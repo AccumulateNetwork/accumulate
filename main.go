@@ -14,6 +14,7 @@ import (
 
 	//"github.com/dgraph-io/badger"
 	"github.com/AccumulusNetwork/accumulated/tendermint"
+	"github.com/AccumulusNetwork/accumulated/validators"
 )
 
 var ConfigFile [33]string
@@ -53,7 +54,7 @@ func main() {
 	}
 
 	app := tendermint.NewDirectoryBlockLeader()
-	appvm1 := tendermint.NewVMApplication()
+	appvm1 := tendermint.NewVMApplication(Validator.FactoidValidator)
 	go app.Start(ConfigFile[0],WorkingDir[0])
 	go appvm1.Start(ConfigFile[1],WorkingDir[1])
 
