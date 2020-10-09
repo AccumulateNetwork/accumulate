@@ -1,4 +1,4 @@
-package Validator
+package validator
 
 //should define return codes for validation...
 type ValidationCode uint32
