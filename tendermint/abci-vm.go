@@ -17,6 +17,7 @@ import (
 	//router2 "github.com/PaulSnow/ValidatorAccumulator/ValAcc/router"
 	"github.com/AccumulusNetwork/accumulated/database"
 	pb "github.com/AccumulusNetwork/accumulated/proto"
+	Validator "github.com/AccumulusNetwork/accumulated/validators"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
 	"time"
@@ -38,7 +39,7 @@ const BanListTrigger = -10000
 
 
 
-type VMApplication struct {
+type AccumulatorApplication struct {
 //	db           *badger.DB
 //	currentBatch *badger.Txn
 	//router = new(router2.Router)
@@ -48,11 +49,11 @@ type VMApplication struct {
 	accountState map[string]AccountStateStruct
 	BootstrapHeight int64
 	Height int64
-	Validator Validator.ValidatorInterface
+	Val Validator.ValidatorInterface
 }
 
-func NewVMApplication() *VMApplication {
-	app := VMApplication{
+func NewAccumulatorApplication() *AccumulatorApplication {
+	app := AccumulatorApplication{
 //		db: db,
 		//router: new(router2.Router),
 		AccNumber: 1,
@@ -65,30 +66,30 @@ func NewVMApplication() *VMApplication {
 }
 
 
-var _ abcitypes.Application = (*VMApplication)(nil)
+var _ abcitypes.Application = (*AccumulatorApplication)(nil)
 
 
-func (app *VMApplication) GetHeight ()(uint64) {
+func (app *AccumulatorApplication) GetHeight ()(uint64) {
 	return uint64(app.Height)
 }
 
-func (VMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
+func (AccumulatorApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
 	return abcitypes.ResponseInfo{}
 }
 
-func (VMApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
+func (AccumulatorApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
 	return abcitypes.ResponseSetOption{}
 }
 
 // new transaction is added to the Tendermint Core. Check if it is valid.
-func (app *VMApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
+func (app *AccumulatorApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
 	bytesLen := len(req.Tx) - dataPtr - 64
 	code := app.isValid(req.Tx,bytesLen)
 	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
 }
 
 
-func (app *VMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
+func (app *AccumulatorApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
 	fmt.Printf("Initalizing Accumulator Router\n")
 	//app.router.Init(EntryFeed, int(AccNumber))
     //go router.Run()
@@ -100,7 +101,7 @@ func (app *VMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.Re
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
 
 //Here we create a batch, which will store block's transactions.
-func (app *VMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
+func (app *AccumulatorApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
 	//app.currentBatch = app.db.NewTransaction(true)
 	app.Height = req.Header.Height
 	return abcitypes.ResponseBeginBlock{}
@@ -108,7 +109,7 @@ func (app *VMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.
 
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
-func (app *VMApplication) DeliverTx(req abcitypes.RequestDeliverTx) ( response abcitypes.ResponseDeliverTx) {
+func (app *AccumulatorApplication) DeliverTx(req abcitypes.RequestDeliverTx) ( response abcitypes.ResponseDeliverTx) {
 
 	bytesLen := len(req.Tx) - dataPtr - 64
 	code := app.isValid(req.Tx,bytesLen)
@@ -162,14 +163,14 @@ func (app *VMApplication) DeliverTx(req abcitypes.RequestDeliverTx) ( response a
 }
 
 //Commit instructs the application to persist the new state.
-func (app *VMApplication) Commit() abcitypes.ResponseCommit {
+func (app *AccumulatorApplication) Commit() abcitypes.ResponseCommit {
 	//app.currentBatch.Commit()
 	//pull merkle DAG from the accumulator and put on blockchain as the Data
 	return abcitypes.ResponseCommit{Data: []byte{}}
 }
 
 
-func (VMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
+func (AccumulatorApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
 	//do any cleanup for block sealing...
 	return abcitypes.ResponseEndBlock{}
 }
@@ -178,7 +179,7 @@ func (VMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseE
 
 
 // when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
-func (app *VMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
+func (app *AccumulatorApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 	/*
 	err := app.db.View(func(txn *badger.Txn) error {
@@ -206,7 +207,7 @@ func (app *VMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcit
 }
 
 
-func (app *VMApplication) isValid(tx []byte, bytesLen int) (code uint32) {
+func (app *AccumulatorApplication) isValid(tx []byte, bytesLen int) (code uint32) {
 
 	// [Key][Type][Nonce][Data][Sign]
 
@@ -231,7 +232,7 @@ func (app *VMApplication) isValid(tx []byte, bytesLen int) (code uint32) {
 	return 3
 }
 
-func (app *VMApplication) GetAccountState (publicKey []byte) (acc AccountStateStruct,err error)  {
+func (app *AccumulatorApplication) GetAccountState (publicKey []byte) (acc AccountStateStruct,err error)  {
 
 	keyString := string(publicKey)
 	var ok bool
@@ -262,7 +263,7 @@ func (app *VMApplication) GetAccountState (publicKey []byte) (acc AccountStateSt
 	return acc,nil
 }
 
-func (app *VMApplication) MakeBootStrapAccount(publicKey []byte)(state AccountStateStruct,err error){
+func (app *AccumulatorApplication) MakeBootStrapAccount(publicKey []byte)(state AccountStateStruct,err error){
 
 	println("Making BootStrap Account")
 
@@ -282,7 +283,7 @@ func (app *VMApplication) MakeBootStrapAccount(publicKey []byte)(state AccountSt
 	return state,nil
 }
 
-func (app *VMApplication) WriteKeyValue(account AccountStateStruct, data []byte) (err error) {
+func (app *AccumulatorApplication) WriteKeyValue(account AccountStateStruct, data []byte) (err error) {
 
 	KeyValue := pb.KeyValue{}
 
@@ -305,7 +306,7 @@ func (app *VMApplication) WriteKeyValue(account AccountStateStruct, data []byte)
 }
 
 
-func (app *VMApplication) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
+func (app *AccumulatorApplication) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
 	fmt.Printf("Starting Tendermint (version: %v)\n", version.Version)
 
 	config := cfg.DefaultConfig()

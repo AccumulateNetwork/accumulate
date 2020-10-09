@@ -17,7 +17,7 @@ import (
 	//router2 "github.com/PaulSnow/ValidatorAccumulator/ValAcc/router"
 	"github.com/AccumulusNetwork/accumulated/database"
 	pb "github.com/AccumulusNetwork/accumulated/proto"
-	abcitypes "github.com/tendermint/tendermint/abci/types"
+	abci "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
 	"time"
 )
@@ -63,33 +63,33 @@ func NewDirectoryBlockLeader() *DirectoryBlockLeader {
     return &app
 }
 
-var _ abcitypes.Application = (*DirectoryBlockLeader)(nil)
+var _ abci.Application = (*DirectoryBlockLeader)(nil)
 
 func (app *DirectoryBlockLeader) GetHeight ()(uint64) {
 	return uint64(app.Height)
 }
 
-func (DirectoryBlockLeader) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
-	return abcitypes.ResponseInfo{}
+func (DirectoryBlockLeader) Info(req abci.RequestInfo) abci.ResponseInfo {
+	return abci.ResponseInfo{}
 }
 
-func (DirectoryBlockLeader) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
-	return abcitypes.ResponseSetOption{}
+func (DirectoryBlockLeader) SetOption(req abci.RequestSetOption) abci.ResponseSetOption {
+	return abci.ResponseSetOption{}
 }
 
 // new transaction is added to the Tendermint Core. Check if it is valid.
-func (app *DirectoryBlockLeader) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
+func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseCheckTx {
 	bytesLen := len(req.Tx) - dataPtr - 64
 	code := app.isValid(req.Tx,bytesLen)
-	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
+	return abci.ResponseCheckTx{Code: code, GasWanted: 1}
 }
 
 
-func (app *DirectoryBlockLeader) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
+func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	fmt.Printf("Initalizing Accumulator Router\n")
 	//app.router.Init(EntryFeed, int(AccNumber))
     //go router.Run()
-	return abcitypes.ResponseInitChain{}
+	return abci.ResponseInitChain{}
 }
 
 // ------ BeginBlock -> DeliverTx -> EndBlock -> Commit
@@ -97,17 +97,17 @@ func (app *DirectoryBlockLeader) InitChain(req abcitypes.RequestInitChain) abcit
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
 
 //Here we create a batch, which will store block's transactions.
-func (app *DirectoryBlockLeader) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
+func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
 	//app.currentBatch = app.db.NewTransaction(true)
 	//may require request to get data from
 	//do any housekeeping for accumulator?
 	app.Height = req.Header.Height
-	return abcitypes.ResponseBeginBlock{}
+	return abci.ResponseBeginBlock{}
 }
 
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
-func (app *DirectoryBlockLeader) DeliverTx(req abcitypes.RequestDeliverTx) ( response abcitypes.ResponseDeliverTx) {
+func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response abci.ResponseDeliverTx) {
 
 	//obtain merkle dag root from VM
 	//write that to whereever...
@@ -115,7 +115,7 @@ func (app *DirectoryBlockLeader) DeliverTx(req abcitypes.RequestDeliverTx) ( res
 	code := app.isValid(req.Tx,bytesLen)
 
 	if code != 0 {
-		return abcitypes.ResponseDeliverTx{Code: code}
+		return abci.ResponseDeliverTx{Code: code}
 	}
     //if the message is a custom message for us... deal with it...
 
@@ -183,22 +183,22 @@ func (app *DirectoryBlockLeader) DeliverTx(req abcitypes.RequestDeliverTx) ( res
 }
 
 //Commit instructs the application to persist the new state.
-func (app *DirectoryBlockLeader) Commit() abcitypes.ResponseCommit {
+func (app *DirectoryBlockLeader) Commit() abci.ResponseCommit {
 	//app.currentBatch.Commit()
 	//need to get hash data / merkle dag from accumulator and place it here.
-	return abcitypes.ResponseCommit{Data: []byte{}}
+	return abci.ResponseCommit{Data: []byte{}}
 }
 
 
-func (DirectoryBlockLeader) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
-	return abcitypes.ResponseEndBlock{}
+func (DirectoryBlockLeader) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
+	return abci.ResponseEndBlock{}
 }
 
 //------------------------
 
 
 // when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
-func (app *DirectoryBlockLeader) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
+func (app *DirectoryBlockLeader) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 	/*
 	err := app.db.View(func(txn *badger.Txn) error {
