@@ -14,7 +14,7 @@ import (
 
 	//"github.com/dgraph-io/badger"
 	"github.com/AccumulusNetwork/accumulated/tendermint"
-	"github.com/AccumulusNetwork/accumulated/validators"
+	"github.com/AccumulusNetwork/accumulated/validator"
 )
 
 var ConfigFile [33]string
@@ -53,10 +53,18 @@ func main() {
 		}
 	}
 
+
+	//create a directory block leader
 	app := tendermint.NewDirectoryBlockLeader()
-	appvm1 := tendermint.NewVMApplication(Validator.FactoidValidator)
+
+	//make a factoid validator/accumulator
+	//create a Factoid validator
+	val := validator.NewFactoidValidator()
+	//create a AccumulatorVM
+	factoidvm := tendermint.NewAccumulatorVMApplication(val)
+
 	go app.Start(ConfigFile[0],WorkingDir[0])
-	go appvm1.Start(ConfigFile[1],WorkingDir[1])
+	go factoidvm.Start(ConfigFile[1],WorkingDir[1])
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
