@@ -16,4 +16,9 @@ type ValidatorInterface interface {
 }
 
 
+type ValidationContext struct {
+	//tbd
+}
+
+
 

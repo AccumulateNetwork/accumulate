@@ -4,7 +4,6 @@ import (
 	"fmt"
 	cfg "github.com/tendermint/tendermint/config"
 	config "github.com/tendermint/tendermint/config"
-	//"github.com/iot-sas/SAS-DBlock"
 )
 
 func Initialize(Namespace string, ABCIAppAddress string, RPCAddress string, ConfigFile string, WorkingDir string){

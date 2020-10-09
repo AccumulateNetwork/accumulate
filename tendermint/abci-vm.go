@@ -15,9 +15,8 @@ import (
 
 	//"github.com/PaulSnow/ValidatorAccumulator/ValAcc/node"
 	//router2 "github.com/PaulSnow/ValidatorAccumulator/ValAcc/router"
-	"github.com/iot-sas/SAS-DBlock/database"
-	pb "github.com/iot-sas/SAS-DBlock/proto"
-	"github.com/iot-sas/SAS-DBlock/validators"
+	"github.com/AccumulusNetwork/accumulated/database"
+	pb "github.com/AccumulusNetwork/accumulated/proto"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
 	"time"
