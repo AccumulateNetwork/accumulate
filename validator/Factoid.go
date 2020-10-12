@@ -6,6 +6,7 @@ import (
 	cfg "github.com/tendermint/tendermint/config"
 	nm "github.com/tendermint/tendermint/node"
 	dbm "github.com/tendermint/tm-db"
+	"github.com/magiconair/properties/assert"
 
 	//"github.com/FactomProject/factomd/common/factoid"
 	factom "github.com/Factom-Asset-Tokens/factom"
@@ -37,18 +38,42 @@ func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider)
 
 func (v *FactoidValidator) Validate(tx []byte) uint32 {
 	//if pass then send to accumulator.
-	//make sure the factoid transaction format is valid.
+	//var fblock := factom.FBlock{}
+	//create a new block
+	var fblock := new(factom.FBlock{})
 
-    //t := new(factoid.Transaction)
-	t := new(factom.Transaction)
-	err := t.UnmarshalBinary(tx)
+	err := fblock.UnmarshalBinary(tx)
 
 	if err != nil {
-		fmt.Printf("Invalid Transaction")
+		fmt.Printf("Invalid FCT Transaction")
+		return nil
 	}
 
+	//require.NoError(err)
+	if  fblock.BodyMR != nil {
+		fmt.Printf("Invalid BodyMR")
+		return nil
+	}
+
+	//require.NotNil(f.BodyMR)
+
+	//data, err := f.MarshalBinary()
+	//require.NoError(err)
+	//assert.Equal(test.Data, data)
+
+	//assert.Equal(test.BodyMR[:], f.BodyMR[:])
+
+	//assert.Equal(test.KeyMr[:], f.KeyMR[:])
+
+	//if len(test.Expansion) > 0 {
+	//	assert.Equal(test.Expansion[:],
+	//		f.Expansion[:])
+
+	//check the timestamp to make sure it is in the valid range.
+
 	//make sure there is enough available balance
-//    inp := t.GetInputs()
+	//    inp := t.GetInputs()
+
     //inp returns a transaction interface.
 
 	//if so, record transaction in factoid database, and pass to validator
