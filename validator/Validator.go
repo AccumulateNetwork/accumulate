@@ -1,5 +1,10 @@
 package validator
 
+import (
+	cfg "github.com/tendermint/tendermint/config"
+	nm "github.com/tendermint/tendermint/node"
+)
+
 //should define return codes for validation...
 type ValidationCode uint32
 
@@ -13,6 +18,7 @@ const (
 
 type ValidatorInterface interface {
 	Validate(tx []byte) uint32
+    InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error
 }
 
 
