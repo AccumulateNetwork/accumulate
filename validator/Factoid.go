@@ -3,11 +3,37 @@ package validator
 
 import (
 	"fmt"
+	cfg "github.com/tendermint/tendermint/config"
+	nm "github.com/tendermint/tendermint/node"
+	dbm "github.com/tendermint/tm-db"
+
 	//"github.com/FactomProject/factomd/common/factoid"
 	factom "github.com/Factom-Asset-Tokens/factom"
 )
 
-type FactoidValidator struct{ValidatorInterface}
+
+type FactoidValidator struct{
+	ValidatorInterface
+	KvStoreDB dbm.DB
+	AccountsDB dbm.DB
+}
+
+
+
+func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
+
+	v.AccountsDB, err = dbProvider(&nm.DBContext{"fctaccounts", config})
+	if err != nil {
+		return
+	}
+
+	v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
+	if err != nil {
+		return
+	}
+
+	return
+}
 
 func (v *FactoidValidator) Validate(tx []byte) uint32 {
 	//if pass then send to accumulator.

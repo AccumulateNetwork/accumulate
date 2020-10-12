@@ -47,6 +47,7 @@ func NewAccumulatorVMApplication(val validator.ValidatorInterface) *AccumulatorV
 		accountState : make(map[string]AccountStateStruct),
 		BootstrapHeight: 99999999999,
 		Height : 0,
+		Val : val,
 	}
     return &app
 }
@@ -328,7 +329,8 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 		return nil, fmt.Errorf("failed to load node's key: %w", err)
 	}
 
-	if database.InitDBs(config, nm.DefaultDBProvider ) !=nil {
+	//initialize the validator databases
+	if app.Val.InitDBs(config, nm.DefaultDBProvider ) !=nil {
 		fmt.Println("DB Error")
 		return nil,nil //TODO
 	}
