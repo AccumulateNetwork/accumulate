@@ -1,7 +1,9 @@
 package tendermint
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"github.com/PaulSnow/ValidatorAccumulator/ValAcc/accumulator"
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
@@ -10,11 +12,13 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
+	"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 	"os"
 
-	//"github.com/PaulSnow/ValidatorAccumulator/ValAcc/node"
-	//router2 "github.com/PaulSnow/ValidatorAccumulator/ValAcc/router"
+	dbm "github.com/tendermint/tm-db"
+	"github.com/PaulSnow/ValidatorAccumulator/ValAcc/node"
+	valacctypes "github.com/PaulSnow/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulusNetwork/accumulated/database"
 	pb "github.com/AccumulusNetwork/accumulated/proto"
 	"github.com/AccumulusNetwork/accumulated/validator"
@@ -28,20 +32,34 @@ import (
 type AccumulatorVMApplication struct {
 //	db           *badger.DB
 //	currentBatch *badger.Txn
-	//router = new(router2.Router)
 	abcitypes.BaseApplication
+
+	router  router2.Router
+
+	EntryFeed chan node.EntryHash
 	AccNumber int64
 	//EntryFeed = chan make(chan node.EntryHash, 10000)
 	accountState map[string]AccountStateStruct
 	BootstrapHeight int64
 	Height int64
 	Val validator.ValidatorInterface
+
+
+	EntryHashStream chan node.EntryHash        // Stream of hashes to record
+	AccumulatorDB   *dbm.DB             // Databases where hashes are recorded
+	ACCs            []*accumulator.Accumulator // Accumulators to record hashes
+	EntryFeeds      []chan node.EntryHash
+	Controls        []chan bool
+	MDFeeds         []chan *valacctypes.Hash
 }
 
 func NewAccumulatorVMApplication(val validator.ValidatorInterface) *AccumulatorVMApplication {
+
+	dbm.BackendType()
 	app := AccumulatorVMApplication{
 //		db: db,
 		//router: new(router2.Router),
+		EntryFeed: make(chan node.EntryHash, 10000),
 		AccNumber: 1,
 		//EntryFeed : make(chan node.EntryHash, 10000),
 		accountState : make(map[string]AccountStateStruct),
@@ -78,6 +96,20 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 
 func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
 	fmt.Printf("Initalizing Accumulator Router\n")
+
+	acc := new(accumulator.Accumulator)
+	app.ACCs = append(app.ACCs, acc)
+
+	str := "accumulator_" + *app.Val.GetInfo().GetTypeName() + "_" + *app.Val.GetInfo().GetInstanceName()
+	chainID := valacctypes.Hash(sha256.Sum256([]byte(str)))
+	//fixme: Requires Badger...
+	entryFeed, control, mdHashes := acc.Init(app.AccumulatorDB, &chainID)
+	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
+	app.Controls = append(app.Controls, control)
+	app.MDFeeds = append(app.MDFeeds, mdHashes)
+	go acc.Run()
+	//app.router.Init(app.EntryFeed, 1)
+	//go app.router.Run()
 	//app.router.Init(EntryFeed, int(AccNumber))
     //go router.Run()
 	return abcitypes.ResponseInitChain{}
@@ -91,6 +123,8 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
 	//app.currentBatch = app.db.NewTransaction(true)
 	app.Height = req.Header.Height
+
+	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&req.Header.ChainID)
 	return abcitypes.ResponseBeginBlock{}
 }
 
@@ -106,6 +140,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	}
 
 	AccountState, err := app.GetAccountState(req.Tx[0:32])
+
 	if err != nil {
 		response.Code = 3
 		response.Info = err.Error()
@@ -127,8 +162,9 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	//Grab our payload
 	data := req.Tx[dataPtr:dataPtr + bytesLen]
 
-	switch pb.EntryMsgType(req.Tx[msgTypePtr]) {
+	app.Val.Validate(data)
 
+	switch pb.EntryMsgType(req.Tx[msgTypePtr]) {
 		case pb.Entry_WriteEntryBytes:
 				//Nothing extra to process, all good response.Code defaults to 0
 		case pb.Entry_WriteKeyValue:
@@ -328,6 +364,15 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load node's key: %w", err)
 	}
+
+	//initialize the accumulator database
+	str := "accumulator_" + *app.Val.GetInfo().GetTypeName() + "_" + *app.Val.GetInfo().GetInstanceName()
+	fmt.Printf("Creating %s\n", str)
+	app.AccumulatorDB, err = nm.DefaultDBProvider(&nm.DBContext{str, config})
+	if err != nil {
+		return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
+	}
+	//db.Init(i)
 
 	//initialize the validator databases
 	if app.Val.InitDBs(config, nm.DefaultDBProvider ) !=nil {

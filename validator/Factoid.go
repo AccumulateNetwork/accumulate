@@ -6,7 +6,7 @@ import (
 	cfg "github.com/tendermint/tendermint/config"
 	nm "github.com/tendermint/tendermint/node"
 	dbm "github.com/tendermint/tm-db"
-	"github.com/magiconair/properties/assert"
+	//"github.com/magiconair/properties/assert"
 
 	//"github.com/FactomProject/factomd/common/factoid"
 	factom "github.com/Factom-Asset-Tokens/factom"
@@ -14,7 +14,7 @@ import (
 
 
 type FactoidValidator struct{
-	ValidatorInterface
+	ValidatorContext
 	KvStoreDB dbm.DB
 	AccountsDB dbm.DB
 }
@@ -23,6 +23,7 @@ type FactoidValidator struct{
 
 func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
 
+	dbm.
 	v.AccountsDB, err = dbProvider(&nm.DBContext{"fctaccounts", config})
 	if err != nil {
 		return
@@ -40,20 +41,23 @@ func (v *FactoidValidator) Validate(tx []byte) uint32 {
 	//if pass then send to accumulator.
 	//var fblock := factom.FBlock{}
 	//create a new block
-	var fblock := new(factom.FBlock{})
+
+	fblock := factom.FBlock{}
 
 	err := fblock.UnmarshalBinary(tx)
 
 	if err != nil {
 		fmt.Printf("Invalid FCT Transaction")
-		return nil
+		return 0
 	}
 
 	//require.NoError(err)
 	if  fblock.BodyMR != nil {
 		fmt.Printf("Invalid BodyMR")
-		return nil
+		return 0
 	}
+
+	//if fblock.Timestamp
 
 	//require.NotNil(f.BodyMR)
 
