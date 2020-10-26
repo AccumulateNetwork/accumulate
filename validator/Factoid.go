@@ -23,7 +23,6 @@ type FactoidValidator struct{
 
 func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
 
-	dbm.
 	v.AccountsDB, err = dbProvider(&nm.DBContext{"fctaccounts", config})
 	if err != nil {
 		return

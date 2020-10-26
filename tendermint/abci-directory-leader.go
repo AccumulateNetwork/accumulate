@@ -13,8 +13,8 @@ import (
 	"github.com/tendermint/tendermint/version"
 	"os"
 
-	//"github.com/PaulSnow/ValidatorAccumulator/ValAcc/node"
-	//router2 "github.com/PaulSnow/ValidatorAccumulator/ValAcc/router"
+	"github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/node"
+	router2 "github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/router"
 	"github.com/AccumulusNetwork/accumulated/database"
 	pb "github.com/AccumulusNetwork/accumulated/proto"
 	abci "github.com/tendermint/tendermint/abci/types"

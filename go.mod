@@ -3,6 +3,7 @@ module github.com/AccumulusNetwork/accumulated
 go 1.13
 
 require (
+	github.com/AccumulusNetwork/ValidatorAccumulator v0.0.0-20201026202750-e0f8a84f33e3
 	github.com/ChainSafe/go-schnorrkel v0.0.0-20200626160457-b38283118816 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/DiSiqueira/GoTree v1.0.0 // indirect
@@ -31,7 +32,6 @@ require (
 	github.com/FactomProject/snappy-go v0.0.0-20170202213131-f2f83b22c29e // indirect
 	github.com/FactomProject/web v0.1.1-0.20200312214504-cff1e06a4e47 // indirect
 	github.com/Netflix/go-expect v0.0.0-20200312175327-da48e75238e2 // indirect
-	github.com/AccumulusNetwork/ValidatorAccumulator v0.0.0-20201024215302-74c6e101bc8a // indirect
 	github.com/alexandrevicenzi/go-sse v1.5.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
