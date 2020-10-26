@@ -19,6 +19,7 @@ import (
 	dbm "github.com/tendermint/tm-db"
 	"github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/node"
 	valacctypes "github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/types"
+	vadb "github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulusNetwork/accumulated/database"
 	pb "github.com/AccumulusNetwork/accumulated/proto"
 	"github.com/AccumulusNetwork/accumulated/validator"
@@ -55,7 +56,6 @@ type AccumulatorVMApplication struct {
 
 func NewAccumulatorVMApplication(val validator.ValidatorInterface) *AccumulatorVMApplication {
 
-	dbm.BackendType()
 	app := AccumulatorVMApplication{
 //		db: db,
 		//router: new(router2.Router),
@@ -103,6 +103,8 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	str := "accumulator_" + *app.Val.GetInfo().GetTypeName() + "_" + *app.Val.GetInfo().GetInstanceName()
 	chainID := valacctypes.Hash(sha256.Sum256([]byte(str)))
 	//fixme: Requires Badger...
+
+
 	entryFeed, control, mdHashes := acc.Init(app.AccumulatorDB, &chainID)
 	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
 	app.Controls = append(app.Controls, control)
@@ -377,6 +379,12 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 	if err != nil {
 		return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
+
+	//accumulator database
+	dir := WorkingDir + "/" + str + ".db"
+
+	db2 := dbm.NewDB(str,dbm.BadgerDBBackend,dir)
+	DB := vadb.InitDB(db2)
 	//db.Init(i)
 
 	//initialize the validator databases
