@@ -3,7 +3,7 @@ package tendermint
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/PaulSnow/ValidatorAccumulator/ValAcc/accumulator"
+	"github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
@@ -17,8 +17,8 @@ import (
 	"os"
 
 	dbm "github.com/tendermint/tm-db"
-	"github.com/PaulSnow/ValidatorAccumulator/ValAcc/node"
-	valacctypes "github.com/PaulSnow/ValidatorAccumulator/ValAcc/types"
+	"github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/node"
+	valacctypes "github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulusNetwork/accumulated/database"
 	pb "github.com/AccumulusNetwork/accumulated/proto"
 	"github.com/AccumulusNetwork/accumulated/validator"
@@ -107,11 +107,14 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
 	app.Controls = append(app.Controls, control)
 	app.MDFeeds = append(app.MDFeeds, mdHashes)
+	//spin up the accumulator
 	go acc.Run()
+
 	//app.router.Init(app.EntryFeed, 1)
 	//go app.router.Run()
 	//app.router.Init(EntryFeed, int(AccNumber))
     //go router.Run()
+
 	return abcitypes.ResponseInitChain{}
 }
 
@@ -162,21 +165,23 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	//Grab our payload
 	data := req.Tx[dataPtr:dataPtr + bytesLen]
 
-	app.Val.Validate(data)
+	var ret = app.Val.Validate(data)
+	//pass into accumulator...
+    //app.Acc.Accumulate(ret)
 
-	switch pb.EntryMsgType(req.Tx[msgTypePtr]) {
-		case pb.Entry_WriteEntryBytes:
-				//Nothing extra to process, all good response.Code defaults to 0
-		case pb.Entry_WriteKeyValue:
-			err = app.WriteKeyValue(AccountState,data)
-			if err != nil {
-				response.Code = 1
-				response.Info = err.Error()
-			}
-		default:
-			response.Code = 1
-			response.Info = fmt.Sprintf("Uknown message type %v \n",req.Tx[msgTypePtr])
-	}
+	//switch pb.EntryMsgType(req.Tx[msgTypePtr]) {
+	//	case pb.Entry_WriteEntryBytes:
+	//			//Nothing extra to process, all good response.Code defaults to 0
+	//	case pb.Entry_WriteKeyValue:
+	//		err = app.WriteKeyValue(AccountState,data)
+	//		if err != nil {
+	//			response.Code = 1
+	//			response.Info = err.Error()
+	//		}
+	//	default:
+	//		response.Code = 1
+	//		response.Info = fmt.Sprintf("Uknown message type %v \n",req.Tx[msgTypePtr])
+	//}
 
 	if (err != nil) {
 		println(err.Error())

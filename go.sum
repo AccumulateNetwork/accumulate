@@ -11,6 +11,10 @@ cloud.google.com/go/firestore v1.1.0/go.mod h1:ulACoGHTpvq5r8rxGJ4ddJZBZqakUQqCl
 cloud.google.com/go/pubsub v1.0.1/go.mod h1:R0Gpsv3s54REJCy4fxDixWD93lHJMoZTyQ2kNxGRt3I=
 cloud.google.com/go/storage v1.0.0/go.mod h1:IhtSnM/ZTZV8YYJWCY8RULGVqBDmpoyjwiyrjsg+URw=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
+github.com/AccumulusNetwork/ValidatorAccumulator v0.0.0-20200908032734-349195caa211 h1:F+bU+NCjrsYchsGu4nEehciZjTauMI3TE3geLwPtWdg=
+github.com/AccumulusNetwork/ValidatorAccumulator v0.0.0-20201024215302-74c6e101bc8a h1:cxptN2uUhh3k9PrgKGS2DEPXMwBjFNnYV33iMS0g+8U=
+github.com/AccumulusNetwork/ValidatorAccumulator v0.0.0-20201024215302-74c6e101bc8a/go.mod h1:8gAwF48zllo/vVyR3wt3m/r98DCYLuQlhaTdu/kHeNI=
+github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc v0.0.0-20200908032734-349195caa211 h1:7D6TJ/Y/QIi4OdcAXecr74X1TtxvbRbLm7mKgWMVuJI=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d h1:FWutTJGVqBnL4rLgeNaspUYnmnvkXcmDA3QO3rHBGgU=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d/go.mod h1:Nw3sh5L40Xs1wno7ndbD/dYWg+vARpBvpX9Zz1YSxbo=
 github.com/AdamSLevy/jsonrpc2/v14 v14.0.0 h1:ofSXSSa9Opft4KtEcIEshKbI2CAynwtKNZj2ASFDucc=
