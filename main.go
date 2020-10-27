@@ -4,12 +4,14 @@ import (
 	//	"errors"
 	"flag"
 	"fmt"
+	"log"
 
 	// db "github.com/tendermint/tm-db"
 	"path"
 	//	"github.com/spf13/cobra"
 	"os"
 	"os/signal"
+	"os/user"
 	"syscall"
 
 	//"github.com/dgraph-io/badger"
@@ -23,7 +25,13 @@ var WorkingDir [33]string
 
 func init() {
 
-	flag.StringVar(&WorkingDir[0], "workingdir", "$HOME/.accumulate", "Path to data directory")
+	usr,err := user.Current()
+	if err != nil {
+		log.Fatal( err )
+		os.Exit(1)
+	}
+
+	flag.StringVar(&WorkingDir[0], "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
 	flag.Parse()
 	WorkingDir[1] = path.Join(WorkingDir[0],"/vm/1")
 	WorkingDir[2] = path.Join(WorkingDir[0],"/vm/2")
