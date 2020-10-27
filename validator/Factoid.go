@@ -64,8 +64,14 @@ func (v *FactoidValidator) Validate(data []byte) error {
 	timeofvalidity := time.Duration(2) * time.Minute//transaction good for only 2 minutes
 	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
 	if elapsed > timeofvalidity || elapsed < 0 {
+		//need to log instaed
+		fmt.Printf("Invalid FCT Transaction: Timestamp out of bounds")
 		return nil
 	}
+
+	//need to check balances
+	//inp := tx.FCTInputs
+
 
 	//
 /*
