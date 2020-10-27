@@ -104,8 +104,6 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 
 	str := "accumulator_" + *app.Val.GetInfo().GetTypeName() + "_" + *app.Val.GetInfo().GetInstanceName()
 	chainID := valacctypes.Hash(sha256.Sum256([]byte(str)))
-	//fixme: Requires Badger...
-
 
 	entryFeed, control, mdHashes := acc.Init(&app.DB, &chainID)
 	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
