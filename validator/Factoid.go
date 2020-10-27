@@ -6,6 +6,8 @@ import (
 	cfg "github.com/tendermint/tendermint/config"
 	nm "github.com/tendermint/tendermint/node"
 	dbm "github.com/tendermint/tm-db"
+	"time"
+
 	//"time"
 
 	//"github.com/magiconair/properties/assert"
@@ -59,12 +61,13 @@ func (v *FactoidValidator) Validate(data []byte) error {
 
 
 
-	timeofvalidity := 60*60//3600 seconds.  valid for within an hour.
-	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime())
-	if elapsed < timeofvalidity && elapsed > 0 {
+	timeofvalidity := time.Duration(2) * time.Minute//transaction good for only 2 minutes
+	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
+	if elapsed > timeofvalidity || elapsed < 0 {
 		return nil
 	}
 
+	//
 /*
 	fblock := factom.FBlock{}
 
