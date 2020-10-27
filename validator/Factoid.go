@@ -6,6 +6,8 @@ import (
 	cfg "github.com/tendermint/tendermint/config"
 	nm "github.com/tendermint/tendermint/node"
 	dbm "github.com/tendermint/tm-db"
+	//"time"
+
 	//"github.com/magiconair/properties/assert"
 
 	//"github.com/FactomProject/factomd/common/factoid"
@@ -42,11 +44,28 @@ func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider)
 	return
 }
 
-func (v *FactoidValidator) Validate(tx []byte) uint32 {
+func (v *FactoidValidator) Validate(data []byte) error {
 	//if pass then send to accumulator.
 	//var fblock := factom.FBlock{}
 	//create a new block
 
+	tx := factom.Transaction{}
+
+	err := tx.UnmarshalBinary(data)
+	if err != nil {
+		fmt.Printf("Invalid FCT Transaction")
+		return err
+	}
+
+
+
+	timeofvalidity := 60*60//3600 seconds.  valid for within an hour.
+	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime())
+	if elapsed < timeofvalidity && elapsed > 0 {
+		return nil
+	}
+
+/*
 	fblock := factom.FBlock{}
 
 	err := fblock.UnmarshalBinary(tx)
@@ -61,7 +80,7 @@ func (v *FactoidValidator) Validate(tx []byte) uint32 {
 		fmt.Printf("Invalid BodyMR")
 		return 0
 	}
-
+*/
 	//if fblock.Timestamp
 
 	//require.NotNil(f.BodyMR)
@@ -86,6 +105,6 @@ func (v *FactoidValidator) Validate(tx []byte) uint32 {
     //inp returns a transaction interface.
 
 	//if so, record transaction in factoid database, and pass to validator
-	return 0
+	return nil
 }
 

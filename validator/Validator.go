@@ -44,7 +44,7 @@ func (h *ValidatorInfo) GetInstanceId() int64 {
 
 type ValidatorInterface interface {
 
-	Validate(tx []byte) uint32
+	Validate(data []byte) error
     InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error
 	SetCurrentBlock(height int64,Time *time.Time,chainid *string)
 	GetInfo() *ValidatorInfo

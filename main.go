@@ -13,8 +13,8 @@ import (
 	"syscall"
 
 	//"github.com/dgraph-io/badger"
-	"github.com/AccumulusNetwork/accumulated/tendermint"
-	"github.com/AccumulusNetwork/accumulated/validator"
+	"github.com/AccumulateNetwork/accumulated/tendermint"
+	"github.com/AccumulateNetwork/accumulated/validator"
 )
 
 var ConfigFile [33]string
@@ -22,7 +22,8 @@ var WorkingDir [33]string
 //var SpecialModeHeight int64 = 99999999999
 
 func init() {
-	flag.StringVar(&WorkingDir[0], "workingdir", "$HOME/.accumulus", "Path to data directory")
+
+	flag.StringVar(&WorkingDir[0], "workingdir", "$HOME/.accumulate", "Path to data directory")
 	flag.Parse()
 	WorkingDir[1] = path.Join(WorkingDir[0],"/vm/1")
 	WorkingDir[2] = path.Join(WorkingDir[0],"/vm/2")

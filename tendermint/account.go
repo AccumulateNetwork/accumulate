@@ -4,8 +4,8 @@ import (
 	"errors"
 	//	"fmt"
 	//"github.com/gogo/protobuf/proto"
-	"github.com/AccumulusNetwork/accumulated/database"
-	pb "github.com/AccumulusNetwork/accumulated/proto"
+	"github.com/AccumulateNetwork/accumulated/database"
+	pb "github.com/AccumulateNetwork/accumulated/proto"
 )
 
 type AccountStateStruct struct {
