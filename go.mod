@@ -3,7 +3,8 @@ module github.com/AccumulusNetwork/accumulated
 go 1.13
 
 require (
-	github.com/AccumulusNetwork/ValidatorAccumulator v0.0.0-20201026202750-e0f8a84f33e3
+	github.com/AccumulusNetwork/ValidatorAccumulator v0.0.0-20201026231601-a9b962130031 // indirect
+	github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201026231601-a9b962130031
 	github.com/ChainSafe/go-schnorrkel v0.0.0-20200626160457-b38283118816 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/DiSiqueira/GoTree v1.0.0 // indirect

@@ -23,11 +23,11 @@ var WorkingDir [33]string
 
 func init() {
 	flag.StringVar(&WorkingDir[0], "workingdir", "$HOME/.accumulus", "Path to data directory")
-	WorkingDir[1] = path.Join(WorkingDir[1],"/vm/1")
-	WorkingDir[2] = path.Join(WorkingDir[2],"/vm/2")
-	WorkingDir[3] = path.Join(WorkingDir[3],"/vm/3")
-	WorkingDir[0] = path.Join(WorkingDir[0],"/dirblock")
 	flag.Parse()
+	WorkingDir[1] = path.Join(WorkingDir[0],"/vm/1")
+	WorkingDir[2] = path.Join(WorkingDir[0],"/vm/2")
+	WorkingDir[3] = path.Join(WorkingDir[0],"/vm/3")
+	WorkingDir[0] = path.Join(WorkingDir[0],"/dirblock")
 	ConfigFile[0] = path.Join(WorkingDir[0],"/config/config.toml")
 	ConfigFile[1] = path.Join(WorkingDir[1],"/config/config.toml")
 	ConfigFile[2] = path.Join(WorkingDir[2],"/config/config.toml")
@@ -61,7 +61,7 @@ func main() {
 	//create a Factoid validator
 	val := validator.NewFactoidValidator()
 	//create a AccumulatorVM
-	factoidvm := tendermint.NewAccumulatorVMApplication(val)
+	factoidvm := tendermint.NewAccumulatorVMApplication(&val.ValidatorContext)
 
 	go app.Start(ConfigFile[0],WorkingDir[0])
 	go factoidvm.Start(ConfigFile[1],WorkingDir[1])
