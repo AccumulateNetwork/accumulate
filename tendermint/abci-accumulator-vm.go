@@ -12,11 +12,11 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
-	"github.com/tendermint/tendermint/types"
+	//"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 	"os"
 
-	dbm "github.com/tendermint/tm-db"
+	//dbm "github.com/tendermint/tm-db"
 	"github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/node"
 	valacctypes "github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/types"
 	vadb "github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/database"
@@ -35,7 +35,7 @@ type AccumulatorVMApplication struct {
 //	currentBatch *badger.Txn
 	abcitypes.BaseApplication
 
-	router  router2.Router
+	//router  router2.Router
 
 	EntryFeed chan node.EntryHash
 	AccNumber int64
@@ -43,18 +43,20 @@ type AccumulatorVMApplication struct {
 	accountState map[string]AccountStateStruct
 	BootstrapHeight int64
 	Height int64
-	Val validator.ValidatorInterface
+	Val *validator.ValidatorContext
+	DB vadb.DB
 
 
 	EntryHashStream chan node.EntryHash        // Stream of hashes to record
-	AccumulatorDB   *dbm.DB             // Databases where hashes are recorded
+	//AccumulatorDB   *dbm.DB             // Databases where hashes are recorded
 	ACCs            []*accumulator.Accumulator // Accumulators to record hashes
 	EntryFeeds      []chan node.EntryHash
 	Controls        []chan bool
 	MDFeeds         []chan *valacctypes.Hash
+
 }
 
-func NewAccumulatorVMApplication(val validator.ValidatorInterface) *AccumulatorVMApplication {
+func NewAccumulatorVMApplication(val *validator.ValidatorContext) *AccumulatorVMApplication {
 
 	app := AccumulatorVMApplication{
 //		db: db,
@@ -105,7 +107,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	//fixme: Requires Badger...
 
 
-	entryFeed, control, mdHashes := acc.Init(app.AccumulatorDB, &chainID)
+	entryFeed, control, mdHashes := acc.Init(&app.DB, &chainID)
 	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
 	app.Controls = append(app.Controls, control)
 	app.MDFeeds = append(app.MDFeeds, mdHashes)
@@ -167,7 +169,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	//Grab our payload
 	data := req.Tx[dataPtr:dataPtr + bytesLen]
 
-	var ret = app.Val.Validate(data)
+	var _ = app.Val.Validate(data)
 	//pass into accumulator...
     //app.Acc.Accumulate(ret)
 
@@ -373,19 +375,25 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 	}
 
 	//initialize the accumulator database
-	str := "accumulator_" + *app.Val.GetInfo().GetTypeName() + "_" + *app.Val.GetInfo().GetInstanceName()
+	str := "accumulator_" + *app.Val.GetInfo().GetTypeName()// + "_" + *app.Val.GetInfo().GetInstanceName()
 	fmt.Printf("Creating %s\n", str)
-	app.AccumulatorDB, err = nm.DefaultDBProvider(&nm.DBContext{str, config})
+	db2, err := nm.DefaultDBProvider(&nm.DBContext{str, config})
 	if err != nil {
 		return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
 
+	//app.DB.db2 = db2
 	//accumulator database
-	dir := WorkingDir + "/" + str + ".db"
+	//dir := WorkingDir + "/" + str + ".db"
 
-	db2 := dbm.NewDB(str,dbm.BadgerDBBackend,dir)
-	DB := vadb.InitDB(db2)
+	//app.AccumulatorDB, err := dbm.NewDB(str,dbm.BadgerDBBackend,dir)
+	//if err != nil {
+	//	return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
+	//}
+
+	app.DB.InitDB(db2)
 	//db.Init(i)
+
 
 	//initialize the validator databases
 	if app.Val.InitDBs(config, nm.DefaultDBProvider ) !=nil {

@@ -18,17 +18,16 @@ const (
 )
 
 type ValidatorInfo struct {
-
 	instanceid int64
 	instancename string
 	typename string
-
 }
 
-func (h *ValidatorInfo) SetHeader(id int64, name *string, typename *string) {
+func (h *ValidatorInfo) SetInfo(id int64, name string, typename string) {
 	h.instanceid = id
-	h.instancename = *name
-	h.typename = *typename
+	h.instancename = name
+	h.typename = typename
+
 }
 
 func (h *ValidatorInfo) GetInstanceName() *string {
@@ -47,7 +46,7 @@ type ValidatorInterface interface {
 
 	Validate(tx []byte) uint32
     InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error
-	SetCurrentBlock(head int64,Time *time.Time,chainid *string) uint32
+	SetCurrentBlock(height int64,Time *time.Time,chainid *string)
 	GetInfo() *ValidatorInfo
 	GetCurrentHeight() int64
 	GetCurrentTime() *time.Time
@@ -57,15 +56,16 @@ type ValidatorInterface interface {
 
 type ValidatorContext struct {
 	ValidatorInterface
-	info ValidatorInfo
+	ValidatorInfo
 	currentHeight int64
 	currentTime time.Time
 	currentChainId string
 }
 
 func (v *ValidatorContext) GetInfo() *ValidatorInfo {
-	return &v.info
+	return &v.ValidatorInfo
 }
+
 
 func (v *ValidatorContext) SetCurrentBlock(height int64,time *time.Time,chainid *string) {
 	v.currentHeight = height

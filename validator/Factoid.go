@@ -19,10 +19,16 @@ type FactoidValidator struct{
 	AccountsDB dbm.DB
 }
 
-
+func NewFactoidValidator() *FactoidValidator {
+	v := FactoidValidator{}
+	v.SetInfo(0,"FCTValidator","Factoid")
+	v.ValidatorContext.ValidatorInterface = &v
+	return &v
+}
 
 func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
 
+	//v.AccountsDB.Get()
 	v.AccountsDB, err = dbProvider(&nm.DBContext{"fctaccounts", config})
 	if err != nil {
 		return
@@ -83,7 +89,3 @@ func (v *FactoidValidator) Validate(tx []byte) uint32 {
 	return 0
 }
 
-func NewFactoidValidator() *FactoidValidator {
-	v := FactoidValidator{}
-	return &v
-}

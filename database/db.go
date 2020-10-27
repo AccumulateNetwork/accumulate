@@ -16,6 +16,7 @@ func InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
 		return
 	}
 
+
 	KvStoreDB, err = dbProvider(&nm.DBContext{"kvStore", config})
 	if err != nil {
 		return

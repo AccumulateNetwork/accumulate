@@ -13,8 +13,8 @@ import (
 	"github.com/tendermint/tendermint/version"
 	"os"
 
-	"github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/node"
-	router2 "github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/router"
+	//"github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/node"
+	//router2 "github.com/AccumulusNetwork/ValidatorAccumulator/ValAcc/router"
 	"github.com/AccumulusNetwork/accumulated/database"
 	pb "github.com/AccumulusNetwork/accumulated/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -39,6 +39,8 @@ const BanListTrigger = -10000
 
 
 type DirectoryBlockLeader struct {
+
+	abci.BaseApplication
 //	db           *badger.DB
 //	currentBatch *badger.Txn
 	//router = new(router2.Router)
