@@ -33,10 +33,10 @@ func init() {
 
 	flag.StringVar(&WorkingDir[0], "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
 	flag.Parse()
-	WorkingDir[1] = path.Join(WorkingDir[0],"/vm/1")
-	WorkingDir[2] = path.Join(WorkingDir[0],"/vm/2")
-	WorkingDir[3] = path.Join(WorkingDir[0],"/vm/3")
-	WorkingDir[0] = path.Join(WorkingDir[0],"/dirblock")
+	WorkingDir[1] = path.Join(WorkingDir[0],"/valacc/fct")
+	WorkingDir[2] = path.Join(WorkingDir[0],"/valacc/ec")
+	WorkingDir[3] = path.Join(WorkingDir[0],"/valacc/user")
+	WorkingDir[0] = path.Join(WorkingDir[0],"/leader")
 	ConfigFile[0] = path.Join(WorkingDir[0],"/config/config.toml")
 	ConfigFile[1] = path.Join(WorkingDir[1],"/config/config.toml")
 	ConfigFile[2] = path.Join(WorkingDir[2],"/config/config.toml")
@@ -54,8 +54,10 @@ func main() {
 	for i := 0; i<n; i++ {
     	switch os.Args[i] {
 		case "init":
-			tendermint.Initialize("dirblock", "tcp://127.0.0.1:26600","tcp://127.0.0.1:26601",ConfigFile[0],WorkingDir[0])
-			tendermint.Initialize("vm1", "tcp://127.0.0.1:26610","tcp://127.0.0.1:26611",ConfigFile[1],WorkingDir[1])
+			tendermint.Initialize("directory-block-leader", "tcp://127.0.0.1:26600","tcp://127.0.0.1:26601",ConfigFile[0],WorkingDir[0])
+			tendermint.Initialize("accumulator-fct", "tcp://127.0.0.1:26610","tcp://127.0.0.1:26611",ConfigFile[1],WorkingDir[1])
+			tendermint.Initialize("accumulator-ec", "tcp://127.0.0.1:26620","tcp://127.0.0.1:26621",ConfigFile[2],WorkingDir[2])
+			tendermint.Initialize("accumulator-user", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631",ConfigFile[3],WorkingDir[3])
 //			tendermint.Initialize("vm2", "tcp://127.0.0.1:26620","tcp://127.0.0.1:26621",ConfigFile[2],WorkingDir[2])
 //			tendermint.Initialize("vm3", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631",ConfigFile[3],WorkingDir[3])
 			os.Exit(0)

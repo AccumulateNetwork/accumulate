@@ -42,7 +42,7 @@ type AccumulatorVMApplication struct {
 	//EntryFeed = chan make(chan node.EntryHash, 10000)
 	accountState map[string]AccountStateStruct
 	BootstrapHeight int64
-	Height int64
+	ChainId [32]byte
 	Val *validator.ValidatorContext
 	DB vadb.DB
 
@@ -66,7 +66,6 @@ func NewAccumulatorVMApplication(val *validator.ValidatorContext) *AccumulatorVM
 		//EntryFeed : make(chan node.EntryHash, 10000),
 		accountState : make(map[string]AccountStateStruct),
 		BootstrapHeight: 99999999999,
-		Height : 0,
 		Val : val,
 	}
     return &app
@@ -77,35 +76,69 @@ var _ abcitypes.Application = (*AccumulatorVMApplication)(nil)
 
 
 func (app *AccumulatorVMApplication) GetHeight ()(uint64) {
-	return uint64(app.Height)
+	return uint64(app.Val.GetCurrentHeight())
 }
 
 func (AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
+	/*
+	type RequestInfo struct {
+		Version      string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
+		BlockVersion uint64 `protobuf:"varint,2,opt,name=block_version,json=blockVersion,proto3" json:"block_version,omitempty"`
+		P2PVersion   uint64 `protobuf:"varint,3,opt,name=p2p_version,json=p2pVersion,proto3" json:"p2p_version,omitempty"`
+	}
+	type ResponseInfo struct {
+		Data             string `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+		Version          string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+		AppVersion       uint64 `protobuf:"varint,3,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
+		LastBlockHeight  int64  `protobuf:"varint,4,opt,name=last_block_height,json=lastBlockHeight,proto3" json:"last_block_height,omitempty"`
+		LastBlockAppHash []byte `protobuf:"bytes,5,opt,name=last_block_app_hash,json=lastBlockAppHash,proto3" json:"last_block_app_hash,omitempty"`
+	}
+	 */
 	return abcitypes.ResponseInfo{}
 }
 
 func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
+
 	return abcitypes.ResponseSetOption{}
 }
 
 // new transaction is added to the Tendermint Core. Check if it is valid.
 func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
+	/*
+	type RequestCheckTx struct {
+		Tx   []byte      `protobuf:"bytes,1,opt,name=tx,proto3" json:"tx,omitempty"`
+		Type CheckTxType `protobuf:"varint,2,opt,name=type,proto3,enum=tendermint.abci.CheckTxType" json:"type,omitempty"`
+	}*/
 	bytesLen := len(req.Tx) - dataPtr - 64
 	code := app.isValid(req.Tx,bytesLen)
+
 	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
 }
 
 
 func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
+	/*
+	type RequestInitChain struct {
+		Time            time.Time         `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
+		ChainId         string            `protobuf:"bytes,2,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
+		ConsensusParams *ConsensusParams  `protobuf:"bytes,3,opt,name=consensus_params,json=consensusParams,proto3" json:"consensus_params,omitempty"`
+		Validators      []ValidatorUpdate `protobuf:"bytes,4,rep,name=validators,proto3" json:"validators"`
+		AppStateBytes   []byte            `protobuf:"bytes,5,opt,name=app_state_bytes,json=appStateBytes,proto3" json:"app_state_bytes,omitempty"`
+		InitialHeight   int64             `protobuf:"varint,6,opt,name=initial_height,json=initialHeight,proto3" json:"initial_height,omitempty"`
+	}*/
 	fmt.Printf("Initalizing Accumulator Router\n")
 
 	acc := new(accumulator.Accumulator)
 	app.ACCs = append(app.ACCs, acc)
 
-	str := "accumulator_" + *app.Val.GetInfo().GetTypeName() + "_" + *app.Val.GetInfo().GetInstanceName()
-	chainID := valacctypes.Hash(sha256.Sum256([]byte(str)))
-
-	entryFeed, control, mdHashes := acc.Init(&app.DB, &chainID)
+	str := "accumulator-" + *app.Val.GetInfo().GetNamespace()// + "_" + *app.Val.GetInfo().GetInstanceName()
+	if str != req.ChainId {
+		fmt.Printf("Invalid chain validator\n")
+		return abcitypes.ResponseInitChain{}
+	}
+	app.ChainId = sha256.Sum256([]byte(req.ChainId))
+    //hchain := valacctypes.Hash(app.ChainId)
+	entryFeed, control, mdHashes := acc.Init(&app.DB, (*valacctypes.Hash)(&app.ChainId))
 	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
 	app.Controls = append(app.Controls, control)
 	app.MDFeeds = append(app.MDFeeds, mdHashes)
@@ -117,7 +150,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	//app.router.Init(EntryFeed, int(AccNumber))
     //go router.Run()
 
-	return abcitypes.ResponseInitChain{}
+	return abcitypes.ResponseInitChain{AppHash: app.ChainId[:]}
 }
 
 // ------ BeginBlock -> DeliverTx -> EndBlock -> Commit
@@ -127,7 +160,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 //Here we create a batch, which will store block's transactions.
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
 	//app.currentBatch = app.db.NewTransaction(true)
-	app.Height = req.Header.Height
+	//app.Height = req.Header.Height
 
 	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&req.Header.ChainID)
 	return abcitypes.ResponseBeginBlock{}
@@ -162,7 +195,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 		println(err.Error())
 		return response
 	}
-	AccountState.LastBlockHeight = app.Height
+	AccountState.LastBlockHeight = app.Val.GetCurrentHeight()
 
 	//Grab our payload
 	data := req.Tx[dataPtr:dataPtr + bytesLen]
@@ -272,7 +305,7 @@ func (app *AccumulatorVMApplication) GetAccountState (publicKey []byte) (acc Acc
 		//Not found in cache, read disk
 		account, err := GetAccount(publicKey)
 		if err !=nil{  //No account for publicKey found!
-			if app.Height < app.BootstrapHeight {
+			if app.GetHeight() < uint64(app.BootstrapHeight) {
 			}else {
 				return acc, err
 			}
@@ -321,7 +354,7 @@ func (app *AccumulatorVMApplication) WriteKeyValue(account AccountStateStruct, d
 		return err
 	}
 
-	KeyValue.Height = uint64(app.Height)
+	KeyValue.Height = uint64(app.GetHeight())
 	data,err = KeyValue.Marshal()
 
 	//AccountAdd.
@@ -373,7 +406,7 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 	}
 
 	//initialize the accumulator database
-	str := "accumulator_" + *app.Val.GetInfo().GetTypeName()// + "_" + *app.Val.GetInfo().GetInstanceName()
+	str := "accumulator_" + *app.Val.GetInfo().GetNamespace()// + "_" + *app.Val.GetInfo().GetInstanceName()
 	fmt.Printf("Creating %s\n", str)
 	db2, err := nm.DefaultDBProvider(&nm.DBContext{str, config})
 	if err != nil {
@@ -398,6 +431,7 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 		fmt.Println("DB Error")
 		return nil,nil //TODO
 	}
+
 
 	// create node
 	node, err := nm.NewNode(

@@ -1,12 +1,10 @@
 package tendermint
+
 import (
 	"fmt"
 
-	//"github.com/spf13/cobra"
-
 	cfg "github.com/tendermint/tendermint/config"
 	tmos "github.com/tendermint/tendermint/libs/os"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
@@ -26,7 +24,7 @@ func initFiles(cmd *cobra.Command, args []string) error {
 }
 */
 
-func InitFilesWithConfig(config *cfg.Config) error {
+func InitFilesWithConfig(config *cfg.Config, chainid *string) error {
 	// private validator
 	privValKeyFile := config.PrivValidatorKeyFile()
 	privValStateFile := config.PrivValidatorStateFile()
@@ -60,7 +58,7 @@ func InitFilesWithConfig(config *cfg.Config) error {
 		fmt.Println("Found genesis file", "path", genFile)
 	} else {
 		genDoc := types.GenesisDoc{
-			ChainID:         fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
+			ChainID:         *chainid, //fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
 			GenesisTime:     tmtime.Now(),
 			ConsensusParams: types.DefaultConsensusParams(),
 		}
