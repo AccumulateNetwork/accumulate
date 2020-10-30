@@ -25,7 +25,7 @@ type FactoidValidator struct{
 
 func NewFactoidValidator() *FactoidValidator {
 	v := FactoidValidator{}
-	v.SetInfo(0,"FCTValidator","Factoid")
+	v.SetInfo(0,"FCTValidator","fct")
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
