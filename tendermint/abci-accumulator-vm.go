@@ -12,6 +12,8 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
+	dbm "github.com/tendermint/tm-db"
+
 	//"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 	"os"
@@ -44,6 +46,7 @@ type AccumulatorVMApplication struct {
 	BootstrapHeight int64
 	ChainId [32]byte
 	Val *validator.ValidatorContext
+	chainval map[string]*validator.ValidatorContext
 	DB vadb.DB
 
 
@@ -53,21 +56,36 @@ type AccumulatorVMApplication struct {
 	EntryFeeds      []chan node.EntryHash
 	Controls        []chan bool
 	MDFeeds         []chan *valacctypes.Hash
+	valTypeRegDB    dbm.DB
+	config cfg.Config
 
 }
 
-func NewAccumulatorVMApplication(val *validator.ValidatorContext) *AccumulatorVMApplication {
+func (app *AccumulatorVMApplication) AddValidator(val *validator.ValidatorContext) error {
+	//validators are mapped to registered type id's.
+	//getTypeId(val.GetChainId())
 
+	//so perhaps, the validator should lookup typeid by chainid in the validator registration database.
+
+	app.chainval[val.GetTypeId()] = val
+	//tmp
+	app.Val = val
+   //registration of the validators should be done on-chain
+}
+
+func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
 	app := AccumulatorVMApplication{
 //		db: db,
 		//router: new(router2.Router),
+		chainval: make(map[uint64]*validator.ValidatorContext),
 		EntryFeed: make(chan node.EntryHash, 10000),
 		AccNumber: 1,
 		//EntryFeed : make(chan node.EntryHash, 10000),
 		accountState : make(map[string]AccountStateStruct),
 		BootstrapHeight: 99999999999,
-		Val : val,
+		Val : nil,
 	}
+	app.Initialize(ConfigFile, WorkingDir)
     return &app
 }
 
@@ -100,6 +118,35 @@ func (AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.Respon
 func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
 
 	return abcitypes.ResponseSetOption{}
+}
+
+
+func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
+	fmt.Printf("Starting Tendermint (version: %v)\n", version.Version)
+
+	err := nil
+	app.config = cfg.DefaultConfig()
+	app.config.SetRoot(WorkingDir)
+
+	viper.SetConfigFile(ConfigFile)
+	if err := viper.ReadInConfig(); err != nil {
+		return nil, fmt.Errorf("viper failed to read config file: %w", err)
+	}
+	if err := viper.Unmarshal(app.config); err != nil {
+		return nil, fmt.Errorf("viper failed to unmarshal config: %w", err)
+	}
+	if err := app.config.ValidateBasic(); err != nil {
+		return nil, fmt.Errorf("config is invalid: %w", err)
+	}
+
+
+	str := "ValTypeReg"
+	fmt.Printf("Creating %s\n", str)
+	app.valTypeRegDB, err := nm.DefaultDBProvider(&nm.DBContext{str, app.config})
+	if err != nil {
+		return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
+	}
+	return nil
 }
 
 // new transaction is added to the Tendermint Core. Check if it is valid.
@@ -368,39 +415,24 @@ func (app *AccumulatorVMApplication) WriteKeyValue(account AccountStateStruct, d
 }
 
 
-func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
-	fmt.Printf("Starting Tendermint (version: %v)\n", version.Version)
-
-	config := cfg.DefaultConfig()
-	config.SetRoot(WorkingDir)
-
-	viper.SetConfigFile(ConfigFile)
-	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("viper failed to read config file: %w", err)
-	}
-	if err := viper.Unmarshal(config); err != nil {
-		return nil, fmt.Errorf("viper failed to unmarshal config: %w", err)
-	}
-	if err := config.ValidateBasic(); err != nil {
-		return nil, fmt.Errorf("config is invalid: %w", err)
-	}
+func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 
 	// create logger
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 	var err error
-	logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel())
+	logger, err = tmflags.ParseLogLevel(app.config.LogLevel, logger, cfg.DefaultLogLevel())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse log level: %w", err)
 	}
 
 	// read private validator
 	pv := privval.LoadFilePV(
-		config.PrivValidatorKeyFile(),
-		config.PrivValidatorStateFile(),
+		app.config.PrivValidatorKeyFile(),
+		app.config.PrivValidatorStateFile(),
 	)
 
 	// read node key
-	nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
+	nodeKey, err := p2p.LoadNodeKey(app.config.NodeKeyFile())
 	if err != nil {
 		return nil, fmt.Errorf("failed to load node's key: %w", err)
 	}
@@ -408,7 +440,7 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 	//initialize the accumulator database
 	str := "accumulator_" + *app.Val.GetInfo().GetNamespace()// + "_" + *app.Val.GetInfo().GetInstanceName()
 	fmt.Printf("Creating %s\n", str)
-	db2, err := nm.DefaultDBProvider(&nm.DBContext{str, config})
+	db2, err := nm.DefaultDBProvider(&nm.DBContext{str, app.config})
 	if err != nil {
 		return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
@@ -427,7 +459,7 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 
 
 	//initialize the validator databases
-	if app.Val.InitDBs(config, nm.DefaultDBProvider ) !=nil {
+	if app.Val.InitDBs(app.config, nm.DefaultDBProvider ) !=nil {
 		fmt.Println("DB Error")
 		return nil,nil //TODO
 	}
@@ -435,13 +467,13 @@ func (app *AccumulatorVMApplication) Start(ConfigFile string, WorkingDir string)
 
 	// create node
 	node, err := nm.NewNode(
-		config,
+		app.config,
 		pv,
 		nodeKey,
 		proxy.NewLocalClientCreator(app),
-		nm.DefaultGenesisDocProviderFunc(config),
+		nm.DefaultGenesisDocProviderFunc(app.config),
 		nm.DefaultDBProvider,
-		nm.DefaultMetricsProvider(config.Instrumentation),
+		nm.DefaultMetricsProvider(app.config.Instrumentation),
 		logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
