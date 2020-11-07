@@ -71,11 +71,13 @@ func main() {
 	//make a factoid validator/accumulator
 	//create a Factoid validator
 	val := validator.NewFactoidValidator()
+
 	//create a AccumulatorVM
-	factoidvm := tendermint.NewAccumulatorVMApplication(&val.ValidatorContext)
+	factomvm := tendermint.NewAccumulatorVMApplication(ConfigFile[1],WorkingDir[1])
+	factomvm.AddValidator(&val.ValidatorContext)
 
 	go app.Start(ConfigFile[0],WorkingDir[0])
-	go factoidvm.Start(ConfigFile[1],WorkingDir[1])
+	go factomvm.Start()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

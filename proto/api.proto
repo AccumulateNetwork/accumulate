@@ -1,5 +1,6 @@
 syntax = "proto3";
 package apiProto;
+option go_package = "proto";
 
 import "google/protobuf/empty.proto";
 
@@ -10,6 +11,34 @@ service ApiService {
 	rpc GetHeight(google.protobuf.Empty) returns (Height) {}
 	rpc GetNodeInfo(google.protobuf.Empty) returns (NodeInfo) {}
 }
+
+
+// [address][Type][Nonce][Data][Sign]
+
+// [Key]  32 bytes
+// [Type] 1 byte  (var_int)
+// [Nonce] 8 byte (typically time stamp)
+// [Data] ? bytes
+// [Sign] 32 bytes (type+nonce+data)
+
+message ValRequest
+{
+	bytes   bvcaddress     = 1; // block validation chain address - sha256(chainId)[0:7] - big-endian or little-endian
+	uint32  instruction 	 = 2; // instruction code used by the validator - e.g. "write data"
+	uint32  parameter1     = 3; // parameter 1 specific to the instruction
+	uint32  parameter2     = 4; // parameter 2 specific to the instruction
+	uint64 	nonce          = 5; // typically time stamp or monotonic counter
+	bytes   data           = 6; // payload for validator - Command Data
+	bytes   signed         = 7; // ed25519 signature
+}
+
+
+message ValReponse
+{
+	bytes  responseData = 1;
+	uint64 errorCode = 2;
+}
+
 
 // [Key][Type][Nonce][Data][Sign]
 

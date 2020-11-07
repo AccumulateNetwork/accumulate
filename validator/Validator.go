@@ -29,14 +29,14 @@ type ValidatorInterface interface {
 }
 
 type ValidatorInfo struct {
-	instanceid int64
+	typeid int64
 	instancename string
 	namespace string
 }
 
 
 func (h *ValidatorInfo) SetInfo(id int64, name string, namespace string) {
-	h.instanceid = id
+	h.typeid = id
 	h.instancename = name
 	h.namespace = namespace
 }
@@ -49,8 +49,8 @@ func (h *ValidatorInfo) GetNamespace() *string {
     return &h.namespace
 }
 
-func (h *ValidatorInfo) GetInstanceId() int64 {
-	return h.instanceid
+func (h *ValidatorInfo) GetTypeId() int64 {
+	return h.typeid
 }
 
 type ValidatorContext struct {
