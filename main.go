@@ -17,6 +17,13 @@ import (
 	//"github.com/dgraph-io/badger"
 	"github.com/AccumulateNetwork/accumulated/tendermint"
 	"github.com/AccumulateNetwork/accumulated/validator"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/rpc"
+	"github.com/gorilla/rpc/json"
+	"log"
+	"net/http"
+
+	//"net/rpc/jsonrpc"
 )
 
 var ConfigFile [33]string
@@ -41,6 +48,28 @@ func init() {
 	ConfigFile[1] = path.Join(WorkingDir[1],"/config/config.toml")
 	ConfigFile[2] = path.Join(WorkingDir[2],"/config/config.toml")
 	ConfigFile[3] = path.Join(WorkingDir[3],"/config/config.toml")
+}
+
+type Args struct {
+	A, B int
+}
+type Arith int
+type Result int
+func (t *Arith) Multiply(r *http.Request, args *Args, result *Result) error {
+	log.Printf("Multiplying %d with %d\n", args.A, args.B)
+	*result = Result(args.A * args.B)
+	return nil
+}
+
+func jsonrpcserver () {
+	s := rpc.NewServer()
+	s.RegisterCodec(json.NewCodec(), "application/json")
+	s.RegisterCodec(json.NewCodec(), "application/json;charset=UTF-8")
+	arith := new(Arith)
+	s.RegisterService(arith, "")
+	r := mux.NewRouter()
+	r.Handle("/rpc", s)
+	go http.ListenAndServe(":1234", r)
 }
 
 func main() {
@@ -78,6 +107,8 @@ func main() {
 
 	go app.Start(ConfigFile[0],WorkingDir[0])
 	go factomvm.Start()
+
+	go jsonrpcserver()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
