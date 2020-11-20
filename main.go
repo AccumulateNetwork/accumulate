@@ -1,15 +1,22 @@
 package main
 
 import (
+	"encoding/json"
 	//	"errors"
 	"flag"
 	"fmt"
 	"log"
 
+	"context"
+	"net/http"
+	"os"
+
+	//"github.com/AdamSLevy/jsonrpc2"
+	"github.com/AdamSLevy/jsonrpc2/v14"
+
 	// db "github.com/tendermint/tm-db"
 	"path"
-	//	"github.com/spf13/cobra"
-	"os"
+
 	"os/signal"
 	"os/user"
 	"syscall"
@@ -17,11 +24,6 @@ import (
 	//"github.com/dgraph-io/badger"
 	"github.com/AccumulateNetwork/accumulated/tendermint"
 	"github.com/AccumulateNetwork/accumulated/validator"
-	"github.com/gorilla/mux"
-	"github.com/gorilla/rpc"
-	"github.com/gorilla/rpc/json"
-	//"log"
-	"net/http"
 
 	//"net/rpc/jsonrpc"
 )
@@ -50,26 +52,93 @@ func init() {
 	ConfigFile[3] = path.Join(WorkingDir[3],"/config/config.toml")
 }
 
-type Args struct {
-	A, B int
+type factoid_tx struct {
+    transaction []byte
 }
-type Arith int
-type Result int
-func (t *Arith) Multiply(r *http.Request, args *Args, result *Result) error {
-	log.Printf("Multiplying %d with %d\n", args.A, args.B)
-	*result = Result(args.A * args.B)
-	return nil
+type FactoidSubmit int
+//
+//func (t *FactoidSubmit) submit(r *http.Request, args *Args, result *Result) error {
+//	log.Printf("factoid-submit\n")
+//	//*result = Result(args.A * args.B)
+//	return nil
+//}
+//
+func factoid_submit(_ context.Context, params json.RawMessage) interface{} {
+
+	var p struct {
+		Transaction *string
+	}
+
+	type ret struct {
+		Message string `json:"message"`
+		Txid string    `json:"txid,omitempty"`
+	}
+
+	err := json.Unmarshal(params, &p)
+	if err != nil {
+		return ret{"transaction unmarshal error",""}
+	}
+	//send off the p.Transaction
+	//call tendermint
+	//process response
+	return ret{"Successfully submitted the transaction","aa8bac391e744340140ea0d95c7b37f9cc8a58601961bd751f5adb042af6f33b" }
+}
+// The RPC methods called in the JSON-RPC 2.0 specification examples.
+func subtract(_ context.Context, params json.RawMessage) interface{} {
+	// Parse either a params array of numbers or named numbers params.
+	var a []float64
+	if err := json.Unmarshal(params, &a); err == nil {
+		if len(a) != 2 {
+			return jsonrpc2.ErrorInvalidParams("Invalid number of array params")
+		}
+		return a[0] - a[1]
+	}
+	var p struct {
+		Subtrahend *float64
+		Minuend    *float64
+	}
+	if err := json.Unmarshal(params, &p); err != nil ||
+		p.Subtrahend == nil || p.Minuend == nil {
+		return jsonrpc2.ErrorInvalidParams(`Required fields "subtrahend" and ` +
+			`"minuend" must be valid numbers.`)
+	}
+	return *p.Minuend - *p.Subtrahend
+}
+func sum(_ context.Context, params json.RawMessage) interface{} {
+	var p []float64
+	if err := json.Unmarshal(params, &p); err != nil {
+		return jsonrpc2.ErrorInvalidParams(err)
+	}
+	sum := float64(0)
+	for _, x := range p {
+		sum += x
+	}
+	return sum
+}
+func notifyHello(_ context.Context, _ json.RawMessage) interface{} {
+	return ""
+}
+func getData(_ context.Context, _ json.RawMessage) interface{} {
+	return []interface{}{"hello", 5}
 }
 
-func jsonrpcserver () {
-	s := rpc.NewServer()
-	s.RegisterCodec(json.NewCodec(), "application/json")
-	s.RegisterCodec(json.NewCodec(), "application/json;charset=UTF-8")
-	arith := new(Arith)
-	s.RegisterService(arith, "")
-	r := mux.NewRouter()
-	r.Handle("/rpc", s)
-	go http.ListenAndServe(":1234", r)
+func jsonrpcserver2(){
+	//s := NewJSONRPCServer()
+	//arith := new(Arith)
+	//s.Register(arith)
+	//http.Handle("/rpc", s)
+	//http.ListenAndServe(":1234", nil)
+	// Register RPC methods.
+	methods := jsonrpc2.MethodMap{
+		"subtract":     subtract,
+		"sum":          sum,
+		"notify_hello": notifyHello,
+		"get_data":     getData,
+		"factoid-submit": factoid_submit,
+	}
+	jsonrpc2.DebugMethodFunc = true
+	handler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
+	http.ListenAndServe(":1234", handler)
 }
 
 func main() {
@@ -102,13 +171,13 @@ func main() {
 	val := validator.NewFactoidValidator()
 
 	//create a AccumulatorVM
-	factomvm := tendermint.NewAccumulatorVMApplication(ConfigFile[1],WorkingDir[1])
-	factomvm.AddValidator(&val.ValidatorContext)
+	accvm1 := tendermint.NewAccumulatorVMApplication(ConfigFile[1],WorkingDir[1])
+	accvm1.AddValidator(&val.ValidatorContext)
 
 	go app.Start(ConfigFile[0],WorkingDir[0])
-	go factomvm.Start()
+	go accvm1.Start()
 
-	go jsonrpcserver()
+	go jsonrpcserver2()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
