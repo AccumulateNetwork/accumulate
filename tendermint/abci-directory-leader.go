@@ -2,6 +2,7 @@ package tendermint
 
 import (
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
@@ -306,15 +307,15 @@ func (app *DirectoryBlockLeader) MakeBootStrapAccount(publicKey []byte)(state Ac
 
 func (app *DirectoryBlockLeader) WriteKeyValue(account AccountStateStruct, data []byte) (err error) {
 
-	KeyValue := pb.KeyValue{}
+	KeyValue := &pb.KeyValue{}
 
-	err = KeyValue.Unmarshal(data)
+	err = proto.Unmarshal(data,KeyValue)
 	if err != nil {
 		return err
 	}
 
 	KeyValue.Height = uint64(app.Height)
-	data,err = KeyValue.Marshal()
+	data,err = proto.Marshal(KeyValue)
 
 	//AccountAdd.
 	err = database.KvStoreDB.Set(KeyValue.Key,data)

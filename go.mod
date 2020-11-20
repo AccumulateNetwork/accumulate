@@ -47,6 +47,7 @@ require (
 	github.com/google/protobuf v3.13.0+incompatible // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
 	github.com/gorilla/mux v1.7.4-0.20190720201435-e67b3c02c719 // indirect
+	github.com/gorilla/rpc v1.2.0 // indirect
 	github.com/hashicorp/go-plugin v1.3.0 // indirect
 	github.com/hinshun/vt10x v0.0.0-20180809195222-d55458df857c // indirect
 	github.com/howeyc/fsnotify v0.9.0 // indirect

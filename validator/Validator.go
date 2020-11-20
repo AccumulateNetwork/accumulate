@@ -1,9 +1,13 @@
 package validator
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
+	"fmt"
 	cfg "github.com/tendermint/tendermint/config"
 	nm "github.com/tendermint/tendermint/node"
 	time "time"
+	"encoding/hex"
 )
 
 //should define return codes for validation...
@@ -29,28 +33,43 @@ type ValidatorInterface interface {
 }
 
 type ValidatorInfo struct {
-	typeid int64
-	instancename string
+	address uint64
+	chainid [32]byte
 	namespace string
 }
 
 
-func (h *ValidatorInfo) SetInfo(id int64, name string, namespace string) {
-	h.typeid = id
-	h.instancename = name
+func (h *ValidatorInfo) SetInfo(chainid string, namespace string) error {
+
+	chainidlen := len(chainid)
+	if chainidlen < 32 {
+		h.chainid = sha256.Sum256([]byte(chainid))
+	} else if chainidlen == 64 {
+		_, err := hex.Decode(h.chainid[:],[]byte(chainid))
+		if err != nil {
+			fmt.Errorf("[Error] cannot decode chainid %s", chainid)
+			return err
+		}
+	} else {
+		return fmt.Errorf("[Error] invalid chainid for validator %s", namespace)
+	}
+
+	h.address = binary.BigEndian.Uint64(h.chainid[24:])
+
 	h.namespace = namespace
+	return nil
 }
 
-func (h *ValidatorInfo) GetInstanceName() *string {
-	return &h.instancename
+func (h *ValidatorInfo) GetValidatorChainId() *[32]byte {
+	return &h.chainid
 }
 
 func (h *ValidatorInfo) GetNamespace() *string {
     return &h.namespace
 }
 
-func (h *ValidatorInfo) GetTypeId() int64 {
-	return h.typeid
+func (h *ValidatorInfo) GetTypeId() uint64 {
+	return h.address
 }
 
 type ValidatorContext struct {

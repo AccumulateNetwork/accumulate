@@ -25,7 +25,12 @@ type FactoidValidator struct{
 
 func NewFactoidValidator() *FactoidValidator {
 	v := FactoidValidator{}
-	v.SetInfo(0,"FCTValidator","fct")
+	//need the chainid, then hash to get first 8 bytes to make the chainid.
+	//by definition a chainid of a factoid block is
+	//000000000000000000000000000000000000000000000000000000000000000f
+	//the id will be 0x0000000f
+	chainid := "000000000000000000000000000000000000000000000000000000000000000f"
+	v.SetInfo(chainid,"factoid")
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
