@@ -20,7 +20,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/rpc"
 	"github.com/gorilla/rpc/json"
-	"log"
+	//"log"
 	"net/http"
 
 	//"net/rpc/jsonrpc"

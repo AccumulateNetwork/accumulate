@@ -6,6 +6,8 @@ import (
 	//"github.com/gogo/protobuf/proto"
 	"github.com/AccumulateNetwork/accumulated/database"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
+
+	"github.com/golang/protobuf/proto"
 )
 
 type AccountStateStruct struct {
@@ -26,6 +28,6 @@ func GetAccount(publicKey []byte) (Account pb.Account, err error){
 		return Account,err
 	}
 
-	err = Account.Unmarshal(accountBytes)
+	err = proto.Unmarshal(accountBytes,&Account)
 	return Account,err
 }

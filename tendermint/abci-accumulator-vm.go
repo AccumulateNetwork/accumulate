@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
+	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
@@ -46,7 +47,7 @@ type AccumulatorVMApplication struct {
 	BootstrapHeight int64
 	ChainId [32]byte
 	Val *validator.ValidatorContext
-	chainval map[string]*validator.ValidatorContext
+	chainval map[uint64]*validator.ValidatorContext
 	DB vadb.DB
 
 
@@ -57,7 +58,7 @@ type AccumulatorVMApplication struct {
 	Controls        []chan bool
 	MDFeeds         []chan *valacctypes.Hash
 	valTypeRegDB    dbm.DB
-	config cfg.Config
+	config *cfg.Config
 
 }
 
@@ -67,10 +68,12 @@ func (app *AccumulatorVMApplication) AddValidator(val *validator.ValidatorContex
 
 	//so perhaps, the validator should lookup typeid by chainid in the validator registration database.
 
+
 	app.chainval[val.GetTypeId()] = val
 	//tmp
 	app.Val = val
    //registration of the validators should be done on-chain
+   return nil
 }
 
 func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
@@ -124,27 +127,28 @@ func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcity
 func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
 	fmt.Printf("Starting Tendermint (version: %v)\n", version.Version)
 
-	err := nil
 	app.config = cfg.DefaultConfig()
 	app.config.SetRoot(WorkingDir)
 
 	viper.SetConfigFile(ConfigFile)
 	if err := viper.ReadInConfig(); err != nil {
-		return nil, fmt.Errorf("viper failed to read config file: %w", err)
+
+		return fmt.Errorf("viper failed to read config file: %w", err)
 	}
 	if err := viper.Unmarshal(app.config); err != nil {
-		return nil, fmt.Errorf("viper failed to unmarshal config: %w", err)
+		return fmt.Errorf("viper failed to unmarshal config: %w", err)
 	}
 	if err := app.config.ValidateBasic(); err != nil {
-		return nil, fmt.Errorf("config is invalid: %w", err)
+		return fmt.Errorf("config is invalid: %w", err)
 	}
 
 
 	str := "ValTypeReg"
 	fmt.Printf("Creating %s\n", str)
-	app.valTypeRegDB, err := nm.DefaultDBProvider(&nm.DBContext{str, app.config})
+	cdb, err := nm.DefaultDBProvider(&nm.DBContext{str, app.config})
+	app.valTypeRegDB = cdb
 	if err != nil {
-		return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
+		return fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
 	return nil
 }
@@ -394,15 +398,15 @@ func (app *AccumulatorVMApplication) MakeBootStrapAccount(publicKey []byte)(stat
 
 func (app *AccumulatorVMApplication) WriteKeyValue(account AccountStateStruct, data []byte) (err error) {
 
-	KeyValue := pb.KeyValue{}
+	KeyValue := &pb.KeyValue{}
 
-	err = KeyValue.Unmarshal(data)
+	err = proto.Unmarshal(data,KeyValue)
 	if err != nil {
 		return err
 	}
 
 	KeyValue.Height = uint64(app.GetHeight())
-	data,err = KeyValue.Marshal()
+	data,err = proto.Marshal(KeyValue)
 
 	//AccountAdd.
 	err = database.KvStoreDB.Set(KeyValue.Key,data)
