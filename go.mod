@@ -6,6 +6,7 @@ require (
 	github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 // indirect
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
 	github.com/AdamSLevy/jsonrpc2 v2.0.0+incompatible // indirect
+	github.com/AdamSLevy/jsonrpc2/v14 v14.0.0
 	github.com/ChainSafe/go-schnorrkel v0.0.0-20200626160457-b38283118816 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/DiSiqueira/GoTree v1.0.0 // indirect
@@ -62,7 +63,6 @@ require (
 	github.com/mitchellh/mapstructure v1.3.3 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/powerman/rpc-codec v1.2.2 // indirect
-	github.com/prometheus/common v0.12.0 // indirect
 	github.com/spf13/afero v1.3.4 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
@@ -70,15 +70,13 @@ require (
 	github.com/spf13/viper v1.7.1
 	github.com/tarndt/wasmws v0.0.0-20191230183838-0f186a886e92
 	github.com/tendermint/go-amino v0.16.0 // indirect
-	github.com/tendermint/tendermint v0.34.0-rc5
-	github.com/tendermint/tm-db v0.6.2
+	github.com/tendermint/tendermint v0.34.0
+	github.com/tendermint/tm-db v0.6.3
 	go.uber.org/atomic v1.6.0 // indirect
 	go.uber.org/ratelimit v0.1.0 // indirect
-	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
-	golang.org/x/net v0.0.0-20200813134508-3edf25e44fcc
-	golang.org/x/sys v0.0.0-20200814200057-3d37ad5750ed // indirect
-	google.golang.org/genproto v0.0.0-20200815001618-f69a88009b70 // indirect
-	google.golang.org/grpc v1.32.0
+	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
+	golang.org/x/net v0.0.0-20200822124328-c89045814202
+	google.golang.org/grpc v1.33.2
 	google.golang.org/protobuf v1.25.0 // indirect
 	gopkg.in/AlecAivazis/survey.v1 v1.6.2 // indirect
 	gopkg.in/ini.v1 v1.58.0 // indirect

@@ -329,7 +329,7 @@ func (app *DirectoryBlockLeader) WriteKeyValue(account AccountStateStruct, data 
 
 
 func (app *DirectoryBlockLeader) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
-	fmt.Printf("Starting Tendermint (version: %v)\n", version.Version)
+	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
 	config := cfg.DefaultConfig()
 	config.SetRoot(WorkingDir)
