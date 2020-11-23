@@ -125,7 +125,7 @@ func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcity
 
 
 func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
-	fmt.Printf("Starting Tendermint (version: %v)\n", version.Version)
+	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
 	app.config = cfg.DefaultConfig()
 	app.config.SetRoot(WorkingDir)
