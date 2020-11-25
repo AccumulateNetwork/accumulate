@@ -13,6 +13,7 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
+	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	dbm "github.com/tendermint/tm-db"
 
 	//"github.com/tendermint/tendermint/types"
@@ -59,6 +60,7 @@ type AccumulatorVMApplication struct {
 	MDFeeds         []chan *valacctypes.Hash
 	valTypeRegDB    dbm.DB
 	config *cfg.Config
+	RPCContext rpctypes.Context
 
 }
 
@@ -150,6 +152,8 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	if err != nil {
 		return fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
+
+	//RPCContext.RPCRequest// = new(JSONReq{})
 	return nil
 }
 
@@ -484,8 +488,9 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	}
 
 	fmt.Println("Tendermint Start")
-	node.Start()
+	//app.config.RPC().
 
+	node.Listeners()
 	defer func() {
 		node.Stop()
 		node.Wait()

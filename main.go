@@ -1,7 +1,10 @@
 package main
 
 import (
+	"encoding/hex"
 	"encoding/json"
+	//pb "github.com/AccumulateNetwork/accumulated/proto"
+
 	//	"errors"
 	"flag"
 	"fmt"
@@ -25,6 +28,8 @@ import (
 	"github.com/AccumulateNetwork/accumulated/tendermint"
 	"github.com/AccumulateNetwork/accumulated/validator"
 
+	"github.com/tendermint/tendermint/rpc/core"
+	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	//"net/rpc/jsonrpc"
 )
 
@@ -79,9 +84,42 @@ func factoid_submit(_ context.Context, params json.RawMessage) interface{} {
 		return ret{"transaction unmarshal error",""}
 	}
 	//send off the p.Transaction
+	//rpctypes.WSRPCConnection()
+	decoded, err := hex.DecodeString(*p.Transaction)
+
+	res, err := core.BroadcastTxCommit(&rpctypes.Context{}, decoded)
+
+//https://github.com/tendermint/tendermint/blob/27e8cea9ce06f6a75f0b26e6993bce139a5a9074/abci/example/kvstore/kvstore_test.go#L253
+	//abcicli.NewClient(,grpc,true)
+	// set up grpc app
+//	kvstore = NewApplication()
+//	gclient, gserver, err := makeGRPCClientServer(kvstore, "kvstore-grpc")
+//	require.NoError(t, err)
+//
+//	t.Cleanup(func() {
+//		if err := gserver.Stop(); err != nil {
+//			t.Error(err)
+//		}
+//	})
+//	t.Cleanup(func() {
+//		if err := gclient.Stop(); err != nil {
+//			t.Error(err)
+//		}
+//	})
+//
+//	runClientTests(t, gclient)
+//}
+	log.Printf(hex.EncodeToString(res.Hash))
+	r := ret{"hello there",hex.EncodeToString(res.Hash) }
+	//if err != nil {
+	//	return &pb.Reply{Error: err.Error()} , nil
+	//}
+
+
 	//call tendermint
 	//process response
-	return ret{"Successfully submitted the transaction","aa8bac391e744340140ea0d95c7b37f9cc8a58601961bd751f5adb042af6f33b" }
+	//ret{"Successfully submitted the transaction","aa8bac391e744340140ea0d95c7b37f9cc8a58601961bd751f5adb042af6f33b" }
+	return r
 }
 // The RPC methods called in the JSON-RPC 2.0 specification examples.
 func subtract(_ context.Context, params json.RawMessage) interface{} {
@@ -166,6 +204,8 @@ func main() {
 	//create a directory block leader
 	app := tendermint.NewDirectoryBlockLeader()
 
+	go app.Start(ConfigFile[0],WorkingDir[0])
+
 	//make a factoid validator/accumulator
 	//create a Factoid validator
 	val := validator.NewFactoidValidator()
@@ -174,7 +214,6 @@ func main() {
 	accvm1 := tendermint.NewAccumulatorVMApplication(ConfigFile[1],WorkingDir[1])
 	accvm1.AddValidator(&val.ValidatorContext)
 
-	go app.Start(ConfigFile[0],WorkingDir[0])
 	go accvm1.Start()
 
 	go jsonrpcserver2()
