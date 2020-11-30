@@ -5,6 +5,7 @@
 *.so
 *.dylib
 
+accumulated 
 # Test binary, built with `go test -c`
 *.test
 
