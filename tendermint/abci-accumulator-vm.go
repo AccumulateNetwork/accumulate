@@ -6,6 +6,7 @@ import (
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
+	abcicli "github.com/tendermint/tendermint/abci/client"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
@@ -17,13 +18,15 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	//"github.com/tendermint/tendermint/types"
+
+	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/version"
 	"os"
 
+	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	//dbm "github.com/tendermint/tm-db"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
-	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/accumulated/database"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
 	"github.com/AccumulateNetwork/accumulated/validator"
@@ -61,6 +64,8 @@ type AccumulatorVMApplication struct {
 	valTypeRegDB    dbm.DB
 	config *cfg.Config
 	RPCContext rpctypes.Context
+	server service.Service
+
 
 }
 
@@ -125,6 +130,9 @@ func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcity
 	return abcitypes.ResponseSetOption{}
 }
 
+func (app *AccumulatorVMApplication) GetAPIClient() (abcicli.Client, error) {
+	return makeGRPCClient(app.config.RPC.ListenAddress)
+}
 
 func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
 	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
@@ -152,6 +160,10 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	if err != nil {
 		return fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
+
+	app.server, err = makeGRPCServer(app, app.config.RPC.ListenAddress)
+
+	//app.client, err = makeGRPCClient(app.BaseApplication, app.config.RPC.ListenAddress)
 
 	//RPCContext.RPCRequest// = new(JSONReq{})
 	return nil
@@ -453,7 +465,8 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
 
-	//app.DB.db2 = db2
+
+    //app.DB.db2 = db2
 	//accumulator database
 	//dir := WorkingDir + "/" + str + ".db"
 
