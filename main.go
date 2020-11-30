@@ -87,11 +87,78 @@ func makeGRPCClientServer(app types.Application, name string) (abcicli.Client, s
 	}
 	return client, server, nil
 }
+type factomapi struct {
+	client abcicli.Client
+}
+
+func NewFactomAPI(client abcicli.Client) (r *factomapi){
+	r = &factomapi{client}
+	return r
+}
 
 type factoid_tx struct {
     transaction []byte
 }
 type FactoidSubmit int
+
+
+func (app *factomapi) factoid_submit(_ context.Context, params json.RawMessage) interface{} {
+
+	var p struct {
+		Transaction *string
+	}
+
+	type ret struct {
+		Message string `json:"message"`
+		Txid string    `json:"txid,omitempty"`
+	}
+
+	err := json.Unmarshal(params, &p)
+	if err != nil {
+		return ret{"transaction unmarshal error",""}
+	}
+	//send off the p.Transaction
+	//rpctypes.WSRPCConnection()
+	decoded, err := hex.DecodeString(*p.Transaction)
+
+	//ctx := context.Background()
+	res, _ :=  app.client.DeliverTxSync(types.RequestDeliverTx{Tx: decoded})
+	//app.client.DeliverTxSync(ctx, types.RequestDeliverTx{decoded})
+		//.BroadcastTxCommit(&rpctypes.Context{}, decoded)
+
+	//https://github.com/tendermint/tendermint/blob/27e8cea9ce06f6a75f0b26e6993bce139a5a9074/abci/example/kvstore/kvstore_test.go#L253
+	//abcicli.NewClient(,grpc,true)
+	// set up grpc app
+	//	kvstore = NewApplication()
+	//	gclient, gserver, err := makeGRPCClientServer(kvstore, "kvstore-grpc")
+	//	require.NoError(t, err)
+	//
+	//	t.Cleanup(func() {
+	//		if err := gserver.Stop(); err != nil {
+	//			t.Error(err)
+	//		}
+	//	})
+	//	t.Cleanup(func() {
+	//		if err := gclient.Stop(); err != nil {
+	//			t.Error(err)
+	//		}
+	//	})
+	//
+	//	runClientTests(t, gclient)
+	//}
+
+	log.Printf(hex.EncodeToString(res.Data))
+	r := ret{"hello there",hex.EncodeToString(res.Data) }
+	//if err != nil {
+	//	return &pb.Reply{Error: err.Error()} , nil
+	//}
+
+
+	//call tendermint
+	//process response
+	//ret{"Successfully submitted the transaction","aa8bac391e744340140ea0d95c7b37f9cc8a58601961bd751f5adb042af6f33b" }
+	return r
+}
 //
 //func (t *FactoidSubmit) submit(r *http.Request, args *Args, result *Result) error {
 //	log.Printf("factoid-submit\n")
@@ -191,19 +258,20 @@ func getData(_ context.Context, _ json.RawMessage) interface{} {
 	return []interface{}{"hello", 5}
 }
 
-func jsonrpcserver2(){
+func jsonrpcserver2(client abcicli.Client){
 	//s := NewJSONRPCServer()
 	//arith := new(Arith)
 	//s.Register(arith)
 	//http.Handle("/rpc", s)
 	//http.ListenAndServe(":1234", nil)
 	// Register RPC methods.
+	fct := NewFactomAPI(client)
 	methods := jsonrpc2.MethodMap{
 		"subtract":     subtract,
 		"sum":          sum,
 		"notify_hello": notifyHello,
 		"get_data":     getData,
-		"factoid-submit": factoid_submit,
+		"factoid-submit": fct.factoid_submit,
 	}
 	jsonrpc2.DebugMethodFunc = true
 	handler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
@@ -247,7 +315,8 @@ func main() {
 
 	go accvm1.Start()
 
-	go jsonrpcserver2()
+	accvm1api, _ := accvm1.GetAPIClient()
+	go jsonrpcserver2(accvm1api)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
