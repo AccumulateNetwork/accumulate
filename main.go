@@ -3,6 +3,11 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	abcicli "github.com/tendermint/tendermint/abci/client"
+	"github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/rpc/core"
+	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+
 	//pb "github.com/AccumulateNetwork/accumulated/proto"
 
 	//	"errors"
@@ -28,9 +33,12 @@ import (
 	"github.com/AccumulateNetwork/accumulated/tendermint"
 	"github.com/AccumulateNetwork/accumulated/validator"
 
-	"github.com/tendermint/tendermint/rpc/core"
-	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	//"net/rpc/jsonrpc"
+
+	tmlog "github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/service"
+
+	abciserver "github.com/tendermint/tendermint/abci/server"
 )
 
 var ConfigFile [33]string
@@ -55,6 +63,29 @@ func init() {
 	ConfigFile[1] = path.Join(WorkingDir[1],"/config/config.toml")
 	ConfigFile[2] = path.Join(WorkingDir[2],"/config/config.toml")
 	ConfigFile[3] = path.Join(WorkingDir[3],"/config/config.toml")
+}
+
+func makeGRPCClientServer(app types.Application, name string) (abcicli.Client, service.Service, error) {
+	// Start the listener
+	socket := fmt.Sprintf("unix://%s.sock", name)
+	logger := tmlog.TestingLogger()
+
+	gapp := types.NewGRPCApplication(app)
+	server := abciserver.NewGRPCServer(socket, gapp)
+	server.SetLogger(logger.With("module", "abci-server"))
+	if err := server.Start(); err != nil {
+		return nil, nil, err
+	}
+
+	client := abcicli.NewGRPCClient(socket, true)
+	client.SetLogger(logger.With("module", "abci-client"))
+	if err := client.Start(); err != nil {
+		if err := server.Stop(); err != nil {
+			return nil, nil, err
+		}
+		return nil, nil, err
+	}
+	return client, server, nil
 }
 
 type factoid_tx struct {
