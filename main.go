@@ -3,11 +3,16 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	pb "github.com/AccumulateNetwork/accumulated/proto"
+	proto1 "github.com/golang/protobuf/proto"
+	"time"
+
+	//pb "github.com/AccumulateNetwork/accumulated/proto"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/rpc/core"
+	grpccore "github.com/tendermint/tendermint/rpc/grpc"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
-
 	//pb "github.com/AccumulateNetwork/accumulated/proto"
 
 	//	"errors"
@@ -88,10 +93,10 @@ func makeGRPCClientServer(app types.Application, name string) (abcicli.Client, s
 	return client, server, nil
 }
 type factomapi struct {
-	client abcicli.Client
+	client grpccore.BroadcastAPIClient
 }
 
-func NewFactomAPI(client abcicli.Client) (r *factomapi){
+func NewFactomAPI(client grpccore.BroadcastAPIClient) (r *factomapi){
 	r = &factomapi{client}
 	return r
 }
@@ -102,8 +107,9 @@ type factoid_tx struct {
 type FactoidSubmit int
 
 
-func (app *factomapi) factoid_submit(_ context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage) interface{} {
 
+	start := time.Now()
 	var p struct {
 		Transaction *string
 	}
@@ -122,7 +128,28 @@ func (app *factomapi) factoid_submit(_ context.Context, params json.RawMessage) 
 	decoded, err := hex.DecodeString(*p.Transaction)
 
 	//ctx := context.Background()
-	res, _ :=  app.client.DeliverTxSync(types.RequestDeliverTx{Tx: decoded})
+
+	sig, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000000000")
+
+
+	duration0 := time.Since(start)
+	start = time.Now()
+	vr := &pb.ValRequest{1234,1,0,0,0,decoded,sig}
+	msg, err := proto1.Marshal(vr)
+	duration1 := time.Since(start)
+	start = time.Now()
+	res, err2 :=  app.client.BroadcastTx(ctx,&grpccore.RequestBroadcastTx{msg}) //app.client.DeliverTxSync(types.RequestDeliverTx{Tx: decoded})
+	if err2 != nil {
+		return ret{"broadcast tx error",""}
+	}
+	duration2 := time.Since(start)
+
+	fmt.Printf("Unmarshal: %d, Marshal: %d, TMBroadcast: %d\n",duration0.Microseconds(), duration1.Microseconds(), duration2.Microseconds())
+
+	//if err != nil {
+	//	return &pb.Reply{Error: err.Error()} , nil
+	//}
+
 	//app.client.DeliverTxSync(ctx, types.RequestDeliverTx{decoded})
 		//.BroadcastTxCommit(&rpctypes.Context{}, decoded)
 
@@ -147,8 +174,8 @@ func (app *factomapi) factoid_submit(_ context.Context, params json.RawMessage) 
 	//	runClientTests(t, gclient)
 	//}
 
-	log.Printf(hex.EncodeToString(res.Data))
-	r := ret{"hello there",hex.EncodeToString(res.Data) }
+	log.Printf(hex.EncodeToString(res.DeliverTx.Data))
+	r := ret{"hello there",hex.EncodeToString(res.DeliverTx.Data) }
 	//if err != nil {
 	//	return &pb.Reply{Error: err.Error()} , nil
 	//}
@@ -258,7 +285,7 @@ func getData(_ context.Context, _ json.RawMessage) interface{} {
 	return []interface{}{"hello", 5}
 }
 
-func jsonrpcserver2(client abcicli.Client){
+func jsonrpcserver2(client grpccore.BroadcastAPIClient){
 	//s := NewJSONRPCServer()
 	//arith := new(Arith)
 	//s.Register(arith)
@@ -289,10 +316,10 @@ func main() {
 	for i := 0; i<n; i++ {
     	switch os.Args[i] {
 		case "init":
-			tendermint.Initialize("directory-block-leader", "tcp://127.0.0.1:26600","tcp://127.0.0.1:26601",ConfigFile[0],WorkingDir[0])
-			tendermint.Initialize("accumulator-fct", "tcp://127.0.0.1:26610","tcp://127.0.0.1:26611",ConfigFile[1],WorkingDir[1])
-			tendermint.Initialize("accumulator-ec", "tcp://127.0.0.1:26620","tcp://127.0.0.1:26621",ConfigFile[2],WorkingDir[2])
-			tendermint.Initialize("accumulator-user", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631",ConfigFile[3],WorkingDir[3])
+			tendermint.Initialize("directory-block-leader", "tcp://127.0.0.1:26600","tcp://127.0.0.1:26601","tcp://127.0.0.1:26602",ConfigFile[0],WorkingDir[0])
+			tendermint.Initialize("accumulator-fct", "tcp://127.0.0.1:26610","tcp://127.0.0.1:26611","tcp://127.0.0.1:26612",ConfigFile[1],WorkingDir[1])
+			tendermint.Initialize("accumulator-ec", "tcp://127.0.0.1:26620","tcp://127.0.0.1:26621","tcp://127.0.0.1:26622",ConfigFile[2],WorkingDir[2])
+			tendermint.Initialize("accumulator-user", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631","tcp://127.0.0.1:26632",ConfigFile[3],WorkingDir[3])
 //			tendermint.Initialize("vm2", "tcp://127.0.0.1:26620","tcp://127.0.0.1:26621",ConfigFile[2],WorkingDir[2])
 //			tendermint.Initialize("vm3", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631",ConfigFile[3],WorkingDir[3])
 			os.Exit(0)
@@ -301,9 +328,9 @@ func main() {
 
 
 	//create a directory block leader
-	app := tendermint.NewDirectoryBlockLeader()
+	//app := tendermint.NewDirectoryBlockLeader()
 
-	go app.Start(ConfigFile[0],WorkingDir[0])
+	//go app.Start(ConfigFile[0],WorkingDir[0])
 
 	//make a factoid validator/accumulator
 	//create a Factoid validator
@@ -315,6 +342,7 @@ func main() {
 
 	go accvm1.Start()
 
+	//time.Sleep(10000 * time.Millisecond)
 	accvm1api, _ := accvm1.GetAPIClient()
 	go jsonrpcserver2(accvm1api)
 
