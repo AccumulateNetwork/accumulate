@@ -6,7 +6,6 @@ import (
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
-	abcicli "github.com/tendermint/tendermint/abci/client"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
@@ -14,9 +13,9 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
+	grpccore "github.com/tendermint/tendermint/rpc/grpc"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	dbm "github.com/tendermint/tm-db"
-
 	//"github.com/tendermint/tendermint/types"
 
 	"github.com/tendermint/tendermint/libs/service"
@@ -32,6 +31,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/validator"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
+	"sync"
 	"time"
 )
 
@@ -41,6 +41,8 @@ type AccumulatorVMApplication struct {
 //	db           *badger.DB
 //	currentBatch *badger.Txn
 	abcitypes.BaseApplication
+	mutex sync.Mutex
+	waitgroup sync.WaitGroup
 
 	//router  router2.Router
 
@@ -104,7 +106,11 @@ var _ abcitypes.Application = (*AccumulatorVMApplication)(nil)
 
 
 func (app *AccumulatorVMApplication) GetHeight ()(uint64) {
-	return uint64(app.Val.GetCurrentHeight())
+
+	app.mutex.Lock()
+	ret := uint64(app.Val.GetCurrentHeight())
+	app.mutex.Unlock()
+	return ret
 }
 
 func (AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
@@ -130,11 +136,13 @@ func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcity
 	return abcitypes.ResponseSetOption{}
 }
 
-func (app *AccumulatorVMApplication) GetAPIClient() (abcicli.Client, error) {
-	return makeGRPCClient(app.config.RPC.ListenAddress)
+func (app *AccumulatorVMApplication) GetAPIClient() (grpccore.BroadcastAPIClient, error) {
+	app.waitgroup.Wait()
+	return makeGRPCClient(app.config.RPC.GRPCListenAddress)
 }
 
 func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
+	app.waitgroup.Add(1)
 	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
 	app.config = cfg.DefaultConfig()
@@ -161,25 +169,12 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 		return fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
 
-	app.server, err = makeGRPCServer(app, app.config.RPC.ListenAddress)
+	//app.server, err = makeGRPCServer(app, app.config.RPC.ListenAddress)
 
 	//app.client, err = makeGRPCClient(app.BaseApplication, app.config.RPC.ListenAddress)
 
 	//RPCContext.RPCRequest// = new(JSONReq{})
 	return nil
-}
-
-// new transaction is added to the Tendermint Core. Check if it is valid.
-func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	/*
-	type RequestCheckTx struct {
-		Tx   []byte      `protobuf:"bytes,1,opt,name=tx,proto3" json:"tx,omitempty"`
-		Type CheckTxType `protobuf:"varint,2,opt,name=type,proto3,enum=tendermint.abci.CheckTxType" json:"type,omitempty"`
-	}*/
-	bytesLen := len(req.Tx) - dataPtr - 64
-	code := app.isValid(req.Tx,bytesLen)
-
-	return abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
 }
 
 
@@ -232,6 +227,21 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&req.Header.ChainID)
 	return abcitypes.ResponseBeginBlock{}
 }
+
+// new transaction is added to the Tendermint Core. Check if it is valid.
+func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
+	/*
+		type RequestCheckTx struct {
+			Tx   []byte      `protobuf:"bytes,1,opt,name=tx,proto3" json:"tx,omitempty"`
+			Type CheckTxType `protobuf:"varint,2,opt,name=type,proto3,enum=tendermint.abci.CheckTxType" json:"type,omitempty"`
+		}*/
+	//bytesLen := len(req.Tx) - dataPtr - 64
+	//code := app.isValid(req.Tx,bytesLen)
+
+	//code = 0
+	return abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}//abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
+}
+
 
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
@@ -500,16 +510,37 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
 
+
 	fmt.Println("Tendermint Start")
 	//app.config.RPC().
+    node.Start()
+	//var grpcSrv *grpc.Server
+	//grpcSrv, err = servergrpc.StartGRPCServer(app, app.config.RPC.GRPCListenAddress)
+	//
+	//gapp := types.NewGRPCApplication(app)
+	//server := abciserver.NewGRPCServer(socket, gapp)
+	//server.SetLogger(logger.With("module", "abci-server"))
+	//if err := server.Start(); err != nil {
+	//	return nil, err
+	//}
+	//
+	//if err != nil {
+	//	return err
+	//}
+	//makeGRPCServer(app, "127.0.0.1:23232")//app.config.RPC.GRPCListenAddress)
 
-	node.Listeners()
+	//s := node.Listeners()
 	defer func() {
 		node.Stop()
 		node.Wait()
 		fmt.Println("Tendermint Stopped")
 	}()
 
+    time.Sleep(1000*time.Millisecond)
+	if node.IsListening() {
+		fmt.Print("node is listening")
+	}
+	app.waitgroup.Done()
 	node.Wait()
 
 	return node,nil
