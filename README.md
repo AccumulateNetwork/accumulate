@@ -44,7 +44,7 @@ type Fee struct {
     Credits        int8         // 1
     SignatureIdx   int8         // 1
     Signature      [64]byte     // 64  
-                                // 1 end byte
+                                // 1 end byte ( 140 bytes for FEE)
     Transaction    []byte       // Transaction
 }
 ```
