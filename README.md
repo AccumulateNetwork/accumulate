@@ -57,7 +57,7 @@ type Validation interface {
 	ValidTx(entry *Entry) bool
 	ValidTxList(entries []*Hash) bool
 }
-```Go
+```
 * `func (m \*SMT) SetValidator(validator *Falidation)`  Set the validator function on the SMT
 
      
