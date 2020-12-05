@@ -6,6 +6,7 @@ import (
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
+	abcicli "github.com/tendermint/tendermint/abci/client"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
@@ -13,7 +14,7 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
-	grpccore "github.com/tendermint/tendermint/rpc/grpc"
+	//grpccore "github.com/tendermint/tendermint/rpc/grpc"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	dbm "github.com/tendermint/tm-db"
 	//"github.com/tendermint/tendermint/types"
@@ -136,9 +137,9 @@ func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcity
 	return abcitypes.ResponseSetOption{}
 }
 
-func (app *AccumulatorVMApplication) GetAPIClient() (grpccore.BroadcastAPIClient, error) {
+func (app *AccumulatorVMApplication) GetAPIClient() (abcicli.Client, error) {
 	app.waitgroup.Wait()
-	return makeGRPCClient(app.config.RPC.GRPCListenAddress)
+	return makeGRPCClient("localhost:22222")//app.config.RPC.GRPCListenAddress)
 }
 
 func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
@@ -515,6 +516,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	//app.config.RPC().
     node.Start()
 	//var grpcSrv *grpc.Server
+	//makeGRPCServer(app, "127.0.0.1:22223")
 	//grpcSrv, err = servergrpc.StartGRPCServer(app, app.config.RPC.GRPCListenAddress)
 	//
 	//gapp := types.NewGRPCApplication(app)
@@ -527,7 +529,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	//if err != nil {
 	//	return err
 	//}
-	//makeGRPCServer(app, "127.0.0.1:23232")//app.config.RPC.GRPCListenAddress)
+	makeGRPCServer(app, "127.0.0.1:22222")//app.config.RPC.GRPCListenAddress)
 
 	//s := node.Listeners()
 	defer func() {

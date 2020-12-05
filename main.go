@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
 	proto1 "github.com/golang/protobuf/proto"
+	"sync"
 	"time"
 
 	//pb "github.com/AccumulateNetwork/accumulated/proto"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/rpc/core"
-	grpccore "github.com/tendermint/tendermint/rpc/grpc"
+	//grpccore "github.com/tendermint/tendermint/rpc/grpc"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	//pb "github.com/AccumulateNetwork/accumulated/proto"
 
@@ -93,10 +94,11 @@ func makeGRPCClientServer(app types.Application, name string) (abcicli.Client, s
 	return client, server, nil
 }
 type factomapi struct {
-	client grpccore.BroadcastAPIClient
+	//client grpccore.BroadcastAPIClient
+	client abcicli.Client
 }
 
-func NewFactomAPI(client grpccore.BroadcastAPIClient) (r *factomapi){
+func NewFactomAPI(client abcicli.Client) (r *factomapi){/*client grpccore.BroadcastAPIClient*/
 	r = &factomapi{client}
 	return r
 }
@@ -106,10 +108,20 @@ type factoid_tx struct {
 }
 type FactoidSubmit int
 
+var counter int
+var mm sync.Mutex
+var gtimer time.Time
 
 func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage) interface{} {
+	mm.Lock()
+	if counter == 0 {
+		gtimer = time.Now()
 
+	}
+	counter = counter + 1
+	mm.Unlock()
 	start := time.Now()
+	start0 := start
 	var p struct {
 		Transaction *string
 	}
@@ -133,18 +145,37 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 
 	duration0 := time.Since(start)
-	start = time.Now()
 	vr := &pb.ValRequest{1234,1,0,0,0,decoded,sig}
 	msg, err := proto1.Marshal(vr)
+	type delivertx struct {
+		Tx []byte `json:"tx"`
+	}
+	dtx := delivertx{msg }
 	duration1 := time.Since(start)
 	start = time.Now()
-	res, err2 :=  app.client.BroadcastTx(ctx,&grpccore.RequestBroadcastTx{msg}) //app.client.DeliverTxSync(types.RequestDeliverTx{Tx: decoded})
-	if err2 != nil {
-		return ret{"broadcast tx error",""}
-	}
+
+	var c jsonrpc2.Client
+
+	var result int
+	err = c.Request(nil, "http://localhost:26611", "broadcast_tx_sync",dtx , &result)
+	//if _, ok := err.(jsonrpc2.Error); ok {
+	//	// received Error Request
+	//}
+	//if err != nil {
+	//	// some JSON marshaling or network error
+	//}
+	//fmt.Printf("The sum of %v is %v.\n", params, result)
+	//
+	//
+	//app.client.CheckTxSync(types.RequestCheckTx{Tx: msg})
+	//app.client.DeliverTxAsync(types.RequestDeliverTx{msg})
+	//app.client.BroadcastTx(ctx,&grpccore.RequestBroadcastTx{msg}) //app.client.DeliverTxSync(types.RequestDeliverTx{Tx: decoded})
+	//if err2 != nil {
+	//	return ret{"broadcast tx error",""}
+	//}
+	//res.GetDeliverTx()
 	duration2 := time.Since(start)
 
-	fmt.Printf("Unmarshal: %d, Marshal: %d, TMBroadcast: %d\n",duration0.Microseconds(), duration1.Microseconds(), duration2.Microseconds())
 
 	//if err != nil {
 	//	return &pb.Reply{Error: err.Error()} , nil
@@ -174,13 +205,22 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	//	runClientTests(t, gclient)
 	//}
 
-	log.Printf(hex.EncodeToString(res.DeliverTx.Data))
-	r := ret{"hello there",hex.EncodeToString(res.DeliverTx.Data) }
+	//log.Printf(hex.EncodeToString(res.GetData()))//res.DeliverTx.Data))
+
 	//if err != nil {
 	//	return &pb.Reply{Error: err.Error()} , nil
 	//}
 
+	durationT := time.Since(start0)
+	mm.Lock()
+	cum := time.Since(gtimer)
+	r := ret{fmt.Sprintf("%d: (%f,cumulative: %f s) Hello there",counter,
+		float64(durationT.Microseconds())/1000.0,float64(cum.Microseconds())/1000000.0),
+		""}//,hex.EncodeToString(res.Data) }
 
+	fmt.Printf("%f %d: Total: %d, Unmarshal: %d, Marshal: %d, TMBroadcast: %d\n",float64(cum.Microseconds())/1000000.0,counter, durationT.Microseconds(), duration0.Microseconds(), duration1.Microseconds(), duration2.Microseconds())
+
+	mm.Unlock()
 	//call tendermint
 	//process response
 	//ret{"Successfully submitted the transaction","aa8bac391e744340140ea0d95c7b37f9cc8a58601961bd751f5adb042af6f33b" }
@@ -285,7 +325,7 @@ func getData(_ context.Context, _ json.RawMessage) interface{} {
 	return []interface{}{"hello", 5}
 }
 
-func jsonrpcserver2(client grpccore.BroadcastAPIClient){
+func jsonrpcserver2(client abcicli.Client){//grpccore.BroadcastAPIClient){
 	//s := NewJSONRPCServer()
 	//arith := new(Arith)
 	//s.Register(arith)
@@ -326,6 +366,7 @@ func main() {
 		}
 	}
 
+	counter = 0
 
 	//create a directory block leader
 	//app := tendermint.NewDirectoryBlockLeader()

@@ -2,15 +2,13 @@ package tendermint
 
 import (
 	"fmt"
+	abcicli "github.com/tendermint/tendermint/abci/client"
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	"github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
 	config "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
-
-	//"github.com/tendermint/rpc/grpc/types"
-	grpccore "github.com/tendermint/tendermint/rpc/grpc"
 )
 
 func Initialize(chainid string, ABCIAppAddress string, RPCAddress string, GRPCAddress string, ConfigFile string, WorkingDir string){
@@ -31,17 +29,18 @@ func Initialize(chainid string, ABCIAppAddress string, RPCAddress string, GRPCAd
 }
 
 
-func makeGRPCClient(addr string) (grpccore.BroadcastAPIClient, error) {//abcicli.Client, error) {
+func makeGRPCClient(addr string) (abcicli.Client,error){ //grpccore.BroadcastAPIClient, error) {//abcicli.Client, error) {
 	// Start the listener
-	//socket := addr //fmt.Sprintf("unix://%s.sock", addr)
-	//logger := tmlog.NewNopLogger()//TestingLogger()
+	socket := addr //fmt.Sprintf("unix://%s.sock", addr)
+	logger := tmlog.NewNopLogger()//TestingLogger()
 
-	client := grpccore.StartGRPCClient(addr)// abcicli.NewGRPCClient(socket, true)
+	//client := grpccore.StartGRPCClient(addr)
+	client := abcicli.NewGRPCClient(socket, true)
 
-	//client.SetLogger(logger.With("module", "abci-client"))
-	//if err := client.Start(); err != nil {
-	//	return nil, err
-	//}
+	client.SetLogger(logger.With("module", "abci-client"))
+	if err := client.Start(); err != nil {
+		return nil, err
+	}
 	return client, nil
 }
 
@@ -59,3 +58,19 @@ func makeGRPCServer(app types.Application, name string) (service.Service, error)
 
 	return server, nil
 }
+
+//
+//func makeGRPCServer(app types.Application, name string) (service.Service, error) {
+//	// Start the listener
+//	socket := name// fmt.Sprintf("unix://%s.sock", name)
+//	logger := tmlog.NewNopLogger()//TestingLogger()
+//
+//	gapp := types.NewGRPCApplication(app)
+//	server := abciserver.NewGRPCServer(socket, gapp)
+//	server.SetLogger(logger.With("module", "abci-server"))
+//	if err := server.Start(); err != nil {
+//		return nil, err
+//	}
+//
+//	return server, nil
+//}
