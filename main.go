@@ -157,23 +157,26 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	var c jsonrpc2.Client
 
 	var result int
-	err = c.Request(nil, "http://localhost:26611", "broadcast_tx_sync",dtx , &result)
-	//if _, ok := err.(jsonrpc2.Error); ok {
-	//	// received Error Request
-	//}
-	//if err != nil {
-	//	// some JSON marshaling or network error
-	//}
-	//fmt.Printf("The sum of %v is %v.\n", params, result)
-	//
-	//
-	//app.client.CheckTxSync(types.RequestCheckTx{Tx: msg})
-	//app.client.DeliverTxAsync(types.RequestDeliverTx{msg})
-	//app.client.BroadcastTx(ctx,&grpccore.RequestBroadcastTx{msg}) //app.client.DeliverTxSync(types.RequestDeliverTx{Tx: decoded})
-	//if err2 != nil {
-	//	return ret{"broadcast tx error",""}
-	//}
-	//res.GetDeliverTx()
+	if true {
+		err = c.Request(nil, "http://localhost:26611", "broadcast_tx_sync", dtx, &result)
+	} else {
+		//if _, ok := err.(jsonrpc2.Error); ok {
+		//	// received Error Request
+		//}
+		//if err != nil {
+		//	// some JSON marshaling or network error
+		//}
+		//fmt.Printf("The sum of %v is %v.\n", params, result)
+		//
+		//
+		app.client.CheckTxSync(types.RequestCheckTx{Tx: msg})
+		app.client.DeliverTxAsync(types.RequestDeliverTx{msg})
+		//app.client.BroadcastTx(ctx,&grpccore.RequestBroadcastTx{msg}) //app.client.DeliverTxSync(types.RequestDeliverTx{Tx: decoded})
+		//if err2 != nil {
+		//	return ret{"broadcast tx error",""}
+		//}
+		//res.GetDeliverTx()
+	}
 	duration2 := time.Since(start)
 
 
