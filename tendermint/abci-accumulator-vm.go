@@ -139,7 +139,7 @@ func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcity
 
 func (app *AccumulatorVMApplication) GetAPIClient() (abcicli.Client, error) {
 	app.waitgroup.Wait()
-	return makeGRPCClient("localhost:22222")//app.config.RPC.GRPCListenAddress)
+	return makeGRPCClient("localhost:22223")//app.config.RPC.GRPCListenAddress)
 }
 
 func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
@@ -516,7 +516,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	//app.config.RPC().
     node.Start()
 	//var grpcSrv *grpc.Server
-	//makeGRPCServer(app, "127.0.0.1:22223")
+	makeGRPCServer(app, "127.0.0.1:22223")
 	//grpcSrv, err = servergrpc.StartGRPCServer(app, app.config.RPC.GRPCListenAddress)
 	//
 	//gapp := types.NewGRPCApplication(app)
