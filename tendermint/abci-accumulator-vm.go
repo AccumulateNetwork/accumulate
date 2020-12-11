@@ -2,6 +2,7 @@ package tendermint
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	"github.com/golang/protobuf/proto"
@@ -240,7 +241,16 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	//code := app.isValid(req.Tx,bytesLen)
 
 	//code = 0
-	return abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}//abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
+	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
+
+	addr := binary.BigEndian.Uint64(req.Tx)
+	//addr := req.GetType()
+    if val, ok := app.chainval[addr]; ok {
+		val.Validate(req.GetTx())
+    	//need transaction id.
+	}
+
+	return ret//abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
 }
 
 
@@ -252,7 +262,9 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	code := app.isValid(req.Tx,bytesLen)
 
 	if code != 0 {
-		return abcitypes.ResponseDeliverTx{Code: code}
+		//intentionally reject Transaction to prevent it from being stored and will instead add it to the valacc pool.
+		//we'll do the honors of storing the transaction ourselves.
+		return abcitypes.ResponseDeliverTx{Code: 0}
 	}
 
 	AccountState, err := app.GetAccountState(req.Tx[0:32])
@@ -313,6 +325,7 @@ func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 
 func (AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
 	//do any cleanup for block sealing...
+
 	return abcitypes.ResponseEndBlock{}
 }
 
@@ -510,6 +523,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
+	//node.
 
 
 	fmt.Println("Tendermint Start")
@@ -529,7 +543,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	//if err != nil {
 	//	return err
 	//}
-	makeGRPCServer(app, "127.0.0.1:22222")//app.config.RPC.GRPCListenAddress)
+
 
 	//s := node.Listeners()
 	defer func() {
@@ -538,7 +552,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		fmt.Println("Tendermint Stopped")
 	}()
 
-    time.Sleep(1000*time.Millisecond)
+    //time.Sleep(1000*time.Millisecond)
 	if node.IsListening() {
 		fmt.Print("node is listening")
 	}

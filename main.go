@@ -145,7 +145,7 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 
 	duration0 := time.Since(start)
-	vr := &pb.ValRequest{1234,1,0,0,0,decoded,sig}
+	vr := &pb.ValRequest{15,1,0,0,0,decoded,sig}
 	msg, err := proto1.Marshal(vr)
 	type delivertx struct {
 		Tx []byte `json:"tx"`
