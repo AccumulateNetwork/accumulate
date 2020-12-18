@@ -4,7 +4,8 @@ package validator
 import (
 	"fmt"
 	cfg "github.com/tendermint/tendermint/config"
-	nm "github.com/tendermint/tendermint/node"
+	//nm "github.com/tendermint/tendermint/node"
+	nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	dbm "github.com/tendermint/tm-db"
 	"time"
 

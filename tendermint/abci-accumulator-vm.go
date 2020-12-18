@@ -11,7 +11,8 @@ import (
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
-	nm "github.com/tendermint/tendermint/node"
+	//nm "github.com/tendermint/tendermint/node"
+	nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
@@ -43,6 +44,8 @@ type AccumulatorVMApplication struct {
 //	db           *badger.DB
 //	currentBatch *badger.Txn
 	abcitypes.BaseApplication
+	RetainBlocks int64
+	Height int64
 	mutex sync.Mutex
 	waitgroup sync.WaitGroup
 
@@ -91,7 +94,8 @@ func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *Accumula
 	app := AccumulatorVMApplication{
 //		db: db,
 		//router: new(router2.Router),
-		chainval: make(map[uint64]*validator.ValidatorContext),
+		RetainBlocks: 600 //only retain 600 blocks
+,		chainval: make(map[uint64]*validator.ValidatorContext),
 		EntryFeed: make(chan node.EntryHash, 10000),
 		AccNumber: 1,
 		//EntryFeed : make(chan node.EntryHash, 10000),
@@ -107,12 +111,13 @@ func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *Accumula
 var _ abcitypes.Application = (*AccumulatorVMApplication)(nil)
 
 
-func (app *AccumulatorVMApplication) GetHeight ()(uint64) {
-
-	app.mutex.Lock()
-	ret := uint64(app.Val.GetCurrentHeight())
-	app.mutex.Unlock()
-	return ret
+func (app *AccumulatorVMApplication) GetHeight ()(int64) {
+	//
+	//app.mutex.Lock()
+	//ret := uint64(app.Val.GetCurrentHeight())
+	//app.mutex.Unlock()
+	//
+	return app.Height
 }
 
 func (AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
@@ -226,6 +231,7 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	//app.currentBatch = app.db.NewTransaction(true)
 	//app.Height = req.Header.Height
 
+	app.Height = req.Header.Height
 	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&req.Header.ChainID)
 	return abcitypes.ResponseBeginBlock{}
 }
@@ -246,7 +252,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	addr := binary.BigEndian.Uint64(req.Tx)
 	//addr := req.GetType()
     if val, ok := app.chainval[addr]; ok {
-		val.Validate(req.GetTx())
+		val.Check(req.GetTx())
     	//need transaction id.
 	}
 
@@ -258,13 +264,25 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 // Otherwise, we add it to the current batch.
 func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) ( response abcitypes.ResponseDeliverTx) {
 
-	bytesLen := len(req.Tx) - dataPtr - 64
-	code := app.isValid(req.Tx,bytesLen)
+
+	var code error
+	addr := binary.BigEndian.Uint64(req.Tx)
+	//addr := req.GetType()
+	if val, ok := app.chainval[addr]; ok {
+		code = val.Check(req.GetTx())
+		//need transaction id.
+	}
+
+	//bytesLen := len(req.Tx) - dataPtr - 64
+	//code := app.isValid(req.Tx,bytesLen)
 
 	if code != 0 {
 		//intentionally reject Transaction to prevent it from being stored and will instead add it to the valacc pool.
 		//we'll do the honors of storing the transaction ourselves.
-		return abcitypes.ResponseDeliverTx{Code: 0}
+
+
+		return abcitypes.ResponseDeliverTx{Code: 1, Data: app.ChainId[0:32]}
+		//return abcitypes.ResponseDeliverTx{Code: 0}
 	}
 
 	AccountState, err := app.GetAccountState(req.Tx[0:32])
@@ -319,7 +337,12 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 	//app.currentBatch.Commit()
 	//pull merkle DAG from the accumulator and put on blockchain as the Data
-	return abcitypes.ResponseCommit{Data: []byte{}}
+	resp := abcitypes.ResponseCommit{Data: []byte{}}
+	if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
+		resp.RetainHeight = app.Height - app.RetainBlocks + 1
+	}
+	return resp
+	//return abcitypes.ResponseCommit{Data: []byte{}}
 }
 
 

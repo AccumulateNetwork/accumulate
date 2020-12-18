@@ -3,11 +3,12 @@ package validator
 import (
 	"crypto/sha256"
 	"encoding/binary"
-	"fmt"
-	cfg "github.com/tendermint/tendermint/config"
-	nm "github.com/tendermint/tendermint/node"
-	time "time"
 	"encoding/hex"
+	"fmt"
+	nm "github.com/AccumulateNetwork/accumulated/vbc/node"
+	cfg "github.com/tendermint/tendermint/config"
+	dbm "github.com/tendermint/tm-db"
+	time "time"
 )
 
 //should define return codes for validation...
@@ -23,6 +24,7 @@ const (
 
 type ValidatorInterface interface {
 
+	Check(data []byte) error
 	Validate(data []byte) error
 	InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error
 	SetCurrentBlock(height int64,Time *time.Time,chainid *string)
@@ -80,10 +82,15 @@ type ValidatorContext struct {
 	lastHeight int64
 	lastTime time.Time
 	chainId string
+	entryDB dbm.DB
 }
 
 func (v *ValidatorContext) GetInfo() *ValidatorInfo {
 	return &v.ValidatorInfo
+}
+
+func (v *ValidatorContext) Check(data []byte) *ValidatorInfo {
+	return nil
 }
 
 func (v *ValidatorContext) SetCurrentBlock(height int64,time *time.Time,chainid *string) {
@@ -112,4 +119,21 @@ func (v *ValidatorContext) GetCurrentTime() *time.Time {
 
 func (v *ValidatorContext) GetChainId() *string {
 	return &v.chainId
+}
+
+
+func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
+
+	//v.AccountsDB.Get()
+	v.entryDB, err = dbProvider(&nm.DBContext{"entry", config})
+	if err != nil {
+		return
+	}
+
+	v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
+	if err != nil {
+		return
+	}
+
+	return
 }
