@@ -52,6 +52,10 @@ func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider)
 	return
 }
 
+func (v *FactoidValidator) Check(data []byte) error {
+    return nil
+}
+
 func (v *FactoidValidator) Validate(data []byte) error {
 	//if pass then send to accumulator.
 	//var fblock := factom.FBlock{}
