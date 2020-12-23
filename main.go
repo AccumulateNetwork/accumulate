@@ -3,8 +3,16 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
+	kv "github.com/AccumulateNetwork/accumulated/example/kvstore"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
 	proto1 "github.com/golang/protobuf/proto"
+	"github.com/spf13/viper"
+	cfg "github.com/tendermint/tendermint/config"
+	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
+	nm "github.com/tendermint/tendermint/node"
+	"github.com/tendermint/tendermint/p2p"
+	"github.com/tendermint/tendermint/privval"
+	"github.com/tendermint/tendermint/proxy"
 	"sync"
 	"time"
 
@@ -37,8 +45,6 @@ import (
 
 	//"github.com/dgraph-io/badger"
 	"github.com/AccumulateNetwork/accumulated/tendermint"
-	"github.com/AccumulateNetwork/accumulated/validator"
-
 	//"net/rpc/jsonrpc"
 
 	tmlog "github.com/tendermint/tendermint/libs/log"
@@ -377,18 +383,90 @@ func main() {
 	//go app.Start(ConfigFile[0],WorkingDir[0])
 
 	//make a factoid validator/accumulator
+
+
+
+
 	//create a Factoid validator
-	val := validator.NewFactoidValidator()
+	//db val := validator.NewFactoidValidator()
 
 	//create a AccumulatorVM
-	accvm1 := tendermint.NewAccumulatorVMApplication(ConfigFile[1],WorkingDir[1])
-	accvm1.AddValidator(&val.ValidatorContext)
+	//db accvm1 := tendermint.NewAccumulatorVMApplication(ConfigFile[1],WorkingDir[1])
+	//db accvm1.AddValidator(&val.ValidatorContext)
 
-	go accvm1.Start()
+	//db go accvm1.Start()
 
 	//time.Sleep(10000 * time.Millisecond)
-	accvm1api, _ := accvm1.GetAPIClient()
-	go jsonrpcserver2(accvm1api)
+	//db accvm1api, _ := accvm1.GetAPIClient()
+	//db go jsonrpcserver2(accvm1api)
+
+	app := kv.NewPersistentKVStoreApplication(WorkingDir[1])
+	//app := kv.NewApplication()
+
+	//fig := cfg.ResetTestRoot("node_priv_val_tcp_test")
+	config := cfg.DefaultConfig()
+	config.SetRoot(WorkingDir[1])
+	viper.SetConfigFile(ConfigFile[1])
+	if err := viper.ReadInConfig(); err != nil {
+
+		fmt.Errorf("viper failed to read config file: %w", err)
+		os.Exit(1)
+	}
+	if err := viper.Unmarshal(config); err != nil {
+		fmt.Errorf("viper failed to unmarshal config: %w", err)
+		os.Exit(1)
+	}
+	if err := config.ValidateBasic(); err != nil {
+		fmt.Errorf("config is invalid: %w", err)
+
+		os.Exit(1)
+	}
+
+
+//	defer os.RemoveAll(config.RootDir)
+
+	// create node
+
+
+//not good here ->
+    //logger := tmlog.NewNopLogger()
+    logger := tmlog.NewTMLogger(tmlog.NewSyncWriter(os.Stdout))
+
+	//nd, err := nm.DefaultNewNode(config, logger)
+
+    var err error
+	logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel())
+	if err != nil {
+		fmt.Errorf("failed to parse log level: %w", err)
+		os.Exit(1)
+	}
+
+	pv := privval.LoadFilePV(
+		config.PrivValidatorKeyFile(),
+		config.PrivValidatorStateFile(),
+	)
+
+	nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
+	if err != nil {
+		fmt.Errorf("failed to load node's key: %w", err)
+		os.Exit(2)
+	}
+
+	danode, err := nm.NewNode(
+		config,
+		pv,
+		nodeKey,
+		proxy.NewLocalClientCreator(app),
+		nm.DefaultGenesisDocProviderFunc(config),
+		nm.DefaultDBProvider,
+		nm.DefaultMetricsProvider(config.Instrumentation),
+		logger)
+
+	if err != nil {
+		fmt.Errorf("failed to create new Tendermint node: %w", err)
+		os.Exit(3)
+	}
+	go  danode.Start()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

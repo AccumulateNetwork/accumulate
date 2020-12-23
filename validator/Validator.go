@@ -122,7 +122,7 @@ func (v *ValidatorContext) GetChainId() *string {
 }
 
 
-func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
+func (v *ValidatorContext) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
 
 	//v.AccountsDB.Get()
 	v.entryDB, err = dbProvider(&nm.DBContext{"entry", config})
@@ -130,10 +130,10 @@ func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider)
 		return
 	}
 
-	v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
-	if err != nil {
-		return
-	}
+	//v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
+	//if err != nil {
+	//	return
+	//}
 
 	return
 }

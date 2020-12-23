@@ -11,8 +11,8 @@ import (
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
-	//nm "github.com/tendermint/tendermint/node"
-	nm "github.com/AccumulateNetwork/accumulated/vbc/node"
+	nm "github.com/tendermint/tendermint/node"
+	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
@@ -35,7 +35,7 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
 	"sync"
-	"time"
+	//"time"
 )
 
 
@@ -94,8 +94,8 @@ func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *Accumula
 	app := AccumulatorVMApplication{
 //		db: db,
 		//router: new(router2.Router),
-		RetainBlocks: 600 //only retain 600 blocks
-,		chainval: make(map[uint64]*validator.ValidatorContext),
+		RetainBlocks: 600, //only retain 600 blocks
+		chainval: make(map[uint64]*validator.ValidatorContext),
 		EntryFeed: make(chan node.EntryHash, 10000),
 		AccNumber: 1,
 		//EntryFeed : make(chan node.EntryHash, 10000),
@@ -265,11 +265,15 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) ( response abcitypes.ResponseDeliverTx) {
 
 
-	var code error
+	code := 0
+	//addr := binary.BigEndian.Uint64(Tx[0:32])
+
+	//ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
+
 	addr := binary.BigEndian.Uint64(req.Tx)
 	//addr := req.GetType()
 	if val, ok := app.chainval[addr]; ok {
-		code = val.Check(req.GetTx())
+		val.Validate(req.GetTx())
 		//need transaction id.
 	}
 
@@ -284,31 +288,31 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 		return abcitypes.ResponseDeliverTx{Code: 1, Data: app.ChainId[0:32]}
 		//return abcitypes.ResponseDeliverTx{Code: 0}
 	}
-
-	AccountState, err := app.GetAccountState(req.Tx[0:32])
-
-	if err != nil {
-		response.Code = 3
-		response.Info = err.Error()
-		println(err.Error())
-		return response
-	}
-
-	AccountState.MessageCountDown--  //We decrement before we test, so we can see if there is abnormal activity
-	fmt.Printf("Messages Left = %v\n",AccountState.MessageCountDown)
-	if AccountState.MessageCountDown < 0{
-		//if (AccountState.MessageCountDown < BanListTrigger) TODO
-		response.Code = 4
-		response.Info = "Account exceeded message count"
-		println(err.Error())
-		return response
-	}
-	AccountState.LastBlockHeight = app.Val.GetCurrentHeight()
-
-	//Grab our payload
-	data := req.Tx[dataPtr:dataPtr + bytesLen]
-
-	var _ = app.Val.Validate(data)
+	//
+	//AccountState, err := app.GetAccountState(req.Tx[0:32])
+	//
+	//if err != nil {
+	//	response.Code = 3
+	//	response.Info = err.Error()
+	//	println(err.Error())
+	//	return response
+	//}
+	//
+	//AccountState.MessageCountDown--  //We decrement before we test, so we can see if there is abnormal activity
+	//fmt.Printf("Messages Left = %v\n",AccountState.MessageCountDown)
+	//if AccountState.MessageCountDown < 0{
+	//	//if (AccountState.MessageCountDown < BanListTrigger) TODO
+	//	response.Code = 4
+	//	response.Info = "Account exceeded message count"
+	//	println(err.Error())
+	//	return response
+	//}
+	//AccountState.LastBlockHeight = app.Val.GetCurrentHeight()
+	//
+	////Grab our payload
+	//data := req.Tx[dataPtr:dataPtr + bytesLen]
+	//
+	//var _ = app.Val.Validate(data)
 	//pass into accumulator...
     //app.Acc.Accumulate(ret)
 
@@ -326,10 +330,10 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	//		response.Info = fmt.Sprintf("Uknown message type %v \n",req.Tx[msgTypePtr])
 	//}
 
-	if (err != nil) {
+/*	if (err != nil) {
 		println(err.Error())
 	}
-
+*/
 	return response
 }
 
@@ -409,55 +413,7 @@ func (app *AccumulatorVMApplication) isValid(tx []byte, bytesLen int) (code uint
 	return 3
 }
 
-func (app *AccumulatorVMApplication) GetAccountState (publicKey []byte) (acc AccountStateStruct,err error)  {
 
-	keyString := string(publicKey)
-	var ok bool
-
-	//Query cache first
-	if acc, ok = app.accountState[keyString]; !ok {
-		//Not found in cache, read disk
-		account, err := GetAccount(publicKey)
-		if err !=nil{  //No account for publicKey found!
-			if app.GetHeight() < uint64(app.BootstrapHeight) {
-			}else {
-				return acc, err
-			}
-		}
-		println("Account Found on Disk")
-		acc = AccountStateStruct{
-			PublicKey:        publicKey,
-			MessageAllowance: account.MessageAllowance,
-			MessageCountDown: account.MessageAllowance,
-		}
-		app.accountState[keyString] = acc
-	} else {
-		println("Account Found in Cache")
-	}
-
-	acc.LastAccess = time.Now().UnixNano()
-	return acc,nil
-}
-
-func (app *AccumulatorVMApplication) MakeBootStrapAccount(publicKey []byte)(state AccountStateStruct,err error){
-
-	println("Making BootStrap Account")
-
-	account := pb.Account {
-		Name: "Bootstrap Account",
-		MessageAllowance: 20000,
-		AllowAddAccounts: true,
-		AllowAddGroups: true,
-	}
-
-	state = AccountStateStruct {
-		PublicKey:        publicKey,
-		MessageCountDown: account.MessageAllowance,
-		MessageAllowance: account.MessageAllowance,
-	}
-	app.accountState[string(publicKey)] = state
-	return state,nil
-}
 
 func (app *AccumulatorVMApplication) WriteKeyValue(account AccountStateStruct, data []byte) (err error) {
 
@@ -527,10 +483,10 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 
 
 	//initialize the validator databases
-	if app.Val.InitDBs(app.config, nm.DefaultDBProvider ) !=nil {
-		fmt.Println("DB Error")
-		return nil,nil //TODO
-	}
+	//if app.Val.InitDBs(app.config, nm.DefaultDBProvider ) !=nil {
+	//	fmt.Println("DB Error")
+	//	return nil,nil //TODO
+	//}
 
 
 	// create node
