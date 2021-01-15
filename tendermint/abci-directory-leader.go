@@ -1,6 +1,7 @@
 package tendermint
 
 import (
+	"encoding/binary"
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
@@ -20,6 +21,7 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
+    //"crypto/ed25519"
 	"time"
 )
 
@@ -80,8 +82,60 @@ func (DirectoryBlockLeader) SetOption(req abci.RequestSetOption) abci.ResponseSe
 	return abci.ResponseSetOption{}
 }
 
+func (app *DirectoryBlockLeader) resolveDDII(ddii []byte) (ed25519.PublicKey, error) {
+    //just give me a key...
+
+	pub, priv, err := ed25519.GenerateKey(nil)
+	return pub, err
+}
+
+func (app *DirectoryBlockLeader) verifyBVCMasterChain(addr uint64) error {
+
+	return nil
+}
+
 // new transaction is added to the Tendermint Core. Check if it is valid.
 func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseCheckTx {
+	//the ABCI request here is a Tx that consists data delivered from the BVC protocol buffer
+    //data here can only come from an authorized VBC validator, otherwise they will be rejected
+	//Step 1: check which BVC is sending the request and see if it is a valid Master Chain.
+	header := pb.DBVCInstructionHeader{}
+
+	proto.Unmarshal(req.GetTx(),header) //if first 4 bytes are valid
+	//ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
+
+
+	err := app.verifyBVCMasterChain(header.GetBvcMasterChainAddr())
+	if err != nil { //add validation here.
+		//quick filter to see if the request if from a valid master chain
+		return abci.ResponseCheckTx{Code: 1, GasWanted: 0}
+	}
+
+	switch header.GetInstruction() {
+	case pb.DBVCInstructionHeader_BVCSubmission:
+		//Step 2: check DDII of BVC against VBC validator
+		bvcreq := pb.BVCSubmissionRequest{}
+
+		err := proto.Unmarshal(req.GetTx(),bvcreq)
+		if err != nil {
+			return abci.ResponseCheckTx{Code: 2, GasWanted: 0}
+		}
+
+		pub, err := app.resolveDDII(bvcreq.GetBvcValidatorDDII())
+
+		if err != nil {
+			return abci.ResponseCheckTx{Code: 3, GasWanted: 0}
+		}
+
+		err = ed25519.Verify(pub, bvcreq.GetMdrc(), bvcreq.GetSignature())
+		if err != nil {
+			println("Invalid")
+			return abci.ResponseCheckTx{Code: 4, GasWanted: 0}
+		}
+
+	}
+	//Step 3: validate signature of signed accumulated MR
+	//Step 4: if signature is valid send dispatch to accumulator directory block
 	bytesLen := len(req.Tx) - dataPtr - 64
 	code := app.isValid(req.Tx,bytesLen)
 	return abci.ResponseCheckTx{Code: code, GasWanted: 1}
@@ -111,6 +165,28 @@ func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.Res
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
 func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response abci.ResponseDeliverTx) {
+
+	//if we get this far, than it has passed check tx,
+	var bvcreq := pb.BVCSubmissionRequest{}
+	err := proto.Unmarshal(req.GetTx(),bvcreq)
+	if err != nil {
+		return abci.ResponseCheckTx{Code: 2, GasWanted: 0}
+	}
+
+	var ddii := bvcreq.GetBvcValidatorDDII()
+	bvcpubkey := ddii //todo: resolve ddii and get signing verification key, for now it is just the public key
+
+	err = ed25519.Verify(bvcpubkey, bvcreq.GetMdrc(), bvcreq.GetSignature())
+	if err != nil {
+		println("Invalid")
+		return abci.ResponseCheckTx{Code: 3, GasWanted: 0}
+	}
+
+	var version := bvcreq.GetMdrc()[0]
+	var height := binary.LittleEndian.Uint64(bvcreq.GetMdrc()[1:5])
+	var timestamp := binary.LittleEndian.Uint64(bvcreq.GetMdrc()[5:9])
+	var mrhash := bvcreq.GetMdrc()[9:41]
+
 
 	//obtain merkle dag root from VM
 	//write that to whereever...
