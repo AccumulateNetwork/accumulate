@@ -151,7 +151,24 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 
 	duration0 := time.Since(start)
-	vr := &pb.ValRequest{15,1,0,0,0,decoded,sig}
+	//
+	//uint64  validatorAddr  = 1; // block validation chain address - sha256(chainId)[0:7] - big-endian or little-endian?
+	//uint32  instruction 	 = 2; // instruction code used by the validator - e.g. "write data"
+	//uint32  parameter1     = 3; // parameter 1 specific to the instruction
+	//uint32  parameter2     = 4; // parameter 2 specific to the instruction
+	//uint64 	nonce          = 5; // typically time stamp or monotonic counter
+	//bytes   data           = 6; // payload for validator - Command Data
+	//bytes   signed         = 7; // ed25519 signature
+
+	vr := &pb.ValRequest{}
+	vr.Nonce = 0
+	vr.Signed = sig
+	vr.ValidatorAddr = 15
+	vr.Instruction = 1
+	vr.Data = decoded
+	vr.Parameter1 = 0
+	vr.Parameter2 = 0
+
 	msg, err := proto1.Marshal(vr)
 	type delivertx struct {
 		Tx []byte `json:"tx"`

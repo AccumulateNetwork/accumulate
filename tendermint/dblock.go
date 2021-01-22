@@ -1,0 +1,53 @@
+package tendermint
+
+import "encoding/binary"
+
+//
+//Header
+//varInt_F	Version	Describes the protocol version that this block is made under. Only valid value is 0. Can safely be coded using 1 byte for the first 127 versions.
+//4 bytes	NetworkID	This is a magic number identifying the main Factom network. The value for MainNet Directory Blocks is 0xFA92E5A2. TestNet is 0xFA92E5A3.
+//32 bytes	BodyMR	This is the Merkle root of the body data which accompanies this block. It is calculated with SHA256.
+//32 bytes	PrevKeyMR	Key Merkle root of previous block. It is the value which is used as a key into databases holding the Directory Block. It is calculated with SHA256.
+//32 bytes	PrevFullHash	This is a SHA256 checksum of the previous Directory Block. It is calculated by hashing the serialized block from the beginning of the header through the end of the body. It is included to allow simplified client verification without building a Merkle tree and to double-check the previous block if SHA2 is weakened in the future.
+//4 bytes	Timestamp	This the time when the block is opened. Blocks start on 10 minute marks based on UTC (ie 12:00, 12:10, 12:20). The data in this field is POSIX time, counting the number of minutes since epoch in 1970.
+//4 bytes	DB Height	The Directory Block height is the sequence it appears in the blockchain. Starts at zero.
+//4 bytes	Block Count	This is the number of Entry Blocks that were updated in this block. It is a count of the ChainID:Key pairs. Inclusive of the special blocks. Big endian.
+//Body
+//32 bytes	Admin Block ChainID	Indication the next item is the serial hash of the Admin Block.
+//32 bytes	Admin Block LookupHash	This is the LookupHash of the Admin Block generated during this time period.
+//32 bytes	Entry Credit Block ChainID	Indication the next item belongs to the Entry Credit Block.
+//32 bytes	Entry Credit Block HeaderHash	This is the serial hash of the Entry Credit Block Header generated during this time period.
+//32 bytes	Factoid Block ChainID	Indication the next item belongs to the Factoid Block.
+//32 bytes	Factoid Block KeyMR	This is the KeyMR of the Factoid Block generated during this time period.
+//32 bytes	ChainID 0	This is the ChainID of one Entry Block which was updated during this block time. These ChainID:KeyMR pairs are sorted numerically based on the ChainID.
+//32 bytes	KeyMR 0	This is the Key Merkle Root of the Entry Block with ChainID 0 which was created during this Directory Block.
+//32 bytes	ChainID N	Nth Entry Block ChainID.
+//32 bytes	KeyMR N	Nth Entry Block KeyMR.
+
+
+type DBockHeader struct {
+	Version uint32	    //varint Describes the protocol version that this block is made under. Only valid value is 0. Can safely be coded using 1 byte for the first 127 versions.
+	NetworkID uint32	//This is a magic number identifying the main Factom network. The value for MainNet Directory Blocks is 0xFA92E5A2. TestNet is 0xFA92E5A3.
+	BodyMR [32]byte	    //This is the Merkle root of the body data which accompanies this block. It is calculated with SHA256.
+	PrevKeyMR [32]byte	//Key Merkle root of previous block. It is the value which is used as a key into databases holding the Directory Block. It is calculated with SHA256.
+	PrevFullHash [32]byte	//This is a SHA256 checksum of the previous Directory Block. It is calculated by hashing the serialized block from the beginning of the header through the end of the body. It is included to allow simplified client verification without building a Merkle tree and to double-check the previous block if SHA2 is weakened in the future.
+	Timestamp uint32     //This the time when the block is opened. Blocks start on 10 minute marks based on UTC (ie 12:00, 12:10, 12:20). The data in this field is POSIX time, counting the number of minutes since epoch in 1970.
+	DBHeight uint32      //The Directory Block height is the sequence it appears in the blockchain. Starts at zero.
+	BlockCount uint32	 //This is the number of Entry Blocks that were updated in this block. It is a count of the ChainID:Key pairs. Inclusive of the special blocks. Big endian.
+}
+
+func NewDBockHeader() *DBockHeader {
+	return &DBockHeader{Version: 1, NetworkID: binary.BigEndian(0xACC00001)}
+}
+type DBlockEntry struct {
+	MasterChainAddr uint64
+	KeyMR          [32]byte
+}
+type DBlockBody struct {
+	//32 bytes	Admin Block ChainID	Indication the next item is the serial hash of the Admin Block.
+	//32 bytes	Admin Block LookupHash	This is the LookupHash of the Admin Block generated during this time period.
+	//for i = 1 to BlockCount
+
+	//32 bytes	ChainID[i]	This is the ChainID of one Entry Block which was updated during this block time. These ChainID:KeyMR pairs are sorted numerically based on the ChainID.
+	//32 bytes	KeyMR[i]]	This is the Key Merkle Root of the Entry Block with ChainID 0 which was created during this Directory Block.
+}

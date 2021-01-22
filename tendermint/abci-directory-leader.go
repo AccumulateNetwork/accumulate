@@ -2,6 +2,7 @@ package tendermint
 
 import (
 	"encoding/binary"
+	//"encoding/binary"
 	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
@@ -38,6 +39,22 @@ const (
 
 const BanListTrigger = -10000
 
+//(4 bytes)    networkid  //magic number0xACCXXXXX
+
+
+////bvc entry header:
+//type BVCEntryStruct {
+//
+//    uint32 BVCHeight          /// (4 bytes) Height of master chain block
+//	uint32 MasterChainAddress /// (8 bytes) Address of chain
+//
+//}
+//
+//
+//entry:
+//key : bvcheight | chainaddr (12 bytes) : bvcpubkey (32bytes)
+//value: mrhash
+//value: signature
 
 
 
@@ -82,10 +99,12 @@ func (DirectoryBlockLeader) SetOption(req abci.RequestSetOption) abci.ResponseSe
 	return abci.ResponseSetOption{}
 }
 
-func (app *DirectoryBlockLeader) resolveDDII(ddii []byte) (ed25519.PublicKey, error) {
+func (app *DirectoryBlockLeader) resolveDDIIatHeight(ddii []byte, bvcheight uint32) (ed25519.PublicKey, error) {
     //just give me a key...
 
-	pub, priv, err := ed25519.GenerateKey(nil)
+	fmt.Printf("%s", string(ddii[:]))
+	//need to find out what the public key for ddii was at height bvcheight
+	pub, _, err := ed25519.GenerateKey(nil)
 	return pub, err
 }
 
@@ -101,7 +120,7 @@ func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseC
 	//Step 1: check which BVC is sending the request and see if it is a valid Master Chain.
 	header := pb.DBVCInstructionHeader{}
 
-	proto.Unmarshal(req.GetTx(),header) //if first 4 bytes are valid
+	proto.Unmarshal(req.GetTx(),&header) //if first 4 bytes are valid
 	//ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 
@@ -112,29 +131,31 @@ func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseC
 	}
 
 	switch header.GetInstruction() {
-	case pb.DBVCInstructionHeader_BVCSubmission:
-		//Step 2: check DDII of BVC against VBC validator
-		bvcreq := pb.BVCSubmissionRequest{}
+	case pb.DBVCInstructionHeader_BVCEntry:
+		//Step 2: resolve DDII of BVC against VBC validator
 
-		err := proto.Unmarshal(req.GetTx(),bvcreq)
-		if err != nil {
-			return abci.ResponseCheckTx{Code: 2, GasWanted: 0}
-		}
 
-		pub, err := app.resolveDDII(bvcreq.GetBvcValidatorDDII())
+		bvcreq := pb.BVCEntry{}
+
+		err = proto.Unmarshal(req.GetTx(),&bvcreq)
 
 		if err != nil {
 			return abci.ResponseCheckTx{Code: 3, GasWanted: 0}
 		}
 
-		err = ed25519.Verify(pub, bvcreq.GetMdrc(), bvcreq.GetSignature())
+		pub, err := app.resolveDDIIatHeight(bvcreq.GetBvcValidatorDDII(), binary.LittleEndian.Uint32(bvcreq.GetEntry()[0:4]))
 		if err != nil {
-			println("Invalid")
+			return abci.ResponseCheckTx{Code: 2, GasWanted: 0}
+		}
+
+		//Step 3: validate signature of signed accumulated MR
+
+		if !ed25519.Verify(pub, bvcreq.GetEntry(), bvcreq.GetSignature()) {
+			println("Invalid Signature")
 			return abci.ResponseCheckTx{Code: 4, GasWanted: 0}
 		}
 
 	}
-	//Step 3: validate signature of signed accumulated MR
 	//Step 4: if signature is valid send dispatch to accumulator directory block
 	bytesLen := len(req.Tx) - dataPtr - 64
 	code := app.isValid(req.Tx,bytesLen)
@@ -167,91 +188,32 @@ func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.Res
 func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response abci.ResponseDeliverTx) {
 
 	//if we get this far, than it has passed check tx,
-	var bvcreq := pb.BVCSubmissionRequest{}
-	err := proto.Unmarshal(req.GetTx(),bvcreq)
+	bvcreq := pb.BVCEntry{}
+	err := proto.Unmarshal(req.GetTx(),&bvcreq)
 	if err != nil {
-		return abci.ResponseCheckTx{Code: 2, GasWanted: 0}
+		return abci.ResponseDeliverTx{Code: 2, GasWanted: 0}
 	}
 
-	var ddii := bvcreq.GetBvcValidatorDDII()
-	bvcpubkey := ddii //todo: resolve ddii and get signing verification key, for now it is just the public key
-
-	err = ed25519.Verify(bvcpubkey, bvcreq.GetMdrc(), bvcreq.GetSignature())
+	bvcheight := binary.LittleEndian.Uint32(bvcreq.GetEntry()[0:4])
+	bvcpubkey, err := app.resolveDDIIatHeight(bvcreq.GetBvcValidatorDDII(), bvcheight)
 	if err != nil {
+		return abci.ResponseDeliverTx{Code: 2, GasWanted: 0}
+	}
+	//everyone verify...
+
+	if ed25519.Verify(bvcpubkey, bvcreq.GetEntry(), bvcreq.GetSignature()) {
 		println("Invalid")
-		return abci.ResponseCheckTx{Code: 3, GasWanted: 0}
+		return abci.ResponseDeliverTx{Code: 3, GasWanted: 0}
 	}
 
-	var version := bvcreq.GetMdrc()[0]
-	var height := binary.LittleEndian.Uint64(bvcreq.GetMdrc()[1:5])
-	var timestamp := binary.LittleEndian.Uint64(bvcreq.GetMdrc()[5:9])
-	var mrhash := bvcreq.GetMdrc()[9:41]
+	//timestamp := binary.LittleEndian.Uint32(bvcreq.GetEntry()[4:8])
+	//mrhash := bvcreq.GetEntry()[8:40]
 
-
-	//obtain merkle dag root from VM
-	//write that to whereever...
-	bytesLen := len(req.Tx) - dataPtr - 64
-	code := app.isValid(req.Tx,bytesLen)
-
-	if code != 0 {
-		return abci.ResponseDeliverTx{Code: code}
-	}
-    //if the message is a custom message for us... deal with it...
-
-	AccountState, err := app.GetAccountState(req.Tx[0:32])
+	key, err := proto.Marshal(bvcreq.GetHeader())
+	err = app.WriteKeyValue(key,req.GetTx())
 	if err != nil {
-		response.Code = 3
+		response.Code = 1
 		response.Info = err.Error()
-		println(err.Error())
-		return response
-	}
-
-	AccountState.MessageCountDown--  //We decrement before we test, so we can see if there is abnormal activity
-	fmt.Printf("Messages Left = %v\n",AccountState.MessageCountDown)
-	if AccountState.MessageCountDown < 0{
-		//if (AccountState.MessageCountDown < BanListTrigger) TODO
-		response.Code = 4
-		response.Info = "Account exceeded message count"
-		println(err.Error())
-		return response
-	}
-	AccountState.LastBlockHeight = app.Height
-
-	//Grab our payload
-	data := req.Tx[dataPtr:dataPtr + bytesLen]
-
-	switch pb.EntryMsgType(req.Tx[msgTypePtr]) {
-
-		case pb.Entry_WriteEntryBytes:
-				//Nothing extra to process, all good response.Code defaults to 0
-		case pb.Entry_WriteKeyValue:
-			err = app.WriteKeyValue(AccountState,data)
-			if err != nil {
-				response.Code = 1
-				response.Info = err.Error()
-			}
-		case pb.Entry_AccountWrite:
-			println("Entry_AccountAdd")
-			/*
-			err = app.AccountWrite(AccountState,data)
-			if err != nil {
-				response.Code = 1
-				response.Info = err.Error()
-			}
-
-			 */
-
-		case pb.Entry_GasAllowanceUpdate:
-/*			err = app.GasAllowanceUpdate(AccountState,data)
-			if err != nil {
-				response.Code = 1
-				response.Info = err.Error()
-			}
-
- */
-		default:
-			response.Code = 1
-			response.Info = fmt.Sprintf("Uknown message type %v \n",req.Tx[msgTypePtr])
 	}
 
 	if (err != nil) {
@@ -381,25 +343,25 @@ func (app *DirectoryBlockLeader) MakeBootStrapAccount(publicKey []byte)(state Ac
 	return state,nil
 }
 
-func (app *DirectoryBlockLeader) WriteKeyValue(account AccountStateStruct, data []byte) (err error) {
+func (app *DirectoryBlockLeader) WriteKeyValue(key []byte, data []byte) (err error) {
 
-	KeyValue := &pb.KeyValue{}
-
-	err = proto.Unmarshal(data,KeyValue)
-	if err != nil {
-		return err
-	}
-
-	KeyValue.Height = uint64(app.Height)
-	data,err = proto.Marshal(KeyValue)
+	//KeyValue := &pb.KeyValue{}
+	//
+	//err = proto.Unmarshal(data,KeyValue)
+	//if err != nil {
+	//	return err
+	//}
+	//
+	//KeyValue.Height = uint64(app.Height)
+	//data,err = proto.Marshal(KeyValue)
 
 	//AccountAdd.
-	err = database.KvStoreDB.Set(KeyValue.Key,data)
+
+	err = database.KvStoreDB.Set(key,data)
 	if err != nil{
 		fmt.Printf("WriteKeyValue err %v\n",err)
-	} else {
-		fmt.Printf("WriteKeyValue: %v\n",KeyValue.Key)
 	}
+
 	return err
 }
 
