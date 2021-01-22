@@ -31,3 +31,14 @@ func GetAccount(publicKey []byte) (Account pb.Account, err error){
 	err = proto.Unmarshal(accountBytes,&Account)
 	return Account,err
 }
+
+
+
+type BVCEntryStruct struct {
+	ChainAddress     []byte
+	MessageCountDown  int32
+	MessageAllowance  int32
+	LastBlockHeight   int64
+	LastAccess        int64
+	groups []pb.Account_Group
+}

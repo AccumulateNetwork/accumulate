@@ -80,7 +80,7 @@ require (
 	golang.org/x/net v0.0.0-20200822124328-c89045814202
 	google.golang.org/grpc v1.33.2
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.0.1 // indirect
-	google.golang.org/protobuf v1.25.0 // indirect
+	google.golang.org/protobuf v1.25.0
 	gopkg.in/AlecAivazis/survey.v1 v1.6.2 // indirect
 	gopkg.in/ini.v1 v1.58.0 // indirect
 	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
