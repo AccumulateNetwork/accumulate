@@ -12,6 +12,8 @@ import (
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
 	nm "github.com/tendermint/tendermint/node"
+	"github.com/tendermint/tendermint/types"
+
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
@@ -40,12 +42,58 @@ import (
 
 
 
+var (
+	stateKey        = []byte("stateKey")
+	kvPairPrefixKey = []byte("kvPairKey:")
+
+	ProtocolVersion uint64 = 0x1
+)
+
+type State struct {
+	db      dbm.DB
+	Size    int64  `json:"size"`
+	Height  int64  `json:"height"`
+	AppHash []byte `json:"app_hash"`
+}
+
+func loadState(db dbm.DB) State {
+	var state State
+	state.db = db
+	stateBytes, err := db.Get(stateKey)
+	if err != nil {
+		panic(err)
+	}
+	if len(stateBytes) == 0 {
+		return state
+	}
+	err = json.Unmarshal(stateBytes, &state)
+	if err != nil {
+		panic(err)
+	}
+	return state
+}
+
+func saveState(state State) {
+	stateBytes, err := json.Marshal(state)
+	if err != nil {
+		panic(err)
+	}
+	err = state.db.Set(stateKey, stateBytes)
+	if err != nil {
+		panic(err)
+	}
+}
+
+func prefixKey(key []byte) []byte {
+	return append(kvPairPrefixKey, key...)
+}
+
 type AccumulatorVMApplication struct {
 //	db           *badger.DB
 //	currentBatch *badger.Txn
+
 	abcitypes.BaseApplication
 	RetainBlocks int64
-	Height int64
 	mutex sync.Mutex
 	waitgroup sync.WaitGroup
 
@@ -61,13 +109,17 @@ type AccumulatorVMApplication struct {
 	chainval map[uint64]*validator.ValidatorContext
 	DB vadb.DB
 
+	state State
 
+	//recording of proofs
 	EntryHashStream chan node.EntryHash        // Stream of hashes to record
 	//AccumulatorDB   *dbm.DB             // Databases where hashes are recorded
 	ACCs            []*accumulator.Accumulator // Accumulators to record hashes
 	EntryFeeds      []chan node.EntryHash
 	Controls        []chan bool
 	MDFeeds         []chan *valacctypes.Hash
+
+    ///
 	valTypeRegDB    dbm.DB
 	config *cfg.Config
 	RPCContext rpctypes.Context
@@ -75,6 +127,35 @@ type AccumulatorVMApplication struct {
 
 
 }
+
+func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
+	name := "kvstore"
+	db, err := dbm.NewGoLevelDB(name, WorkingDir)
+	if err != nil {
+		panic(err)
+	}
+
+	state := loadState(db)
+
+	app := AccumulatorVMApplication{
+		//router: new(router2.Router),
+		RetainBlocks: 1, //only retain current block, we will manage our own state
+		chainval: make(map[uint64]*validator.ValidatorContext),
+		EntryFeed: make(chan node.EntryHash, 10000),
+		AccNumber: 1,
+		//EntryFeed : make(chan node.EntryHash, 10000),
+		accountState : make(map[string]AccountStateStruct),
+		BootstrapHeight: 99999999999,
+		Val : nil,
+		state : state,
+	}
+	app.Initialize(ConfigFile, WorkingDir)
+    return &app
+}
+
+
+var _ abcitypes.Application = (*AccumulatorVMApplication)(nil)
+
 
 func (app *AccumulatorVMApplication) AddValidator(val *validator.ValidatorContext) error {
 	//validators are mapped to registered type id's.
@@ -86,30 +167,9 @@ func (app *AccumulatorVMApplication) AddValidator(val *validator.ValidatorContex
 	app.chainval[val.GetTypeId()] = val
 	//tmp
 	app.Val = val
-   //registration of the validators should be done on-chain
-   return nil
+	//registration of the validators should be done on-chain
+	return nil
 }
-
-func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
-	app := AccumulatorVMApplication{
-//		db: db,
-		//router: new(router2.Router),
-		RetainBlocks: 600, //only retain 600 blocks
-		chainval: make(map[uint64]*validator.ValidatorContext),
-		EntryFeed: make(chan node.EntryHash, 10000),
-		AccNumber: 1,
-		//EntryFeed : make(chan node.EntryHash, 10000),
-		accountState : make(map[string]AccountStateStruct),
-		BootstrapHeight: 99999999999,
-		Val : nil,
-	}
-	app.Initialize(ConfigFile, WorkingDir)
-    return &app
-}
-
-
-var _ abcitypes.Application = (*AccumulatorVMApplication)(nil)
-
 
 func (app *AccumulatorVMApplication) GetHeight ()(int64) {
 	//
@@ -117,34 +177,34 @@ func (app *AccumulatorVMApplication) GetHeight ()(int64) {
 	//ret := uint64(app.Val.GetCurrentHeight())
 	//app.mutex.Unlock()
 	//
-	return app.Height
+	return app.state.Height
 }
 
-func (AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
+func (app *AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
 	/*
 	type RequestInfo struct {
 		Version      string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
 		BlockVersion uint64 `protobuf:"varint,2,opt,name=block_version,json=blockVersion,proto3" json:"block_version,omitempty"`
 		P2PVersion   uint64 `protobuf:"varint,3,opt,name=p2p_version,json=p2pVersion,proto3" json:"p2p_version,omitempty"`
 	}
-	type ResponseInfo struct {
-		Data             string `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-		Version          string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
-		AppVersion       uint64 `protobuf:"varint,3,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
-		LastBlockHeight  int64  `protobuf:"varint,4,opt,name=last_block_height,json=lastBlockHeight,proto3" json:"last_block_height,omitempty"`
-		LastBlockAppHash []byte `protobuf:"bytes,5,opt,name=last_block_app_hash,json=lastBlockAppHash,proto3" json:"last_block_app_hash,omitempty"`
-	}
 	 */
-	return abcitypes.ResponseInfo{}
+	app.RetainBlocks = 1
+	return abcitypes.ResponseInfo{
+		Data:             fmt.Sprintf("{\"size\":%v}", app.state.Size),
+		Version:          version.ABCIVersion,
+		AppVersion:       ProtocolVersion,
+		LastBlockHeight:  app.state.Height,
+		LastBlockAppHash: app.state.AppHash,
+	}
 }
 
-func (AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
-
-	return abcitypes.ResponseSetOption{}
+func (app *AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
+	return app.BaseApplication.SetOption(req)
 }
 
 func (app *AccumulatorVMApplication) GetAPIClient() (abcicli.Client, error) {
 	app.waitgroup.Wait()
+	//todo: fixme
 	return makeGRPCClient("localhost:22223")//app.config.RPC.GRPCListenAddress)
 }
 
@@ -184,7 +244,7 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	return nil
 }
 
-
+///ABCI call
 func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
 	/*
 	type RequestInitChain struct {
@@ -222,6 +282,12 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	return abcitypes.ResponseInitChain{AppHash: app.ChainId[:]}
 }
 
+///ABCI / block calls
+///   BeginBlock <---
+///   [CheckTx]
+///   [DeliverTx]
+///   EndBlock
+///   Commit
 // ------ BeginBlock -> DeliverTx -> EndBlock -> Commit
 // When Tendermint Core has decided on the block, it's transferred to the application in 3 parts:
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
@@ -230,11 +296,40 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
 	//app.currentBatch = app.db.NewTransaction(true)
 	//app.Height = req.Header.Height
+	// reset valset changes
+/*
+	app.ValUpdates = make([]types.ValidatorUpdate, 0)
 
-	app.Height = req.Header.Height
+	// Punish validators who committed equivocation.
+	for _, ev := range req.ByzantineValidators {
+		if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
+			addr := string(ev.Validator.Address)
+			if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
+				app.updateValidator(types.ValidatorUpdate{
+					PubKey: pubKey,
+					Power:  ev.Validator.Power - 1,
+				})
+				app.logger.Info("Decreased val power by 1 because of the equivocation",
+					"val", addr)
+			} else {
+				app.logger.Error("Wanted to punish val, but can't find it",
+					"val", addr)
+			}
+		}
+	}
+
+*/
+	//need to fix me, rather than update every validator, instead have validator ask for it if needed.
 	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&req.Header.ChainID)
 	return abcitypes.ResponseBeginBlock{}
 }
+
+///ABCI / block calls
+///   BeginBlock
+///   [CheckTx] <---
+///   [DeliverTx]
+///   EndBlock
+///   Commit
 
 // new transaction is added to the Tendermint Core. Check if it is valid.
 func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
@@ -259,6 +354,12 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	return ret//abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
 }
 
+///ABCI / block calls
+///   BeginBlock
+///   [CheckTx]
+///   [DeliverTx] <---
+///   EndBlock
+///   Commit
 
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
@@ -337,6 +438,27 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	return response
 }
 
+
+///ABCI / block calls
+///   BeginBlock
+///   [CheckTx]
+///   [DeliverTx]
+///   EndBlock <---
+///   Commit
+
+func (AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
+	//do any cleanup for block sealing...
+
+	return abcitypes.ResponseEndBlock{}
+}
+
+///ABCI / block calls
+///   BeginBlock
+///   [CheckTx]
+///   [DeliverTx]
+///   EndBlock
+///   Commit <---
+
 //Commit instructs the application to persist the new state.
 func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 	//app.currentBatch.Commit()
@@ -350,18 +472,43 @@ func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 }
 
 
-func (AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
-	//do any cleanup for block sealing...
+//------------------------
 
-	return abcitypes.ResponseEndBlock{}
+// Update the validator set
+func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
+	return abcitypes.ResponseEndBlock{ValidatorUpdates: app.ValUpdates}
 }
 
-//------------------------
+func (app *AccumulatorVMApplication) ListSnapshots(
+	req abcitypes.RequestListSnapshots) abcitypes.ResponseListSnapshots {
+	return abcitypes.ResponseListSnapshots{}
+}
+
+func (app *AccumulatorVMApplication) LoadSnapshotChunk(
+	req abcitypes.RequestLoadSnapshotChunk) abcitypes.ResponseLoadSnapshotChunk {
+	return abcitypes.ResponseLoadSnapshotChunk{}
+}
+
+func (app *AccumulatorVMApplication) OfferSnapshot(
+	req abcitypes.RequestOfferSnapshot) abcitypes.ResponseOfferSnapshot {
+	return abcitypes.ResponseOfferSnapshot{Result: abcitypes.ResponseOfferSnapshot_ABORT}
+}
+
+func (app *AccumulatorVMApplication) ApplySnapshotChunk(
+	req types.RequestApplySnapshotChunk) types.ResponseApplySnapshotChunk {
+	return types.ResponseApplySnapshotChunk{Result: types.ResponseApplySnapshotChunk_ABORT}
+}
 
 
 // when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
 func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
+
+	///implement lazy sync calls. If a node falls behind it needs to have several query calls
+	///1 get current height
+	///2 get block data for height X
+	///3 get block data for given hash
+
 	/*
 	err := app.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(reqQuery.Data)
