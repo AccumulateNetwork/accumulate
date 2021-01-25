@@ -39,9 +39,10 @@ type DBockHeader struct {
 func NewDBockHeader() *DBockHeader {
 	return &DBockHeader{Version: 1, NetworkID: binary.BigEndian(0xACC00001)}
 }
+
 type DBlockEntry struct {
-	MasterChainAddr uint64
-	KeyMR          [32]byte
+	MasterChainAddr uint64 //since our dblocks only contain Master Chains, we can use the address instead of full chainid
+	KeyMR          [32]byte //sha256[ entries  for the chain. ]
 }
 type DBlockBody struct {
 	//32 bytes	Admin Block ChainID	Indication the next item is the serial hash of the Admin Block.
@@ -51,3 +52,34 @@ type DBlockBody struct {
 	//32 bytes	ChainID[i]	This is the ChainID of one Entry Block which was updated during this block time. These ChainID:KeyMR pairs are sorted numerically based on the ChainID.
 	//32 bytes	KeyMR[i]]	This is the Key Merkle Root of the Entry Block with ChainID 0 which was created during this Directory Block.
 }
+// Entry Header
+//                   BVCMR_012345 (KeyMR that goes in DBlockBody)
+//                 /                   \
+//              BVCMR_0123            BVCMR45
+//          /                \          \
+//       BVCMR_01        BVCMR_23       BVCMR45
+//      /      \         /      \         /      \
+//  BVCMR_0  BVCMR_1  BVCMR_2 BVCMR_3   BVCMR4  BVCMR5 
+//32 bytes
+//ChainID
+//All the Entries in this Entry Block have this ChainID
+//32 bytes
+//BodyMR
+//This is the Merkle root of the body data which accompanies this block.  It is calculated with SHA256.
+//32 bytes
+//PrevKeyMR
+//Key Merkle root of previous block.  This is the value of this ChainID's previous Entry Block Merkle root which was placed in the Directory Block.  It is the value which is used as a key into databases holding the Entry Block. It is calculated with SHA256.
+//32 bytes
+//PrevFullHash
+//This is a SHA256 checksum of the previous Entry Block of this ChainID. It is calculated by hashing the serialized block from the beginning of the header through the end of the body. It is included to doublecheck the previous block if SHA2 is weakened in the future.  First block has a PrevFullHash of 0.
+//4 bytes
+//EB Sequence
+//This is the sequence which this block is in for this ChainID.  This number increments by 1 for every new EB with this chain ID.  First block is height 0. Big endian.
+//4 bytes
+//DB Height
+//This the Directory Block height which this Entry Block is located in. Big endian.
+//4 bytes
+//Entry Count
+//This is the number of Entry Hashes and time delimiters that the body of this block contains.  Big endian.
+
+//
