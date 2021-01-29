@@ -13,33 +13,34 @@ require (
 	github.com/Factom-Asset-Tokens/factom v0.0.0-20200222022020-d06cbcfe6ece
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/FactomProject/bolt v1.1.1-0.20170202195217-952a1b4e9a55 // indirect
-	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2 // indirect
+	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2
 	github.com/FactomProject/btcutilecc v0.0.0-20130527213604-d3a63a5752ec // indirect
 	github.com/FactomProject/dynrsrc v0.3.1 // indirect
-	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6 // indirect
+	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6
 	github.com/FactomProject/factoid v0.3.4 // indirect
 	github.com/FactomProject/factom v0.3.6-0.20190712163801-e7717c4ab072 // indirect
 	github.com/FactomProject/factomd v6.7.0+incompatible
 	github.com/FactomProject/fastsha256 v0.2.1 // indirect
 	github.com/FactomProject/fsnotify v0.9.0 // indirect
-	github.com/FactomProject/go-bip32 v0.3.6-0.20161206200006-3b593af1c415 // indirect
-	github.com/FactomProject/go-bip39 v0.3.6-0.20161217174232-d1007fb78d9a // indirect
+	github.com/FactomProject/go-bip32 v0.3.6-0.20161206200006-3b593af1c415
+	github.com/FactomProject/go-bip39 v0.3.6-0.20161217174232-d1007fb78d9a
 	github.com/FactomProject/go-bip44 v0.0.0-20190306062959-b541a96d8da9 // indirect
 	github.com/FactomProject/go-simplejson v0.5.0 // indirect
 	github.com/FactomProject/go-spew v0.0.0-20160301052117-ddfaec9b42f5 // indirect
 	github.com/FactomProject/gocoding v0.0.0-20150814232539-59666ce39524 // indirect
-	github.com/FactomProject/goleveldb v0.2.2-0.20170418171130-e7800c6976c5 // indirect
+	github.com/FactomProject/goleveldb v0.2.2-0.20170418171130-e7800c6976c5
 	github.com/FactomProject/logrustash v0.0.0-20171005151533-9c7278ede46e // indirect
 	github.com/FactomProject/netki-go-partner-client v0.0.0-20160324224126-426acb535e66 // indirect
 	github.com/FactomProject/serveridentity v0.0.0-20180611231115-cf42d2aa8deb // indirect
 	github.com/FactomProject/snappy-go v0.0.0-20170202213131-f2f83b22c29e // indirect
 	github.com/FactomProject/web v0.1.1-0.20200312214504-cff1e06a4e47 // indirect
 	github.com/Netflix/go-expect v0.0.0-20200312175327-da48e75238e2 // indirect
+	github.com/PaulSnow/factom2d v6.7.0+incompatible
 	github.com/alexandrevicenzi/go-sse v1.5.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/btcsuite/btcutil v1.0.2
-	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255 // indirect
+	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255
 	github.com/cmars/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dgraph-io/ristretto v0.0.3 // indirect
