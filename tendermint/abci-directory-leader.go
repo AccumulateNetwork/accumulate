@@ -20,9 +20,10 @@ import (
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
 	"github.com/AccumulateNetwork/accumulated/database"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
+	"github.com/Factom-Asset-Tokens/factom"
 	abci "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
-    //"crypto/ed25519"
+	//"crypto/ed25519"
 	"time"
 )
 
@@ -65,7 +66,7 @@ type DirectoryBlockLeader struct {
 //	currentBatch *badger.Txn
 	//router = new(router2.Router)
 	AccNumber int64
-	Hash [32]uint8
+	Hash [32]byte
 	//EntryFeed = chan make(chan node.EntryHash, 10000)
 	accountState map[string]AccountStateStruct
 	BootstrapHeight int64
@@ -119,6 +120,8 @@ func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseC
     //data here can only come from an authorized VBC validator, otherwise they will be rejected
 	//Step 1: check which BVC is sending the request and see if it is a valid Master Chain.
 	header := pb.DBVCInstructionHeader{}
+
+	var _ factom.DBlock{}
 
 	proto.Unmarshal(req.GetTx(),&header) //if first 4 bytes are valid
 	//ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
