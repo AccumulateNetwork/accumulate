@@ -24,10 +24,10 @@ import (
 //4 bytes	DB Height	The Directory Block height is the sequence it appears in the blockchain. Starts at zero.
 //4 bytes	Block Count	This is the number of Entry Blocks that were updated in this block. It is a count of the ChainID:Key pairs. Inclusive of the special blocks. Big endian.
 //Body
-//32 bytes	Admin Block ChainID	Indication the next item is the serial hash of the Admin Block.
-//32 bytes	Admin Block LookupHash	This is the LookupHash of the Admin Block generated during this time period.
-//32 bytes	Entry Credit Block ChainID	Indication the next item belongs to the Entry Credit Block.
-//32 bytes	Entry Credit Block HeaderHash	This is the serial hash of the Entry Credit Block Header generated during this time period.
+//N/A 32 bytes	Admin Block ChainID	Indication the next item is the serial hash of the Admin Block.
+//N/A 32 bytes	Admin Block LookupHash	This is the LookupHash of the Admin Block generated during this time period.
+//N/A 32 bytes	Entry Credit Block ChainID	Indication the next item belongs to the Entry Credit Block.
+//N/A 32 bytes	Entry Credit Block HeaderHash	This is the serial hash of the Entry Credit Block Header generated during this time period.
 //32 bytes	Factoid Block ChainID	Indication the next item belongs to the Factoid Block.
 //32 bytes	Factoid Block KeyMR	This is the KeyMR of the Factoid Block generated during this time period.
 //32 bytes	ChainID 0	This is the ChainID of one Entry Block which was updated during this block time. These ChainID:KeyMR pairs are sorted numerically based on the ChainID.
