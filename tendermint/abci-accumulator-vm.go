@@ -3,6 +3,7 @@ package tendermint
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	"github.com/golang/protobuf/proto"
@@ -12,8 +13,6 @@ import (
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
 	nm "github.com/tendermint/tendermint/node"
-	"github.com/tendermint/tendermint/types"
-
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
@@ -31,10 +30,13 @@ import (
 	//dbm "github.com/tendermint/tm-db"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
+	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 	"github.com/AccumulateNetwork/accumulated/database"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
 	"github.com/AccumulateNetwork/accumulated/validator"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+
+
 	ed25519 "golang.org/x/crypto/ed25519"
 	"sync"
 	//"time"
@@ -99,6 +101,7 @@ type AccumulatorVMApplication struct {
 
 	//router  router2.Router
 
+	Height int64
 	EntryFeed chan node.EntryHash
 	AccNumber int64
 	//EntryFeed = chan make(chan node.EntryHash, 10000)
@@ -446,12 +449,11 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 ///   EndBlock <---
 ///   Commit
 
-func (AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
-	//do any cleanup for block sealing...
 
-	return abcitypes.ResponseEndBlock{}
+// Update the validator set
+func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
+	return abcitypes.ResponseEndBlock{}//ValidatorUpdates: app.ValUpdates}
 }
-
 ///ABCI / block calls
 ///   BeginBlock
 ///   [CheckTx]
@@ -463,7 +465,12 @@ func (AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitype
 func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 	//app.currentBatch.Commit()
 	//pull merkle DAG from the accumulator and put on blockchain as the Data
-	resp := abcitypes.ResponseCommit{Data: []byte{}}
+
+	dblock := dbvc.NewDBlock()
+	data, _ := dblock.MarshalBinary()
+
+	//saveDBlock
+	resp := abcitypes.ResponseCommit{Data: data}
 	if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
 		resp.RetainHeight = app.Height - app.RetainBlocks + 1
 	}
@@ -474,10 +481,6 @@ func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 
 //------------------------
 
-// Update the validator set
-func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
-	return abcitypes.ResponseEndBlock{ValidatorUpdates: app.ValUpdates}
-}
 
 func (app *AccumulatorVMApplication) ListSnapshots(
 	req abcitypes.RequestListSnapshots) abcitypes.ResponseListSnapshots {
@@ -495,8 +498,9 @@ func (app *AccumulatorVMApplication) OfferSnapshot(
 }
 
 func (app *AccumulatorVMApplication) ApplySnapshotChunk(
-	req types.RequestApplySnapshotChunk) types.ResponseApplySnapshotChunk {
-	return types.ResponseApplySnapshotChunk{Result: types.ResponseApplySnapshotChunk_ABORT}
+
+	req abcitypes.RequestApplySnapshotChunk) abcitypes.ResponseApplySnapshotChunk {
+	return abcitypes.ResponseApplySnapshotChunk{Result: abcitypes.ResponseApplySnapshotChunk_ABORT}
 }
 
 
