@@ -1,6 +1,6 @@
 module github.com/AccumulateNetwork/accumulated
 
-go 1.13
+go 1.15
 
 require (
 	github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 // indirect
@@ -77,9 +77,9 @@ require (
 	github.com/tendermint/tm-db v0.6.3
 	go.uber.org/atomic v1.6.0 // indirect
 	go.uber.org/ratelimit v0.1.0 // indirect
-	golang.org/x/crypto v0.0.0-20201016220609-9e8e0b390897
-	golang.org/x/net v0.0.0-20200822124328-c89045814202
-	google.golang.org/grpc v1.33.2
+	golang.org/x/crypto v0.0.0-20201117144127-c1f2f97bffc9
+	golang.org/x/net v0.0.0-20201021035429-f5854403a974
+	google.golang.org/grpc v1.35.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.0.1 // indirect
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/AlecAivazis/survey.v1 v1.6.2 // indirect
