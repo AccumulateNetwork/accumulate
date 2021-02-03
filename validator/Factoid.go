@@ -14,7 +14,7 @@ import (
 	//"github.com/magiconair/properties/assert"
 
 	//"github.com/FactomProject/factomd/common/factoid"
-	factom "github.com/Factom-Asset-Tokens/factom"
+	"github.com/AccumulateNetwork/accumulated/factom"
 )
 
 
