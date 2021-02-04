@@ -28,7 +28,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccumulateNetework/accumulated/factom/varintf"
+	"github.com/AccumulateNetwork/accumulated/factom/varintf"
+	//"varintf"
 )
 
 // Transaction is a Factoid Transaction which is stored in the FBlock.

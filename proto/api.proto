@@ -24,17 +24,21 @@ message DBVCInstructionHeader {
 		RegisterBVCMasterChain 	 = 2; // add a new master chain
 		RemoveBVCMasterChain 	   = 3; // remove a master chain the network.  May need to have blacklists so that core chain's cannot be removed without a fork?
 	}
-	uint64   bvcMasterChainAddr = 1; // block validation chain (BVC) address - sha256(chainId)[0:7] - from which BVC master chain did this request originate. Identifies BVC and Network
-	uint32   version            = 2; // version number stored as varint.
-	insType  instruction        = 3; // type of instruction / request, will have one of the values of
+	insType instruction        = 1; // type of instruction / request, will have one of the values of
+	uint32  version            = 2; // version number stored as varint.
+	uint64  bvcMasterChainAddr = 3; // block validation chain (BVC) address - sha256(chainId)[0:7] - from which BVC master chain did this request originate. Identifies BVC and Network
+    //bytes   bvcValidatorDDII   = 3; // Specific Digital identity of validator within the BVC submitting the instruction
 }
 
 message BVCEntry
 {
 	DBVCInstructionHeader header = 1;
-	bytes   bvcValidatorDDII     = 2; // Specific Digital identity of validator within the BVC submitting the instruction
-	bytes   entry                = 3; // BVC Entry - Merkel DAG root tx (41 bytes) consists of [bvc block height (4 bytes) | unix timestamp (4 bytes) | Merkel DAG Root hash (32 Bytes)]
-	bytes   signature            = 4; // Signature: ed25519[ bvcentry ]
+    bytes   entry                = 2; // BVC Entry - Merkel DAG root tx (41 bytes) consists of
+	                                  //  header := [ version (1byte) | varintf ddiilen | ddii (up to 32 bytes) ]
+	                                  //  body :=   [  bvc bigendian blockheight (4 bytes) |
+	                                  //               unix timestamp (4 bytes) |
+	                                  //               Merkel DAG Root hash (32 Bytes)]
+	bytes   signature            = 3; // Signature: ed25519[ entry ]
 }
 
 message BVCEntryResponse

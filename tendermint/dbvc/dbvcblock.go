@@ -27,19 +27,20 @@ import (
 	"encoding/binary"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/factom"
+	"github.com/elliotchance/orderedmap"
 	"math"
 	"sort"
 	"time"
 )
 
 var (
-	aBlockChainID  = Bytes32{31: 0x0a}
+	aBlockChainID  = factom.Bytes32{31: 0x0a}
 	//ecBlockChainID = Bytes32{31: 0x0c}
 	//fBlockChainID  = Bytes32{31: 0x0f}
 )
 
 // ABlockChainID returns the ChainID of the Admin Block Chain, 0x00..0a.
-func ABlockChainID() Bytes32 { return aBlockChainID }
+func ABlockChainID() factom.Bytes32 { return aBlockChainID }
 //
 //// ECBlockChainID returns the ChainID of the Entry Credit Block Chain,
 //// 0x00..0c.
@@ -51,14 +52,14 @@ func ABlockChainID() Bytes32 { return aBlockChainID }
 // DBlock represents a Factom Directory Block.
 type DBlock struct {
 	// Computed
-	KeyMR    *Bytes32
-	FullHash *Bytes32
+	KeyMR    *factom.Bytes32
+	FullHash *factom.Bytes32
 
 	// Unmarshaled
-	NetworkID    NetworkID
-	BodyMR       *Bytes32
-	PrevKeyMR    *Bytes32
-	PrevFullHash *Bytes32
+	NetworkID    factom.NetworkID
+	BodyMR       *factom.Bytes32
+	PrevKeyMR    *factom.Bytes32
+	PrevFullHash *factom.Bytes32
 	Height       uint32
 	Timestamp    time.Time
 
@@ -66,9 +67,9 @@ type DBlock struct {
 
 	// DBlock.Get populates EBlocks with their ChainID, KeyMR, Timestamp,
 	// and Height.
-	EBlocks []EBlock
+	EBlocks []factom.EBlock
 
-	BVCEntryMap OrderedMap
+	BVCEntryMap orderedmap.OrderedMap
 
 	// marshalBinaryCache is the binary data of the DBlock. It is cached by
 	// UnmarshalBinary so it can be re-used by MarshalBinary.
@@ -96,7 +97,7 @@ func (db DBlock) IsPopulated() bool {
 		!db.Timestamp.IsZero()
 }
 
-func (db *DBlock) AddEBlock(chainid *Bytes32, keymr *Bytes32) {
+func (db *DBlock) AddEBlock(chainid *factom.Bytes32, keymr *factom.Bytes32) {
 	//should sanity check be done here to make sure it is a master chain?
 	db.BVCEntryMap.Set(*chainid,*keymr)
 }
@@ -229,13 +230,13 @@ func (db *DBlock) UnmarshalBinary(data []byte) error {
 	// Parse the Header
 	i += copy(db.NetworkID[:], data[i:])
 
-	db.BodyMR = new(Bytes32)
+	db.BodyMR = new(factom.Bytes32)
 	i += copy(db.BodyMR[:], data[i:])
 
-	db.PrevKeyMR = new(Bytes32)
+	db.PrevKeyMR = new(factom.Bytes32)
 	i += copy(db.PrevKeyMR[:], data[i:])
 
-	db.PrevFullHash = new(Bytes32)
+	db.PrevFullHash = new(factom.Bytes32)
 	i += copy(db.PrevFullHash[:], data[i:])
 
 	db.Timestamp = time.Unix(int64(binary.BigEndian.Uint32(data[i:i+4]))*60, 0)
@@ -258,10 +259,10 @@ func (db *DBlock) UnmarshalBinary(data []byte) error {
 	elements := make([][]byte, eBlockCount)
 
 	// prevChainID is used to ensure that ChainIDs are in ascending order.
-	var prevChainID *Bytes32
+	var prevChainID *factom.Bytes32
 
 	// Parse the EBlocks.
-	db.EBlocks = make([]EBlock, eBlockCount-1) // less one for the FBlock
+	db.EBlocks = make([]factom.EBlock, eBlockCount-1) // less one for the FBlock
 	for ebi := range elements {
 		// Ensure that ChainIDs are in ascending order.
 		if prevChainID != nil &&
@@ -270,11 +271,11 @@ func (db *DBlock) UnmarshalBinary(data []byte) error {
 			return fmt.Errorf("out of order or duplicate Chain ID")
 		}
 
-		elements[ebi] = data[i : i+2*len(Bytes32{})]
+		elements[ebi] = data[i : i+2*len(factom.Bytes32{})]
 
 		// Populate ChainID, KeyMR, Timestamp, and Height.
 
-		var chainID, keyMR Bytes32
+		var chainID, keyMR factom.Bytes32
 		i += copy(chainID[:], data[i:])
 		prevChainID = &chainID
 		i += copy(keyMR[:], data[i:])
@@ -417,11 +418,11 @@ func (db DBlock) MarshalBinaryLen() int {
 // chainID, if it exists. Otherwise, EBlock returns nil.
 //
 // This assumes that db.EBlocks ordered by ascending ChainID.
-func (db DBlock) GetEBlock(chainID *Bytes32) *EBlock {
+func (db DBlock) GetEBlock(chainID *factom.Bytes32) *factom.EBlock {
 	ei := sort.Search(len(db.EBlocks), func(i int) bool {
 		return bytes.Compare(db.EBlocks[i].ChainID[:], (*chainID)[:]) >= 0
 	})
-	if ei < len(db.EBlocks) && *db.EBlocks[ei].ChainID == chainID {
+	if ei < len(db.EBlocks) && *db.EBlocks[ei].ChainID == *chainID {
 		return &db.EBlocks[ei]
 	}
 	return nil
