@@ -1,7 +1,11 @@
 package tendermint
 
 import (
+	"crypto"
+	"crypto/sha256"
 	"encoding/binary"
+	"github.com/AccumulateNetwork/accumulated/factom/varintf"
+
 	//"encoding/binary"
 	"fmt"
 	"github.com/golang/protobuf/proto"
@@ -20,11 +24,12 @@ import (
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
 	"github.com/AccumulateNetwork/accumulated/database"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
-	"github.com/Factom-Asset-Tokens/factom"
+	"github.com/AccumulateNetwork/accumulated/factom"
 	abci "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
 	//"crypto/ed25519"
 	"time"
+	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 )
 
 const (
@@ -71,6 +76,7 @@ type DirectoryBlockLeader struct {
 	accountState map[string]AccountStateStruct
 	BootstrapHeight int64
 	Height int64
+	dblock dbvc.DBlock
 }
 
 func NewDirectoryBlockLeader() *DirectoryBlockLeader {
@@ -121,7 +127,6 @@ func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseC
 	//Step 1: check which BVC is sending the request and see if it is a valid Master Chain.
 	header := pb.DBVCInstructionHeader{}
 
-	var _ factom.DBlock{}
 
 	proto.Unmarshal(req.GetTx(),&header) //if first 4 bytes are valid
 	//ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
@@ -183,6 +188,11 @@ func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.Res
 	//may require request to get data from
 	//do any housekeeping for accumulator?
 	app.Height = req.Header.Height
+
+	app.dblock.ClearMarshalBinaryCache()
+	app.dblock.Height = app.GetHeight()
+	app.dblock.Timestamp = req.GetHeader().GetTime()
+
 	return abci.ResponseBeginBlock{}
 }
 
@@ -205,14 +215,30 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 	//everyone verify...
 
 	if ed25519.Verify(bvcpubkey, bvcreq.GetEntry(), bvcreq.GetSignature()) {
-		println("Invalid")
+		println("Invalid Signature")
 		return abci.ResponseDeliverTx{Code: 3, GasWanted: 0}
 	}
 
+	var _ dbvc.DBlock{}
 	//timestamp := binary.LittleEndian.Uint32(bvcreq.GetEntry()[4:8])
 	//mrhash := bvcreq.GetEntry()[8:40]
 
 	key, err := proto.Marshal(bvcreq.GetHeader())
+
+
+	versionentry, offset := varintf.Decode(bvcreq.GetEntry())
+	bvcheight := binary.LittleEndian.Uint32(bvcreq.Entry[offset:])
+	offset += 4
+	bvctimestamp := binary.LittleEndian.Uint32(bvcreq.Entry[offset:])
+	offset += 4
+	mrhash := bvcreq.Entry[offset:]
+
+	key_bvc_at_height := sha256.Sum256(binary.BigEndian + bvcreq.Header.BvcMasterChainAddr )
+	//key := hash(height | bvcchain | ddii), value := bvcreq.GetEntry()
+	//
+	//app.dblock.AddEBlock(,sha256.Sum256(bvcreq.GetEntry());
+
+	//app.dblock.AddEBlock(bvcreq.GetEntry())
 	err = app.WriteKeyValue(key,req.GetTx())
 	if err != nil {
 		response.Code = 1
