@@ -466,7 +466,7 @@ func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 	//app.currentBatch.Commit()
 	//pull merkle DAG from the accumulator and put on blockchain as the Data
 
-	dblock := dbvc.NewDBlock()
+	dblock := dbvc.DBlock{}//NewDBlock()
 	data, _ := dblock.MarshalBinary()
 
 	//saveDBlock

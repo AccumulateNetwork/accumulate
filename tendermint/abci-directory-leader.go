@@ -4,6 +4,9 @@ import (
 	"crypto"
 	"crypto/sha256"
 	"encoding/binary"
+	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
+	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
+	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulateNetwork/accumulated/factom/varintf"
 
 	//"encoding/binary"
@@ -29,6 +32,11 @@ import (
 	ed25519 "golang.org/x/crypto/ed25519"
 	//"crypto/ed25519"
 	"time"
+	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
+
+	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
+	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
+	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 )
 
@@ -77,6 +85,16 @@ type DirectoryBlockLeader struct {
 	BootstrapHeight int64
 	Height int64
 	dblock dbvc.DBlock
+	//per chain accumulator
+
+	ACCs            []*accumulator.Accumulator // Accumulators to record hashes
+	EntryFeeds      []chan node.EntryHash
+	Controls        []chan bool
+	MDFeeds         []chan *valacctypes.Hash
+
+	//bvc_masterchain_acc accumulator.Accumulator//map[factom.Bytes32]accumulator.ChainAcc
+
+	DB vadb.DB
 }
 
 func NewDirectoryBlockLeader() *DirectoryBlockLeader {
@@ -175,6 +193,22 @@ func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.Respo
 	fmt.Printf("Initalizing Accumulator Router\n")
 	//app.router.Init(EntryFeed, int(AccNumber))
     //go router.Run()
+    //allocate all BVC chains
+    //initialize all chain ids
+
+    //TODO query something to resolve all BVC Master Chains
+	acc := new(accumulator.Accumulator)
+	app.ACCs = append(app.ACCs, acc)
+
+
+	chainid := sha256.Sum256([]byte("TODO: one of many bvc chains"))
+
+	entryFeed, control, mdHashes := accumulator.Init(&app.DB, (*valacctypes.Hash)(&chainid))
+	//initialize the feeds to the accumulator
+	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
+	app.Controls = append(app.Controls, control)
+	app.MDFeeds = append(app.MDFeeds, mdHashes)
+
 	return abci.ResponseInitChain{}
 }
 
@@ -189,6 +223,8 @@ func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.Res
 	//do any housekeeping for accumulator?
 	app.Height = req.Header.Height
 
+	//Reset the BVC master chain accumulator for this round
+	app.bvc_masterchain_acc = make(map[factom.Bytes32]accumulator.ChainAcc)
 	app.dblock.ClearMarshalBinaryCache()
 	app.dblock.Height = app.GetHeight()
 	app.dblock.Timestamp = req.GetHeader().GetTime()
@@ -219,7 +255,14 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 		return abci.ResponseDeliverTx{Code: 3, GasWanted: 0}
 	}
 
-	var _ dbvc.DBlock{}
+	val, err := app.bvc_masterchain_acc[bvcreq.GetHeader().BvcMasterChainAddr]
+	if err != nil {
+		//do something here
+		app.bvc_masterchain_acc[bvcreq.GetHeader().BvcMasterChainAddr] = accumulator.NewChainAcc()
+	}
+
+
+	//var _ dbvc.DBlock{}
 	//timestamp := binary.LittleEndian.Uint32(bvcreq.GetEntry()[4:8])
 	//mrhash := bvcreq.GetEntry()[8:40]
 
