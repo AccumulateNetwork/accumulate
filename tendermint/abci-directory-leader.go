@@ -1,13 +1,15 @@
 package tendermint
 
 import (
-	"crypto"
+	"container/list"
+	//"crypto"
 	"crypto/sha256"
 	"encoding/binary"
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
-	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
+	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulateNetwork/accumulated/factom/varintf"
+	//"github.com/Workiva/go-datastructures/threadsafe/err"
 
 	//"encoding/binary"
 	"fmt"
@@ -57,12 +59,79 @@ const BanListTrigger = -10000
 
 
 ////bvc entry header:
-//type BVCEntryStruct {
-//
-//    uint32 BVCHeight          /// (4 bytes) Height of master chain block
-//	uint32 MasterChainAddress /// (8 bytes) Address of chain
-//
-//}
+const BVCEntryMaxSize = 1+32+4+8+32
+
+type BVCEntry struct {
+	Version byte
+	DDII []byte
+	BVCHeight uint32          /// (4 bytes) Height of master chain block
+	Timestamp uint64
+	Mrhash valacctypes.Hash
+
+}
+
+func (entry *BVCEntry) MarshalBinary()([]byte, error) {
+	ret := make([]byte,1+1+len(entry.DDII)+4+8+32)
+
+    offset := 0
+    endoffset := 1
+    varintf.Put(ret[:endoffset],uint64(entry.Version))
+    offset++
+    endoffset++
+
+	ret[offset] = byte(len(entry.DDII))
+
+	endoffset += int(ret[offset])
+	offset++
+
+	copy(ret[offset:endoffset],entry.DDII);
+    offset = endoffset-1
+    endoffset += 4
+
+	binary.BigEndian.PutUint32(ret[offset:endoffset],entry.BVCHeight)
+    offset += 4
+    endoffset += 8
+
+	binary.BigEndian.PutUint64(ret[offset:endoffset],entry.Timestamp)
+    offset += 8
+    endoffset += 32
+
+    copy(ret[offset:endoffset],entry.Mrhash[:])
+
+	return ret[:],nil
+}
+
+func (entry *BVCEntry) UnmarshalBinary(data []byte) error {
+	version, offset := varintf.Decode(data)
+	if offset != 1 {
+		return fmt.Errorf("Invalid version")
+	}
+	entry.Version = byte(version)
+	ddiilen := data[offset]
+	if ddiilen > 32 && ddiilen > 0 {
+		return fmt.Errorf("Invalid DDII Length.  Must be > 0 && <= 32")
+	}
+
+	offset++
+	endoffset := offset + int(ddiilen)
+	if endoffset+4+16+32+1 > len(data) {
+		return fmt.Errorf("Insuffient data for parsing BVC Entry")
+	}
+	entry.DDII = data[offset:endoffset+1]
+	offset = endoffset
+	endoffset = offset + 4
+	entry.BVCHeight = binary.LittleEndian.Uint32(data[offset:endoffset+1])
+
+	offset = endoffset
+	endoffset = offset + 4
+	entry.Timestamp = binary.LittleEndian.Uint64(data[offset:endoffset+1])
+
+	offset = endoffset
+	endoffset = offset + 32
+	entry.Timestamp = binary.LittleEndian.Uint64(data[offset:endoffset+1])
+	return nil
+}
+
 //
 //
 //entry:
@@ -85,6 +154,9 @@ type DirectoryBlockLeader struct {
 	BootstrapHeight int64
 	Height int64
 	dblock dbvc.DBlock
+
+	//map chain addr to confirmation count
+	confimrationmap map[BVCConfirmationKey]BVCEntryConfirmation
 	//per chain accumulator
 
 	ACCs            []*accumulator.Accumulator // Accumulators to record hashes
@@ -92,9 +164,65 @@ type DirectoryBlockLeader struct {
 	Controls        []chan bool
 	MDFeeds         []chan *valacctypes.Hash
 
+	//chainid -> height -> mrhash -> confirmation count
+	//map[chainid]AccumulateConfirmation [height][mrhash]
+
+	validator map[valacctypes.Hash]BVCValidator
 	//bvc_masterchain_acc accumulator.Accumulator//map[factom.Bytes32]accumulator.ChainAcc
 
 	DB vadb.DB
+}
+
+//lookup by bvcheight | chainaddress
+type BVCConfirmationKey struct {
+	Height uint32
+	ChainId factom.Bytes32
+}
+
+type BVCEntryCandidate struct {
+	Count uint32
+	DDII [][32]byte
+}
+
+type BVCEntryKey struct {
+	Height uint32
+	MrHash valacctypes.Hash
+}
+
+type BVCEntryConfirmation struct {
+	//should be map[valacctypes.Hash]map[uint32]BVCEntryCandidate
+	candidates map[BVCEntryKey]BVCEntryCandidate
+}
+
+func (candidate *BVCEntryCandidate) Add(ddii []byte) {
+	candidate.Count++
+	candidate.DDII = append(candidate.DDII, ddii)
+}
+
+func NewBVCEntryConfirmation() *BVCEntryConfirmation {
+	conf := BVCEntryConfirmation{}
+	conf.Reset()
+	return &conf
+}
+func (entryconf *BVCEntryConfirmation) Submit(bvcheight uint32, mrhash *valacctypes.Hash, ddii []byte) {
+	key := BVCEntryKey{bvcheight, *mrhash }
+
+	entryconf.candidates[key].Add(ddii)
+
+}
+
+func (entryconf *BVCEntryConfirmation) Reset() {
+    entryconf.candidates = make(map[BVCEntryKey]BVCEntryCandidate)
+}
+
+func (entryconf *BVCEntryConfirmation) Winners(threshold int32) (winners []BVCEntryConfirmation, losers []BVCEntryConfirmation) {
+    //split the winners and losers - there should never be any losers.
+	//threshold sets the number of winners required to achieve consensus.
+	//only winning hash needs to be stored
+	return nil, nil
+}
+type BVCValidator struct {
+	bvcentrymap map[uint32]BVCEntry
 }
 
 func NewDirectoryBlockLeader() *DirectoryBlockLeader {
@@ -195,8 +323,9 @@ func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.Respo
     //go router.Run()
     //allocate all BVC chains
     //initialize all chain ids
+	app.confimrationmap = make(map[BVCConfirmationKey]BVCEntryConfirmation)
 
-    //TODO query something to resolve all BVC Master Chains
+	//TODO query something to resolve all BVC Master Chains
 	acc := new(accumulator.Accumulator)
 	app.ACCs = append(app.ACCs, acc)
 
@@ -266,31 +395,28 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 	//timestamp := binary.LittleEndian.Uint32(bvcreq.GetEntry()[4:8])
 	//mrhash := bvcreq.GetEntry()[8:40]
 
-	key, err := proto.Marshal(bvcreq.GetHeader())
+	//key, err := proto.Marshal(bvcreq.GetHeader())
+
+    bve := BVCEntry{}
+    bve.UnmarshalBinary(bvcreq.GetEntry())
 
 
-	versionentry, offset := varintf.Decode(bvcreq.GetEntry())
-	bvcheight := binary.LittleEndian.Uint32(bvcreq.Entry[offset:])
-	offset += 4
-	bvctimestamp := binary.LittleEndian.Uint32(bvcreq.Entry[offset:])
-	offset += 4
-	mrhash := bvcreq.Entry[offset:]
-
-	key_bvc_at_height := sha256.Sum256(binary.BigEndian + bvcreq.Header.BvcMasterChainAddr )
+	key := BVCConfirmationKey{bve.BVCHeight, bvcreq.GetHeader().GetBvcMasterChainAddr() }
+	app.confimrationmap[key].Submit(bve.BVCHeight,&bve.Mrhash,bve.DDII)
 	//key := hash(height | bvcchain | ddii), value := bvcreq.GetEntry()
 	//
 	//app.dblock.AddEBlock(,sha256.Sum256(bvcreq.GetEntry());
 
 	//app.dblock.AddEBlock(bvcreq.GetEntry())
-	err = app.WriteKeyValue(key,req.GetTx())
-	if err != nil {
-		response.Code = 1
-		response.Info = err.Error()
-	}
-
-	if (err != nil) {
-		println(err.Error())
-	}
+	//err = app.WriteKeyValue(key,req.GetTx())
+	//if err != nil {
+	//	response.Code = 1
+	//	response.Info = err.Error()
+	//}
+	//
+	//if (err != nil) {
+	//	println(err.Error())
+	//}
 
 	return response
 }

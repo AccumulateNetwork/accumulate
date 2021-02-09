@@ -39,6 +39,7 @@ require (
 	github.com/FactomProject/web v0.1.1-0.20200312214504-cff1e06a4e47 // indirect
 	github.com/Netflix/go-expect v0.0.0-20200312175327-da48e75238e2 // indirect
 	github.com/PaulSnow/factom2d v6.7.0+incompatible
+	github.com/Workiva/go-datastructures v1.0.52
 	github.com/alexandrevicenzi/go-sse v1.5.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect

@@ -357,10 +357,10 @@ func (db *DBlock) UnmarshalBinary(data []byte) error {
 //deprecated //     [EC Block HeaderHash (Bytes32)] +
 //deprecated //     [FCT Block ChainID (Bytes32{31:0x0f})] +
 //deprecated //     [FCT Block KeyMR (Bytes32)] +
-//      [ChainID 0 (Bytes32)] +
-//      [KeyMR 0 (Bytes32)] +
+//      hash [ChainID 0 (Bytes32) | bvcheight ] +
+//      [BVCMrHash 0 (Bytes32)] +
 //      ... +
-//      [ChainID N (Bytes32)] +
+//      hash [ChainID N (Bytes32) | bvcheightN] +
 //      [KeyMR N (Bytes32)] +
 //
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#directory-block
