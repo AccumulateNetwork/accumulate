@@ -27,7 +27,7 @@ message DBVCInstructionHeader {
 	insType instruction        = 1; // type of instruction / request, will have one of the values of
 	uint32  version            = 2; // version number stored as varint.
 	uint64  bvcMasterChainAddr = 3; // block validation chain (BVC) address - sha256(chainId)[0:7] - from which BVC master chain did this request originate. Identifies BVC and Network
-    //bytes   bvcValidatorDDII   = 3; // Specific Digital identity of validator within the BVC submitting the instruction
+    bytes   bvcValidatorDDII   = 3; // Specific Digital identity of validator within the BVC submitting the instruction
 }
 
 message BVCEntry
