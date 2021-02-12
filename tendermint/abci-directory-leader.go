@@ -1,7 +1,6 @@
 package tendermint
 
 import (
-	"container/list"
 	//"crypto"
 	"crypto/sha256"
 	"encoding/binary"
@@ -28,18 +27,16 @@ import (
 	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
 	"github.com/AccumulateNetwork/accumulated/database"
-	pb "github.com/AccumulateNetwork/accumulated/proto"
 	"github.com/AccumulateNetwork/accumulated/factom"
+	pb "github.com/AccumulateNetwork/accumulated/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
+	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 	//"crypto/ed25519"
 	"time"
-	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
-	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
-	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 )
 
 const (
@@ -166,7 +163,7 @@ type DirectoryBlockLeader struct {
 
 	//chainid -> height -> mrhash -> confirmation count
 	//map[chainid]AccumulateConfirmation [height][mrhash]
-
+    bvcentrymap map[BVCConfirmationKey]BVCEntry
 	validator map[valacctypes.Hash]BVCValidator
 	//bvc_masterchain_acc accumulator.Accumulator//map[factom.Bytes32]accumulator.ChainAcc
 
@@ -175,55 +172,62 @@ type DirectoryBlockLeader struct {
 
 //lookup by bvcheight | chainaddress
 type BVCConfirmationKey struct {
-	Height uint32
-	ChainId factom.Bytes32
+	Height uint64
+	ChainAddr uint64
+	//ChainId factom.Bytes32
 }
 
-type BVCEntryCandidate struct {
-	Count uint32
-	DDII [][32]byte
-}
-
-type BVCEntryKey struct {
-	Height uint32
-	MrHash valacctypes.Hash
-}
-
-type BVCEntryConfirmation struct {
-	//should be map[valacctypes.Hash]map[uint32]BVCEntryCandidate
-	candidates map[BVCEntryKey]BVCEntryCandidate
-}
-
-func (candidate *BVCEntryCandidate) Add(ddii []byte) {
-	candidate.Count++
-	candidate.DDII = append(candidate.DDII, ddii)
-}
-
-func NewBVCEntryConfirmation() *BVCEntryConfirmation {
-	conf := BVCEntryConfirmation{}
-	conf.Reset()
-	return &conf
-}
-func (entryconf *BVCEntryConfirmation) Submit(bvcheight uint32, mrhash *valacctypes.Hash, ddii []byte) {
-	key := BVCEntryKey{bvcheight, *mrhash }
-
-	entryconf.candidates[key].Add(ddii)
-
-}
-
-func (entryconf *BVCEntryConfirmation) Reset() {
-    entryconf.candidates = make(map[BVCEntryKey]BVCEntryCandidate)
-}
-
-func (entryconf *BVCEntryConfirmation) Winners(threshold int32) (winners []BVCEntryConfirmation, losers []BVCEntryConfirmation) {
-    //split the winners and losers - there should never be any losers.
-	//threshold sets the number of winners required to achieve consensus.
-	//only winning hash needs to be stored
-	return nil, nil
-}
-type BVCValidator struct {
-	bvcentrymap map[uint32]BVCEntry
-}
+//type BVCEntryCandidate struct {
+//	Count uint32
+//	DDII [][32]byte
+//}
+//
+//type BVCEntryKey struct {
+//	Height uint32
+//	MrHash valacctypes.Hash
+//}
+//
+//type BVCEntryConfirmation struct {
+//	//should be map[valacctypes.Hash]map[uint32]BVCEntryCandidate
+//	candidates map[BVCEntryKey]BVCEntryCandidate
+//}
+//
+//func (candidate *BVCEntryCandidate) Add(ddii []byte) {
+//	candidate.Count++
+//	candidate.DDII = append(candidate.DDII, ddii)
+//}
+//
+//func NewBVCEntryConfirmation() *BVCEntryConfirmation {
+//	conf := BVCEntryConfirmation{}
+//	conf.Reset()
+//	return &conf
+//}
+//func (entryconf *BVCEntryConfirmation) Submit(bvcheight uint32, chainaddr uint64, mrhash *valacctypes.Hash, ddii []byte) {
+//	key := BVCEntryKey{bvcheight, *chainaddr }
+//
+//	entryconf.candidates[key].Add(ddii)
+//
+//}
+//
+//func (entryconf *BVCEntryConfirmation) Reset() {
+//    entryconf.candidates = make(map[BVCEntryKey]BVCEntryCandidate)
+//}
+//
+//func (entryconf *BVCEntryConfirmation) Winners(threshold int32) (winners []BVCEntryConfirmation, losers []BVCEntryConfirmation) {
+//    //split the winners and losers - there should never be any losers.
+//	//threshold sets the number of winners required to achieve consensus.
+//	//only winning hash needs to be stored
+//
+//	for k, v := range entryconf.candidates {
+//		winners = append(winners,BVCEntryCandidate)
+//	}
+//
+//	entryconf.candidates
+//	return nil, nil
+//}
+//type BVCValidator struct {
+//	bvcentrymap map[uint32]BVCEntry
+//}
 
 func NewDirectoryBlockLeader() *DirectoryBlockLeader {
 	app := DirectoryBlockLeader{
@@ -402,7 +406,15 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 
 
 	key := BVCConfirmationKey{bve.BVCHeight, bvcreq.GetHeader().GetBvcMasterChainAddr() }
-	app.confimrationmap[key].Submit(bve.BVCHeight,&bve.Mrhash,bve.DDII)
+    v, ok := app.bvcentrymap[key]
+    if ok {
+    	//this means it has already been sent by another bvc
+    	response.Code = 1
+    	response.GasUsed = 0
+    	response.GasWanted = 0
+    	return response
+	}
+	//app.confimrationmap[key].Submit(bve.BVCHeight,&bve.Mrhash,bve.DDII)
 	//key := hash(height | bvcchain | ddii), value := bvcreq.GetEntry()
 	//
 	//app.dblock.AddEBlock(,sha256.Sum256(bvcreq.GetEntry());
