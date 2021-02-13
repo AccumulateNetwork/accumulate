@@ -30,14 +30,12 @@ import (
 	//dbm "github.com/tendermint/tm-db"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
-	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 	"github.com/AccumulateNetwork/accumulated/database"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
+	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 	"github.com/AccumulateNetwork/accumulated/validator"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 
-
-	ed25519 "golang.org/x/crypto/ed25519"
 	"sync"
 	//"time"
 )
@@ -539,30 +537,30 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 }
 
 
-func (app *AccumulatorVMApplication) isValid(tx []byte, bytesLen int) (code uint32) {
-
-	// [Key][Type][Nonce][Data][Sign]
-
-
-	//Zero bytes acceptable, but negative value indecates malformed message
-	if bytesLen < 0 {
-		return 1
-	}
-
-	//Maximim data size (TODO move to global configuration)
-	if bytesLen > 10240 {
-		return 2
-	}
-
-	signPtr := dataPtr + bytesLen
-
-	if ed25519.Verify(tx[keyPtr:keyPtrE], tx[msgTypePtr:signPtr], tx[signPtr:]) {
-		println("Valid")
-	 	return 0
-	}
-	println("NOT Valid")
-	return 3
-}
+//func (app *AccumulatorVMApplication) isValid(tx []byte, bytesLen int) (code uint32) {
+//
+//	// [Key][Type][Nonce][Data][Sign]
+//
+//
+//	//Zero bytes acceptable, but negative value indecates malformed message
+//	if bytesLen < 0 {
+//		return 1
+//	}
+//
+//	//Maximim data size (TODO move to global configuration)
+//	if bytesLen > 10240 {
+//		return 2
+//	}
+//
+//	signPtr := dataPtr + bytesLen
+//
+//	if ed25519.Verify(tx[keyPtr:keyPtrE], tx[msgTypePtr:signPtr], tx[signPtr:]) {
+//		println("Valid")
+//	 	return 0
+//	}
+//	println("NOT Valid")
+//	return 3
+//}
 
 
 

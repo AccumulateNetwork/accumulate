@@ -1,11 +1,12 @@
 package tendermint
 
 import (
-	//"crypto"
 	"crypto/sha256"
 	"encoding/binary"
+	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
+	"github.com/AccumulateNetwork/accumulated/example/code"
 	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulateNetwork/accumulated/factom/varintf"
 	//"github.com/Workiva/go-datastructures/threadsafe/err"
@@ -27,27 +28,14 @@ import (
 	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
 	"github.com/AccumulateNetwork/accumulated/database"
-	"github.com/AccumulateNetwork/accumulated/factom"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
-	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
-	//"crypto/ed25519"
-	"time"
 
-	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
+	//	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
-)
+	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/merkleDag"
 
-const (
-	keyPtr = 0 					// [Key]  32 bytes
-	keyPtrE = keyPtr + 32
-
-	msgTypePtr = keyPtrE 	// [Type] 1 byte  (var_int)
-
- 	noncePtr = msgTypePtr + 1	// [Nonce] 8 byte (typically time stamp)
- 	dataPtr = noncePtr + 8    	// [Data] ? bytes
-	// [Sign] 64 bytes (type+nonce+data)
 )
 
 const BanListTrigger = -10000
@@ -58,13 +46,22 @@ const BanListTrigger = -10000
 ////bvc entry header:
 const BVCEntryMaxSize = 1+32+4+8+32
 
+
+const(
+    DDII_type int = 0
+    BVCHeight_type int = 1
+    Timestamp_type int = 2
+    MDRoot_type int = 3
+)
 type BVCEntry struct {
 	Version byte
 	DDII []byte
 	BVCHeight uint32          /// (4 bytes) Height of master chain block
 	Timestamp uint64
-	Mrhash valacctypes.Hash
+	MDRoot valacctypes.Hash
 
+	rawslices [4][]byte
+	cache []byte
 }
 
 func (entry *BVCEntry) MarshalBinary()([]byte, error) {
@@ -93,47 +90,59 @@ func (entry *BVCEntry) MarshalBinary()([]byte, error) {
     offset += 8
     endoffset += 32
 
-    copy(ret[offset:endoffset],entry.Mrhash[:])
+    copy(ret[offset:endoffset],entry.MDRoot[:])
 
 	return ret[:],nil
 }
+func (entry *BVCEntry) UnmarshalBinary(data []byte) ([][]byte, error) {
 
-func (entry *BVCEntry) UnmarshalBinary(data []byte) error {
+
 	version, offset := varintf.Decode(data)
 	if offset != 1 {
-		return fmt.Errorf("Invalid version")
+		return nil, fmt.Errorf("Invalid version")
 	}
 	entry.Version = byte(version)
 	ddiilen := data[offset]
 	if ddiilen > 32 && ddiilen > 0 {
-		return fmt.Errorf("Invalid DDII Length.  Must be > 0 && <= 32")
+		return nil, fmt.Errorf("Invalid DDII Length.  Must be > 0 && <= 32")
 	}
 
 	offset++
 	endoffset := offset + int(ddiilen)
 	if endoffset+4+16+32+1 > len(data) {
-		return fmt.Errorf("Insuffient data for parsing BVC Entry")
+		return nil, fmt.Errorf("Insuffient data for parsing BVC Entry")
 	}
 	entry.DDII = data[offset:endoffset+1]
-	offset = endoffset
-	endoffset = offset + 4
-	entry.BVCHeight = binary.LittleEndian.Uint32(data[offset:endoffset+1])
+
+	ret := make([][]byte,4)
+
+	ret[DDII_type] = entry.DDII
 
 	offset = endoffset
 	endoffset = offset + 4
-	entry.Timestamp = binary.LittleEndian.Uint64(data[offset:endoffset+1])
+	ret[BVCHeight_type] = data[offset:endoffset+1]
+	entry.BVCHeight = binary.LittleEndian.Uint32(ret[BVCHeight_type])
+
+
+	offset = endoffset
+	endoffset = offset + 4
+	ret[Timestamp_type] = data[offset:endoffset+1]
+	entry.Timestamp = binary.LittleEndian.Uint64(ret[Timestamp_type])
 
 	offset = endoffset
 	endoffset = offset + 32
-	entry.Timestamp = binary.LittleEndian.Uint64(data[offset:endoffset+1])
-	return nil
+
+	ret[MDRoot_type] = data[offset:endoffset+1]
+	copy(entry.MDRoot[:],ret[MDRoot_type])
+	return ret,nil
 }
+
 
 //
 //
 //entry:
 //key : bvcheight | chainaddr (12 bytes) : bvcpubkey (32bytes)
-//value: mrhash
+//value: MDRoot
 //value: signature
 
 
@@ -141,30 +150,23 @@ func (entry *BVCEntry) UnmarshalBinary(data []byte) error {
 type DirectoryBlockLeader struct {
 
 	abci.BaseApplication
-//	db           *badger.DB
-//	currentBatch *badger.Txn
-	//router = new(router2.Router)
-	AccNumber int64
-	Hash [32]byte
-	//EntryFeed = chan make(chan node.EntryHash, 10000)
-	accountState map[string]AccountStateStruct
-	BootstrapHeight int64
-	Height int64
-	dblock dbvc.DBlock
+//	BootstrapHeight int64
+	Height uint64
+//	dblock dbvc.DBlock
 
 	//map chain addr to confirmation count
-	confimrationmap map[BVCConfirmationKey]BVCEntryConfirmation
-	//per chain accumulator
-
-	ACCs            []*accumulator.Accumulator // Accumulators to record hashes
-	EntryFeeds      []chan node.EntryHash
-	Controls        []chan bool
-	MDFeeds         []chan *valacctypes.Hash
-
-	//chainid -> height -> mrhash -> confirmation count
-	//map[chainid]AccumulateConfirmation [height][mrhash]
+	//confimrationmap map[BVCConfirmationKey]BVCEntryConfirmation
+	////per chain accumulator
+	//
+	ACC            *accumulator.Accumulator // Accumulators to record hashes
+	EntryFeed      chan node.EntryHash
+	Control        chan bool
+	MDFeed         chan *valacctypes.Hash
+	md       merkleDag.MD
+	AppMDRoot valacctypes.Hash
+	//chainid -> height -> MDRoot -> confirmation count
+	//map[chainid]AccumulateConfirmation [height][MDRoot]
     bvcentrymap map[BVCConfirmationKey]BVCEntry
-	validator map[valacctypes.Hash]BVCValidator
 	//bvc_masterchain_acc accumulator.Accumulator//map[factom.Bytes32]accumulator.ChainAcc
 
 	DB vadb.DB
@@ -184,7 +186,7 @@ type BVCConfirmationKey struct {
 //
 //type BVCEntryKey struct {
 //	Height uint32
-//	MrHash valacctypes.Hash
+//	MDRoot valacctypes.Hash
 //}
 //
 //type BVCEntryConfirmation struct {
@@ -202,7 +204,7 @@ type BVCConfirmationKey struct {
 //	conf.Reset()
 //	return &conf
 //}
-//func (entryconf *BVCEntryConfirmation) Submit(bvcheight uint32, chainaddr uint64, mrhash *valacctypes.Hash, ddii []byte) {
+//func (entryconf *BVCEntryConfirmation) Submit(bvcheight uint32, chainaddr uint64, MDRoot *valacctypes.Hash, ddii []byte) {
 //	key := BVCEntryKey{bvcheight, *chainaddr }
 //
 //	entryconf.candidates[key].Add(ddii)
@@ -233,11 +235,8 @@ func NewDirectoryBlockLeader() *DirectoryBlockLeader {
 	app := DirectoryBlockLeader{
 //		db: db,
 		//router: new(router2.Router),
-		AccNumber: 1,
+
 		//EntryFeed : make(chan node.EntryHash, 10000),
-		accountState : make(map[string]AccountStateStruct),
-		BootstrapHeight: 99999999999,
-		Height : 0,
 	}
     return &app
 }
@@ -261,6 +260,7 @@ func (app *DirectoryBlockLeader) resolveDDIIatHeight(ddii []byte, bvcheight uint
 
 	fmt.Printf("%s", string(ddii[:]))
 	//need to find out what the public key for ddii was at height bvcheight
+	//only temporary... create a valid key
 	pub, _, err := ed25519.GenerateKey(nil)
 	return pub, err
 }
@@ -278,46 +278,52 @@ func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseC
 	header := pb.DBVCInstructionHeader{}
 
 
-	proto.Unmarshal(req.GetTx(),&header) //if first 4 bytes are valid
-	//ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
+	err := proto.Unmarshal(req.GetTx(),&header)
+	if err != nil {
+		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0}
+	}
 
-
-	err := app.verifyBVCMasterChain(header.GetBvcMasterChainAddr())
+	err = app.verifyBVCMasterChain(header.GetBvcMasterChainAddr())
 	if err != nil { //add validation here.
 		//quick filter to see if the request if from a valid master chain
-		return abci.ResponseCheckTx{Code: 1, GasWanted: 0}
+		return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0}
 	}
 
 	switch header.GetInstruction() {
 	case pb.DBVCInstructionHeader_BVCEntry:
 		//Step 2: resolve DDII of BVC against VBC validator
-
-
 		bvcreq := pb.BVCEntry{}
 
 		err = proto.Unmarshal(req.GetTx(),&bvcreq)
 
 		if err != nil {
-			return abci.ResponseCheckTx{Code: 3, GasWanted: 0}
+			return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
+				Log: fmt.Sprintf("Unable to decode BVC Protobuf Transaction") }
 		}
 
-		pub, err := app.resolveDDIIatHeight(bvcreq.GetBvcValidatorDDII(), binary.LittleEndian.Uint32(bvcreq.GetEntry()[0:4]))
+		bve := BVCEntry{}
+		bve.UnmarshalBinary(bvcreq.GetEntry())
+
+		//resolve the validator's bve to obtain public key for given height
+		pub, err := app.resolveDDIIatHeight(bve.DDII, bve.BVCHeight)
 		if err != nil {
-			return abci.ResponseCheckTx{Code: 2, GasWanted: 0}
+			return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0,
+			    Log: fmt.Sprintf("Unable to resolve DDII at Height %d", bve.BVCHeight) }
 		}
 
-		//Step 3: validate signature of signed accumulated MR
+		//Step 3: validate signature of signed accumulated merkle dag root
 
 		if !ed25519.Verify(pub, bvcreq.GetEntry(), bvcreq.GetSignature()) {
 			println("Invalid Signature")
-			return abci.ResponseCheckTx{Code: 4, GasWanted: 0}
+			return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0,
+			                            Log: "Invalid Signature" }
 		}
+	default:
+		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0, Log : "Bad Instruction Header"}
 
 	}
 	//Step 4: if signature is valid send dispatch to accumulator directory block
-	bytesLen := len(req.Tx) - dataPtr - 64
-	code := app.isValid(req.Tx,bytesLen)
-	return abci.ResponseCheckTx{Code: code, GasWanted: 1}
+	return abci.ResponseCheckTx{Code: code.CodeTypeOK, GasWanted: 1}
 }
 
 
@@ -327,21 +333,19 @@ func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.Respo
     //go router.Run()
     //allocate all BVC chains
     //initialize all chain ids
-	app.confimrationmap = make(map[BVCConfirmationKey]BVCEntryConfirmation)
+//	app.confimrationmap = make(map[BVCConfirmationKey]BVCEntryConfirmation)
 
 	//TODO query something to resolve all BVC Master Chains
-	acc := new(accumulator.Accumulator)
-	app.ACCs = append(app.ACCs, acc)
+	app.ACC = new(accumulator.Accumulator)
+	//app.ACCs = append(app.ACCs, acc)
 
 
-	chainid := sha256.Sum256([]byte("TODO: one of many bvc chains"))
+	chainid := sha256.Sum256([]byte("dbvc"))
 
-	entryFeed, control, mdHashes := accumulator.Init(&app.DB, (*valacctypes.Hash)(&chainid))
-	//initialize the feeds to the accumulator
-	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
-	app.Controls = append(app.Controls, control)
-	app.MDFeeds = append(app.MDFeeds, mdHashes)
+	app.EntryFeed, app.Control, app.MDFeed = app.ACC.Init(&app.DB, (*valacctypes.Hash)(&chainid))
 
+	//need to set
+	//app.AppMDRoot //load state
 	return abci.ResponseInitChain{}
 }
 
@@ -351,17 +355,7 @@ func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.Respo
 
 //Here we create a batch, which will store block's transactions.
 func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
-	//app.currentBatch = app.db.NewTransaction(true)
-	//may require request to get data from
-	//do any housekeeping for accumulator?
-	app.Height = req.Header.Height
-
-	//Reset the BVC master chain accumulator for this round
-	app.bvc_masterchain_acc = make(map[factom.Bytes32]accumulator.ChainAcc)
-	app.dblock.ClearMarshalBinaryCache()
-	app.dblock.Height = app.GetHeight()
-	app.dblock.Timestamp = req.GetHeader().GetTime()
-
+	app.AppMDRoot.Extract(req.Hash)
 	return abci.ResponseBeginBlock{}
 }
 
@@ -376,8 +370,13 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 		return abci.ResponseDeliverTx{Code: 2, GasWanted: 0}
 	}
 
-	bvcheight := binary.LittleEndian.Uint32(bvcreq.GetEntry()[0:4])
-	bvcpubkey, err := app.resolveDDIIatHeight(bvcreq.GetBvcValidatorDDII(), bvcheight)
+	bve := BVCEntry{}
+	slices, _ := bve.UnmarshalBinary(bvcreq.GetEntry())
+
+	bvcheight := bve.BVCHeight
+
+	//resolve the validator's bve to obtain public key for given height
+	bvcpubkey, err := app.resolveDDIIatHeight(bve.DDII, bvcheight)
 	if err != nil {
 		return abci.ResponseDeliverTx{Code: 2, GasWanted: 0}
 	}
@@ -388,60 +387,44 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 		return abci.ResponseDeliverTx{Code: 3, GasWanted: 0}
 	}
 
-	val, err := app.bvc_masterchain_acc[bvcreq.GetHeader().BvcMasterChainAddr]
-	if err != nil {
-		//do something here
-		app.bvc_masterchain_acc[bvcreq.GetHeader().BvcMasterChainAddr] = accumulator.NewChainAcc()
+	var chain []byte
+    //TODO. find out if we need full chain or if we can just use address.
+	binary.BigEndian.PutUint64(chain,bvcreq.GetHeader().BvcMasterChainAddr)
+
+	app.md.AddToChain(bve.MDRoot)
+
+	//index the events to let BVC know MDRoot has been secured so that consensus can be achieved
+	response.Events = []abci.Event{
+		{
+			Type: "bvc",
+			Attributes: []abci.EventAttribute{
+				//want to be able to search by BVC chain.
+				{Key: []byte("chain"), Value: chain, Index: true},
+				//want to be able to search by height, but probably should be AND'ed with the chain
+				{Key: []byte("height"), Value: slices[BVCHeight_type], Index: true},
+				//want to be able to search by ddii (optional AND'ed with chain or height)
+				{Key: []byte("ddii"), Value: slices[DDII_type], Index: true},
+				//don't care about searching by bvc timestamp or valacc hash
+				{Key: []byte("timestamp"), Value: slices[Timestamp_type], Index: false},
+				{Key: []byte("mdroot"), Value: slices[MDRoot_type], Index: false},
+			},
+		},
 	}
-
-
-	//var _ dbvc.DBlock{}
-	//timestamp := binary.LittleEndian.Uint32(bvcreq.GetEntry()[4:8])
-	//mrhash := bvcreq.GetEntry()[8:40]
-
-	//key, err := proto.Marshal(bvcreq.GetHeader())
-
-    bve := BVCEntry{}
-    bve.UnmarshalBinary(bvcreq.GetEntry())
-
-
-	key := BVCConfirmationKey{bve.BVCHeight, bvcreq.GetHeader().GetBvcMasterChainAddr() }
-    v, ok := app.bvcentrymap[key]
-    if ok {
-    	//this means it has already been sent by another bvc
-    	response.Code = 1
-    	response.GasUsed = 0
-    	response.GasWanted = 0
-    	return response
-	}
-	//app.confimrationmap[key].Submit(bve.BVCHeight,&bve.Mrhash,bve.DDII)
-	//key := hash(height | bvcchain | ddii), value := bvcreq.GetEntry()
-	//
-	//app.dblock.AddEBlock(,sha256.Sum256(bvcreq.GetEntry());
-
-	//app.dblock.AddEBlock(bvcreq.GetEntry())
-	//err = app.WriteKeyValue(key,req.GetTx())
-	//if err != nil {
-	//	response.Code = 1
-	//	response.Info = err.Error()
-	//}
-	//
-	//if (err != nil) {
-	//	println(err.Error())
-	//}
-
+	response.Code = code.CodeTypeOK
 	return response
 }
 
 //Commit instructs the application to persist the new state.
 func (app *DirectoryBlockLeader) Commit() abci.ResponseCommit {
-	//app.currentBatch.Commit()
-	//need to get hash data / merkle dag from accumulator and place it here.
-	return abci.ResponseCommit{Data: []byte{}}
+    //is folding in prev block hash necessary
+	var hash valacctypes.Hash
+	hash.Extract(app.md.GetMDRoot().Bytes())
+	app.AppMDRoot = *hash.Combine(app.AppMDRoot)
+	return abci.ResponseCommit{Data: app.AppMDRoot.Bytes()}
 }
 
 
-func (DirectoryBlockLeader) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
+func (app *DirectoryBlockLeader) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	return abci.ResponseEndBlock{}
 }
 
@@ -474,105 +457,6 @@ func (app *DirectoryBlockLeader) Query(reqQuery abci.RequestQuery) (resQuery abc
 
 	 */
 	return
-}
-
-
-func (app *DirectoryBlockLeader) isValid(tx []byte, bytesLen int) (code uint32) {
-
-	// [Key][Type][Nonce][Data][Sign]
-
-
-	//Zero bytes acceptable, but negative value indecates malformed message
-	if bytesLen < 0 {
-		return 1
-	}
-
-	//Maximim data size (TODO move to global configuration)
-	if bytesLen > 10240 {
-		return 2
-	}
-
-	signPtr := dataPtr + bytesLen
-
-	if ed25519.Verify(tx[keyPtr:keyPtrE], tx[msgTypePtr:signPtr], tx[signPtr:]) {
-		println("Valid")
-	 	return 0
-	}
-	println("NOT Valid")
-	return 3
-}
-
-func (app *DirectoryBlockLeader) GetAccountState (publicKey []byte) (acc AccountStateStruct,err error)  {
-
-	keyString := string(publicKey)
-	var ok bool
-
-	//Query cache first
-	if acc, ok = app.accountState[keyString]; !ok {
-		//Not found in cache, read disk
-		account, err := GetAccount(publicKey)
-		if err !=nil{  //No account for publicKey found!
-			if app.Height < app.BootstrapHeight {
-				return app.MakeBootStrapAccount(publicKey)
-			}else {
-				return acc, err
-			}
-		}
-		println("Account Found on Disk")
-		acc = AccountStateStruct{
-			PublicKey:        publicKey,
-			MessageAllowance: account.MessageAllowance,
-			MessageCountDown: account.MessageAllowance,
-		}
-		app.accountState[keyString] = acc
-	} else {
-		println("Account Found in Cache")
-	}
-
-	acc.LastAccess = time.Now().UnixNano()
-	return acc,nil
-}
-
-func (app *DirectoryBlockLeader) MakeBootStrapAccount(publicKey []byte)(state AccountStateStruct,err error){
-
-	println("Making BootStrap Account")
-
-	account := pb.Account {
-		Name: "Bootstrap Account",
-		MessageAllowance: 20000,
-		AllowAddAccounts: true,
-		AllowAddGroups: true,
-	}
-
-	state = AccountStateStruct {
-		PublicKey:        publicKey,
-		MessageCountDown: account.MessageAllowance,
-		MessageAllowance: account.MessageAllowance,
-	}
-	app.accountState[string(publicKey)] = state
-	return state,nil
-}
-
-func (app *DirectoryBlockLeader) WriteKeyValue(key []byte, data []byte) (err error) {
-
-	//KeyValue := &pb.KeyValue{}
-	//
-	//err = proto.Unmarshal(data,KeyValue)
-	//if err != nil {
-	//	return err
-	//}
-	//
-	//KeyValue.Height = uint64(app.Height)
-	//data,err = proto.Marshal(KeyValue)
-
-	//AccountAdd.
-
-	err = database.KvStoreDB.Set(key,data)
-	if err != nil{
-		fmt.Printf("WriteKeyValue err %v\n",err)
-	}
-
-	return err
 }
 
 
