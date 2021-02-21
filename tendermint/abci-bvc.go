@@ -13,6 +13,8 @@ import (
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
 	nm "github.com/tendermint/tendermint/node"
+	"github.com/tendermint/tendermint/types"
+
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
@@ -298,6 +300,8 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	//app.currentBatch = app.db.NewTransaction(true)
 	//app.Height = req.Header.Height
 	// reset valset changes
+
+
 /*
 	app.ValUpdates = make([]types.ValidatorUpdate, 0)
 
@@ -449,7 +453,26 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 
 // Update the validator set
-func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) abcitypes.ResponseEndBlock {
+func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (resp abcitypes.ResponseEndBlock) {
+	// Select our leader who will initiate consensus on dbvc chain.
+	//resp.ConsensusParamUpdates
+	//for _, ev := range req.ByzantineValidators {
+	//	if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
+	//		addr := string(ev.Validator.Address)
+	//		if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
+	//			app.updateValidator(types.ValidatorUpdate{
+	//				PubKey: pubKey,
+	//				Power:  ev.Validator.Power - 1,
+	//			})
+	//			app.logger.Info("Decreased val power by 1 because of the equivocation",
+	//				"val", addr)
+	//		} else {
+	//			app.logger.Error("Wanted to punish val, but can't find it",
+	//				"val", addr)
+	//		}
+	//	}
+	//}
+
 	return abcitypes.ResponseEndBlock{}//ValidatorUpdates: app.ValUpdates}
 }
 ///ABCI / block calls

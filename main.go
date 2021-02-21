@@ -389,7 +389,10 @@ func main() {
 //			tendermint.Initialize("vm2", "tcp://127.0.0.1:26620","tcp://127.0.0.1:26621",ConfigFile[2],WorkingDir[2])
 //			tendermint.Initialize("vm3", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631",ConfigFile[3],WorkingDir[3])
 			os.Exit(0)
-		}
+		case "dbvc":
+
+    	}
+
 	}
 
 	counter = 0
