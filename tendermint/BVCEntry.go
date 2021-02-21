@@ -10,7 +10,7 @@ import (
 )
 
 ////bvc entry header:
-const BVCEntryMaxSize = 1+32+4+8+32
+//const BVCEntryMaxSize = 1+32+4+8+32
 
 
 const(
@@ -19,6 +19,7 @@ const(
 	Timestamp_type int = 2
 	MDRoot_type int = 3
 )
+
 type BVCEntry struct {
 	Version byte
 	DDII []byte
@@ -26,8 +27,6 @@ type BVCEntry struct {
 	Timestamp uint64
 	MDRoot valacctypes.Hash
 
-	rawslices [4][]byte
-	cache []byte
 }
 
 func (entry *BVCEntry) MarshalBinary()([]byte, error) {

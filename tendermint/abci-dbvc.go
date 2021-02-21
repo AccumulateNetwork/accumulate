@@ -35,48 +35,17 @@ import (
 
 const BanListTrigger = -10000
 
-//(4 bytes)    networkid  //magic number0xACCXXXXX
-
-
-//
-//
-//entry:
-//key : bvcheight | chainaddr (12 bytes) : bvcpubkey (32bytes)
-//value: MDRoot
-//value: signature
-
-
 
 type DirectoryBlockLeader struct {
 
 	abci.BaseApplication
 //	BootstrapHeight int64
 	Height uint64
-//	dblock dbvc.DBlock
 
-	//map chain addr to confirmation count
-	//confimrationmap map[BVCConfirmationKey]BVCEntryConfirmation
-	////per chain accumulator
-	//
-	//ACC            *accumulator.Accumulator // Accumulators to record hashes
-	//EntryFeed      chan node.EntryHash
-	//Control        chan bool
-	//MDFeed         chan *valacctypes.Hash
 	md       merkleDag.MD
 	AppMDRoot valacctypes.Hash
-	//chainid -> height -> MDRoot -> confirmation count
-	//map[chainid]AccumulateConfirmation [height][MDRoot]
-    //bvcentrymap map[BVCConfirmationKey]BVCEntry
-	//bvc_masterchain_acc accumulator.Accumulator//map[factom.Bytes32]accumulator.ChainAcc
 
 	DB vadb.DB
-}
-
-//lookup by bvcheight | chainaddress
-type BVCConfirmationKey struct {
-	Height uint64
-	ChainAddr uint64
-	//ChainId factom.Bytes32
 }
 
 
@@ -110,12 +79,15 @@ func (app *DirectoryBlockLeader) resolveDDIIatHeight(ddii []byte, bvcheight uint
 	fmt.Printf("%s", string(ddii[:]))
 	//TODO: need to find out what the public key for ddii was at height bvcheight
 	//only temporary... create a valid key
+	//The DBVC will subscribe to the DDII - BVC nodes and will cache the latest valid public key for the BVC DDII
 	pub, _, err := ed25519.GenerateKey(nil)
 	return pub, err
 }
 
-func (app *DirectoryBlockLeader) verifyBVCMasterChain(addr uint64) error {
+func (app *DirectoryBlockLeader) verifyBVCMasterChain(ddii []byte) error {
 
+	//make sure we're dealing with a valid registered BVC master chain, not just any ol' chain.
+	//the BVC chains will be managed and registered by the DBVC.
 	return nil
 }
 
@@ -125,7 +97,7 @@ func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.Respo
 
 	//TODO: do a load state here to continue on with where we were.
 	//loadState(...)
-	//reset height to last good height and reset app.AppMDRoot
+	//reset height to last good height and restore app.AppMDRoot
 
 	//TODO query something to resolve all BVC Master Chains to map ddii's to pub keys
 	//wood be good to cache the ddii's or at least observe the DDII chain to quickly resolve those.
@@ -142,6 +114,7 @@ func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.Respo
 func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
 	//probably don't need to do this here...
 	//app.AppMDRoot.Extract(req.Hash)
+
 	return abci.ResponseBeginBlock{}
 }
 
