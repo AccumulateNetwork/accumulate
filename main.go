@@ -3,7 +3,6 @@ package main
 import (
 	"encoding/hex"
 	"encoding/json"
-	kv "github.com/AccumulateNetwork/accumulated/example/kvstore"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
@@ -391,6 +390,7 @@ func main() {
 			os.Exit(0)
 		case "dbvc":
 
+			os.Exit(0)
     	}
 
 	}
@@ -420,7 +420,8 @@ func main() {
 	//db accvm1api, _ := accvm1.GetAPIClient()
 	//db go jsonrpcserver2(accvm1api)
 
-	app := kv.NewPersistentKVStoreApplication(WorkingDir[1])
+	//app := kv.NewPersistentKVStoreApplication(WorkingDir[1])
+	dbc := tendermint.NewDirectoryBlockChain()
 	//app := kv.NewApplication()
 
 	//fig := cfg.ResetTestRoot("node_priv_val_tcp_test")
@@ -476,7 +477,7 @@ func main() {
 		config,
 		pv,
 		nodeKey,
-		proxy.NewLocalClientCreator(app),
+		proxy.NewLocalClientCreator(dbc),
 		nm.DefaultGenesisDocProviderFunc(config),
 		nm.DefaultDBProvider,
 		nm.DefaultMetricsProvider(config.Instrumentation),
