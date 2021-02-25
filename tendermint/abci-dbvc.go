@@ -3,7 +3,6 @@ package tendermint
 import (
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/accumulated/example/code"
-
 	//"github.com/Workiva/go-datastructures/threadsafe/err"
 
 	//"encoding/binary"
@@ -35,7 +34,7 @@ import (
 const BanListTrigger = -10000
 
 
-type DirectoryBlockLeader struct {
+type DirectoryBlockChain struct {
 
 	abci.BaseApplication
 //	BootstrapHeight int64
@@ -48,8 +47,8 @@ type DirectoryBlockLeader struct {
 }
 
 
-func NewDirectoryBlockLeader() *DirectoryBlockLeader {
-	app := DirectoryBlockLeader{
+func NewDirectoryBlockChain() *DirectoryBlockChain {
+	app := DirectoryBlockChain{
 //		db: db,
 		//router: new(router2.Router),
 
@@ -58,21 +57,21 @@ func NewDirectoryBlockLeader() *DirectoryBlockLeader {
     return &app
 }
 
-var _ abci.Application = (*DirectoryBlockLeader)(nil)
+var _ abci.Application = (*DirectoryBlockChain)(nil)
 
-func (app *DirectoryBlockLeader) GetHeight ()(uint64) {
+func (app *DirectoryBlockChain) GetHeight ()(uint64) {
 	return uint64(app.Height)
 }
 
-func (DirectoryBlockLeader) Info(req abci.RequestInfo) abci.ResponseInfo {
+func (DirectoryBlockChain) Info(req abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{}
 }
 
-func (DirectoryBlockLeader) SetOption(req abci.RequestSetOption) abci.ResponseSetOption {
+func (DirectoryBlockChain) SetOption(req abci.RequestSetOption) abci.ResponseSetOption {
 	return abci.ResponseSetOption{}
 }
 
-func (app *DirectoryBlockLeader) resolveDDIIatHeight(ddii []byte, bvcheight uint32) (ed25519.PublicKey, error) {
+func (app *DirectoryBlockChain) resolveDDIIatHeight(ddii []byte, bvcheight uint32) (ed25519.PublicKey, error) {
     //just give me a key...
 
 	fmt.Printf("%s", string(ddii[:]))
@@ -83,14 +82,14 @@ func (app *DirectoryBlockLeader) resolveDDIIatHeight(ddii []byte, bvcheight uint
 	return pub, err
 }
 
-func (app *DirectoryBlockLeader) verifyBVCMasterChain(ddii []byte) error {
+func (app *DirectoryBlockChain) verifyBVCMasterChain(ddii []byte) error {
 
 	//make sure we're dealing with a valid registered BVC master chain, not just any ol' chain.
 	//the BVC chains will be managed and registered by the DBVC.
 	return nil
 }
 
-func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
+func (app *DirectoryBlockChain) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	fmt.Printf("Initalizing Accumulator Router\n")
 
 
@@ -101,6 +100,8 @@ func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.Respo
 	//TODO query something to resolve all BVC Master Chains to map ddii's to pub keys
 	//wood be good to cache the ddii's or at least observe the DDII chain to quickly resolve those.
 
+	//TODO: rebuild MD from store, for now just initialize it.
+	app.md.AddToChain(app.AppMDRoot)
 
 	return abci.ResponseInitChain{}
 }
@@ -110,7 +111,7 @@ func (app *DirectoryBlockLeader) InitChain(req abci.RequestInitChain) abci.Respo
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
 
 //Here we create a batch, which will store block's transactions.
-func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
+func (app *DirectoryBlockChain) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
 	//probably don't need to do this here...
 	//app.AppMDRoot.Extract(req.Hash)
 
@@ -118,7 +119,7 @@ func (app *DirectoryBlockLeader) BeginBlock(req abci.RequestBeginBlock) abci.Res
 }
 
 // BVC Block is finished and MDRoot data is delivered to DBVC. Check if it is valid.
-func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseCheckTx {
+func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCheckTx {
 	//the ABCI request here is a Tx that consists data delivered from the BVC protocol buffer
     //data here can only come from an authorized VBC validator, otherwise they will be rejected
 	//Step 1: check which BVC is sending the request and see if it is a valid Master Chain.
@@ -175,7 +176,7 @@ func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseC
 
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
-func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response abci.ResponseDeliverTx) {
+func (app *DirectoryBlockChain) DeliverTx(req abci.RequestDeliverTx) ( response abci.ResponseDeliverTx) {
 
 	//if we get this far, than it has passed check tx,
 	bvcreq := pb.BVCEntry{}
@@ -224,7 +225,7 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 	return response
 }
 
-func (app *DirectoryBlockLeader) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
+func (app *DirectoryBlockChain) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	//todo: validator adjustments here...
 	//todo: do consensus adjustments here...
 	//Signals the end of a block.
@@ -239,7 +240,7 @@ func (app *DirectoryBlockLeader) EndBlock(req abci.RequestEndBlock) abci.Respons
 
 
 //Commit instructs the application to persist the new state.
-func (app *DirectoryBlockLeader) Commit() abci.ResponseCommit {
+func (app *DirectoryBlockChain) Commit() abci.ResponseCommit {
     //TODO: Determine if folding in prev block hash necessary
 	app.AppMDRoot = *app.md.GetMDRoot().Combine(app.AppMDRoot)
 
@@ -253,7 +254,7 @@ func (app *DirectoryBlockLeader) Commit() abci.ResponseCommit {
 
 
 // when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
-func (app *DirectoryBlockLeader) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
+func (app *DirectoryBlockChain) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 	/*
 	err := app.db.View(func(txn *badger.Txn) error {
@@ -281,7 +282,7 @@ func (app *DirectoryBlockLeader) Query(reqQuery abci.RequestQuery) (resQuery abc
 }
 
 
-func (app *DirectoryBlockLeader) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
+func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
 	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
 	config := cfg.DefaultConfig()
