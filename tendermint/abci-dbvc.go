@@ -1,7 +1,6 @@
 package tendermint
 
 import (
-	"encoding/binary"
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/accumulated/example/code"
 
@@ -130,7 +129,7 @@ func (app *DirectoryBlockLeader) CheckTx(req abci.RequestCheckTx) abci.ResponseC
 		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0}
 	}
 
-	err = app.verifyBVCMasterChain(header.GetBvcMasterChainAddr())
+	err = app.verifyBVCMasterChain(header.GetBvcMasterChainDDII())
 	if err != nil { //add validation here.
 		//quick filter to see if the request if from a valid master chain
 		return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0}
@@ -186,7 +185,7 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 	}
 
 	bve := BVCEntry{}
-	slices, _ := bve.UnmarshalBinary(bvcreq.GetEntry())
+	entry_slices, _ := bve.UnmarshalBinary(bvcreq.GetEntry())
 
 	bvcheight := bve.BVCHeight
 
@@ -202,10 +201,6 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 		return abci.ResponseDeliverTx{Code: 3, GasWanted: 0}
 	}
 
-	var chain []byte
-    //TODO. find out if we need full chain or if we can just use address.
-	binary.BigEndian.PutUint64(chain,bvcreq.GetHeader().BvcMasterChainAddr)
-
 	app.md.AddToChain(bve.MDRoot)
 
 	//index the events to let BVC know MDRoot has been secured so that consensus can be achieved by BVCs
@@ -214,14 +209,14 @@ func (app *DirectoryBlockLeader) DeliverTx(req abci.RequestDeliverTx) ( response
 			Type: "bvc",
 			Attributes: []abci.EventAttribute{
 				//want to be able to search by BVC chain.
-				{Key: []byte("chain"), Value: chain, Index: true},
+				{Key: []byte("chain"), Value: bvcreq.GetHeader().GetBvcMasterChainDDII(), Index: true},
 				//want to be able to search by height, but probably should be AND'ed with the chain
-				{Key: []byte("height"), Value: slices[BVCHeight_type], Index: true},
+				{Key: []byte("height"), Value: entry_slices[BVCHeight_type], Index: true},
 				//want to be able to search by ddii (optional AND'ed with chain or height)
-				{Key: []byte("ddii"), Value: slices[DDII_type], Index: true},
+				{Key: []byte("ddii"), Value: entry_slices[DDII_type], Index: true},
 				//don't care about searching by bvc timestamp or valacc hash
-				{Key: []byte("timestamp"), Value: slices[Timestamp_type], Index: false},
-				{Key: []byte("mdroot"), Value: slices[MDRoot_type], Index: false},
+				{Key: []byte("timestamp"), Value: entry_slices[Timestamp_type], Index: false},
+				{Key: []byte("mdroot"), Value: entry_slices[MDRoot_type], Index: false},
 			},
 		},
 	}
