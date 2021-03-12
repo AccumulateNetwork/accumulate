@@ -43,7 +43,7 @@ type Fee struct {
     ChainID        [33]byte     // 33
     Credits        int8         // 1
     SignatureIdx   int8         // 1
-    Signature      [64]byte     // 64  
+    Signature      []byte       // 64 minimum 
                                 // 1 end byte ( 140 bytes for FEE)
     Transaction    []byte       // Transaction
 }
@@ -58,6 +58,6 @@ type Validation interface {
 	ValidTxList(entries []*Hash) bool
 }
 ```
-* `func (m \*SMT) SetValidator(validator *Falidation)`  Set the validator function on the SMT
+* `func (m \*SMT) SetValidator(validator *Validation)`  Set the validator function on the SMT
 
      
