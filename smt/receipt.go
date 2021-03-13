@@ -17,18 +17,18 @@ type MDReceipt struct {
 
 // BuildMDReceipt
 // Building a receipt is a bit more complex than just computing the Merkle DAG.  We look at the stream of
-// hashes as we build the MS, and detect when the Hash for which we need a receipt shows up.  Then we
+// hashes as we build the MerkleState, and detect when the Hash for which we need a receipt shows up.  Then we
 // track it through the intermediate hashes, tracking if it is combined from the right or from the left.
 // Then when we have to calculate the Merkle DAG root, we do one more pass through the combining of the
 // trailing hashes to finish off the receipt.
-func (mdr *MDReceipt) BuildMDReceipt(MerkleDag MS, data Hash) {
+func (mdr *MDReceipt) BuildMDReceipt(MerkleDag MerkleState, data Hash) {
 	mdr.Nodes = mdr.Nodes[:0] // Throw away any old paths
 	mdr.EntryHash = data      // The Data for which this is a Receipt
 	md := []*Hash{nil}        // The intermediate hashes used to compute the Merkle DAG root
 	right := true             // We assume we will be combining from the right
 	idx := -1                 // idx of -1 means not yet found the hash for which we want a receipt in the hash stream
 
-DataLoop: // Loop through the data behind the Merkle DAG and rebuild the MS state
+DataLoop: // Loop through the data behind the Merkle DAG and rebuild the MerkleState state
 	for _, h := range MerkleDag.HashList {
 		right = true // Generally our "place" is in md[], so the hash we combine with will be on the right
 		// Always make sure md ends with a nil; limits corner cases

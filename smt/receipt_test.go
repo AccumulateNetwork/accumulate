@@ -30,7 +30,7 @@ func TestMD(t *testing.T) {
 	//                     \    /
 	//                    1234+56
 
-	md := new(MS)
+	md := new(MerkleState)
 	md.InitSha256()
 	h1 := sha256.Sum256([]byte{1})
 	h2 := sha256.Sum256([]byte{2})
@@ -79,7 +79,7 @@ func TestMD(t *testing.T) {
 		if mdRoot != nil {
 			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
 		} else {
-			t.Errorf("mdRoot of MS is nil")
+			t.Errorf("mdRoot of MerkleState is nil")
 		}
 	}
 
@@ -97,7 +97,7 @@ func TestMD(t *testing.T) {
 		if mdRoot != nil {
 			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
 		} else {
-			t.Errorf("mdRoot of MS is nil")
+			t.Errorf("mdRoot of MerkleState is nil")
 		}
 	}
 
@@ -115,7 +115,7 @@ func TestMD(t *testing.T) {
 		if mdRoot != nil {
 			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
 		} else {
-			t.Errorf("mdRoot of MS is nil")
+			t.Errorf("mdRoot of MerkleState is nil")
 		}
 	}
 
@@ -133,7 +133,7 @@ func TestMD(t *testing.T) {
 		if mdRoot != nil {
 			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
 		} else {
-			t.Errorf("mdRoot of MS is nil")
+			t.Errorf("mdRoot of MerkleState is nil")
 		}
 	}
 
@@ -151,7 +151,7 @@ func TestMD(t *testing.T) {
 		if mdRoot != nil {
 			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
 		} else {
-			t.Errorf("mdRoot of MS is nil")
+			t.Errorf("mdRoot of MerkleState is nil")
 		}
 	}
 
@@ -169,7 +169,7 @@ func TestMD(t *testing.T) {
 		if mdRoot != nil {
 			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
 		} else {
-			t.Errorf("mdRoot of MS is nil")
+			t.Errorf("mdRoot of MerkleState is nil")
 		}
 	}
 
