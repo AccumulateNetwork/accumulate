@@ -172,5 +172,5 @@ func (m *MerkleState) PrintMR() (mr string) {
 //
 // We
 func (m *MerkleState) EndBlock() (MSBytes []byte) {
-
+return nil
 }
