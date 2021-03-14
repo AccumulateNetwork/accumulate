@@ -1,6 +1,7 @@
 package smt
 
 import (
+	"bytes"
 	"crypto/sha256"
 )
 
@@ -14,11 +15,51 @@ import (
 type MerkleState struct {
 	HashFunction func(data []byte) Hash
 
-	count    int64   // Count of hashes added to the Merkle tree
+	count int64 // Count of hashes added to the Merkle tree
 	// Note that if the count is zero, there is no previous Hash
 	previous Hash    // Hash of the previous MerkleState added to the Merkle Tree
 	Pending  []*Hash // Array of hashes that represent the left edge of the Merkle tree
 	HashList []Hash  // List of Hashes in the order added to the chain
+}
+
+// Equal
+// Compares one MerkleState to another, and returns true if they are the same
+func (m MerkleState) Equal(m2 MerkleState) bool {
+	failcnt := 0
+	if m.count != m2.count {
+		failcnt++
+	}
+	if m.previous != m2.previous {
+		failcnt++
+	}
+	if len(m.Pending) != len(m2.Pending) {
+		failcnt++
+	} else {
+		for i, v := range m.Pending {
+			if (v == nil && m2.Pending[i] != nil) || m2.Pending[i] == nil {
+				failcnt++
+				break
+			} else if v == nil {
+				continue
+			}
+			v1 := m.Pending[i][:]
+			v2 := m2.Pending[i][:]
+			if !bytes.Equal(v1, v2) {
+				failcnt++
+			}
+		}
+	}
+	if len(m.HashList) != len(m2.HashList) {
+		failcnt++
+	} else {
+		for i, v := range m.HashList {
+			if !bytes.Equal(v[:], m2.HashList[i][:]) {
+				failcnt++
+			}
+		}
+	}
+
+	return failcnt == 0
 }
 
 // Marshal
@@ -75,6 +116,7 @@ func (m *MerkleState) UnMarshal(MSBytes []byte) {
 			// Now skip MSBytes past the value we just copied to Pending
 			MSBytes = MSBytes[32:]
 		}
+		cnt = cnt >> 1
 	}
 	// Extract the length of the HashList
 	var length int64
@@ -90,17 +132,23 @@ func (m *MerkleState) UnMarshal(MSBytes []byte) {
 	}
 }
 
+// GetSha256
+// Get the a Sha256 function that can be used to create hashes compatible with a Stateful
+// Merkle tree using sha256
 func GetSha256() func(data []byte) Hash {
 	return func(data []byte) Hash { return sha256.Sum256(data) }
 }
 
+// InitSha256
+// Set the hashing function of this Merkle State to Sha256
 func (m *MerkleState) InitSha256() {
 	m.HashFunction = GetSha256()
 }
 
 // AddToChain
 // Add a Hash to the chain and incrementally build the MerkleState
-func (m *MerkleState) AddToChain(hash Hash) {
+func (m *MerkleState) AddToChain(hash_ [32]byte) {
+	hash := Hash(hash_)
 	// We are going through through the MerkleState list and combining hashes, so we have to record the hash first thing
 	m.HashList = append(m.HashList, hash) // before it is combined with other hashes already added to MerkleState[].
 
@@ -164,7 +212,6 @@ func (m *MerkleState) PrintMR() (mr string) {
 	return mr
 }
 
-
 // EndBlock
 // Data is added to a Merkle State over time. Entries can be grouped into Merkle Blocks.  Each Merkle Block
 // begins with the Merkle State describing the state of the Merkle Tree prior to that Merkle Block.  Each
@@ -172,5 +219,5 @@ func (m *MerkleState) PrintMR() (mr string) {
 //
 // We
 func (m *MerkleState) EndBlock() (MSBytes []byte) {
-return nil
+	return nil
 }
