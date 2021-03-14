@@ -22,6 +22,24 @@ type MerkleState struct {
 	HashList []Hash  // List of Hashes in the order added to the chain
 }
 
+// GetCount
+// Get the count of elements in the Merkle Tree
+func (m MerkleState) GetCount() int64 {
+	return m.count
+}
+
+// GetPrevious
+// Get the hash of the Previous MerkleState
+func (m MerkleState) GetPrevious() Hash {
+	return m.previous
+}
+
+// GetCurrentCount
+// Get the count of the hashes added in the current Merkle Block
+func (m MerkleState) GetCurrentCount() int64 {
+	return int64(len(m.HashList))
+}
+
 // Equal
 // Compares one MerkleState to another, and returns true if they are the same
 func (m MerkleState) Equal(m2 MerkleState) bool {
