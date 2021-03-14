@@ -136,6 +136,9 @@ func (m *MerkleState) UnMarshal(MSBytes []byte) {
 		}
 		cnt = cnt >> 1
 	}
+
+	// Make sure this merkle state has a blank HashList, because we are replacing it with a new one.
+	m.HashList = m.HashList[:0]
 	// Extract the length of the HashList
 	var length int64
 	length, MSBytes = BytesInt64(MSBytes)
@@ -167,8 +170,9 @@ func (m *MerkleState) InitSha256() {
 // Add a Hash to the chain and incrementally build the MerkleState
 func (m *MerkleState) AddToChain(hash_ [32]byte) {
 	hash := Hash(hash_)
-	// We are going through through the MerkleState list and combining hashes, so we have to record the hash first thing
+	// We are going through through the MerkleState list and combining hashes; we have to record the hash first thing
 	m.HashList = append(m.HashList, hash) // before it is combined with other hashes already added to MerkleState[].
+	m.count++                             // Add one to our count of elements added to the Merkle State
 
 	// We make sure m.MerkleState ends with a nil entry, because that cuts out most of the corner cases in adding hashes
 	if len(m.Pending) == 0 || m.Pending[len(m.Pending)-1] != nil { // If first entry, or the last entry isn't nil
