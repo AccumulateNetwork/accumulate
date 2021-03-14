@@ -42,42 +42,56 @@ func (m MerkleState) GetCurrentCount() int64 {
 
 // Equal
 // Compares one MerkleState to another, and returns true if they are the same
-func (m MerkleState) Equal(m2 MerkleState) bool {
-	failcnt := 0
-	if m.count != m2.count {
-		failcnt++
-	}
-	if m.previous != m2.previous {
-		failcnt++
-	}
-	if len(m.Pending) != len(m2.Pending) {
-		failcnt++
-	} else {
-		for i, v := range m.Pending {
-			if (v == nil && m2.Pending[i] != nil) || m2.Pending[i] == nil {
-				failcnt++
-				break
-			} else if v == nil {
-				continue
-			}
-			v1 := m.Pending[i][:]
-			v2 := m2.Pending[i][:]
-			if !bytes.Equal(v1, v2) {
-				failcnt++
-			}
+func (m MerkleState) Equal(m2 MerkleState) (errorFlag bool) {
+	// Any errors indicate at m is not the same as m2, or either m or m2 or both is malformed.
+	defer func() {
+		if recover() != nil {
+			errorFlag = false
+			return
 		}
+	}()
+	// Count is how many elements in the merkle tree.  should be the same
+	if m.count != m2.count {
+		return false
 	}
-	if len(m.HashList) != len(m2.HashList) {
-		failcnt++
-	} else {
-		for i, v := range m.HashList {
-			if !bytes.Equal(v[:], m2.HashList[i][:]) {
-				failcnt++
-			}
+
+	// Check previous hash, which should be the same.
+	if m.previous != m2.previous {
+		return false
+	}
+
+	// The count drives what is compared, so even if one or the other Pending has a trailing nil, it won't
+	// matter; the bit won't be set.  (A trailing nil is possible as a side effect of an odd number of elements
+	// in the merkle tree).
+	cnt := m.count             // Only check that we have entries in Pending that have a bit set in the count.
+	for i := 0; cnt > 0; i++ { // When cnt goes to zero, we are done, even if a nil might exist in the Pending array
+		cnt = cnt >> 1 // Shift a bit out of count; When cnt is zero, we are done.
+
+		// If the Merkle State has a nil, m2 must have a nil.  If we later compare m to m2 and m2 has a nil,
+		// we will panic. That's okay, because we catch it and declare them unequal.
+		if m.Pending[i] == nil && m2.Pending[i] != nil {
+			return false
+		}
+
+		// Each element of Pending must be equal
+		if !bytes.Equal(m.Pending[i][:], m2.Pending[i][:]) {
+			return false
 		}
 	}
 
-	return failcnt == 0
+	// Each must have the same number of elements in the HashList
+	if len(m.HashList) != len(m2.HashList) {
+		return false
+	} else {
+		// Each element in the HashLists must be equal
+		for i, v := range m.HashList {
+			if !bytes.Equal(v[:], m2.HashList[i][:]) {
+				return false
+			}
+		}
+	}
+	// If we made it here, all is golden.
+	return true
 }
 
 // Marshal
@@ -120,6 +134,9 @@ func (m *MerkleState) UnMarshal(MSBytes []byte) {
 		copy(m.previous[:], MSBytes[:32])
 		MSBytes = MSBytes[32:]
 	}
+
+	// We are getting a new Pending Array, so clear the old one.
+	m.Pending = m.Pending[:0]
 	// Extract the Pending roots array from MSBytes; not only where bits in count are set do we have a value in Pending
 	cnt := m.count
 	for i := 0; cnt > 0; i++ {
@@ -239,7 +256,13 @@ func (m *MerkleState) PrintMR() (mr string) {
 // begins with the Merkle State describing the state of the Merkle Tree prior to that Merkle Block.  Each
 // Merkle block holds the hash of the previous Merkle State.
 //
-// We
-func (m *MerkleState) EndBlock() (MSBytes []byte) {
-	return nil
+// Ending a Merkle Block means adding the Current Merkle State to the Merkle Tree.  So every Merkle Block
+// begins with the hash of the Merkle State of the end of the previous Merkle Block.
+func (m *MerkleState) EndBlock() (MSBytes []byte, hash Hash) {
+	MSBytes = m.Marshal()          // Get the serialization of the current Merkle State
+	hash = m.HashFunction(MSBytes) // Get the hash of last Merkle State of the current Merkle Block
+	m.HashList = m.HashList[:0]    // The HashList is just the hashes in the Merkle Block, so Clear that.
+	m.AddToChain(hash)             // Adding the Hash to the Merkle Tree begins the new Merkle Block
+	m.previous = hash              // Point the previous hash to the Merkle State of the new previous Merkle Block
+	return MSBytes, hash
 }
