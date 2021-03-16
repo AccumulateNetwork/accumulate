@@ -183,9 +183,9 @@ func (m *MerkleState) InitSha256() {
 	m.HashFunction = GetSha256()
 }
 
-// AddToChain
+// AddToMerkleTree
 // Add a Hash to the chain and incrementally build the MerkleState
-func (m *MerkleState) AddToChain(hash_ [32]byte) {
+func (m *MerkleState) AddToMerkleTree(hash_ [32]byte) {
 	hash := Hash(hash_)
 	// We are going through through the MerkleState list and combining hashes; we have to record the hash first thing
 	m.HashList = append(m.HashList, hash) // before it is combined with other hashes already added to MerkleState[].

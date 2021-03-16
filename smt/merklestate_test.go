@@ -19,7 +19,7 @@ func TestMarshal(t *testing.T) {
 		t.Error("Should be the same")
 	}
 
-	MS1.AddToChain(MS1.HashFunction([]byte{1, 2, 3, 4, 5}))
+	MS1.AddToMerkleTree(MS1.HashFunction([]byte{1, 2, 3, 4, 5}))
 
 	data1 = MS1.Marshal()
 	MS2.UnMarshal(data1)
@@ -32,7 +32,7 @@ func TestMarshal(t *testing.T) {
 	}
 
 	for i := 0; i < 10; i++ {
-		MS1.AddToChain(MS1.HashFunction([]byte(fmt.Sprintf("%8d", i))))
+		MS1.AddToMerkleTree(MS1.HashFunction([]byte(fmt.Sprintf("%8d", i))))
 
 		data1 = MS1.Marshal()
 		MS2.UnMarshal(data1)
@@ -57,11 +57,11 @@ func TestMarshal(t *testing.T) {
 		}
 		for j := 0; j < 0; j++ {
 			someData := MS1.HashFunction(hash1a[:])
-			MS1.AddToChain(someData)
+			MS1.AddToMerkleTree(someData)
 		}
 		MS2.EndBlock()
-		for _, v := range MS1.HashList[1:] {
-			MS2.AddToChain(v)
+		for _, v := range MS1.HashList {
+			MS2.AddToMerkleTree(v)
 		}
 		if !bytes.Equal(MS1.Marshal(), MS2.Marshal()) {
 			t.Error("should be the same")
