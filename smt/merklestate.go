@@ -258,11 +258,13 @@ func (m *MerkleState) PrintMR() (mr string) {
 //
 // Ending a Merkle Block means adding the Current Merkle State to the Merkle Tree.  So every Merkle Block
 // begins with the hash of the Merkle State of the end of the previous Merkle Block.
+//
+// NOTE: The caller is responsible for being able to match the Merkle State to the block by putting it in a
+// database or memory map.
 func (m *MerkleState) EndBlock() (MSBytes []byte, hash Hash) {
 	MSBytes = m.Marshal()          // Get the serialization of the current Merkle State
 	hash = m.HashFunction(MSBytes) // Get the hash of last Merkle State of the current Merkle Block
 	m.HashList = m.HashList[:0]    // The HashList is just the hashes in the Merkle Block, so Clear that.
-	m.AddToChain(hash)             // Adding the Hash to the Merkle Tree begins the new Merkle Block
 	m.previous = hash              // Point the previous hash to the Merkle State of the new previous Merkle Block
 	return MSBytes, hash
 }
