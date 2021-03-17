@@ -22,6 +22,16 @@ type MerkleState struct {
 	HashList []Hash  // List of Hashes in the order added to the chain
 }
 
+// PadPending
+// Make sure the Pending list ends in a nil.  This avoids some corner cases and simplifies adding elements
+// to the merkle tree.  If Pending doesn't have a last entry with a nil value, then one is added.
+func (m *MerkleState) PadPending() {
+	PendingLen := len(m.Pending)
+	if PendingLen == 0 || m.Pending[PendingLen-1] != nil {
+		m.Pending = append(m.Pending, nil)
+	}
+}
+
 // GetCount
 // Get the count of elements in the Merkle Tree
 func (m MerkleState) GetCount() int64 {
@@ -192,9 +202,7 @@ func (m *MerkleState) AddToMerkleTree(hash_ [32]byte) {
 	m.count++                             // Add one to our count of elements added to the Merkle State
 
 	// We make sure m.MerkleState ends with a nil entry, because that cuts out most of the corner cases in adding hashes
-	if len(m.Pending) == 0 || m.Pending[len(m.Pending)-1] != nil { // If first entry, or the last entry isn't nil
-		m.Pending = append(m.Pending, nil) // then we need to add a nil to the end of m.MerkleState
-	}
+	m.PadPending()
 
 	// Okay, now we go through m.Pending and look for the first nil entry in Pending and add our hash there. Along the
 	// way, we take every non-vil entry and combine it with the hash we are adding. Note we ALWAYS have a nil at the
