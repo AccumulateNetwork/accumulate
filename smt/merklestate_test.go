@@ -2,9 +2,34 @@ package smt
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"testing"
 )
+
+func TestCopy(t *testing.T) {
+	ms1 := new(MerkleState)
+	ms1.InitSha256()
+	for i := 0; i < 3000; i++ {
+		hash := Hash(sha256.Sum256([]byte(fmt.Sprintf("%x", i*i*i*i))))
+		ms1.AddToMerkleTree(hash)
+	}
+	ms1.AddToMerkleTree(Hash(sha256.Sum256([]byte{1, 2, 3, 4, 5})))
+	ms2 := ms1
+	if !ms1.Equal(*ms2) {
+		t.Error("ms1 should be equal ms2")
+	}
+	ms2 = ms1.Copy()
+	ms3 := ms2.Copy()
+	if !ms1.Equal(*ms2) || !ms2.Equal(*ms3) || !ms1.Equal(*ms3) {
+		t.Error("ms1 ms2 and ms3 should all be equal")
+	}
+	fmt.Printf("%x\n", ms1.count)
+	ms1.AddToMerkleTree(Hash(sha256.Sum256([]byte{1, 2, 3, 4, 5})))
+	if ms1.Equal(*ms2) {
+		t.Error("ms1 should not equal ms2")
+	}
+}
 
 func TestMarshal(t *testing.T) {
 	MS1 := new(MerkleState)

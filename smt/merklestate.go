@@ -22,6 +22,24 @@ type MerkleState struct {
 	HashList []Hash  // List of Hashes in the order added to the chain
 }
 
+// Copy
+// Make a completely independent copy of the Merkle State that removes all references to
+// structures in the given Merkle State.  This means copying any entries in the Pending slice
+func (m *MerkleState) Copy() *MerkleState {
+	ms := *m
+	// Must make a new slice for ms.Pending
+	ms.Pending = append(ms.Pending[:0], m.Pending...)
+	// Extra paranoid, make the hashes new hashes in pending
+	// (nobody should change a hash, but even if they do the copy will be independent
+	for i, v := range ms.Pending {
+		if v != nil {
+			var hash = *v
+			ms.Pending[i] = &hash
+		}
+	}
+	return &ms
+}
+
 // PadPending
 // Make sure the Pending list ends in a nil.  This avoids some corner cases and simplifies adding elements
 // to the merkle tree.  If Pending doesn't have a last entry with a nil value, then one is added.
@@ -75,8 +93,6 @@ func (m MerkleState) Equal(m2 MerkleState) (errorFlag bool) {
 	// in the merkle tree).
 	cnt := m.count             // Only check that we have entries in Pending that have a bit set in the count.
 	for i := 0; cnt > 0; i++ { // When cnt goes to zero, we are done, even if a nil might exist in the Pending array
-		cnt = cnt >> 1 // Shift a bit out of count; When cnt is zero, we are done.
-
 		// If the Merkle State has a nil, m2 must have a nil.  If we later compare m to m2 and m2 has a nil,
 		// we will panic. That's okay, because we catch it and declare them unequal.
 		if m.Pending[i] == nil && m2.Pending[i] != nil {
@@ -84,9 +100,10 @@ func (m MerkleState) Equal(m2 MerkleState) (errorFlag bool) {
 		}
 
 		// Each element of Pending must be equal
-		if !bytes.Equal(m.Pending[i][:], m2.Pending[i][:]) {
+		if cnt&1 == 1 && !bytes.Equal(m.Pending[i][:], m2.Pending[i][:]) {
 			return false
 		}
+		cnt = cnt >> 1 // Shift a bit out of count; When cnt is zero, we are done.
 	}
 
 	// Each must have the same number of elements in the HashList
