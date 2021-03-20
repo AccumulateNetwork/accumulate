@@ -3,6 +3,7 @@ package smt
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 )
 
 // MerkleState
@@ -20,6 +21,28 @@ type MerkleState struct {
 	previous Hash    // Hash of the previous MerkleState added to the Merkle Tree
 	Pending  []*Hash // Array of hashes that represent the left edge of the Merkle tree
 	HashList []Hash  // List of Hashes in the order added to the chain
+}
+
+// String
+// convert the MerkleState to a human readable string
+func (m MerkleState) String() string {
+	var b bytes.Buffer
+	b.WriteString(fmt.Sprintf("%20s %d\n", "count", m.count))
+	b.WriteString(fmt.Sprintf("%20s %x\n", "previous", m.previous))
+	b.WriteString(fmt.Sprintf("%20s %d\n", "Pending[] length:", len(m.Pending)))
+	for i, v := range m.Pending {
+		vp := "nil"
+		if v != nil {
+			vp = fmt.Sprintf("%x", *v)
+		}
+		b.WriteString(fmt.Sprintf("%20s [%3d] %s\n", "", i, vp))
+	}
+	b.WriteString(fmt.Sprintf("%20s %d\n", "HashList Length:", len(m.HashList)))
+	for i, v := range m.HashList {
+		vp := fmt.Sprintf("%x", v)
+		b.WriteString(fmt.Sprintf("%20s [%3d] %s\n", "", i, vp))
+	}
+	return b.String()
 }
 
 // Copy
