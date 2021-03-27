@@ -5,180 +5,61 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/AccumulateNetwork/SMT/storage/database"
 )
 
-func TestMD(t *testing.T) {
+func GetHash(i int) Hash {
+	return sha256.Sum256([]byte(fmt.Sprint(i)))
+}
 
-	start := time.Now()
-	_ = start
+func TestReceipt(t *testing.T) {
 
-	// We will do all the combinations by hand.  In the test h1 refers to 1 (because it needs to be a variable)
-	//
-	// We test a partial merkle tree.
-	//            1   2   3   4   5   6
-	//             \ /     \ /     \ /
-	//              12     34       56
-	//                \   /
-	//                  1234
-	//
-	//  So what we want to do is hash 1234 with 56  to create the Merkle DAG root
-	//            1   2   3   4   5   6
-	//             \ /     \ /     \ /
-	//             1+2     3+4     5+6
-	//                \   /       /
-	//                12+34      /
-	//                     \    /
-	//                    1234+56
+	const testMerkleTreeSize = 7
 
-	md := new(MerkleState)
-	md.InitSha256()
-	h1 := sha256.Sum256([]byte{1})
-	h2 := sha256.Sum256([]byte{2})
-	h3 := sha256.Sum256([]byte{3})
-	h4 := sha256.Sum256([]byte{4})
-	h5 := sha256.Sum256([]byte{5})
-	h6 := sha256.Sum256([]byte{6})
-	md.AddToMerkleTree(h1)
-	md.AddToMerkleTree(h2)
-	md.AddToMerkleTree(h3)
-	md.AddToMerkleTree(h4)
-	md.AddToMerkleTree(h5)
-	md.AddToMerkleTree(h6)
-	var h12, h34, h56, h1234, h123456 [32]byte
-	h12 = sha256.Sum256(append(h1[:], h2[:]...))
-	h34 = sha256.Sum256(append(h3[:], h4[:]...))
-	h56 = sha256.Sum256(append(h5[:], h6[:]...))
-	h1234 = sha256.Sum256(append(h12[:], h34[:]...))
-	h123456 = sha256.Sum256(append(h1234[:], h56[:]...))
-	fmt.Printf("%10s %x\n", "h1", h1)
-	fmt.Printf("%10s %x\n", "h2", h2)
-	fmt.Printf("%10s %x\n", "h3", h3)
-	fmt.Printf("%10s %x\n", "h4", h4)
-	fmt.Printf("%10s %x\n", "h5", h5)
-	fmt.Printf("%10s %x\n", "h6", h6)
-	fmt.Printf("%10s %x\n", "h12", h12)
-	fmt.Printf("%10s %x\n", "h34", h34)
-	fmt.Printf("%10s %x\n", "h56", h56)
-	fmt.Printf("%10s %x\n", "h1234", h1234)
-	fmt.Printf("%10s %x\n", "h123456", h123456) // This is the correct Merkle DAG
-
-	mdRoot := md.GetMDRoot()
-	fmt.Printf("%10s %x\n", "mdRoot", *mdRoot)
-
-	if *mdRoot != h123456 {
-		t.Error("the hand calculated Merkle DAG Root should be returned by md.GetMDRoot()")
+	// Create a memory based database
+	dbManager := new(database.Manager)
+	_ = dbManager.Init("memory", "")
+	// Create a MerkleManager for the memory database
+	manager := new(MerkleManager)
+	manager.Init(dbManager, 2)
+	// populate the database
+	for i := 0; i < testMerkleTreeSize; i++ {
+		manager.HashFeed <- GetHash(i)
+		fmt.Printf("%d %x\n", i, GetHash(i))
 	}
+	e0 := GetHash(0)
+	e1 := GetHash(1)
+	e2 := GetHash(2)
+	e3 := GetHash(3)
+	e4 := GetHash(4)
+	e5 := GetHash(5)
+	e6 := GetHash(6)
+	e01 := sha256.Sum256(append(e0[:], e1[:]...))
+	e23 := sha256.Sum256(append(e2[:], e3[:]...))
+	e45 := sha256.Sum256(append(e4[:], e5[:]...))
+	e0123 := sha256.Sum256(append(e01[:], e23[:]...))
 
-	MDR := new(MDReceipt)
+	fmt.Printf("\n\n %3v %3x %3x %3x %3x %3x %3x\n", e0[:3], e1[:3], e2[:3], e3[:3], e4[:3], e5[:3], e6[:3])
+	fmt.Printf("     %3x        %3x        %3x\n", e01[:3], e23[:3], e45[:3])
+	fmt.Printf("            %3x\n", e0123[:3])
 
-	//===================== h1 =============
-	fmt.Println("build h1")
+	fmt.Printf("\n\n %3v %3v   %3v %3v   %3v %3v   %3v\n", e0[:3], e1[:3], e2[:3], e3[:3], e4[:3], e5[:3], e6[:3])
+	fmt.Printf("         %3v                %3v                  %3v\n", e01[:3], e23[:3], e45[:3])
+	fmt.Printf("                       %3v\n", e0123[:3])
 
-	MDR.BuildMDReceipt(*md, h1)
-	if mdRoot == nil || MDR.MDRoot != *mdRoot {
-		if mdRoot != nil {
-			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
-		} else {
-			t.Errorf("mdRoot of MerkleState is nil")
-		}
+	for len(manager.HashFeed) > 0 {
+		time.Sleep(time.Millisecond)
 	}
+	element := GetHash(2)
+	anchor := GetHash(2)
 
-	if !MDR.Validate() {
-		t.Errorf("Receipt fails to validate ")
+	r := GetReceipt(manager, element, anchor)
+	if r == nil {
+		t.Fatal("Failed to generate receipt")
 	}
-	//fmt.Printf(" Merkle DAG Root %x\n", MDR.MDRoot)
-	if MDR.MDRoot != *mdRoot {
-		t.Errorf("Merkle Roots not equal %x %x", MDR.MDRoot, *mdRoot)
+	fmt.Println(r.String())
+	if !r.Validate() {
+		t.Fatal("Receipt fails")
 	}
-
-	//=================== h2 =============
-	MDR.BuildMDReceipt(*md, h2)
-	if mdRoot == nil || MDR.MDRoot != *mdRoot {
-		if mdRoot != nil {
-			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
-		} else {
-			t.Errorf("mdRoot of MerkleState is nil")
-		}
-	}
-
-	if !MDR.Validate() {
-		t.Errorf("Receipt fails to validate ")
-	}
-	//fmt.Printf(" Merkle DAG Root %x\n", MDR.MDRoot)
-	if MDR.MDRoot != *mdRoot {
-		t.Errorf("Merkle Roots not equal %x %x", MDR.MDRoot, *mdRoot)
-	}
-
-	//=================== h3 =============
-	MDR.BuildMDReceipt(*md, h3)
-	if mdRoot == nil || MDR.MDRoot != *mdRoot {
-		if mdRoot != nil {
-			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
-		} else {
-			t.Errorf("mdRoot of MerkleState is nil")
-		}
-	}
-
-	if !MDR.Validate() {
-		t.Errorf("Receipt fails to validate ")
-	}
-	//fmt.Printf(" Merkle DAG Root %x\n", MDR.MDRoot)
-	if MDR.MDRoot != *mdRoot {
-		t.Errorf("Merkle Roots not equal %x %x", MDR.MDRoot, *mdRoot)
-	}
-
-	//=================== h4 =============
-	MDR.BuildMDReceipt(*md, h4)
-	if mdRoot == nil || MDR.MDRoot != *mdRoot {
-		if mdRoot != nil {
-			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
-		} else {
-			t.Errorf("mdRoot of MerkleState is nil")
-		}
-	}
-
-	if !MDR.Validate() {
-		t.Errorf("Receipt fails to validate ")
-	}
-	//fmt.Printf(" Merkle DAG Root %x\n", MDR.MDRoot)
-	if MDR.MDRoot != *mdRoot {
-		t.Errorf("Merkle Roots not equal %x %x", MDR.MDRoot, *mdRoot)
-	}
-
-	//=================== h5 =============
-	MDR.BuildMDReceipt(*md, h5)
-	if mdRoot == nil || MDR.MDRoot != *mdRoot {
-		if mdRoot != nil {
-			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
-		} else {
-			t.Errorf("mdRoot of MerkleState is nil")
-		}
-	}
-
-	if !MDR.Validate() {
-		t.Errorf("Receipt fails to validate ")
-	}
-	//fmt.Printf(" Merkle DAG Root %x\n", MDR.MDRoot)
-	if MDR.MDRoot != *mdRoot {
-		t.Errorf("Merkle Roots not equal %x %x", MDR.MDRoot, *mdRoot)
-	}
-
-	//=================== h6 =============
-	MDR.BuildMDReceipt(*md, h6)
-	if mdRoot == nil || MDR.MDRoot != *mdRoot {
-		if mdRoot != nil {
-			t.Errorf("MDRoots don't match.  Expected %x Got %x", *mdRoot, MDR.MDRoot)
-		} else {
-			t.Errorf("mdRoot of MerkleState is nil")
-		}
-	}
-
-	if !MDR.Validate() {
-		t.Errorf("Receipt fails to validate ")
-	}
-	//fmt.Printf(" Merkle DAG Root %x\n", MDR.MDRoot)
-	if MDR.MDRoot != *mdRoot {
-		t.Errorf("merkle Roots not equal %x %x", MDR.MDRoot, *mdRoot)
-	}
-
 }
