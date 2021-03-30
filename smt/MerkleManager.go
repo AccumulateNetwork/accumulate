@@ -6,13 +6,11 @@ import (
 
 	"github.com/AccumulateNetwork/SMT/storage"
 
-	"github.com/AccumulateNetwork/SMT/storage/batch"
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
 
 type MerkleManager struct {
 	DBManager *database.Manager // Database for holding the Merkle Tree
-	Batch     batch.TXList      // Current Batch of transactions
 	MS        MerkleState       // The Merkle State Managed
 	MarkPower int64             // log2 of the MarkFreq
 	MarkFreq  int64             // The count between Marks
@@ -30,7 +28,8 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 // Create a Merkle Tree manager to collect hashes and build a Merkle Tree and a
 // database behind it to validate hashes and create receipts
 func (m *MerkleManager) Init(DBManager *database.Manager, markPower int64) {
-	m.DBManager = DBManager                             //
+	m.DBManager = DBManager                             // Save the database
+	m.DBManager.BeginBatch()                            // Start our batch mode
 	m.MarkPower = markPower                             // Number of levels in the Merkle Tree to be indexed
 	m.MarkFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
 	m.MarkMask = (m.MarkFreq - 1) ^ -1                  // Mask to 0 to n-1 elements between marks
@@ -50,18 +49,22 @@ func (m *MerkleManager) Update() {
 		hash := <-m.HashFeed // Get the next hash
 		// Keep the index of every element added to the Merkle Tree, but only of the first instance
 		if m.DBManager.GetIndex(hash[:]) < 0 { // So only if the hash is not yet added to the Merkle Tree
-			_ = m.DBManager.Put("ElementIndex", hash[:], Int64Bytes(m.MS.Count)) // Keep its index
+			_ = m.DBManager.PutBatch("ElementIndex", hash[:], Int64Bytes(m.MS.Count)) // Keep its index
 		}
 
 		if (m.MS.Count+1)&(m.MarkMask^-1) == 0 { // If we are about to roll into a Mark
-			_ = m.DBManager.Put("States", Int64Bytes(m.MS.Count), m.MS.Marshal()) // Save Merkle State at n*MarkFreq-1
-			_ = m.DBManager.Put("NextElement", Int64Bytes(m.MS.Count), hash[:])   // Save Hash added at n*MarkFreq-1
-			m.MS.AddToMerkleTree(hash)                                            // Add the hash to the Merkle Tree
-			state, _ := m.MS.EndBlock()                                           //   Clear the HashList
+			_ = m.DBManager.PutBatch("States", Int64Bytes(m.MS.Count), m.MS.Marshal()) // Save Merkle State at n*MarkFreq-1
+			_ = m.DBManager.PutBatch("NextElement", Int64Bytes(m.MS.Count), hash[:])   // Save Hash added at n*MarkFreq-1
+			m.MS.AddToMerkleTree(hash)                                                 // Add the hash to the Merkle Tree
+			state, _ := m.MS.EndBlock()                                                //   Clear the HashList
 
-			_ = m.DBManager.Put("States", Int64Bytes(m.MS.Count), state) //      Save Merkle State at n*MarkFreq
+			_ = m.DBManager.PutBatch("States", Int64Bytes(m.MS.Count), state) //      Save Merkle State at n*MarkFreq
 		} else {
 			m.MS.AddToMerkleTree(hash) //                                            Always add to the merkle tree
+		}
+
+		if len(m.HashFeed) == 0 || len(m.DBManager.TXList.List) > 1000 {
+			m.DBManager.EndBatch()
 		}
 	}
 }

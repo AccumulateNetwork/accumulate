@@ -3,8 +3,13 @@ package smt
 import (
 	"crypto/sha256"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
 	"testing"
 	"time"
+
+	"github.com/dustin/go-humanize"
 
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
@@ -108,6 +113,73 @@ func TestReceiptAll(t *testing.T) {
 				if !r.Validate() {
 					t.Fatal("Receipt fails for element ", i, " anchor ", j)
 				}
+			}
+		}
+	}
+}
+
+func TestBadgerReceipts(t *testing.T) {
+
+	dir, err := ioutil.TempDir("", "badger")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() {
+		_ = os.RemoveAll(dir)
+	}()
+
+	const testMerkleTreeSize = 1024 * 1024
+
+	// Create a memory based database
+	dbManager := new(database.Manager)
+	if err = dbManager.Init("badger", dir); err != nil {
+		t.Fatal("Failed to create database: ", err)
+	}
+
+	start := time.Now()
+	// Create a MerkleManager for the memory database
+	manager := new(MerkleManager)
+	manager.Init(dbManager, 4)
+	// populate the database
+	for i := 0; i < testMerkleTreeSize; i++ {
+		v := GetHash(i)
+		manager.HashFeed <- v
+		if i%100000 == 0 {
+			seconds := time.Now().Sub(start).Seconds() + 1
+			fmt.Println("Entries added ", humanize.Comma(int64(i)), " at ", int64(i)/int64(seconds), " per second.")
+		}
+	}
+
+	for len(manager.HashFeed) > 0 {
+		time.Sleep(time.Millisecond)
+	}
+
+	start = time.Now()
+	total := int64(0)
+	for i := 0; i < testMerkleTreeSize; i += 5 {
+		for j := i; j < testMerkleTreeSize+1; j += 3 {
+			element := GetHash(i)
+			anchor := GetHash(j)
+
+			r := GetReceipt(manager, element, anchor)
+			if i < 0 || i >= testMerkleTreeSize || //       If i is out of range
+				j < 0 || j >= testMerkleTreeSize || //        Or j is out of range
+				j < i { //                                    Or if the anchor is before the element
+				if r != nil { //                            then you should not be able to generate a receipt
+					t.Fatal("Should not be able to generate a receipt")
+				}
+			} else {
+				if r == nil {
+					t.Fatal("Failed to generate receipt", i, j)
+				}
+				if !r.Validate() {
+					t.Fatal("Receipt fails for element ", i, " anchor ", j)
+				}
+				total++
+			}
+			if total > 0 && total%100000 == 0 {
+				seconds := int64(time.Now().Sub(start).Seconds()) + 1
+				fmt.Println("Receipts generated ", humanize.Comma(int64(total)), " at ", total/seconds, " per second")
 			}
 		}
 	}
