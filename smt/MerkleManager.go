@@ -47,7 +47,12 @@ func (m *MerkleManager) Init(DBManager *database.Manager, markPower int64) {
 // Pull from the HashFeed channel and add to the Merkle Tree managed by the MerkleManager
 func (m *MerkleManager) Update() {
 	for {
-		hash := <-m.HashFeed                     // Get the next hash
+		hash := <-m.HashFeed // Get the next hash
+		// Keep the index of every element added to the Merkle Tree, but only of the first instance
+		if m.DBManager.GetIndex(hash[:]) < 0 { // So only if the hash is not yet added to the Merkle Tree
+			_ = m.DBManager.Put("ElementIndex", hash[:], Int64Bytes(m.MS.Count)) // Keep its index
+		}
+
 		if (m.MS.Count+1)&(m.MarkMask^-1) == 0 { // If we are about to roll into a Mark
 			_ = m.DBManager.Put("States", Int64Bytes(m.MS.Count), m.MS.Marshal()) // Save Merkle State at n*MarkFreq-1
 			_ = m.DBManager.Put("NextElement", Int64Bytes(m.MS.Count), hash[:])   // Save Hash added at n*MarkFreq-1
@@ -57,9 +62,6 @@ func (m *MerkleManager) Update() {
 			_ = m.DBManager.Put("States", Int64Bytes(m.MS.Count), state) //      Save Merkle State at n*MarkFreq
 		} else {
 			m.MS.AddToMerkleTree(hash) //                                            Always add to the merkle tree
-		}
-		if m.DBManager.GetIndex(hash[:]) < 0 { // Only keep the earliest index
-			_ = m.DBManager.Put("ElementIndex", hash[:], Int64Bytes(m.MS.Count))
 		}
 	}
 }

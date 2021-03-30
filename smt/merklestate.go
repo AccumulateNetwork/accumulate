@@ -53,19 +53,25 @@ func (m MerkleState) String() string {
 // Copy
 // Make a completely independent copy of the Merkle State that removes all references to
 // structures in the given Merkle State.  This means copying any entries in the Pending slice
-func (m *MerkleState) Copy() MerkleState {
-	ms := *m
+func (m MerkleState) Copy() MerkleState {
+	return *m.CopyAndPoint()
+}
+
+// CopyAndPoint
+// Make a completely independent copy of the Merkle State that removes all references to
+// structures in the given Merkle State.  This means copying any entries in the Pending slice
+func (m MerkleState) CopyAndPoint() *MerkleState {
 	// Must make a new slice for ms.Pending
-	ms.Pending = append(ms.Pending[:0], m.Pending...)
+	m.Pending = append(m.Pending[:0], m.Pending...)
 	// Extra paranoid, make the hashes new hashes in pending
 	// (nobody should change a hash, but even if they do the copy will be independent
-	for i, v := range ms.Pending {
+	for i, v := range m.Pending {
 		if v != nil {
 			var hash = *v
-			ms.Pending[i] = &hash
+			m.Pending[i] = &hash
 		}
 	}
-	return ms
+	return &m
 }
 
 // PadPending
