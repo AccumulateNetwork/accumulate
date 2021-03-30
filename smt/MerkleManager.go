@@ -2,6 +2,8 @@ package smt
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"math"
 
 	"github.com/AccumulateNetwork/SMT/storage"
@@ -120,4 +122,23 @@ func (r Receipt) Validate() bool {
 	}
 	// In the end, anchor should be the same hash the receipt expects.
 	return anchor == r.Anchor
+}
+
+// AddHash
+// Add a hash to the Merkle Tree.  Often instead of a hash, we have a byte slice,
+// but that's okay too.
+func (m *MerkleManager) AddHash(hash []byte) {
+	var v Hash
+	copy(v[:], hash)
+	m.HashFeed <- v
+}
+
+// AddHashString
+// Often instead of a hash, we have a hex string, but that's okay too.
+func (m *MerkleManager) AddHashString(hash string) {
+	if h, err := hex.DecodeString(hash); err != nil {
+		panic(fmt.Sprintf("failed to decode a hash %s with error %v", hash, err))
+	} else {
+		m.AddHash(h)
+	}
 }
