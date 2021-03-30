@@ -71,12 +71,20 @@ func (r *Receipt) AdvanceToMark(
 	atAnchor bool,
 	newHeight int) {
 
+	// Add all the hashes that remain in the HashList of the next Mark to the current state.
+	// The result will be a current state that is at the next mark.
 	for i, v := range nextMark.HashList[markIndex:] {
-		if currentState.Count == anchorState.Count {
-			return true, height
+		if currentState.Count == anchorState.Count { // Check to see if we reached the anchor state
+			return true, height //                      If at the anchor, signal currentState is at the anchor
 		}
-		height = r.AddAHash(currentState, height, !(i == 0 && currentState.Count&1 == 1), v)
+		if i == 0 && //                 If we are adding the first hash of the hash list
+			currentState.Count&1 == 1 { //    And we are at an odd number of elements in the Merkle Tree
+			height = r.AddAHash(currentState, height, false, v) // In that case, the hash will come from the left
+		} else { //                                                    Otherwise
+			height = r.AddAHash(currentState, height, true, v) // the hash will come from the right
+		}
 	}
+	// If reaching the next mark doesn't reach the anchor state, signal that the search continues
 	return false, height
 }
 
