@@ -89,17 +89,25 @@ func TestReceiptAll(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 
-	for i := 0; i < testMerkleTreeSize; i++ {
-		for j := i; j < testMerkleTreeSize; j++ {
+	for i := -10; i < testMerkleTreeSize+10; i++ {
+		for j := -10; j < testMerkleTreeSize+10; j++ {
 			element := GetHash(i)
 			anchor := GetHash(j)
 
 			r := GetReceipt(manager, element, anchor)
-			if r == nil {
-				t.Fatal("Failed to generate receipt")
-			}
-			if !r.Validate() {
-				t.Fatal("Receipt fails for element ", i, " anchor ", j)
+			if i < 0 || i >= testMerkleTreeSize || //       If i is out of range
+				j < 0 || j >= testMerkleTreeSize || //        Or j is out of range
+				j < i { //                                    Or if the anchor is before the element
+				if r != nil { //                            then you should not be able to generate a receipt
+					t.Fatal("Should not be able to generate a receipt")
+				}
+			} else {
+				if r == nil {
+					t.Fatal("Failed to generate receipt", i, j)
+				}
+				if !r.Validate() {
+					t.Fatal("Receipt fails for element ", i, " anchor ", j)
+				}
 			}
 		}
 	}
