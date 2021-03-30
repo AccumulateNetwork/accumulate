@@ -10,8 +10,6 @@ import (
 
 	"github.com/AccumulateNetwork/SMT/storage"
 
-	"github.com/AccumulateNetwork/SMT/storage/batch"
-
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
 
@@ -65,7 +63,7 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	}
 
 	// Put entries into the database
-	txList := new(batch.TXList)
+	txList := new(database.TXList)
 	txList.Begin(dbManager)
 	for i := 0; i < 10; i++ {
 		if err := txList.Put(

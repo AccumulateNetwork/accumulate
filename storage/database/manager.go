@@ -12,6 +12,7 @@ import (
 type Manager struct {
 	DB      storage.KeyValueDB // Underlying database implementation
 	Buckets map[string]byte    // two bytes indicating a bucket
+	TXList  TXList             // Transaction List
 }
 
 // Init
@@ -136,4 +137,20 @@ func (m *Manager) GetIndex(element []byte) int64 {
 	}
 	v, _ := storage.BytesInt64(data)
 	return v
+}
+
+func (m *Manager) PutBatch(Bucket string, key []byte, value []byte) error {
+	theKey := m.GetKey(Bucket, key)
+	return m.TXList.Put(theKey, value)
+}
+
+func (m *Manager) EndBatch() {
+	if err := m.DB.PutBatch(m.TXList.List); err != nil {
+		panic("batch failed to persist to the database")
+	}
+	m.TXList.List = m.TXList.List[:0] // Reset the List to allow it to be reused
+}
+
+func (m *Manager) BeginBatch() {
+	m.TXList.List = m.TXList.List[:0]
 }
