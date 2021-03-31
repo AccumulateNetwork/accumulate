@@ -35,22 +35,22 @@ func NewFactoidValidator() *FactoidValidator {
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
-
-func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
-
-	//v.AccountsDB.Get()
-	v.AccountsDB, err = dbProvider(&nm.DBContext{"fctaccounts", config})
-	if err != nil {
-		return
-	}
-
-	v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
-	if err != nil {
-		return
-	}
-
-	return
-}
+//
+//func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
+//
+//	//v.AccountsDB.Get()
+//	v.AccountsDB, err = dbProvider(&nm.DBContext{"fctaccounts", config})
+//	if err != nil {
+//		return
+//	}
+//
+//	v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
+//	if err != nil {
+//		return
+//	}
+//
+//	return
+//}
 
 func (v *FactoidValidator) Check(data []byte) error {
     return nil

@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/viper"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	cfg "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/crypto"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
 	nm "github.com/tendermint/tendermint/node"
@@ -37,10 +38,10 @@ import (
 	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 	"github.com/AccumulateNetwork/accumulated/validator"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
-
+    "bytes"
 	"sync"
 	//"time"
-)
+	)
 
 
 
@@ -125,10 +126,11 @@ type AccumulatorVMApplication struct {
     ///
 	valTypeRegDB    dbm.DB
 	config *cfg.Config
+	Address crypto.Address
 	RPCContext rpctypes.Context
 	server service.Service
-
-
+	amLeader bool
+    dbvc pb.BVCEntry
 }
 
 func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
@@ -231,6 +233,7 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	}
 
 
+
 	str := "ValTypeReg"
 	fmt.Printf("Creating %s\n", str)
 	cdb, err := nm.DefaultDBProvider(&nm.DBContext{str, app.config})
@@ -258,6 +261,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 		AppStateBytes   []byte            `protobuf:"bytes,5,opt,name=app_state_bytes,json=appStateBytes,proto3" json:"app_state_bytes,omitempty"`
 		InitialHeight   int64             `protobuf:"varint,6,opt,name=initial_height,json=initialHeight,proto3" json:"initial_height,omitempty"`
 	}*/
+
 	fmt.Printf("Initalizing Accumulator Router\n")
 
 	acc := new(accumulator.Accumulator)
@@ -324,8 +328,14 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	}
 
 */
-	//need to fix me, rather than update every validator, instead have validator ask for it if needed.
-	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&req.Header.ChainID)
+	//TODO: need to fix me, rather than update every validator, instead have validator ask for it if needed.
+
+	//if we are the proposer... then we are the leader.
+	app.amLeader = bytes.Compare( app.Address.Bytes(), req.Header.GetProposerAddress() ) == 0
+	if app.amLeader {
+
+	}
+	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&app)
 	return abcitypes.ResponseBeginBlock{}
 }
 
@@ -433,7 +443,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	//		}
 	//	default:
 	//		response.Code = 1
-	//		response.Info = fmt.Sprintf("Uknown message type %v \n",req.Tx[msgTypePtr])
+	//		response.Info = fmt.Sprintf("Unknown message type %v \n",req.Tx[msgTypePtr])
 	//}
 
 /*	if (err != nil) {
@@ -495,6 +505,21 @@ func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 	if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
 		resp.RetainHeight = app.Height - app.RetainBlocks + 1
 	}
+
+
+	if app.amLeader {
+		app.dbvc.Header.BvcMasterChainDDII = DDII_type
+		app.dbvc.Header.BvcValidatorDDII = me
+		app.dbvc.Header.Instruction = app.dbvc.Header.Instruction.BVCEntry
+		app.dbvc.Header.Version = 1
+		///build the entry
+		bve := BVCEntry{}
+		bve.Version = 1
+		bve.BVCHeight = app.Height
+	//	bve.DDII = me
+	//	bve.MDRoot = app.
+	}
+
 	return resp
 	//return abcitypes.ResponseCommit{Data: []byte{}}
 }
@@ -632,6 +657,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		return nil, fmt.Errorf("failed to load node's key: %w", err)
 	}
 
+	copy(app.Address, nodeKey.PubKey().Address())
 	//initialize the accumulator database
 	str := "accumulator_" + *app.Val.GetInfo().GetNamespace()// + "_" + *app.Val.GetInfo().GetInstanceName()
 	fmt.Printf("Creating %s\n", str)
@@ -676,11 +702,11 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	}
 	//node.
 
-
 	fmt.Println("Tendermint Start")
 	//app.config.RPC().
     node.Start()
 	//var grpcSrv *grpc.Server
+
 	makeGRPCServer(app, "127.0.0.1:22223")
 	//grpcSrv, err = servergrpc.StartGRPCServer(app, app.config.RPC.GRPCListenAddress)
 	//
@@ -694,6 +720,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	//if err != nil {
 	//	return err
 	//}
+
 
 
 	//s := node.Listeners()

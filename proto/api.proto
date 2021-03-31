@@ -14,15 +14,31 @@ service ApiService {
 	rpc GetNodeInfo(google.protobuf.Empty) returns (NodeInfo) {}
 }
 
+//message BVCEntry
+//{
+//	DBVCInstructionHeader header = 1;
+//    bytes   entry                = 2; // BVC Entry - Merkel DAG root tx (41 bytes) consists of
+	                                  //  header := [ version (1byte) | varintf ddiilen | ddii (up to 32 bytes) ]
+	                                  //  body :=   [  bvc bigendian blockheight (4 bytes) |
+	                                  //               unix timestamp (4 bytes) |
+	                                  //               Merkel DAG Root hash (32 Bytes)]
+//	bytes   signature            = 3; // Signature: ed25519[ entry ]
+//}
 
 //Directory Block Validation Chain (DBVC) Instruction Header
+//maybe rethink into instruction and subcommand.  for example entry has several froms as does chain, adi etc.
+//the chain address routes the thing anyway so maybe instruction really needs to be address
 message DBVCInstructionHeader {
 	enum insType
 	{
 		Unknown                  = 0;
-		BVCEntry                 = 1; // submission instruction issued at each end of block of VBC.
-		RegisterBVCMasterChain 	 = 2; // add a new master chain
-		RemoveBVCMasterChain 	   = 3; // remove a master chain the network.  May need to have blacklists so that core chain's cannot be removed without a fork?
+		EntrySubmit              = 1; // submission instruction issued at each end of block of VBC.
+		EntryReveal              = 2;
+		AddChain                 = 3;
+		RemoveChain              = 4;
+		RegisterMasterChain 	 = 5; // add a new master chain
+		RemoveMasterChain 	     = 6; // remove a master chain the network.  May need to have blacklists so that core chain's cannot be removed without a fork?
+	    RegisterADI              = 7;
 	}
 	insType instruction        = 1; // type of instruction / request, will have one of the values of
 	uint32  version            = 2; // version number stored as varint.
@@ -39,6 +55,18 @@ message BVCEntry
 	                                  //               unix timestamp (4 bytes) |
 	                                  //               Merkel DAG Root hash (32 Bytes)]
 	bytes   signature            = 3; // Signature: ed25519[ entry ]
+}
+
+
+
+message Submission
+{
+    uint64 address     = 1;// route to chain validator
+    uint32 class       = 2;// type of instruction to follow e.g. [ entry, chain, admin, adi ]
+    uint32 instruction = 3;// validator specific, e.g. [ commit, reveal, etc ]
+    uint64 param1      = 4;// validator specific
+    uint64 param2      = 5;// validator specific
+    bytes data         = 6;// validator will validate this data however it sees fit. may include signature
 }
 
 message BVCEntryResponse
