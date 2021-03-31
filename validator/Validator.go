@@ -26,7 +26,7 @@ type ValidatorInterface interface {
 
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
-	Check(data []byte) error
+	Check(ins int32, p1 uint64, p2 uint64, data []byte) error
 	Validate(data []byte) ([]byte, error) //return persistent entry or error
 	EndBlock(mdroot []byte) error  //do something with MD root
 

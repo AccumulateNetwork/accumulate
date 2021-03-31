@@ -49,7 +49,7 @@ message DBVCInstructionHeader {
 message BVCEntry
 {
 	DBVCInstructionHeader header = 1;
-    bytes   entry                = 2; // BVC Entry - Merkel DAG root tx (41 bytes) consists of
+    bytes   entry               = 2; // BVC Entry - Merkel DAG root tx (41 bytes) consists of
 	                                  //  header := [ version (1byte) | varintf ddiilen | ddii (up to 32 bytes) ]
 	                                  //  body :=   [  bvc bigendian blockheight (4 bytes) |
 	                                  //               unix timestamp (4 bytes) |
@@ -61,8 +61,16 @@ message BVCEntry
 
 message Submission
 {
+
+    enum Type {
+      Unknown = 0;
+      Entry   = 1;
+      Chain   = 2;
+      Admin   = 3;
+      ADI     = 4;
+    }
     uint64 address     = 1;// route to chain validator
-    uint32 class       = 2;// type of instruction to follow e.g. [ entry, chain, admin, adi ]
+    Type   class       = 2;// type of instruction to follow e.g. [ entry, chain, admin, adi ]
     uint32 instruction = 3;// validator specific, e.g. [ commit, reveal, etc ]
     uint64 param1      = 4;// validator specific
     uint64 param2      = 5;// validator specific
