@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/example/code"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
@@ -29,6 +30,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 	"os"
 
+	"bytes"
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	//dbm "github.com/tendermint/tm-db"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
@@ -38,10 +40,12 @@ import (
 	"github.com/AccumulateNetwork/accumulated/tendermint/dbvc"
 	"github.com/AccumulateNetwork/accumulated/validator"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
-    "bytes"
 	"sync"
+	"github.com/AccumulateNetwork/SMT/smt"
 	//"time"
-	)
+	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
+
+)
 
 
 
@@ -109,13 +113,18 @@ type AccumulatorVMApplication struct {
 	accountState map[string]AccountStateStruct
 	BootstrapHeight int64
 	ChainId [32]byte
-	Val *validator.ValidatorContext
-	chainval map[uint64]*validator.ValidatorContext
+
+	Val *validator.ValidatorContext //change to use chainval below instead
+	chainval map[uint64]*validator.ValidatorContext //use this instead to make a group of validators that can be accessed via chain address.
+
+
+	//begin deprecation
 	DB vadb.DB
 
 	state State
 
 	//recording of proofs
+
 	EntryHashStream chan node.EntryHash        // Stream of hashes to record
 	//AccumulatorDB   *dbm.DB             // Databases where hashes are recorded
 	ACCs            []*accumulator.Accumulator // Accumulators to record hashes
@@ -123,14 +132,25 @@ type AccumulatorVMApplication struct {
 	Controls        []chan bool
 	MDFeeds         []chan *valacctypes.Hash
 
+
     ///
 	valTypeRegDB    dbm.DB
+	//end deprecation
+
 	config *cfg.Config
 	Address crypto.Address
 	RPCContext rpctypes.Context
 	server service.Service
 	amLeader bool
     dbvc pb.BVCEntry
+
+
+
+	mmdb smtdb.Manager
+	mm smt.MerkleManager
+
+
+
 }
 
 func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
@@ -155,6 +175,7 @@ func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *Accumula
 		state : state,
 	}
 	app.Initialize(ConfigFile, WorkingDir)
+
     return &app
 }
 
@@ -214,6 +235,8 @@ func (app *AccumulatorVMApplication) GetAPIClient() (abcicli.Client, error) {
 }
 
 func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
+
+
 	app.waitgroup.Add(1)
 	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
@@ -247,6 +270,14 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	//app.client, err = makeGRPCClient(app.BaseApplication, app.config.RPC.ListenAddress)
 
 	//RPCContext.RPCRequest// = new(JSONReq{})
+
+	dbfilename := WorkingDir + "/" + "valacc.db"
+
+	//dbtype := "badgerdb"
+	dbtype := "memory" ////for kicks just create an in-memory database for now
+	app.mmdb.Init(dbtype,dbfilename)
+
+
 	return nil
 }
 
@@ -277,17 +308,26 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	app.ChainId = sha256.Sum256([]byte(req.ChainId))
     //hchain := valacctypes.Hash(app.ChainId)
 
-	entryFeed, control, mdHashes := acc.Init(&app.DB, (*valacctypes.Hash)(&app.ChainId))
-	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
-	app.Controls = append(app.Controls, control)
-	app.MDFeeds = append(app.MDFeeds, mdHashes)
-	//spin up the accumulator
-	go acc.Run()
+	//entryFeed, control, mdHashes := acc.Init(&app.DB, (*valacctypes.Hash)(&app.ChainId))
+	//app.EntryFeeds = append(app.EntryFeeds, entryFeed)
+	//app.Controls = append(app.Controls, control)
+	//app.MDFeeds = append(app.MDFeeds, mdHashes)
+	////spin up the accumulator
+	//go acc.Run()
 
 	//app.router.Init(app.EntryFeed, 1)
 	//go app.router.Run()
 	//app.router.Init(EntryFeed, int(AccNumber))
     //go router.Run()
+
+    //load to current state
+   // app.mm.
+
+	app.mm.Init(&app.mmdb,8)
+
+	//launch the hash update thread
+	go app.mm.Update()
+
 
 	return abcitypes.ResponseInitChain{AppHash: app.ChainId[:]}
 }
@@ -338,6 +378,13 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	if app.amLeader {
 
 	}
+
+
+
+	//an entry bucket
+	app.mmdb.AddBucket("Entry")
+
+
 	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&app)
 	return abcitypes.ResponseBeginBlock{}
 }
@@ -362,14 +409,53 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	//code = 0
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
-	addr := binary.BigEndian.Uint64(req.Tx)
-	//addr := req.GetType()
-    if val, ok := app.chainval[addr]; ok {
-		val.Check(req.GetTx())
-    	//need transaction id.
+	sub := &pb.Submission{}
+	err := proto.Unmarshal(req.Tx,sub)
+
+	if err != nil {
+		return abcitypes.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
+			Log: fmt.Sprintf("Unable to decode transaction") }
 	}
 
-	return ret//abcitypes.ResponseCheckTx{Code: code, GasWanted: 1}
+
+	//resolve the validator's bve to obtain public key for given height
+	//pub, err := app.resolveDDIIatHeight(bve.DDII, bve.BVCHeight)
+	//if err != nil {
+	//	return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0,
+	//		Log: fmt.Sprintf("Unable to resolve DDII at Height %d", bve.BVCHeight) }
+	//}
+	//
+    if val, ok := app.chainval[sub.Address]; ok {
+    	//check the type of transaction
+		switch sub.Class {
+		case pb.Submission_Entry:
+				//ask validator to do a quick check on command.
+				err := val.Check(sub.Instruction, sub.Param1, sub.Param2, sub.Data)
+				if err != nil {
+					ret.Code = 2
+					ret.GasWanted = 0
+					ret.GasUsed = 0
+					ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n",sub.Class, app.chainval[sub.Address])
+					return ret
+				}
+		case pb.Submission_Chain:
+			//do nothing fo rnow
+		case pb.Submission_Admin:
+				//do nothing for now
+		default:
+				ret.Code = 1
+				ret.Info = fmt.Sprintf("Unknown message type %v on address %v \n",sub.Class, sub.Address)
+				return ret
+		}
+		if err != nil {
+			ret.Code = 2
+			ret.GasWanted = 0
+			return ret
+		}
+	}
+
+	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
+	return ret
 }
 
 ///ABCI / block calls

@@ -3,6 +3,7 @@ module github.com/AccumulateNetwork/accumulated
 go 1.15
 
 require (
+	github.com/AccumulateNetwork/SMT v0.0.15
 	github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 // indirect
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
 	github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d
@@ -47,7 +48,6 @@ require (
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255
 	github.com/cmars/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
-	github.com/dgraph-io/ristretto v0.0.3 // indirect
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/elliotchance/orderedmap v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
@@ -85,7 +85,7 @@ require (
 	go.uber.org/ratelimit v0.1.0 // indirect
 	golang.org/x/crypto v0.0.0-20201117144127-c1f2f97bffc9
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	google.golang.org/grpc v1.35.0
 	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.0.1 // indirect
 	google.golang.org/protobuf v1.25.0
