@@ -24,39 +24,47 @@ const (
 
 type ValidatorInterface interface {
 
+	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
+	BeginBlock(height int64, Time *time.Time) error
 	Check(data []byte) error
-	Validate(data []byte) error
-	InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error
-	SetCurrentBlock(height int64,Time *time.Time,chainid *string)
+	Validate(data []byte) ([]byte, error) //return persistent entry or error
+	EndBlock(mdroot []byte) error  //do something with MD root
+
+
+	InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error  //deprecated
+	SetCurrentBlock(height int64,Time *time.Time,chainid *string) //deprecated
 	GetInfo() *ValidatorInfo
 	GetCurrentHeight() int64
 	GetCurrentTime() *time.Time
 	GetCurrentChainId() *string
+
 }
 
 type ValidatorInfo struct {
-	address uint64
-	chainid [32]byte
-	namespace string
+	chainadi     string   //
+	chainid [32]byte //derrived from chain adi
+	namespace   string
+
 }
 
 
-func (h *ValidatorInfo) SetInfo(chainid string, namespace string) error {
+func (h *ValidatorInfo) SetInfo(chainadi string, namespace string) error {
 
-	chainidlen := len(chainid)
+	chainidlen := len(chainadi)
 	if chainidlen < 32 {
-		h.chainid = sha256.Sum256([]byte(chainid))
+		h.chainid = sha256.Sum256([]byte(chainadi))
 	} else if chainidlen == 64 {
-		_, err := hex.Decode(h.chainid[:],[]byte(chainid))
+		_, err := hex.Decode(h.chainid[:],[]byte(chainadi))
 		if err != nil {
-			fmt.Errorf("[Error] cannot decode chainid %s", chainid)
+			fmt.Errorf("[Error] cannot decode chainid %s", chainadi)
 			return err
 		}
 	} else {
-		return fmt.Errorf("[Error] invalid chainid for validator %s", namespace)
+		return fmt.Errorf("[Error] invalid chainid for validator on shard %s", namespace)
 	}
 
-	h.address = binary.BigEndian.Uint64(h.chainid[24:])
+	h.chainadi = chainadi;
+//	h.address = binary.BigEndian.Uint64(h.chainid[24:])
 
 	h.namespace = namespace
 	return nil
@@ -70,36 +78,25 @@ func (h *ValidatorInfo) GetNamespace() *string {
     return &h.namespace
 }
 
-func (h *ValidatorInfo) GetTypeId() uint64 {
-	return h.address
+func (h *ValidatorInfo) GetChainAdi() uint64 {
+	return h.chainadi
 }
 
 type ValidatorContext struct {
 	ValidatorInterface
 	ValidatorInfo
 	currentHeight int64
-	currentTime time.Time
-	lastHeight int64
-	lastTime time.Time
-	chainId string
-	entryDB dbm.DB
+	currentTime   time.Time
+	lastHeight    int64
+	lastTime      time.Time
+	chainId       string
+	entryDB       dbm.DB
 }
 
 func (v *ValidatorContext) GetInfo() *ValidatorInfo {
 	return &v.ValidatorInfo
 }
 
-func (v *ValidatorContext) Check(data []byte) *ValidatorInfo {
-	return nil
-}
-
-func (v *ValidatorContext) SetCurrentBlock(height int64,time *time.Time,chainid *string) {
-	v.lastHeight = v.currentHeight
-	v.lastTime = v.currentTime
-	v.currentHeight = height
-	v.currentTime = *time
-	v.chainId = *chainid
-}
 
 func (v *ValidatorContext) GetLastHeight() int64 {
 	return v.lastHeight
@@ -121,19 +118,19 @@ func (v *ValidatorContext) GetChainId() *string {
 	return &v.chainId
 }
 
-
-func (v *ValidatorContext) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
-
-	//v.AccountsDB.Get()
-	v.entryDB, err = dbProvider(&nm.DBContext{"entry", config})
-	if err != nil {
-		return
-	}
-
-	//v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
-	//if err != nil {
-	//	return
-	//}
-
-	return
-}
+//
+//func (v *ValidatorContext) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
+//
+//	//v.AccountsDB.Get()
+//	v.entryDB, err = dbProvider(&nm.DBContext{"entry", config})
+//	if err != nil {
+//		return
+//	}
+//
+//	//v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
+//	//if err != nil {
+//	//	return
+//	//}
+//
+//	return
+//}

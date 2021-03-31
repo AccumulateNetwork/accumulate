@@ -123,7 +123,7 @@ func (app *PersistentKVStoreApplication) InitChain(req types.RequestInitChain) t
 func (app *PersistentKVStoreApplication) BeginBlock(req types.RequestBeginBlock) types.ResponseBeginBlock {
 	// reset valset changes
 	app.ValUpdates = make([]types.ValidatorUpdate, 0)
-
+req.ByzantineValidators[0].Validator.
 	// Punish validators who committed equivocation.
 	for _, ev := range req.ByzantineValidators {
 		if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
