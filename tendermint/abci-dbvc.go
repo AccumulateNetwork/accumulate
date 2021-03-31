@@ -3,6 +3,8 @@ package tendermint
 import (
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/accumulated/example/code"
+	dbm "github.com/tendermint/tm-db"
+
 	//"github.com/Workiva/go-datastructures/threadsafe/err"
 
 	//"encoding/binary"
@@ -33,6 +35,19 @@ import (
 
 const BanListTrigger = -10000
 
+var (
+	stateKey        = []byte("stateKey")
+	kvPairPrefixKey = []byte("kvPairKey:")
+
+	ProtocolVersion uint64 = 0x1
+)
+
+type State struct {
+	db      dbm.DB
+	Size    int64  `json:"size"`
+	Height  int64  `json:"height"`
+	AppHash []byte `json:"app_hash"`
+}
 
 type DirectoryBlockChain struct {
 

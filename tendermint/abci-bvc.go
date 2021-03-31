@@ -264,9 +264,11 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 
 	fmt.Printf("Initalizing Accumulator Router\n")
 
+	//create a new accumulator
 	acc := new(accumulator.Accumulator)
 	app.ACCs = append(app.ACCs, acc)
 
+	//i don't think we want an accumulator for each type... only
 	str := "accumulator-" + *app.Val.GetInfo().GetNamespace()// + "_" + *app.Val.GetInfo().GetInstanceName()
 	if str != req.ChainId {
 		fmt.Printf("Invalid chain validator\n")
@@ -274,6 +276,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	}
 	app.ChainId = sha256.Sum256([]byte(req.ChainId))
     //hchain := valacctypes.Hash(app.ChainId)
+
 	entryFeed, control, mdHashes := acc.Init(&app.DB, (*valacctypes.Hash)(&app.ChainId))
 	app.EntryFeeds = append(app.EntryFeeds, entryFeed)
 	app.Controls = append(app.Controls, control)
@@ -659,8 +662,11 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 
 	copy(app.Address, nodeKey.PubKey().Address())
 	//initialize the accumulator database
-	str := "accumulator_" + *app.Val.GetInfo().GetNamespace()// + "_" + *app.Val.GetInfo().GetInstanceName()
+	//TODO: fix the following.  there will be 1 to many validators in a single accumulator, so it should be tagged via chainid of accumulator i.e "accumulator_<chain_ddii>"
+
+	str := "accumulator_" + app.config.ChainID() //*app.Val.GetInfo().GetNamespace()// + "_" + *app.Val.GetInfo().GetInstanceName()
 	fmt.Printf("Creating %s\n", str)
+
 	db2, err := nm.DefaultDBProvider(&nm.DBContext{str, app.config})
 	if err != nil {
 		return nil,fmt.Errorf("failed to create node accumulator database: %w", err)
@@ -686,6 +692,8 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	//	return nil,nil //TODO
 	//}
 
+
+	//this should be done outside of here...
 
 	// create node
 	node, err := nm.NewNode(
