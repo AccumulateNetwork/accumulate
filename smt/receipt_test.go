@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -118,69 +119,128 @@ func TestReceiptAll(t *testing.T) {
 	}
 }
 
-func TestBadgerReceipts(t *testing.T) {
-
-	dir, err := ioutil.TempDir("", "badger")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() {
-		_ = os.RemoveAll(dir)
-	}()
-
-	const testMerkleTreeSize = 1024 * 1024
+// GetManager
+// Get a manager, and build it with the given MarkPower.  If temp == true
+func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (manager *MerkleManager, dir string) {
 
 	// Create a memory based database
 	dbManager := new(database.Manager)
-	if err = dbManager.Init("badger", dir); err != nil {
-		t.Fatal("Failed to create database: ", err)
+	if temp {
+		var err error
+		dir, err = ioutil.TempDir("", "badger")
+		if err != nil {
+			log.Fatal(err)
+		}
+		if err = dbManager.Init("badger", dir); err != nil {
+			t.Fatal("Failed to create database: ", err)
+		}
+	} else {
+		if err := dbManager.Init("badger", databaseName); err != nil {
+			t.Fatal("Failed to create database: ", databaseName)
+		}
 	}
 
-	start := time.Now()
 	// Create a MerkleManager for the memory database
-	manager := new(MerkleManager)
-	manager.Init(dbManager, 4)
+	manager = new(MerkleManager)
+	manager.Init(dbManager, int64(MarkPower))
+	return manager, dir
+}
+
+func PopulateDatabase(manager *MerkleManager, treeSize int64) {
 	// populate the database
-	for i := 0; i < testMerkleTreeSize; i++ {
-		v := GetHash(i)
+	start := time.Now()
+	startCount := manager.MS.Count
+	for i := startCount; i < treeSize; i++ {
+		v := GetHash(int(i))
 		manager.HashFeed <- v
 		if i%100000 == 0 {
 			seconds := time.Now().Sub(start).Seconds() + 1
-			fmt.Println("Entries added ", humanize.Comma(int64(i)), " at ", int64(i)/int64(seconds), " per second.")
+			fmt.Println(
+				"Entries added ", humanize.Comma(i),
+				" at ", (i-startCount)/int64(seconds), " per second.")
 		}
 	}
 
 	for len(manager.HashFeed) > 0 {
 		time.Sleep(time.Millisecond)
 	}
+}
 
-	start = time.Now()
-	total := int64(0)
-	for i := 0; i < testMerkleTreeSize; i += 5 {
-		for j := i; j < testMerkleTreeSize+1; j += 3 {
-			element := GetHash(i)
-			anchor := GetHash(j)
+func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) {
+	start := time.Now()
+	total := new(int64)
+	atomic.StoreInt64(total, 0)
+	running := new(int64)
+	printed := new(int64)
 
-			r := GetReceipt(manager, element, anchor)
-			if i < 0 || i >= testMerkleTreeSize || //       If i is out of range
-				j < 0 || j >= testMerkleTreeSize || //        Or j is out of range
-				j < i { //                                    Or if the anchor is before the element
-				if r != nil { //                            then you should not be able to generate a receipt
-					t.Fatal("Should not be able to generate a receipt")
+	for i := 0; i < int(manager.MS.Count); i++ {
+		go func(i int) {
+			atomic.AddInt64(running, 1)
+			for j := i; j < int(manager.MS.Count); j++ {
+				element := GetHash(i)
+				anchor := GetHash(j)
+
+				r := GetReceipt(manager, element, anchor)
+				if i < 0 || i >= int(manager.MS.Count) || //       If i is out of range
+					j < 0 || j >= int(manager.MS.Count) || //        Or j is out of range
+					j < i { //                                    Or if the anchor is before the element
+					if r != nil { //                            then you should not be able to generate a receipt
+						t.Fatal("Should not be able to generate a receipt")
+					}
+				} else {
+					if r == nil {
+						t.Fatal("Failed to generate receipt", i, j)
+					}
+					if !r.Validate() {
+						t.Fatal("Receipt fails for element ", i, " anchor ", j)
+					}
+					atomic.AddInt64(total, 1)
 				}
-			} else {
-				if r == nil {
-					t.Fatal("Failed to generate receipt", i, j)
+				t := atomic.LoadInt64(total)
+				if t-atomic.LoadInt64(printed) >= 100000 {
+					atomic.StoreInt64(printed, t)
+					seconds := int64(time.Now().Sub(start).Seconds()) + 1
+					fmt.Printf("Element: %7d     Receipts generated: %12s     Rate: %8d/s\n",
+						i, humanize.Comma(t), t/seconds)
 				}
-				if !r.Validate() {
-					t.Fatal("Receipt fails for element ", i, " anchor ", j)
+				if t > receiptCount {
+					return
 				}
-				total++
 			}
-			if total > 0 && total%100000 == 0 {
-				seconds := int64(time.Now().Sub(start).Seconds()) + 1
-				fmt.Println("Receipts generated ", humanize.Comma(int64(total)), " at ", total/seconds, " per second")
+			atomic.AddInt64(running, -1)
+		}(i)
+		if atomic.LoadInt64(total) > receiptCount {
+			break
+		}
+		if atomic.LoadInt64(running) > 5 {
+			for atomic.LoadInt64(running) > 2 {
+				time.Sleep(time.Millisecond)
 			}
 		}
 	}
+	for atomic.LoadInt64(running) > 0 {
+	}
+}
+
+func TestBadgerReceipts(t *testing.T) {
+
+	manager, dir := GetManager(2, true, "", t)
+	defer func() {
+		_ = os.RemoveAll(dir)
+	}()
+	PopulateDatabase(manager, 1400)
+
+	GenerateReceipts(manager, 1500000, t)
+
+}
+
+func TestBadgerReceiptsBig(t *testing.T) {
+
+	// Don't remove the database (it's not temp)
+	manager, _ := GetManager(2, false, "40million", t)
+
+	PopulateDatabase(manager, 1000000*40) // Create a 40 million element Merkle Tree
+
+	GenerateReceipts(manager, 1500000, t)
+
 }

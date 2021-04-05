@@ -2,7 +2,6 @@ package smt_test
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -46,10 +45,6 @@ func TestMerkleManager(t *testing.T) {
 
 	if MerkleManager.GetElementCount() != testlen {
 		t.Fatal("added elements in merkle tree don't match the number we added")
-	}
-
-	if MerkleManager.GetElementCount()/MerkleManager.MarkFreq != MerkleManager.MS.BlockNumber {
-		t.Fatal(fmt.Sprintf("Element count / Mark Frequency should equal the BlockNumber"))
 	}
 
 	// Check the Indexing

@@ -13,6 +13,7 @@ type Manager struct {
 	DB      storage.KeyValueDB // Underlying database implementation
 	Buckets map[string]byte    // two bytes indicating a bucket
 	TXList  TXList             // Transaction List
+	Count   int64              // The number of elements in this database
 }
 
 // Init
@@ -47,7 +48,21 @@ func (m *Manager) Init(database, filename string) error {
 		m.DB = new(memory.DB)
 		_ = m.DB.InitDB(filename)
 	}
+	m.Count = m.GetCount()
 	return nil
+}
+
+// GetCount
+// The number of elements as recorded in the Database.  Note that this may differ from
+// the count in the the actual Merkle Tree in memory due to batching transactions
+func (m *Manager) GetCount() int64 {
+	// Look and see if there is any element count recorded
+	data := m.DB.Get(m.GetKey("Element", []byte("Count")))
+	if data == nil { // If not, nothing is there
+		return 0
+	}
+	v, _ := storage.BytesInt64(data) // Return the recorded count
+	return v
 }
 
 // Close

@@ -71,27 +71,4 @@ func TestMarshal(t *testing.T) {
 			t.Error("Should be the same")
 		}
 	}
-
-	for i := 0; i < 10; i++ {
-		data1 = MS1.Marshal()
-		MS2.UnMarshal(data1)
-		data1a, hash1 := MS1.EndBlock()
-		hash1a := MS1.HashFunction(data1a)
-		if !bytes.Equal(data1, data1a) ||
-			!bytes.Equal(hash1[:], hash1a[:]) ||
-			!bytes.Equal(data1a, MS2.Marshal()) {
-			t.Error("Should be the same")
-		}
-		for j := 0; j < 0; j++ {
-			someData := MS1.HashFunction(hash1a[:])
-			MS1.AddToMerkleTree(someData)
-		}
-		MS2.EndBlock()
-		for _, v := range MS1.HashList {
-			MS2.AddToMerkleTree(v)
-		}
-		if !bytes.Equal(MS1.Marshal(), MS2.Marshal()) {
-			t.Error("should be the same")
-		}
-	}
 }
