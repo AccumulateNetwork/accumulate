@@ -23,7 +23,6 @@ import (
 type MerkleState struct {
 	HashFunction func(data []byte) Hash
 	Count        int64   // Count of hashes added to the Merkle tree
-	BlockNumber  int64   // Count of the blocks in the Stateful Merkle Tree
 	Pending      []*Hash // Array of hashes that represent the left edge of the Merkle tree
 	HashList     []Hash  // List of Hashes in the order added to the chain
 }
@@ -33,7 +32,6 @@ type MerkleState struct {
 func (m MerkleState) String() string {
 	var b bytes.Buffer
 	b.WriteString(fmt.Sprintf("%20s %d %x\n", "Count", m.Count, m.Count))
-	b.WriteString(fmt.Sprintf("%20s %d\n)", "BlockNumber", m.BlockNumber))
 	b.WriteString(fmt.Sprintf("%20s %d\n", "Pending[] length:", len(m.Pending)))
 	for i, v := range m.Pending {
 		vp := "nil"
@@ -135,10 +133,9 @@ func (m MerkleState) Equal(m2 MerkleState) (errorFlag bool) {
 // Marshal
 // Encodes the Merkle State so it can be embedded into the Merkle Tree
 func (m *MerkleState) Marshal() (MSBytes []byte) {
-	MSBytes = append(MSBytes, Int64Bytes(m.Count)...)       // Count
-	MSBytes = append(MSBytes, Int64Bytes(m.BlockNumber)...) // BlockNumber
-	cnt := m.Count                                          // Each bit set in Count, indicates a Sub Merkle Tree root
-	for i := 0; cnt > 0; i++ {                              // For each bit in cnt,
+	MSBytes = append(MSBytes, Int64Bytes(m.Count)...) // Count
+	cnt := m.Count                                    // Each bit set in Count, indicates a Sub Merkle Tree root
+	for i := 0; cnt > 0; i++ {                        // For each bit in cnt,
 		if cnt&1 > 0 { //                                         if the bit is set in cnt, record the hash
 			MSBytes = append(MSBytes, m.Pending[i][:]...)
 		} //                                                   If the bit is not set, ignore (it is nil anyway)
@@ -157,11 +154,10 @@ func (m *MerkleState) Marshal() (MSBytes []byte) {
 // hash function has been set by the caller.
 func (m *MerkleState) UnMarshal(MSBytes []byte) {
 
-	m.Count, MSBytes = BytesInt64(MSBytes)       // Extract the Count
-	m.BlockNumber, MSBytes = BytesInt64(MSBytes) // Extract the BlockNumber
-	m.Pending = m.Pending[:0]                    // Set Pending to zero, then use the bits of Count
-	cnt := m.Count                               //   to guide the extraction of the List of Sub Merkle State roots
-	for i := 0; cnt > 0; i++ {                   // To do this, go through the count
+	m.Count, MSBytes = BytesInt64(MSBytes) // Extract the Count
+	m.Pending = m.Pending[:0]              // Set Pending to zero, then use the bits of Count
+	cnt := m.Count                         //   to guide the extraction of the List of Sub Merkle State roots
+	for i := 0; cnt > 0; i++ {             // To do this, go through the count
 		m.Pending = append(m.Pending, nil) //       Make a spot, which will leave nil if the bit in count is zero
 		if cnt&1 > 0 {                     //       If the bit is set, then extract the next hash and put it here
 			m.Pending[i] = new(Hash)            //  Add the storage for the hash
@@ -247,22 +243,4 @@ func (m *MerkleState) PrintMR() (mr string) {
 		mr += "_"
 	}
 	return mr
-}
-
-// EndBlock
-// Data is added to a Merkle State over time. Entries can be grouped into Merkle Blocks.  Each Merkle Block
-// begins with the Merkle State describing the state of the Merkle Tree prior to that Merkle Block.  Each
-// Merkle block holds the hash of the Previous Merkle State.
-//
-// Ending a Merkle Block means adding the Current Merkle State to the Merkle Tree.  So every Merkle Block
-// begins with the hash of the Merkle State of the end of the Previous Merkle Block.
-//
-// NOTE: The caller is responsible for being able to match the Merkle State to the block by putting it in a
-// database or memory map.
-func (m *MerkleState) EndBlock() (MSBytes []byte, hash Hash) {
-	MSBytes = m.Marshal()          // Get the serialization of the current Merkle State
-	hash = m.HashFunction(MSBytes) // Get the hash of last Merkle State of the current Merkle Block
-	m.BlockNumber++                // Increment the Block Number
-	m.HashList = m.HashList[:0]    // The HashList is just the hashes in the Merkle Block, so Clear that.
-	return MSBytes, hash
 }

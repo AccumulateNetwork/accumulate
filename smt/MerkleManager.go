@@ -36,12 +36,9 @@ func (m *MerkleManager) Init(DBManager *database.Manager, markPower int64) {
 	m.MarkFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
 	m.MarkMask = (m.MarkFreq - 1) ^ -1                  // Mask to 0 to n-1 elements between marks
 	m.HashFeed = make(chan [32]byte, 10)                // A feed of Hashes to be added to the Merkle Tree
+	m.MS = *m.GetState(m.DBManager.GetCount())          // Get the Merkle State from the database
 	m.MS.InitSha256()                                   // Use Sha256
-	data := m.DBManager.Get("Element", []byte("Count")) // Set the Merkle State
-	if data != nil {                                    // which we can only if one exists
-		m.MS.UnMarshal(data)
-	}
-	go m.Update() // Run go routine that builds the Merkle Tree
+	go m.Update()                                       // Run go routine that builds the Merkle Tree
 }
 
 // Update
@@ -55,12 +52,18 @@ func (m *MerkleManager) Update() {
 		}
 
 		if (m.MS.Count+1)&(m.MarkMask^-1) == 0 { // If we are about to roll into a Mark
-			_ = m.DBManager.PutBatch("States", Int64Bytes(m.MS.Count), m.MS.Marshal()) // Save Merkle State at n*MarkFreq-1
-			_ = m.DBManager.PutBatch("NextElement", Int64Bytes(m.MS.Count), hash[:])   // Save Hash added at n*MarkFreq-1
-			m.MS.AddToMerkleTree(hash)                                                 // Add the hash to the Merkle Tree
-			state, _ := m.MS.EndBlock()                                                //   Clear the HashList
-
-			_ = m.DBManager.PutBatch("States", Int64Bytes(m.MS.Count), state) //      Save Merkle State at n*MarkFreq
+			MSCount := Int64Bytes(m.MS.Count)
+			MSState := m.MS.Marshal()
+			_ = m.DBManager.PutBatch("States", MSCount, MSState)          // Save Merkle State at n*MarkFreq-1
+			_ = m.DBManager.PutBatch("NextElement", MSCount, hash[:])     // Save Hash added at n*MarkFreq-1
+			_ = m                                                         //
+			m.MS.AddToMerkleTree(hash)                                    // Add the hash to the Merkle Tree
+			_ = m                                                         //
+			state := m.MS.Marshal()                                       // Create the marshaled Merkle State
+			m.MS.HashList = m.MS.HashList[:0]                             // Clear the HashList
+			MSCount = Int64Bytes(m.MS.Count)                              // Update MSCount
+			_ = m.DBManager.PutBatch("Element", []byte("Count"), MSCount) // Put the Element Count in DB
+			_ = m.DBManager.PutBatch("States", MSCount, state)            // Save Merkle State at n*MarkFreq
 		} else {
 			m.MS.AddToMerkleTree(hash) //                                            Always add to the merkle tree
 		}
