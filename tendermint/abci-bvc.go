@@ -385,6 +385,7 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	app.mmdb.AddBucket("Entry")
 
 
+	//todo: look at changing this to be queried rather than passed to all validators, because they may not need it
 	app.Val.SetCurrentBlock(req.Header.Height,&req.Header.Time,&app)
 	return abcitypes.ResponseBeginBlock{}
 }
@@ -403,28 +404,22 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 			Tx   []byte      `protobuf:"bytes,1,opt,name=tx,proto3" json:"tx,omitempty"`
 			Type CheckTxType `protobuf:"varint,2,opt,name=type,proto3,enum=tendermint.abci.CheckTxType" json:"type,omitempty"`
 		}*/
-	//bytesLen := len(req.Tx) - dataPtr - 64
-	//code := app.isValid(req.Tx,bytesLen)
 
-	//code = 0
+	//create a default response
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 	sub := &pb.Submission{}
+
+	//unpack the request
 	err := proto.Unmarshal(req.Tx,sub)
 
 	if err != nil {
+		//reject it
 		return abcitypes.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: fmt.Sprintf("Unable to decode transaction") }
 	}
 
-
 	//resolve the validator's bve to obtain public key for given height
-	//pub, err := app.resolveDDIIatHeight(bve.DDII, bve.BVCHeight)
-	//if err != nil {
-	//	return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0,
-	//		Log: fmt.Sprintf("Unable to resolve DDII at Height %d", bve.BVCHeight) }
-	//}
-	//
     if val, ok := app.chainval[sub.Address]; ok {
     	//check the type of transaction
 		switch sub.Class {
@@ -469,12 +464,54 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 // Otherwise, we add it to the current batch.
 func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) ( response abcitypes.ResponseDeliverTx) {
 
+	ret := abcitypes.ResponseDeliverTx{Code: 0, GasWanted: 1, GasUsed: 0, Data: nil, Code: code.CodeTypeUnknownError}
+
+	sub := &pb.Submission{}
+
+	//unpack the request
+	err := proto.Unmarshal(req.Tx,sub)
+
+	if err != nil {
+		//reject it
+		return abcitypes.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
+			Log: fmt.Sprintf("Unable to decode transaction") }
+	}
+
+	//resolve the validator's bve to obtain public key for given height
+	if val, ok := app.chainval[sub.Address]; ok {
+		//check the type of transaction
+		switch sub.Class {
+		case pb.Submission_Entry:
+			//ask validator to do a quick check on command.
+			data, err := val.Validate(sub.Instruction, sub.Param1, sub.Param2, sub.Data)
+			if err != nil {
+				ret.Code = 2
+				ret.GasWanted = 0
+				ret.GasUsed = 0
+				ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n",sub.Class, app.chainval[sub.Address])
+				return ret
+			}
+			//now we need to store the data returned by the validator and feed into accumulator
+			app.mmdb.Get
+
+		case pb.Submission_Chain:
+			//do nothing fo rnow
+		case pb.Submission_Admin:
+			//do nothing for now
+		default:
+			ret.Code = 1
+			ret.Info = fmt.Sprintf("Unknown message type %v on address %v \n",sub.Class, sub.Address)
+			return ret
+		}
+		if err != nil {
+			ret.Code = 2
+			ret.GasWanted = 0
+			return ret
+		}
+	}
+
 
 	code := 0
-	//addr := binary.BigEndian.Uint64(Tx[0:32])
-
-	//ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
-
 	addr := binary.BigEndian.Uint64(req.Tx)
 	//addr := req.GetType()
 	if val, ok := app.chainval[addr]; ok {
