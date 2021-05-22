@@ -223,7 +223,7 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 }
 
 func TestBadgerReceipts(t *testing.T) {
-
+	t.SkipNow()
 	manager, dir := GetManager(2, true, "", t)
 	defer func() {
 		_ = os.RemoveAll(dir)
@@ -235,7 +235,7 @@ func TestBadgerReceipts(t *testing.T) {
 }
 
 func TestBadgerReceiptsBig(t *testing.T) {
-
+	t.SkipNow()
 	// Don't remove the database (it's not temp)
 	manager, _ := GetManager(2, false, "40million", t)
 

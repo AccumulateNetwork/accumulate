@@ -62,19 +62,12 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 		t.Error("Should throw an error")
 	}
 
-	// Put entries into the database
-	txList := new(database.TXList)
-	txList.Begin(dbManager)
 	for i := 0; i < 10; i++ {
-		if err := txList.Put(
-			dbManager.GetKey("a", storage.Int64Bytes(int64(i))),
-			[]byte(fmt.Sprint(i))); err != nil {
+		if err := dbManager.PutBatch("a", storage.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
 			t.Error(err)
 		}
 	}
-	if err := txList.End(); err != nil {
-		t.Error(err)
-	}
+	dbManager.EndBatch()
 
 	// Check that I can read all thousand entries
 	for i := 0; i < 10; i++ {
