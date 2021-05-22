@@ -42,6 +42,7 @@ func TestMerkleManager(t *testing.T) {
 	for len(MerkleManager.HashFeed) > 0 {
 		time.Sleep(time.Millisecond)
 	}
+	time.Sleep(time.Millisecond)
 
 	if MerkleManager.GetElementCount() != testlen {
 		t.Fatal("added elements in merkle tree don't match the number we added")

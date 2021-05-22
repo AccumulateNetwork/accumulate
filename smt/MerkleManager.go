@@ -34,7 +34,7 @@ func (m *MerkleManager) Init(DBManager *database.Manager, markPower int64) {
 	m.DBManager.BeginBatch()                            // Start our batch mode
 	m.MarkPower = markPower                             // Number of levels in the Merkle Tree to be indexed
 	m.MarkFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
-	m.MarkMask = (m.MarkFreq - 1) ^ -1                  // Mask to 0 to n-1 elements between marks
+	m.MarkMask = (m.MarkFreq - 1)                       // Mask to the index of the next mark (0 if at a mark)
 	m.HashFeed = make(chan [32]byte, 10)                // A feed of Hashes to be added to the Merkle Tree
 	m.MS = *m.GetState(m.DBManager.GetCount())          // Get the Merkle State from the database
 	m.MS.InitSha256()                                   // Use Sha256
@@ -51,7 +51,7 @@ func (m *MerkleManager) Update() {
 			_ = m.DBManager.PutBatch("ElementIndex", hash[:], Int64Bytes(m.MS.Count)) // Keep its index
 		}
 
-		if (m.MS.Count+1)&(m.MarkMask^-1) == 0 { // If we are about to roll into a Mark
+		if (m.MS.Count+1)&m.MarkMask == 0 { // If we are about to roll into a Mark
 			MSCount := Int64Bytes(m.MS.Count)
 			MSState := m.MS.Marshal()
 			_ = m.DBManager.PutBatch("States", MSCount, MSState)          // Save Merkle State at n*MarkFreq-1

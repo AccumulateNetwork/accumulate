@@ -21,10 +21,13 @@ import (
 // Interestingly, the state of building such a Merkle Tree looks just like counting in binary.  And the
 // higher order bits set will correspond to where the binary roots must be kept in a Merkle state.
 type MerkleState struct {
-	HashFunction func(data []byte) Hash
-	Count        int64   // Count of hashes added to the Merkle tree
-	Pending      []*Hash // Array of hashes that represent the left edge of the Merkle tree
-	HashList     []Hash  // List of Hashes in the order added to the chain
+	Name         []byte                 // Name of this MerkleState
+	Key          [16]byte               // Key for this MerkleState
+	HashFunction func(data []byte) Hash // Hash function for this Merkle State
+	Count        int64                  // Count of hashes added to the Merkle tree
+	Pending      []*Hash                // Array of hashes that represent the left edge of the Merkle tree
+	HashList     []Hash                 // List of Hashes in the order added to the chain
+	HashFeed     chan *Hash             // Feed of hashes to add to the MerkleState
 }
 
 // String
