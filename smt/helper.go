@@ -11,6 +11,7 @@
 package smt
 
 import (
+	"encoding/binary"
 	"os"
 	"os/user"
 )
@@ -144,4 +145,24 @@ func Int64Bytes(i int64) []byte {
 func BytesInt64(data []byte) (int64, []byte) {
 	return int64(data[0])<<56 + int64(data[1])<<48 + int64(data[2])<<40 + int64(data[3])<<32 +
 		int64(data[4])<<24 + int64(data[5])<<16 + int64(data[6])<<8 + int64(data[7]), data[8:]
+}
+
+// SliceBytes
+// Append a Uvarint length infront of a slice, effectively converting a slice to a counted string
+func SliceBytes(slice []byte) []byte {
+	var varInt [8]byte                                        // Buffer to hold a Uvarint
+	count := binary.PutUvarint(varInt[:], uint64(len(slice))) // calculate the Uvarint of the len of the slice
+	counted := append(varInt[:count], slice...)               // Now put the Uvarint right in front of the slice
+	return counted                                            // Return the resulting counted string
+}
+
+// BytesSlice
+// Convert a counted byte array (which is a count followed by the byte values) to a slice.  We return what is
+// left of the data once the counted byte array is removed
+func BytesSlice(data []byte) (slice []byte, data2 []byte) {
+	value, count := binary.Uvarint(data) // Get the number of bytes in the slice, and count of bytes used for the count
+	data = data[count:]
+	slice = append(slice, data[:value]...)
+	data = data[value:]
+	return slice, data
 }
