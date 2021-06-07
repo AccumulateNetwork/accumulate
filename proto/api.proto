@@ -63,31 +63,32 @@ message Submission
 {
 
     enum Type {
-      Unknown = 0;
+      Unknown      = 0;
       Entry_Commit = 1;
       Entry_Reveal = 2;
       Chain_Commit = 3;
-      Admin   = 4;
-      ADI     = 5;
+      Transaction  = 4; //contains both commit and reveal.
+      Admin        = 5;
+      ADI_Commit   = 6;
     }
-    uint64 address     = 1;// route to chain validator
-    Type   class       = 2;// type of instruction to follow e.g. [ entry, admin, adi ]
-    uint32 instruction = 3;// validator specific, e.g. [ entry commit, chain commit, entry reveal ]
-    uint64 param1      = 4;// validator specific
-    uint64 param2      = 5;// validator specific
-    bytes data         = 6;// validator will validate this data however it sees fit. may include signature
+    uint64 address     = 1; // route to chain validator
+    Type   class       = 2; // type of instruction to follow e.g. [ entry, admin, adi ]
+    uint32 instruction = 3; // validator specific, e.g. [ entry commit, chain commit, entry reveal ]
+    uint64 param1      = 4; // validator specific
+    uint64 param2      = 5; // validator specific
+    bytes  data        = 6; // validator will validate this data however it sees fit. may include signature
 }
 
 message BVCEntryResponse
 {
 	bytes  responseData = 1; // error message???
-	uint64 errorCode = 2;    // error code if it fails the sanity check
+	uint64 errorCode    = 2; // error code if it fails the sanity check
 }
 
 message ValRequest
 {
 	uint64  validatorAddr  = 1; // block validation chain address - sha256(chainId)[0:7] - big-endian or little-endian?
-	uint32  instruction 	 = 2; // instruction code used by the validator - e.g. "write data"
+	uint32  instruction    = 2; // instruction code used by the validator - e.g. "write data"
 	uint32  parameter1     = 3; // parameter 1 specific to the instruction
 	uint32  parameter2     = 4; // parameter 2 specific to the instruction
 	uint64 	nonce          = 5; // typically time stamp or monotonic counter
@@ -106,7 +107,7 @@ message ValRequest
 //message ValRequest
 //{
 //	bytes   bvcaddress     = 1; // block validation chain address - sha256(chainId)[0:7] - big-endian or little-endian
-//	uint32  instruction 	 = 2; // instruction code used by the validator - e.g. "write data"
+//	uint32  instruction    = 2; // instruction code used by the validator - e.g. "write data"
 //	uint32  parameter1     = 3; // parameter 1 specific to the instruction
 //	uint32  parameter2     = 4; // parameter 2 specific to the instruction
 //	uint64 	nonce          = 5; // typically time stamp or monotonic counter
