@@ -64,14 +64,15 @@ message Submission
 
     enum Type {
       Unknown = 0;
-      Entry   = 1;
-      Chain   = 2;
-      Admin   = 3;
-      ADI     = 4;
+      Entry_Commit = 1
+      Entry_Reveal = 2
+      Chain_Commit = 3
+      Admin   = 4;
+      ADI     = 5;
     }
     uint64 address     = 1;// route to chain validator
-    Type   class       = 2;// type of instruction to follow e.g. [ entry, chain, admin, adi ]
-    uint32 instruction = 3;// validator specific, e.g. [ commit, reveal, etc ]
+    Type   class       = 2;// type of instruction to follow e.g. [ entry, admin, adi ]
+    uint32 instruction = 3;// validator specific, e.g. [ entry commit, chain commit, entry reveal ]
     uint64 param1      = 4;// validator specific
     uint64 param2      = 5;// validator specific
     bytes data         = 6;// validator will validate this data however it sees fit. may include signature
