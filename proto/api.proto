@@ -64,9 +64,9 @@ message Submission
 
     enum Type {
       Unknown = 0;
-      Entry_Commit = 1
-      Entry_Reveal = 2
-      Chain_Commit = 3
+      Entry_Commit = 1;
+      Entry_Reveal = 2;
+      Chain_Commit = 3;
       Admin   = 4;
       ADI     = 5;
     }
