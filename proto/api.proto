@@ -64,16 +64,25 @@ message Submission
 
     enum Type {
       Unknown      = 0;
-      Entry_Commit = 1;
-      Entry_Reveal = 2;
-      Chain_Commit = 3;
-      Transaction  = 4; //contains both commit and reveal.
-      Admin        = 5;
-      ADI_Commit   = 6;
+      Identity_Creation = 1;
+      Token_URL_Creation = 2;
+      Token_Transaction = 3;
+      Data_Chain_Creation = 4;
+      Data_Entry = 5; //per 250 bytes
+      Scratch_Chain_Creation = 6;
+      Scratch_Entry = 7; //per 250 bytes
+      Token_Issue = 8;
+      Key_Update = 9;
+//      Entry_Commit = 1; //
+//      Entry_Reveal = 2; // raw data
+//      Chain_Commit = 3;
+//      Transaction  = 4; //contains both commit and reveal. So would this just be Entry_Commit_Reveal or should transactions consist of segwit commit/reveal?
+//      Admin        = 5; //is a type needed? can this be handled by adding a validator an using type 1 and 2 or 4?
+//      ADI_Commit   = 6; //is a type needed? can this be handled by types 4?
     }
     uint64 address     = 1; // route to chain validator
-    Type   class       = 2; // type of instruction to follow e.g. [ entry, admin, adi ]
-    uint32 instruction = 3; // validator specific, e.g. [ entry commit, chain commit, entry reveal ]
+    Type   type        = 2; // type of instruction to follow
+    uint32 instruction = 3; // validator specific,
     uint64 param1      = 4; // validator specific
     uint64 param2      = 5; // validator specific
     bytes  data        = 6; // validator will validate this data however it sees fit. may include signature
