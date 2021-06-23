@@ -1,12 +1,14 @@
 package tendermint
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/example/code"
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
+	"github.com/Factom-Asset-Tokens/factom/varintf"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	abcicli "github.com/tendermint/tendermint/abci/client"
@@ -325,6 +327,13 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 
 	app.mm.Init(&app.mmdb,8)
 
+
+	//an entry bucket --> do do determine if
+	app.mmdb.AddBucket("Entry")
+
+	//commits will be stored here and key'ed via entry hash.
+	app.mmdb.AddBucket("Commit")
+
 	//launch the hash update thread
 	go app.mm.Update()
 
@@ -371,18 +380,17 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	}
 
 */
-	//TODO: need to fix me, rather than update every validator, instead have validator ask for it if needed.
+	//TODO: Purge any expired entry / chain commits
 
+
+	//Identify the leader for this block.
 	//if we are the proposer... then we are the leader.
 	app.amLeader = bytes.Compare( app.Address.Bytes(), req.Header.GetProposerAddress() ) == 0
 	if app.amLeader {
-
+        //TODO: determine if anything needs to be done here.
 	}
 
 
-
-	//an entry bucket
-	app.mmdb.AddBucket("Entry")
 
 
 	//todo: look at changing this to be queried rather than passed to all validators, because they may not need it
@@ -420,10 +428,20 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	}
 
 	//resolve the validator's bve to obtain public key for given height
-    if val, ok := app.chainval[sub.Address]; ok {
+    if val, ok := app.chainval[sub.Address]; !ok {
+    	//if not ok, then we need to assign a val to default entry validator?
+    	err := val.Check(sub.Instruction,sub.Param1, sub.Param2,sub.Data)
+
+	}
+
+	//sub :=  factom.Entry{}
     	//check the type of transaction
 		switch sub.Class {
-		case pb.Submission_Entry:
+		case pb.Submission_Entry_Commit:
+
+		case pb.Submission_Entry_Reveal:
+			    //need to check to see if a segwit for the data exists
+			    //compute entry hash
 				//ask validator to do a quick check on command.
 				err := val.Check(sub.Instruction, sub.Param1, sub.Param2, sub.Data)
 				if err != nil {
@@ -433,10 +451,16 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 					ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n",sub.Class, app.chainval[sub.Address])
 					return ret
 				}
-		case pb.Submission_Chain:
-			//do nothing fo rnow
+		case pb.Submission_Chain_Commit:
+			//verify chain commit signature checks out
+			//verify EC has a balance
+		//case pb.Submission_ADI_Commit:
+
+		case pb.Submission_Transaction:
+		    //val.
+		//case pb.Submission_SyntheticTransaction:
 		case pb.Submission_Admin:
-				//do nothing for now
+				//do nothing for now, is this even needed?
 		default:
 				ret.Code = 1
 				ret.Info = fmt.Sprintf("Unknown message type %v on address %v \n",sub.Class, sub.Address)
@@ -447,7 +471,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 			ret.GasWanted = 0
 			return ret
 		}
-	}
+
 
 	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
 	return ret
@@ -477,12 +501,14 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			Log: fmt.Sprintf("Unable to decode transaction") }
 	}
 
+
 	//resolve the validator's bve to obtain public key for given height
 	if val, ok := app.chainval[sub.Address]; ok {
 		//check the type of transaction
 		switch sub.Class {
 		case pb.Submission_Entry:
 			//ask validator to do a quick check on command.
+            //
 			data, err := val.Validate(sub.Instruction, sub.Param1, sub.Param2, sub.Data)
 			if err != nil {
 				ret.Code = 2
@@ -494,10 +520,10 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			//now we need to store the data returned by the validator and feed into accumulator
 			app.mmdb.Get
 
-		case pb.Submission_Chain:
-			//do nothing fo rnow
 		case pb.Submission_Admin:
 			//do nothing for now
+		case pb.Submission_ADI:
+			//do nothing fo rnow
 		default:
 			ret.Code = 1
 			ret.Info = fmt.Sprintf("Unknown message type %v on address %v \n",sub.Class, sub.Address)
