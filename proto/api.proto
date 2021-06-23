@@ -4,7 +4,7 @@ option go_package = "./proto";//github.com/AccumulateNetwork/accumulated/proto";
 
 //go:generate protoc example.proto --go_out=plugins=grpc:$GOPATH/src
 
-import "google/protobuf/empty.proto";
+//import "google/protobuf/empty.proto";
 
 service ApiService {
 	rpc PostEntry(EntryBytes) returns (Reply) {}
@@ -61,7 +61,6 @@ message BVCEntry
 
 message Submission
 {
-
     enum Type {
       Unknown      = 0;
       Identity_Creation = 1;

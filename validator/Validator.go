@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/proto"
 	nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	cfg "github.com/tendermint/tendermint/config"
 	dbm "github.com/tendermint/tm-db"
@@ -22,14 +23,24 @@ const (
 	Fail = 4
 )
 
-type ValidatorInterface interface {
+type TXEvidence struct {
+	DDII []byte
+	Sig []byte
+}
 
+type TXEntry struct {
+	Evidence TXEvidence
+	Data []byte
+	Balance int64
+}
+
+
+type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
 	Check(ins uint32, p1 uint64, p2 uint64, data []byte) error
-	Validate(ins uint32, p1 uint64, p2 uint64, data []byte) ([]byte, error) //return persistent entry or error
+	Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (proto.Submission, error) //return persistent entry or error
 	EndBlock(mdroot []byte) error  //do something with MD root
-
 
 	InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error  //deprecated
 	SetCurrentBlock(height int64,Time *time.Time,chainid *string) //deprecated
@@ -37,13 +48,12 @@ type ValidatorInterface interface {
 	GetCurrentHeight() int64
 	GetCurrentTime() *time.Time
 	GetCurrentChainId() *string
-
 }
 
 type ValidatorInfo struct {
-	chainadi     string   //
-	chainid [32]byte //derrived from chain adi
-	namespace   string
+	chainadi  string   //
+	chainid   [32]byte //derrived from chain adi
+	namespace string
 
 }
 
