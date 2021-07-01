@@ -11,7 +11,8 @@ import (
 
 type Manager struct {
 	DB      storage.KeyValueDB // Underlying database implementation
-	Buckets map[string]byte    // two bytes indicating a bucket
+	Buckets map[string]byte    // one byte to indicate a bucket
+	Labels  map[string]byte    // one byte to indicate a label
 	TXList  TXList             // Transaction List
 	Count   int64              // The number of elements in this database
 }
@@ -57,7 +58,7 @@ func (m *Manager) Init(database, filename string) error {
 // the count in the the actual Merkle Tree in memory due to batching transactions
 func (m *Manager) GetCount() int64 {
 	// Look and see if there is any element count recorded
-	data := m.DB.Get(m.GetKey("Element", []byte("Count")))
+	data := m.DB.Get(m.GetKey("Element", "", []byte("Count")))
 	if data == nil { // If not, nothing is there
 		return 0
 	}
@@ -85,68 +86,90 @@ func (m *Manager) AddBucket(bucket string) {
 	m.Buckets[bucket] = byte(idx)
 }
 
+// AddLabel
+// Add a Label to be used in the database.  Initializing a database requires
+// that buckets and labels be added in the correct order.
+func (m *Manager) AddLabel(label string) {
+	if _, ok := m.Labels[label]; ok {
+		panic(fmt.Sprintf("the label '%s' is already defined", label))
+	}
+	idx := len(m.Labels) + 1
+	if idx > 255 {
+		panic("too many labels")
+	}
+	m.Buckets[label] = byte(idx)
+}
+
 // GetKey
 // Given a Bucket Name, a Label name, and a key, GetKey returns a single
 // key to be used in a key/value database
-func (m *Manager) GetKey(Bucket string, key []byte) (DBKey [storage.KeyLength]byte) {
+func (m *Manager) GetKey(Bucket, Label string, key []byte) (DBKey [storage.KeyLength]byte) {
 	var ok bool
-	if _, ok = m.Buckets[Bucket]; !ok { //                          Make sure we have a bucket
-		panic(fmt.Sprintf("bucket %s undefined or invalid", Bucket)) //    and panic if we don't
+	if _, ok = m.Buckets[Bucket]; !ok { //                                 Is the bucket defined?
+		panic(fmt.Sprintf("bucket %s undefined or invalid", Bucket)) //      Panic if not
 	}
-	keyHash := sha256.Sum256(key)      // Use the Hash of the given key
-	copy(DBKey[:], keyHash[:])         //
-	DBKey[0] = byte(m.Buckets[Bucket]) // Replace the first byte with the bucket index
+	if _, ok = m.Labels[Label]; len(Label) > 0 && !ok { //                 If a label is specified, is it defined?
+		panic(fmt.Sprintf("label %s undefined or invalid", Label)) //        Panic if not.
+	}
+	DBKey = sha256.Sum256(key) //          To get a fixed length key, we hash the given key.
+	//                                     Because a hash is very secure, losing two bytes won't hurt anything
+	DBKey[0] = m.Buckets[Bucket] //        Replace the first byte with the bucket index
+	DBKey[1] = 0                 //        Assume no label (0 -- means no label
+	if len(Label) > 0 {          //        But if a label is specified, then
+		DBKey[1] = m.Labels[Label] //        set its byte value.
+	}
+
 	return DBKey
 }
 
 // Put
 // Put a []byte value into the underlying database
-func (m *Manager) Put(Bucket string, key []byte, value []byte) (err error) {
+func (m *Manager) Put(Bucket, Label string, key []byte, value []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("%v", r)
 		}
 	}()
-	k := m.GetKey(Bucket, key)
+	k := m.GetKey(Bucket, Label, key)
 	err = m.DB.Put(k, value)
 	return err
 }
 
 // PutString
 // Put a String value into the underlying database
-func (m *Manager) PutString(Bucket string, key []byte, value string) error {
-	return m.Put(Bucket, key, []byte(value))
+func (m *Manager) PutString(Bucket, Label string, key []byte, value string) error {
+	return m.Put(Bucket, Label, key, []byte(value))
 }
 
 // PutInt64
 // Put a int64 value into the underlying database
-func (m *Manager) PutInt64(Bucket string, key []byte, value int64) error {
-	return m.Put(Bucket, key, storage.Int64Bytes(value))
+func (m *Manager) PutInt64(Bucket, Label string, key []byte, value int64) error {
+	return m.Put(Bucket, Label, key, storage.Int64Bytes(value))
 }
 
 // Get
 // Get a []byte value from the underlying database.  Returns a nil if not found, or on an error
-func (m *Manager) Get(Bucket string, key []byte) (value []byte) {
-	return m.DB.Get(m.GetKey(Bucket, key))
+func (m *Manager) Get(Bucket, Label string, key []byte) (value []byte) {
+	return m.DB.Get(m.GetKey(Bucket, Label, key))
 }
 
 // GetString
 // Get a string value from the underlying database.  Returns a nil if not found, or on an error
-func (m *Manager) GetString(Bucket string, key []byte) (value string) {
-	return string(m.DB.Get(m.GetKey(Bucket, key)))
+func (m *Manager) GetString(Bucket, Label string, key []byte) (value string) {
+	return string(m.DB.Get(m.GetKey(Bucket, Label, key)))
 }
 
 // GetInt64
 // Get a string value from the underlying database.  Returns a nil if not found, or on an error
-func (m *Manager) GetInt64(Bucket string, key []byte) (value int64) {
-	v, _ := storage.BytesInt64(m.DB.Get(m.GetKey(Bucket, key)))
+func (m *Manager) GetInt64(Bucket, Label string, key []byte) (value int64) {
+	v, _ := storage.BytesInt64(m.DB.Get(m.GetKey(Bucket, Label, key)))
 	return v
 }
 
 // GetIndex
 // Return the int64 value tied to the element hash in the ElementIndex bucket
 func (m *Manager) GetIndex(element []byte) int64 {
-	data := m.Get("ElementIndex", element)
+	data := m.Get("ElementIndex", "", element)
 	if data == nil {
 		return -1
 	}
@@ -154,8 +177,8 @@ func (m *Manager) GetIndex(element []byte) int64 {
 	return v
 }
 
-func (m *Manager) PutBatch(Bucket string, key []byte, value []byte) error {
-	theKey := m.GetKey(Bucket, key)
+func (m *Manager) PutBatch(Bucket, Label string, key []byte, value []byte) error {
+	theKey := m.GetKey(Bucket, Label, key)
 	return m.TXList.Put(theKey, value)
 }
 

@@ -32,7 +32,7 @@ func TestReceipt(t *testing.T) {
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
-		manager.HashFeed <- v
+		manager.AddHash(v)
 		fmt.Printf("e%-6d %x %v\n", i, v, v[:3])
 	}
 	e0 := GetHash(0)
@@ -59,9 +59,6 @@ func TestReceipt(t *testing.T) {
 	fmt.Printf("         %3v                %3v                  %3v\n", e01[:3], e23[:3], e45[:3])
 	fmt.Printf("                       %3v\n", e0123[:3])
 
-	for len(manager.HashFeed) > 0 {
-		time.Sleep(time.Millisecond)
-	}
 	element := GetHash(0)
 	anchor := GetHash(3)
 
@@ -88,11 +85,7 @@ func TestReceiptAll(t *testing.T) {
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
-		manager.HashFeed <- v
-	}
-
-	for len(manager.HashFeed) > 0 {
-		time.Sleep(time.Millisecond)
+		manager.AddHash(v)
 	}
 
 	for i := -10; i < testMerkleTreeSize+10; i++ {
@@ -152,17 +145,13 @@ func PopulateDatabase(manager *MerkleManager, treeSize int64) {
 	startCount := manager.MS.Count
 	for i := startCount; i < treeSize; i++ {
 		v := GetHash(int(i))
-		manager.HashFeed <- v
+		manager.AddHash(v)
 		if i%100000 == 0 {
 			seconds := time.Now().Sub(start).Seconds() + 1
 			fmt.Println(
 				"Entries added ", humanize.Comma(i),
 				" at ", (i-startCount)/int64(seconds), " per second.")
 		}
-	}
-
-	for len(manager.HashFeed) > 0 {
-		time.Sleep(time.Millisecond)
 	}
 }
 
