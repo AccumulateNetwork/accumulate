@@ -4,11 +4,39 @@ import (
 	"crypto/sha256"
 	"math"
 	"testing"
-	"time"
 
 	. "github.com/AccumulateNetwork/SMT/smt"
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
+
+func TestIndexing(t *testing.T) {
+
+	const testlen = 1024
+
+	dbManager := new(database.Manager)
+	if err := dbManager.Init("memory", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	MerkleManager := new(MerkleManager)
+	MerkleManager.Init(dbManager, 2)
+
+	// Fill the Merkle Tree with a few hashes
+	hash := sha256.Sum256([]byte("start"))
+	for i := 0; i < testlen; i++ {
+		MerkleManager.AddHash(hash)
+		hash = sha256.Sum256(hash[:])
+	}
+
+	MerkleManager.DBManager.EndBatch()
+	hash = sha256.Sum256([]byte("start"))
+	for i := 0; i < testlen; i++ {
+		if v := MerkleManager.GetIndex(hash[:]); v < 0 {
+			t.Fatalf("failed to index hash %d", i)
+		}
+		hash = sha256.Sum256(hash[:])
+	}
+}
 
 func TestMerkleManager(t *testing.T) {
 
@@ -36,17 +64,15 @@ func TestMerkleManager(t *testing.T) {
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
 	for i := 0; i < testlen; i++ {
-		MerkleManager.HashFeed <- hash
+		MerkleManager.AddHash(hash)
 		hash = sha256.Sum256(hash[:])
 	}
-	for len(MerkleManager.HashFeed) > 0 {
-		time.Sleep(time.Millisecond)
-	}
-	time.Sleep(time.Millisecond)
 
 	if MerkleManager.GetElementCount() != testlen {
 		t.Fatal("added elements in merkle tree don't match the number we added")
 	}
+
+	dbManager.EndBatch()
 
 	// Check the Indexing
 	for i := int64(0); i < testlen; i++ {

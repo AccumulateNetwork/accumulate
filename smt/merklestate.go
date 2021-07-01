@@ -21,13 +21,10 @@ import (
 // Interestingly, the state of building such a Merkle Tree looks just like counting in binary.  And the
 // higher order bits set will correspond to where the binary roots must be kept in a Merkle state.
 type MerkleState struct {
-	Name         []byte                 // Name of this MerkleState
-	Key          [16]byte               // Key for this MerkleState
 	HashFunction func(data []byte) Hash // Hash function for this Merkle State
 	Count        int64                  // Count of hashes added to the Merkle tree
 	Pending      []*Hash                // Array of hashes that represent the left edge of the Merkle tree
 	HashList     []Hash                 // List of Hashes in the order added to the chain
-	HashFeed     chan *Hash             // Feed of hashes to add to the MerkleState
 }
 
 // String
@@ -156,7 +153,6 @@ func (m *MerkleState) Marshal() (MSBytes []byte) {
 // in this instance of MSMarshal to the state defined by MSBytes.  It is assumed that the
 // hash function has been set by the caller.
 func (m *MerkleState) UnMarshal(MSBytes []byte) {
-
 	m.Count, MSBytes = BytesInt64(MSBytes) // Extract the Count
 	m.Pending = m.Pending[:0]              // Set Pending to zero, then use the bits of Count
 	cnt := m.Count                         //   to guide the extraction of the List of Sub Merkle State roots
