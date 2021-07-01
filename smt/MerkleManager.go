@@ -17,7 +17,6 @@ type MerkleManager struct {
 	MarkPower int64             // log2 of the MarkFreq
 	MarkFreq  int64             // The count between Marks
 	MarkMask  int64             // The binary mask to detect Mark boundaries
-	HashFeed  chan [32]byte     // Feed of hashes to be put into the Merkle State under management
 }
 
 // getElementCount()
@@ -35,42 +34,37 @@ func (m *MerkleManager) Init(DBManager *database.Manager, markPower int64) {
 	m.MarkPower = markPower                             // Number of levels in the Merkle Tree to be indexed
 	m.MarkFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
 	m.MarkMask = (m.MarkFreq - 1)                       // Mask to the index of the next mark (0 if at a mark)
-	m.HashFeed = make(chan [32]byte, 10)                // A feed of Hashes to be added to the Merkle Tree
 	m.MS = *m.GetState(m.DBManager.GetCount())          // Get the Merkle State from the database
 	m.MS.InitSha256()                                   // Use Sha256
-	go m.Update()                                       // Run go routine that builds the Merkle Tree
 }
 
 // Update
 // Pull from the HashFeed channel and add to the Merkle Tree managed by the MerkleManager
-func (m *MerkleManager) Update() {
-	for {
-		hash := <-m.HashFeed // Get the next hash
-		// Keep the index of every element added to the Merkle Tree, but only of the first instance
-		if m.DBManager.GetIndex(hash[:]) < 0 { // So only if the hash is not yet added to the Merkle Tree
-			_ = m.DBManager.PutBatch("ElementIndex", hash[:], Int64Bytes(m.MS.Count)) // Keep its index
-		}
+func (m *MerkleManager) AddHash(hash Hash) {
+	// Keep the index of every element added to the Merkle Tree, but only of the first instance
+	if m.DBManager.GetIndex(hash[:]) < 0 { // So only if the hash is not yet added to the Merkle Tree
+		_ = m.DBManager.PutBatch("ElementIndex", "", hash[:], Int64Bytes(m.MS.Count)) // Keep its index
+	}
 
-		if (m.MS.Count+1)&m.MarkMask == 0 { // If we are about to roll into a Mark
-			MSCount := Int64Bytes(m.MS.Count)
-			MSState := m.MS.Marshal()
-			_ = m.DBManager.PutBatch("States", MSCount, MSState)          // Save Merkle State at n*MarkFreq-1
-			_ = m.DBManager.PutBatch("NextElement", MSCount, hash[:])     // Save Hash added at n*MarkFreq-1
-			_ = m                                                         //
-			m.MS.AddToMerkleTree(hash)                                    // Add the hash to the Merkle Tree
-			_ = m                                                         //
-			state := m.MS.Marshal()                                       // Create the marshaled Merkle State
-			m.MS.HashList = m.MS.HashList[:0]                             // Clear the HashList
-			MSCount = Int64Bytes(m.MS.Count)                              // Update MSCount
-			_ = m.DBManager.PutBatch("Element", []byte("Count"), MSCount) // Put the Element Count in DB
-			_ = m.DBManager.PutBatch("States", MSCount, state)            // Save Merkle State at n*MarkFreq
-		} else {
-			m.MS.AddToMerkleTree(hash) //                                            Always add to the merkle tree
-		}
+	if (m.MS.Count+1)&m.MarkMask == 0 { // If we are about to roll into a Mark
+		MSCount := Int64Bytes(m.MS.Count)
+		MSState := m.MS.Marshal()
+		_ = m.DBManager.PutBatch("States", "", MSCount, MSState)      //     Save Merkle State at n*MarkFreq-1
+		_ = m.DBManager.PutBatch("NextElement", "", MSCount, hash[:]) //     Save Hash added at n*MarkFreq-1
+		//
+		m.MS.AddToMerkleTree(hash) //                                    Add the hash to the Merkle Tree
+		//
+		state := m.MS.Marshal()                                           // Create the marshaled Merkle State
+		m.MS.HashList = m.MS.HashList[:0]                                 // Clear the HashList
+		MSCount = Int64Bytes(m.MS.Count)                                  // Update MSCount
+		_ = m.DBManager.PutBatch("Element", "", []byte("Count"), MSCount) // Put the Element Count in DB
+		_ = m.DBManager.PutBatch("States", "", MSCount, state)            // Save Merkle State at n*MarkFreq
+	} else {
+		m.MS.AddToMerkleTree(hash) //                                            Always add to the merkle tree
+	}
 
-		if len(m.HashFeed) == 0 || len(m.DBManager.TXList.List) > 1000 {
-			m.DBManager.EndBatch()
-		}
+	if len(m.DBManager.TXList.List) > 1000 {
+		m.DBManager.EndBatch()
 	}
 }
 
@@ -80,8 +74,8 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	if element == 0 {
 		return new(MerkleState)
 	}
-	data := m.DBManager.Get("States", Int64Bytes(element)) // Get the data at this height
-	if data == nil {                                       // If we get a nil, there is no state saved
+	data := m.DBManager.Get("States", "", Int64Bytes(element)) // Get the data at this height
+	if data == nil {                                           // If we get a nil, there is no state saved
 		return nil //                                            return nil, as no state exists
 	}
 	ms := new(MerkleState) // Get a fresh new merklestate
@@ -92,7 +86,7 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 // GetNext
 // Get the next hash to be added to a state at this height
 func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
-	data := m.DBManager.Get("NextElement", Int64Bytes(element))
+	data := m.DBManager.Get("NextElement", "", Int64Bytes(element))
 	if data == nil || len(data) != storage.KeyLength {
 		return nil
 	}
@@ -127,21 +121,14 @@ func (r Receipt) Validate() bool {
 	return anchor == r.Anchor
 }
 
-// AddHash
-// Add a hash to the Merkle Tree.  Often instead of a hash, we have a byte slice,
-// but that's okay too.
-func (m *MerkleManager) AddHash(hash []byte) {
-	var v Hash
-	copy(v[:], hash)
-	m.HashFeed <- v
-}
-
 // AddHashString
 // Often instead of a hash, we have a hex string, but that's okay too.
 func (m *MerkleManager) AddHashString(hash string) {
 	if h, err := hex.DecodeString(hash); err != nil {
 		panic(fmt.Sprintf("failed to decode a hash %s with error %v", hash, err))
 	} else {
-		m.AddHash(h)
+		var h2 [32]byte
+		copy(h2[:], h)
+		m.AddHash(h2)
 	}
 }

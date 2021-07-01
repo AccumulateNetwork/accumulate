@@ -226,6 +226,7 @@ func (r *Receipt) String() string {
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
 // after the element, or even the element itself.
 func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
+	manager.DBManager.EndBatch()                 // Make sure all batched writes are flushed to disk
 	elementIndex := manager.GetIndex(element[:]) // Get the index of the element in the Merkle Tree; -1 if not found
 	anchorIndex := manager.GetIndex(anchor[:])   // Get the index of the anchor in the Merkle Tree; -1 if not found
 	if elementIndex == -1 || anchorIndex == -1 { // Both the element and the anchor must be in the Merkle Tree
