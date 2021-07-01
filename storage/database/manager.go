@@ -150,6 +150,7 @@ func (m *Manager) PutInt64(Bucket, Label string, key []byte, value int64) error 
 // Get
 // Get a []byte value from the underlying database.  Returns a nil if not found, or on an error
 func (m *Manager) Get(Bucket, Label string, key []byte) (value []byte) {
+	m.EndBatch()
 	return m.DB.Get(m.GetKey(Bucket, Label, key))
 }
 
@@ -177,12 +178,20 @@ func (m *Manager) GetIndex(element []byte) int64 {
 	return v
 }
 
+// PutBatch
+// put the write of a key value into the pending batch.  These will all be written to the
+// database together.
 func (m *Manager) PutBatch(Bucket, Label string, key []byte, value []byte) error {
 	theKey := m.GetKey(Bucket, Label, key)
 	return m.TXList.Put(theKey, value)
 }
 
+// EndBatch()
+// Flush anything in the batch list to the database.
 func (m *Manager) EndBatch() {
+	if len(m.TXList.List) == 0 { // If there is nothing to do, do nothing
+		return
+	}
 	if err := m.DB.PutBatch(m.TXList.List); err != nil {
 		panic("batch failed to persist to the database")
 	}
