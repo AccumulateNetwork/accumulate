@@ -47,23 +47,23 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	d1 := []byte{1, 2, 3}
 	d2 := []byte{2, 3, 4}
 	d3 := []byte{3, 4, 5}
-	_ = dbManager.Put("a", []byte("horse"), d1)
-	_ = dbManager.Put("b", []byte("horse"), d2)
-	_ = dbManager.Put("c", []byte("horse"), d3)
-	v1 := dbManager.Get("a", []byte("horse"))
-	v2 := dbManager.Get("b", []byte("horse"))
-	v3 := dbManager.Get("c", []byte("horse"))
+	_ = dbManager.Put("a", "", []byte("horse"), d1)
+	_ = dbManager.Put("b", "", []byte("horse"), d2)
+	_ = dbManager.Put("c", "", []byte("horse"), d3)
+	v1 := dbManager.Get("a", "", []byte("horse"))
+	v2 := dbManager.Get("b", "", []byte("horse"))
+	v3 := dbManager.Get("c", "", []byte("horse"))
 
 	if !bytes.Equal(d1, v1) || !bytes.Equal(d2, v2) || !bytes.Equal(d3, v3) {
 		t.Error("All values should be equal")
 	}
 
-	if err := dbManager.PutInt64("d", []byte(fmt.Sprint(1)), int64(1)); err == nil {
+	if err := dbManager.PutInt64("d", "", []byte(fmt.Sprint(1)), int64(1)); err == nil {
 		t.Error("Should throw an error")
 	}
 
 	for i := 0; i < 10; i++ {
-		if err := dbManager.PutBatch("a", storage.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
+		if err := dbManager.PutBatch("a", "", storage.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
 			t.Error(err)
 		}
 	}
@@ -71,7 +71,7 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 
 	// Check that I can read all thousand entries
 	for i := 0; i < 10; i++ {
-		eKey := dbManager.GetKey("a", storage.Int64Bytes(int64(i)))
+		eKey := dbManager.GetKey("a", "", storage.Int64Bytes(int64(i)))
 		eValue := []byte(fmt.Sprint(i))
 
 		fmt.Printf("key %x value %s\n", eKey, eValue)
