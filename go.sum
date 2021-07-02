@@ -11,8 +11,12 @@ cloud.google.com/go/firestore v1.1.0/go.mod h1:ulACoGHTpvq5r8rxGJ4ddJZBZqakUQqCl
 cloud.google.com/go/pubsub v1.0.1/go.mod h1:R0Gpsv3s54REJCy4fxDixWD93lHJMoZTyQ2kNxGRt3I=
 cloud.google.com/go/storage v1.0.0/go.mod h1:IhtSnM/ZTZV8YYJWCY8RULGVqBDmpoyjwiyrjsg+URw=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
-github.com/AccumulateNetwork/SMT v0.0.15 h1:X92tJi8L+L371wbyjjZwThnQatXlze6nVN531dtZ2mk=
-github.com/AccumulateNetwork/SMT v0.0.15/go.mod h1:bsYM1AkMuMrdwc5GOdM2EMMHStL1DJf1ouAB8udzsQU=
+github.com/AccumulateNetwork/SMT v0.0.17 h1:VyztibI5h1XrAbUSRmJRAWiepmqluWVONmxwAkUJ5aA=
+github.com/AccumulateNetwork/SMT v0.0.17/go.mod h1:bsYM1AkMuMrdwc5GOdM2EMMHStL1DJf1ouAB8udzsQU=
+github.com/AccumulateNetwork/SMT v0.0.18-0.20210701152942-5870519c3252 h1:avSANiBmzI3SjGOeVfheHIYjeFAeehaxSQXsito8i6A=
+github.com/AccumulateNetwork/SMT v0.0.18-0.20210701152942-5870519c3252/go.mod h1:bsYM1AkMuMrdwc5GOdM2EMMHStL1DJf1ouAB8udzsQU=
+github.com/AccumulateNetwork/SMT v0.0.19 h1:y7Md/pybWx1LSVA2XkZEQ52G718M4O6GtNHRn+yLMls=
+github.com/AccumulateNetwork/SMT v0.0.19/go.mod h1:bsYM1AkMuMrdwc5GOdM2EMMHStL1DJf1ouAB8udzsQU=
 github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 h1:bYfNhL1fCOcy96+HJxhFEsinBiP39IftYwkVy/L9nBQ=
 github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03/go.mod h1:QeKvdJfy+5p9vt13HevpAuN23SZMcn4jmntTODtNEuM=
 github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03 h1:YeSKCsAcgRMblJcT9d+2sbuJh5DwYISdnkgtoKd0o9I=

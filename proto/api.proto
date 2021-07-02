@@ -87,6 +87,15 @@ message Submission
     bytes  data        = 6; // validator will validate this data however it sees fit. may include signature
 }
 
+message ValidatorSubmission
+{
+		int64 height;       //height at which submission was made
+		Submission submission;
+		bytes submitteradi; //digital identity of signer
+		bytes shardadi;     //digital identity of shard
+		bytes signature;    //signature of the validator making the submission
+}
+
 message BVCEntryResponse
 {
 	bytes  responseData = 1; // error message???
@@ -103,6 +112,20 @@ message ValRequest
 	bytes   data           = 6; // payload for validator - Command Data
 	bytes   signed         = 7; // ed25519 signature
 }
+
+//message ResponseDeliverTx struct
+//{
+//	Submission SynthSubmission //if valid, create a synthetic transaction
+//	bytes []ExtIds //external id's to put in entry
+//	bytes Data     //data for stored entry
+//			Data      []byte  `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+//		Log       string  `protobuf:"bytes,3,opt,name=log,proto3" json:"log,omitempty"`
+//		Info      string  `protobuf:"bytes,4,opt,name=info,proto3" json:"info,omitempty"`
+//		GasWanted int64   `protobuf:"varint,5,opt,name=gas_wanted,proto3" json:"gas_wanted,omitempty"`
+//		GasUsed   int64   `protobuf:"varint,6,opt,name=gas_used,proto3" json:"gas_used,omitempty"`
+//		Events    []Event `protobuf:"bytes,7,rep,name=events,proto3" json:"events,omitempty"`
+//		Codespace string  `protobuf:"bytes,8,opt,name=codespace,proto3" json:"codespace,omitempty"`
+//		}
 
 // [address][Type][Nonce][Data][Sign]
 

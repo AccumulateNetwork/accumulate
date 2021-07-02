@@ -2,7 +2,7 @@ package validator
 
 import (
 	cfg "github.com/tendermint/tendermint/config"
-	dbm "github.com/tendermint/tm-db"
+	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
 
@@ -14,19 +14,19 @@ type BVCLeader struct{
 }
 
 func NewBVCLeader(shard string) *BVCLeader {
-	v := FactoidValidator{}
+	v := BVCLeader{}
 	//need the chainid, then hash to get first 8 bytes to make the chainid.
 	//by definition a chainid of a factoid block is
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
-	chainid := "000000000000000000000000000000000000000000000000000000000000000f"
-	v.SetInfo(chainid,"factoid")
+	chainid := "0000000000000000000000000000000000000000000000000000000000000001"
+	v.SetInfo(chainid,"bvc")
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
 
-func (v *BVCLeader) Check(data []byte) *ValidatorInfo {
+func (v *BVCLeader) Check(ins uint32, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *BVCLeader) Initialize(config *cfg.Config) error {
@@ -42,12 +42,12 @@ func (v *BVCLeader) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *BVCLeader) Validate(data []byte) ([]byte, error) {
+func (v *BVCLeader) Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 	//return persistent entry or error
 	return nil, nil
 }
 
-func (v *BVCLeader) EndBlock(mdroot [32]byte) error  {
+func (v *BVCLeader) EndBlock(mdroot []byte) error  {
 	copy(v.mdroot[:], mdroot[:])
 	return nil
 }

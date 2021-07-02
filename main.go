@@ -1,17 +1,20 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
+	"github.com/AccumulateNetwork/accumulated/validator"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
-	nm "github.com/tendermint/tendermint/node"
+	//nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
-	"github.com/tendermint/tendermint/proxy"
+	//"github.com/tendermint/tendermint/proxy"
 	"sync"
 	"time"
 
@@ -146,7 +149,7 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 	//ctx := context.Background()
 
-	sig, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000000000")
+	//sig, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000000000")
 
 
 	duration0 := time.Since(start)
@@ -159,46 +162,49 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	//bytes   data           = 6; // payload for validator - Command Data
 	//bytes   signed         = 7; // ed25519 signature
 
-	vr := &pb.ValRequest{}
-	vr.Nonce = 0
-	vr.Signed = sig
-	vr.ValidatorAddr = 15
-	vr.Instruction = 1
-	vr.Data = decoded
-	vr.Parameter1 = 0
-	vr.Parameter2 = 0
+	chainadi := "000000000000000000000000000000000000000000000000000000000000000f"
+	var chainid [32]byte
+	hex.Decode(chainid[:],[]byte(chainadi))
+	chainhash := sha256.Sum256(chainid[:])
+    var duration1 time.Duration
+	for i := 0; i < 100000; i++ {
+		vr := &pb.Submission{}
+		//vr.Nonce = 0
+		//vr.Signed = sig
+		vr.Address = binary.BigEndian.Uint64(chainhash[:])
+		vr.Type = pb.Submission_Token_Transaction
+		vr.Instruction = 1
 
-	msg, err := proto1.Marshal(vr)
-	type delivertx struct {
-		Tx []byte `json:"tx"`
-	}
-	dtx := delivertx{msg }
-	duration1 := time.Since(start)
-	start = time.Now()
+		vr.Data = decoded
+		vr.Param1 = uint64(time.Since(start).Nanoseconds())
+		vr.Param2 = 0
 
-	var c jsonrpc2.Client
+		msg, _ := proto1.Marshal(vr)
+		type delivertx struct {
+			Tx []byte `json:"tx"`
+		}
+		dtx := delivertx{msg }
 
-	var result int
-	if true {
+		duration1 = time.Since(start)
+		start = time.Now()
+
+		var c jsonrpc2.Client
+
+		var result int
 		err = c.Request(nil, "http://localhost:26611", "broadcast_tx_sync", dtx, &result)
-	} else {
-		//if _, ok := err.(jsonrpc2.Error); ok {
-		//	// received Error Request
-		//}
-		//if err != nil {
-		//	// some JSON marshaling or network error
-		//}
-		//fmt.Printf("The sum of %v is %v.\n", params, result)
+
+		//err = c.Request(nil, "http://localhost:26611", "broadcast_tx_commit", dtx, &result)
+	}
+		//for i := 0; i < 100; i++ {
 		//
-		//
-		app.client.CheckTxSync(types.RequestCheckTx{Tx: msg})
-		app.client.DeliverTxAsync(types.RequestDeliverTx{msg})
+		//	app.client.CheckTxSync(types.RequestCheckTx{Tx: msg})
+		//	app.client.DeliverTxAsync(types.RequestDeliverTx{msg})
+		//}
 		//app.client.BroadcastTx(ctx,&grpccore.RequestBroadcastTx{msg}) //app.client.DeliverTxSync(types.RequestDeliverTx{Tx: decoded})
 		//if err2 != nil {
 		//	return ret{"broadcast tx error",""}
 		//}
 		//res.GetDeliverTx()
-	}
 	duration2 := time.Since(start)
 
 
@@ -408,20 +414,20 @@ func main() {
 
 
 	//create a Factoid validator
-	//db val := validator.NewFactoidValidator()
+	val := validator.NewFactoidValidator()
 
 	//create a AccumulatorVM
-	//db accvm1 := tendermint.NewAccumulatorVMApplication(ConfigFile[1],WorkingDir[1])
-	//db accvm1.AddValidator(&val.ValidatorContext)
+	accvm1 := tendermint.NewAccumulatorVMApplication(ConfigFile[1],WorkingDir[1])
+	accvm1.AddValidator(&val.ValidatorContext)
 
-	//db go accvm1.Start()
+	go accvm1.Start()
 
-	//time.Sleep(10000 * time.Millisecond)
-	//db accvm1api, _ := accvm1.GetAPIClient()
-	//db go jsonrpcserver2(accvm1api)
+	time.Sleep(10000 * time.Millisecond)
+	 accvm1api, _ := accvm1.GetAPIClient()
+	go jsonrpcserver2(accvm1api)
 
 	//app := kv.NewPersistentKVStoreApplication(WorkingDir[1])
-	dbc := tendermint.NewDirectoryBlockChain()
+	//dbc := tendermint.NewDirectoryBlockChain()
 	//app := kv.NewApplication()
 
 	//fig := cfg.ResetTestRoot("node_priv_val_tcp_test")
@@ -473,6 +479,9 @@ func main() {
 		os.Exit(2)
 	}
 
+	_ = nodeKey
+	_ = pv
+	/* dbvc
 	danode, err := nm.NewNode(
 		config,
 		pv,
@@ -488,6 +497,7 @@ func main() {
 		os.Exit(3)
 	}
 	go  danode.Start()
+	*/
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
