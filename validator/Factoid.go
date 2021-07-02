@@ -4,9 +4,9 @@ package validator
 import (
 	"fmt"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
-	cfg "github.com/tendermint/tendermint/config"
+	//cfg "github.com/tendermint/tendermint/config"
 	//nm "github.com/tendermint/tendermint/node"
-	nm "github.com/AccumulateNetwork/accumulated/vbc/node"
+	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	dbm "github.com/tendermint/tm-db"
 	"time"
 
@@ -16,6 +16,7 @@ import (
 
 	//"github.com/FactomProject/factomd/common/factoid"
 	"github.com/AccumulateNetwork/accumulated/factom"
+	"math/rand"
 )
 
 
@@ -23,6 +24,7 @@ type FactoidValidator struct{
 	ValidatorContext
 	KvStoreDB dbm.DB
 	AccountsDB dbm.DB
+	timeofvalidity time.Duration
 }
 
 func NewFactoidValidator() *FactoidValidator {
@@ -34,6 +36,7 @@ func NewFactoidValidator() *FactoidValidator {
 	chainid := "000000000000000000000000000000000000000000000000000000000000000f"
 	v.SetInfo(chainid,"factoid")
 	v.ValidatorContext.ValidatorInterface = &v
+	v.timeofvalidity = time.Duration(2) * time.Minute //transaction good for only 2 minutes
 	return &v
 }
 //
@@ -53,7 +56,21 @@ func NewFactoidValidator() *FactoidValidator {
 //	return
 //}
 
-func (v *FactoidValidator) Check(data []byte) error {
+func (v *FactoidValidator) Check(ins uint32, p1 uint64, p2 uint64, data []byte) error {
+	tx := factom.Transaction{}
+	err := tx.UnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+
+
+	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
+	if elapsed > v.timeofvalidity || elapsed < 0 {
+		//need to log instaed
+		return fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
+	}
+
     return nil
 }
 func (v *FactoidValidator) processFctTx(data []byte) ([]byte, error) {
@@ -67,11 +84,10 @@ func (v *FactoidValidator) processFctTx(data []byte) ([]byte, error) {
 
 
 
-	timeofvalidity := time.Duration(2) * time.Minute//transaction good for only 2 minutes
 	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
-	if elapsed > timeofvalidity || elapsed < 0 {
+	if elapsed > v.timeofvalidity || elapsed < 0 {
 		//need to log instaed
-		fmt.Printf("Invalid FCT Transaction: Timestamp out of bounds")
+		err := fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
 		return nil, err
 	}
 
@@ -131,7 +147,8 @@ func (v *FactoidValidator) processEcTx(data []byte) ([]byte, error) {
 	return nil, err
 }
 
-func (v *FactoidValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (pb.Submission,error) {
+
+func (v *FactoidValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
 	//if pass then send to accumulator.
 	//var fblock := factom.FBlock{}
 	//create a new block
@@ -144,12 +161,10 @@ func (v *FactoidValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byt
 	}
 
 
-
-	timeofvalidity := time.Duration(2) * time.Minute//transaction good for only 2 minutes
 	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
-	if elapsed > timeofvalidity || elapsed < 0 {
+	if elapsed > v.timeofvalidity || elapsed < 0 {
 		//need to log instaed
-		fmt.Printf("Invalid FCT Transaction: Timestamp out of bounds")
+		err := fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
 		return nil, err
 	}
 
@@ -204,10 +219,15 @@ func (v *FactoidValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byt
 	// atkchainaddr := AccumulateTransaction.ChainAddr()
 	// ins := AccumulateTransaction.Instruction()
 
-	var atktx []byte
-    atkchainaddr := 0x0000000000000000
+	ret := ResponseValidateTX{}
+	submissions := make([]pb.Submission,2)
+
+    atktx := make([]byte, 64)
+    atkchainaddr := uint64(0x0000000000000000)
+    //for now just read random stuff
+	rand.Read(atktx)
 	atkins := uint32(0) //
-    ret := pb.Submission{
+	submissions[1] = pb.Submission{
 		Address: atkchainaddr,
 		Type:    pb.Submission_Token_Transaction,
 		Instruction: atkins,
@@ -216,6 +236,6 @@ func (v *FactoidValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byt
 		Data:    atktx,//data does not contain an RCD will be added
 	}
 
-	return ret,err
+	return &ret,err
 }
 

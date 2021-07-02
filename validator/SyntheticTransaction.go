@@ -1,9 +1,8 @@
 package validator
 
 import (
-	pb "github.com/AccumulateNetwork/accumulated/proto"
 	cfg "github.com/tendermint/tendermint/config"
-	dbm "github.com/tendermint/tm-db"
+	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
 
@@ -49,14 +48,14 @@ func NewSyntheticTransactionValidator() *SyntheticTransactionValidator {
 	//by definition a chainid of a factoid block is
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
-	chainid := "000000000000000000000000000000000000000000000000000000000000000f"
-	v.SetInfo(chainid,"factoid")
+	chainid := "0000000000000000000000000000000000000000000000000000000000000005"
+	v.SetInfo(chainid,"synthetic_transaction")
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
 
-func (v *SyntheticTransactionValidator) Check(data []byte) *ValidatorInfo {
+func (v *SyntheticTransactionValidator) Check(ins uint32, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *SyntheticTransactionValidator) Initialize(config *cfg.Config) error {
@@ -72,12 +71,12 @@ func (v *SyntheticTransactionValidator) BeginBlock(height int64, time *time.Time
 	return nil
 }
 
-func (v *SyntheticTransactionValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (pb.Submission,error) {
-
-	return pb.Submission{}, nil
+func (v *SyntheticTransactionValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+	return nil, nil
+	//return &pb.Submission{}, nil
 }
 
-func (v *SyntheticTransactionValidator) EndBlock(mdroot [32]byte) error  {
+func (v *SyntheticTransactionValidator) EndBlock(mdroot []byte) error  {
 	copy(v.mdroot[:], mdroot[:])
 	//don't think this serves a purpose???
 	return nil

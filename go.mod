@@ -3,7 +3,7 @@ module github.com/AccumulateNetwork/accumulated
 go 1.15
 
 require (
-	github.com/AccumulateNetwork/SMT v0.0.15
+	github.com/AccumulateNetwork/SMT v0.0.19
 	github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 // indirect
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
 	github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d

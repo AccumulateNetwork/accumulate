@@ -3,8 +3,7 @@ package tendermint
 import (
 	"encoding/binary"
 	"fmt"
-
-	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
+	"github.com/AccumulateNetwork/SMT/smt"
 
 	"github.com/AccumulateNetwork/accumulated/factom/varintf"
 )
@@ -23,9 +22,9 @@ const(
 type BVCEntry struct {
 	Version byte
 	DDII []byte
-	BVCHeight uint32          /// (4 bytes) Height of master chain block
+	BVCHeight int64          /// (4 bytes) Height of master chain block
 	Timestamp uint64
-	MDRoot valacctypes.Hash
+	MDRoot smt.Hash
 
 }
 
@@ -47,7 +46,7 @@ func (entry *BVCEntry) MarshalBinary()([]byte, error) {
 	offset = endoffset-1
 	endoffset += 4
 
-	binary.BigEndian.PutUint32(ret[offset:endoffset],entry.BVCHeight)
+	binary.BigEndian.PutUint64(ret[offset:endoffset],uint64(entry.BVCHeight))
 	offset += 4
 	endoffset += 8
 
@@ -88,7 +87,7 @@ func (entry *BVCEntry) UnmarshalBinary(data []byte) ([][]byte, error) {
 	offset = endoffset
 	endoffset = offset + 4
 	ret[BVCHeight_type] = data[offset:endoffset+1]
-	entry.BVCHeight = binary.LittleEndian.Uint32(ret[BVCHeight_type])
+	entry.BVCHeight = int64(binary.LittleEndian.Uint64(ret[BVCHeight_type]))
 
 
 	offset = endoffset

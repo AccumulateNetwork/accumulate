@@ -2,10 +2,10 @@ package validator
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
+	//"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/proto"
+	pb "github.com/AccumulateNetwork/accumulated/proto"
 	nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	cfg "github.com/tendermint/tendermint/config"
 	dbm "github.com/tendermint/tm-db"
@@ -30,16 +30,22 @@ type TXEvidence struct {
 
 type TXEntry struct {
 	Evidence TXEvidence
+	ExtIDs *[]byte
 	Data []byte
-	Balance int64
 }
+
+type ResponseValidateTX struct{
+	Submissions []pb.Submission //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
+}
+
+
 
 
 type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
 	Check(ins uint32, p1 uint64, p2 uint64, data []byte) error
-	Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (proto.Submission, error) //return persistent entry or error
+	Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) //return persistent entry or error
 	EndBlock(mdroot []byte) error  //do something with MD root
 
 	InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error  //deprecated
@@ -80,16 +86,16 @@ func (h *ValidatorInfo) SetInfo(chainadi string, namespace string) error {
 	return nil
 }
 
-func (h *ValidatorInfo) GetValidatorChainId() *[32]byte {
-	return &h.chainid
+func (h *ValidatorInfo) GetValidatorChainId() []byte {
+	return h.chainid[:]
 }
 
 func (h *ValidatorInfo) GetNamespace() *string {
     return &h.namespace
 }
 
-func (h *ValidatorInfo) GetChainAdi() uint64 {
-	return h.chainadi
+func (h *ValidatorInfo) GetChainAdi() *string {
+	return &h.chainadi
 }
 
 type ValidatorContext struct {

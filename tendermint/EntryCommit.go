@@ -3,7 +3,11 @@ package tendermint
 import (
 	"crypto/sha256"
 	"fmt"
+	//fold in the types to accumulate
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
+
+	"math/rand"
+	//"github.com/AccumulateNetwork/SMT/smt"
 	"time"
 
 	"crypto/ed25519"
@@ -33,8 +37,6 @@ type ChainCommit struct {
 //	32 bytes	ChainID Hash	This is a double hash (SHA256d) of the ChainID which the Entry is in.
 //	32 bytes	Commit Weld	SHA256(SHA256(Entry Hash | ChainID)) This is the double hash (SHA256d) of the Entry Hash concatenated with the ChainID.
 }
-
-Entr
 
 
 // Entry represents a Factom Entry.
@@ -68,10 +70,15 @@ type Entry struct {
 
 }
 
+type EntryCommitReveal struct {
+	entry Entry
+	segwit EntryCommit //discarded after validation
+}
+
 // IsPopulated returns true if e has already been successfully populated by a
 // call to Get.
 func (e Entry) IsPopulated() bool {
-	return e.ChainID != nil &&
+	return len(e.ChainID) != 0 &&
 		e.ExtIDs != nil &&
 		e.Content != nil
 }
@@ -80,13 +87,29 @@ const EntryCommitLedgerSize int = 1+6+32+1
 const ChainCommitLedgerSize int = EntryCommitLedgerSize + 32 + 32
 const EntryCommitSize int = EntryCommitLedgerSize+32+64
 const ChainCommitSize int = ChainCommitLedgerSize+32+64
-
-func GenerateCommit(e *Entry) EntryCommit {
-	return EntryCommit{}
-}
+//
+//func GenerateCommit(e *Entry) EntryCommit {
+//	return EntryCommit{}
+//}
 
 func (ec *EntryCommit) isChainCommit() bool {
 	return ec.ChainIDHash != nil && ec.ChainWeld != nil
+}
+
+func getInt48BE(data []byte) int64 {
+	const size = 6
+	var x int64
+	for i := 0; i < size; i++ {
+		x |= int64(data[i]) << (8 * (size - 1 - i))
+	}
+	return x
+}
+
+func putInt48BE(data []byte, x int64) {
+	const size = 6
+	for i := 0; i < size; i++ {
+		data[i] = byte(x >> (8 * (size - 1 - i)))
+	}
 }
 
 func (ec *EntryCommit) MarshalLedger() []byte {
@@ -197,4 +220,104 @@ func (ec *EntryCommit) TXID() valacctypes.Hash {
 
 func (ec *EntryCommit) EntryHash() valacctypes.Hash {
 	return sha256.Sum256(ec.MarshalCommit())
+}
+// sha256(sha256(data))
+func sha256d(data []byte) [sha256.Size]byte {
+	hash := sha256.Sum256(data)
+	return sha256.Sum256(hash[:])
+}
+
+///Generate a commit binary.  entrydata is either the adi/chainid or it is the raw data.
+func GenerateCommit(entrydata []byte, entryhash *valacctypes.Hash,
+	newChain bool) ([]byte, valacctypes.Hash) {
+
+	commitSize := EntryCommitSize
+	if newChain {
+		commitSize = ChainCommitSize
+	}
+
+	commit := make([]byte, commitSize)
+
+	i := 1 // Skip version byte
+
+	// ms is a timestamp salt in milliseconds.
+	ms := valacctypes.TimeStamp(time.Now().Unix()*1e3 + rand.Int63n(1000))
+	i += copy(commit[i:], ms.Bytes()[2:8])
+
+	if newChain {
+		chainID := entrydata[1 : 1+len(valacctypes.Hash{})]
+		// ChainID Hash
+		chainIDHash := sha256d(chainID)
+		i += copy(commit[i:], chainIDHash[:])
+
+		// Commit Weld sha256d(entryhash | chainid)
+		weld := sha256d(append(entryhash[:], chainID[:]...))
+		i += copy(commit[i:], weld[:])
+	}
+
+	// Entry Hash
+	i += copy(commit[i:], entryhash[:])
+
+	cost, _ := EntryCost(len(entrydata), newChain)
+	commit[i] = byte(cost)
+	i++
+
+	txID := sha256.Sum256(commit[:i])
+	//
+	//// Public Key
+	//signedDataSize := i
+	//i += copy(commit[i:], es.PublicKey())
+	//
+	//// Signature
+	//sig := ed25519.Sign(es.PrivateKey(), commit[:signedDataSize])
+	//copy(commit[i:], sig)
+
+	return commit, txID
+}
+
+
+func SignCommit( es valacctypes.PrivateKey, commit []byte) error {
+
+	if len(commit) != ChainCommitSize || len(commit) != EntryCommitSize {
+		return fmt.Errorf("Entry is neither a Chain Commit nor Entry Commit. Cannot sign.")
+	}
+
+	// Public Key
+	signedDataSize := len(commit) - 32 - 64
+	i := signedDataSize
+	i += copy(commit[i:], es.GetPublicKey()) //es.PublicKey())
+
+	// Signature
+	sig := es.Sign(commit[:signedDataSize])
+	copy(commit[i:], sig)
+
+	return nil
+}
+
+// NewChainCost is the fixed added cost of creating a new chain.
+const NewChainCost = 10
+
+// EntryCost returns the required Entry Credit cost for an entry with encoded
+// length equal to size. An error is returned if size exceeds 10275.
+//
+// Set newChain to true to add the NewChainCost.
+func EntryCost(size int, newChain bool) (uint8, error) {
+	if size < EntryHeaderSize {
+		return 0, fmt.Errorf("invalid size")
+	}
+	size -= EntryHeaderSize
+	if size > 10240 {
+		return 0, fmt.Errorf("Entry cannot be larger than 10KB")
+	}
+	cost := uint8(size / 1024)
+	if size%1024 > 0 {
+		cost++
+	}
+	if cost < 1 {
+		cost = 1
+	}
+	if newChain {
+		cost += NewChainCost
+	}
+	return cost, nil
 }

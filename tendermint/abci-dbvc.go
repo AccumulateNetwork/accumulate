@@ -86,7 +86,7 @@ func (DirectoryBlockChain) SetOption(req abci.RequestSetOption) abci.ResponseSet
 	return abci.ResponseSetOption{}
 }
 
-func (app *DirectoryBlockChain) resolveDDIIatHeight(ddii []byte, bvcheight uint32) (ed25519.PublicKey, error) {
+func (app *DirectoryBlockChain) resolveDDIIatHeight(ddii []byte, bvcheight int64) (ed25519.PublicKey, error) {
     //just give me a key...
 
 	fmt.Printf("%s", string(ddii[:]))
@@ -152,7 +152,7 @@ func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCh
 	}
 
 	switch header.GetInstruction() {
-	case pb.DBVCInstructionHeader_BVCEntry:
+	case pb.DBVCInstructionHeader_EntryReveal:
 		//Step 2: resolve DDII of BVC against VBC validator
 		bvcreq := pb.BVCEntry{}
 
@@ -217,7 +217,10 @@ func (app *DirectoryBlockChain) DeliverTx(req abci.RequestDeliverTx) ( response 
 		return abci.ResponseDeliverTx{Code: 3, GasWanted: 0}
 	}
 
-	app.md.AddToChain(bve.MDRoot)
+	mdr := valacctypes.Hash{}
+	copy(mdr.Bytes(),bve.MDRoot.Bytes())
+
+	app.md.AddToChain(mdr)
 
 	//index the events to let BVC know MDRoot has been secured so that consensus can be achieved by BVCs
 	response.Events = []abci.Event{
