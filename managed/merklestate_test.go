@@ -1,4 +1,4 @@
-package smt
+package managed
 
 import (
 	"bytes"

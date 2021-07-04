@@ -1,38 +1,77 @@
-package smt_test
+package managed_test
 
 import (
 	"crypto/sha256"
 	"math"
 	"testing"
 
-	. "github.com/AccumulateNetwork/SMT/smt"
+	. "github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
 
 func TestIndexing(t *testing.T) {
 
 	const testlen = 1024
+	const blocklen = 10
 
 	dbManager := new(database.Manager)
 	if err := dbManager.Init("memory", ""); err != nil {
 		t.Fatal(err)
 	}
 
-	MerkleManager := new(MerkleManager)
-	MerkleManager.Init(dbManager, 2)
+	MM1 := new(MerkleManager)
+	MM1.Init(dbManager, 2)
 
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
 	for i := 0; i < testlen; i++ {
-		MerkleManager.AddHash(hash)
+		MM1.AddHash(hash)
+		hash = sha256.Sum256(hash[:])
+		if (i+1)%blocklen == 0 {
+			MM1.SetBlockIndex()
+		}
+	}
+
+	hash = sha256.Sum256([]byte("start"))
+	for i := int64(0); i < testlen; i++ {
+		if (i+1)%blocklen == 0 {
+			bi := new(BlockIndex)
+			data := MM1.DBManager.Get("BlockIndex", "", Int64Bytes(i/blocklen))
+			bi.UnMarshal(data)
+			if bi.ElementIndex != i {
+				t.Fatalf("the ElementIndex doesn't match v %d i %d",
+					bi.ElementIndex, i)
+			}
+			if bi.BlockIndex != i/blocklen {
+				t.Fatalf("the BlockIndex doesn't match v %d i/blocklen %d",
+					bi.BlockIndex, i/blocklen)
+			}
+		}
+		if v := MM1.GetIndex(hash[:]); v < 0 {
+			t.Fatalf("failed to index hash %d", i)
+		} else {
+			if v != i {
+				t.Fatalf("failed to get the right index.  i %d v %d", i, v)
+			}
+		}
 		hash = sha256.Sum256(hash[:])
 	}
 
-	MerkleManager.DBManager.EndBatch()
+	MM2 := new(MerkleManager)
+	MM2.Init(dbManager, 2)
+
+	if MM1.MS.Count != MM2.MS.Count {
+		t.Fatal("failed to properly load from a database")
+	}
+
 	hash = sha256.Sum256([]byte("start"))
 	for i := 0; i < testlen; i++ {
-		if v := MerkleManager.GetIndex(hash[:]); v < 0 {
+		if v := MM2.GetIndex(hash[:]); v < 0 {
 			t.Fatalf("failed to index hash %d", i)
+		} else {
+			if int(v) != i {
+				t.Fatalf("failed to get the right index.  i %d v %d", i, v)
+			}
 		}
 		hash = sha256.Sum256(hash[:])
 	}

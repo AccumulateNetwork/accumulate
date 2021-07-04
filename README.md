@@ -100,7 +100,13 @@ root MerKle Tree can hold the DAGs of other Merkle Trees, those Merkle Trees
 can also hold DAGS of other Merkle Trees.
   
 ## SMT API
-* `func NewSMT() SMT`
+* `func  NewMerkleManager(DBManager *database.Manager, markPower int64, 
+  initialSalt []byte)
+  *MerkleManager` Returns a MerkleManager using the given initial salt
+  
+* `func (m MerkleManager) Copy(salt []byte)` Effectively points the 
+  MerkleManager to point to a MerkleTree associated with the given salt
+* `func (m MerkleManager) SetBlockIndex()`    
   
    create a new SMT object to manage a Merkle tree   
 ### Construction
