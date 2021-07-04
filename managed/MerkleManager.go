@@ -81,9 +81,11 @@ func (m *MerkleManager) Init(DBManager *database.Manager, markPower int64) {
 
 // SetBlockIndex
 // Keep track of where the blocks are in the Merkle Tree.
+// ToDo: We have to actually enforce the block over all the chains.  Blocks remain broken.
 func (m *MerkleManager) SetBlockIndex() {
-	holdSalt := m.CurrentSalt()                                                // Hold the current salt
-	defer func() { m.DBManager.SetSalt(holdSalt) }()                           // and reset the salt when we are done
+	holdSalt := m.CurrentSalt()                      // Hold the current salt
+	defer func() { m.DBManager.SetSalt(holdSalt) }() // and reset the salt when we are done
+
 	m.DBManager.SetSalt([]byte{})                                              // BlockIndex is handled outside salts
 	bi := new(BlockIndex)                                                      // Create a blockIndex to store
 	bi.BlockIndex = m.BlockIndex                                               // Save the current BlockIndex
