@@ -1,4 +1,4 @@
-package smt
+package managed
 
 import (
 	"crypto/sha256"
@@ -12,11 +12,48 @@ import (
 )
 
 type MerkleManager struct {
-	DBManager *database.Manager // Database for holding the Merkle Tree
-	MS        MerkleState       // The Merkle State Managed
-	MarkPower int64             // log2 of the MarkFreq
-	MarkFreq  int64             // The count between Marks
-	MarkMask  int64             // The binary mask to detect Mark boundaries
+	DBManager  *database.Manager // Database for holding the Merkle Tree
+	MS         MerkleState       // The Merkle State Managed
+	BlockIndex int64             // Index of the highest completed block
+	MarkPower  int64             // log2 of the MarkFreq
+	MarkFreq   int64             // The count between Marks
+	MarkMask   int64             // The binary mask to detect Mark boundaries
+}
+
+// NewMerkleManager
+// Create a new MerkleManager given a DBManager and markPower.
+// The DBManager handles the persistence for the Merkle Tree under management
+// The markPower is the log 2 frequency used to collect states in the Merkle Tree
+func NewMerkleManager(
+	DBManager *database.Manager, //             database that can be shared with other MerkleManager instances
+	markPower int64, //                         log 2 of the frequency of creating marks in the Merkle Tree
+	initialSalt []byte) *MerkleManager { //     Initial Salt identifying a Merkle Tree
+
+	mm := new(MerkleManager)
+	mm.Init(DBManager, markPower)
+	mm.DBManager.SetSalt(initialSalt)
+	return mm
+}
+
+// Copy
+// Create a copy of the MerkleManager.  The MerkleManager can be pointed to
+// particular merkle trees by setting the Salt.
+func (m MerkleManager) Copy(salt []byte) *MerkleManager {
+	m.DBManager = m.DBManager.Copy(salt)       // Point a DBManager at the specified salt
+	m.MS = *m.GetState(m.DBManager.GetCount()) // Get the Merkle State from the database
+	m.BlockIndex = 0                           // Clear BlockIndex since elements could be zero
+	if m.MS.Count > 0 {                        // If MS has elements, Get the BlockIndex
+		m.BlockIndex = m.DBManager.GetInt64("BlockIndex", "", []byte{}) // Get the highest block index
+	}
+	m.MS.InitSha256() // Use Sha256 TODO: Actually update the library to be able to use various hash algorithms
+	return &m
+}
+
+// CurrentSalt
+// Return the current salt used by the MerkleManager
+func (m *MerkleManager) CurrentSalt() (salt []byte) {
+	salt = append(salt, m.DBManager.Salt...)
+	return salt
 }
 
 // getElementCount()
@@ -29,16 +66,37 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 // Create a Merkle Tree manager to collect hashes and build a Merkle Tree and a
 // database behind it to validate hashes and create receipts
 func (m *MerkleManager) Init(DBManager *database.Manager, markPower int64) {
+	_ = DBManager.AddBucket("BlockIndex")               // Add a bucket to track block indexes
 	m.DBManager = DBManager                             // Save the database
 	m.DBManager.BeginBatch()                            // Start our batch mode
 	m.MarkPower = markPower                             // Number of levels in the Merkle Tree to be indexed
 	m.MarkFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
-	m.MarkMask = (m.MarkFreq - 1)                       // Mask to the index of the next mark (0 if at a mark)
+	m.MarkMask = m.MarkFreq - 1                         // Mask to the index of the next mark (0 if at a mark)
 	m.MS = *m.GetState(m.DBManager.GetCount())          // Get the Merkle State from the database
-	m.MS.InitSha256()                                   // Use Sha256
+	if m.MS.Count > 0 {
+		m.BlockIndex = m.DBManager.GetInt64("BlockIndex", "", []byte{}) // Get the highest block index
+	}
+	m.MS.InitSha256() // Use Sha256
 }
 
-// Update
+// SetBlockIndex
+// Keep track of where the blocks are in the Merkle Tree.
+func (m *MerkleManager) SetBlockIndex() {
+	holdSalt := m.CurrentSalt()                                                // Hold the current salt
+	defer func() { m.DBManager.SetSalt(holdSalt) }()                           // and reset the salt when we are done
+	m.DBManager.SetSalt([]byte{})                                              // BlockIndex is handled outside salts
+	bi := new(BlockIndex)                                                      // Create a blockIndex to store
+	bi.BlockIndex = m.BlockIndex                                               // Save the current BlockIndex
+	bi.ElementIndex = m.MS.Count - 1                                           // Save the ElementIndex (count-1)
+	m.DBManager.Put("BlockIndex", "", Int64Bytes(bi.BlockIndex), bi.Marshal()) // Put the BlockIndex in the database
+	m.DBManager.Put("BlockIndex", "", []byte{}, bi.Marshal())                  // Mark this as the new highest block
+	m.BlockIndex++                                                             // BlockIndex is now one greater
+}
+
+// CurrentBlockIndex
+// Return the current block index
+
+// AddHash
 // Pull from the HashFeed channel and add to the Merkle Tree managed by the MerkleManager
 func (m *MerkleManager) AddHash(hash Hash) {
 	// Keep the index of every element added to the Merkle Tree, but only of the first instance
@@ -59,7 +117,10 @@ func (m *MerkleManager) AddHash(hash Hash) {
 		MSCount = Int64Bytes(m.MS.Count)                                  // Update MSCount
 		_ = m.DBManager.PutBatch("Element", "", []byte("Count"), MSCount) // Put the Element Count in DB
 		_ = m.DBManager.PutBatch("States", "", MSCount, state)            // Save Merkle State at n*MarkFreq
-	} else {
+		//                   Saving the count in the database actually gives the index of the
+		//                   next element in the merkle tree.  This is because counting is one based,
+		//                   and indexing is zero based.  There is an implied count-1 going on here.
+	} else { //
 		m.MS.AddToMerkleTree(hash) //                                            Always add to the merkle tree
 	}
 
