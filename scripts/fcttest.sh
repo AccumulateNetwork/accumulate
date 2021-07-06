@@ -8,8 +8,8 @@ script='echo {\"jsonrpc\": \"2.0\", \"id\": $1, \"method\": \"factoid-submit\", 
 
 for num in `seq 1 1`; do 
     payload="'`/bin/sh -c "$script" -- "$num"`'"
-    curlit="curl -X POST -H 'content-type:text/plain;' http://192.168.0.102:1234/v2 --data-binary $payload"
-    #curlit="curl -X POST -H 'content-type:text/plain;' http://localhost:1234/v2 --data-binary $payload"
+    #curlit="curl -X POST -H 'content-type:text/plain;' http://192.168.0.102:1234/v2 --data-binary $payload"
+    curlit="curl -X POST -H 'content-type:text/plain;' http://localhost:1234/v2 --data-binary $payload"
     /bin/sh -c "$curlit"  & 
     num=$(($num+$one))
 done
