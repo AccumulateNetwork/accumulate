@@ -84,12 +84,12 @@ func (v *FactoidValidator) processFctTx(data []byte) ([]byte, error) {
 
 
 
-	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
-	if elapsed > v.timeofvalidity || elapsed < 0 {
-		//need to log instaed
-		err := fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
-		return nil, err
-	}
+	//elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
+	//if elapsed > v.timeofvalidity || elapsed < 0 {
+	//	//need to log instaed
+	//	err := fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
+	//	return nil, err
+	//}
 
 	//need to check balances
 	//inp := tx.FCTInputs
