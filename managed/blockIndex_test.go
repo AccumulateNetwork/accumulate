@@ -3,24 +3,28 @@ package managed
 import "testing"
 
 func TestBlockIndex_Marshal(t *testing.T) {
-	var data []byte
-	bi := new(BlockIndex)
-	for i := int64(0); i < 1024; i++ {
-		bi.BlockIndex = i
-		bi.MainIndex = i * 3
-		bi.PendingIndex = i * 2
-		data = append(data, bi.Marshal()...)
+
+	const numberStructs = 1024
+
+	var data []byte //                             Serialize numberStructs of BlockIndex into data
+
+	bi := new(BlockIndex)                       // Use just one BlockIndex struct
+	for i := int64(0); i < numberStructs; i++ { // Serialize that struct numberStructs times
+		bi.BlockIndex = i                    //    Change all the data in the struct. Set BlockIndex
+		bi.MainIndex = i * 3                 //    Set MainIndex
+		bi.PendingIndex = i * 2              //    Set PendingIndex (all to different values)
+		data = append(data, bi.Marshal()...) //    Marshal bi into data, update data, and keep looping
 	}
 
-	for i := int64(0); i < 1024; i++ {
-		data = bi.UnMarshal(data)
-		if bi.BlockIndex != i {
+	for i := int64(0); i < numberStructs; i++ { // Now validate them by repeatedly unmarshalling bi
+		data = bi.UnMarshal(data) //               Unmarshal struct
+		if bi.BlockIndex != i {   //               Check that it is the same as what we set (use same scalar on i)
 			t.Fatalf("error with the BlockIndex value %d", i)
 		}
-		if bi.MainIndex != i*3 {
+		if bi.MainIndex != i*3 { //                Check that it is the same as what we set (use same scalar on i)
 			t.Fatalf("error with the ElementIndex Value %d", i*3)
 		}
-		if bi.PendingIndex != i*2 {
+		if bi.PendingIndex != i*2 { //             Check that it is the same as what we set (use same scalar on i)
 			t.Fatalf("error with the ElementIndex Value %d", i*3)
 		}
 	}
