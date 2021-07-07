@@ -84,11 +84,11 @@ func (m *MerkleState) PadPending() {
 
 // Equal
 // Compares one MerkleState to another, and returns true if they are the same
-func (m MerkleState) Equal(m2 MerkleState) (errorFlag bool) {
+func (m MerkleState) Equal(m2 MerkleState) (isEqual bool) {
 	// Any errors indicate at m is not the same as m2, or either m or m2 or both is malformed.
 	defer func() {
 		if recover() != nil {
-			errorFlag = false
+			isEqual = false
 			return
 		}
 	}()
@@ -184,12 +184,13 @@ func GetSha256() func(data []byte) Hash {
 
 // InitSha256
 // Set the hashing function of this Merkle State to Sha256
+// TODO: Actually update the library to be able to use various hash algorithms
 func (m *MerkleState) InitSha256() {
 	m.HashFunction = GetSha256()
 }
 
 // AddToMerkleTree
-// Add a Hash to the chain and incrementally build the MerkleState
+// Add a Hash to the merkle tree and incrementally build the MerkleState
 func (m *MerkleState) AddToMerkleTree(hash_ [32]byte) {
 	hash := Hash(hash_)
 
@@ -207,9 +208,10 @@ func (m *MerkleState) AddToMerkleTree(hash_ [32]byte) {
 }
 
 // GetMDRoot
-// Close off the Merkle Directed Acyclic Graph (Merkle DAG or MerkleState)
-// We take any trailing hashes in MerkleState, hash them up and combine to create the Merkle Dag Root.
-// Getting the closing ListMDRoot is non-destructive, which is useful for some use cases.
+// Compute the Merkle Directed Acyclic Graph (Merkle DAG or MerkleState) for
+// the MerkleState at this point We take any trailing hashes in MerkleState,
+// hash them up and combine to create the Merkle Dag Root. Getting the closing
+// ListMDRoot is non-destructive, which is useful for some use cases.
 func (m *MerkleState) GetMDRoot() (MDRoot *Hash) {
 	// We go through m.MerkleState and combine any left over hashes in m.MerkleState with each other and the MR.
 	// If this is a power of two, that's okay because we will pick up the MR (a balanced MerkleState) and

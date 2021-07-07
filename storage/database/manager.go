@@ -40,7 +40,6 @@ var SaltMutex sync.Mutex // Creating new Salts has to be atomic
 // the salt must be cleared to access the Salt bucket and its labels.  Then
 // the salt can be set so the appropriate buckets can be accessed under
 // the salt
-
 func (m Manager) SetSalt(salt []byte) {
 
 	m.Salt = m.Salt[:0]                                 // clear the salt to get salt data
@@ -59,6 +58,16 @@ func (m Manager) SetSalt(salt []byte) {
 		SaltMutex.Unlock()
 	}
 	m.Salt = append(m.Salt[:0], salt...) // copy the given salt over the current salt
+}
+
+// CurrentSalt
+// Return the current salt used by the MerkleManager
+func (m *Manager) CurrentSalt() (salt []byte) {
+	if salt == nil {
+		return nil
+	}
+	salt = append(salt, m.Salt...)
+	return salt
 }
 
 // Init

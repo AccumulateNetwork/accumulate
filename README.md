@@ -99,27 +99,76 @@ merkle trees can be nested will not be illustrated.  If the
 root MerKle Tree can hold the DAGs of other Merkle Trees, those Merkle Trees
 can also hold DAGS of other Merkle Trees.
   
-## SMT API
+## SMT/managed/MerkleManager
+The MerkleManager is used to build and persist Merkle Trees.  Features 
+include the dynamic construction of Merkle Trees, saving such Merkle Trees 
+to a specified key value store, handling of multiple Merkle Trees, maintenance 
+of shadow Merkle Trees, and more.
+
 * `func  NewMerkleManager(DBManager *database.Manager, markPower int64, 
-  initialSalt []byte)
-  *MerkleManager` Returns a MerkleManager using the given initial salt
-  
+  Salt []byte) *MerkleManager` Returns a MerkleManager using the 
+  given initial salt
 * `func (m MerkleManager) Copy(salt []byte)` Effectively points the 
   MerkleManager to point to a MerkleTree associated with the given salt
-* `func (m MerkleManager) SetBlockIndex()`    
+  `func (m MerkleManager) CurrentSalt() (salt []byte)` Returns the current 
+  salt in used by the MerkleManagher
+* `func (m MerkleManager) GetLementCount() (elementCount int64)` Returns the 
+  count of elements in the Stateful Merkle Tree currently under the focus of 
+  the MerkleManager
+* `func (m MerkleManager) SetBlockIndex(blockIndex int)` Mark this point in the 
+  Merkle 
+  Tree as the last element in a block
+* `func (m MerkleManager) GetState(element int64)` Get the state of the 
+  MerkleTree at the given 
+  element index.  If no state was stored at that index, returns nil.  Note
+  that the frequency at which states are stored is determined by the mark power.
+* `func (m MerkleManager) GetNext(element int64)` Return the element added 
+  at this index.  We store
+  the state just prior to moving into the power of 2, and the element that
+  when added brings the merkle tree to a power of 2 (frequency determined by
+  the mark power).  This is key to generating receipts efficently from a 
+  stateful merkle tree
+* `func (m MerkleManager) AddHash(hash Hash)` Adds a hash to the current
+      MerkleTree under management
+* `func (m MerkleManager)  AddHashString(hash string)`  Does a conversion of 
+  a hex string to a binary hash before calling AddHash.  Panics if provided 
+  a string that is not a valid hex string.
   
-   create a new SMT object to manage a Merkle tree   
-### Construction
- 
-* `func (m \*SMT) AddHash([]byte)` add a hash to the merkle tree
-* `func (m \*SMT) GetState() (index int64, state [][]byte)` Returns State 
-         of Merkle tree.  The index of the last hash added, the Merkle Tree state, and the 
-         ordered list of entry hashes as they were added to the Merkle Tree
-* `func (m \*SMT) SetState(index int64, state [][]byte)` Sets the state 
-         of SMT to allow building on an existing Merkle Tree
-* `func (m \*SMT) GetDagRoot() []byte` Returns the Dag Root for the 
-         current state of the Merkle Tree
-   
+## SMT/managed/Receipt
+Receipts allow the generation and validation of the elements in a Merkle 
+Tree against other, later elements in the Merkle Tree.  The use case this 
+supports is the dynamic construction of Merkle Trees that are anchored over 
+time either to other merkle trees or to blockchains.
+* `GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt` 
+  Given the hash of an element in the Merkle Tree, and the hash of an 
+  element that has been anchored externally, compute the receipt of the 
+  element hash.  Note that the element index must be less than or equal to 
+  the anchor index. If either hash is not a member of the merkle tree, or 
+  the hash of the element has an index higher than the index of the anchor, 
+  a nil reciept is returned.
+* `(r Receipt) Validate` applies the hashes as specified by the receipt and 
+  validates that the element hash is proven by the anchor hash.  
+
+## SMT/managed/MerkleState
+Supports the dynamic construction of Merkle Trees.  Note that the 
+MerkleState only handles the "storm front" of merkle tree construction, such 
+that the state is updated as elements are added.  The MerkleState object 
+does not persist the elements of a merkle tree. This is done externally, and 
+in this library this is done by the MerkleManager.
+* `(m MerkleState) Copy()` Returns a new copy of the MerkleState
+* `(m MerkleState) CopyAndPoint()` Returns a pointer to a new copy of the 
+  MerkleState
+* `(m MerkleState) Equal(m2 MerkleState) (isEqual bool)` Returns true if the 
+  MerkleState is equal to the m2 MerkleState
+* `(m MerkleState) Marshal() (MSBytes[]byte)` Returns a serialized version 
+  of the MerkleState
+* `(m *MerkleState) UnMarshal(MSBytes []byte)` Decodes the MerkleState from 
+  the given bytes and updates the MerkleState to reflect that state.  
+* `(m *MerkleState) AddToMerkleTree(hash_ [32]byte` Add a given Hash to the 
+  Merkle Tree and update the Merkle State
+  
+
+
 ### Build 
 
 * `func (m \*SMT) EndBlock() (dagRoot []byte, index int64, state [][]byte)` 

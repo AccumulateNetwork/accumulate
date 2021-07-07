@@ -43,7 +43,7 @@ func GetElementState(
 	nextMarkIndex = currentIndex + manager.MarkFreq        // The next mark has the list of elements to add including ours
 	nextMark = manager.GetState(nextMarkIndex)             // Get that NextMark state. Now that we bracket element, search
 	if nextMark == nil {                                   // If there is no state at the next mark,
-		nextMark = manager.MS.CopyAndPoint() // then just use the last state of the Merkle Tree
+		nextMark = manager.MainChain.MS.CopyAndPoint() // then just use the last state of the Merkle Tree
 	}
 	for i, v1 := range nextMark.HashList { // Go through the pending elements
 		nextMarkIndex = int64(i) //                      Return where we are in this HashList for next step
@@ -226,7 +226,7 @@ func (r *Receipt) String() string {
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
 // after the element, or even the element itself.
 func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
-	manager.DBManager.EndBatch()                 // Make sure all batched writes are flushed to disk
+	manager.MainChain.Manager.EndBatch()         // Make sure all batched writes are flushed to disk
 	elementIndex := manager.GetIndex(element[:]) // Get the index of the element in the Merkle Tree; -1 if not found
 	anchorIndex := manager.GetIndex(anchor[:])   // Get the index of the anchor in the Merkle Tree; -1 if not found
 	if elementIndex == -1 || anchorIndex == -1 { // Both the element and the anchor must be in the Merkle Tree
@@ -264,4 +264,24 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
 			return receipt
 		}
 	}
+}
+
+// Receipt
+// Take a receipt and validate that the
+func (r Receipt) Validate() bool {
+	anchor := r.Element // To begin with, we start with the object as the anchor
+	// Now apply all the path hashes to the anchor
+	for _, node := range r.Nodes {
+		// Need a [32]byte to slice
+		hash := [32]byte(node.Hash)
+		if node.Right {
+			// If this hash comes from the right, apply it that way
+			anchor = sha256.Sum256(append(anchor[:], hash[:]...))
+		} else {
+			// If this hash comes from the left, apply it that way
+			anchor = sha256.Sum256(append(hash[:], anchor[:]...))
+		}
+	}
+	// In the end, anchor should be the same hash the receipt expects.
+	return anchor == r.Anchor
 }
