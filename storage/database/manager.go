@@ -73,7 +73,7 @@ func (m *Manager) CurrentSalt() (salt []byte) {
 // Init
 // Initialize the Manager with a specified underlying database. databaseTag
 // can currently be either badger or memory.  The filename indicates where
-// the database is persisted (ignored by memory).
+// the database is persisted (ignored by memory).PendingChain
 func (m *Manager) Init(databaseTag, filename string) error {
 	// Set up Buckets for use by the Stateful Merkle Trees
 	m.Buckets = make(map[string]byte) // Buckets hold sets of key value pairs

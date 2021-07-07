@@ -1,6 +1,7 @@
 package managed
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -69,12 +70,17 @@ func NewMerkleManager(
 // particular merkle trees by setting the Salt.  This is a brand new MerkleManager pointed
 // towards a particular chain and its shadow chains
 func (m MerkleManager) Copy(salt []byte) *MerkleManager {
-	m.MainChain.Manager = m.MainChain.Manager.Copy(salt)         // Point a MainChain.Manager at the specified salt
-	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount()) // Get the Merkle State from the database
-	m.MainChain.MS.InitSha256()                                  // Use Sha256
-	m.MainChain.Manager = m.MainChain.Manager.Copy(salt)         // Point a MainChain.Manager at the specified salt
-	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount()) // Get the Merkle State from the database
-	m.MainChain.MS.InitSha256()                                  // Use Sha256
+	bSalt := add2Salt(salt, BlkIdxOff)                                 // salt for block Index shadow chain
+	pSalt := add2Salt(salt, PendingOff)                                // salt for pending shadow chain
+	m.MainChain.Manager = m.MainChain.Manager.Copy(salt)               // MainChain.Manager uses salt
+	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount())       // Get Main Merkle State from the database
+	m.MainChain.MS.InitSha256()                                        // Use Sha256
+	m.BlkIdxChain.Manager = m.BlkIdxChain.Manager.Copy(bSalt)          // BlkIdxChain.Manager uses bSalt
+	m.BlkIdxChain.MS = *m.GetState(m.BlkIdxChain.Manager.GetCount())   // Get block Merkle State from the database
+	m.BlkIdxChain.MS.InitSha256()                                      // Use Sha256
+	m.PendingChain.Manager = m.PendingChain.Manager.Copy(pSalt)        // PendingChain uses pSalt
+	m.PendingChain.MS = *m.GetState(m.PendingChain.Manager.GetCount()) // Get Pending Merkle State from the database
+	m.PendingChain.MS.InitSha256()                                     // Use Sha256
 	return &m
 }
 
@@ -91,28 +97,37 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 // This is an internal routine; calling init outside of constructing the first
 // reference to the MerkleManager doesn't make much sense.
 func (m *MerkleManager) init(DBManager *database.Manager, salt []byte, markPower int64) {
-	m.RootDBManager = DBManager.Copy(nil)                               // Add a Database manager without a salt
-	_ = DBManager.AddBucket("BlockIndex")                               // Add a bucket to track block indexes
+	m.RootDBManager = DBManager.Copy(nil) // Add a Database manager without a salt
+	_ = DBManager.AddBucket("BlockIndex") // Add a bucket to track block indexes
+	_ = DBManager.AddBucket("Transactions")
 	m.MainChain.Manager = DBManager.Copy(salt)                          // Save the database
 	m.PendingChain.Manager = DBManager.Copy(add2Salt(salt, PendingOff)) //
 	m.BlkIdxChain.Manager = DBManager.Copy(add2Salt(salt, BlkIdxOff))   //
 	m.MainChain.Manager.BeginBatch()                                    // Start our batch mode
-	m.MarkPower = markPower                                             // Number of levels in the Merkle Tree to be indexed
+	m.MarkPower = markPower                                             // # levels in Merkle Tree to be indexed
 	m.MarkFreq = int64(math.Pow(2, float64(markPower)))                 // The number of elements between indexes
-	m.MarkMask = m.MarkFreq - 1                                         // Mask to the index of the next mark (0 if at a mark)
-	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount())        // Get the Merkle State from the database
+	m.MarkMask = m.MarkFreq - 1                                         // Mask to index of next mark (0 if at a mark)
+	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount())        // Get the main Merkle State from the database
 	m.MainChain.MS.InitSha256()                                         // Use Sha256
+	m.BlkIdxChain.MS = *m.GetState(m.BlkIdxChain.Manager.GetCount())    // Get block Merkle State from the database
+	m.BlkIdxChain.MS.InitSha256()                                       // Use Sha256
+	m.PendingChain.MS = *m.GetState(m.PendingChain.Manager.GetCount())  // Get pending Merkle State from the database
+	m.PendingChain.MS.InitSha256()                                      // Use Sha256
+
 }
 
 // SetBlockIndex
 // Keep track of where the blocks are in the Merkle Tree.
-// ToDo: We have to actually enforce the block over all the chains.  Blocks remain broken.
 func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
-	bi := new(BlockIndex)                                                           // Create blockIndex to store
-	bi.BlockIndex = blockIndex                                                      // Save current BlockIndex
-	bi.MainIndex = m.MainChain.MS.Count - 1                                         // Save MainIndex (count-1)
-	_ = m.RootDBManager.Put("BlockIndex", "", Int64Bytes(blockIndex), bi.Marshal()) // BlockIndex -> database
-	_ = m.RootDBManager.Put("BlockIndex", "", []byte{}, bi.Marshal())               // Mark as highest block
+	bi := new(BlockIndex)                                                        // Create blockIndex to store
+	bi.BlockIndex = blockIndex                                                   // Save current BlockIndex
+	bi.MainIndex = m.MainChain.MS.Count - 1                                      // Save MainIndex (count-1)
+	bi.PendingIndex = m.PendingChain.MS.Count - 1                                // Save the PendingIndex (count-1)
+	bbi := bi.Marshal()                                                          // Marshal the Block Index record
+	biHash := sha256.Sum256(bbi)                                                 // Get the Hash of the bi
+	m.BlkIdxChain.MS.AddToMerkleTree(biHash)                                     // Add the bi hash to the BlkIdxChain
+	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", Int64Bytes(blockIndex), bbi) // BlockIndex ->
+	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", []byte{}, bbi)               // Mark as highest block
 }
 
 // GetState

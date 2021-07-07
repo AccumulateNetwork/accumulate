@@ -98,6 +98,40 @@ Due to the limitations of a document like this, flushing out how deep the
 merkle trees can be nested will not be illustrated.  If the
 root MerKle Tree can hold the DAGs of other Merkle Trees, those Merkle Trees
 can also hold DAGS of other Merkle Trees.
+
+## Database
+
+The database used underneath the MerkleManager is a key value store that 
+uses the concepts of salts, buckets, and labels to organize the key value 
+pairs generated in the process of building multiple Merkle Trees.
+
+Salts provide a way of separating one Merkle Tree's data and hashes from 
+another. Some overall tracking of the contents of the database is done 
+without a salt, i.e. at the root level.  Most if not all salts will be the 
+ChainID (hash of the chain URL).
+
+* **Salt** *Root, no Salt*, no label, no key: Index Count
+   * **Index2Salt** Index / Salt  -- Given a Salt Index returns a Salt
+   * **Salt2Index** Salt / Index -- Given a Salt returns a Salt Index
+* **ElementIndex** *Salted by ChainID* element hash / element Index
+* **States** *Salted by ChainID* element index / Merkle State -- Given an 
+  element index in a Merkle Tree, return the Merkle State at that point. Not 
+  all element indexes are defined
+* **NextElement** *Salted by ChainID* element index / next element -- 
+  Returns the next element to be added to the Merkle Tree at a given index
+* **Element** *Salted by ChainID* no label, no key: Count of elements in the 
+  merkle tree
+  
+Buckets used by the MerkleManager:
+
+* **BucketIndex** *Salted by ChainID* element index / BlockIndex struct -- A 
+  BlockIndex struct has three indexes: The BVC block index, the Main chain 
+  index, and the Pending Index.  Either of the Main chain index or the 
+  Pending Index can be -1 (indicating no entries in this block, but not both.  
+  * **\<blockIndex\>** -- Using the block index as a key, returns the 
+    BlockIndex struct at that index in the Block Index Chain (BlxIdxChain).
+  * **\<none\>** -- Providing no label or key, returns the highest 
+    BlockIndex in the Block Index Chain (BlxIdxChain)
   
 ## SMT/managed/MerkleManager
 The MerkleManager is used to build and persist Merkle Trees.  Features 
@@ -168,13 +202,6 @@ in this library this is done by the MerkleManager.
   Merkle Tree and update the Merkle State
   
 
-
-### Build 
-
-* `func (m \*SMT) EndBlock() (dagRoot []byte, index int64, state [][]byte)` 
-             
-   ends the current block by adding the timestamp and header to the Merkle tree to SMT.  
-   The `dagRoot` sans the transaction
 
 ### Validation
 ```Go
