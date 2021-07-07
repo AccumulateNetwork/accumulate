@@ -7,7 +7,8 @@ func TestBlockIndex_Marshal(t *testing.T) {
 	bi := new(BlockIndex)
 	for i := int64(0); i < 1024; i++ {
 		bi.BlockIndex = i
-		bi.ElementIndex = i * 3
+		bi.MainIndex = i * 3
+		bi.PendingIndex = i * 2
 		data = append(data, bi.Marshal()...)
 	}
 
@@ -16,7 +17,10 @@ func TestBlockIndex_Marshal(t *testing.T) {
 		if bi.BlockIndex != i {
 			t.Fatalf("error with the BlockIndex value %d", i)
 		}
-		if bi.ElementIndex != i*3 {
+		if bi.MainIndex != i*3 {
+			t.Fatalf("error with the ElementIndex Value %d", i*3)
+		}
+		if bi.PendingIndex != i*2 {
 			t.Fatalf("error with the ElementIndex Value %d", i*3)
 		}
 	}

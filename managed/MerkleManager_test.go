@@ -1,13 +1,21 @@
-package managed_test
+package managed
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"math"
 	"testing"
 
-	. "github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
+
+func TestAddSalt(t *testing.T) {
+	Salt := sha256.Sum256([]byte{1})
+	Salt2 := add2Salt(Salt[:], 1)
+	if bytes.Equal(Salt[:], Salt2) {
+		t.Errorf("These should not be equal \n%x \n%x", Salt, Salt2)
+	}
+}
 
 func TestIndexing(t *testing.T) {
 
@@ -19,8 +27,8 @@ func TestIndexing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	MM1 := new(MerkleManager)
-	MM1.Init(dbManager, 2)
+	salt := sha256.Sum256([]byte("root"))
+	MM1 := NewMerkleManager(dbManager, salt[:], 2)
 
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
@@ -28,7 +36,7 @@ func TestIndexing(t *testing.T) {
 		MM1.AddHash(hash)
 		hash = sha256.Sum256(hash[:])
 		if (i+1)%blocklen == 0 {
-			MM1.SetBlockIndex()
+			MM1.SetBlockIndex(int64(i) / blocklen)
 		}
 	}
 
@@ -36,11 +44,11 @@ func TestIndexing(t *testing.T) {
 	for i := int64(0); i < testlen; i++ {
 		if (i+1)%blocklen == 0 {
 			bi := new(BlockIndex)
-			data := MM1.DBManager.Get("BlockIndex", "", Int64Bytes(i/blocklen))
+			data := MM1.MainChain.Manager.Get("BlockIndex", "", Int64Bytes(i/blocklen))
 			bi.UnMarshal(data)
-			if bi.ElementIndex != i {
-				t.Fatalf("the ElementIndex doesn't match v %d i %d",
-					bi.ElementIndex, i)
+			if bi.MainIndex != i {
+				t.Fatalf("the MainIndex doesn't match v %d i %d",
+					bi.MainIndex, i)
 			}
 			if bi.BlockIndex != i/blocklen {
 				t.Fatalf("the BlockIndex doesn't match v %d i/blocklen %d",
@@ -57,10 +65,9 @@ func TestIndexing(t *testing.T) {
 		hash = sha256.Sum256(hash[:])
 	}
 
-	MM2 := new(MerkleManager)
-	MM2.Init(dbManager, 2)
+	MM2 := NewMerkleManager(dbManager, []byte("root"), 2)
 
-	if MM1.MS.Count != MM2.MS.Count {
+	if MM1.MainChain.MS.Count != MM2.MainChain.MS.Count {
 		t.Fatal("failed to properly load from a database")
 	}
 
@@ -90,24 +97,23 @@ func TestMerkleManager(t *testing.T) {
 	MarkFreq := int64(math.Pow(2, float64(MarkPower)))
 	MarkMask := MarkFreq - 1
 
-	// Set up a MerkleManager that uses a MarkPower of 2
-	MerkleManager := new(MerkleManager)
-	MerkleManager.Init(dbManager, MarkPower)
+	// Set up a MM1 that uses a MarkPower of 2
+	MM1 := NewMerkleManager(dbManager, []byte("root"), MarkPower)
 
-	if MarkPower != MerkleManager.MarkPower ||
-		MarkFreq != MerkleManager.MarkFreq ||
-		MarkMask != MerkleManager.MarkMask {
+	if MarkPower != MM1.MarkPower ||
+		MarkFreq != MM1.MarkFreq ||
+		MarkMask != MM1.MarkMask {
 		t.Fatal("Marks were not correctly computed")
 	}
 
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
 	for i := 0; i < testlen; i++ {
-		MerkleManager.AddHash(hash)
+		MM1.AddHash(hash)
 		hash = sha256.Sum256(hash[:])
 	}
 
-	if MerkleManager.GetElementCount() != testlen {
+	if MM1.GetElementCount() != testlen {
 		t.Fatal("added elements in merkle tree don't match the number we added")
 	}
 
@@ -115,8 +121,8 @@ func TestMerkleManager(t *testing.T) {
 
 	// Check the Indexing
 	for i := int64(0); i < testlen; i++ {
-		ms := MerkleManager.GetState(i)
-		m := MerkleManager.GetNext(i)
+		ms := MM1.GetState(i)
+		m := MM1.GetNext(i)
 		if (i+1)&MarkMask == 0 {
 			if ms == nil {
 				t.Fatal("should have a state at Mark point - 1 at ", i)
