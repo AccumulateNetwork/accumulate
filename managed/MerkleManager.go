@@ -55,6 +55,10 @@ func NewMerkleManager(
 	initialSalt []byte, //               Initial Salt identifying a Merkle Tree
 	markPower int64) *MerkleManager { // log 2 of the frequency of creating marks in the Merkle Tree
 
+	if len(initialSalt) != 32 { // Panic salt is bad
+		panic(fmt.Sprintf("salt must be 32 bytes long. got %x", initialSalt))
+	}
+
 	mm := new(MerkleManager)
 	mm.init(DBManager, initialSalt, markPower)
 	return mm

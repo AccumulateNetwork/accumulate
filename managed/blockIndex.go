@@ -12,7 +12,7 @@ type BlockIndex struct {
 // serialize a BlockIndex into a slice of data
 func (b *BlockIndex) Marshal() (data []byte) {
 	data = append(Int64Bytes(b.BlockIndex), Int64Bytes(b.MainIndex)...)
-	data = append(Int64Bytes(b.BlockIndex), Int64Bytes(b.PendingIndex)...)
+	data = append(data, Int64Bytes(b.PendingIndex)...)
 	return data
 }
 

@@ -65,7 +65,7 @@ func TestIndexing(t *testing.T) {
 		hash = sha256.Sum256(hash[:])
 	}
 
-	MM2 := NewMerkleManager(dbManager, []byte("root"), 2)
+	MM2 := NewMerkleManager(dbManager, salt[:], 2)
 
 	if MM1.MainChain.MS.Count != MM2.MainChain.MS.Count {
 		t.Fatal("failed to properly load from a database")
@@ -98,7 +98,8 @@ func TestMerkleManager(t *testing.T) {
 	MarkMask := MarkFreq - 1
 
 	// Set up a MM1 that uses a MarkPower of 2
-	MM1 := NewMerkleManager(dbManager, []byte("root"), MarkPower)
+	salt := sha256.Sum256([]byte("root"))
+	MM1 := NewMerkleManager(dbManager, salt[:], MarkPower)
 
 	if MarkPower != MM1.MarkPower ||
 		MarkFreq != MM1.MarkFreq ||
