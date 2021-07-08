@@ -3,7 +3,9 @@ package managed
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"math"
+	"math/rand"
 	"testing"
 
 	"github.com/AccumulateNetwork/SMT/storage/database"
@@ -86,7 +88,7 @@ func TestIndexing(t *testing.T) {
 
 func TestMerkleManager(t *testing.T) {
 
-	const testlen = 1024
+	const testLen = 1024
 
 	dbManager := new(database.Manager)
 	if err := dbManager.Init("memory", ""); err != nil {
@@ -109,19 +111,19 @@ func TestMerkleManager(t *testing.T) {
 
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
-	for i := 0; i < testlen; i++ {
+	for i := 0; i < testLen; i++ {
 		MM1.AddHash(hash)
 		hash = sha256.Sum256(hash[:])
 	}
 
-	if MM1.GetElementCount() != testlen {
+	if MM1.GetElementCount() != testLen {
 		t.Fatal("added elements in merkle tree don't match the number we added")
 	}
 
 	dbManager.EndBatch()
 
 	// Check the Indexing
-	for i := int64(0); i < testlen; i++ {
+	for i := int64(0); i < testLen; i++ {
 		ms := MM1.GetState(i)
 		m := MM1.GetNext(i)
 		if (i+1)&MarkMask == 0 {
@@ -148,4 +150,61 @@ func TestMerkleManager(t *testing.T) {
 		}
 
 	}
+}
+
+func TestBlockIndexes(t *testing.T) {
+	const testLen = 10240 //                                         Our iterations
+
+	dbManager := new(database.Manager)                   //          Allocate a memory database
+	if err := dbManager.Init("memory", ""); err != nil { //
+		t.Fatal(err) //
+	} //
+	chainID := sha256.Sum256([]byte("one"))          //              Create a MerkleManager with a particular salt
+	MM := NewMerkleManager(dbManager, chainID[:], 4) //
+
+	rand.Seed(1)                   //                                Start rand from a particular seed
+	blkCnt := int64(1)             //                                This will be our block count
+	for i := 0; i < testLen; i++ { //                                Then for the specified number of iterations
+		v := rand.Int63()                                        //  Assign to v so we can see the number
+		MM.AddHash(sha256.Sum256([]byte(fmt.Sprintf(" %d", v)))) //    if  debugging.  Make a hash with it.
+		if rand.Intn(30) == 0 {                                  //  About 1 out of 30 times...
+			MM.SetBlockIndex(blkCnt) //                              Pretend this is the end of the block
+			blkCnt++                 //                              Of course, the next round the block incs.
+			if rand.Intn(100) < 15 { //                                About 15 percent of the time, skip a block
+				blkCnt++ //                                            skipping
+			} //
+		} //
+		if rand.Intn(10) == 0 { //                                              1 out of 10 times, add a pending entry
+			v = rand.Int63()                                                //  Make the entry (use v to see)
+			MM.AddPendingHash(sha256.Sum256([]byte(fmt.Sprintf(" %d", v)))) //  Add the Hash
+		} //
+	}
+
+	rand.Seed(1)                          //           Here is the trick: Reset rand seed to get the same sequence of
+	bi := new(BlockIndex)                 //           random numbers.  Allocate a block to read the BlockIndexChain
+	blkIdx := int64(0)                    //           Blocks count up from zero
+	pendingIdx := int64(-1)               //           pendingIdx is going to start at -1 (we have none)
+	blkCnt = 1                            //           blkCnt is the count of our pretend blocks
+	for i := int64(0); i < testLen; i++ { //                                            Now for the same iterations...
+		v := rand.Int63()       //                                                      Get v again
+		_ = v                   //                                                      (v to see (in debugger))
+		if rand.Intn(30) == 0 { //                                                      Same rate
+			data := MM.BlkIdxChain.Manager.Get("BlockIndex", "", Int64Bytes(blkIdx)) // Get the next element of
+			blkIdx++                                                                 // BlockIndexChain. Inc that cnt
+			bi.UnMarshal(data)                                                       // Get the struct
+			if bi.BlockIndex != blkCnt ||                                            // Should match our blk count
+				bi.PendingIndex != pendingIdx || //                                     Should match our pendingIdx
+				bi.MainIndex != i { //                                                  Should match i
+				t.Fatal("Didn't see what we expected") //  If any of that isn't true, flag
+			} //
+			blkCnt++                 //                    count our pretend blocks
+			if rand.Intn(100) < 15 { //                    Again, about 15% of the time skip a pretend block
+				blkCnt++ //
+			} //
+		} //
+		if rand.Intn(10) == 0 { //                         Again, 1 out of 10 times add a pending entry (inc the count)
+			v = rand.Int63() //                            Have to mimic calls to rand exactly, so just make
+			pendingIdx++     //                              the call to rand, and increment our count
+		} //
+	} //
 }
