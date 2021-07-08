@@ -160,7 +160,7 @@ of shadow Merkle Trees, and more.
   at this index.  We store
   the state just prior to moving into the power of 2, and the element that
   when added brings the merkle tree to a power of 2 (frequency determined by
-  the mark power).  This is key to generating receipts efficently from a 
+  the mark power).  This is key to generating receipts efficiently from a 
   stateful merkle tree
 * `func (m MerkleManager) AddHash(hash Hash)` Adds a hash to the current
       MerkleTree under management

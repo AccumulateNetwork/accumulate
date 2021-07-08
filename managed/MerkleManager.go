@@ -22,6 +22,7 @@ type MerkleManager struct {
 	MarkPower     int64             // log2 of the MarkFreq
 	MarkFreq      int64             // The count between Marks
 	MarkMask      int64             // The binary mask to detect Mark boundaries
+	blkidx        *BlockIndex       // The Last BlockIndex seen
 }
 
 // add2Salt
@@ -119,15 +120,35 @@ func (m *MerkleManager) init(DBManager *database.Manager, salt []byte, markPower
 // SetBlockIndex
 // Keep track of where the blocks are in the Merkle Tree.
 func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
-	bi := new(BlockIndex)                                                        // Create blockIndex to store
-	bi.BlockIndex = blockIndex                                                   // Save current BlockIndex
-	bi.MainIndex = m.MainChain.MS.Count - 1                                      // Save MainIndex (count-1)
-	bi.PendingIndex = m.PendingChain.MS.Count - 1                                // Save the PendingIndex (count-1)
-	bbi := bi.Marshal()                                                          // Marshal the Block Index record
-	biHash := sha256.Sum256(bbi)                                                 // Get the Hash of the bi
-	m.BlkIdxChain.MS.AddToMerkleTree(biHash)                                     // Add the bi hash to the BlkIdxChain
-	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", Int64Bytes(blockIndex), bbi) // BlockIndex ->
-	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", []byte{}, bbi)               // Mark as highest block
+	if m.blkidx == nil { //                                              Load cache if first use
+		m.blkidx = new(BlockIndex)                                    // Create blockIndex to store
+		data := m.BlkIdxChain.Manager.Get("BlockIndex", "", []byte{}) // Look see the current bbi
+		if data == nil {                                              // Then this is a new merkle tree
+			m.blkidx.MainIndex = -1    //                                and no indexes exist
+			m.blkidx.PendingIndex = -1 //                                so set them all to -1
+			m.blkidx.BlockIndex = -1   //
+		} else { //                                                      Otherwise,
+			m.blkidx.UnMarshal(data) //                                  get all the values from the database
+		}
+	}
+	if m.blkidx.BlockIndex >= blockIndex { //                            Block Index must increment
+		panic("should not have block indexes that go backwards or stay constant")
+	}
+	if m.blkidx.MainIndex > m.MainChain.MS.Count-1 { //                  Must move MainChain or stay same
+		panic("should not have main indexes that go backwards")
+	}
+	if m.blkidx.PendingIndex > m.PendingChain.MS.Count-1 { //            Must move Pending chain or stay same
+		panic("should not have pending indexes that go backwards")
+	}
+	m.blkidx.BlockIndex = blockIndex                                         // Save blockIndex
+	m.blkidx.MainIndex = m.MainChain.MS.Count - 1                            // Update MainIndex (count is index+1)
+	m.blkidx.PendingIndex = m.PendingChain.MS.Count - 1                      // Update PendingIndex
+	bbi := m.blkidx.Marshal()                                                // Marshal the Block Index record
+	biHash := sha256.Sum256(bbi)                                             // Get the Hash of the bi
+	m.BlkIdxChain.MS.AddToMerkleTree(biHash)                                 // Add the bi hash to the BlkIdxChain
+	blkIdx := m.BlkIdxChain.MS.Count - 1                                     // Use a variable to make tidy
+	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", Int64Bytes(blkIdx), bbi) // blkIdx -> bbi struct
+	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", []byte{}, bbi)           // Mark as highest block
 }
 
 // GetState
@@ -168,9 +189,15 @@ func (m *MerkleManager) GetIndex(element []byte) (index int64) {
 }
 
 // AddHash
-// Pull from the HashFeed channel and add to the Merkle Tree managed by the MerkleManager
+// Add a Hash to the MainChain
 func (m *MerkleManager) AddHash(hash Hash) {
 	m.MainChain.AddHash(m.MarkMask, hash)
+}
+
+// AddPendingHash
+// Pending transactions for managed chains or suggested transactions go into the Pending Chain
+func (m *MerkleManager) AddPendingHash(hash Hash) {
+	m.PendingChain.AddHash(m.MarkMask, hash)
 }
 
 // AddHashString
