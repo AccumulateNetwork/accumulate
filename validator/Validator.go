@@ -2,6 +2,11 @@ package validator
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
+
+	//"encoding/binary"
+	"github.com/AccumulateNetwork/SMT/smt"
+
 	//"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -38,14 +43,17 @@ type ResponseValidateTX struct{
 	Submissions []pb.Submission //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
 }
 
-
-
+func LeaderAtHeight(addr uint64, height uint64) *[32]byte {
+    //todo: implement...
+	//lookup the public key for the addr at given height
+	return nil
+}
 
 type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
-	Check(ins uint32, p1 uint64, p2 uint64, data []byte) error
-	Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) //return persistent entry or error
+	Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error
+	Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) //return persistent entry or error
 	EndBlock(mdroot []byte) error  //do something with MD root
 
 	InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error  //deprecated
@@ -58,30 +66,51 @@ type ValidatorInterface interface {
 
 type ValidatorInfo struct {
 	chainadi  string   //
-	chainid   [32]byte //derrived from chain adi
+	chainid   smt.Hash //derrived from chain adi
 	namespace string
+    typeid    uint64
 
 }
 
 
-func (h *ValidatorInfo) SetInfo(chainadi string, namespace string) error {
+func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
 
-	chainidlen := len(chainadi)
+	chainidlen := len(*chainadi)
+	var chainid smt.Hash
+
 	if chainidlen < 32 {
-		h.chainid = sha256.Sum256([]byte(chainadi))
+		chainid = sha256.Sum256([]byte(*chainadi))
 	} else if chainidlen == 64 {
-		_, err := hex.Decode(h.chainid[:],[]byte(chainadi))
+		_, err := hex.Decode(chainid[:],[]byte(*chainadi))
 		if err != nil {
 			fmt.Errorf("[Error] cannot decode chainid %s", chainadi)
-			return err
+			return nil, err
 		}
 	} else {
-		return fmt.Errorf("[Error] invalid chainid for validator on shard %s", namespace)
+		return nil, fmt.Errorf("[Error] invalid chainid for validator on shard %s", chainadi)
 	}
 
-	h.chainadi = chainadi;
-//	h.address = binary.BigEndian.Uint64(h.chainid[24:])
+    return chainid.Bytes(), nil
+}
+//func BuildChainAddressFromAdi(chain *string) uint64 {
+//	chainid,_ := BuildChainIdFromAdi(chain)
+//	return BuildChainAddress(smt.Hash(chainid))
+//}
+//func BuildChainAddress(chainid smt.Hash) uint64 {
+//	hash :=sha256.Sum256(chainid.Bytes())
+//	return binary.BigEndian.Uint64(hash[:])
+//}
+//
+//hash :=sha256.Sum256(val.GetValidatorChainId())
+//app.chainval[binary.BigEndian.Uint64(hash[:])] = val
 
+func (h *ValidatorInfo) SetInfo(chainadi string, namespace string) error {
+	chainid, _ := BuildChainIdFromAdi(&chainadi)
+	h.chainid.Extract(chainid)
+	h.chainadi = chainadi
+	h.namespace = namespace
+//	h.address = binary.BigEndian.Uint64(h.chainid[24:])
+	h.typeid = GetTypeIdFromName(h.namespace)
 	h.namespace = namespace
 	return nil
 }
@@ -98,6 +127,15 @@ func (h *ValidatorInfo) GetChainAdi() *string {
 	return &h.chainadi
 }
 
+func GetTypeIdFromName(name string) uint64 {
+	b := sha256.Sum256([]byte(name))
+	return binary.BigEndian.Uint64(b[:8])
+}
+
+func (h *ValidatorInfo) GetTypeId() uint64 {
+	return h.typeid
+}
+
 type ValidatorContext struct {
 	ValidatorInterface
 	ValidatorInfo
@@ -105,7 +143,7 @@ type ValidatorContext struct {
 	currentTime   time.Time
 	lastHeight    int64
 	lastTime      time.Time
-	chainId       string
+	//chainId       smt.Hash
 	entryDB       dbm.DB
 }
 
@@ -130,9 +168,9 @@ func (v *ValidatorContext) GetCurrentTime() *time.Time {
 	return &v.currentTime
 }
 
-func (v *ValidatorContext) GetChainId() *string {
-	return &v.chainId
-}
+//func (v *ValidatorContext) GetChainId() *smt.Hash {
+//	return &v.chainId
+//}
 
 //
 //func (v *ValidatorContext) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {

@@ -39,6 +39,9 @@ func (entry *BVCEntry) MarshalBinary()([]byte, error) {
 
 	ret[offset] = byte(len(entry.DDII))
 
+	if ret[offset] == 0 {
+		return nil, fmt.Errorf("BVCEntry marshal error: entry.DDII has zero length")
+	}
 	endoffset += int(ret[offset])
 	offset++
 
@@ -53,6 +56,7 @@ func (entry *BVCEntry) MarshalBinary()([]byte, error) {
 	binary.BigEndian.PutUint64(ret[offset:endoffset],entry.Timestamp)
 	offset += 8
 	endoffset += 32
+
 
 	copy(ret[offset:endoffset],entry.MDRoot[:])
 
@@ -78,7 +82,9 @@ func (entry *BVCEntry) UnmarshalBinary(data []byte) ([][]byte, error) {
 	if endoffset+4+16+32+1 > len(data) {
 		return nil, fmt.Errorf("Insuffient data for parsing BVC Entry")
 	}
-	entry.DDII = data[offset:endoffset+1]
+	entry.DDII = make([]byte,ddiilen)
+
+	copy(entry.DDII, data[offset:endoffset+1])
 
 	ret := make([][]byte,4)
 

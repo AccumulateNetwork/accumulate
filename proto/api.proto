@@ -4,7 +4,7 @@ option go_package = "./proto";//github.com/AccumulateNetwork/accumulated/proto";
 
 //go:generate protoc example.proto --go_out=plugins=grpc:$GOPATH/src
 
-//import "google/protobuf/empty.proto";
+import "google/protobuf/empty.proto";
 
 service ApiService {
 	rpc PostEntry(EntryBytes) returns (Reply) {}
@@ -12,6 +12,9 @@ service ApiService {
 	rpc RequestAccount(Key) returns (Account){}
 	rpc GetHeight(google.protobuf.Empty) returns (Height) {}
 	rpc GetNodeInfo(google.protobuf.Empty) returns (NodeInfo) {}
+
+	// Obtains the feature at a given position.
+	rpc SyntheticTx(Submission) returns (SubmissionResponse) {}
 }
 
 //message BVCEntry
@@ -43,7 +46,7 @@ message DBVCInstructionHeader {
 	insType instruction        = 1; // type of instruction / request, will have one of the values of
 	uint32  version            = 2; // version number stored as varint.
 	bytes   bvcMasterChainDDII = 3; // block validation chain (BVC) DDII from which BVC master chain did this request originate. Identifies BVC and Network
-    bytes   bvcValidatorDDII   = 4; // Specific Digital identity of validator within the BVC submitting the instruction
+  bytes   bvcValidatorDDII   = 4; // Specific Digital identity of validator within the BVC submitting the instruction
 }
 
 message BVCEntry
@@ -61,7 +64,7 @@ message BVCEntry
 
 message Submission
 {
-    enum Type {
+    enum Instruction {
       Unknown      = 0;
       Identity_Creation = 1;
       Token_URL_Creation = 2;
@@ -80,20 +83,24 @@ message Submission
 //      ADI_Commit   = 6; //is a type needed? can this be handled by types 4?
     }
     uint64 address     = 1; // route to chain validator
-    Type   type        = 2; // type of instruction to follow
-    uint32 instruction = 3; // validator specific,
-    uint64 param1      = 4; // validator specific
-    uint64 param2      = 5; // validator specific
-    bytes  data        = 6; // validator will validate this data however it sees fit. may include signature
+    uint64   type      = 2; // type id of validator needed to process the
+    bytes  chainid     = 3; // chainid of the validator
+    Instruction instruction = 4; // validator specific,
+    uint64 param1      = 5; // validator specific
+    uint64 param2      = 6; // validator specific
+    bytes  data        = 7; // validator will validate this data however it sees fit. may include signature
 }
-
+message SubmissionResponse {
+	bytes  respdata = 1;
+	uint64 errorCode = 2;
+}
 message ValidatorSubmission
 {
-		int64 height;       //height at which submission was made
-		Submission submission;
-		bytes submitteradi; //digital identity of signer
-		bytes shardadi;     //digital identity of shard
-		bytes signature;    //signature of the validator making the submission
+		int64 height = 1;       //height at which submission was made
+		Submission submission = 2;
+		bytes submitteradi = 3; //digital identity of signer
+		bytes shardadi = 4;     //digital identity of shard
+		bytes signature = 5;    //signature of the validator making the submission
 }
 
 message BVCEntryResponse
@@ -112,39 +119,6 @@ message ValRequest
 	bytes   data           = 6; // payload for validator - Command Data
 	bytes   signed         = 7; // ed25519 signature
 }
-
-//message ResponseDeliverTx struct
-//{
-//	Submission SynthSubmission //if valid, create a synthetic transaction
-//	bytes []ExtIds //external id's to put in entry
-//	bytes Data     //data for stored entry
-//			Data      []byte  `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-//		Log       string  `protobuf:"bytes,3,opt,name=log,proto3" json:"log,omitempty"`
-//		Info      string  `protobuf:"bytes,4,opt,name=info,proto3" json:"info,omitempty"`
-//		GasWanted int64   `protobuf:"varint,5,opt,name=gas_wanted,proto3" json:"gas_wanted,omitempty"`
-//		GasUsed   int64   `protobuf:"varint,6,opt,name=gas_used,proto3" json:"gas_used,omitempty"`
-//		Events    []Event `protobuf:"bytes,7,rep,name=events,proto3" json:"events,omitempty"`
-//		Codespace string  `protobuf:"bytes,8,opt,name=codespace,proto3" json:"codespace,omitempty"`
-//		}
-
-// [address][Type][Nonce][Data][Sign]
-
-// [Key]  32 bytes
-// [Type] 1 byte  (var_int)
-// [Nonce] 8 byte (typically time stamp)
-// [Data] ? bytes
-// [Sign] 32 bytes (type+nonce+data)
-//
-//message ValRequest
-//{
-//	bytes   bvcaddress     = 1; // block validation chain address - sha256(chainId)[0:7] - big-endian or little-endian
-//	uint32  instruction    = 2; // instruction code used by the validator - e.g. "write data"
-//	uint32  parameter1     = 3; // parameter 1 specific to the instruction
-//	uint32  parameter2     = 4; // parameter 2 specific to the instruction
-//	uint64 	nonce          = 5; // typically time stamp or monotonic counter
-//	bytes   data           = 6; // payload for validator - Command Data
-//	bytes   signed         = 7; // ed25519 signature
-//}
 
 
 message ValReponse

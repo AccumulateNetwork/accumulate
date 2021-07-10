@@ -1,6 +1,5 @@
 package validator
 
-
 import (
 	"fmt"
 	pb "github.com/AccumulateNetwork/accumulated/proto"
@@ -16,7 +15,6 @@ import (
 
 	//"github.com/FactomProject/factomd/common/factoid"
 	"github.com/AccumulateNetwork/accumulated/factom"
-	"math/rand"
 )
 
 
@@ -34,7 +32,7 @@ func NewFactoidValidator() *FactoidValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "000000000000000000000000000000000000000000000000000000000000000f"
-	v.SetInfo(chainid,"factoid")
+	v.SetInfo(chainid,"fct")
 	v.ValidatorContext.ValidatorInterface = &v
 	v.timeofvalidity = time.Duration(2) * time.Minute //transaction good for only 2 minutes
 	return &v
@@ -56,7 +54,7 @@ func NewFactoidValidator() *FactoidValidator {
 //	return
 //}
 
-func (v *FactoidValidator) Check(ins uint32, p1 uint64, p2 uint64, data []byte) error {
+func (v *FactoidValidator) Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	tx := factom.Transaction{}
 	err := tx.UnmarshalBinary(data)
 	if err != nil {
@@ -65,11 +63,11 @@ func (v *FactoidValidator) Check(ins uint32, p1 uint64, p2 uint64, data []byte) 
 
 
 
-	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
-	if elapsed > v.timeofvalidity || elapsed < 0 {
-		//need to log instaed
-		return fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
-	}
+	//elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
+	//if elapsed > v.timeofvalidity || elapsed < 0 {
+	//	//need to log instaed
+	//	return fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
+	//}
 
     return nil
 }
@@ -148,7 +146,7 @@ func (v *FactoidValidator) processEcTx(data []byte) ([]byte, error) {
 }
 
 
-func (v *FactoidValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *FactoidValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
 	//if pass then send to accumulator.
 	//var fblock := factom.FBlock{}
 	//create a new block
@@ -160,13 +158,13 @@ func (v *FactoidValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byt
 		return nil,err
 	}
 
-
-	elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
-	if elapsed > v.timeofvalidity || elapsed < 0 {
-		//need to log instaed
-		err := fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
-		return nil, err
-	}
+	//
+	//elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
+	//if elapsed > v.timeofvalidity || elapsed < 0 {
+	//	//need to log instaed
+	//	err := fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
+	//	return nil, err
+	//}
 
 	//need to check balances
 	//inp := tx.FCTInputs
@@ -220,20 +218,21 @@ func (v *FactoidValidator) Validate(ins uint32, p1 uint64, p2 uint64, data []byt
 	// ins := AccumulateTransaction.Instruction()
 
 	ret := ResponseValidateTX{}
-	submissions := make([]pb.Submission,2)
+	ret.Submissions = make([]pb.Submission,2)
 
-    atktx := make([]byte, 64)
-    atkchainaddr := uint64(0x0000000000000000)
-    //for now just read random stuff
-	rand.Read(atktx)
-	atkins := uint32(0) //
-	submissions[1] = pb.Submission{
-		Address: atkchainaddr,
-		Type:    pb.Submission_Token_Transaction,
-		Instruction: atkins,
+
+
+	//where is this being routed to?
+	//send to synth tx chain validator
+	//chainid + 1
+	ret.Submissions[1] = pb.Submission{
+		Address: addr, //should this be set externally?
+		Type:   GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
+		Instruction:  pb.Submission_Token_Transaction,
+		Chainid: chainid, //need a chain id of where you are going...  chainid + 1
 		Param1: 0,
 		Param2: 0,
-		Data:    atktx,//data does not contain an RCD will be added
+		Data:    data,//need to make the data what it should be for atk
 	}
 
 	return &ret,err
