@@ -24,7 +24,7 @@ type ApiServiceClient interface {
 	GetHeight(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*Height, error)
 	GetNodeInfo(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*NodeInfo, error)
 	// Obtains the feature at a given position.
-	DispatchTx(ctx context.Context, in *Submission, opts ...grpc.CallOption) (*SubmissionResponse, error)
+	SyntheticTx(ctx context.Context, in *Submission, opts ...grpc.CallOption) (*SubmissionResponse, error)
 }
 
 type apiServiceClient struct {
@@ -80,9 +80,9 @@ func (c *apiServiceClient) GetNodeInfo(ctx context.Context, in *empty.Empty, opt
 	return out, nil
 }
 
-func (c *apiServiceClient) DispatchTx(ctx context.Context, in *Submission, opts ...grpc.CallOption) (*SubmissionResponse, error) {
+func (c *apiServiceClient) SyntheticTx(ctx context.Context, in *Submission, opts ...grpc.CallOption) (*SubmissionResponse, error) {
 	out := new(SubmissionResponse)
-	err := c.cc.Invoke(ctx, "/apiProto.ApiService/DispatchTx", in, out, opts...)
+	err := c.cc.Invoke(ctx, "/apiProto.ApiService/SyntheticTx", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ type ApiServiceServer interface {
 	GetHeight(context.Context, *empty.Empty) (*Height, error)
 	GetNodeInfo(context.Context, *empty.Empty) (*NodeInfo, error)
 	// Obtains the feature at a given position.
-	DispatchTx(context.Context, *Submission) (*SubmissionResponse, error)
+	SyntheticTx(context.Context, *Submission) (*SubmissionResponse, error)
 	mustEmbedUnimplementedApiServiceServer()
 }
 
@@ -122,8 +122,8 @@ func (UnimplementedApiServiceServer) GetHeight(context.Context, *empty.Empty) (*
 func (UnimplementedApiServiceServer) GetNodeInfo(context.Context, *empty.Empty) (*NodeInfo, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNodeInfo not implemented")
 }
-func (UnimplementedApiServiceServer) DispatchTx(context.Context, *Submission) (*SubmissionResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DispatchTx not implemented")
+func (UnimplementedApiServiceServer) SyntheticTx(context.Context, *Submission) (*SubmissionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyntheticTx not implemented")
 }
 func (UnimplementedApiServiceServer) mustEmbedUnimplementedApiServiceServer() {}
 
@@ -228,20 +228,20 @@ func _ApiService_GetNodeInfo_Handler(srv interface{}, ctx context.Context, dec f
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ApiService_DispatchTx_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ApiService_SyntheticTx_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(Submission)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ApiServiceServer).DispatchTx(ctx, in)
+		return srv.(ApiServiceServer).SyntheticTx(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/apiProto.ApiService/DispatchTx",
+		FullMethod: "/apiProto.ApiService/SyntheticTx",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ApiServiceServer).DispatchTx(ctx, req.(*Submission))
+		return srv.(ApiServiceServer).SyntheticTx(ctx, req.(*Submission))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -271,8 +271,8 @@ var _ApiService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _ApiService_GetNodeInfo_Handler,
 		},
 		{
-			MethodName: "DispatchTx",
-			Handler:    _ApiService_DispatchTx_Handler,
+			MethodName: "SyntheticTx",
+			Handler:    _ApiService_SyntheticTx_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

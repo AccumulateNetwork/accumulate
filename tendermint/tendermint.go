@@ -2,6 +2,7 @@ package tendermint
 
 import (
 	"fmt"
+	"github.com/spf13/viper"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	"github.com/tendermint/tendermint/abci/types"
@@ -11,18 +12,33 @@ import (
 	"github.com/tendermint/tendermint/libs/service"
 )
 
-func Initialize(chainid string, ABCIAppAddress string, RPCAddress string, GRPCAddress string, ConfigFile string, WorkingDir string){
+func Initialize(shardname string,
+	ABCIAppAddress string, RPCAddress string, GRPCAddress string, AccRPCAddress string, RouterAddress string,
+	ConfigFile string, WorkingDir string){
 	fmt.Println("Tendermint Initialize")
 	config.EnsureRoot(WorkingDir)
 	var newConfig = cfg.DefaultConfig()
 	newConfig.SetRoot(WorkingDir)
 	//newConfig.BaseConfig.
-	newConfig.Instrumentation.Namespace = chainid
+	newConfig.Instrumentation.Namespace = shardname
 	newConfig.ProxyApp = ABCIAppAddress
 	newConfig.RPC.ListenAddress = RPCAddress
 	newConfig.RPC.GRPCListenAddress = GRPCAddress
 	config.WriteConfigFile(ConfigFile,newConfig)
-	if InitFilesWithConfig(newConfig,&chainid) != nil {
+
+	v := viper.New()
+	v.SetConfigFile(ConfigFile)
+	v.AddConfigPath(WorkingDir)
+	v.ReadInConfig()
+	type config struct {
+		Port int
+		Name string
+	}
+	v.Set("accumulate.AccRPCAddress",AccRPCAddress)
+	v.Set("accumulate.RouterAddress", RouterAddress)
+	v.WriteConfig()
+
+	if InitFilesWithConfig(newConfig,&shardname) != nil {
 		//log.Fatal("")
 		return
 	}

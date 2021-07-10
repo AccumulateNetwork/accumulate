@@ -13,20 +13,20 @@ type BVCLeader struct{
 
 }
 
-func NewBVCLeader(shard string) *BVCLeader {
+func NewBVCLeader() *BVCLeader {
 	v := BVCLeader{}
 	//need the chainid, then hash to get first 8 bytes to make the chainid.
 	//by definition a chainid of a factoid block is
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
-	chainid := "0000000000000000000000000000000000000000000000000000000000000001"
-	v.SetInfo(chainid,"bvc")
+	//chainid := "0000000000000000000000000000000000000000000000000000000000000001"
+	v.SetInfo("dbvc","bvc")
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
 
-func (v *BVCLeader) Check(ins uint32, p1 uint64, p2 uint64, data []byte) error {
+func (v *BVCLeader) Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *BVCLeader) Initialize(config *cfg.Config) error {
@@ -42,7 +42,7 @@ func (v *BVCLeader) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *BVCLeader) Validate(ins uint32, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
+func (v *BVCLeader) Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 	//return persistent entry or error
 	return nil, nil
 }
