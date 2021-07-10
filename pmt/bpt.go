@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"sort"
+
+	"github.com/AccumulateNetwork/SMT/storage"
 )
 
 // BPT
@@ -15,10 +17,48 @@ import (
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
-	Root      Entry         // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
-	DirtyMap  map[int]*Node // Map of dirty nodes.
-	MaxHeight int           // Highest height of any node in the BPT
-	MaxNodeID int           // Maximum node id assigned to any node
+	Root      Entry           // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
+	DirtyMap  map[int64]*Node // Map of dirty nodes.
+	MaxHeight byte            // Highest height of any node in the BPT
+	MaxNodeID int64           // Maximum node id assigned to any node
+}
+
+// Equal
+// Used to do some testing
+func (b *BPT) Equal(b2 *BPT) (equal bool) {
+	defer func() {
+		if err := recover(); err != 0 {
+			equal = false
+		}
+	}()
+
+	if !b.Root.Equal(b2.Root) {
+		return false
+	}
+	if b.MaxHeight != b2.MaxHeight {
+		return false
+	}
+	if b.MaxNodeID != b2.MaxNodeID {
+		return false
+	}
+	return true
+}
+
+// Marshal
+// Must have the MaxNodeID at the very least to be able to add nodes
+// to the BPT
+func (b *BPT) Marshal() (data []byte) {
+	data = append(data, storage.Int64Bytes(int64(b.MaxHeight))...)
+	data = append(data, storage.Int64Bytes(int64(b.MaxNodeID))...)
+	return data
+}
+
+// UnMarshal
+// Reload the BPT
+func (b *BPT) UnMarshal(data []byte) (newData []byte) {
+	b.MaxHeight, data = data[0], data[1:]
+	b.MaxNodeID, data = storage.BytesInt64(data)
+	return data
 }
 
 // NewNode
@@ -184,8 +224,56 @@ func (b *BPT) Update() [32]byte {
 // Allocate a new BPT and set up the structures required to get to work with
 // Binary Patricia Trees.
 func NewBPT() *BPT {
-	b := new(BPT)                    // Get a Binary Patricai Tree
-	b.Root = new(Node)               // Allocate the summary node (contributes nothing to the BPT summary Hash
-	b.DirtyMap = make(map[int]*Node) // Allocate the Dirty Map, because batching updates is
-	return b                         // a pretty powerful way to process Patricia Trees
+	b := new(BPT)                      // Get a Binary Patricai Tree
+	b.Root = new(Node)                 // Allocate the summary node (contributes nothing to the BPT summary Hash
+	b.DirtyMap = make(map[int64]*Node) // Allocate the Dirty Map, because batching updates is
+	return b                           // a pretty powerful way to process Patricia Trees
+}
+
+// MarshalByteBlock
+// Given the node leading into a byte block, marshal all the nodes within the
+// block.  A borderNode is a node that completes a byte boundry.  So consider
+// a theoretical key 03e706b93d2e515c6eff056ee481eb92f9e790277db91eb748b3cc5b46dfe8ca
+// The first byte is 03, second is a7, third is 06 etc.
+//
+// The node in block 03 that completes e7 is the board node.  The left path
+// would begin the path to the theoretical key (a bit zero).
+func MarshalByteBlock(borderNode *Node) (data []byte) {
+	if borderNode.Height&7 != 0 { //                                    Must be a boarder node
+		panic("cannot call MarshalByteBlock on non-boarder nodes") //   and the code should not call this routine
+	} //
+	data = MarshalEntry(borderNode.left, data)  //                      Marshal the Byte Block to the left
+	data = MarshalEntry(borderNode.right, data) //                      Marshal the Byte Block to the right
+	return data
+}
+
+// MarshalEntry
+// Recursive routine that marshals a byte block starting from an entry on
+// the left or on the right.  Calling MarshalEntry from the left only
+// marshals half the node space of a byte block.  Have to call MarshalEntry
+// from the right to complete coverage.
+func MarshalEntry(entry Entry, data []byte) []byte { //
+	switch {
+	case entry == nil: //                           Check if nil
+		data = append(data, 0) //                   Mark as nil,
+		return data            //                   We are done
+	case !entry.T(): //                             Check if Value
+		data = append(data, 1)                  //  Tag left as a value
+		data = append(data, entry.Marshal()...) //  And marshal the value
+		return data                             //  Done
+	case entry.(*Node).Height&0x7 == 0: //          See if entry is going into
+		data = append(data, 2) //                   the next Byte Block
+		return data            //                   Ignore if so and done
+	default: //
+		data = append(data, 3)                         //                    Mark as going into a node
+		data = MarshalEntry(entry.(*Node).left, data)  // Marshal left
+		data = MarshalEntry(entry.(*Node).right, data) // Marshal right
+	}
+	return data
+}
+
+// UnMarshalByteBlock
+//
+func UnMarshalByteBlock(boarderNode *Node, data []byte) []byte {
+	return nil
 }

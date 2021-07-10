@@ -166,3 +166,11 @@ func TestUpdateValues(t *testing.T) {
 		fmt.Printf("Prime pass: %x\n", onePrime) // Print the summary hash from pass one
 	}
 }
+
+func TestExample(t *testing.T) {
+	for i := 0; i < 5; i++ {
+		s := fmt.Sprintf("RedWaggon/%d", i)
+		ex := sha256.Sum256([]byte(s))
+		fmt.Printf("%x %x %08b\n", ex, ex[:1], ex[:1])
+	}
+}
