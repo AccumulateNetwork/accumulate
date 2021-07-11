@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+
+	//"fmt"
 	"github.com/AccumulateNetwork/accumulated/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 
