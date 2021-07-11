@@ -55,4 +55,17 @@ CreateToken acc://RedWagon/create?token=
 
 
 
+# Create Identity
 
+
+
+CreateIdentity acc://RedWagon
+
+* Who signs the identity?  Identities need to be bootstrapped. I.e. Someone needs to pay for it...
+* Need to assign it to an initial public key?
+
+CreateSubDomain acc://RedWagon.Pizza
+
+acc://RedWagon/
+
+https://localhost:12345/RedWagon/acc/query=balance

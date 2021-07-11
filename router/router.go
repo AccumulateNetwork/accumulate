@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/AccumulateNetwork/SMT/smt"
 	"github.com/AccumulateNetwork/accumulated/proto"
+	"github.com/AccumulateNetwork/accumulated/validator"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	abcicli "github.com/tendermint/tendermint/abci/client"
@@ -19,10 +20,13 @@ import (
 
 type RouterConfig struct {
 	proto.ApiServiceServer
+	grpcServer *grpc.Server
+
 	shardclients []abcicli.Client
 	Address string
-
 }
+
+
 func (app RouterConfig) PostEntry(context.Context, *proto.EntryBytes) (*proto.Reply, error) {
 	return nil,nil
 }
@@ -39,9 +43,42 @@ func (app RouterConfig) GetNodeInfo(context.Context, *empty.Empty) (*proto.NodeI
 	return nil,nil
 }
 
+func (app RouterConfig) QueryShardCount(context.Context, *empty.Empty) (*proto.ShardCountResponse, error) {
+	scr := proto.ShardCountResponse{}
 
-func (app RouterConfig) SyntheticTx(ctx context.Context,sub *proto.Submission) (*proto.SubmissionResponse, error) {
-	fmt.Printf("hello world from dispatch server TX ")
+	fmt.Printf("TODO: need to implement blockchain query to dbvc for number of shards\n")
+	scr.Numshards = app.GetNumShardsInSystem() //todo: Need to query blockchain for this number....
+	return &scr,nil
+}
+
+func (app RouterConfig) GetNumShardsInSystem() int32 {
+	//todo query DBVC....  need a better way to monitor this from the perspective of the DBVC since it knows about
+	//everyone.  We also need to know who all the leaders are who participated in a given round at a given height
+	//only update it once in a blue moon when shards are added.  so need to monitor the appropriate chain for activity.
+	return 1
+}
+
+func (app RouterConfig) QueryShard(ctx context.Context,query *proto.ShardQuery) (*proto.ShardResponse, error) {
+	sr := proto.ShardResponse{}
+	return &sr, nil
+}
+
+func (app RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*proto.AccQueryResp, error) {
+	scr := proto.AccQueryResp{}
+
+	rq := types.RequestQuery{}
+
+	rq.Data,_ = proto1.Marshal(query)
+
+	rq.Height = 12345
+	resp, _ := app.getBVCClient(query.Addr).QuerySync(rq)
+	scr.Code = resp.Code
+
+	return &scr,nil
+}
+
+func (app RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*proto.SubmissionResponse, error) {
+	//fmt.Printf("hello world from dispatch server TX ")
 	resp := proto.SubmissionResponse{}
 	client := app.getBVCClient(sub.GetAddress())
 	if client == nil {
@@ -67,6 +104,10 @@ func (app RouterConfig) SyntheticTx(ctx context.Context,sub *proto.Submission) (
 	return &resp, nil
 }
 
+func (app RouterConfig) Close (){
+    app.grpcServer.GracefulStop()
+}
+
 func NewRouter(routeraddress string) (config *RouterConfig) {
 	r := RouterConfig{}
 
@@ -89,9 +130,9 @@ func NewRouter(routeraddress string) (config *RouterConfig) {
 	}
 	var opts []grpc.ServerOption
 	//...
-	grpcServer := grpc.NewServer(opts...)
-	proto.RegisterApiServiceServer(grpcServer, &r)
-	go grpcServer.Serve(lis)
+	r.grpcServer = grpc.NewServer(opts...)
+	proto.RegisterApiServiceServer(r.grpcServer, r.ApiServiceServer)
+	go r.grpcServer.Serve(lis)
 
 	return &r
 }
@@ -157,13 +198,54 @@ func SendTransaction(senderurl string, receiverurl string) error {
 
 	fmt.Printf("%d%d%s%s", sendaddr, recvaddr, sendtokentype,receivetokentype )
 
-
-
-
-
-
-
     return nil
+}
+//
+//const (
+//	AccAction_Unknown = iota
+//	AccAction_Identity_Creation
+//	AccAction_Token_URL_Creation
+//	AccAction_Token_Transaction
+//	AccAction_Data_Chain_Creation
+//	AccAction_Data_Entry //per 250 bytes
+//	AccAction_Scratch_Chain_Creation
+//	AccAction_Scratch_Entry //per 250 bytes
+//	AccAction_Token_Issue
+//	AccAction_Key_Update
+//)
+
+type AccUrl struct {
+	Addr uint64
+	DDII string
+	ChainPath []smt.Hash
+	Action uint32
+}
+//func (app AccUrl) Marshall() ([]byte,error) {
+//	m := make([]byte, 8 + len(app.DDII)+ len(app.ChainPath)*32 + 4 )
+//	copy(m)
+//	return m, nil
+//}
+func URLParser(s string) proto.AccQuery {
+
+	r := proto.AccQuery{}
+
+	u, err := url.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println(u.Scheme)
+
+	fmt.Println(u.Host)
+	r.DDII = u.Host
+	r.Addr = validator.GetTypeIdFromName(r.DDII)
+	h := sha256.Sum256([]byte(u.RawPath))
+	r.ChainId =  h[:]
+
+	fmt.Println(u.RawPath)
+	fmt.Println(u.RequestURI())
+
+    return r
 }
 
 func Router() {

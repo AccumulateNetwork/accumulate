@@ -14,10 +14,28 @@ service ApiService {
 	rpc GetNodeInfo(google.protobuf.Empty) returns (NodeInfo) {}
 
 	// Obtains the feature at a given position.
-	rpc SyntheticTx(Submission) returns (SubmissionResponse) {}
+	rpc ProcessTx(Submission) returns (SubmissionResponse) {}
+	rpc QueryShardCount(google.protobuf.Empty) returns (ShardCountResponse){}
+	rpc QueryShard(ShardQuery) returns (ShardResponse){}
+	rpc Query(AccQuery) returns (AccQueryResp){}
+
 }
 
+message ShardQuery {
+	string queryurl = 1;
+}
+
+message ShardResponse {
+	string resp = 1;
+}
+
+
+
+message ShardCountResponse {
+	int32 numshards = 1; //return the number of shards that are active
+}
 //message BVCEntry
+
 //{
 //	DBVCInstructionHeader header = 1;
 //    bytes   entry                = 2; // BVC Entry - Merkel DAG root tx (41 bytes) consists of
@@ -60,40 +78,69 @@ message BVCEntry
 	bytes   signature            = 3; // Signature: ed25519[ entry ]
 }
 
+message Fee
+{
+    int64 TimeStamp  = 1;      // 8
+		bytes DDII       = 2;      // Hash 32
+		bytes ChainID    = 3;      //[33]byte     // 33
+	  int32 Credits    = 4;      //int8         // 1
+		int32 SignatureIdx = 5;    //int8
+		bytes Signature    = 6;    //minimum 64 bytes []byte       // 64 minimum
+// 1 end byte ( 140 bytes for FEE)
+		bytes Transaction  = 7;   //[]byte       // Transaction
+}
 
+
+
+enum AccInstruction {
+	Unknown      = 0;
+	Identity_Creation = 1;
+	Token_URL_Creation = 2;
+	Token_Transaction = 3;
+	Data_Chain_Creation = 4;
+	Data_Entry = 5; //per 250 bytes
+	Scratch_Chain_Creation = 6;
+	Scratch_Entry = 7; //per 250 bytes
+	Token_Issue = 8;
+	Key_Update = 9;
+	Deep_Query = 10; //implements a transaction on the network that is processed by validators these cost $$
+	Light_Query = 11; //sends a query to a node and info is returned.
+	//      Entry_Commit = 1; //
+	//      Entry_Reveal = 2; // raw data
+	//      Chain_Commit = 3;
+	//      Transaction  = 4; //contains both commit and reveal. So would this just be Entry_Commit_Reveal or should transactions consist of segwit commit/reveal?
+	//      Admin        = 5; //is a type needed? can this be handled by adding a validator an using type 1 and 2 or 4?
+	//      ADI_Commit   = 6; //is a type needed? can this be handled by types 4?
+}
 
 message Submission
 {
-    enum Instruction {
-      Unknown      = 0;
-      Identity_Creation = 1;
-      Token_URL_Creation = 2;
-      Token_Transaction = 3;
-      Data_Chain_Creation = 4;
-      Data_Entry = 5; //per 250 bytes
-      Scratch_Chain_Creation = 6;
-      Scratch_Entry = 7; //per 250 bytes
-      Token_Issue = 8;
-      Key_Update = 9;
-//      Entry_Commit = 1; //
-//      Entry_Reveal = 2; // raw data
-//      Chain_Commit = 3;
-//      Transaction  = 4; //contains both commit and reveal. So would this just be Entry_Commit_Reveal or should transactions consist of segwit commit/reveal?
-//      Admin        = 5; //is a type needed? can this be handled by adding a validator an using type 1 and 2 or 4?
-//      ADI_Commit   = 6; //is a type needed? can this be handled by types 4?
-    }
     uint64 address     = 1; // route to chain validator
     uint64   type      = 2; // type id of validator needed to process the
     bytes  chainid     = 3; // chainid of the validator
-    Instruction instruction = 4; // validator specific,
+    AccInstruction instruction = 4; // validator specific,
     uint64 param1      = 5; // validator specific
     uint64 param2      = 6; // validator specific
     bytes  data        = 7; // validator will validate this data however it sees fit. may include signature
 }
+
 message SubmissionResponse {
 	bytes  respdata = 1;
 	uint64 errorCode = 2;
 }
+
+message AccQuery {
+	uint64 Addr = 1;
+	string DDII = 2;
+	bytes ChainId = 3;
+	string URI = 4;
+	//AccInstruction Ins = 4;
+}
+
+message AccQueryResp {
+	uint32 code = 1;
+}
+
 message ValidatorSubmission
 {
 		int64 height = 1;       //height at which submission was made

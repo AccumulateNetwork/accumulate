@@ -138,7 +138,7 @@ func (v *EntryValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uin
 		resp.Submissions[index].Address = addr
 		resp.Submissions[index].Chainid = chainid //is this the parent chain ?
 		resp.Submissions[index].Type = nextchaintype
-		resp.Submissions[index].Instruction = pb.Submission_Data_Chain_Creation
+		resp.Submissions[index].Instruction = pb.AccInstruction_Data_Chain_Creation
 		resp.Submissions[index].Data = make([]byte,32)
 		copy(resp.Submissions[index].Data, ecr.Entry.ChainID[:])
 		index++
@@ -149,7 +149,7 @@ func (v *EntryValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uin
 	resp.Submissions[index].Address = addr //TBD: this probably needs to be addressed to the Data Store shard.
 	resp.Submissions[index].Chainid = chainid
 	resp.Submissions[index].Type = GetTypeIdFromName("entry-store")
-	resp.Submissions[index].Instruction = pb.Submission_Data_Entry //really needs to be a directl
+	resp.Submissions[index].Instruction = pb.AccInstruction_Data_Entry //really needs to be a directl
 	resp.Submissions[index].Data = entryblock[:]
 	//should this be returns or just be locked into a shard
 	return &resp, nil
