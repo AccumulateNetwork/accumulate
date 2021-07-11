@@ -112,7 +112,7 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	hex.Decode(chainid[:],[]byte(chainadi))
 	chainhash := chainid[:]
 	var duration1 time.Duration
-	for i := 0; i < /*100000*/1; i++ {
+	for i := 0; i < 1/* 00000 */; i++ {
 		vr := &pb.Submission{}
 		//vr.Nonce = 0
 		//vr.Signed = sig
@@ -120,7 +120,7 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 		vr.Type = validator.GetTypeIdFromName("fct")
 
-		vr.Instruction = pb.Submission_Token_Transaction
+		vr.Instruction = pb.AccInstruction_Token_Transaction
 
 		vr.Data = decoded
 		vr.Param1 = uint64(time.Since(start).Nanoseconds())

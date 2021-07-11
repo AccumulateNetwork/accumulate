@@ -1,9 +1,11 @@
 package main
 
 import (
+	"github.com/AccumulateNetwork/SMT/smt"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/AccumulateNetwork/accumulated/validator"
 	"github.com/spf13/viper"
+	"strings"
 
 	//	"errors"
 	"flag"
@@ -19,12 +21,57 @@ import (
 	"github.com/AccumulateNetwork/accumulated/tendermint"
 
 )
+const MaxShards int = 1024
 
-var ConfigFile [33]string
-var WorkingDir [33]string
+var ConfigFile [MaxShards]string
+var WorkingDir [MaxShards]string
 //var SpecialModeHeight int64 = 99999999999
 
+//SendToken GreenRock/t/acc RedWagon/t/acc 10
+type SendToken {
+    fromurl string
+    tourl string
+    actoshis uint64
+}
+
+
+type Fee struct {
+	TimeStamp      int64        // 8
+	DDII           smt.Hash     // 32
+	ChainID        [33]byte     // 33
+	Credits        int8         // 1
+	SignatureIdx   int8         // 1
+	Signature      []byte       // 64 minimum
+	// 1 end byte ( 140 bytes for FEE)
+	Transaction    []byte       // Transaction
+}
+
+
+
+
 func init() {
+	var name string
+	flag.StringVar(&name, "name", "", "your name")
+	flag.Parse()
+	values := flag.Args()
+	for _, word := range values {
+		urlname := strings.ToLower(word)
+		if !strings.HasPrefis("acc://")
+		if u {
+
+			fmt.Println(strings.ToUpper(word))
+		} else {
+
+			fmt.Println(word)
+		}
+	}
+
+	if len(name) == 0 {
+		fmt.Println("Usage: defaults.go -name")
+		flag.PrintDefaults()
+		os.Exit(1)
+	}
+
 
 	usr,err := user.Current()
 	if err != nil {
@@ -34,9 +81,9 @@ func init() {
 
 	flag.StringVar(&WorkingDir[0], "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
 	flag.Parse()
-	WorkingDir[1] = path.Join(WorkingDir[0],"/accumulate/yellowstone")
+	WorkingDir[1] = path.Join(WorkingDir[0],"/accumulate/rocky")
 	WorkingDir[2] = path.Join(WorkingDir[0],"/accumulate/smoky")
-	WorkingDir[3] = path.Join(WorkingDir[0],"/accumulate/rocky")
+	WorkingDir[3] = path.Join(WorkingDir[0],"/accumulate/yellowstone")
 	WorkingDir[0] = path.Join(WorkingDir[0],"/accumulate/leader")
 	ConfigFile[0] = path.Join(WorkingDir[0],"/config/config.toml")
 	ConfigFile[1] = path.Join(WorkingDir[1],"/config/config.toml")
@@ -44,32 +91,8 @@ func init() {
 	ConfigFile[3] = path.Join(WorkingDir[3],"/config/config.toml")
 }
 
-func CreateAccumulateVM(config string, path string) *tendermint.AccumulatorVMApplication {
-	//create a AccumulatorVM
-	acc := tendermint.NewAccumulatorVMApplication(config, path)
-
-	//create and add some validators for known types
-	fct := validator.NewFactoidValidator()
-	acc.AddValidator(&fct.ValidatorContext)
-
-	synthval := validator.NewSyntheticTransactionValidator()
-	acc.AddValidator(&synthval.ValidatorContext)
-
-	entryval := validator.NewEntryValidator()
-	acc.AddValidator(&entryval.ValidatorContext)
-
-	//this is only temporary to handle leader sending messages to the DBVC to produce receipts.
-	//there will only be one of these in the network
-	dbvcval := validator.NewBVCLeader()
-	acc.AddValidator(&dbvcval.ValidatorContext)
-
-	go acc.Start()
-
-	acc.Wait()
-	return acc
-}
-
 func main() {
+
 
 	fmt.Printf("Working dir: %v\n", WorkingDir[0])
 	fmt.Printf("Working VM1 dir: %v\n", ConfigFile[1])
@@ -81,9 +104,9 @@ func main() {
     	switch os.Args[i] {
 		case "init":
 			tendermint.Initialize("accumulate.leader", "tcp://127.0.0.1:26600","tcp://127.0.0.1:26601","tcp://127.0.0.1:26602","tcp://127.0.0.1:26603","tcp://127.0.0.1:26604",ConfigFile[0],WorkingDir[0])
-			tendermint.Initialize("accumulate.yellowstone", "tcp://127.0.0.1:26610","tcp://127.0.0.1:26611","tcp://127.0.0.1:26612","tcp://127.0.0.1:26613", "tcp://127.0.0.1:26614",ConfigFile[1],WorkingDir[1])
+			tendermint.Initialize("accumulate.rocky", "tcp://127.0.0.1:26610","tcp://127.0.0.1:26611","tcp://127.0.0.1:26612","tcp://127.0.0.1:26613", "tcp://127.0.0.1:26614",ConfigFile[1],WorkingDir[1])
 			tendermint.Initialize("accumulate.smoky", "tcp://127.0.0.1:26620","tcp://127.0.0.1:26621","tcp://127.0.0.1:26622","tcp://127.0.0.1:26623",  "tcp://127.0.0.1:26624",ConfigFile[2],WorkingDir[2])
-			tendermint.Initialize("accumulate.rocky", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631","tcp://127.0.0.1:26632","tcp://127.0.0.1:26633","tcp://127.0.0.1:26634",ConfigFile[3],WorkingDir[3])
+			tendermint.Initialize("accumulate.yellowstone", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631","tcp://127.0.0.1:26632","tcp://127.0.0.1:26633","tcp://127.0.0.1:26634",ConfigFile[3],WorkingDir[3])
 //			tendermint.Initialize("vm2", "tcp://127.0.0.1:26620","tcp://127.0.0.1:26621",ConfigFile[2],WorkingDir[2])
 //			tendermint.Initialize("vm3", "tcp://127.0.0.1:26630","tcp://127.0.0.1:26631",ConfigFile[3],WorkingDir[3])
 			os.Exit(0)
