@@ -39,6 +39,31 @@ type TXEntry struct {
 	Data []byte
 }
 
+type StateEntry struct {
+	State smt.Hash
+	Entry []byte
+}
+
+
+type Fee struct {
+	TimeStamp      int64        // 8
+	DDII           smt.Hash     // 32
+	ChainID        [33]byte     // 33
+	Credits        int8         // 1
+	SignatureIdx   int8         // 1
+	Signature      []byte       // 64 minimum
+	// 1 end byte ( 140 bytes for FEE)
+	Transaction    []byte       // Transaction
+}
+
+func (f Fee) MarshalBinary() ([]byte, error) {
+	//smt
+	return nil,nil
+}
+
+
+
+
 type ResponseValidateTX struct{
 	Submissions []pb.Submission //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
 }
