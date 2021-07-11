@@ -26,7 +26,6 @@ type ApiServiceClient interface {
 	// Obtains the feature at a given position.
 	ProcessTx(ctx context.Context, in *Submission, opts ...grpc.CallOption) (*SubmissionResponse, error)
 	QueryShardCount(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ShardCountResponse, error)
-	QueryShard(ctx context.Context, in *ShardQuery, opts ...grpc.CallOption) (*ShardResponse, error)
 	Query(ctx context.Context, in *AccQuery, opts ...grpc.CallOption) (*AccQueryResp, error)
 }
 
@@ -101,15 +100,6 @@ func (c *apiServiceClient) QueryShardCount(ctx context.Context, in *empty.Empty,
 	return out, nil
 }
 
-func (c *apiServiceClient) QueryShard(ctx context.Context, in *ShardQuery, opts ...grpc.CallOption) (*ShardResponse, error) {
-	out := new(ShardResponse)
-	err := c.cc.Invoke(ctx, "/apiProto.ApiService/QueryShard", in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *apiServiceClient) Query(ctx context.Context, in *AccQuery, opts ...grpc.CallOption) (*AccQueryResp, error) {
 	out := new(AccQueryResp)
 	err := c.cc.Invoke(ctx, "/apiProto.ApiService/Query", in, out, opts...)
@@ -131,7 +121,6 @@ type ApiServiceServer interface {
 	// Obtains the feature at a given position.
 	ProcessTx(context.Context, *Submission) (*SubmissionResponse, error)
 	QueryShardCount(context.Context, *empty.Empty) (*ShardCountResponse, error)
-	QueryShard(context.Context, *ShardQuery) (*ShardResponse, error)
 	Query(context.Context, *AccQuery) (*AccQueryResp, error)
 	mustEmbedUnimplementedApiServiceServer()
 }
@@ -160,9 +149,6 @@ func (UnimplementedApiServiceServer) ProcessTx(context.Context, *Submission) (*S
 }
 func (UnimplementedApiServiceServer) QueryShardCount(context.Context, *empty.Empty) (*ShardCountResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryShardCount not implemented")
-}
-func (UnimplementedApiServiceServer) QueryShard(context.Context, *ShardQuery) (*ShardResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method QueryShard not implemented")
 }
 func (UnimplementedApiServiceServer) Query(context.Context, *AccQuery) (*AccQueryResp, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Query not implemented")
@@ -306,24 +292,6 @@ func _ApiService_QueryShardCount_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ApiService_QueryShard_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ShardQuery)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(ApiServiceServer).QueryShard(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/apiProto.ApiService/QueryShard",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ApiServiceServer).QueryShard(ctx, req.(*ShardQuery))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _ApiService_Query_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(AccQuery)
 	if err := dec(in); err != nil {
@@ -373,10 +341,6 @@ var _ApiService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "QueryShardCount",
 			Handler:    _ApiService_QueryShardCount_Handler,
-		},
-		{
-			MethodName: "QueryShard",
-			Handler:    _ApiService_QueryShard_Handler,
 		},
 		{
 			MethodName: "Query",
