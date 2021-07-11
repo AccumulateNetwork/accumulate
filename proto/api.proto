@@ -16,18 +16,9 @@ service ApiService {
 	// Obtains the feature at a given position.
 	rpc ProcessTx(Submission) returns (SubmissionResponse) {}
 	rpc QueryShardCount(google.protobuf.Empty) returns (ShardCountResponse){}
-	rpc QueryShard(ShardQuery) returns (ShardResponse){}
 	rpc Query(AccQuery) returns (AccQueryResp){}
-
 }
 
-message ShardQuery {
-	string queryurl = 1;
-}
-
-message ShardResponse {
-	string resp = 1;
-}
 
 
 

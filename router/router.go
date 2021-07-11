@@ -58,11 +58,6 @@ func (app RouterConfig) GetNumShardsInSystem() int32 {
 	return 1
 }
 
-func (app RouterConfig) QueryShard(ctx context.Context,query *proto.ShardQuery) (*proto.ShardResponse, error) {
-	sr := proto.ShardResponse{}
-	return &sr, nil
-}
-
 func (app RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*proto.AccQueryResp, error) {
 	scr := proto.AccQueryResp{}
 
@@ -71,7 +66,8 @@ func (app RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*proto
 	rq.Data,_ = proto1.Marshal(query)
 
 	rq.Height = 12345
-	resp, _ := app.getBVCClient(query.Addr).QuerySync(rq)
+	client := app.getBVCClient(query.Addr)
+	resp, _ := client.QuerySync(rq)
 	scr.Code = resp.Code
 
 	return &scr,nil
@@ -131,7 +127,7 @@ func NewRouter(routeraddress string) (config *RouterConfig) {
 	var opts []grpc.ServerOption
 	//...
 	r.grpcServer = grpc.NewServer(opts...)
-	proto.RegisterApiServiceServer(r.grpcServer, r.ApiServiceServer)
+	proto.RegisterApiServiceServer(r.grpcServer, r)
 	go r.grpcServer.Serve(lis)
 
 	return &r
