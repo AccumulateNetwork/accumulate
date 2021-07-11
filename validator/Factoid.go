@@ -228,7 +228,7 @@ func (v *FactoidValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 u
 	ret.Submissions[1] = pb.Submission{
 		Address: addr, //should this be set externally?
 		Type:   GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
-		Instruction:  pb.Submission_Token_Transaction,
+		Instruction:  pb.AccInstruction_Token_Transaction,
 		Chainid: chainid, //need a chain id of where you are going...  chainid + 1
 		Param1: 0,
 		Param2: 0,

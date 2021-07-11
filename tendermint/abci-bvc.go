@@ -189,14 +189,11 @@ func (app *AccumulatorVMApplication) GetHeight ()(int64) {
 }
 
 func (app *AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
-	/*
-	type RequestInfo struct {
-		Version      string `protobuf:"bytes,1,opt,name=version,proto3" json:"version,omitempty"`
-		BlockVersion uint64 `protobuf:"varint,2,opt,name=block_version,json=blockVersion,proto3" json:"block_version,omitempty"`
-		P2PVersion   uint64 `protobuf:"varint,3,opt,name=p2p_version,json=p2pVersion,proto3" json:"p2p_version,omitempty"`
-	}
-	 */
+
 	//todo: load up the merkle databases to the same state we're at...
+	//smt.Load(app.state.Height)
+	//smt.PruneToHeight(app.state.Height)
+
 
 
 	return abcitypes.ResponseInfo{
@@ -254,7 +251,7 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 
 	sub := pb.Submission{}
 	//send a test transaction
-	app.RouterClient.SyntheticTx(context.Background(),&sub)
+	app.RouterClient.ProcessTx(context.Background(),&sub)
 
 	name := "blockstate"
 	db, err := dbm.NewGoLevelDB(name, WorkingDir)
@@ -297,22 +294,6 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 
 
 	app.ChainId = sha256.Sum256([]byte(req.ChainId))
-    //hchain := valacctypes.Hash(app.ChainId)
-
-	//entryFeed, control, mdHashes := acc.Init(&app.DB, (*valacctypes.Hash)(&app.ChainId))
-	//app.EntryFeeds = append(app.EntryFeeds, entryFeed)
-	//app.Controls = append(app.Controls, control)
-	//app.MDFeeds = append(app.MDFeeds, mdHashes)
-	////spin up the accumulator
-	//go acc.Run()
-
-	//app.router.Init(app.EntryFeed, 1)
-	//go app.router.Run()
-	//app.router.Init(EntryFeed, int(AccNumber))
-    //go router.Run()
-
-    //load to current state
-   // app.mm.
 
 	app.mm.Init(&app.mmdb,8)
 
@@ -585,7 +566,7 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 				//err = c.Request(nil, "http://localhost:26611", "broadcast_tx_async", vdata.Submissions[i], &result)
 				//msg, _ := proto.Marshal(&vdata.Submissions[i])
 
-				app.RouterClient.SyntheticTx(context.Background(),&vdata.Submissions[i])
+				app.RouterClient.ProcessTx(context.Background(),&vdata.Submissions[i])
 			}
 
 		}
@@ -817,6 +798,13 @@ func (app *AccumulatorVMApplication) ApplySnapshotChunk(
 func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 
+    q := pb.AccQuery{}
+    err :=  proto.Unmarshal(reqQuery.Data,&q)
+    if err != nil {
+    	resQuery.Info = fmt.Sprintf("Requst is not an Accumulate Query\n")
+    	resQuery.Code = code.CodeTypeUnauthorized
+    	return resQuery
+	}
 	///implement lazy sync calls. If a node falls behind it needs to have several query calls
 	///1 get current height
 	///2 get block data for height X
