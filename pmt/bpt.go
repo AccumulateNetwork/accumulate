@@ -53,14 +53,18 @@ func (b *BPT) Marshal() (data []byte) {
 	b.Update()
 	data = append(data, byte(b.MaxHeight))
 	data = append(data, storage.Int64Bytes(b.MaxNodeID)...)
+	data = append(data, b.Root.Marshal()...)
 	return data
 }
 
 // UnMarshal
-// Reload the BPT
+// Load the BPT in support of initialization from disk.  Note that
+// an existing BPT will be over written completely.
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
 	b.MaxHeight, data = int(data[0]), data[1:]
 	b.MaxNodeID, data = storage.BytesInt64(data)
+	b.DirtyMap = make(map[int64]*Node)
+	data = b.Root.UnMarshal(data)
 	return data
 }
 

@@ -79,13 +79,17 @@ func (m *Manager) Init(databaseTag, filename string) error {
 	m.Buckets = make(map[string]byte) // Buckets hold sets of key value pairs
 	m.Labels = make(map[string]byte)  // Labels hold subsets of key value pairs within a bucket
 
-	m.AddBucket("Salt")         //                       Maintains the maximum index count   /count
-	m.AddLabel("Index2Salt")    //                       Given a salt index returns a salt   index/salt
-	m.AddLabel("Salt2Index")    //                       Given a salt, provides an index     salt/index
+	m.AddBucket("Salt")      //                          Maintains the maximum index count   /count
+	m.AddLabel("Index2Salt") //                          Given a salt index returns a salt   index/salt
+	m.AddLabel("Salt2Index") //                          Given a salt, provides an index     salt/index
+
 	m.AddBucket("ElementIndex") //                       element hash / element index
 	m.AddBucket("States")       //                       element index / merkle state
 	m.AddBucket("NextElement")  //                       element index / next element to be added to merkle tree
 	m.AddBucket("Element")      //                       count of elements in the merkle tree
+
+	m.AddBucket("BucketIndex") //                                Binary Patricia Tree Byte Blocks (blocks of BPT nodes)
+	m.AddLabel("Root")         //                                The Root node of the BPT
 
 	switch databaseTag { //                              match with a supported databaseTag
 	case "badger": //                                    Badger database indicated
