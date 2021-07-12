@@ -17,17 +17,19 @@ import (
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
-	Root      Entry           // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
+	Root      *Node           // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
 	DirtyMap  map[int64]*Node // Map of dirty nodes.
-	MaxHeight byte            // Highest height of any node in the BPT
+	MaxHeight int             // Highest height of any node in the BPT
 	MaxNodeID int64           // Maximum node id assigned to any node
+	power     int             // Power
+	mask      int             // Mask used to detect Byte Block boundaries
 }
 
 // Equal
 // Used to do some testing
 func (b *BPT) Equal(b2 *BPT) (equal bool) {
 	defer func() {
-		if err := recover(); err != 0 {
+		if err := recover(); err != nil {
 			equal = false
 		}
 	}()
@@ -48,15 +50,16 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 // Must have the MaxNodeID at the very least to be able to add nodes
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
-	data = append(data, storage.Int64Bytes(int64(b.MaxHeight))...)
-	data = append(data, storage.Int64Bytes(int64(b.MaxNodeID))...)
+	b.Update()
+	data = append(data, byte(b.MaxHeight))
+	data = append(data, storage.Int64Bytes(b.MaxNodeID)...)
 	return data
 }
 
 // UnMarshal
 // Reload the BPT
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
-	b.MaxHeight, data = data[0], data[1:]
+	b.MaxHeight, data = int(data[0]), data[1:]
 	b.MaxNodeID, data = storage.BytesInt64(data)
 	return data
 }
@@ -151,14 +154,17 @@ func (b *BPT) insertAtNode(byte, bit byte, node *Node, key, hash [32]byte) {
 			*e = v                     //                          so just do so.
 			b.Dirty(node)              //                          And changing the value of a node makes it dirty
 			return                     //                          we are done.
-		case (*e).T(): //                                         If the entry isn't nil, check if it is a Node
+		case (*e).T() == TNode: //                                         If the entry isn't nil, check if it is a Node
 			step()                                             //  If it is a node, then try and insert it on that node
 			b.insertAtNode(byte, bit, (*e).(*Node), key, hash) //  Recurse up the tree
 		default: //                                               If not a node, not nil, it is a value.
 			v := (*e).(*Value)                 //                  A collision. Get the value that got here first
 			if bytes.Equal(key[:], v.Key[:]) { //                  If this value is the same as we are inserting
-				(*e).(*Value).Hash = hash
-				return
+				if !bytes.Equal((*e).(*Value).Hash[:], hash[:]) { // Make sure this is really a change, i.e.
+					(*e).(*Value).Hash = hash //                     the new hash is really different.  If it is
+					b.Dirty(node)             //                     mark the node as dirty
+				}
+				return //                                          Changed or not, we are done.
 			} //                                                   The idea is to create a node, to replace the value
 			nn := b.NewNode(node)                        //        that was here, and the old value and the new value
 			*e = nn                                      //        and insert them at one height higher.
@@ -178,7 +184,7 @@ func (b *BPT) insertAtNode(byte, bit byte, node *Node, key, hash [32]byte) {
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
 func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value is determined by the key, and the value
-	b.insertAtNode(0, 1, b.Root.(*Node), key, hash) // in that location is the hash.  We start at byte 0, lowest
+	b.insertAtNode(0, 1, b.Root, key, hash) //         in that location is the hash.  We start at byte 0, lowest
 } //                                                   significant bit. (which is masked with a 1)
 
 // GetHash
@@ -217,15 +223,18 @@ func (b *BPT) Update() [32]byte {
 			b.Dirty(n.parent) //                           The parent is dirty cause it must consider this new state
 		}
 	}
-	return b.Root.(*Node).Hash //                          Summary hash in root.  Return it.
+	return b.Root.Hash //                          Summary hash in root.  Return it.
 }
 
 // New BPT
 // Allocate a new BPT and set up the structures required to get to work with
 // Binary Patricia Trees.
 func NewBPT() *BPT {
-	b := new(BPT)                      // Get a Binary Patricai Tree
-	b.Root = new(Node)                 // Allocate the summary node (contributes nothing to the BPT summary Hash
+	b := new(BPT)                      // Get a Binary Patrica Tree
+	b.power = 8                        // using 4 bits to persist BPTs to disk
+	b.mask = b.power - 1               // Take the bits to the power of 2 -1
+	b.Root = new(Node)                 // Allocate summary node (contributes nothing to BPT summary Hash
+	b.Root.Height = 0                  // Before the next level
 	b.DirtyMap = make(map[int64]*Node) // Allocate the Dirty Map, because batching updates is
 	return b                           // a pretty powerful way to process Patricia Trees
 }
@@ -238,12 +247,12 @@ func NewBPT() *BPT {
 //
 // The node in block 03 that completes e7 is the board node.  The left path
 // would begin the path to the theoretical key (a bit zero).
-func MarshalByteBlock(borderNode *Node) (data []byte) {
-	if borderNode.Height&7 != 0 { //                                    Must be a boarder node
-		panic("cannot call MarshalByteBlock on non-boarder nodes") //   and the code should not call this routine
+func (b *BPT) MarshalByteBlock(borderNode *Node) (data []byte) {
+	if borderNode.Height&b.mask != 0 { //                Must be a boarder node
+		panic("cannot call MarshalByteBlock on non-boarder nodes") //     and the code should not call this routine
 	} //
-	data = MarshalEntry(borderNode.left, data)  //                      Marshal the Byte Block to the left
-	data = MarshalEntry(borderNode.right, data) //                      Marshal the Byte Block to the right
+	data = b.MarshalEntry(borderNode.left, data)  //                      Marshal the Byte Block to the left
+	data = b.MarshalEntry(borderNode.right, data) //                      Marshal the Byte Block to the right
 	return data
 }
 
@@ -252,28 +261,59 @@ func MarshalByteBlock(borderNode *Node) (data []byte) {
 // the left or on the right.  Calling MarshalEntry from the left only
 // marshals half the node space of a byte block.  Have to call MarshalEntry
 // from the right to complete coverage.
-func MarshalEntry(entry Entry, data []byte) []byte { //
+func (b *BPT) MarshalEntry(entry Entry, data []byte) []byte { //
+
 	switch {
-	case entry == nil: //                           Check if nil
-		data = append(data, 0) //                   Mark as nil,
-		return data            //                   We are done
-	case !entry.T(): //                             Check if Value
-		data = append(data, 1)                  //  Tag left as a value
-		data = append(data, entry.Marshal()...) //  And marshal the value
-		return data                             //  Done
-	case entry.(*Node).Height&0x7 == 0: //          See if entry is going into
-		data = append(data, 2) //                   the next Byte Block
-		return data            //                   Ignore if so and done
-	default: //
-		data = append(data, 3)                         //                    Mark as going into a node
-		data = MarshalEntry(entry.(*Node).left, data)  // Marshal left
-		data = MarshalEntry(entry.(*Node).right, data) // Marshal right
+	case entry == nil: //                                      Check if nil
+		data = append(data, TNil) //                           Mark as nil,
+		return data               //                           We are done
+	case entry.T() == TValue: //                               Check if Value
+		data = append(data, TValue)             //             Tag left as a value
+		data = append(data, entry.Marshal()...) //             And marshal the value
+		return data                             //             Done
+	case entry.T() == TNode && //                              Check if TNode
+		entry.(*Node).Height&b.mask == b.mask: //              See if entry is going into
+		data = append(data, TNotLoaded) //                     the next Byte Block
+		return data                     //                     Ignore if so and done
+	case entry.T() == TNotLoaded: //                           Check if node isn't loaded
+		data = append(data, TNotLoaded)
+	default: //                                                In this case, we have a node to marshal
+		data = append(data, TNode)                       //    Mark as going into a node
+		data = append(data, entry.Marshal()...)          //    Put the fields into the slice
+		data = b.MarshalEntry(entry.(*Node).left, data)  //    Marshal left
+		data = b.MarshalEntry(entry.(*Node).right, data) //    Marshal right
 	}
 	return data
 }
 
 // UnMarshalByteBlock
 //
-func UnMarshalByteBlock(boarderNode *Node, data []byte) []byte {
-	return nil
+func (b *BPT) UnMarshalByteBlock(borderNode *Node, data []byte) []byte {
+	if borderNode.Height&b.mask != 0 {
+		panic("cannot call UnMarshalByteBlock on non-boarder nodes")
+	}
+	borderNode.left, data = UnMarshalEntry(data)
+	borderNode.right, data = UnMarshalEntry(data)
+	return data
+}
+
+func UnMarshalEntry(data []byte) (Entry, []byte) { //
+	nodeType, data := data[0], data[1:] //      Pull the node type out of the slice
+	switch nodeType {                   //      Based on node time, use proper unmarshal code
+	case TNil: //                               If a nil, easy
+		return nil, data //                     return the data pointer (sans the type)
+	case TValue: //                             If a value
+		v := new(Value)          //             unmarshal the value
+		data = v.UnMarshal(data) //
+		return v, data           //             Return the value object and updated data slice
+	case TNotLoaded: //                         If not loaded
+		return new(NotLoaded), data //          Create the NotLoaded stub and updated pointer
+	case TNode: //                              If a Node
+		n := new(Node)                       // Allocate a new node
+		data = n.UnMarshal(data)             // Get the Node
+		n.left, data = UnMarshalEntry(data)  // Populate Left
+		n.right, data = UnMarshalEntry(data) // Populate Right
+		return n, data
+	}
+	panic("failure to decode the ByteBlock")
 }

@@ -176,7 +176,7 @@ the key.  Should any attack be mounted to create chainIDs that significantly
 unbalance the BPT, we can refactor the Patricia Tree using any of these 
 methods, and do so over time (reorganizing only parts of the BFT at a time).
 
-We have two entry types in the BPT:
+We have three entry types in the BPT:
 * Node -- Node entries are used to organize the tree.  They have a left path 
   and a right path, and exist at a height in the BPT.  The Height is used to 
   consider a particular bit in the BPT.  The Left path is taken if the key 
@@ -185,6 +185,9 @@ We have two entry types in the BPT:
 * Value -- The key value pair in the BPT.  Value entries have no children, and 
   paths through the BPT from parent to child Node entries must end with either 
   at a nil or a Value entry.
+* Load -- Node represents the fact that the next Byte Block is not loaded, 
+  and needs to be loaded if the search is running through this part of the 
+  BPT.  
 
 Consider a set of keys that might be added to the BPT. The sequence of URLs 
 formed from acc://RedWagon/1, acc://RedWagon/2,acc://RedWagon/3, ... would 

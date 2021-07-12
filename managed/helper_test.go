@@ -40,4 +40,8 @@ func TestSliceBytes(t *testing.T) {
 			t.Errorf(" %d %x %x", i, v, slice)
 		}
 	}
+
+	if len(inputs) != 0 {
+		t.Error("should consume all data")
+	}
 }

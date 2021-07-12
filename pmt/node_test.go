@@ -1,176 +1,135 @@
 package pmt
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
-	"sort"
 	"testing"
-	"time"
 )
 
-// TestInsert
-// Check to make sure we can add elements to the BPT and get
-// out hashes.  And that we can update the BPT
-func TestInsert(t *testing.T) {
-
-	const numElements = 1000 // Choose a number of transactions to process
-
-	b := NewBPT()                         // Allocate a BPT
-	val := sha256.Sum256([]byte("hello")) // Get a seed hash
-	start := time.Now()                   // Time this
-	for i := 0; i < 100; i++ {            // Process the elements some number of times
-		for j := 0; j < numElements; j++ { // For each element
-			key := sha256.Sum256(val[:]) //   compute a key
-			b.Insert(key, val)           //   Insert the key value pair
-			key, val = val, key          //   And reuse the new key by just swapping.
+// GetLeaf
+// Find a leaf node in the given BPT tree.  Take a random path
+// (But if you set the seed, you can get the same random path)
+func GetPath(bpt *BPT) (path []*Node) {
+	bpt.Update()
+	here := bpt.Root //                                 Find a leaf node
+	for {
+		path = append(path, here)
+		if rand.Int()&1 == 0 {
+			if here.left != nil && here.left.T() == TNode { //   If I have a left child
+				here = here.left.(*Node) //                      chase it, and continue
+				continue
+			}
+			if here.right != nil && here.right.T() == TNode { // If I have a right child
+				here = here.right.(*Node) //                     chase it, and continue
+				continue
+			}
+		} else {
+			if here.right != nil && here.right.T() == TNode { // If I have a left child
+				here = here.right.(*Node) //                     chase it, and continue
+				continue
+			}
+			if here.left != nil && here.left.T() == TNode { //   If I have a right child
+				here = here.left.(*Node) //                      chase it, and continue
+				continue
+			}
 		}
-		fmt.Printf("elements Added: %d nodes to update: %d\n", numElements, len(b.DirtyMap)) // Print some results
-		fmt.Println("Max Height: ", b.MaxHeight, "node ID", b.MaxNodeID)                     // Get the Max Height
-		bHash := b.Update()                                                                  // Now update all the hashes
-		fmt.Printf("Root %x\n", bHash)                                                       // Print the summary hash (intermediate)
-		t := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000                    // Calculate the seconds, with decimal places
-		start = time.Now()                                                                   // And print how long it took
-		fmt.Printf("seconds: %8.6f\n", t)                                                    // And ... well print it.
+		break
 	}
+	return path
 }
 
-// TestInsertOrder
-// Here we prove that no matter what order the updates, the same updates
-// will produce the same BPT.
-func TestInsertOrder(t *testing.T) {
+func TestBPT_Equal(t *testing.T) {
 
-	const numElements = 1000 // how many elements we will test
+	bpt1 := LoadBpt() // Get a bunch of nodes
+	bpt2 := LoadBpt() // Get a bunch of nodes
+	fmt.Printf("Max Height %d Max ID %d\n", bpt1.MaxHeight, bpt1.MaxNodeID)
 
-	type kv struct { // Need the elements in a struct so when
-		key   [32]byte // the order is mixed up, the same keys
-		value [32]byte // follow the same values
-	}
+	unique := make(map[int64]int64)
 
-	var pair []*kv                            // A slice of kv pairs
-	keySeed := sha256.Sum256([]byte("hello")) // Different seeds for keys and values.
-	valSeed := sha256.Sum256([]byte("there")) // Not necessary, but it is what I did
-	for i := 0; i < numElements; i++ {        // For the number of elements
-		p := new(kv)                        //   Get a key / value struct
-		p.key = keySeed                     //   key from the keySeed
-		p.value = valSeed                   //   value from the value seed
-		pair = append(pair, p)              //   stick the key value pair into the slice of kv pairs (so I can replay them)
-		keySeed = sha256.Sum256(keySeed[:]) //   move the seed
-		valSeed = sha256.Sum256(valSeed[:]) //   move the value
-	} // loop and continue
+	for i := int64(0); i < 100; i++ {
+		rand.Seed(i)
+		p1 := GetPath(bpt1)
+		rand.Seed(i)
+		p2 := GetPath(bpt2)
 
-	b := NewBPT()            //        Get a BPT
-	start := time.Now()      //        Set the clock
-	for _, v := range pair { //        for every pair in the slice, insert them
-		b.Insert(v.key, v.value) //    into the PBT
-	}
-	one := b.Update()                                                  // update the BPT to get the correct summary hash
-	tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
-	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
-	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
+		leaf := p1[len(p1)-1]
+		if leaf.left != nil && leaf.left.T() == TNode {
+			t.Error("Last node is no leaf")
+		}
+		//unique[p1[len(p1)-1].ID] = i
 
-	sort.Slice(pair, func(i, j int) bool { //                             Now shuffle the pairs.  Completely different order
-		return rand.Int()&1 == 1 //                                       Randimize using the low order bit of the random number generator
-	})
+		if len(p1) != len(p2) {
+			t.Error("Path is not the same")
+		}
 
-	b = NewBPT()             //                                         Get a fresh BPT
-	start = time.Now()       //                                         Reset the clock
-	for _, v := range pair { //                                         Insert the scrambled pairs
-		b.Insert(v.key, v.value) //                                     into the BPT
-	} //
-	two := b.Update()                                                 // Update the summary hash
-	tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
-	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
-	fmt.Printf("First pass: %x\n", two)                               // Print the summary hash (should be the same)
-
-	first := pair[0]
-	sort.Slice(pair, func(i, j int) bool { //                             Now shuffle the pairs.  Completely different order
-		return rand.Int()&1 == 1 //                                       Randimize using the low order bit of the random number generator
-	})
-	if bytes.Equal(pair[0].key[:], first.key[:]) {
-		t.Fatal("After shuffle, first entry should not be the same.")
-	}
-
-	var last, now [32]byte
-	_ = last
-	b = NewBPT()             //                                         Get a fresh BPT
-	start = time.Now()       //                                         Reset the clock
-	for _, v := range pair { //                                         Insert the scrambled pairs
-		b.Insert(v.key, v.value) //                                     into the BPT
-		now = b.Update()
-		if bytes.Equal(now[:], last[:]) {
-			t.Fatal("Every Insert should change state.")
+		for i, v := range p1 {
+			if !v.Equal(p2[i]) {
+				t.Errorf("nodes should be equal %d of %d", i, len(p1))
+			}
 		}
 	}
-	three := b.Update()
-	tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
-	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
-	fmt.Printf("First pass: %x\n", two)                               // Print the summary hash (should be the same)
 
-	if !bytes.Equal(one[:], two[:]) || !bytes.Equal(one[:], three[:]) { // Use the actual go test infrastructure to report possible errors
-		t.Fatalf("\n1: %x\n2: %x\n3: %x\n3: %x", one, two, now, three) //                see 'em if they are there
+	rand.Seed(0)
+	p1 := GetPath(bpt1)
+	leaf := p1[len(p1)-1]
+	_ = leaf
+	var v *Value
+	if leaf.left != nil {
+		v = leaf.left.(*Value)
+	} else if leaf.right != nil {
+		v = leaf.right.(*Value)
+	} else {
+		t.Errorf("nodes with nil left and right paths not allowed")
 	}
 
+	bpt1.Insert(v.Key, sha256.Sum256(v.Hash[:]))
+	rand.Seed(0)
+	var equalCnt, unequalCnt int
+	for i := int64(0); i < 100; i++ {
+		rand.Seed(i)
+		p1 := GetPath(bpt1)
+		rand.Seed(i)
+		p2 := GetPath(bpt2)
+
+		leaf := p1[len(p1)-1]
+		if leaf.left != nil && leaf.left.T() == TNode {
+			t.Error("Last node is no leaf")
+		}
+		unique[p1[len(p1)-1].ID] = i
+
+		if len(p1) != len(p2) {
+			t.Error("Path is not the same")
+		}
+
+		for i, v := range p1 {
+			if !v.Equal(p2[i]) {
+				unequalCnt++
+			} else {
+				equalCnt++
+			}
+		}
+	}
+
+	fmt.Println("unique nodes tested ", len(unique))
+	fmt.Println("equal nodes ", equalCnt, " unequal nodes ", unequalCnt)
 }
 
-// TestUpdateValues
-// Here we prove that no matter what order the updates, the same updates
-// will produce the same BPT.
-func TestUpdateValues(t *testing.T) {
+func TestNode_Marshal(t *testing.T) {
+	node1 := new(Node)
+	node1.Height = 27
+	node1.Hash = [32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 10, 20}
+	node1.ID = 87654
+	node1.PreBytes = []byte{0xFF, 0xAA, 0xBB}
 
-	defer func() {
-		if err := recover(); err != nil {
-			t.Error(err)
-		}
-	}()
+	data := node1.Marshal()
+	node2 := new(Node)
+	data = (node2).UnMarshal(data)
 
-	const numElements = 1000 // how many elements we will test
-
-	type kv struct { // Need the elements in a struct so when
-		key   [32]byte // the order is mixed up, the same keys
-		value [32]byte // follow the same values
+	if len(data) != 0 {
+		t.Errorf("All data should be consumed")
 	}
-
-	var pair []*kv                            // A slice of kv pairs
-	keySeed := sha256.Sum256([]byte("hello")) // Different seeds for keys and values.
-	valSeed := sha256.Sum256([]byte("there")) // Not necessary, but it is what I did
-	for i := 0; i < numElements; i++ {        // For the number of elements
-		p := new(kv)                        //   Get a key / value struct
-		p.key = keySeed                     //   key from the keySeed
-		p.value = valSeed                   //   value from the value seed
-		pair = append(pair, p)              //   stick the key value pair into the slice of kv pairs (so I can replay them)
-		keySeed = sha256.Sum256(keySeed[:]) //   move the seed
-		valSeed = sha256.Sum256(valSeed[:]) //   move the value
-	} // loop and continue
-
-	b := NewBPT()            //                Get a BPT
-	start := time.Now()      //                Set the clock
-	for _, v := range pair { //                for every pair in the slice, insert them
-		b.Insert(v.key, v.value) //  it into the PBT
-	}
-
-	one := b.Update()                                                  // update the BPT to get the correct summary hash
-	tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
-	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
-	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
-	if len(pair) > numElements/2 {
-		updatePair := pair[numElements/2]                   //                Pick a pair out in the middle of the list
-		updatePair.key = sha256.Sum256(updatePair.value[:]) //                  change the value,
-		b.Insert(updatePair.key, updatePair.value)          //                  then insert it into BPT
-		onePrime := b.Update()                              //                Update and get the summary hash
-
-		if bytes.Equal(one[:], onePrime[:]) {
-			t.Fatalf("one %x should not be the same as onePrime", one)
-		}
-		fmt.Printf("Prime pass: %x\n", onePrime) // Print the summary hash from pass one
-	}
-}
-
-func TestExample(t *testing.T) {
-	for i := 0; i < 5; i++ {
-		s := fmt.Sprintf("RedWaggon/%d", i)
-		ex := sha256.Sum256([]byte(s))
-		fmt.Printf("%x %x %08b\n", ex, ex[:1], ex[:1])
+	if !node1.Equal(node2) {
+		t.Errorf("Failed to unmarshal node correctly")
 	}
 }

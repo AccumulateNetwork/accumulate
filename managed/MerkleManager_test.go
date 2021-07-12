@@ -8,6 +8,8 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/AccumulateNetwork/SMT/storage"
+
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
 
@@ -46,7 +48,7 @@ func TestIndexing(t *testing.T) {
 	for i := int64(0); i < testlen; i++ {
 		if (i+1)%blocklen == 0 {
 			bi := new(BlockIndex)
-			data := MM1.MainChain.Manager.Get("BlockIndex", "", Int64Bytes(i/blocklen))
+			data := MM1.MainChain.Manager.Get("BlockIndex", "", storage.Int64Bytes(i/blocklen))
 			bi.UnMarshal(data)
 			if bi.MainIndex != i {
 				t.Fatalf("the MainIndex doesn't match v %d i %d",
@@ -189,10 +191,10 @@ func TestBlockIndexes(t *testing.T) {
 		v := rand.Int63()       //                                                      Get v again
 		_ = v                   //                                                      (v to see (in debugger))
 		if rand.Intn(30) == 0 { //                                                      Same rate
-			data := MM.BlkIdxChain.Manager.Get("BlockIndex", "", Int64Bytes(blkIdx)) // Get the next element of
-			blkIdx++                                                                 // BlockIndexChain. Inc that cnt
-			bi.UnMarshal(data)                                                       // Get the struct
-			if bi.BlockIndex != blkCnt ||                                            // Should match our blk count
+			data := MM.BlkIdxChain.Manager.Get("BlockIndex", "", storage.Int64Bytes(blkIdx)) // Get the next element of
+			blkIdx++                                                                         // BlockIndexChain. Inc that cnt
+			bi.UnMarshal(data)                                                               // Get the struct
+			if bi.BlockIndex != blkCnt ||                                                    // Should match our blk count
 				bi.PendingIndex != pendingIdx || //                                     Should match our pendingIdx
 				bi.MainIndex != i { //                                                  Should match i
 				t.Fatal("Didn't see what we expected") //  If any of that isn't true, flag

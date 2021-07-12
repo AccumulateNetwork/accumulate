@@ -140,15 +140,16 @@ func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
 	if m.blkidx.PendingIndex > m.PendingChain.MS.Count-1 { //            Must move Pending chain or stay same
 		panic("should not have pending indexes that go backwards")
 	}
-	m.blkidx.BlockIndex = blockIndex                                         // Save blockIndex
-	m.blkidx.MainIndex = m.MainChain.MS.Count - 1                            // Update MainIndex (count is index+1)
-	m.blkidx.PendingIndex = m.PendingChain.MS.Count - 1                      // Update PendingIndex
-	bbi := m.blkidx.Marshal()                                                // Marshal the Block Index record
-	biHash := sha256.Sum256(bbi)                                             // Get the Hash of the bi
-	m.BlkIdxChain.MS.AddToMerkleTree(biHash)                                 // Add the bi hash to the BlkIdxChain
-	blkIdx := m.BlkIdxChain.MS.Count - 1                                     // Use a variable to make tidy
-	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", Int64Bytes(blkIdx), bbi) // blkIdx -> bbi struct
-	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", []byte{}, bbi)           // Mark as highest block
+	m.blkidx.BlockIndex = blockIndex                    //               Save blockIndex
+	m.blkidx.MainIndex = m.MainChain.MS.Count - 1       //               Update MainIndex (count is index+1)
+	m.blkidx.PendingIndex = m.PendingChain.MS.Count - 1 //               Update PendingIndex
+	bbi := m.blkidx.Marshal()                           //               Marshal the Block Index record
+	biHash := sha256.Sum256(bbi)                        //               Get the Hash of the bi
+	m.BlkIdxChain.MS.AddToMerkleTree(biHash)            //               Add the bi hash to the BlkIdxChain
+	blkIdx := m.BlkIdxChain.MS.Count - 1                //               Use a variable to make tidy
+	_ = m.BlkIdxChain.Manager.Put(                      //
+		"BlockIndex", "", storage.Int64Bytes(blkIdx), bbi) //            blkIdx -> bbi struct
+	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", []byte{}, bbi) //    Mark as highest block
 }
 
 // GetState
@@ -161,19 +162,19 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	if element == 0 {
 		return new(MerkleState)
 	}
-	data := m.MainChain.Manager.Get("States", "", Int64Bytes(element)) // Get the data at this height
-	if data == nil {                                                   // If we get a nil, there is no state saved
-		return nil //                                                     return nil, as no state exists
+	data := m.MainChain.Manager.Get("States", "", storage.Int64Bytes(element)) // Get the data at this height
+	if data == nil {                                                           //         If nil, there is no state saved
+		return nil //                                                             return nil, as no state exists
 	}
-	ms := new(MerkleState) // Get a fresh new MerkleState
-	ms.UnMarshal(data)     // set it up
-	return ms              // return it
+	ms := new(MerkleState) //                                                     Get a fresh new MerkleState
+	ms.UnMarshal(data)     //                                                     set it up
+	return ms              //                                                     return it
 }
 
 // GetNext
 // Get the next hash to be added to a state at this height
 func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
-	data := m.MainChain.Manager.Get("NextElement", "", Int64Bytes(element))
+	data := m.MainChain.Manager.Get("NextElement", "", storage.Int64Bytes(element))
 	if data == nil || len(data) != storage.KeyLength {
 		return nil
 	}
