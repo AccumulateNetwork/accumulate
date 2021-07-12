@@ -285,7 +285,12 @@ ChainID (hash of the chain URL).
   Returns the next element to be added to the Merkle Tree at a given index
 * **Element** *Salted by ChainID* no label, no key: Count of elements in the 
   merkle tree
-  
+* **BPT** *no Salt* -- ChainID / Byte Block -- The nodes in the Binary 
+  Patricia Tree (BPT) are saved as blocks of BPT nodes.  Each BPT Byte Block 
+  is addressed by the key up to the block.  
+   * **Root** *no Salt, no Key* / BPT -- returns the state of the BPT and 
+     the root node.
+     
 Buckets used by the MerkleManager:
 
 * **BucketIndex** *Salted by ChainID* element index / BlockIndex struct -- A 

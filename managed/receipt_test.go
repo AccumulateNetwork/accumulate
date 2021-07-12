@@ -74,7 +74,7 @@ func TestReceipt(t *testing.T) {
 
 func TestReceiptAll(t *testing.T) {
 
-	const testMerkleTreeSize = 1024
+	const testMerkleTreeSize = 500
 
 	// Create a memory based database
 	dbManager := new(database.Manager)
