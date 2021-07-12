@@ -1,8 +1,10 @@
 package validator
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
+	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
 
 	//"encoding/binary"
 	"github.com/AccumulateNetwork/SMT/smt"
@@ -40,8 +42,53 @@ type TXEntry struct {
 }
 
 type StateEntry struct {
-	State smt.Hash
+	StateHash []byte
+	PrevStateHash []byte
+	DDIIPubKey []byte //this is the active pubkey in the keychain for the DDII to verify data against.
+	EntryHash []byte //not sure this is needed since it is baked into state hash...
 	Entry []byte
+
+
+	DB *smtdb.Manager
+}
+
+func (app StateEntry) Marshal() ([]byte, error){
+	var ret []byte
+
+	ret = append(ret, app.StateHash...)
+	ret = append(ret, app.PrevStateHash...)
+	ret = append(ret, app.DDIIPubKey...)
+	ret = append(ret, app.EntryHash...)
+	ret = append(ret, app.Entry...)
+
+	return ret, nil
+}
+
+
+func (app StateEntry) Unmarshal(data []byte,db *smtdb.Manager) error {
+	if len(data) < 32 + 32 + 32 + 32 + 1 {
+		return fmt.Errorf("Insufficient data to unmarshall State Entry.")
+	}
+
+	app.StateHash = smt.Hash{}.Bytes()
+	app.PrevStateHash = smt.Hash{}.Bytes()
+	app.DDIIPubKey = smt.Hash{}.Bytes()
+	app.EntryHash = smt.Hash{}.Bytes()
+
+
+	i := 0
+	i += copy(app.StateHash,data[i:32])
+	i += copy(app.PrevStateHash,data[i:32])
+	i += copy(app.DDIIPubKey, data[i:i+32])
+	i += copy(app.EntryHash, data[i:i+32])
+	entryhash := sha256.Sum256(data[i:])
+	if bytes.Compare(app.EntryHash,entryhash[:]) != 0 {
+		return fmt.Errorf("Entry Hash does not match the data hash")
+	}
+	app.Entry = data[i:]
+	
+	app.DB = db
+	return nil
 }
 
 
@@ -77,8 +124,8 @@ func LeaderAtHeight(addr uint64, height uint64) *[32]byte {
 type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
-	Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error
-	Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) //return persistent entry or error
+	Check(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error
+	Validate(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) //return persistent entry or error
 	EndBlock(mdroot []byte) error  //do something with MD root
 
 	InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error  //deprecated
@@ -97,7 +144,8 @@ type ValidatorInfo struct {
 
 }
 
-
+//This function will build a chain from an DDII / ADI.  If the string is 64 characters in length, then it is assumed
+//to be a hex encoded ChainID instead.
 func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
 
 	chainidlen := len(*chainadi)

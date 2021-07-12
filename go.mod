@@ -15,6 +15,7 @@ require (
 	github.com/DiSiqueira/GoTree v1.0.0 // indirect
 	github.com/Factom-Asset-Tokens/base58 v0.0.0-20191118025050-4fa02e92ec20
 	github.com/Factom-Asset-Tokens/factom v0.0.0-20200222022020-d06cbcfe6ece
+	github.com/Factom-Asset-Tokens/fatd v1.1.4
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/FactomProject/bolt v1.1.1-0.20170202195217-952a1b4e9a55 // indirect
 	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2
