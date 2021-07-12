@@ -1,6 +1,8 @@
 #Accumulate URL
 
-acc://RedWagon 
+##Identity and Subidentities
+
+
 
 
 ##Transaction Types:
@@ -27,7 +29,7 @@ An identity can be updated to replace a public key.  The public key which will b
 the current block forward, but can still be used to for resolving identity keys for entries prior to the current block 
 height.  No transactions using the replaced key will be valid going forward.
 
-> acc://RedWagon/identity?replace=PUBLICKEY1_HEX+PUBLICKEY2_HEX
+> acc://RedWagon/identity?replace=PUBLICKEY1_HEX+PUBLICKEY2_HEX&signature=f97a65de43
 
 ####Delegate Identity
 **TBD:** It is possible to delegate your identity to another identity for a given amount of time.  It will allow

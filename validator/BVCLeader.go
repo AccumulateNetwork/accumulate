@@ -26,7 +26,7 @@ func NewBVCLeader() *BVCLeader {
 }
 
 
-func (v *BVCLeader) Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *BVCLeader) Check(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *BVCLeader) Initialize(config *cfg.Config) error {
@@ -42,7 +42,7 @@ func (v *BVCLeader) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *BVCLeader) Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
+func (v *BVCLeader) Validate(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 	//return persistent entry or error
 	return nil, nil
 }
