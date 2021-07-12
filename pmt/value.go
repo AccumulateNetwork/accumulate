@@ -15,8 +15,8 @@ type Value struct {
 
 // Node
 // Returns true if this is a Node, otherwise it is a value
-func (v *Value) T() bool {
-	return false
+func (v *Value) T() int {
+	return TValue
 }
 
 // GetHash

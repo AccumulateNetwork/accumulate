@@ -17,7 +17,7 @@ import (
 type Node struct {
 	ID       int64    // Node Count
 	PreBytes []byte   // Bytes preceding the block that contains this node
-	Height   uint8    // Root is 0. above root is 1. Above above root is 2, etc.
+	Height   int      // Root is 0. above root is 1. Above above root is 2, etc.
 	Hash     [32]byte // This is the summary hash for the tree
 	left     Entry    // The hash of the child left and up the tree, bit is zero
 	right    Entry    // the hash to the child right and up the tree, bit is one
@@ -61,8 +61,8 @@ func (n *Node) Equal(entry Entry) (equal bool) {
 // is really a Value.  We possibly want a way for Node to compress the
 // distance to child nodes that have a long single path to leaves just
 // because a key matches a number of bits before differentiating.
-func (n *Node) T() bool {
-	return true
+func (n *Node) T() int {
+	return TNode
 }
 
 // GetID
@@ -89,7 +89,7 @@ func (n *Node) GetHash() []byte {
 func (n *Node) Marshal() (data []byte) {
 	data = append(data, storage.Int64Bytes(n.ID)...)
 	data = append(data, managed.SliceBytes(n.PreBytes)...)
-	data = append(data, n.Height)
+	data = append(data, byte(n.Height))
 	data = append(data, n.Hash[:]...)
 	return data
 }
@@ -99,8 +99,8 @@ func (n *Node) Marshal() (data []byte) {
 func (n *Node) UnMarshal(data []byte) []byte {
 	n.ID, data = storage.BytesInt64(data)
 	n.PreBytes, data = managed.BytesSlice(data)
-	n.Height, data = data[0], data[1:]
-	hashSlice, data := managed.BytesSlice(data)
+	n.Height, data = int(data[0]), data[1:]
+	hashSlice, data := data[:32], data[32:]
 	copy(n.Hash[:], hashSlice)
 	return data
 }

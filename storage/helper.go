@@ -11,6 +11,7 @@
 package storage
 
 import (
+	"encoding/binary"
 	"fmt"
 	"os"
 	"os/user"
@@ -94,31 +95,35 @@ func BytesUint32(data []byte) (uint32, []byte) {
 
 // Uint64Bytes
 // Marshal a uint64 (big endian)
-func Uint64Bytes(i uint64) []byte {
-	return append([]byte{}, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+func Uint64Bytes(i uint64) (data []byte) {
+	var buf [16]byte
+	count := binary.PutUvarint(buf[:], i)
+	return buf[count:]
 }
 
 // BytesUint64
 // Unmarshal a uint64 (big endian)
 func BytesUint64(data []byte) (uint64, []byte) {
-	return uint64(data[0])<<56 + uint64(data[1])<<48 + uint64(data[2])<<40 + uint64(data[3])<<32 +
-		uint64(data[4])<<24 + uint64(data[5])<<16 + uint64(data[6])<<8 + uint64(data[7]), data[8:]
+	value, count := binary.Uvarint(data)
+	return value, data[count:]
 }
 
 // Int64Bytes
 // Marshal a int64 (big endian)
 // We only need this function on top of Uint64Bytes to avoid a type conversion when dealing with int64 values
 func Int64Bytes(i int64) []byte {
+	var buf [16]byte
 	// Note that shifting i right 56 bits DOES fill the in64 with the sign bit, but the byte conversion kills that.
-	return append([]byte{}, byte(i>>56), byte(i>>48), byte(i>>40), byte(i>>32), byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
+	count := binary.PutVarint(buf[:], i)
+	return buf[:count]
 }
 
 // BytesInt64
 // Unmarshal a int64 (big endian)
 // We only need this function on top of BytesUint64 to avoid a type conversion when dealing with int64 values
 func BytesInt64(data []byte) (int64, []byte) {
-	return int64(data[0])<<56 + int64(data[1])<<48 + int64(data[2])<<40 + int64(data[3])<<32 +
-		int64(data[4])<<24 + int64(data[5])<<16 + int64(data[6])<<8 + int64(data[7]), data[8:]
+	value, cnt := binary.Varint(data)
+	return value, data[cnt:]
 }
 
 // DurationFormat
