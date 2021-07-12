@@ -237,7 +237,7 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	app.Accrpcaddr = v.GetString("accumulate.AccRPCAddress")
 
 	//create a connection to the router.
-	routeraddress := viper.GetString("accumulate.RouterAddress")
+	routeraddress := v.GetString("accumulate.RouterAddress")
 	if len(routeraddress) == 0 {
 		return fmt.Errorf("accumulate.RouterAddress token not specified in config file")
 	}
@@ -248,10 +248,6 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	}
 	//defer conn.Close()
 	app.RouterClient = pb.NewApiServiceClient(conn)
-
-	sub := pb.Submission{}
-	//send a test transaction
-	app.RouterClient.ProcessTx(context.Background(),&sub)
 
 	name := "blockstate"
 	db, err := dbm.NewGoLevelDB(name, WorkingDir)
@@ -300,7 +296,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 
 	////an entry bucket --> do do determine if
 	//app.mmdb.AddBucket("Entry")
-	//
+	app.mmdb.AddBucket("Entries")
 	////commits will be stored here and key'ed via entry hash.
 	//app.mmdb.AddBucket("Commit")
 
@@ -454,7 +450,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 
 
 	//do a quick check to make sure this this transaction has a high probability of passing given further testing upon delivery
-	err = val.Check(sub.Address, sub.Chainid, sub.Param1, sub.Param2, sub.Data)
+	err = val.Check(nil, sub.Address, sub.Chainid, sub.Param1, sub.Param2, sub.Data)
 	if err != nil {
 		ret.Code = 2
 		ret.GasWanted = 0
@@ -522,12 +518,12 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 
 		hash := smt.Hash(sha256.Sum256(vdata.Submissions[i].Data))
 		switch vdata.Submissions[i].Instruction {
-		case pb.Submission_Scratch_Entry:
+		case pb.AccInstruction_Scratch_Entry:
 			//generate a key for the chain entry
 			//store to scratch DB.
 			app.mm.AddHash(hash)
 
-		case pb.Submission_Data_Entry:
+		case pb.AccInstruction_Data_Entry:
 
             //if we get to this point we can move scratch chain to this chain perhaps and remove scratch chain?
             //remove from scratch DB
@@ -597,28 +593,71 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 		return abcitypes.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: fmt.Sprintf("Unable to decode transaction") }
 	}
+
+	tempkey := sub.GetChainid() //the key is not stored in the database, just using this as temporary.
+
+	//The key is the state hash in the patricia trie.  So lookup the state hash based upon the
+	//Chain ID of what you are interested in.  So...  After looking up the state hash, you can then
+	//pull the data.
+	//key := app.mm.PT.StoreState(sub.GetChainid(),sha256.Sum256(sub.GetData()))
+	key := tempkey
+
+	data := app.mmdb.Get("Entries","", key)
+	currentstate := validator.StateEntry{}
+	err = currentstate.Unmarshal(data,&app.mmdb)
+
+	if err != nil {
+		ret.Code = code.CodeTypeEncodingError
+		ret.Info = fmt.Sprintf("Invalid State Object for %X", sub.GetChainid())
+	}
+
 	//resolve the validator's bve to obtain public key for given height
-	var key smt.Hash
-	key.Extract(sub.GetChainid())
 	if val, ok := app.chainval[sub.GetType()]; ok {
 		//check the type of transaction
+		//in reality we will check the type of chain to determine how to handle validation for that chain.
+
+		vdata, err := val.Validate(&currentstate, sub.Address, sub.Chainid, sub.Param1, sub.Param2, sub.Data)
+
+		if err != nil {
+			ret.Code = 2
+			ret.GasWanted = 0
+			ret.GasUsed = 0
+			ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n",sub.Type, val.GetNamespace())
+			return ret
+		}
+		if vdata == nil {
+			ret.Code = 2
+			ret.GasWanted = 0
+			ret.GasUsed = 0
+			ret.Info = fmt.Sprintf("Insufficent Entry Data on validator %v \n", val.GetNamespace())
+			return ret
+		}
+
+		app.processValidatedSubmissionRequest(vdata)
+
+		//now we need to store the data returned by the validator and feed into accumulator
+		app.txct++
+
 		switch sub.Instruction {
-		case pb.Submission_Token_Transaction:
-			//ask validator to do a quick check on command.
-            //
-			//data, err := val.Validate(sub.Instruction, sub.Param1, sub.Param2, sub.Data)
-			vdata, err := val.Validate(sub.Address, sub.Chainid, sub.Param1, sub.Param2, sub.Data)
+		case pb.AccInstruction_Token_URL_Creation,
+			pb.AccInstruction_Token_Transaction,
+			pb.AccInstruction_Data_Chain_Creation,
+			pb.AccInstruction_Data_Entry,
+			pb.AccInstruction_Scratch_Chain_Creation,
+			pb.AccInstruction_Scratch_Entry,
+			pb.AccInstruction_Token_Issue:
+
+
+			vdata, err := val.Validate(&currentstate, sub.Address, sub.Chainid, sub.Param1, sub.Param2, sub.Data)
 
 			if err != nil {
 				ret.Code = 2
 				ret.GasWanted = 0
 				ret.GasUsed = 0
-
 				ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n",sub.Type, val.GetNamespace())
 				return ret
 			}
 			if vdata == nil {
-
 				ret.Code = 2
 				ret.GasWanted = 0
 				ret.GasUsed = 0
@@ -627,18 +666,33 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			}
 			// if we have vdata, then we need to figure out what to do with it.
 
-			app.processValidatedSubmissionRequest(vdata)
 
-			//now we need to store the data returned by the validator and feed into accumulator
-			//app.mmdb.Get
-			app.txct++
 
-		case pb.Submission_Key_Update:
+		case pb.AccInstruction_Key_Update:
 			//do nothing for now
-		case pb.Submission_Identity_Creation:
+		case pb.AccInstruction_Identity_Creation:
 			//do nothing fo rnow
+
+		case pb.AccInstruction_Data_Store:
+			//generate Entry Key from Chainid.
+			//need to validate the sucker...
+			//validate(sub.GetData)
+			state := validator.StateEntry{}
+			ddiiname := sha256.Sum256([]byte("RedWagon"))
+			state.DDIIPubKey = ddiiname[:]
+			state.StateHash = smt.Hash{}.Bytes()
+			state.Entry = sub.GetData()
+			//key := app.mm.PT.StoreState(sub.GetChainid(),sha256.Sum256(sub.GetData()))
+			key := sub.GetChainid() //only temporary...
+
+			err = app.mmdb.Put("Entries","", key, sub.GetData())
+			if err != nil {
+				ret.Code = code.CodeTypeEncodingError
+				ret.Info = fmt.Sprintf("Error submitting entry to database for chain %X",sub.GetChainid())
+				ret.GasWanted = 0
+			}
 		default:
-			ret.Code = 1
+			ret.Code = code.CodeTypeEncodingError
 			ret.Info = fmt.Sprintf("Unknown message type %v on address %v \n",sub.Type, sub.Address)
 			return ret
 		}
@@ -730,7 +784,7 @@ func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
         chainaddr, _ := smt.BytesUint64(chainid)
 		dbvc.Submissions[0].Address = chainaddr //1 is the chain id of the DBVC
 		dbvc.Submissions[0].Chainid = chainid
-		dbvc.Submissions[0].Instruction = pb.Submission_Data_Entry //this may be irrelevant...
+		dbvc.Submissions[0].Instruction = pb.AccInstruction_Data_Entry //this may be irrelevant...
 		dbvc.Submissions[0].Param1 = 0
 		dbvc.Submissions[0].Param2 = 0
 		bvedata,err := bve.MarshalBinary()
@@ -779,6 +833,10 @@ func (app *AccumulatorVMApplication) ListSnapshots(
 
 func (app *AccumulatorVMApplication) LoadSnapshotChunk(
 	req abcitypes.RequestLoadSnapshotChunk) abcitypes.ResponseLoadSnapshotChunk {
+	//req.Height
+	//resp := abcitypes.ResponseLoadSnapshotChunk{}
+	//need to get a block of data between markers.
+	//resp.Chunk = app.mm.GetState(req.Height)
 	return abcitypes.ResponseLoadSnapshotChunk{}
 }
 
@@ -805,6 +863,8 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
     	resQuery.Code = code.CodeTypeUnauthorized
     	return resQuery
 	}
+	fmt.Printf("Query URI: %s", q.Query)
+
 	///implement lazy sync calls. If a node falls behind it needs to have several query calls
 	///1 get current height
 	///2 get block data for height X
