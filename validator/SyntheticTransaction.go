@@ -55,7 +55,7 @@ func NewSyntheticTransactionValidator() *SyntheticTransactionValidator {
 }
 
 
-func (v *SyntheticTransactionValidator) Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *SyntheticTransactionValidator) Check(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *SyntheticTransactionValidator) Initialize(config *cfg.Config) error {
@@ -71,7 +71,7 @@ func (v *SyntheticTransactionValidator) BeginBlock(height int64, time *time.Time
 	return nil
 }
 
-func (v *SyntheticTransactionValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *SyntheticTransactionValidator) Validate(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
 	return nil, nil
 	//return &pb.Submission{}, nil
 }

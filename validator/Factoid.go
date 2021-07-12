@@ -54,7 +54,7 @@ func NewFactoidValidator() *FactoidValidator {
 //	return
 //}
 
-func (v *FactoidValidator) Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *FactoidValidator) Check(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	tx := factom.Transaction{}
 	err := tx.UnmarshalBinary(data)
 	if err != nil {
@@ -146,7 +146,7 @@ func (v *FactoidValidator) processEcTx(data []byte) ([]byte, error) {
 }
 
 
-func (v *FactoidValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *FactoidValidator) Validate(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
 	//if pass then send to accumulator.
 	//var fblock := factom.FBlock{}
 	//create a new block

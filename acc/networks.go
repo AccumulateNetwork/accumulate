@@ -1,9 +1,10 @@
 package acc
 
-const Shard string = {
+var Networks = [...]string  {
+    "Theodore-Roosevelt",
     "Arcadia",
     "Arches",
-    "American-Samoa"
+    "American-Samoa",
     "Badlands",
     "Big-Bend",
     "Biscayne",
@@ -55,7 +56,6 @@ const Shard string = {
     "Saguaro",
     "Sequoia",
     "Shenandoah",
-    "Theodore-Roosevelt",
     "Virgin-Islands",
     "Voyageurs",
     "White-Sands",
@@ -63,6 +63,6 @@ const Shard string = {
     "Wrangell-Saint-Elias",
     "Yellowstone",
     "Yosemite",
-    "Zion"
-}
+    "Zion",
+    }
 

@@ -1,34 +1,24 @@
-package main
+package acc
 
 import (
-	"github.com/AccumulateNetwork/SMT/smt"
-	"github.com/AccumulateNetwork/accumulated/router"
-	"github.com/AccumulateNetwork/accumulated/validator"
-	"github.com/spf13/viper"
-	"strings"
-
-	//	"errors"
-	"flag"
 	"fmt"
-	"log"
+	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/spf13/viper"
 	"os"
-    "path"
-
 	"os/signal"
-	"os/user"
 	"syscall"
 
+	//"github.com/AccumulateNetwork/accumulated/acc"
 	"github.com/AccumulateNetwork/accumulated/tendermint"
-
 )
-const MaxShards int = 1024
+const MaxNetworks int = len(Networks)
 
-var ConfigFile [MaxShards]string
-var WorkingDir [MaxShards]string
+var ConfigFile [MaxNetworks]string
+var WorkingDir [MaxNetworks]string
 //var SpecialModeHeight int64 = 99999999999
 
 //SendToken GreenRock/t/acc RedWagon/t/acc 10
-type SendToken {
+type SendToken struct {
     fromurl string
     tourl string
     actoshis uint64
@@ -50,45 +40,49 @@ type Fee struct {
 
 
 func init() {
-	var name string
-	flag.StringVar(&name, "name", "", "your name")
-	flag.Parse()
-	values := flag.Args()
-	for _, word := range values {
-		urlname := strings.ToLower(word)
-		if !strings.HasPrefis("acc://")
-		if u {
+	//var name string
+	//flag.StringVar(&name, "name", "", "your name")
+	//flag.Parse()
+	//values := flag.Args()
+	//for _, word := range values {
+	//	urlname := strings.ToLower(word)
+	//	if !strings.HasPrefix("acc://", urlname) {
+	//
+	//	}
+	//	if urlname != "" {
+	//
+	//		fmt.Println(strings.ToUpper(word))
+	//	} else {
+	//
+	//		fmt.Println(word)
+	//	}
+	//}
 
-			fmt.Println(strings.ToUpper(word))
-		} else {
-
-			fmt.Println(word)
-		}
-	}
-
-	if len(name) == 0 {
-		fmt.Println("Usage: defaults.go -name")
-		flag.PrintDefaults()
-		os.Exit(1)
-	}
-
-
-	usr,err := user.Current()
-	if err != nil {
-		log.Fatal( err )
-		os.Exit(1)
-	}
-
-	flag.StringVar(&WorkingDir[0], "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
-	flag.Parse()
-	WorkingDir[1] = path.Join(WorkingDir[0],"/accumulate/rocky")
-	WorkingDir[2] = path.Join(WorkingDir[0],"/accumulate/smoky")
-	WorkingDir[3] = path.Join(WorkingDir[0],"/accumulate/yellowstone")
-	WorkingDir[0] = path.Join(WorkingDir[0],"/accumulate/leader")
-	ConfigFile[0] = path.Join(WorkingDir[0],"/config/config.toml")
-	ConfigFile[1] = path.Join(WorkingDir[1],"/config/config.toml")
-	ConfigFile[2] = path.Join(WorkingDir[2],"/config/config.toml")
-	ConfigFile[3] = path.Join(WorkingDir[3],"/config/config.toml")
+	//if len(name) == 0 {
+	//	fmt.Println("Usage: defaults.go -name")
+	//	flag.PrintDefaults()
+	//	os.Exit(1)
+	//}
+	//
+	//
+	//usr,err := user.Current()
+	//if err != nil {
+	//	panic( err )
+	//	os.Exit(1)
+	//}
+	//
+	////flag.StringVar(&WorkingDir[0], "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
+	//flag.StringVar(&WorkingDir[0], "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
+	//flag.Parse()
+	////acc.Networks[0]
+	//WorkingDir[1] = path.Join(WorkingDir[0],"/accumulate/rocky")
+	//WorkingDir[2] = path.Join(WorkingDir[0],"/accumulate/smoky")
+	//WorkingDir[3] = path.Join(WorkingDir[0],"/accumulate/yellowstone")
+	//WorkingDir[0] = path.Join(WorkingDir[0],"/accumulate/leader")
+	//ConfigFile[0] = path.Join(WorkingDir[0],"/config/config.toml")
+	//ConfigFile[1] = path.Join(WorkingDir[1],"/config/config.toml")
+	//ConfigFile[2] = path.Join(WorkingDir[2],"/config/config.toml")
+	//ConfigFile[3] = path.Join(WorkingDir[3],"/config/config.toml")
 }
 
 func main() {
@@ -122,17 +116,17 @@ func main() {
 	viper.SetConfigFile(ConfigFile[1])
 	viper.AddConfigPath(WorkingDir[1])
 	viper.ReadInConfig()
-	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
+	viper.GetString("accumulate.RouterAddress")
 
-	accvm := CreateAccumulateVM(ConfigFile[1], WorkingDir[1])
+//	accvm := CreateAccumulateVM(ConfigFile[1], WorkingDir[1])
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
-	accvmapi, _ := accvm.GetAPIClient()
-	urlrouter.AddShardClient(accvm.GetName(), accvmapi)
+//	accvmapi, _ := accvm.GetAPIClient()
+//	urlrouter.AddShardClient(accvm.GetName(), accvmapi)
 
 	//temporary server for each vm.  will be replaced by url router.
-	go router.Jsonrpcserver2(accvmapi)
-	urlrouter.AddShardClient("",accvmapi)
+//	go router.Jsonrpcserver2(accvmapi)
+//	urlrouter.AddShardClient("",accvmapi)
 
 
 	c := make(chan os.Signal, 1)

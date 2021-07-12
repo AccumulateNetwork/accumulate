@@ -42,7 +42,7 @@ func NewCreateIdentityValidator() *CreateIdentityValidator {
 }
 
 
-func (v *CreateIdentityValidator) Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *CreateIdentityValidator) Check(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *CreateIdentityValidator) Initialize(config *cfg.Config) error {
@@ -58,7 +58,7 @@ func (v *CreateIdentityValidator) BeginBlock(height int64, time *time.Time) erro
 	return nil
 }
 
-func (v *CreateIdentityValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
 	return nil, nil
 	//return &pb.Submission{}, nil
 }

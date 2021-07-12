@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/SMT/smt"
 	"github.com/AccumulateNetwork/accumulated/proto"
@@ -16,34 +17,35 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
 type RouterConfig struct {
 	proto.ApiServiceServer
 	grpcServer *grpc.Server
 
-	shardclients []abcicli.Client
+	bvcclients []abcicli.Client
 	Address string
 }
 
 
-func (app RouterConfig) PostEntry(context.Context, *proto.EntryBytes) (*proto.Reply, error) {
+func (app *RouterConfig) PostEntry(context.Context, *proto.EntryBytes) (*proto.Reply, error) {
 	return nil,nil
 }
-func (app RouterConfig) ReadKeyValue(context.Context, *proto.Key) (*proto.KeyValue, error) {
+func (app *RouterConfig) ReadKeyValue(context.Context, *proto.Key) (*proto.KeyValue, error) {
 	return nil,nil
 }
-func (app RouterConfig) RequestAccount(context.Context, *proto.Key) (*proto.Account, error) {
+func (app *RouterConfig) RequestAccount(context.Context, *proto.Key) (*proto.Account, error) {
 	return nil,nil
 }
-func (app RouterConfig) GetHeight(context.Context, *empty.Empty) (*proto.Height, error) {
+func (app *RouterConfig) GetHeight(context.Context, *empty.Empty) (*proto.Height, error) {
 	return nil,nil
 }
-func (app RouterConfig) GetNodeInfo(context.Context, *empty.Empty) (*proto.NodeInfo, error) {
+func (app *RouterConfig) GetNodeInfo(context.Context, *empty.Empty) (*proto.NodeInfo, error) {
 	return nil,nil
 }
 
-func (app RouterConfig) QueryShardCount(context.Context, *empty.Empty) (*proto.ShardCountResponse, error) {
+func (app *RouterConfig) QueryShardCount(context.Context, *empty.Empty) (*proto.ShardCountResponse, error) {
 	scr := proto.ShardCountResponse{}
 
 	fmt.Printf("TODO: need to implement blockchain query to dbvc for number of shards\n")
@@ -51,14 +53,14 @@ func (app RouterConfig) QueryShardCount(context.Context, *empty.Empty) (*proto.S
 	return &scr,nil
 }
 
-func (app RouterConfig) GetNumShardsInSystem() int32 {
+func (app *RouterConfig) GetNumShardsInSystem() int32 {
 	//todo query DBVC....  need a better way to monitor this from the perspective of the DBVC since it knows about
 	//everyone.  We also need to know who all the leaders are who participated in a given round at a given height
 	//only update it once in a blue moon when shards are added.  so need to monitor the appropriate chain for activity.
 	return 1
 }
 
-func (app RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*proto.AccQueryResp, error) {
+func (app *RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*proto.AccQueryResp, error) {
 	scr := proto.AccQueryResp{}
 
 	rq := types.RequestQuery{}
@@ -67,13 +69,21 @@ func (app RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*proto
 
 	rq.Height = 12345
 	client := app.getBVCClient(query.Addr)
-	resp, _ := client.QuerySync(rq)
+	if client == nil {
+		return nil, fmt.Errorf("No BVC Client Available on for address %X", query.Addr)
+	}
+	resp, err := client.QuerySync(rq)
+
+	if err != nil {
+		return nil, err
+	}
+
 	scr.Code = resp.Code
 
 	return &scr,nil
 }
 
-func (app RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*proto.SubmissionResponse, error) {
+func (app *RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*proto.SubmissionResponse, error) {
 	//fmt.Printf("hello world from dispatch server TX ")
 	resp := proto.SubmissionResponse{}
 	client := app.getBVCClient(sub.GetAddress())
@@ -100,7 +110,7 @@ func (app RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*p
 	return &resp, nil
 }
 
-func (app RouterConfig) Close (){
+func (app *RouterConfig) Close (){
     app.grpcServer.GracefulStop()
 }
 
@@ -127,22 +137,24 @@ func NewRouter(routeraddress string) (config *RouterConfig) {
 	var opts []grpc.ServerOption
 	//...
 	r.grpcServer = grpc.NewServer(opts...)
-	proto.RegisterApiServiceServer(r.grpcServer, r)
+	proto.RegisterApiServiceServer(r.grpcServer, &r)
 	go r.grpcServer.Serve(lis)
 
 	return &r
 }
 
-func (app RouterConfig) getBVCClient(addr uint64) abcicli.Client {
-	numshards := uint64(len(app.shardclients))
-	if numshards == 0 {
+func (app *RouterConfig) getBVCClient(addr uint64) abcicli.Client {
+	numbvcnetworks := uint64(len(app.bvcclients))
+	if numbvcnetworks == 0 {
 		return nil
 	}
-	return app.shardclients[addr%numshards]
+	return app.bvcclients[addr%numbvcnetworks]
 }
 
-func (app RouterConfig) AddShardClient(shardname string, client abcicli.Client) error {
-	app.shardclients = append(app.shardclients,client)
+func (app *RouterConfig) AddBVCClient(shardname string, client abcicli.Client) error {
+	//todo: make this a discovery method.  we need to know for sure how many BVC's there are and we need
+	//to explicitly connect to them...
+	app.bvcclients = append(app.bvcclients,client)
 	return nil
 }
 
@@ -150,7 +162,7 @@ func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
 	return tmnet.Connect(addr)
 }
 
-func (app RouterConfig) CreateGRPCClient() (proto.ApiServiceClient,error) {
+func (app *RouterConfig) CreateGRPCClient() (proto.ApiServiceClient,error) {
 	conn, err := grpc.Dial(app.Address, grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
 	if err != nil {
 		return nil, fmt.Errorf("Error Openning GRPC client in router")
@@ -158,6 +170,7 @@ func (app RouterConfig) CreateGRPCClient() (proto.ApiServiceClient,error) {
 	api := proto.NewApiServiceClient(conn)
 	return api, nil
 }
+
 
 func GetAddressFromIdentityName(name string) uint64 {
 	namelower := strings.ToLower(name)
@@ -221,27 +234,53 @@ type AccUrl struct {
 //	copy(m)
 //	return m, nil
 //}
-func URLParser(s string) proto.AccQuery {
+func toJSON(m interface{}) (string,error) {
+	js, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return strings.ReplaceAll(string(js), ",", ", "),nil
+}
 
-	r := proto.AccQuery{}
+func URLParser(s string) (ret proto.AccQuery,err error) {
+
+	if !utf8.ValidString(s) {
+		return ret,fmt.Errorf("URL is has invalid UTF8 encoding")
+	}
+
+	if !strings.HasPrefix(s,"acc://") {
+		s = "acc://" + s
+	}
+
 
 	u, err := url.Parse(s)
 	if err != nil {
-		panic(err)
+		return ret, err
 	}
 
 	fmt.Println(u.Scheme)
 
 	fmt.Println(u.Host)
-	r.DDII = u.Host
-	r.Addr = validator.GetTypeIdFromName(r.DDII)
-	h := sha256.Sum256([]byte(u.RawPath))
-	r.ChainId =  h[:]
+	//so the primary is up to the "." if it is there.
+	hostname := u.Hostname()
+	//DDIIaccounts := strings.Split(hostname,".")
+	ret.DDII = hostname
 
-	fmt.Println(u.RawPath)
-	fmt.Println(u.RequestURI())
+	ret.Addr = validator.GetTypeIdFromName(hostname)
 
-    return r
+	m, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return ret,err
+	}
+	js,err := toJSON(m)
+
+	fmt.Println(js)
+
+	h := sha256.Sum256([]byte(hostname+u.Path))
+	ret.ChainId =  h[:]
+    ret.Query = js //u.RawQuery
+
+    return ret,nil
 }
 
 func Router() {

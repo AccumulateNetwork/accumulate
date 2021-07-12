@@ -61,7 +61,7 @@ func NewEntryValidator() *EntryValidator {
 }
 
 
-func (v *EntryValidator) Check(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *EntryValidator) Check(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *EntryValidator) Initialize(config *cfg.Config) error {
@@ -81,7 +81,7 @@ func (v *EntryValidator) BeginBlock(height int64, time *time.Time) error {
 
 
 
-func (v *EntryValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *EntryValidator) Validate(currentstate *StateEntry, addr uint64, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
 	datalen := uint64(len(data))
 
 	//safety check to make sure the P1 is valid
@@ -89,7 +89,7 @@ func (v *EntryValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uin
 		return nil, fmt.Errorf("Invalid offset parameter for entry validation")
 	}
 
-	commitlen := uint64(len(data)) - p1
+	commitlen := datalen - p1
 
 	ischaincommit := (commitlen == uint64(vtypes.ChainCommitSize))
 
@@ -122,13 +122,23 @@ func (v *EntryValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uin
 		return nil, fmt.Errorf("Entry Hash does not match commit hash")
 	}
 
-	//third check if segwit is valid
+
+	//third check if segwit has a valid signature
+	if currentstate != nil {
+		copy(ecr.Segwit.Signature.PublicKey, currentstate.DDIIPubKey[:])
+	}
+
 	if !ecr.Segwit.Valid() {
 		return nil, fmt.Errorf("Invalid Segwit signature for entry")
 	}
 
+	EcRequired := p1 % 250
 
-	var entryblock [128]byte
+	//need to check the fees.
+	if ischaincommit {
+		EcRequired += 1
+	}
+
 	//build up a entry block to submit for finality
 	resp := ResponseValidateTX{}
 	index := 0
@@ -145,12 +155,13 @@ func (v *EntryValidator) Validate(addr uint64, chainid []byte, p1 uint64, p2 uin
 	} else {
 		resp.Submissions = make([]pb.Submission,1)
 	}
-
-	resp.Submissions[index].Address = addr //TBD: this probably needs to be addressed to the Data Store shard.
-	resp.Submissions[index].Chainid = chainid
-	resp.Submissions[index].Type = GetTypeIdFromName("entry-store")
-	resp.Submissions[index].Instruction = pb.AccInstruction_Data_Entry //really needs to be a directl
-	resp.Submissions[index].Data = entryblock[:]
+	//so for data store, should an entry block be created
+    //so even if this is a chain commit, do we actually need to know
+	resp.Submissions[index].Address = addr //route to the data store on this network
+	resp.Submissions[index].Chainid = chainid //store the data under this chain
+	resp.Submissions[index].Type = GetTypeIdFromName("entry-store")  //not sure if we really need this...
+	resp.Submissions[index].Instruction = pb.AccInstruction_Data_Store //this will authorize the storage of the data
+	resp.Submissions[index].Data = data[0:p1]
 	//should this be returns or just be locked into a shard
 	return &resp, nil
 	//return &pb.Submission{}, nil

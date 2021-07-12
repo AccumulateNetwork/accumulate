@@ -2,9 +2,9 @@ package types
 
 import (
 	"crypto/sha256"
-	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"github.com/AccumulateNetwork/SMT/smt"
 
 	//fold in the types to accumulate
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
@@ -20,8 +20,8 @@ type EntryCommit struct {
 	Version	uint64
 	Timestamp valacctypes.TimeStamp
 	Entryhash valacctypes.Hash
-	Numec int8
-	Signature valacctypes.Signature //signature contains signature and pubkey
+	NumEc int8
+	Signature valacctypes.Signature //signature contains signature and pubkey, but we probably need to change pubkey to DDII/ADI
 
 	ChainIDHash *valacctypes.Hash
 	ChainWeld *valacctypes.Hash
@@ -50,8 +50,8 @@ type Entry struct {
 	// An Entry in EBlock.Entries after a successful call to EBlock.Get has
 	// its ChainID, Hash, and Timestamp.
     Version uint64
-	ChainID   *[32]byte  `json:"chainid,omitempty"`
-	Hash      *[32]byte  `json:"entryhash,omitempty"`
+	ChainID   *smt.Hash  `json:"chainid,omitempty"`
+	Hash      *smt.Hash  `json:"entryhash,omitempty"`
 	//EntryHash  *[32]byte  `json:"entryhash,omitempty"`
 
 	// Entry.Get populates the Content and ExtIDs.
@@ -128,6 +128,9 @@ func (e Entry) MarshalBinary() ([]byte, error) {
 
 	// Header, version byte 0x00
 	data := make([]byte, totalSize)
+
+	data[0] = 0x02 //update to version 1 now that we are no longer using minute boundaries.
+
 	i := 1
 	i += copy(data[i:], e.ChainID[:])
 	binary.BigEndian.PutUint16(data[i:i+2],
@@ -157,16 +160,6 @@ const EntryMaxDataSize = 10240
 // EntryMaxTotalSize is the maximum total encoded length of an Entry.
 const EntryMaxTotalSize = EntryMaxDataSize + EntryHeaderSize
 
-// ComputeEntryHash returns the Entry hash of data. Entry's are hashed via:
-// sha256(sha512(data) + data).
-func ComputeEntryHash(data []byte) [32]byte {
-	sum := sha512.Sum512(data)
-	saltedSum := make([]byte, len(sum)+len(data))
-	i := copy(saltedSum, sum[:])
-	copy(saltedSum[i:], data)
-	return sha256.Sum256(saltedSum)
-}
-
 // UnmarshalBinary unmarshals raw entry data into e.
 //
 // If e.ChainID is not nil, it must equal the ChainID described in the data.
@@ -193,13 +186,14 @@ func (e *Entry) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("invalid length")
 	}
 
-	if data[0] != 0x00 {
-		return fmt.Errorf("invalid version byte")
+	version := data[0]
+	if version != 0x02 {
+		return fmt.Errorf("invalid version byte, expecting version 2")
 	}
 
 	i := 1 // Skip version byte.
 
-	var chainID [32]byte
+	var chainID smt.Hash
 	i += copy(chainID[:], data[i:i+len(e.ChainID)])
 	if e.ChainID != nil {
 		if *e.ChainID != chainID {
@@ -368,7 +362,7 @@ func (ec *EntryCommit) MarshalLedger() []byte {
 	startoffset = endoffset
 	endoffset += l
 
-	ret[startoffset] =byte(ec.Numec)
+	ret[startoffset] =byte(ec.NumEc)
 	startoffset = endoffset
 
 	return ret
@@ -417,7 +411,7 @@ func (ec *EntryCommit) UnmarshalLedger(data []byte) ([]byte,error) {
 
 	rem = ec.Entryhash.Extract(rem)
 
-	ec.Numec = int8(rem[0])
+	ec.NumEc = int8(rem[0])
 
 	if len(rem) == 1 {
 		return nil, nil
