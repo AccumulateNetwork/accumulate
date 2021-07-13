@@ -83,3 +83,48 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	}
 
 }
+
+func TestSalt(t *testing.T) {
+
+	dbManager := new(database.Manager)
+	_ = dbManager.Init("memory", "")
+	defer dbManager.Close()
+
+	dbManager.SetSalt([]byte("one"))
+	dbManager.AddBucket("a")
+	dbManager.AddBucket("b")
+	dbManager.AddBucket("c")
+	d1 := []byte{1, 2, 3}
+	d2 := []byte{2, 3, 4}
+	d3 := []byte{3, 4, 5}
+	_ = dbManager.Put("a", "", []byte("horse"), d1)
+	_ = dbManager.Put("b", "", []byte("horse"), d2)
+	_ = dbManager.Put("c", "", []byte("horse"), d3)
+	v1 := dbManager.Get("a", "", []byte("horse"))
+	v2 := dbManager.Get("b", "", []byte("horse"))
+	v3 := dbManager.Get("c", "", []byte("horse"))
+
+	dbManager.SetSalt([]byte("two"))
+	dbManager.AddBucket("a")
+	dbManager.AddBucket("b")
+	dbManager.AddBucket("c")
+	d4 := []byte{7, 1, 2, 3}
+	d5 := []byte{8, 2, 3, 4}
+	d6 := []byte{9, 3, 4, 5}
+	_ = dbManager.Put("a", "", []byte("horse"), d4)
+	_ = dbManager.Put("b", "", []byte("horse"), d5)
+	_ = dbManager.Put("c", "", []byte("horse"), d6)
+	v4 := dbManager.Get("a", "", []byte("horse"))
+	v5 := dbManager.Get("b", "", []byte("horse"))
+	v6 := dbManager.Get("c", "", []byte("horse"))
+
+	if !bytes.Equal(d1, v1) || !bytes.Equal(d2, v2) || !bytes.Equal(d3, v3) ||
+		!bytes.Equal(d4, v4) || !bytes.Equal(d5, v5) || !bytes.Equal(d6, v6) {
+		t.Error("All values should be equal")
+	}
+
+	if bytes.Equal(v1, v4) || bytes.Equal(v2, v5) || bytes.Equal(v3, v6) {
+		t.Error("all values should be different")
+	}
+
+}
