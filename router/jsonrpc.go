@@ -1,11 +1,13 @@
 package router
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	pb "github.com/AccumulateNetwork/accumulated/proto"
-	"github.com/AccumulateNetwork/accumulated/validator"
+	"github.com/AccumulateNetwork/SMT/smt"
+	pb "github.com/AccumulateNetwork/accumulated/api/proto"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AdamSLevy/jsonrpc2/v14"
 	proto1 "github.com/golang/protobuf/proto"
 	abcicli "github.com/tendermint/tendermint/abci/client"
@@ -116,7 +118,7 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 		vr := &pb.Submission{}
 		//vr.Nonce = 0
 		//vr.Signed = sig
-		vr.Address = 15 //this needs to point to the identity... :(
+		vr.Identitychain = smt.Hash(sha256.Sum256([]byte("FA000bt"))).Bytes() //this needs to point to the identity... :(
 
 		vr.Type = validator.GetTypeIdFromName("fct")
 

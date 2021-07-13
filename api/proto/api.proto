@@ -1,0 +1,266 @@
+syntax = "proto3";
+package apiProto;
+option go_package = "./proto";//github.com/AccumulateNetwork/accumulated/proto";
+
+//go:generate protoc example.proto --go_out=plugins=grpc:$GOPATH/src
+
+import "google/protobuf/empty.proto";
+
+service ApiService {
+	rpc PostEntry(EntryBytes) returns (Reply) {}
+	rpc ReadKeyValue(Key) returns (KeyValue) {}
+	rpc RequestAccount(Key) returns (Account){}
+	rpc GetHeight(google.protobuf.Empty) returns (Height) {}
+	rpc GetNodeInfo(google.protobuf.Empty) returns (NodeInfo) {}
+
+	// Obtains the feature at a given position.
+	rpc ProcessTx(Submission) returns (SubmissionResponse) {}
+	rpc QueryShardCount(google.protobuf.Empty) returns (ShardCountResponse){}
+	rpc Query(AccQuery) returns (AccQueryResp){}
+}
+
+
+
+
+message ShardCountResponse {
+	int32 numshards = 1; //return the number of shards that are active
+}
+//message BVCEntry
+
+//{
+//	DBVCInstructionHeader header = 1;
+//    bytes   entry                = 2; // BVC Entry - Merkel DAG root tx (41 bytes) consists of
+	                                  //  header := [ version (1byte) | varintf ddiilen | ddii (up to 32 bytes) ]
+	                                  //  body :=   [  bvc bigendian blockheight (4 bytes) |
+	                                  //               unix timestamp (4 bytes) |
+	                                  //               Merkel DAG Root hash (32 Bytes)]
+//	bytes   signature            = 3; // Signature: ed25519[ entry ]
+//}
+
+//Directory Block Validation Chain (DBVC) Instruction Header
+//maybe rethink into instruction and subcommand.  for example entry has several froms as does chain, adi etc.
+//the chain address routes the thing anyway so maybe instruction really needs to be address
+message DBVCInstructionHeader {
+	enum insType
+	{
+		Unknown                  = 0;
+		EntrySubmit              = 1; // submission instruction issued at each end of block of VBC.
+		EntryReveal              = 2;
+		AddChain                 = 3;
+		RemoveChain              = 4;
+		RegisterMasterChain 	 = 5; // add a new master chain
+		RemoveMasterChain 	     = 6; // remove a master chain the network.  May need to have blacklists so that core chain's cannot be removed without a fork?
+	    RegisterADI              = 7;
+	}
+	insType instruction        = 1; // type of instruction / request, will have one of the values of
+	uint32  version            = 2; // version number stored as varint.
+	bytes   bvcMasterChainDDII = 3; // block validation chain (BVC) DDII from which BVC master chain did this request originate. Identifies BVC and Network
+  bytes   bvcValidatorDDII   = 4; // Specific Digital identity of validator within the BVC submitting the instruction
+}
+
+message BVCEntry
+{
+	DBVCInstructionHeader header = 1;
+    bytes   entry               = 2; // BVC Entry - Merkel DAG root tx (41 bytes) consists of
+	                                  //  header := [ version (1byte) | varintf ddiilen | ddii (up to 32 bytes) ]
+	                                  //  body :=   [  bvc bigendian blockheight (4 bytes) |
+	                                  //               unix timestamp (4 bytes) |
+	                                  //               Merkel DAG Root hash (32 Bytes)]
+	bytes   signature            = 3; // Signature: ed25519[ entry ]
+}
+
+message Fee
+{
+    int64 TimeStamp  = 1;      // 8
+		bytes DDII       = 2;      // Hash 32
+		bytes ChainID    = 3;      //[33]byte     // 33
+	  int32 Credits    = 4;      //int8         // 1
+		int32 SignatureIdx = 5;    //int8
+		bytes Signature    = 6;    //minimum 64 bytes []byte       // 64 minimum
+// 1 end byte ( 140 bytes for FEE)
+		bytes Transaction  = 7;   //[]byte       // Transaction
+}
+
+
+
+enum AccInstruction {
+	Unknown      = 0;
+	Identity_Creation = 1;
+	Token_URL_Creation = 2;
+	Token_Transaction = 3;
+	Data_Chain_Creation = 4;
+	Data_Entry = 5; //per 250 bytes
+	Scratch_Chain_Creation = 6;
+	Scratch_Entry = 7; //per 250 bytes
+	Token_Issue = 8;
+	Key_Update = 9; //update keys on the keychain the identity
+	Deep_Query = 10; //implements a transaction on the network that is processed by validators these cost $$, but can provide cryptographic proof for validity at current state
+	Light_Query = 11; //sends a query to a node and info is returned.
+	//Only valid for BVC use: any other source of this message will be rejected
+	Data_Store = 12; //Data Store can only be sent and thus authorized by an authority node
+	//      Entry_Commit = 1; //
+	//      Entry_Reveal = 2; // raw data
+	//      Chain_Commit = 3;
+	//      Transaction  = 4; //contains both commit and reveal. So would this just be Entry_Commit_Reveal or should transactions consist of segwit commit/reveal?
+	//      Admin        = 5; //is a type needed? can this be handled by adding a validator an using type 1 and 2 or 4?
+	//      ADI_Commit   = 6; //is a type needed? can this be handled by types 4?
+}
+
+message Submission
+{
+    //uint64 address     = 1; // route to chain validator
+	  bytes  identitychain = 1; // router will determine network this chain this resides on by looking at lower 64 bits (little Endian)
+    bytes  chainid       = 3; // chainid of the entry somewhere underneath identity chain
+	  uint64   type        = 2; // type id of validator needed to process the --> we might be able to do away with this. since chain id will determine chain validation rules in shadow chain.
+    AccInstruction instruction = 4; // validator specific,
+    uint64 param1      = 5; // validator specific
+    uint64 param2      = 6; // validator specific
+    bytes  data        = 7; // validator will validate this data however it sees fit. may include signature
+}
+
+message SubmissionResponse {
+	bytes  respdata = 1;
+	uint64 errorCode = 2;
+}
+
+message AccQuery {
+	uint64 Addr = 1;
+	string DDII = 2;
+	bytes ChainId = 3;
+	string Query = 4;
+	//AccInstruction Ins = 4;
+}
+
+message AccQueryResp {
+	uint32 code = 1;
+	bytes data = 2;
+}
+
+message ValidatorSubmission
+{
+		int64 height = 1;       //height at which submission was made
+		Submission submission = 2;
+		bytes submitteradi = 3; //digital identity of signer
+		bytes shardadi = 4;     //digital identity of shard
+		bytes signature = 5;    //signature of the validator making the submission
+}
+
+message BVCEntryResponse
+{
+	bytes  responseData = 1; // error message???
+	uint64 errorCode    = 2; // error code if it fails the sanity check
+}
+
+message ValRequest
+{
+	uint64  validatorAddr  = 1; // block validation chain address - sha256(chainId)[0:7] - big-endian or little-endian?
+	uint32  instruction    = 2; // instruction code used by the validator - e.g. "write data"
+	uint32  parameter1     = 3; // parameter 1 specific to the instruction
+	uint32  parameter2     = 4; // parameter 2 specific to the instruction
+	uint64 	nonce          = 5; // typically time stamp or monotonic counter
+	bytes   data           = 6; // payload for validator - Command Data
+	bytes   signed         = 7; // ed25519 signature
+}
+
+
+message ValReponse
+{
+	bytes  responseData = 1;
+	uint64 errorCode = 2;
+}
+
+
+// [Key][Type][Nonce][Data][Sign]
+
+// [Key]  32 bytes
+// [Type] 1 byte  (var_int)
+// [Nonce] 8 byte (typically time stamp)
+// [Data] ? bytes
+// [Sign] 32 bytes (type+nonce+data)
+
+message Entry
+{
+	enum msgType
+	{
+			WriteEntryBytes 	 = 0;
+			WriteKeyValue 		 = 1;
+			ReadKeyValue 			 = 2;
+			AccountWrite 			 = 100;
+			AccountRead 			 = 101;
+			GasAllowanceUpdate = 105;
+	}
+
+	bytes 	key 			  	= 1;
+	msgType messageType 	= 2;
+	uint64 	nonce					= 3; //(typically time stamp)
+	bytes 	data				  = 4;
+	bytes 	signed				= 5;
+}
+
+message Height
+{
+	uint64 height				= 1;
+}
+
+message EntryBytes
+{
+	bytes Data = 1;
+}
+
+message Account
+{
+	string	 name 						= 1;
+	string	 owner 						= 2;
+	int32		 messageAllowance = 3;
+	repeated Group groups 		= 4;
+	bool 		 allowAddAccounts	= 5;
+	bool 		 allowAddGroups		= 6;
+
+	message Group
+	{
+		string name 				   			= 1;
+		bool   adminRights  				= 2;
+	}
+}
+
+message Group
+{
+	string name						= 1;
+	string description 		= 2;
+}
+
+message AccountAdd
+{
+	bytes  publicKey = 1;
+	Account account = 2;
+}
+
+
+message GasAllowanceUpdate {
+	bytes  accountKey = 1;
+	int32  gasAllowance = 2;
+}
+
+message Reply
+{
+	bytes   hash   = 1;
+	uint64  height = 2;
+	string  error  = 3;
+}
+
+message KeyValue
+{
+	bytes  key 		= 1;
+	bytes  value 	= 2;
+	uint64 height = 3;
+}
+
+message Key
+{
+	bytes  key 		= 1;
+}
+
+message NodeInfo
+{
+	string version = 1;
+}

@@ -6,8 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/SMT/smt"
-	"github.com/AccumulateNetwork/accumulated/proto"
-	"github.com/AccumulateNetwork/accumulated/validator"
+	"github.com/AccumulateNetwork/accumulated/api/proto"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
+	vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	abcicli "github.com/tendermint/tendermint/abci/client"
@@ -86,7 +87,7 @@ func (app *RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*prot
 func (app *RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*proto.SubmissionResponse, error) {
 	//fmt.Printf("hello world from dispatch server TX ")
 	resp := proto.SubmissionResponse{}
-	client := app.getBVCClient(sub.GetAddress())
+	client := app.getBVCClient(vtypes.GetAddressFromIdentityChain(sub.Identitychain))
 	if client == nil {
 		resp.Respdata = nil
 		resp.ErrorCode = 0x0001
@@ -171,14 +172,6 @@ func (app *RouterConfig) CreateGRPCClient() (proto.ApiServiceClient,error) {
 	return api, nil
 }
 
-
-func GetAddressFromIdentityName(name string) uint64 {
-	namelower := strings.ToLower(name)
-	h := sha256.Sum256([]byte(namelower))
-
-	addr,_ := smt.BytesUint64(h[:])
-	return addr
-}
 
 func SendTransaction(senderurl string, receiverurl string) error {
 	su, err := url.Parse(senderurl)
