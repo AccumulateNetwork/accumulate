@@ -50,7 +50,9 @@ func LoadBpt() *BPT { //                                                LoadBpt 
 func TestBPT_Marshal(t *testing.T) {
 
 	bpt1 := LoadBpt()
+	bpt1.Update()
 	bpt2 := LoadBpt()
+	bpt2.Update()
 
 	if !bpt1.Equal(bpt2) {
 		t.Errorf("Two test BPTs that should be equal are not")
