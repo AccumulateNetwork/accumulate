@@ -224,8 +224,8 @@ func (b *BPT) Update() {
 			if n.Height != h { //                          Note when the height is done,
 				break //                                     bap out
 			} //
-			if h&b.mask == 0 { //                          Check and see if at the root node for a byte block
-				b.manager.FlushNode(n) //                  If so, flush the byte block; it has already been updated
+			if h&b.mask == 0 && b.manager != nil { //      Check and see if at the root node for a byte block
+				//				b.manager.FlushNode(n) //  If so, flush the byte block; it has already been updated
 			} //
 			L := GetHash(n.Left)  //                       Get the Left Branch
 			R := GetHash(n.Right) //                       Get the Right Branch
