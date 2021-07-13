@@ -1,4 +1,4 @@
-package smt
+package managed
 
 import (
 	"bytes"
@@ -39,5 +39,9 @@ func TestSliceBytes(t *testing.T) {
 		if !bytes.Equal(v, slice) {
 			t.Errorf(" %d %x %x", i, v, slice)
 		}
+	}
+
+	if len(inputs) != 0 {
+		t.Error("should consume all data")
 	}
 }

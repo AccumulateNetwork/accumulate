@@ -1,4 +1,4 @@
-package smt
+package managed
 
 import (
 	"crypto/sha256"
@@ -27,8 +27,8 @@ func TestReceipt(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	// Create a MerkleManager for the memory database
-	manager := new(MerkleManager)
-	manager.Init(dbManager, 4)
+	salt := sha256.Sum256([]byte("test"))
+	manager := NewMerkleManager(dbManager, salt[:], 4)
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
@@ -74,14 +74,14 @@ func TestReceipt(t *testing.T) {
 
 func TestReceiptAll(t *testing.T) {
 
-	const testMerkleTreeSize = 1024
+	const testMerkleTreeSize = 500
 
 	// Create a memory based database
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	// Create a MerkleManager for the memory database
-	manager := new(MerkleManager)
-	manager.Init(dbManager, 4)
+	salt := sha256.Sum256([]byte("test"))
+	manager := NewMerkleManager(dbManager, salt[:], 4)
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
@@ -134,15 +134,15 @@ func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (ma
 	}
 
 	// Create a MerkleManager for the memory database
-	manager = new(MerkleManager)
-	manager.Init(dbManager, int64(MarkPower))
+	salt := sha256.Sum256([]byte("test"))
+	manager = NewMerkleManager(dbManager, salt[:], 2)
 	return manager, dir
 }
 
 func PopulateDatabase(manager *MerkleManager, treeSize int64) {
 	// populate the database
 	start := time.Now()
-	startCount := manager.MS.Count
+	startCount := manager.MainChain.MS.Count
 	for i := startCount; i < treeSize; i++ {
 		v := GetHash(int(i))
 		manager.AddHash(v)
@@ -162,16 +162,16 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 	running := new(int64)
 	printed := new(int64)
 
-	for i := 0; i < int(manager.MS.Count); i++ {
+	for i := 0; i < int(manager.MainChain.MS.Count); i++ {
 		go func(i int) {
 			atomic.AddInt64(running, 1)
-			for j := i; j < int(manager.MS.Count); j++ {
+			for j := i; j < int(manager.MainChain.MS.Count); j++ {
 				element := GetHash(i)
 				anchor := GetHash(j)
 
 				r := GetReceipt(manager, element, anchor)
-				if i < 0 || i >= int(manager.MS.Count) || //       If i is out of range
-					j < 0 || j >= int(manager.MS.Count) || //        Or j is out of range
+				if i < 0 || i >= int(manager.MainChain.MS.Count) || //       If i is out of range
+					j < 0 || j >= int(manager.MainChain.MS.Count) || //        Or j is out of range
 					j < i { //                                    Or if the anchor is before the element
 					if r != nil { //                            then you should not be able to generate a receipt
 						t.Fatal("Should not be able to generate a receipt")

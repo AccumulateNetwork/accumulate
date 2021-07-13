@@ -1,9 +1,11 @@
-package smt
+package managed
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+
+	"github.com/AccumulateNetwork/SMT/storage"
 )
 
 // MerkleState
@@ -84,11 +86,11 @@ func (m *MerkleState) PadPending() {
 
 // Equal
 // Compares one MerkleState to another, and returns true if they are the same
-func (m MerkleState) Equal(m2 MerkleState) (errorFlag bool) {
+func (m MerkleState) Equal(m2 MerkleState) (isEqual bool) {
 	// Any errors indicate at m is not the same as m2, or either m or m2 or both is malformed.
 	defer func() {
 		if recover() != nil {
-			errorFlag = false
+			isEqual = false
 			return
 		}
 	}()
@@ -133,16 +135,16 @@ func (m MerkleState) Equal(m2 MerkleState) (errorFlag bool) {
 // Marshal
 // Encodes the Merkle State so it can be embedded into the Merkle Tree
 func (m *MerkleState) Marshal() (MSBytes []byte) {
-	MSBytes = append(MSBytes, Int64Bytes(m.Count)...) // Count
-	cnt := m.Count                                    // Each bit set in Count, indicates a Sub Merkle Tree root
-	for i := 0; cnt > 0; i++ {                        // For each bit in cnt,
+	MSBytes = append(MSBytes, storage.Int64Bytes(m.Count)...) // Count
+	cnt := m.Count                                            // Each bit set in Count, indicates a Sub Merkle Tree root
+	for i := 0; cnt > 0; i++ {                                // For each bit in cnt,
 		if cnt&1 > 0 { //                                         if the bit is set in cnt, record the hash
 			MSBytes = append(MSBytes, m.Pending[i][:]...)
 		} //                                                   If the bit is not set, ignore (it is nil anyway)
 		cnt = cnt >> 1 //                                      Shift cnt so we can check the next bit
 	}
-	MSBytes = append(MSBytes, Int64Bytes(int64(len(m.HashList)))...) // Write out the HashList
-	for _, v := range m.HashList {                                   // For every Hash
+	MSBytes = append(MSBytes, storage.Int64Bytes(int64(len(m.HashList)))...) // Write out the HashList
+	for _, v := range m.HashList {                                           // For every Hash
 		MSBytes = append(MSBytes, v[:]...) // Add it to MSBytes
 	}
 	return MSBytes
@@ -153,25 +155,25 @@ func (m *MerkleState) Marshal() (MSBytes []byte) {
 // in this instance of MSMarshal to the state defined by MSBytes.  It is assumed that the
 // hash function has been set by the caller.
 func (m *MerkleState) UnMarshal(MSBytes []byte) {
-	m.Count, MSBytes = BytesInt64(MSBytes) // Extract the Count
-	m.Pending = m.Pending[:0]              // Set Pending to zero, then use the bits of Count
-	cnt := m.Count                         //   to guide the extraction of the List of Sub Merkle State roots
-	for i := 0; cnt > 0; i++ {             // To do this, go through the count
-		m.Pending = append(m.Pending, nil) //       Make a spot, which will leave nil if the bit in count is zero
-		if cnt&1 > 0 {                     //       If the bit is set, then extract the next hash and put it here
-			m.Pending[i] = new(Hash)            //  Add the storage for the hash
-			copy(m.Pending[i][:], MSBytes[:32]) //  Copy in its value
-			MSBytes = MSBytes[32:]              //  And advance MSBytes by the hash size
+	m.Count, MSBytes = storage.BytesInt64(MSBytes) // Extract the Count
+	m.Pending = m.Pending[:0]                      // Set Pending to zero, then use the bits of Count
+	cnt := m.Count                                 //   to guide the extraction of the List of Sub Merkle State roots
+	for i := 0; cnt > 0; i++ {                     // To do this, go through the count
+		m.Pending = append(m.Pending, nil) //         Make a spot, which will leave nil if the bit in count is zero
+		if cnt&1 > 0 {                     //         If the bit is set, then extract the next hash and put it here
+			m.Pending[i] = new(Hash)            //    Add the storage for the hash
+			copy(m.Pending[i][:], MSBytes[:32]) //    Copy in its value
+			MSBytes = MSBytes[32:]              //    And advance MSBytes by the hash size
 		}
-		cnt = cnt >> 1 //                           Shift cnt to the right to look at the next bit
+		cnt = cnt >> 1 //                             Shift cnt to the right to look at the next bit
 	}
 
-	m.HashList = m.HashList[:0]            // Clear any possible existing HashList
-	length, MSBytes := BytesInt64(MSBytes) // Extract the length of the HashList
-	for i := int64(0); i < length; i++ {   // Extract each Hash
-		m.HashList = append(m.HashList, Hash{}) // Add the storage for the Hash, then
-		copy(m.HashList[i][:], MSBytes[:32])    //    copy over its value
-		MSBytes = MSBytes[32:]                  // Advance MSBytes by the hash size
+	m.HashList = m.HashList[:0]                    // Clear any possible existing HashList
+	length, MSBytes := storage.BytesInt64(MSBytes) // Extract the length of the HashList
+	for i := int64(0); i < length; i++ {           // Extract each Hash
+		m.HashList = append(m.HashList, Hash{}) //    Add the storage for the Hash, then
+		copy(m.HashList[i][:], MSBytes[:32])    //      copy over its value
+		MSBytes = MSBytes[32:]                  //    Advance MSBytes by the hash size
 	}
 }
 
@@ -184,12 +186,13 @@ func GetSha256() func(data []byte) Hash {
 
 // InitSha256
 // Set the hashing function of this Merkle State to Sha256
+// TODO: Actually update the library to be able to use various hash algorithms
 func (m *MerkleState) InitSha256() {
 	m.HashFunction = GetSha256()
 }
 
 // AddToMerkleTree
-// Add a Hash to the chain and incrementally build the MerkleState
+// Add a Hash to the merkle tree and incrementally build the MerkleState
 func (m *MerkleState) AddToMerkleTree(hash_ [32]byte) {
 	hash := Hash(hash_)
 
@@ -207,9 +210,10 @@ func (m *MerkleState) AddToMerkleTree(hash_ [32]byte) {
 }
 
 // GetMDRoot
-// Close off the Merkle Directed Acyclic Graph (Merkle DAG or MerkleState)
-// We take any trailing hashes in MerkleState, hash them up and combine to create the Merkle Dag Root.
-// Getting the closing ListMDRoot is non-destructive, which is useful for some use cases.
+// Compute the Merkle Directed Acyclic Graph (Merkle DAG or MerkleState) for
+// the MerkleState at this point We take any trailing hashes in MerkleState,
+// hash them up and combine to create the Merkle Dag Root. Getting the closing
+// ListMDRoot is non-destructive, which is useful for some use cases.
 func (m *MerkleState) GetMDRoot() (MDRoot *Hash) {
 	// We go through m.MerkleState and combine any left over hashes in m.MerkleState with each other and the MR.
 	// If this is a power of two, that's okay because we will pick up the MR (a balanced MerkleState) and
