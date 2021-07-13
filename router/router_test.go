@@ -4,15 +4,17 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/accnode"
-	"github.com/AccumulateNetwork/accumulated/tendermint"
+	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
+	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/spf13/viper"
 	"io/ioutil"
 	"os"
 	"path"
 
 	//"fmt"
-	"github.com/AccumulateNetwork/accumulated/proto"
+	"github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 
 	//"github.com/golang/protobuf/ptypes/empty"
@@ -210,6 +212,11 @@ func TestQuery(t *testing.T) {
 		t.Fatalf("Error sending query for shard count")
 	}
 	fmt.Printf("URL Querty Test string %s result: %d\n",urlstring , res.Code)
+
+    sub := proto.Submission{}
+    sub.Address = validator.GetTypeIdFromName()
+    sub.Chainid = smt.Hash{} //just submit what you want
+
 
 }
 
