@@ -291,6 +291,7 @@ ChainID (hash of the chain URL).
    * **Root** *no Salt, no Key* / BPT -- returns the state of the BPT and 
      the root node.
      
+     
 Buckets used by the MerkleManager:
 
 * **BucketIndex** *Salted by ChainID* element index / BlockIndex struct -- A 

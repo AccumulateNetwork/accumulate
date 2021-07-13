@@ -1,34 +1,52 @@
 package pmt
 
 import (
-	"bytes"
-
-	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/SMT/storage"
 )
 
 // Note that the tree considered here grows up by convention here, where
-// parent nodes are at the bottom, and leaves are at the top. Obviously
+// Parent nodes are at the bottom, and leaves are at the top. Obviously
 // mapping up to down and down to up is valid if a need to have the tree
 // grow down is viewed as important.
 
 // Node
 // A node in our binary patricia/merkle tree
+//
+// A note about Byte Blocks.  Byte Blocks hold nodes and values, and are
+// the structures serialized to persist nodes and values to the
+// database, and load them as needed.  At least eventually that is what is
+// to be done.
+//
+// The BBKey is an interesting thing in the context of Byte Blocks.  It is
+// the key used to persist a byte block.  It is the bytes of the keys used
+// by the BPT to track state.  Because Go doesn't allow slices as keys, and
+// other solutions to make keys (like converting byte slices to strings)
+// creates heavy load on the garbage collectors, we need a different
+// solution.
+//
+// What we do is clear out all the bytes of the key other than the leading
+// bytes of the key, those bits that were used to identify a particular
+// byte block.  But of course, a key can have zero bytes.
+//
+// We give up 8 bits of the space and put the length of the key in the last
+// byte.  This will only cause us issues if we use 248 bits of the key
+// to create a node.  In other words, not too much of an issue.
+
 type Node struct {
-	ID       int64    // Node Count
-	PreBytes []byte   // Bytes preceding the block that contains this node
-	Height   int      // Root is 0. above root is 1. Above above root is 2, etc.
-	Hash     [32]byte // This is the summary hash for the tree
-	left     Entry    // The hash of the child left and up the tree, bit is zero
-	right    Entry    // the hash to the child right and up the tree, bit is one
-	parent   *Node    // the parent node "below" this node
+	ID     int64    // Node Count
+	Height int      // Root is 0. above root is 1. Above above root is 2, etc.
+	BBKey  [32]byte // Byte Block Key.
+	Hash   [32]byte // This is the summary hash for the tree
+	Left   Entry    // The hash of the child Left and up the tree, bit is zero
+	Right  Entry    // the hash to the child Right and up the tree, bit is one
+	Parent *Node    // the Parent node "below" this node
 }
 
 func (n *Node) Equal(entry Entry) (equal bool) {
 
-	defer func() { //                          If we access a nil, it is because something is missing
-		if err := recover(); err != nil { //
-			equal = false
+	defer func() { //                          When an entry is cast to *Node, it might panic. Then the test is false
+		if err := recover(); err != nil { //   Also left or right (which is not nil) may be compared to a nil.
+			equal = false //                   That will also panic, and if so, false is returned.
 		}
 	}()
 
@@ -36,24 +54,24 @@ func (n *Node) Equal(entry Entry) (equal bool) {
 	// then the code would loop infinitely.  Certainly we could avoid retracing
 	// paths, but if we wish to compare entire BPT trees, we can compare their
 	// roots.
-	node := entry.(*Node) //                           The entry we are considering must be a node
-	switch {
-	case !bytes.Equal(n.PreBytes, node.PreBytes):
-		return false
-	case n.Height != node.Height:
-		return false
-	case !bytes.Equal(n.Hash[:], node.Hash[:]):
-		return false
-	case n.left == nil && node.left != nil:
-		return false
-	case n.right == nil && node.right != nil:
-		return false
-	case n.left != nil && !n.left.Equal(node.left):
-		return false
-	case n.right != nil && !n.right.Equal(node.right):
-		return false
-	}
-	return true
+	node := entry.(*Node) //                              The entry considered must be a node.  If it is not
+	switch {              //                              this conversion will panic, get caught, and return false
+	case n.Height != node.Height: //                      Height == Height
+		return false //
+	case n.BBKey != node.BBKey: //                        BBKey == BBKey
+		return false //
+	case n.Hash != node.Hash: //                          Hash == Hash
+		return false //
+	case n.Left == nil && node.Left != nil: //            Left both nil -- Later test of equality will throw a panic
+		return false //                                                    which gets caught and returns false
+	case n.Right == nil && node.Right != nil: //          Right both nil -- Later test of equality will throw a panic
+		return false //                                                     which gets caught and returns false
+	case n.Left != nil && !n.Left.Equal(node.Left): //    Left == Left
+		return false //
+	case n.Right != nil && !n.Right.Equal(node.Right): // Right == Right
+		return false //
+	} //
+	return true //                                        All good! Equal
 }
 
 // T
@@ -88,7 +106,7 @@ func (n *Node) GetHash() []byte {
 // See (p *BPT)MarshalByteBlock
 func (n *Node) Marshal() (data []byte) {
 	data = append(data, storage.Int64Bytes(n.ID)...)
-	data = append(data, managed.SliceBytes(n.PreBytes)...)
+	data = append(data, n.BBKey[:]...)
 	data = append(data, byte(n.Height))
 	data = append(data, n.Hash[:]...)
 	return data
@@ -98,9 +116,16 @@ func (n *Node) Marshal() (data []byte) {
 // Deserialize the fields of the Node.  See (p *BPT)UnMarshalByteBlock
 func (n *Node) UnMarshal(data []byte) []byte {
 	n.ID, data = storage.BytesInt64(data)
-	n.PreBytes, data = managed.BytesSlice(data)
+	keySlice, data := data[:32], data[32:]
+	copy(n.BBKey[:], keySlice)
 	n.Height, data = int(data[0]), data[1:]
 	hashSlice, data := data[:32], data[32:]
 	copy(n.Hash[:], hashSlice)
 	return data
+}
+
+func GetBBKey(BIdx byte, key [32]byte) (BBKey [32]byte) {
+	copy(BBKey[:BIdx], key[:BIdx])
+	BBKey[31] = byte(BIdx)
+	return BBKey
 }

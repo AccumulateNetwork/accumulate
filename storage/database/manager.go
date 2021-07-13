@@ -70,6 +70,16 @@ func (m *Manager) CurrentSalt() (salt []byte) {
 	return salt
 }
 
+// NewDBManager
+// Create and initialize a new database manager
+func NewDBManager(databaseTag, filename string) (*Manager, error) {
+	manager := new(Manager)
+	if err := manager.Init(databaseTag, filename); err != nil {
+		return nil, err
+	}
+	return manager, nil
+}
+
 // Init
 // Initialize the Manager with a specified underlying database. databaseTag
 // can currently be either badger or memory.  The filename indicates where
@@ -87,9 +97,8 @@ func (m *Manager) Init(databaseTag, filename string) error {
 	m.AddBucket("States")       //                       element index / merkle state
 	m.AddBucket("NextElement")  //                       element index / next element to be added to merkle tree
 	m.AddBucket("Element")      //                       count of elements in the merkle tree
-
-	m.AddBucket("BucketIndex") //                                Binary Patricia Tree Byte Blocks (blocks of BPT nodes)
-	m.AddLabel("Root")         //                                The Root node of the BPT
+	m.AddBucket("BPT")          //                       Binary Patricia Tree Byte Blocks (blocks of BPT nodes)
+	m.AddLabel("Root")          //                       The Root node of the BPT
 
 	switch databaseTag { //                              match with a supported databaseTag
 	case "badger": //                                    Badger database indicated

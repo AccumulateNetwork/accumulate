@@ -1,7 +1,7 @@
 package pmt
 
 // Note that the tree considered here grows up by convention here, where
-// parent nodes are at the bottom, and leaves are at the top. Obviously
+// Parent nodes are at the bottom, and leaves are at the top. Obviously
 // mapping up to down and down to up is valid if a need to have the tree
 // grow down is viewed as important.
 
