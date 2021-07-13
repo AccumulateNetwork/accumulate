@@ -1,8 +1,7 @@
 package main
 
 import (
-	"github.com/AccumulateNetwork/accumulated/acc"
-	"github.com/AccumulateNetwork/accumulated/accnode"
+	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/viper"
 
@@ -17,7 +16,7 @@ import (
 	"os/user"
 	"syscall"
 
-	"github.com/AccumulateNetwork/accumulated/tendermint"
+	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 )
 
 var ConfigFile []string
@@ -38,8 +37,8 @@ func init() {
 	flag.StringVar(&initdir, "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
 	flag.Parse()
 
-	for i := range acc.Networks {
-		WorkingDir = append(WorkingDir, path.Join(initdir, acc.Networks[i]))
+	for i := range router.Networks {
+		WorkingDir = append(WorkingDir, path.Join(initdir, router.Networks[i]))
 		ConfigFile = append(ConfigFile, path.Join(WorkingDir[i],"/config/config.toml"))
 	}
 
@@ -58,14 +57,14 @@ func main() {
     	switch os.Args[i] {
 		case "init":
 			baseport := 26600
-			for i := range acc.Networks {
+			for i := range router.Networks {
 				abciAppAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
 				rcpAddress := fmt.Sprintf("tcp://localhost:%d", baseport+1)
 				grpcAddress := fmt.Sprintf("tcp://localhost:%d", baseport+2)
 				accRCPAddress := fmt.Sprintf("tcp://localhost:%d", baseport+3)
 				routerAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
 				baseport += 5
-				tendermint.Initialize("accumulate." + acc.Networks[i],abciAppAddress,rcpAddress,grpcAddress,accRCPAddress,routerAddress,ConfigFile[i],WorkingDir[i])
+				tendermint.Initialize("accumulate." + router.Networks[i],abciAppAddress,rcpAddress,grpcAddress,accRCPAddress,routerAddress,ConfigFile[i],WorkingDir[i])
 			}
 			os.Exit(0)
 		case "dbvc":
