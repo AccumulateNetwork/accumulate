@@ -98,7 +98,7 @@ func BytesUint32(data []byte) (uint32, []byte) {
 func Uint64Bytes(i uint64) (data []byte) {
 	var buf [16]byte
 	count := binary.PutUvarint(buf[:], i)
-	return buf[count:]
+	return buf[:count]
 }
 
 // BytesUint64
@@ -122,8 +122,8 @@ func Int64Bytes(i int64) []byte {
 // Unmarshal a int64 (big endian)
 // We only need this function on top of BytesUint64 to avoid a type conversion when dealing with int64 values
 func BytesInt64(data []byte) (int64, []byte) {
-	value, cnt := binary.Varint(data)
-	return value, data[cnt:]
+	value, count := binary.Varint(data)
+	return value, data[count:]
 }
 
 // DurationFormat

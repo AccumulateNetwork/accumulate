@@ -45,7 +45,7 @@ func TestBPT_Equal(t *testing.T) {
 	bpt2 := LoadBpt() // Get a bunch of nodes
 	fmt.Printf("Max Height %d Max ID %d\n", bpt1.MaxHeight, bpt1.MaxNodeID)
 
-	unique := make(map[int64]int64)
+	unique := make(map[uint64]int64)
 
 	for i := int64(0); i < 100; i++ {
 		rand.Seed(i)

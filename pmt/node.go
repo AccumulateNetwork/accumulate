@@ -33,7 +33,7 @@ import (
 // to create a node.  In other words, not too much of an issue.
 
 type Node struct {
-	ID     int64    // Node Count
+	ID     uint64   // Node Count
 	Height int      // Root is 0. above root is 1. Above above root is 2, etc.
 	BBKey  [32]byte // Byte Block Key.
 	Hash   [32]byte // This is the summary hash for the tree
@@ -86,7 +86,7 @@ func (n *Node) T() int {
 // GetID
 // Returns the ID for this node.  This is used to compare nodes and serve
 // as a key in the BPT.DirtyMap.
-func (n *Node) GetID() int64 {
+func (n *Node) GetID() uint64 {
 	return n.ID
 }
 
@@ -105,7 +105,7 @@ func (n *Node) GetHash() []byte {
 //
 // See (p *BPT)MarshalByteBlock
 func (n *Node) Marshal() (data []byte) {
-	data = append(data, storage.Int64Bytes(n.ID)...)
+	data = append(data, storage.Uint64Bytes(n.ID)...)
 	data = append(data, n.BBKey[:]...)
 	data = append(data, byte(n.Height))
 	data = append(data, n.Hash[:]...)
@@ -115,7 +115,7 @@ func (n *Node) Marshal() (data []byte) {
 // UnMarshal
 // Deserialize the fields of the Node.  See (p *BPT)UnMarshalByteBlock
 func (n *Node) UnMarshal(data []byte) []byte {
-	n.ID, data = storage.BytesInt64(data)
+	n.ID, data = storage.BytesUint64(data)
 	keySlice, data := data[:32], data[32:]
 	copy(n.BBKey[:], keySlice)
 	n.Height, data = int(data[0]), data[1:]
