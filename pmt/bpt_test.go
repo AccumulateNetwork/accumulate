@@ -65,6 +65,72 @@ func TestBPT_Marshal(t *testing.T) {
 	}
 }
 
+func MarshalThem(bpt *BPT, entry Entry, data []byte) (cnt int, d []byte) {
+	var c int
+	switch {
+	case entry == nil:
+	case entry.T() == TValue:
+	case entry.T() == TNode:
+		n := entry.(*Node)
+		if n.Height&bpt.mask == 0 {
+			data = append(data, bpt.MarshalByteBlock(n)...)
+			c++
+		}
+		cnt, data = MarshalThem(bpt, n.Left, data)
+		c += cnt
+		cnt, data = MarshalThem(bpt, n.Right, data)
+		c += cnt
+	case entry.T() == TNotLoaded:
+		fmt.Println("Not Loaded.  Should not get here.")
+	}
+	return c, data
+}
+
+func unMarshalThem(bpt *BPT, entry Entry, data []byte) (cnt int, d []byte) {
+	var c int
+	switch {
+	case entry == nil:
+	case entry.T() == TValue:
+	case entry.T() == TNode:
+		n := entry.(*Node)
+		if n.Height&bpt.mask == 0 {
+			data = bpt.UnMarshalByteBlock(n, data)
+			c++
+		}
+		cnt, data = unMarshalThem(bpt, n.Left, data)
+		c += cnt
+		cnt, data = unMarshalThem(bpt, n.Right, data)
+		c += cnt
+		return c, data
+	case entry.T() == TNotLoaded:
+		fmt.Println("Not Loaded.  Should not get here.")
+	}
+	return c, data
+}
+
+func TestBPT_MarshalAllByteBlocks(t *testing.T) {
+	var cnt int
+	bpt := LoadBpt()
+	data := bpt.Marshal()
+	bpt2 := new(BPT)
+	bpt2.Root = new(Node)
+	if nd := bpt2.UnMarshal(data); len(nd) != 0 {
+		t.Fatal("nd should be zero")
+	}
+	data2 := bpt2.Marshal()
+	if !bytes.Equal(data, data2) {
+		t.Error("data should be equal")
+	}
+	cnt, data = MarshalThem(bpt, bpt.Root, []byte{})
+	fmt.Println("len(data) = ", len(data), " nodes ", cnt, " avg ", len(data)/cnt)
+
+	bpt3 := new(BPT)
+	bpt3.Root = new(Node)
+	data = bpt3.UnMarshal(data)
+	cnt, data = unMarshalThem(bpt, bpt3.Root, data)
+	fmt.Println("len(data) = ", len(data), " nodes ", cnt, " avg ", len(data)/cnt)
+}
+
 // TestInsert
 // Check to make sure we can add elements to the BPT and get
 // out hashes.  And that we can update the BPT
@@ -262,15 +328,8 @@ func TestMarshalByteBlock(t *testing.T) {
 
 	if !bytes.Equal(data1, data2) {
 		t.Errorf("Should marshal to the same data")
-	}
-	// The following code provides for dumping data for debugging
-	// purposes.
-
-	/*
-		if !bytes.Equal(data1, data2) {
-			t.Errorf("Should marshal to the same data")
-
-			print(len(data1), " ")
+		if false { //                                     Note the following code allows debugging of the data
+			print(len(data1), " ") //                     differences.  But it is too foamy to run all the time.
 			var ahead int
 			for i, v := range data1 {
 				if v == data2[i] {
@@ -298,7 +357,7 @@ func TestMarshalByteBlock(t *testing.T) {
 		}
 		fmt.Printf("%d %0x\n", len(data1), data1)
 		fmt.Printf("%d %0x\n", len(data2), data2)
-	*/
+	}
 }
 
 var size, count []int
@@ -340,7 +399,7 @@ func walk(bpt *BPT, node *Node) {
 func TestBPTByteSizes(t *testing.T) {
 	//t.Skip("Just gives data about distributions in the BPT.")
 	println("build BFT")
-	bpt := LoadBptCnt(37, 1000000)
+	bpt := LoadBptCnt(37, 100000)
 	println("walking")
 	walk(bpt, bpt.Root)
 	maxcnt := 1

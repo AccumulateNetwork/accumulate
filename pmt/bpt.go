@@ -18,13 +18,13 @@ import (
 // The BPT can be updated many times, then updated in batch (which reduces
 // the hashes that have to be performed to update the summary hash)
 type BPT struct {
-	Root      *Node           // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
-	DirtyMap  map[int64]*Node // Map of dirty nodes.
-	MaxHeight int             // Highest height of any node in the BPT
-	MaxNodeID int64           // Maximum node id assigned to any node
-	power     int             // Power
-	mask      int             // Mask used to detect Byte Block boundaries
-	manager   *Manager        // Pointer to the manager for access to the database
+	Root      *Node            // The root of the Patricia Tree, holding the summary hash for the Patricia Tree
+	DirtyMap  map[uint64]*Node // Map of dirty nodes.
+	MaxHeight int              // Highest height of any node in the BPT
+	MaxNodeID uint64           // Maximum node id assigned to any node
+	power     int              // Power
+	mask      int              // Mask used to detect Byte Block boundaries
+	manager   *Manager         // Pointer to the manager for access to the database
 }
 
 // Equal
@@ -53,7 +53,9 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
 	data = append(data, byte(b.MaxHeight))
-	data = append(data, storage.Int64Bytes(b.MaxNodeID)...)
+	data = append(data, storage.Uint64Bytes(b.MaxNodeID)...)
+	data = append(data, byte(b.power>>8), byte(b.power))
+	data = append(data, byte(b.mask>>8), byte(b.mask))
 	data = append(data, b.Root.Marshal()...)
 	return data
 }
@@ -62,9 +64,11 @@ func (b *BPT) Marshal() (data []byte) {
 // Load the BPT in support of initialization from disk.  Note that
 // an existing BPT will be over written completely.
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
+	b.DirtyMap = make(map[uint64]*Node)
 	b.MaxHeight, data = int(data[0]), data[1:]
-	b.MaxNodeID, data = storage.BytesInt64(data)
-	b.DirtyMap = make(map[int64]*Node)
+	b.MaxNodeID, data = storage.BytesUint64(data)
+	b.power, data = int(data[0])<<8+int(data[1]), data[2:]
+	b.mask, data = int(data[0])<<8+int(data[1]), data[2:]
 	data = b.Root.UnMarshal(data)
 	return data
 }
@@ -249,13 +253,13 @@ func (b *BPT) Update() {
 // Allocate a new BPT and set up the structures required to get to work with
 // Binary Patricia Trees.
 func NewBPT() *BPT {
-	b := new(BPT)                      // Get a Binary Patrica Tree
-	b.power = 8                        // using 4 bits to persist BPTs to disk
-	b.mask = b.power - 1               // Take the bits to the power of 2 -1
-	b.Root = new(Node)                 // Allocate summary node (contributes nothing to BPT summary Hash
-	b.Root.Height = 0                  // Before the next level
-	b.DirtyMap = make(map[int64]*Node) // Allocate the Dirty Map, because batching updates is
-	return b                           // a pretty powerful way to process Patricia Trees
+	b := new(BPT)                       // Get a Binary Patrica Tree
+	b.power = 8                         // using 4 bits to persist BPTs to disk
+	b.mask = b.power - 1                // Take the bits to the power of 2 -1
+	b.Root = new(Node)                  // Allocate summary node (contributes nothing to BPT summary Hash
+	b.Root.Height = 0                   // Before the next level
+	b.DirtyMap = make(map[uint64]*Node) // Allocate the Dirty Map, because batching updates is
+	return b                            // a pretty powerful way to process Patricia Trees
 }
 
 // MarshalByteBlock
