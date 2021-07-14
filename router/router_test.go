@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
@@ -215,7 +215,7 @@ func TestQuery(t *testing.T) {
 
     sub := proto.Submission{}
     sub.Address = validator.GetTypeIdFromName()
-    sub.Chainid = smt.Hash{} //just submit what you want
+    sub.Chainid = managed.Hash{} //just submit what you want
 
 
 }
