@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
 	pb "github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AdamSLevy/jsonrpc2/v14"
@@ -118,7 +118,7 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 		vr := &pb.Submission{}
 		//vr.Nonce = 0
 		//vr.Signed = sig
-		vr.Identitychain = smt.Hash(sha256.Sum256([]byte("FA000bt"))).Bytes() //this needs to point to the identity... :(
+		vr.Identitychain = managed.Hash(sha256.Sum256([]byte("FA000bt"))).Bytes() //this needs to point to the identity... :(
 
 		vr.Type = validator.GetTypeIdFromName("fct")
 

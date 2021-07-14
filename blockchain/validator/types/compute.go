@@ -25,81 +25,81 @@ package types
 import (
 	"crypto/sha256"
 	"crypto/sha512"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
 
 	merkle "github.com/AdamSLevy/go-merkle"
 )
 
 //// ComputeDBlockHeaderHash returns sha256(data[:DBlockHeaderSize]).
-//func ComputeDBlockHeaderHash(data []byte) smt.Hash {
+//func ComputeDBlockHeaderHash(data []byte) managed.Hash {
 //	return sha256.Sum256(data[:DBlockHeaderSize])
 //}
 
 // ComputeEBlockHeaderHash returns sha256(data[:EBlockHeaderSize]).
-func ComputeEBlockHeaderHash(data []byte) smt.Hash {
+func ComputeEBlockHeaderHash(data []byte) managed.Hash {
 	return sha256.Sum256(data[:EBlockHeaderSize])
 }
 
 // ComputeFBlockKeyMR returns the Key Merkle root of the FBlock.
-func ComputeFBlockKeyMR(elements [][]byte) (smt.Hash, error) {
+func ComputeFBlockKeyMR(elements [][]byte) (managed.Hash, error) {
 	tree := merkle.NewTreeWithOpts(merkle.TreeOptions{DoubleOddNodes: true, DisableHashLeaves: true})
 	if err := tree.Generate(elements, sha256.New()); err != nil {
-		return smt.Hash{}, err
+		return managed.Hash{}, err
 	}
 	root := tree.Root()
-	var keyMR smt.Hash
+	var keyMR managed.Hash
 	copy(keyMR[:], root.Hash)
 	return keyMR, nil
 }
 
 // ComputeFBlockBodyMR returns the merkle root of the tree created with
 // elements as leaves, where the leaves are hashed.
-func ComputeFBlockBodyMR(elements [][]byte) (smt.Hash, error) {
+func ComputeFBlockBodyMR(elements [][]byte) (managed.Hash, error) {
 	tree := merkle.NewTreeWithOpts(merkle.TreeOptions{DoubleOddNodes: true})
 	if err := tree.Generate(elements, sha256.New()); err != nil {
-		return smt.Hash{}, err
+		return managed.Hash{}, err
 	}
 	root := tree.Root()
-	var bodyMR smt.Hash
+	var bodyMR managed.Hash
 	copy(bodyMR[:], root.Hash)
 	return bodyMR, nil
 }
 
 // ComputeDBlockBodyMR returns the merkle root of the tree created with
 // elements as leaves, where the leaves are hashed.
-func ComputeDBlockBodyMR(elements [][]byte) (smt.Hash, error) {
+func ComputeDBlockBodyMR(elements [][]byte) (managed.Hash, error) {
 	tree := merkle.NewTreeWithOpts(merkle.TreeOptions{DoubleOddNodes: true})
 	if err := tree.Generate(elements, sha256.New()); err != nil {
-		return smt.Hash{}, err
+		return managed.Hash{}, err
 	}
 	root := tree.Root()
-	var bodyMR smt.Hash
+	var bodyMR managed.Hash
 	copy(bodyMR[:], root.Hash)
 	return bodyMR, nil
 }
 
 // ComputeEBlockBodyMR returns the merkle root of the tree created with
 // elements as leaves, where the leaves are not hashed.
-func ComputeEBlockBodyMR(elements [][]byte) (smt.Hash, error) {
+func ComputeEBlockBodyMR(elements [][]byte) (managed.Hash, error) {
 	tree := merkle.NewTreeWithOpts(merkle.TreeOptions{
 		DoubleOddNodes:    true,
 		DisableHashLeaves: true})
 	if err := tree.Generate(elements, sha256.New()); err != nil {
-		return smt.Hash{}, err
+		return managed.Hash{}, err
 	}
 	root := tree.Root()
-	var bodyMR smt.Hash
+	var bodyMR managed.Hash
 	copy(bodyMR[:], root.Hash)
 	return bodyMR, nil
 }
 
 // ComputeFullHash returns sha256(data).
-func ComputeFullHash(data []byte) smt.Hash {
+func ComputeFullHash(data []byte) managed.Hash {
 	return sha256.Sum256(data)
 }
 
 // ComputeKeyMR returns sha256(headerHash|bodyMR).
-func ComputeKeyMR(headerHash, bodyMR *smt.Hash) smt.Hash {
+func ComputeKeyMR(headerHash, bodyMR *managed.Hash) managed.Hash {
 	data := make([]byte, len(headerHash)+len(bodyMR))
 	i := copy(data, headerHash[:])
 	copy(data[i:], bodyMR[:])
@@ -107,33 +107,26 @@ func ComputeKeyMR(headerHash, bodyMR *smt.Hash) smt.Hash {
 }
 
 // ComputeChainID returns the chain ID for a set of NameIDs.
-func ComputeChainID(nameIDs []smt.Hash) smt.Hash {
+func ComputeChainID(nameIDs []managed.Hash) managed.Hash {
 	hash := sha256.New()
 	for _, id := range nameIDs {
 		idSum := sha256.Sum256(id.Bytes())
 		hash.Write(idSum[:])
 	}
 	c := hash.Sum(nil)
-	var chainID smt.Hash
+	var chainID managed.Hash
 	copy(chainID[:], c)
 	return chainID
 }
 
 // ComputeEntryHash returns the Entry hash of data. Entry's are hashed via:
 // sha256(sha512(data) + data).
-func ComputeEntryHash(data []byte) smt.Hash {
+func ComputeEntryHash(data []byte) managed.Hash {
 	sum := sha512.Sum512(data)
 	saltedSum := make([]byte, len(sum)+len(data))
 	i := copy(saltedSum, sum[:])
 	copy(saltedSum[i:], data)
 	return sha256.Sum256(saltedSum)
-}
-
-func ComputeEntryHashV2(header []byte, data []byte) (*smt.Hash, *smt.Hash, *smt.Hash) {
-	hh := smt.Hash(sha256.Sum256(header))
-	dh := smt.Hash(sha256.Sum256(data))
-	mr := smt.Hash(sha256.Sum256(append(hh.Bytes(),dh.Bytes()...)))
-	return &hh, &dh,&mr
 }
 
 

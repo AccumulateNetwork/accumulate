@@ -2,7 +2,7 @@ package acc
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/spf13/viper"
 	"os"
 	"os/signal"
@@ -27,7 +27,7 @@ type SendToken struct {
 
 type Fee struct {
 	TimeStamp      int64        // 8
-	DDII           smt.Hash     // 32
+	DDII           managed.Hash     // 32
 	ChainID        [33]byte     // 33
 	Credits        int8         // 1
 	SignatureIdx   int8         // 1

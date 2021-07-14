@@ -4,7 +4,7 @@ import (
 	"bytes"
 	//"crypto/sha256"
 	"fmt"
-	//"github.com/AccumulateNetwork/SMT/smt"
+	//"github.com/AccumulateNetwork/SMT/managed"
 	acctypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
@@ -23,7 +23,7 @@ type CreateIdentityValidator struct{
 //type Identity struct {
 //	Version int8
 //    DDII string
-//    PublicKey smt.Hash
+//    PublicKey managed.Hash
 //}
 //
 //func (tx *Identity) MarshalBinary() ([]byte, error){
@@ -99,7 +99,7 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 	}
 
 
-	//identitychain = smt.Hash( sha256.Sum256(e.ExtIDs[0]) )
+	//identitychain = managed.Hash( sha256.Sum256(e.ExtIDs[0]) )
 	if bytes.Compare(identitychain, e.ChainID.Bytes() ) != 0 {
 		return nil, fmt.Errorf("Invalid Entry: Identity name does not match ChainID")
 	}
