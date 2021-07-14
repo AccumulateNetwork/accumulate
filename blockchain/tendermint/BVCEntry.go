@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 )
 
@@ -24,7 +24,7 @@ type BVCEntry struct {
 	DDII []byte
 	BVCHeight int64          /// (4 bytes) Height of master chain block
 	Timestamp uint64
-	MDRoot smt.Hash
+	MDRoot managed.Hash
 
 }
 

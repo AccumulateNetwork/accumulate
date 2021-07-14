@@ -4,13 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
 
 	//fold in the types to accumulate
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 
 	"math/rand"
-	//"github.com/AccumulateNetwork/SMT/smt"
+	//"github.com/AccumulateNetwork/SMT/managed"
 	"time"
 
 	"crypto/ed25519"
@@ -50,8 +50,8 @@ type Entry struct {
 	// An Entry in EBlock.Entries after a successful call to EBlock.Get has
 	// its ChainID, Hash, and Timestamp.
     Version uint64
-	ChainID   *smt.Hash  `json:"chainid,omitempty"`
-	Hash      *smt.Hash  `json:"entryhash,omitempty"`
+	ChainID   *managed.Hash  `json:"chainid,omitempty"`
+	Hash      *managed.Hash  `json:"entryhash,omitempty"`
 	//EntryHash  *[32]byte  `json:"entryhash,omitempty"`
 
 	// Entry.Get populates the Content and ExtIDs.
@@ -193,7 +193,7 @@ func (e *Entry) UnmarshalBinary(data []byte) error {
 
 	i := 1 // Skip version byte.
 
-	var chainID smt.Hash
+	var chainID managed.Hash
 	i += copy(chainID[:], data[i:i+len(e.ChainID)])
 	if e.ChainID != nil {
 		if *e.ChainID != chainID {

@@ -3,7 +3,7 @@ module github.com/AccumulateNetwork/accumulated
 go 1.15
 
 require (
-	github.com/AccumulateNetwork/SMT v0.0.19
+	github.com/AccumulateNetwork/SMT v0.0.20
 	github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 // indirect
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
 	github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d
@@ -72,6 +72,7 @@ require (
 	github.com/powerman/rpc-codec v1.2.2 // indirect
 	github.com/prometheus/client_golang v1.8.0
 	github.com/rs/cors v1.7.0
+	github.com/shopspring/decimal v1.2.0
 	github.com/spf13/afero v1.3.4 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
