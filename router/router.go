@@ -5,7 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
+	"github.com/AccumulateNetwork/SMT/storage"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
@@ -191,8 +192,8 @@ func SendTransaction(senderurl string, receiverurl string) error {
 	rh := sha256.Sum256([]byte(receiveridentity))
 
 
-	sendaddr,_ := smt.BytesUint64(sh[:])
-	recvaddr,_ := smt.BytesUint64(rh[:])
+	sendaddr,_ := storage.BytesUint64(sh[:])
+	recvaddr,_ := storage.BytesUint64(rh[:])
 
 	sendtokentype := su.Path
 
@@ -219,7 +220,7 @@ func SendTransaction(senderurl string, receiverurl string) error {
 type AccUrl struct {
 	Addr uint64
 	DDII string
-	ChainPath []smt.Hash
+	ChainPath []managed.Hash
 	Action uint32
 }
 //func (app AccUrl) Marshall() ([]byte,error) {

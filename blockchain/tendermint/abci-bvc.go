@@ -3,6 +3,7 @@ package tendermint
 import (
 	"context"
 	"crypto/sha256"
+	"github.com/AccumulateNetwork/SMT/pmt"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"google.golang.org/grpc"
 	"net"
@@ -33,7 +34,7 @@ import (
 	"os"
 
 	"bytes"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
@@ -93,6 +94,11 @@ func saveState(state State) {
 func prefixKey(key []byte) []byte {
 	return append(kvPairPrefixKey, key...)
 }
+type MerkleManagerState struct {
+	merklemgr *managed.MerkleManager
+	currentstateobject vtypes.StateObject
+	stateobjects []vtypes.StateObject //all the state objects for this height, if we don't care about history this can go byebye...
+}
 
 type AccumulatorVMApplication struct {
 
@@ -129,8 +135,10 @@ type AccumulatorVMApplication struct {
 
 
 	mmdb smtdb.Manager
-	mm smt.MerkleManager
-	lasthash smt.Hash
+	mms map[managed.Hash]*MerkleManagerState
+	bpt *pmt.Manager
+
+	lasthash managed.Hash
 
 	txct int64
 
@@ -268,6 +276,11 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	dbtype := "badger"
 	//dbtype := "memory" ////for kicks just create an in-memory database for now
 	app.mmdb.Init(dbtype,dbfilename)
+	app.mms = make(map[managed.Hash]*MerkleManagerState)
+	app.bpt = pmt.NewBPTManager(&app.mmdb)
+
+	//the salt is the chainid and needs to be updated as chainid changes with each transaction
+	//app.mms = new(map[managed.Hash]*MMState)
 
 	return nil
 }
@@ -290,12 +303,12 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 
 	app.ChainId = sha256.Sum256([]byte(req.ChainId))
 
-	app.mm.Init(&app.mmdb,8)
 
 
 	////an entry bucket --> do do determine if
 	//app.mmdb.AddBucket("Entry")
 	app.mmdb.AddBucket("Entries")
+	app.mmdb.AddBucket("StateEntries")
 	////commits will be stored here and key'ed via entry hash.
 	//app.mmdb.AddBucket("Commit")
 
@@ -376,7 +389,7 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
         //TODO: determine if anything needs to be done here.
 	}
 
-	//app.lasthash = smt.Hash{}
+	//app.lasthash = managed.Hash{}
 
     //app.mm.
 
@@ -426,7 +439,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	var val *validator.ValidatorContext
 
 	//resolve the validator's bve to obtain public key for given height
-	var key smt.Hash
+	var key managed.Hash
 
 	//make sure we have a chain id
 	if sub.Chainid == nil {
@@ -510,23 +523,125 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	return ret
 }
 
+func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*vtypes.StateObject, error) {
+	var ret *vtypes.StateObject
+	var key managed.Hash
+	key.Extract(chainid)
+	if mms := app.mms[key]; mms != nil {
+		ret = &mms.currentstateobject
+	} else {
+		//pull current state from the database.
+		data := app.mmdb.Get("Entries", "", chainid)
+		if data != nil {
+			ret = &vtypes.StateObject{}
+			err := ret.Unmarshal(data)
+			if err != nil {
+				return nil, fmt.Errorf("No Current State is Defined")
+			}
+
+		}
+	}
+
+	return ret,nil
+}
+
+func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte) error {
+	mms := &MerkleManagerState{}
+
+	hash := sha256.Sum256(entry)
+	key := managed.Hash{}
+	key.Extract(chainid)
+	if mms = app.mms[key]; mms == nil {
+		mms.merklemgr = managed.NewMerkleManager(&app.mmdb,chainid,8)
+		app.mms[key] = mms
+	}
+	data := app.mmdb.Get("Entries", "", chainid)
+	if data != nil {
+		currso := vtypes.StateObject{}
+		mms.currentstateobject.PrevStateHash = currso.PrevStateHash
+	}
+	mms.merklemgr.AddHash(hash)
+	elements := mms.merklemgr.GetElementCount()-1
+
+	mdroot := mms.merklemgr.GetState(elements).GetMDRoot()
+	if mdroot == nil {
+		mdroot = &managed.Hash{}
+	}
+	app.bpt.Bpt.Insert(key,*mdroot)
+
+	//would this be the current MR? or is is simply the EntryHash that gets entered into the MM
+	mms.currentstateobject.StateHash = mdroot.Bytes()
+	mms.currentstateobject.EntryHash = hash[:]
+	mms.currentstateobject.Entry = entry
+
+	//list of the state objects from the beginning of the block to the end, so don't know if this needs to be kept
+	mms.stateobjects = append(mms.stateobjects, mms.currentstateobject )
+	return nil
+}
+
+func (app *AccumulatorVMApplication) writeStates() error {
+	//loop through everything and write out states to the database.
+
+	//need to Marshal the bpt
+	//and write bpt to disk
+	//app.bpt.Write()
+
+	app.mmdb.EndBatch()
+	for chainid,v := range app.mms {
+		ms := v.merklemgr.GetState(v.merklemgr.GetElementCount())
+		if ms == nil {
+			//shouldn't get here, but will reject if I do
+			fmt.Printf("Shouldn't get here on writeState() on chain id %X obtaining merkle state", chainid)
+			continue
+		}
+
+		v.currentstateobject.StateHash = ms.GetMDRoot().Bytes()
+		datatostore,err := v.currentstateobject.Marshal()
+		if err != nil {
+			//need to log failure
+			continue
+		}
+		app.mmdb.Put("StateEntries","",chainid.Bytes(),datatostore)
+		for i := range v.stateobjects {
+			data,err := v.stateobjects[i].Marshal()
+			if err != nil {
+				//shouldn't get here, but will reject if I do
+				fmt.Printf("Shouldn't get here on writeState() on chain id %X for updated states", chainid)
+				continue
+			}
+
+			app.mmdb.Put("StateEntries","",chainid.Bytes(),datatostore)
+			///TBD : this is not needed since we are maintaining only current state and not all states
+			//just keeping for debug history.
+			app.mmdb.Put("Entries", "", v.stateobjects[i].StateHash, data)
+		}
+		//delete it...
+		delete(app.mms, chainid)
+	}
+
+
+	return nil
+}
+
 //Figure out what to do with the processed validated transaction.  This may include firing off a synthetic TX or simply
 //updating the state of the transaction
 func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *validator.ResponseValidateTX) error {
 	for i := range vdata.Submissions {
 
-		hash := smt.Hash(sha256.Sum256(vdata.Submissions[i].Data))
+		hash := managed.Hash(sha256.Sum256(vdata.Submissions[i].Data))
+
 		switch vdata.Submissions[i].Instruction {
 		case pb.AccInstruction_Scratch_Entry:
 			//generate a key for the chain entry
 			//store to scratch DB.
-			app.mm.AddHash(hash)
+
+			app.addStateEntry(vdata.Submissions[i].Chainid, vdata.Submissions[i].Data )
 
 		case pb.AccInstruction_Data_Entry:
 
             //if we get to this point we can move scratch chain to this chain perhaps and remove scratch chain?
             //remove from scratch DB
-			app.mm.AddHash(hash)
+			app.addStateEntry(vdata.Submissions[i].Chainid, vdata.Submissions[i].Data )
 		default:
 			//generate a synthetic tx and pass to the next round. keep doing that until validators in subsiquent rounds
 			//reduce Submissions to Data Entries on their appropriate chains
@@ -602,19 +717,22 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	key := tempkey
 
 	data := app.mmdb.Get("Entries","", key)
-	stateobject := validator.StateObject{}
+	stateobject := vtypes.StateObject{}
 	stateobject.Unmarshal(data)
 
+	currentstatedata, err := app.getCurrentState(sub.GetChainid())
+	currentstatedata.Marshal()
 	if err != nil {
 		ret.Code = code.CodeTypeEncodingError
 		ret.Info = fmt.Sprintf("Invalid State Object for %X", sub.GetChainid())
 	}
 
 	//gets the current identity state data
-	identitystatedata := app.mmdb.Get("Entries","", sub.Identitychain)
+	currentidentitystatedata, err := app.getCurrentState(sub.Identitychain)
+
 	//identdata := validator.IdentityChainData()
 	//pubkey := identdata.PublicKey
-	pubkey := identitystatedata
+	pubkey, _ := currentidentitystatedata.Marshal()
 
 	currentstate, err := validator.NewStateEntry(pubkey,&stateobject, &app.mmdb)
 
@@ -690,10 +808,10 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			//generate Entry Key from Chainid.
 			//need to validate the sucker...
 			//validate(sub.GetData)
-			state := validator.StateObject{}
+			state := vtypes.StateObject{}
 			//ddiiname := sha256.Sum256([]byte("RedWagon"))
 			//state.DDIIPubKey = ddiiname[:]
-			state.StateHash = smt.Hash{}.Bytes()
+			state.StateHash = managed.Hash{}.Bytes()
 			state.Entry = sub.GetData()
 			//key := app.mm.PT.StoreState(sub.GetChainid(),sha256.Sum256(sub.GetData()))
 			key := sub.GetChainid() //only temporary...
@@ -761,24 +879,14 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 //Commit instructs the application to persist the new state.
 func (app *AccumulatorVMApplication) Commit() abcitypes.ResponseCommit {
 	//end the current batch of transactions in the Stateful Merkle Tree
-	app.mmdb.EndBatch()
 
-	//pull merkle DAG from the Merkle State accumulator and put on blockchain as the Data
-	mdroot := app.mm.MS.GetMDRoot()
+    app.writeStates()
 
-	//if there isn't an MDroot set
-	if mdroot == nil {
-		mdroot = new(smt.Hash)
-	}
 
-	//get the last valid one from the state
-	state := app.mm.GetState(app.mm.GetElementCount())
-	if state != nil {
-		if state.GetMDRoot() != nil {
-			copy(mdroot.Bytes(), state.GetMDRoot().Bytes())
-		}
-	}
 
+	//I think we need to get this from the bpt
+	//app.bpt.Bpt.Root.Hash
+	mdroot := managed.Hash{}
 	//if we have no transactions this block then don't publish anything
 	if app.amLeader && app.txct > 0 {
 

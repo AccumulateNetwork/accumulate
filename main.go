@@ -23,6 +23,9 @@ var ConfigFile []string
 var WorkingDir []string
 const DBVCIndex = 0
 
+var (
+	BuildTag     string = "v0.0.1"
+)
 //var SpecialModeHeight int64 = 99999999999
 
 func init() {
@@ -34,9 +37,13 @@ func init() {
 	}
 	initdir := path.Join(usr.HomeDir , "/.accumulate" )
 
+	version := flag.Bool("v", false, "prints the current version")
 	flag.StringVar(&initdir, "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
 	flag.Parse()
-
+	if *version {
+		fmt.Printf("Accumulate BVC %s\n",BuildTag)
+		os.Exit(0)
+	}
 	for i := range router.Networks {
 		WorkingDir = append(WorkingDir, path.Join(initdir, router.Networks[i]))
 		ConfigFile = append(ConfigFile, path.Join(WorkingDir[i],"/config/config.toml"))

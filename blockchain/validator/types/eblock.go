@@ -25,7 +25,7 @@ package types
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/smt"
+	"github.com/AccumulateNetwork/SMT/managed"
 	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	//"github.com/AccumulateNetwork/accumulated/tendermint"
 	//"golang.org/x/sync/errgroup"
@@ -38,17 +38,17 @@ import (
 // EBlock represents a Factom Entry Block.
 type EBlock struct {
 	// DBlock.Get populates the ChainID, KeyMR, Height and Timestamp.
-	ChainID   *smt.Hash
-	KeyMR     *smt.Hash // Computed
+	ChainID   *managed.Hash
+	KeyMR     *managed.Hash // Computed
 	Timestamp time.Time // Established by DBlock
 	Height    uint32
 
-	FullHash *smt.Hash // Computed
+	FullHash *managed.Hash // Computed
 
 	// Unmarshaled
-	PrevKeyMR    *smt.Hash
-	PrevFullHash *smt.Hash
-	BodyMR       *smt.Hash
+	PrevKeyMR    *managed.Hash
+	PrevFullHash *managed.Hash
+	BodyMR       *managed.Hash
 	Sequence     uint32
 	ObjectCount  uint32
 
@@ -131,7 +131,7 @@ const EBlockMinTotalSize = EBlockHeaderSize + EBlockMinBodySize
 const EBlockMaxTotalSize = EBlockHeaderSize + EBlockMaxBodySize
 
 // min10Marker is frequently reused for comparison in UnmarshalBinary.
-//var min10Marker = smt.Hash{31: 10}
+//var min10Marker = managed.Hash{31: 10}
 
 // UnmarshalBinary unmarshals raw EBlock data, verifies the BodyMR, and
 // populates eb.FullHash and eb.KeyMR, if nil. If eb.KeyMR is populated, it is
@@ -158,7 +158,7 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	return fmt.Errorf("invalid length")
 	}
 
-	var chainID smt.Hash
+	var chainID managed.Hash
 	i := copy(chainID[:], data)
 	if eb.ChainID != nil {
 	if *eb.ChainID != chainID {
@@ -168,13 +168,13 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	eb.ChainID = &chainID
 	}
 
-	eb.BodyMR = new(smt.Hash)
+	eb.BodyMR = new(managed.Hash)
 	i += copy(eb.BodyMR[:], data[i:])
 
-	eb.PrevKeyMR = new(smt.Hash)
+	eb.PrevKeyMR = new(managed.Hash)
 	i += copy(eb.PrevKeyMR[:], data[i:])
 
-	eb.PrevFullHash = new(smt.Hash)
+	eb.PrevFullHash = new(managed.Hash)
 	i += copy(eb.PrevFullHash[:], data[i:])
 
 	eb.Sequence = binary.BigEndian.Uint32(data[i : i+4])
@@ -195,11 +195,11 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	//minuteMarkerID := make([]int, 10)
 	//var numMins int
 	for oi := range objects {
-	objects[oi] = data[i : i+len(smt.Hash{})]
-	i += len(smt.Hash{})
+	objects[oi] = data[i : i+len(managed.Hash{})]
+	i += len(managed.Hash{})
 
 	//if bytes.Compare(objects[oi], min10Marker[:]) <= 0 {
-	//minute := int(objects[oi][len(smt.Hash{})-1])
+	//minute := int(objects[oi][len(managed.Hash{})-1])
 	//minuteMarkerID[minute-1] = oi
 	//numMins++
 	//}
@@ -234,7 +234,7 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	e := &eb.Entries[ei]
 	ei++
 
-	e.Hash = new(smt.Hash)
+	e.Hash = new(managed.Hash)
 	copy(e.Hash[:], objects[oi])
 
 	e.ChainID = eb.ChainID
@@ -268,7 +268,7 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	}
 
 	// Populate FullHash.
-	eb.FullHash = new(smt.Hash)
+	eb.FullHash = new(managed.Hash)
 	*eb.FullHash = ComputeFullHash(data)
 
 	eb.marshalBinaryCache = data
@@ -339,7 +339,7 @@ func (eb EBlock) MarshalBinary() ([]byte, error) {
 
 	// Insert final minute marker
 	//no minute markers needed anymore
-	//data[i+len(smt.Hash{})-1] = byte(min)
+	//data[i+len(managed.Hash{})-1] = byte(min)
 
 	return data, nil
 }
@@ -347,7 +347,7 @@ func (eb EBlock) MarshalBinary() ([]byte, error) {
 // MarshalBinaryLen returns the length of the binary encoding of eb,
 //      EBlockHeaderSize + len(eb.ObjectCount)*len(Bytes32{})
 func (eb EBlock) MarshalBinaryLen() int {
-	return EBlockHeaderSize + int(eb.ObjectCount)*len(smt.Hash{})
+	return EBlockHeaderSize + int(eb.ObjectCount)*len(managed.Hash{})
 }
 
 // SetTimestamp sets the EBlock timestamp and updates all Entry Timestamps

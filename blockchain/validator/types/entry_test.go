@@ -24,13 +24,13 @@ package types_test
 
 import (
 	"encoding/hex"
-	"fmt"
+	//"fmt"
 	"testing"
 
-	"github.com/AdamSLevy/jsonrpc2/v14"
+	//"github.com/AdamSLevy/jsonrpc2/v14"
 	. "github.com/Factom-Asset-Tokens/factom"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	//"github.com/stretchr/testify/assert"
+	//"github.com/stretchr/testify/require"
 )
 
 func TestEntry(t *testing.T) {
