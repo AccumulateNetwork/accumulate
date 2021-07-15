@@ -44,7 +44,7 @@ type MerkleManager struct {
 // by simply getting a receipt and preserving it off chain or on chain.
 func add2Salt(Salt []byte, offset byte) (salt []byte) {
 	salt = append(salt, Salt...) // Make a copy of the salt
-	salt[31] += offset           // Add offset to low order byte -> new salt
+	salt[0] += offset            // Add offset to the first byte -> new salt
 	return salt                  // and return new salt
 }
 

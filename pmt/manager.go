@@ -1,6 +1,8 @@
 package pmt
 
-import "github.com/AccumulateNetwork/SMT/storage/database"
+import (
+	"github.com/AccumulateNetwork/SMT/storage/database"
+)
 
 type Manager struct {
 	DBManager *database.Manager
@@ -28,7 +30,7 @@ func NewBPTManager(dbManager *database.Manager) *Manager { // Return a new BPTMa
 
 // LoadNode
 // Loads the nodes under the given node into the BPT
-func (m *Manager) LoadNode(node *Node) {
+func (m *Manager) LoadNode(node *Node) *Node {
 	if node.Height&m.Bpt.mask != 0 { //                                           Throw an error if not a border node
 		panic("load should not be called on a node that is not a border node") // panic -- should not occur
 	}
@@ -36,6 +38,9 @@ func (m *Manager) LoadNode(node *Node) {
 		data := m.DBManager.Get("BPT", "", node.BBKey[:]) //                      Get the Byte Block
 		m.Bpt.UnMarshalByteBlock(node, data)              //                      unpack it
 		m.LoadedBB[node.BBKey] = node                     //                      Save the root node of Byte Block
+		return node
+	} else {
+		return n
 	}
 }
 
