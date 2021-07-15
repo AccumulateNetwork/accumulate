@@ -3,6 +3,7 @@ package validator
 import (
 	"encoding/json"
 	"fmt"
+	pb "github.com/AccumulateNetwork/accumulated/api/proto"
 	cfg "github.com/tendermint/tendermint/config"
 	"time"
 
@@ -57,7 +58,7 @@ func NewAtkTransactionValidator() *AtkTransactionValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "0000000000000000000000000000000000000000000000000000000000000A75"
-	v.SetInfo(chainid,"atk-transaction")
+	v.SetInfo(chainid,"atk-transaction",pb.AccInstruction_Admin_Vote)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }

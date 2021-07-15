@@ -55,7 +55,7 @@ func NewEntryValidator() *EntryValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "0000000000000000000000000000000000000000000000000000000000000005"
-	v.SetInfo(chainid,"entry")
+	v.SetInfo(chainid,"entry", pb.AccInstruction_Data_Entry)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -123,9 +123,12 @@ func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte
 	}
 
 
+	identityentry := vtypes.IdentityState{}
+	identityentry.UnmarshalBinary(currentstate.IdentityState.Entry)
+
 	//third check if segwit has a valid signature
 	if currentstate != nil {
-		copy(ecr.Segwit.Signature.PublicKey, currentstate.DDIIPubKey[:])
+		copy(ecr.Segwit.Signature.PublicKey, identityentry.Publickey[:])
 	}
 
 	if !ecr.Segwit.Valid() {

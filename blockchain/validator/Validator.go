@@ -44,19 +44,17 @@ type TXEntry struct {
 
 type StateEntry struct {
 
-	DDIIPubKey []byte //this is the active pubkey in the keychain for the DDII to verify data against.
-	SO *acctypes.StateObject
+	IdentityState *acctypes.StateObject
+	ChainState *acctypes.StateObject
+	//database to query other stuff if needed???
 	DB *smtdb.Manager
 }
 
-func NewStateEntry(key []byte, so *acctypes.StateObject, db *smtdb.Manager) (*StateEntry, error){
-	if len(key) != 32 {
-		return nil, fmt.Errorf("Invalid public key length for State Entry")
-	}
+func NewStateEntry(idstate *acctypes.StateObject, chainstate *acctypes.StateObject, db *smtdb.Manager) (*StateEntry, error){
 	se := StateEntry{}
-	se.DDIIPubKey = key
+	se.IdentityState = idstate
 
-	se.SO = so
+	se.ChainState = chainstate
 	se.DB = db
 
 	return &se,nil
@@ -82,6 +80,7 @@ func (f Fee) MarshalBinary() ([]byte, error) {
 
 
 type ResponseValidateTX struct{
+	StateData []byte //acctypes.StateObject
 	Submissions []pb.Submission //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
 }
 
@@ -147,13 +146,13 @@ func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
 //hash :=sha256.Sum256(val.GetValidatorChainId())
 //app.chainval[binary.BigEndian.Uint64(hash[:])] = val
 
-func (h *ValidatorInfo) SetInfo(chainadi string, namespace string) error {
+func (h *ValidatorInfo) SetInfo(chainadi string, namespace string, instructiontype pb.AccInstruction) error {
 	chainid, _ := BuildChainIdFromAdi(&chainadi)
 	h.chainid.Extract(chainid)
 	h.chainadi = chainadi
 	h.namespace = namespace
 //	h.address = binary.BigEndian.Uint64(h.chainid[24:])
-	h.typeid = GetTypeIdFromName(h.namespace)
+	h.typeid = uint64(instructiontype) //GetTypeIdFromName(h.namespace)
 	h.namespace = namespace
 	return nil
 }

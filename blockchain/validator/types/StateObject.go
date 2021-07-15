@@ -32,7 +32,7 @@ func (app *StateObject) Marshal() ([]byte, error){
 }
 
 func (app *StateObject) Unmarshal(data []byte) error {
-	if len(data) < 32 + 32 + 32 + 32 + EntryHeaderSize {
+	if len(data) < 32 + 32 + 32 + 1 {
 		return fmt.Errorf("Insufficient data to unmarshall State Entry.")
 	}
 

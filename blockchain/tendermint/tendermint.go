@@ -1,7 +1,10 @@
 package tendermint
 
 import (
+	"context"
 	"fmt"
+	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
+	//"github.com/btcsuite/btcd/rpcclient"
 	"github.com/spf13/viper"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	abciserver "github.com/tendermint/tendermint/abci/server"
@@ -13,9 +16,11 @@ import (
 	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
-
+	ctypes "github.com/tendermint/tendermint/rpc/core/types"
+	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
 	"github.com/tendermint/tendermint/types"
 	tmtime "github.com/tendermint/tendermint/types/time"
+	"time"
 )
 
 func Initialize(shardname string,
@@ -122,6 +127,11 @@ func makeGRPCClient(addr string) (abcicli.Client,error){ //grpccore.BroadcastAPI
 	}
 	return client, nil
 }
+//
+//func makeRPCClient(addr string) rpcclient.ABCIClient {
+//}
+//
+
 
 func makeGRPCServer(app abcitypes.Application, name string) (service.Service, error) {
 	// Start the listener
@@ -136,4 +146,44 @@ func makeGRPCServer(app abcitypes.Application, name string) (service.Service, er
 	}
 
 	return server, nil
+}
+func WaitForRPC(laddr string) {
+	//laddr := GetConfig().RPC.ListenAddress
+	client, err := rpcclient.New(laddr)
+	if err != nil {
+		panic(err)
+	}
+	result := new(ctypes.ResultStatus)
+	for {
+		_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
+		if err == nil {
+			return
+		}
+
+		fmt.Println("error", err)
+		time.Sleep(time.Millisecond)
+	}
+}
+func GetGRPCClient(grpcAddr string) core_grpc.BroadcastAPIClient {
+	return core_grpc.StartGRPCClient(grpcAddr)
+}
+
+func GetRPCClient(rpcAddr string) *rpcclient.Client {
+	client, _ := rpcclient.New(rpcAddr)
+	//b := client.NewRequestBatch()
+	//
+	//result := new(ctypes.ResultStatus)
+	//_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
+	//b.Call()
+    return client
+}
+
+func WaitForGRPC(grpcAddr string) {
+	client := GetGRPCClient(grpcAddr)
+	for {
+		_, err := client.Ping(context.Background(), &core_grpc.RequestPing{})
+		if err == nil {
+			return
+		}
+	}
 }

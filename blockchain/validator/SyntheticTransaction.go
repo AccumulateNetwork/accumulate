@@ -1,6 +1,7 @@
 package validator
 
 import (
+	pb "github.com/AccumulateNetwork/accumulated/api/proto"
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
 	"time"
@@ -49,7 +50,7 @@ func NewSyntheticTransactionValidator() *SyntheticTransactionValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "0000000000000000000000000000000000000000000000000000000000000005"
-	v.SetInfo(chainid,"synthetic_transaction")
+	v.SetInfo(chainid,"synthetic_transaction",  pb.AccInstruction_State_Store)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }

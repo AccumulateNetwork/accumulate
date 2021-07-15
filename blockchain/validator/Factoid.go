@@ -32,7 +32,7 @@ func NewFactoidValidator() *FactoidValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "000000000000000000000000000000000000000000000000000000000000000f"
-	v.SetInfo(chainid,"fct")
+	v.SetInfo(chainid,"fct",pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = &v
 	v.timeofvalidity = time.Duration(2) * time.Minute //transaction good for only 2 minutes
 	return &v
