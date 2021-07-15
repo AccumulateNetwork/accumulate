@@ -371,34 +371,9 @@ in this library this is done by the MerkleManager.
 * `(m *MerkleState) AddToMerkleTree(hash_ [32]byte` Add a given Hash to the 
   Merkle Tree and update the Merkle State
   
-
-
 ### Validation
-```Go
-type Hash [32]byte
-```
-```Go
-type Fee struct {
-    TimeStamp      int64        // 8
-    DDII           Hash         // 32
-    ChainID        [33]byte     // 33
-    Credits        int8         // 1
-    SignatureIdx   int8         // 1
-    Signature      []byte       // 64 minimum 
-                                // 1 end byte ( 140 bytes for FEE)
-    Transaction    []byte       // Transaction
-}
-```
+Accumulate is based on authentications. We support a hierarchy of keys that 
+allows for cold storage and multi-signature security for the control and 
+management of an identity, and the chains and tokens managed by an identity.
 
-```Go
-type Validation interface {
-    Type() string
-    SetState(state *StateEntry)
-    GetState() state *StateEntry
-	ValidTx(entry *Entry) bool
-	ValidTxList(entries []*Hash) bool
-}
-```
-* `func (m \*SMT) SetValidator(validator *Validation)`  Set the validator function on the SMT
-
-     
+T
