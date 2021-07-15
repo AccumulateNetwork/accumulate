@@ -20,7 +20,7 @@ func NewBVCLeader() *BVCLeader {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	//chainid := "0000000000000000000000000000000000000000000000000000000000000001"
-	v.SetInfo("dbvc","bvc")
+	v.SetInfo("dbvc","bvc",99)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }

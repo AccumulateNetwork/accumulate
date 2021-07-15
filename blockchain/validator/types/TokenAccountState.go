@@ -9,13 +9,13 @@ import (
 type TokenState struct {
 	StateEntry
 	issueridentity managed.Hash
-	issuertokenchainid managed.Hash
+	issuerchainid managed.Hash  //identity/issue chains both hold the metrics for the TokenRules ... hmm.. do those need to be passed along since those need to be used
 	balance decimal.Decimal
 	//balance big.Int
 }
 //
 //{
-//"type": "FAT-0",
+//"type": "ACC-0",
 //"supply": 10000000,
 //"precision": 5,
 //"symbol": "EXT",
@@ -23,7 +23,7 @@ type TokenState struct {
 //}
 //this is part of the token chain
 type TokenRules struct {
-    tokentype string //
+    tokentype string //ACC-0 aka FAT-0
     supply uint64
     precision int8
     symbol string
@@ -32,16 +32,15 @@ type TokenRules struct {
 
 const TokenStateLen = 32+32
 
-func (ts *TokenState) IssuerIdentity() *managed.Hash {
+func (ts *TokenState) GetIssuerIdentity() *managed.Hash {
 	return &ts.issueridentity
 }
 
-func (ts *TokenState) IssuerTokenChainId() *managed.Hash {
-	return &ts.issuertokenchainid
-
+func (ts *TokenState) GetIssuerChainId() *managed.Hash {
+	return &ts.issuerchainid
 }
 
-func (ts *TokenState) Deposit(amt string) error {
+func (ts *TokenState) Credit(amt string) error {
 	inputamt, err := decimal.NewFromString(amt)
 
 	if err != nil {
@@ -56,27 +55,20 @@ func (ts *TokenState) Balance() string {
 	return ts.balance.StringFixedBank(2)
 }
 
-func (ts *TokenState) Withdrawal(amt string, fee string) error {
+func (ts *TokenState) Debit(amt string) error {
 
-	outputamt, err := decimal.NewFromString(amt)
-
-	if err != nil {
-		return err
-	}
-
-	feeamt, err := decimal.NewFromString(fee)
+	debitamt, err := decimal.NewFromString(amt)
 
 	if err != nil {
 		return err
 	}
 
-	total := outputamt.Add(feeamt)
-
-	if ts.balance.Cmp(total) < 0 {
-		return fmt.Errorf("Insufficient Balance")
+	if ts.balance.Cmp(debitamt) < 0 {
+		///precision
+		return fmt.Errorf("Insufficient Balance : Available %s / Requested %s", ts.Balance(), debitamt.StringFixedBank(2))
 	}
 
-	ts.balance = ts.balance.Sub(total)
+	ts.balance = ts.balance.Sub(debitamt)
 
 	return nil
 }
@@ -93,11 +85,11 @@ func (ts *TokenState) MarshalBinary() ([]byte, error) {
 
 func (ts *TokenState) UnmarshalBinary(data []byte) error {
 
-	if len(data) !=  TokenStateLen {
-		return fmt.Errorf("Invalid Token Data for unmarshalling %X on chain %X", ts.issueridentity, ts.issuertokenchainid)
+	if len(data) < TokenStateLen {
+		return fmt.Errorf("Invalid Token Data for unmarshalling %X on chain %X", ts.issueridentity, ts.issuerchainid)
 	}
 	i := copy(ts.issueridentity.Bytes(), data[:])
-	i += copy(ts.issuertokenchainid.Bytes(), data[i:])
+	i += copy(ts.issuerchainid.Bytes(), data[i:])
 
 	var err error
 	ts.balance, err = decimal.NewFromString(string(data[i:]))

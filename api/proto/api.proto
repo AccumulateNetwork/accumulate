@@ -97,7 +97,10 @@ enum AccInstruction {
 	Deep_Query = 10; //implements a transaction on the network that is processed by validators these cost $$, but can provide cryptographic proof for validity at current state
 	Light_Query = 11; //sends a query to a node and info is returned.
 	//Only valid for BVC use: any other source of this message will be rejected
+	//is this data store or State_Store
 	Data_Store = 12; //Data Store can only be sent and thus authorized by an authority node
+	State_Store = 13;
+	Admin_Vote = 14;
 	//      Entry_Commit = 1; //
 	//      Entry_Reveal = 2; // raw data
 	//      Chain_Commit = 3;
@@ -116,6 +119,8 @@ message Submission
     uint64 param1      = 5; // validator specific
     uint64 param2      = 6; // validator specific
     bytes  data        = 7; // validator will validate this data however it sees fit. may include signature
+		bytes  key          = 9;
+		bytes  signature    = 8;
 }
 
 message SubmissionResponse {

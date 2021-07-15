@@ -94,7 +94,7 @@ func main() {
 	urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
 	//temporary server for each vm.  will be replaced by url router.
-	go router.Jsonrpcserver2(accvmapi)
+	//go router.Jsonrpcserver2(accvmapi)
 
 
 	c := make(chan os.Signal, 1)

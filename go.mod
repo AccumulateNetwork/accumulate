@@ -3,7 +3,7 @@ module github.com/AccumulateNetwork/accumulated
 go 1.15
 
 require (
-	github.com/AccumulateNetwork/SMT v0.0.20
+	github.com/AccumulateNetwork/SMT v0.0.22
 	github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 // indirect
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
 	github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d
@@ -45,6 +45,7 @@ require (
 	github.com/alexandrevicenzi/go-sse v1.5.0 // indirect
 	github.com/bmizerany/assert v0.0.0-20160611221934-b7ed37b82869 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
+	github.com/btcsuite/btcd v0.21.0-beta
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/btcsuitereleases/btcutil v0.0.0-20150612230727-f2b1058a8255
 	github.com/cmars/basen v0.0.0-20150613233007-fe3947df716e // indirect
