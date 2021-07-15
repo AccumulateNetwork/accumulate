@@ -12,9 +12,8 @@ import (
 	vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
-	abcicli "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/types"
 	tmnet "github.com/tendermint/tendermint/libs/net"
+	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
 	"google.golang.org/grpc"
 	"net"
 	"net/url"
@@ -26,7 +25,7 @@ type RouterConfig struct {
 	proto.ApiServiceServer
 	grpcServer *grpc.Server
 
-	bvcclients []abcicli.Client
+	bvcclients []core_grpc.BroadcastAPIClient
 	Address string
 }
 
@@ -64,23 +63,24 @@ func (app *RouterConfig) GetNumShardsInSystem() int32 {
 
 func (app *RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*proto.AccQueryResp, error) {
 	scr := proto.AccQueryResp{}
-
-	rq := types.RequestQuery{}
-
-	rq.Data,_ = proto1.Marshal(query)
-
-	rq.Height = 12345
-	client := app.getBVCClient(query.Addr)
-	if client == nil {
-		return nil, fmt.Errorf("No BVC Client Available on for address %X", query.Addr)
-	}
-	resp, err := client.QuerySync(rq)
-
-	if err != nil {
-		return nil, err
-	}
-
-	scr.Code = resp.Code
+	//fixme
+	//
+	//rq := types.RequestQuery{}
+	//
+	//rq.Data,_ = proto1.Marshal(query)
+	//
+	//rq.Height = 12345
+	//client := app.getBVCClient(query.Addr)
+	//if client == nil {
+	//	return nil, fmt.Errorf("No BVC Client Available on for address %X", query.Addr)
+	//}
+	//resp, err := client.QuerySync(rq)
+	//
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//scr.Code = resp.Code
 
 	return &scr,nil
 }
@@ -99,13 +99,14 @@ func (app *RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*
 	if err != nil {
 		return nil, fmt.Errorf("Invalid Submission payload for Synthetic TX")
 	}
-	req := types.RequestCheckTx{}
+	req := core_grpc.RequestBroadcastTx{}
 	req.Tx = msg
-	checkresp,err := client.CheckTxSync(req)
-	if err != nil {
-		fmt.Printf("Error received from Check Tx Sync %v", err)
-	}
-	fmt.Printf("Result : %s", checkresp.Log)
+	client.BroadcastTx(context.Background(),&req)
+	//client.
+	//if err != nil {
+	//	fmt.Printf("Error received from Check Tx Sync %v", err)
+	//}
+	//fmt.Printf("Result : %s", checkresp.)
 
 	resp.Respdata = nil
 	resp.ErrorCode = 0x9000
@@ -145,7 +146,7 @@ func NewRouter(routeraddress string) (config *RouterConfig) {
 	return &r
 }
 
-func (app *RouterConfig) getBVCClient(addr uint64) abcicli.Client {
+func (app *RouterConfig) getBVCClient(addr uint64) core_grpc.BroadcastAPIClient {
 	numbvcnetworks := uint64(len(app.bvcclients))
 	if numbvcnetworks == 0 {
 		return nil
@@ -153,7 +154,7 @@ func (app *RouterConfig) getBVCClient(addr uint64) abcicli.Client {
 	return app.bvcclients[addr%numbvcnetworks]
 }
 
-func (app *RouterConfig) AddBVCClient(shardname string, client abcicli.Client) error {
+func (app *RouterConfig) AddBVCClient(shardname string, client core_grpc.BroadcastAPIClient) error {
 	//todo: make this a discovery method.  we need to know for sure how many BVC's there are and we need
 	//to explicitly connect to them...
 	app.bvcclients = append(app.bvcclients,client)

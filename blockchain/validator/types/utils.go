@@ -2,22 +2,27 @@ package types
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"github.com/AccumulateNetwork/SMT/managed"
-	"github.com/AccumulateNetwork/SMT/storage"
 	"strings"
 )
 
+func GetIdentityChainFromAdi(adi string) *managed.Hash {
+	namelower := strings.ToLower(adi)
+	h := managed.Hash( sha256.Sum256([]byte(namelower)) )
+
+	return &h
+}
+
+
 func GetAddressFromIdentityChain(identitychain []byte) uint64 {
-	addr,_ := storage.BytesUint64(identitychain)
+	addr := binary.LittleEndian.Uint64(identitychain)
 	return addr
 }
 
 
 func GetAddressFromIdentityName(name string) uint64 {
-	namelower := strings.ToLower(name)
-	h := sha256.Sum256([]byte(namelower))
-
-	addr := GetAddressFromIdentityChain(h[:])
+	addr := GetAddressFromIdentityChain(GetIdentityChainFromAdi(name).Bytes())
 	return addr
 }
 
