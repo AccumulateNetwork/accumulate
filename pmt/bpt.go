@@ -141,6 +141,8 @@ func (b *BPT) GetDirtyList() (list []*Node) {
 	return list //                                Return sorted list
 }
 
+var dcnt = 0
+
 // insertAtNode
 // A recursive routine that pushes collisions towards the leaves of the
 // binary patricia tree until the keys don't match any more.  Note that
@@ -155,6 +157,10 @@ func (b *BPT) GetDirtyList() (list []*Node) {
 // hash -- The current value of the key, as tracked by the BPT
 func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 
+	if BIdx == 0 && bit == 1 {
+		//fmt.Printf("key %x\n", key)
+		dcnt = 0
+	}
 	step := func() { //  In order to reduce redundant code, we step with a
 		bit <<= 1     // local function.         Inlining might provide some
 		if bit == 0 { //                         performance.  What we are doing is shifting the
@@ -164,9 +170,6 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 	}
 
 	Insert := func(e *Entry) { //                                    Again, to avoid redundant code, Left and Right
-		if *e != nil && (*e).T() == TNotLoaded { //                   If the nodes above this node are not loaded
-			b.manager.LoadNode(node) //                              then load them from the database
-		} //                                                         otherwise continue the search
 		switch { //                                                  processing is done once here.
 		case *e == nil: //                                           Check if the Left/Right is nil.
 			v := b.NewValue(key, hash) //                            If it is, we can put the value here
@@ -185,15 +188,22 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 				}
 				return //                                            Changed or not, we are done.
 			} //                                                     The idea is to create a node, to replace the value
-			nn := b.NewNode(node)          //                     that was here, and the old value and the new value
-			nn.BBKey = GetBBKey(BIdx, key) //                     The previous Byte Block is indexed by the bytes in
-			//                                                         the key leading up to this entry.
+			nn := b.NewNode(node)                        //          that was here, and the old value and the new value
 			*e = nn                                      //          and insert them at one height higher.
 			step()                                       //          This means we walk down the bits of both values
+			nn.BBKey = GetBBKey(BIdx, key)               //          Record the nn.BBKey
 			b.insertAtNode(BIdx, bit, nn, key, hash)     //          until they diverge.
 			b.insertAtNode(BIdx, bit, nn, v.Key, v.Hash) //          Because these are chainIDs, while they could be
 		} //                                                         mined to attack our BPT, we don't much care; it will
 	} //                                                             cost the attackers more than the protocol
+
+	if node.Left != nil && node.Left.T() == TNotLoaded ||
+		node.Right != nil && node.Right.T() == TNotLoaded {
+		node.BBKey = GetBBKey(BIdx, key)
+		n := b.manager.LoadNode(node)
+		node.Left = n.Left
+		node.Right = n.Right
+	}
 
 	if bit&key[BIdx] == 0 { //      Note that this is the code that calls the Inline function Insert, and Insert
 		Insert(&node.Left) //       in turn calls step.  We check the bit on the given BIdx. 0 goes Left
@@ -229,7 +239,7 @@ func (b *BPT) Update() {
 				break //                                     bap out
 			} //
 			if h&b.mask == 0 && b.manager != nil { //      Check and see if at the root node for a byte block
-				//				b.manager.FlushNode(n) //  If so, flush the byte block; it has already been updated
+				b.manager.FlushNode(n) //                  If so, flush the byte block; it has already been updated
 			} //
 			L := GetHash(n.Left)  //                       Get the Left Branch
 			R := GetHash(n.Right) //                       Get the Right Branch
@@ -295,9 +305,12 @@ func (b *BPT) MarshalEntry(entry Entry, data []byte) []byte { //
 		data = append(data, entry.Marshal()...) //             And marshal the value
 		return data                             //             Done
 	case entry.T() == TNode && //                              Check if TNode
-		entry.(*Node).Height&b.mask == b.mask: //              See if entry is going into
-		data = append(data, TNotLoaded) //                     the next Byte Block
-		return data                     //                     Ignore if so and done
+		entry.(*Node).Height&b.mask == 0: //                   See if entry is going into
+		data = append(data, TNode)              //             Mark as going into a node
+		data = append(data, entry.Marshal()...) //             Put the fields into the slice
+		data = append(data, TNotLoaded)         //             Left is going into next Byte Block
+		data = append(data, TNotLoaded)         //             Right is going into next Byte Block
+		return data                             //             Return the data
 	case entry.T() == TNotLoaded: //                           Check if node isn't loaded
 		data = append(data, TNotLoaded)
 	default: //                                                In this case, we have a node to marshal
@@ -330,7 +343,7 @@ func (b *BPT) UnMarshalEntry(parent *Node, data []byte) (Entry, []byte) { //
 		data = v.UnMarshal(data) //
 		return v, data           //             Return the value object and updated data slice
 	case TNotLoaded: //                         If not loaded
-		if parent.Height&b.mask == 0 {
+		if parent.Height&b.mask != 0 {
 			panic(fmt.Sprintf("writing a TNotLoaded node on a non-boundary node"))
 		}
 		return new(NotLoaded), data //          Create the NotLoaded stub and updated pointer
