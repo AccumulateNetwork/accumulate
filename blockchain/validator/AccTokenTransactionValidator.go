@@ -2,6 +2,8 @@ package validator
 
 import (
 	"bytes"
+	pb "github.com/AccumulateNetwork/accumulated/api/proto"
+
 	//"crypto/sha256"
 	"fmt"
 	//"github.com/AccumulateNetwork/SMT/managed"
@@ -11,7 +13,7 @@ import (
 	"time"
 )
 
-type CreateIdentityValidator struct{
+type AccTokenTransactionValidator struct{
 	ValidatorContext
 
     EV *EntryValidator
@@ -36,28 +38,28 @@ type CreateIdentityValidator struct{
 //	return nil
 //}
 
-func NewCreateIdentityValidator() *CreateIdentityValidator {
-	v := CreateIdentityValidator{}
+func NewAccTokenTransactionValidator() *AccTokenTransactionValidator {
+	v := AccTokenTransactionValidator{}
 	//need the chainid, then hash to get first 8 bytes to make the chainid.
 	//by definition a chainid of a factoid block is
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "000000000000000000000000000000000000000000000000000000000000001D" //does this make sense anymore?
 	v.EV = NewEntryValidator()
-	v.SetInfo(chainid,"create-identity")
+	v.SetInfo(chainid,"token-transaction", pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
 
-func (v *CreateIdentityValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *AccTokenTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
-func (v *CreateIdentityValidator) Initialize(config *cfg.Config) error {
+func (v *AccTokenTransactionValidator) Initialize(config *cfg.Config) error {
 	return nil
 }
 
-func (v *CreateIdentityValidator) BeginBlock(height int64, time *time.Time) error {
+func (v *AccTokenTransactionValidator) BeginBlock(height int64, time *time.Time) error {
 	v.lastHeight = v.currentHeight
 	v.lastTime = v.currentTime
 	v.currentHeight = height
@@ -66,7 +68,7 @@ func (v *CreateIdentityValidator) BeginBlock(height int64, time *time.Time) erro
 	return nil
 }
 
-func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *AccTokenTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("Current State Not Defined")
@@ -116,7 +118,7 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 	//return &pb.Submission{}, nil
 }
 
-func (v *CreateIdentityValidator) EndBlock(mdroot []byte) error  {
+func (v *AccTokenTransactionValidator) EndBlock(mdroot []byte) error  {
 	//copy(v.mdroot[:], mdroot[:])
 	//don't think this serves a purpose???
 	return nil
