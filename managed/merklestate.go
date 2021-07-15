@@ -214,10 +214,15 @@ func (m *MerkleState) AddToMerkleTree(hash_ [32]byte) {
 // the MerkleState at this point We take any trailing hashes in MerkleState,
 // hash them up and combine to create the Merkle Dag Root. Getting the closing
 // ListMDRoot is non-destructive, which is useful for some use cases.
+//
+// Returns a nil if the MerkleSate is empty.
 func (m *MerkleState) GetMDRoot() (MDRoot *Hash) {
 	// We go through m.MerkleState and combine any left over hashes in m.MerkleState with each other and the MR.
 	// If this is a power of two, that's okay because we will pick up the MR (a balanced MerkleState) and
 	// return that, the correct behavior
+	if m.Count == 0 { // If the count is zero, we have no root.  Return a nil
+		return MDRoot
+	}
 	for _, v := range m.Pending {
 		if MDRoot == nil { // Pick up the first hash in m.MerkleState no matter what.
 			MDRoot = v // If a nil is assigned over a nil, no harm no foul.  Fewer cases to test this way.
