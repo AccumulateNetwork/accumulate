@@ -474,7 +474,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("Entry check failed %v on validator %s \n",sub.Type, val.GetInfo().GetNamespace())
+		ret.Info = fmt.Sprintf("Entry check failed %v on validator %s \n",sub.Type, *val.GetInfo().GetNamespace())
 		return ret
 	}
 
