@@ -30,7 +30,7 @@ type CVE struct {
 	mmdb *smtdb.Manager
 	mms *map[managed.Hash]*MerkleManagerState
 	bpt *pmt.Manager
-    
+
 
 }
 
@@ -88,6 +88,7 @@ func (app *CVE) addStateEntry(chainid []byte, entry []byte) error {
 	return nil
 }
 
+
 func (app *CVE) validationChainWorker(q chan ChainValidationCandidate, e chan error) {
 
 	for ;; {
@@ -116,7 +117,9 @@ func (app *CVE) validateChain() {
 
 }
 
-
+//Because chains are actec upon in isolation during an update, we can take advantage of this by splitting the validation
+//by chain amongst CPU's. Only data operating on similar chains but be run in the same thread to ensure ordering
+//of chain operations is preserved.
 func ChainValidationEngine(complete chan bool) {
 	//
 	//type q chan uint8
