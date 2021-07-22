@@ -1,6 +1,7 @@
 package router
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -15,13 +16,15 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/rpc/core"
-	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	tmtypes "github.com/tendermint/tendermint/types"
+	//coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 
-	"context"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -48,12 +51,13 @@ func makeGRPCClientServer(app types.Application, name string) (abcicli.Client, s
 	}
 	return client, server, nil
 }
+
 type factomapi struct {
 	//client grpccore.BroadcastAPIClient
-	client abcicli.Client
+	client *rpchttp.HTTP
 }
 
-func NewFactomAPI(client abcicli.Client) (r *factomapi){/*client grpccore.BroadcastAPIClient*/
+func NewFactomAPI(client *rpchttp.HTTP) (r *factomapi) { /*client grpccore.BroadcastAPIClient*/
 	r = &factomapi{client}
 	return r
 }
@@ -83,12 +87,12 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 	type ret struct {
 		Message string `json:"message"`
-		Txid string    `json:"txid,omitempty"`
+		Txid    string `json:"txid,omitempty"`
 	}
 
 	err := json.Unmarshal(params, &p)
 	if err != nil {
-		return ret{"transaction unmarshal error",""}
+		return ret{"transaction unmarshal error", ""}
 	}
 	//send off the p.Transaction
 	//rpctypes.WSRPCConnection()
@@ -97,7 +101,6 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	//ctx := context.Background()
 
 	//sig, _ := hex.DecodeString("0000000000000000000000000000000000000000000000000000000000000000")
-
 
 	duration0 := time.Since(start)
 	//
@@ -111,10 +114,10 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 	chainadi := "000000000000000000000000000000000000000000000000000000000000000f"
 	var chainid [32]byte
-	hex.Decode(chainid[:],[]byte(chainadi))
+	hex.Decode(chainid[:], []byte(chainadi))
 	chainhash := chainid[:]
 	var duration1 time.Duration
-	for i := 0; i < 1/* 00000 */; i++ {
+	for i := 0; i < 1; /* 00000 */ i++ {
 		vr := &pb.Submission{}
 		//vr.Nonce = 0
 		//vr.Signed = sig
@@ -130,9 +133,10 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 		vr.Chainid = make([]byte, 32)
 
-		copy(vr.Chainid,chainhash[:])
+		copy(vr.Chainid, chainhash[:])
 
-		msg, _ := proto1.Marshal(vr)
+		var msg tmtypes.Tx
+		msg, _ = proto1.Marshal(vr)
 		//type delivertx struct {
 		//	Tx []byte `json:"tx"`
 		//}
@@ -143,9 +147,11 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 
 		//var c jsonrpc2.Client
 
-		req := types.RequestDeliverTx{}
-		req.Tx = msg
-		resp := app.client.DeliverTxAsync(req)
+		//batch := app.client.NewBatch()
+		//req := tmtypes.Tx //types.RequestDeliverTx{}
+		//req.Tx = msg
+
+		resp, err := app.client.BroadcastTxAsync(context.Background(), msg) //DeliverTxAsync(req)
 		if resp == nil {
 			fmt.Printf("Error received from Check Tx Sync %v", err)
 		}
@@ -166,7 +172,6 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	//}
 	//res.GetDeliverTx()
 	duration2 := time.Since(start)
-
 
 	//if err != nil {
 	//	return &pb.Reply{Error: err.Error()} , nil
@@ -205,11 +210,11 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	durationT := time.Since(start0)
 	mm.Lock()
 	cum := time.Since(gtimer)
-	r := ret{fmt.Sprintf("%d: (%f,cumulative: %f s) Hello there",counter,
-		float64(durationT.Microseconds())/1000.0,float64(cum.Microseconds())/1000000.0),
-		""}//,hex.EncodeToString(res.Data) }
+	r := ret{fmt.Sprintf("%d: (%f,cumulative: %f s) Hello there", counter,
+		float64(durationT.Microseconds())/1000.0, float64(cum.Microseconds())/1000000.0),
+		""} //,hex.EncodeToString(res.Data) }
 
-	fmt.Printf("%f %d: Total: %d, Unmarshal: %d, Marshal: %d, TMBroadcast: %d\n",float64(cum.Microseconds())/1000000.0,counter, durationT.Microseconds(), duration0.Microseconds(), duration1.Microseconds(), duration2.Microseconds())
+	fmt.Printf("%f %d: Total: %d, Unmarshal: %d, Marshal: %d, TMBroadcast: %d\n", float64(cum.Microseconds())/1000000.0, counter, durationT.Microseconds(), duration0.Microseconds(), duration1.Microseconds(), duration2.Microseconds())
 
 	mm.Unlock()
 	//call tendermint
@@ -217,122 +222,111 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	//ret{"Successfully submitted the transaction","aa8bac391e744340140ea0d95c7b37f9cc8a58601961bd751f5adb042af6f33b" }
 	return r
 }
-//
-//func (t *FactoidSubmit) submit(r *http.Request, args *Args, result *Result) error {
-//	log.Printf("factoid-submit\n")
-//	//*result = Result(args.A * args.B)
-//	return nil
-//}
-//
-func factoid_submit(_ context.Context, params json.RawMessage) interface{} {
+
+func (app *factomapi) ablock_by_height(ctx context.Context, params json.RawMessage) interface{} {
 
 	var p struct {
-		Transaction *string
+		Keymr *string `json:"keymr"`
 	}
 
 	type ret struct {
 		Message string `json:"message"`
-		Txid string    `json:"txid,omitempty"`
+		Txid    string `json:"txid,omitempty"`
 	}
 
 	err := json.Unmarshal(params, &p)
 	if err != nil {
-		return ret{"transaction unmarshal error",""}
+		return ret{"ablock_by_height unmarshal error", ""}
 	}
-	//send off the p.Transaction
-	//rpctypes.WSRPCConnection()
-	decoded, err := hex.DecodeString(*p.Transaction)
 
-	res, err := core.BroadcastTxCommit(&rpctypes.Context{}, decoded)
+	return ret{"Not yet implemented", ""}
+}
 
-	//https://github.com/tendermint/tendermint/blob/27e8cea9ce06f6a75f0b26e6993bce139a5a9074/abci/example/kvstore/kvstore_test.go#L253
-	//abcicli.NewClient(,grpc,true)
-	// set up grpc app
-	//	kvstore = NewApplication()
-	//	gclient, gserver, err := makeGRPCClientServer(kvstore, "kvstore-grpc")
-	//	require.NoError(t, err)
-	//
-	//	t.Cleanup(func() {
-	//		if err := gserver.Stop(); err != nil {
-	//			t.Error(err)
-	//		}
-	//	})
-	//	t.Cleanup(func() {
-	//		if err := gclient.Stop(); err != nil {
-	//			t.Error(err)
-	//		}
-	//	})
-	//
-	//	runClientTests(t, gclient)
+func (app *factomapi) ack(ctx context.Context, params json.RawMessage) interface{} {
+
+	var p struct {
+		Hash    *string `json:"hash"`
+		Chainid *string `json:"chainid"`
+	}
+
+	//Entry
+	//{
+	//	"jsonrpc":"2.0",
+	//	"id":0,
+	//	"result":{
+	//	"committxid":"debbbb6b902de330bfaa78c6c9107eb0a451e10cd4523e150a8e8e6d5a042886",
+	//		"entryhash":"1a6c96162e81d429de92b2f18a0ba9b428e505de0077a5d16ad5707f0f8a73b2",
+	//		"commitdata":{
+	//		"status":"DBlockConfirmed"
+	//	},
+	//	"entrydata":{
+	//		"status":"DBlockConfirmed"
+	//	}
 	//}
-	log.Printf(hex.EncodeToString(res.Hash))
-	r := ret{"hello there",hex.EncodeToString(res.Hash) }
-	//if err != nil {
-	//	return &pb.Reply{Error: err.Error()} , nil
 	//}
+	type Data struct {
+		Status string `json:"status"`
+	}
+	type CommitAck struct {
+		Committxid string `json:"committxid"`
+		Entryhash  string `json:"entryhash"`
+		Commitdata Data   `json:"commitdata"`
+	}
 
+	type eret struct {
+		Result    CommitAck `json:"result"`
+		Entrydata Data      `json:"entrydata"`
+	}
 
-	//call tendermint
-	//process response
-	//ret{"Successfully submitted the transaction","aa8bac391e744340140ea0d95c7b37f9cc8a58601961bd751f5adb042af6f33b" }
+	err := json.Unmarshal(params, &p)
+	if err != nil {
+		return eret{}
+	}
+
+	var r eret
 	return r
 }
-// The RPC methods called in the JSON-RPC 2.0 specification examples.
-func subtract(_ context.Context, params json.RawMessage) interface{} {
-	// Parse either a params array of numbers or named numbers params.
-	var a []float64
-	if err := json.Unmarshal(params, &a); err == nil {
-		if len(a) != 2 {
-			return jsonrpc2.ErrorInvalidParams("Invalid number of array params")
-		}
-		return a[0] - a[1]
-	}
-	var p struct {
-		Subtrahend *float64
-		Minuend    *float64
-	}
-	if err := json.Unmarshal(params, &p); err != nil ||
-		p.Subtrahend == nil || p.Minuend == nil {
-		return jsonrpc2.ErrorInvalidParams(`Required fields "subtrahend" and ` +
-			`"minuend" must be valid numbers.`)
-	}
-	return *p.Minuend - *p.Subtrahend
-}
-func sum(_ context.Context, params json.RawMessage) interface{} {
-	var p []float64
-	if err := json.Unmarshal(params, &p); err != nil {
-		return jsonrpc2.ErrorInvalidParams(err)
-	}
-	sum := float64(0)
-	for _, x := range p {
-		sum += x
-	}
-	return sum
-}
-func notifyHello(_ context.Context, _ json.RawMessage) interface{} {
-	return ""
-}
-func getData(_ context.Context, _ json.RawMessage) interface{} {
-	return []interface{}{"hello", 5}
-}
 
-func Jsonrpcserver2(client abcicli.Client){//grpccore.BroadcastAPIClient){
-	//s := NewJSONRPCServer()
-	//arith := new(Arith)
-	//s.Register(arith)
-	//http.Handle("/rpc", s)
-	//http.ListenAndServe(":1234", nil)
-	// Register RPC methods.
+func Jsonrpcserver2(client *rpchttp.HTTP, port int) { //grpccore.BroadcastAPIClient){
 	fct := NewFactomAPI(client)
 	methods := jsonrpc2.MethodMap{
-		"subtract":     subtract,
-		"sum":          sum,
-		"notify_hello": notifyHello,
-		"get_data":     getData,
-		"factoid-submit": fct.factoid_submit,
+		"factoid-submit":   fct.factoid_submit,
+		"ablock-by-height": fct.ablock_by_height, //dbvc query?
+		"ack":              fct.ack,
+		//		"admin-block": fct.admin_block, //dbvc query?
+		//		"chain-head": fct.chain_head,
+		//		"commit-chain": fct.commit_chain,
+		//		"commit-entry": fct.commit_entry,
+		//		"current-minute": fct.current_minute, //no longer makes sense...
+		//		"dblock-by-height": fct.dblock_by_height, //dbvc query???
+		//		"directory-block": fct.directory_block, // dbvc query?
+		//		"directory-block-head": fct.directory_block_head, //dbvc query?
+		//		"ecblock-by-height": fct.eblock_by_height, //no sure this makes sense anymore
+		//		"entry": fct.entry, //this pulls data from a chain based upon entry hash
+		//		"entry-ack": fct.ack, //no longer used
+		//		"entry-block": fct.entry_block, //no longer use entry blocks
+		//		"entry-credit-balance": fct.entry_credit_balance, //this should be derived from current state
+		//		"entry-credit-block": fct.entry_credit_block, //this no longer makes sense
+		//		"entry-credit-rate": fct.entry_credit_rate, //maintained at each bvc
+		//		"factoid-ack": fct.ack, //deprecated.
+		//		"factoid-balance": fct.factoid_balance, //this should be either "token-balance" or generic "entry"
+		//		"factoid-block": fct.factoid_block, //this no longer makes sense
+		//		"fblock-by-height": fct.fblock_by_height, //this no longer makes sense
+		//		"heights": fct.heights, //this is probably a dbvc thing
+		//		"multiple-ec-balances": fct.multiple_ec_balances, //this should be more generic now
+		//		"multiple-fct-balances", //this should be more generic now
+		//		"pending-entries",
+		//		"pending-transactions",
+		//		"properties",
+		//		"raw-data",
+		//		"receipt", //this one is important.
+		//		"reveal-chain", //commit / reveal combined now.
+		//		"reveal-entry", // ditto
+		//		"send-raw-message", //hmm.
+		//		"transaction", //get details only valid for 2 weeks after transaction initiates
+
 	}
 	jsonrpc2.DebugMethodFunc = true
 	handler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
-	http.ListenAndServe(":1234", handler)
+	go http.ListenAndServe(":"+strconv.Itoa(port), handler)
 }
-
