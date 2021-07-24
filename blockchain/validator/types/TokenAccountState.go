@@ -4,15 +4,18 @@ import (
 	"fmt"
 	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/shopspring/decimal"
+	"math/big"
 )
 
 type TokenState struct {
 	StateEntry
 	issueridentity managed.Hash
-	issuerchainid managed.Hash  //identity/issue chains both hold the metrics for the TokenRules ... hmm.. do those need to be passed along since those need to be used
-	balance decimal.Decimal
+	issuerchainid  managed.Hash //identity/issue chains both hold the metrics for the TokenRules ... hmm.. do those need to be passed along since those need to be used
+	precision      int8         //carried along by the rules.  It is redundant, so storage is sacrificed for performance in query
+	balance        decimal.Decimal
 	//balance big.Int
 }
+
 //
 //{
 //"type": "ACC-0",
@@ -23,14 +26,14 @@ type TokenState struct {
 //}
 //this is part of the token chain
 type TokenRules struct {
-    tokentype string //ACC-0 aka FAT-0
-    supply uint64
-    precision int8
-    symbol string
-    metadata string //don't need here
+	tokentype string //ACC-0 aka FAT-0
+	supply    uint64
+	precision int8
+	symbol    string
+	metadata  string //don't need here
 }
 
-const TokenStateLen = 32+32
+const TokenStateLen = 32 + 32
 
 func (ts *TokenState) GetIssuerIdentity() *managed.Hash {
 	return &ts.issueridentity
@@ -38,6 +41,10 @@ func (ts *TokenState) GetIssuerIdentity() *managed.Hash {
 
 func (ts *TokenState) GetIssuerChainId() *managed.Hash {
 	return &ts.issuerchainid
+}
+
+func (ts *TokenState) GetPrecision() int8 {
+	return ts.precision
 }
 
 func (ts *TokenState) Credit(amt string) error {
@@ -48,24 +55,26 @@ func (ts *TokenState) Credit(amt string) error {
 	}
 
 	ts.balance = ts.balance.Add(inputamt)
-    return nil
+	return nil
 }
 
-func (ts *TokenState) Balance() string {
-	return ts.balance.StringFixedBank(2)
+func (ts *TokenState) GetBalance() string {
+	return ts.balance.StringFixedBank(int32(ts.precision))
 }
 
-func (ts *TokenState) Debit(amt string) error {
+//debit amount should be in form of type big.int
+func (ts *TokenState) Debit( /*amt string*/ amt *big.Int) error {
 
-	debitamt, err := decimal.NewFromString(amt)
+	debitamt := decimal.NewFromBigInt(amt, int32(ts.precision))
+	//debitamt, err := decimal.NewFromString(amt)
 
-	if err != nil {
-		return err
-	}
+	//if err != nil {
+	//	return err
+	//}
 
 	if ts.balance.Cmp(debitamt) < 0 {
 		///precision
-		return fmt.Errorf("Insufficient Balance : Available %s / Requested %s", ts.Balance(), debitamt.StringFixedBank(2))
+		return fmt.Errorf("Insufficient Balance : Available %s / Requested %s", ts.GetBalance(), debitamt.StringFixedBank(int32(ts.precision)))
 	}
 
 	ts.balance = ts.balance.Sub(debitamt)
@@ -74,10 +83,12 @@ func (ts *TokenState) Debit(amt string) error {
 }
 
 func (ts *TokenState) MarshalBinary() ([]byte, error) {
-	bal := []byte(ts.Balance())
-	data := make([]byte, TokenStateLen + len(bal))
+	bal := []byte(ts.GetBalance())
+	data := make([]byte, TokenStateLen+len(bal))
 	i := copy(data[:], ts.issueridentity.Bytes())
-	i += copy(data[i:], ts.issueridentity.Bytes())
+	i += copy(data[i:], ts.issuerchainid.Bytes())
+	data[i] = byte(ts.precision)
+	i++
 	copy(data[i:], bal)
 
 	return data, nil

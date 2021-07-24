@@ -242,6 +242,8 @@ func (app *factomapi) ablock_by_height(ctx context.Context, params json.RawMessa
 	return ret{"Not yet implemented", ""}
 }
 
+//func (app *factomapi) ack(ctx context.Context, params json.RawMessage) interface{} {
+//}
 func (app *factomapi) ack(ctx context.Context, params json.RawMessage) interface{} {
 
 	var p struct {

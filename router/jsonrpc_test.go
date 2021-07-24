@@ -45,12 +45,27 @@ func TestJsonrpcserver2(t *testing.T) {
 		Commitdata Data   `json:"commitdata"`
 	}
 
-	type eret struct {
+	type EntryResponse struct {
 		Result    CommitAck `json:"result"`
 		Entrydata Data      `json:"entrydata"`
 	}
 
-	var res eret
+	var res EntryResponse
+
+	//token resposne
+	//{
+	//	"jsonrpc":"2.0",
+	//	"id":0,
+	//	"result":{
+	//	"txid":"f1d9919829fa71ce18caf1bd8659cce8a06c0026d3f3fffc61054ebb25ebeaa0",
+	//		"transactiondate":1441138021975,
+	//		"transactiondatestring":"2015-09-01 15:07:01",
+	//		"blockdate":1441137600000,
+	//		"blockdatestring":"2015-09-01 15:00:00",
+	//		"status":"DBlockConfirmed"
+	//}
+	//
+
 	var rpc jsonrpc2.Client
 	err = rpc.Request(context.Background(), "http://localhost:1234", "ack",
 		r, res)
