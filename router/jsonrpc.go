@@ -289,6 +289,49 @@ func (app *factomapi) ack(ctx context.Context, params json.RawMessage) interface
 	return r
 }
 
+func (app *factomapi) commit_chain(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+}
+
+func (app *factomapi) commit_entry(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+}
+
+func (app *factomapi) entry(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+}
+
+func (app *factomapi) token_balance(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+}
+
+func (app *factomapi) pending_transactions(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+
+}
+func (app *factomapi) reveal_chain(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+
+}
+
+func (app *factomapi) reveal_entry(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+
+}
+
+func (app *factomapi) transaction(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+
+}
+
 func Jsonrpcserver2(client *rpchttp.HTTP, port int) { //grpccore.BroadcastAPIClient){
 	fct := NewFactomAPI(client)
 	methods := jsonrpc2.MethodMap{
@@ -297,20 +340,21 @@ func Jsonrpcserver2(client *rpchttp.HTTP, port int) { //grpccore.BroadcastAPICli
 		"ack":              fct.ack,
 		//		"admin-block": fct.admin_block, //dbvc query?
 		//		"chain-head": fct.chain_head,
-		//		"commit-chain": fct.commit_chain,
-		//		"commit-entry": fct.commit_entry,
+		"commit-chain": fct.commit_chain,
+		"commit-entry": fct.commit_entry,
 		//		"current-minute": fct.current_minute, //no longer makes sense...
 		//		"dblock-by-height": fct.dblock_by_height, //dbvc query???
 		//		"directory-block": fct.directory_block, // dbvc query?
 		//		"directory-block-head": fct.directory_block_head, //dbvc query?
 		//		"ecblock-by-height": fct.eblock_by_height, //no sure this makes sense anymore
-		//		"entry": fct.entry, //this pulls data from a chain based upon entry hash
+		"entry": fct.entry, //this pulls data from a chain based upon entry hash
 		//		"entry-ack": fct.ack, //no longer used
 		//		"entry-block": fct.entry_block, //no longer use entry blocks
 		//		"entry-credit-balance": fct.entry_credit_balance, //this should be derived from current state
 		//		"entry-credit-block": fct.entry_credit_block, //this no longer makes sense
 		//		"entry-credit-rate": fct.entry_credit_rate, //maintained at each bvc
 		//		"factoid-ack": fct.ack, //deprecated.
+		"token-balance": fct.token_balance, //this should be either "token-balance" or generic "entry"
 		//		"factoid-balance": fct.factoid_balance, //this should be either "token-balance" or generic "entry"
 		//		"factoid-block": fct.factoid_block, //this no longer makes sense
 		//		"fblock-by-height": fct.fblock_by_height, //this no longer makes sense
@@ -318,14 +362,14 @@ func Jsonrpcserver2(client *rpchttp.HTTP, port int) { //grpccore.BroadcastAPICli
 		//		"multiple-ec-balances": fct.multiple_ec_balances, //this should be more generic now
 		//		"multiple-fct-balances", //this should be more generic now
 		//		"pending-entries",
-		//		"pending-transactions",
+		"pending-transactions": fct.pending_transactions,
 		//		"properties",
 		//		"raw-data",
 		//		"receipt", //this one is important.
-		//		"reveal-chain", //commit / reveal combined now.
-		//		"reveal-entry", // ditto
+		"reveal-chain": fct.reveal_chain, //commit / reveal combined now.
+		"reveal-entry": fct.reveal_entry, // ditto
 		//		"send-raw-message", //hmm.
-		//		"transaction", //get details only valid for 2 weeks after transaction initiates
+		"transaction": fct.transaction, //get details only valid for 2 weeks after transaction initiates
 
 	}
 	jsonrpc2.DebugMethodFunc = true

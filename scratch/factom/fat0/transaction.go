@@ -63,7 +63,7 @@ func NewTransaction(e factom.Entry, idKey *factom.Bytes32) (Transaction, error) 
 			return t, fmt.Errorf("invalid coinbase transaction")
 		}
 
-		expected = map[factom.Bytes32]struct{}{*idKey: struct{}{}}
+		expected = map[factom.Bytes32]struct{}{*idKey: {}}
 	} else {
 		expected = make(map[factom.Bytes32]struct{}, len(t.Inputs))
 		for adr := range t.Inputs {

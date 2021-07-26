@@ -27,7 +27,7 @@ import (
 	"crypto/sha512"
 	"github.com/AccumulateNetwork/SMT/managed"
 
-	merkle "github.com/AdamSLevy/go-merkle"
+	"github.com/AdamSLevy/go-merkle"
 )
 
 //// ComputeDBlockHeaderHash returns sha256(data[:DBlockHeaderSize]).

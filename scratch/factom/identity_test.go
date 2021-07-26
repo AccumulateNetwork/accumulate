@@ -76,7 +76,7 @@ func TestValidIdentityChainID(t *testing.T) {
 
 func validIdentityNameIDs() []Bytes {
 	return []Bytes{
-		Bytes{0x00},
+		{0x00},
 		Bytes("Identity Chain"),
 		NewBytes("f825c5629772afb5bce0464e5ea1af244be853a692d16360b8e03d6164b6adb5"),
 		NewBytes("28baa7d04e6c102991a184533b9f2443c9c314cc0327cc3a2f2adc0f3d7373a1"),

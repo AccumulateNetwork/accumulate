@@ -16,7 +16,7 @@ import (
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	cfg "github.com/tendermint/tendermint/config"
 	dbm "github.com/tendermint/tm-db"
-	time "time"
+	"time"
 )
 
 //should define return codes for validation...

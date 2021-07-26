@@ -68,7 +68,7 @@ func NewTransaction(e factom.Entry, idKey *factom.Bytes32) (Transaction, error) 
 			return t, fmt.Errorf("%T.TokenMetadata: %w", t, err)
 		}
 
-		expected = map[factom.Bytes32]struct{}{*idKey: struct{}{}}
+		expected = map[factom.Bytes32]struct{}{*idKey: {}}
 	} else {
 		if len(t.TokenMetadata) > 0 {
 			return t, fmt.Errorf(

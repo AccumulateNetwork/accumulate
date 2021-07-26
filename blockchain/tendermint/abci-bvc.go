@@ -190,7 +190,7 @@ func (app *AccumulatorVMApplication) AddValidator(val *validator.ValidatorContex
 	return nil
 }
 
-func (app *AccumulatorVMApplication) GetHeight ()(int64) {
+func (app *AccumulatorVMApplication) GetHeight () int64 {
 	//
 	//app.mutex.Lock()
 	//ret := uint64(app.Val.GetCurrentHeight())

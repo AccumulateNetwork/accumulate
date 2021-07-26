@@ -133,7 +133,7 @@ func NewTransaction(e *factom.Entry, idKey []byte) (Transaction, error) {
 		k := factom.Bytes32{}
 		copy(k[:],idKey)
 
-		expected = map[factom.Bytes32]struct{}{k: struct{}{}}
+		expected = map[factom.Bytes32]struct{}{k: {}}
 	} else {
 		expected = make(map[factom.Bytes32]struct{}, len(t.Inputs))
 		for adr := range t.Inputs {

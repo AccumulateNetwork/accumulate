@@ -91,7 +91,7 @@ func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte
 
 	commitlen := datalen - p1
 
-	ischaincommit := (commitlen == uint64(vtypes.ChainCommitSize))
+	ischaincommit := commitlen == uint64(vtypes.ChainCommitSize)
 
 	//safety check to make sure length of commit is what is expected
 	if !ischaincommit {

@@ -79,7 +79,7 @@ func NewIssuance(e factom.Entry, idKey *factom.Bytes32) (Issuance, error) {
 		return i, fmt.Errorf(`invalid "type": %v`, i.Type)
 	}
 
-	expected := map[factom.Bytes32]struct{}{*idKey: struct{}{}}
+	expected := map[factom.Bytes32]struct{}{*idKey: {}}
 	if err := fat103.Validate(e, expected); err != nil {
 		return i, err
 	}

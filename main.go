@@ -24,7 +24,7 @@ var WorkingDir []string
 const DBVCIndex = 0
 
 var (
-	BuildTag     string = "v0.0.1"
+	BuildTag = "v0.0.1"
 )
 //var SpecialModeHeight int64 = 99999999999
 

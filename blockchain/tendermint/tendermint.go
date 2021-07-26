@@ -10,7 +10,7 @@ import (
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
-	config "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/libs/service"

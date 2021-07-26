@@ -290,9 +290,9 @@ func (ecr EntryCommitReveal) Unmarshal(data []byte) error {
 
 
 const EntryCommitLedgerSize int = 1+6+32+1
-const ChainCommitLedgerSize int = EntryCommitLedgerSize + 32 + 32
-const EntryCommitSize int = EntryCommitLedgerSize+32+64
-const ChainCommitSize int = ChainCommitLedgerSize+32+64
+const ChainCommitLedgerSize = EntryCommitLedgerSize + 32 + 32
+const EntryCommitSize = EntryCommitLedgerSize+32+64
+const ChainCommitSize = ChainCommitLedgerSize+32+64
 
 
 

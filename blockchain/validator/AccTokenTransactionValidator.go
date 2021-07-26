@@ -96,7 +96,7 @@ func (v *AccTokenTransactionValidator) Validate(currentstate *StateEntry, identi
 	//rules: ExtID[0] = Identity Name
 	//the Sha256(ExtID[0]) should == ChainID
 	//if
-    if ( len(e.ExtIDs[0]) != 0 ) {
+    if len(e.ExtIDs[0]) != 0 {
     	return nil, fmt.Errorf("Invalid format: Expecting Identity Name in ExtID[0]")
 	}
 

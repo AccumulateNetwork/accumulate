@@ -52,7 +52,7 @@ func (entry *BVCEntry) MarshalBinary()([]byte, error) {
 	endoffset += int(ret[offset])
 	offset++
 
-	copy(ret[offset:endoffset],entry.DDII);
+	copy(ret[offset:endoffset],entry.DDII)
 	offset = endoffset-1
 	endoffset += 4
 

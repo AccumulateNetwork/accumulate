@@ -25,7 +25,7 @@ import (
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
 	pb "github.com/AccumulateNetwork/accumulated/api/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
-	ed25519 "golang.org/x/crypto/ed25519"
+	"golang.org/x/crypto/ed25519"
 
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/merkleDag"
 	//	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
@@ -73,7 +73,7 @@ func NewDirectoryBlockChain() *DirectoryBlockChain {
 
 var _ abci.Application = (*DirectoryBlockChain)(nil)
 
-func (app *DirectoryBlockChain) GetHeight ()(uint64) {
+func (app *DirectoryBlockChain) GetHeight () uint64 {
 	return uint64(app.Height)
 }
 

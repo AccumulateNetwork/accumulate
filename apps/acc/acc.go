@@ -11,7 +11,7 @@ import (
 	//"github.com/AccumulateNetwork/accumulated/acc"
 	"github.com/AccumulateNetwork/accumulated/tendermint"
 )
-const MaxNetworks int = len(Networks)
+const MaxNetworks = len(Networks)
 
 var ConfigFile [MaxNetworks]string
 var WorkingDir [MaxNetworks]string
