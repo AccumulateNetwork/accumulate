@@ -71,7 +71,7 @@ var counter int
 var mm sync.Mutex
 var gtimer time.Time
 
-func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) FactoidSubmit(ctx context.Context, params json.RawMessage) interface{} {
 	mm.Lock()
 	if counter == 0 {
 		gtimer = time.Now()
@@ -223,7 +223,7 @@ func (app *factomapi) factoid_submit(ctx context.Context, params json.RawMessage
 	return r
 }
 
-func (app *factomapi) ablock_by_height(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) ABlockByHeight(ctx context.Context, params json.RawMessage) interface{} {
 
 	var p struct {
 		Keymr *string `json:"keymr"`
@@ -244,7 +244,7 @@ func (app *factomapi) ablock_by_height(ctx context.Context, params json.RawMessa
 
 //func (app *factomapi) ack(ctx context.Context, params json.RawMessage) interface{} {
 //}
-func (app *factomapi) ack(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) Ack(ctx context.Context, params json.RawMessage) interface{} {
 
 	var p struct {
 		Hash    *string `json:"hash"`
@@ -289,44 +289,64 @@ func (app *factomapi) ack(ctx context.Context, params json.RawMessage) interface
 	return r
 }
 
-func (app *factomapi) commit_chain(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) CommitChain(ctx context.Context, params json.RawMessage) interface{} {
 
 	return nil
 }
 
-func (app *factomapi) commit_entry(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) CommitEntry(ctx context.Context, params json.RawMessage) interface{} {
 
 	return nil
 }
 
-func (app *factomapi) entry(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) Entry(ctx context.Context, params json.RawMessage) interface{} {
 
 	return nil
 }
 
-func (app *factomapi) token_balance(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) TokenBalance(ctx context.Context, params json.RawMessage) interface{} {
 
 	return nil
 }
 
-func (app *factomapi) pending_transactions(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) PendingTransactions(ctx context.Context, params json.RawMessage) interface{} {
 
 	return nil
 
 }
-func (app *factomapi) reveal_chain(ctx context.Context, params json.RawMessage) interface{} {
-
-	return nil
-
-}
-
-func (app *factomapi) reveal_entry(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) RevealChain(ctx context.Context, params json.RawMessage) interface{} {
 
 	return nil
 
 }
 
-func (app *factomapi) transaction(ctx context.Context, params json.RawMessage) interface{} {
+func (app *factomapi) RevealEntry(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+
+}
+
+func (app *factomapi) Transaction(ctx context.Context, params json.RawMessage) interface{} {
+
+	return nil
+
+}
+
+func (app *factomapi) CommitRevealEntry(ctx context.Context, params json.RawMessage) interface{} {
+
+	type Params struct {
+		url       string `json:"url"`
+		payload   []byte `json:"payload"`
+		signature []byte `json:"signature"`
+		key       []byte `json:"signature"`
+	}
+
+	var p Params
+	json.Unmarshal(params, &p)
+	URLParser(p.url)
+
+	//pass parse result to the router...
+	//this will do a both commit and reveal.  This appends the commit/reveal into one transaction
 
 	return nil
 
@@ -335,26 +355,26 @@ func (app *factomapi) transaction(ctx context.Context, params json.RawMessage) i
 func Jsonrpcserver2(client *rpchttp.HTTP, port int) { //grpccore.BroadcastAPIClient){
 	fct := NewFactomAPI(client)
 	methods := jsonrpc2.MethodMap{
-		"factoid-submit":   fct.factoid_submit,
-		"ablock-by-height": fct.ablock_by_height, //dbvc query?
-		"ack":              fct.ack,
+		"factoid-submit":   fct.FactoidSubmit,
+		"ablock-by-height": fct.ABlockByHeight, //dbvc query?
+		"ack":              fct.Ack,
 		//		"admin-block": fct.admin_block, //dbvc query?
 		//		"chain-head": fct.chain_head,
-		"commit-chain": fct.commit_chain,
-		"commit-entry": fct.commit_entry,
+		"commit-chain": fct.CommitChain, //commit and reveal are done at the same time.  do we need to support backwards compat?
+		"commit-entry": fct.CommitEntry, // ditto ^^^
 		//		"current-minute": fct.current_minute, //no longer makes sense...
 		//		"dblock-by-height": fct.dblock_by_height, //dbvc query???
 		//		"directory-block": fct.directory_block, // dbvc query?
 		//		"directory-block-head": fct.directory_block_head, //dbvc query?
 		//		"ecblock-by-height": fct.eblock_by_height, //no sure this makes sense anymore
-		"entry": fct.entry, //this pulls data from a chain based upon entry hash
+		"entry": fct.Entry, //this pulls data from a chain based upon entry hash
 		//		"entry-ack": fct.ack, //no longer used
 		//		"entry-block": fct.entry_block, //no longer use entry blocks
 		//		"entry-credit-balance": fct.entry_credit_balance, //this should be derived from current state
 		//		"entry-credit-block": fct.entry_credit_block, //this no longer makes sense
 		//		"entry-credit-rate": fct.entry_credit_rate, //maintained at each bvc
 		//		"factoid-ack": fct.ack, //deprecated.
-		"token-balance": fct.token_balance, //this should be either "token-balance" or generic "entry"
+		"token-balance": fct.TokenBalance, //this should be either "token-balance" or generic "entry"
 		//		"factoid-balance": fct.factoid_balance, //this should be either "token-balance" or generic "entry"
 		//		"factoid-block": fct.factoid_block, //this no longer makes sense
 		//		"fblock-by-height": fct.fblock_by_height, //this no longer makes sense
@@ -362,14 +382,15 @@ func Jsonrpcserver2(client *rpchttp.HTTP, port int) { //grpccore.BroadcastAPICli
 		//		"multiple-ec-balances": fct.multiple_ec_balances, //this should be more generic now
 		//		"multiple-fct-balances", //this should be more generic now
 		//		"pending-entries",
-		"pending-transactions": fct.pending_transactions,
+		"pending-transactions": fct.PendingTransactions,
 		//		"properties",
 		//		"raw-data",
 		//		"receipt", //this one is important.
-		"reveal-chain": fct.reveal_chain, //commit / reveal combined now.
-		"reveal-entry": fct.reveal_entry, // ditto
+		"reveal-chain":        fct.RevealChain, //commit / reveal combined now.
+		"reveal-entry":        fct.RevealEntry, // ditto
+		"commit-reveal-entry": fct.CommitRevealEntry,
 		//		"send-raw-message", //hmm.
-		"transaction": fct.transaction, //get details only valid for 2 weeks after transaction initiates
+		"transaction": fct.Transaction, //get details only valid for 2 weeks after transaction initiates
 
 	}
 	jsonrpc2.DebugMethodFunc = true

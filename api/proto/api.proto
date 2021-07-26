@@ -16,7 +16,7 @@ service ApiService {
 	// Obtains the feature at a given position.
 	rpc ProcessTx(Submission) returns (SubmissionResponse) {}
 	rpc QueryShardCount(google.protobuf.Empty) returns (ShardCountResponse){}
-	rpc Query(AccQuery) returns (AccQueryResp){}
+	rpc ProcessLightQuery(Submission) returns (AccQueryResp){}
 }
 
 
@@ -130,7 +130,7 @@ message SubmissionResponse {
 
 message AccQuery {
 	uint64 Addr = 1;
-	string DDII = 2;
+	string Adi = 2;
 	bytes ChainId = 3;
 	string Query = 4;
 	//AccInstruction Ins = 4;

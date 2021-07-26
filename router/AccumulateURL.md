@@ -1,33 +1,21 @@
-#Accumulate Data Structures
-
-#Accumulate 
-| data | Field Name | Description |
-| ----------------- | ---------------- | --------------- | 
-| **Header** |  | |
-| varInt_F | Version | Version 2.  Higher numbers are currently rejected. Can safely be coded using 1 byte for the first 127 versions. |
-| varInt_F | ChainIDLen | Length of chain identifier.  < 31 is a utf8 encoded chain name, 32 bytes in length is a sha256(chain name) Can be 0 if 
-| 32 bytes | ChainID | This is the Chain which the author wants this Entry to go into |
-| 32 bytes | ChainTypeID | This is the Chain which contains the formatting / rules upon which the entry payload is validated should be empty if data entry |
-| 2 bytes | ExtIDs Size | Describes how many bytes required for the set of External IDs for this Entry.  Must be less than or equal to the Payload size.  Big endian. |
-| **Payload** | | This is the data between the end of the Header and the end of the Content. |
-| **External IDs** |  | This section is only interpreted and enforced if the External ID Size is greater than zero. |
-| 2 bytes | ExtID element 0 length | This is the number of the following bytes to be interpreted as an External ID element.  Cannot be 0 length. |
-| variable | ExtID 0 | This is the data for the first External ID. |
-| 2 bytes | ExtID X | Size of the X External ID  |
-| variable | ExtID X data | This is the Xth element.  The last byte of the last element must fall on the last byte specified ExtIDs Size in the header. |
-| **Content** | | |
-| variable | Entry Data | This is the unstructured part of the Entry.  It is all user specified data. |
-
-Minimum empty Entry length: 35 bytes
-
-Minimum empty first Entry with Chain Name of 1 byte: 38 bytes
-
-Maximum Entry size: 10KiB + 35 bytes = 10275 bytes
-
-Typical size recording the hash of a file with 200 letters of ExtID metadata: 1+32+2+2+200+32 = 269 bytes
+#Accumulate URL 
 
 
-#Accumulate URL
+acc://[identityname]/[chain/path]?[action]&...
+
+| Query/Action | short hand | Description | Example |
+| ----------------- | ---------------- | --------------- | --------------- |
+|identity-create | idc | Create an identity chain. Requires a sponsor's signature for payment | acc://RedWagon?idc&sponsor=GreenRock&timestamp=[unix timestamp]&sig=[hex encoded signature]&key=[key used to sign] |
+|token-url-create | turl | Add a token chain to an identity.  | acc://RedWagon/acc?turl&type=GreenRock/AccumulateTokenType&timestamp=[unix timestamp]&sig=[hex encoded signature]&key=[key used to sign] |
+|token-tx| tx | Perform a token transaction | acc://RedWagon/acc?tx&tx=[hex encoded transaction per spec]&timestamp=[unix timestamp]&sig=[hex encoded signature]&key=[key used to sign]
+|data-chain-create  |dcc | | | 
+| data-entry | de | | |
+|scratch-chain-create| scc | | | 
+|scratch-entry | se | | |
+|token-issue | ti | | |
+|key-update | ku | | |
+|deep-query | dq | Issue a transaction on the blockchain for a query that will provide a cryptographic receipt | |
+|query | q | Issue a light weight simple query to a node | |
 
 ##Identity and Subidentities
 

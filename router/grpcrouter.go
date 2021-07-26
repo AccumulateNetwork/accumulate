@@ -8,7 +8,6 @@ import (
 	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/SMT/storage"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
@@ -18,7 +17,6 @@ import (
 	"net"
 	"net/url"
 	"strings"
-	"unicode/utf8"
 )
 
 type RouterConfig struct {
@@ -26,24 +24,23 @@ type RouterConfig struct {
 	grpcServer *grpc.Server
 
 	bvcclients []core_grpc.BroadcastAPIClient
-	Address string
+	Address    string
 }
-
 
 func (app *RouterConfig) PostEntry(context.Context, *proto.EntryBytes) (*proto.Reply, error) {
-	return nil,nil
+	return nil, nil
 }
 func (app *RouterConfig) ReadKeyValue(context.Context, *proto.Key) (*proto.KeyValue, error) {
-	return nil,nil
+	return nil, nil
 }
 func (app *RouterConfig) RequestAccount(context.Context, *proto.Key) (*proto.Account, error) {
-	return nil,nil
+	return nil, nil
 }
 func (app *RouterConfig) GetHeight(context.Context, *empty.Empty) (*proto.Height, error) {
-	return nil,nil
+	return nil, nil
 }
 func (app *RouterConfig) GetNodeInfo(context.Context, *empty.Empty) (*proto.NodeInfo, error) {
-	return nil,nil
+	return nil, nil
 }
 
 func (app *RouterConfig) QueryShardCount(context.Context, *empty.Empty) (*proto.ShardCountResponse, error) {
@@ -51,7 +48,7 @@ func (app *RouterConfig) QueryShardCount(context.Context, *empty.Empty) (*proto.
 
 	fmt.Printf("TODO: need to implement blockchain query to dbvc for number of shards\n")
 	scr.Numshards = app.GetNumShardsInSystem() //todo: Need to query blockchain for this number....
-	return &scr,nil
+	return &scr, nil
 }
 
 func (app *RouterConfig) GetNumShardsInSystem() int32 {
@@ -60,8 +57,7 @@ func (app *RouterConfig) GetNumShardsInSystem() int32 {
 	//only update it once in a blue moon when shards are added.  so need to monitor the appropriate chain for activity.
 	return 1
 }
-
-func (app *RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*proto.AccQueryResp, error) {
+func (app *RouterConfig) ProcessLightQuery(ctx context.Context, in *proto.Submission) (*proto.AccQueryResp, error) {
 	scr := proto.AccQueryResp{}
 	//fixme
 	//
@@ -82,10 +78,10 @@ func (app *RouterConfig) Query(ctx context.Context,query *proto.AccQuery) (*prot
 	//
 	//scr.Code = resp.Code
 
-	return &scr,nil
+	return &scr, nil
 }
 
-func (app *RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*proto.SubmissionResponse, error) {
+func (app *RouterConfig) ProcessTx(ctx context.Context, sub *proto.Submission) (*proto.SubmissionResponse, error) {
 	//fmt.Printf("hello world from dispatch server TX ")
 	resp := proto.SubmissionResponse{}
 	client := app.getBVCClient(vtypes.GetAddressFromIdentityChain(sub.Identitychain))
@@ -101,7 +97,7 @@ func (app *RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*
 	}
 	req := core_grpc.RequestBroadcastTx{}
 	req.Tx = msg
-	client.BroadcastTx(context.Background(),&req)
+	client.BroadcastTx(context.Background(), &req)
 	//client.
 	//if err != nil {
 	//	fmt.Printf("Error received from Check Tx Sync %v", err)
@@ -113,8 +109,8 @@ func (app *RouterConfig) ProcessTx(ctx context.Context,sub *proto.Submission) (*
 	return &resp, nil
 }
 
-func (app *RouterConfig) Close (){
-    app.grpcServer.GracefulStop()
+func (app *RouterConfig) Close() {
+	app.grpcServer.GracefulStop()
 }
 
 func NewRouter(routeraddress string) (config *RouterConfig) {
@@ -125,14 +121,12 @@ func NewRouter(routeraddress string) (config *RouterConfig) {
 	if len(r.Address) == 0 {
 		panic("accumulate.RouterAddress token not specified in config file")
 	}
-	urladdr,err := url.Parse(r.Address)
+	urladdr, err := url.Parse(r.Address)
 	if err != nil {
 		panic(err)
 	}
 
-
 	lis, err := net.Listen(urladdr.Scheme, urladdr.Host)
-
 
 	if err != nil {
 		panic(fmt.Sprintf("failed to listen: %v", err))
@@ -157,7 +151,7 @@ func (app *RouterConfig) getBVCClient(addr uint64) core_grpc.BroadcastAPIClient 
 func (app *RouterConfig) AddBVCClient(shardname string, client core_grpc.BroadcastAPIClient) error {
 	//todo: make this a discovery method.  we need to know for sure how many BVC's there are and we need
 	//to explicitly connect to them...
-	app.bvcclients = append(app.bvcclients,client)
+	app.bvcclients = append(app.bvcclients, client)
 	return nil
 }
 
@@ -165,7 +159,7 @@ func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
 	return tmnet.Connect(addr)
 }
 
-func (app *RouterConfig) CreateGRPCClient() (proto.ApiServiceClient,error) {
+func (app *RouterConfig) CreateGRPCClient() (proto.ApiServiceClient, error) {
 	conn, err := grpc.Dial(app.Address, grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
 	if err != nil {
 		return nil, fmt.Errorf("Error Openning GRPC client in router")
@@ -174,15 +168,14 @@ func (app *RouterConfig) CreateGRPCClient() (proto.ApiServiceClient,error) {
 	return api, nil
 }
 
-
 func SendTransaction(senderurl string, receiverurl string) error {
 	su, err := url.Parse(senderurl)
 	if err != nil {
-		return fmt.Errorf("Unable to parse Sender URL %v",err)
+		return fmt.Errorf("Unable to parse Sender URL %v", err)
 	}
 	ru, err := url.Parse(receiverurl)
 	if err != nil {
-		return fmt.Errorf("Unable to parse Receiver URL %v",err)
+		return fmt.Errorf("Unable to parse Receiver URL %v", err)
 	}
 
 	//convert URL host identity to lowercase standard
@@ -192,18 +185,18 @@ func SendTransaction(senderurl string, receiverurl string) error {
 	sh := sha256.Sum256([]byte(senderidentity))
 	rh := sha256.Sum256([]byte(receiveridentity))
 
-
-	sendaddr,_ := storage.BytesUint64(sh[:])
-	recvaddr,_ := storage.BytesUint64(rh[:])
+	sendaddr, _ := storage.BytesUint64(sh[:])
+	recvaddr, _ := storage.BytesUint64(rh[:])
 
 	sendtokentype := su.Path
 
 	receivetokentype := ru.Path
 
-	fmt.Printf("%d%d%s%s", sendaddr, recvaddr, sendtokentype,receivetokentype )
+	fmt.Printf("%d%d%s%s", sendaddr, recvaddr, sendtokentype, receivetokentype)
 
-    return nil
+	return nil
 }
+
 //
 //const (
 //	AccAction_Unknown = iota
@@ -219,72 +212,32 @@ func SendTransaction(senderurl string, receiverurl string) error {
 //)
 
 type AccUrl struct {
-	Addr uint64
-	DDII string
+	Addr      uint64
+	DDII      string
 	ChainPath []managed.Hash
-	Action uint32
+	Action    uint32
 }
+
 //func (app AccUrl) Marshall() ([]byte,error) {
 //	m := make([]byte, 8 + len(app.DDII)+ len(app.ChainPath)*32 + 4 )
 //	copy(m)
 //	return m, nil
 //}
-func toJSON(m interface{}) (string,error) {
+func toJSON(m interface{}) (string, error) {
 	js, err := json.Marshal(m)
 	if err != nil {
 		return "", err
 	}
-	return strings.ReplaceAll(string(js), ",", ", "),nil
-}
-
-func URLParser(s string) (ret proto.AccQuery,err error) {
-
-	if !utf8.ValidString(s) {
-		return ret,fmt.Errorf("URL is has invalid UTF8 encoding")
-	}
-
-	if !strings.HasPrefix(s,"acc://") {
-		s = "acc://" + s
-	}
-
-
-	u, err := url.Parse(s)
-	if err != nil {
-		return ret, err
-	}
-
-	fmt.Println(u.Scheme)
-
-	fmt.Println(u.Host)
-	//so the primary is up to the "." if it is there.
-	hostname := u.Hostname()
-	//DDIIaccounts := strings.Split(hostname,".")
-	ret.DDII = hostname
-
-	ret.Addr = validator.GetTypeIdFromName(hostname)
-
-	m, err := url.ParseQuery(u.RawQuery)
-	if err != nil {
-		return ret,err
-	}
-	js,err := toJSON(m)
-
-	fmt.Println(js)
-
-	h := sha256.Sum256([]byte(hostname+u.Path))
-	ret.ChainId =  h[:]
-    ret.Query = js //u.RawQuery
-
-    return ret,nil
+	return strings.ReplaceAll(string(js), ",", ", "), nil
 }
 
 func Router() {
-//acc://root_name[/sub-chain name[/sub-chain]...]
-//acc://a:Big.Company/atk
+	//acc://root_name[/sub-chain name[/sub-chain]...]
+	//acc://a:Big.Company/atk
 	//s := "postgres://user:pass@host.com:5432/path?k=v#f"
 
 	s := "acc://Big.Company/fct?send-transaction/Small.Company/fct"
-    //s = url.QueryEscape(s)
+	//s = url.QueryEscape(s)
 
 	u, err := url.Parse(s)
 	if err != nil {
@@ -311,4 +264,3 @@ func Router() {
 	fmt.Println(m)
 	//fmt.Println(m["k"][0])
 }
-

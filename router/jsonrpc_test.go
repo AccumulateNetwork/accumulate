@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-func ackcheck(t *testing.T, testport int ) {
+func ackcheck(t *testing.T, url string) {
 
 	type Params struct {
 		Hash    *string `json:"hash"`
@@ -57,13 +57,27 @@ func ackcheck(t *testing.T, testport int ) {
 	//
 
 	var rpc jsonrpc2.Client
-	err := rpc.Request(context.Background(), "http://localhost:" + strconv.Itoa(testport), "ack",
-		r, res)
+	err := rpc.Request(context.Background(), url, "ack", r, res)
 
 	if err != nil {
 		t.Fatal(err)
 	}
 
+}
+
+type T struct {
+	FactoidSubmit       interface{} `json:"factoid-submit"`
+	AblockByHeight      interface{} `json:"ablock-by-height"`
+	Ack                 interface{} `json:"ack"`
+	CommitChain         interface{} `json:"commit-chain"`
+	CommitEntry         interface{} `json:"commit-entry"`
+	Entry               interface{} `json:"entry"`
+	TokenBalance        interface{} `json:"token-balance"`
+	PendingTransactions interface{} `json:"pending-transactions"`
+	RevealChain         interface{} `json:"reveal-chain"`
+	RevealEntry         interface{} `json:"reveal-entry"`
+	CommitRevealEntry   interface{} `json:"commit-reveal-entry"`
+	Transaction         interface{} `json:"transaction"`
 }
 
 func TestJsonrpcserver2(t *testing.T) {
@@ -81,9 +95,8 @@ func TestJsonrpcserver2(t *testing.T) {
 
 	Jsonrpcserver2(rpcc, testport)
 
-	ackcheck(t, testport)
-
-
+	url := "http://localhost:" + strconv.Itoa(testport)
+	ackcheck(t, url)
 
 	time.Sleep(20 * time.Second)
 

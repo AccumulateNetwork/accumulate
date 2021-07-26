@@ -2,12 +2,12 @@ package router
 
 import (
 	"context"
-	"crypto/ed25519"
 	"encoding/hex"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	"github.com/Factom-Asset-Tokens/fatd/fat0"
 	proto1 "github.com/golang/protobuf/proto"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -44,49 +44,6 @@ import (
 //	}
 //}
 
-func TestURL(t *testing.T) {
-
-	//create a URL with invalid utf8
-
-	//create a URL without acc://
-
-	//create a URL with sub account Wagon
-	//Red is primary, and Wagon is secondary.
-	urlstring := "acc://RedWagon/acc"
-	q, err := URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	urlstring = "acc://RedWagon/acc?block=1000"
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if q.Query != "{\"block\":[\"1000\"]}" {
-		t.Fatalf("URL query failed:  expected block=1000 received %s", q.Query)
-	}
-
-	urlstring = "acc://RedWagon/acc?currentblock&block=1000+index"
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	urlstring = "acc://RedWagon/identity?replace=PUBLICKEY1_HEX+PUBLICKEY2_HEX&signature=f97a65de43"
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	urlstring = "acc://RedWagon?replace=PUBLICKEY1_HEX+PUBLICKEY2_HEX&signature=f97a65de43"
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-}
-
 func TestRouter(t *testing.T) {
 	//routeraddress := "tcp://localhost:54321"
 
@@ -100,45 +57,20 @@ func TestRouter(t *testing.T) {
 	//r.Close()
 }
 
-const hexseed = "36422e9560f56e0ead53a83b33aec9571d379291b5e292b88dec641a98ef05d8"
-
-func createKeyPair() ed25519.PrivateKey {
-	seed := make([]byte, 32)
-	hex.Decode(seed, []byte(hexseed))
-
-	//return ed25519.NewKeyFromSeed(seed)
-	_, sk, _ := ed25519.GenerateKey(nil)
-	return sk
+func CreateKeyPair() ed25519.PrivKey {
+	return ed25519.GenPrivKey()
 }
-func createIdentity(t *testing.T) *proto.Submission {
-	kp := createKeyPair()
 
-	sub := proto.Submission{}
+func createIdentity(t *testing.T) *proto.Submission {
+	kp := CreateKeyPair()
+	sponsor := CreateKeyPair() //this really needs to be some existing identity of who ever is paying for it.
 
 	name := "RedWagon"
-	sub.Identitychain = types.GetIdentityChainFromAdi(name).Bytes()
-	sub.Chainid = types.GetIdentityChainFromAdi(name).Bytes()
-
-	sub.Type = 0 //this is going away it is not needed since we'll know the type from transaction
-	sub.Instruction = proto.AccInstruction_Identity_Creation
-	identitystate := types.IdentityState{}
-
-	copy(identitystate.Publickey[:], kp.Public().(ed25519.PublicKey)) //gomagic...
-	identitystate.Adi = name
-	data, err := identitystate.MarshalBinary()
+	sub, err := CreateIdentityTest(&name, kp.PubKey().(ed25519.PubKey), sponsor)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("Error creating submission %v", err)
 	}
-	sub.Data = data
-	sub.Signature = make([]byte, 64)
-	sub.Key = make([]byte, 32)
-	signed := ed25519.Sign(kp, sub.Data)
-	if ed25519.Verify(kp.Public().(ed25519.PublicKey), data, signed) == false {
-		t.Fatal("Bad Signature\n")
-	}
-	copy(sub.Signature, signed)
-	copy(sub.Key, kp.Public().(ed25519.PublicKey))
-	return &sub
+	return sub
 }
 
 func createTransaction(t *testing.T) *proto.Submission {
@@ -160,9 +92,12 @@ func createTransaction(t *testing.T) *proto.Submission {
 	if err != nil {
 		t.Fatal(err)
 	}
-	kp := createKeyPair()
-	sub.Signature = ed25519.Sign(kp.Seed(), sub.Data)
-	sub.Key = kp.Public().(ed25519.PublicKey)
+	kp := CreateKeyPair()
+	sub.Signature, err = kp.Sign(sub.Data)
+	if err != nil {
+		return nil
+	}
+	sub.Key = kp.PubKey().Bytes()
 
 	return &sub
 }
@@ -203,7 +138,7 @@ func TestQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	res, err := client.Query(context.Background(), &q)
+	res, err := client.ProcessLightQuery(context.Background(), q)
 	if err != nil {
 		t.Fatalf("Error sending query for shard count")
 	}

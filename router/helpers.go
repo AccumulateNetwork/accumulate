@@ -1,16 +1,22 @@
 package router
 
 import (
+	"encoding/hex"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	"github.com/spf13/viper"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"google.golang.org/grpc"
+	"net/url"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func RandPort() int {
@@ -109,10 +115,201 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 
 	rpcc, _ := rpchttp.New(laddr, "/websocket")
 
-	//if err != nil {
-	//	log.Fatal(err)
-	//}.Client ) {
-	//
-	//}
 	return client, routerserver, &lc, rpcc
+}
+
+func AssembleBVCSubmissionHeader(identityname string, chainname string, ins proto.AccInstruction) *proto.Submission {
+	sub := proto.Submission{}
+
+	sub.Identitychain = types.GetIdentityChainFromAdi(identityname).Bytes()
+	sub.Chainid = types.GetIdentityChainFromAdi(identityname).Bytes()
+	sub.Type = 0 //this is going away it is not needed since we'll know the type from transaction
+	sub.Instruction = ins
+	return &sub
+}
+
+func MakeCreateIdentityBVCSubmission(identityname string, chainname string, payload []byte) *proto.Submission {
+	sub := AssembleBVCSubmissionHeader(identityname, chainname, proto.AccInstruction_Identity_Creation)
+	sub.Data = payload
+	return sub
+}
+
+func MakeSignedCreateIdentityBVCSubmission(identityname string, chainname string, payload []byte, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
+	sub := MakeCreateIdentityBVCSubmission(identityname, chainname, payload)
+	sub.Data = payload
+	sub.Signature = signature
+	sub.Key = pubkey.Bytes()
+	return sub
+}
+
+func MakeTokenTransactionBVCSubmission(identityname string, chainname string, payload []byte) *proto.Submission {
+	sub := AssembleBVCSubmissionHeader(identityname, chainname, proto.AccInstruction_Token_Transaction)
+	sub.Data = payload
+	return sub
+}
+
+func MakeSignedTokenTransactionBVCSubmission(identityname string, chainname string, payload []byte, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
+	sub := MakeTokenTransactionBVCSubmission(identityname, chainname, payload)
+	sub.Data = payload
+	sub.Signature = signature
+	sub.Key = pubkey.Bytes()
+	return sub
+}
+
+func MakeTokenIssueBVCSubmission(identityname string, chainname string, payload []byte) *proto.Submission {
+	sub := AssembleBVCSubmissionHeader(identityname, chainname, proto.AccInstruction_Token_Issue)
+	sub.Data = payload
+	return sub
+}
+
+func MakeSignedTokenIssueBVCSubmission(identityname string, chainname string, payload []byte, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
+	sub := MakeTokenIssueBVCSubmission(identityname, chainname, payload)
+	sub.Data = payload
+	sub.Signature = signature
+	sub.Key = pubkey.Bytes()
+	return sub
+}
+
+func MakeDataChainCreateBVCSubmission(identityname string, chainname string, payload []byte) *proto.Submission {
+	sub := AssembleBVCSubmissionHeader(identityname, chainname, proto.AccInstruction_Data_Chain_Creation)
+	sub.Data = payload
+	return sub
+}
+
+func MakeSignedDataChainCreateBVCSubmission(identityname string, chainname string, payload []byte, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
+	sub := MakeDataChainCreateBVCSubmission(identityname, chainname, payload)
+	sub.Data = payload
+	sub.Signature = signature
+	sub.Key = pubkey.Bytes()
+	return sub
+}
+
+func MakeDataEntryBVCSubmission(identityname string, chainname string, payload []byte) *proto.Submission {
+	sub := AssembleBVCSubmissionHeader(identityname, chainname, proto.AccInstruction_Data_Entry)
+	sub.Data = payload
+	return sub
+}
+
+func MakeSignedDataEntryBVCSubmission(identityname string, chainname string, payload []byte, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
+	sub := MakeDataEntryBVCSubmission(identityname, chainname, payload)
+	sub.Data = payload
+	sub.Signature = signature
+	sub.Key = pubkey.Bytes()
+	return sub
+}
+
+func MakeDeepQueryBVCSubmission(identityname string, chainname string, payload []byte) *proto.Submission {
+	sub := AssembleBVCSubmissionHeader(identityname, chainname, proto.AccInstruction_Deep_Query)
+	sub.Data = payload
+	return sub
+}
+
+func MakeSignedDeepQueryBVCSubmission(identityname string, chainname string, payload []byte, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
+	sub := MakeDeepQueryBVCSubmission(identityname, chainname, payload)
+	sub.Data = payload
+	sub.Signature = signature
+	sub.Key = pubkey.Bytes()
+	return sub
+}
+
+func MakeKeyUpdateBVCSubmission(identityname string, chainname string, payload []byte) *proto.Submission {
+	sub := AssembleBVCSubmissionHeader(identityname, chainname, proto.AccInstruction_Key_Update)
+	sub.Data = payload
+	return sub
+}
+func MakeSignedKeyUpdateBVCSubmission(identityname string, chainname string, payload []byte, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
+	sub := MakeKeyUpdateBVCSubmission(identityname, chainname, payload)
+	sub.Signature = signature
+	sub.Key = pubkey.Bytes()
+	return sub
+}
+
+func MakeLightQueryBVCSubmission(identityname string, chainname string, payload []byte) *proto.Submission {
+	sub := AssembleBVCSubmissionHeader(identityname, chainname, proto.AccInstruction_Light_Query)
+	sub.Data = payload
+	return sub
+}
+
+var UrlInstructionMap = map[string]proto.AccInstruction{
+	"identity-create":      proto.AccInstruction_Identity_Creation,
+	"idc":                  proto.AccInstruction_Identity_Creation,
+	"token-url-create":     proto.AccInstruction_Token_URL_Creation,
+	"url":                  proto.AccInstruction_Token_URL_Creation,
+	"token-tx":             proto.AccInstruction_Token_Transaction,
+	"tx":                   proto.AccInstruction_Token_Transaction,
+	"data-chain-create":    proto.AccInstruction_Data_Chain_Creation,
+	"dcc":                  proto.AccInstruction_Data_Chain_Creation,
+	"data-entry":           proto.AccInstruction_Data_Entry,
+	"de":                   proto.AccInstruction_Data_Entry,
+	"scratch-chain-create": proto.AccInstruction_Scratch_Chain_Creation,
+	"scc":                  proto.AccInstruction_Scratch_Chain_Creation,
+	"scratch-entry":        proto.AccInstruction_Scratch_Entry,
+	"se":                   proto.AccInstruction_Scratch_Entry,
+	"token-issue":          proto.AccInstruction_Token_Issue,
+	"ti":                   proto.AccInstruction_Token_Issue,
+	"key-update":           proto.AccInstruction_Key_Update,
+	"ku":                   proto.AccInstruction_Key_Update,
+	"deep-query":           proto.AccInstruction_Deep_Query,
+	"dq":                   proto.AccInstruction_Deep_Query,
+	"query":                proto.AccInstruction_Light_Query,
+	"q":                    proto.AccInstruction_Light_Query,
+}
+
+func URLParser(s string) (ret *proto.Submission, err error) {
+
+	if !utf8.ValidString(s) {
+		return ret, fmt.Errorf("URL is has invalid UTF8 encoding")
+	}
+
+	if !strings.HasPrefix(s, "acc://") {
+		s = "acc://" + s
+	}
+
+	var sub proto.Submission
+
+	u, err := url.Parse(s)
+	if err != nil {
+		return ret, err
+	}
+
+	fmt.Println(u.Scheme)
+
+	fmt.Println(u.Host)
+	//so the primary is up to the "." if it is there.
+	hostname := u.Hostname()
+	//DDIIaccounts := strings.Split(hostname,".")
+	m, err := url.ParseQuery(u.RawQuery)
+	if err != nil {
+		return ret, err
+	}
+
+	var sub *proto.Submission{}
+	//todo .. make the correct submission based upon raw query...
+	for k, _ := range m {
+		ins := UrlInstructionMap[k]
+		m.Del(k)
+		js, _ := toJSON(m)
+		switch k {
+		case "q":
+			fallthrough
+		case "query":
+			sub = MakeLightQueryBVCSubmission(hostname, hostname+u.Path, []byte(js))
+			fmt.Println(js)
+		case "tx":
+			fallthrough
+		case "token-tx":
+			data, err := hex.DecodeString(m["data"])
+			signature, err := hex.DecodeString(m["sig"])
+			key, err := hex.DecodeString(m["key"])
+			if err != nil {
+				return nil, fmt.Errorf("Cannot decode signature in url %v", err)
+			}
+			sub = MakeSignedTokenTransactionBVCSubmission(hostname, hostname+u.Path, data,signature,key)
+			fmt.Println(js)
+		}
+		break
+	}
+	//}
+
+	return &sub, nil
 }
