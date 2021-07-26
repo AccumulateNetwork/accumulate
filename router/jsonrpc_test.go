@@ -8,22 +8,12 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strconv"
 	"testing"
 	"time"
 )
 
-func TestJsonrpcserver2(t *testing.T) {
-	//make a temporary director to configure a test BVC
-	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
-	cfg := path.Join(dir, "/config/config.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-	_, routerserver, _, rpcc := makeBVCandRouter(t, cfg, dir)
-	defer routerserver.Close()
-
-	Jsonrpcserver2(rpcc, 1234)
+func ackcheck(t *testing.T, testport int ) {
 
 	type Params struct {
 		Hash    *string `json:"hash"`
@@ -67,12 +57,33 @@ func TestJsonrpcserver2(t *testing.T) {
 	//
 
 	var rpc jsonrpc2.Client
-	err = rpc.Request(context.Background(), "http://localhost:1234", "ack",
+	err := rpc.Request(context.Background(), "http://localhost:" + strconv.Itoa(testport), "ack",
 		r, res)
 
 	if err != nil {
 		t.Fatal(err)
 	}
+
+}
+
+func TestJsonrpcserver2(t *testing.T) {
+	//make a temporary director to configure a test BVC
+	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
+	cfg := path.Join(dir, "/config/config.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	_, routerserver, _, rpcc := makeBVCandRouter(t, cfg, dir)
+	defer routerserver.Close()
+
+	testport := RandPort()
+
+	Jsonrpcserver2(rpcc, testport)
+
+	ackcheck(t, testport)
+
+
 
 	time.Sleep(20 * time.Second)
 
