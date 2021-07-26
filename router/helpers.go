@@ -265,7 +265,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 		s = "acc://" + s
 	}
 
-	var sub proto.Submission
+	var sub *proto.Submission
 
 	u, err := url.Parse(s)
 	if err != nil {
@@ -283,10 +283,8 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 		return ret, err
 	}
 
-	var sub *proto.Submission{}
 	//todo .. make the correct submission based upon raw query...
 	for k, _ := range m {
-		ins := UrlInstructionMap[k]
 		m.Del(k)
 		js, _ := toJSON(m)
 		switch k {
@@ -298,16 +296,23 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 		case "tx":
 			fallthrough
 		case "token-tx":
-			data, err := hex.DecodeString(m["data"])
+			data, err := hex.DecodeString(m["payload"])
 			signature, err := hex.DecodeString(m["sig"])
 			key, err := hex.DecodeString(m["key"])
 			if err != nil {
 				return nil, fmt.Errorf("Cannot decode signature in url %v", err)
 			}
-			sub = MakeSignedTokenTransactionBVCSubmission(hostname, hostname+u.Path, data,signature,key)
+			sub = MakeSignedTokenTransactionBVCSubmission(hostname, hostname+u.Path, data, signature, key)
 			fmt.Println(js)
 		}
 		break
+	}
+	if sub == nil {
+		sub = &proto.Submission{
+			Identitychain: types.GetIdentityChainFromAdi(hostname).Bytes(),
+			Chainid:       types.GetIdentityChainFromAdi(hostname + u.Path).Bytes(),
+			Instruction:   proto.AccInstruction_Unknown,
+		}
 	}
 	//}
 

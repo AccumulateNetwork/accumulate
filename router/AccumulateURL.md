@@ -1,7 +1,13 @@
 #Accumulate URL 
 
 
-acc://[identityname]/[chain/path]?[action]&...
+##Actions [POST]
+acc://[identityname]/[chain/path]?[action]&payload=[payload in hex]&sig=[signature in hex]&key=[key in hex]...
+
+##Query [GET]
+queries can be simple query paths.
+
+acc://[identityname]/[chain/path]?query&...
 
 | Query/Action | short hand | Description | Example |
 | ----------------- | ---------------- | --------------- | --------------- |
