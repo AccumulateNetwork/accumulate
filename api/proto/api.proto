@@ -48,9 +48,9 @@ message DBVCInstructionHeader {
 		EntryReveal              = 2;
 		AddChain                 = 3;
 		RemoveChain              = 4;
-		RegisterMasterChain 	 = 5; // add a new master chain
-		RemoveMasterChain 	     = 6; // remove a master chain the network.  May need to have blacklists so that core chain's cannot be removed without a fork?
-	    RegisterADI              = 7;
+		RegisterMasterChain      = 5; // add a new master chain
+		RemoveMasterChain        = 6; // remove a master chain the network.  May need to have blacklists so that core chain's cannot be removed without a fork?
+	    RegisterADI            = 7;
 	}
 	insType instruction        = 1; // type of instruction / request, will have one of the values of
 	uint32  version            = 2; // version number stored as varint.
