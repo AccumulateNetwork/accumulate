@@ -13,11 +13,10 @@ import (
 	"time"
 )
 
-type AccTokenTransactionValidator struct{
+type AccTokenTransactionValidator struct {
 	ValidatorContext
 
-    EV *EntryValidator
-
+	EV *EntryValidator
 }
 
 //transactions are just accounts with balances on a given token chain
@@ -46,11 +45,10 @@ func NewAccTokenTransactionValidator() *AccTokenTransactionValidator {
 	//the id will be 0x0000000f
 	chainid := "000000000000000000000000000000000000000000000000000000000000001D" //does this make sense anymore?
 	v.EV = NewEntryValidator()
-	v.SetInfo(chainid,"token-transaction", pb.AccInstruction_Token_Transaction)
+	v.SetInfo(chainid, "token-transaction", pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
-
 
 func (v *AccTokenTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
@@ -68,7 +66,7 @@ func (v *AccTokenTransactionValidator) BeginBlock(height int64, time *time.Time)
 	return nil
 }
 
-func (v *AccTokenTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *AccTokenTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("Current State Not Defined")
@@ -87,7 +85,6 @@ func (v *AccTokenTransactionValidator) Validate(currentstate *StateEntry, identi
 	//	//need to validate this: res.Submissions[i].Data()
 	//}
 
-
 	e := acctypes.Entry{}
 
 	e.UnmarshalBinary(data[0:p1])
@@ -96,13 +93,12 @@ func (v *AccTokenTransactionValidator) Validate(currentstate *StateEntry, identi
 	//rules: ExtID[0] = Identity Name
 	//the Sha256(ExtID[0]) should == ChainID
 	//if
-    if len(e.ExtIDs[0]) != 0 {
-    	return nil, fmt.Errorf("Invalid format: Expecting Identity Name in ExtID[0]")
+	if len(e.ExtIDs[0]) != 0 {
+		return nil, fmt.Errorf("Invalid format: Expecting Identity Name in ExtID[0]")
 	}
 
-
 	//identitychain = managed.Hash( sha256.Sum256(e.ExtIDs[0]) )
-	if bytes.Compare(identitychain, e.ChainID.Bytes() ) != 0 {
+	if bytes.Compare(identitychain, e.ChainID.Bytes()) != 0 {
 		return nil, fmt.Errorf("Invalid Entry: Identity name does not match ChainID")
 	}
 	//self validation...
@@ -112,13 +108,11 @@ func (v *AccTokenTransactionValidator) Validate(currentstate *StateEntry, identi
 		return nil, fmt.Errorf("Execting Version 1 ")
 	}
 
-
-
 	return nil, nil
 	//return &pb.Submission{}, nil
 }
 
-func (v *AccTokenTransactionValidator) EndBlock(mdroot []byte) error  {
+func (v *AccTokenTransactionValidator) EndBlock(mdroot []byte) error {
 	//copy(v.mdroot[:], mdroot[:])
 	//don't think this serves a purpose???
 	return nil

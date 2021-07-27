@@ -7,7 +7,7 @@ import (
 
 type IdentityState struct {
 	Publickey [32]byte
-	Adi string
+	Adi       string
 }
 
 func (app *IdentityState) GetPublicKey() []byte {
@@ -29,14 +29,14 @@ func (app *IdentityState) GetIdentityAddress() uint64 {
 
 func (app *IdentityState) MarshalBinary() ([]byte, error) {
 	badi := []byte(app.Adi)
-    data := make([]byte,len(badi) + 32)
-    i := copy(data[:], app.Publickey[:])
-    copy(data[i:],badi)
+	data := make([]byte, len(badi)+32)
+	i := copy(data[:], app.Publickey[:])
+	copy(data[i:], badi)
 	return data, nil
 }
 
 func (app *IdentityState) UnmarshalBinary(data []byte) error {
-	if len(data) < 32 + 1 {
+	if len(data) < 32+1 {
 		return fmt.Errorf("insufficent data")
 	}
 	i := copy(app.Publickey[:], data[:32])

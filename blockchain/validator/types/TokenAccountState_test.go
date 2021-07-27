@@ -13,17 +13,17 @@ func TestTokenBalanceState(t *testing.T) {
 
 	token.Credit("10000.00")
 	if token.Balance() != "10000.00" {
-		t.Fatalf("Token Balance Error %s",token.Balance())
+		t.Fatalf("Token Balance Error %s", token.Balance())
 	}
 
 	token.Debit("5000.00")
 	if token.Balance() != "5000.00" {
-		t.Fatalf("Token Balance Error %s , expect 5000.00",token.Balance())
+		t.Fatalf("Token Balance Error %s , expect 5000.00", token.Balance())
 	}
 
 	token.Debit("1.99")
 	if token.Balance() != "4998.01" {
-		t.Fatalf("Token Balance Error %s , expect 4998.01",token.Balance())
+		t.Fatalf("Token Balance Error %s , expect 4998.01", token.Balance())
 	}
 
 	err := token.Debit("5000.00")
@@ -33,7 +33,7 @@ func TestTokenBalanceState(t *testing.T) {
 	}
 
 	if token.Balance() != "4998.01" {
-		t.Fatalf("Token Balance Error %s , expect 4998.01",token.Balance())
+		t.Fatalf("Token Balance Error %s , expect 4998.01", token.Balance())
 	}
 
 	err = token.Credit("1.00 FCT")
@@ -62,7 +62,7 @@ func TestTokenTestMarshal(t *testing.T) {
 
 	token.Credit("10000.00")
 	if token.Balance() != "10000.00" {
-		t.Fatalf("Token Balance Error %s",token.Balance())
+		t.Fatalf("Token Balance Error %s", token.Balance())
 	}
 
 	data, err := token.MarshalBinary()

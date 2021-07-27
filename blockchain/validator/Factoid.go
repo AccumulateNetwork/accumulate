@@ -17,11 +17,10 @@ import (
 	"github.com/AccumulateNetwork/accumulated/scratch/factom"
 )
 
-
-type FactoidValidator struct{
+type FactoidValidator struct {
 	ValidatorContext
-	KvStoreDB dbm.DB
-	AccountsDB dbm.DB
+	KvStoreDB      dbm.DB
+	AccountsDB     dbm.DB
 	timeofvalidity time.Duration
 }
 
@@ -32,11 +31,12 @@ func NewFactoidValidator() *FactoidValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "000000000000000000000000000000000000000000000000000000000000000f"
-	v.SetInfo(chainid,"fct",pb.AccInstruction_Token_Transaction)
+	v.SetInfo(chainid, "fct", pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = &v
 	v.timeofvalidity = time.Duration(2) * time.Minute //transaction good for only 2 minutes
 	return &v
 }
+
 //
 //func (v *FactoidValidator) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
 //
@@ -54,14 +54,12 @@ func NewFactoidValidator() *FactoidValidator {
 //	return
 //}
 
-func (v *FactoidValidator) Check(currentstate *StateEntry, identitychain []byte,  chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *FactoidValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	tx := factom.Transaction{}
 	err := tx.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
-
-
 
 	//elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
 	//if elapsed > v.timeofvalidity || elapsed < 0 {
@@ -69,7 +67,7 @@ func (v *FactoidValidator) Check(currentstate *StateEntry, identitychain []byte,
 	//	return fmt.Errorf("Invalid FCT Transaction: Timestamp out of bounds")
 	//}
 
-    return nil
+	return nil
 }
 func (v *FactoidValidator) processFctTx(data []byte) ([]byte, error) {
 
@@ -77,10 +75,8 @@ func (v *FactoidValidator) processFctTx(data []byte) ([]byte, error) {
 	err := tx.UnmarshalBinary(data)
 	if err != nil {
 		fmt.Printf("Invalid FCT Transaction")
-		return nil,err
+		return nil, err
 	}
-
-
 
 	//elapsed := tx.TimestampSalt.Sub(*v.GetCurrentTime()) * time.Minute
 	//if elapsed > v.timeofvalidity || elapsed < 0 {
@@ -91,7 +87,6 @@ func (v *FactoidValidator) processFctTx(data []byte) ([]byte, error) {
 
 	//need to check balances
 	//inp := tx.FCTInputs
-
 
 	//
 	/*
@@ -145,8 +140,7 @@ func (v *FactoidValidator) processEcTx(data []byte) ([]byte, error) {
 	return nil, err
 }
 
-
-func (v *FactoidValidator) Validate(currentstate *StateEntry, identitychain []byte,  chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *FactoidValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 	//if pass then send to accumulator.
 	//var fblock := factom.FBlock{}
 	//create a new block
@@ -155,7 +149,7 @@ func (v *FactoidValidator) Validate(currentstate *StateEntry, identitychain []by
 	err := tx.UnmarshalBinary(data)
 	if err != nil {
 		fmt.Printf("Invalid FCT Transaction")
-		return nil,err
+		return nil, err
 	}
 
 	//
@@ -168,7 +162,6 @@ func (v *FactoidValidator) Validate(currentstate *StateEntry, identitychain []by
 
 	//need to check balances
 	//inp := tx.FCTInputs
-
 
 	//
 	/*
@@ -218,23 +211,20 @@ func (v *FactoidValidator) Validate(currentstate *StateEntry, identitychain []by
 	// ins := AccumulateTransaction.Instruction()
 
 	ret := ResponseValidateTX{}
-	ret.Submissions = make([]pb.Submission,2)
-
-
+	ret.Submissions = make([]pb.Submission, 2)
 
 	//where is this being routed to?
 	//send to synth tx chain validator
 	//chainid + 1
 	ret.Submissions[1] = pb.Submission{
-		Identitychain: identitychain, //should this be set externally?
-		Type:   GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
-		Instruction:  pb.AccInstruction_Token_Transaction,
-		Chainid: chainid, //need a chain id of where you are going...  chainid + 1
-		Param1: 0,
-		Param2: 0,
-		Data:    data,//need to make the data what it should be for atk
+		Identitychain: identitychain,                              //should this be set externally?
+		Type:          GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
+		Instruction:   pb.AccInstruction_Token_Transaction,
+		Chainid:       chainid, //need a chain id of where you are going...  chainid + 1
+		Param1:        0,
+		Param2:        0,
+		Data:          data, //need to make the data what it should be for atk
 	}
 
-	return &ret,err
+	return &ret, err
 }
-

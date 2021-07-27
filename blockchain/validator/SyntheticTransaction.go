@@ -7,38 +7,36 @@ import (
 	"time"
 )
 
-type SyntheticTransactionValidator struct{
+type SyntheticTransactionValidator struct {
 	ValidatorContext
 
 	mdroot [32]byte
-
 }
 
 //transactions are just accounts with balances on a given token chain
 //what transaction types should be supported?
 type SyntheticTransaction struct {
-	chainadi string //token chain
-	txid [32]byte //transaction id -- sha256[chainadi | txid] defines the scratch chain for the transaction
-	intputddii string //ddii includes account?
+	chainadi    string   //token chain
+	txid        [32]byte //transaction id -- sha256[chainadi | txid] defines the scratch chain for the transaction
+	intputddii  string   //ddii includes account?
 	inputamount int64
 
 	numsignaturesrequired int
-	signature [64]byte  //array?
-
+	signature             [64]byte //array?
 
 	//assume fees are paid it ATK
 	fee int32 //fees in Atoshies
 
-	outputddii string
-    outputaccount string //?
-    outputamount int64
+	outputddii    string
+	outputaccount string //?
+	outputamount  int64
 }
 
-func (tx *SyntheticTransaction) MarshalBinary() ([]byte, error){
+func (tx *SyntheticTransaction) MarshalBinary() ([]byte, error) {
 	return nil, nil
 }
 
-func (tx *SyntheticTransaction) UnmarshalBinary(data []byte) error{
+func (tx *SyntheticTransaction) UnmarshalBinary(data []byte) error {
 
 	return nil
 }
@@ -50,13 +48,12 @@ func NewSyntheticTransactionValidator() *SyntheticTransactionValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "0000000000000000000000000000000000000000000000000000000000000005"
-	v.SetInfo(chainid,"synthetic_transaction",  pb.AccInstruction_State_Store)
+	v.SetInfo(chainid, "synthetic_transaction", pb.AccInstruction_State_Store)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-
-func (v *SyntheticTransactionValidator) Check(currentstate *StateEntry, identitychain []byte,  chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *SyntheticTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *SyntheticTransactionValidator) Initialize(config *cfg.Config) error {
@@ -72,12 +69,12 @@ func (v *SyntheticTransactionValidator) BeginBlock(height int64, time *time.Time
 	return nil
 }
 
-func (v *SyntheticTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *SyntheticTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 	return nil, nil
 	//return &pb.Submission{}, nil
 }
 
-func (v *SyntheticTransactionValidator) EndBlock(mdroot []byte) error  {
+func (v *SyntheticTransactionValidator) EndBlock(mdroot []byte) error {
 	copy(v.mdroot[:], mdroot[:])
 	//don't think this serves a purpose???
 	return nil
