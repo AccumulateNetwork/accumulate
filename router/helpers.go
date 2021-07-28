@@ -232,7 +232,7 @@ func (p *Subparams) MarshalJSON() ([]byte, error) {
 	if p.Signature == nil || p.Key == nil {
 		ret += "]}"
 	} else {
-		ret = fmt.Sprintf("%s, {\"timestamp\":%d}, {\"sig\":\"%x\", \"key\":\"%x\"}]}",
+		ret = fmt.Sprintf("%s, {\"timestamp\":%d}, {\"sig\":\"%x\"}, {\"key\":\"%x\"}]}",
 			ret, p.Timestamp, p.Signature, p.Key)
 	}
 	if !json.Valid([]byte(ret)) {

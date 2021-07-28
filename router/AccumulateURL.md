@@ -2,8 +2,11 @@
 
 
 ##Actions [POST]
-acc://[identityname]/[chain/path]?[action]&payload=[payload in hex]&sig=[signature in hex]&key=[key in hex]...
+ use url encding rules for post
+> curl -d "acc://[identityname]/[chain/path]?[instruction]&payload=[payload in hex]&timestamp=[unix timestamp]&sig=[signature in hex]&key=[key in hex]" -X POST https://localhost:1234
 
+or use json rpc
+> { "jsonrpc": "2.0", "method": "\<method-name\>", "params": [{"identity-chainpath":"\<identity/chain/path\>"},{"payload":\<payload per spec\>, {"timestamp":\<unix timestamp\>}, {"sig":"\<signature in hex\>"}, {"key":"\<key in hex\>"}], "id": 1 }
 ##Query [GET]
 queries can be simple query paths.
 
