@@ -63,7 +63,10 @@ func CreateTokenTransactionTest(inputidentityname *string,
 	tx.Input[*intputchainname] = inputamt
 	tx.Output = outputs
 	if metadata != nil {
-		tx.Metadata.UnmarshalJSON([]byte(fmt.Sprintf("{%s}", *metadata)))
+		err := tx.Metadata.UnmarshalJSON([]byte(fmt.Sprintf("{%s}", *metadata)))
+		if err != nil {
+			return nil, fmt.Errorf("Error marshalling metadata %v", err)
+		}
 	}
 
 	txdata, err := json.Marshal(tx)
@@ -116,7 +119,7 @@ func MakeUpdateKeyURL(identityname string, oldkey ed25519.PrivKey, newkey ed2551
 	kp1hash := sha256.Sum256(oldkey.PubKey().Bytes())
 	kp2hash := sha256.Sum256(newkey.Bytes())
 
-	payload := fmt.Sprintf("\"payload\" : { \"curkeyhash\": \"%x\", \"newkeyhash\": \"%x\" } }", kp1hash[:], kp2hash[:])
+	payload := fmt.Sprintf("{ \"curkeyhash\": \"%x\", \"newkeyhash\": \"%x\" }", kp1hash[:], kp2hash[:])
 
 	instruction := "ku"
 	timestamp := time.Now().Unix()
@@ -166,7 +169,6 @@ func MakeTokenIssueURL(fullchainpath string, supply int64, precision uint, symbo
 
 	instruction := "token-issue"
 	timestamp := time.Now().Unix()
-
 	msg := MarshalBinarySig(fullchainpath, []byte(payload), timestamp)
 	sig, _ := issuerkey.Sign(msg)
 
@@ -218,6 +220,8 @@ func TestURL(t *testing.T) {
 
 	//create a URL without acc://
 
+	params := Subparams{}
+
 	//Test identity name and chain path
 	//identity name should be RedWagon and chainpath should be RedWagon/acc
 	urlstring := "acc://RedWagon/acc"
@@ -225,12 +229,18 @@ func TestURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	params.Set("RedWagon", q)
+	result, _ := params.MarshalJSON()
+	fmt.Println(string(result))
 
 	urlstring = "acc://RedWagon/acc?query&block=1000"
 	q, err = URLParser(urlstring)
 	if err != nil {
 		t.Fatal(err)
 	}
+	params.Set("RedWagon/acc", q)
+	result, _ = params.MarshalJSON()
+	fmt.Println(string(result))
 
 	if string(q.Data) != "{\"block\":[\"1000\"]}" {
 		t.Fatalf("URL query failed:  expected block=1000 received %s", string(q.Data))
@@ -241,6 +251,9 @@ func TestURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	params.Set("RedWagon/acc", q)
+	result, _ = params.MarshalJSON()
+	fmt.Println(string(result))
 
 	identityname := "RedWagon"
 
@@ -253,12 +266,18 @@ func TestURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	params.Set(identityname, q)
+	result, _ = params.MarshalJSON()
+	fmt.Println(string(result))
 
 	urlstring = MakeUpdateKeyURL(identityname, kp1, kp2.PubKey().(ed25519.PubKey))
 	q, err = URLParser(urlstring)
 	if err != nil {
 		t.Fatal(err)
 	}
+	params.Set(identityname, q)
+	result, _ = params.MarshalJSON()
+	fmt.Println(string(result))
 
 	chainpath := identityname + "/" + "ATKCoinbase"
 	urlstring = MakeTokenIssueURL(chainpath, 500000000, 8, "ATK", kp1)
@@ -266,6 +285,9 @@ func TestURL(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	params.Set(chainpath, q)
+	result, _ = params.MarshalJSON()
+	fmt.Println(string(result))
 
 	chainpath = identityname + "/" + "MyAtkTokens"
 
@@ -285,5 +307,8 @@ func TestURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	params.Set(chainpath, q)
+	result, _ = params.MarshalJSON()
+	fmt.Println(string(result))
 	//the q objects can be submitted to the router for processing.
 }

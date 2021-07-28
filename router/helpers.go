@@ -4,11 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	"github.com/golang/protobuf/jsonpb"
 	"github.com/spf13/viper"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmnet "github.com/tendermint/tendermint/libs/net"
@@ -190,6 +192,55 @@ var InstructionTypeMap = map[string]proto.AccInstruction{
 	"q":                    proto.AccInstruction_Light_Query,
 }
 
+//input is a the json params parser
+func JsonRpcParamsParser(s string) (ret *proto.Submission, err error) {
+	m := jsonpb.Unmarshaler{}
+	err = m.Unmarshal(strings.NewReader(s), ret)
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
+}
+
+type Subparams struct {
+	IdentityChainpath string `json:"identity-chainpath"`
+	Payload           []byte `json:"payload"`
+	Timestamp         int64  `json:"timestamp"`
+	Signature         []byte `json:"sig"`
+	Key               []byte `json:"key"`
+}
+
+func (p *Subparams) Set(chainpath string, sub *proto.Submission) {
+	p.IdentityChainpath = chainpath
+	p.Payload = sub.Data
+	p.Timestamp = sub.Timestamp
+	p.Signature = sub.Signature
+	p.Key = sub.Key
+}
+
+func (p *Subparams) MarshalJSON() ([]byte, error) {
+	var ret string
+	ret = fmt.Sprintf("{\"params\": [{\"identity-chainpath\":\"%s\"}",
+		p.IdentityChainpath)
+	if p.Payload != nil {
+		if json.Valid(p.Payload) {
+			ret = fmt.Sprintf("%s,{\"payload\":%s}", ret, p.Payload)
+		} else {
+			ret = fmt.Sprintf("%s,{\"payload\":\"%s\"}", ret, p.Payload)
+		}
+	}
+	if p.Signature == nil || p.Key == nil {
+		ret += "]}"
+	} else {
+		ret = fmt.Sprintf("%s, {\"timestamp\":%d}, {\"sig\":\"%x\", \"key\":\"%x\"}]}",
+			ret, p.Timestamp, p.Signature, p.Key)
+	}
+	if !json.Valid([]byte(ret)) {
+		return nil, fmt.Errorf("Invalid json : %s", ret)
+	}
+	return []byte(ret), nil
+}
+
 func URLParser(s string) (ret *proto.Submission, err error) {
 
 	if !utf8.ValidString(s) {
@@ -229,9 +280,12 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 		insidx = len(u.RawQuery)
 	}
 
+	var data []byte
+	var timestamp int64
+	var signature []byte
+	var key []byte
 	if insidx > 0 {
 		k := u.RawQuery[:insidx]
-		var data []byte
 		if k == "query" || k == "q" {
 			if v := m["payload"]; v == nil {
 				m.Del(k)
@@ -244,9 +298,6 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 			}
 		}
 		//make the correct submission based upon raw query...  Light query needs to be handled differently.
-		var timestamp int64
-		var signature []byte
-		var key []byte
 		if v := m["payload"]; v != nil {
 			if len(v) > 0 {
 				data, err = hex.DecodeString(m["payload"][0])
@@ -287,6 +338,8 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 	if sub == nil {
 		sub = AssembleBVCSubmissionHeader(hostname, chainpath, proto.AccInstruction_Unknown)
 	}
+
+	//json rpc params:
 
 	return sub, nil
 }
