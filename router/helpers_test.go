@@ -135,7 +135,7 @@ func MakeUpdateKeyURL(identityname string, oldkey ed25519.PrivKey, newkey ed2551
 func MakeCreateIdentityURL(identityname string, sponsoridentityname string, sponsorkey ed25519.PrivKey, key ed25519.PubKey) string {
 	kp2hash := sha256.Sum256(key.Bytes())
 
-	payload := fmt.Sprintf("\"payload\" : { \"sponsor-identity\": \"%s\", \"initial-key-hash\": \"%s\" } }", sponsoridentityname, kp2hash[:])
+	payload := fmt.Sprintf("{ \"sponsor-identity\": \"%s\", \"initial-key-hash\": \"%x\" }", sponsoridentityname, kp2hash[:])
 
 	instruction := "identity-create"
 	timestamp := time.Now().Unix()
@@ -149,7 +149,7 @@ func MakeCreateIdentityURL(identityname string, sponsoridentityname string, spon
 	return urlstring
 }
 
-func BuildAccumulateURL(fullchainpath string, ins string, payload []byte, timestamp int64, sig []byte, key []byte) string {
+func BuildAccumulateURL(fullchainpath string, ins string, payload []byte, timestamp int64, key []byte, sig []byte) string {
 	return fmt.Sprintf("acc://%s?%s&payload=%x&timestamp=%d&key=%x&sig=%x", fullchainpath, ins, payload, timestamp, key, sig)
 }
 
