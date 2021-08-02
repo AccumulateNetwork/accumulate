@@ -5,7 +5,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/api"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
-	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"testing"
@@ -65,7 +64,7 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 
 func TestTokenTransactionValidator_Check(t *testing.T) {
 
-	kp := router.CreateKeyPair()
+	kp := api.CreateKeyPair()
 	identitychainpath := "RedWagon/acc"
 	currentstate := StateEntry{}
 	currentstate.ChainState = CreateFakeTokenAccountState(t)
