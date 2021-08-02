@@ -23,69 +23,65 @@ import (
 type ValidationCode uint32
 
 const (
-	Success ValidationCode = 0
-	BufferUnderflow = 1
-	BufferOverflow = 2
-	InvalidSignature = 3
-	Fail = 4
+	Success          ValidationCode = 0
+	BufferUnderflow                 = 1
+	BufferOverflow                  = 2
+	InvalidSignature                = 3
+	Fail                            = 4
 )
 
-type TXEvidence struct {
-	DDII []byte
-	Sig []byte
-}
-
-type TXEntry struct {
-	Evidence TXEvidence
-	ExtIDs *[]byte
-	Data []byte
-}
-
+//type TXEvidence struct {
+//	DDII []byte
+//	Sig []byte
+//}
+//
+//type TXEntry struct {
+//	Evidence TXEvidence
+//	ExtIDs *[]byte
+//	Data []byte
+//}
 
 type StateEntry struct {
-
 	IdentityState *acctypes.StateObject
-	ChainState *acctypes.StateObject
+	ChainState    *acctypes.StateObject
 	//database to query other stuff if needed???
 	DB *smtdb.Manager
 }
 
-func NewStateEntry(idstate *acctypes.StateObject, chainstate *acctypes.StateObject, db *smtdb.Manager) (*StateEntry, error){
+func NewStateEntry(idstate *acctypes.StateObject, chainstate *acctypes.StateObject, db *smtdb.Manager) (*StateEntry, error) {
 	se := StateEntry{}
 	se.IdentityState = idstate
 
 	se.ChainState = chainstate
 	se.DB = db
 
-	return &se,nil
+	return &se, nil
 }
 
 type Fee struct {
-	TimeStamp      int64        // 8
-	DDII           managed.Hash     // 32
-	ChainID        [33]byte     // 33
-	Credits        int8         // 1
-	SignatureIdx   int8         // 1
-	Signature      []byte       // 64 minimum
+	TimeStamp    int64        // 8
+	DDII         managed.Hash // 32
+	ChainID      [33]byte     // 33
+	Credits      int8         // 1
+	SignatureIdx int8         // 1
+	Signature    []byte       // 64 minimum
 	// 1 end byte ( 140 bytes for FEE)
-	Transaction    []byte       // Transaction
+	Transaction []byte // Transaction
 }
 
 func (f Fee) MarshalBinary() ([]byte, error) {
 	//smt
-	return nil,nil
+	return nil, nil
 }
 
-
-
-
-type ResponseValidateTX struct{
-	StateData []byte //acctypes.StateObject
+type ResponseValidateTX struct {
+	StateData   []byte          //acctypes.StateObject
+	EventData   []byte          //this should be events that need to get published
 	Submissions []pb.Submission //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
 }
 
 func LeaderAtHeight(addr uint64, height uint64) *[32]byte {
-    //todo: implement...
+	//todo: implement...
 	//lookup the public key for the addr at given height
 	return nil
 }
@@ -95,10 +91,10 @@ type ValidatorInterface interface {
 	BeginBlock(height int64, Time *time.Time) error
 	Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error
 	Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) //return persistent entry or error
-	EndBlock(mdroot []byte) error  //do something with MD root
+	EndBlock(mdroot []byte) error                                                                                                            //do something with MD root
 
 	//InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error  //deprecated
-	SetCurrentBlock(height int64,Time *time.Time,chainid *string) //deprecated
+	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated
 	GetInfo() *ValidatorInfo
 	GetCurrentHeight() int64
 	GetCurrentTime() *time.Time
@@ -106,11 +102,10 @@ type ValidatorInterface interface {
 }
 
 type ValidatorInfo struct {
-	chainadi  string   //
+	chainadi  string       //
 	chainid   managed.Hash //derrived from chain adi
 	namespace string
-    typeid    uint64
-
+	typeid    uint64
 }
 
 //This function will build a chain from an DDII / ADI.  If the string is 64 characters in length, then it is assumed
@@ -123,7 +118,7 @@ func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
 	if chainidlen < 32 {
 		chainid = sha256.Sum256([]byte(*chainadi))
 	} else if chainidlen == 64 {
-		_, err := hex.Decode(chainid[:],[]byte(*chainadi))
+		_, err := hex.Decode(chainid[:], []byte(*chainadi))
 		if err != nil {
 			fmt.Errorf("[Error] cannot decode chainid %s", chainadi)
 			return nil, err
@@ -132,8 +127,9 @@ func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
 		return nil, fmt.Errorf("[Error] invalid chainid for validator on shard %s", chainadi)
 	}
 
-    return chainid.Bytes(), nil
+	return chainid.Bytes(), nil
 }
+
 //func BuildChainAddressFromAdi(chain *string) uint64 {
 //	chainid,_ := BuildChainIdFromAdi(chain)
 //	return BuildChainAddress(managed.Hash(chainid))
@@ -151,7 +147,7 @@ func (h *ValidatorInfo) SetInfo(chainadi string, namespace string, instructionty
 	h.chainid.Extract(chainid)
 	h.chainadi = chainadi
 	h.namespace = namespace
-//	h.address = binary.BigEndian.Uint64(h.chainid[24:])
+	//	h.address = binary.BigEndian.Uint64(h.chainid[24:])
 	h.typeid = uint64(instructiontype) //GetTypeIdFromName(h.namespace)
 	h.namespace = namespace
 	return nil
@@ -162,7 +158,7 @@ func (h *ValidatorInfo) GetValidatorChainId() []byte {
 }
 
 func (h *ValidatorInfo) GetNamespace() *string {
-    return &h.namespace
+	return &h.namespace
 }
 
 func (h *ValidatorInfo) GetChainAdi() *string {
@@ -186,13 +182,12 @@ type ValidatorContext struct {
 	lastHeight    int64
 	lastTime      time.Time
 	//chainId       managed.Hash
-	entryDB       dbm.DB
+	entryDB dbm.DB
 }
 
 func (v *ValidatorContext) GetInfo() *ValidatorInfo {
 	return &v.ValidatorInfo
 }
-
 
 func (v *ValidatorContext) GetLastHeight() int64 {
 	return v.lastHeight

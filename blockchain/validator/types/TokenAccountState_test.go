@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"math/big"
 	"testing"
 )
 
@@ -11,76 +12,78 @@ func TestTokenBalanceState(t *testing.T) {
 
 	fmt.Println(token.Balance())
 
-	token.Credit("10000.00")
-	if token.Balance() != "10000.00" {
-		t.Fatalf("Token Balance Error %s",token.Balance())
+	deposit := big.NewInt(10000)
+
+	token.AddBalance(deposit)
+	expected_balance := big.NewInt(10000)
+
+	if token.Balance().Cmp(expected_balance) != 0 {
+		t.Fatalf("Token Balance Error %s", token.Balance())
 	}
 
-	token.Debit("5000.00")
-	if token.Balance() != "5000.00" {
-		t.Fatalf("Token Balance Error %s , expect 5000.00",token.Balance())
+	withdrawal := big.NewInt(5000)
+
+	expected_balance.SetInt64(5000)
+
+	token.SubBalance(withdrawal)
+	if token.Balance().Cmp(expected_balance) != 0 {
+		t.Fatalf("Token Balance Error %s , expect 5000.00", token.Balance())
 	}
 
-	token.Debit("1.99")
-	if token.Balance() != "4998.01" {
-		t.Fatalf("Token Balance Error %s , expect 4998.01",token.Balance())
+	withdrawal.SetInt64(199)
+	token.SubBalance(withdrawal)
+	expected_balance.SetInt64(4801)
+
+	if token.Balance().Cmp(expected_balance) != 0 {
+		t.Fatalf("Token Balance Error %s , expect 4801", token.Balance())
 	}
 
-	err := token.Debit("5000.00")
+	withdrawal.SetInt64(4802) //insufficient balance
+	//attempt to withdraw 4802.  We should get an exception now...
+	err := token.SubBalance(withdrawal)
 	//should fail with insufficient funds
 	if err == nil {
 		t.Fatal("Should have failed with negative balance")
 	}
 
-	if token.Balance() != "4998.01" {
-		t.Fatalf("Token Balance Error %s , expect 4998.01",token.Balance())
+	fmt.Printf("Current balance %d\n", token.Balance())
+	withdrawal.SetInt64(4801) //withdrawal it all.
+	//attempt to withdraw 4802.  We should get an exception now...
+	err = token.SubBalance(withdrawal)
+	//should fail with insufficient funds
+	if err != nil {
+		t.Fatal("Account should have been emptied...")
 	}
 
-	err = token.Credit("1.00 FCT")
-	//should fail with invalid input txt
-	if err == nil {
-		t.Fatal("Should have failed with invalid input txt")
+	expected_balance.SetInt64(0)
+	//balance should not have changed and still should be 4801,
+	if token.Balance().Cmp(expected_balance) != 0 {
+		t.Fatalf("Cannot transact, token Balance %d , expected %d", token.Balance(), expected_balance)
 	}
 
-	err = token.Credit("1,00")
-	//should fail with invalid input txt
-	if err == nil {
-		t.Fatal("Should have failed with invalid input txt")
+	//Add 5001 to the balance
+	deposit.SetInt64(5001)
+	err = token.AddBalance(deposit)
+	//since we emptied the account it should be 5001
+	expected_balance.SetInt64(5001)
+	if token.Balance().Cmp(expected_balance) != 0 {
+		t.Fatalf("Expected a balance of %d, but got %d", expected_balance, token.Balance())
 	}
 
-	fmt.Println()
-
-	if token.Balance() != "5000" {
-		t.Fatal("Should have failed with negative balance")
-	}
-}
-
-func TestTokenTestMarshal(t *testing.T) {
-	token := TokenState{}
-
-	fmt.Println(token.Balance())
-
-	token.Credit("10000.00")
-	if token.Balance() != "10000.00" {
-		t.Fatalf("Token Balance Error %s",token.Balance())
+	tokenbytes, err := token.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
 	}
 
-	data, err := token.MarshalBinary()
+	err = token.UnmarshalBinary(tokenbytes)
 
 	if err != nil {
-		t.Fatal("Cannot marshal token structure")
+		t.Fatal(err)
 	}
 
-	token2 := TokenState{}
-
-	err = token2.UnmarshalBinary(data)
-
-	if err != nil {
-		t.Fatal("Cannot unmarshal token structure")
+	//account balance should still be 5001
+	if token.Balance().Cmp(expected_balance) != 0 {
+		t.Fatalf("Unmarshal error, Expected a balance of %d, but got %d", expected_balance, token.Balance())
 	}
 
-	fmt.Printf("Token (Premarshal) %s / Token (PostUnmarshal) %s\n", token.Balance(), token2.Balance())
-	if token.Balance() != token2.Balance() {
-		t.Fatalf("Balance of marshalled data does not equal that of unmarshalled data %s != %s", token.Balance(), token2.Balance())
-	}
 }
