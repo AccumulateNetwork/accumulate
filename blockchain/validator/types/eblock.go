@@ -34,13 +34,12 @@ import (
 	"time"
 )
 
-
 // EBlock represents a Factom Entry Block.
 type EBlock struct {
 	// DBlock.Get populates the ChainID, KeyMR, Height and Timestamp.
 	ChainID   *managed.Hash
 	KeyMR     *managed.Hash // Computed
-	Timestamp time.Time // Established by DBlock
+	Timestamp time.Time     // Established by DBlock
 	Height    uint32
 
 	FullHash *managed.Hash // Computed
@@ -71,13 +70,13 @@ func (eb *EBlock) ClearMarshalBinaryCache() {
 // IsPopulated returns true if eb has already been populated by a successful
 // call to Get.
 func (eb EBlock) IsPopulated() bool {
-return len(eb.Entries) > 0 &&
-	eb.ChainID != nil &&
-	eb.PrevKeyMR != nil &&
-	eb.PrevFullHash != nil &&
-	eb.BodyMR != nil &&
-	eb.FullHash != nil &&
-	eb.ObjectCount > 1
+	return len(eb.Entries) > 0 &&
+		eb.ChainID != nil &&
+		eb.PrevKeyMR != nil &&
+		eb.PrevFullHash != nil &&
+		eb.BodyMR != nil &&
+		eb.FullHash != nil &&
+		eb.ObjectCount > 1
 }
 
 // IsFirst returns true if this is the first EBlock in its chain, indicated by
@@ -85,7 +84,7 @@ return len(eb.Entries) > 0 &&
 //
 // If eb is not populated, eb.IsFirst will always return false.
 func (eb EBlock) IsFirst() bool {
-return eb.IsPopulated() && (len(eb.PrevKeyMR.Bytes()) == 0)
+	return eb.IsPopulated() && (len(eb.PrevKeyMR.Bytes()) == 0)
 }
 
 // Prev returns the EBlock preceding eb, an EBlock with its KeyMR initialized
@@ -94,23 +93,23 @@ return eb.IsPopulated() && (len(eb.PrevKeyMR.Bytes()) == 0)
 // If eb is the first Entry Block in the chain, then eb is returned. If eb is
 // not populated, the returned EBlock will be its zero value.
 func (eb EBlock) Prev() EBlock {
-if !eb.IsPopulated() {
-return EBlock{}
-}
-if eb.IsFirst() {
-return eb
-}
-return EBlock{ChainID: eb.ChainID, KeyMR: eb.PrevKeyMR}
+	if !eb.IsPopulated() {
+		return EBlock{}
+	}
+	if eb.IsFirst() {
+		return eb
+	}
+	return EBlock{ChainID: eb.ChainID, KeyMR: eb.PrevKeyMR}
 }
 
 // EBlockHeaderSize is the exact length of an EBlock header.
 const EBlockHeaderSize = 32 + // [ChainID (Bytes32)] +
-						32 + // [BodyMR (Bytes32)] +
-						32 + // [PrevKeyMR (Bytes32)] +
-						32 + // [PrevFullHash (Bytes32)] +
-						4 + // [EB Sequence (uint32 BE)] +
-						4 + // [DB Height (uint32 BE)] +
-						4 // [Entry Count (uint32 BE)]
+	32 + // [BodyMR (Bytes32)] +
+	32 + // [PrevKeyMR (Bytes32)] +
+	32 + // [PrevFullHash (Bytes32)] +
+	4 + // [EB Sequence (uint32 BE)] +
+	4 + // [DB Height (uint32 BE)] +
+	4 // [Entry Count (uint32 BE)]
 
 // EBlockObjectSize is the length of an EBlock body object, which may be an
 // Entry hash or minute marker.
@@ -154,18 +153,18 @@ const EBlockMaxTotalSize = EBlockHeaderSize + EBlockMaxBodySize
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry-block
 func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	if uint64(len(data)) < EBlockMinTotalSize ||
-	uint64(len(data)) > EBlockMaxTotalSize {
-	return fmt.Errorf("invalid length")
+		uint64(len(data)) > EBlockMaxTotalSize {
+		return fmt.Errorf("invalid length")
 	}
 
 	var chainID managed.Hash
 	i := copy(chainID[:], data)
 	if eb.ChainID != nil {
-	if *eb.ChainID != chainID {
-	return fmt.Errorf("invalid ChainID")
-	}
+		if *eb.ChainID != chainID {
+			return fmt.Errorf("invalid ChainID")
+		}
 	} else {
-	eb.ChainID = &chainID
+		eb.ChainID = &chainID
 	}
 
 	eb.BodyMR = new(managed.Hash)
@@ -187,7 +186,7 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	i += 4
 
 	if len(data[i:]) != int(eb.ObjectCount*32) {
-	return fmt.Errorf("invalid length")
+		return fmt.Errorf("invalid length")
 	}
 
 	// Parse objects and mark indexes of minute markers.
@@ -195,14 +194,14 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	//minuteMarkerID := make([]int, 10)
 	//var numMins int
 	for oi := range objects {
-	objects[oi] = data[i : i+len(managed.Hash{})]
-	i += len(managed.Hash{})
+		objects[oi] = data[i : i+len(managed.Hash{})]
+		i += len(managed.Hash{})
 
-	//if bytes.Compare(objects[oi], min10Marker[:]) <= 0 {
-	//minute := int(objects[oi][len(managed.Hash{})-1])
-	//minuteMarkerID[minute-1] = oi
-	//numMins++
-	//}
+		//if bytes.Compare(objects[oi], min10Marker[:]) <= 0 {
+		//minute := int(objects[oi][len(managed.Hash{})-1])
+		//minuteMarkerID[minute-1] = oi
+		//numMins++
+		//}
 	}
 
 	// The last element must be a minute marker.
@@ -215,7 +214,7 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 	//}
 
 	// Populate Entries from objects.
-	eb.Entries = make([]Entry, int(eb.ObjectCount)/*-numMins*/)
+	eb.Entries = make([]Entry, int(eb.ObjectCount) /*-numMins*/)
 
 	// ei indexes into eb.Entries. oi indexes into objects.
 	var ei, oi int
@@ -231,26 +230,26 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 
 	// Populate EBlocks up to this minute marker.
 	for ; oi < int(eb.ObjectCount); oi++ {
-	e := &eb.Entries[ei]
-	ei++
+		e := &eb.Entries[ei]
+		ei++
 
-	e.Hash = new(managed.Hash)
-	copy(e.Hash[:], objects[oi])
+		e.Hash = new(managed.Hash)
+		copy(e.Hash[:], objects[oi])
 
-	e.ChainID = eb.ChainID
+		e.ChainID = eb.ChainID
 
-	//?e.Timestamp = ts
-	//}
+		//?e.Timestamp = ts
+		//}
 
 	}
 
 	// Verify BodyMR.
 	bodyMR, err := ComputeEBlockBodyMR(objects)
 	if err != nil {
-	return err
+		return err
 	}
 	if *eb.BodyMR != bodyMR {
-	return fmt.Errorf("invalid BodyMR")
+		return fmt.Errorf("invalid BodyMR")
 	}
 
 	// Compute KeyMR
@@ -259,12 +258,12 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 
 	// Verify KeyMR, if set, otherwise populate it.
 	if eb.KeyMR != nil {
-	if *eb.KeyMR != keyMR {
-	return fmt.Errorf("invalid KeyMR")
-	}
+		if *eb.KeyMR != keyMR {
+			return fmt.Errorf("invalid KeyMR")
+		}
 	} else {
-	// Populate KeyMR.
-	eb.KeyMR = &keyMR
+		// Populate KeyMR.
+		eb.KeyMR = &keyMR
 	}
 
 	// Populate FullHash.
@@ -298,11 +297,11 @@ func (eb *EBlock) UnmarshalBinary(data []byte) error {
 // If EBlock was populated by a call to MarshalBinary, and ClearMar
 func (eb EBlock) MarshalBinary() ([]byte, error) {
 	if eb.marshalBinaryCache != nil {
-	return eb.marshalBinaryCache, nil
+		return eb.marshalBinaryCache, nil
 	}
 
 	if !eb.IsPopulated() {
-	return nil, fmt.Errorf("not populated")
+		return nil, fmt.Errorf("not populated")
 	}
 
 	data := make([]byte, eb.MarshalBinaryLen())
@@ -324,15 +323,15 @@ func (eb EBlock) MarshalBinary() ([]byte, error) {
 	//var min int
 
 	for _, e := range eb.Entries {
-	//min = int(e.Timestamp.Sub(eb.Timestamp).Minutes())
-	//if min < lastMin || min > 10 {
-	//return nil, fmt.Errorf("invalid entry timestamp")
-	//}
-	//if min > lastMin {
-	//data[i+len(Bytes32{})-1] = byte(lastMin)
-	//i += len(Bytes32{})
-	//lastMin = min
-	//}
+		//min = int(e.Timestamp.Sub(eb.Timestamp).Minutes())
+		//if min < lastMin || min > 10 {
+		//return nil, fmt.Errorf("invalid entry timestamp")
+		//}
+		//if min > lastMin {
+		//data[i+len(Bytes32{})-1] = byte(lastMin)
+		//i += len(Bytes32{})
+		//lastMin = min
+		//}
 		//no need for minute boundary logic anymore
 		i += copy(data[i:], e.Hash[:])
 	}
@@ -362,5 +361,3 @@ func (eb *EBlock) SetTimestamp(ts time.Time) {
 	//}
 	eb.Timestamp = ts
 }
-
-
