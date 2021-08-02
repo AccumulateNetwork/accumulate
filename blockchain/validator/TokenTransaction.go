@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/api"
 	pb "github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
-	"github.com/AccumulateNetwork/accumulated/router"
 	cfg "github.com/tendermint/tendermint/config"
 	"math/big"
 	"time"
@@ -105,7 +105,7 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 			return fmt.Errorf("Invalid amount")
 		}
 
-		identity, chainpath, err := router.ParseIdentityChainPath(k)
+		identity, chainpath, err := api.ParseIdentityChainPath(k)
 		if err != nil {
 			return fmt.Errorf("Malformed Token Transaction: Invalid identity/chainpath %s", k)
 		}

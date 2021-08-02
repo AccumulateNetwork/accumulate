@@ -120,11 +120,11 @@ func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
 	} else if chainidlen == 64 {
 		_, err := hex.Decode(chainid[:], []byte(*chainadi))
 		if err != nil {
-			fmt.Errorf("[Error] cannot decode chainid %s", chainadi)
+			fmt.Errorf("[Error] cannot decode chainid %s", *chainadi)
 			return nil, err
 		}
 	} else {
-		return nil, fmt.Errorf("[Error] invalid chainid for validator on shard %s", chainadi)
+		return nil, fmt.Errorf("[Error] invalid chainid for validator on shard %s", *chainadi)
 	}
 
 	return chainid.Bytes(), nil
