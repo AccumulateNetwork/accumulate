@@ -128,5 +128,3 @@ func ComputeEntryHash(data []byte) managed.Hash {
 	copy(saltedSum[i:], data)
 	return sha256.Sum256(saltedSum)
 }
-
-

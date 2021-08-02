@@ -16,13 +16,15 @@ require (
 	github.com/Factom-Asset-Tokens/base58 v0.0.0-20191118025050-4fa02e92ec20
 	github.com/Factom-Asset-Tokens/factom v0.0.0-20200222022020-d06cbcfe6ece
 	github.com/Factom-Asset-Tokens/fatd v1.1.4
+	github.com/FactomProject/FactomCode v0.3.6-0.20171228170625-d7e03150a9d5
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/FactomProject/bolt v1.1.1-0.20170202195217-952a1b4e9a55 // indirect
+	github.com/FactomProject/btcd v0.3.6-0.20200312193844-fe42c67cdb3a
 	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2
 	github.com/FactomProject/btcutilecc v0.0.0-20130527213604-d3a63a5752ec // indirect
 	github.com/FactomProject/dynrsrc v0.3.1 // indirect
 	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6
-	github.com/FactomProject/factoid v0.3.4 // indirect
+	github.com/FactomProject/factoid v0.3.4
 	github.com/FactomProject/factom v0.3.6-0.20190712163801-e7717c4ab072 // indirect
 	github.com/FactomProject/factomd v6.7.0+incompatible
 	github.com/FactomProject/fastsha256 v0.2.1 // indirect

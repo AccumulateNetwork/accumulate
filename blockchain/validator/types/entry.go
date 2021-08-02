@@ -17,14 +17,14 @@ import (
 )
 
 type EntryCommit struct {
-	Version	uint64
+	Version   uint64
 	Timestamp valacctypes.TimeStamp
 	Entryhash valacctypes.Hash
-	NumEc int8
+	NumEc     int8
 	Signature valacctypes.Signature //signature contains signature and pubkey, but we probably need to change pubkey to DDII/ADI
 
 	ChainIDHash *valacctypes.Hash
-	ChainWeld *valacctypes.Hash
+	ChainWeld   *valacctypes.Hash
 	//varInt_F	Version	starts at 0. Higher numbers are currently rejected. Can safely be coded using 1 byte for the first 127 versions.
 	//6 bytes	milliTimestamp	This is a timestamp that is user defined. It is a unique value per payment. This is the number of milliseconds since 1970 epoch.
 	//32 bytes	Entry Hash	This is the SHA512+256 descriptor of the Entry to be paid for.
@@ -36,11 +36,10 @@ type EntryCommit struct {
 type ChainCommit struct {
 	EntryCommit
 	ChainIdHash valacctypes.Hash
-	CommitWeld valacctypes.Hash
-//	32 bytes	ChainID Hash	This is a double hash (SHA256d) of the ChainID which the Entry is in.
-//	32 bytes	Commit Weld	SHA256(SHA256(Entry Hash | ChainID)) This is the double hash (SHA256d) of the Entry Hash concatenated with the ChainID.
+	CommitWeld  valacctypes.Hash
+	//	32 bytes	ChainID Hash	This is a double hash (SHA256d) of the ChainID which the Entry is in.
+	//	32 bytes	Commit Weld	SHA256(SHA256(Entry Hash | ChainID)) This is the double hash (SHA256d) of the Entry Hash concatenated with the ChainID.
 }
-
 
 // Entry represents a Factom Entry.
 //
@@ -49,9 +48,9 @@ type ChainCommit struct {
 type Entry struct {
 	// An Entry in EBlock.Entries after a successful call to EBlock.Get has
 	// its ChainID, Hash, and Timestamp.
-    Version uint64
-	ChainID   *managed.Hash  `json:"chainid,omitempty"`
-	Hash      *managed.Hash  `json:"entryhash,omitempty"`
+	Version uint64
+	ChainID *managed.Hash `json:"chainid,omitempty"`
+	Hash    *managed.Hash `json:"entryhash,omitempty"`
 	//EntryHash  *[32]byte  `json:"entryhash,omitempty"`
 
 	// Entry.Get populates the Content and ExtIDs.
@@ -244,22 +243,21 @@ func (e *Entry) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-
 type EntryCommitReveal struct {
-	Entry Entry
+	Entry  Entry
 	Segwit EntryCommit //discarded after validation
 }
 
 func (ecr EntryCommitReveal) Marshal() ([]byte, error) {
 
-	data := make([]byte,ecr.Entry.MarshalBinaryLen() + ecr.Segwit.MarshalCommitLen())
+	data := make([]byte, ecr.Entry.MarshalBinaryLen()+ecr.Segwit.MarshalCommitLen())
 
 	entrydata, err := ecr.Entry.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	l := copy(data,entrydata)
+	l := copy(data, entrydata)
 
 	commitdata := ecr.Segwit.MarshalCommit()
 
@@ -287,14 +285,10 @@ func (ecr EntryCommitReveal) Unmarshal(data []byte) error {
 	return nil
 }
 
-
-
-const EntryCommitLedgerSize int = 1+6+32+1
+const EntryCommitLedgerSize int = 1 + 6 + 32 + 1
 const ChainCommitLedgerSize int = EntryCommitLedgerSize + 32 + 32
-const EntryCommitSize int = EntryCommitLedgerSize+32+64
-const ChainCommitSize int = ChainCommitLedgerSize+32+64
-
-
+const EntryCommitSize int = EntryCommitLedgerSize + 32 + 64
+const ChainCommitSize int = ChainCommitLedgerSize + 32 + 64
 
 //
 //func GenerateCommit(e *Entry) EntryCommit {
@@ -336,7 +330,7 @@ func (ec *EntryCommit) MarshalLedger() []byte {
 		commitsize = ChainCommitLedgerSize
 	}
 
-	ret := make([]byte,commitsize)
+	ret := make([]byte, commitsize)
 	startoffset := 0
 	endoffset := 1
 
@@ -358,11 +352,11 @@ func (ec *EntryCommit) MarshalLedger() []byte {
 		endoffset += l
 	}
 
-	l = copy(ret[startoffset:endoffset],ec.Entryhash.Bytes())
+	l = copy(ret[startoffset:endoffset], ec.Entryhash.Bytes())
 	startoffset = endoffset
 	endoffset += l
 
-	ret[startoffset] =byte(ec.NumEc)
+	ret[startoffset] = byte(ec.NumEc)
 	startoffset = endoffset
 
 	return ret
@@ -371,15 +365,15 @@ func (ec *EntryCommit) MarshalLedger() []byte {
 func (ec *EntryCommit) MarshalCommit() []byte {
 	ledger := ec.MarshalLedger()
 	sig := ec.Signature.Bytes()
-	ret := make([]byte,len(ledger)+len(sig))
+	ret := make([]byte, len(ledger)+len(sig))
 
 	ll := copy(ret, ledger)
-	copy(ret[ll:],sig)
+	copy(ret[ll:], sig)
 
 	return ret[:]
 }
 
-func (ec *EntryCommit) UnmarshalLedger(data []byte) ([]byte,error) {
+func (ec *EntryCommit) UnmarshalLedger(data []byte) ([]byte, error) {
 	var rem []byte
 	commitsize := len(data)
 	asChainCommit := false
@@ -392,14 +386,14 @@ func (ec *EntryCommit) UnmarshalLedger(data []byte) ([]byte,error) {
 
 	ec.Version, rem = valacctypes.DecodeVarInt(data)
 	if len(rem) < commitsize-1 {
-		return nil,fmt.Errorf("Invalid entry commit size after version")
+		return nil, fmt.Errorf("Invalid entry commit size after version")
 	}
 
 	var ts [8]byte
-	copy(ts[2:8],rem[0:6])
+	copy(ts[2:8], rem[0:6])
 	ec.Timestamp.Extract(ts[:])
 
-    rem = rem[6:]
+	rem = rem[6:]
 
 	if asChainCommit {
 		ec.ChainIDHash = new(valacctypes.Hash)
@@ -417,7 +411,7 @@ func (ec *EntryCommit) UnmarshalLedger(data []byte) ([]byte,error) {
 		return nil, nil
 	}
 
-	return rem[1:],nil
+	return rem[1:], nil
 }
 
 func (ec *EntryCommit) UnmarshalCommit(data []byte) error {
@@ -429,12 +423,13 @@ func (ec *EntryCommit) UnmarshalCommit(data []byte) error {
 }
 
 func (ec *EntryCommit) Valid() bool {
-	return ed25519.Verify(ec.Signature.PublicKey, ec.MarshalLedger(),ec.Signature.Signature[:])
+	return ed25519.Verify(ec.Signature.PublicKey, ec.MarshalLedger(), ec.Signature.Signature[:])
 }
 
 func (ec *EntryCommit) TXID() valacctypes.Hash {
 	return sha256.Sum256(ec.MarshalLedger())
 }
+
 //
 //func (ec *EntryCommit) EntryHash() valacctypes.Hash {
 //	return sha256.Sum256(ec.MarshalCommit())
@@ -493,8 +488,7 @@ func GenerateCommit(entrydata []byte, entryhash *valacctypes.Hash,
 	return commit, txID
 }
 
-
-func SignCommit( es valacctypes.PrivateKey, commit []byte) error {
+func SignCommit(es valacctypes.PrivateKey, commit []byte) error {
 
 	if len(commit) != EntryCommitSize {
 		if len(commit) != ChainCommitSize {
