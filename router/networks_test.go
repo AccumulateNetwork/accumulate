@@ -24,14 +24,14 @@ func TestNetworkAddress(t *testing.T) {
 
 	for i := range Networks {
 		if mms := m[uint64(i)]; mms == "" {
-			fmt.Printf("No Network Found for ID : %d\n",i)
+			fmt.Printf("No Network Found for ID : %d\n", i)
 		}
 	}
 
 	dupct := 0
 	for i := range Networks {
 		if mms := m[uint64(i)]; mms != "" {
-			fmt.Printf("Network %s ID %d, Duplicates %d : ",mms,i,len(n[uint64(i)])-1)
+			fmt.Printf("Network %s ID %d, Duplicates %d : ", mms, i, len(n[uint64(i)])-1)
 			if len(n[uint64(i)]) == 1 {
 				fmt.Printf("\n")
 				continue
@@ -49,7 +49,7 @@ func TestNetworkAddress(t *testing.T) {
 		}
 	}
 	fmt.Printf("Total number of with Duplicates : %d\n", dupct)
-	fmt.Printf("Total number of Unused Networks : %d\n", len(Networks) - len(m))
+	fmt.Printf("Total number of Unused Networks : %d\n", len(Networks)-len(m))
 	//
 	//for i := range Networks {
 	//	if mms := dupct[uint64(i)]; mms != 0 {

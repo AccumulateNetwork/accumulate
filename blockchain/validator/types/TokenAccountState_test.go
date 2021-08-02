@@ -8,7 +8,7 @@ import (
 
 func TestTokenBalanceState(t *testing.T) {
 
-	token := TokenState{}
+	token := TokenAccountState{}
 
 	fmt.Println(token.Balance())
 

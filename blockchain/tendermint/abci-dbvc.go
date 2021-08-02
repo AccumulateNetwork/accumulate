@@ -49,31 +49,29 @@ type State struct {
 }
 
 type DirectoryBlockChain struct {
-
 	abci.BaseApplication
-//	BootstrapHeight int64
+	//	BootstrapHeight int64
 	Height uint64
 
-	md       merkleDag.MD
+	md        merkleDag.MD
 	AppMDRoot valacctypes.Hash
 
 	DB vadb.DB
 }
 
-
 func NewDirectoryBlockChain() *DirectoryBlockChain {
 	app := DirectoryBlockChain{
-//		db: db,
+		//		db: db,
 		//router: new(router2.Router),
 
 		//EntryFeed : make(chan node.EntryHash, 10000),
 	}
-    return &app
+	return &app
 }
 
 var _ abci.Application = (*DirectoryBlockChain)(nil)
 
-func (app *DirectoryBlockChain) GetHeight ()(uint64) {
+func (app *DirectoryBlockChain) GetHeight() uint64 {
 	return uint64(app.Height)
 }
 
@@ -86,7 +84,7 @@ func (DirectoryBlockChain) SetOption(req abci.RequestSetOption) abci.ResponseSet
 }
 
 func (app *DirectoryBlockChain) resolveDDIIatHeight(ddii []byte, bvcheight int64) (ed25519.PublicKey, error) {
-    //just give me a key...
+	//just give me a key...
 
 	fmt.Printf("%s", string(ddii[:]))
 	//TODO: need to find out what the public key for ddii was at height bvcheight
@@ -105,7 +103,6 @@ func (app *DirectoryBlockChain) verifyBVCMasterChain(ddii []byte) error {
 
 func (app *DirectoryBlockChain) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	fmt.Printf("Initalizing Accumulator Router\n")
-
 
 	//TODO: do a load state here to continue on with where we were.
 	//loadState(...)
@@ -135,11 +132,11 @@ func (app *DirectoryBlockChain) BeginBlock(req abci.RequestBeginBlock) abci.Resp
 // BVC Block is finished and MDRoot data is delivered to DBVC. Check if it is valid.
 func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCheckTx {
 	//the ABCI request here is a Tx that consists data delivered from the BVC protocol buffer
-    //data here can only come from an authorized VBC validator, otherwise they will be rejected
+	//data here can only come from an authorized VBC validator, otherwise they will be rejected
 	//Step 1: check which BVC is sending the request and see if it is a valid Master Chain.
 	header := pb.DBVCInstructionHeader{}
 
-	err := proto.Unmarshal(req.GetTx(),&header)
+	err := proto.Unmarshal(req.GetTx(), &header)
 	if err != nil {
 		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0}
 	}
@@ -155,11 +152,11 @@ func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCh
 		//Step 2: resolve DDII of BVC against VBC validator
 		bvcreq := pb.BVCEntry{}
 
-		err = proto.Unmarshal(req.GetTx(),&bvcreq)
+		err = proto.Unmarshal(req.GetTx(), &bvcreq)
 
 		if err != nil {
 			return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
-				Log: fmt.Sprintf("Unable to decode BVC Protobuf Transaction") }
+				Log: fmt.Sprintf("Unable to decode BVC Protobuf Transaction")}
 		}
 
 		bve := BVCEntry{}
@@ -169,32 +166,30 @@ func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCh
 		pub, err := app.resolveDDIIatHeight(bve.DDII, bve.BVCHeight)
 		if err != nil {
 			return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0,
-			    Log: fmt.Sprintf("Unable to resolve DDII at Height %d", bve.BVCHeight) }
+				Log: fmt.Sprintf("Unable to resolve DDII at Height %d", bve.BVCHeight)}
 		}
 
 		//Step 3: validate signature of signed accumulated merkle dag root
 		if !ed25519.Verify(pub, bvcreq.GetEntry(), bvcreq.GetSignature()) {
 			println("Invalid Signature")
 			return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0,
-			                            Log: "Invalid Signature" }
+				Log: "Invalid Signature"}
 		}
 	default:
-		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0, Log : "Bad Instruction Header"}
+		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0, Log: "Bad Instruction Header"}
 
 	}
 	//Step 4: if signature is valid send dispatch to accumulator directory block
 	return abci.ResponseCheckTx{Code: code.CodeTypeOK, GasWanted: 1}
 }
 
-
-
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
-func (app *DirectoryBlockChain) DeliverTx(req abci.RequestDeliverTx) ( response abci.ResponseDeliverTx) {
+func (app *DirectoryBlockChain) DeliverTx(req abci.RequestDeliverTx) (response abci.ResponseDeliverTx) {
 
 	//if we get this far, than it has passed check tx,
 	bvcreq := pb.BVCEntry{}
-	err := proto.Unmarshal(req.GetTx(),&bvcreq)
+	err := proto.Unmarshal(req.GetTx(), &bvcreq)
 	if err != nil {
 		return abci.ResponseDeliverTx{Code: 2, GasWanted: 0}
 	}
@@ -217,7 +212,7 @@ func (app *DirectoryBlockChain) DeliverTx(req abci.RequestDeliverTx) ( response 
 	}
 
 	mdr := valacctypes.Hash{}
-	copy(mdr.Bytes(),bve.MDRoot.Bytes())
+	copy(mdr.Bytes(), bve.MDRoot.Bytes())
 
 	app.md.AddToChain(mdr)
 
@@ -255,49 +250,44 @@ func (app *DirectoryBlockChain) EndBlock(req abci.RequestEndBlock) abci.Response
 	return abci.ResponseEndBlock{}
 }
 
-
 //Commit instructs the application to persist the new state.
 func (app *DirectoryBlockChain) Commit() abci.ResponseCommit {
-    //TODO: Determine if folding in prev block hash necessary
+	//TODO: Determine if folding in prev block hash necessary
 	app.AppMDRoot = *app.md.GetMDRoot().Combine(app.AppMDRoot)
 
 	//TODO: saveState(app.appmdroot, currentheight);
 	return abci.ResponseCommit{Data: app.AppMDRoot.Bytes()}
 }
 
-
-
 //------------------------
-
 
 // when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
 func (app *DirectoryBlockChain) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 	/*
-	err := app.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(reqQuery.Data)
-		if err != nil && err != badger.ErrKeyNotFound {
-			return err
+		err := app.db.View(func(txn *badger.Txn) error {
+			item, err := txn.Get(reqQuery.Data)
+			if err != nil && err != badger.ErrKeyNotFound {
+				return err
+			}
+			if err == badger.ErrKeyNotFound {
+				resQuery.Log = "does not exist"
+			} else {
+				return item.Value(func(val []byte) error {
+					resQuery.Log = "exists"
+					resQuery.Value = val
+					return nil
+				})
+			}
+			return nil
+		})
+		if err != nil {
+			panic(err)
 		}
-		if err == badger.ErrKeyNotFound {
-			resQuery.Log = "does not exist"
-		} else {
-			return item.Value(func(val []byte) error {
-				resQuery.Log = "exists"
-				resQuery.Value = val
-				return nil
-			})
-		}
-		return nil
-	})
-	if err != nil {
-		panic(err)
-	}
 
-	 */
+	*/
 	return
 }
-
 
 func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
 	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
@@ -366,5 +356,5 @@ func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm
 
 	node.Wait()
 
-	return node,nil
+	return node, nil
 }

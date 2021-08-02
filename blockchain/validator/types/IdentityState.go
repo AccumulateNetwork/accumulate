@@ -7,6 +7,7 @@ import (
 )
 
 type IdentityState struct {
+	StateEntry
 	keytype byte
 	keydata []byte //this will eventually be the key groups
 	adi     string

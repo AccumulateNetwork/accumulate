@@ -22,8 +22,6 @@ func CreateAccumulateBVC(config string, path string) *tendermint.AccumulatorVMAp
 	idval := validator.NewCreateIdentityValidator()
 	acc.AddValidator(&idval.ValidatorContext)
 
-
-
 	//entryval := validator.NewEntryValidator()
 	//acc.AddValidator(&entryval.ValidatorContext)
 
@@ -50,4 +48,3 @@ func CreateAccumulateDBVC(config string, path string) *tendermint.AccumulatorVMA
 	acc.Wait()
 	return acc
 }
-

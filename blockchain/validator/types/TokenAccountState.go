@@ -6,11 +6,18 @@ import (
 	"math/big"
 )
 
-type TokenState struct {
+type TokenAccountState struct {
 	StateEntry
 	issueridentity managed.Hash //need to know who issued tokens
 	issuerchainid  managed.Hash //identity/issue chains both hold the metrics for the TokenRules ... hmm.. do those need to be passed along since those need to be used
 	balance        big.Int
+}
+
+func NewTokenAccountState(issuerid []byte, issuerchain []byte) *TokenAccountState {
+	tas := TokenAccountState{}
+	tas.issueridentity.Extract(issuerid)
+	tas.issuerchainid.Extract(issuerchain)
+	return &tas
 }
 
 //
@@ -30,17 +37,18 @@ type TokenRules struct {
 	metadata  string //don't need here
 }
 
-const TokenStateLen = 32 + 32 + 32
+const TokenAccountStateLen = 32 + 32 + 32
 
-func (ts *TokenState) GetIssuerIdentity() *managed.Hash {
+
+func (ts *TokenAccountState) GetIssuerIdentity() *managed.Hash {
 	return &ts.issueridentity
 }
 
-func (ts *TokenState) GetIssuerChainId() *managed.Hash {
+func (ts *TokenAccountState) GetIssuerChainId() *managed.Hash {
 	return &ts.issuerchainid
 }
 
-func (ts *TokenState) SubBalance(amt *big.Int) error {
+func (ts *TokenAccountState) SubBalance(amt *big.Int) error {
 
 	if amt == nil {
 		return fmt.Errorf("Invalid input amount specified to subtract from balance")
@@ -54,11 +62,11 @@ func (ts *TokenState) SubBalance(amt *big.Int) error {
 	return nil
 }
 
-func (ts *TokenState) Balance() *big.Int {
+func (ts *TokenAccountState) Balance() *big.Int {
 	return &ts.balance
 }
 
-func (ts *TokenState) AddBalance(amt *big.Int) error {
+func (ts *TokenAccountState) AddBalance(amt *big.Int) error {
 
 	if amt == nil {
 		return fmt.Errorf("Invalid input amount specified to add to balance")
@@ -68,9 +76,9 @@ func (ts *TokenState) AddBalance(amt *big.Int) error {
 	return nil
 }
 
-func (ts *TokenState) MarshalBinary() ([]byte, error) {
+func (ts *TokenAccountState) MarshalBinary() ([]byte, error) {
 
-	data := make([]byte, TokenStateLen)
+	data := make([]byte, TokenAccountStateLen)
 
 	i := copy(data[:], ts.issueridentity.Bytes())
 	i += copy(data[i:], ts.issuerchainid.Bytes())
@@ -80,9 +88,9 @@ func (ts *TokenState) MarshalBinary() ([]byte, error) {
 	return data, nil
 }
 
-func (ts *TokenState) UnmarshalBinary(data []byte) error {
+func (ts *TokenAccountState) UnmarshalBinary(data []byte) error {
 
-	if len(data) < TokenStateLen {
+	if len(data) < TokenAccountStateLen {
 		return fmt.Errorf("Invalid Token Data for unmarshalling %X on chain %X", ts.issueridentity, ts.issuerchainid)
 	}
 
@@ -93,7 +101,7 @@ func (ts *TokenState) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-//func (app *TokenState) MarshalEntry(chainid *managed.Hash) (*Entry, error) {
+//func (app *TokenAccountState) MarshalEntry(chainid *managed.Hash) (*Entry, error) {
 //	e := Entry{}
 //	e.ChainID = chainid
 //	data := make([]byte,8)
@@ -103,7 +111,7 @@ func (ts *TokenState) UnmarshalBinary(data []byte) error {
 //	return nil, nil
 //}
 //
-//func (app *TokenState) UnmarshalEntry(entry *Entry) error {
+//func (app *TokenAccountState) UnmarshalEntry(entry *Entry) error {
 //	//i := 1
 //	//i += copy(data[i:], e.ChainID[:])
 //	//binary.BigEndian.PutUint16(data[i:i+2],
