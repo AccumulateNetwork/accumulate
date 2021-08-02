@@ -13,16 +13,15 @@ import (
 	"github.com/Factom-Asset-Tokens/factom/jsonlen"
 	"github.com/Factom-Asset-Tokens/fatd/fat0"
 )
+
 //This follows the FAT-0 Specification for transactions
 
 const Type = fat.TypeFAT0
 
-
-type AtkTransactionValidator struct{
+type TokenTransactionValidator struct {
 	ValidatorContext
-
-
 }
+
 /*
 {
    "inputs:": {
@@ -34,51 +33,49 @@ type AtkTransactionValidator struct{
    },
    "metadata": {"memo": "thanks for dinner!"}
 }
- */
+*/
 
 //transactions are just accounts with balances on a given token chain
 //what transaction types should be supported?
-type AtkTransaction struct {
-
+type TokenTransaction struct {
 }
 
-func (tx *AtkTransaction) MarshalBinary() ([]byte, error){
+func (tx *TokenTransaction) MarshalBinary() ([]byte, error) {
 	return nil, nil
 }
 
-func (tx *AtkTransaction) UnmarshalBinary(data []byte) error{
+func (tx *TokenTransaction) UnmarshalBinary(data []byte) error {
 
 	return nil
 }
 
-func NewAtkTransactionValidator() *AtkTransactionValidator {
-	v := AtkTransactionValidator{}
+func NewTokenTransactionValidator() *TokenTransactionValidator {
+	v := TokenTransactionValidator{}
 	//need the chainid, then hash to get first 8 bytes to make the chainid.
 	//by definition a chainid of a factoid block is
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "0000000000000000000000000000000000000000000000000000000000000A75"
-	v.SetInfo(chainid,"atk-transaction",pb.AccInstruction_Admin_Vote)
+	v.SetInfo(chainid, "atk-transaction", pb.AccInstruction_Admin_Vote)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-
-func (v *AtkTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	e := factom.Entry{}
 	e.UnmarshalBinary(data)
-	_, err := NewTransaction(&e,chainid)
+	_, err := NewTransaction(&e, chainid)
 	if err != nil {
 		return err
 	}
 
 	return nil
 }
-func (v *AtkTransactionValidator) Initialize(config *cfg.Config) error {
+func (v *TokenTransactionValidator) Initialize(config *cfg.Config) error {
 	return nil
 }
 
-func (v *AtkTransactionValidator) BeginBlock(height int64, time *time.Time) error {
+func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) error {
 	v.lastHeight = v.currentHeight
 	v.lastTime = v.currentTime
 	v.currentHeight = height
@@ -87,19 +84,17 @@ func (v *AtkTransactionValidator) BeginBlock(height int64, time *time.Time) erro
 	return nil
 }
 
-func (v *AtkTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte,  chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 
 	return nil, nil
 	//return &pb.Submission{}, nil
 }
 
-func (v *AtkTransactionValidator) EndBlock(mdroot []byte) error  {
+func (v *TokenTransactionValidator) EndBlock(mdroot []byte) error {
 	//copy(v.mdroot[:], mdroot[:])
 	//don't think this serves a purpose???
 	return nil
 }
-
-
 
 // Transaction represents a fat0 transaction, which can be a normal account
 // transaction or a coinbase transaction depending on the Inputs and the
@@ -131,7 +126,7 @@ func NewTransaction(e *factom.Entry, idKey []byte) (Transaction, error) {
 		}
 
 		k := factom.Bytes32{}
-		copy(k[:],idKey)
+		copy(k[:], idKey)
 
 		expected = map[factom.Bytes32]struct{}{k: struct{}{}}
 	} else {
