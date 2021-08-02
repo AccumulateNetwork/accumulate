@@ -15,8 +15,8 @@ type TokenAccountState struct {
 
 func NewTokenAccountState(issuerid []byte, issuerchain []byte) *TokenAccountState {
 	tas := TokenAccountState{}
-	tas.issueridentity.Extract(issuerid)
-	tas.issuerchainid.Extract(issuerchain)
+	copy(tas.issueridentity[:],issuerid)
+	copy(tas.issuerchainid[:],issuerchain)
 	return &tas
 }
 

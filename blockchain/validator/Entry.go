@@ -128,7 +128,8 @@ func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte
 
 	//third check if segwit has a valid signature
 	if currentstate != nil {
-		copy(ecr.Segwit.Signature.PublicKey, identityentry.Publickey[:])
+		_, key :=  identityentry.GetKeyData()
+		copy(ecr.Segwit.Signature.PublicKey,key)
 	}
 
 	if !ecr.Segwit.Valid() {
