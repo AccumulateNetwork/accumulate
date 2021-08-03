@@ -6,10 +6,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/api"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	//"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	"github.com/golang/protobuf/jsonpb"
 	"github.com/spf13/viper"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -127,11 +128,11 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins proto.AccInstruction) *proto.Submission {
 	sub := proto.Submission{}
 
-	sub.Identitychain = types.GetIdentityChainFromAdi(identityname).Bytes()
+	sub.Identitychain = api.GetIdentityChainFromAdi(identityname).Bytes()
 	if chainpath == "" {
 		chainpath = identityname
 	}
-	sub.Chainid = types.GetIdentityChainFromAdi(chainpath).Bytes()
+	sub.Chainid = api.GetIdentityChainFromAdi(chainpath).Bytes()
 	sub.Type = 0 //this is going away it is not needed since we'll know the type from transaction
 	sub.Instruction = ins
 	return &sub
@@ -246,7 +247,7 @@ func CreateKeyPair() ed25519.PrivKey {
 	return ed25519.GenPrivKey()
 }
 
-func ParseIdentityChainPath(s string) (identity string, chainpath string,err error) {
+func ParseIdentityChainPath(s string) (identity string, chainpath string, err error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return "", "", err
@@ -369,7 +370,6 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 
 	return sub, nil
 }
-
 
 //This will create a submission message that for a token transaction.  Assume only 1 input and many outputs.
 func CreateTokenTransactionTest(inputidentityname *string,

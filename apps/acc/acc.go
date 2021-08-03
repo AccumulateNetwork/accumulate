@@ -9,10 +9,11 @@ import (
 	"syscall"
 
 	//"github.com/AccumulateNetwork/accumulated/acc"
-	"github.com/AccumulateNetwork/accumulated/tendermint"
+	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+	"github.com/AccumulateNetwork/accumulated/router"
 )
 
-const MaxNetworks int = len(Networks)
+const MaxNetworks int = len(router.Networks)
 
 var ConfigFile [MaxNetworks]string
 var WorkingDir [MaxNetworks]string

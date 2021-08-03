@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
+	"strings"
 
 	//"encoding/binary"
 	"github.com/AccumulateNetwork/SMT/managed"
@@ -15,7 +16,6 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/api/proto"
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	cfg "github.com/tendermint/tendermint/config"
-	dbm "github.com/tendermint/tm-db"
 	time "time"
 )
 
@@ -99,7 +99,8 @@ type ValidatorInterface interface {
 	GetCurrentHeight() int64
 	GetCurrentTime() *time.Time
 	GetCurrentChainId() *string
-	AddStateDB(networkid int)
+	SetStateDBMgr(dbm *state.StateDBMgr)
+	GetBVCDatabase(networkid int) *state.StateDB
 }
 
 type ValidatorInfo struct {
@@ -167,8 +168,8 @@ func (h *ValidatorInfo) GetChainAdi() *string {
 }
 
 func GetTypeIdFromName(name string) uint64 {
-	b := sha256.Sum256([]byte(name))
-	return binary.BigEndian.Uint64(b[:8])
+	b := sha256.Sum256([]byte(strings.ToLower(name)))
+	return binary.LittleEndian.Uint64(b[:8])
 }
 
 func (h *ValidatorInfo) GetTypeId() uint64 {
@@ -182,8 +183,16 @@ type ValidatorContext struct {
 	currentTime   time.Time
 	lastHeight    int64
 	lastTime      time.Time
-	//chainId       managed.Hash
-	entryDB dbm.DB
+	bvc_dbs       *state.StateDBMgr //this stores an array of read-only state databases.
+}
+
+func (v *ValidatorContext) SetStateDBMgr(dbm *state.StateDBMgr) error {
+	v.bvc_dbs = dbm
+	return v.bvc_dbs.Verify()
+}
+
+func (v *ValidatorContext) GetBVCDatabase(networkid int) *state.StateDB {
+	return v.bvc_dbs.GetStateDB(networkid)
 }
 
 func (v *ValidatorContext) GetInfo() *ValidatorInfo {
@@ -205,24 +214,3 @@ func (v *ValidatorContext) GetCurrentHeight() int64 {
 func (v *ValidatorContext) GetCurrentTime() *time.Time {
 	return &v.currentTime
 }
-
-//func (v *ValidatorContext) GetChainId() *managed.Hash {
-//	return &v.chainId
-//}
-
-//
-//func (v *ValidatorContext) InitDBs(config *cfg.Config, dbProvider nm.DBProvider) (err error) {
-//
-//	//v.AccountsDB.Get()
-//	v.entryDB, err = dbProvider(&nm.DBContext{"entry", config})
-//	if err != nil {
-//		return
-//	}
-//
-//	//v.KvStoreDB, err = dbProvider(&nm.DBContext{"fctkvStore", config})
-//	//if err != nil {
-//	//	return
-//	//}
-//
-//	return
-//}
