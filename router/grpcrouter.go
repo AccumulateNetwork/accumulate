@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/accumulated/api"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
-	vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	//vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	tmnet "github.com/tendermint/tendermint/libs/net"
@@ -84,7 +85,7 @@ func (app *RouterConfig) Query(ctx context.Context, query *proto.AccQuery) (*pro
 func (app *RouterConfig) ProcessTx(ctx context.Context, sub *proto.Submission) (*proto.SubmissionResponse, error) {
 	//fmt.Printf("hello world from dispatch server TX ")
 	resp := proto.SubmissionResponse{}
-	client := app.getBVCClient(vtypes.GetAddressFromIdentityChain(sub.Identitychain))
+	client := app.getBVCClient(api.GetAddressFromIdentityChain(sub.Identitychain))
 	if client == nil {
 		resp.Respdata = nil
 		resp.ErrorCode = 0x0001
@@ -223,7 +224,6 @@ type AccUrl struct {
 //	copy(m)
 //	return m, nil
 //}
-
 
 //func Router() {
 //	//acc://root_name[/sub-chain name[/sub-chain]...]

@@ -5,25 +5,38 @@ import (
 	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
 )
 
+//the state DB will only retrieve information out of the database.  To store stuff use PersistentStateDB instead
 type StateDB struct {
-	db smtdb.Manager
+	db    *smtdb.Manager
+	debug bool
 }
 
-func (sdb *StateDB) Open(path string) {
+func (sdb *StateDB) Open(path string, usememdb bool, debug bool) {
 	dbfilename := path + "/" + "valacc.db"
 	dbtype := "badger"
-	//dbtype := "memory" ////for kicks just create an in-memory database for now
+	if usememdb {
+		dbtype = "memory"
+	}
+
+	sdb.db = &smtdb.Manager{}
 	sdb.db.Init(dbtype, dbfilename)
 
-	sdb.db.AddBucket("Entries-Debug") //items will bet pushed into this bucket as the state entries change
 	sdb.db.AddBucket("StateEntries")
+	sdb.debug = debug
+	if debug {
+		sdb.db.AddBucket("Entries-Debug") //items will bet pushed into this bucket as the state entries change
+	}
+
 }
 
 func (sdb *StateDB) GetDB() *smtdb.Manager {
-	return &sdb.db
+	return sdb.db
 }
 
-func (sdb *StateDB) GetStateObject(chainid []byte) (ret *StateObject, err error) {
+func (sdb *StateDB) GetStateObject(chainid []byte, verify bool) (ret *StateObject, err error) {
+	if sdb.db == nil {
+		return nil, fmt.Errorf("Database has not been initialized")
+	}
 	data := sdb.db.Get("StateEntries", "", chainid)
 	if data != nil {
 		ret = &StateObject{}
@@ -32,9 +45,22 @@ func (sdb *StateDB) GetStateObject(chainid []byte) (ret *StateObject, err error)
 			return nil, fmt.Errorf("No Current State is Defined")
 		}
 	}
+	if verify {
+		//todo: generate and verify data the receipts to make sure the information is valid
+	}
 	return ret, nil
 }
 
-func (sdb *StateDB) GetStateEntryDebug(statehash []byte) (ret *StateEntry, err error) {
+func (sdb *StateDB) GetStateEntryDebug(statehash []byte) (ret []byte, err error) {
+	if !sdb.debug {
+		return nil, fmt.Errorf("No debug information stored")
+	}
+	if sdb.db == nil {
+		return nil, fmt.Errorf("Database has not been initialized")
+	}
 	data := sdb.db.Get("Entries-Debug", "", statehash)
+	if data != nil {
+		return nil, fmt.Errorf("No entry found for state hash %v", statehash)
+	}
+	return ret, nil
 }

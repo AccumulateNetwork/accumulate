@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/api"
 	pb "github.com/AccumulateNetwork/accumulated/api/proto"
+	//"github.com/AccumulateNetwork/accumulated/apps/acc"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
 	cfg "github.com/tendermint/tendermint/config"
 	"math/big"
@@ -123,6 +124,8 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 			return fmt.Errorf("Insufficient balance")
 		}
 
+		//need to check entry credit availability
+
 		cantransact = true
 	}
 
@@ -133,7 +136,41 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 	//if we get here we are good to proceed.
 	//we didn't check if the receiver able to receive that type of token?
 	//should we do a pre-fetch query on the receiver's state object?
-	for k, v := range *tx.Output {
+	for k, o := range *tx.Output {
+		//k dest addr
+		identity, chainpath, err := api.ParseIdentityChainPath(k)
+		if err != nil {
+			return fmt.Errorf("Invalid output destination")
+		}
+		idchain := api.GetIdentityChainFromAdi(identity)
+		addr := api.GetAddressFromIdentityChain(idchain[:])
+
+		networkid := addr % uint64(1) //acc.MaxNetworks) //where is maxnetworks set?
+
+		db := v.GetBVCDatabase(networkid)
+
+		if db == nil {
+			return fmt.Errorf("Cannot find BVC database on network %d for identity %s", networkid, identity)
+		}
+
+		//so we have a valid database look up token chain
+		desttokenchainid := sha256.Sum256([]byte(chainpath))
+		so, err := db.GetStateObject(desttokenchainid)
+		if err != nil {
+			return fmt.Errorf("Destination Token Chain does not exist %s", chainpath)
+		}
+
+		desttokenaccount := state.TokenAccountState{}
+		err = desttokenaccount.UnmarshalBinary(so.Entry)
+
+		if err != nil {
+			return err
+		}
+		//all i care about is if the source matches the dest.
+		if bytes.Compare(desttokenaccount.GetIssuerChainId()[:], tas.GetIssuerChainId()[:]) != 0 {
+			return fmt.Errorf("Token chain is of a different type.")
+		}
+
 	}
 	return nil
 }
