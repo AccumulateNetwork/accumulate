@@ -8,26 +8,35 @@ even Merkle Trees of Merkle Trees.
 
 An SMT can collect hashes of validated data from multiple sources and
 create a Merkle Tree that orders all these hashes by arrival time to the
-SMT.  The order of all sources is maintained.
+SMT.  The arrival order of entries from all sources is maintained.
 
-An additional feature is the ability to order entries into blocks, but
-allow the Merkle Tree to span blocks. This means that all the data collected
-is in fact organized into a single Merkle Tree, but sets of entries
-are understood to represent blocks.
+SMTs can be arranged in any way an application requires.  The SMT manager
+can be redirected to update multiple SMTs.  Note that one of the logical
+arrangements for SMT is to create an SMT of SMTs.
 
-SMT goes further, and allows Merkle Trees to be maintained over time, but
-anchored into parent Merkle Trees. In other words, SMT allows validators to
-submit hashes of validated entries into SMT and maintain those entries in
-their own Merkle Trees that, on block boundaries, are anchored into other
-Merkle Trees, building a Hierarchical set of Merkle Trees,  or a Merkle Tree
-of Merkle trees.
+SMTs collect entries in lists maintained on power of 2 boundries (i.e. 
+every 4, 8, ... 1024, .... boundaries. Blocks are documented by creating
+indexes of blocks and elements in a shadow Merkle tree.  This is all that is 
+needed to be able to generate the state of the Merkle Tree at the end of any 
+block.  
 
-A single Merkle Tree for example could take as elements the letters of the
+A single Merkle Tree, for example, could take as elements the letters of the
 Alphabet.  In this notation, a and b represent hashes, and ab represents
-some set of hashing of a and b.  Because we combine hashes on power of 2
-boundaries, we can understand how any set of characters is combined.
+hash resulting from hashing a and b together.  Because we combine 
+hashes on power of 2 boundaries, we can understand how to combine any set of n 
+characters where n is a power of 2.
 
-for example, abcdefgh is h( h( h(a+b), h(c+d) ), h( h(e,f), h(g,h) ) )
+for example, assume **H**(x) indicates the hash of x, and **+** is the 
+concatenation operator, then:
+```
+ab       = H( a+b )
+abcd     = H( H( a+b ) + H( c+d )
+abcdefgh = H( H( H( a+b ) + H( c+d ) + H( H( e+f ) + H( g+h ) )
+```
+
+Using this simplified notation, we can write out a Merkle Tree with 26 
+elements denoted by the letters a-z this way.  Note that at 26 entries, 
+three sub merkle trees are not yet combined, and are denoted with [ ]s.
 
 ```
 a  b  c  d  e  f  g  h  i  j  k  l  m  n  o  p  q  r  s  t  u  v  w  x  y  z
@@ -38,11 +47,11 @@ a  b  c  d  e  f  g  h  i  j  k  l  m  n  o  p  q  r  s  t  u  v  w  x  y  z
 ```
 
 The roots of this tree are **abcdefghijklmnop**, **qrstuvwx**, and **yz**.
-Given a hash function h(x), and a concatenation
+Given a hash function H(x), and a concatenation
 operator +, The DAG root of the above partial Merkle Tree is
-
-> h(abcdefghijklmnop + h([qrstuvwx] + [yz]))
-
+```
+  H( abcdefghijklmnop + H( [qrstuvwx] + [yz] ) )
+```
 In order to create blocks, suppose the alphabet were entered into a
 blockchain that managed 5 elements per block (and we put any leftovers in
 their own block).  Then the above blockchain of characters becomes a Merkle
@@ -106,13 +115,15 @@ process.  On a blockchain, a Patricia Tree can be used to prove the balance
 of an account (an address) in a blockchain at a particular block height.
 
 Accumulate organizes the blockchain into a series of chains under particular 
-identities.  Being able to prove the membership of a particular chain at a 
-particular block height becomes critical.  The BPT provides these proofs for 
-the state of each chain.
+identities.  Being able to prove the state of a particular chain at a 
+particular block height becomes critical.  The index of the block where a 
+chain was last modified is also important. The BPT provides these 
+proofs for the state of each chain.
 
 To summarize:
 
-* Identities act as domains to allow addressing the blockchain as a set of URLs
+* Identities can act as domains to allow addressing the blockchain as a set of 
+  URLs
 * Chains are organized under Identities
 * The Membership of Chains is proven using Stateful Merkle Trees. All 
   entries in a chain are members of one, growing, Merkle Tree.  At any point 
@@ -135,7 +146,7 @@ organized as chains where the membership and order of transactions from a
 particular account exist in its own chain.
 
 Knowing and proving what the complete state of a chain at a particular block 
-height becomes critical.  And that is known if one can prove the last state 
+height becomes critical.  That is known if one can prove the last state 
 of the Merkle Tree that holds those transactions.
 
 We place these states in our Patricia Tree.  The implementation here is the 
@@ -144,11 +155,12 @@ each chain.  The Values are the hash of the Merkle Tree States.
 
 ### Implementation
 
-The qualitiy we need in the Patricia Tree implementaiton is the ability to 
+The quality we need in the Patricia Tree implementation is the ability to 
 quickly update its state, and that its state provides proofs of the state of 
-the entire protocol.  This implementaiton ensures that, no matter what order is 
+the entire protocol.  This implementation ensures that, no matter what order is 
 used to add records to a Patricia Tree, the same set of records produces 
-exactly the same Patricia Tree.
+exactly the same Patricia Tree (Assuming no two records modify the same 
+state). Note that this is true of any Patricia Tree Implementation.
 
 Further, subsets of the Patricia Tree are independently provably correct, 
 as long as there is a path to the root of the Patricia Tree to the 
@@ -156,32 +168,31 @@ subsection of the Patricia tree.
 
 The BPT is a Binary Patricia Tree, and perhaps more correctly called 
 a Binary Patricia-Merkle Tree.  The summary of all Key/Value pairs is a hash 
-that acts like the Merkle Root of a 
-Merkle Tree, while additions or modifications of the Merkle Tree only 
-require localized re-computations.  
+that acts like the Merkle Root of a Merkle Tree, while additions or 
+modifications of the Merkle Tree only require localized re-computations.  
 
-Many implementations of Patricia Trees are described 
-in the literature.  With BPT as are used by Accumulate, the keys are randomly 
-distributed from a binary point of 
-view because the keys are the hashes of URLs.  Mining these hashes to 
-build some particular pattern of leading bits is not very manageable or 
-possible as the keys derive from URLs.  URLs can certainly be mined to have 
-interesting leading bits, but little incentive exists to do so. 
+Many implementations of Patricia Trees are described in the literature.  
+With BPT as are used by Accumulate, the keys are randomly distributed from 
+a binary point of  view because the keys are the hashes of URLs.  Mining 
+these hashes to build some particular pattern of leading bits is not very 
+manageable or possible as the keys derive from URLs.  URLs can certainly be 
+mined to have interesting leading bits, but little incentive exists to do so. 
 
-Given that the keys can be relied on to be numerically random, a BPT will be 
-very well-balanced if this feature is exploited.  Note that we use the 
-leading bits to organize entries in the BPT.  However, nothing prevents 
-using every 3rd bit, the trailing bits, or any other random walk of bits in 
-the key.  Should any attack be mounted to create chainIDs that significantly 
-unbalance the BPT, we can refactor the Patricia Tree using any of these 
-methods, and do so over time (reorganizing only parts of the BFT at a time).
+Given that the keys created from hashes can be relied on to be numerically 
+random, a BPT will be very well-balanced if this feature is exploited.  
+Note that we use the leading bits to organize entries in the BPT.  However, 
+nothing prevents using every 3rd bit, the trailing bits, or any other 
+random walk of bits in the key.  Should any attack be mounted to create 
+chainIDs that significantly unbalance the BPT, we can refactor the Patricia 
+Tree using any of these methods, and do so over time (reorganizing only 
+parts of the BPT at a time).
 
 We have three entry types in the BPT:
 * Node -- Node entries are used to organize the tree.  They have a left path 
   and a right path, and exist at a height in the BPT.  The Height is used to 
-  consider a particular bit in the BPT.  The Left path is taken if the key 
-  has a zero bit at that point.  The Right path is taken if the key has a 1 
-  at that point.
+  consider a particular bit in the BPT (at that point).  The Left path is 
+  taken if the key has a zero bit at that point.  The Right path is taken 
+  if the key has a 1 at that point.
 * Value -- The key value pair in the BPT.  Value entries have no children, and 
   paths through the BPT from parent to child Node entries must end with either 
   at a nil or a Value entry.
@@ -192,9 +203,10 @@ We have three entry types in the BPT:
 Consider a set of keys that might be added to the BPT. The sequence of URLs 
 formed from acc://RedWagon/1, acc://RedWagon/2,acc://RedWagon/3, ... would 
 result in the following Keys, the first byte, and the binary of the first byte:
-```
-                             Key                                 First   Byte
-  (Hashs of the URLs acc://RedWagon/1, acc://RedWagon2, ...)     Byte   in Binary
+```                                                              
+                                                                First    First
+                             Keys                                Byte     Byte
+  (Hashs of the URLs acc://RedWagon/1, acc://RedWagon2, ...)    in Hex   in Binary
 694833d340c7e952163b3dd8a25bfeea8b1163971d4816093a0eb77889006e5b  69    [01101001]
 a100ecde2c835a02f722a395311d3f070cf874e9945f42645ba8bcfe8f883f1c  a1    [10100001]
 2de44ed61567e49d338c1a1dc42cd801e57080bfb925784d124b8027b7bc2a39  2d    [00101101]
@@ -202,33 +214,33 @@ fb1f13654fb5178b489c1dc3f5ac24e488b68ee7beedeaabbb3e90f5ff38c96e  fb    [1111101
 efdcd18725e4ab8bdc5521d40bc6626c2374e453c86a1dcbca3a19c31696623e  ef    [11101111]
 ```
 
-Walking through adding these entries to a BFT will illustrate the approach.  
+Walking through adding these entries to a BPT will illustrate the approach. 
 It is left to the reader to walk through adding these nodes in different 
 orders to demonstrate how order does not change the end state of the BPT.
 
 In the chart above, we see the hashes of a set of URLs built off of the 
 RedWagon identity/identifier/domain.  The following steps show adding the 
-states of these chains to an empty BFT.
+states of these chains to an empty BPT.
 
 We start with the Root entry, an empty Node
 ```
 |L  /R
 Root
 ```
-With the ChainID starting with 69, the first bit is zero:
+With the ChainID starting with 0x69, the first bit is zero:
 
 ```
 69
  \L  /R  <-- looking at bit 0
   Root
 ```
-Adding A1:
+Adding 0xA1:
 ```
 69    a1
  \L  /R  <-- looking at bit 0
   Root
 ```
-Adding 2d will push 69 up, adding a Node on the Left
+Adding 0x2d will push 0x69 up, adding a Node on the Left
 ```
 2d  69
  \L /R       <-- Looking at bit 1
@@ -236,7 +248,7 @@ Adding 2d will push 69 up, adding a Node on the Left
     \L  /R   <-- Looking at bit 0
      Root
 ```
-Adding fb will push A1 up, adding a Node on the right
+Adding 0xfb will push 0xA1 up, adding a Node on the right
 ```
 2d  69   a1   fb
  \L /R    \L /R  <-- Looking at bit 1
@@ -244,7 +256,7 @@ Adding fb will push A1 up, adding a Node on the right
     \L    /R     <-- Looking at bit 0
       Root
 ```
-Finally adding ef will push fb up, adding a node on the right 
+Finally adding 0xef will push 0xfb up, adding a node on the right 
 ```
             ef    fb    
              \L  /R     <-- Looking at bit 2
@@ -255,12 +267,16 @@ Finally adding ef will push fb up, adding a node on the right
       Root
 ```
 
-## Saving the BFT to disk
+Note that even adding just 5 nodes resulted in a reasonably balanced tree. 
+Tests have demonstrated that we get pretty reasonable results with larger 
+test sets, even if the trees are rarely absolutely optimal. 
+
+## Saving the BPT to disk
 Each byte of the ChainID represents up to 511 nodes/values in the MerkleTree 
-(1+2+4+...+256). The BPT packages each byte into one persisted BFT block.  When 
+(1+2+4+...+256). The BPT packages each byte into one persisted BPT block.  When 
 the BPT is updated, modified BPT blocks are persisted to the database.
 
-BFT blocks are indexed in the database under the "BPT" bucket using the 
+BPT blocks are indexed in the database under the "BPT" bucket using the 
 preceding bytes as keys.
 
 ### Database
@@ -371,34 +387,7 @@ in this library this is done by the MerkleManager.
 * `(m *MerkleState) AddToMerkleTree(hash_ [32]byte` Add a given Hash to the 
   Merkle Tree and update the Merkle State
   
-
-
 ### Validation
-```Go
-type Hash [32]byte
-```
-```Go
-type Fee struct {
-    TimeStamp      int64        // 8
-    DDII           Hash         // 32
-    ChainID        [33]byte     // 33
-    Credits        int8         // 1
-    SignatureIdx   int8         // 1
-    Signature      []byte       // 64 minimum 
-                                // 1 end byte ( 140 bytes for FEE)
-    Transaction    []byte       // Transaction
-}
-```
-
-```Go
-type Validation interface {
-    Type() string
-    SetState(state *StateEntry)
-    GetState() state *StateEntry
-	ValidTx(entry *Entry) bool
-	ValidTxList(entries []*Hash) bool
-}
-```
-* `func (m \*SMT) SetValidator(validator *Validation)`  Set the validator function on the SMT
-
-     
+Accumulate is based on authentications. We support a hierarchy of keys that 
+allows for cold storage and multi-signature security for the control and 
+management of an identity, and the chains and tokens managed by an identity.
