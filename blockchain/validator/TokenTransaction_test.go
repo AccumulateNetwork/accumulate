@@ -4,23 +4,22 @@ import (
 	"crypto/sha256"
 	"github.com/AccumulateNetwork/accumulated/api"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"testing"
 )
 
-func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*types.StateObject, []byte) {
-
+func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*state.StateObject, []byte) {
 
 	id, _, _ := api.ParseIdentityChainPath(identitychainpath)
 
 	idhash := sha256.Sum256([]byte(id))
 
-	so := types.StateObject{}
-	ids := types.NewIdentityState(id)
-	ids.SetKeyData(0,key.PubKey().Bytes())
-	so.Entry , _ = ids.MarshalBinary()
+	so := state.StateObject{}
+	ids := state.NewIdentityState(id)
+	ids.SetKeyData(0, key.PubKey().Bytes())
+	so.Entry, _ = ids.MarshalBinary()
 
 	eh := sha256.Sum256(so.Entry)
 	so.EntryHash = eh[:]
@@ -28,14 +27,14 @@ func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*ty
 	return &so, idhash[:]
 }
 
-func CreateFakeTokenAccountState(t *testing.T) *types.StateObject {
+func CreateFakeTokenAccountState(t *testing.T) *state.StateObject {
 
-	tas := types.NewTokenAccountState([]byte("dont"), []byte("dont/care"))
+	tas := state.NewTokenAccountState([]byte("dont"), []byte("dont/care"))
 
 	deposit := big.NewInt(5000)
 	tas.AddBalance(deposit)
 
-	so := types.StateObject{}
+	so := state.StateObject{}
 	so.Entry, _ = tas.MarshalBinary()
 	eh := sha256.Sum256(so.Entry)
 	so.EntryHash = eh[:]
@@ -61,7 +60,6 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 	return sub
 }
 
-
 func TestTokenTransactionValidator_Check(t *testing.T) {
 
 	kp := api.CreateKeyPair()
@@ -69,16 +67,16 @@ func TestTokenTransactionValidator_Check(t *testing.T) {
 	currentstate := StateEntry{}
 	currentstate.ChainState = CreateFakeTokenAccountState(t)
 	var idhash []byte
-	currentstate.IdentityState, idhash = CreateFakeIdentityState(identitychainpath,kp)
+	currentstate.IdentityState, idhash = CreateFakeIdentityState(identitychainpath, kp)
 
 	chainhash := sha256.Sum256([]byte(identitychainpath))
 
 	ttv := NewTokenTransactionValidator()
 
-	faketx := CreateFakeTokenTransaction(t,kp)
+	faketx := CreateFakeTokenTransaction(t, kp)
 
 	//need to simulate a state entry for chain and token
-	err := ttv.Check(&currentstate,idhash,chainhash[:],0,0,faketx.Data)
+	err := ttv.Check(&currentstate, idhash, chainhash[:], 0, 0, faketx.Data)
 	if err != nil {
 		t.Fatalf("Error performing check %v", err)
 	}

@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/api"
 	pb "github.com/AccumulateNetwork/accumulated/api/proto"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
 	cfg "github.com/tendermint/tendermint/config"
 	"math/big"
 	"time"
@@ -70,14 +70,13 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 
 	//extract the identity state i.e. get the current keys... todo: does signature checking go here or can it be done before here?
 	//
-	ids := types.IdentityState{}
+	ids := state.IdentityState{}
 	err := ids.UnmarshalBinary(currentstate.IdentityState.Entry)
 	if err != nil {
 		return err
 	}
 
-
-	tas := types.TokenAccountState{}
+	tas := state.TokenAccountState{}
 	err = tas.UnmarshalBinary(currentstate.ChainState.Entry)
 	if err != nil {
 		return err
@@ -92,7 +91,7 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 	}
 
 	var tx AccTransaction
-	err = json.Unmarshal(data,tx)
+	err = json.Unmarshal(data, &tx)
 
 	if err != nil {
 		return err
@@ -100,7 +99,7 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 	//now check to see if we can transact
 	//really only need to provide one input...
 	cantransact := false
-	for k,v := range tx.Input {
+	for k, v := range tx.Input {
 		if v == nil {
 			return fmt.Errorf("Invalid amount")
 		}
@@ -123,6 +122,7 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 			///insufficient balance
 			return fmt.Errorf("Insufficient balance")
 		}
+
 		cantransact = true
 	}
 
@@ -131,6 +131,10 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 	}
 
 	//if we get here we are good to proceed.
+	//we didn't check if the receiver able to receive that type of token?
+	//should we do a pre-fetch query on the receiver's state object?
+	for k, v := range *tx.Output {
+	}
 	return nil
 }
 
@@ -152,21 +156,19 @@ func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, identityc
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
 
 	ret := ResponseValidateTX{}
-	ret.Submissions = make([]pb.Submission,1)
-
-
+	ret.Submissions = make([]pb.Submission, 1)
 
 	//where is this being routed to?
 	//send to synth tx chain validator
 	//chainid + 1
 	ret.Submissions[1] = pb.Submission{
-		Identitychain: identitychain, //should this be set externally?
-		Type:   GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
-		Instruction:  pb.AccInstruction_Token_Transaction,
-		Chainid: chainid, //need a chain id of where you are going...  chainid + 1
-		Param1: 0,
-		Param2: 0,
-		Data:    data,//need to make the data what it should be for atk
+		Identitychain: identitychain,                              //should this be set externally?
+		Type:          GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
+		Instruction:   pb.AccInstruction_Token_Transaction,
+		Chainid:       chainid, //need a chain id of where you are going...  chainid + 1
+		Param1:        0,
+		Param2:        0,
+		Data:          data, //need to make the data what it should be for atk
 	}
 
 	return nil, nil

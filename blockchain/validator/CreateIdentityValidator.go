@@ -7,17 +7,16 @@ import (
 	//"crypto/sha256"
 	"fmt"
 	//"github.com/AccumulateNetwork/SMT/managed"
-	acctypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	acctypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
 
-type CreateIdentityValidator struct{
+type CreateIdentityValidator struct {
 	ValidatorContext
 
-    EV *EntryValidator
-
+	EV *EntryValidator
 }
 
 //transactions are just accounts with balances on a given token chain
@@ -46,11 +45,10 @@ func NewCreateIdentityValidator() *CreateIdentityValidator {
 	//the id will be 0x0000000f
 	chainid := "000000000000000000000000000000000000000000000000000000000000001D" //does this make sense anymore?
 	v.EV = NewEntryValidator()
-	v.SetInfo(chainid,"create-identity", pb.AccInstruction_Identity_Creation)
+	v.SetInfo(chainid, "create-identity", pb.AccInstruction_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
-
 
 func (v *CreateIdentityValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
@@ -68,7 +66,7 @@ func (v *CreateIdentityValidator) BeginBlock(height int64, time *time.Time) erro
 	return nil
 }
 
-func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (resp *ResponseValidateTX,err error) {
+func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("Current State Not Defined")
@@ -82,11 +80,9 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 	}
 
 	resp = &ResponseValidateTX{}
-    //so. also need to return the identity chain and chain id these belong to....  Really need the factom entry format updated.
+	//so. also need to return the identity chain and chain id these belong to....  Really need the factom entry format updated.
 	resp.StateData = data //make([][]byte,1)
 	//resp.StateData[0] = data
-
-
 
 	return resp, nil
 	//this builds the entry if valid
@@ -102,7 +98,6 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 	//	//need to validate this: res.Submissions[i].Data()
 	//}
 
-
 	e := acctypes.Entry{}
 
 	e.UnmarshalBinary(data[0:p1])
@@ -111,13 +106,12 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 	//rules: ExtID[0] = Identity Name
 	//the Sha256(ExtID[0]) should == ChainID
 	//if
-    if ( len(e.ExtIDs[0]) != 0 ) {
-    	return nil, fmt.Errorf("Invalid format: Expecting Identity Name in ExtID[0]")
+	if len(e.ExtIDs[0]) != 0 {
+		return nil, fmt.Errorf("Invalid format: Expecting Identity Name in ExtID[0]")
 	}
 
-
 	//identitychain = managed.Hash( sha256.Sum256(e.ExtIDs[0]) )
-	if bytes.Compare(identitychain, e.ChainID.Bytes() ) != 0 {
+	if bytes.Compare(identitychain, e.ChainID.Bytes()) != 0 {
 		return nil, fmt.Errorf("Invalid Entry: Identity name does not match ChainID")
 	}
 	//self validation...
@@ -127,13 +121,11 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 		return nil, fmt.Errorf("Execting Version 1 ")
 	}
 
-
-
 	return nil, nil
 	//return &pb.Submission{}, nil
 }
 
-func (v *CreateIdentityValidator) EndBlock(mdroot []byte) error  {
+func (v *CreateIdentityValidator) EndBlock(mdroot []byte) error {
 	//copy(v.mdroot[:], mdroot[:])
 	//don't think this serves a purpose???
 	return nil
