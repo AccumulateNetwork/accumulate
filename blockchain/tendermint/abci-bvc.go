@@ -45,7 +45,6 @@ import (
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	pb "github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
-	vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"sync"
 	//"time"
@@ -517,7 +516,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	return ret
 }
 
-func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*vtypes.StateObject, error) {
+func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*state.StateObject, error) {
 	var ret *state.StateObject
 	var key managed.Hash
 	key.Extract(chainid)
@@ -542,8 +541,11 @@ func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte)
 	var mms *MerkleManagerState
 
 	hash := sha256.Sum256(entry)
-	key := managed.Hash{}
-	key.Extract(chainid)
+	var key managed.Hash
+	copy(key[:], chainid)
+	//note: keys will be added to the map, but a map won't store them in order added.
+	//this is ok since the chains are independent of one another.  The BPT will look
+	//the same no matter what order the chains are added for a particular block.
 	if mms = app.mms[key]; mms == nil {
 		mms = new(MerkleManagerState)
 		mms.merklemgr = managed.NewMerkleManager(&app.mmdb, chainid, 8)
@@ -586,7 +588,10 @@ func (app *AccumulatorVMApplication) writeStates() []byte {
 			//need to log failure
 			continue
 		}
+		//store the current state for the chain
 		app.mmdb.Put("StateEntries", "", chainid.Bytes(), datatostore)
+
+		//iterate over the state objects updated as part of the state change and push the data for debugging
 		for i := range v.stateobjects {
 			data, err := v.stateobjects[i].Marshal()
 			if err != nil {
@@ -595,12 +600,11 @@ func (app *AccumulatorVMApplication) writeStates() []byte {
 				continue
 			}
 
-			//app.mmdb.Put("StateEntries", "", chainid.Bytes(), datatostore)
 			///TBD : this is not needed since we are maintaining only current state and not all states
 			//just keeping for debug history.
 			app.mmdb.Put("Entries-Debug", "", v.stateobjects[i].StateHash, data)
 		}
-		//delete it...
+		//delete it from our list.
 		delete(app.mms, chainid)
 	}
 	app.bpt.Bpt.Update()
@@ -634,7 +638,7 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 
 			//txid stack
 			chash := valacctypes.Hash(hash)
-			commit, _ /*txid*/ := vtypes.GenerateCommit(vdata.Submissions[i].Data, &chash, false)
+			commit, _ /*txid*/ := state.GenerateCommit(vdata.Submissions[i].Data, &chash, false)
 
 			//need to track txid to make sure they get processed....
 			if app.amLeader {
@@ -643,7 +647,7 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 				var sk valacctypes.PrivateKey
 				copy(sk[:], app.Key.PrivKey.Bytes())
 
-				err := vtypes.SignCommit(sk, commit)
+				err := state.SignCommit(sk, commit)
 
 				//now we need to make a new submission that has the segwit commit block added.
 				//revisit this...  probably need to
