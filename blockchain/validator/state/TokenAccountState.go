@@ -1,4 +1,4 @@
-package types
+package state
 
 import (
 	"fmt"
@@ -15,8 +15,8 @@ type TokenAccountState struct {
 
 func NewTokenAccountState(issuerid []byte, issuerchain []byte) *TokenAccountState {
 	tas := TokenAccountState{}
-	copy(tas.issueridentity[:],issuerid)
-	copy(tas.issuerchainid[:],issuerchain)
+	copy(tas.issueridentity[:], issuerid)
+	copy(tas.issuerchainid[:], issuerchain)
 	return &tas
 }
 
@@ -38,7 +38,6 @@ type TokenRules struct {
 }
 
 const TokenAccountStateLen = 32 + 32 + 32
-
 
 func (ts *TokenAccountState) GetIssuerIdentity() *managed.Hash {
 	return &ts.issueridentity

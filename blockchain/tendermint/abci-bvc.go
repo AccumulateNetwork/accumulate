@@ -2,6 +2,8 @@ package tendermint
 
 import (
 	"context"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
+
 	//"crypto/ed25519"
 	"crypto/sha256"
 	"github.com/AccumulateNetwork/SMT/pmt"
@@ -99,8 +101,8 @@ func prefixKey(key []byte) []byte {
 
 type MerkleManagerState struct {
 	merklemgr          *managed.MerkleManager
-	currentstateobject vtypes.StateObject
-	stateobjects       []vtypes.StateObject //all the state objects for this height, if we don't care about history this can go byebye...
+	currentstateobject state.StateObject
+	stateobjects       []state.StateObject //all the state objects for this height, if we don't care about history this can go byebye...
 }
 
 type AccumulatorVMApplication struct {
@@ -516,7 +518,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 }
 
 func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*vtypes.StateObject, error) {
-	var ret *vtypes.StateObject
+	var ret *state.StateObject
 	var key managed.Hash
 	key.Extract(chainid)
 	if mms := app.mms[key]; mms != nil {
@@ -525,7 +527,7 @@ func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*vtypes.St
 		//pull current state from the database.
 		data := app.mmdb.Get("StateEntries", "", chainid)
 		if data != nil {
-			ret = &vtypes.StateObject{}
+			ret = &state.StateObject{}
 			err := ret.Unmarshal(data)
 			if err != nil {
 				return nil, fmt.Errorf("No Current State is Defined")
@@ -549,7 +551,7 @@ func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte)
 	}
 	data := app.mmdb.Get("StateEntries", "", chainid)
 	if data != nil {
-		currso := vtypes.StateObject{}
+		currso := state.StateObject{}
 		mms.currentstateobject.PrevStateHash = currso.PrevStateHash
 	}
 	mms.merklemgr.AddHash(hash)
@@ -593,7 +595,7 @@ func (app *AccumulatorVMApplication) writeStates() []byte {
 				continue
 			}
 
-			app.mmdb.Put("StateEntries", "", chainid.Bytes(), datatostore)
+			//app.mmdb.Put("StateEntries", "", chainid.Bytes(), datatostore)
 			///TBD : this is not needed since we are maintaining only current state and not all states
 			//just keeping for debug history.
 			app.mmdb.Put("Entries-Debug", "", v.stateobjects[i].StateHash, data)
