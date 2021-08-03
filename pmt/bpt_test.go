@@ -111,23 +111,26 @@ func unMarshalThem(bpt *BPT, entry Entry, data []byte) (cnt int, d []byte) {
 func TestBPT_MarshalAllByteBlocks(t *testing.T) {
 	var cnt int
 	bpt := LoadBpt()
+	bpt.Update()
 	data := bpt.Marshal()
 	bpt2 := new(BPT)
 	bpt2.Root = new(Node)
 	if nd := bpt2.UnMarshal(data); len(nd) != 0 {
 		t.Fatal("nd should be zero")
 	}
+	bpt2.Update()
 	data2 := bpt2.Marshal()
 	if !bytes.Equal(data, data2) {
 		t.Error("data should be equal")
 	}
-	cnt, data = MarshalThem(bpt, bpt.Root, []byte{})
-	fmt.Println("len(data) = ", len(data), " nodes ", cnt, " avg ", len(data)/cnt)
+	data3 := bpt.Marshal()
+	cnt, data3 = MarshalThem(bpt, bpt.Root, data3)
+	fmt.Println("len(data) = ", len(data3), " nodes ", cnt, " avg ", len(data3)/cnt)
 
 	bpt3 := new(BPT)
 	bpt3.Root = new(Node)
-	data = bpt3.UnMarshal(data)
-	cnt, data = unMarshalThem(bpt, bpt3.Root, data)
+	data = bpt3.UnMarshal(data3)
+	cnt, data = unMarshalThem(bpt3, bpt3.Root, data)
 	fmt.Println("len(data) = ", len(data), " nodes ", cnt, " avg ", len(data)/cnt)
 }
 

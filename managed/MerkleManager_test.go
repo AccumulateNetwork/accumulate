@@ -155,12 +155,12 @@ func TestMerkleManager(t *testing.T) {
 }
 
 func TestBlockIndexes(t *testing.T) {
-	const testLen = 10240 //                                         Our iterations
+	const testLen = 50 //                                         Our iterations
 
-	dbManager := new(database.Manager)                   //          Allocate a memory database
-	if err := dbManager.Init("memory", ""); err != nil { //
-		t.Fatal(err) //
-	} //
+	dbManager, err := database.NewDBManager("memory", "") //         Allocate a memory database
+	if err != nil {
+		t.Fatal("no database")
+	}
 	chainID := sha256.Sum256([]byte("one"))          //              Create a MerkleManager with a particular salt
 	MM := NewMerkleManager(dbManager, chainID[:], 4) //
 
@@ -176,6 +176,8 @@ func TestBlockIndexes(t *testing.T) {
 				blkCnt++ //                                            skipping
 			} //
 		} //
+		mdroot := MM.MainChain.MS.GetMDRoot()
+		fmt.Printf("%5d %x\n", i, *mdroot)
 		if rand.Intn(10) == 0 { //                                              1 out of 10 times, add a pending entry
 			v = rand.Int63()                                                //  Make the entry (use v to see)
 			MM.AddPendingHash(sha256.Sum256([]byte(fmt.Sprintf(" %d", v)))) //  Add the Hash
