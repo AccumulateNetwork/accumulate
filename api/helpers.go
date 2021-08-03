@@ -306,9 +306,15 @@ func GetAddressFromIdentityChain(identitychain []byte) uint64 {
 }
 
 func GetAddressFromIdentityName(name string) uint64 {
-	addr := GetAddressFromIdentityChain(GetIdentityChainFromAdi(name).Bytes())
-	return addr
+	b := sha256.Sum256([]byte(strings.ToLower(name)))
+	return GetAddressFromIdentityChain(b[:])
 }
+
+//
+//func GetAddressFromIdentityName(name string) uint64 {
+//	addr := GetAddressFromIdentityChain(GetIdentityChainFromAdi(name).Bytes())
+//	return addr
+//}
 
 func ComputeEntryHashV2(header []byte, data []byte) (*managed.Hash, *managed.Hash, *managed.Hash) {
 	hh := managed.Hash(sha256.Sum256(header))
