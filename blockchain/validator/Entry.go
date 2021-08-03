@@ -4,46 +4,42 @@ import (
 	"bytes"
 	"fmt"
 	pb "github.com/AccumulateNetwork/accumulated/api/proto"
-	vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
 
-type EntryValidator struct{
+type EntryValidator struct {
 	ValidatorContext
 
 	mdroot [32]byte
-
 }
-
-
 
 //transactions are just accounts with balances on a given token chain
 //what transaction types should be supported?
 type EntryBlock struct {
-	chainadi string //token chain
-	txid [32]byte //transaction id -- sha256[chainadi | txid] defines the scratch chain for the transaction
-	intputddii string //ddii includes account?
+	chainadi    string   //token chain
+	txid        [32]byte //transaction id -- sha256[chainadi | txid] defines the scratch chain for the transaction
+	intputddii  string   //ddii includes account?
 	inputamount int64
 
 	numsignaturesrequired int
-	signature [64]byte  //array?
-
+	signature             [64]byte //array?
 
 	//assume fees are paid it ATK
 	fee int32 //fees in Atoshies
 
-	outputddii string
-    outputaccount string //?
-    outputamount int64
+	outputddii    string
+	outputaccount string //?
+	outputamount  int64
 }
 
-func (tx *EntryValidator) MarshalBinary() ([]byte, error){
+func (tx *EntryValidator) MarshalBinary() ([]byte, error) {
 	return nil, nil
 }
 
-func (tx *EntryValidator) UnmarshalBinary(data []byte) error{
+func (tx *EntryValidator) UnmarshalBinary(data []byte) error {
 
 	return nil
 }
@@ -55,11 +51,10 @@ func NewEntryValidator() *EntryValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "0000000000000000000000000000000000000000000000000000000000000005"
-	v.SetInfo(chainid,"entry", pb.AccInstruction_Data_Entry)
+	v.SetInfo(chainid, "entry", pb.AccInstruction_Data_Entry)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
-
 
 func (v *EntryValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
@@ -67,7 +62,6 @@ func (v *EntryValidator) Check(currentstate *StateEntry, identitychain []byte, c
 func (v *EntryValidator) Initialize(config *cfg.Config) error {
 	return nil
 }
-
 
 func (v *EntryValidator) BeginBlock(height int64, time *time.Time) error {
 
@@ -79,9 +73,7 @@ func (v *EntryValidator) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-
-
-func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX,error) {
+func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 	datalen := uint64(len(data))
 
 	//safety check to make sure the P1 is valid
@@ -118,18 +110,17 @@ func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte
 
 	//second make sure entry hash matches segwit entry hash
 	entryhash := vtypes.ComputeEntryHash(data[:p1])
-	if !bytes.Equal(ecr.Segwit.Entryhash.Bytes(), entryhash[:] ) {
+	if !bytes.Equal(ecr.Segwit.Entryhash.Bytes(), entryhash[:]) {
 		return nil, fmt.Errorf("Entry Hash does not match commit hash")
 	}
-
 
 	identityentry := vtypes.IdentityState{}
 	identityentry.UnmarshalBinary(currentstate.IdentityState.Entry)
 
 	//third check if segwit has a valid signature
 	if currentstate != nil {
-		_, key :=  identityentry.GetKeyData()
-		copy(ecr.Segwit.Signature.PublicKey,key)
+		_, key := identityentry.GetKeyData()
+		copy(ecr.Segwit.Signature.PublicKey, key)
 	}
 
 	if !ecr.Segwit.Valid() {
@@ -149,22 +140,22 @@ func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte
 	nextchaintype := GetTypeIdFromName("entry-store")
 
 	if ischaincommit {
-		resp.Submissions = make([]pb.Submission,2)
+		resp.Submissions = make([]pb.Submission, 2)
 		resp.Submissions[index].Identitychain = identitychain
 		resp.Submissions[index].Chainid = chainid //is this the parent chain ?
 		resp.Submissions[index].Type = nextchaintype
 		resp.Submissions[index].Instruction = pb.AccInstruction_Data_Chain_Creation
-		resp.Submissions[index].Data = make([]byte,32)
+		resp.Submissions[index].Data = make([]byte, 32)
 		copy(resp.Submissions[index].Data, ecr.Entry.ChainID[:])
 		index++
 	} else {
-		resp.Submissions = make([]pb.Submission,1)
+		resp.Submissions = make([]pb.Submission, 1)
 	}
 	//so for data store, should an entry block be created
-    //so even if this is a chain commit, do we actually need to know
-	resp.Submissions[index].Identitychain = identitychain //route to the data store on this network
-	resp.Submissions[index].Chainid = chainid //store the data under this chain
-	resp.Submissions[index].Type = GetTypeIdFromName("entry-store")  //not sure if we really need this...
+	//so even if this is a chain commit, do we actually need to know
+	resp.Submissions[index].Identitychain = identitychain              //route to the data store on this network
+	resp.Submissions[index].Chainid = chainid                          //store the data under this chain
+	resp.Submissions[index].Type = GetTypeIdFromName("entry-store")    //not sure if we really need this...
 	resp.Submissions[index].Instruction = pb.AccInstruction_Data_Store //this will authorize the storage of the data
 	resp.Submissions[index].Data = data[0:p1]
 	//should this be returns or just be locked into a shard
@@ -172,7 +163,7 @@ func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte
 	//return &pb.Submission{}, nil
 }
 
-func (v *EntryValidator) EndBlock(mdroot []byte) error  {
+func (v *EntryValidator) EndBlock(mdroot []byte) error {
 	copy(v.mdroot[:], mdroot[:])
 	//don't think this serves a purpose???
 	return nil

@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
-	acctypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
 
 	//"encoding/binary"
 	"github.com/AccumulateNetwork/SMT/managed"
@@ -42,13 +42,13 @@ const (
 //}
 
 type StateEntry struct {
-	IdentityState *acctypes.StateObject
-	ChainState    *acctypes.StateObject
+	IdentityState *state.StateObject
+	ChainState    *state.StateObject
 	//database to query other stuff if needed???
 	DB *smtdb.Manager
 }
 
-func NewStateEntry(idstate *acctypes.StateObject, chainstate *acctypes.StateObject, db *smtdb.Manager) (*StateEntry, error) {
+func NewStateEntry(idstate *state.StateObject, chainstate *state.StateObject, db *smtdb.Manager) (*StateEntry, error) {
 	se := StateEntry{}
 	se.IdentityState = idstate
 
@@ -99,6 +99,7 @@ type ValidatorInterface interface {
 	GetCurrentHeight() int64
 	GetCurrentTime() *time.Time
 	GetCurrentChainId() *string
+	AddStateDB(networkid int)
 }
 
 type ValidatorInfo struct {

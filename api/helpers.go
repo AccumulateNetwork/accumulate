@@ -6,8 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/accumulated/api/proto"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"net/url"
@@ -20,11 +20,11 @@ import (
 func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins proto.AccInstruction) *proto.Submission {
 	sub := proto.Submission{}
 
-	sub.Identitychain = types.GetIdentityChainFromAdi(identityname).Bytes()
+	sub.Identitychain = GetIdentityChainFromAdi(identityname).Bytes()
 	if chainpath == "" {
 		chainpath = identityname
 	}
-	sub.Chainid = types.GetIdentityChainFromAdi(chainpath).Bytes()
+	sub.Chainid = GetIdentityChainFromAdi(chainpath).Bytes()
 	sub.Type = 0 //this is going away it is not needed since we'll know the type from transaction
 	sub.Instruction = ins
 	return &sub
@@ -86,7 +86,6 @@ var InstructionTypeMap = map[string]proto.AccInstruction{
 	"q":                    proto.AccInstruction_Light_Query,
 }
 
-
 type Subparams struct {
 	IdentityChainpath string `json:"identity-chainpath"`
 	Payload           []byte `json:"payload"`
@@ -130,7 +129,7 @@ func CreateKeyPair() ed25519.PrivKey {
 	return ed25519.GenPrivKey()
 }
 
-func ParseIdentityChainPath(s string) (identity string, chainpath string,err error) {
+func ParseIdentityChainPath(s string) (identity string, chainpath string, err error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return "", "", err
@@ -254,7 +253,6 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 	return sub, nil
 }
 
-
 //This will create a submission message that for a token transaction.  Assume only 1 input and many outputs.
 func CreateTokenTransaction(inputidentityname *string,
 	intputchainname *string, inputamt *big.Int, outputs *map[string]*big.Int, metadata *string,
@@ -293,4 +291,28 @@ func CreateTokenTransaction(inputidentityname *string,
 	sub := MakeBVCSubmission("tx", *inputidentityname, *intputchainname, txdata, time.Now().Unix(), sig, signer.PubKey().(ed25519.PubKey))
 
 	return sub, nil
+}
+
+func GetIdentityChainFromAdi(adi string) *managed.Hash {
+	namelower := strings.ToLower(adi)
+	h := managed.Hash(sha256.Sum256([]byte(namelower)))
+
+	return &h
+}
+
+func GetAddressFromIdentityChain(identitychain []byte) uint64 {
+	addr := binary.LittleEndian.Uint64(identitychain)
+	return addr
+}
+
+func GetAddressFromIdentityName(name string) uint64 {
+	addr := GetAddressFromIdentityChain(GetIdentityChainFromAdi(name).Bytes())
+	return addr
+}
+
+func ComputeEntryHashV2(header []byte, data []byte) (*managed.Hash, *managed.Hash, *managed.Hash) {
+	hh := managed.Hash(sha256.Sum256(header))
+	dh := managed.Hash(sha256.Sum256(data))
+	mr := managed.Hash(sha256.Sum256(append(hh.Bytes(), dh.Bytes()...)))
+	return &hh, &dh, &mr
 }
