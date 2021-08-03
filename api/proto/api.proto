@@ -85,22 +85,23 @@ message Fee
 
 enum AccInstruction {
   Unknown = 0;
-  Identity_Creation = 1;
-  Token_URL_Creation = 2;
-  Token_Transaction = 3;
-  Data_Chain_Creation = 4;
-  Data_Entry = 5; //per 250 bytes
-  Scratch_Chain_Creation = 6;
-  Scratch_Entry = 7; //per 250 bytes
-  Token_Issue = 8;
-  Key_Update = 9; //update keys on the keychain the identity
-  Deep_Query = 10; //implements a transaction on the network that is processed by validators these cost $$, but can provide cryptographic proof for validity at current state
-  Light_Query = 11; //sends a query to a node and info is returned.
+  Identity_Creation = 0x01;
+  Token_URL_Creation = 0x02;
+  Token_Transaction = 0x03;
+  Data_Chain_Creation = 0x04;
+  Data_Entry = 0x05; //per 256 btes
+  Scratch_Chain_Creation = 0x06;
+  Scratch_Entry = 0x07; //per 256 bytes
+  Token_Issue = 0x08;
+  Key_Update = 0x09; //update keys on the keychain the identity
+  Deep_Query = 0x0A; //implements a transaction on the network that is processed by validators these cost $$, but can provide cryptographic proof for validity at current state
+  Light_Query = 0x0B; //sends a query to a node and info is returned.
   //Only valid for BVC use: any other source of this message will be rejected
   //is this data store or State_Store
-  Data_Store = 12; //Data Store can only be sent and thus authorized by an authority node
-  State_Store = 13;
-  Admin_Vote = 14;
+  Data_Store = 0x0C; //Data Store can only be sent and thus authorized by an authority node
+  State_Store = 0x0D;
+  Admin_Vote = 0x0E;
+  Synthetic_Token_Transaction = 0x13;
   //      Entry_Commit = 1; //
   //      Entry_Reveal = 2; // raw data
   //      Chain_Commit = 3;
@@ -116,8 +117,8 @@ message Submission
   bytes  chainid = 3; // chainid of the entry somewhere underneath identity chain
   uint64 type = 2; // type id of validator needed to process the --> we might be able to do away with this. since chain id will determine chain validation rules in shadow chain.
   AccInstruction instruction = 4; // validator specific,
-  uint64 param1 = 5; // validator specific
-  uint64 param2 = 6; // validator specific
+  uint64 param1 = 5; // validator specific, deprecated
+  uint64 param2 = 6; // validator specific, deprecated
   bytes  data = 7; // validator will validate this data however it sees fit. may include signature
   int64  timestamp = 8;
   bytes  key = 9;
