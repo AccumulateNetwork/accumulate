@@ -41,7 +41,7 @@ func PrintNode(h int, e Entry) {
 
 func TestManager(t *testing.T) {
 
-	d := 10000
+	d := 100000
 
 	dbManager, err := database.NewDBManager("memory", "")
 	if err != nil {
