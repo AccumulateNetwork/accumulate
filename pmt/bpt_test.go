@@ -433,3 +433,45 @@ func TestBPTByteSizes(t *testing.T) {
 		maxcnt += maxcnt
 	}
 }
+
+func LoadBptCnt1(seed int64, NodeCnt int64, freq int64) *BPT {
+
+	rnd := rand.New(rand.NewSource(seed)) //                            Using our own instance of rand makes us concurrency safe
+	bpt := NewBPT()                       //                            Allocate a new bpt
+
+	rnd.Seed(seed)               //                                     seed our rand structure
+	b := rnd.Int63()             //                                     Create an 8 byte random key seed
+	key := sha256.Sum256([]byte{ //                                     Take the sha256 of the byte sequence
+		byte(b), byte(b >> 8), byte(b >> 16), byte(b >> 24), //
+		byte(b >> 32), byte(b >> 40), byte(b >> 48), byte(b >> 56)}) //
+
+	b = rnd.Int63()               //                                    Create an 8 byte random hash seed
+	hash := sha256.Sum256([]byte{ //                                    Take the sha256 of the byte sequence
+		byte(b), byte(b >> 8), byte(b >> 16), byte(b >> 24), //
+		byte(b >> 32), byte(b >> 40), byte(b >> 48), byte(b >> 56)}) //
+	for i := int64(0); i < NodeCnt; i++ { //                            Now for the specified NodeCnt,
+		if i%freq == 0 {
+			bpt.Update()
+		}
+		bpt.Insert(key, hash)         //                                Insert our current key and hash
+		key = sha256.Sum256(key[:])   //                                Then roll them forward by hashing the
+		hash = sha256.Sum256(hash[:]) //                                current key and hash value
+	} //
+	return bpt //                                                       When all done, return the *BPT
+}
+
+// 1,000,000 @ 12.627227555 every 10,000
+// 1,000,000 @ 18.701121638 every 1
+
+// 10,000,000 @ 226.023,584,148 every 1
+// 10,000,000 @ 161.706,478,227 every 10000
+func BenchmarkBPT_Update1(b *testing.B) {
+	bpt := LoadBptCnt1(1, 10000000, 1)
+	bpt.Update()
+	b.StopTimer()
+}
+
+func BenchmarkBPT_Update2(b *testing.B) {
+	bpt := LoadBptCnt1(1, 10000000, 10000)
+	bpt.Update()
+}
