@@ -1,7 +1,7 @@
 package validator
 
 import (
-	pb "github.com/AccumulateNetwork/accumulated/api/proto"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
 	"time"
