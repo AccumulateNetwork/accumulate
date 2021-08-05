@@ -2,7 +2,7 @@ package tendermint
 
 import (
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
-	"github.com/AccumulateNetwork/accumulated/scratch/example/code"
+	"github.com/tendermint/tendermint/abci/example/code"
 	dbm "github.com/tendermint/tm-db"
 
 	//"github.com/Workiva/go-datastructures/threadsafe/err"
@@ -23,7 +23,7 @@ import (
 
 	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
-	pb "github.com/AccumulateNetwork/accumulated/api/proto"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
 	ed25519 "golang.org/x/crypto/ed25519"
 
