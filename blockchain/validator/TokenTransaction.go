@@ -5,10 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/api"
-	pb "github.com/AccumulateNetwork/accumulated/api/proto"
-	//"github.com/AccumulateNetwork/accumulated/apps/acc"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
 	"math/big"
 	"time"
@@ -30,14 +28,14 @@ type TokenTransactionValidator struct {
 
 /*
 {
-   "inputs:": {
-      "RedWagon": 100,
-      "BlueWagon": 50
-   },
+"identity-chain-path" : "RedWagon/MyAccTokens",
+"payload" : {
+   "send:": 150,
    "outputs:": {
-      "GreenRock": 150
+      "GreenRock/Acc": 150
    },
    "metadata": {"memo": "thanks for dinner!"}
+},
 }
 */
 
@@ -57,20 +55,129 @@ func (tx *TokenTransaction) UnmarshalBinary(data []byte) error {
 
 func NewTokenTransactionValidator() *TokenTransactionValidator {
 	v := TokenTransactionValidator{}
-	//need the chainid, then hash to get first 8 bytes to make the chainid.
-	//by definition a chainid of a factoid block is
-	//000000000000000000000000000000000000000000000000000000000000000f
-	//the id will be 0x0000000f
+
+	//deprecate chainid in this context.. has no meaning.
 	chainid := "0000000000000000000000000000000000000000000000000000000000000A75"
+
 	v.SetInfo(chainid, "token-transaction", pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
+}
+
+func (v *TokenTransactionValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.IdentityState, *state.TokenAccountState, error) {
+	//extract the identity state i.e. get the current keys... todo: does signature checking go here or can it be done before here?
+	//
+
+	ids := state.IdentityState{}
+	err := ids.UnmarshalBinary(currentstate.IdentityState.Entry)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	tas := state.TokenAccountState{}
+	err = tas.UnmarshalBinary(currentstate.ChainState.Entry)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	//{"inputs":{"RedWagon/MyAtkTokens":10000},"outputs":{"GreenRock/YourAtkTokens":10000}}
+	//need to formalize this in an object.
+	type AccTransaction struct {
+		Input    map[string]*big.Int  `json:"inputs"`
+		Output   *map[string]*big.Int `json:"outputs"`
+		Metadata json.RawMessage      `json:"metadata,omitempty"`
+	}
+
+	var tx AccTransaction
+	err = json.Unmarshal(data, &tx)
+
+	if err != nil {
+		return nil, nil, err
+	}
+	//now check to see if we can transact
+	//really only need to provide one input...
+	cantransact := false
+	for k, v := range tx.Input {
+		if v == nil {
+			return nil, nil, fmt.Errorf("Invalid amount")
+		}
+
+		identity, chainpath, err := api.ParseIdentityChainPath(k)
+		if err != nil {
+			return nil, nil, fmt.Errorf("Malformed Token Transaction: Invalid identity/chainpath %s", k)
+		}
+
+		if identity != ids.GetAdi() {
+			//we can only transact on the input for this transaction
+			continue
+			//return fmt.Errorf("Invalid identity does not match state object, have %s expected %s", identity, ids.GetAdi())
+		}
+		chainhash := sha256.Sum256([]byte(chainpath))
+		if bytes.Compare(chainhash[:], chainid) != 0 {
+			return nil, nil, fmt.Errorf("Invalid token chain")
+		}
+
+		if tas.Balance().Cmp(v) < 0 {
+			///insufficient balance
+			return nil, nil, fmt.Errorf("Insufficient balance")
+		}
+
+		//need to check entry credit availability
+
+		cantransact = true
+	}
+
+	if !cantransact {
+		return nil, nil, fmt.Errorf("Unknown error, cannot perform transaction")
+	}
+
+	////if we get here we are good to proceed.
+	////we didn't check if the receiver able to receive that type of token?
+	////should we do a pre-fetch query on the receiver's state object?
+	//for k, o := range *tx.Output {
+	//	//k dest addr
+	//	identity, chainpath, err := api.ParseIdentityChainPath(k)
+	//	if err != nil {
+	//		return fmt.Errorf("Invalid output destination")
+	//	}
+	//	idchain := api.GetIdentityChainFromIdentity(identity)
+	//	addr := api.GetAddressFromIdentityChain(idchain[:])
+	//
+	//	//networkid := addr % uint64(1) //acc.MaxNetworks) //where is maxnetworks set?
+	//	//
+	//	//db := v.GetBVCDatabase(networkid)
+	//	//
+	//	//if db == nil {
+	//	//	return fmt.Errorf("Cannot find BVC database on network %d for identity %s", networkid, identity)
+	//	//}
+	//	//
+	//	////so we have a valid database look up token chain
+	//	//desttokenchainid := sha256.Sum256([]byte(chainpath))
+	//	//so, err := db.GetStateObject(desttokenchainid)
+	//	//if err != nil {
+	//	//	return fmt.Errorf("Destination Token Chain does not exist %s", chainpath)
+	//	//}
+	//	//
+	//	//desttokenaccount := state.TokenAccountState{}
+	//	//err = desttokenaccount.UnmarshalBinary(so.Entry)
+	//	//
+	//	//if err != nil {
+	//	//	return err
+	//	//}
+	//	////all i care about is if the source matches the dest.
+	//	//if bytes.Compare(desttokenaccount.GetIssuerChainId()[:], tas.GetIssuerChainId()[:]) != 0 {
+	//	//	return fmt.Errorf("Token chain is of a different type.")
+	//	//}
+	//	//
+	//}
+	return &ids, &tas, nil
 }
 
 func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 
 	//extract the identity state i.e. get the current keys... todo: does signature checking go here or can it be done before here?
 	//
+
 	ids := state.IdentityState{}
 	err := ids.UnmarshalBinary(currentstate.IdentityState.Entry)
 	if err != nil {
@@ -133,45 +240,45 @@ func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychai
 		return fmt.Errorf("Unknown error, cannot perform transaction")
 	}
 
-	//if we get here we are good to proceed.
-	//we didn't check if the receiver able to receive that type of token?
-	//should we do a pre-fetch query on the receiver's state object?
-	for k, o := range *tx.Output {
-		//k dest addr
-		identity, chainpath, err := api.ParseIdentityChainPath(k)
-		if err != nil {
-			return fmt.Errorf("Invalid output destination")
-		}
-		idchain := api.GetIdentityChainFromAdi(identity)
-		addr := api.GetAddressFromIdentityChain(idchain[:])
-
-		networkid := addr % uint64(1) //acc.MaxNetworks) //where is maxnetworks set?
-
-		db := v.GetBVCDatabase(networkid)
-
-		if db == nil {
-			return fmt.Errorf("Cannot find BVC database on network %d for identity %s", networkid, identity)
-		}
-
-		//so we have a valid database look up token chain
-		desttokenchainid := sha256.Sum256([]byte(chainpath))
-		so, err := db.GetStateObject(desttokenchainid)
-		if err != nil {
-			return fmt.Errorf("Destination Token Chain does not exist %s", chainpath)
-		}
-
-		desttokenaccount := state.TokenAccountState{}
-		err = desttokenaccount.UnmarshalBinary(so.Entry)
-
-		if err != nil {
-			return err
-		}
-		//all i care about is if the source matches the dest.
-		if bytes.Compare(desttokenaccount.GetIssuerChainId()[:], tas.GetIssuerChainId()[:]) != 0 {
-			return fmt.Errorf("Token chain is of a different type.")
-		}
-
-	}
+	////if we get here we are good to proceed.
+	////we didn't check if the receiver able to receive that type of token?
+	////should we do a pre-fetch query on the receiver's state object?
+	//for k, o := range *tx.Output {
+	//	//k dest addr
+	//	identity, chainpath, err := api.ParseIdentityChainPath(k)
+	//	if err != nil {
+	//		return fmt.Errorf("Invalid output destination")
+	//	}
+	//	idchain := api.GetIdentityChainFromIdentity(identity)
+	//	addr := api.GetAddressFromIdentityChain(idchain[:])
+	//
+	//	//networkid := addr % uint64(1) //acc.MaxNetworks) //where is maxnetworks set?
+	//	//
+	//	//db := v.GetBVCDatabase(networkid)
+	//	//
+	//	//if db == nil {
+	//	//	return fmt.Errorf("Cannot find BVC database on network %d for identity %s", networkid, identity)
+	//	//}
+	//	//
+	//	////so we have a valid database look up token chain
+	//	//desttokenchainid := sha256.Sum256([]byte(chainpath))
+	//	//so, err := db.GetStateObject(desttokenchainid)
+	//	//if err != nil {
+	//	//	return fmt.Errorf("Destination Token Chain does not exist %s", chainpath)
+	//	//}
+	//	//
+	//	//desttokenaccount := state.TokenAccountState{}
+	//	//err = desttokenaccount.UnmarshalBinary(so.Entry)
+	//	//
+	//	//if err != nil {
+	//	//	return err
+	//	//}
+	//	////all i care about is if the source matches the dest.
+	//	//if bytes.Compare(desttokenaccount.GetIssuerChainId()[:], tas.GetIssuerChainId()[:]) != 0 {
+	//	//	return fmt.Errorf("Token chain is of a different type.")
+	//	//}
+	//	//
+	//}
 	return nil
 }
 

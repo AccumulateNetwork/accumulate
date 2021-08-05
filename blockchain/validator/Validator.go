@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"strings"
 
 	//"encoding/binary"
@@ -13,7 +13,7 @@ import (
 	//"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	pb "github.com/AccumulateNetwork/accumulated/api/proto"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	cfg "github.com/tendermint/tendermint/config"
 	time "time"

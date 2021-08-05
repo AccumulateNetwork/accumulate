@@ -20,23 +20,6 @@ func NewTokenAccountState(issuerid []byte, issuerchain []byte) *TokenAccountStat
 	return &tas
 }
 
-//
-//{
-//"type": "ACC-0",
-//"supply": 10000000,
-//"precision": 5,
-//"symbol": "EXT",
-//"metadata": {"custom-field": "example"}
-//}
-//this is part of the token chain
-type TokenRules struct {
-	tokentype string //ACC-0 aka FAT-0
-	supply    uint64
-	precision int8
-	symbol    string
-	metadata  string //don't need here
-}
-
 const TokenAccountStateLen = 32 + 32 + 32
 
 func (ts *TokenAccountState) GetIssuerIdentity() *managed.Hash {

@@ -10,6 +10,8 @@ import (
 type StateEntry interface {
 	MarshalBinary() ([]byte, error)
 	UnmarshalBinary(data []byte) error
+	MarshalJSON() (string, error)
+	UnmarshalJSON(s string) error
 }
 
 type StateObject struct {

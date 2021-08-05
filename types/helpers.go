@@ -1,4 +1,4 @@
-package api
+package types
 
 import (
 	"crypto/sha256"
@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/SMT/managed"
-	"github.com/AccumulateNetwork/accumulated/api/proto"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"net/url"
@@ -17,20 +17,21 @@ import (
 	"unicode/utf8"
 )
 
-//This will make
+//This will populate the identity chain, chainid, and instruction fields for a BVC submission
 func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins proto.AccInstruction) *proto.Submission {
 	sub := proto.Submission{}
 
-	sub.Identitychain = GetIdentityChainFromAdi(identityname).Bytes()
+	sub.Identitychain = GetIdentityChainFromIdentity(identityname).Bytes()
 	if chainpath == "" {
 		chainpath = identityname
 	}
-	sub.Chainid = GetIdentityChainFromAdi(chainpath).Bytes()
+	sub.Chainid = GetChainIdFromChainPath(chainpath).Bytes()
 	sub.Type = 0 //this is going away it is not needed since we'll know the type from transaction
 	sub.Instruction = ins
 	return &sub
 }
 
+//This will make the BVC submision protobuf transaction
 func MakeBVCSubmission(ins string, identityname string, chainpath string, payload []byte, timestamp int64, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
 	v := InstructionTypeMap[ins]
 	if v == 0 {
@@ -45,6 +46,7 @@ func MakeBVCSubmission(ins string, identityname string, chainpath string, payloa
 }
 
 //fullchainpath == identityname/chainpath
+//This function will generate a ledger needed for ed25519 signing or sha256 hashed to produce TXID
 func MarshalBinarySig(fullchainpath string, payload []byte, timestamp int64) []byte {
 	var msg []byte
 
@@ -52,8 +54,7 @@ func MarshalBinarySig(fullchainpath string, payload []byte, timestamp int64) []b
 	chainid := sha256.Sum256([]byte(fullchainpath))
 	msg = append(msg, chainid[:]...)
 
-	payloadhash := sha256.Sum256(payload)
-	msg = append(msg, payloadhash[:]...)
+	msg = append(msg, payload...)
 
 	var tsbytes [8]byte
 	binary.LittleEndian.PutUint64(tsbytes[:], uint64(timestamp))
@@ -64,30 +65,21 @@ func MarshalBinarySig(fullchainpath string, payload []byte, timestamp int64) []b
 
 var InstructionTypeMap = map[string]proto.AccInstruction{
 	"identity-create":      proto.AccInstruction_Identity_Creation,
-	"idc":                  proto.AccInstruction_Identity_Creation,
 	"token-url-create":     proto.AccInstruction_Token_URL_Creation,
-	"url":                  proto.AccInstruction_Token_URL_Creation,
 	"token-tx":             proto.AccInstruction_Token_Transaction,
-	"tx":                   proto.AccInstruction_Token_Transaction,
 	"data-chain-create":    proto.AccInstruction_Data_Chain_Creation,
-	"dcc":                  proto.AccInstruction_Data_Chain_Creation,
 	"data-entry":           proto.AccInstruction_Data_Entry,
-	"de":                   proto.AccInstruction_Data_Entry,
 	"scratch-chain-create": proto.AccInstruction_Scratch_Chain_Creation,
-	"scc":                  proto.AccInstruction_Scratch_Chain_Creation,
 	"scratch-entry":        proto.AccInstruction_Scratch_Entry,
-	"se":                   proto.AccInstruction_Scratch_Entry,
 	"token-issue":          proto.AccInstruction_Token_Issue,
-	"ti":                   proto.AccInstruction_Token_Issue,
 	"key-update":           proto.AccInstruction_Key_Update,
-	"ku":                   proto.AccInstruction_Key_Update,
 	"deep-query":           proto.AccInstruction_Deep_Query,
-	"dq":                   proto.AccInstruction_Deep_Query,
 	"query":                proto.AccInstruction_Light_Query,
-	"q":                    proto.AccInstruction_Light_Query,
 }
 
-type Subparams struct {
+//this is a generic structure for a bvc submission transaction that can be marshalled to and from json,
+//this is helpful for json rpc
+type Subtx struct {
 	IdentityChainpath string `json:"identity-chainpath"`
 	Payload           []byte `json:"payload"`
 	Timestamp         int64  `json:"timestamp"`
@@ -95,7 +87,7 @@ type Subparams struct {
 	Key               []byte `json:"key"`
 }
 
-func (p *Subparams) Set(chainpath string, sub *proto.Submission) {
+func (p *Subtx) Set(chainpath string, sub *proto.Submission) {
 	p.IdentityChainpath = chainpath
 	p.Payload = sub.Data
 	p.Timestamp = sub.Timestamp
@@ -103,7 +95,7 @@ func (p *Subparams) Set(chainpath string, sub *proto.Submission) {
 	p.Key = sub.Key
 }
 
-func (p *Subparams) MarshalJSON() ([]byte, error) {
+func (p *Subtx) MarshalJSON() ([]byte, error) {
 	var ret string
 	ret = fmt.Sprintf("{\"params\": [{\"identity-chainpath\":\"%s\"}",
 		p.IdentityChainpath)
@@ -126,10 +118,13 @@ func (p *Subparams) MarshalJSON() ([]byte, error) {
 	return []byte(ret), nil
 }
 
+//generic helper function to creaet a ed25519 key pair
 func CreateKeyPair() ed25519.PrivKey {
 	return ed25519.GenPrivKey()
 }
 
+//helpful parser to extract the identity name and chainpath
+//for example RedWagon/MyAccAddress becomes identity=redwagon and chainpath=redwagon/MyAccAddress
 func ParseIdentityChainPath(s string) (identity string, chainpath string, err error) {
 	u, err := url.Parse(s)
 	if err != nil {
@@ -151,6 +146,7 @@ func toJSON(m interface{}) (string, error) {
 	return strings.ReplaceAll(string(js), ",", ", "), nil
 }
 
+//helper function to take a acc url and generate a submission transaction.
 func URLParser(s string) (ret *proto.Submission, err error) {
 
 	if !utf8.ValidString(s) {
@@ -255,6 +251,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 }
 
 //This will create a submission message that for a token transaction.  Assume only 1 input and many outputs.
+//this shouldn't be here...
 func CreateTokenTransaction(inputidentityname *string,
 	intputchainname *string, inputamt *big.Int, outputs *map[string]*big.Int, metadata *string,
 	signer ed25519.PrivKey) (*proto.Submission, error) {
@@ -294,32 +291,36 @@ func CreateTokenTransaction(inputidentityname *string,
 	return sub, nil
 }
 
-func GetIdentityChainFromAdi(adi string) *managed.Hash {
-	namelower := strings.ToLower(adi)
-	h := managed.Hash(sha256.Sum256([]byte(namelower)))
+//this expects a identity chain path to produce the chainid.  RedWagon/Acc/Chain/Path
+func GetChainIdFromChainPath(identitychainpath string) *managed.Hash {
+	_, chainpathformatted, err := ParseIdentityChainPath(identitychainpath)
+	if err != nil {
+		return nil
+	}
 
+	h := managed.Hash(sha256.Sum256([]byte(chainpathformatted)))
 	return &h
 }
 
+//Helper function to generate a identity chain from adi. can return nil, if the adi is malformed
+func GetIdentityChainFromIdentity(adi string) *managed.Hash {
+	namelower, _, err := ParseIdentityChainPath(adi)
+	if err != nil {
+		return nil
+	}
+
+	h := managed.Hash(sha256.Sum256([]byte(namelower)))
+	return &h
+}
+
+//get the 8 bit address from the identity chain.  this is used for bvc routing
 func GetAddressFromIdentityChain(identitychain []byte) uint64 {
 	addr := binary.LittleEndian.Uint64(identitychain)
 	return addr
 }
 
-func GetAddressFromIdentityName(name string) uint64 {
-	b := sha256.Sum256([]byte(strings.ToLower(name)))
+//given a string, return the address used for bvc routing
+func GetAddressFromIdentity(name string) uint64 {
+	b := GetIdentityChainFromIdentity(name)
 	return GetAddressFromIdentityChain(b[:])
-}
-
-//
-//func GetAddressFromIdentityName(name string) uint64 {
-//	addr := GetAddressFromIdentityChain(GetIdentityChainFromAdi(name).Bytes())
-//	return addr
-//}
-
-func ComputeEntryHashV2(header []byte, data []byte) (*managed.Hash, *managed.Hash, *managed.Hash) {
-	hh := managed.Hash(sha256.Sum256(header))
-	dh := managed.Hash(sha256.Sum256(data))
-	mr := managed.Hash(sha256.Sum256(append(hh.Bytes(), dh.Bytes()...)))
-	return &hh, &dh, &mr
 }
