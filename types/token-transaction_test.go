@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"math/big"
 	"testing"
 )
@@ -16,12 +17,13 @@ func TestTokenTransaction(t *testing.T) {
 	toamt = big.NewInt(2500)
 	tt.AddToAccount("RedRock/acc/sekret/subaccount", toamt)
 
-	data, err := tt.MarshalJSON()
+	data, err := json.Marshal(&tt)
 	if err != nil {
 		t.Fatalf("Error marshalling TokenTransaction %v", err)
 	}
 	tt2 := TokenTransaction{}
-	err = tt2.UnmarshalJSON(data)
+	err = json.Unmarshal(data, &tt2)
+	//err = tt2.UnmarshalJSON(data)
 
 	if err != nil {
 		t.Fatalf("Error unmarshalling TokenTransaction %v", err)
