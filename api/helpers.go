@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 )
 
+//This will make
 func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins proto.AccInstruction) *proto.Submission {
 	sub := proto.Submission{}
 
