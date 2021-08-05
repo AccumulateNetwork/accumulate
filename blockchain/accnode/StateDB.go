@@ -1,8 +1,9 @@
-package state
+package accnode
 
 import (
 	"fmt"
 	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
 //the state DB will only retrieve information out of the database.  To store stuff use PersistentStateDB instead
@@ -33,13 +34,13 @@ func (sdb *StateDB) GetDB() *smtdb.Manager {
 	return sdb.db
 }
 
-func (sdb *StateDB) GetStateObject(chainid []byte, verify bool) (ret *StateObject, err error) {
+func (sdb *StateDB) GetStateObject(chainid []byte, verify bool) (ret *state.StateObject, err error) {
 	if sdb.db == nil {
 		return nil, fmt.Errorf("Database has not been initialized")
 	}
 	data := sdb.db.Get("StateEntries", "", chainid)
 	if data != nil {
-		ret = &StateObject{}
+		ret = &state.StateObject{}
 		err = ret.Unmarshal(data)
 		if err != nil {
 			return nil, fmt.Errorf("No Current State is Defined")

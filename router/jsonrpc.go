@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/SMT/managed"
-	pb "github.com/AccumulateNetwork/accumulated/api/proto"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AdamSLevy/jsonrpc2/v14"
 	proto1 "github.com/golang/protobuf/proto"
 	abcicli "github.com/tendermint/tendermint/abci/client"
