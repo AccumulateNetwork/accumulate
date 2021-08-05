@@ -1,4 +1,4 @@
-package api
+package types
 
 import (
 	"crypto/sha256"
@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"testing"
 )
+
 //
 //func CreateIdentityTest(identityname *string, key ed25519.PubKey, sponsor ed25519.PrivKey) (*proto.Submission, error) {
 //	sub := proto.Submission{}
@@ -45,7 +46,6 @@ import (
 //
 //	return &sub, nil
 //}
-
 
 func TestTokenTransfer(t *testing.T) {
 	kp := CreateKeyPair()
@@ -180,7 +180,7 @@ func TestURL(t *testing.T) {
 
 	//create a URL without acc://
 
-	params := Subparams{}
+	params := Subtx{}
 
 	//Test identity name and chain path
 	//identity name should be RedWagon and chainpath should be RedWagon/acc
