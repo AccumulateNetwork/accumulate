@@ -39,28 +39,3 @@ func (t *TokenTransaction) SetMetadata(md *json.RawMessage) error {
 	copy(t.Metadata[:], (*md)[:])
 	return nil
 }
-
-func (t *TokenTransaction) MarshalJSON() ([]byte, error) {
-	if t.Output == nil {
-		return nil, fmt.Errorf("No outputs defined")
-	}
-
-	ret := fmt.Sprintf("{\"transfer\":%s, \"to-accounts\":{", t.TransferAmount.String())
-	first := true
-	for k, v := range t.Output {
-		if !first {
-			ret += ","
-		}
-		first = false
-		ret += fmt.Sprintf("\"%s\":%s", k, v.String())
-	}
-	ret += fmt.Sprintf("}}")
-
-	return []byte(ret), nil
-}
-
-func (t *TokenTransaction) UnmarshalJSON(data []byte) error {
-	t.Output = make(map[string]*big.Int)
-	err := json.Unmarshal(data, t)
-	return err
-}
