@@ -6,6 +6,7 @@ require (
 	github.com/AccumulateNetwork/SMT v0.0.22
 	github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 // indirect
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
+	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106 // indirect
 	github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d
 	github.com/AdamSLevy/jsonrpc2 v2.0.0+incompatible // indirect
 	github.com/AdamSLevy/jsonrpc2/v14 v14.0.0
