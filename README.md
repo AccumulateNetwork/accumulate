@@ -128,7 +128,7 @@ To summarize:
 * The Membership of Chains is proven using Stateful Merkle Trees. All 
   entries in a chain are members of one, growing, Merkle Tree.  At any point 
   in time, the membership of the Merkle Tree is provable by the Merkle State.
-* Binary Patricia Trees are used to prove the state of very chain in a Block 
+* Binary Patricia Trees are used to prove the state of every chain in a Block 
   Validator Node at a particular block height  
 
 A Merkle Tree takes a set of records, then hashes them in order to produce a
