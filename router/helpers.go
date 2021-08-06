@@ -1,16 +1,19 @@
 package router
 
 import (
+	"encoding/json"
 	"fmt"
+	"testing"
+
 	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"google.golang.org/grpc"
-	"testing"
 )
 
 func RandPort() int {
@@ -112,3 +115,34 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 	return client, routerserver, &lc, rpcc
 }
 
+// parseJSON parses json.RawMessage into map[string]json.RawMessage
+func parseAPIInstruction(data json.RawMessage) (string, jsonrpc2.Error) {
+
+	var objmap map[string]json.RawMessage
+	var instr string
+
+	err := json.Unmarshal(data, &objmap)
+	if err != nil {
+		return "", ErrorMissingInstruction
+	}
+
+	err = json.Unmarshal(objmap["instruction"], &instr)
+	if err != nil {
+		return "", ErrorMissingInstruction
+	}
+
+	var validInstr bool
+
+	for i := range APISubmitInstructions {
+		if APISubmitInstructions[i] == instr {
+			validInstr = true
+		}
+	}
+
+	if !validInstr {
+		return "", ErrorInvalidInstruction
+	}
+
+	return instr, jsonrpc2.Error{}
+
+}
