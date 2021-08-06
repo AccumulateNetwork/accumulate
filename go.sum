@@ -30,6 +30,8 @@ github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba
 github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03/go.mod h1:QeKvdJfy+5p9vt13HevpAuN23SZMcn4jmntTODtNEuM=
 github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03 h1:YeSKCsAcgRMblJcT9d+2sbuJh5DwYISdnkgtoKd0o9I=
 github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03/go.mod h1:HGQgdvw2ZQah3rwhLB3KLQe0nBW8hPgJZbJmeR3VqNk=
+github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106 h1:+PPbYmYZ02KDz3FJfxELkwsw/hq8N03E/K59+0c/WBg=
+github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106/go.mod h1:IZ754L8YfDkLr74Dr8tGexsOq6n9hkfM3tvULzBTBn4=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d h1:FWutTJGVqBnL4rLgeNaspUYnmnvkXcmDA3QO3rHBGgU=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d/go.mod h1:Nw3sh5L40Xs1wno7ndbD/dYWg+vARpBvpX9Zz1YSxbo=
 github.com/AdamSLevy/jsonrpc2 v2.0.0+incompatible h1:ut4YIGFeO2Mzyj7pNEmcHBAm/88qCDmZMyUn6EeuXI4=
