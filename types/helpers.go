@@ -47,11 +47,26 @@ func MakeBVCSubmission(ins string, identityname string, chainpath string, payloa
 
 //fullchainpath == identityname/chainpath
 //This function will generate a ledger needed for ed25519 signing or sha256 hashed to produce TXID
-func MarshalBinarySig(fullchainpath string, payload []byte, timestamp int64) []byte {
+func MarshalBinaryLedgerAdiChainPath(fullchainpath string, payload []byte, timestamp int64) []byte {
 	var msg []byte
 
 	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
 	chainid := sha256.Sum256([]byte(fullchainpath))
+	msg = append(msg, chainid[:]...)
+
+	msg = append(msg, payload...)
+
+	var tsbytes [8]byte
+	binary.LittleEndian.PutUint64(tsbytes[:], uint64(timestamp))
+	msg = append(msg, tsbytes[:]...)
+
+	return msg
+}
+
+func MarshalBinaryLedgerChainId(chainid []byte, payload []byte, timestamp int64) []byte {
+	var msg []byte
+
+	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
 	msg = append(msg, chainid[:]...)
 
 	msg = append(msg, payload...)
@@ -324,3 +339,25 @@ func GetAddressFromIdentity(name string) uint64 {
 	b := GetIdentityChainFromIdentity(name)
 	return GetAddressFromIdentityChain(b[:])
 }
+
+//This function will build a chain from an DDII / ADI.  If the string is 64 characters in length, then it is assumed
+//to be a hex encoded ChainID instead.
+//func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
+//
+//	chainidlen := len(*chainadi)
+//	var chainid managed.Hash
+//
+//	if chainidlen < 32 {
+//		chainid = sha256.Sum256([]byte(*chainadi))
+//	} else if chainidlen == 64 {
+//		_, err := hex.Decode(chainid[:], []byte(*chainadi))
+//		if err != nil {
+//			fmt.Errorf("[Error] cannot decode chainid %s", *chainadi)
+//			return nil, err
+//		}
+//	} else {
+//		return nil, fmt.Errorf("[Error] invalid chainid for validator on shard %s", *chainadi)
+//	}
+//
+//	return chainid.Bytes(), nil
+//}

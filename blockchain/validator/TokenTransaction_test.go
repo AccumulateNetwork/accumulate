@@ -2,9 +2,9 @@ package validator
 
 import (
 	"crypto/sha256"
-	"github.com/AccumulateNetwork/accumulated/api"
-	"github.com/AccumulateNetwork/accumulated/api/proto"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"testing"
@@ -12,7 +12,7 @@ import (
 
 func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*state.StateObject, []byte) {
 
-	id, _, _ := api.ParseIdentityChainPath(identitychainpath)
+	id, _, _ := types.ParseIdentityChainPath(identitychainpath)
 
 	idhash := sha256.Sum256([]byte(id))
 
@@ -52,7 +52,7 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 	outputs := make(map[string]*big.Int)
 	outputs["RedRock/myacctoken"] = big.NewInt(5000)
 
-	sub, err := api.CreateTokenTransaction(&identityname, &tokenchainname,
+	sub, err := types.CreateTokenTransaction(&identityname, &tokenchainname,
 		inputamt, &outputs, nil, kp)
 	if err != nil {
 		t.Fatalf("Failed to make a token rpc call %v", err)
@@ -62,7 +62,7 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 
 func TestTokenTransactionValidator_Check(t *testing.T) {
 
-	kp := api.CreateKeyPair()
+	kp := types.CreateKeyPair()
 	identitychainpath := "RedWagon/acc"
 	currentstate := StateEntry{}
 	currentstate.ChainState = CreateFakeTokenAccountState(t)
