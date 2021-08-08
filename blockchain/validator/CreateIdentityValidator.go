@@ -1,13 +1,12 @@
 package validator
 
 import (
-	"bytes"
-	pb "github.com/AccumulateNetwork/accumulated/api/proto"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 
 	//"crypto/sha256"
 	"fmt"
 	//"github.com/AccumulateNetwork/SMT/managed"
-	acctypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
+	acctypes "github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
 	"time"
@@ -97,29 +96,6 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 	//	//now we need to validate the contents.
 	//	//need to validate this: res.Submissions[i].Data()
 	//}
-
-	e := acctypes.Entry{}
-
-	e.UnmarshalBinary(data[0:p1])
-
-	// { "name" : "Dennis", "Key" : "whatevs" }
-	//rules: ExtID[0] = Identity Name
-	//the Sha256(ExtID[0]) should == ChainID
-	//if
-	if len(e.ExtIDs[0]) != 0 {
-		return nil, fmt.Errorf("Invalid format: Expecting Identity Name in ExtID[0]")
-	}
-
-	//identitychain = managed.Hash( sha256.Sum256(e.ExtIDs[0]) )
-	if bytes.Compare(identitychain, e.ChainID.Bytes()) != 0 {
-		return nil, fmt.Errorf("Invalid Entry: Identity name does not match ChainID")
-	}
-	//self validation...
-
-	//the chain ID needs to be the name of the DDII.
-	if e.Version != 1 {
-		return nil, fmt.Errorf("Execting Version 1 ")
-	}
 
 	return nil, nil
 	//return &pb.Submission{}, nil

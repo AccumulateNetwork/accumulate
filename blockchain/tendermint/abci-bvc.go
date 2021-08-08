@@ -2,7 +2,9 @@ package tendermint
 
 import (
 	"context"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/state"
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/tendermint/tendermint/abci/example/code"
 
 	//"crypto/ed25519"
 	"crypto/sha256"
@@ -16,7 +18,6 @@ import (
 
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/scratch/example/code"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"time"
 
@@ -43,8 +44,8 @@ import (
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
-	pb "github.com/AccumulateNetwork/accumulated/api/proto"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"sync"
 	//"time"
@@ -617,7 +618,7 @@ func (app *AccumulatorVMApplication) writeStates() []byte {
 func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *validator.ResponseValidateTX) error {
 	for i := range vdata.Submissions {
 
-		hash := managed.Hash(sha256.Sum256(vdata.Submissions[i].Data))
+		//hash := managed.Hash(sha256.Sum256(vdata.Submissions[i].Data))
 
 		switch vdata.Submissions[i].Instruction {
 		case pb.AccInstruction_Scratch_Entry:
@@ -637,8 +638,10 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 			//
 
 			//txid stack
-			chash := valacctypes.Hash(hash)
-			commit, _ /*txid*/ := state.GenerateCommit(vdata.Submissions[i].Data, &chash, false)
+			ledger := types.MarshalBinaryLedgerChainId(vdata.Submissions[i].Chainid, vdata.Submissions[i].Data, time.Now().Unix())
+
+			//transaction id
+			_ = sha256.Sum256(ledger)
 
 			//need to track txid to make sure they get processed....
 			if app.amLeader {
@@ -647,17 +650,20 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 				var sk valacctypes.PrivateKey
 				copy(sk[:], app.Key.PrivKey.Bytes())
 
-				err := state.SignCommit(sk, commit)
+				/* DHB Need to redo this
+				err := state.SignCommit(sk, ledger)
 
 				//now we need to make a new submission that has the segwit commit block added.
 				//revisit this...  probably need to
 				//store the offset to the segwit
 				vdata.Submissions[i].Param1 = uint64(len(vdata.Submissions[i].Data)) //signed
-				vdata.Submissions[i].Data = append(vdata.Submissions[i].Data, commit...)
+				vdata.Submissions[i].Data = append(vdata.Submissions[i].Data, ledger...)
+
 
 				if err != nil {
 					return fmt.Errorf("Error signing validated submission request")
 				}
+				*/
 
 				//var c jsonrpc2.Client
 
@@ -907,10 +913,10 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 		dbvc.Submissions = make([]pb.Submission, 1)
 		dbvc.Submissions[0].Instruction = 0
 		chainadi := string("dbvc")
-		chainid, _ := validator.BuildChainIdFromAdi(&chainadi)
+		chainid := types.GetChainIdFromChainPath(chainadi)
 		//chainaddr, _ := smt.BytesUint64(chainid)
-		dbvc.Submissions[0].Identitychain = chainid //1 is the chain id of the DBVC
-		dbvc.Submissions[0].Chainid = chainid
+		dbvc.Submissions[0].Identitychain = chainid[:] //1 is the chain id of the DBVC
+		dbvc.Submissions[0].Chainid = chainid[:]
 
 		dbvc.Submissions[0].Instruction = pb.AccInstruction_Data_Entry //this may be irrelevant...
 		dbvc.Submissions[0].Param1 = 0
