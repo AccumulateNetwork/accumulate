@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
@@ -102,7 +103,7 @@ func (v *TokenTransactionValidator) canTransact(currentstate *StateEntry, identi
 			return nil, nil, fmt.Errorf("Invalid amount")
 		}
 
-		identity, chainpath, err := api.ParseIdentityChainPath(k)
+		identity, chainpath, err := types.ParseIdentityChainPath(k)
 		if err != nil {
 			return nil, nil, fmt.Errorf("Malformed Token Transaction: Invalid identity/chainpath %s", k)
 		}
@@ -175,69 +176,12 @@ func (v *TokenTransactionValidator) canTransact(currentstate *StateEntry, identi
 
 func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 
-	//extract the identity state i.e. get the current keys... todo: does signature checking go here or can it be done before here?
+	//extract the identity state i.e. get the current keys...
 	//
-
-	ids := state.IdentityState{}
-	err := ids.UnmarshalBinary(currentstate.IdentityState.Entry)
-	if err != nil {
-		return err
-	}
-
-	tas := state.TokenAccountState{}
-	err = tas.UnmarshalBinary(currentstate.ChainState.Entry)
-	if err != nil {
-		return err
-	}
-
-	//{"inputs":{"RedWagon/MyAtkTokens":10000},"outputs":{"GreenRock/YourAtkTokens":10000}}
-	//need to formalize this in an object.
-	type AccTransaction struct {
-		Input    map[string]*big.Int  `json:"inputs"`
-		Output   *map[string]*big.Int `json:"outputs"`
-		Metadata json.RawMessage      `json:"metadata,omitempty"`
-	}
-
-	var tx AccTransaction
-	err = json.Unmarshal(data, &tx)
+	_, _, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
 
 	if err != nil {
 		return err
-	}
-	//now check to see if we can transact
-	//really only need to provide one input...
-	cantransact := false
-	for k, v := range tx.Input {
-		if v == nil {
-			return fmt.Errorf("Invalid amount")
-		}
-
-		identity, chainpath, err := api.ParseIdentityChainPath(k)
-		if err != nil {
-			return fmt.Errorf("Malformed Token Transaction: Invalid identity/chainpath %s", k)
-		}
-		if identity != ids.GetAdi() {
-			//we can only transact on the input for this transaction
-			continue
-			//return fmt.Errorf("Invalid identity does not match state object, have %s expected %s", identity, ids.GetAdi())
-		}
-		chainhash := sha256.Sum256([]byte(chainpath))
-		if bytes.Compare(chainhash[:], chainid) != 0 {
-			return fmt.Errorf("Invalid token chain")
-		}
-
-		if tas.Balance().Cmp(v) < 0 {
-			///insufficient balance
-			return fmt.Errorf("Insufficient balance")
-		}
-
-		//need to check entry credit availability
-
-		cantransact = true
-	}
-
-	if !cantransact {
-		return fmt.Errorf("Unknown error, cannot perform transaction")
 	}
 
 	////if we get here we are good to proceed.
@@ -299,6 +243,12 @@ func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, identityc
 
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
 
+	_, _, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
+
+	if err != nil {
+		return nil, err
+	}
+
 	ret := ResponseValidateTX{}
 	ret.Submissions = make([]pb.Submission, 1)
 
@@ -307,7 +257,7 @@ func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, identityc
 	//chainid + 1
 	ret.Submissions[1] = pb.Submission{
 		Identitychain: identitychain,                              //should this be set externally?
-		Type:          GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
+		//Type:          GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
 		Instruction:   pb.AccInstruction_Token_Transaction,
 		Chainid:       chainid, //need a chain id of where you are going...  chainid + 1
 		Param1:        0,
