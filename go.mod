@@ -92,7 +92,7 @@ require (
 	golang.org/x/net v0.0.0-20201021035429-f5854403a974
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	google.golang.org/grpc v1.35.0
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.0.1 // indirect
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0 // indirect
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/AlecAivazis/survey.v1 v1.6.2 // indirect
 	gopkg.in/ini.v1 v1.58.0 // indirect
