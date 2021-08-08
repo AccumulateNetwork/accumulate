@@ -9,7 +9,7 @@ func CreateAccumulateBVC(config string, path string) *tendermint.AccumulatorVMAp
 	//create a AccumulatorVM
 	acc := tendermint.NewAccumulatorVMApplication(config, path)
 
-	atktx := validator.NewAtkTransactionValidator()
+	atktx := validator.NewTokenTransactionValidator()
 	acc.AddValidator(&atktx.ValidatorContext)
 
 	//create and add some validators for known types

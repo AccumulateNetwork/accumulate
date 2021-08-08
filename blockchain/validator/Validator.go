@@ -2,17 +2,11 @@ package validator
 
 import (
 	"crypto/sha256"
-	"encoding/binary"
 	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	"strings"
-
 	//"encoding/binary"
 	"github.com/AccumulateNetwork/SMT/managed"
 
-	//"encoding/binary"
-	"encoding/hex"
-	"fmt"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	cfg "github.com/tendermint/tendermint/config"
@@ -29,17 +23,6 @@ const (
 	InvalidSignature                = 3
 	Fail                            = 4
 )
-
-//type TXEvidence struct {
-//	DDII []byte
-//	Sig []byte
-//}
-//
-//type TXEntry struct {
-//	Evidence TXEvidence
-//	ExtIDs *[]byte
-//	Data []byte
-//}
 
 type StateEntry struct {
 	IdentityState *state.StateObject
@@ -99,8 +82,6 @@ type ValidatorInterface interface {
 	GetCurrentHeight() int64
 	GetCurrentTime() *time.Time
 	GetCurrentChainId() *string
-	SetStateDBMgr(dbm *state.StateDBMgr)
-	GetBVCDatabase(networkid int) *state.StateDB
 }
 
 type ValidatorInfo struct {
@@ -110,44 +91,10 @@ type ValidatorInfo struct {
 	typeid    uint64
 }
 
-//This function will build a chain from an DDII / ADI.  If the string is 64 characters in length, then it is assumed
-//to be a hex encoded ChainID instead.
-func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
-
-	chainidlen := len(*chainadi)
-	var chainid managed.Hash
-
-	if chainidlen < 32 {
-		chainid = sha256.Sum256([]byte(*chainadi))
-	} else if chainidlen == 64 {
-		_, err := hex.Decode(chainid[:], []byte(*chainadi))
-		if err != nil {
-			fmt.Errorf("[Error] cannot decode chainid %s", *chainadi)
-			return nil, err
-		}
-	} else {
-		return nil, fmt.Errorf("[Error] invalid chainid for validator on shard %s", *chainadi)
-	}
-
-	return chainid.Bytes(), nil
-}
-
-//func BuildChainAddressFromAdi(chain *string) uint64 {
-//	chainid,_ := BuildChainIdFromAdi(chain)
-//	return BuildChainAddress(managed.Hash(chainid))
-//}
-//func BuildChainAddress(chainid managed.Hash) uint64 {
-//	hash :=sha256.Sum256(chainid.Bytes())
-//	return binary.BigEndian.Uint64(hash[:])
-//}
-//
-//hash :=sha256.Sum256(val.GetValidatorChainId())
-//app.chainval[binary.BigEndian.Uint64(hash[:])] = val
-
-func (h *ValidatorInfo) SetInfo(chainadi string, namespace string, instructiontype pb.AccInstruction) error {
-	chainid, _ := BuildChainIdFromAdi(&chainadi)
-	h.chainid.Extract(chainid)
-	h.chainadi = chainadi
+func (h *ValidatorInfo) SetInfo(adi string, namespace string, instructiontype pb.AccInstruction) error {
+	chainid := sha256.Sum256([]byte(adi))
+	h.chainid.Extract(chainid[:])
+	h.chainadi = adi
 	h.namespace = namespace
 	//	h.address = binary.BigEndian.Uint64(h.chainid[24:])
 	h.typeid = uint64(instructiontype) //GetTypeIdFromName(h.namespace)
@@ -167,11 +114,6 @@ func (h *ValidatorInfo) GetChainAdi() *string {
 	return &h.chainadi
 }
 
-func GetTypeIdFromName(name string) uint64 {
-	b := sha256.Sum256([]byte(strings.ToLower(name)))
-	return binary.LittleEndian.Uint64(b[:8])
-}
-
 func (h *ValidatorInfo) GetTypeId() uint64 {
 	return h.typeid
 }
@@ -183,16 +125,6 @@ type ValidatorContext struct {
 	currentTime   time.Time
 	lastHeight    int64
 	lastTime      time.Time
-	bvc_dbs       *state.StateDBMgr //this stores an array of read-only state databases.
-}
-
-func (v *ValidatorContext) SetStateDBMgr(dbm *state.StateDBMgr) error {
-	v.bvc_dbs = dbm
-	return v.bvc_dbs.Verify()
-}
-
-func (v *ValidatorContext) GetBVCDatabase(networkid int) *state.StateDB {
-	return v.bvc_dbs.GetStateDB(networkid)
 }
 
 func (v *ValidatorContext) GetInfo() *ValidatorInfo {
