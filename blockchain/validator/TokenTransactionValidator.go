@@ -65,165 +65,52 @@ func NewTokenTransactionValidator() *TokenTransactionValidator {
 	return &v
 }
 
-func (v *TokenTransactionValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.IdentityState, *state.TokenAccountState, error) {
+func (v *TokenTransactionValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.IdentityState, *state.TokenAccountState, *types.TokenTransaction, error) {
+
 	//extract the identity state i.e. get the current keys... todo: does signature checking go here or can it be done before here?
 	//
 
 	ids := state.IdentityState{}
 	err := ids.UnmarshalBinary(currentstate.IdentityState.Entry)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	tas := state.TokenAccountState{}
 	err = tas.UnmarshalBinary(currentstate.ChainState.Entry)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	//{"inputs":{"RedWagon/MyAtkTokens":10000},"outputs":{"GreenRock/YourAtkTokens":10000}}
-	//need to formalize this in an object.
-	type AccTransaction struct {
-		Input    map[string]*big.Int  `json:"inputs"`
-		Output   *map[string]*big.Int `json:"outputs"`
-		Metadata json.RawMessage      `json:"metadata,omitempty"`
-	}
-
-	var tx AccTransaction
+	var tx types.TokenTransaction
 	err = json.Unmarshal(data, &tx)
 
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	//now check to see if we can transact
 	//really only need to provide one input...
-	cantransact := false
-	for k, v := range tx.Input {
-		if v == nil {
-			return nil, nil, fmt.Errorf("Invalid amount")
-		}
 
-		identity, chainpath, err := types.ParseIdentityChainPath(k)
-		if err != nil {
-			return nil, nil, fmt.Errorf("Malformed Token Transaction: Invalid identity/chainpath %s", k)
-		}
-
-		if identity != ids.GetAdi() {
-			//we can only transact on the input for this transaction
-			continue
-			//return fmt.Errorf("Invalid identity does not match state object, have %s expected %s", identity, ids.GetAdi())
-		}
-		chainhash := sha256.Sum256([]byte(chainpath))
-		if bytes.Compare(chainhash[:], chainid) != 0 {
-			return nil, nil, fmt.Errorf("Invalid token chain")
-		}
-
-		if tas.Balance().Cmp(v) < 0 {
-			///insufficient balance
-			return nil, nil, fmt.Errorf("Insufficient balance")
-		}
-
-		//need to check entry credit availability
-
-		cantransact = true
+	amt := big.NewInt(0)
+	for _, val := range tx.Output {
+		amt.Add(amt, val)
 	}
 
-	if !cantransact {
-		return nil, nil, fmt.Errorf("Unknown error, cannot perform transaction")
+	if tx.TransferAmount.Cmp(amt) != 0 {
+		return nil, nil, nil, fmt.Errorf("Transfer amount (%s) doesn't equal sum of the outputs (%s)",
+			tx.TransferAmount.String(), amt.String())
 	}
 
-	////if we get here we are good to proceed.
-	////we didn't check if the receiver able to receive that type of token?
-	////should we do a pre-fetch query on the receiver's state object?
-	//for k, o := range *tx.Output {
-	//	//k dest addr
-	//	identity, chainpath, err := api.ParseIdentityChainPath(k)
-	//	if err != nil {
-	//		return fmt.Errorf("Invalid output destination")
-	//	}
-	//	idchain := api.GetIdentityChainFromIdentity(identity)
-	//	addr := api.GetAddressFromIdentityChain(idchain[:])
-	//
-	//	//networkid := addr % uint64(1) //acc.MaxNetworks) //where is maxnetworks set?
-	//	//
-	//	//db := v.GetBVCDatabase(networkid)
-	//	//
-	//	//if db == nil {
-	//	//	return fmt.Errorf("Cannot find BVC database on network %d for identity %s", networkid, identity)
-	//	//}
-	//	//
-	//	////so we have a valid database look up token chain
-	//	//desttokenchainid := sha256.Sum256([]byte(chainpath))
-	//	//so, err := db.GetStateObject(desttokenchainid)
-	//	//if err != nil {
-	//	//	return fmt.Errorf("Destination Token Chain does not exist %s", chainpath)
-	//	//}
-	//	//
-	//	//desttokenaccount := state.TokenAccountState{}
-	//	//err = desttokenaccount.UnmarshalBinary(so.Entry)
-	//	//
-	//	//if err != nil {
-	//	//	return err
-	//	//}
-	//	////all i care about is if the source matches the dest.
-	//	//if bytes.Compare(desttokenaccount.GetIssuerChainId()[:], tas.GetIssuerChainId()[:]) != 0 {
-	//	//	return fmt.Errorf("Token chain is of a different type.")
-	//	//}
-	//	//
-	//}
-	return &ids, &tas, nil
+	if tas.Balance().Cmp(&tx.TransferAmount) < 0 {
+		///insufficient balance
+		return nil, nil, nil, fmt.Errorf("Insufficient balance")
+	}
+	return &ids, &tas, &tx, nil
 }
 
 func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
-
-	//extract the identity state i.e. get the current keys...
-	//
-	_, _, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
-
-	if err != nil {
-		return err
-	}
-
-	////if we get here we are good to proceed.
-	////we didn't check if the receiver able to receive that type of token?
-	////should we do a pre-fetch query on the receiver's state object?
-	//for k, o := range *tx.Output {
-	//	//k dest addr
-	//	identity, chainpath, err := api.ParseIdentityChainPath(k)
-	//	if err != nil {
-	//		return fmt.Errorf("Invalid output destination")
-	//	}
-	//	idchain := api.GetIdentityChainFromIdentity(identity)
-	//	addr := api.GetAddressFromIdentityChain(idchain[:])
-	//
-	//	//networkid := addr % uint64(1) //acc.MaxNetworks) //where is maxnetworks set?
-	//	//
-	//	//db := v.GetBVCDatabase(networkid)
-	//	//
-	//	//if db == nil {
-	//	//	return fmt.Errorf("Cannot find BVC database on network %d for identity %s", networkid, identity)
-	//	//}
-	//	//
-	//	////so we have a valid database look up token chain
-	//	//desttokenchainid := sha256.Sum256([]byte(chainpath))
-	//	//so, err := db.GetStateObject(desttokenchainid)
-	//	//if err != nil {
-	//	//	return fmt.Errorf("Destination Token Chain does not exist %s", chainpath)
-	//	//}
-	//	//
-	//	//desttokenaccount := state.TokenAccountState{}
-	//	//err = desttokenaccount.UnmarshalBinary(so.Entry)
-	//	//
-	//	//if err != nil {
-	//	//	return err
-	//	//}
-	//	////all i care about is if the source matches the dest.
-	//	//if bytes.Compare(desttokenaccount.GetIssuerChainId()[:], tas.GetIssuerChainId()[:]) != 0 {
-	//	//	return fmt.Errorf("Token chain is of a different type.")
-	//	//}
-	//	//
-	//}
-	return nil
+	_, _, _, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
+	return err
 }
 
 func (v *TokenTransactionValidator) Initialize(config *cfg.Config) error {
@@ -242,8 +129,7 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
 
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
-
-	_, _, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
+	_, _, tx, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
 
 	if err != nil {
 		return nil, err
@@ -252,17 +138,39 @@ func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, identityc
 	ret := ResponseValidateTX{}
 	ret.Submissions = make([]pb.Submission, 1)
 
+	count := 0
+	for outputaddr, val := range tx.Output {
+		sub := pb.Submission{}
+		adi, chainpath, err := types.ParseIdentityChainPath(outputaddr)
+		if err != nil {
+			return nil, err
+		}
+		idchain := types.GetIdentityChainFromIdentity(adi)
+		if idchain == nil {
+			return nil, fmt.Errorf("Invalid identity chain for %s", adi)
+		}
+		sub.Identitychain = idchain[:]
+
+		chainid := types.GetChainIdFromChainPath(chainpath)
+
+		sub.Chainid = chainid[:]
+
+		sub.Instruction = pb.AccInstruction_Token_Deposit
+
+		ret.Submissions[count] = sub
+	}
+
 	//where is this being routed to?
 	//send to synth tx chain validator
 	//chainid + 1
 	ret.Submissions[1] = pb.Submission{
-		Identitychain: identitychain,                              //should this be set externally?
+		Identitychain: identitychain, //should this be set externally?
 		//Type:          GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
-		Instruction:   pb.AccInstruction_Token_Transaction,
-		Chainid:       chainid, //need a chain id of where you are going...  chainid + 1
-		Param1:        0,
-		Param2:        0,
-		Data:          data, //need to make the data what it should be for atk
+		Instruction: pb.AccInstruction_Token_Transaction,
+		Chainid:     chainid, //need a chain id of where you are going...  chainid + 1
+		Param1:      0,
+		Param2:      0,
+		Data:        data, //need to make the data what it should be for atk
 	}
 
 	return nil, nil

@@ -85,7 +85,7 @@ func MakeUpdateKeyURL(identityname string, oldkey ed25519.PrivKey, newkey ed2551
 	timestamp := time.Now().Unix()
 
 	//build the message to be signed ed25519( sha256(identityname) | sha256(raw payload) | timestamp )
-	msg := MarshalBinarySig(identityname, []byte(payload), timestamp)
+	msg := MarshalBinaryLedgerAdiChainPath(identityname, []byte(payload), timestamp)
 
 	sig, _ := oldkey.Sign(msg)
 
@@ -103,7 +103,7 @@ func MakeCreateIdentityURL(identityname string, sponsoridentityname string, spon
 	instruction := "identity-create"
 	timestamp := time.Now().Unix()
 
-	msg := MarshalBinarySig(identityname, []byte(payload), timestamp)
+	msg := MarshalBinaryLedgerAdiChainPath(identityname, []byte(payload), timestamp)
 	sig, _ := sponsorkey.Sign(msg)
 
 	///create identity
@@ -129,7 +129,7 @@ func MakeTokenIssueURL(fullchainpath string, supply int64, precision uint, symbo
 
 	instruction := "token-issue"
 	timestamp := time.Now().Unix()
-	msg := MarshalBinarySig(fullchainpath, []byte(payload), timestamp)
+	msg := MarshalBinaryLedgerAdiChainPath(fullchainpath, []byte(payload), timestamp)
 	sig, _ := issuerkey.Sign(msg)
 
 	urlstring := BuildAccumulateURL(fullchainpath, instruction, []byte(payload), timestamp, issuerkey.PubKey().Bytes(), sig)
@@ -159,7 +159,7 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 	}
 
 	timestamp := time.Now().Unix()
-	msg := MarshalBinarySig(intputfullchainpath, payload, timestamp)
+	msg := MarshalBinaryLedgerAdiChainPath(intputfullchainpath, payload, timestamp)
 	sig, err := signer.Sign(msg)
 	if err != nil {
 		return "", fmt.Errorf("Cannot sign data %v", err)
