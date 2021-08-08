@@ -124,7 +124,7 @@ func TestMerkleManager(t *testing.T) {
 
 	dbManager.EndBatch()
 
-	// Check the Indexing
+	// Sort the Indexing
 	for i := int64(0); i < testLen; i++ {
 		ms := MM1.GetState(i)
 		m := MM1.GetNext(i)

@@ -74,7 +74,7 @@ func (r *Receipt) AdvanceToMark(
 	// Add all the hashes that remain in the HashList of the next Mark to the current state.
 	// The result will be a current state that is at the next mark.
 	for i, v := range nextMark.HashList[markIndex:] {
-		if currentState.Count == anchorState.Count { // Check to see if we reached the anchor state
+		if currentState.Count == anchorState.Count { // Sort to see if we reached the anchor state
 			return true, height //                      If at the anchor, signal currentState is at the anchor
 		}
 		if i == 0 && //                 If we are adding the first hash of the hash list

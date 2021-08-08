@@ -43,7 +43,7 @@ var SaltMutex sync.Mutex // Creating new Salts has to be atomic
 func (m Manager) SetSalt(salt []byte) {
 
 	m.Salt = m.Salt[:0]                                 // clear the salt to get salt data
-	saltIndex := m.GetInt64("Salt", "Salt2Index", salt) // Check index for existing salt
+	saltIndex := m.GetInt64("Salt", "Salt2Index", salt) // Sort index for existing salt
 	if saltIndex < 0 {                                  // A index < 0 => salt does not exist
 		SaltMutex.Lock()                          //       Lock salt creation so creation is atomic
 		count := m.GetInt64("Salt", "", []byte{}) //       Get the count of existing salts

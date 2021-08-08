@@ -135,7 +135,7 @@ func TestBPT_MarshalAllByteBlocks(t *testing.T) {
 }
 
 // TestInsert
-// Check to make sure we can add elements to the BPT and get
+// Sort to make sure we can add elements to the BPT and get
 // out hashes.  And that we can update the BPT
 func TestInsert(t *testing.T) {
 
