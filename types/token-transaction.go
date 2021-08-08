@@ -6,6 +6,7 @@ import (
 	"math/big"
 )
 
+//{"inputs": {
 //{"transfer":10000,"to-accounts":{"GreenRock/YourAtkTokens":10000}}
 //need to formalize this in an object.
 type TokenTransaction struct {
