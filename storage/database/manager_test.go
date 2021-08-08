@@ -69,7 +69,7 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	}
 	dbManager.EndBatch()
 
-	// Check that I can read all thousand entries
+	// Sort that I can read all thousand entries
 	for i := 0; i < 10; i++ {
 		eKey := dbManager.GetKey("a", "", storage.Int64Bytes(int64(i)))
 		eValue := []byte(fmt.Sprint(i))

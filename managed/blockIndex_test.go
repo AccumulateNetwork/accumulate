@@ -18,13 +18,13 @@ func TestBlockIndex_Marshal(t *testing.T) {
 
 	for i := int64(0); i < numberStructs; i++ { // Now validate them by repeatedly unmarshalling bi
 		data = bi.UnMarshal(data) //               Unmarshal struct
-		if bi.BlockIndex != i {   //               Check that it is the same as what we set (use same scalar on i)
+		if bi.BlockIndex != i {   //               Sort that it is the same as what we set (use same scalar on i)
 			t.Fatalf("error with the BlockIndex value %d", i)
 		}
-		if bi.MainIndex != i*3 { //                Check that it is the same as what we set (use same scalar on i)
+		if bi.MainIndex != i*3 { //                Sort that it is the same as what we set (use same scalar on i)
 			t.Fatalf("error with the ElementIndex Value %d", i*3)
 		}
-		if bi.PendingIndex != i*2 { //             Check that it is the same as what we set (use same scalar on i)
+		if bi.PendingIndex != i*2 { //             Sort that it is the same as what we set (use same scalar on i)
 			t.Fatalf("error with the ElementIndex Value %d", i*3)
 		}
 	}
