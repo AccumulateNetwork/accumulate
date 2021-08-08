@@ -102,6 +102,7 @@ enum AccInstruction {
   State_Store = 0x0D;
   Admin_Vote = 0x0E;
   Synthetic_Token_Transaction = 0x13;
+  Synthetic_Token_Deposit = 0x14;
   //      Entry_Commit = 1; //
   //      Entry_Reveal = 2; // raw data
   //      Chain_Commit = 3;
