@@ -11,10 +11,10 @@ import (
 // BuildMultiVectors
 // Build nCount test multiSignatures.  All choices of m for all multiSignatures
 // of n Signatures where n <= nCount
-func BuildMultiVectors(nCount int) (mSigs []*MSigs, messages [][]byte) {
+func BuildMultiVectors(nCount int) (mSigs []*MultiSig, messages [][]byte) {
 
 	for n := 1; n <= nCount; n += 1 { //                   Create MultiSigs with n upto nCount
-		mSig := new(MSigs)                 //              Working structure for building the mSigs
+		mSig := new(MultiSig)              //              Working structure for building the mSigs
 		var Private [][]byte               //              Place for private keys
 		s := []byte{byte(n), byte(n >> 8), //              Use n as a seed
 			byte(n >> 16), byte(n >> 32)} //                 which will work as long as n < ~4 GB
@@ -32,27 +32,34 @@ func BuildMultiVectors(nCount int) (mSigs []*MSigs, messages [][]byte) {
 }
 
 func TestMultiSig_Verify(t *testing.T) {
-	mSigs, messages := BuildMultiVectors(300)
-	fmt.Printf("number of test cases %d\n", len(messages))
-	for i, m := range messages {
-		if !mSigs[i].Verify(m) {
-			t.Error(fmt.Sprintf("Failed signature %d", i))
+	mSigs, messages := BuildMultiVectors(50)               //           Get a pool of test vectors
+	fmt.Printf("number of test cases %d\n", len(messages)) //           For grins, print how many tests
+	for i, m := range messages {                           //           For each of these vectors
+		if !mSigs[i].Verify(m) { //                                     Make sure they validate their message
+			t.Error(fmt.Sprintf("Failed signature %d", i)) //           Bonk if they don't.
+		} //
+		m[1] = m[1] ^ 1         //                                      Flip a bit in the message
+		if mSigs[i].Verify(m) { //                                      Make sure the multisig fails the message
+			t.Error(fmt.Sprintf("Accepted a bad message %d", i)) //
+		} //
+		m[1] = m[1] ^ 1                    //                           Flip the bit back, so message stays good
+		for _, sig := range mSigs[i].sig { //                           Now go through the sigs of the multi-sig
+			sig.(*SigEd25519).sig[0] = sig.Signature()[0] ^ 1 //        Flip a bit in the signature
+			if mSigs[i].Verify(m) {                           //        Verify we don't accept the message
+				t.Error(fmt.Sprintf("Accepted a bad signature %d", i)) // Blow if we accept a bad sig
+			} //
+			sig.(*SigEd25519).sig[0] = sig.Signature()[0] ^ 1 //        Repair the bit we flipped
 		}
-		m[1] = m[1] ^ 1
-		if mSigs[i].Verify(m) {
-			t.Error(fmt.Sprintf("Accepted a bad message %d", i))
-		}
-		m[1] = m[1] ^ 1
-	}
-	var data []byte
-	for _, sig := range mSigs {
-		data = append(data, sig.Marshal()...)
-	}
-	var mSig = new(MSigs)
-	for i, m := range messages {
-		data = mSig.Unmarshal(data)
-		if !mSig.Verify(m) {
-			t.Errorf("failure to marshal() and Unmarshal() %d", i)
-		}
+	} //
+	var data []byte             //                 Now let's make sure we can marshal and come back.
+	for _, sig := range mSigs { //                 Marshal all the multi signatures
+		data = append(data, sig.Marshal()...) //   Stack them all together
+	} //
+	var mSig = new(MultiSig)     //                Get a multi sig structure we can reuse
+	for i, m := range messages { //                Go through all multi sigs and the messages they signed
+		data = mSig.Unmarshal(data) //             Make sure we can reconstitute the multi-sig
+		if !mSig.Verify(m) {        //             And validate all the messages
+			t.Errorf("failure to marshal() and Unmarshal() %d", i) // Blow if it fails.
+		} //
 	}
 }

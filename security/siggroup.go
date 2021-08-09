@@ -9,8 +9,7 @@ package security
 // loaded for not MAST SigSpecs.  For MAST SigSpecs, transactions must provide
 // a SigSpec that validates against the hash in the SigGroup
 type SigGroup struct {
-	SigSpecHashes [][]byte  // The hashes of the SigSpec stores them in the database (if known)
-	SigSpecs      []SigSpec // The SigSpec of a hash if not a MAST SigSpec
+	SigSpecs []SigSpec // The SigSpec of a hash if not a MAST SigSpec
 }
 
 // AddSigSpec
