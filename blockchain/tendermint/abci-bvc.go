@@ -745,7 +745,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			return ret
 		}
 
-		vdata, err := val.Validate(currentstate, sub.Identitychain, sub.Chainid, sub.Param1, sub.Param2, sub.Data)
+		vdata, err := val.Validate(currentstate, sub)
 
 		//privKey := ed25519.GenPrivKey()
 		////gratuitously sign data to add simulted overhead

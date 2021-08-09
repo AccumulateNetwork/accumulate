@@ -65,7 +65,7 @@ func (v *CreateIdentityValidator) BeginBlock(height int64, time *time.Time) erro
 	return nil
 }
 
-func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (resp *ResponseValidateTX, err error) {
+func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("Current State Not Defined")
@@ -73,19 +73,19 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 
 	//Temporary validation rules:
 	idstate := acctypes.IdentityState{}
-	err = idstate.UnmarshalBinary(data)
+	err = idstate.UnmarshalBinary(submission.Data)
 	if err != nil {
 		return nil, err
 	}
 
 	resp = &ResponseValidateTX{}
 	//so. also need to return the identity chain and chain id these belong to....  Really need the factom entry format updated.
-	resp.StateData = data //make([][]byte,1)
+	resp.StateData = submission.Data //make([][]byte,1)
 	//resp.StateData[0] = data
 
 	return resp, nil
 	//this builds the entry if valid
-	_, err = v.EV.Validate(currentstate, identitychain, chainid, p1, p2, data)
+	_, err = v.EV.Validate(currentstate, submission)
 
 	if err != nil {
 		return nil, err
@@ -95,7 +95,6 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, identitycha
 	//for _ := range res.Submissions {
 	//	//now we need to validate the contents.
 	//	//need to validate this: res.Submissions[i].Data()
-	//}
 
 	return nil, nil
 	//return &pb.Submission{}, nil
