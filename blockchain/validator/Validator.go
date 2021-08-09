@@ -73,8 +73,8 @@ type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
 	Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error
-	Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) //return persistent entry or error
-	EndBlock(mdroot []byte) error                                                                                                            //do something with MD root
+	Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) //return persistent entry or error
+	EndBlock(mdroot []byte) error                                                              //do something with MD root
 
 	//InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error  //deprecated
 	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated

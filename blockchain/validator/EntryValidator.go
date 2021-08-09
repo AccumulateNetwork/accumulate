@@ -71,7 +71,7 @@ func (v *EntryValidator) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *EntryValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
+func (v *EntryValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 	//entry design is TBD...
 
 	//datalen := uint64(len(data))

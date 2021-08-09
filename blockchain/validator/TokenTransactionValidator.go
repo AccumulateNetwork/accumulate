@@ -1,13 +1,13 @@
 package validator
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	cfg "github.com/tendermint/tendermint/config"
 	"math/big"
 	"time"
@@ -126,17 +126,17 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 	return nil
 }
 
-func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
-
+func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
-	_, _, tx, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
+	_, tas, tx, err := v.canTransact(currentstate, submission.Identitychain, submission.Chainid,
+		submission.GetParam1(), submission.GetParam2(), submission.GetData())
 
 	if err != nil {
 		return nil, err
 	}
 
 	ret := ResponseValidateTX{}
-	ret.Submissions = make([]pb.Submission, 1)
+	ret.Submissions = make([]pb.Submission, len(tx.Output)+1)
 
 	count := 0
 	for outputaddr, val := range tx.Output {
@@ -151,30 +151,35 @@ func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, identityc
 		}
 		sub.Identitychain = idchain[:]
 
-		chainid := types.GetChainIdFromChainPath(chainpath)
+		destchainid := types.GetChainIdFromChainPath(chainpath)
 
-		sub.Chainid = chainid[:]
+		sub.Chainid = destchainid[:]
 
-		sub.Instruction = pb.AccInstruction_Token_Deposit
+		sub.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 
+		deptx := synthetic.NewTokenTransactionDeposit()
+		txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp))
+		deptx.SetDeposit(txid[:], val)
+		deptx.SetTokenInfo(tas.GetIssuerIdentity().Bytes(), tas.GetIssuerChainId().Bytes())
+		deptx.SetSenderInfo(submission.Identitychain, submission.Chainid)
+
+		//store the synthetic transactions, each submission will be signed by leader
 		ret.Submissions[count] = sub
+		count++
 	}
 
-	//where is this being routed to?
-	//send to synth tx chain validator
-	//chainid + 1
-	ret.Submissions[1] = pb.Submission{
-		Identitychain: identitychain, //should this be set externally?
-		//Type:          GetTypeIdFromName("synthetic_transaction"), //should this get set externally?
-		Instruction: pb.AccInstruction_Token_Transaction,
-		Chainid:     chainid, //need a chain id of where you are going...  chainid + 1
-		Param1:      0,
-		Param2:      0,
-		Data:        data, //need to make the data what it should be for atk
+	//subtract the transfer amount from the balance
+	err = tas.SubBalance(&tx.TransferAmount)
+	if err != nil {
+		return nil, err
 	}
 
-	return nil, nil
-	//return &pb.Submission{}, nil
+	//issue a state change...
+	ret.StateData, err = tas.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	return &ret, nil
 }
 
 func (v *TokenTransactionValidator) EndBlock(mdroot []byte) error {
