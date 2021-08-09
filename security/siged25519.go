@@ -68,7 +68,7 @@ func (s *SigEd25519) Unmarshal(data []byte) []byte {
 
 // Verify
 // Verify that the signature is valid for the given message
-func (s *SigEd25519) Verify(_ *MSigs, _ int, message []byte) bool {
+func (s *SigEd25519) Verify(_ *MultiSig, _ int, message []byte) bool {
 	b := ed25519.Verify(s.publicKey, message, s.sig) // Validate the signature
 	return b                                         // Return the result
 }

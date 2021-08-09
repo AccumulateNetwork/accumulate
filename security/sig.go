@@ -8,13 +8,13 @@ const (
 )
 
 type Sig interface {
-	Type() int                                      // Returns the type implementing the interface
-	Signature() []byte                              // Returns the signature
-	Marshal() []byte                                // Marshals the object implementing Sig into a slice
-	PublicKey() []byte                              // Returns the public key
-	Unmarshal(data []byte) []byte                   // Sets object implementing Sig to state defined by byte slice
-	Verify(ms *MSigs, idx int, message []byte) bool // Validates message. True if message is validated by signature
-	Equal(sig Sig) bool                             // Returns true if two signatures are equal
+	Type() int                                         // Returns the type implementing the interface
+	Signature() []byte                                 // Returns the signature
+	Marshal() []byte                                   // Marshals the object implementing Sig into a slice
+	PublicKey() []byte                                 // Returns the public key
+	Unmarshal(data []byte) []byte                      // Sets object implementing Sig to state defined by byte slice
+	Verify(ms *MultiSig, idx int, message []byte) bool // Validates message. True if message is validated by signature
+	Equal(sig Sig) bool                                // Returns true if two signatures are equal
 }
 
 // Unmarshal
