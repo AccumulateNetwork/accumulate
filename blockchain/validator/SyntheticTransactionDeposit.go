@@ -3,7 +3,6 @@ package validator
 import (
 	"bytes"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -14,38 +13,7 @@ import (
 
 type SyntheticTransactionDepositValidator struct {
 	ValidatorContext
-
-	mdroot [32]byte
 }
-
-//
-////transactions are just accounts with balances on a given token chain
-////what transaction types should be supported?
-//type SyntheticTransactionDeposit struct {
-//	chainadi    string   //token chain
-//	txid        [32]byte //transaction id -- sha256[chainadi | txid] defines the scratch chain for the transaction
-//	intputddii  string   //ddii includes account?
-//	inputamount int64
-//
-//	numsignaturesrequired int
-//	signature             [64]byte //array?
-//
-//	//assume fees are paid it ATK
-//	fee int32 //fees in Atoshies
-//
-//	outputddii    string
-//	outputaccount string //?
-//	outputamount  int64
-//}
-//
-//func (tx *SyntheticTransaction) MarshalBinary() ([]byte, error) {
-//	return nil, nil
-//}
-//
-//func (tx *SyntheticTransaction) UnmarshalBinary(data []byte) error {
-//
-//	return nil
-//}
 
 func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValidator {
 	v := SyntheticTransactionDepositValidator{}
@@ -112,52 +80,84 @@ func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEn
 	return &ids, &tas, ttd, nil
 }
 
-func returnToSenderTx()
+func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Submission) (*ResponseValidateTX, error) {
+	retsub := ResponseValidateTX{}
+	retsub.Submissions = make([]pb.Submission, 1)
+	rs := &retsub.Submissions[0]
+	rs.Identitychain = ttd.SenderIdentity[:]
+	rs.Chainid = ttd.SenderChainId[:]
+	rs.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
+	//this will reverse the deposit and send it back to the sender.
+	retdep := synthetic.TokenTransactionDeposit{}
+	copy(retdep.Txid[:], ttd.Txid[:])
+	copy(retdep.SenderIdentity[:], submission.Identitychain)
+	copy(retdep.SenderChainId[:], submission.Chainid)
+	copy(retdep.IssuerIdentity[:], ttd.IssuerIdentity[:])
+	copy(retdep.IssuerChainId[:], ttd.IssuerChainId[:])
+	retdep.Metadata.UnmarshalJSON([]byte("{\"Deposit failed\"}"))
+	retdep.DepositAmount.Set(&ttd.DepositAmount)
+	retdepdata, err := retdep.MarshalBinary()
+	if err != nil {
+		//shouldn't get here.
+		return nil, err
+	}
+	rs.Data = retdepdata
+	return &retsub, nil
+}
 
 func (v *SyntheticTransactionDepositValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 
-	ids, tas, ttd, err := v.canTransact(currentstate, submission.Identitychain, submission.Chainid,
+	_, tas, ttd, err := v.canTransact(currentstate, submission.Identitychain, submission.Chainid,
 		submission.Param1, submission.Param2, submission.Data)
 
 	if ttd != nil && err != nil {
 		//return to sender...
-		retsub := ResponseValidateTX{}
-		retsub.Submissions = make([]pb.Submission, 1)
-		rs := &retsub.Submissions[0]
-		rs.Identitychain = ttd.SenderIdentity[:]
-		rs.Chainid = ttd.SenderChainId[:]
-		rs.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
-		retdep := synthetic.TokenTransactionDeposit{}
-		copy(retdep.Txid[:], ttd.Txid[:])
-		copy(retdep.SenderIdentity[:], submission.Identitychain)
-		copy(retdep.SenderChainId[:], submission.Chainid)
-		copy(retdep.IssuerIdentity[:], ttd.IssuerIdentity[:])
-		copy(retdep.IssuerChainId[:], ttd.IssuerChainId[:])
-		retdep.DepositAmount.Set(&ttd.DepositAmount)
-		retdepdata, err := retdep.MarshalBinary()
-		if err != nil {
-			return nil, err
+		rts, err2 := returnToSenderTx(ttd, submission)
+		if err2 != nil {
+			//shouldn't get here.
+			return nil, err2
 		}
-		rs.Data = retdepdata
+		return rts, err
 	}
+
 	if err != nil {
-		return
-	}
-	//if tdd not nil, we need to return to sender.
-	if err != nil {
+		//the transaction data is bad and cannot credit nor return funds.
 		return nil, err
 	}
-	ttd.IssuerIdentity
-	ttd.IssuerChainId
-	ttd.Txid
 
-	ttd.DepositAmount
+	//Modify the state object -> add the deposit amount to the balance
+	err = tas.AddBalance(&ttd.DepositAmount)
+	if err != nil {
+		rts, err2 := returnToSenderTx(ttd, submission)
+		if err2 != nil {
+			//shouldn't get here.
+			return nil, err2
+		}
+		return rts, err
+	}
 
-	return nil, nil
+
+	//Tell BVC to modify the state for the chain
+	ret := ResponseValidateTX{}
+	//TODO: should we send back an ack tx to the sender? ret.Submissions = make([]pb.Submission, 1)
+
+	//Marshal the state change...
+	ret.StateData, err = tas.MarshalBinary()
+
+	//make sure marshalling went ok, if it didn't send the transaction back to sender.
+	if err != nil {
+		//we failed to marshal the token account state, shouldn't get here...
+		rts, err2 := returnToSenderTx(ttd, submission)
+		if err2 != nil {
+			//shouldn't get here.
+			return nil, err2
+		}
+		return rts, err
+	}
+
+	return &ret, nil
 }
 
 func (v *SyntheticTransactionDepositValidator) EndBlock(mdroot []byte) error {
-	copy(v.mdroot[:], mdroot[:])
-	//don't think this serves a purpose???
 	return nil
 }
