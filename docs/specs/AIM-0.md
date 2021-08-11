@@ -1,23 +1,22 @@
 | AIM | Title                   | Status   | Category       | Author                             | Created   |
 | ----- | ----------------------- | -------- | -------------- | ---------------------------------- | --------- |
-| 0     | Fungible Token Standard | Accepted | Token Standard | Dennis Bunfield \<<dbunfield@cybitron.com>\> | 8-10-2021 |
+| 0     | Accumulate Fungible Token Standard | Accepted | Token Standard | Dennis Bunfield \<<dbunfield@cybitron.com>\> | 8-10-2021 |
 
 
 
 # Summary
 
 This document describes the functionality, data structures, and validation
-rules of the **FAT-0** token standard. FAT-0 is a fungible token standard. Its
-functionality is most alike the ERC-20 token standard of Ethereum.
+rules of the **AIM-0** token standard. AIM-0 is a fungible token standard. Its
+functionality is derived from the Factom Asset Token FAT-0 standard and 
+is most alike the ERC-20 token standard of Ethereum.
 
 
 # Motivation
 
-Fungible tokens are ubiquitous in the cryptocurrency space. The properties of
-fungible tokens are generally what most people expect from a currency: units of
-the token are interchangeable and indistinguishable. Most currencies and assets
-have this property, thus it follows that the first basic FAT token type should
-be a simple fungible token.
+The core capability of the Accumulate Network is for tokens to be issued and transacted on the network. This specification outlines 
+the data structures to issue a new token. The Factom Asset Token Fungible Token Standard specification (FAT-0) serves as inspiration for
+the Accumulate Token standard.
 
 <!-- toc -->
 
@@ -57,37 +56,50 @@ be a simple fungible token.
 
 # Specification
 
+## Identity
+Tokens are issued under an ADI (i.e. identity) on the Accumulate Network. 
+This identity will host the token issuance chain. A valid identity must exist on the network to
+issue a token.
+
 ## Token Chain
 
-A single Factom chain is used to hold the initialization of the token and all
-subsequent transaction. The Factom Blockchain provides the underlying consensus
-mechanism for the content and ordering of transactions. Clients shall apply
-transactions in the order that they appear in the Factom Token Chain.
+A token chain is a managed chain that holds the state object defining a token. 
+This token issuance state object includes information
+on specification type, token supply, token precision, token ticker, coinbase account, circulation mode, and metadata. 
+Once the token issuance state has been set, it cannot be changed.
 
-### Token Chain ID
+### Coinbase Account
 
-The Token Chain ID is calculated by using the Token ID and the Issuer's
-Identity Chain ID as described in [FATIP-100](100.md).
+The identity coinbase URL must exist as a token chain prior to token issuance 
+and must reside under the same identity as the token issuance. For 
+tokens of unlimited supply, the identity of the controlling
+coinbase URL will contain the key signing rules established via the 
+identity key groups to mint and distribute new tokens. 
+For tokens of limited supply, the coinbase account will receive a deposit of the 
+full supply upon creation. Key groups can be leveraged to enable multi-sig for token minting 
+(for unlimited supply tokens) and distribution to ensure 
+no single identity has ownership or control over the coinbase token account. Thus, key groups
+can make it such than an individual identity has no material claim 
+on the balance held in the coinbase account.
 
-As the purpose of the first entry in the Token Chain is solely intended to
-create a chain with the appropriate Name IDs, the content of the first entry in
-a Token Chain is ignored.
+### Token Burns
+Token can be taken out of circulation by sending them back to the 
+coinbase account. There are two types of configurations for burning, 
+"burn" or "burn-and-mint."
 
-## Token Chain Entries
+Burning tokens will lower the total cap of a token in the network.  Burn-and-mint will 
+replace burned tokens in the coinbase account, thus making the total available 
+supply in the network fixed.
 
-Factom Chains are permissionless, meaning that anyone can pay to submit any
-entry on any chain. Thus implementations must parse all entries and determine
-their validity.
+## Token States
+
+Balances of tokens are maintained on the user accounts for a particular token type. 
+Only the identity can send tokens from the token chain accounts 
+owned by that identity. Key groups can be used to enable multi-sig transactions. Anyone will be allowed to make deposits into a user's account.
 
 ### Global Requirements
 
 All valid entries must adhere to the following.
-
-#### On Token Chain
-
-Only entries submitted on the Token Chain may be valid. Thus all entries must
-be properly submitted and paid for according to Factom's rules. Implementations
-shall not prematurely apply pending Factom entries to the token state.
 
 #### Strict JSON Parsing
 
@@ -105,26 +117,19 @@ Implementation Notes for some mechanisms to detect and prohibit duplicate field
 names if the JSON library does not support their detection natively.
 
 
-#### External IDs and Signatures
+#### Signatures
 
-All valid entries must have External IDs with valid signatures that conform to
-the specifications defined by [FATIP-103](103.md). The required set of
-signatures depends on the entry and is defined below for each entry type.
+Signature(s) are defined by [FATIP-103](103.md). The required set of
+signatures depends on the key group defined for the identity.
 
-## Token Initialization Entry
-
-The Token Initialization Entry establishes parameters and metadata about the
-Token. All entries prior to the first valid Initialization Entry shall be
-ignored. A Token may only be initialized once and these parameters and metadata
-cannot ever be modified. Subsequent Initializations entries after the first
-valid one, are always considered invalid and ignored.
-
-### Initialization Entry Content Example
+### Token Issuance Example
 
 ```json
 {
   "type": "AIM-0",
   "supply": 50000000000000000,
+  "coinbase": "accumulate/coinbase",
+  "mode": "burn-and-mint",
   "precision": 8, 
   "symbol": "ATK",
   "metadata": {"custom-field": "Accumulate Tokens"}
@@ -135,16 +140,17 @@ valid one, are always considered invalid and ignored.
 
 | Name        | Type   | Description                                                  | Validation                                                   | Required |
 | ----------- | ------ | ------------------------------------------------------------ | ------------------------------------------------------------ | -------- |
-| `type`      | string | The type of this token issuance.                             | Must equal 'FAT-0'.                                          | Y        |
+| `type`      | string | The type the chain validator for the issued token.                             | Must equal 'AIM-0'.                                          | Y        |
+| `coinbase`  | string | The coinbase URL account.                                    | Identity chain path for the coinbase token account             | Y        |
+| `ticker`    | string | The display symbol of the token.                             | Must be A-Z,1-9, and <= 10 characters in length.             | Y        |
 | `supply`    | number | The maximum possible number of tokens that can ever be issued. Expect integer units x 10^precision | Must be greater than 0, or -1 for an unlimited supply. All other values are invalid. | Y        |
 | `precision` | number | The decimal accuracy of the tokens base unit (e.g. each 1 ATK is composed of 10 ^ 8 base units). | Must be an integer in the range 0-18 inclusive. Default 0.   | N        |
-| `symbol`    | string | The display symbol of the token.                             | Must be A-Z, and 1-4 characters in length.                   | N        |
 | `metadata`  | any    | Optional metadata defined by the Issuer.                     | This may be any valid JSON type.                             | N        |
 
 ### Signing
 
 The Initialization Entry must be signed by the Issuer's key established by the
-Identity Chain referenced in the Token Chain's Name IDs. Thus the Identity
+Identity Chain referenced in the Token Chain's Name IDs. Thus, the Identity
 Chain must exist and be properly set up with a key at the time that the
 Initialization Entry is submitted. See [FATIP-101](101.md) for details on key
 selection from the Identity Chain and [FATIP-103](103.md) for details on
