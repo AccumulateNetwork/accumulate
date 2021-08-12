@@ -361,3 +361,17 @@ func GetAddressFromIdentity(name string) uint64 {
 //
 //	return chainid.Bytes(), nil
 //}
+
+type Bytes32 [32]byte
+
+// MarshalJSON serializes ByteArray to hex
+func (s *Bytes32) MarshalJSON() ([]byte, error) {
+	bytes, err := json.Marshal(fmt.Sprintf("%x", string(s[:])))
+	return bytes, err
+}
+
+// UnmarshalJSON serializes ByteArray to hex
+func (s *Bytes32) UnmarshalJSON() ([]byte, error) {
+	bytes, err := json.Marshal(fmt.Sprintf("%x", string(s[:])))
+	return bytes, err
+}
