@@ -2,31 +2,37 @@ package state
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/managed"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"math/big"
 )
 
 type TokenAccountState struct {
 	StateEntry
-	issueridentity managed.Hash //need to know who issued tokens
-	issuerchainid  managed.Hash //identity/issue chains both hold the metrics for the TokenRules ... hmm.. do those need to be passed along since those need to be used
+	issueridentity types.Bytes32 //need to know who issued tokens
+	issuerchainid  types.Bytes32 //identity/issue chains both hold the metrics for the TokenRules ... hmm.. do those need to be passed along since those need to be used
 	balance        big.Int
+	coinbase       *types.TokenIssuance
 }
 
-func NewTokenAccountState(issuerid []byte, issuerchain []byte) *TokenAccountState {
+func NewTokenAccountState(issuerid []byte, issuerchain []byte, coinbase *types.TokenIssuance) *TokenAccountState {
 	tas := TokenAccountState{}
 	copy(tas.issueridentity[:], issuerid)
 	copy(tas.issuerchainid[:], issuerchain)
+	tas.coinbase = coinbase
 	return &tas
 }
 
-const TokenAccountStateLen = 32 + 32 + 32
+const tokenAccountStateLen = 32 + 32 + 32
 
-func (ts *TokenAccountState) GetIssuerIdentity() *managed.Hash {
+func (ts *TokenAccountState) Type() string {
+	return "AIM-0"
+}
+
+func (ts *TokenAccountState) GetIssuerIdentity() *types.Bytes32 {
 	return &ts.issueridentity
 }
 
-func (ts *TokenAccountState) GetIssuerChainId() *managed.Hash {
+func (ts *TokenAccountState) GetIssuerChainId() *types.Bytes32 {
 	return &ts.issuerchainid
 }
 
@@ -58,28 +64,51 @@ func (ts *TokenAccountState) AddBalance(amt *big.Int) error {
 	return nil
 }
 
-func (ts *TokenAccountState) MarshalBinary() ([]byte, error) {
+func (ts *TokenAccountState) MarshalBinary() (ret []byte, err error) {
 
-	data := make([]byte, TokenAccountStateLen)
+	var coinbase []byte
+	if ts.coinbase != nil {
+		coinbase, err = ts.coinbase.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+	}
+	data := make([]byte, tokenAccountStateLen+len(coinbase))
 
-	i := copy(data[:], ts.issueridentity.Bytes())
-	i += copy(data[i:], ts.issuerchainid.Bytes())
+	i := copy(data[:], ts.issueridentity[:])
+	i += copy(data[i:], ts.issuerchainid[:])
 
 	ts.balance.FillBytes(data[i:])
+	i += 32
+
+	if ts.coinbase != nil {
+		copy(data[i:], coinbase)
+	}
 
 	return data, nil
 }
 
 func (ts *TokenAccountState) UnmarshalBinary(data []byte) error {
 
-	if len(data) < TokenAccountStateLen {
+	if len(data) < tokenAccountStateLen {
 		return fmt.Errorf("Invalid Token Data for unmarshalling %X on chain %X", ts.issueridentity, ts.issuerchainid)
 	}
 
-	i := copy(ts.issueridentity.Bytes(), data[:])
-	i += copy(ts.issuerchainid.Bytes(), data[i:])
+	i := copy(ts.issueridentity[:], data[:])
+	i += copy(ts.issuerchainid[:], data[i:])
 
 	ts.balance.SetBytes(data[i:])
+	i += 32
+
+	if len(data) > i {
+		coinbase := types.TokenIssuance{}
+		err := coinbase.UnmarshalBinary(data[i:])
+		if err != nil {
+			return err
+		}
+		ts.coinbase = &coinbase
+	}
+
 	return nil
 }
 

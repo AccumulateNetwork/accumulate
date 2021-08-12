@@ -3,16 +3,17 @@ package synthetic
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"math/big"
 )
 
 type TokenTransactionDeposit struct {
-	Txid           [32]byte        `json:"txid"`            //txid of original tx
+	Txid           types.Bytes32   `json:"txid"`            //txid of original tx
 	DepositAmount  big.Int         `json:"amount"`          //amount
-	SenderIdentity [32]byte        `json:"sender-id"`       //sender of amount
-	SenderChainId  [32]byte        `json:"sender-chain-id"` // sender's token chain
-	IssuerIdentity [32]byte        `json:"issuer-identity"` //token issuer's identity chain
-	IssuerChainId  [32]byte        `json:"issuer-chain-id"` //token issuer's chain id
+	SenderIdentity types.Bytes32   `json:"sender-id"`       //sender of amount
+	SenderChainId  types.Bytes32   `json:"sender-chain-id"` // sender's token chain
+	IssuerIdentity types.Bytes32   `json:"issuer-identity"` //token issuer's identity chain
+	IssuerChainId  types.Bytes32   `json:"issuer-chain-id"` //token issuer's chain id
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
 }
 

@@ -6,9 +6,6 @@ import (
 	"math/big"
 )
 
-//{"inputs": {
-//{"transfer":10000,"to-accounts":{"GreenRock/YourAtkTokens":10000}}
-//need to formalize this in an object.
 type TokenTransaction struct {
 	TransferAmount big.Int             `json:"transfer"`
 	Output         map[string]*big.Int `json:"to-accounts"`
@@ -23,7 +20,6 @@ func (t *TokenTransaction) SetTransferAmount(amt *big.Int) error {
 	return nil
 }
 
-//
 func (t *TokenTransaction) AddToAccount(aditokenpath string, amt *big.Int) error {
 	if t.Output == nil {
 		t.Output = make(map[string]*big.Int)

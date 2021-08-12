@@ -1,14 +1,16 @@
 package state
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"math/big"
 	"testing"
 )
 
 func TestTokenBalanceState(t *testing.T) {
 
-	token := TokenAccountState{}
+	token := NewTokenAccountState([]byte("issueid1"), []byte("issuechainid"), nil)
 
 	fmt.Println(token.Balance())
 
@@ -75,7 +77,8 @@ func TestTokenBalanceState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	err = token.UnmarshalBinary(tokenbytes)
+	token2 := NewTokenAccountState([]byte("blah"), []byte("blah"), nil)
+	err = token2.UnmarshalBinary(tokenbytes)
 
 	if err != nil {
 		t.Fatal(err)
@@ -86,4 +89,27 @@ func TestTokenBalanceState(t *testing.T) {
 		t.Fatalf("Unmarshal error, Expected a balance of %d, but got %d", expected_balance, token.Balance())
 	}
 
+	supply := big.NewInt(200000000000000)
+	issuedtoken, err := types.NewTokenIssuance("FCT", supply, 8, types.TokenCirculationMode_Burn_and_Mint)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	identityhash := sha256.Sum256([]byte("MyADI"))
+	chainid := sha256.Sum256([]byte("MyADI/MyChain"))
+	account := NewTokenAccountState(identityhash[:], chainid[:], issuedtoken)
+
+	actdata, err := account.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	account2 := TokenAccountState{}
+
+	err = account2.UnmarshalBinary(actdata)
+
+	if err != nil {
+		t.Fatal(err)
+	}
 }
