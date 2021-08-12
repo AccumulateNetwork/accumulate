@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/abci/example/code"
 
 	//"crypto/ed25519"
@@ -703,23 +704,29 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
 
-	chainstate, err := app.getCurrentState(sub.GetChainid())
-
-	//not finding the chain id is probably not a big deal if the chain doesn't exist yet, so need better scrutiny of TX
-	//if err != nil {
-	//	return abcitypes.ResponseDeliverTx{Code: code.CodeTypeUnauthorized, GasWanted: 0,
-	//		Log: fmt.Sprintf("Unable to find chain id") }
-	//}
-
-	//not findinng the identity may not be a big deal if we are attempting to create one so need more scrutiny of TX
+	//not finding the identity is a big deal.  Need to send a Nak if this a synthetic tx.
 	identitystate, err := app.getCurrentState(sub.GetIdentitychain()) //need the identity chain
 
 	//lack of chain or identity isn't necessarily an error.
-	//if err != nil {
+	if err != nil {
+		if sub.Instruction&0x10 == 0 {
+			synthetic.New
+			synthetic.AckNakCode_Identity_Not_Found
+		}
+		ret.Code = code.CodeTypeUnauthorized
+		ret.Info = fmt.Sprintf("Invalid Identity State for Identity %X", sub.GetIdentitychain())
+		return ret
+	}
+
+	//retrieve the chain state.  If chain state is nil that means the chain has not been created nor typed
+	//not finding the chain id is not a big deal if the chain doesn't exist yet, so need better scrutiny of TX
+	chainstate, err := app.getCurrentState(sub.GetChainid())
+	//if err != nil && sub.Instruction != pb.AccInstruction_Token_URL_Creation {
 	//	ret.Code = code.CodeTypeUnauthorized
-	//	ret.Info = fmt.Sprintf("Invalid State Object for Identity %X", sub.GetIdentitychain())
+	//	ret.Info = fmt.Sprintf("Invalid Chain Object for Identity %X, Chain ID %X", sub.GetIdentitychain(), sub.GetChainid())
 	//}
 
+	//make a current state object to pass to the validator.
 	currentstate, err := validator.NewStateEntry(identitystate, chainstate, &app.mmdb)
 
 	if err != nil {
