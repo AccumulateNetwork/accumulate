@@ -136,7 +136,6 @@ func (v *SyntheticTransactionDepositValidator) Validate(currentstate *StateEntry
 		return rts, err
 	}
 
-
 	//Tell BVC to modify the state for the chain
 	ret := ResponseValidateTX{}
 	//TODO: should we send back an ack tx to the sender? ret.Submissions = make([]pb.Submission, 1)
