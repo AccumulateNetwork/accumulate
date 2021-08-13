@@ -16,7 +16,7 @@ func CreateAccumulateBVC(config string, path string) *tendermint.AccumulatorVMAp
 	//fct := validator.NewFactoidValidator()
 	//acc.AddValidator(&fct.ValidatorContext)
 
-	synthval := validator.NewSyntheticTransactionValidator()
+	synthval := validator.NewSyntheticTransactionDepositValidator()
 	acc.AddValidator(&synthval.ValidatorContext)
 
 	idval := validator.NewCreateIdentityValidator()

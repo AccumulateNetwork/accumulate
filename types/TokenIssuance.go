@@ -21,7 +21,7 @@ type TokenIssuance struct {
 	Precision int8                 `json:"precision"`
 	Symbol    string               `json:"symbol"`
 	Mode      TokenCirculationMode `json:"mode"`
-	Metadata  json.RawMessage      `json:"metadata,omitempty"`
+	Metadata  *json.RawMessage     `json:"metadata,omitempty"`
 }
 
 func NewTokenIssuance(symbol string, supply *big.Int, precision int8, mode TokenCirculationMode) (*TokenIssuance, error) {
@@ -64,7 +64,8 @@ func (t *TokenIssuance) SetMetadata(md *json.RawMessage) error {
 	if md == nil {
 		return fmt.Errorf("Invalid metadata")
 	}
-	copy(t.Metadata[:], (*md)[:])
+	t.Metadata = &json.RawMessage{}
+	copy((*t.Metadata)[:], (*md)[:])
 	return nil
 }
 
@@ -83,10 +84,15 @@ func (t *TokenIssuance) MarshalBinary() ([]byte, error) {
 	buffer.WriteByte(byte(t.Precision))
 	buffer.WriteByte(byte(t.Mode))
 
-	mdlen := int16(len(t.Metadata))
+	mdlen := int16(0)
+	if t.Metadata != nil {
+		mdlen = int16(len(*t.Metadata))
+	}
 	buffer.WriteByte(byte(mdlen >> 8))
 	buffer.WriteByte(byte(mdlen))
-	buffer.Write(t.Metadata)
+	if t.Metadata != nil {
+		buffer.Write(*t.Metadata)
+	}
 	if len(buffer.Bytes()) > 0xFFFF {
 		return nil, fmt.Errorf("Error marshalling Token Isuance. Buffer exceeeds permitted size")
 	}
@@ -157,7 +163,8 @@ func (t *TokenIssuance) UnmarshalBinary(data []byte) error {
 			return fmt.Errorf("Cannot unmarshal Token Issuance object at Metadata")
 		}
 
-		t.Metadata = append(t.Metadata, data[i:slen+i]...)
+		t.Metadata = &json.RawMessage{}
+		*t.Metadata = append(*t.Metadata, data[i:slen+i]...)
 	}
 
 	return nil

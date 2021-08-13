@@ -85,9 +85,8 @@ func (v *TokenIssuanceValidator) Validate(currentstate *StateEntry, submission *
 		return nil, err
 	}
 	resp = &ResponseValidateTX{}
-	//so. also need to return the identity chain and chain id these belong to....  Really need the factom entry format updated.
-	resp.StateData = tasso //make([][]byte,1)
-	//resp.StateData[0] = data
+	//so. also need to return the identity chain and chain id these belong to....
+	resp.StateData = tasso
 
 	return resp, nil
 
@@ -101,7 +100,5 @@ func (v *TokenIssuanceValidator) Validate(currentstate *StateEntry, submission *
 }
 
 func (v *TokenIssuanceValidator) EndBlock(mdroot []byte) error {
-	//copy(v.mdroot[:], mdroot[:])
-	//don't think this serves a purpose???
 	return nil
 }

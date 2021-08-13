@@ -29,7 +29,7 @@ func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*st
 
 func CreateFakeTokenAccountState(t *testing.T) *state.StateObject {
 
-	tas := state.NewTokenAccountState([]byte("dont"), []byte("dont/care"))
+	tas := state.NewTokenAccountState([]byte("dont"), []byte("dont/care"), nil)
 
 	deposit := big.NewInt(5000)
 	tas.AddBalance(deposit)

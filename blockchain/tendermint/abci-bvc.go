@@ -4,7 +4,6 @@ import (
 	"context"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/abci/example/code"
 
 	//"crypto/ed25519"
@@ -567,7 +566,7 @@ func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte)
 	//The Entry hash is the hash of the state object being stored
 	mms.currentstateobject.EntryHash = hash[:]
 	//The Entry is the State object derived from the transaction
-	mms.currentstateobject.Entry = entry
+	mms.currentstateobject.Entry = types.Bytes(entry)
 
 	//list of the state objects from the beginning of the block to the end, so don't know if this needs to be kept
 	mms.stateobjects = append(mms.stateobjects, mms.currentstateobject)
@@ -710,8 +709,8 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	//lack of chain or identity isn't necessarily an error.
 	if err != nil {
 		if sub.Instruction&0x10 == 0 {
-			synthetic.New
-			synthetic.AckNakCode_Identity_Not_Found
+			//synthetic.New
+			//synthetic.AckNakCode_Identity_Not_Found
 		}
 		ret.Code = code.CodeTypeUnauthorized
 		ret.Info = fmt.Sprintf("Invalid Identity State for Identity %X", sub.GetIdentitychain())

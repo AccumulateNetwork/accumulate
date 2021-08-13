@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
@@ -50,15 +49,16 @@ func MakeBVCSubmission(ins string, identityname string, chainpath string, payloa
 func MarshalBinaryLedgerAdiChainPath(fullchainpath string, payload []byte, timestamp int64) []byte {
 	var msg []byte
 
+	//the timestamp will act
+	var tsbytes [8]byte
+	binary.LittleEndian.PutUint64(tsbytes[:], uint64(timestamp))
+	msg = append(msg, tsbytes[:]...)
+
 	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
 	chainid := sha256.Sum256([]byte(fullchainpath))
 	msg = append(msg, chainid[:]...)
 
 	msg = append(msg, payload...)
-
-	var tsbytes [8]byte
-	binary.LittleEndian.PutUint64(tsbytes[:], uint64(timestamp))
-	msg = append(msg, tsbytes[:]...)
 
 	return msg
 }
@@ -66,14 +66,14 @@ func MarshalBinaryLedgerAdiChainPath(fullchainpath string, payload []byte, times
 func MarshalBinaryLedgerChainId(chainid []byte, payload []byte, timestamp int64) []byte {
 	var msg []byte
 
+	var tsbytes [8]byte
+	binary.LittleEndian.PutUint64(tsbytes[:], uint64(timestamp))
+	msg = append(msg, tsbytes[:]...)
+
 	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
 	msg = append(msg, chainid[:]...)
 
 	msg = append(msg, payload...)
-
-	var tsbytes [8]byte
-	binary.LittleEndian.PutUint64(tsbytes[:], uint64(timestamp))
-	msg = append(msg, tsbytes[:]...)
 
 	return msg
 }
@@ -307,24 +307,24 @@ func CreateTokenTransaction(inputidentityname *string,
 }
 
 //this expects a identity chain path to produce the chainid.  RedWagon/Acc/Chain/Path
-func GetChainIdFromChainPath(identitychainpath string) *managed.Hash {
+func GetChainIdFromChainPath(identitychainpath string) *Bytes32 {
 	_, chainpathformatted, err := ParseIdentityChainPath(identitychainpath)
 	if err != nil {
 		return nil
 	}
 
-	h := managed.Hash(sha256.Sum256([]byte(chainpathformatted)))
+	h := Bytes32(sha256.Sum256([]byte(chainpathformatted)))
 	return &h
 }
 
 //Helper function to generate a identity chain from adi. can return nil, if the adi is malformed
-func GetIdentityChainFromIdentity(adi string) *managed.Hash {
+func GetIdentityChainFromIdentity(adi string) *Bytes32 {
 	namelower, _, err := ParseIdentityChainPath(adi)
 	if err != nil {
 		return nil
 	}
 
-	h := managed.Hash(sha256.Sum256([]byte(namelower)))
+	h := Bytes32(sha256.Sum256([]byte(namelower)))
 	return &h
 }
 
@@ -362,6 +362,25 @@ func GetAddressFromIdentity(name string) uint64 {
 //	return chainid.Bytes(), nil
 //}
 
+type Bytes []byte
+
+// MarshalJSON serializes ByteArray to hex
+func (s *Bytes) MarshalJSON() ([]byte, error) {
+	bytes, err := json.Marshal(fmt.Sprintf("%x", string(*s)))
+	return bytes, err
+}
+
+// UnmarshalJSON serializes ByteArray to hex
+func (s *Bytes) UnmarshalJSON(data []byte) error {
+	d, err := hex.DecodeString(string(data))
+	if err != nil {
+		return nil
+	}
+	*s = make([]byte, len(d))
+	copy(*s, d)
+	return err
+}
+
 type Bytes32 [32]byte
 
 // MarshalJSON serializes ByteArray to hex
@@ -371,7 +390,17 @@ func (s *Bytes32) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON serializes ByteArray to hex
-func (s *Bytes32) UnmarshalJSON() ([]byte, error) {
-	bytes, err := json.Marshal(fmt.Sprintf("%x", string(s[:])))
-	return bytes, err
+func (s *Bytes32) UnmarshalJSON(data []byte) error {
+	str := strings.Trim(string(data), `"`)
+	d, err := hex.DecodeString(str)
+	if err != nil {
+		return nil
+	}
+	copy(s[:], d)
+	return err
+}
+
+// Bytes returns the bite slice of the 32 byte array
+func (s Bytes32) Bytes() []byte {
+	return s[:]
 }
