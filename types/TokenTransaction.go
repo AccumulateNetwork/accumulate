@@ -12,7 +12,23 @@ type TokenTransaction struct {
 	Metadata       json.RawMessage     `json:"metadata,omitempty"`
 }
 
+func NewTokenTransaction(amt *big.Int, outputs *map[string]*big.Int) *TokenTransaction {
+	tx := &TokenTransaction{}
+	tx.SetTransferAmount(amt)
+
+	if outputs != nil {
+		for k, v := range *outputs {
+			tx.AddToAccount(k, v)
+		}
+	}
+
+	return tx
+}
+
 func (t *TokenTransaction) SetTransferAmount(amt *big.Int) error {
+	if amt == nil {
+		return fmt.Errorf("No Transfer Amount Specified")
+	}
 	if amt.Sign() < 0 {
 		return fmt.Errorf("Invalid Transfer Amount")
 	}
@@ -24,6 +40,7 @@ func (t *TokenTransaction) AddToAccount(aditokenpath string, amt *big.Int) error
 	if t.Output == nil {
 		t.Output = make(map[string]*big.Int)
 	}
+
 	var toamt big.Int
 	toamt.Set(amt)
 	t.Output[aditokenpath] = &toamt

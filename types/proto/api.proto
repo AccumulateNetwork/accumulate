@@ -113,18 +113,18 @@ enum AccInstruction {
 
 message Submission
 {
-  //uint64 address     = 1; // route to chain validator
-  bytes  identitychain = 1; // router will determine network this chain this resides on by looking at lower 64 bits (little Endian)
+  string AdiChainPath = 1;  //provided for reference <= either send this or the chains, chains have advantage of not needing to hash.
+  bytes  identitychain = 2; // router will determine network this chain this resides on by looking at lower 64 bits (little Endian)
   bytes  chainid = 3; // chainid of the entry somewhere underneath identity chain
-  uint64 type = 2; // type id of validator needed to process the --> we might be able to do away with this. since chain id will determine chain validation rules in shadow chain.
-  AccInstruction instruction = 4; // validator specific,
-  uint64 param1 = 5; // validator specific, deprecated
-  uint64 param2 = 6; // validator specific, deprecated
-  bytes  data = 7; // validator will validate this data however it sees fit. may include signature
-  int64  timestamp = 8;
-  bytes  key = 9;
-  bytes  signature = 10;
-
+  uint64 type = 4; // deprecated.
+  AccInstruction instruction = 5; // validator specific,
+  uint64 param1 = 6; // validator specific, deprecated
+  uint64 param2 = 7; // validator specific, deprecated
+  bytes  data = 8; // validator will validate this data however it sees fit. may include signature
+  int64  timestamp = 9;
+  bytes  key = 10;
+  bytes  signature = 11;
+  string sourceAdiChainPath = 12; //who sent this ? only valid for synthetic transactions.
 }
 
 message SubmissionResponse {
