@@ -4,23 +4,33 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/managed"
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type StateEntry interface {
-	//MarshalBinary() ([]byte, error)
-	//UnmarshalBinary(data []byte) error
-	//MarshalJSON() (string, error)
-	//UnmarshalJSON(s string) error
-	Type() string //return the Chain Type for the entry.
+	MarshalBinary() ([]byte, error)
+	UnmarshalBinary(data []byte) error
+	MarshalJSON() ([]byte, error)
+	UnmarshalJSON(s []byte) error
+	GetType() string //return the Chain Type for the entry.
+	GetAdiChainPath() string
 }
 
 type StateObject struct {
-	Type          string
-	StateHash     []byte //this is the same as the entry hash.
-	PrevStateHash []byte //not sure if we need this since we are only keeping up with current state
-	EntryHash     []byte //not sure this is needed since it is baked into state hash...
-	Entry         []byte //this is the data that stores the current state of the chain
+	Type          string      `json:"type"`
+	AdiChainPath  string      `json:"adi-chain-path"`
+	StateHash     types.Bytes `json:"state-hash"`      //this is the same as the entry hash.
+	PrevStateHash types.Bytes `json:"prev-state-hash"` //not sure if we need this since we are only keeping up with current state
+	EntryHash     types.Bytes `json:"entry-hash"`      //not sure this is needed since it is baked into state hash...
+	Entry         types.Bytes `json:"entry"`           //this is the state data that stores the current state of the chain
+}
+
+func (s *StateObject) GetType() *string {
+	return &s.Type
+}
+
+func (s *StateObject) GetAdiChainPath() *string {
+	return &s.AdiChainPath
 }
 
 func (app *StateObject) Marshal() ([]byte, error) {
@@ -48,9 +58,9 @@ func (app *StateObject) Unmarshal(data []byte) error {
 	if len(data)-int(data[0]) < 1+32+32+32+1 {
 		return fmt.Errorf("Insufficient data for on State object for state type")
 	}
-	app.StateHash = managed.Hash{}.Bytes()
-	app.PrevStateHash = managed.Hash{}.Bytes()
-	app.EntryHash = managed.Hash{}.Bytes()
+	app.StateHash = types.Bytes32{}.Bytes()
+	app.PrevStateHash = types.Bytes32{}.Bytes()
+	app.EntryHash = types.Bytes32{}.Bytes()
 
 	app.Type = string(data[1 : 1+data[0]])
 	i := int(data[0]) + 1
@@ -61,7 +71,8 @@ func (app *StateObject) Unmarshal(data []byte) error {
 	if bytes.Compare(app.EntryHash, entryhash[:]) != 0 {
 		return fmt.Errorf("Entry Hash does not match the data hash")
 	}
-	app.Entry = data[i:]
+
+	app.Entry = types.Bytes(data[i:])
 
 	return nil
 }
