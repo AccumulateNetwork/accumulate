@@ -17,8 +17,8 @@ const (
 	KeyType_public
 	KeyType_sha256
 	KeyType_sha256d
-	KeyType_group
 	KeyType_chain
+	KeyType_group
 )
 
 type identityState struct {
@@ -159,26 +159,51 @@ func (is *IdentityState) UnmarshalBinary(data []byte) error {
 }
 
 func (is *IdentityState) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, is.identityState)
+	return json.Unmarshal(data, &is.identityState)
 }
 
 func (is *IdentityState) MarshalJSON() ([]byte, error) {
-	return json.Marshal(is.identityState)
+	return json.Marshal(&is.identityState)
 }
 
 func (k *KeyType) UnmarshalJSON(b []byte) error {
 	str := strings.Trim(string(b), `"`)
 
 	switch {
-	case str == "KeyType_public":
+	case str == "public":
 		*k = KeyType_public
-	case str == "KeyType_sha256":
+	case str == "sha256":
 		*k = KeyType_sha256
-	case str == "KeyType_sha256d":
+	case str == "sha256d":
 		*k = KeyType_sha256d
+	case str == "chain":
+		str = "KeyType_chain"
+	case str == "group":
+		*k = KeyType_group
 	default:
 		*k = KeyType_unknown
 	}
 
 	return nil
+}
+
+func (k *KeyType) MarshalJSON() ([]byte, error) {
+	var str string
+	switch {
+	case *k == KeyType_public:
+		str = "public"
+	case *k == KeyType_sha256:
+		str = "sha256"
+	case *k == KeyType_sha256d:
+		str = "sha256d"
+	case *k == KeyType_chain:
+		str = "chain"
+	case *k == KeyType_group:
+		str = "group"
+	default:
+		str = "unknown"
+	}
+
+	data, _ := json.Marshal(str)
+	return data, nil
 }
