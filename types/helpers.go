@@ -372,7 +372,8 @@ func (s *Bytes) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON serializes ByteArray to hex
 func (s *Bytes) UnmarshalJSON(data []byte) error {
-	d, err := hex.DecodeString(string(data))
+	str := strings.Trim(string(data), `"`)
+	d, err := hex.DecodeString(str)
 	if err != nil {
 		return nil
 	}
