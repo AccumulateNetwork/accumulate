@@ -1,7 +1,11 @@
 package validator
 
 import (
+	"crypto/sha256"
+	"encoding/json"
+	"github.com/AccumulateNetwork/accumulated/types"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 
 	//"crypto/sha256"
 	"fmt"
@@ -43,15 +47,21 @@ func NewCreateIdentityValidator() *CreateIdentityValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "000000000000000000000000000000000000000000000000000000000000001D" //does this make sense anymore?
-	v.EV = NewEntryValidator()
+	//v.EV = NewEntryValidator()
 	v.SetInfo(chainid, "create-identity", pb.AccInstruction_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
 func (v *CreateIdentityValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+	if currentstate == nil {
+		//but this is to be expected...
+		return fmt.Errorf("Current State Not Defined")
+	}
+
 	return nil
 }
+
 func (v *CreateIdentityValidator) Initialize(config *cfg.Config) error {
 	return nil
 }
@@ -71,37 +81,49 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, submission 
 		return nil, fmt.Errorf("Current State Not Defined")
 	}
 
-	//Temporary validation rules:
-	idstate := acctypes.IdentityState{}
-	err = idstate.UnmarshalBinary(submission.Data)
+	if currentstate.IdentityState == nil {
+		return nil, fmt.Errorf("Sponsor identity is not defined")
+	}
+
+	ic := types.IdentityCreate{}
+	err = json.Unmarshal(submission.Data, &ic)
+	if err != nil {
+		return nil, fmt.Errorf("Data payload of submission is not a valid identity create message")
+	}
+
+	isc := synthetic.NewIdentityStateCreate(string(ic.IdentityName))
+	ledger := types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp)
+	txid := sha256.Sum256(ledger)
+	copy(isc.Txid[:], txid[:])
+	copy(isc.SourceIdentity[:], submission.Identitychain)
+	copy(isc.SourceChainId[:], submission.Chainid)
+	isc.SetKeyData(acctypes.KeyType_sha256, ic.IdentityKeyHash[:])
+	iscdata, err := json.Marshal(isc)
 	if err != nil {
 		return nil, err
 	}
+
+	destid, destchainpath, err := types.ParseIdentityChainPath(string(isc.AdiChainPath))
+	if err != nil {
+		return nil, fmt.Errorf("invalid adi chain path")
+	}
+	destidhash := sha256.Sum256([]byte(destid))
+	destchainid := sha256.Sum256([]byte(destchainpath))
 
 	resp = &ResponseValidateTX{}
-	//so. also need to return the identity chain and chain id these belong to....  Really need the factom entry format updated.
-	resp.StateData = submission.Data //make([][]byte,1)
-	//resp.StateData[0] = data
+
+	//send of a synthetic transaction to the correct network
+	resp.Submissions = make([]pb.Submission, 1)
+	sub := &resp.Submissions[0]
+	sub.Instruction = pb.AccInstruction_Synthetic_Identity_Creation
+	sub.Timestamp = time.Now().Unix()
+	sub.Data = iscdata
+	sub.Chainid = destchainid[:]
+	sub.Identitychain = destidhash[:]
 
 	return resp, nil
-	//this builds the entry if valid
-	_, err = v.EV.Validate(currentstate, submission)
-
-	if err != nil {
-		return nil, err
-	}
-
-	//now we need to validate the contents.
-	//for _ := range res.Submissions {
-	//	//now we need to validate the contents.
-	//	//need to validate this: res.Submissions[i].Data()
-
-	return nil, nil
-	//return &pb.Submission{}, nil
 }
 
 func (v *CreateIdentityValidator) EndBlock(mdroot []byte) error {
-	//copy(v.mdroot[:], mdroot[:])
-	//don't think this serves a purpose???
 	return nil
 }

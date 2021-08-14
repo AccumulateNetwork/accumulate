@@ -17,20 +17,11 @@ type StateEntry interface {
 }
 
 type StateObject struct {
-	Type          string      `json:"type"`
-	AdiChainPath  string      `json:"adi-chain-path"`
+	StateHeader
 	StateHash     types.Bytes `json:"state-hash"`      //this is the same as the entry hash.
 	PrevStateHash types.Bytes `json:"prev-state-hash"` //not sure if we need this since we are only keeping up with current state
 	EntryHash     types.Bytes `json:"entry-hash"`      //not sure this is needed since it is baked into state hash...
 	Entry         types.Bytes `json:"entry"`           //this is the state data that stores the current state of the chain
-}
-
-func (s *StateObject) GetType() *string {
-	return &s.Type
-}
-
-func (s *StateObject) GetAdiChainPath() *string {
-	return &s.AdiChainPath
 }
 
 func (app *StateObject) Marshal() ([]byte, error) {
@@ -62,7 +53,7 @@ func (app *StateObject) Unmarshal(data []byte) error {
 	app.PrevStateHash = types.Bytes32{}.Bytes()
 	app.EntryHash = types.Bytes32{}.Bytes()
 
-	app.Type = string(data[1 : 1+data[0]])
+	app.Type = types.String(data[1 : 1+data[0]])
 	i := int(data[0]) + 1
 	i += copy(app.StateHash, data[i:i+32])
 	i += copy(app.PrevStateHash, data[i:i+32])

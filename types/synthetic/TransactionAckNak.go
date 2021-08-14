@@ -19,7 +19,7 @@ const (
 )
 
 type TransactionAckNak struct {
-	Header   `json:"header"`
+	Header
 	Code     AckNakCode      `json:"code"`               // Pass / Fail Return Code
 	Metadata json.RawMessage `json:"metadata,omitempty"` // Reason for Pass / Fail
 }

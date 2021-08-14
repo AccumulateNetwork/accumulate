@@ -11,7 +11,6 @@ import (
 )
 
 func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*state.StateObject, []byte) {
-
 	id, _, _ := types.ParseIdentityChainPath(identitychainpath)
 
 	idhash := sha256.Sum256([]byte(id))
@@ -27,9 +26,10 @@ func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*st
 	return &so, idhash[:]
 }
 
-func CreateFakeTokenAccountState(t *testing.T) *state.StateObject {
+func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.StateObject {
+	id, cp, _ := types.ParseIdentityChainPath(identitychainpath)
 
-	tas := state.NewTokenAccountState([]byte("dont"), []byte("dont/care"), nil)
+	tas := state.NewTokenAccountState([]byte(id), []byte(cp), nil)
 
 	deposit := big.NewInt(5000)
 	tas.AddBalance(deposit)
@@ -46,11 +46,11 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 
 	inputamt := big.NewInt(5000)
 
-	identityname := "RedWagon"
-	tokenchainname := "RedWagon/acc"
+	identityname := "RoadRunner"
+	tokenchainname := "RoadRunner/ACME"
 
 	outputs := make(map[string]*big.Int)
-	outputs["RedRock/myacctoken"] = big.NewInt(5000)
+	outputs["WileECoyote/MyACMEToken"] = big.NewInt(5000)
 
 	sub, err := types.CreateTokenTransaction(&identityname, &tokenchainname,
 		inputamt, &outputs, nil, kp)
@@ -61,11 +61,10 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 }
 
 func TestTokenTransactionValidator_Check(t *testing.T) {
-
 	kp := types.CreateKeyPair()
-	identitychainpath := "RedWagon/acc"
+	identitychainpath := "RoadRunner/ACME"
 	currentstate := StateEntry{}
-	currentstate.ChainState = CreateFakeTokenAccountState(t)
+	currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath, t)
 	var idhash []byte
 	currentstate.IdentityState, idhash = CreateFakeIdentityState(identitychainpath, kp)
 
@@ -80,5 +79,4 @@ func TestTokenTransactionValidator_Check(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Error performing check %v", err)
 	}
-
 }
