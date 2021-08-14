@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"testing"
 )
@@ -15,7 +16,7 @@ func TestIdentityState(t *testing.T) {
 	key := ed25519.GenPrivKeyFromSecret(seed[:])
 
 	ids := NewIdentityState(testidentity)
-	ids.SetKeyData(0, key.PubKey().Bytes())
+	ids.SetKeyData(KeyType_public, key.PubKey().Bytes())
 
 	if ids.GetAdiChainPath() != "TestIdentity" {
 		t.Fatalf("Invalid ADI stored in identity state, expected %s, received %s", ids.GetAdiChainPath(), testidentity)
@@ -65,6 +66,17 @@ func TestIdentityState(t *testing.T) {
 
 	if ktype2 != ktype {
 		t.Fatalf("Key's do not match after unmarshalling")
+	}
+
+	var id3 IdentityState
+
+	id2data, err := json.Marshal(&id2)
+	if err != nil {
+		t.Fatalf("Cannot marshal json")
+	}
+	err = json.Unmarshal(id2data, &id3)
+	if err != nil {
+		t.Fatalf("Cannot marshal json")
 	}
 
 }
