@@ -22,7 +22,7 @@ func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValid
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "0000000000000000000000000000000000000000000000000000000000000005"
-	v.SetInfo(chainid, "synthetic_transaction", pb.AccInstruction_State_Store)
+	v.SetInfo(chainid, "synthetic-transaction-deposit", pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -84,14 +84,14 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Sub
 	retsub := ResponseValidateTX{}
 	retsub.Submissions = make([]pb.Submission, 1)
 	rs := &retsub.Submissions[0]
-	rs.Identitychain = ttd.SenderIdentity[:]
-	rs.Chainid = ttd.SenderChainId[:]
+	rs.Identitychain = ttd.SourceIdentity[:]
+	rs.Chainid = ttd.SourceChainId[:]
 	rs.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 	//this will reverse the deposit and send it back to the sender.
 	retdep := synthetic.TokenTransactionDeposit{}
 	copy(retdep.Txid[:], ttd.Txid[:])
-	copy(retdep.SenderIdentity[:], submission.Identitychain)
-	copy(retdep.SenderChainId[:], submission.Chainid)
+	copy(retdep.SourceIdentity[:], submission.Identitychain)
+	copy(retdep.SourceChainId[:], submission.Chainid)
 	copy(retdep.IssuerIdentity[:], ttd.IssuerIdentity[:])
 	copy(retdep.IssuerChainId[:], ttd.IssuerChainId[:])
 	retdep.Metadata.UnmarshalJSON([]byte("{\"Deposit failed\"}"))

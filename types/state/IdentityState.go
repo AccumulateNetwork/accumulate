@@ -1,6 +1,8 @@
 package state
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -20,11 +22,9 @@ const (
 )
 
 type identityState struct {
-	StateEntry
-	Type         string      `json:"type"`
-	AdiChainPath string      `json:"adi-chain-path"`
-	Keytype      KeyType     `json:"keytype"`
-	Keydata      types.Bytes `json:"keydata"`
+	StateHeader
+	Keytype KeyType     `json:"keytype"`
+	Keydata types.Bytes `json:"keydata"`
 }
 
 type IdentityState struct {
@@ -35,17 +35,44 @@ type IdentityState struct {
 //this will eventually be the key groups and potentially just a multimap of types to chain paths controlled by the identity
 func NewIdentityState(adi string) *IdentityState {
 	r := &IdentityState{}
-	r.AdiChainPath = adi
+	r.AdiChainPath = types.String(adi)
 	r.Type = "AIM-1"
 	return r
 }
 
-func (is *IdentityState) GetType() string {
-	return is.Type
+func (is *IdentityState) GetAdiChainPath() string {
+	return is.StateHeader.GetAdiChainPath()
 }
 
-func (is *IdentityState) GetAdiChainPath() string {
-	return is.AdiChainPath
+func (is *IdentityState) GetType() string {
+	return is.StateHeader.GetType()
+}
+
+func (is *IdentityState) VerifyKey(key []byte) bool {
+	//check if key is a valid public key for identity
+	if key[0] == is.Keydata[0] {
+		if bytes.Compare(key, is.Keydata) == 0 {
+			return true
+		}
+	}
+
+	//check if key is a valid sha256(key) for identity
+	kh := sha256.Sum256(key)
+	if kh[0] == is.Keydata[0] {
+		if bytes.Compare(key, kh[:]) == 0 {
+			return true
+		}
+	}
+
+	//check if key is a valid sha256d(key) for identity
+	kh = sha256.Sum256(kh[:])
+	if kh[0] == is.Keydata[0] {
+		if bytes.Compare(key, kh[:]) == 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 //currently key data is loosly defined based upon keytype.  This will
@@ -70,7 +97,7 @@ func (is *IdentityState) GetKeyData() (KeyType, types.Bytes) {
 }
 
 func (is *IdentityState) GetIdentityChainId() types.Bytes {
-	h := types.GetIdentityChainFromIdentity(is.AdiChainPath)
+	h := types.GetIdentityChainFromIdentity(is.GetAdiChainPath())
 	if h == nil {
 		return types.Bytes{}
 	}
@@ -79,27 +106,21 @@ func (is *IdentityState) GetIdentityChainId() types.Bytes {
 
 func (is *IdentityState) MarshalBinary() ([]byte, error) {
 
-	data := make([]byte, 1+8+len(is.AdiChainPath)+1+len(is.Keydata))
-	//length of adi
-	i := 0
-	i += copy(data[i:], []byte(is.Type)[:5])
+	var data []byte
+	shdata, err := is.StateHeader.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
 
-	data[i] = byte(is.Keytype)
+	data = append(data, shdata...)
+	data = append(data, byte(is.Keytype))
 
-	i++
+	var bint [8]byte
 	//store the keydata size
-	i += binary.PutVarint(data[i:], int64(len(is.Keydata)))
+	i := binary.PutVarint(bint[:], int64(len(is.Keydata)))
+	data = append(data, bint[:i]...)
 	//store the key data
-	i += copy(data[i:], is.Keydata[:])
-
-	//store the adi len
-	ladi := byte(len(is.AdiChainPath))
-	data[i] = ladi
-	i++
-	//store the adi
-	i += copy(data[i:], []byte(is.AdiChainPath))
-
-	data = data[:i]
+	data = append(data, is.Keydata[:]...)
 
 	return data, nil
 }
@@ -110,16 +131,18 @@ func (is *IdentityState) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("Cannot unmarshal Identity State, insuffient data")
 	}
 	i := 0
-	if dlen < i+5 {
-		return fmt.Errorf("Cannot unmarshal specification type")
+	err := is.StateHeader.UnmarshalBinary(data)
+	if err != nil {
+		return err
 	}
-	is.Type = string(data[i:5])
-	i += 5
+	i += is.StateHeader.GetHeaderSize()
+
 	is.Keytype = KeyType(data[i])
 	i++
 	if dlen <= i {
 		return fmt.Errorf("Cannot unmarshal Identity State after key type, insuffient data")
 	}
+
 	v, l := binary.Varint(data[i:])
 	if l <= 0 {
 		return fmt.Errorf("Cannot unmarshal Identity State after key data len, insuffient data")
@@ -131,19 +154,6 @@ func (is *IdentityState) UnmarshalBinary(data []byte) error {
 	}
 	is.Keydata = make([]byte, v)
 	i += copy(is.Keydata, data[i:i+int(v)])
-
-	if dlen < i {
-		return fmt.Errorf("Cannot unmarshal Identity State before adi len, insuffient data")
-	}
-
-	l = int(data[i])
-	i++
-
-	if dlen < i+l {
-		return fmt.Errorf("Cannot unmarshal Identity State before copy adi, insuffient data")
-	}
-
-	is.AdiChainPath = string(data[i : i+l])
 
 	return nil
 }
