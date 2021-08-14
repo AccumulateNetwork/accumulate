@@ -46,6 +46,7 @@ const (
 	AccInstruction_Data_Store                  AccInstruction = 12 //Data Store can only be sent and thus authorized by an authority node
 	AccInstruction_State_Store                 AccInstruction = 13
 	AccInstruction_Admin_Vote                  AccInstruction = 14
+	AccInstruction_Synthetic_Identity_Creation AccInstruction = 17
 	AccInstruction_Synthetic_Token_Transaction AccInstruction = 19
 	AccInstruction_Synthetic_Token_Deposit     AccInstruction = 20
 )
@@ -68,6 +69,7 @@ var (
 		12: "Data_Store",
 		13: "State_Store",
 		14: "Admin_Vote",
+		17: "Synthetic_Identity_Creation",
 		19: "Synthetic_Token_Transaction",
 		20: "Synthetic_Token_Deposit",
 	}
@@ -87,6 +89,7 @@ var (
 		"Data_Store":                  12,
 		"State_Store":                 13,
 		"Admin_Vote":                  14,
+		"Synthetic_Identity_Creation": 17,
 		"Synthetic_Token_Transaction": 19,
 		"Synthetic_Token_Deposit":     20,
 	}

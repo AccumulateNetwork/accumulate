@@ -404,3 +404,37 @@ func (s *Bytes32) UnmarshalJSON(data []byte) error {
 func (s Bytes32) Bytes() []byte {
 	return s[:]
 }
+
+type String string
+
+func (s *String) MarshalBinary() ([]byte, error) {
+	var buf [8]byte
+	l := s.Size(&buf)
+	i := l - len(*s)
+	data := make([]byte, l)
+	copy(data, buf[:i])
+	copy(data[i:], []byte(*s))
+	return data, nil
+}
+
+func (s *String) UnmarshalBinary(data []byte) error {
+	slen, l := binary.Varint(data)
+	if l == 0 {
+		return fmt.Errorf("cannot unmarshal string")
+	}
+	if len(data) < int(slen)+l {
+		return fmt.Errorf("insufficient data to unmarshal string")
+	}
+	*s = String(data[l : int(slen)+l])
+	return nil
+}
+
+func (s *String) Size(varintbuf *[8]byte) int {
+	buf := varintbuf
+	if buf == nil {
+		buf = &[8]byte{}
+	}
+	l := int64(len(*s))
+	i := binary.PutVarint(buf[:], l)
+	return i + int(l)
+}
