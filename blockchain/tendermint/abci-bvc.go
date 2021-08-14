@@ -5,11 +5,11 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 
 	//"crypto/ed25519"
 	"crypto/sha256"
 	"github.com/AccumulateNetwork/SMT/pmt"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
@@ -706,7 +706,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	//not finding the identity is a big deal.  Need to send a Nak if this a synthetic tx.
 	identitystate, err := app.getCurrentState(sub.GetIdentitychain()) //need the identity chain
 
-	//lack of chain or identity isn't necessarily an error.
+	//lack of identity is an error. however we have a chicken and egg problem, need soluiton for genesis block
 	if err != nil {
 		if sub.Instruction&0x10 == 0 {
 			//synthetic.New
@@ -737,13 +737,14 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	if val, ok := app.chainval[uint64(sub.GetInstruction())]; ok {
 		//check the type of transaction
 		//in reality we will check the type of chain to determine how to handle validation for that chain.
-
-		//pk := ed25519.PublicKey{}
-		//copy(pk,sub.Key)
-		//ed25519.Verify(idstate.Publickey,data,signature)
-		//this will need to be made more robust...
-		//privKey := ed25519.GenPrivKey()
-		//ppk := ed25519.PubKey{}
+		is := state.IdentityState{}
+		is.UnmarshalBinary(identitystate.Entry)
+		if !is.VerifyKey(sub.Key) {
+			//todo: need to handle responses differently when we go to the parallelized validtor
+			ret.Code = code.CodeTypeUnauthorized
+			ret.Info = fmt.Sprintf("Identity key is not authorized for the transaction")
+			return response
+		}
 
 		if ed25519.PubKey(sub.Key).VerifySignature(sub.Data, sub.Signature) == false {
 			ret.Code = code.CodeTypeEncodingError
@@ -941,12 +942,14 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 
 	//this will truncate what tendermint stores since we only care about current state
 	if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
-		//todo: add this back when done with debugging.
+		//todo: add this back when done with debugging. right now we are retaining everything for test net until
+		//we get bootstrapping sync working...
 		//resp.RetainHeight = app.Height - app.RetainBlocks + 1
 	}
 
 	//appHash := make([]byte, 8)
 	//binary.PutVarint(appHash, app.state.Size)
+	//save the state
 	app.state.Size += int64(app.txct)
 	app.state.AppHash = mdroot
 	app.state.Height++
@@ -954,7 +957,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 
 	duration := time.Since(app.timer)
 	fmt.Printf("TPS: %d in %f for %f\n", app.txct, duration.Seconds(), float64(app.txct)/duration.Seconds())
-	//return resp
+
 	return resp
 }
 

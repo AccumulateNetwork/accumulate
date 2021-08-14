@@ -1,6 +1,7 @@
 syntax = "proto3";
 package apiProto;
-option go_package = "./proto";//github.com/AccumulateNetwork/accumulated/proto";
+option go_package = "./proto";
+//option go_package = "github.com/AccumulateNetwork/accumulated/types/proto";
 
 //go:generate protoc example.proto --go_out=plugins=grpc:$GOPATH/src
 
@@ -101,6 +102,7 @@ enum AccInstruction {
   Data_Store = 0x0C; //Data Store can only be sent and thus authorized by an authority node
   State_Store = 0x0D;
   Admin_Vote = 0x0E;
+  Synthetic_Identity_Creation = 0x11;
   Synthetic_Token_Transaction = 0x13;
   Synthetic_Token_Deposit = 0x14;
   //      Entry_Commit = 1; //

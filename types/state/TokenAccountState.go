@@ -8,8 +8,7 @@ import (
 )
 
 type tokenAccountState struct {
-	Type           string               `json:"type"`
-	ChainPath      string               `json:"chain-path"`
+	StateHeader
 	IssuerIdentity types.Bytes32        `json:"issuer-identity"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
 	IssuerChainId  types.Bytes32        `json:"issuer-chain-id"` //identity/issue chains both hold the metrics for the TokenRules ... hmm.. do those need to be passed along since those need to be used
 	Balance        big.Int              `json:"balance"`
@@ -24,6 +23,7 @@ type TokenAccountState struct {
 func NewTokenAccountState(issuerid []byte, issuerchain []byte, coinbase *types.TokenIssuance) *TokenAccountState {
 	tas := TokenAccountState{}
 	tas.Type = "AIM-0"
+	tas.AdiChainPath = "unknown"
 	copy(tas.IssuerIdentity[:], issuerid)
 	copy(tas.IssuerChainId[:], issuerchain)
 	tas.Coinbase = coinbase
@@ -36,10 +36,27 @@ func NewTokenAccountState(issuerid []byte, issuerchain []byte, coinbase *types.T
 	return &tas
 }
 
+func (ts *TokenAccountState) Set(accountState *TokenAccountState) {
+	if accountState == nil {
+		return
+	}
+
+	ts.Coinbase = accountState.Coinbase
+	ts.Balance.Set(&accountState.Balance)
+	ts.AdiChainPath = accountState.AdiChainPath
+	ts.Type = accountState.Type
+	copy(ts.IssuerChainId[:], accountState.IssuerChainId[:])
+	copy(ts.IssuerIdentity[:], accountState.IssuerIdentity[:])
+}
+
 const tokenAccountStateLen = 32 + 32 + 32
 
 func (ts *TokenAccountState) GetType() string {
-	return ts.Type
+	return string(ts.Type)
+}
+
+func (ts *TokenAccountState) GetAdiChainPath() string {
+	return string(ts.AdiChainPath)
 }
 
 func (ts *TokenAccountState) GetIssuerIdentity() *types.Bytes32 {

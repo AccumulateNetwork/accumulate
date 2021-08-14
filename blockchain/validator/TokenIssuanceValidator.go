@@ -25,7 +25,7 @@ func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
 	chainid := "000000000000000000000000000000000000000000000000000000000000001D" //does this make sense anymore?
-	v.SetInfo(chainid, "create-identity", pb.AccInstruction_Identity_Creation)
+	v.SetInfo(chainid, "create-token", pb.AccInstruction_Token_Issue)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -60,13 +60,6 @@ func (v *TokenIssuanceValidator) Validate(currentstate *StateEntry, submission *
 		return nil, fmt.Errorf("Token chain already defined.  Unable to issue token.")
 	}
 
-	//Temporary validation rules:
-	idstate := acctypes.IdentityState{}
-	err = idstate.UnmarshalBinary(submission.Data)
-	if err != nil {
-		return nil, err
-	}
-
 	ti := &types.TokenIssuance{}
 	err = json.Unmarshal(submission.Data, ti)
 	if err != nil {
@@ -76,9 +69,9 @@ func (v *TokenIssuanceValidator) Validate(currentstate *StateEntry, submission *
 	//do some ti validation
 
 	tas := acctypes.NewTokenAccountState(submission.Identitychain, submission.GetChainid(), ti)
-	if ti.Supply.Sign() >= 0 {
-		tas.AddBalance(&ti.Supply)
-	}
+	//if ti.Supply.Sign() >= 0 {
+	//	tas.AddBalance(&ti.Supply)
+	//}
 
 	tasso, err := tas.MarshalBinary()
 	if err != nil {
