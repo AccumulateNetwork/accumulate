@@ -43,12 +43,13 @@ const (
 	AccInstruction_Light_Query            AccInstruction = 11 //sends a query to a node and info is returned.
 	//Only valid for BVC use: any other source of this message will be rejected
 	//is this data store or State_Store
-	AccInstruction_Data_Store                  AccInstruction = 12 //Data Store can only be sent and thus authorized by an authority node
-	AccInstruction_State_Store                 AccInstruction = 13
-	AccInstruction_Admin_Vote                  AccInstruction = 14
-	AccInstruction_Synthetic_Identity_Creation AccInstruction = 17
-	AccInstruction_Synthetic_Token_Transaction AccInstruction = 19
-	AccInstruction_Synthetic_Token_Deposit     AccInstruction = 20
+	AccInstruction_Data_Store                     AccInstruction = 12 //Data Store can only be sent and thus authorized by an authority node
+	AccInstruction_State_Store                    AccInstruction = 13
+	AccInstruction_Admin_Vote                     AccInstruction = 14
+	AccInstruction_Synthetic_Identity_Creation    AccInstruction = 17
+	AccInstruction_Synthetic_Token_Transaction    AccInstruction = 19
+	AccInstruction_Synthetic_Token_Deposit        AccInstruction = 20
+	AccInstruction_Synthetic_Transaction_Response AccInstruction = 21
 )
 
 // Enum value maps for AccInstruction.
@@ -72,26 +73,28 @@ var (
 		17: "Synthetic_Identity_Creation",
 		19: "Synthetic_Token_Transaction",
 		20: "Synthetic_Token_Deposit",
+		21: "Synthetic_Transaction_Response",
 	}
 	AccInstruction_value = map[string]int32{
-		"Unknown":                     0,
-		"Identity_Creation":           1,
-		"Token_URL_Creation":          2,
-		"Token_Transaction":           3,
-		"Data_Chain_Creation":         4,
-		"Data_Entry":                  5,
-		"Scratch_Chain_Creation":      6,
-		"Scratch_Entry":               7,
-		"Token_Issue":                 8,
-		"Key_Update":                  9,
-		"Deep_Query":                  10,
-		"Light_Query":                 11,
-		"Data_Store":                  12,
-		"State_Store":                 13,
-		"Admin_Vote":                  14,
-		"Synthetic_Identity_Creation": 17,
-		"Synthetic_Token_Transaction": 19,
-		"Synthetic_Token_Deposit":     20,
+		"Unknown":                        0,
+		"Identity_Creation":              1,
+		"Token_URL_Creation":             2,
+		"Token_Transaction":              3,
+		"Data_Chain_Creation":            4,
+		"Data_Entry":                     5,
+		"Scratch_Chain_Creation":         6,
+		"Scratch_Entry":                  7,
+		"Token_Issue":                    8,
+		"Key_Update":                     9,
+		"Deep_Query":                     10,
+		"Light_Query":                    11,
+		"Data_Store":                     12,
+		"State_Store":                    13,
+		"Admin_Vote":                     14,
+		"Synthetic_Identity_Creation":    17,
+		"Synthetic_Token_Transaction":    19,
+		"Synthetic_Token_Deposit":        20,
+		"Synthetic_Transaction_Response": 21,
 	}
 )
 

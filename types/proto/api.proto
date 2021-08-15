@@ -105,6 +105,7 @@ enum AccInstruction {
   Synthetic_Identity_Creation = 0x11;
   Synthetic_Token_Transaction = 0x13;
   Synthetic_Token_Deposit = 0x14;
+  Synthetic_Transaction_Response = 0x15;
   //      Entry_Commit = 1; //
   //      Entry_Reveal = 2; // raw data
   //      Chain_Commit = 3;

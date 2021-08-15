@@ -47,23 +47,48 @@ func NewTransactionAckNak(code AckNakCode, txid []byte, receiverid []byte, recei
 	return tan
 }
 
+func (k *AckNakCode) MarshalJSON() ([]byte, error) {
+	var str string
+
+	switch {
+	case *k == AckNakCode_Success:
+		str = "success"
+	case *k == AckNakCode_Identity_Not_Found:
+		str = "identity-not-found"
+	case *k == AckNakCode_Invalid_Chain_Id:
+		str = "invalid-chain-id"
+	case *k == AckNakCode_State_Change_Fail:
+		str = "state-change-fail"
+	case *k == AckNakCode_Transaction_Parsing_Error:
+		str = "transaction-parsing-error"
+	case *k == AckNakCode_Invalid_Signature:
+		str = "invalid-signature"
+	case *k == AckNakCode_Sender_Not_Authorized:
+		str = "sender-not-authorized"
+	default:
+		*k = AckNakCode_Error_Unknown
+	}
+
+	return json.Marshal(&str)
+}
+
 func (k *AckNakCode) UnmarshalJSON(b []byte) error {
 	str := strings.Trim(string(b), `"`)
 
 	switch {
-	case str == "AckNakCode_Success":
+	case str == "success":
 		*k = AckNakCode_Success
-	case str == "AckNakCode_Identity_Not_Found":
+	case str == "identity-not-found":
 		*k = AckNakCode_Identity_Not_Found
-	case str == "AckNakCode_Invalid_Chain_Id":
+	case str == "invalid-chain-id":
 		*k = AckNakCode_Invalid_Chain_Id
-	case str == "AckNakCode_State_Change_Fail":
+	case str == "state-change-fail":
 		*k = AckNakCode_State_Change_Fail
-	case str == "AckNakCode_Transaction_Parsing_Error":
+	case str == "transaction-parsing-error":
 		*k = AckNakCode_Transaction_Parsing_Error
-	case str == "AckNakCode_Invalid_Signature":
+	case str == "invalid-signature":
 		*k = AckNakCode_Invalid_Signature
-	case str == "AckNakCode_Sender_Not_Authorized":
+	case str == "sender-not-authorized":
 		*k = AckNakCode_Sender_Not_Authorized
 	default:
 		*k = AckNakCode_Error_Unknown
