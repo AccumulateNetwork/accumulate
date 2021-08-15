@@ -9,18 +9,29 @@ func CreateAccumulateBVC(config string, path string) *tendermint.AccumulatorVMAp
 	//create a AccumulatorVM
 	acc := tendermint.NewAccumulatorVMApplication(config, path)
 
+	//initiate a transaction for token transfer
 	atktx := validator.NewTokenTransactionValidator()
 	acc.AddValidator(&atktx.ValidatorContext)
 
-	//create and add some validators for known types
-	//fct := validator.NewFactoidValidator()
-	//acc.AddValidator(&fct.ValidatorContext)
-
+	//support validation for a deposit into an account.
 	synthval := validator.NewSyntheticTransactionDepositValidator()
 	acc.AddValidator(&synthval.ValidatorContext)
 
+	//support validation to issue a new token
+	tokissuance := validator.NewTokenIssuanceValidator()
+	acc.AddValidator(&tokissuance.ValidatorContext)
+
+	//support validation for creating a token url
+	tokchain := validator.NewTokenChainCreateValidator()
+	acc.AddValidator(&tokchain.ValidatorContext)
+
+	//create identity validator
 	idval := validator.NewCreateIdentityValidator()
 	acc.AddValidator(&idval.ValidatorContext)
+
+	//add validator for validating the synthetic identity create tx
+	synthidentity := validator.NewCreateIdentityValidator()
+	acc.AddValidator(&synthidentity.ValidatorContext)
 
 	//entryval := validator.NewEntryValidator()
 	//acc.AddValidator(&entryval.ValidatorContext)
