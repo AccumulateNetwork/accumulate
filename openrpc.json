@@ -461,11 +461,6 @@
 						"type": "integer",
 						"maximum": 18,
 						"minimum": 0
-					},
-					"mode": {
-						"title": "Burn mode",
-						"description": "Circulation  mode where tokens are burned and taken out of circulation (“burn”), or added back to the pool (“burn-and-mint”) to be kept in in circulation.",
-						"type": "string"
 					}
 				}
 			},
