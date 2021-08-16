@@ -409,28 +409,6 @@
 				"type": "string",
 				"pattern": "^[0-9a-zA-Z._-/]+$"
 			},
-			"aim0": {
-				"type": "object",
-				"properties": {
-					"symbol": {
-						"title": "Token symbol",
-						"description": "Token ticker",
-						"type": "string"
-					},
-					"precision": {
-						"title": "Token precision",
-						"description": "All transactions will need to specify input/output amounts in integer units × 10^precision",
-						"type": "integer",
-						"maximum": 18,
-						"minimum": 0
-					},
-					"mode": {
-						"title": "Burn mode",
-						"description": "Circulation  mode where tokens are burned and taken out of circulation (“burn”), or added back to the pool (“burn-and-mint”) to be kept in in circulation.",
-						"type": "string"
-					}
-				}
-			},
 			"identity": {
 				"title": "Identity",
 				"type": "object",
@@ -472,10 +450,22 @@
 						"description": "Token URL",
 						"$ref": "#/components/schemas/fullURL"
 					},
-					"aim-0": {
-						"title": "AIM-specific fields",
-						"type": "object",
-						"$ref": "#/components/schemas/aim0"
+					"symbol": {
+						"title": "Token symbol",
+						"description": "Token ticker",
+						"type": "string"
+					},
+					"precision": {
+						"title": "Token precision",
+						"description": "All transactions will need to specify input/output amounts in integer units × 10^precision",
+						"type": "integer",
+						"maximum": 18,
+						"minimum": 0
+					},
+					"mode": {
+						"title": "Burn mode",
+						"description": "Circulation  mode where tokens are burned and taken out of circulation (“burn”), or added back to the pool (“burn-and-mint”) to be kept in in circulation.",
+						"type": "string"
 					}
 				}
 			},
