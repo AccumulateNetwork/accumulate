@@ -214,12 +214,9 @@
 			]
 		},
 		{
-			"name": "identity-token-address",
-			"summary": "Get Identity Token Address info",
+			"name": "token-address",
+			"summary": "Get Token Address info",
 			"tags": [
-				{
-					"name": "identity"
-				},
 				{
 					"name": "token"
 				}
@@ -252,12 +249,9 @@
 			]
 		},
 		{
-			"name": "identity-token-address-create",
-			"summary": "Create Identity Token Address",
+			"name": "token-address-create",
+			"summary": "Create Token Address",
 			"tags": [
-				{
-					"name": "identity"
-				},
 				{
 					"name": "token"
 				}
