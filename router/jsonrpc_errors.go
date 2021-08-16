@@ -3,6 +3,8 @@ package router
 import "github.com/AccumulateNetwork/jsonrpc2/v15"
 
 var (
+	ErrorInvalidRequest = jsonrpc2.NewError(-32701, "Parsing Error", "unable to parse request params")
+
 	ErrorSponsorInvalid   = jsonrpc2.NewError(-32801, "Invalid Sponsor Identity", "sponsor identity url is invalid")
 	ErrorInvalidSignature = jsonrpc2.NewError(-32802, "Invalid Signature", "invalid signature")
 	ErrorInvalidTimestamp = jsonrpc2.NewError(-32803, "Invalid Timestamp", "invalid timestamp")
@@ -16,3 +18,7 @@ var (
 	ErrorTokenAddressInvalid  = jsonrpc2.NewError(-34001, "Invalid Token Address", "token address url is invalid")
 	ErrorTokenAddressNotExist = jsonrpc2.NewError(-34002, "Token Address Does Not Exist", "token address url does not exist")
 )
+
+func NewValidatorError(err error) jsonrpc2.Error {
+	return jsonrpc2.NewError(-32702, "Validation Error", err)
+}
