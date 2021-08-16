@@ -1,0 +1,555 @@
+{
+	"openrpc": "1.2.4",
+	"info": {
+		"title": "Accumulate API",
+		"description": "A public JSON RPC API of the Accumulate Node",
+		"version": "0.1.0",
+		"license": {
+			"name": "MIT"
+		}
+	},
+	"methods": [
+		{
+			"name": "identity",
+			"summary": "Get Identity info",
+			"tags": [
+				{
+					"name": "identity"
+				}
+			],
+			"params": [
+				{
+					"name": "url",
+					"summary": "Accumulate URL",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/identityURL"
+					}
+				}
+			],
+			"result": {
+				"name": "Identity",
+				"schema": {
+					"$ref": "#/components/schemas/identity"
+				}
+			},
+			"errors": [
+				{
+					"code": -32901,
+					"message": "invalid identity url"
+				},
+				{
+					"code": -32902,
+					"message": "identity does not exist"
+				}
+			]
+		},
+		{
+			"name": "identity-create",
+			"summary": "Create Identity",
+			"tags": [
+				{
+					"name": "identity"
+				}
+			],
+			"params": [
+				{
+					"name": "identity",
+					"summary": "New Identity",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/identity"
+					}
+				},
+				{
+					"name": "sponsor",
+					"summary": "Existing Identity sponsoring the creation of new Identity",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sponsorIdentity"
+					}
+				},
+				{
+					"name": "timestamp",
+					"summary": "Unix timestamp",
+					"required": true,
+					"schema": {
+						"type": "integer"
+					}
+				},
+				{
+					"name": "sig",
+					"summary": "Signature",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sha256"
+					}
+				}
+			],
+			"result": {
+				"name": "Identity",
+				"schema": {
+					"$ref": "#/components/schemas/identity"
+				}
+			},
+			"errors": [
+				{
+					"code": -32901,
+					"message": "invalid identity url"
+				},
+				{
+					"code": -32801,
+					"message": "invalid sponsor identity"
+				},
+				{
+					"code": -32802,
+					"message": "invalid signature"
+				},
+				{
+					"code": -32803,
+					"message": "invalid timestamp"
+				}
+			]
+		},
+		{
+			"name": "token",
+			"summary": "Get Token info",
+			"tags": [
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "url",
+					"summary": "Accumulate URL",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/fullURL"
+					}
+				}
+			],
+			"result": {
+				"name": "Token",
+				"schema": {
+					"$ref": "#/components/schemas/token"
+				}
+			},
+			"errors": [
+				{
+					"code": -33001,
+					"message": "invalid token url"
+				},
+				{
+					"code": -33002,
+					"message": "token does not exist"
+				}
+			]
+		},
+		{
+			"name": "token-create",
+			"summary": "Create Token",
+			"tags": [
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "token",
+					"summary": "New Token",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/token"
+					}
+				},
+				{
+					"name": "sponsor",
+					"summary": "Existing Identity sponsoring the creation of new Token",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sponsorIdentity"
+					}
+				},
+				{
+					"name": "timestamp",
+					"summary": "Unix timestamp",
+					"required": true,
+					"schema": {
+						"type": "integer"
+					}
+				},
+				{
+					"name": "sig",
+					"summary": "Signature",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sha256"
+					}
+				}
+			],
+			"result": {
+				"name": "Token",
+				"schema": {
+					"$ref": "#/components/schemas/token"
+				}
+			},
+			"errors": [
+				{
+					"code": -33001,
+					"message": "invalid token url"
+				},
+				{
+					"code": -32801,
+					"message": "invalid sponsor identity"
+				},
+				{
+					"code": -32802,
+					"message": "invalid signature"
+				},
+				{
+					"code": -32803,
+					"message": "invalid timestamp"
+				}
+			]
+		},
+		{
+			"name": "identity-token-address",
+			"summary": "Get Identity Token Address info",
+			"tags": [
+				{
+					"name": "identity"
+				},
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "url",
+					"summary": "Accumulate URL",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/fullURL"
+					}
+				}
+			],
+			"result": {
+				"name": "Token Address with Balance",
+				"schema": {
+					"$ref": "#/components/schemas/tokenAddressWithBalance"
+				}
+			},
+			"errors": [
+				{
+					"code": -34001,
+					"message": "invalid token address url"
+				},
+				{
+					"code": -34002,
+					"message": "token address does not exist"
+				}
+			]
+		},
+		{
+			"name": "identity-token-address-create",
+			"summary": "Create Identity Token Address",
+			"tags": [
+				{
+					"name": "identity"
+				},
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "tokenAddress",
+					"summary": "New Token Address",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/tokenAddress"
+					}
+				},
+				{
+					"name": "sponsor",
+					"summary": "Existing Identity sponsoring the creation of new Token Address",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sponsorIdentity"
+					}
+				},
+				{
+					"name": "timestamp",
+					"summary": "Unix timestamp",
+					"required": true,
+					"schema": {
+						"type": "integer"
+					}
+				},
+				{
+					"name": "sig",
+					"summary": "Signature",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sha256"
+					}
+				}
+			],
+			"result": {
+				"name": "Token Address",
+				"schema": {
+					"$ref": "#/components/schemas/tokenAddress"
+				}
+			},
+			"errors": [
+				{
+					"code": -34001,
+					"message": "invalid token address url"
+				},
+				{
+					"code": -33001,
+					"message": "invalid token url"
+				},
+				{
+					"code": -32801,
+					"message": "invalid sponsor identity"
+				},
+				{
+					"code": -32802,
+					"message": "invalid signature"
+				},
+				{
+					"code": -32803,
+					"message": "invalid timestamp"
+				}
+			]
+		},
+		{
+			"name": "token-tx-create",
+			"summary": "Create Token Transaction",
+			"tags": [
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "tx",
+					"summary": "New Token Transaction",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/tokenTx"
+					}
+				},
+				{
+					"name": "sponsor",
+					"summary": "Existing Identity sponsoring the creation of new Token Transaction",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sponsorIdentity"
+					}
+				},
+				{
+					"name": "timestamp",
+					"summary": "Unix timestamp",
+					"required": true,
+					"schema": {
+						"type": "integer"
+					}
+				},
+				{
+					"name": "sig",
+					"summary": "Signature",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sha256"
+					}
+				}
+			],
+			"result": {
+				"name": "Token Tx",
+				"schema": {
+					"$ref": "#/components/schemas/tokenTx"
+				}
+			},
+			"errors": [
+				{
+					"code": -34001,
+					"message": "invalid token address url"
+				},
+				{
+					"code": -32801,
+					"message": "invalid sponsor identity"
+				},
+				{
+					"code": -32802,
+					"message": "invalid signature"
+				},
+				{
+					"code": -32803,
+					"message": "invalid timestamp"
+				}
+			]
+		}
+	],
+	"components": {
+		"schemas": {
+			"sha256": {
+				"type": "string",
+				"pattern": "^[0-9a-f]+$"
+			},
+			"hex": {
+				"type": "string",
+				"pattern": "^[0-9a-f]+$"
+			},
+			"identityURL": {
+				"type": "string",
+				"pattern": "^[0-9a-z]+$"
+			},
+			"chainURL": {
+				"type": "string",
+				"pattern": "^[0-9a-zA-Z._-]+$"
+			},
+			"fullURL": {
+				"type": "string",
+				"pattern": "^[0-9a-zA-Z._-/]+$"
+			},
+			"aim0": {
+				"type": "object",
+				"properties": {
+					"symbol": {
+						"title": "Token symbol",
+						"description": "Token ticker",
+						"type": "string"
+					},
+					"precision": {
+						"title": "Token precision",
+						"description": "All transactions will need to specify input/output amounts in integer units × 10^precision",
+						"type": "integer",
+						"maximum": 18,
+						"minimum": 0
+					},
+					"mode": {
+						"title": "Burn mode",
+						"description": "Circulation  mode where tokens are burned and taken out of circulation (“burn”), or added back to the pool (“burn-and-mint”) to be kept in in circulation.",
+						"type": "string"
+					}
+				}
+			},
+			"identity": {
+				"title": "Identity",
+				"type": "object",
+				"properties": {
+					"url": {
+						"title": "Identity URL",
+						"description": "Identity name",
+						"$ref": "#/components/schemas/identityURL"
+					},
+					"publicKeyHash": {
+						"title": "Public Key Hash",
+						"description": "SHA-256 hash of Identity Public Key",
+						"$ref": "#/components/schemas/sha256"
+					}
+				}
+			},
+			"sponsorIdentity": {
+				"title": "Identity",
+				"type": "object",
+				"properties": {
+					"url": {
+						"title": "Identity URL",
+						"description": "Identity name",
+						"$ref": "#/components/schemas/identityURL"
+					},
+					"publicKey": {
+						"title": "Public Key",
+						"description": "Identity Public Key in hex format",
+						"$ref": "#/components/schemas/hex"
+					}
+				}
+			},
+			"token": {
+				"title": "Token",
+				"type": "object",
+				"properties": {
+					"url": {
+						"title": "Token URL",
+						"description": "Token URL",
+						"$ref": "#/components/schemas/fullURL"
+					},
+					"aim-0": {
+						"title": "AIM-specific fields",
+						"type": "object",
+						"$ref": "#/components/schemas/aim0"
+					}
+				}
+			},
+			"tokenAddress": {
+				"title": "Token Address",
+				"type": "object",
+				"properties": {
+					"url": {
+						"title": "Token Address URL",
+						"description": "Token Address URL",
+						"$ref": "#/components/schemas/fullURL"
+					},
+					"tokenURL": {
+						"title": "Token URL",
+						"description": "Token URL",
+						"type": "string",
+						"$ref": "#/components/schemas/fullURL"
+					}
+				}
+			},
+			"tokenAddressWithBalance": {
+				"title": "Token Address with Balance",
+				"type": "object",
+				"properties": {
+					"url": {
+						"title": "Token Address URL",
+						"description": "Token Address URL",
+						"$ref": "#/components/schemas/fullURL"
+					},
+					"tokenURL": {
+						"title": "Token URL",
+						"description": "Token URL",
+						"type": "string",
+						"$ref": "#/components/schemas/fullURL"
+					},
+					"balance": {
+						"title": "Balance",
+						"description": "Token Address balance",
+						"type": "integer"
+					}
+				}
+			},
+			"tokenTx": {
+				"title": "Token Tx",
+				"type": "object",
+				"properties": {
+					"from": {
+						"title": "Sender's Token Address",
+						"description": "Token Address URL",
+						"$ref": "#/components/schemas/fullURL"
+					},
+					"to": {
+						"title": "Receiver(s) Token Address(es)",
+						"description": "Token Address URL",
+						"type": "array",
+						"items": {
+							"title": "Receiver Token Address",
+							"description": "Token Address URL",
+							"$ref": "#/components/schemas/fullURL"
+						}
+					},
+					"meta": {
+						"title": "Metadata",
+						"description": "Transaction Metadata",
+						"type": "string"
+					}
+				}
+			}
+		}
+	}
+}
