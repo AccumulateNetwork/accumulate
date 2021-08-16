@@ -10,88 +10,194 @@ import (
 	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/go-playground/validator/v10"
 )
 
 type API struct {
-	port int
+	port     int
+	validate *validator.Validate
 }
 
-var APISubmitInstructions = [...]string{
-	"identity",               // ex "identity-create"
-	"identity-key-update",    // ex "key-update"
-	"identity-token-account", // ex "token-url-create"
-	"token",                  // ex "token-issue"
-	"token-tx",
-	"chain", // ex "data-chain-create"
-	"entry", // ex "data-entry"
-	"scratch-chain",
-	"scratch-entry",
-}
-
-var (
-	ErrorMissingInstruction = jsonrpc2.NewError(-32801, "Missing Instruction", "parameter `instruction` is missing")
-	ErrorInvalidInstruction = jsonrpc2.NewError(-32802, "Invalid Instruction", "instruction is invalid or deprecated")
-)
-
-// Temporarily put API related structs here, need to move into separate package after refactoring
-type Status struct {
-	Height int `json:"height" validate:"required,int"`
-}
-
-// StartJSONRPCAPI starts new JSON-RPC server
-func StartJSONRPCAPI(port int) error {
+// StartAPI starts new JSON-RPC server
+func StartAPI(port int) *API {
 
 	fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
+	api := &API{}
+	api.port = port
+	api.validate = validator.New()
+
 	methods := jsonrpc2.MethodMap{
+		// identity
+		"identity":        api.getIdentity,
+		"identity-create": api.createIdentity,
 
-		// node and network
-		"status": status,
-
-		// node and network
-		"submit": submit,
-
-		// query
-		"query":      query,
-		"deep-query": deepQuery,
+		// token
+		"token":                api.getToken,
+		"token-create":         api.createToken,
+		"token-address":        api.getTokenAddress,
+		"token-address-create": api.createTokenAddress,
+		"token-tx-create":      api.createTokenTx,
 	}
 
 	apiHandler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
 	http.HandleFunc("/v1", apiHandler)
 
 	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), nil))
-	return nil
+
+	return api
 
 }
 
-// status returns node status
-func status(_ context.Context, params json.RawMessage) interface{} {
+// getIdentity returns Identity info
+func (api *API) getIdentity(_ context.Context, params json.RawMessage) interface{} {
 
-	resp := &Status{}
-	resp.Height = 0
+	var err error
+	req := &Identity{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
+	}
+
+	// validate only Identity.URL
+	if err = api.validate.StructPartial(req, "URL"); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &Identity{}
+	resp.URL = req.URL
+
+	// Tendermint integration here
 
 	return resp
 }
 
-// submit submits new data on blockchain
-func submit(_ context.Context, params json.RawMessage) interface{} {
+// createIdentity creates Identity
+func (api *API) createIdentity(_ context.Context, params json.RawMessage) interface{} {
 
-	instr, err := parseAPIInstruction(params)
-	if err.Code != 0 {
-		return ErrorInvalidInstruction
+	var err error
+	req := &CreateIdentityRequest{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
 	}
 
-	return instr
+	// validate request
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &Identity{}
+	resp.URL = req.Identity.URL
+	resp.PublicKeyHash = req.Identity.PublicKeyHash
+
+	// Tendermint integration here
+
+	return resp
 }
 
-// query retrieves data from blockchain
-func query(_ context.Context, params json.RawMessage) interface{} {
+// getToken returns Token info
+func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} {
 
-	return nil
+	var err error
+	req := &Token{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
+	}
+
+	// validate only Token.URL
+	if err = api.validate.StructPartial(req, "URL"); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &Token{}
+	resp.URL = req.URL
+
+	// Tendermint integration here
+
+	return resp
+
 }
 
-// deepQuery retrieves cryptographic receipt of the current state
-func deepQuery(_ context.Context, params json.RawMessage) interface{} {
+// createToken creates Token
+func (api *API) createToken(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &CreateTokenRequest{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
+	}
+
+	// validate request
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &Token{}
+	resp.URL = req.Token.URL
+	resp.Precision = req.Token.Precision
+	resp.Symbol = req.Token.Symbol
+
+	// Tendermint integration here
+
+	return resp
+
+}
+
+// getTokenAddress returns Token Address info
+func (api *API) getTokenAddress(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &TokenAddress{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
+	}
+
+	// validate only TokenAddress.URL
+	if err = api.validate.StructPartial(req, "URL"); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &TokenAddress{}
+	resp.URL = req.URL
+
+	// Tendermint integration here
+
+	return resp
+
+}
+
+// createTokenAddress creates Token Address
+func (api *API) createTokenAddress(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &CreateTokenAddressRequest{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
+	}
+
+	// validate request
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &TokenAddress{}
+	resp.URL = req.TokenAddress.URL
+	resp.TokenURL = req.TokenAddress.TokenURL
+
+	// Tendermint integration here
+
+	return resp
+
+}
+
+// createTokenTx creates Token Tx
+func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interface{} {
 
 	return nil
+
 }
