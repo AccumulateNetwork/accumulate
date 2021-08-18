@@ -10,28 +10,17 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	cfg "github.com/tendermint/tendermint/config"
-	time "time"
-)
-
-//should define return codes for validation...
-type ValidationCode uint32
-
-const (
-	Success          ValidationCode = 0
-	BufferUnderflow                 = 1
-	BufferOverflow                  = 2
-	InvalidSignature                = 3
-	Fail                            = 4
+	"time"
 )
 
 type StateEntry struct {
-	IdentityState *state.StateObject
-	ChainState    *state.StateObject
-	//database to query other stuff if needed???
+	IdentityState *state.Object
+	ChainState    *state.Object
+
 	DB *smtdb.Manager
 }
 
-func NewStateEntry(idstate *state.StateObject, chainstate *state.StateObject, db *smtdb.Manager) (*StateEntry, error) {
+func NewStateEntry(idstate *state.Object, chainstate *state.Object, db *smtdb.Manager) (*StateEntry, error) {
 	se := StateEntry{}
 	se.IdentityState = idstate
 
@@ -41,22 +30,6 @@ func NewStateEntry(idstate *state.StateObject, chainstate *state.StateObject, db
 	return &se, nil
 }
 
-type Fee struct {
-	TimeStamp    int64        // 8
-	DDII         managed.Hash // 32
-	ChainID      [33]byte     // 33
-	Credits      int8         // 1
-	SignatureIdx int8         // 1
-	Signature    []byte       // 64 minimum
-	// 1 end byte ( 140 bytes for FEE)
-	Transaction []byte // Transaction
-}
-
-func (f Fee) MarshalBinary() ([]byte, error) {
-	//smt
-	return nil, nil
-}
-
 type ResponseValidateTX struct {
 	StateData   []byte          //acctypes.StateObject
 	EventData   []byte          //this should be events that need to get published
@@ -64,7 +37,6 @@ type ResponseValidateTX struct {
 }
 
 func LeaderAtHeight(addr uint64, height uint64) *[32]byte {
-	//todo: implement...
 	//lookup the public key for the addr at given height
 	return nil
 }
@@ -76,7 +48,6 @@ type ValidatorInterface interface {
 	Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) //return persistent entry or error
 	EndBlock(mdroot []byte) error                                                              //do something with MD root
 
-	//InitDBs(config *cfg.Config, dbProvider nm.DBProvider) error  //deprecated
 	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated
 	GetInfo() *ValidatorInfo
 	GetCurrentHeight() int64

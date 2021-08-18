@@ -4,14 +4,14 @@ import "testing"
 
 func TestStateHeader(t *testing.T) {
 
-	header := StateHeader{"AIM-1", "acme/chain/path"}
+	header := Header{"AIM-1", "acme/chain/path"}
 
 	data, err := header.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	header2 := StateHeader{}
+	header2 := Header{}
 
 	err = header2.UnmarshalBinary(data)
 	if err != nil {

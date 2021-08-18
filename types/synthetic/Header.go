@@ -23,7 +23,7 @@ func (h *Header) MarshalBinary() ([]byte, error) {
 
 func (h *Header) UnmarshalBinary(data []byte) error {
 	if HeaderLen > len(data) {
-		return fmt.Errorf("Insufficient data to unmarshal synthetic transaction header")
+		return fmt.Errorf("insufficient data to unmarshal synthetic transaction header")
 	}
 
 	i := copy(h.Txid[:], data[:])
@@ -32,21 +32,3 @@ func (h *Header) UnmarshalBinary(data []byte) error {
 
 	return nil
 }
-
-//
-//func (h *Header) UnmarshalJSON(data []byte) error {
-//	var result map[string]interface{}
-//	err := json.Unmarshal(data,&result)
-//	if err != nil {
-//		return err
-//	}
-//	d := json.NewDecoder(strings.NewReader(string(data)))
-//	d.DisallowUnknownFields()
-//	d.DisallowUnknownFields()
-//
-//	if err := d.Decode(&a)
-//	h.Txid
-//	fmt.Sscanf()Scanf("%x",)result["txid"].(map[string]interface{}).(string)
-//
-//	return nil
-//}
