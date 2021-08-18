@@ -11,5 +11,51 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+*.idea
+
+# Special build files
+engine/overrideversion.go
+# Executable
+accumulated*
+# Compiled Object files, Static and Dynamic libs (Shared Objects)
+*.o
+*.a
+*.db
+# Temp files
+*~
+*.kate-swp
+*.orig
+debug
+*.txt
+*.log
+.vscode/
+.idea/
+peers.json
+*.csv
+*.gz
+*.swp
+out
+# Folders
+_obj
+_test
+build
+bin
+pkg
+.vagrant
+# Architecture specific extensions/prefixes
+*.[568vq]
+[568vq].out
+*.cgo1.go
+*.cgo2.c
+_cgo_defun.c
+_cgo_gotypes.go
+_cgo_export.*
+_testmain.go
+*.block
+*.entry
+.DS_Store
+----*
+# Vendoring
+vendor/
+.sim
+recovery
