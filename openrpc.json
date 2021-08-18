@@ -62,11 +62,11 @@
 					}
 				},
 				{
-					"name": "sponsor",
-					"summary": "Existing Identity sponsoring the creation of new Identity",
+					"name": "signer",
+					"summary": "Existing Accumulate Identity signing the creation of new Identity",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/sponsorIdentity"
+						"$ref": "#/components/schemas/signer"
 					}
 				},
 				{
@@ -82,7 +82,7 @@
 					"summary": "Signature",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/sha256"
+						"$ref": "#/components/schemas/hex"
 					}
 				}
 			],
@@ -99,7 +99,7 @@
 				},
 				{
 					"code": -32801,
-					"message": "invalid sponsor identity"
+					"message": "invalid signer identity"
 				},
 				{
 					"code": -32802,
@@ -164,11 +164,11 @@
 					}
 				},
 				{
-					"name": "sponsor",
-					"summary": "Existing Identity sponsoring the creation of new Token",
+					"name": "signer",
+					"summary": "Accumulate Identity signing the creation of new Token",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/sponsorIdentity"
+						"$ref": "#/components/schemas/signer"
 					}
 				},
 				{
@@ -184,7 +184,7 @@
 					"summary": "Signature",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/sha256"
+						"$ref": "#/components/schemas/hex"
 					}
 				}
 			],
@@ -201,7 +201,7 @@
 				},
 				{
 					"code": -32801,
-					"message": "invalid sponsor identity"
+					"message": "invalid signer identity"
 				},
 				{
 					"code": -32802,
@@ -214,8 +214,8 @@
 			]
 		},
 		{
-			"name": "token-address",
-			"summary": "Get Token Address info",
+			"name": "token-account",
+			"summary": "Get Token Account info",
 			"tags": [
 				{
 					"name": "token"
@@ -232,25 +232,25 @@
 				}
 			],
 			"result": {
-				"name": "Token Address with Balance",
+				"name": "Token Account with Balance",
 				"schema": {
-					"$ref": "#/components/schemas/tokenAddressWithBalance"
+					"$ref": "#/components/schemas/tokenAccountWithBalance"
 				}
 			},
 			"errors": [
 				{
 					"code": -34001,
-					"message": "invalid token address url"
+					"message": "invalid token account url"
 				},
 				{
 					"code": -34002,
-					"message": "token address does not exist"
+					"message": "token account does not exist"
 				}
 			]
 		},
 		{
-			"name": "token-address-create",
-			"summary": "Create Token Address",
+			"name": "token-account-create",
+			"summary": "Create Token Account",
 			"tags": [
 				{
 					"name": "token"
@@ -258,19 +258,19 @@
 			],
 			"params": [
 				{
-					"name": "tokenAddress",
-					"summary": "New Token Address",
+					"name": "tokenAccount",
+					"summary": "New Token Account",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/tokenAddress"
+						"$ref": "#/components/schemas/tokenAccount"
 					}
 				},
 				{
-					"name": "sponsor",
-					"summary": "Existing Identity sponsoring the creation of new Token Address",
+					"name": "signer",
+					"summary": "Accumulate Identity signing the creation of new Token Account",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/sponsorIdentity"
+						"$ref": "#/components/schemas/signer"
 					}
 				},
 				{
@@ -286,20 +286,20 @@
 					"summary": "Signature",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/sha256"
+						"$ref": "#/components/schemas/hex"
 					}
 				}
 			],
 			"result": {
-				"name": "Token Address",
+				"name": "Token Account",
 				"schema": {
-					"$ref": "#/components/schemas/tokenAddress"
+					"$ref": "#/components/schemas/tokenAccount"
 				}
 			},
 			"errors": [
 				{
 					"code": -34001,
-					"message": "invalid token address url"
+					"message": "invalid token account url"
 				},
 				{
 					"code": -33001,
@@ -307,7 +307,7 @@
 				},
 				{
 					"code": -32801,
-					"message": "invalid sponsor identity"
+					"message": "invalid signer identity"
 				},
 				{
 					"code": -32802,
@@ -337,11 +337,11 @@
 					}
 				},
 				{
-					"name": "sponsor",
-					"summary": "Existing Identity sponsoring the creation of new Token Transaction",
+					"name": "signer",
+					"summary": "Accumulate Identity signing the transaction",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/sponsorIdentity"
+						"$ref": "#/components/schemas/signer"
 					}
 				},
 				{
@@ -357,7 +357,7 @@
 					"summary": "Signature",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/sha256"
+						"$ref": "#/components/schemas/hex"
 					}
 				}
 			],
@@ -374,7 +374,7 @@
 				},
 				{
 					"code": -32801,
-					"message": "invalid sponsor identity"
+					"message": "invalid signer identity"
 				},
 				{
 					"code": -32802,
@@ -425,12 +425,12 @@
 					}
 				}
 			},
-			"sponsorIdentity": {
-				"title": "Identity",
+			"signer": {
+				"title": "Signer",
 				"type": "object",
 				"properties": {
 					"url": {
-						"title": "Identity URL",
+						"title": "Signer Identity URL",
 						"description": "Identity name",
 						"$ref": "#/components/schemas/identityURL"
 					},
@@ -464,13 +464,13 @@
 					}
 				}
 			},
-			"tokenAddress": {
-				"title": "Token Address",
+			"tokenAccount": {
+				"title": "Token Account",
 				"type": "object",
 				"properties": {
 					"url": {
-						"title": "Token Address URL",
-						"description": "Token Address URL",
+						"title": "Token Account URL",
+						"description": "Token Account URL",
 						"$ref": "#/components/schemas/fullURL"
 					},
 					"tokenURL": {
@@ -481,13 +481,13 @@
 					}
 				}
 			},
-			"tokenAddressWithBalance": {
-				"title": "Token Address with Balance",
+			"tokenAccountWithBalance": {
+				"title": "Token Account with Balance",
 				"type": "object",
 				"properties": {
 					"url": {
-						"title": "Token Address URL",
-						"description": "Token Address URL",
+						"title": "Token Account URL",
+						"description": "Token Account URL",
 						"$ref": "#/components/schemas/fullURL"
 					},
 					"tokenURL": {
@@ -498,7 +498,7 @@
 					},
 					"balance": {
 						"title": "Balance",
-						"description": "Token Address balance",
+						"description": "Token Account balance",
 						"type": "integer"
 					}
 				}
@@ -508,18 +508,30 @@
 				"type": "object",
 				"properties": {
 					"from": {
-						"title": "Sender's Token Address",
-						"description": "Token Address URL",
+						"title": "Sender Token Account",
+						"description": "Token Account URL",
 						"$ref": "#/components/schemas/fullURL"
 					},
 					"to": {
-						"title": "Receiver(s) Token Address(es)",
-						"description": "Token Address URL",
+						"title": "Receiver(s) Token Account(s)",
+						"description": "Token Account URL",
 						"type": "array",
 						"items": {
-							"title": "Receiver Token Address",
-							"description": "Token Address URL",
-							"$ref": "#/components/schemas/fullURL"
+							"title": "Receiver Token Account",
+							"description": "Token Account URL and amount",
+							"type": "object",
+							"properties": {
+								"url": {
+									"title": "Token Account URL",
+									"description": "Token Account URL",
+									"$ref": "#/components/schemas/fullURL"
+								},
+								"amount": {
+									"title": "Amount",
+									"description": "Number of tokens",
+									"type": "integer"
+								}
+							}
 						}
 					},
 					"meta": {
