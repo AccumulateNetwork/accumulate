@@ -48,8 +48,8 @@ func (ic *IdentityCreate) UnmarshalBinary(data []byte) error {
 	}
 
 	l := ic.IdentityName.Size(nil)
-	if len(data) < l+int(32) {
-		return fmt.Errorf("Key hash length too short for identity create")
+	if len(data) < l+32 {
+		return fmt.Errorf("key hash length too short for identity create")
 	}
 
 	copy(ic.IdentityKeyHash[:], data[l:])

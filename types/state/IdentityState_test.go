@@ -9,14 +9,20 @@ import (
 
 func TestIdentityState(t *testing.T) {
 	var seed [32]byte
-	hex.Decode(seed[:], []byte("36422e9560f56e0ead53a83b33aec9571d379291b5e292b88dec641a98ef05d8"))
 
+	_, err := hex.Decode(seed[:], []byte("36422e9560f56e0ead53a83b33aec9571d379291b5e292b88dec641a98ef05d8"))
+	if err != nil {
+		t.Fatal(err)
+	}
 	testidentity := "TestIdentity"
 
 	key := ed25519.GenPrivKeyFromSecret(seed[:])
 
 	ids := NewIdentityState(testidentity)
-	ids.SetKeyData(KeyType_public, key.PubKey().Bytes())
+	err = ids.SetKeyData(KeyTypePublic, key.PubKey().Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if ids.GetAdiChainPath() != "TestIdentity" {
 		t.Fatalf("Invalid ADI stored in identity state, expected %s, received %s", ids.GetAdiChainPath(), testidentity)
@@ -78,13 +84,5 @@ func TestIdentityState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Cannot marshal json")
 	}
-
-}
-
-func TestIdentityState_GetIdentityChainId(t *testing.T) {
-
-}
-
-func TestIdentityState_GetPublicKey(t *testing.T) {
 
 }

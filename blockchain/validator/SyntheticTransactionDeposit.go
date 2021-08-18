@@ -94,7 +94,10 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Sub
 	copy(retdep.SourceChainId[:], submission.Chainid)
 	copy(retdep.IssuerIdentity[:], ttd.IssuerIdentity[:])
 	copy(retdep.IssuerChainId[:], ttd.IssuerChainId[:])
-	retdep.Metadata.UnmarshalJSON([]byte("{\"Deposit failed\"}"))
+	err := retdep.Metadata.UnmarshalJSON([]byte("{\"Deposit failed\"}"))
+	if err != nil {
+		return nil, err
+	}
 	retdep.DepositAmount.Set(&ttd.DepositAmount)
 	retdepdata, err := retdep.MarshalBinary()
 	if err != nil {

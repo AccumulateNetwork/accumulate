@@ -18,27 +18,7 @@ import (
 
 type CreateIdentityValidator struct {
 	ValidatorContext
-
-	EV *EntryValidator
 }
-
-//transactions are just accounts with balances on a given token chain
-//what transaction types should be supported?
-//type Identity struct {
-//	Version int8
-//    DDII string
-//    PublicKey managed.Hash
-//}
-//
-//func (tx *Identity) MarshalBinary() ([]byte, error){
-//	ret := make([]byte, )
-//	return nil, nil
-//}
-//
-//func (tx *Identity) UnmarshalBinary(data []byte) error{
-//
-//	return nil
-//}
 
 func NewCreateIdentityValidator() *CreateIdentityValidator {
 	v := CreateIdentityValidator{}
@@ -56,7 +36,7 @@ func NewCreateIdentityValidator() *CreateIdentityValidator {
 func (v *CreateIdentityValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	if currentstate == nil {
 		//but this is to be expected...
-		return fmt.Errorf("Current State Not Defined")
+		return fmt.Errorf("current state not defined")
 	}
 
 	return nil
@@ -78,17 +58,17 @@ func (v *CreateIdentityValidator) BeginBlock(height int64, time *time.Time) erro
 func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
-		return nil, fmt.Errorf("Current State Not Defined")
+		return nil, fmt.Errorf("current State Not Defined")
 	}
 
 	if currentstate.IdentityState == nil {
-		return nil, fmt.Errorf("Sponsor identity is not defined")
+		return nil, fmt.Errorf("sponsor identity is not defined")
 	}
 
 	ic := types.IdentityCreate{}
 	err = json.Unmarshal(submission.Data, &ic)
 	if err != nil {
-		return nil, fmt.Errorf("Data payload of submission is not a valid identity create message")
+		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
 	isc := synthetic.NewIdentityStateCreate(string(ic.IdentityName))
@@ -97,7 +77,10 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, submission 
 	copy(isc.Txid[:], txid[:])
 	copy(isc.SourceIdentity[:], submission.Identitychain)
 	copy(isc.SourceChainId[:], submission.Chainid)
-	isc.SetKeyData(acctypes.KeyType_sha256, ic.IdentityKeyHash[:])
+	err = isc.SetKeyData(acctypes.KeyTypeSha256, ic.IdentityKeyHash[:])
+	if err != nil {
+		return nil, err
+	}
 	iscdata, err := json.Marshal(isc)
 	if err != nil {
 		return nil, err

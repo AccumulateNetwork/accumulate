@@ -13,7 +13,7 @@ import (
 	"github.com/AccumulateNetwork/SMT/pmt"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
-	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"google.golang.org/grpc"
 	"net"
 
@@ -69,20 +69,20 @@ import (
 //}
 
 func loadState(db dbm.DB) State {
-	var state State
-	state.db = db
+	var tmstate State
+	tmstate.db = db
 	stateBytes, err := db.Get(stateKey)
 	if err != nil {
 		panic(err)
 	}
 	if len(stateBytes) == 0 {
-		return state
+		return tmstate
 	}
-	err = json.Unmarshal(stateBytes, &state)
+	err = json.Unmarshal(stateBytes, &tmstate)
 	if err != nil {
 		panic(err)
 	}
-	return state
+	return tmstate
 }
 
 func saveState(state State) {
@@ -102,8 +102,8 @@ func prefixKey(key []byte) []byte {
 
 type MerkleManagerState struct {
 	merklemgr          *managed.MerkleManager
-	currentstateobject state.StateObject
-	stateobjects       []state.StateObject //all the state objects for this height, if we don't care about history this can go byebye...
+	currentstateobject state.Object
+	stateobjects       []state.Object //all the state objects for this height, if we don't care about history this can go byebye...
 }
 
 type AccumulatorVMApplication struct {
@@ -147,7 +147,7 @@ type AccumulatorVMApplication struct {
 	timer time.Time
 
 	submission   chan pb.Submission
-	APIClient    core_grpc.BroadcastAPIClient
+	APIClient    coregrpc.BroadcastAPIClient
 	Accrpcaddr   string
 	RouterClient pb.ApiServiceClient
 
@@ -161,15 +161,15 @@ func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *Accumula
 		panic(err)
 	}
 
-	state := loadState(db)
+	tmstate := loadState(db)
 
 	app := AccumulatorVMApplication{
 		//router: new(router2.Router),
-		RetainBlocks: 1, //only retain current block, we will manage our own state
+		RetainBlocks: 1, //only retain current block, we will manage our own tmstate
 		chainval:     make(map[uint64]*validator.ValidatorContext),
-		state:        state,
+		state:        tmstate,
 	}
-	app.Initialize(ConfigFile, WorkingDir)
+	_ = app.Initialize(ConfigFile, WorkingDir)
 
 	return &app
 }
@@ -216,7 +216,7 @@ func (app *AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) a
 func (app *AccumulatorVMApplication) GetLocalClient() (local.Local, error) {
 	return *app.LocalClient, nil
 }
-func (app *AccumulatorVMApplication) GetAPIClient() (core_grpc.BroadcastAPIClient, error) {
+func (app *AccumulatorVMApplication) GetAPIClient() (coregrpc.BroadcastAPIClient, error) {
 	return app.APIClient, nil
 }
 
@@ -251,7 +251,7 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 
 	conn, err := grpc.Dial(routeraddress, grpc.WithBlock(), grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
 	if err != nil {
-		return fmt.Errorf("Error Openning GRPC client in router")
+		return fmt.Errorf("error Openning GRPC client in router")
 	}
 	//defer conn.Close()
 	app.RouterClient = pb.NewApiServiceClient(conn)
@@ -266,7 +266,7 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 
 	str := "ValTypeReg"
 	fmt.Printf("Creating %s\n", str)
-	cdb, err := nm.DefaultDBProvider(&nm.DBContext{str, app.config})
+	cdb, err := nm.DefaultDBProvider(&nm.DBContext{ID: str, Config: app.config})
 	app.valTypeRegDB = cdb
 	if err != nil {
 		return fmt.Errorf("failed to create node accumulator database: %w", err)
@@ -275,17 +275,17 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	dbfilename := WorkingDir + "/" + "valacc.db"
 	dbtype := "badger"
 	//dbtype := "memory" ////for kicks just create an in-memory database for now
-	app.mmdb.Init(dbtype, dbfilename)
+	err = app.mmdb.Init(dbtype, dbfilename)
+	if err != nil {
+		return err
+	}
 	app.mms = make(map[managed.Hash]*MerkleManagerState)
 	app.bpt = pmt.NewBPTManager(&app.mmdb)
-
-	//the salt is the chainid and needs to be updated as chainid changes with each transaction
-	//app.mms = new(map[managed.Hash]*MMState)
 
 	return nil
 }
 
-///ABCI call
+// InitChain /ABCI call
 func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
 	/*
 		type RequestInitChain struct {
@@ -348,7 +348,7 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	}
 
 	is := state.NewIdentityState(adi)
-	is.SetKeyData(state.KeyType_public, app.Key.PubKey.Bytes())
+	is.SetKeyData(state.KeyTypePublic, app.Key.PubKey.Bytes())
 	idstatedata, err := is.MarshalBinary()
 	if err != nil {
 		panic(err)
@@ -369,11 +369,18 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	if err != nil {
 		panic(err)
 	}
-	app.addStateEntry(identity[:], idstatedata)
-	app.addStateEntry(chainid[:], tasstatedata)
+	err = app.addStateEntry(identity[:], idstatedata)
+	if err != nil {
+		panic(err)
+	}
+	err = app.addStateEntry(chainid[:], tasstatedata)
+	if err != nil {
+		panic(err)
+	}
+
 }
 
-///ABCI / block calls
+// BeginBlock /ABCI / block calls
 ///   BeginBlock <---
 ///   [CheckTx]
 ///   [DeliverTx]
@@ -382,7 +389,6 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 // ------ BeginBlock -> DeliverTx -> EndBlock -> Commit
 // When Tendermint Core has decided on the block, it's transferred to the application in 3 parts:
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
-
 //Here we create a batch, which will store block's transactions.
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
 	//app.currentBatch = app.db.NewTransaction(true)
@@ -442,21 +448,14 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	return abcitypes.ResponseBeginBlock{}
 }
 
-///ABCI / block calls
+// CheckTx /ABCI / block calls
 ///   BeginBlock
 ///   [CheckTx] <---
 ///   [DeliverTx]
 ///   EndBlock
 ///   Commit
-
 // new transaction is added to the Tendermint Core. Check if it is valid.
 func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
-	/*
-		type RequestCheckTx struct {
-			Tx   []byte      `protobuf:"bytes,1,opt,name=tx,proto3" json:"tx,omitempty"`
-			Type CheckTxType `protobuf:"varint,2,opt,name=type,proto3,enum=tendermint.abci.CheckTxType" json:"type,omitempty"`
-		}*/
-
 	//create a default response
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
@@ -512,8 +511,9 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	return ret
 }
 
-func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*state.StateObject, error) {
-	var ret *state.StateObject
+//getCurrentState retrieve the current state object from the database based upon chainid
+func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*state.Object, error) {
+	var ret *state.Object
 	var key managed.Hash
 	key.Extract(chainid)
 	if mms := app.mms[key]; mms != nil {
@@ -522,10 +522,10 @@ func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*state.Sta
 		//pull current state from the database.
 		data := app.mmdb.Get("StateEntries", "", chainid)
 		if data != nil {
-			ret = &state.StateObject{}
+			ret = &state.Object{}
 			err := ret.Unmarshal(data)
 			if err != nil {
-				return nil, fmt.Errorf("No Current State is Defined")
+				return nil, fmt.Errorf("no current state is defined")
 			}
 
 		}
@@ -533,6 +533,7 @@ func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*state.Sta
 	return ret, nil
 }
 
+// addStateEntry add the entry to the smt and database based upon chainid
 func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte) error {
 	var mms *MerkleManagerState
 
@@ -549,7 +550,7 @@ func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte)
 	}
 	data := app.mmdb.Get("StateEntries", "", chainid)
 	if data != nil {
-		currso := state.StateObject{}
+		currso := state.Object{}
 		mms.currentstateobject.PrevStateHash = currso.PrevStateHash
 	}
 	mms.merklemgr.AddHash(hash)
@@ -568,13 +569,14 @@ func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte)
 	return nil
 }
 
+// writeStates will push the data to the database and update the patricia trie
 func (app *AccumulatorVMApplication) writeStates() []byte {
 	//loop through everything and write out states to the database.
 	for chainid, v := range app.mms {
 		mdroot := v.merklemgr.MainChain.MS.GetMDRoot()
 		if mdroot == nil {
 			//shouldn't get here, but will reject if I do
-			fmt.Printf("Shouldn't get here on writeState() on chain id %X obtaining merkle state", chainid)
+			fmt.Printf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainid)
 			continue
 		}
 
@@ -592,7 +594,7 @@ func (app *AccumulatorVMApplication) writeStates() []byte {
 			data, err := v.stateobjects[i].Marshal()
 			if err != nil {
 				//shouldn't get here, but will reject if I do
-				fmt.Printf("Shouldn't get here on writeState() on chain id %X for updated states", chainid)
+				fmt.Printf("shouldn't get here on writeState() on chain id %X for updated states", chainid)
 				continue
 			}
 
@@ -608,7 +610,7 @@ func (app *AccumulatorVMApplication) writeStates() []byte {
 	return app.bpt.Bpt.Root.Hash[:]
 }
 
-//Figure out what to do with the processed validated transaction.  This may include firing off a synthetic TX or simply
+//processValidatedSubmissionRequest Figure out what to do with the processed validated transaction.  This may include firing off a synthetic TX or simply
 //updating the state of the transaction
 func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *validator.ResponseValidateTX) error {
 
@@ -635,7 +637,7 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 			vdata.Submissions[i].Signature, err = app.Key.PrivKey.Sign(ledger)
 
 			if err != nil {
-				return fmt.Errorf("Error signing validated submission request")
+				return fmt.Errorf("error signing validated submission request")
 			}
 
 			//using protobuffers grpc is quite slow, so we might want to consider
@@ -647,13 +649,12 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 	return nil
 }
 
-///ABCI / block calls
-///   BeginBlock
-///   [CheckTx]
-///   [DeliverTx] <---
-///   EndBlock
-///   Commit
-
+// DeliverTx ABCI / block calls
+//   <BeginBlock>
+//   [CheckTx]
+//   [DeliverTx] <---
+//   <EndBlock>
+//   <Commit>
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
 func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (response abcitypes.ResponseDeliverTx) {
@@ -701,8 +702,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 		//in reality we will check the type of chain to determine how to handle validation for that chain.
 
 		if sub.GetInstruction()&0xFF00 > 0 {
-			//need to verify the sender is a legit bvc validator
-
+			//need to verify the sender is a legit bvc validator also need the dbvc receipt
 			//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
 			//not an impostor. Need to figure out how to do this. Right now we just assume the syth request
 			//sender is legit.
@@ -748,7 +748,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 		/// update the state data for the chain.
 		if vdata.StateData != nil {
-			header := state.StateHeader{}
+			header := state.Header{}
 			err := header.UnmarshalBinary(vdata.StateData)
 			if err != nil {
 				ret.Code = 2
@@ -773,13 +773,12 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	return response
 }
 
-///ABCI / block calls
-///   BeginBlock
-///   [CheckTx]
-///   [DeliverTx]
-///   EndBlock <---
-///   Commit
-
+// EndBlock ABCI / block calls
+//   BeginBlock
+//   [CheckTx]
+//   [DeliverTx]
+//   EndBlock <---
+//   Commit
 // Update the validator set
 func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (resp abcitypes.ResponseEndBlock) {
 	// Select our leader who will initiate consensus on dbvc chain.
@@ -804,14 +803,13 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 	return abcitypes.ResponseEndBlock{} //ValidatorUpdates: app.ValUpdates}
 }
 
-///ABCI / block calls
-///   BeginBlock
-///   [CheckTx]
-///   [DeliverTx]
-///   EndBlock
-///   Commit <---
-
-//Commit instructs the application to persist the new state.
+// Commit instructs the application to persist the new state.
+// ABCI / block calls
+//    BeginBlock
+//    [CheckTx]
+//    [DeliverTx]
+//    EndBlock
+//    Commit <---
 func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	//end the current batch of transactions in the Stateful Merkle Tree
 
@@ -838,7 +836,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 		dbvc := validator.ResponseValidateTX{}
 		dbvc.Submissions = make([]pb.Submission, 1)
 		dbvc.Submissions[0].Instruction = 0
-		chainadi := string("dbvc")
+		chainadi := "dbvc"
 		chainid := types.GetChainIdFromChainPath(chainadi)
 		//chainaddr, _ := smt.BytesUint64(chainid)
 		dbvc.Submissions[0].Identitychain = chainid[:] //1 is the chain id of the DBVC
@@ -867,7 +865,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	}
 
 	//save the state
-	app.state.Size += int64(app.txct)
+	app.state.Size += app.txct
 	app.state.AppHash = mdroot
 	app.state.Height++
 	saveState(app.state)
@@ -906,7 +904,7 @@ func (app *AccumulatorVMApplication) ApplySnapshotChunk(
 	return abcitypes.ResponseApplySnapshotChunk{Result: abcitypes.ResponseApplySnapshotChunk_ABORT}
 }
 
-// when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
+//Query when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
 func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 
@@ -1043,9 +1041,8 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	return node, nil
 }
 
-// add, update, or remove a validator
+//updateValidator add, update, or remove a validator
 func (app *AccumulatorVMApplication) updateValidator(v abcitypes.ValidatorUpdate) abcitypes.ResponseDeliverTx {
-
 	pubkey, _ := cryptoenc.PubKeyFromProto(v.PubKey)
 
 	fmt.Printf("Val Pub Key 0x%X\n", pubkey.Address())

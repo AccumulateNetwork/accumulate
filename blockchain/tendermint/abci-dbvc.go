@@ -32,8 +32,6 @@ import (
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 )
 
-const BanListTrigger = -10000
-
 var (
 	stateKey        = []byte("stateKey")
 	kvPairPrefixKey = []byte("kvPairKey:")
@@ -59,27 +57,17 @@ type DirectoryBlockChain struct {
 	DB vadb.DB
 }
 
-func NewDirectoryBlockChain() *DirectoryBlockChain {
-	app := DirectoryBlockChain{
-		//		db: db,
-		//router: new(router2.Router),
-
-		//EntryFeed : make(chan node.EntryHash, 10000),
-	}
-	return &app
-}
-
 var _ abci.Application = (*DirectoryBlockChain)(nil)
 
 func (app *DirectoryBlockChain) GetHeight() uint64 {
 	return uint64(app.Height)
 }
 
-func (DirectoryBlockChain) Info(req abci.RequestInfo) abci.ResponseInfo {
+func (DirectoryBlockChain) Info(abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{}
 }
 
-func (DirectoryBlockChain) SetOption(req abci.RequestSetOption) abci.ResponseSetOption {
+func (DirectoryBlockChain) SetOption(abci.RequestSetOption) abci.ResponseSetOption {
 	return abci.ResponseSetOption{}
 }
 
@@ -101,7 +89,8 @@ func (app *DirectoryBlockChain) verifyBVCMasterChain(ddii []byte) error {
 	return nil
 }
 
-func (app *DirectoryBlockChain) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
+//InitChain will get called at the initialization of the dbvc
+func (app *DirectoryBlockChain) InitChain(abci.RequestInitChain) abci.ResponseInitChain {
 	fmt.Printf("Initalizing Accumulator Router\n")
 
 	//TODO: do a load state here to continue on with where we were.
@@ -117,19 +106,18 @@ func (app *DirectoryBlockChain) InitChain(req abci.RequestInitChain) abci.Respon
 	return abci.ResponseInitChain{}
 }
 
+//BeginBlock Here we create a batch, which will store block's transactions.
 // ------ BeginBlock() -> DeliverTx()... -> EndBlock() -> Commit()
 // When Tendermint Core has decided on the block, it's transferred to the application in 3 parts:
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
-
-//Here we create a batch, which will store block's transactions.
-func (app *DirectoryBlockChain) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
+func (app *DirectoryBlockChain) BeginBlock(abci.RequestBeginBlock) abci.ResponseBeginBlock {
 	//probably don't need to do this here...
 	//app.AppMDRoot.Extract(req.Hash)
 
 	return abci.ResponseBeginBlock{}
 }
 
-// BVC Block is finished and MDRoot data is delivered to DBVC. Check if it is valid.
+// CheckTx BVC Block is finished and MDRoot data is delivered to DBVC. Check if it is valid.
 func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCheckTx {
 	//the ABCI request here is a Tx that consists data delivered from the BVC protocol buffer
 	//data here can only come from an authorized VBC validator, otherwise they will be rejected
@@ -160,8 +148,11 @@ func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCh
 		}
 
 		bve := BVCEntry{}
-		bve.UnmarshalBinary(bvcreq.GetEntry())
-
+		_, err = bve.UnmarshalBinary(bvcreq.GetEntry())
+		if err != nil {
+			return abci.ResponseCheckTx{Code: code.CodeTypeUnauthorized, GasWanted: 0,
+				Log: fmt.Sprintf("Unable to resolve DDII at Height %d", bve.BVCHeight)}
+		}
 		//resolve the validator's bve to obtain public key for given height
 		pub, err := app.resolveDDIIatHeight(bve.DDII, bve.BVCHeight)
 		if err != nil {
@@ -237,7 +228,7 @@ func (app *DirectoryBlockChain) DeliverTx(req abci.RequestDeliverTx) (response a
 	return response
 }
 
-func (app *DirectoryBlockChain) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
+func (app *DirectoryBlockChain) EndBlock(abci.RequestEndBlock) abci.ResponseEndBlock {
 	//todo: validator adjustments here...
 	//todo: do consensus adjustments here...
 	//Signals the end of a block.
@@ -346,10 +337,14 @@ func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm
 	}
 
 	fmt.Println("Tendermint Start")
-	node.Start()
+	err = node.Start()
+	if err != nil {
+		return nil, fmt.Errorf("failed to start Tendermint node %w", err)
+	}
 
 	defer func() {
-		node.Stop()
+		_ = node.Stop()
+
 		node.Wait()
 		fmt.Println("Tendermint Stopped")
 	}()

@@ -10,12 +10,12 @@ import (
 	"testing"
 )
 
-func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*state.StateObject, []byte) {
+func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*state.Object, []byte) {
 	id, _, _ := types.ParseIdentityChainPath(identitychainpath)
 
 	idhash := sha256.Sum256([]byte(id))
 
-	so := state.StateObject{}
+	so := state.Object{}
 	ids := state.NewIdentityState(id)
 	ids.SetKeyData(0, key.PubKey().Bytes())
 	so.Entry, _ = ids.MarshalBinary()
@@ -26,7 +26,7 @@ func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*st
 	return &so, idhash[:]
 }
 
-func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.StateObject {
+func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.Object {
 	id, cp, _ := types.ParseIdentityChainPath(identitychainpath)
 
 	tas := state.NewTokenAccountState([]byte(id), []byte(cp), nil)
@@ -34,7 +34,7 @@ func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.
 	deposit := big.NewInt(5000)
 	tas.AddBalance(deposit)
 
-	so := state.StateObject{}
+	so := state.Object{}
 	so.Entry, _ = tas.MarshalBinary()
 	eh := sha256.Sum256(so.Entry)
 	so.EntryHash = eh[:]

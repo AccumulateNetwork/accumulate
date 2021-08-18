@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestTransactionAckNak(t *testing.T) {
+func TestTransactionNak(t *testing.T) {
 	adichainpath := "wileecoyote/acme"
 	chainid := types.GetChainIdFromChainPath(adichainpath)
 	idhash := types.GetIdentityChainFromIdentity(adichainpath)
@@ -17,5 +17,5 @@ func TestTransactionAckNak(t *testing.T) {
 	sub.Instruction = proto.AccInstruction_Synthetic_Transaction_Response
 	sub.SourceAdiChainPath = "roadrunner/acme"
 
-	//NewTransactionAckNak(AckNakCode_State_Change_Fail,txscript.ErrSigInvalidDataLen,)
+	//NewTransactionNak(NakCode_State_Change_Fail,txscript.ErrSigInvalidDataLen,)
 }

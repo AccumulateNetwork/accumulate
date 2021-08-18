@@ -35,20 +35,20 @@ func NewTokenIssuance(symbol string, supply *big.Int, precision int8, mode Token
 
 func (t *TokenIssuance) SetTokenParams(symbol string, supply *big.Int, precision int8, mode TokenCirculationMode) error {
 	if supply == nil {
-		return fmt.Errorf("Invalid supply")
+		return fmt.Errorf("invalid supply")
 	}
 
 	maxsupply := big.NewInt(-1)
 	if supply.Cmp(maxsupply) < 0 {
-		return fmt.Errorf("Invalid supply amount %s", supply.String())
+		return fmt.Errorf("invalid supply amount %s", supply.String())
 	}
 
 	if precision > 18 || precision < 0 {
-		return fmt.Errorf("Token precision must be between 0 and 18")
+		return fmt.Errorf("token precision must be between 0 and 18")
 	}
 
 	if len(symbol) > 10 {
-		return fmt.Errorf("Token ticker may not exceed 10 charaters in length")
+		return fmt.Errorf("token ticker may not exceed 10 charaters in length")
 	}
 
 	t.Type = "AIM-0"
@@ -62,7 +62,7 @@ func (t *TokenIssuance) SetTokenParams(symbol string, supply *big.Int, precision
 
 func (t *TokenIssuance) SetMetadata(md *json.RawMessage) error {
 	if md == nil {
-		return fmt.Errorf("Invalid metadata")
+		return fmt.Errorf("invalid metadata")
 	}
 	t.Metadata = &json.RawMessage{}
 	copy((*t.Metadata)[:], (*md)[:])
@@ -94,7 +94,7 @@ func (t *TokenIssuance) MarshalBinary() ([]byte, error) {
 		buffer.Write(*t.Metadata)
 	}
 	if len(buffer.Bytes()) > 0xFFFF {
-		return nil, fmt.Errorf("Error marshalling Token Isuance. Buffer exceeeds permitted size")
+		return nil, fmt.Errorf("error marshalling Token Isuance. Buffer exceeeds permitted size")
 	}
 	ret := buffer.Bytes()
 	binary.BigEndian.PutUint16(ret[0:2], uint16(len(ret)-2))
@@ -106,61 +106,61 @@ func (t *TokenIssuance) UnmarshalBinary(data []byte) error {
 	mlen := binary.BigEndian.Uint16(data)
 	dlen := len(data)
 	if mlen+2 != uint16(dlen) {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object")
+		return fmt.Errorf("cannot unmarshal Token Issuance object")
 	}
 	i := 2
 	//copy the Type
 	if dlen < i {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object at Type length")
+		return fmt.Errorf("cannot unmarshal Token Issuance object at Type length")
 	}
 	slen := int(data[i])
 	i++
-	if dlen < int(slen)+i {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object at Type")
+	if dlen < slen+i {
+		return fmt.Errorf("cannot unmarshal Token Issuance object at Type")
 	}
 	t.Type = string(data[i : slen+i])
-	i += int(slen)
+	i += slen
 
 	//copy the symbol
 	if dlen < i+1 {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object at Symbol length")
+		return fmt.Errorf("cannot unmarshal Token Issuance object at symbol length")
 	}
 	slen = int(data[i])
 	i++
 	if dlen < slen+i+1 {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object at Symbol")
+		return fmt.Errorf("cannot unmarshal Token Issuance object at symbol")
 	}
 	t.Symbol = string(data[i : slen+i])
-	i += int(slen)
+	i += slen
 
 	if dlen < 32+i+1 {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object at Supply")
+		return fmt.Errorf("cannot unmarshal Token Issuance object at supply")
 	}
 
 	t.Supply.SetBytes(data[i : 32+i])
 	i += 32
 
 	if dlen < i+1 {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object at Precision")
+		return fmt.Errorf("cannot unmarshal Token Issuance object at precision")
 	}
 	t.Precision = int8(data[i])
 	i++
 
 	if dlen < i+1 {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object at Circulation Mode")
+		return fmt.Errorf("cannot unmarshal Token Issuance object at Circulation Mode")
 	}
 	t.Mode = TokenCirculationMode(data[i])
 	i++
 
 	if dlen < i+2 {
-		return fmt.Errorf("Cannot unmarshal Token Issuance object at Symbol length")
+		return fmt.Errorf("cannot unmarshal Token Issuance object at Symbol length")
 	}
 
 	slen = int(data[i])<<8 + int(data[i+1])
 	i += 2
 	if slen > 0 {
 		if dlen < slen+i {
-			return fmt.Errorf("Cannot unmarshal Token Issuance object at Metadata")
+			return fmt.Errorf("cannot unmarshal Token Issuance object at Metadata")
 		}
 
 		t.Metadata = &json.RawMessage{}
