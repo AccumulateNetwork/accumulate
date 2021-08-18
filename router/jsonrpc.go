@@ -28,15 +28,15 @@ func StartAPI(port int) *API {
 	api.validate = validator.New()
 
 	methods := jsonrpc2.MethodMap{
-		// identity
-		"identity":        api.getIdentity,
-		"identity-create": api.createIdentity,
+		// ADI
+		"adi":        api.getADI,
+		"adi-create": api.createADI,
 
 		// token
 		"token":                api.getToken,
 		"token-create":         api.createToken,
-		"token-address":        api.getTokenAddress,
-		"token-address-create": api.createTokenAddress,
+		"token-account":        api.getTokenAccount,
+		"token-account-create": api.createTokenAccount,
 		"token-tx-create":      api.createTokenTx,
 	}
 
@@ -49,22 +49,22 @@ func StartAPI(port int) *API {
 
 }
 
-// getIdentity returns Identity info
-func (api *API) getIdentity(_ context.Context, params json.RawMessage) interface{} {
+// getADI returns ADI info
+func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &Identity{}
+	req := &ADI{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return ErrorInvalidRequest
 	}
 
-	// validate only Identity.URL
+	// validate only ADI.URL
 	if err = api.validate.StructPartial(req, "URL"); err != nil {
 		return NewValidatorError(err)
 	}
 
-	resp := &Identity{}
+	resp := &ADI{}
 	resp.URL = req.URL
 
 	// Tendermint integration here
@@ -72,11 +72,11 @@ func (api *API) getIdentity(_ context.Context, params json.RawMessage) interface
 	return resp
 }
 
-// createIdentity creates Identity
-func (api *API) createIdentity(_ context.Context, params json.RawMessage) interface{} {
+// createADI creates ADI
+func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &CreateIdentityRequest{}
+	req := &CreateADIRequest{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return ErrorInvalidRequest
@@ -87,9 +87,9 @@ func (api *API) createIdentity(_ context.Context, params json.RawMessage) interf
 		return NewValidatorError(err)
 	}
 
-	resp := &Identity{}
-	resp.URL = req.Identity.URL
-	resp.PublicKeyHash = req.Identity.PublicKeyHash
+	resp := &ADI{}
+	resp.URL = req.ADI.URL
+	resp.PublicKeyHash = req.ADI.PublicKeyHash
 
 	// Tendermint integration here
 
@@ -146,11 +146,11 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 
 }
 
-// getTokenAddress returns Token Address info
-func (api *API) getTokenAddress(_ context.Context, params json.RawMessage) interface{} {
+// getTokenAccount returns Token Account info
+func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &TokenAddress{}
+	req := &TokenAccount{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return ErrorInvalidRequest
@@ -161,7 +161,7 @@ func (api *API) getTokenAddress(_ context.Context, params json.RawMessage) inter
 		return NewValidatorError(err)
 	}
 
-	resp := &TokenAddress{}
+	resp := &TokenAccount{}
 	resp.URL = req.URL
 
 	// Tendermint integration here
@@ -170,11 +170,11 @@ func (api *API) getTokenAddress(_ context.Context, params json.RawMessage) inter
 
 }
 
-// createTokenAddress creates Token Address
-func (api *API) createTokenAddress(_ context.Context, params json.RawMessage) interface{} {
+// createTokenAccount creates Token Account
+func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &CreateTokenAddressRequest{}
+	req := &CreateTokenAccountRequest{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return ErrorInvalidRequest
@@ -185,9 +185,9 @@ func (api *API) createTokenAddress(_ context.Context, params json.RawMessage) in
 		return NewValidatorError(err)
 	}
 
-	resp := &TokenAddress{}
-	resp.URL = req.TokenAddress.URL
-	resp.TokenURL = req.TokenAddress.TokenURL
+	resp := &TokenAccount{}
+	resp.URL = req.TokenAccount.URL
+	resp.TokenURL = req.TokenAccount.TokenURL
 
 	// Tendermint integration here
 
@@ -197,6 +197,26 @@ func (api *API) createTokenAddress(_ context.Context, params json.RawMessage) in
 
 // createTokenTx creates Token Tx
 func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &CreateTokenTxRequest{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
+	}
+
+	// validate request
+	if err = api.validate.StructExcept(req, "Hash"); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &TokenTx{}
+	resp.To = req.TokenTx.To
+	resp.From = req.TokenTx.From
+	resp.Meta = req.TokenTx.Meta
+
+	// Tendermint integration here
+	resp.Hash = "hash"
 
 	return nil
 

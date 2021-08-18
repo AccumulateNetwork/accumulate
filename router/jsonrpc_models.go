@@ -2,12 +2,12 @@ package router
 
 // API data structures, need to merge with Tendermint data structures to avoid duplicates
 
-type Identity struct {
+type ADI struct {
 	URL           string `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	PublicKeyHash string `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required,hexadecimal"`
 }
 
-type SponsorIdentity struct {
+type Signer struct {
 	URL       string `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	PublicKey string `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required,hexadecimal"`
 }
@@ -18,37 +18,54 @@ type Token struct {
 	Precision int    `json:"precision" form:"precision" query:"precision" validate:"required,min=0,max=18"`
 }
 
-type TokenAddress struct {
+type TokenAccount struct {
 	URL      string `json:"url" form:"url" query:"url" validate:"required"`
 	TokenURL string `json:"tokenURL" form:"tokenURL" query:"tokenURL" validate:"required,uri"`
 }
 
-type TokenAddressWithBalance struct {
-	*TokenAddress
+type TokenAccountWithBalance struct {
+	*TokenAccount
 	Balance int64 `json:"balance" form:"balance" query:"balance"`
+}
+
+type TokenTx struct {
+	Hash string           `json:"hash" form:"hash" query:"hash" validate:"required,hexadecimal"`
+	From string           `json:"from" form:"from" query:"from" validate:"required"`
+	To   []*TokenTxOutput `json:"to" form:"to" query:"to" validate:"required"`
+	Meta []byte           `json:"meta" form:"meta" query:"meta" validate:"required"`
+}
+
+type TokenTxOutput struct {
+	URL    string `json:"url" form:"url" query:"url" validate:"required"`
+	Amount int64  `json:"url" form:"url" query:"url" validate:"gt=0"`
 }
 
 // Helpers
 
-type SponsorData struct {
-	Sponsor   *SponsorIdentity `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
-	Timestamp int64            `json:"timestamp" form:"timestamp" query:"timestamp" validate:"required"`
-	Sig       int64            `json:"sig" form:"sig" query:"sig" validate:"required,hexadecimal"`
+type SignerData struct {
+	Signer    *Signer `json:"signer" form:"signer" query:"signer" validate:"required"`
+	Timestamp int64   `json:"timestamp" form:"timestamp" query:"timestamp" validate:"required"`
+	Sig       int64   `json:"sig" form:"sig" query:"sig" validate:"required,hexadecimal"`
 }
 
 // API requests
 
-type CreateIdentityRequest struct {
-	Identity *Identity `json:"identity" form:"identity" query:"identity" validate:"required"`
-	*SponsorData
+type CreateADIRequest struct {
+	ADI *ADI `json:"adi" form:"adi" query:"adi" validate:"required"`
+	*SignerData
 }
 
 type CreateTokenRequest struct {
 	Token *Token `json:"token" form:"token" query:"token" validate:"required"`
-	*SponsorData
+	*SignerData
 }
 
-type CreateTokenAddressRequest struct {
-	TokenAddress *TokenAddress `json:"tokenAddress" form:"tokenAddress" query:"tokenAddress" validate:"required"`
-	*SponsorData
+type CreateTokenAccountRequest struct {
+	TokenAccount *TokenAccount `json:"tokenAccount" form:"tokenAccount" query:"tokenAccount" validate:"required"`
+	*SignerData
+}
+
+type CreateTokenTxRequest struct {
+	TokenTx *TokenTx `json:"tokenTx" form:"tokenTx" query:"tokenTx" validate:"required"`
+	*SignerData
 }
