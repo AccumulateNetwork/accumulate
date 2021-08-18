@@ -320,6 +320,41 @@
 			]
 		},
 		{
+			"name": "token-tx",
+			"summary": "Get Token Transaction info",
+			"tags": [
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "hash",
+					"summary": "Transaction Hash",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/sha256"
+					}
+				}
+			],
+			"result": {
+				"name": "Token Transaction",
+				"schema": {
+					"$ref": "#/components/schemas/tokenTxWithHash"
+				}
+			},
+			"errors": [
+				{
+					"code": -34002,
+					"message": "invalid transaction hash"
+				},
+				{
+					"code": -34003,
+					"message": "transaction does not exist"
+				}
+			]
+		},
+		{
 			"name": "token-tx-create",
 			"summary": "Create Token Transaction",
 			"tags": [
@@ -329,7 +364,7 @@
 			],
 			"params": [
 				{
-					"name": "tx",
+					"name": "tokenTx",
 					"summary": "New Token Transaction",
 					"required": true,
 					"schema": {
@@ -364,7 +399,7 @@
 			"result": {
 				"name": "Token Tx",
 				"schema": {
-					"$ref": "#/components/schemas/tokenTx"
+					"$ref": "#/components/schemas/tokenTxWithHash"
 				}
 			},
 			"errors": [
@@ -507,6 +542,49 @@
 				"title": "Token Tx",
 				"type": "object",
 				"properties": {
+					"from": {
+						"title": "Sender Token Account",
+						"description": "Token Account URL",
+						"$ref": "#/components/schemas/fullURL"
+					},
+					"to": {
+						"title": "Receiver(s) Token Account(s)",
+						"description": "Token Account URL",
+						"type": "array",
+						"items": {
+							"title": "Receiver Token Account",
+							"description": "Token Account URL and amount",
+							"type": "object",
+							"properties": {
+								"url": {
+									"title": "Token Account URL",
+									"description": "Token Account URL",
+									"$ref": "#/components/schemas/fullURL"
+								},
+								"amount": {
+									"title": "Amount",
+									"description": "Number of tokens",
+									"type": "integer"
+								}
+							}
+						}
+					},
+					"meta": {
+						"title": "Metadata",
+						"description": "Transaction Metadata",
+						"type": "string"
+					}
+				}
+			},
+			"tokenTxWithHash": {
+				"title": "Token Tx",
+				"type": "object",
+				"properties": {
+					"hash": {
+						"title": "Hash",
+						"description": "Transaction Hash",
+						"$ref": "#/components/schemas/sha256"
+					},
 					"from": {
 						"title": "Sender Token Account",
 						"description": "Token Account URL",
