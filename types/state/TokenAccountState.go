@@ -8,18 +8,19 @@ import (
 )
 
 type tokenAccountState struct {
-	StateHeader
-	IssuerIdentity types.Bytes32        `json:"issuer-identity"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
-	IssuerChainId  types.Bytes32        `json:"issuer-chain-id"` //identity/issue chains both hold the metrics for the TokenRules ... hmm.. do those need to be passed along since those need to be used
-	Balance        big.Int              `json:"balance"`
-	Coinbase       *types.TokenIssuance `json:"coinbase,omitempty"`
+	Header
+	IssuerIdentity types.Bytes32        `json:"issuer-identity"`    //need to know who issued tokens, this can be condensed maybe back to adi chain path
+	IssuerChainId  types.Bytes32        `json:"issuer-chain-id"`    //identity/issue chains both hold the metrics for the TokenRules
+	Balance        big.Int              `json:"balance"`            //store the balance as a big int.
+	Coinbase       *types.TokenIssuance `json:"coinbase,omitempty"` //this is nil for a non-coinbase account, has token info otherwise
 }
 
 type TokenAccountState struct {
-	StateEntry
+	Entry
 	tokenAccountState
 }
 
+//NewTokenAccountState create a new token account.  Requires the identity/chain id's and coinbase if applicable
 func NewTokenAccountState(issuerid []byte, issuerchain []byte, coinbase *types.TokenIssuance) *TokenAccountState {
 	tas := TokenAccountState{}
 	tas.Type = "AIM-0"
@@ -27,6 +28,8 @@ func NewTokenAccountState(issuerid []byte, issuerchain []byte, coinbase *types.T
 	copy(tas.IssuerIdentity[:], issuerid)
 	copy(tas.IssuerChainId[:], issuerchain)
 	tas.Coinbase = coinbase
+
+	//set the initial supply if a coinbase account
 	if tas.IsCoinbaseAccount() {
 		if tas.Coinbase.Supply.Cmp(big.NewInt(0)) > 0 {
 			//set the initial supply to the account
@@ -36,125 +39,141 @@ func NewTokenAccountState(issuerid []byte, issuerchain []byte, coinbase *types.T
 	return &tas
 }
 
-func (ts *TokenAccountState) Set(accountState *TokenAccountState) {
+//Set will copy a token account state
+func (app *TokenAccountState) Set(accountState *TokenAccountState) {
 	if accountState == nil {
 		return
 	}
 
-	ts.Coinbase = accountState.Coinbase
-	ts.Balance.Set(&accountState.Balance)
-	ts.AdiChainPath = accountState.AdiChainPath
-	ts.Type = accountState.Type
-	copy(ts.IssuerChainId[:], accountState.IssuerChainId[:])
-	copy(ts.IssuerIdentity[:], accountState.IssuerIdentity[:])
+	app.Coinbase = accountState.Coinbase
+	app.Balance.Set(&accountState.Balance)
+	app.AdiChainPath = accountState.AdiChainPath
+	app.Type = accountState.Type
+	copy(app.IssuerChainId[:], accountState.IssuerChainId[:])
+	copy(app.IssuerIdentity[:], accountState.IssuerIdentity[:])
 }
 
 const tokenAccountStateLen = 32 + 32 + 32
 
-func (ts *TokenAccountState) GetType() string {
-	return string(ts.Type)
+//GetType is an implemented interface that returns the chain type of the object
+func (app *TokenAccountState) GetType() string {
+	return string(app.Type)
 }
 
-func (ts *TokenAccountState) GetAdiChainPath() string {
-	return string(ts.AdiChainPath)
+//GetAdiChainPath returns the chain path for the object in the chain.
+func (app *TokenAccountState) GetAdiChainPath() string {
+	return string(app.AdiChainPath)
 }
 
-func (ts *TokenAccountState) GetIssuerIdentity() *types.Bytes32 {
-	return &ts.IssuerIdentity
+//GetIssuerIdentity is the identity of the coinbase for the tokentype
+func (app *TokenAccountState) GetIssuerIdentity() *types.Bytes32 {
+	return &app.IssuerIdentity
 }
 
-func (ts *TokenAccountState) GetIssuerChainId() *types.Bytes32 {
-	return &ts.IssuerChainId
+//GetIssuerChainId is the Issuer's chain id of the coinbase
+func (app *TokenAccountState) GetIssuerChainId() *types.Bytes32 {
+	return &app.IssuerChainId
 }
 
-func (ts *TokenAccountState) SubBalance(amt *big.Int) error {
+//SubBalance will subtract a balance form the account.  If this is a coinbase account,
+//the balance will not be subtracted.
+func (app *TokenAccountState) SubBalance(amt *big.Int) error {
 	if amt == nil {
-		return fmt.Errorf("Invalid input amount specified to subtract from balance")
+		return fmt.Errorf("invalid input amount specified to subtract from balance")
 	}
 
-	if ts.IsCoinbaseAccount() {
-		if ts.Coinbase.Supply.Sign() < 0 {
+	if app.IsCoinbaseAccount() {
+		if app.Coinbase.Supply.Sign() < 0 {
 			//if we have unlimited supply, never subtract balance
 			return nil
 		}
 	}
 
-	if ts.Balance.Cmp(amt) < 0 {
-		return fmt.Errorf("{ \"insufficient-balance\" : { \"available\" : \"%d\" , \"requested\", \"%d\" } }", ts.GetBalance(), amt)
+	if app.Balance.Cmp(amt) < 0 {
+		return fmt.Errorf("{ \"insufficient-balance\" : { \"available\" : \"%d\" , \"requested\", \"%d\" } }", app.GetBalance(), amt)
 	}
 
-	ts.Balance.Sub(&ts.Balance, amt)
+	app.Balance.Sub(&app.Balance, amt)
 	return nil
 }
 
-func (ts *TokenAccountState) GetBalance() *big.Int {
-	return &ts.Balance
+//GetBalance will return the balance of the account
+func (app *TokenAccountState) GetBalance() *big.Int {
+	return &app.Balance
 }
 
-func (ts *TokenAccountState) AddBalance(amt *big.Int) error {
+//AddBalance will add an amount to the balance. It only accepts a positive balance.
+func (app *TokenAccountState) AddBalance(amt *big.Int) error {
 	if amt == nil {
-		return fmt.Errorf("Invalid input amount specified to add to balance")
+		return fmt.Errorf("invalid input amount specified to add to balance")
+	}
+
+	if amt.Sign() <= 0 {
+		return fmt.Errorf("amount to add to balance must be a positive amount")
 	}
 
 	//do coinbase stuff if this a coinbase account
-	if ts.Coinbase != nil {
+	if app.Coinbase != nil {
 		//check to see if we are a coinbase, and if our circulation mode is burn only,
 		//if so, no funds should be added to this account so return with no error
-		if ts.Coinbase.Mode == types.TokenCirculationMode_Burn {
+		if app.Coinbase.Mode == types.TokenCirculationMode_Burn {
 			return nil
 		}
 
 		//check to see if we have an unlimited supply, if so, no tokens are added.
-		if ts.Coinbase.Supply.Sign() < 0 {
+		if app.Coinbase.Supply.Sign() < 0 {
 			return nil
 		}
 
 		//do a test add to the balance to make sure it doesn't exceed supply.
-		if big.NewInt(0).Add(ts.GetBalance(), amt).Cmp(&ts.Coinbase.Supply) > 0 {
-			return fmt.Errorf("Attempting to add tokens to coinbase greater than supply")
+		if big.NewInt(0).Add(app.GetBalance(), amt).Cmp(&app.Coinbase.Supply) > 0 {
+			return fmt.Errorf("attempting to add tokens to coinbase greater than supply")
 		}
 	}
 
-	ts.Balance.Add(&ts.Balance, amt)
+	app.Balance.Add(&app.Balance, amt)
 	return nil
 }
 
-func (ts *TokenAccountState) IsCoinbaseAccount() bool {
-	return ts.Coinbase != nil
+//IsCoinbaseAccount will return true if this is a coinbase, false otherwise
+func (app *TokenAccountState) IsCoinbaseAccount() bool {
+	return app.Coinbase != nil
 }
 
-func (ts *TokenAccountState) MarshalBinary() (ret []byte, err error) {
+//MarshalBinary creates a byte array of the state object needed for storage
+func (app *TokenAccountState) MarshalBinary() (ret []byte, err error) {
 	var coinbase []byte
-	if ts.Coinbase != nil {
-		coinbase, err = ts.Coinbase.MarshalBinary()
+	if app.Coinbase != nil {
+		coinbase, err = app.Coinbase.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
 	}
 	data := make([]byte, tokenAccountStateLen+len(coinbase))
 
-	i := copy(data[:], ts.IssuerIdentity[:])
-	i += copy(data[i:], ts.IssuerChainId[:])
+	i := copy(data[:], app.IssuerIdentity[:])
+	i += copy(data[i:], app.IssuerChainId[:])
 
-	ts.Balance.FillBytes(data[i:])
+	app.Balance.FillBytes(data[i:])
 	i += 32
 
-	if ts.Coinbase != nil {
+	if app.Coinbase != nil {
 		copy(data[i:], coinbase)
 	}
 
 	return data, nil
 }
 
-func (ts *TokenAccountState) UnmarshalBinary(data []byte) error {
+//UnmarshalBinary will deserialize a byte array
+func (app *TokenAccountState) UnmarshalBinary(data []byte) error {
 	if len(data) < tokenAccountStateLen {
-		return fmt.Errorf("Invalid Token Data for unmarshalling %X on chain %X", ts.IssuerIdentity, ts.IssuerChainId)
+		return fmt.Errorf("invalid Token Data for unmarshalling %X on chain %X", app.IssuerIdentity, app.IssuerChainId)
 	}
 
-	i := copy(ts.IssuerIdentity[:], data[:])
-	i += copy(ts.IssuerChainId[:], data[i:])
+	i := copy(app.IssuerIdentity[:], data[:])
+	i += copy(app.IssuerChainId[:], data[i:])
 
-	ts.Balance.SetBytes(data[i:])
+	app.Balance.SetBytes(data[i:])
 	i += 32
 
 	if len(data) > i {
@@ -163,16 +182,18 @@ func (ts *TokenAccountState) UnmarshalBinary(data []byte) error {
 		if err != nil {
 			return err
 		}
-		ts.Coinbase = &coinbase
+		app.Coinbase = &coinbase
 	}
 
 	return nil
 }
 
+//UnmarshalJSON will convert a json string into the Token Account
 func (app *TokenAccountState) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, app.tokenAccountState)
+	return json.Unmarshal(data, &app.tokenAccountState)
 }
 
+//MarshalJSON will convert the Token Account into a json string
 func (app *TokenAccountState) MarshalJSON() ([]byte, error) {
-	return json.Marshal(app.tokenAccountState)
+	return json.Marshal(&app.tokenAccountState)
 }

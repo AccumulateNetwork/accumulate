@@ -5,27 +5,26 @@ import (
 	"strings"
 )
 
-type AckNakCode int
+type NakCode int
 
 const (
-	AckNakCode_Success AckNakCode = iota
-	AckNakCode_Error_Unknown
-	AckNakCode_Identity_Not_Found
-	AckNakCode_Invalid_Chain_Id
-	AckNakCode_State_Change_Fail
-	AckNakCode_Transaction_Parsing_Error
-	AckNakCode_Invalid_Signature
-	AckNakCode_Sender_Not_Authorized
+	NakCodeErrorUnknown NakCode = iota
+	NakCodeIdentityNotFound
+	NakCodeInvalidChainId
+	NakCodeStateChangeFail
+	NakCodeTransactionParsingError
+	NakCodeInvalidSignature
+	NakCodeSenderNotAuthorized
 )
 
-type TransactionAckNak struct {
+type TransactionNak struct {
 	Header
-	Code     AckNakCode      `json:"code"`               // Pass / Fail Return Code
+	Code     NakCode         `json:"code"`               // Pass / Fail Return Code
 	Metadata json.RawMessage `json:"metadata,omitempty"` // Reason for Pass / Fail
 }
 
-func NewTransactionAckNak(code AckNakCode, txid []byte, receiverid []byte, receiverchainid []byte, md *json.RawMessage) *TransactionAckNak {
-	tan := &TransactionAckNak{}
+func NewTransactionNak(code NakCode, txid []byte, receiverid []byte, receiverchainid []byte, md *json.RawMessage) *TransactionNak {
+	tan := &TransactionNak{}
 	tan.Code = code
 	if len(txid) != 32 {
 		return nil
@@ -47,51 +46,47 @@ func NewTransactionAckNak(code AckNakCode, txid []byte, receiverid []byte, recei
 	return tan
 }
 
-func (k *AckNakCode) MarshalJSON() ([]byte, error) {
+func (k *NakCode) MarshalJSON() ([]byte, error) {
 	var str string
 
-	switch {
-	case *k == AckNakCode_Success:
-		str = "success"
-	case *k == AckNakCode_Identity_Not_Found:
+	switch *k {
+	case NakCodeIdentityNotFound:
 		str = "identity-not-found"
-	case *k == AckNakCode_Invalid_Chain_Id:
+	case NakCodeInvalidChainId:
 		str = "invalid-chain-id"
-	case *k == AckNakCode_State_Change_Fail:
+	case NakCodeStateChangeFail:
 		str = "state-change-fail"
-	case *k == AckNakCode_Transaction_Parsing_Error:
+	case NakCodeTransactionParsingError:
 		str = "transaction-parsing-error"
-	case *k == AckNakCode_Invalid_Signature:
+	case NakCodeInvalidSignature:
 		str = "invalid-signature"
-	case *k == AckNakCode_Sender_Not_Authorized:
+	case NakCodeSenderNotAuthorized:
 		str = "sender-not-authorized"
 	default:
-		*k = AckNakCode_Error_Unknown
+		str = "unknown"
 	}
 
 	return json.Marshal(&str)
 }
 
-func (k *AckNakCode) UnmarshalJSON(b []byte) error {
+func (k *NakCode) UnmarshalJSON(b []byte) error {
 	str := strings.Trim(string(b), `"`)
 
 	switch {
-	case str == "success":
-		*k = AckNakCode_Success
 	case str == "identity-not-found":
-		*k = AckNakCode_Identity_Not_Found
+		*k = NakCodeIdentityNotFound
 	case str == "invalid-chain-id":
-		*k = AckNakCode_Invalid_Chain_Id
+		*k = NakCodeInvalidChainId
 	case str == "state-change-fail":
-		*k = AckNakCode_State_Change_Fail
+		*k = NakCodeStateChangeFail
 	case str == "transaction-parsing-error":
-		*k = AckNakCode_Transaction_Parsing_Error
+		*k = NakCodeTransactionParsingError
 	case str == "invalid-signature":
-		*k = AckNakCode_Invalid_Signature
+		*k = NakCodeInvalidSignature
 	case str == "sender-not-authorized":
-		*k = AckNakCode_Sender_Not_Authorized
+		*k = NakCodeSenderNotAuthorized
 	default:
-		*k = AckNakCode_Error_Unknown
+		*k = NakCodeErrorUnknown
 	}
 
 	return nil

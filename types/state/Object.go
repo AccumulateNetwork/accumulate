@@ -7,7 +7,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
-type StateEntry interface {
+type Entry interface {
 	MarshalBinary() ([]byte, error)
 	UnmarshalBinary(data []byte) error
 	MarshalJSON() ([]byte, error)
@@ -16,19 +16,19 @@ type StateEntry interface {
 	GetAdiChainPath() string
 }
 
-type StateObject struct {
-	StateHeader
+type Object struct {
+	Header
 	StateHash     types.Bytes `json:"state-hash"`      //this is the same as the entry hash.
 	PrevStateHash types.Bytes `json:"prev-state-hash"` //not sure if we need this since we are only keeping up with current state
-	EntryHash     types.Bytes `json:"entry-hash"`      //not sure this is needed since it is baked into state hash...
+	EntryHash     types.Bytes `json:"entry-hash"`      //not sure if this is needed since it is baked into state hash...
 	Entry         types.Bytes `json:"entry"`           //this is the state data that stores the current state of the chain
 }
 
-func (app *StateObject) Marshal() ([]byte, error) {
+func (app *Object) Marshal() ([]byte, error) {
 	var ret []byte
 
 	if len(app.Type) == 0 {
-		return nil, fmt.Errorf("State Object type not specified")
+		return nil, fmt.Errorf("state object type not specified")
 	}
 
 	ret = append(ret, byte(len(app.Type)))
@@ -41,13 +41,13 @@ func (app *StateObject) Marshal() ([]byte, error) {
 	return ret, nil
 }
 
-func (app *StateObject) Unmarshal(data []byte) error {
+func (app *Object) Unmarshal(data []byte) error {
 	if len(data) < 1+32+32+32+1 {
-		return fmt.Errorf("Insufficient data to unmarshall State Entry.")
+		return fmt.Errorf("insufficient data to unmarshall State Entry")
 	}
 
 	if len(data)-int(data[0]) < 1+32+32+32+1 {
-		return fmt.Errorf("Insufficient data for on State object for state type")
+		return fmt.Errorf("insufficient data for on State object for state type")
 	}
 	app.StateHash = types.Bytes32{}.Bytes()
 	app.PrevStateHash = types.Bytes32{}.Bytes()
@@ -60,10 +60,10 @@ func (app *StateObject) Unmarshal(data []byte) error {
 	i += copy(app.EntryHash, data[i:i+i+32])
 	entryhash := sha256.Sum256(data[i:])
 	if bytes.Compare(app.EntryHash, entryhash[:]) != 0 {
-		return fmt.Errorf("Entry Hash does not match the data hash")
+		return fmt.Errorf("entry Hash does not match the data hash")
 	}
 
-	app.Entry = types.Bytes(data[i:])
+	app.Entry = data[i:]
 
 	return nil
 }

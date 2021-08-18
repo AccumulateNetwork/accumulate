@@ -16,7 +16,7 @@ import (
 	"unicode/utf8"
 )
 
-//This will populate the identity chain, chainid, and instruction fields for a BVC submission
+// AssembleBVCSubmissionHeader This will populate the identity chain, chainid, and instruction fields for a BVC submission
 func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins proto.AccInstruction) *proto.Submission {
 	sub := proto.Submission{}
 
@@ -25,12 +25,11 @@ func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins prot
 		chainpath = identityname
 	}
 	sub.Chainid = GetChainIdFromChainPath(chainpath).Bytes()
-	sub.Type = 0 //this is going away it is not needed since we'll know the type from transaction
 	sub.Instruction = ins
 	return &sub
 }
 
-//This will make the BVC submision protobuf transaction
+// MakeBVCSubmission This will make the BVC submision protobuf transaction
 func MakeBVCSubmission(ins string, identityname string, chainpath string, payload []byte, timestamp int64, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
 	v := InstructionTypeMap[ins]
 	if v == 0 {
@@ -44,7 +43,7 @@ func MakeBVCSubmission(ins string, identityname string, chainpath string, payloa
 	return sub
 }
 
-//fullchainpath == identityname/chainpath
+// MarshalBinaryLedgerAdiChainPath fullchainpath == identityname/chainpath
 //This function will generate a ledger needed for ed25519 signing or sha256 hashed to produce TXID
 func MarshalBinaryLedgerAdiChainPath(fullchainpath string, payload []byte, timestamp int64) []byte {
 	var msg []byte
@@ -63,6 +62,7 @@ func MarshalBinaryLedgerAdiChainPath(fullchainpath string, payload []byte, times
 	return msg
 }
 
+// MarshalBinaryLedgerChainId create a ledger that can be used for signing or generating a txid
 func MarshalBinaryLedgerChainId(chainid []byte, payload []byte, timestamp int64) []byte {
 	var msg []byte
 
@@ -92,7 +92,7 @@ var InstructionTypeMap = map[string]proto.AccInstruction{
 	"query":                proto.AccInstruction_Light_Query,
 }
 
-//this is a generic structure for a bvc submission transaction that can be marshalled to and from json,
+// Subtx this is a generic structure for a bvc submission transaction that can be marshalled to and from json,
 //this is helpful for json rpc
 type Subtx struct {
 	IdentityChainpath string `json:"identity-chainpath"`
@@ -128,17 +128,17 @@ func (p *Subtx) MarshalJSON() ([]byte, error) {
 			ret, p.Timestamp, p.Signature, p.Key)
 	}
 	if !json.Valid([]byte(ret)) {
-		return nil, fmt.Errorf("Invalid json : %s", ret)
+		return nil, fmt.Errorf("invalid json : %s", ret)
 	}
 	return []byte(ret), nil
 }
 
-//generic helper function to creaet a ed25519 key pair
+// CreateKeyPair generic helper function to create an ed25519 key pair
 func CreateKeyPair() ed25519.PrivKey {
 	return ed25519.GenPrivKey()
 }
 
-//helpful parser to extract the identity name and chainpath
+// ParseIdentityChainPath helpful parser to extract the identity name and chainpath
 //for example RedWagon/MyAccAddress becomes identity=redwagon and chainpath=redwagon/MyAccAddress
 func ParseIdentityChainPath(s string) (identity string, chainpath string, err error) {
 	u, err := url.Parse(s)
@@ -153,6 +153,7 @@ func ParseIdentityChainPath(s string) (identity string, chainpath string, err er
 	return identity, chainpath, nil
 }
 
+// toJSON marshal object to json
 func toJSON(m interface{}) (string, error) {
 	js, err := json.Marshal(m)
 	if err != nil {
@@ -161,7 +162,7 @@ func toJSON(m interface{}) (string, error) {
 	return strings.ReplaceAll(string(js), ",", ", "), nil
 }
 
-//helper function to take a acc url and generate a submission transaction.
+// URLParser helper function to take an acme url and generate a submission transaction.
 func URLParser(s string) (ret *proto.Submission, err error) {
 
 	if !utf8.ValidString(s) {
@@ -184,7 +185,6 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 	fmt.Println(u.Host)
 	//so the primary is up to the "." if it is there.
 	hostname := strings.ToLower(u.Hostname())
-	//DDIIaccounts := strings.Split(hostname,".")
 
 	m, err := url.ParseQuery(u.RawQuery)
 	if err != nil {
@@ -212,7 +212,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 				m.Del(k)
 				js, err := toJSON(m)
 				if err != nil {
-					return nil, fmt.Errorf("Unable to create url query %s, %v", s, err)
+					return nil, fmt.Errorf("unable to create url query %s, %v", s, err)
 				}
 				data = []byte(js)
 
@@ -223,7 +223,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 			if len(v) > 0 {
 				data, err = hex.DecodeString(m["payload"][0])
 				if err != nil {
-					return nil, fmt.Errorf("Unable to parse payload in url %s, %v", s, err)
+					return nil, fmt.Errorf("unable to parse payload in url %s, %v", s, err)
 				}
 			}
 		}
@@ -231,7 +231,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 			if len(v) > 0 {
 				timestamp, err = strconv.ParseInt(v[0], 10, 64)
 				if err != nil {
-					return nil, fmt.Errorf("Unable to parse timestamp in url %s, %v", s, err)
+					return nil, fmt.Errorf("unable to parse timestamp in url %s, %v", s, err)
 				}
 			}
 		}
@@ -240,7 +240,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 			if len(v) > 0 {
 				signature, err = hex.DecodeString(m["sig"][0])
 				if err != nil {
-					return nil, fmt.Errorf("Unable to parse signature in url %s, %v", s, err)
+					return nil, fmt.Errorf("unable to parse signature in url %s, %v", s, err)
 				}
 			}
 		}
@@ -248,7 +248,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 			if len(v) > 0 {
 				key, err = hex.DecodeString(m["key"][0])
 				if err != nil {
-					return nil, fmt.Errorf("Unable to parse signature in url %s, %v", s, err)
+					return nil, fmt.Errorf("unable to parse signature in url %s, %v", s, err)
 				}
 			}
 		}
@@ -265,7 +265,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 	return sub, nil
 }
 
-//This will create a submission message that for a token transaction.  Assume only 1 input and many outputs.
+// CreateTokenTransaction This will create a submission message that for a token transaction.  Assume only 1 input and many outputs.
 //this shouldn't be here...
 func CreateTokenTransaction(inputidentityname *string,
 	intputchainname *string, inputamt *big.Int, outputs *map[string]*big.Int, metadata *string,
@@ -284,21 +284,21 @@ func CreateTokenTransaction(inputidentityname *string,
 	if metadata != nil {
 		err := tx.Metadata.UnmarshalJSON([]byte(fmt.Sprintf("{%s}", *metadata)))
 		if err != nil {
-			return nil, fmt.Errorf("Error marshalling metadata %v", err)
+			return nil, fmt.Errorf("error marshalling metadata %v", err)
 		}
 	}
 
 	txdata, err := json.Marshal(tx)
 	if err != nil {
-		return nil, fmt.Errorf("Error formatting transaction, %v", err)
+		return nil, fmt.Errorf("error formatting transaction, %v", err)
 	}
 
 	sig, err := signer.Sign(txdata)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot sign data %v", err)
+		return nil, fmt.Errorf("cannot sign data %v", err)
 	}
 	if signer.PubKey().VerifySignature(txdata, sig) == false {
-		return nil, fmt.Errorf("Bad Signature")
+		return nil, fmt.Errorf("bad signature")
 	}
 
 	sub := MakeBVCSubmission("tx", *inputidentityname, *intputchainname, txdata, time.Now().Unix(), sig, signer.PubKey().(ed25519.PubKey))
@@ -306,7 +306,7 @@ func CreateTokenTransaction(inputidentityname *string,
 	return sub, nil
 }
 
-//this expects a identity chain path to produce the chainid.  RedWagon/Acc/Chain/Path
+// GetChainIdFromChainPath this expects an identity chain path to produce the chainid.  RedWagon/Acc/Chain/Path
 func GetChainIdFromChainPath(identitychainpath string) *Bytes32 {
 	_, chainpathformatted, err := ParseIdentityChainPath(identitychainpath)
 	if err != nil {
@@ -317,7 +317,7 @@ func GetChainIdFromChainPath(identitychainpath string) *Bytes32 {
 	return &h
 }
 
-//Helper function to generate a identity chain from adi. can return nil, if the adi is malformed
+// GetIdentityChainFromIdentity Helper function to generate an identity chain from adi. can return nil, if the adi is malformed
 func GetIdentityChainFromIdentity(adi string) *Bytes32 {
 	namelower, _, err := ParseIdentityChainPath(adi)
 	if err != nil {
@@ -328,13 +328,13 @@ func GetIdentityChainFromIdentity(adi string) *Bytes32 {
 	return &h
 }
 
-//get the 8 bit address from the identity chain.  this is used for bvc routing
+//GetAddressFromIdentityChain get the 8-bit address from the identity chain.  this is used for bvc routing
 func GetAddressFromIdentityChain(identitychain []byte) uint64 {
 	addr := binary.LittleEndian.Uint64(identitychain)
 	return addr
 }
 
-//given a string, return the address used for bvc routing
+//GetAddressFromIdentity given a string, return the address used for bvc routing
 func GetAddressFromIdentity(name string) uint64 {
 	b := GetIdentityChainFromIdentity(name)
 	return GetAddressFromIdentityChain(b[:])
@@ -414,7 +414,7 @@ func (s *String) MarshalBinary() ([]byte, error) {
 	i := l - len(*s)
 	data := make([]byte, l)
 	copy(data, buf[:i])
-	copy(data[i:], []byte(*s))
+	copy(data[i:], *s)
 	return data, nil
 }
 

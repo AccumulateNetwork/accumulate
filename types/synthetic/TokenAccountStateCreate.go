@@ -10,7 +10,7 @@ type TokenAccountStateCreate struct {
 	state.TokenAccountState
 }
 
-//create a default account state
+//NewTokenAccountStateCreate create a default account state
 func NewTokenAccountStateCreate(issuerid []byte, issuerchain []byte, coinbase *types.TokenIssuance) *TokenAccountStateCreate {
 	ctas := &TokenAccountStateCreate{}
 	atas := state.NewTokenAccountState(issuerid, issuerchain, coinbase)
