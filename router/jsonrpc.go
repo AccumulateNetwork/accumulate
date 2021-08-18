@@ -37,6 +37,7 @@ func StartAPI(port int) *API {
 		"token-create":         api.createToken,
 		"token-account":        api.getTokenAccount,
 		"token-account-create": api.createTokenAccount,
+		"token-tx":             api.getTokenTx,
 		"token-tx-create":      api.createTokenTx,
 	}
 
@@ -193,6 +194,28 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 
 	return resp
 
+}
+
+// getTokenTx returns Token Tx info
+func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &TokenTx{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
+	}
+
+	// validate only TokenTx.Hash
+	if err = api.validate.StructPartial(req, "Hash"); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &TokenTx{}
+
+	// Tendermint integration here
+
+	return resp
 }
 
 // createTokenTx creates Token Tx
