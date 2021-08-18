@@ -70,7 +70,10 @@ func boostrapBVC(t *testing.T, configfile string, workingdir string, baseport in
 }
 
 func makeBVC(t *testing.T, configfile string, workingdir string) *tendermint.AccumulatorVMApplication {
-	app := accnode.CreateAccumulateBVC(configfile, workingdir)
+	app, err := accnode.CreateAccumulateBVC(configfile, workingdir)
+	if err != nil {
+		panic(err)
+	}
 	return app
 }
 
@@ -111,4 +114,3 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 
 	return client, routerserver, &lc, rpcc
 }
-

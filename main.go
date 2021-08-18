@@ -22,13 +22,9 @@ import (
 var ConfigFile []string
 var WorkingDir []string
 
-const DBVCIndex = 0
-
 var (
 	BuildTag string = "v0.0.1"
 )
-
-//var SpecialModeHeight int64 = 99999999999
 
 func init() {
 
@@ -87,7 +83,10 @@ func main() {
 	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
 
 	//Next create a BVC
-	accvm := accnode.CreateAccumulateBVC(ConfigFile[1], WorkingDir[1])
+	accvm, err := accnode.CreateAccumulateBVC(ConfigFile[1], WorkingDir[1])
+	if err != nil {
+		panic(err)
+	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
 	accvmapi, _ := accvm.GetAPIClient()

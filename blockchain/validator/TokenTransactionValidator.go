@@ -11,43 +11,10 @@ import (
 	cfg "github.com/tendermint/tendermint/config"
 	"math/big"
 	"time"
-
-	"github.com/Factom-Asset-Tokens/factom/fat"
 )
-
-//This follows the FAT-0 Specification for transactions
-
-const Type = fat.TypeFAT0
 
 type TokenTransactionValidator struct {
 	ValidatorContext
-}
-
-/*
-{
-"identity-chain-path" : "RedWagon/MyAccTokens",
-"payload" : {
-   "send:": 150,
-   "outputs:": {
-      "GreenRock/Acc": 150
-   },
-   "metadata": {"memo": "thanks for dinner!"}
-},
-}
-*/
-
-//transactions are just accounts with balances on a given token chain
-//what transaction types should be supported?
-type TokenTransaction struct {
-}
-
-func (tx *TokenTransaction) MarshalBinary() ([]byte, error) {
-	return nil, nil
-}
-
-func (tx *TokenTransaction) UnmarshalBinary(data []byte) error {
-
-	return nil
 }
 
 func NewTokenTransactionValidator() *TokenTransactionValidator {
@@ -56,11 +23,12 @@ func NewTokenTransactionValidator() *TokenTransactionValidator {
 	//deprecate chainid in this context.. has no meaning.
 	chainid := "0000000000000000000000000000000000000000000000000000000000000A75"
 
-	v.SetInfo(chainid, "token-transaction", pb.AccInstruction_Token_Transaction)
+	_ = v.SetInfo(chainid, "token-transaction", pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
+// canTransact is a helper function to parse and check for errors in the transaction data
 func (v *TokenTransactionValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.IdentityState, *state.TokenAccountState, *types.TokenTransaction, error) {
 
 	ids := state.IdentityState{}
@@ -101,15 +69,18 @@ func (v *TokenTransactionValidator) canTransact(currentstate *StateEntry, identi
 	return &ids, &tas, &tx, nil
 }
 
+// Check will perform a sanity check to make sure transaction seems reasonable
 func (v *TokenTransactionValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	_, _, _, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
 	return err
 }
 
+// Initialize
 func (v *TokenTransactionValidator) Initialize(config *cfg.Config) error {
 	return nil
 }
 
+// BeginBlock Sets time and height information for begining of block
 func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) error {
 	v.lastHeight = v.currentHeight
 	v.lastTime = v.currentTime
@@ -119,6 +90,7 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 	return nil
 }
 
+// Validate validates a token transaction
 func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
 	_, tas, tx, err := v.canTransact(currentstate, submission.Identitychain, submission.Chainid,
@@ -152,9 +124,19 @@ func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, submissio
 
 		deptx := synthetic.NewTokenTransactionDeposit()
 		txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp))
-		deptx.SetDeposit(txid[:], val)
-		deptx.SetTokenInfo(tas.GetIssuerIdentity().Bytes(), tas.GetIssuerChainId().Bytes())
-		deptx.SetSenderInfo(submission.Identitychain, submission.Chainid)
+		err = deptx.SetDeposit(txid[:], val)
+		if err != nil {
+			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction")
+		}
+		err = deptx.SetTokenInfo(tas.GetIssuerIdentity().Bytes(), tas.GetIssuerChainId().Bytes())
+		if err != nil {
+			return nil, fmt.Errorf("unable to set token information for synthetic token deposit transaction")
+		}
+
+		err = deptx.SetSenderInfo(submission.Identitychain, submission.Chainid)
+		if err != nil {
+			return nil, fmt.Errorf("unable to set sender info for synthetic token deposit transaction")
+		}
 
 		//store the synthetic transactions, each submission will be signed by leader
 		ret.Submissions[count] = sub
@@ -175,7 +157,7 @@ func (v *TokenTransactionValidator) Validate(currentstate *StateEntry, submissio
 	return &ret, nil
 }
 
+// EndBlock
 func (v *TokenTransactionValidator) EndBlock(mdroot []byte) error {
-	//don't think this serves a purpose???
 	return nil
 }

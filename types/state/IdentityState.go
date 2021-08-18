@@ -13,26 +13,26 @@ import (
 type KeyType byte
 
 const (
-	KeyType_unknown KeyType = iota
-	KeyType_public
-	KeyType_sha256
-	KeyType_sha256d
-	KeyType_chain
-	KeyType_group
+	KeyTypeUnknown KeyType = iota
+	KeyTypePublic
+	KeyTypeSha256
+	KeyTypeSha256d
+	KeyTypeChain
+	KeyTypeGroup
 )
 
 type identityState struct {
-	StateHeader
+	Header
 	Keytype KeyType     `json:"keytype"`
 	Keydata types.Bytes `json:"keydata"`
 }
 
 type IdentityState struct {
-	StateEntry
+	Entry
 	identityState
 }
 
-//this will eventually be the key groups and potentially just a multimap of types to chain paths controlled by the identity
+// NewIdentityState this will eventually be the key groups and potentially just a multimap of types to chain paths controlled by the identity
 func NewIdentityState(adi string) *IdentityState {
 	r := &IdentityState{}
 	r.AdiChainPath = types.String(adi)
@@ -41,11 +41,11 @@ func NewIdentityState(adi string) *IdentityState {
 }
 
 func (is *IdentityState) GetAdiChainPath() string {
-	return is.StateHeader.GetAdiChainPath()
+	return is.Header.GetAdiChainPath()
 }
 
 func (is *IdentityState) GetType() string {
-	return is.StateHeader.GetType()
+	return is.Header.GetType()
 }
 
 func (is *IdentityState) VerifyKey(key []byte) bool {
@@ -75,7 +75,7 @@ func (is *IdentityState) VerifyKey(key []byte) bool {
 	return false
 }
 
-//currently key data is loosly defined based upon keytype.  This will
+//SetKeyData currently key data is loosly defined based upon keytype.  This will
 //be replaced once a formal spec for key groups is established.
 //we will also be storing references to chains managed by the identity.
 //a chain will most likely be just the chain paths mapped to chain types
@@ -89,7 +89,7 @@ func (is *IdentityState) SetKeyData(keytype KeyType, data []byte) error {
 	return nil
 }
 
-//Currently this will just return the key information
+//GetKeyData Currently this will just return the key information
 //in the future the identity will hold links to a bunch of subchains
 //managed by the identities.  one of them will be of key groups.
 func (is *IdentityState) GetKeyData() (KeyType, types.Bytes) {
@@ -107,7 +107,7 @@ func (is *IdentityState) GetIdentityChainId() types.Bytes {
 func (is *IdentityState) MarshalBinary() ([]byte, error) {
 
 	var data []byte
-	shdata, err := is.StateHeader.MarshalBinary()
+	shdata, err := is.Header.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -128,29 +128,29 @@ func (is *IdentityState) MarshalBinary() ([]byte, error) {
 func (is *IdentityState) UnmarshalBinary(data []byte) error {
 	dlen := len(data)
 	if dlen == 0 {
-		return fmt.Errorf("Cannot unmarshal Identity State, insuffient data")
+		return fmt.Errorf("cannot unmarshal Identity State, insuffient data")
 	}
 	i := 0
-	err := is.StateHeader.UnmarshalBinary(data)
+	err := is.Header.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
-	i += is.StateHeader.GetHeaderSize()
+	i += is.Header.GetHeaderSize()
 
 	is.Keytype = KeyType(data[i])
 	i++
 	if dlen <= i {
-		return fmt.Errorf("Cannot unmarshal Identity State after key type, insuffient data")
+		return fmt.Errorf("cannot unmarshal Identity State after key type, insuffient data")
 	}
 
 	v, l := binary.Varint(data[i:])
 	if l <= 0 {
-		return fmt.Errorf("Cannot unmarshal Identity State after key data len, insuffient data")
+		return fmt.Errorf("cannot unmarshal Identity State after key data len, insuffient data")
 	}
 	i += l
 
 	if dlen < i {
-		return fmt.Errorf("Cannot unmarshal Identity State before copy key data, insuffient data")
+		return fmt.Errorf("cannot unmarshal Identity State before copy key data, insuffient data")
 	}
 	is.Keydata = make([]byte, v)
 	i += copy(is.Keydata, data[i:i+int(v)])
@@ -171,17 +171,17 @@ func (k *KeyType) UnmarshalJSON(b []byte) error {
 
 	switch {
 	case str == "public":
-		*k = KeyType_public
+		*k = KeyTypePublic
 	case str == "sha256":
-		*k = KeyType_sha256
+		*k = KeyTypeSha256
 	case str == "sha256d":
-		*k = KeyType_sha256d
+		*k = KeyTypeSha256d
 	case str == "chain":
-		str = "KeyType_chain"
+		*k = KeyTypeChain
 	case str == "group":
-		*k = KeyType_group
+		*k = KeyTypeGroup
 	default:
-		*k = KeyType_unknown
+		*k = KeyTypeUnknown
 	}
 
 	return nil
@@ -189,16 +189,16 @@ func (k *KeyType) UnmarshalJSON(b []byte) error {
 
 func (k *KeyType) MarshalJSON() ([]byte, error) {
 	var str string
-	switch {
-	case *k == KeyType_public:
+	switch *k {
+	case KeyTypePublic:
 		str = "public"
-	case *k == KeyType_sha256:
+	case KeyTypeSha256:
 		str = "sha256"
-	case *k == KeyType_sha256d:
+	case KeyTypeSha256d:
 		str = "sha256d"
-	case *k == KeyType_chain:
+	case KeyTypeChain:
 		str = "chain"
-	case *k == KeyType_group:
+	case KeyTypeGroup:
 		str = "group"
 	default:
 		str = "unknown"
