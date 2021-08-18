@@ -10,60 +10,60 @@
 	},
 	"methods": [
 		{
-			"name": "identity",
-			"summary": "Get Identity info",
+			"name": "adi",
+			"summary": "Get ADI (Accumulate Digital Identity) info",
 			"tags": [
 				{
-					"name": "identity"
+					"name": "ADI"
 				}
 			],
 			"params": [
 				{
 					"name": "url",
-					"summary": "Accumulate URL",
+					"summary": "Accumulate ADI URL",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/identityURL"
+						"$ref": "#/components/schemas/adiURL"
 					}
 				}
 			],
 			"result": {
-				"name": "Identity",
+				"name": "ADI",
 				"schema": {
-					"$ref": "#/components/schemas/identity"
+					"$ref": "#/components/schemas/adi"
 				}
 			},
 			"errors": [
 				{
 					"code": -32901,
-					"message": "invalid identity url"
+					"message": "invalid adi url"
 				},
 				{
 					"code": -32902,
-					"message": "identity does not exist"
+					"message": "adi does not exist"
 				}
 			]
 		},
 		{
-			"name": "identity-create",
-			"summary": "Create Identity",
+			"name": "adi-create",
+			"summary": "Create ADI (Accumulate Digital Identity)",
 			"tags": [
 				{
-					"name": "identity"
+					"name": "ADI"
 				}
 			],
 			"params": [
 				{
-					"name": "identity",
-					"summary": "New Identity",
+					"name": "adi",
+					"summary": "New ADI",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/identity"
+						"$ref": "#/components/schemas/adi"
 					}
 				},
 				{
 					"name": "signer",
-					"summary": "Existing Accumulate Identity signing the creation of new Identity",
+					"summary": "Existing ADI signing the creation of new ADI",
 					"required": true,
 					"schema": {
 						"$ref": "#/components/schemas/signer"
@@ -87,19 +87,19 @@
 				}
 			],
 			"result": {
-				"name": "Identity",
+				"name": "ADI",
 				"schema": {
-					"$ref": "#/components/schemas/identity"
+					"$ref": "#/components/schemas/adi"
 				}
 			},
 			"errors": [
 				{
 					"code": -32901,
-					"message": "invalid identity url"
+					"message": "invalid adi url"
 				},
 				{
 					"code": -32801,
-					"message": "invalid signer identity"
+					"message": "invalid signer adi"
 				},
 				{
 					"code": -32802,
@@ -122,7 +122,7 @@
 			"params": [
 				{
 					"name": "url",
-					"summary": "Accumulate URL",
+					"summary": "Accumulate Token URL",
 					"required": true,
 					"schema": {
 						"$ref": "#/components/schemas/fullURL"
@@ -165,7 +165,7 @@
 				},
 				{
 					"name": "signer",
-					"summary": "Accumulate Identity signing the creation of new Token",
+					"summary": "ADI signing the creation of new Token",
 					"required": true,
 					"schema": {
 						"$ref": "#/components/schemas/signer"
@@ -201,7 +201,7 @@
 				},
 				{
 					"code": -32801,
-					"message": "invalid signer identity"
+					"message": "invalid signer adi"
 				},
 				{
 					"code": -32802,
@@ -224,7 +224,7 @@
 			"params": [
 				{
 					"name": "url",
-					"summary": "Accumulate URL",
+					"summary": "Accumulate Token Account URL",
 					"required": true,
 					"schema": {
 						"$ref": "#/components/schemas/fullURL"
@@ -267,7 +267,7 @@
 				},
 				{
 					"name": "signer",
-					"summary": "Accumulate Identity signing the creation of new Token Account",
+					"summary": "ADI signing the creation of new Token Account",
 					"required": true,
 					"schema": {
 						"$ref": "#/components/schemas/signer"
@@ -307,7 +307,7 @@
 				},
 				{
 					"code": -32801,
-					"message": "invalid signer identity"
+					"message": "invalid signer adi"
 				},
 				{
 					"code": -32802,
@@ -338,7 +338,7 @@
 				},
 				{
 					"name": "signer",
-					"summary": "Accumulate Identity signing the transaction",
+					"summary": "ADI signing the transaction",
 					"required": true,
 					"schema": {
 						"$ref": "#/components/schemas/signer"
@@ -374,7 +374,7 @@
 				},
 				{
 					"code": -32801,
-					"message": "invalid signer identity"
+					"message": "invalid signer adi"
 				},
 				{
 					"code": -32802,
@@ -397,7 +397,7 @@
 				"type": "string",
 				"pattern": "^[0-9a-f]+$"
 			},
-			"identityURL": {
+			"adiURL": {
 				"type": "string",
 				"pattern": "^[0-9a-z]+$"
 			},
@@ -409,18 +409,18 @@
 				"type": "string",
 				"pattern": "^[0-9a-zA-Z._-/]+$"
 			},
-			"identity": {
-				"title": "Identity",
+			"adi": {
+				"title": "ADI (Accumulate Digital Identity)",
 				"type": "object",
 				"properties": {
 					"url": {
-						"title": "Identity URL",
-						"description": "Identity name",
-						"$ref": "#/components/schemas/identityURL"
+						"title": "ADI URL",
+						"description": "Accumulate ADI URL",
+						"$ref": "#/components/schemas/adiURL"
 					},
 					"publicKeyHash": {
-						"title": "Public Key Hash",
-						"description": "SHA-256 hash of Identity Public Key",
+						"title": "ADI Public Key Hash",
+						"description": "SHA-256 hash of ADI Public Key",
 						"$ref": "#/components/schemas/sha256"
 					}
 				}
@@ -430,13 +430,13 @@
 				"type": "object",
 				"properties": {
 					"url": {
-						"title": "Signer Identity URL",
-						"description": "Identity name",
-						"$ref": "#/components/schemas/identityURL"
+						"title": "ADI URL",
+						"description": "Accumulate ADI URL",
+						"$ref": "#/components/schemas/adiURL"
 					},
 					"publicKey": {
-						"title": "Public Key",
-						"description": "Identity Public Key in hex format",
+						"title": "ADI Public Key",
+						"description": "ADI Public Key in hex format",
 						"$ref": "#/components/schemas/hex"
 					}
 				}
