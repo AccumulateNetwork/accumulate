@@ -2,6 +2,8 @@ package router
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
@@ -10,7 +12,6 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"google.golang.org/grpc"
-	"testing"
 )
 
 func RandPort() int {
