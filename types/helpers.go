@@ -382,28 +382,44 @@ func (s *Bytes) UnmarshalJSON(data []byte) error {
 	return err
 }
 
+// Bytes32 is a fixed array of 32 bytes
 type Bytes32 [32]byte
 
 // MarshalJSON serializes ByteArray to hex
 func (s *Bytes32) MarshalJSON() ([]byte, error) {
-	bytes, err := json.Marshal(fmt.Sprintf("%x", string(s[:])))
+	bytes, err := json.Marshal(s.ToString())
 	return bytes, err
 }
 
 // UnmarshalJSON serializes ByteArray to hex
 func (s *Bytes32) UnmarshalJSON(data []byte) error {
 	str := strings.Trim(string(data), `"`)
-	d, err := hex.DecodeString(str)
-	if err != nil {
-		return nil
-	}
-	copy(s[:], d)
-	return err
+	return s.FromString(str)
 }
 
 // Bytes returns the bite slice of the 32 byte array
 func (s Bytes32) Bytes() []byte {
 	return s[:]
+}
+
+// FromString takes a hex encoded string and sets the byte array.
+// The input parameter, str, must be 64 hex characters in length
+func (s *Bytes32) FromString(str string) error {
+	if len(str) != 64 {
+		return fmt.Errorf("insufficient data")
+	}
+
+	d, err := hex.DecodeString(string(str))
+	if err != nil {
+		return err
+	}
+	copy(s[:], d)
+	return nil
+}
+
+// ToString will convert the 32 byte array into a hex string that is 64 hex characters in length
+func (s *Bytes32) ToString() String {
+	return String(hex.EncodeToString(s[:]))
 }
 
 type String string
@@ -439,3 +455,25 @@ func (s *String) Size(varintbuf *[8]byte) int {
 	i := binary.PutVarint(buf[:], l)
 	return i + int(l)
 }
+
+type Byte byte
+
+func (s *Byte) MarshalBinary() ([]byte, error) {
+	ret := make([]byte,1)
+	ret[0] = byte(*s)
+	return ret, nil
+}
+
+func (s *Byte) UnmarshalBinary(data []byte) error {
+	if len(data) < 1 {
+		return fmt.Errorf("insufficient data length for unmarshal of a byte")
+	}
+	*s = Byte(data[0])
+	return nil
+}
+
+type UrlAdi string
+
+type UrlChain string
+
+type Amount big.Int
