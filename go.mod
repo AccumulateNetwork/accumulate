@@ -71,7 +71,7 @@ require (
 	github.com/magiconair/properties v1.8.1
 	github.com/mattn/go-colorable v0.1.0 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
-	github.com/mitchellh/mapstructure v1.3.3 // indirect
+	github.com/mitchellh/mapstructure v1.4.1 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/powerman/rpc-codec v1.2.2 // indirect
 	github.com/prometheus/client_golang v1.8.0
