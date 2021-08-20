@@ -37,35 +37,18 @@ type TokenTx struct {
 
 type TokenTxOutput struct {
 	URL    string `json:"url" form:"url" query:"url" validate:"required"`
-	Amount int64  `json:"url" form:"url" query:"url" validate:"gt=0"`
+	Amount int64  `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
 }
 
-// Helpers
+// API Request Data Structures
 
-type SignerData struct {
-	Signer    *Signer `json:"signer" form:"signer" query:"signer" validate:"required"`
-	Timestamp int64   `json:"timestamp" form:"timestamp" query:"timestamp" validate:"required"`
-	Sig       int64   `json:"sig" form:"sig" query:"sig" validate:"required,hexadecimal"`
+type APIRequest struct {
+	Tx  *APIRequestTx `json:"tx" form:"tx" query:"tx" validate:"required"`
+	Sig string        `json:"sig" form:"sig" query:"sig" validate:"required,hexadecimal"`
 }
 
-// API requests
-
-type CreateADIRequest struct {
-	ADI *ADI `json:"adi" form:"adi" query:"adi" validate:"required"`
-	*SignerData
-}
-
-type CreateTokenRequest struct {
-	Token *Token `json:"token" form:"token" query:"token" validate:"required"`
-	*SignerData
-}
-
-type CreateTokenAccountRequest struct {
-	TokenAccount *TokenAccount `json:"tokenAccount" form:"tokenAccount" query:"tokenAccount" validate:"required"`
-	*SignerData
-}
-
-type CreateTokenTxRequest struct {
-	TokenTx *TokenTx `json:"tokenTx" form:"tokenTx" query:"tokenTx" validate:"required"`
-	*SignerData
+type APIRequestTx struct {
+	Data      interface{} `json:"data" form:"data" query:"data" validate:"required"`
+	Signer    *Signer     `json:"signer" form:"signer" query:"signer" validate:"required"`
+	Timestamp int64       `json:"timestamp" form:"timestamp" query:"timestamp" validate:"required"`
 }
