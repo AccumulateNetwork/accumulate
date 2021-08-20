@@ -6,9 +6,9 @@ import (
 	"math"
 	"sync"
 
-	"github.com/AccumulateNetwork/SMT/storage"
-	"github.com/AccumulateNetwork/SMT/storage/badger"
-	"github.com/AccumulateNetwork/SMT/storage/memory"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
+	"github.com/AccumulateNetwork/SMT/smt/storage/badger"
+	"github.com/AccumulateNetwork/SMT/smt/storage/memory"
 )
 
 type Manager struct {

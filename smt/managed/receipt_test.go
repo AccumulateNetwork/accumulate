@@ -10,9 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dustin/go-humanize"
-
-	"github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/AccumulateNetwork/SMT/smt/storage/database"
 )
 
 func GetHash(i int) Hash {

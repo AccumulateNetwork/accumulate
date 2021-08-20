@@ -3,7 +3,7 @@ package security
 import (
 	"bytes"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -22,6 +22,12 @@ func (s *SigEd25519) Type() int {
 // Returns the bytes holding the signature
 func (s *SigEd25519) Signature() []byte {
 	return s.sig
+}
+
+// Sign
+// Signs the given message, and populates the signature in the Sig
+func (s *SigEd25519) Sign(msg []byte) {
+	s.sig = ed25519.Sign(s.publicKey, msg)
 }
 
 // PublicKey
@@ -68,9 +74,9 @@ func (s *SigEd25519) Unmarshal(data []byte) []byte {
 
 // Verify
 // Verify that the signature is valid for the given message
-func (s *SigEd25519) Verify(_ *MultiSig, _ int, message []byte) bool {
-	b := ed25519.Verify(s.publicKey, message, s.sig) // Validate the signature
-	return b                                         // Return the result
+func (s *SigEd25519) Verify(_ *MultiSig, _ int, msgHash [32]byte) bool {
+	b := ed25519.Verify(s.publicKey, msgHash[:], s.sig) // Validate the signature
+	return b                                            // Return the result
 }
 
 // Equal

@@ -1,6 +1,7 @@
 package security
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -11,7 +12,7 @@ import (
 // BuildMultiVectors
 // Build nCount test multiSignatures.  All choices of m for all multiSignatures
 // of n Signatures where n <= nCount
-func BuildMultiVectors(nCount int) (mSigs []*MultiSig, messages [][]byte) {
+func BuildMultiVectors(nCount int) (mSigs []*MultiSig, messages [][32]byte) {
 
 	for n := 1; n <= nCount; n += 1 { //                   Create MultiSigs with n upto nCount
 		mSig := new(MultiSig)              //              Working structure for building the mSigs
@@ -21,12 +22,13 @@ func BuildMultiVectors(nCount int) (mSigs []*MultiSig, messages [][]byte) {
 		mSig.sig, _, _, Private, _, _ = buildSigs(s, n) // Get n Sigs.  Get the Private keys, because we need to
 		var message [1234]byte                          // Every Sig is going to sign this message
 		rand.Read(message[:])                           // Set the message to some random stuff
+		msgHash := sha256.Sum256(message[:])            // Get the hash of the message
 		for i, sig := range mSig.sig {                  // For all sig in mSig.sig
-			s := ed25519.Sign(Private[i], message[:]) //   but repurpose each signature to sign the message
+			s := ed25519.Sign(Private[i], msgHash[:]) //   but repurpose each signature to sign the message
 			sig.(*SigEd25519).sig = s                 //   by updating the signature
 		}
-		messages = append(messages, append([]byte{}, message[:]...)) // Add the message to the messages list
-		mSigs = append(mSigs, mSig)                                  //              Add the updated m2Sig to the set of mSigs
+		messages = append(messages, msgHash) //            Add the message to the messages list
+		mSigs = append(mSigs, mSig)          //              Add the updated m2Sig to the set of mSigs
 	}
 	return mSigs, messages
 }
@@ -46,7 +48,7 @@ func TestMultiSig_Verify(t *testing.T) {
 		for _, sig := range mSigs[i].sig { //                           Now go through the sigs of the multi-sig
 			sig.(*SigEd25519).sig[0] = sig.Signature()[0] ^ 1 //        Flip a bit in the signature
 			if mSigs[i].Verify(m) {                           //        Verify we don't accept the message
-				t.Error(fmt.Sprintf("Accepted a bad signature %d", i)) // Blow if we accept a bad sig
+				t.Error(fmt.Sprintf("found a bad signature %d", i)) //  Blow if we accept a bad sig
 			} //
 			sig.(*SigEd25519).sig[0] = sig.Signature()[0] ^ 1 //        Repair the bit we flipped
 		}

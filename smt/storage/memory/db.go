@@ -3,7 +3,7 @@ package memory
 import (
 	"sync"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
 )
 
 type DB struct {
