@@ -4,7 +4,7 @@ import (
 	//"context"
 	"crypto/ed25519"
 	"encoding/hex"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/Factom-Asset-Tokens/fatd/fat0"
 
 	//"io/ioutil"
@@ -14,7 +14,7 @@ import (
 	//"time"
 
 	//"fmt"
-	"github.com/AccumulateNetwork/accumulated/api/proto"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 	//"github.com/golang/protobuf/ptypes/empty"
 
 	//"github.com/golang/protobuf/ptypes/empty"
@@ -144,8 +144,8 @@ func createKeyPair() ed25519.PrivateKey {
 func createTransaction(t *testing.T) *proto.Submission {
 	sub := proto.Submission{}
 
-	sub.Identitychain = types.GetIdentityChainFromAdi("RedWagon").Bytes()
-	sub.Chainid = types.GetIdentityChainFromAdi("RedWagon/acc").Bytes()
+	sub.Identitychain = types.GetIdentityChainFromIdentity("RedWagon").Bytes()
+	sub.Chainid = types.GetIdentityChainFromIdentity("RedWagon/acc").Bytes()
 	sub.Type = 0 //this is going away it is not needed since we'll know the type from transaction
 	sub.Instruction = proto.AccInstruction_Token_Transaction
 
