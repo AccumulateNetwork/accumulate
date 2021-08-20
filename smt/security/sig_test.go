@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
 
 	"golang.org/x/crypto/ed25519"
 )
@@ -16,7 +16,8 @@ import (
 // Build some signed messages, along with with private and public keys
 func buildSigs(Seed []byte, NumTests int) ( //                     Generate NumTests number of test vectors
 	sigStruct []Sig, //                                            Create the Sig struct
-	message, sig, privateKey, publicKey [][]byte, //               A Test Vector  (msg/sig/private/public)
+	msgHashes [][32]byte, //                                         Return a set of message hashes
+	sig, privateKey, publicKey [][]byte, //                        A Test Vector  (msg/sig/private/public)
 	data []byte, //                                                And a marshaled data representation of the vectors
 ) { //                                                               a public/private key pair.
 	seed := sha256.Sum256(Seed)
@@ -26,26 +27,27 @@ func buildSigs(Seed []byte, NumTests int) ( //                     Generate NumT
 		private := ed25519.NewKeyFromSeed(seed[:])                     // Compute the public and private key
 		public := private[32:]                                         // Public key is the last 32 bytes
 		seed = sha256.Sum256(seed[:])                                  // Increment the seed
-		s := ed25519.Sign(private, buff[:])                            // Sign the message
+		msgHash := sha256.Sum256(buff[:])                              // Sign the msgHashes
+		s := ed25519.Sign(private, msgHash[:])                         // Sign the msgHashes
 		aSigStruct := new(SigEd25519)                                  // Create Sig instance
 		aSigStruct.sig = s                                             // Populate it with the signature
 		aSigStruct.publicKey = append(aSigStruct.publicKey, public...) //   and the public key
 
-		// At this point we have the message, signature, private key,
+		// At this point we have the msgHashes, signature, private key,
 		// and public key.  Now build the test vector
 
-		message = append(message, append([]byte{}, buff[:]...)) //        Add message (make copy because we reuse buff)
-		sig = append(sig, s)                                    //        Add signature
-		privateKey = append(privateKey, private)                //        Add private Key
-		publicKey = append(publicKey, public)                   //        Add public key
-		sigStruct = append(sigStruct, aSigStruct)               //        Add a signature
+		msgHashes = append(msgHashes, msgHash)    //        Add msgHashes (make copy because we reuse buff)
+		sig = append(sig, s)                      //        Add signature
+		privateKey = append(privateKey, private)  //        Add private Key
+		publicKey = append(publicKey, public)     //        Add public key
+		sigStruct = append(sigStruct, aSigStruct) //        Add a signature
 
 		data = append(data, storage.Int64Bytes(int64(SEd25519))...) //    Encode signatures type
 		data = append(data, public...)                              //    Encode public key
 		data = append(data, s...)                                   //    Encode signature
 
 	}
-	return sigStruct, message, sig, privateKey, publicKey, data
+	return sigStruct, msgHashes, sig, privateKey, publicKey, data
 }
 
 func TestUnmarshal(t *testing.T) {

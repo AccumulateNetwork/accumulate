@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
 
-	"github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/AccumulateNetwork/SMT/smt/storage/database"
 )
 
 const PendingOff = byte(1) // Offset to the chain holding pending transactions for managed chains

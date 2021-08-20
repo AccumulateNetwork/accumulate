@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/AccumulateNetwork/SMT/smt/storage/database"
 )
 
 var _ = PrintNode // Avoids highlighting that PrintNode isn't used.  It is useful for debugging.

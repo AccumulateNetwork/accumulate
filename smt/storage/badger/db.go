@@ -4,9 +4,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/AccumulateNetwork/SMT/storage"
-
-	"github.com/dgraph-io/badger/v3"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
 )
 
 type DB struct {

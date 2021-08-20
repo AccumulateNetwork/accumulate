@@ -1,6 +1,6 @@
 package managed
 
-import "github.com/AccumulateNetwork/SMT/storage"
+import "github.com/AccumulateNetwork/SMT/smt/storage"
 
 // BlockIndex
 // Holds a mapping of the BlockIndex to the MainIndex and PendingIndex that mark the end of the block

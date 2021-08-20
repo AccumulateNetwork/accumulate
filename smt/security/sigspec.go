@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
 )
 
 // SigSpec

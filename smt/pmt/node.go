@@ -1,7 +1,7 @@
 package pmt
 
 import (
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
 )
 
 // Note that the tree considered here grows up by convention here, where
