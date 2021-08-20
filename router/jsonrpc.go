@@ -11,6 +11,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
+	"github.com/mitchellh/mapstructure"
 )
 
 type API struct {
@@ -77,8 +78,10 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &CreateADIRequest{}
+	req := &APIRequest{}
+	data := &ADI{}
 
+	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
 		return ErrorInvalidRequest
 	}
@@ -88,9 +91,15 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 		return NewValidatorError(err)
 	}
 
+	// parse req.tx.data
+	mapstructure.Decode(req.Tx.Data, data)
+
+	// validate request data
+	if err = api.validate.Struct(data); err != nil {
+		return NewValidatorError(err)
+	}
+
 	resp := &ADI{}
-	resp.URL = req.ADI.URL
-	resp.PublicKeyHash = req.ADI.PublicKeyHash
 
 	// Tendermint integration here
 
@@ -125,8 +134,10 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 func (api *API) createToken(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &CreateTokenRequest{}
+	req := &APIRequest{}
+	data := &Token{}
 
+	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
 		return ErrorInvalidRequest
 	}
@@ -136,10 +147,15 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 		return NewValidatorError(err)
 	}
 
+	// parse req.tx.data
+	mapstructure.Decode(req.Tx.Data, data)
+
+	// validate request data
+	if err = api.validate.Struct(data); err != nil {
+		return NewValidatorError(err)
+	}
+
 	resp := &Token{}
-	resp.URL = req.Token.URL
-	resp.Precision = req.Token.Precision
-	resp.Symbol = req.Token.Symbol
 
 	// Tendermint integration here
 
@@ -175,8 +191,10 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &CreateTokenAccountRequest{}
+	req := &APIRequest{}
+	data := &TokenAccount{}
 
+	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
 		return ErrorInvalidRequest
 	}
@@ -186,9 +204,15 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 		return NewValidatorError(err)
 	}
 
+	// parse req.tx.data
+	mapstructure.Decode(req.Tx.Data, data)
+
+	// validate request data
+	if err = api.validate.Struct(data); err != nil {
+		return NewValidatorError(err)
+	}
+
 	resp := &TokenAccount{}
-	resp.URL = req.TokenAccount.URL
-	resp.TokenURL = req.TokenAccount.TokenURL
 
 	// Tendermint integration here
 
@@ -222,25 +246,31 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &CreateTokenTxRequest{}
+	req := &APIRequest{}
+	data := &TokenTx{}
 
+	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
 		return ErrorInvalidRequest
 	}
 
 	// validate request
-	if err = api.validate.StructExcept(req, "Hash"); err != nil {
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// parse req.tx.data
+	mapstructure.Decode(req.Tx.Data, data)
+
+	// validate request data
+	if err = api.validate.Struct(data); err != nil {
 		return NewValidatorError(err)
 	}
 
 	resp := &TokenTx{}
-	resp.To = req.TokenTx.To
-	resp.From = req.TokenTx.From
-	resp.Meta = req.TokenTx.Meta
 
 	// Tendermint integration here
-	resp.Hash = "hash"
 
-	return nil
+	return resp
 
 }
