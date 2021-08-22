@@ -44,7 +44,7 @@ func (v *TokenChainCreateValidator) Check(currentstate *StateEntry, identitychai
 	if currentstate.ChainState != nil {
 		return fmt.Errorf("chain already defined")
 	}
-	tcc := types.TokenChainCreate{}
+	tcc := types.TokenAccount{}
 	err := json.Unmarshal(data, &tcc)
 	if err != nil {
 		return fmt.Errorf("data payload of submission is not a valid token chain create message")
@@ -78,13 +78,13 @@ func (v *TokenChainCreateValidator) Validate(currentstate *StateEntry, submissio
 	if currentstate.ChainState != nil {
 		return nil, fmt.Errorf("chain already defined")
 	}
-	tcc := types.TokenChainCreate{}
+	tcc := types.TokenAccount{}
 	err = json.Unmarshal(submission.Data, &tcc)
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
 
-	adi, chainpath, err := types.ParseIdentityChainPath(string(tcc.IssuingAdiChainPath))
+	adi, chainpath, err := types.ParseIdentityChainPath(string(tcc.URL))
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +100,12 @@ func (v *TokenChainCreateValidator) Validate(currentstate *StateEntry, submissio
 		return nil, fmt.Errorf("issuing identity chain id is invalid")
 	}
 
-	tas := acctypes.NewTokenAccountState(issuingidentityhash.Bytes(), issuingchainid.Bytes(), nil)
+	_, chainPathToken, err := types.ParseIdentityChainPath(string(tcc.TokenURL))
+	if err != nil {
+		return nil, err
+	}
+
+	tas := acctypes.NewTokenAccountState(types.UrlChain(chainpath), types.UrlChain(chainPathToken), nil)
 	//tas.AdiChainPath = submission.? //todo: need to obtain the adi chain path from the submission request
 	statedata, err := tas.MarshalBinary()
 	if err != nil {

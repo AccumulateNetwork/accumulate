@@ -18,47 +18,46 @@ const (
 	KeyTypeSha256
 	KeyTypeSha256d
 	KeyTypeChain
-	KeyTypeGroup
 )
 
-type identityState struct {
+type adiState struct {
 	Header
-	Keytype KeyType     `json:"keytype"`
-	Keydata types.Bytes `json:"keydata"`
+	KeyType KeyType     `json:"keyType"`
+	KeyData types.Bytes `json:"keyData"`
 }
 
-type IdentityState struct {
+type AdiState struct {
 	Entry
-	identityState
+	adiState
 }
 
-// NewIdentityState this will eventually be the key groups and potentially just a multimap of types to chain paths controlled by the identity
-func NewIdentityState(adi string) *IdentityState {
-	r := &IdentityState{}
+// NewIdentityState this will eventually be the key groups and potentially just a multi-map of types to chain paths controlled by the identity
+func NewIdentityState(adi string) *AdiState {
+	r := &AdiState{}
 	r.AdiChainPath = types.String(adi)
-	r.Type = "AIM-1"
+	r.Type = sha256.Sum256([]byte("AIM/0/0.1"))
 	return r
 }
 
-func (is *IdentityState) GetAdiChainPath() string {
+func (is *AdiState) GetAdiChainPath() string {
 	return is.Header.GetAdiChainPath()
 }
 
-func (is *IdentityState) GetType() string {
+func (is *AdiState) GetType() *types.Bytes32 {
 	return is.Header.GetType()
 }
 
-func (is *IdentityState) VerifyKey(key []byte) bool {
+func (is *AdiState) VerifyKey(key []byte) bool {
 	//check if key is a valid public key for identity
-	if key[0] == is.Keydata[0] {
-		if bytes.Compare(key, is.Keydata) == 0 {
+	if key[0] == is.KeyData[0] {
+		if bytes.Compare(key, is.KeyData) == 0 {
 			return true
 		}
 	}
 
 	//check if key is a valid sha256(key) for identity
 	kh := sha256.Sum256(key)
-	if kh[0] == is.Keydata[0] {
+	if kh[0] == is.KeyData[0] {
 		if bytes.Compare(key, kh[:]) == 0 {
 			return true
 		}
@@ -66,7 +65,7 @@ func (is *IdentityState) VerifyKey(key []byte) bool {
 
 	//check if key is a valid sha256d(key) for identity
 	kh = sha256.Sum256(kh[:])
-	if kh[0] == is.Keydata[0] {
+	if kh[0] == is.KeyData[0] {
 		if bytes.Compare(key, kh[:]) == 0 {
 			return true
 		}
@@ -75,28 +74,28 @@ func (is *IdentityState) VerifyKey(key []byte) bool {
 	return false
 }
 
-//SetKeyData currently key data is loosly defined based upon keytype.  This will
+//SetKeyData currently key data is defined based upon keyType.  This will
 //be replaced once a formal spec for key groups is established.
-//we will also be storing references to chains managed by the identity.
+//we will also be storing references to a key group chain managed by the identity.
 //a chain will most likely be just the chain paths mapped to chain types
-func (is *IdentityState) SetKeyData(keytype KeyType, data []byte) error {
-	if len(data) > cap(is.Keydata) {
-		is.Keydata = make([]byte, len(data))
+func (is *AdiState) SetKeyData(keyType KeyType, data []byte) error {
+	if len(data) > cap(is.KeyData) {
+		is.KeyData = make([]byte, len(data))
 	}
-	is.Keytype = keytype
-	copy(is.Keydata, data)
+	is.KeyType = keyType
+	copy(is.KeyData, data)
 
 	return nil
 }
 
 //GetKeyData Currently this will just return the key information
-//in the future the identity will hold links to a bunch of subchains
+//in the future the identity will hold links to a bunch of sub-chains
 //managed by the identities.  one of them will be of key groups.
-func (is *IdentityState) GetKeyData() (KeyType, types.Bytes) {
-	return is.Keytype, is.Keydata
+func (is *AdiState) GetKeyData() (KeyType, types.Bytes) {
+	return is.KeyType, is.KeyData
 }
 
-func (is *IdentityState) GetIdentityChainId() types.Bytes {
+func (is *AdiState) GetIdentityChainId() types.Bytes {
 	h := types.GetIdentityChainFromIdentity(is.GetAdiChainPath())
 	if h == nil {
 		return types.Bytes{}
@@ -104,28 +103,29 @@ func (is *IdentityState) GetIdentityChainId() types.Bytes {
 	return h[:]
 }
 
-func (is *IdentityState) MarshalBinary() ([]byte, error) {
+func (is *AdiState) MarshalBinary() ([]byte, error) {
 
 	var data []byte
-	shdata, err := is.Header.MarshalBinary()
+	headerData, err := is.Header.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	data = append(data, shdata...)
-	data = append(data, byte(is.Keytype))
+	var buffer bytes.Buffer
+	buffer.Write(headerData)
+	buffer.WriteByte(byte(is.KeyType))
 
-	var bint [8]byte
-	//store the keydata size
-	i := binary.PutVarint(bint[:], int64(len(is.Keydata)))
-	data = append(data, bint[:i]...)
+	var intBuf [8]byte
+	//store the keyData size
+	i := binary.PutVarint(intBuf[:], int64(len(is.KeyData)))
+	data = append(data, intBuf[:i]...)
 	//store the key data
-	data = append(data, is.Keydata[:]...)
+	data = append(data, is.KeyData[:]...)
 
 	return data, nil
 }
 
-func (is *IdentityState) UnmarshalBinary(data []byte) error {
+func (is *AdiState) UnmarshalBinary(data []byte) error {
 	dlen := len(data)
 	if dlen == 0 {
 		return fmt.Errorf("cannot unmarshal Identity State, insuffient data")
@@ -137,7 +137,7 @@ func (is *IdentityState) UnmarshalBinary(data []byte) error {
 	}
 	i += is.Header.GetHeaderSize()
 
-	is.Keytype = KeyType(data[i])
+	is.KeyType = KeyType(data[i])
 	i++
 	if dlen <= i {
 		return fmt.Errorf("cannot unmarshal Identity State after key type, insuffient data")
@@ -152,18 +152,18 @@ func (is *IdentityState) UnmarshalBinary(data []byte) error {
 	if dlen < i {
 		return fmt.Errorf("cannot unmarshal Identity State before copy key data, insuffient data")
 	}
-	is.Keydata = make([]byte, v)
-	i += copy(is.Keydata, data[i:i+int(v)])
+	is.KeyData = make([]byte, v)
+	i += copy(is.KeyData, data[i:i+int(v)])
 
 	return nil
 }
 
-func (is *IdentityState) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, &is.identityState)
+func (is *AdiState) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data, &is.adiState)
 }
 
-func (is *IdentityState) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&is.identityState)
+func (is *AdiState) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&is.adiState)
 }
 
 func (k *KeyType) UnmarshalJSON(b []byte) error {
@@ -178,8 +178,6 @@ func (k *KeyType) UnmarshalJSON(b []byte) error {
 		*k = KeyTypeSha256d
 	case str == "chain":
 		*k = KeyTypeChain
-	case str == "group":
-		*k = KeyTypeGroup
 	default:
 		*k = KeyTypeUnknown
 	}
@@ -198,8 +196,6 @@ func (k *KeyType) MarshalJSON() ([]byte, error) {
 		str = "sha256d"
 	case KeyTypeChain:
 		str = "chain"
-	case KeyTypeGroup:
-		str = "group"
 	default:
 		str = "unknown"
 	}

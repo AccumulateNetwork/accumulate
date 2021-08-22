@@ -4,22 +4,20 @@ import (
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
+
 // API data structures, need to merge with Tendermint data structures to avoid duplicates
 
+// ADI structure holds the identity name in the URL.  The name can be stored as acc://<name> or simply <name>
+// all chain paths following the ADI domain will be ignored
 type ADI struct {
-	URL           types.String `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`//",hexadecimal"`
-}
-
-type Signer struct {
-	URL       types.String `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	PublicKey types.Bytes32 `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`//,hexadecimal"`
+	URL           types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"` //",hexadecimal"`
 }
 
 type Token struct {
 	URL       types.String `json:"url" form:"url" query:"url" validate:"required"`
 	Symbol    types.String `json:"symbol" form:"symbol" query:"symbol" validate:"required,alphanum"`
-	Precision types.Byte         `json:"precision" form:"precision" query:"precision" validate:"required,min=0,max=18"`
+	Precision types.Byte   `json:"precision" form:"precision" query:"precision" validate:"required,min=0,max=18"`
 }
 
 type TokenAccount struct {
@@ -33,27 +31,35 @@ type TokenAccountWithBalance struct {
 }
 
 type TokenTx struct {
-	Hash types.Bytes32           `json:"hash" form:"hash" query:"hash" validate:"required"`//,hexadecimal"`
-	From types.String           `json:"from" form:"from" query:"from" validate:"required"`
+	Hash types.Bytes32    `json:"hash" form:"hash" query:"hash" validate:"required"` //,hexadecimal"`
+	From types.String     `json:"from" form:"from" query:"from" validate:"required"`
 	To   []*TokenTxOutput `json:"to" form:"to" query:"to" validate:"required"`
-	Meta json.RawMessage        `json:"meta" form:"meta" query:"meta" validate:"required"`
+	Meta json.RawMessage  `json:"meta" form:"meta" query:"meta" validate:"required"`
 }
 
 type TokenTxOutput struct {
 	URL    types.UrlChain `json:"url" form:"url" query:"url" validate:"required"`
-	Amount types.Amount  `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
+	Amount types.Amount   `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
+}
+
+// API Request Support Structure
+
+// Signer holds the ADI and public key to use to verify the transaction
+type Signer struct {
+	URL       types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	PublicKey types.Bytes32 `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
 }
 
 // API Request Data Structures
 
 type APIRequestRaw struct {
-	Tx *json.RawMessage  `json:"tx" form:"tx" query:"tx" validate:"required"`
-	Sig types.Bytes32    `json:"sig" form:"sig" query:"sig" validate:"required"`
+	Tx  *json.RawMessage `json:"tx" form:"tx" query:"tx" validate:"required"`
+	Sig types.Bytes64    `json:"sig" form:"sig" query:"sig" validate:"required"`
 }
 
 type APIRequest struct {
 	Tx  *APIRequestTx `json:"tx" form:"tx" query:"tx" validate:"required"`
-	Sig types.Bytes32        `json:"sig" form:"sig" query:"sig" validate:"required"`//",hexadecimal"`
+	Sig types.Bytes64 `json:"sig" form:"sig" query:"sig" validate:"required"` //",hexadecimal"`
 }
 
 type APIRequestTx struct {

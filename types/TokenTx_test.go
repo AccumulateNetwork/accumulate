@@ -2,28 +2,26 @@ package types
 
 import (
 	"encoding/json"
-	"math/big"
 	"testing"
 )
 
 func TestTokenTransaction(t *testing.T) {
-	tt := TokenTransaction{}
-	amt := big.NewInt(10000)
-	tt.SetTransferAmount(amt)
+	tt := NewTokenTx("WileECoyote/MyACMETokens")
 
-	toamt := big.NewInt(7500)
-	tt.AddToAccount("RedRock/acc", toamt)
+	toAmt := Amount{}
+	toAmt.SetInt64(6500)
+	tt.AddToAccount("AcmeCorporation/ACMETokens", &toAmt)
 
-	toamt = big.NewInt(2500)
-	tt.AddToAccount("RedRock/acc/sekret/subaccount", toamt)
+	toAmt.SetInt64(2500)
+	tt.AddToAccount("RoadRunner/beep/beep", &toAmt)
 
 	data, err := json.Marshal(&tt)
 	if err != nil {
 		t.Fatalf("Error marshalling TokenTransaction %v", err)
 	}
-	tt2 := TokenTransaction{}
+
+	tt2 := TokenTx{}
 	err = json.Unmarshal(data, &tt2)
-	//err = tt2.UnmarshalJSON(data)
 
 	if err != nil {
 		t.Fatalf("Error unmarshalling TokenTransaction %v", err)
