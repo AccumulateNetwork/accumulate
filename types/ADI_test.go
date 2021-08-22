@@ -9,8 +9,8 @@ import (
 )
 
 func TestIdentityCreate(t *testing.T) {
-	ic := IdentityCreate{}
-	ic.SetName("ACME")
+	ic := ADI{}
+	_ = ic.SetName("WileECoyote")
 	kp := CreateKeyPair()
 	kh := Bytes32(sha256.Sum256(kp.PubKey().Bytes()))
 	ic.SetKeyHash(&kh)
@@ -20,7 +20,7 @@ func TestIdentityCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ic2 := IdentityCreate{}
+	ic2 := ADI{}
 	err = json.Unmarshal(data, &ic2)
 	if err != nil {
 		t.Fatal(err)
@@ -33,17 +33,17 @@ func TestIdentityCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ic3 := IdentityCreate{}
+	ic3 := ADI{}
 	err = ic3.UnmarshalBinary(data)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if ic.IdentityName != ic3.IdentityName {
+	if ic.URL != ic3.URL {
 		t.Fatalf("Unmarshalled identity doesn't match")
 	}
 
-	if bytes.Compare(ic.IdentityKeyHash[:], ic3.IdentityKeyHash[:]) != 0 {
+	if bytes.Compare(ic.PublicKeyHash[:], ic3.PublicKeyHash[:]) != 0 {
 		t.Fatalf("Unmarshalled key hash doesn't match")
 	}
 }

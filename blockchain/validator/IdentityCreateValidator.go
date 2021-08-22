@@ -65,19 +65,19 @@ func (v *CreateIdentityValidator) Validate(currentstate *StateEntry, submission 
 		return nil, fmt.Errorf("sponsor identity is not defined")
 	}
 
-	ic := types.IdentityCreate{}
+	ic := types.ADI{}
 	err = json.Unmarshal(submission.Data, &ic)
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
-	isc := synthetic.NewIdentityStateCreate(string(ic.IdentityName))
+	isc := synthetic.NewIdentityStateCreate(string(ic.URL))
 	ledger := types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp)
 	txid := sha256.Sum256(ledger)
 	copy(isc.Txid[:], txid[:])
 	copy(isc.SourceIdentity[:], submission.Identitychain)
 	copy(isc.SourceChainId[:], submission.Chainid)
-	err = isc.SetKeyData(acctypes.KeyTypeSha256, ic.IdentityKeyHash[:])
+	err = isc.SetKeyData(acctypes.KeyTypeSha256, ic.PublicKeyHash[:])
 	if err != nil {
 		return nil, err
 	}

@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"bytes"
 	"fmt"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -44,7 +43,7 @@ func (v *SyntheticTransactionDepositValidator) BeginBlock(height int64, time *ti
 	return nil
 }
 
-func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.IdentityState, *state.TokenAccountState, *synthetic.TokenTransactionDeposit, error) {
+func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccountState, *synthetic.TokenTransactionDeposit, error) {
 
 	ttd := synthetic.NewTokenTransactionDeposit()
 	err := ttd.UnmarshalBinary(data)
@@ -53,7 +52,7 @@ func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEn
 		return nil, nil, nil, err
 	}
 
-	ids := state.IdentityState{}
+	ids := state.AdiState{}
 	err = ids.UnmarshalBinary(currentstate.IdentityState.Entry)
 	if err != nil {
 		return nil, nil, nil, err
@@ -65,12 +64,8 @@ func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEn
 		return &ids, nil, ttd, err
 	}
 
-	if bytes.Compare(ttd.IssuerIdentity[:], tas.GetIssuerIdentity().Bytes()) != 0 {
+	if ttd.TokenUrl != tas.AdiChainPath {
 		return &ids, &tas, ttd, fmt.Errorf("Invalid token Issuer identity")
-	}
-
-	if bytes.Compare(ttd.IssuerChainId[:], tas.GetIssuerChainId().Bytes()) != 0 {
-		return &ids, &tas, ttd, fmt.Errorf("Invalid token Issuer chainid")
 	}
 
 	if ttd.DepositAmount.Sign() <= 0 {
@@ -92,9 +87,8 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Sub
 	copy(retdep.Txid[:], ttd.Txid[:])
 	copy(retdep.SourceIdentity[:], submission.Identitychain)
 	copy(retdep.SourceChainId[:], submission.Chainid)
-	copy(retdep.IssuerIdentity[:], ttd.IssuerIdentity[:])
-	copy(retdep.IssuerChainId[:], ttd.IssuerChainId[:])
-	err := retdep.Metadata.UnmarshalJSON([]byte("{\"Deposit failed\"}"))
+	retdep.TokenUrl = ttd.TokenUrl
+	err := retdep.Metadata.UnmarshalJSON([]byte("{\"deposit failed\"}"))
 	if err != nil {
 		return nil, err
 	}

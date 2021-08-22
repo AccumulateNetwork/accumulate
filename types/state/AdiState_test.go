@@ -50,7 +50,7 @@ func TestIdentityState(t *testing.T) {
 		t.Fatalf("Error marshalling binary %v", err)
 	}
 
-	var id2 IdentityState
+	var id2 AdiState
 
 	err = id2.UnmarshalBinary(data)
 	if err != nil {
@@ -74,7 +74,7 @@ func TestIdentityState(t *testing.T) {
 		t.Fatalf("Key's do not match after unmarshalling")
 	}
 
-	var id3 IdentityState
+	var id3 AdiState
 
 	id2data, err := json.Marshal(&id2)
 	if err != nil {

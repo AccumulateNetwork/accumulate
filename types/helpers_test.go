@@ -14,33 +14,6 @@ import (
 	"testing"
 )
 
-func TestTokenTransfer(t *testing.T) {
-	kp := CreateKeyPair()
-	inputamt := big.NewInt(12345)
-
-	identityname := "RedWagon"
-	tokenchainname := "RedWagon/acc"
-
-	outputs := make(map[string]*big.Int)
-	outputs["RedRock/myacctoken"] = big.NewInt(12345)
-
-	sub, err := CreateTokenTransaction(&identityname, &tokenchainname,
-		inputamt, &outputs, nil, kp)
-	if err != nil {
-		t.Fatalf("failed to make a token rpc call %v", err)
-	}
-
-	fmt.Println(string(sub.Data))
-
-	if !json.Valid(sub.Data) {
-		t.Fatal("transaction test created invalid json")
-	}
-
-	if !kp.PubKey().VerifySignature(sub.Data, sub.Signature) {
-		t.Fatal("invalid signature for transaction")
-	}
-}
-
 func MakeUpdateKeyURL(identityname string, oldkey ed25519.PrivKey, newkey ed25519.PubKey) string {
 
 	kp1hash := sha256.Sum256(oldkey.PubKey().Bytes())
