@@ -14,6 +14,7 @@ import (
 	"math/big"
 	"testing"
 )
+
 //
 //func CreateIdentityTest(identityname *string, key ed25519.PubKey, sponsor ed25519.PrivKey) (*proto.Submission, error) {
 //	sub := proto.Submission{}
@@ -47,32 +48,31 @@ import (
 //	return &sub, nil
 //}
 
-
 func TestTokenTransfer(t *testing.T) {
-	kp := types.CreateKeyPair()
-	inputamt := big.NewInt(12345)
-
-	identityname := "RedWagon"
-	tokenchainname := "RedWagon/acc"
-
-	outputs := make(map[string]*big.Int)
-	outputs["RedRock/myacctoken"] = big.NewInt(12345)
-
-	sub, err := types.CreateTokenTransaction(&identityname, &tokenchainname,
-		inputamt, &outputs, nil, kp)
-	if err != nil {
-		t.Fatalf("Failed to make a token rpc call %v", err)
-	}
-
-	fmt.Println(string(sub.Data))
-
-	if !json.Valid(sub.Data) {
-		t.Fatal("Transaction test created invalid json")
-	}
-
-	if !kp.PubKey().VerifySignature(sub.Data, sub.Signature) {
-		t.Fatal("Invalid signature for transaction")
-	}
+	//kp := types.CreateKeyPair()
+	//inputamt := big.NewInt(12345)
+	//
+	//identityname := "RedWagon"
+	//tokenchainname := "RedWagon/acc"
+	//
+	//outputs := make(map[string]*big.Int)
+	//outputs["RedRock/myacctoken"] = big.NewInt(12345)
+	//
+	//sub, err := types.CreateTokenTransaction(&identityname, &tokenchainname,
+	//	inputamt, &outputs, nil, kp)
+	//if err != nil {
+	//	t.Fatalf("Failed to make a token rpc call %v", err)
+	//}
+	//
+	//fmt.Println(string(sub.Data))
+	//
+	//if !json.Valid(sub.Data) {
+	//	t.Fatal("Transaction test created invalid json")
+	//}
+	//
+	//if !kp.PubKey().VerifySignature(sub.Data, sub.Signature) {
+	//	t.Fatal("Invalid signature for transaction")
+	//}
 }
 
 func MakeUpdateKeyURL(identityname string, oldkey ed25519.PrivKey, newkey ed25519.PubKey) string {
@@ -170,6 +170,7 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 
 	return urlstring, nil
 }
+
 //
 //func TestURL(t *testing.T) {
 //

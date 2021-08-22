@@ -12,11 +12,10 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
-	"time"
 	"unicode/utf8"
 )
 
-// AssembleBVCSubmissionHeader This will populate the identity chain, chainid, and instruction fields for a BVC submission
+// AssembleBVCSubmissionHeader This will populate the identity chain, chainId, and instruction fields for a BVC submission
 func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins proto.AccInstruction) *proto.Submission {
 	sub := proto.Submission{}
 
@@ -30,12 +29,12 @@ func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins prot
 }
 
 // MakeBVCSubmission This will make the BVC submision protobuf transaction
-func MakeBVCSubmission(ins string, identityname string, chainpath string, payload []byte, timestamp int64, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
+func MakeBVCSubmission(ins string, adi UrlAdi, chainUrl UrlChain, payload []byte, timestamp int64, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
 	v := InstructionTypeMap[ins]
 	if v == 0 {
 		return nil
 	}
-	sub := AssembleBVCSubmissionHeader(identityname, chainpath, v)
+	sub := AssembleBVCSubmissionHeader(string(adi), string(chainUrl), v)
 	sub.Data = payload
 	sub.Timestamp = timestamp
 	sub.Signature = signature
@@ -79,23 +78,23 @@ func MarshalBinaryLedgerChainId(chainid []byte, payload []byte, timestamp int64)
 }
 
 var InstructionTypeMap = map[string]proto.AccInstruction{
-	"identity-create":      proto.AccInstruction_Identity_Creation,
-	"token-url-create":     proto.AccInstruction_Token_URL_Creation,
-	"token-tx":             proto.AccInstruction_Token_Transaction,
+	"adi-create":           proto.AccInstruction_Identity_Creation,
+	"token-account-create": proto.AccInstruction_Token_URL_Creation,
+	"token-tx-create":      proto.AccInstruction_Token_Transaction,
 	"data-chain-create":    proto.AccInstruction_Data_Chain_Creation,
-	"data-entry":           proto.AccInstruction_Data_Entry,
+	"data-entry-create":    proto.AccInstruction_Data_Entry,
 	"scratch-chain-create": proto.AccInstruction_Scratch_Chain_Creation,
-	"scratch-entry":        proto.AccInstruction_Scratch_Entry,
-	"token-issue":          proto.AccInstruction_Token_Issue,
+	"scratch-entry-create": proto.AccInstruction_Scratch_Entry,
+	"token-create":         proto.AccInstruction_Token_Issue,
 	"key-update":           proto.AccInstruction_Key_Update,
-	"deep-query":           proto.AccInstruction_Deep_Query,
+	"query-tx-create":      proto.AccInstruction_Deep_Query,
 	"query":                proto.AccInstruction_Light_Query,
 }
 
 // Subtx this is a generic structure for a bvc submission transaction that can be marshalled to and from json,
 //this is helpful for json rpc
 type Subtx struct {
-	IdentityChainpath string `json:"identity-chainpath"`
+	IdentityChainpath string `json:"chainUrl"`
 	Payload           []byte `json:"payload"`
 	Timestamp         int64  `json:"timestamp"`
 	Signature         []byte `json:"sig"`
@@ -141,6 +140,15 @@ func CreateKeyPair() ed25519.PrivKey {
 // ParseIdentityChainPath helpful parser to extract the identity name and chainpath
 //for example RedWagon/MyAccAddress becomes identity=redwagon and chainpath=redwagon/MyAccAddress
 func ParseIdentityChainPath(s string) (identity string, chainpath string, err error) {
+
+	if !utf8.ValidString(s) {
+		return "", "", fmt.Errorf("URL is has invalid UTF8 encoding")
+	}
+
+	if !strings.HasPrefix(s, "acc://") {
+		s = "acc://" + s
+	}
+
 	u, err := url.Parse(s)
 	if err != nil {
 		return "", "", err
@@ -253,7 +261,7 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 			}
 		}
 
-		sub = MakeBVCSubmission(k, hostname, chainpath, data, timestamp, signature, key)
+		sub = MakeBVCSubmission(k, UrlAdi(hostname), UrlChain(chainpath), data, timestamp, signature, key)
 	}
 
 	if sub == nil {
@@ -261,47 +269,6 @@ func URLParser(s string) (ret *proto.Submission, err error) {
 	}
 
 	//json rpc params:
-
-	return sub, nil
-}
-
-// CreateTokenTransaction This will create a submission message that for a token transaction.  Assume only 1 input and many outputs.
-//this shouldn't be here...
-func CreateTokenTransaction(inputidentityname *string,
-	intputchainname *string, inputamt *big.Int, outputs *map[string]*big.Int, metadata *string,
-	signer ed25519.PrivKey) (*proto.Submission, error) {
-
-	type AccTransaction struct {
-		Input    map[string]*big.Int  `json:"inputs"`
-		Output   *map[string]*big.Int `json:"outputs"`
-		Metadata json.RawMessage      `json:"metadata,omitempty"`
-	}
-
-	var tx AccTransaction
-	tx.Input = make(map[string]*big.Int)
-	tx.Input[*intputchainname] = inputamt
-	tx.Output = outputs
-	if metadata != nil {
-		err := tx.Metadata.UnmarshalJSON([]byte(fmt.Sprintf("{%s}", *metadata)))
-		if err != nil {
-			return nil, fmt.Errorf("error marshalling metadata %v", err)
-		}
-	}
-
-	txdata, err := json.Marshal(tx)
-	if err != nil {
-		return nil, fmt.Errorf("error formatting transaction, %v", err)
-	}
-
-	sig, err := signer.Sign(txdata)
-	if err != nil {
-		return nil, fmt.Errorf("cannot sign data %v", err)
-	}
-	if signer.PubKey().VerifySignature(txdata, sig) == false {
-		return nil, fmt.Errorf("bad signature")
-	}
-
-	sub := MakeBVCSubmission("tx", *inputidentityname, *intputchainname, txdata, time.Now().Unix(), sig, signer.PubKey().(ed25519.PubKey))
 
 	return sub, nil
 }
@@ -382,6 +349,42 @@ func (s *Bytes) UnmarshalJSON(data []byte) error {
 	return err
 }
 
+func (s *Bytes) Bytes() []byte {
+	return []byte(*s)
+}
+
+func (s *Bytes) MarshalBinary() ([]byte, error) {
+	var buf [8]byte
+	l := s.Size(&buf)
+	i := l - len(*s)
+	data := make([]byte, l)
+	copy(data, buf[:i])
+	copy(data[i:], *s)
+	return data, nil
+}
+
+func (s *Bytes) UnmarshalBinary(data []byte) error {
+	slen, l := binary.Varint(data)
+	if l == 0 {
+		return fmt.Errorf("cannot unmarshal string")
+	}
+	if len(data) < int(slen)+l {
+		return fmt.Errorf("insufficient data to unmarshal string")
+	}
+	*s = data[l : int(slen)+l]
+	return nil
+}
+
+func (s *Bytes) Size(varintbuf *[8]byte) int {
+	buf := varintbuf
+	if buf == nil {
+		buf = &[8]byte{}
+	}
+	l := int64(len(*s))
+	i := binary.PutVarint(buf[:], l)
+	return i + int(l)
+}
+
 // Bytes32 is a fixed array of 32 bytes
 type Bytes32 [32]byte
 
@@ -409,7 +412,7 @@ func (s *Bytes32) FromString(str string) error {
 		return fmt.Errorf("insufficient data")
 	}
 
-	d, err := hex.DecodeString(string(str))
+	d, err := hex.DecodeString(str)
 	if err != nil {
 		return err
 	}
@@ -422,44 +425,71 @@ func (s *Bytes32) ToString() String {
 	return String(hex.EncodeToString(s[:]))
 }
 
-type String string
+// Bytes32 is a fixed array of 32 bytes
+type Bytes64 [64]byte
 
-func (s *String) MarshalBinary() ([]byte, error) {
-	var buf [8]byte
-	l := s.Size(&buf)
-	i := l - len(*s)
-	data := make([]byte, l)
-	copy(data, buf[:i])
-	copy(data[i:], *s)
-	return data, nil
+// MarshalJSON serializes ByteArray to hex
+func (s *Bytes64) MarshalJSON() ([]byte, error) {
+	bytes, err := json.Marshal(s.ToString())
+	return bytes, err
 }
 
-func (s *String) UnmarshalBinary(data []byte) error {
-	slen, l := binary.Varint(data)
-	if l == 0 {
-		return fmt.Errorf("cannot unmarshal string")
+// UnmarshalJSON serializes ByteArray to hex
+func (s *Bytes64) UnmarshalJSON(data []byte) error {
+	str := strings.Trim(string(data), `"`)
+	return s.FromString(str)
+}
+
+// Bytes returns the bite slice of the 32 byte array
+func (s Bytes64) Bytes() []byte {
+	return s[:]
+}
+
+// FromString takes a hex encoded string and sets the byte array.
+// The input parameter, str, must be 64 hex characters in length
+func (s *Bytes64) FromString(str string) error {
+	if len(str) != 128 {
+		return fmt.Errorf("insufficient data")
 	}
-	if len(data) < int(slen)+l {
-		return fmt.Errorf("insufficient data to unmarshal string")
+
+	d, err := hex.DecodeString(str)
+	if err != nil {
+		return err
 	}
-	*s = String(data[l : int(slen)+l])
+	copy(s[:], d)
 	return nil
 }
 
-func (s *String) Size(varintbuf *[8]byte) int {
-	buf := varintbuf
-	if buf == nil {
-		buf = &[8]byte{}
+// ToString will convert the 32 byte array into a hex string that is 64 hex characters in length
+func (s *Bytes64) ToString() String {
+	return String(hex.EncodeToString(s[:]))
+}
+
+type String string
+
+func (s *String) MarshalBinary() ([]byte, error) {
+	b := Bytes(*s)
+	return b.MarshalBinary()
+}
+
+func (s *String) UnmarshalBinary(data []byte) error {
+	var b Bytes
+	err := b.UnmarshalBinary(data)
+	if err == nil {
+		*s = String(b)
 	}
-	l := int64(len(*s))
-	i := binary.PutVarint(buf[:], l)
-	return i + int(l)
+	return err
+}
+
+func (s *String) Size(varintbuf *[8]byte) int {
+	b := Bytes(*s)
+	return b.Size(varintbuf)
 }
 
 type Byte byte
 
 func (s *Byte) MarshalBinary() ([]byte, error) {
-	ret := make([]byte,1)
+	ret := make([]byte, 1)
 	ret[0] = byte(*s)
 	return ret, nil
 }
@@ -476,4 +506,10 @@ type UrlAdi string
 
 type UrlChain string
 
-type Amount big.Int
+type Amount struct {
+	big.Int
+}
+
+func (a *Amount) AsBigInt() *big.Int {
+	return &a.Int
+}

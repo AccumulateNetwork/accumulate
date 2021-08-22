@@ -41,7 +41,7 @@ func (v *SyntheticIdentityStateCreateValidator) Check(currentstate *StateEntry, 
 		return fmt.Errorf("identity already exists")
 	}
 
-	is := acctypes.IdentityState{}
+	is := acctypes.AdiState{}
 	err := json.Unmarshal(data, &is)
 	if err != nil {
 		return fmt.Errorf("data payload of submission is not a valid identity state create message")
@@ -73,7 +73,7 @@ func (v *SyntheticIdentityStateCreateValidator) Validate(currentstate *StateEntr
 		return nil, fmt.Errorf("identity already exists")
 	}
 
-	is := acctypes.IdentityState{}
+	is := acctypes.AdiState{}
 	err = json.Unmarshal(submission.Data, &is)
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid identity state create message")

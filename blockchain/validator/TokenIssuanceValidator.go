@@ -46,21 +46,27 @@ func (v *TokenIssuanceValidator) BeginBlock(height int64, time *time.Time) error
 	return nil
 }
 
-func (v *TokenIssuanceValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
-	if currentstate == nil {
+func (v *TokenIssuanceValidator) Validate(currentState *StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+	if currentState == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("Current State Not Defined")
 	}
 
-	if currentstate.IdentityState == nil {
+	if currentState.IdentityState == nil {
 		return nil, fmt.Errorf("Identity not defined. Unable to issue token.")
 	}
 
-	if currentstate.ChainState != nil {
+	if currentState.ChainState != nil {
 		return nil, fmt.Errorf("Token chain already defined.  Unable to issue token.")
 	}
 
-	ti := &types.TokenIssuance{}
+	id := &acctypes.AdiState{}
+	err = id.UnmarshalBinary(currentState.IdentityState.Entry)
+	if err != nil {
+		return nil, err
+	}
+
+	ti := &types.Token{}
 	err = json.Unmarshal(submission.Data, ti)
 	if err != nil {
 		return nil, err
@@ -68,10 +74,16 @@ func (v *TokenIssuanceValidator) Validate(currentstate *StateEntry, submission *
 
 	//do some ti validation
 
-	tas := acctypes.NewTokenAccountState(submission.Identitychain, submission.GetChainid(), ti)
-	//if ti.Supply.Sign() >= 0 {
-	//	tas.AddBalance(&ti.Supply)
-	//}
+	adiState, _, err := types.ParseIdentityChainPath(string(id.AdiChainPath))
+	adiToken, tokenChain, err := types.ParseIdentityChainPath(string(ti.URL))
+	if err != nil {
+		return nil, err
+	}
+
+	if adiState != adiToken {
+		return nil, fmt.Errorf("ADI URL doesn't match token ADI")
+	}
+	tas := acctypes.NewTokenAccountState(types.UrlChain(tokenChain), types.UrlChain(tokenChain), ti)
 
 	tasso, err := tas.MarshalBinary()
 	if err != nil {

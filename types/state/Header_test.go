@@ -1,10 +1,14 @@
 package state
 
-import "testing"
+import (
+	"crypto/sha256"
+	"testing"
+)
 
 func TestStateHeader(t *testing.T) {
 
-	header := Header{"AIM-1", "acme/chain/path"}
+	aimHash := sha256.Sum256([]byte("AIM/1/0.1"))
+	header := Header{aimHash, "acme/chain/path"}
 
 	data, err := header.MarshalBinary()
 	if err != nil {

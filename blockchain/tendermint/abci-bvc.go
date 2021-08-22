@@ -6,8 +6,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"math/big"
-
 	//"crypto/ed25519"
 	"crypto/sha256"
 	"github.com/AccumulateNetwork/SMT/pmt"
@@ -357,13 +355,9 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	identity := types.GetIdentityChainFromIdentity(adi)
 	chainid := types.GetChainIdFromChainPath(chainpath)
 
-	supply := big.NewInt(50000000000000000)
-	ti, err := types.NewTokenIssuance("ACME", supply, 8, types.TokenCirculationMode_Burn_and_Mint)
-	if err != nil {
-		panic(err)
-	}
+	ti := types.NewToken(chainpath, "ACME", 8)
 
-	tas := state.NewTokenAccountState(identity[:], chainid[:], ti)
+	tas := state.NewTokenAccountState(types.UrlChain(chainpath), types.UrlChain(chainpath), ti)
 
 	tasstatedata, err := tas.MarshalBinary()
 	if err != nil {
@@ -377,7 +371,6 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 // BeginBlock /ABCI / block calls
@@ -707,7 +700,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			//not an impostor. Need to figure out how to do this. Right now we just assume the syth request
 			//sender is legit.
 		} else {
-			is := state.IdentityState{}
+			is := state.AdiState{}
 			is.UnmarshalBinary(identitystate.Entry)
 			if !is.VerifyKey(sub.Key) {
 				//todo: need to handle responses differently when we go to the parallelized validtor

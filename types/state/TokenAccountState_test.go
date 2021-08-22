@@ -1,7 +1,6 @@
 package state
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"math/big"
@@ -10,7 +9,10 @@ import (
 
 func TestTokenBalanceState(t *testing.T) {
 
-	token := NewTokenAccountState([]byte("issueid1"), []byte("issuechainid"), nil)
+	tokenUrl := "MyADI/MyTokenType"
+
+	accountUrl := "MyADI/MyTokens"
+	token := NewTokenAccountState(types.UrlChain(accountUrl), types.UrlChain(tokenUrl), nil)
 
 	fmt.Println(token.GetBalance())
 
@@ -77,7 +79,7 @@ func TestTokenBalanceState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	token2 := NewTokenAccountState([]byte("blah"), []byte("blah"), nil)
+	token2 := NewTokenAccountState("blah", "blah", nil)
 	err = token2.UnmarshalBinary(tokenbytes)
 
 	if err != nil {
@@ -91,16 +93,13 @@ func TestTokenBalanceState(t *testing.T) {
 }
 
 func TestTokenCoinbase(t *testing.T) {
-	supply := big.NewInt(200000000000000)
-	issuedtoken, err := types.NewTokenIssuance("FCT", supply, 8, types.TokenCirculationMode_Burn_and_Mint)
 
-	if err != nil {
-		t.Fatal(err)
-	}
+	tokenUrl := "MyADI/MyTokenType"
 
-	identityhash := sha256.Sum256([]byte("MyADI"))
-	chainid := sha256.Sum256([]byte("MyADI/MyTokenType"))
-	account := NewTokenAccountState(identityhash[:], chainid[:], issuedtoken)
+	issuedToken := types.NewToken(tokenUrl, "fct", 8)
+
+	accountUrl := "MyADI/MyTokens"
+	account := NewTokenAccountState(types.UrlChain(accountUrl), types.UrlChain(tokenUrl), issuedToken)
 
 	actdata, err := account.MarshalBinary()
 	if err != nil {
@@ -123,33 +122,15 @@ func TestTokenCoinbase(t *testing.T) {
 
 	account.SubBalance(amt)
 
-	balancetest := big.NewInt(199999900000000)
+	balancetest := big.NewInt(0)
 
 	if account.GetBalance().Cmp(balancetest) != 0 {
-		t.Fatalf("SubBalance fail: Balance should be %s, but is %s", balancetest.String(), account2.GetBalance().String())
+		t.Fatalf("SubBalance fail: Coinbase Balance should be %s, but is %s", balancetest.String(), account.GetBalance().String())
 	}
 
 	account2.AddBalance(amt)
 
-	if account2.GetBalance().Cmp(supply) == 0 {
+	if account2.GetBalance().Cmp(balancetest) != 0 {
 		t.Fatalf("Burn and Mint AddBalance fail: Balance should be %s, but is %s", balancetest.String(), account2.GetBalance().String())
-	}
-
-	//setup burn only tokens
-	coinbase2, err := types.NewTokenIssuance("ATK", supply, 8, types.TokenCirculationMode_Burn)
-	account3 := NewTokenAccountState(identityhash[:], chainid[:], coinbase2)
-
-	account3.SubBalance(amt)
-
-	//check to make sure balance was subtracted
-	if account3.GetBalance().Cmp(balancetest) != 0 {
-		t.Fatalf("SubBalance fail: Balance should be %s, but is %s", balancetest.String(), account2.GetBalance().String())
-	}
-
-	account3.AddBalance(amt)
-
-	//check to make sure tokens were not added back, i.e tokens are burned
-	if account3.GetBalance().Cmp(balancetest) != 0 {
-		t.Fatalf("Burn Test AddBalance fail: Balance should be %s, but is %s", balancetest.String(), account2.GetBalance().String())
 	}
 }
