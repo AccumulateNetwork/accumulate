@@ -7,6 +7,13 @@ import (
 
 // API data structures, need to merge with Tendermint data structures to avoid duplicates
 
+// Chain will define a new chain to be registered. It will be initialized to the default state
+// as defined by validator referenced by the ChainType
+type Chain struct {
+	URL       types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	ChainType types.ChainType `json:"chainType" form:"chainType" query:"chainType" validate:"required"` //",hexadecimal"`
+}
+
 // ADI structure holds the identity name in the URL.  The name can be stored as acc://<name> or simply <name>
 // all chain paths following the ADI domain will be ignored
 type ADI struct {

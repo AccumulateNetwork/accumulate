@@ -26,6 +26,7 @@ func NewTokenAccountState(accountUrl types.UrlChain, tokenUrl types.UrlChain, co
 	tas.Type = sha256.Sum256([]byte("AIM/1/0.1"))
 	tas.AdiChainPath = types.String(accountUrl)
 	tas.Coinbase = coinbase
+	tas.TokenUrl = types.String(tokenUrl)
 	if tas.IsCoinbaseAccount() {
 		tas.TokenUrl = coinbase.URL
 	}

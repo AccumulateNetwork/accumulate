@@ -3,7 +3,6 @@ package types
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 type TokenTx struct {
@@ -36,9 +35,4 @@ func (t *TokenTx) SetMetadata(md *json.RawMessage) error {
 	}
 	copy(t.Meta[:], (*md)[:])
 	return nil
-}
-
-func (t *TokenTx) CreateSubmission() *proto.Submission {
-	sub := &proto.Submission{}
-	return sub
 }
