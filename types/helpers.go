@@ -6,41 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"net/url"
-	"strconv"
 	"strings"
 	"unicode/utf8"
 )
-
-// AssembleBVCSubmissionHeader This will populate the identity chain, chainId, and instruction fields for a BVC submission
-func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins proto.AccInstruction) *proto.Submission {
-	sub := proto.Submission{}
-
-	sub.Identitychain = GetIdentityChainFromIdentity(identityname).Bytes()
-	if chainpath == "" {
-		chainpath = identityname
-	}
-	sub.Chainid = GetChainIdFromChainPath(chainpath).Bytes()
-	sub.Instruction = ins
-	return &sub
-}
-
-// MakeBVCSubmission This will make the BVC submision protobuf transaction
-func MakeBVCSubmission(ins string, adi UrlAdi, chainUrl UrlChain, payload []byte, timestamp int64, signature []byte, pubkey ed25519.PubKey) *proto.Submission {
-	v := InstructionTypeMap[ins]
-	if v == 0 {
-		return nil
-	}
-	sub := AssembleBVCSubmissionHeader(string(adi), string(chainUrl), v)
-	sub.Data = payload
-	sub.Timestamp = timestamp
-	sub.Signature = signature
-	sub.Key = pubkey
-	return sub
-}
 
 // MarshalBinaryLedgerAdiChainPath fullchainpath == identityname/chainpath
 //This function will generate a ledger needed for ed25519 signing or sha256 hashed to produce TXID
@@ -75,61 +46,6 @@ func MarshalBinaryLedgerChainId(chainid []byte, payload []byte, timestamp int64)
 	msg = append(msg, payload...)
 
 	return msg
-}
-
-var InstructionTypeMap = map[string]proto.AccInstruction{
-	"adi-create":           proto.AccInstruction_Identity_Creation,
-	"token-account-create": proto.AccInstruction_Token_URL_Creation,
-	"token-tx-create":      proto.AccInstruction_Token_Transaction,
-	"data-chain-create":    proto.AccInstruction_Data_Chain_Creation,
-	"data-entry-create":    proto.AccInstruction_Data_Entry,
-	"scratch-chain-create": proto.AccInstruction_Scratch_Chain_Creation,
-	"scratch-entry-create": proto.AccInstruction_Scratch_Entry,
-	"token-create":         proto.AccInstruction_Token_Issue,
-	"key-update":           proto.AccInstruction_Key_Update,
-	"query-tx-create":      proto.AccInstruction_Deep_Query,
-	"query":                proto.AccInstruction_Light_Query,
-}
-
-// Subtx this is a generic structure for a bvc submission transaction that can be marshalled to and from json,
-//this is helpful for json rpc
-type Subtx struct {
-	IdentityChainpath string `json:"chainUrl"`
-	Payload           []byte `json:"payload"`
-	Timestamp         int64  `json:"timestamp"`
-	Signature         []byte `json:"sig"`
-	Key               []byte `json:"key"`
-}
-
-func (p *Subtx) Set(chainpath string, sub *proto.Submission) {
-	p.IdentityChainpath = chainpath
-	p.Payload = sub.Data
-	p.Timestamp = sub.Timestamp
-	p.Signature = sub.Signature
-	p.Key = sub.Key
-}
-
-func (p *Subtx) MarshalJSON() ([]byte, error) {
-	var ret string
-	ret = fmt.Sprintf("{\"params\": [{\"identity-chainpath\":\"%s\"}",
-		p.IdentityChainpath)
-	if p.Payload != nil {
-		if json.Valid(p.Payload) {
-			ret = fmt.Sprintf("%s,{\"payload\":%s}", ret, p.Payload)
-		} else {
-			ret = fmt.Sprintf("%s,{\"payload\":\"%s\"}", ret, p.Payload)
-		}
-	}
-	if p.Signature == nil || p.Key == nil {
-		ret += "]}"
-	} else {
-		ret = fmt.Sprintf("%s, {\"timestamp\":%d}, {\"sig\":\"%x\"}, {\"key\":\"%x\"}]}",
-			ret, p.Timestamp, p.Signature, p.Key)
-	}
-	if !json.Valid([]byte(ret)) {
-		return nil, fmt.Errorf("invalid json : %s", ret)
-	}
-	return []byte(ret), nil
 }
 
 // CreateKeyPair generic helper function to create an ed25519 key pair
@@ -170,108 +86,108 @@ func toJSON(m interface{}) (string, error) {
 	return strings.ReplaceAll(string(js), ",", ", "), nil
 }
 
-// URLParser helper function to take an acme url and generate a submission transaction.
-func URLParser(s string) (ret *proto.Submission, err error) {
-
-	if !utf8.ValidString(s) {
-		return ret, fmt.Errorf("URL is has invalid UTF8 encoding")
-	}
-
-	if !strings.HasPrefix(s, "acc://") {
-		s = "acc://" + s
-	}
-
-	var sub *proto.Submission
-
-	u, err := url.Parse(s)
-	if err != nil {
-		return ret, err
-	}
-
-	fmt.Println(u.Scheme)
-
-	fmt.Println(u.Host)
-	//so the primary is up to the "." if it is there.
-	hostname := strings.ToLower(u.Hostname())
-
-	m, err := url.ParseQuery(u.RawQuery)
-	if err != nil {
-		return ret, err
-	}
-
-	chainpath := hostname
-	if len(u.Path) != 0 {
-		chainpath += u.Path
-	}
-
-	insidx := strings.Index(u.RawQuery, "&")
-	if len(u.RawQuery) > 0 && insidx < 0 {
-		insidx = len(u.RawQuery)
-	}
-
-	var data []byte
-	var timestamp int64
-	var signature []byte
-	var key []byte
-	if insidx > 0 {
-		k := u.RawQuery[:insidx]
-		if k == "query" || k == "q" {
-			if v := m["payload"]; v == nil {
-				m.Del(k)
-				js, err := toJSON(m)
-				if err != nil {
-					return nil, fmt.Errorf("unable to create url query %s, %v", s, err)
-				}
-				data = []byte(js)
-
-			}
-		}
-		//make the correct submission based upon raw query...  Light query needs to be handled differently.
-		if v := m["payload"]; v != nil {
-			if len(v) > 0 {
-				data, err = hex.DecodeString(m["payload"][0])
-				if err != nil {
-					return nil, fmt.Errorf("unable to parse payload in url %s, %v", s, err)
-				}
-			}
-		}
-		if v := m["timestamp"]; v != nil {
-			if len(v) > 0 {
-				timestamp, err = strconv.ParseInt(v[0], 10, 64)
-				if err != nil {
-					return nil, fmt.Errorf("unable to parse timestamp in url %s, %v", s, err)
-				}
-			}
-		}
-
-		if v := m["sig"]; v != nil {
-			if len(v) > 0 {
-				signature, err = hex.DecodeString(m["sig"][0])
-				if err != nil {
-					return nil, fmt.Errorf("unable to parse signature in url %s, %v", s, err)
-				}
-			}
-		}
-		if v := m["key"]; v != nil {
-			if len(v) > 0 {
-				key, err = hex.DecodeString(m["key"][0])
-				if err != nil {
-					return nil, fmt.Errorf("unable to parse signature in url %s, %v", s, err)
-				}
-			}
-		}
-
-		sub = MakeBVCSubmission(k, UrlAdi(hostname), UrlChain(chainpath), data, timestamp, signature, key)
-	}
-
-	if sub == nil {
-		sub = AssembleBVCSubmissionHeader(hostname, chainpath, proto.AccInstruction_Unknown)
-	}
-
-	//json rpc params:
-
-	return sub, nil
-}
+//// URLParser helper function to take an acme url and generate a submission transaction.
+//func URLParser(s string) (ret *proto.Submission, err error) {
+//
+//	if !utf8.ValidString(s) {
+//		return ret, fmt.Errorf("URL is has invalid UTF8 encoding")
+//	}
+//
+//	if !strings.HasPrefix(s, "acc://") {
+//		s = "acc://" + s
+//	}
+//
+//	var sub *proto.Submission
+//
+//	u, err := url.Parse(s)
+//	if err != nil {
+//		return ret, err
+//	}
+//
+//	fmt.Println(u.Scheme)
+//
+//	fmt.Println(u.Host)
+//	//so the primary is up to the "." if it is there.
+//	hostname := strings.ToLower(u.Hostname())
+//
+//	m, err := url.ParseQuery(u.RawQuery)
+//	if err != nil {
+//		return ret, err
+//	}
+//
+//	chainpath := hostname
+//	if len(u.Path) != 0 {
+//		chainpath += u.Path
+//	}
+//
+//	insidx := strings.Index(u.RawQuery, "&")
+//	if len(u.RawQuery) > 0 && insidx < 0 {
+//		insidx = len(u.RawQuery)
+//	}
+//
+//	var data []byte
+//	var timestamp int64
+//	var signature []byte
+//	var key []byte
+//	if insidx > 0 {
+//		k := u.RawQuery[:insidx]
+//		if k == "query" || k == "q" {
+//			if v := m["payload"]; v == nil {
+//				m.Del(k)
+//				js, err := toJSON(m)
+//				if err != nil {
+//					return nil, fmt.Errorf("unable to create url query %s, %v", s, err)
+//				}
+//				data = []byte(js)
+//
+//			}
+//		}
+//		//make the correct submission based upon raw query...  Light query needs to be handled differently.
+//		if v := m["payload"]; v != nil {
+//			if len(v) > 0 {
+//				data, err = hex.DecodeString(m["payload"][0])
+//				if err != nil {
+//					return nil, fmt.Errorf("unable to parse payload in url %s, %v", s, err)
+//				}
+//			}
+//		}
+//		if v := m["timestamp"]; v != nil {
+//			if len(v) > 0 {
+//				timestamp, err = strconv.ParseInt(v[0], 10, 64)
+//				if err != nil {
+//					return nil, fmt.Errorf("unable to parse timestamp in url %s, %v", s, err)
+//				}
+//			}
+//		}
+//
+//		if v := m["sig"]; v != nil {
+//			if len(v) > 0 {
+//				signature, err = hex.DecodeString(m["sig"][0])
+//				if err != nil {
+//					return nil, fmt.Errorf("unable to parse signature in url %s, %v", s, err)
+//				}
+//			}
+//		}
+//		if v := m["key"]; v != nil {
+//			if len(v) > 0 {
+//				key, err = hex.DecodeString(m["key"][0])
+//				if err != nil {
+//					return nil, fmt.Errorf("unable to parse signature in url %s, %v", s, err)
+//				}
+//			}
+//		}
+//
+//		sub = MakeBVCSubmission(k, UrlAdi(hostname), UrlChain(chainpath), data, timestamp, signature, key)
+//	}
+//
+//	if sub == nil {
+//		sub = AssembleBVCSubmissionHeader(hostname, chainpath, proto.AccInstruction_Unknown)
+//	}
+//
+//	//json rpc params:
+//
+//	return sub, nil
+//}
 
 // GetChainIdFromChainPath this expects an identity chain path to produce the chainid.  RedWagon/Acc/Chain/Path
 func GetChainIdFromChainPath(identitychainpath string) *Bytes32 {
@@ -484,6 +400,10 @@ func (s *String) UnmarshalBinary(data []byte) error {
 func (s *String) Size(varintbuf *[8]byte) int {
 	b := Bytes(*s)
 	return b.Size(varintbuf)
+}
+
+func (s *String) AsString() *string {
+	return (*string)(s)
 }
 
 type Byte byte
