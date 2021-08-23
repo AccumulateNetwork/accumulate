@@ -29,7 +29,7 @@ func createAdiTxJson(t *testing.T) []byte {
 	req.Tx.Signer.URL = "redrock"
 	copy(req.Tx.Signer.PublicKey[:], kp.PubKey().Bytes())
 
-	params, err := json.Marshal(&req.Tx)
+	params, err := json.Marshal(&req.Tx.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,8 +37,8 @@ func createAdiTxJson(t *testing.T) []byte {
 
 	reqraw := &APIRequestRaw{}
 
-	reqraw.Tx = &json.RawMessage{}
-	*reqraw.Tx = params
+	//reqraw.Tx = &json.RawMessage{}
+	//*reqraw.Tx.Data = params
 
 	copy(reqraw.Sig[:], sig)
 
