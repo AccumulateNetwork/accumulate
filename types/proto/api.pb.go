@@ -539,7 +539,7 @@ type Submission struct {
 	AdiChainPath       string         `protobuf:"bytes,1,opt,name=AdiChainPath,proto3" json:"AdiChainPath,omitempty"`                             //provided for reference <= either send this or the chains, chains have advantage of not needing to hash.
 	Identitychain      []byte         `protobuf:"bytes,2,opt,name=identitychain,proto3" json:"identitychain,omitempty"`                           // router will determine network this chain this resides on by looking at lower 64 bits (little Endian)
 	Chainid            []byte         `protobuf:"bytes,3,opt,name=chainid,proto3" json:"chainid,omitempty"`                                       // chainid of the entry somewhere underneath identity chain
-	Type               uint64         `protobuf:"varint,4,opt,name=type,proto3" json:"type,omitempty"`                                            // deprecated.
+	Type               []byte         `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`                                             // chain type - hash of the chain spec e.g. AIM/1/0.1 (for Accumulate IMprovement, Adi specification, version 0.1).
 	Instruction        AccInstruction `protobuf:"varint,5,opt,name=instruction,proto3,enum=apiProto.AccInstruction" json:"instruction,omitempty"` // validator specific,
 	Param1             uint64         `protobuf:"varint,6,opt,name=param1,proto3" json:"param1,omitempty"`                                        // validator specific, deprecated
 	Param2             uint64         `protobuf:"varint,7,opt,name=param2,proto3" json:"param2,omitempty"`                                        // validator specific, deprecated
@@ -603,11 +603,11 @@ func (x *Submission) GetChainid() []byte {
 	return nil
 }
 
-func (x *Submission) GetType() uint64 {
+func (x *Submission) GetType() []byte {
 	if x != nil {
 		return x.Type
 	}
-	return 0
+	return nil
 }
 
 func (x *Submission) GetInstruction() AccInstruction {
@@ -1892,7 +1892,7 @@ var file_api_proto_rawDesc = []byte{
 	0x0c, 0x52, 0x0d, 0x69, 0x64, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x63, 0x68, 0x61, 0x69, 0x6e,
 	0x12, 0x18, 0x0a, 0x07, 0x63, 0x68, 0x61, 0x69, 0x6e, 0x69, 0x64, 0x18, 0x03, 0x20, 0x01, 0x28,
 	0x0c, 0x52, 0x07, 0x63, 0x68, 0x61, 0x69, 0x6e, 0x69, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x79,
-	0x70, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x04, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x3a,
+	0x70, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x3a,
 	0x0a, 0x0b, 0x69, 0x6e, 0x73, 0x74, 0x72, 0x75, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x05, 0x20,
 	0x01, 0x28, 0x0e, 0x32, 0x18, 0x2e, 0x61, 0x70, 0x69, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41,
 	0x63, 0x63, 0x49, 0x6e, 0x73, 0x74, 0x72, 0x75, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x0b, 0x69,
