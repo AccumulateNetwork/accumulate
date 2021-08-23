@@ -119,7 +119,7 @@ message Submission
   string AdiChainPath = 1;  //provided for reference <= either send this or the chains, chains have advantage of not needing to hash.
   bytes  identitychain = 2; // router will determine network this chain this resides on by looking at lower 64 bits (little Endian)
   bytes  chainid = 3; // chainid of the entry somewhere underneath identity chain
-  uint64 type = 4; // deprecated.
+  bytes type = 4; // chain type - hash of the chain spec e.g. AIM/1/0.1 (for Accumulate IMprovement, Adi specification, version 0.1).
   AccInstruction instruction = 5; // validator specific,
   uint64 param1 = 6; // validator specific, deprecated
   uint64 param2 = 7; // validator specific, deprecated
