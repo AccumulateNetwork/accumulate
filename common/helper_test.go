@@ -1,11 +1,9 @@
-package managed
+package common
 
 import (
 	"bytes"
 	"math/rand"
 	"testing"
-
-	"github.com/AccumulateNetwork/SMT/common"
 )
 
 func TestSliceBytes(t *testing.T) {
@@ -14,8 +12,8 @@ func TestSliceBytes(t *testing.T) {
 		for j := 0; j < i; j++ {
 			bytetest = append(bytetest, byte(rand.Int()))
 		}
-		counted := common.SliceBytes(bytetest)
-		slice, left := common.BytesSlice(counted)
+		counted := SliceBytes(bytetest)
+		slice, left := BytesSlice(counted)
 
 		if len(left) > 0 || !bytes.Equal(bytetest, slice) {
 			t.Errorf(" %d %x %x", len(left), bytetest, slice)
@@ -30,13 +28,13 @@ func TestSliceBytes(t *testing.T) {
 			bytetest = append(bytetest, byte(rand.Int()))
 		}
 		tests = append(tests, bytetest)
-		counted := common.SliceBytes(bytetest)
+		counted := SliceBytes(bytetest)
 		inputs = append(inputs, counted...)
 	}
 
 	for i, v := range tests {
 		var slice []byte
-		slice, inputs = common.BytesSlice(inputs)
+		slice, inputs = BytesSlice(inputs)
 
 		if !bytes.Equal(v, slice) {
 			t.Errorf(" %d %x %x", i, v, slice)

@@ -19,13 +19,6 @@ func (h Hash) Bytes() []byte {
 	return h[:]
 }
 
-// Extract
-// Pull out a hash from a byte slice, and return the remaining bytes
-func (h *Hash) Extract(data []byte) []byte {
-	copy((*h)[:], data[:32])
-	return data[32:]
-}
-
 // Copy
 // Make a copy of a Hash (so the caller cannot modify the original version)
 func (h Hash) Copy() Hash {
