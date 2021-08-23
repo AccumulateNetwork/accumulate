@@ -1,7 +1,7 @@
 package managed
 
 import (
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
 
@@ -18,11 +18,11 @@ type ChainManager struct {
 func (m *ChainManager) AddHash(MarkMask int64, hash Hash) {
 	// Keep the index of every element added to the Merkle Tree, but only of the first instance
 	if m.Manager.GetIndex(hash[:]) < 0 { // So only if the hash is not yet added to the Merkle Tree
-		_ = m.Manager.PutBatch("ElementIndex", "", hash[:], storage.Int64Bytes(m.MS.Count)) // Keep its index
+		_ = m.Manager.PutBatch("ElementIndex", "", hash[:], common.Int64Bytes(m.MS.Count)) // Keep its index
 	}
 
 	if (m.MS.Count+1)&MarkMask == 0 { // If we are about to roll into a Mark
-		MSCount := storage.Int64Bytes(m.MS.Count)
+		MSCount := common.Int64Bytes(m.MS.Count)
 		MSState := m.MS.Marshal()
 		_ = m.Manager.PutBatch("States", "", MSCount, MSState)      //   Save Merkle State at n*MarkFreq-1
 		_ = m.Manager.PutBatch("NextElement", "", MSCount, hash[:]) //   Save Hash added at n*MarkFreq-1
@@ -31,7 +31,7 @@ func (m *ChainManager) AddHash(MarkMask int64, hash Hash) {
 		//
 		state := m.MS.Marshal()                                         // Create the marshaled Merkle State
 		m.MS.HashList = m.MS.HashList[:0]                               // Clear the HashList
-		MSCount = storage.Int64Bytes(m.MS.Count)                        // Update MainChain.MSCount
+		MSCount = common.Int64Bytes(m.MS.Count)                         // Update MainChain.MSCount
 		_ = m.Manager.PutBatch("Element", "", []byte("Count"), MSCount) // Put the Element Count in DB
 		_ = m.Manager.PutBatch("States", "", MSCount, state)            // Save Merkle State at n*MarkFreq
 		//                   Saving the count in the database actually gives the index of the

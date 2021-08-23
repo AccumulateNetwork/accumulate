@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 )
 
 // SigSpec
@@ -18,10 +18,10 @@ type SigSpec struct {
 // Marshal
 // Marshals the SigSpec into a byte slice
 func (s *SigSpec) Marshal() (data []byte) {
-	s.Check()                                       // Sort the signatures
-	data = append(data, storage.Int64Bytes(s.m)...) // Write out the sig count
-	data = append(data, storage.Int64Bytes(s.n)...) // Write out the sig count
-	for _, publicKey := range s.PublicKeys {        // For each sig
+	s.Check()                                      // Sort the signatures
+	data = append(data, common.Int64Bytes(s.m)...) // Write out the sig count
+	data = append(data, common.Int64Bytes(s.n)...) // Write out the sig count
+	for _, publicKey := range s.PublicKeys {       // For each sig
 		data = append(data, publicKey[:]...) //           Append its data representation
 	}
 	return data //                                     Return the bytes
@@ -49,9 +49,9 @@ func (s *SigSpec) Check() {
 // Get the values from a data slice to set up a SigSpec
 // Note anything off, this function panics
 func (s *SigSpec) Unmarshal(data []byte) []byte { //
-	s.m, data = storage.BytesInt64(data) //          Number of required signatures
-	s.n, data = storage.BytesInt64(data) //          Number of candidate signatures
-	for i := 0; int64(i) < s.n; i++ {    //          unmarshal n public keys
+	s.m, data = common.BytesInt64(data) //          Number of required signatures
+	s.n, data = common.BytesInt64(data) //          Number of candidate signatures
+	for i := 0; int64(i) < s.n; i++ {   //          unmarshal n public keys
 		var p [32]byte                         //    Copy the data into an array
 		copy(p[:], data[:32])                  //
 		s.PublicKeys = append(s.PublicKeys, p) //    Get a key

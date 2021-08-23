@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
@@ -63,7 +63,7 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	}
 
 	for i := 0; i < 10; i++ {
-		if err := dbManager.PutBatch("a", "", storage.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
+		if err := dbManager.PutBatch("a", "", common.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
 			t.Error(err)
 		}
 	}
@@ -71,7 +71,7 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 
 	// Sort that I can read all thousand entries
 	for i := 0; i < 10; i++ {
-		eKey := dbManager.GetKey("a", "", storage.Int64Bytes(int64(i)))
+		eKey := dbManager.GetKey("a", "", common.Int64Bytes(int64(i)))
 		eValue := []byte(fmt.Sprint(i))
 
 		fmt.Printf("key %x value %s\n", eKey, eValue)

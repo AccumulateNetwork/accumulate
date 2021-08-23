@@ -1,6 +1,8 @@
 package security
 
-import "github.com/AccumulateNetwork/SMT/storage"
+import (
+	"github.com/AccumulateNetwork/SMT/common"
+)
 
 const (
 	SEd25519 = 1
@@ -22,7 +24,7 @@ type Sig interface {
 // and Unmarshal() its state into the new sig.  Returns the sig and the updated
 // data slice
 func Unmarshal(data []byte) (sig Sig, newData []byte) {
-	sigType, _ := storage.BytesInt64(data)
+	sigType, _ := common.BytesInt64(data)
 	switch sigType {
 	case SEd25519:
 		sig = new(SigEd25519)

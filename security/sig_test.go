@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 
 	"golang.org/x/crypto/ed25519"
 )
@@ -42,9 +42,9 @@ func buildSigs(Seed []byte, NumTests int) ( //                     Generate NumT
 		publicKey = append(publicKey, public)     //        Add public key
 		sigStruct = append(sigStruct, aSigStruct) //        Add a signature
 
-		data = append(data, storage.Int64Bytes(int64(SEd25519))...) //    Encode signatures type
-		data = append(data, public...)                              //    Encode public key
-		data = append(data, s...)                                   //    Encode signature
+		data = append(data, common.Int64Bytes(int64(SEd25519))...) //    Encode signatures type
+		data = append(data, public...)                             //    Encode public key
+		data = append(data, s...)                                  //    Encode signature
 
 	}
 	return sigStruct, msgHashes, sig, privateKey, publicKey, data

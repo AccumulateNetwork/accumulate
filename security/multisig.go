@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"sort"
 
-	"golang.org/x/crypto/ed25519"
+	"github.com/AccumulateNetwork/SMT/common"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"golang.org/x/crypto/ed25519"
 )
 
 // MultiSig
@@ -20,10 +20,10 @@ type MultiSig struct {
 // Marshal
 // Marshals the MultiSig into a byte slice
 func (s *MultiSig) Marshal() (data []byte) {
-	s.Check()                                                     // Sort the signatures
-	data = append(data, s.msgHash[:]...)                          // Store the message hash
-	data = append(data, storage.Int64Bytes(int64(len(s.sig)))...) // Write out the sig count
-	for _, aSig := range s.sig {                                  // For each sig
+	s.Check()                                                    // Sort the signatures
+	data = append(data, s.msgHash[:]...)                         // Store the message hash
+	data = append(data, common.Int64Bytes(int64(len(s.sig)))...) // Write out the sig count
+	for _, aSig := range s.sig {                                 // For each sig
 		data = append(data, aSig.Marshal()...) //                    Append its data representation
 	}
 	return data //                                                   Return the bytes
@@ -52,13 +52,13 @@ func (s *MultiSig) Check() {
 // Get the values from a data slice to set up a MultiSig
 // Note anything off, this function panics
 func (s *MultiSig) Unmarshal(data []byte) []byte { //
-	var m int64                        //           Number of provided signatures (m of n for multi-sig)
-	var os Sig                         //           One Signature temp space
-	copy(s.msgHash[:], data[:32])      //           Pull out the message hash
-	data = data[32:]                   //           step to the next field
-	m, data = storage.BytesInt64(data) //           Pull m
-	s.sig = s.sig[:0]                  //           Reset the Sig array
-	for i := 0; int64(i) < m; i++ {    //           for m times
+	var m int64                       //           Number of provided signatures (m of n for multi-sig)
+	var os Sig                        //           One Signature temp space
+	copy(s.msgHash[:], data[:32])     //           Pull out the message hash
+	data = data[32:]                  //           step to the next field
+	m, data = common.BytesInt64(data) //           Pull m
+	s.sig = s.sig[:0]                 //           Reset the Sig array
+	for i := 0; int64(i) < m; i++ {   //           for m times
 		os, data = Unmarshal(data) //               Pull a Sig out of the data
 		s.sig = append(s.sig, os)  //               Append to the Sig List
 	} //

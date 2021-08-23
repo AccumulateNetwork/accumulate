@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/AccumulateNetwork/SMT/managed"
+	"github.com/AccumulateNetwork/SMT/common"
 
 	"golang.org/x/crypto/ed25519"
 )
@@ -52,9 +52,9 @@ func TestSigSpec_Verify(t *testing.T) {
 				sigSpec.m = int64(j)          //                    Change m
 				msg, mSig := Sign(j, sigSpec) //                    Create a signature that meets the requirement
 				//                                                    of the sigSpec
-				data = append(data, managed.SliceBytes(msg[:])...) //  Marshal the message
-				data = append(data, sigSpec.Marshal()...)          //  Marshal the sigSpec
-				data = append(data, mSig.Marshal()...)             //  Marshal the MultiSig
+				data = append(data, common.SliceBytes(msg[:])...) //  Marshal the message
+				data = append(data, sigSpec.Marshal()...)         //  Marshal the sigSpec
+				data = append(data, mSig.Marshal()...)            //  Marshal the MultiSig
 				//
 				SigSpecValid := sigSpec.Verify(mSig) //             Attempt to verify the mSig against the sigSpec
 				mSigValid := mSig.Verify(msg)        //             Attempt to verify the msg against the mSig
@@ -74,10 +74,10 @@ func TestSigSpec_Verify(t *testing.T) {
 
 	d := data                         //                          Save data as a starting point
 	for i := 0; i < totalTests; i++ { //                          Run through the tests
-		SigSpec := new(SigSpec)          //                       UnMarshal
-		mSig := new(MultiSig)            //
-		msg, d_ := managed.BytesSlice(d) //
-		var msgh [32]byte                //
+		SigSpec := new(SigSpec)         //                       UnMarshal
+		mSig := new(MultiSig)           //
+		msg, d_ := common.BytesSlice(d) //
+		var msgh [32]byte               //
 		copy(msgh[:], msg)
 		d = SigSpec.Unmarshal(d_) //
 		d = mSig.Unmarshal(d)     //
@@ -98,10 +98,10 @@ func TestSigSpec_Verify(t *testing.T) {
 
 	d = data                          //                          Now add unused signatures
 	for i := 0; i < totalTests; i++ { //
-		SigSpec := new(SigSpec)          //
-		mSig := new(MultiSig)            //
-		msg, d_ := managed.BytesSlice(d) //
-		var msgh [32]byte                //
+		SigSpec := new(SigSpec)         //
+		mSig := new(MultiSig)           //
+		msg, d_ := common.BytesSlice(d) //
+		var msgh [32]byte               //
 		copy(msgh[:], msg)
 		d = SigSpec.Unmarshal(d_) //
 		d = mSig.Unmarshal(d)     //
@@ -129,10 +129,10 @@ func TestSigSpec_Verify(t *testing.T) {
 
 	d = data                          //                          Remove some valid signatures. Replace 0 or more
 	for i := 0; i < totalTests; i++ { //                          with bad signatures.
-		SigSpec := new(SigSpec)          //
-		mSig := new(MultiSig)            //
-		msg, d_ := managed.BytesSlice(d) //
-		var msgh [32]byte                //
+		SigSpec := new(SigSpec)         //
+		mSig := new(MultiSig)           //
+		msg, d_ := common.BytesSlice(d) //
+		var msgh [32]byte               //
 		copy(msgh[:], msg)
 		d = SigSpec.Unmarshal(d_) //
 		d = mSig.Unmarshal(d)     //

@@ -8,7 +8,7 @@
 //
 // This allows us to put the raw directory block at DBlockBucket+L_raw, and meta data
 // about the directory block at DBlockBucket+MetaLabel
-package storage
+package common
 
 import (
 	"encoding/binary"
@@ -150,4 +150,24 @@ func FormatTimeLapseSeconds(total int64) string {
 	} else {
 		return fmt.Sprintf("          %2d s      ", seconds)
 	}
+}
+
+// SliceBytes
+// Append a Uvarint length infront of a slice, effectively converting a slice to a counted string
+func SliceBytes(slice []byte) []byte {
+	var varInt [16]byte                                              // Buffer to hold a Uvarint
+	countOfBytes := binary.PutUvarint(varInt[:], uint64(len(slice))) // calculate the Uvarint of the len of the slice
+	counted := append(varInt[:countOfBytes], slice...)               // Now put the Uvarint right in front of the slice
+	return counted                                                   // Return the resulting counted string
+}
+
+// BytesSlice
+// Convert a counted byte array (which is a count followed by the byte values) to a slice.  We return what is
+// left of the data once the counted byte array is removed
+func BytesSlice(data []byte) (slice []byte, data2 []byte) {
+	countOfBytes, count := binary.Uvarint(data) // Get the number of bytes in the slice, and count of bytes used for the count
+	data = data[count:]
+	slice = append(slice, data[:countOfBytes]...)
+	data = data[countOfBytes:]
+	return slice, data
 }

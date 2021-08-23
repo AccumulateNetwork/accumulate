@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/AccumulateNetwork/SMT/common"
+
 	"github.com/AccumulateNetwork/SMT/storage"
 
 	"github.com/AccumulateNetwork/SMT/storage/database"
@@ -148,7 +150,7 @@ func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
 	m.BlkIdxChain.MS.AddToMerkleTree(biHash)            //               Add the bi hash to the BlkIdxChain
 	blkIdx := m.BlkIdxChain.MS.Count - 1                //               Use a variable to make tidy
 	_ = m.BlkIdxChain.Manager.Put(                      //
-		"BlockIndex", "", storage.Int64Bytes(blkIdx), bbi) //            blkIdx -> bbi struct
+		"BlockIndex", "", common.Int64Bytes(blkIdx), bbi) //            blkIdx -> bbi struct
 	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", []byte{}, bbi) //    Mark as highest block
 }
 
@@ -162,8 +164,8 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	if element == 0 {
 		return new(MerkleState)
 	}
-	data := m.MainChain.Manager.Get("States", "", storage.Int64Bytes(element)) // Get the data at this height
-	if data == nil {                                                           //         If nil, there is no state saved
+	data := m.MainChain.Manager.Get("States", "", common.Int64Bytes(element)) // Get the data at this height
+	if data == nil {                                                          //         If nil, there is no state saved
 		return nil //                                                             return nil, as no state exists
 	}
 	ms := new(MerkleState) //                                                     Get a fresh new MerkleState
@@ -174,7 +176,7 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 // GetNext
 // Get the next hash to be added to a state at this height
 func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
-	data := m.MainChain.Manager.Get("NextElement", "", storage.Int64Bytes(element))
+	data := m.MainChain.Manager.Get("NextElement", "", common.Int64Bytes(element))
 	if data == nil || len(data) != storage.KeyLength {
 		return nil
 	}
