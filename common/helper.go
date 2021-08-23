@@ -13,85 +13,8 @@ package common
 import (
 	"encoding/binary"
 	"fmt"
-	"os"
-	"os/user"
 	"time"
 )
-
-// GetHomeDir
-// Used to find the Home Directory from which the configuration directory for the ValAcc application to
-// use for its database.  This is not a terribly refined way of configuring the ValAcc and may be
-// refined in the future.
-func GetHomeDir() string {
-	anchorPlatformHome := os.Getenv("ANCHOR_PLATFORM")
-	if anchorPlatformHome != "" {
-		return anchorPlatformHome
-	}
-
-	// Get the OS specific home directory via the Go standard lib.
-	var homeDir string
-	usr, err := user.Current()
-	if err == nil {
-		homeDir = usr.HomeDir
-	}
-
-	// Fall back to standard HOME environment variable that works
-	// for most POSIX OSes if the directory from the Go standard
-	// lib failed.
-	if err != nil || homeDir == "" {
-		homeDir = os.Getenv("HOME")
-	}
-	return homeDir
-}
-
-// s2a
-// Slice to 32 byte Array
-func s2a(s []byte) (a [32]byte) {
-	copy(a[:], s)
-	return a
-}
-
-// BoolBytes
-// Marshal a Bool
-func BoolBytes(b bool) []byte {
-	if b {
-		return append([]byte{}, 1)
-	}
-	return append([]byte{}, 0)
-}
-
-// BytesBool
-// Unmarshal a Uint8
-func BytesBool(data []byte) (f bool, newData []byte) {
-	if data[0] != 0 {
-		f = true
-	}
-	return f, data[1:]
-}
-
-// Uint16Bytes
-// Marshal a int32 (big endian)
-func Uint16Bytes(i uint16) []byte {
-	return append([]byte{}, byte(i>>8), byte(i))
-}
-
-// BytesUint16
-// Unmarshal a uint32 (big endian)
-func BytesUint16(data []byte) (uint16, []byte) {
-	return uint16(data[0])<<8 + uint16(data[1]), data[2:]
-}
-
-// Uint32Bytes
-// Marshal a int32 (big endian)
-func Uint32Bytes(i uint32) []byte {
-	return append([]byte{}, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-}
-
-// BytesUint32
-// Unmarshal a uint32 (big endian)
-func BytesUint32(data []byte) (uint32, []byte) {
-	return uint32(data[0])<<24 + uint32(data[1])<<16 + uint32(data[2])<<8 + uint32(data[3]), data[4:]
-}
 
 // Uint64Bytes
 // Marshal a uint64 (big endian)
@@ -126,7 +49,7 @@ func BytesInt64(data []byte) (int64, []byte) {
 	return value, data[count:]
 }
 
-// DurationFormat
+// FormatTimeLapse
 // Simple formatting for duration time.  Prints all results within a fixed field of text.
 func FormatTimeLapse(d time.Duration) string {
 	return FormatTimeLapseSeconds(int64(d.Seconds()))
