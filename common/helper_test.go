@@ -2,8 +2,10 @@ package common
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
 	"testing"
+	"time"
 )
 
 func TestSliceBytes(t *testing.T) {
@@ -43,5 +45,13 @@ func TestSliceBytes(t *testing.T) {
 
 	if len(inputs) != 0 {
 		t.Error("should consume all data")
+	}
+}
+
+func TestFormatTimeLapse(t *testing.T) {
+	var d = time.Duration(time.Hour*3 + time.Minute*4 + time.Second*5)
+	str := FormatTimeLapse(d)
+	if fmt.Sprint(str) != "    03:04:05 h:m:s  " {
+		t.Error("failed to print time as desired")
 	}
 }
