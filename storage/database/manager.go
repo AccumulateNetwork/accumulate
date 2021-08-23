@@ -6,6 +6,8 @@ import (
 	"math"
 	"sync"
 
+	"github.com/AccumulateNetwork/SMT/common"
+
 	"github.com/AccumulateNetwork/SMT/storage"
 	"github.com/AccumulateNetwork/SMT/storage/badger"
 	"github.com/AccumulateNetwork/SMT/storage/memory"
@@ -52,9 +54,9 @@ func (m Manager) SetSalt(salt []byte) {
 		}
 		// Note that we don't batch updating of salts.  the batch processing does not need
 		// to be flushed however.
-		_ = m.Put("Salt", "Index2Salt", storage.Int64Bytes(count), salt) // Index to Salt
-		_ = m.PutInt64("Salt", "Salt2Index", salt, count)                // Salt to Index
-		_ = m.PutInt64("Salt", "", []byte{}, count+1)                    // increment the count in the database.
+		_ = m.Put("Salt", "Index2Salt", common.Int64Bytes(count), salt) // Index to Salt
+		_ = m.PutInt64("Salt", "Salt2Index", salt, count)               // Salt to Index
+		_ = m.PutInt64("Salt", "", []byte{}, count+1)                   // increment the count in the database.
 		SaltMutex.Unlock()
 	}
 	m.Salt = append(m.Salt[:0], salt...) // copy the given salt over the current salt
@@ -122,7 +124,7 @@ func (m *Manager) GetCount() int64 {
 	if data == nil {                                           // If not, nothing is there
 		return 0 //                                                 return zero
 	}
-	v, _ := storage.BytesInt64(data) //                           Return the recorded count
+	v, _ := common.BytesInt64(data) //                           Return the recorded count
 	return v
 }
 
@@ -213,7 +215,7 @@ func (m *Manager) PutString(Bucket, Label string, key []byte, value string) erro
 // PutInt64
 // Put a int64 value into the underlying database
 func (m *Manager) PutInt64(Bucket, Label string, key []byte, value int64) error {
-	return m.Put(Bucket, Label, key, storage.Int64Bytes(value)) // Do the conversion of int64 to bytes
+	return m.Put(Bucket, Label, key, common.Int64Bytes(value)) // Do the conversion of int64 to bytes
 }
 
 // Get
@@ -239,7 +241,7 @@ func (m *Manager) GetInt64(Bucket, Label string, key []byte) (value int64) {
 	if bv == nil {
 		return math.MinInt64
 	}
-	v, _ := storage.BytesInt64(bv) // Do the bytes to int64 conversion
+	v, _ := common.BytesInt64(bv) // Do the bytes to int64 conversion
 	return v
 }
 
@@ -250,7 +252,7 @@ func (m *Manager) GetIndex(element []byte) int64 {
 	if data == nil {                           // in the merkle tree.  Note that nil means it does not yet exist
 		return -1 //                              in which case, return an invalid index (-1)
 	}
-	v, _ := storage.BytesInt64(data) //           Convert the index to an int64
+	v, _ := common.BytesInt64(data) //           Convert the index to an int64
 	return v
 }
 

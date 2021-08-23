@@ -3,7 +3,8 @@ package security
 import (
 	"bytes"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
+
 	"golang.org/x/crypto/ed25519"
 )
 
@@ -40,9 +41,9 @@ func (s *SigEd25519) PublicKey() []byte {
 // Marshal
 // Marshals the Signature
 func (s *SigEd25519) Marshal() (data []byte) {
-	data = storage.Int64Bytes(int64(SEd25519)) // Note that this function is a varint, so overhead is 1 byte generally
-	data = append(data, s.publicKey...)        // Add the public Key
-	data = append(data, s.sig...)              // Add the signature.  Must be 64 bytes
+	data = common.Int64Bytes(int64(SEd25519)) // Note that this function is a varint, so overhead is 1 byte generally
+	data = append(data, s.publicKey...)       // Add the public Key
+	data = append(data, s.sig...)             // Add the signature.  Must be 64 bytes
 	return data
 }
 
@@ -59,8 +60,8 @@ func (s *SigEd25519) Unmarshal(data []byte) []byte {
 	if len(data) < 64 {                                                        // Sort that we have data for the type
 		panic(emsg1) //                                                              and complain if we don't
 	}
-	sigType, data = storage.BytesInt64(data) //                                   Get the type from the data stream
-	if int(sigType) != SEd25519 {            //                                   It needs to be us.
+	sigType, data = common.BytesInt64(data) //                                   Get the type from the data stream
+	if int(sigType) != SEd25519 {           //                                   It needs to be us.
 		panic(emsg2) //                                                           Panic if it isn't right
 	}
 	if len(data) < 32+64 { //                                                     Now that varInt is gone, check that

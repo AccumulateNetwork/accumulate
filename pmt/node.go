@@ -1,7 +1,7 @@
 package pmt
 
 import (
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 )
 
 // Note that the tree considered here grows up by convention here, where
@@ -105,7 +105,7 @@ func (n *Node) GetHash() []byte {
 //
 // See (p *BPT)MarshalByteBlock
 func (n *Node) Marshal() (data []byte) {
-	data = append(data, storage.Uint64Bytes(n.ID)...)
+	data = append(data, common.Uint64Bytes(n.ID)...)
 	data = append(data, n.BBKey[:]...)
 	data = append(data, byte(n.Height))
 	data = append(data, n.Hash[:]...)
@@ -115,7 +115,7 @@ func (n *Node) Marshal() (data []byte) {
 // UnMarshal
 // Deserialize the fields of the Node.  See (p *BPT)UnMarshalByteBlock
 func (n *Node) UnMarshal(data []byte) []byte {
-	n.ID, data = storage.BytesUint64(data)
+	n.ID, data = common.BytesUint64(data)
 	keySlice, data := data[:32], data[32:]
 	copy(n.BBKey[:], keySlice)
 	n.Height, data = int(data[0]), data[1:]

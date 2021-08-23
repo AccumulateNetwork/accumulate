@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 )
 
 // BPT
@@ -53,7 +53,7 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
 	data = append(data, byte(b.MaxHeight))
-	data = append(data, storage.Uint64Bytes(b.MaxNodeID)...)
+	data = append(data, common.Uint64Bytes(b.MaxNodeID)...)
 	data = append(data, byte(b.power>>8), byte(b.power))
 	data = append(data, byte(b.mask>>8), byte(b.mask))
 	data = append(data, b.Root.Marshal()...)
@@ -66,7 +66,7 @@ func (b *BPT) Marshal() (data []byte) {
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
 	b.DirtyMap = make(map[uint64]*Node)
 	b.MaxHeight, data = int(data[0]), data[1:]
-	b.MaxNodeID, data = storage.BytesUint64(data)
+	b.MaxNodeID, data = common.BytesUint64(data)
 	b.power, data = int(data[0])<<8+int(data[1]), data[2:]
 	b.mask, data = int(data[0])<<8+int(data[1]), data[2:]
 	data = b.Root.UnMarshal(data)
