@@ -35,60 +35,59 @@ var (
 
 func init() {
 
-	usr, err := user.Current()
+	usr,err := user.Current()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal( err )
 		os.Exit(1)
 	}
 
-	initdir := path.Join(usr.HomeDir, "/.accumulate")
+	initdir := path.Join(usr.HomeDir , "/.accumulate" )
 	nodeName := "Acadia"
 
 	version := flag.Bool("v", false, "prints the current version")
-	flag.StringVar(&initdir, "workingdir", usr.HomeDir+"/.accumulate", "Path to data directory")
-	flag.StringVar(&nodeName, "n", "Acadia", "Node to build configs for")
+	flag.StringVar(&initdir, "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
+        flag.StringVar(&nodeName, "n", "Acadia", "Node to build configs for")
 	node := flag.Int("i", -1, "Which Node are we?  Required (0-n)")
+
+ 	wantInit := flag.Bool("init", false, "Initialize")
+ 	wantDBVC := flag.Bool("dbvc", false, "DBVC Initialize")
+
 	flag.Parse()
 
 	if *version {
-		fmt.Printf("Accumulate BVC %s\n", BuildTag)
+		fmt.Printf("Accumulate BVC %s\n",BuildTag)
 		os.Exit(0)
 	}
 
-	if *node == -1 {
-		fmt.Printf("Must specify which node we are running, 0-n")
-		os.Exit(0)
-	}
-	whichNode = *node
-
-	for i := range networks.Networks {
-		if networks.Networks[i].Name == nodeName {
-			fmt.Printf("Building configs for %s\n", nodeName)
-			break
-		}
-	}
 	WorkingDir = initdir
-}
-
-func main() {
-
 	fmt.Printf("Working dir: %v\n", WorkingDir)
 
-	n := len(os.Args)
-	for i := 0; i < n; i++ {
-		switch os.Args[i] {
-		case "init":
-			tendermint.Initialize("accumulate.", i, WorkingDir)
-			os.Exit(0)
-		case "dbvc":
-			os.Exit(0)
-		}
+	if *wantInit {
+	   for j := range router.Networks {
+	       if router.Networks[j].Name == nodeName {
+	          fmt.Printf("Building configs for %s\n",nodeName)
+		  tendermint.Initialize("accumulate.", j, WorkingDir)
+		  break;
+	    	}
+           }
+	   os.Exit(0)
 	}
+	if *wantDBVC {
+	   os.Exit(0)
+	}
+        if *node == -1 {
+	   fmt.Printf("Must specify which node we are running, 0-n");
+	   os.Exit(0); 
+	}
+	whichNode = *node
+}
 
+
+func main() {
 	nodeDir := fmt.Sprintf("Node%d", whichNode)
 
 	WorkingDir = path.Join(WorkingDir, nodeDir)
-	ConfigFile = path.Join(WorkingDir, "/config/config.toml")
+	ConfigFile = path.Join(WorkingDir,"/config/config.toml")
 
 	fmt.Printf("%s\n", ConfigFile)
 
@@ -99,19 +98,15 @@ func main() {
 	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
 
 	//Next create a BVC
-	accvm, err := accumulate.CreateAccumulateBVC(ConfigFile, WorkingDir)
-	if err != nil {
-		panic(err)
-	}
+	accvm := accnode.CreateAccumulateBVC(ConfigFile, WorkingDir)
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
 	accvmapi, _ := accvm.GetAPIClient()
-	_ = urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
+	urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
-	//the query object connects to the BVC, will be replaced with network client router
-	query := router.NewQuery(accvm)
+	//temporary server for each vm.  will be replaced by url router.
+	//go router.Jsonrpcserver2(accvmapi)
 
-	go router.StartAPI(34000, query)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
