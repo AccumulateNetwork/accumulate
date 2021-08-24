@@ -1,11 +1,9 @@
 package validator
 
 import (
-	"crypto/sha256"
 	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	//"encoding/binary"
-	"github.com/AccumulateNetwork/SMT/managed"
 
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
@@ -31,14 +29,9 @@ func NewStateEntry(idstate *state.Object, chainstate *state.Object, db *smtdb.Ma
 }
 
 type ResponseValidateTX struct {
-	StateData   []byte          //acctypes.StateObject
-	EventData   []byte          //this should be events that need to get published
-	Submissions []pb.Submission //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
-}
-
-func LeaderAtHeight(addr uint64, height uint64) *[32]byte {
-	//lookup the public key for the addr at given height
-	return nil
+	StateData   []byte           //acctypes.StateObject
+	EventData   []byte           //this should be events that need to get published
+	Submissions []*pb.Submission //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
 }
 
 type ValidatorInterface interface {
@@ -56,33 +49,24 @@ type ValidatorInterface interface {
 }
 
 type ValidatorInfo struct {
-	chainadi  string       //
-	chainid   managed.Hash //derrived from chain adi
-	namespace string
-	typeid    uint64
+	chainSpec   string //
+	chainTypeId types.Bytes32
+	typeid      uint64
 }
 
-func (h *ValidatorInfo) SetInfo(adi string, namespace string, instructiontype pb.AccInstruction) error {
-	chainid := sha256.Sum256([]byte(adi))
-	h.chainid.Extract(chainid[:])
-	h.chainadi = adi
-	h.namespace = namespace
-	//	h.address = binary.BigEndian.Uint64(h.chainid[24:])
-	h.typeid = uint64(instructiontype) //GetTypeIdFromName(h.namespace)
-	h.namespace = namespace
+func (h *ValidatorInfo) SetInfo(chainTypeId types.Bytes, chainSpec string, instructiontype pb.AccInstruction) error {
+	copy(h.chainTypeId[:], chainTypeId)
+	h.chainSpec = chainSpec
+	h.typeid = uint64(instructiontype)
 	return nil
 }
 
-func (h *ValidatorInfo) GetValidatorChainId() []byte {
-	return h.chainid[:]
+func (h *ValidatorInfo) GetValidatorChainTypeId() types.Bytes {
+	return h.chainTypeId[:]
 }
 
-func (h *ValidatorInfo) GetNamespace() *string {
-	return &h.namespace
-}
-
-func (h *ValidatorInfo) GetChainAdi() *string {
-	return &h.chainadi
+func (h *ValidatorInfo) GetChainSpec() *string {
+	return &h.chainSpec
 }
 
 func (h *ValidatorInfo) GetTypeId() uint64 {

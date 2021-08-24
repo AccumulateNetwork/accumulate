@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"log"
 	"net/http"
@@ -81,7 +81,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &types.APIRequestRaw{}
+	req := &acmeapi.APIRequestRaw{}
 	data := &ADI{}
 
 	// unmarshal req
@@ -108,7 +108,7 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 	submission, err := proto.Builder().
 		AdiUrl(*req.Tx.Signer.URL.AsString()).
 		Instruction(proto.AccInstruction_Identity_Creation).
-		Type(types.ChainTypeAdi[:]). //The type is only needed for chain create messages
+		Type(acmeapi.ChainTypeAdi[:]). //The type is only needed for chain create messages
 		Data(*req.Tx.Data).
 		PubKey(req.Tx.Signer.PublicKey.Bytes()).
 		Signature(req.Sig.Bytes()).
@@ -156,7 +156,7 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 func (api *API) createToken(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &types.APIRequestRaw{}
+	req := &acmeapi.APIRequestRaw{}
 	data := &Token{}
 
 	// unmarshal req
@@ -183,7 +183,7 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 		AdiUrl(*req.Tx.Signer.URL.AsString()).
 		ChainUrl(*data.URL.AsString()). //this chain shouldn't exist yet
 		Instruction(proto.AccInstruction_Token_Issue).
-		Type(types.ChainTypeToken[:]). //Needed since this is a chain create messages
+		Type(acmeapi.ChainTypeToken[:]). //Needed since this is a chain create messages
 		Data(*req.Tx.Data).
 		PubKey(req.Tx.Signer.PublicKey.Bytes()).
 		Signature(req.Sig.Bytes()).
@@ -233,7 +233,7 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &types.APIRequestRaw{}
+	req := &acmeapi.APIRequestRaw{}
 	data := &TokenAccount{}
 
 	// unmarshal req
@@ -260,7 +260,7 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 		AdiUrl(*req.Tx.Signer.URL.AsString()).
 		ChainUrl(*data.URL.AsString()). // This chain shouldn't exist yet.
 		Instruction(proto.AccInstruction_Token_URL_Creation).
-		Type(types.ChainTypeToken[:]). // The type is only needed for chain create messages
+		Type(acmeapi.ChainTypeToken[:]). // The type is only needed for chain create messages
 		Data(*req.Tx.Data).
 		PubKey(req.Tx.Signer.PublicKey.Bytes()).
 		Signature(req.Sig.Bytes()).
@@ -307,7 +307,7 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &types.APIRequestRaw{}
+	req := &acmeapi.APIRequestRaw{}
 	data := &TokenTx{}
 
 	// unmarshal req
@@ -334,7 +334,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 		AdiUrl(*req.Tx.Signer.URL.AsString()).
 		ChainUrl(*data.From.AsString()). // This chain shouldn't exist yet.
 		Instruction(proto.AccInstruction_Token_Transaction).
-		Type(types.ChainTypeToken[:]). // The type is only needed for chain create messages
+		Type(acmeapi.ChainTypeToken[:]). // The type is only needed for chain create messages
 		Data(*req.Tx.Data).
 		PubKey(req.Tx.Signer.PublicKey.Bytes()).
 		Signature(req.Sig.Bytes()).

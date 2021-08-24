@@ -11,8 +11,8 @@ func TestStateObject(t *testing.T) {
 
 	th := sha256.Sum256([]byte("headerTypeTest"))
 
-	so.Header.Type = th
-	so.Header.AdiChainPath = "object/type/path"
+	so.Chain.Type = th
+	so.Chain.ChainUrl = "object/type/path"
 
 	hash := sha256.Sum256([]byte("stateHashTest"))
 	so.StateHash = hash[:]
