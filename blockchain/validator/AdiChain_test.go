@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -28,7 +29,7 @@ func createIdentityCreateSubmission(t *testing.T, identitychainpath string) (*St
 
 	var keyhash types.Bytes32
 	keyhash = types.Bytes32(sha256.Sum256(kp.PubKey().Bytes()))
-	ic := types.NewIdentityCreate("ACME", &keyhash)
+	ic := api.NewADI("ACME", &keyhash)
 	if ic == nil {
 		t.Fatalf("Identity Create is nil")
 	}
@@ -46,7 +47,7 @@ func createIdentityCreateSubmission(t *testing.T, identitychainpath string) (*St
 }
 
 func TestIdentityCreateValidator_Check(t *testing.T) {
-	tiv := NewCreateIdentityValidator()
+	tiv := NewAdiChain()
 	identitychainpath := "RoadRunner/ACME"
 	currentstate, sub, _ := createIdentityCreateSubmission(t, identitychainpath)
 
@@ -59,7 +60,7 @@ func TestIdentityCreateValidator_Check(t *testing.T) {
 
 func TestIdentityCreateValidator_Validate(t *testing.T) {
 	//	kp := types.CreateKeyPair()
-	tiv := NewCreateIdentityValidator()
+	tiv := NewAdiChain()
 	identitychainpath := "RoadRunner/ACME"
 	adi, chainpath, err := types.ParseIdentityChainPath(identitychainpath)
 	adihash := types.GetIdentityChainFromIdentity(adi)
@@ -87,9 +88,9 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 		t.Fatalf("expecting only 1 synthetic transaction request")
 	}
 
-	sub = &resp.Submissions[0]
+	sub = resp.Submissions[0]
 
-	isc := synthetic.IdentityStateCreate{}
+	isc := synthetic.AdiStateCreate{}
 	err = json.Unmarshal(sub.Data, isc)
 	if err != nil {
 		t.Fatal(err)
@@ -108,11 +109,11 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 	}
 
 	keyhash := sha256.Sum256(kp.PubKey().Bytes())
-	if bytes.Compare(isc.Keydata, keyhash[:]) == 0 {
+	if bytes.Compare(isc.KeyData, keyhash[:]) == 0 {
 		t.Fatalf("Invalid public key data stored")
 	}
 
-	if isc.Keytype != state.KeyType_sha256 {
+	if isc.KeyType != state.KeyTypeSha256 {
 		t.Fatalf("Expected key type to be KeyType_sha256")
 	}
 

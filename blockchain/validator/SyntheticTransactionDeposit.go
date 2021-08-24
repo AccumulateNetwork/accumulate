@@ -2,6 +2,8 @@ package validator
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -16,12 +18,7 @@ type SyntheticTransactionDepositValidator struct {
 
 func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValidator {
 	v := SyntheticTransactionDepositValidator{}
-	//need the chainid, then hash to get first 8 bytes to make the chainid.
-	//by definition a chainid of a factoid block is
-	//000000000000000000000000000000000000000000000000000000000000000f
-	//the id will be 0x0000000f
-	chainid := "0000000000000000000000000000000000000000000000000000000000000005"
-	v.SetInfo(chainid, "synthetic-transaction-deposit", pb.AccInstruction_Synthetic_Token_Deposit)
+	v.SetInfo(api.ChainTypeTokenAccount[:], "synthetic-transaction-deposit", pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -43,7 +40,7 @@ func (v *SyntheticTransactionDepositValidator) BeginBlock(height int64, time *ti
 	return nil
 }
 
-func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccountState, *synthetic.TokenTransactionDeposit, error) {
+func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccount, *synthetic.TokenTransactionDeposit, error) {
 
 	ttd := synthetic.NewTokenTransactionDeposit()
 	err := ttd.UnmarshalBinary(data)
@@ -58,13 +55,13 @@ func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEn
 		return nil, nil, nil, err
 	}
 
-	tas := state.TokenAccountState{}
+	tas := state.TokenAccount{}
 	err = tas.UnmarshalBinary(currentstate.ChainState.Entry)
 	if err != nil {
 		return &ids, nil, ttd, err
 	}
 
-	if ttd.TokenUrl != tas.AdiChainPath {
+	if ttd.TokenUrl != types.String(tas.GetChainUrl()) {
 		return &ids, &tas, ttd, fmt.Errorf("Invalid token Issuer identity")
 	}
 
@@ -77,8 +74,9 @@ func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEn
 
 func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Submission) (*ResponseValidateTX, error) {
 	retsub := ResponseValidateTX{}
-	retsub.Submissions = make([]pb.Submission, 1)
-	rs := &retsub.Submissions[0]
+	retsub.Submissions = make([]*pb.Submission, 1)
+	retsub.Submissions[0] = &pb.Submission{}
+	rs := retsub.Submissions[0]
 	rs.Identitychain = ttd.SourceIdentity[:]
 	rs.Chainid = ttd.SourceChainId[:]
 	rs.Instruction = pb.AccInstruction_Synthetic_Token_Deposit

@@ -24,8 +24,8 @@ func TestIdentityState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if ids.GetAdiChainPath() != "TestIdentity" {
-		t.Fatalf("Invalid ADI stored in identity state, expected %s, received %s", ids.GetAdiChainPath(), testidentity)
+	if ids.GetChainUrl() != "TestIdentity" {
+		t.Fatalf("Invalid ADI stored in identity state, expected %s, received %s", ids.GetChainUrl(), testidentity)
 	}
 
 	ktype, keydata := ids.GetKeyData()
@@ -57,7 +57,7 @@ func TestIdentityState(t *testing.T) {
 		t.Fatalf("Error unmarshalling binary %v", err)
 	}
 
-	if id2.GetAdiChainPath() != ids.GetAdiChainPath() {
+	if id2.GetChainUrl() != ids.GetChainUrl() {
 		t.Fatalf("Adi's do not match after unmarshalling")
 	}
 
