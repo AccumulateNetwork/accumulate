@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	//"crypto/sha256"
@@ -111,9 +110,4 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 	if bytes.Compare(isc.Keydata, keyhash[:]) == 0 {
 		t.Fatalf("Invalid public key data stored")
 	}
-
-	if isc.Keytype != state.KeyType_sha256 {
-		t.Fatalf("Expected key type to be KeyType_sha256")
-	}
-
 }

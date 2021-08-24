@@ -276,10 +276,4 @@ func createTransaction(t *testing.T) *proto.Submission {
 //
 //}
 
-func hexToBytes(hexStr string) []byte {
-	raw, err := hex.DecodeString(hexStr)
-	if err != nil {
-		panic(err)
-	}
-	return raw
-}
+
