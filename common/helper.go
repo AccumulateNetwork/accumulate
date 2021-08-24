@@ -12,6 +12,7 @@ package common
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"time"
 )
@@ -93,4 +94,12 @@ func BytesSlice(data []byte) (slice []byte, data2 []byte) {
 	slice = append(slice, data[:countOfBytes]...)
 	data = data[countOfBytes:]
 	return slice, data
+}
+
+func hexToBytes(hexStr string) []byte {
+	raw, err := hex.DecodeString(hexStr)
+	if err != nil {
+		panic(err)
+	}
+	return raw
 }
