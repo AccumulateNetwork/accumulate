@@ -64,7 +64,7 @@ type ValidatorInfo struct {
 
 func (h *ValidatorInfo) SetInfo(adi string, namespace string, instructiontype pb.AccInstruction) error {
 	chainid := sha256.Sum256([]byte(adi))
-	h.chainid.Extract(chainid[:])
+	copy(h.chainid[:],chainid[:])
 	h.chainadi = adi
 	h.namespace = namespace
 	//	h.address = binary.BigEndian.Uint64(h.chainid[24:])

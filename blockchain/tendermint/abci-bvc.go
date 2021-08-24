@@ -486,7 +486,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 
 	//todo: look up validator rules for this chain to make sure we can do what we want here.
 
-	key.Extract(sub.GetChainid())
+	copy(key[:],sub.GetChainid())
 
 	//resolve the validator type to use based on the type of the transaction
 	if v, ok := app.chainval[uint64(sub.GetInstruction())]; ok {
@@ -515,7 +515,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*state.Object, error) {
 	var ret *state.Object
 	var key managed.Hash
-	key.Extract(chainid)
+	copy(key[:],chainid)
 	if mms := app.mms[key]; mms != nil {
 		ret = &mms.currentstateobject
 	} else {

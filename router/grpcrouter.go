@@ -4,8 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"github.com/AccumulateNetwork/SMT/common"
 	"github.com/AccumulateNetwork/SMT/managed"
-	"github.com/AccumulateNetwork/SMT/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	//vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
@@ -186,8 +186,8 @@ func SendTransaction(senderurl string, receiverurl string) error {
 	sh := sha256.Sum256([]byte(senderidentity))
 	rh := sha256.Sum256([]byte(receiveridentity))
 
-	sendaddr, _ := storage.BytesUint64(sh[:])
-	recvaddr, _ := storage.BytesUint64(rh[:])
+	sendaddr, _ := common.BytesUint64(sh[:])
+	recvaddr, _ := common.BytesUint64(rh[:])
 
 	sendtokentype := su.Path
 

@@ -14,6 +14,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+// RandPort
+// Is this used?  It isn't referenced...
 func RandPort() int {
 	port, err := tmnet.GetFreePort()
 	if err != nil {
@@ -37,6 +39,9 @@ func makeClientAndServer(t *testing.T, routeraddress string) (proto.ApiServiceCl
 	client := proto.NewApiServiceClient(conn)
 	return client, r
 }
+
+// boostrapBVC
+// Should be "bootStrapBVC ? todo: Fix typo
 func boostrapBVC(t *testing.T, configfile string, workingdir string, baseport int) error {
 
 	ABCIAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
@@ -70,6 +75,8 @@ func boostrapBVC(t *testing.T, configfile string, workingdir string, baseport in
 	return nil
 }
 
+// makeBVC
+// Create a BVC
 func makeBVC(t *testing.T, configfile string, workingdir string) *tendermint.AccumulatorVMApplication {
 	app, err := accnode.CreateAccumulateBVC(configfile, workingdir)
 	if err != nil {
@@ -78,6 +85,8 @@ func makeBVC(t *testing.T, configfile string, workingdir string) *tendermint.Acc
 	return app
 }
 
+// makeBVCandRouter
+// ???
 func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceClient, *RouterConfig, *local.Local, *rpchttp.HTTP) {
 
 	//Select a base port to open.  Ports 43210, 43211, 43212, 43213,43214 need to be open
