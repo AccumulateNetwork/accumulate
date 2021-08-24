@@ -6,10 +6,10 @@ import (
 )
 
 func TestChainValidationEngine(t *testing.T) {
-		done := make(chan bool, 1)
-		go ChainValidationEngine(done)
+	done := make(chan bool, 1)
+	go ChainValidationEngine(done)
 
-		<-done
+	<-done
 
-		fmt.Printf("All done...")
+	fmt.Printf("All done...")
 }

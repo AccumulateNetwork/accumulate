@@ -1,30 +1,25 @@
 package validator
 
 import (
+	"github.com/AccumulateNetwork/accumulated/types/api"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
 
-type BVCLeader struct{
+type BVCLeader struct {
 	ValidatorContext
 
 	mdroot [32]byte
-
 }
 
 func NewBVCLeader() *BVCLeader {
 	v := BVCLeader{}
-	//need the chainid, then hash to get first 8 bytes to make the chainid.
-	//by definition a chainid of a factoid block is
-	//000000000000000000000000000000000000000000000000000000000000000f
-	//the id will be 0x0000000f
-	//chainid := "0000000000000000000000000000000000000000000000000000000000000001"
-	v.SetInfo("dbvc","bvc",99)
+	v.SetInfo(api.ChainTypeDBVC[:], api.ChainSpecDBVC, pb.AccInstruction_State_Query)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
-
 
 func (v *BVCLeader) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
@@ -42,12 +37,12 @@ func (v *BVCLeader) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *BVCLeader) Validate(currentstate *StateEntry, identitychain []byte,  chainid []byte, p1 uint64, p2 uint64, data []byte) (*ResponseValidateTX, error) {
+func (v *BVCLeader) Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 	//return persistent entry or error
 	return nil, nil
 }
 
-func (v *BVCLeader) EndBlock(mdroot []byte) error  {
+func (v *BVCLeader) EndBlock(mdroot []byte) error {
 	copy(v.mdroot[:], mdroot[:])
 	return nil
 }

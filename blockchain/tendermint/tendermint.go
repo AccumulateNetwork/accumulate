@@ -157,7 +157,6 @@ func Initialize(shardname string, index int, WorkingDir string){
         fmt.Printf("Successfully initialized %v node directories\n", nValidators)
 
         return
-
 }
 
 func initFilesWithConfig(config *cfg.Config, chainid *string) error {
@@ -220,10 +219,10 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	return nil
 }
 
-func makeGRPCClient(addr string) (abcicli.Client,error){ //grpccore.BroadcastAPIClient, error) {//abcicli.Client, error) {
+func makeGRPCClient(addr string) (abcicli.Client, error) { //grpccore.BroadcastAPIClient, error) {//abcicli.Client, error) {
 	// Start the listener
-	socket := addr //fmt.Sprintf("unix://%s.sock", addr)
-	logger := tmlog.NewNopLogger()//TestingLogger()
+	socket := addr                 //fmt.Sprintf("unix://%s.sock", addr)
+	logger := tmlog.NewNopLogger() //TestingLogger()
 
 	//client := grpccore.StartGRPCClient(addr)
 	client := abcicli.NewGRPCClient(socket, true)
@@ -234,16 +233,16 @@ func makeGRPCClient(addr string) (abcicli.Client,error){ //grpccore.BroadcastAPI
 	}
 	return client, nil
 }
+
 //
 //func makeRPCClient(addr string) rpcclient.ABCIClient {
 //}
 //
 
-
 func makeGRPCServer(app abcitypes.Application, name string) (service.Service, error) {
 	// Start the listener
-	socket := name// fmt.Sprintf("unix://%s.sock", name)
-	logger := tmlog.NewNopLogger()//TestingLogger()
+	socket := name                 // fmt.Sprintf("unix://%s.sock", name)
+	logger := tmlog.NewNopLogger() //TestingLogger()
 
 	gapp := abcitypes.NewGRPCApplication(app)
 	server := abciserver.NewGRPCServer(socket, gapp)
@@ -271,8 +270,8 @@ func WaitForRPC(laddr string) {
 		time.Sleep(time.Millisecond)
 	}
 }
-func GetGRPCClient(grpcAddr string) core_grpc.BroadcastAPIClient {
-	return core_grpc.StartGRPCClient(grpcAddr)
+func GetGRPCClient(grpcAddr string) coregrpc.BroadcastAPIClient {
+	return coregrpc.StartGRPCClient(grpcAddr)
 }
 
 func GetRPCClient(rpcAddr string) *rpcclient.Client {
@@ -282,13 +281,13 @@ func GetRPCClient(rpcAddr string) *rpcclient.Client {
 	//result := new(ctypes.ResultStatus)
 	//_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
 	//b.Call()
-    return client
+	return client
 }
 
 func WaitForGRPC(grpcAddr string) {
 	client := GetGRPCClient(grpcAddr)
 	for {
-		_, err := client.Ping(context.Background(), &core_grpc.RequestPing{})
+		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
 		if err == nil {
 			return
 		}
