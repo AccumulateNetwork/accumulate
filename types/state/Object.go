@@ -9,14 +9,12 @@ import (
 type Entry interface {
 	MarshalBinary() ([]byte, error)
 	UnmarshalBinary(data []byte) error
-	MarshalJSON() ([]byte, error)
-	UnmarshalJSON(s []byte) error
 	GetType() *types.Bytes32 //return the Chain Type for the entry.
-	GetAdiChainPath() string
+	GetChainUrl() string
 }
 
 type Object struct {
-	Header
+	Chain
 	StateHash     types.Bytes `json:"stateHash"`     //this is the same as the entry hash.
 	PrevStateHash types.Bytes `json:"prevStateHash"` //not sure if we need this since we are only keeping up with current state
 	EntryHash     types.Bytes `json:"entryHash"`     //not sure if this is needed since it is baked into state hash...
@@ -26,7 +24,7 @@ type Object struct {
 func (app *Object) Marshal() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	data, err := app.Header.MarshalBinary()
+	data, err := app.Chain.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -60,14 +58,12 @@ func (app *Object) Marshal() ([]byte, error) {
 }
 
 func (app *Object) Unmarshal(data []byte) error {
-	err := app.Header.UnmarshalBinary(data)
+	err := app.Chain.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
 
 	i := app.GetHeaderSize()
-
-	//l := 33
 
 	if len(data) < i {
 		return fmt.Errorf("invalid data before state hash")

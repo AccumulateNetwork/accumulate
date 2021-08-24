@@ -1,15 +1,18 @@
-package types
+package api
 
-import "fmt"
+import (
+	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
+)
 
 // ADI structure holds the identity name in the URL.  The name can be stored as acc://<name> or simply <name>
 // all chain paths following the ADI domain will be ignored
 type ADI struct {
-	URL           String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	PublicKeyHash Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"` //",hexadecimal"`
+	URL           types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"` //",hexadecimal"`
 }
 
-func NewADI(name string, keyHash *Bytes32) *ADI {
+func NewADI(name string, keyHash *types.Bytes32) *ADI {
 	ic := &ADI{}
 	ic.SetName(name)
 	ic.SetKeyHash(keyHash)
@@ -17,16 +20,16 @@ func NewADI(name string, keyHash *Bytes32) *ADI {
 }
 
 func (ic *ADI) SetName(name string) error {
-	adi, _, err := ParseIdentityChainPath(name)
+	adi, _, err := types.ParseIdentityChainPath(name)
 
 	if err != nil {
 		return err
 	}
-	ic.URL = String(adi)
+	ic.URL = types.String(adi)
 	return nil
 }
 
-func (ic *ADI) SetKeyHash(hash *Bytes32) {
+func (ic *ADI) SetKeyHash(hash *types.Bytes32) {
 	if hash != nil {
 		copy(ic.PublicKeyHash[:], hash[:])
 	}

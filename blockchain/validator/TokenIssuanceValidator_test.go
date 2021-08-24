@@ -2,12 +2,12 @@ package validator
 
 import (
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 
 	//"crypto/sha256"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
-	"math/big"
 	"testing"
 	"time"
 )
@@ -24,11 +24,7 @@ func createTokenIssuanceSubmission(t *testing.T, identitychainpath string) (*Sta
 
 	chainid := types.GetChainIdFromChainPath(identitychainpath).Bytes()
 
-	supply := big.NewInt(50000)
-	ti, err := types.NewTokenIssuance("ACME", supply, 1, types.TokenCirculationMode_Burn)
-	if err != nil {
-		t.Fatal(err)
-	}
+	ti := api.NewToken(identitychainpath, "ACME", 1)
 
 	//build a submission message
 	sub := proto.Submission{}
@@ -74,7 +70,7 @@ func TestTokenIssuanceValidator_Validate(t *testing.T) {
 		t.Fatal("expecting a state object to be returned to add to a token coinbase chain")
 	}
 
-	ti := state.TokenAccountState{}
+	ti := state.TokenAccount{}
 	err = ti.UnmarshalBinary(resp.StateData)
 
 	if err != nil {
