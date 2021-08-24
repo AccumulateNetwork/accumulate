@@ -55,3 +55,33 @@ func TestFormatTimeLapse(t *testing.T) {
 		t.Error("failed to print time as desired")
 	}
 }
+
+func TestHexToBytes(t *testing.T) {
+	test := "abcdef1234567890"
+	bytes := hexToBytes(test)
+	bs := fmt.Sprintf("%x", bytes)
+	if bs != test {
+		t.Error("hex to string didn't work")
+	}
+
+	testHex := func(hex string) (gotError bool) {
+		defer func() {
+			gotError = recover() != nil
+		}()
+		_ = hexToBytes(hex)
+		return false
+	}
+
+	if !testHex("abcdefg") {
+		t.Error("no error on odd length hex string")
+	}
+	if testHex("abcdef") {
+		t.Error("error on an even length hex string")
+	}
+	if !testHex("abcdefhi") {
+		t.Error("didn't error on invalid characters")
+	}
+	if testHex("abcdef") {
+		t.Error("error on valid characters")
+	}
+}
