@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"strings"
 )
 
@@ -21,7 +22,7 @@ const (
 )
 
 type adiState struct {
-	Header
+	Chain
 	KeyType KeyType     `json:"keyType"`
 	KeyData types.Bytes `json:"keyData"`
 }
@@ -34,17 +35,16 @@ type AdiState struct {
 // NewIdentityState this will eventually be the key groups and potentially just a multi-map of types to chain paths controlled by the identity
 func NewIdentityState(adi string) *AdiState {
 	r := &AdiState{}
-	r.AdiChainPath = types.String(adi)
-	r.Type = sha256.Sum256([]byte("AIM/0/0.1"))
+	r.SetHeader(types.UrlChain(adi), api.ChainTypeAdi[:])
 	return r
 }
 
-func (is *AdiState) GetAdiChainPath() string {
-	return is.Header.GetAdiChainPath()
+func (is *AdiState) GetChainUrl() string {
+	return is.Chain.GetChainUrl()
 }
 
 func (is *AdiState) GetType() *types.Bytes32 {
-	return is.Header.GetType()
+	return is.Chain.GetType()
 }
 
 func (is *AdiState) VerifyKey(key []byte) bool {
@@ -96,7 +96,7 @@ func (is *AdiState) GetKeyData() (KeyType, types.Bytes) {
 }
 
 func (is *AdiState) GetIdentityChainId() types.Bytes {
-	h := types.GetIdentityChainFromIdentity(is.GetAdiChainPath())
+	h := types.GetIdentityChainFromIdentity(is.GetChainUrl())
 	if h == nil {
 		return types.Bytes{}
 	}
@@ -106,7 +106,7 @@ func (is *AdiState) GetIdentityChainId() types.Bytes {
 func (is *AdiState) MarshalBinary() ([]byte, error) {
 
 	var data []byte
-	headerData, err := is.Header.MarshalBinary()
+	headerData, err := is.Chain.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -131,11 +131,11 @@ func (is *AdiState) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("cannot unmarshal Identity State, insuffient data")
 	}
 	i := 0
-	err := is.Header.UnmarshalBinary(data)
+	err := is.Chain.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
-	i += is.Header.GetHeaderSize()
+	i += is.Chain.GetHeaderSize()
 
 	is.KeyType = KeyType(data[i])
 	i++
@@ -156,14 +156,6 @@ func (is *AdiState) UnmarshalBinary(data []byte) error {
 	i += copy(is.KeyData, data[i:i+int(v)])
 
 	return nil
-}
-
-func (is *AdiState) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, &is.adiState)
-}
-
-func (is *AdiState) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&is.adiState)
 }
 
 func (k *KeyType) UnmarshalJSON(b []byte) error {

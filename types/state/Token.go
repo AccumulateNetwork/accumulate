@@ -1,34 +1,50 @@
-package types
+package state
 
 import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 )
 
-type TokenCirculationMode int
-
-type Token struct {
-	URL       String           `json:"url" form:"url" query:"url" validate:"required"`
-	Symbol    String           `json:"symbol" form:"symbol" query:"symbol" validate:"required,alphanum"`
-	Precision Byte             `json:"precision" form:"precision" query:"precision" validate:"required,min=0,max=18"`
+type token struct {
+	Chain
+	Symbol    types.String     `json:"symbol" form:"symbol" query:"symbol" validate:"required,alphanum"`
+	Precision types.Byte       `json:"precision" form:"precision" query:"precision" validate:"required,min=0,max=18"`
 	Meta      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"optional"`
 }
 
-func NewToken(url string, symbol string, precision byte) *Token {
-	t := &Token{String(url), String(symbol), Byte(precision), nil}
-	return t
+// Token implement the Entry interfaces for a token
+type Token struct {
+	Entry
+	token
+}
+
+func NewToken(tokenUrl types.UrlChain) *Token {
+	token := &Token{}
+	token.SetHeader(tokenUrl, api.ChainTypeToken[:])
+	return token
+}
+
+func (t *Token) GetChainUrl() string {
+	return t.Chain.GetChainUrl()
+}
+
+func (t *Token) GetType() *types.Bytes32 {
+	return t.Chain.GetType()
 }
 
 func (t *Token) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	//marshal URL
-	d, err := t.URL.MarshalBinary()
+	d, err := t.Chain.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
+
+	//marshal URL
 	buffer.Write(d)
 
 	//marshal Symbol
@@ -54,12 +70,12 @@ func (t *Token) MarshalBinary() ([]byte, error) {
 
 func (t *Token) UnmarshalBinary(data []byte) error {
 
-	err := t.URL.UnmarshalBinary(data)
+	err := t.Chain.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
 
-	i := t.URL.Size(nil)
+	i := t.GetHeaderSize()
 	err = t.Symbol.UnmarshalBinary(data[i:])
 	if err != nil {
 		return err
@@ -70,7 +86,7 @@ func (t *Token) UnmarshalBinary(data []byte) error {
 	if i >= len(data) {
 		return fmt.Errorf("unable to unmarshal data, precision not set")
 	}
-	t.Precision = Byte(data[i])
+	t.Precision = types.Byte(data[i])
 	i++
 
 	if i < len(data) {

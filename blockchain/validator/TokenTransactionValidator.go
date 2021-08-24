@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -17,21 +18,19 @@ type TokenTransactionValidator struct {
 	ValidatorContext
 }
 
+//this token validator belings in both a Token (coinbase) and Token Account validator.
 func NewTokenTransactionValidator() *TokenTransactionValidator {
 	v := TokenTransactionValidator{}
-
-	//deprecate chainid in this context.. has no meaning.
-	//chainid := sha256.Sum256([]byte("AIM/0/0.1"))
-	_ = v.SetInfo("AIM/0/0.1", "token-transaction", pb.AccInstruction_Token_Transaction)
+	v.SetInfo(api.ChainTypeToken[:], "token-transaction", pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
 // canTransact is a helper function to parse and check for errors in the transaction data
-func (v *TokenTransactionValidator) canSendTokens(currentState *StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccountState, *types.TokenTx, error) {
+func (v *TokenTransactionValidator) canSendTokens(currentState *StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccount, *api.TokenTx, error) {
 
 	//unmarshal the data into a TokenTx structure, if this fails no point in continuing.
-	var tx types.TokenTx
+	var tx api.TokenTx
 	err := json.Unmarshal(data, &tx)
 	if err != nil {
 		return nil, nil, nil, err
@@ -43,7 +42,7 @@ func (v *TokenTransactionValidator) canSendTokens(currentState *StateEntry, iden
 		return nil, nil, nil, err
 	}
 
-	tas := state.TokenAccountState{}
+	tas := state.TokenAccount{}
 	err = tas.UnmarshalBinary(currentState.ChainState.Entry)
 	if err != nil {
 		return nil, nil, nil, err
@@ -97,7 +96,7 @@ func (v *TokenTransactionValidator) Validate(currentState *StateEntry, submissio
 	}
 
 	ret := ResponseValidateTX{}
-	ret.Submissions = make([]pb.Submission, len(tx.To)+1)
+	ret.Submissions = make([]*pb.Submission, len(tx.To)+1)
 
 	txAmt := big.NewInt(0)
 	for i, val := range tx.To {
@@ -119,7 +118,8 @@ func (v *TokenTransactionValidator) Validate(currentState *StateEntry, submissio
 		}
 
 		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
-		sub := &ret.Submissions[i]
+		sub := pb.Submission{}
+		ret.Submissions[i] = &sub
 
 		//set the identity chain for the destination
 		sub.Identitychain = idChain[:]
@@ -138,7 +138,7 @@ func (v *TokenTransactionValidator) Validate(currentState *StateEntry, submissio
 			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction")
 		}
 
-		err = depositTx.SetTokenInfo(types.UrlChain(tas.AdiChainPath))
+		err = depositTx.SetTokenInfo(types.UrlChain(tas.GetChainUrl()))
 		if err != nil {
 			return nil, fmt.Errorf("unable to set token information for synthetic token deposit transaction")
 		}

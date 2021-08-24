@@ -3,6 +3,7 @@ package tendermint
 import (
 	"context"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -355,9 +356,12 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	identity := types.GetIdentityChainFromIdentity(adi)
 	chainid := types.GetChainIdFromChainPath(chainpath)
 
-	ti := types.NewToken(chainpath, "ACME", 8)
+	ti := api.NewToken(chainpath, "ACME", 8)
 
-	tas := state.NewTokenAccountState(types.UrlChain(chainpath), types.UrlChain(chainpath), ti)
+	tas := state.NewToken(types.UrlChain(chainpath))
+	tas.Precision = ti.Precision
+	tas.Symbol = ti.Symbol
+	tas.Meta = ti.Meta
 
 	tasstatedata, err := tas.MarshalBinary()
 	if err != nil {
@@ -496,7 +500,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("Entry check failed %v on validator %s \n", sub.Type, *val.GetInfo().GetNamespace())
+		ret.Info = fmt.Sprintf("Entry check failed %v on validator %s \n", sub.Type, *val.GetInfo().GetChainSpec())
 		return ret
 	}
 
@@ -636,7 +640,7 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 			//using protobuffers grpc is quite slow, so we might want to consider
 			//buffering these calls up into a batch and send them out at the end of frame instead.
 			//this is a good place to experiment with different optimizations
-			app.RouterClient.ProcessTx(context.Background(), &vdata.Submissions[i])
+			app.RouterClient.ProcessTx(context.Background(), vdata.Submissions[i])
 		}
 	}
 	return nil
@@ -725,14 +729,14 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			ret.Code = 2
 			ret.GasWanted = 0
 			ret.GasUsed = 0
-			ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n", sub.Type, val.GetNamespace())
+			ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n", sub.Type, val.GetChainSpec())
 			return ret
 		}
 		if vdata == nil {
 			ret.Code = 2
 			ret.GasWanted = 0
 			ret.GasUsed = 0
-			ret.Info = fmt.Sprintf("Insufficent Entry Data on validator %v \n", val.GetNamespace())
+			ret.Info = fmt.Sprintf("Insufficent Entry Data on validator %v \n", val.GetChainSpec())
 			return ret
 		}
 
@@ -741,13 +745,13 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 		/// update the state data for the chain.
 		if vdata.StateData != nil {
-			header := state.Header{}
+			header := state.Chain{}
 			err := header.UnmarshalBinary(vdata.StateData)
 			if err != nil {
 				ret.Code = 2
 				ret.GasWanted = 0
 				ret.GasUsed = 0
-				ret.Info = fmt.Sprintf("Invalid state object %v \n", val.GetNamespace())
+				ret.Info = fmt.Sprintf("Invalid state object %v \n", val.GetChainSpec())
 				return ret
 			}
 			app.addStateEntry(sub.Chainid, vdata.StateData)
@@ -827,7 +831,8 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 		//
 
 		dbvc := validator.ResponseValidateTX{}
-		dbvc.Submissions = make([]pb.Submission, 1)
+		dbvc.Submissions = make([]*pb.Submission, 1)
+		dbvc.Submissions[0] = &pb.Submission{}
 		dbvc.Submissions[0].Instruction = 0
 		chainadi := "dbvc"
 		chainid := types.GetChainIdFromChainPath(chainadi)
@@ -838,16 +843,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 		dbvc.Submissions[0].Instruction = pb.AccInstruction_Data_Entry //this may be irrelevant...
 		dbvc.Submissions[0].Param1 = 0
 		dbvc.Submissions[0].Param2 = 0
-		//bvedata,err := bve.MarshalBinary()
-		//if err != nil {
-		//	///shouldn't get here.
-		//	fmt.Printf("Shouldn't get here... invalid BVE marshal")
-		//	return abcitypes.ResponseCommit{}
-		//}
-		//dbvc.Submissions[0].Data = bvedata
 
-		//send to router.
-		//app.processValidatedSubmissionRequest(&dbvc)
 	}
 
 	//this will truncate what tendermint stores since we only care about current state

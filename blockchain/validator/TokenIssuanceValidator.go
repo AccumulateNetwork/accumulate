@@ -3,6 +3,7 @@ package validator
 import (
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 
 	//"crypto/sha256"
@@ -20,12 +21,7 @@ type TokenIssuanceValidator struct {
 
 func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	v := TokenIssuanceValidator{}
-	//need the chainid, then hash to get first 8 bytes to make the chainid.
-	//by definition a chainid of a factoid block is
-	//000000000000000000000000000000000000000000000000000000000000000f
-	//the id will be 0x0000000f
-	chainid := "000000000000000000000000000000000000000000000000000000000000001D" //does this make sense anymore?
-	v.SetInfo(chainid, "create-token", pb.AccInstruction_Token_Issue)
+	v.SetInfo(api.ChainTypeToken[:], api.ChainSpecToken, pb.AccInstruction_Token_Issue)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -66,7 +62,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *StateEntry, submission *
 		return nil, err
 	}
 
-	ti := &types.Token{}
+	ti := &api.Token{}
 	err = json.Unmarshal(submission.Data, ti)
 	if err != nil {
 		return nil, err
@@ -74,7 +70,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *StateEntry, submission *
 
 	//do some ti validation
 
-	adiState, _, err := types.ParseIdentityChainPath(string(id.AdiChainPath))
+	adiState, _, err := types.ParseIdentityChainPath(string(id.GetChainUrl()))
 	adiToken, tokenChain, err := types.ParseIdentityChainPath(string(ti.URL))
 	if err != nil {
 		return nil, err
@@ -83,25 +79,21 @@ func (v *TokenIssuanceValidator) Validate(currentState *StateEntry, submission *
 	if adiState != adiToken {
 		return nil, fmt.Errorf("ADI URL doesn't match token ADI")
 	}
-	tas := acctypes.NewTokenAccountState(types.UrlChain(tokenChain), types.UrlChain(tokenChain), ti)
+	tas := acctypes.NewToken(types.UrlChain(tokenChain))
+	tas.Precision = ti.Precision
+	tas.Meta = ti.Meta
+	tas.Symbol = ti.Symbol
 
 	tasso, err := tas.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 	resp = &ResponseValidateTX{}
-	//so. also need to return the identity chain and chain id these belong to....
+
+	//return a new state object for a token
 	resp.StateData = tasso
 
 	return resp, nil
-
-	//now we need to validate the contents.
-	//for _ := range res.Submissions {
-	//	//now we need to validate the contents.
-	//	//need to validate this: res.Submissions[i].Data()
-
-	return nil, nil
-	//return &pb.Submission{}, nil
 }
 
 func (v *TokenIssuanceValidator) EndBlock(mdroot []byte) error {

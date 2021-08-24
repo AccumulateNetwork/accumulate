@@ -1,18 +1,19 @@
-package types
+package api
 
 import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
 )
 
 func TestIdentityCreate(t *testing.T) {
 	ic := ADI{}
 	_ = ic.SetName("WileECoyote")
-	kp := CreateKeyPair()
-	kh := Bytes32(sha256.Sum256(kp.PubKey().Bytes()))
+	kp := types.CreateKeyPair()
+	kh := types.Bytes32(sha256.Sum256(kp.PubKey().Bytes()))
 	ic.SetKeyHash(&kh)
 
 	data, err := json.Marshal(&ic)

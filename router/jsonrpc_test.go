@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/go-playground/validator/v10"
 	"testing"
 	"time"
@@ -22,10 +23,10 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	client, _ := makeClientAndServer(t, routerAddress)
-	api := API{RandPort(), validator.New(), client}
+	jsonapi := API{RandPort(), validator.New(), client}
 	//StartAPI(RandPort(), client)
 
-	req := types.APIRequestRaw{}
+	req := api.APIRequestRaw{}
 	adi := &ADI{}
 	adi.URL = "WileECoyote"
 	adi.PublicKeyHash = sha256.Sum256(kpNewAdi.PubKey().Bytes())
@@ -34,8 +35,8 @@ func TestJsonRpcAdi(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	req.Tx = &types.APIRequestRawTx{}
-	req.Tx.Signer = &types.Signer{}
+	req.Tx = &api.APIRequestRawTx{}
+	req.Tx.Signer = &api.Signer{}
 	req.Tx.Signer.URL = types.String(adiSponsor)
 	copy(req.Tx.Signer.PublicKey[:], kpSponsor.PubKey().Bytes())
 	req.Tx.Timestamp = time.Now().Unix()
@@ -55,7 +56,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	}
 
 	//now we can send in json rpc calls.
-	ret := api.createADI(context.Background(), jsonReq)
+	ret := jsonapi.createADI(context.Background(), jsonReq)
 
 	t.Fatal(ret)
 

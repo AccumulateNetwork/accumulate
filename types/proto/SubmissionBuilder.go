@@ -43,9 +43,12 @@ func (sb *SubmissionBuilder) Type(chainType types.Bytes) *SubmissionBuilder {
 }
 
 func (sb *SubmissionBuilder) ChainUrl(url string) *SubmissionBuilder {
-	_, chain, _ := types.ParseIdentityChainPath(url)
+	adi, chain, _ := types.ParseIdentityChainPath(url)
 	sb.sub.Chainid = types.GetChainIdFromChainPath(chain).Bytes()
 	sb.sub.AdiChainPath = chain
+	if len(sb.sub.Identitychain) == 0 {
+		sb.sub.Identitychain = types.GetIdentityChainFromIdentity(adi).Bytes()
+	}
 	return sb
 }
 
@@ -59,14 +62,10 @@ func (sb *SubmissionBuilder) AdiUrl(url string) *SubmissionBuilder {
 	return sb
 }
 
-func (sb *SubmissionBuilder) Build() (*Submission, error) {
+func (sb *SubmissionBuilder) BuildUnsigned() (*Submission, error) {
 
 	if sb.sub.Instruction == 0 {
 		return nil, fmt.Errorf("instruction not set")
-	}
-
-	if len(sb.sub.Signature) != 64 {
-		return nil, fmt.Errorf("invalid signature length")
 	}
 
 	if len(sb.sub.Data) == 0 {
@@ -77,12 +76,27 @@ func (sb *SubmissionBuilder) Build() (*Submission, error) {
 		return nil, fmt.Errorf("invalid adi url")
 	}
 
+	if sb.sub.Timestamp == 0 {
+		return nil, fmt.Errorf("timestamp not set")
+	}
+
+	return &sb.sub, nil
+}
+
+func (sb *SubmissionBuilder) Build() (*Submission, error) {
+
+	if len(sb.sub.Signature) != 64 {
+		return nil, fmt.Errorf("invalid signature length")
+	}
+
 	if len(sb.sub.Key) != 32 {
 		return nil, fmt.Errorf("invalid public key data length")
 	}
 
-	if sb.sub.Timestamp == 0 {
-		return nil, fmt.Errorf("timestamp not set")
+	var err error
+	_, err = sb.BuildUnsigned()
+	if err != nil {
+		return nil, err
 	}
 
 	return &sb.sub, nil

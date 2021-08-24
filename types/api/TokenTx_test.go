@@ -1,14 +1,15 @@
-package types
+package api
 
 import (
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
 )
 
 func TestTokenTransaction(t *testing.T) {
 	tt := NewTokenTx("WileECoyote/MyACMETokens")
 
-	toAmt := Amount{}
+	toAmt := types.Amount{}
 	toAmt.SetInt64(6500)
 	tt.AddToAccount("AcmeCorporation/ACMETokens", &toAmt)
 

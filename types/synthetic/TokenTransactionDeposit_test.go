@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"testing"
 	"time"
 )
@@ -14,7 +15,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 	amt.SetInt64(1000)
 	fromAccount := types.UrlChain("MyIdentity/MyAcmeAccount")
 	toAccount := types.UrlChain("YourIdentity/MyAcmeAccount")
-	tx := types.NewTokenTx(fromAccount)
+	tx := api.NewTokenTx(fromAccount)
 	tx.AddToAccount(toAccount, &amt)
 
 	data, err := json.Marshal(&tx)

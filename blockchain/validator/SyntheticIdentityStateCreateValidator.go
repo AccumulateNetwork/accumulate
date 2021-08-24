@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	//"crypto/sha256"
 	"fmt"
@@ -12,6 +13,8 @@ import (
 	"time"
 )
 
+//todo fold this into the AdiChain validator
+
 type SyntheticIdentityStateCreateValidator struct {
 	ValidatorContext
 
@@ -20,13 +23,8 @@ type SyntheticIdentityStateCreateValidator struct {
 
 func NewSyntheticIdentityStateCreateValidator() *SyntheticIdentityStateCreateValidator {
 	v := SyntheticIdentityStateCreateValidator{}
-	//need the chainid, then hash to get first 8 bytes to make the chainid.
-	//by definition a chainid of a factoid block is
-	//000000000000000000000000000000000000000000000000000000000000000f
-	//the id will be 0x0000000f
-	chainid := "000000000000000000000000000000000000000000000000000000000000001D" //does this make sense anymore?
-	//v.EV = NewEntryValidator()
-	v.SetInfo(chainid, "create-identity-state", pb.AccInstruction_Synthetic_Identity_Creation)
+	//this needs to be changed to use AdiChain
+	v.SetInfo(api.ChainTypeAdi[:], "create-identity-state", pb.AccInstruction_Synthetic_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }

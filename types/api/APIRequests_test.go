@@ -1,8 +1,9 @@
-package types
+package api
 
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/go-playground/validator/v10"
 	"github.com/mitchellh/mapstructure"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 func createAdiTxJson(t *testing.T) []byte {
-	kp := CreateKeyPair()
+	kp := types.CreateKeyPair()
 
 	var err error
 	req := &APIRequest{}
