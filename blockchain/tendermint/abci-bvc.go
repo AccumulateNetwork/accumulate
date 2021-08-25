@@ -897,13 +897,25 @@ func (app *AccumulatorVMApplication) ApplySnapshotChunk(
 func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 
-	q := pb.AccQuery{}
+	q := pb.Query{}
 	err := proto.Unmarshal(reqQuery.Data, &q)
 	if err != nil {
-		resQuery.Info = fmt.Sprintf("Requst is not an Accumulate Query\n")
+		resQuery.Info = fmt.Sprintf("requst is not an Accumulate Query\n")
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
+	//extract the state for the chain id
+	chainState, err := app.getCurrentState(q.ChainId)
+	chainHeader := state.Chain{}
+	err = chainHeader.UnmarshalBinary(chainState.Entry)
+	if err != nil {
+		resQuery.Info = fmt.Sprintf("unable to extract chain header\n")
+		resQuery.Code = code.CodeTypeUnauthorized
+		return resQuery
+	}
+
+	// app.chainval[chainHeader.Type[:]].Query(q, chainState.Entry)
+
 	fmt.Printf("Query URI: %s", q.Query)
 
 	///implement lazy sync calls. If a node falls behind it needs to have several query calls
