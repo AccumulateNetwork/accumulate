@@ -134,17 +134,17 @@ func MakeBVCSubmission(ins string, adi types.UrlAdi, chainUrl types.UrlChain, pa
 }
 
 var InstructionTypeMap = map[string]AccInstruction{
-	"adi-create":           AccInstruction_Identity_Creation,
-	"token-account-create": AccInstruction_Token_URL_Creation,
-	"token-tx-create":      AccInstruction_Token_Transaction,
-	"data-chain-create":    AccInstruction_Data_Chain_Creation,
-	"data-entry-create":    AccInstruction_Data_Entry,
-	"scratch-chain-create": AccInstruction_Scratch_Chain_Creation,
-	"scratch-entry-create": AccInstruction_Scratch_Entry,
-	"token-create":         AccInstruction_Token_Issue,
-	"key-update":           AccInstruction_Key_Update,
-	"query-tx-create":      AccInstruction_Deep_Query,
-	"query":                AccInstruction_Light_Query,
+	"adi":          AccInstruction_Identity_Creation,
+	"tokenAccount": AccInstruction_Token_URL_Creation,
+	"tokenTx":      AccInstruction_Token_Transaction,
+	"dataChain":    AccInstruction_Data_Chain_Creation,
+	"dataEntry":    AccInstruction_Data_Entry,
+	"scratchChain": AccInstruction_Scratch_Chain_Creation,
+	"scratchEntry": AccInstruction_Scratch_Entry,
+	"token":        AccInstruction_Token_Issue,
+	"keyUpdate":    AccInstruction_Key_Update,
+	"queryTx":      AccInstruction_Deep_Query,
+	"query":        AccInstruction_State_Query,
 }
 
 // Subtx this is a generic structure for a bvc submission transaction that can be marshalled to and from json,

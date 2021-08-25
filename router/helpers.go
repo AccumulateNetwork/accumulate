@@ -22,6 +22,24 @@ func RandPort() int {
 	return port
 }
 
+func makeApiServiceClientAndServer(routeraddress string) (proto.ApiServiceClient, *RouterConfig, error) {
+
+	r := NewRouter(routeraddress)
+
+	if r == nil {
+		return nil, nil, fmt.Errorf("failed to create router")
+	}
+
+	conn, err := grpc.Dial(routeraddress, grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
+	if err != nil {
+		return nil, nil, fmt.Errorf("error openning GRPC client in router")
+	}
+
+	client := proto.NewApiServiceClient(conn)
+
+	return client, r, nil
+}
+
 func makeClientAndServer(t *testing.T, routeraddress string) (proto.ApiServiceClient, *RouterConfig) {
 
 	r := NewRouter(routeraddress)
@@ -35,6 +53,7 @@ func makeClientAndServer(t *testing.T, routeraddress string) (proto.ApiServiceCl
 	}
 
 	client := proto.NewApiServiceClient(conn)
+
 	return client, r
 }
 func boostrapBVC(t *testing.T, configfile string, workingdir string, baseport int) error {

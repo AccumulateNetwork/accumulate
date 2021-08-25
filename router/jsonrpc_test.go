@@ -22,7 +22,12 @@ func TestJsonRpcAdi(t *testing.T) {
 	routerAddress := fmt.Sprintf("tcp://localhost:%d", RandPort())
 
 	//make a client, and also spin up the router grpc
-	client, _ := makeClientAndServer(t, routerAddress)
+	client, _, err := makeApiServiceClientAndServer(routerAddress)
+	//r.AddBVCClient("network1", tmgrpc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	jsonapi := API{RandPort(), validator.New(), client}
 	//StartAPI(RandPort(), client)
 

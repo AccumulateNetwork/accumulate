@@ -93,7 +93,11 @@ func main() {
 	urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
 	//temporary server for each vm.  will be replaced by url router.
-	go router.StartAPI(25999)
+	routerClient, err := urlrouter.CreateGRPCClient()
+	if err != nil {
+		panic(fmt.Errorf("unable to create grpc tendermint router client"))
+	}
+	go router.StartAPI(25999, routerClient)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
