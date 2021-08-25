@@ -11,6 +11,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
+	"github.com/gorilla/mux"
 	"github.com/mitchellh/mapstructure"
 )
 
@@ -29,6 +30,9 @@ func StartAPI(port int) *API {
 	api.validate = validator.New()
 
 	methods := jsonrpc2.MethodMap{
+		// URL
+		"get": api.getData,
+
 		// ADI
 		"adi":        api.getADI,
 		"adi-create": api.createADI,
@@ -43,12 +47,48 @@ func StartAPI(port int) *API {
 	}
 
 	apiHandler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
-	http.HandleFunc("/v1", apiHandler)
 
-	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), nil))
+	apiRouter := mux.NewRouter().StrictSlash(true)
+	apiRouter.HandleFunc("/v1", apiHandler)
+
+	proxyRouter := mux.NewRouter().StrictSlash(true)
+	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
+
+	// start JSON RPC API
+	go func() {
+		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), apiRouter))
+	}()
+
+	// start REST proxy for JSON RPC API
+	go func() {
+		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port+1), proxyRouter))
+	}()
 
 	return api
 
+}
+
+// getData returns Accumulate Object by URL
+func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &APIURLRequest{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return ErrorInvalidRequest
+	}
+
+	// validate URL
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &TokenAccount{}
+	resp.URL = req.URL
+
+	// Tendermint integration here
+
+	return resp
 }
 
 // getADI returns ADI info
