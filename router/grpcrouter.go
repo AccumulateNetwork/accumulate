@@ -4,15 +4,16 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/SMT/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
+	types2 "github.com/tendermint/tendermint/abci/types"
+
 	//vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	tmnet "github.com/tendermint/tendermint/libs/net"
-	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"google.golang.org/grpc"
 	"net"
 	"net/url"
@@ -23,7 +24,7 @@ type RouterConfig struct {
 	proto.ApiServiceServer
 	grpcServer *grpc.Server
 
-	bvcclients []core_grpc.BroadcastAPIClient
+	bvcclients []coregrpc.BroadcastAPIClient
 	Address    string
 }
 
@@ -58,52 +59,49 @@ func (app *RouterConfig) GetNumShardsInSystem() int32 {
 	return 1
 }
 
-func (app *RouterConfig) Query(ctx context.Context, query *proto.AccQuery) (*proto.AccQueryResp, error) {
-	scr := proto.AccQueryResp{}
-	//fixme
-	//
-	//rq := types.RequestQuery{}
-	//
-	//rq.Data,_ = proto1.Marshal(query)
-	//
-	//rq.Height = 12345
-	//client := app.getBVCClient(query.Addr)
-	//if client == nil {
-	//	return nil, fmt.Errorf("No BVC Client Available on for address %X", query.Addr)
-	//}
-	//resp, err := client.QuerySync(rq)
-	//
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//scr.Code = resp.Code
+// ProcessQuery processes a query
+func (app *RouterConfig) ProcessQuery(ctx context.Context, query *proto.Query) (*proto.QueryResp, error) {
+	resp := proto.QueryResp{}
+	client := app.getBVCClient(types.GetAddressFromIdentityChain(query.AdiChain))
+	if client == nil {
+		resp.Data = nil
+		resp.Code = 0x0001
+		return nil, fmt.Errorf("no BVC's defined for router")
+	}
 
-	return &scr, nil
+	var err error
+	rq := types2.RequestQuery{}
+	rq.Data, err = proto1.Marshal(query)
+
+	if err != nil {
+		return nil, err
+	}
+
+	//resp, err = client.QuerySync(rq)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
 }
 
 func (app *RouterConfig) ProcessTx(ctx context.Context, sub *proto.Submission) (*proto.SubmissionResponse, error) {
-	//fmt.Printf("hello world from dispatch server TX ")
 	resp := proto.SubmissionResponse{}
 	client := app.getBVCClient(types.GetAddressFromIdentityChain(sub.Identitychain))
 	if client == nil {
 		resp.Respdata = nil
 		resp.ErrorCode = 0x0001
-		return nil, fmt.Errorf("No BVC's defined for router")
+		return nil, fmt.Errorf("no BVC's defined for router")
 	}
 
 	msg, err := proto1.Marshal(sub)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid Submission payload for Synthetic TX")
+		return nil, fmt.Errorf("invalid Submission payload for Synthetic TX")
 	}
-	req := core_grpc.RequestBroadcastTx{}
+	req := coregrpc.RequestBroadcastTx{}
 	req.Tx = msg
+	//probably should shift to https submissions.
 	client.BroadcastTx(context.Background(), &req)
-	//client.
-	//if err != nil {
-	//	fmt.Printf("Error received from Check Tx Sync %v", err)
-	//}
-	//fmt.Printf("Result : %s", checkresp.)
 
 	resp.Respdata = nil
 	resp.ErrorCode = 0x9000
@@ -141,7 +139,7 @@ func NewRouter(routeraddress string) (config *RouterConfig) {
 	return &r
 }
 
-func (app *RouterConfig) getBVCClient(addr uint64) core_grpc.BroadcastAPIClient {
+func (app *RouterConfig) getBVCClient(addr uint64) coregrpc.BroadcastAPIClient {
 	numbvcnetworks := uint64(len(app.bvcclients))
 	if numbvcnetworks == 0 {
 		return nil
@@ -149,7 +147,7 @@ func (app *RouterConfig) getBVCClient(addr uint64) core_grpc.BroadcastAPIClient 
 	return app.bvcclients[addr%numbvcnetworks]
 }
 
-func (app *RouterConfig) AddBVCClient(shardname string, client core_grpc.BroadcastAPIClient) error {
+func (app *RouterConfig) AddBVCClient(shardname string, client coregrpc.BroadcastAPIClient) error {
 	//todo: make this a discovery method.  we need to know for sure how many BVC's there are and we need
 	//to explicitly connect to them...
 	app.bvcclients = append(app.bvcclients, client)
@@ -197,64 +195,3 @@ func SendTransaction(senderurl string, receiverurl string) error {
 
 	return nil
 }
-
-//
-//const (
-//	AccAction_Unknown = iota
-//	AccAction_Identity_Creation
-//	AccAction_Token_URL_Creation
-//	AccAction_Token_Transaction
-//	AccAction_Data_Chain_Creation
-//	AccAction_Data_Entry //per 250 bytes
-//	AccAction_Scratch_Chain_Creation
-//	AccAction_Scratch_Entry //per 250 bytes
-//	AccAction_Token_Issue
-//	AccAction_Key_Update
-//)
-
-type AccUrl struct {
-	Addr      uint64
-	DDII      string
-	ChainPath []managed.Hash
-	Action    uint32
-}
-
-//func (app AccUrl) Marshall() ([]byte,error) {
-//	m := make([]byte, 8 + len(app.DDII)+ len(app.ChainPath)*32 + 4 )
-//	copy(m)
-//	return m, nil
-//}
-
-//func Router() {
-//	//acc://root_name[/sub-chain name[/sub-chain]...]
-//	//acc://a:Big.Company/atk
-//	//s := "postgres://user:pass@host.com:5432/path?k=v#f"
-//
-//	s := "acc://Big.Company/fct?send-transaction/Small.Company/fct"
-//	//s = url.QueryEscape(s)
-//
-//	u, err := url.Parse(s)
-//	if err != nil {
-//		panic(err)
-//	}
-//
-//	fmt.Println(u.Scheme)
-//
-//	fmt.Println(u.User)
-//	fmt.Println(u.User.Username())
-//	p, _ := u.User.Password()
-//	fmt.Println(p)
-//
-//	fmt.Println(u.Host)
-//	host, port, _ := net.SplitHostPort(u.Host)
-//	fmt.Println(host)
-//	fmt.Println(port)
-//
-//	fmt.Println(u.Path)
-//	fmt.Println(u.Fragment)
-//
-//	fmt.Println(u.RawQuery)
-//	m, _ := url.ParseQuery(u.RawQuery)
-//	fmt.Println(m)
-//	//fmt.Println(m["k"][0])
-//}

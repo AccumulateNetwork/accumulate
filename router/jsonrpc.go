@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"log"
@@ -18,7 +19,7 @@ import (
 type API struct {
 	port     int
 	validate *validator.Validate
-	client   proto.ApiServiceClient
+	client   proto.ApiServiceClient // Replace this with a dispatcher that contains clients to each BVC
 }
 
 // StartAPI starts new JSON-RPC server
@@ -195,6 +196,8 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 	}
 
 	//This client connects us to the router, the router will send the message to the correct BVC network
+	//this uses grpc to route but that isn't necessary (and slow), we should develop a simple dispatcher
+	//that contains a client connection to each BVC
 	resp, err := api.client.ProcessTx(context.Background(), submission)
 	if err != nil {
 		return NewAccumulateError(err)
@@ -291,16 +294,30 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 		return ErrorInvalidRequest
 	}
 
-	// validate only TokenTx.Hash
+	// validate only TokenTx.Hash (Assuming the hash is the txid)
 	if err = api.validate.StructPartial(req, "Hash"); err != nil {
 		return NewValidatorError(err)
 	}
+	// Validate only the From URL field of the token tx
+	if err = api.validate.StructPartial(req, "From"); err != nil {
+		return NewValidatorError(err)
+	}
 
-	resp := &TokenTx{}
+	// Tendermint's integration here
+	// need to know the ADI and ChainID, deriving adi and chain id from TokenTx.From
+	q := proto.Query{}
+	q.ChainUrl = string(req.From)
+	adichain := types.GetIdentityChainFromIdentity(q.ChainUrl)
+	chainId := types.GetChainIdFromChainPath(q.ChainUrl)
+	q.AdiChain = adichain.Bytes()
+	q.ChainId = chainId.Bytes()
+	q.Ins = proto.AccInstruction_Token_Transaction
+	q.Query = req.Hash.Bytes()
 
-	// Tendermint integration here
+	//this is only temporary until we get router setup. This is slow
+	qresp, err := api.client.ProcessQuery(context.Background(), &q)
 
-	return resp
+	return qresp
 }
 
 // createTokenTx creates Token Tx
