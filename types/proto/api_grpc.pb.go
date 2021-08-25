@@ -27,7 +27,7 @@ type ApiServiceClient interface {
 	// Obtains the feature at a given position.
 	ProcessTx(ctx context.Context, in *Submission, opts ...grpc.CallOption) (*SubmissionResponse, error)
 	QueryShardCount(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*ShardCountResponse, error)
-	ProcessLightQuery(ctx context.Context, in *Submission, opts ...grpc.CallOption) (*AccQueryResp, error)
+	ProcessQuery(ctx context.Context, in *Query, opts ...grpc.CallOption) (*QueryResp, error)
 }
 
 type apiServiceClient struct {
@@ -101,9 +101,9 @@ func (c *apiServiceClient) QueryShardCount(ctx context.Context, in *empty.Empty,
 	return out, nil
 }
 
-func (c *apiServiceClient) ProcessLightQuery(ctx context.Context, in *Submission, opts ...grpc.CallOption) (*AccQueryResp, error) {
-	out := new(AccQueryResp)
-	err := c.cc.Invoke(ctx, "/apiProto.ApiService/ProcessLightQuery", in, out, opts...)
+func (c *apiServiceClient) ProcessQuery(ctx context.Context, in *Query, opts ...grpc.CallOption) (*QueryResp, error) {
+	out := new(QueryResp)
+	err := c.cc.Invoke(ctx, "/apiProto.ApiService/ProcessQuery", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ type ApiServiceServer interface {
 	// Obtains the feature at a given position.
 	ProcessTx(context.Context, *Submission) (*SubmissionResponse, error)
 	QueryShardCount(context.Context, *empty.Empty) (*ShardCountResponse, error)
-	ProcessLightQuery(context.Context, *Submission) (*AccQueryResp, error)
+	ProcessQuery(context.Context, *Query) (*QueryResp, error)
 	mustEmbedUnimplementedApiServiceServer()
 }
 
@@ -151,8 +151,8 @@ func (UnimplementedApiServiceServer) ProcessTx(context.Context, *Submission) (*S
 func (UnimplementedApiServiceServer) QueryShardCount(context.Context, *empty.Empty) (*ShardCountResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryShardCount not implemented")
 }
-func (UnimplementedApiServiceServer) ProcessLightQuery(context.Context, *Submission) (*AccQueryResp, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ProcessLightQuery not implemented")
+func (UnimplementedApiServiceServer) ProcessQuery(context.Context, *Query) (*QueryResp, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ProcessQuery not implemented")
 }
 func (UnimplementedApiServiceServer) mustEmbedUnimplementedApiServiceServer() {}
 
@@ -293,20 +293,20 @@ func _ApiService_QueryShardCount_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ApiService_ProcessLightQuery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(Submission)
+func _ApiService_ProcessQuery_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Query)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ApiServiceServer).ProcessLightQuery(ctx, in)
+		return srv.(ApiServiceServer).ProcessQuery(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/apiProto.ApiService/ProcessLightQuery",
+		FullMethod: "/apiProto.ApiService/ProcessQuery",
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ApiServiceServer).ProcessLightQuery(ctx, req.(*Submission))
+		return srv.(ApiServiceServer).ProcessQuery(ctx, req.(*Query))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -347,8 +347,8 @@ var ApiService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _ApiService_QueryShardCount_Handler,
 		},
 		{
-			MethodName: "ProcessLightQuery",
-			Handler:    _ApiService_ProcessLightQuery_Handler,
+			MethodName: "ProcessQuery",
+			Handler:    _ApiService_ProcessQuery_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
