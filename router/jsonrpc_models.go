@@ -52,3 +52,7 @@ type APIRequestTx struct {
 	Signer    *Signer     `json:"signer" form:"signer" query:"signer" validate:"required"`
 	Timestamp int64       `json:"timestamp" form:"timestamp" query:"timestamp" validate:"required"`
 }
+
+type APIURLRequest struct {
+	URL string `json:"url" form:"url" query:"url" validate:"required"`
+}
