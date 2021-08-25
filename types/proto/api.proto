@@ -17,10 +17,8 @@ service ApiService {
   // Obtains the feature at a given position.
   rpc ProcessTx(Submission) returns (SubmissionResponse) {}
   rpc QueryShardCount(google.protobuf.Empty) returns (ShardCountResponse){}
-  rpc ProcessLightQuery(Submission) returns (AccQueryResp){}
+  rpc ProcessQuery(Query) returns (QueryResp){}
 }
-
-
 
 
 message ShardCountResponse {
@@ -96,7 +94,7 @@ enum AccInstruction {
   Token_Issue = 0x08;
   Key_Update = 0x09; //update keys on the keychain the identity
   Deep_Query = 0x0A; //implements a transaction on the network that is processed by validators these cost $$, but can provide cryptographic proof for validity at current state
-  Light_Query = 0x0B; //sends a query to a node and info is returned.
+  State_Query = 0x0B; //sends a query to a chain and returns its state information
   //Only valid for BVC use: any other source of this message will be rejected
   //is this data store or State_Store
   Data_Store = 0x0C; //Data Store can only be sent and thus authorized by an authority node
@@ -135,15 +133,15 @@ message SubmissionResponse {
   uint64 errorCode = 2;
 }
 
-message AccQuery {
-  uint64 Addr = 1;
-  string Adi = 2;
+message Query {
+  string ChainUrl = 1;
+  bytes AdiChain = 2;
   bytes ChainId = 3;
-  string Query = 4;
-  //AccInstruction Ins = 4;
+  AccInstruction Ins = 4; //this is the instruction for the type of query
+  bytes Query = 5;  // This is the query data to be processed by the validator
 }
 
-message AccQueryResp {
+message QueryResp {
   uint32 code = 1;
   bytes data = 2;
 }
