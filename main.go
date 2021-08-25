@@ -21,36 +21,33 @@ import (
 
 var ConfigFile []string
 var WorkingDir []string
-const DBVCIndex = 0
 
 var (
-	BuildTag     string = "v0.0.1"
+	BuildTag string = "v0.0.1"
 )
-//var SpecialModeHeight int64 = 99999999999
 
 func init() {
 
-	usr,err := user.Current()
+	usr, err := user.Current()
 	if err != nil {
-		log.Fatal( err )
+		log.Fatal(err)
 		os.Exit(1)
 	}
-	initdir := path.Join(usr.HomeDir , "/.accumulate" )
+	initdir := path.Join(usr.HomeDir, "/.accumulate")
 
 	version := flag.Bool("v", false, "prints the current version")
-	flag.StringVar(&initdir, "workingdir", usr.HomeDir +  "/.accumulate", "Path to data directory")
+	flag.StringVar(&initdir, "workingdir", usr.HomeDir+"/.accumulate", "Path to data directory")
 	flag.Parse()
 	if *version {
-		fmt.Printf("Accumulate BVC %s\n",BuildTag)
+		fmt.Printf("Accumulate BVC %s\n", BuildTag)
 		os.Exit(0)
 	}
 	for i := range router.Networks {
 		WorkingDir = append(WorkingDir, path.Join(initdir, router.Networks[i]))
-		ConfigFile = append(ConfigFile, path.Join(WorkingDir[i],"/config/config.toml"))
+		ConfigFile = append(ConfigFile, path.Join(WorkingDir[i], "/config/config.toml"))
 	}
 
 }
-
 
 func main() {
 
@@ -60,8 +57,8 @@ func main() {
 	fmt.Printf("Config File VM1: %v\n", ConfigFile[1])
 
 	n := len(os.Args)
-	for i := 0; i<n; i++ {
-    	switch os.Args[i] {
+	for i := 0; i < n; i++ {
+		switch os.Args[i] {
 		case "init":
 			baseport := 26600
 			for i := range router.Networks {
@@ -71,14 +68,13 @@ func main() {
 				accRCPAddress := fmt.Sprintf("tcp://localhost:%d", baseport+3)
 				routerAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
 				baseport += 5
-				tendermint.Initialize("accumulate." + router.Networks[i],abciAppAddress,rcpAddress,grpcAddress,accRCPAddress,routerAddress,ConfigFile[i],WorkingDir[i])
+				tendermint.Initialize("accumulate."+router.Networks[i], abciAppAddress, rcpAddress, grpcAddress, accRCPAddress, routerAddress, ConfigFile[i], WorkingDir[i])
 			}
 			os.Exit(0)
 		case "dbvc":
 			os.Exit(0)
 		}
 	}
-
 
 	//First create a router
 	viper.SetConfigFile(ConfigFile[1])
@@ -87,15 +83,17 @@ func main() {
 	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
 
 	//Next create a BVC
-	accvm := accnode.CreateAccumulateBVC(ConfigFile[1], WorkingDir[1])
+	accvm, err := accnode.CreateAccumulateBVC(ConfigFile[1], WorkingDir[1])
+	if err != nil {
+		panic(err)
+	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
 	accvmapi, _ := accvm.GetAPIClient()
 	urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
 	//temporary server for each vm.  will be replaced by url router.
-	//go router.Jsonrpcserver2(accvmapi)
-
+	go router.StartAPI(25999)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

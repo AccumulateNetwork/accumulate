@@ -3,21 +3,21 @@ package tendermint
 import (
 	"context"
 	"fmt"
+	"github.com/spf13/viper"
 	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	//"github.com/btcsuite/btcd/rpcclient"
-	"github.com/spf13/viper"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/config"
 	cfg "github.com/tendermint/tendermint/config"
-	config "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
-	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"github.com/tendermint/tendermint/types"
 	tmtime "github.com/tendermint/tendermint/types/time"
 	"time"
@@ -25,7 +25,7 @@ import (
 
 func Initialize(shardname string,
 	ABCIAppAddress string, RPCAddress string, GRPCAddress string, AccRPCAddress string, RouterAddress string,
-	ConfigFile string, WorkingDir string){
+	ConfigFile string, WorkingDir string) error {
 	fmt.Println("Tendermint Initialize")
 	config.EnsureRoot(WorkingDir)
 	var newConfig = cfg.DefaultConfig()
@@ -35,24 +35,28 @@ func Initialize(shardname string,
 	newConfig.ProxyApp = ABCIAppAddress
 	newConfig.RPC.ListenAddress = RPCAddress
 	newConfig.RPC.GRPCListenAddress = GRPCAddress
-	config.WriteConfigFile(ConfigFile,newConfig)
+	config.WriteConfigFile(ConfigFile, newConfig)
 
 	v := viper.New()
 	v.SetConfigFile(ConfigFile)
 	v.AddConfigPath(WorkingDir)
-	v.ReadInConfig()
-	type config struct {
-		Port int
-		Name string
+	err := v.ReadInConfig()
+	if err != nil {
+		return err
 	}
-	v.Set("accumulate.AccRPCAddress",AccRPCAddress)
+	//type config struct {
+	//	Port int
+	//	Name string
+	//}
+	v.Set("accumulate.AccRPCAddress", AccRPCAddress)
 	v.Set("accumulate.RouterAddress", RouterAddress)
 	v.WriteConfig()
 
-	if InitFilesWithConfig(newConfig,&shardname) != nil {
-		//log.Fatal("")
-		return
+	err = InitFilesWithConfig(newConfig, &shardname)
+	if err != nil {
+		return err
 	}
+	return nil
 }
 
 func InitFilesWithConfig(config *cfg.Config, chainid *string) error {
@@ -113,10 +117,10 @@ func InitFilesWithConfig(config *cfg.Config, chainid *string) error {
 	return nil
 }
 
-func makeGRPCClient(addr string) (abcicli.Client,error){ //grpccore.BroadcastAPIClient, error) {//abcicli.Client, error) {
+func makeGRPCClient(addr string) (abcicli.Client, error) { //grpccore.BroadcastAPIClient, error) {//abcicli.Client, error) {
 	// Start the listener
-	socket := addr //fmt.Sprintf("unix://%s.sock", addr)
-	logger := tmlog.NewNopLogger()//TestingLogger()
+	socket := addr                 //fmt.Sprintf("unix://%s.sock", addr)
+	logger := tmlog.NewNopLogger() //TestingLogger()
 
 	//client := grpccore.StartGRPCClient(addr)
 	client := abcicli.NewGRPCClient(socket, true)
@@ -127,16 +131,16 @@ func makeGRPCClient(addr string) (abcicli.Client,error){ //grpccore.BroadcastAPI
 	}
 	return client, nil
 }
+
 //
 //func makeRPCClient(addr string) rpcclient.ABCIClient {
 //}
 //
 
-
 func makeGRPCServer(app abcitypes.Application, name string) (service.Service, error) {
 	// Start the listener
-	socket := name// fmt.Sprintf("unix://%s.sock", name)
-	logger := tmlog.NewNopLogger()//TestingLogger()
+	socket := name                 // fmt.Sprintf("unix://%s.sock", name)
+	logger := tmlog.NewNopLogger() //TestingLogger()
 
 	gapp := abcitypes.NewGRPCApplication(app)
 	server := abciserver.NewGRPCServer(socket, gapp)
@@ -164,8 +168,8 @@ func WaitForRPC(laddr string) {
 		time.Sleep(time.Millisecond)
 	}
 }
-func GetGRPCClient(grpcAddr string) core_grpc.BroadcastAPIClient {
-	return core_grpc.StartGRPCClient(grpcAddr)
+func GetGRPCClient(grpcAddr string) coregrpc.BroadcastAPIClient {
+	return coregrpc.StartGRPCClient(grpcAddr)
 }
 
 func GetRPCClient(rpcAddr string) *rpcclient.Client {
@@ -175,13 +179,13 @@ func GetRPCClient(rpcAddr string) *rpcclient.Client {
 	//result := new(ctypes.ResultStatus)
 	//_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
 	//b.Call()
-    return client
+	return client
 }
 
 func WaitForGRPC(grpcAddr string) {
 	client := GetGRPCClient(grpcAddr)
 	for {
-		_, err := client.Ping(context.Background(), &core_grpc.RequestPing{})
+		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
 		if err == nil {
 			return
 		}

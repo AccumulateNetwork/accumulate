@@ -6,6 +6,7 @@ require (
 	github.com/AccumulateNetwork/SMT v0.0.22
 	github.com/AccumulateNetwork/ValidatorAccumulator v0.0.0-20201027214006-47dd1dba5f03 // indirect
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
+	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106
 	github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d
 	github.com/AdamSLevy/jsonrpc2 v2.0.0+incompatible // indirect
 	github.com/AdamSLevy/jsonrpc2/v14 v14.0.0
@@ -16,13 +17,15 @@ require (
 	github.com/Factom-Asset-Tokens/base58 v0.0.0-20191118025050-4fa02e92ec20
 	github.com/Factom-Asset-Tokens/factom v0.0.0-20200222022020-d06cbcfe6ece
 	github.com/Factom-Asset-Tokens/fatd v1.1.4
+	github.com/FactomProject/FactomCode v0.3.6-0.20171228170625-d7e03150a9d5
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/FactomProject/bolt v1.1.1-0.20170202195217-952a1b4e9a55 // indirect
+	github.com/FactomProject/btcd v0.3.6-0.20200312193844-fe42c67cdb3a
 	github.com/FactomProject/btcutil v0.0.0-20200312214114-5fd3eaf71bd2
 	github.com/FactomProject/btcutilecc v0.0.0-20130527213604-d3a63a5752ec // indirect
 	github.com/FactomProject/dynrsrc v0.3.1 // indirect
 	github.com/FactomProject/ed25519 v0.0.0-20150814230546-38002c4fe7b6
-	github.com/FactomProject/factoid v0.3.4 // indirect
+	github.com/FactomProject/factoid v0.3.4
 	github.com/FactomProject/factom v0.3.6-0.20190712163801-e7717c4ab072 // indirect
 	github.com/FactomProject/factomd v6.7.0+incompatible
 	github.com/FactomProject/fastsha256 v0.2.1 // indirect
@@ -53,6 +56,7 @@ require (
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/elliotchance/orderedmap v1.3.0
 	github.com/fsnotify/fsnotify v1.4.9 // indirect
+	github.com/go-playground/validator/v10 v10.9.0
 	github.com/golang/protobuf v1.4.3
 	github.com/google/protobuf v3.13.0+incompatible // indirect
 	github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1 // indirect
@@ -63,12 +67,11 @@ require (
 	github.com/howeyc/fsnotify v0.9.0 // indirect
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/klauspost/compress v1.10.11 // indirect
-	github.com/kr/pretty v0.2.0 // indirect
 	github.com/kr/pty v1.1.8 // indirect
 	github.com/magiconair/properties v1.8.1
 	github.com/mattn/go-colorable v0.1.0 // indirect
 	github.com/mgutz/ansi v0.0.0-20170206155736-9520e82c474b // indirect
-	github.com/mitchellh/mapstructure v1.3.3 // indirect
+	github.com/mitchellh/mapstructure v1.4.1
 	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/powerman/rpc-codec v1.2.2 // indirect
 	github.com/prometheus/client_golang v1.8.0
@@ -79,21 +82,23 @@ require (
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.7.1
-	github.com/stretchr/testify v1.6.1
+	github.com/stretchr/testify v1.7.0
 	github.com/tarndt/wasmws v0.0.0-20191230183838-0f186a886e92
 	github.com/tendermint/go-amino v0.16.0 // indirect
 	github.com/tendermint/tendermint v0.34.0
 	github.com/tendermint/tm-db v0.6.3
 	go.uber.org/atomic v1.6.0 // indirect
 	go.uber.org/ratelimit v0.1.0 // indirect
-	golang.org/x/crypto v0.0.0-20201117144127-c1f2f97bffc9
-	golang.org/x/net v0.0.0-20201021035429-f5854403a974
+	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
+	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	google.golang.org/grpc v1.35.0
-	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.0.1 // indirect
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.1.0 // indirect
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/AlecAivazis/survey.v1 v1.6.2 // indirect
 	gopkg.in/ini.v1 v1.58.0 // indirect
 	launchpad.net/gocheck v0.0.0-20140225173054-000000000087 // indirect
 	nhooyr.io/websocket v1.8.6 // indirect
 )
+
+replace github.com/AccumulateNetwork/SMT => ../SMT
