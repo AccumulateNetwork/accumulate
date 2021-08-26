@@ -5,18 +5,18 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"math/big"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"testing"
 	"time"
 )
 
 func TestTokenTransactionDeposit(t *testing.T) {
-	amt := big.NewInt(1000)
-
-	toaccount := "YourIdentity/MyAcmeAccount"
-	tx := types.NewTokenTransaction(nil, nil)
-	tx.SetTransferAmount(amt)
-	tx.AddToAccount(toaccount, amt)
+	amt := types.Amount{}
+	amt.SetInt64(1000)
+	fromAccount := types.UrlChain("MyIdentity/MyAcmeAccount")
+	toAccount := types.UrlChain("YourIdentity/MyAcmeAccount")
+	tx := api.NewTokenTx(fromAccount)
+	tx.AddToAccount(toAccount, &amt)
 
 	data, err := json.Marshal(&tx)
 
@@ -24,7 +24,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ledger := types.MarshalBinaryLedgerAdiChainPath(toaccount, data, time.Now().Unix())
+	ledger := types.MarshalBinaryLedgerAdiChainPath(string(toAccount), data, time.Now().Unix())
 
 	dep := NewTokenTransactionDeposit()
 
@@ -34,8 +34,8 @@ func TestTokenTransactionDeposit(t *testing.T) {
 	cp := types.GetChainIdFromChainPath(idchp)
 
 	txid := sha256.Sum256(ledger)
-	dep.SetDeposit(txid[:], amt)
-	dep.SetTokenInfo(id[:], cp[:])
+	dep.SetDeposit(txid[:], amt.AsBigInt())
+	dep.SetTokenInfo(types.UrlChain(idchp))
 	dep.SetSenderInfo(id[:], cp[:])
 	err = dep.Valid()
 	if err != nil {
@@ -69,12 +69,8 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		t.Fatalf("Error marshalling sender chain id")
 	}
 
-	if bytes.Compare(dep.IssuerIdentity[:], dep2.IssuerIdentity[:]) != 0 {
+	if dep.TokenUrl != dep2.TokenUrl {
 		t.Fatalf("Error marshalling issuer identity hash")
-	}
-
-	if bytes.Compare(dep.IssuerChainId[:], dep2.IssuerChainId[:]) != 0 {
-		t.Fatalf("Error marshalling sender chain id")
 	}
 
 	if dep.Metadata != nil {

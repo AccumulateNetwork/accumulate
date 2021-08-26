@@ -2,12 +2,15 @@ package validator
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"testing"
+	"time"
 )
 
 func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*state.Object, []byte) {
@@ -27,9 +30,10 @@ func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*st
 }
 
 func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.Object {
-	id, cp, _ := types.ParseIdentityChainPath(identitychainpath)
+	_, cp, _ := types.ParseIdentityChainPath(identitychainpath)
 
-	tas := state.NewTokenAccountState([]byte(id), []byte(cp), nil)
+	tokenPath := "wileecoyote/Acme"
+	tas := state.NewTokenAccount(types.UrlChain(cp), types.UrlChain(tokenPath))
 
 	deposit := big.NewInt(5000)
 	tas.AddBalance(deposit)
@@ -43,17 +47,35 @@ func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.
 }
 
 func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submission {
-
-	inputamt := big.NewInt(5000)
-
-	identityname := "RoadRunner"
 	tokenchainname := "RoadRunner/ACME"
 
 	outputs := make(map[string]*big.Int)
 	outputs["WileECoyote/MyACMEToken"] = big.NewInt(5000)
 
-	sub, err := types.CreateTokenTransaction(&identityname, &tokenchainname,
-		inputamt, &outputs, nil, kp)
+	tx := api.TokenTx{}
+	amt := types.Amount{}
+	amt.SetInt64(5000)
+	tx.AddToAccount("WileECoyote/MyACMETokens", &amt)
+	tx.From = types.UrlChain(tokenchainname)
+
+	data, err := json.Marshal(&tx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sig, err := kp.Sign(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	builder := proto.SubmissionBuilder{}
+	sub, err := builder.
+		Data(data).
+		ChainUrl(tokenchainname).
+		Timestamp(time.Now().Unix()).
+		PubKey(kp.PubKey().Bytes()).
+		Signature(sig).Instruction(proto.AccInstruction_Token_Transaction).
+		Build()
+
 	if err != nil {
 		t.Fatalf("Failed to make a token rpc call %v", err)
 	}

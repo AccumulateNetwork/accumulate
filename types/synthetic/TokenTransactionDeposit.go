@@ -9,10 +9,9 @@ import (
 
 type TokenTransactionDeposit struct {
 	Header
-	DepositAmount  big.Int          `json:"amount"`          //amount
-	IssuerIdentity types.Bytes32    `json:"issuer-identity"` //token issuer's identity chain
-	IssuerChainId  types.Bytes32    `json:"issuer-chain-id"` //token issuer's chain id
-	Metadata       *json.RawMessage `json:"metadata,omitempty"`
+	DepositAmount big.Int          `json:"amount"` //amount
+	TokenUrl      types.String     `json:"tokenUrl"`
+	Metadata      *json.RawMessage `json:"metadata,omitempty"`
 }
 
 const tokenTransactionDepositMinLen = HeaderLen + 32 + 32 + 32
@@ -49,16 +48,12 @@ func (tx *TokenTransactionDeposit) SetSenderInfo(senderidentity []byte, senderch
 	return nil
 }
 
-func (tx *TokenTransactionDeposit) SetTokenInfo(issueridentity []byte, issuerchainid []byte) error {
-	if len(issueridentity) != 32 {
-		return fmt.Errorf("Issuer identity invalid")
-	}
-
-	if len(issuerchainid) != 32 {
-		return fmt.Errorf("Issuer chain id invalid")
-	}
-	copy(tx.IssuerIdentity[:], issueridentity)
-	copy(tx.IssuerChainId[:], issuerchainid)
+func (tx *TokenTransactionDeposit) SetTokenInfo(tokenUrl types.UrlChain) error {
+	//err := tokenUrl.MakeValid()
+	//if err != nil {
+	//	return err
+	//}
+	tx.TokenUrl = types.String(tokenUrl)
 	return nil
 }
 
@@ -82,7 +77,8 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 	}
 	var md []byte
 	if tx.Metadata != nil {
-		md, err = tx.Metadata.MarshalJSON()
+		bmd := types.Bytes(*tx.Metadata) //.MarshalJSON()
+		md, err = bmd.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
@@ -101,8 +97,12 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 
 	tx.DepositAmount.FillBytes(ret[i : i+32])
 	i += 32
-	i += copy(ret[i:], tx.IssuerIdentity[:])
-	i += copy(ret[i:], tx.IssuerChainId[:])
+	sdata, err := tx.TokenUrl.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	i += copy(ret[i:], sdata)
+
 	if md != nil {
 		i += copy(ret[i:], md)
 	}
@@ -122,14 +122,26 @@ func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) error {
 	i := HeaderLen
 	tx.DepositAmount.SetBytes(data[i : i+32])
 	i += 32
-	i += copy(tx.IssuerIdentity[:], data[i:])
-	i += copy(tx.IssuerChainId[:], data[i:])
+
+	if len(data) < i {
+		return fmt.Errorf("unable to unmarshal binary before token url")
+	}
+
+	err = tx.TokenUrl.UnmarshalBinary(data[i:])
+	if err != nil {
+		return err
+	}
+
+	i += tx.TokenUrl.Size(nil)
 
 	if i < len(data) {
-		err := tx.Metadata.UnmarshalJSON(data[i:])
+		var b types.Bytes
+		err = b.UnmarshalBinary(data[i:])
 		if err != nil {
 			return err
 		}
+		tx.Metadata = &json.RawMessage{}
+		copy(*tx.Metadata, b)
 	}
 
 	return nil

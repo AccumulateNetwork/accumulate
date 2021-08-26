@@ -4,7 +4,8 @@ import (
 	//"context"
 	"crypto/ed25519"
 	"encoding/hex"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/Factom-Asset-Tokens/fatd/fat0"
 
 	//"io/ioutil"
@@ -14,7 +15,7 @@ import (
 	//"time"
 
 	//"fmt"
-	"github.com/AccumulateNetwork/accumulated/api/proto"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 	//"github.com/golang/protobuf/ptypes/empty"
 
 	//"github.com/golang/protobuf/ptypes/empty"
@@ -144,9 +145,9 @@ func createKeyPair() ed25519.PrivateKey {
 func createTransaction(t *testing.T) *proto.Submission {
 	sub := proto.Submission{}
 
-	sub.Identitychain = types.GetIdentityChainFromAdi("RedWagon").Bytes()
-	sub.Chainid = types.GetIdentityChainFromAdi("RedWagon/acc").Bytes()
-	sub.Type = 0 //this is going away it is not needed since we'll know the type from transaction
+	sub.Identitychain = types.GetIdentityChainFromIdentity("RedWagon").Bytes()
+	sub.Chainid = types.GetIdentityChainFromIdentity("RedWagon/acc").Bytes()
+	sub.Type = api.ChainTypeToken[:]
 	sub.Instruction = proto.AccInstruction_Token_Transaction
 
 	//transaction := `{"inputs":{"FA3tM2R3T2ZT2gPrTfxjqhnFsdiqQUyKboKxvka3z5c1JF9yQck5":100,"FA3tM2R3T2ZT2gPrTfxjqhnFsdiqQUyKboKxvka3z5c1JF9yQck5":100,"FA3rCRnpU95ieYCwh7YGH99YUWPjdVEjk73mpjqnVpTDt3rUUhX8":10},"metadata":[0],"outputs":{"FA1zT4aFpEvcnPqPCigB3fvGu4Q4mTXY22iiuV69DqE1pNhdF2MC":10,"FA3sjgNF4hrJAiD9tQxAVjWS9Ca1hMqyxtuVSZTBqJiPwD7bnHkn":90,"FA2uyZviB3vs28VkqkfnhoXRD8XdKP1zaq7iukq2gBfCq3hxeuE8":10}}`
