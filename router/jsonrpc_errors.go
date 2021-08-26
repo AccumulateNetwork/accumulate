@@ -27,3 +27,11 @@ var (
 func NewValidatorError(err error) jsonrpc2.Error {
 	return jsonrpc2.NewError(-32802, "Validation Error", err)
 }
+
+func NewSubmissionError(err error) jsonrpc2.Error {
+	return jsonrpc2.NewError(-32803, "Submission Entry Error", err)
+}
+
+func NewAccumulateError(err error) jsonrpc2.Error {
+	return jsonrpc2.NewError(-32804, "Accumulate Error", err)
+}

@@ -3,11 +3,10 @@ package tendermint
 import (
 	"context"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"math/big"
-
 	//"crypto/ed25519"
 	"crypto/sha256"
 	"github.com/AccumulateNetwork/SMT/pmt"
@@ -357,13 +356,12 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	identity := types.GetIdentityChainFromIdentity(adi)
 	chainid := types.GetChainIdFromChainPath(chainpath)
 
-	supply := big.NewInt(50000000000000000)
-	ti, err := types.NewTokenIssuance("ACME", supply, 8, types.TokenCirculationMode_Burn_and_Mint)
-	if err != nil {
-		panic(err)
-	}
+	ti := api.NewToken(chainpath, "ACME", 8)
 
-	tas := state.NewTokenAccountState(identity[:], chainid[:], ti)
+	tas := state.NewToken(types.UrlChain(chainpath))
+	tas.Precision = ti.Precision
+	tas.Symbol = ti.Symbol
+	tas.Meta = ti.Meta
 
 	tasstatedata, err := tas.MarshalBinary()
 	if err != nil {
@@ -377,7 +375,6 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	if err != nil {
 		panic(err)
 	}
-
 }
 
 // BeginBlock /ABCI / block calls
@@ -503,7 +500,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("Entry check failed %v on validator %s \n", sub.Type, *val.GetInfo().GetNamespace())
+		ret.Info = fmt.Sprintf("Entry check failed %v on validator %s \n", sub.Type, *val.GetInfo().GetChainSpec())
 		return ret
 	}
 
@@ -643,7 +640,7 @@ func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *va
 			//using protobuffers grpc is quite slow, so we might want to consider
 			//buffering these calls up into a batch and send them out at the end of frame instead.
 			//this is a good place to experiment with different optimizations
-			app.RouterClient.ProcessTx(context.Background(), &vdata.Submissions[i])
+			app.RouterClient.ProcessTx(context.Background(), vdata.Submissions[i])
 		}
 	}
 	return nil
@@ -707,7 +704,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			//not an impostor. Need to figure out how to do this. Right now we just assume the syth request
 			//sender is legit.
 		} else {
-			is := state.IdentityState{}
+			is := state.AdiState{}
 			is.UnmarshalBinary(identitystate.Entry)
 			if !is.VerifyKey(sub.Key) {
 				//todo: need to handle responses differently when we go to the parallelized validtor
@@ -732,14 +729,14 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			ret.Code = 2
 			ret.GasWanted = 0
 			ret.GasUsed = 0
-			ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n", sub.Type, val.GetNamespace())
+			ret.Info = fmt.Sprintf("Entry check failed %v on validator %v \n", sub.Type, val.GetChainSpec())
 			return ret
 		}
 		if vdata == nil {
 			ret.Code = 2
 			ret.GasWanted = 0
 			ret.GasUsed = 0
-			ret.Info = fmt.Sprintf("Insufficent Entry Data on validator %v \n", val.GetNamespace())
+			ret.Info = fmt.Sprintf("Insufficent Entry Data on validator %v \n", val.GetChainSpec())
 			return ret
 		}
 
@@ -748,13 +745,13 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 		/// update the state data for the chain.
 		if vdata.StateData != nil {
-			header := state.Header{}
+			header := state.Chain{}
 			err := header.UnmarshalBinary(vdata.StateData)
 			if err != nil {
 				ret.Code = 2
 				ret.GasWanted = 0
 				ret.GasUsed = 0
-				ret.Info = fmt.Sprintf("Invalid state object %v \n", val.GetNamespace())
+				ret.Info = fmt.Sprintf("Invalid state object %v \n", val.GetChainSpec())
 				return ret
 			}
 			app.addStateEntry(sub.Chainid, vdata.StateData)
@@ -834,7 +831,8 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 		//
 
 		dbvc := validator.ResponseValidateTX{}
-		dbvc.Submissions = make([]pb.Submission, 1)
+		dbvc.Submissions = make([]*pb.Submission, 1)
+		dbvc.Submissions[0] = &pb.Submission{}
 		dbvc.Submissions[0].Instruction = 0
 		chainadi := "dbvc"
 		chainid := types.GetChainIdFromChainPath(chainadi)
@@ -845,16 +843,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 		dbvc.Submissions[0].Instruction = pb.AccInstruction_Data_Entry //this may be irrelevant...
 		dbvc.Submissions[0].Param1 = 0
 		dbvc.Submissions[0].Param2 = 0
-		//bvedata,err := bve.MarshalBinary()
-		//if err != nil {
-		//	///shouldn't get here.
-		//	fmt.Printf("Shouldn't get here... invalid BVE marshal")
-		//	return abcitypes.ResponseCommit{}
-		//}
-		//dbvc.Submissions[0].Data = bvedata
 
-		//send to router.
-		//app.processValidatedSubmissionRequest(&dbvc)
 	}
 
 	//this will truncate what tendermint stores since we only care about current state
@@ -908,13 +897,25 @@ func (app *AccumulatorVMApplication) ApplySnapshotChunk(
 func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 
-	q := pb.AccQuery{}
+	q := pb.Query{}
 	err := proto.Unmarshal(reqQuery.Data, &q)
 	if err != nil {
-		resQuery.Info = fmt.Sprintf("Requst is not an Accumulate Query\n")
+		resQuery.Info = fmt.Sprintf("requst is not an Accumulate Query\n")
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
+	//extract the state for the chain id
+	chainState, err := app.getCurrentState(q.ChainId)
+	chainHeader := state.Chain{}
+	err = chainHeader.UnmarshalBinary(chainState.Entry)
+	if err != nil {
+		resQuery.Info = fmt.Sprintf("unable to extract chain header\n")
+		resQuery.Code = code.CodeTypeUnauthorized
+		return resQuery
+	}
+
+	// app.chainval[chainHeader.Type[:]].Query(q, chainState.Entry)
+
 	fmt.Printf("Query URI: %s", q.Query)
 
 	///implement lazy sync calls. If a node falls behind it needs to have several query calls

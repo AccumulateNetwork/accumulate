@@ -11,35 +11,7 @@ import (
 	"fmt"
 	//"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	"math/big"
-	"testing"
 )
-
-func TestTokenTransfer(t *testing.T) {
-	kp := CreateKeyPair()
-	inputamt := big.NewInt(12345)
-
-	identityname := "RedWagon"
-	tokenchainname := "RedWagon/acc"
-
-	outputs := make(map[string]*big.Int)
-	outputs["RedRock/myacctoken"] = big.NewInt(12345)
-
-	sub, err := CreateTokenTransaction(&identityname, &tokenchainname,
-		inputamt, &outputs, nil, kp)
-	if err != nil {
-		t.Fatalf("failed to make a token rpc call %v", err)
-	}
-
-	fmt.Println(string(sub.Data))
-
-	if !json.Valid(sub.Data) {
-		t.Fatal("transaction test created invalid json")
-	}
-
-	if !kp.PubKey().VerifySignature(sub.Data, sub.Signature) {
-		t.Fatal("invalid signature for transaction")
-	}
-}
 
 func MakeUpdateKeyURL(identityname string, oldkey ed25519.PrivKey, newkey ed25519.PubKey) string {
 
@@ -141,105 +113,105 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 	return urlstring, nil
 }
 
-func TestURL(t *testing.T) {
-
-	//create a keypair to use...
-
-	//the current scheme is a notional scheme.  word after ? indicates action to take i.e. the Submission instruction
-
-	//create a URL with invalid utf8
-
-	//create a URL without acc://
-
-	params := Subtx{}
-
-	//Test identity name and chain path
-	//identity name should be RedWagon and chainpath should be RedWagon/acc
-	urlstring := "acc://RedWagon/acc"
-	q, err := URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-	params.Set("RedWagon", q)
-	result, _ := params.MarshalJSON()
-	fmt.Println(string(result))
-
-	urlstring = "acc://RedWagon/acc?query&block=1000"
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-	params.Set("RedWagon/acc", q)
-	result, _ = params.MarshalJSON()
-	fmt.Println(string(result))
-
-	if string(q.Data) != "{\"block\":[\"1000\"]}" {
-		t.Fatalf("URL query failed:  expected block=1000 received %s", string(q.Data))
-	}
-
-	urlstring = "acc://RedWagon/acc?query&block=1000+index"
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-	params.Set("RedWagon/acc", q)
-	result, _ = params.MarshalJSON()
-	fmt.Println(string(result))
-
-	identityname := "RedWagon"
-
-	kp1 := CreateKeyPair()
-
-	kp2 := CreateKeyPair()
-	sponsorname := "GreenRock"
-	urlstring = MakeCreateIdentityURL(identityname, sponsorname, kp1, kp2.PubKey().(ed25519.PubKey))
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-	params.Set(identityname, q)
-	result, _ = params.MarshalJSON()
-	fmt.Println(string(result))
-
-	urlstring = MakeUpdateKeyURL(identityname, kp1, kp2.PubKey().(ed25519.PubKey))
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-	params.Set(identityname, q)
-	result, _ = params.MarshalJSON()
-	fmt.Println(string(result))
-
-	chainpath := identityname + "/" + "ATKCoinbase"
-	urlstring = MakeTokenIssueURL(chainpath, 500000000, 8, "ATK", kp1)
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-	params.Set(chainpath, q)
-	result, _ = params.MarshalJSON()
-	fmt.Println(string(result))
-
-	chainpath = identityname + "/" + "MyAtkTokens"
-
-	inpamt := big.NewInt(10000)
-	outamt := big.NewInt(10000)
-	outchainpath := "GreenRock/YourAtkTokens"
-	out := make(map[string]*big.Int)
-	out[outchainpath] = outamt
-
-	urlstring, err = MakeTokenTransactionURL(chainpath, inpamt, &out, "", kp1)
-	if err != nil {
-		t.Fatalf("Error creating token transaction %v", err)
-	}
-
-	q, err = URLParser(urlstring)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	params.Set(chainpath, q)
-	result, _ = params.MarshalJSON()
-	fmt.Println(string(result))
-	//the q objects can be submitted to the router for processing.
-}
+//func TestURL(t *testing.T) {
+//
+//	//create a keypair to use...
+//
+//	//the current scheme is a notional scheme.  word after ? indicates action to take i.e. the Submission instruction
+//
+//	//create a URL with invalid utf8
+//
+//	//create a URL without acc://
+//
+//	params := Subtx{}
+//
+//	//Test identity name and chain path
+//	//identity name should be RedWagon and chainpath should be RedWagon/acc
+//	urlstring := "acc://RedWagon/acc"
+//	q, err := URLParser(urlstring)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	params.Set("RedWagon", q)
+//	result, _ := params.MarshalJSON()
+//	fmt.Println(string(result))
+//
+//	urlstring = "acc://RedWagon/acc?query&block=1000"
+//	q, err = URLParser(urlstring)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	params.Set("RedWagon/acc", q)
+//	result, _ = params.MarshalJSON()
+//	fmt.Println(string(result))
+//
+//	if string(q.Data) != "{\"block\":[\"1000\"]}" {
+//		t.Fatalf("URL query failed:  expected block=1000 received %s", string(q.Data))
+//	}
+//
+//	urlstring = "acc://RedWagon/acc?query&block=1000+index"
+//	q, err = URLParser(urlstring)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	params.Set("RedWagon/acc", q)
+//	result, _ = params.MarshalJSON()
+//	fmt.Println(string(result))
+//
+//	identityname := "RedWagon"
+//
+//	kp1 := CreateKeyPair()
+//
+//	kp2 := CreateKeyPair()
+//	sponsorname := "GreenRock"
+//	urlstring = MakeCreateIdentityURL(identityname, sponsorname, kp1, kp2.PubKey().(ed25519.PubKey))
+//	q, err = URLParser(urlstring)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	params.Set(identityname, q)
+//	result, _ = params.MarshalJSON()
+//	fmt.Println(string(result))
+//
+//	urlstring = MakeUpdateKeyURL(identityname, kp1, kp2.PubKey().(ed25519.PubKey))
+//	q, err = URLParser(urlstring)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	params.Set(identityname, q)
+//	result, _ = params.MarshalJSON()
+//	fmt.Println(string(result))
+//
+//	chainpath := identityname + "/" + "ATKCoinbase"
+//	urlstring = MakeTokenIssueURL(chainpath, 500000000, 8, "ATK", kp1)
+//	q, err = URLParser(urlstring)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//	params.Set(chainpath, q)
+//	result, _ = params.MarshalJSON()
+//	fmt.Println(string(result))
+//
+//	chainpath = identityname + "/" + "MyAtkTokens"
+//
+//	inpamt := big.NewInt(10000)
+//	outamt := big.NewInt(10000)
+//	outchainpath := "GreenRock/YourAtkTokens"
+//	out := make(map[string]*big.Int)
+//	out[outchainpath] = outamt
+//
+//	urlstring, err = MakeTokenTransactionURL(chainpath, inpamt, &out, "", kp1)
+//	if err != nil {
+//		t.Fatalf("Error creating token transaction %v", err)
+//	}
+//
+//	q, err = URLParser(urlstring)
+//	if err != nil {
+//		t.Fatal(err)
+//	}
+//
+//	params.Set(chainpath, q)
+//	result, _ = params.MarshalJSON()
+//	fmt.Println(string(result))
+//	//the q objects can be submitted to the router for processing.
+//}

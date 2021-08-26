@@ -38,7 +38,7 @@ func CreateAccumulateBVC(config string, path string) (*tendermint.AccumulatorVMA
 	}
 
 	//create identity validator
-	idval := validator.NewCreateIdentityValidator()
+	idval := validator.NewAdiChain()
 	err = acc.AddValidator(&idval.ValidatorContext)
 	if err != nil {
 		return nil, err
