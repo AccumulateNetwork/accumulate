@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -11,19 +12,6 @@ import (
 type Signer struct {
 	URL       types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	PublicKey types.Bytes32 `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
-}
-
-// API Request Data Structures
-
-type APIRequest struct {
-	Tx  *APIRequestTx `json:"tx" form:"tx" query:"tx" validate:"required"`
-	Sig types.Bytes64 `json:"sig" form:"sig" query:"sig" validate:"required"` //",hexadecimal"`
-}
-
-type APIRequestTx struct {
-	Data      interface{} `json:"data" form:"data" query:"data" validate:"required"`
-	Signer    *Signer     `json:"signer" form:"signer" query:"signer" validate:"required"`
-	Timestamp int64       `json:"timestamp" form:"timestamp" query:"timestamp" validate:"required"`
 }
 
 // APIRequestRaw will leave the data payload intact which is required for signature verification
