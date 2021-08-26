@@ -10,7 +10,7 @@ func TestNetworkAddress(t *testing.T) {
 	m := make(map[uint64]string)
 	n := make(map[uint64][]string)
 	for i := range Networks {
-		addr := types.GetAddressFromIdentity("accumulate." + Networks[i])
+		addr := types.GetAddressFromIdentity( Networks[i] + ".accumulate")
 		networkid := addr % uint64(len(Networks))
 		if mms := m[networkid]; mms == "" {
 			fmt.Printf("Found New ID : %d for network %s\n", networkid, Networks[i])
