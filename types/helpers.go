@@ -283,10 +283,13 @@ func (s *Bytes) MarshalBinary() ([]byte, error) {
 func (s *Bytes) UnmarshalBinary(data []byte) error {
 	slen, l := binary.Varint(data)
 	if l == 0 {
-		return fmt.Errorf("cannot unmarshal string")
+		return nil
+	}
+	if l < 0 {
+		return fmt.Errorf("invalid data to unmarshal")
 	}
 	if len(data) < int(slen)+l {
-		return fmt.Errorf("insufficient data to unmarshal string")
+		return fmt.Errorf("insufficient data to unmarshal")
 	}
 	*s = data[l : int(slen)+l]
 	return nil
