@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"crypto/sha256"
 	"fmt"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	cfg "github.com/tendermint/tendermint/config"
@@ -48,8 +49,8 @@ func NewEntryValidator() *EntryValidator {
 	//by definition a chainid of a factoid block is
 	//000000000000000000000000000000000000000000000000000000000000000f
 	//the id will be 0x0000000f
-	chainid := "0000000000000000000000000000000000000000000000000000000000000005"
-	v.SetInfo(chainid, "entry", pb.AccInstruction_Data_Entry)
+	chainid := sha256.Sum256([]byte("0000000000000000000000000000000000000000000000000000000000000005"))
+	v.SetInfo(chainid[:], "entry", pb.AccInstruction_Data_Entry)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
