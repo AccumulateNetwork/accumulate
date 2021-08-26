@@ -91,7 +91,7 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 	sub = resp.Submissions[0]
 
 	isc := synthetic.AdiStateCreate{}
-	err = json.Unmarshal(sub.Data, isc)
+	err = json.Unmarshal(sub.Data, &isc)
 	if err != nil {
 		t.Fatal(err)
 	}

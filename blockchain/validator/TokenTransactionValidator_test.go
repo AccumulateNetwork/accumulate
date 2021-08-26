@@ -20,7 +20,7 @@ func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*st
 
 	so := state.Object{}
 	ids := state.NewIdentityState(id)
-	ids.SetKeyData(0, key.PubKey().Bytes())
+	ids.SetKeyData(state.KeyTypeSha256, key.PubKey().Bytes())
 	so.Entry, _ = ids.MarshalBinary()
 
 	eh := sha256.Sum256(so.Entry)
@@ -89,6 +89,7 @@ func TestTokenTransactionValidator_Check(t *testing.T) {
 	currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath, t)
 	var idhash []byte
 	currentstate.IdentityState, idhash = CreateFakeIdentityState(identitychainpath, kp)
+
 
 	chainhash := sha256.Sum256([]byte(identitychainpath))
 
