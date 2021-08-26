@@ -6,11 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"net/url"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 // MarshalBinaryLedgerAdiChainPath fullchainpath == identityname/chainpath
@@ -325,7 +326,7 @@ func (s Bytes32) Bytes() []byte {
 // The input parameter, str, must be 64 hex characters in length
 func (s *Bytes32) FromString(str string) error {
 	if len(str) != 64 {
-		return fmt.Errorf("insufficient data")
+		return fmt.Errorf("expected 32 bytes string, received %s", str)
 	}
 
 	d, err := hex.DecodeString(str)
@@ -365,7 +366,7 @@ func (s Bytes64) Bytes() []byte {
 // The input parameter, str, must be 64 hex characters in length
 func (s *Bytes64) FromString(str string) error {
 	if len(str) != 128 {
-		return fmt.Errorf("insufficient data")
+		return fmt.Errorf("expected 64 bytes string, received %s", str)
 	}
 
 	d, err := hex.DecodeString(str)
