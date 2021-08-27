@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	//"crypto/sha256"
@@ -68,9 +67,9 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 
 	currentstate, sub, kp := createIdentityCreateSubmission(t, identitychainpath)
 
-	resp, err := tiv.Validate(currentstate, sub)
+	txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(adihash.Bytes(), sub.Data, sub.Timestamp))
 
-	txid := sha256.Sum256(types.MarshalBinaryLedgerAdiChainPath(identitychainpath, sub.Data, sub.Timestamp))
+	resp, err := tiv.Validate(currentstate, sub)
 
 	if err != nil {
 		t.Fatal(err)
@@ -96,7 +95,7 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if bytes.Compare(isc.SourceIdentity[:], adihash[:]) != 0 {
+	if bytes.Compare(isc.SourceAdiChain[:], adihash[:]) != 0 {
 		t.Fatalf("Invalid source identity in synth tx")
 	}
 
@@ -109,12 +108,7 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 	}
 
 	keyhash := sha256.Sum256(kp.PubKey().Bytes())
-	if bytes.Compare(isc.KeyData, keyhash[:]) == 0 {
+	if bytes.Compare(isc.PublicKeyHash[:], keyhash[:]) != 0 {
 		t.Fatalf("Invalid public key data stored")
 	}
-
-	if isc.KeyType != state.KeyTypeSha256 {
-		t.Fatalf("Expected key type to be KeyType_sha256")
-	}
-
 }

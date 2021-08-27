@@ -321,7 +321,7 @@ func (s *Bytes32) UnmarshalJSON(data []byte) error {
 }
 
 // Bytes returns the bite slice of the 32 byte array
-func (s Bytes32) Bytes() []byte {
+func (s *Bytes32) Bytes() []byte {
 	return s[:]
 }
 
@@ -428,7 +428,15 @@ func (s *Byte) UnmarshalBinary(data []byte) error {
 
 type UrlAdi string
 
+func (s *UrlAdi) AsString() *string {
+	return (*string)(s)
+}
+
 type UrlChain string
+
+func (s *UrlChain) AsString() *string {
+	return (*string)(s)
+}
 
 type Amount struct {
 	big.Int

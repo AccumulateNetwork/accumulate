@@ -62,7 +62,9 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 	if err != nil {
 		t.Fatal(err)
 	}
-	sig, err := kp.Sign(data)
+	ts := time.Now().Unix()
+	ledger := types.MarshalBinaryLedgerChainId(types.GetIdentityChainFromIdentity(tokenchainname)[:], data, ts)
+	sig, err := kp.Sign(ledger)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +73,7 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 	sub, err := builder.
 		Data(data).
 		ChainUrl(tokenchainname).
-		Timestamp(time.Now().Unix()).
+		Timestamp(ts).
 		PubKey(kp.PubKey().Bytes()).
 		Signature(sig).Instruction(proto.AccInstruction_Token_Transaction).
 		Build()
@@ -89,7 +91,6 @@ func TestTokenTransactionValidator_Check(t *testing.T) {
 	currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath, t)
 	var idhash []byte
 	currentstate.IdentityState, idhash = CreateFakeIdentityState(identitychainpath, kp)
-
 
 	chainhash := sha256.Sum256([]byte(identitychainpath))
 

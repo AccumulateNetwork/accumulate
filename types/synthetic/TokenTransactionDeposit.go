@@ -43,7 +43,7 @@ func (tx *TokenTransactionDeposit) SetSenderInfo(senderidentity []byte, senderch
 	if len(senderchainid) != 32 {
 		return fmt.Errorf("Sender chain id invalid")
 	}
-	copy(tx.SourceIdentity[:], senderidentity)
+	copy(tx.SourceAdiChain[:], senderidentity)
 	copy(tx.SourceChainId[:], senderchainid)
 	return nil
 }
@@ -77,7 +77,7 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 	}
 	var md []byte
 	if tx.Metadata != nil {
-		bmd := types.Bytes(*tx.Metadata) //.MarshalJSON()
+		bmd := types.Bytes(*tx.Metadata)
 		md, err = bmd.MarshalBinary()
 		if err != nil {
 			return nil, err
@@ -103,7 +103,7 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 	}
 	i += copy(ret[i:], sdata)
 
-	if md != nil {
+	if len(md) > 0 {
 		i += copy(ret[i:], md)
 	}
 	return ret, nil
@@ -140,8 +140,10 @@ func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) error {
 		if err != nil {
 			return err
 		}
-		tx.Metadata = &json.RawMessage{}
-		copy(*tx.Metadata, b)
+		if len(b) > 0 {
+			tx.Metadata = &json.RawMessage{}
+			copy(*tx.Metadata, b)
+		}
 	}
 
 	return nil

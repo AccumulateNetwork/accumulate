@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -48,9 +49,22 @@ func (v *TokenTransactionValidator) canSendTokens(currentState *StateEntry, iden
 		return nil, nil, nil, err
 	}
 
+	//verify the tx.from is from the same identity
+	stateAdiChain := types.GetIdentityChainFromIdentity(string(ids.ChainUrl))
+	fromAdiChain := types.GetIdentityChainFromIdentity(string(tx.From))
+	if bytes.Compare(stateAdiChain[:], fromAdiChain[:]) != 0 {
+		return nil, nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
+	}
+
+	//verify the tx.from is from the same chain
+	stateChainId := types.GetChainIdFromChainPath(string(tas.ChainUrl))
+	fromChainId := types.GetChainIdFromChainPath(string(tx.From))
+	if bytes.Compare(stateChainId[:], fromChainId[:]) != 0 {
+		return nil, nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
+	}
+
 	//now check to see if we can transact
 	//really only need to provide one input...
-
 	amt := types.Amount{}
 	for _, val := range tx.To {
 		amt.Add(amt.AsBigInt(), val.Amount.AsBigInt())
@@ -156,10 +170,15 @@ func (v *TokenTransactionValidator) Validate(currentState *StateEntry, submissio
 	}
 
 	//issue a state change...
-	ret.StateData, err = tas.MarshalBinary()
+	tasso, err := tas.MarshalBinary()
+
 	if err != nil {
 		return nil, err
 	}
+
+	//return a transaction state object
+	ret.AddStateData(types.GetChainIdFromChainPath(string(tx.From)), tasso)
+
 	return &ret, nil
 }
 

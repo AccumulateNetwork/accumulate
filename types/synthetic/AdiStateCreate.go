@@ -1,18 +1,20 @@
 package synthetic
 
 import (
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 )
 
 type AdiStateCreate struct {
-	*state.AdiState `json:"adiState"`
-	*Header `json:"header"`
+	Header
+	api.ADI
 }
 
-func NewIdentityStateCreate(adi string) *AdiStateCreate {
+func NewAdiStateCreate(adi string, keyHash *types.Bytes32) *AdiStateCreate {
 	ctas := &AdiStateCreate{}
-	ctas.Header = &Header{}
-	ctas.AdiState = state.NewIdentityState(adi)
+	ctas.ADI.URL = types.String(adi)
+	ctas.PublicKeyHash = *keyHash
+
 	return ctas
 }
 

@@ -2,7 +2,6 @@ package validator
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -59,7 +58,7 @@ func (v *AnonTokenChain) processDeposit(currentState *StateEntry, submission *pb
 
 	//the ADI is the Address, so now form the chain from the token type
 	url := fmt.Sprintf("%s/%s", adi, deposit.TokenUrl)
-	tokenChain := sha256.Sum256([]byte(url))
+	tokenChain := types.GetChainIdFromChainPath(url)
 
 	//so now look up the token chain from the account
 	data := currentState.DB.Get("Entry", "", tokenChain[:])
@@ -96,7 +95,7 @@ func (v *AnonTokenChain) processDeposit(currentState *StateEntry, submission *pb
 		if err != nil {
 			return nil
 		}
-		resp.StateData = data //this need to be appended into an array
+		resp.AddStateData(types.GetChainIdFromChainPath(adi), data)
 	}
 
 	//all is good, so subtract the balance
@@ -105,7 +104,7 @@ func (v *AnonTokenChain) processDeposit(currentState *StateEntry, submission *pb
 	data, err = account.MarshalBinary()
 
 	//todo: since we potentially added a state already, this one needs to be appended.
-	resp.StateData = data
+	resp.AddStateData(tokenChain, data)
 
 	return nil
 }

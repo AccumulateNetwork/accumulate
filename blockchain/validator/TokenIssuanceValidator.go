@@ -91,7 +91,9 @@ func (v *TokenIssuanceValidator) Validate(currentState *StateEntry, submission *
 	resp = &ResponseValidateTX{}
 
 	//return a new state object for a token
-	resp.StateData = tasso
+	chainid := types.Bytes32{}
+	copy(chainid[:], submission.Chainid)
+	resp.AddStateData(&chainid, tasso)
 
 	return resp, nil
 }

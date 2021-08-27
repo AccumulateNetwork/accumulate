@@ -10,8 +10,7 @@ import (
 
 	//"crypto/sha256"
 	"fmt"
-	//"github.com/AccumulateNetwork/SMT/managed"
-	acctypes "github.com/AccumulateNetwork/accumulated/types/state"
+
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
 	"time"
@@ -66,14 +65,13 @@ func (v *AdiChain) Validate(currentstate *StateEntry, submission *pb.Submission)
 		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
-	isc := synthetic.NewIdentityStateCreate(string(ic.URL))
-	ledger := types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp)
+	isc := synthetic.NewAdiStateCreate(string(ic.URL), &ic.PublicKeyHash)
+	ledger := types.MarshalBinaryLedgerChainId(submission.Identitychain, submission.Data, submission.Timestamp)
 
 	txid := sha256.Sum256(ledger)
 	copy(isc.Txid[:], txid[:])
-	copy(isc.SourceIdentity[:], submission.Identitychain)
+	copy(isc.SourceAdiChain[:], submission.Identitychain)
 	copy(isc.SourceChainId[:], submission.Chainid)
-	err = isc.SetKeyData(acctypes.KeyTypeSha256, ic.PublicKeyHash[:])
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +90,7 @@ func (v *AdiChain) Validate(currentstate *StateEntry, submission *pb.Submission)
 	resp.Submissions[0], err = builder.
 		Type(v.GetValidatorChainTypeId()).
 		Instruction(pb.AccInstruction_Synthetic_Identity_Creation).
-		ChainUrl(isc.GetChainUrl()).
+		AdiUrl(string(isc.URL)).
 		Data(iscData).
 		Timestamp(time.Now().Unix()).
 		BuildUnsigned()

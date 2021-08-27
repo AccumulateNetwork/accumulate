@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	//"crypto/sha256"
@@ -82,7 +83,8 @@ func (v *SyntheticIdentityStateCreateValidator) Validate(currentstate *StateEntr
 		return nil, fmt.Errorf("cannot marshal state object for identity state create")
 	}
 	resp = &ResponseValidateTX{}
-	resp.StateData = statedata
+
+	resp.AddStateData(types.GetIdentityChainFromIdentity(string(is.ChainUrl)), statedata)
 
 	return resp, nil
 }
