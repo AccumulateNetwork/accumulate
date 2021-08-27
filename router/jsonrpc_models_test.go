@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/mitchellh/mapstructure"
 
@@ -21,7 +23,7 @@ func createAdiTxJson(t *testing.T) []byte {
 	kp := types.CreateKeyPair()
 
 	var err error
-	req := &APIRequest{}
+	req := &api.APIRequestRaw{}
 
 	data := &ADI{}
 
@@ -29,10 +31,10 @@ func createAdiTxJson(t *testing.T) []byte {
 	keyhash := sha256.Sum256(kp.PubKey().Bytes())
 	copy(data.PublicKeyHash[:], keyhash[:])
 
-	req.Tx = &APIRequestTx{}
+	req.Tx = &api.APIRequestRawTx{}
 	req.Tx.Data = data
 	req.Tx.Timestamp = time.Now().Unix()
-	req.Tx.Signer = &Signer{}
+	req.Tx.Signer = &api.Signer{}
 	req.Tx.Signer.URL = "redrock"
 	copy(req.Tx.Signer.PublicKey[:], kp.PubKey().Bytes())
 
@@ -42,7 +44,7 @@ func createAdiTxJson(t *testing.T) []byte {
 	}
 	sig, err := kp.Sign(params)
 
-	reqraw := &APIRequestRaw{}
+	reqraw := &api.APIRequestRaw{}
 
 	reqraw.Tx = &json.RawMessage{}
 	*reqraw.Tx = params
@@ -133,7 +135,7 @@ func (sb *SubmissionBuilder) Build() (*proto.Submission, error) {
 }
 
 func BuildSubmissionAdiCreate(raw *APIRequestRaw) (*proto.Submission, error) {
-	req := &APIRequestTx{}
+	req := &api.APIRequestRawTx{}
 	err := json.Unmarshal(*raw.Tx, req)
 	if err != nil {
 		return nil, err
@@ -161,7 +163,7 @@ func TestJsonRpcModels_Adi(t *testing.T) {
 
 	params := createAdiTxJson(t)
 
-	rawreq2 := APIRequestRaw{}
+	rawreq2 := api.APIRequestRaw{}
 	err := json.Unmarshal(params, &rawreq2)
 
 	submission, err := BuildSubmissionAdiCreate(&rawreq2)
@@ -175,7 +177,7 @@ func TestJsonRpcModels_Adi(t *testing.T) {
 
 	validate := validator.New()
 
-	req := &APIRequest{}
+	req := &api.APIRequestRaw{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
