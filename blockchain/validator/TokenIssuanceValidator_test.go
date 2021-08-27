@@ -71,7 +71,16 @@ func TestTokenIssuanceValidator_Validate(t *testing.T) {
 	}
 
 	ti := state.Token{}
-	err = ti.UnmarshalBinary(resp.StateData)
+	chainid := types.GetChainIdFromChainPath(identitychainpath)
+	if resp.StateData == nil {
+		t.Fatal("expecting state object from token transaction")
+	}
+
+	val, ok := resp.StateData[*chainid]
+	if !ok {
+		t.Fatalf("token transaction account chain not found %s", identitychainpath)
+	}
+	err = ti.UnmarshalBinary(val)
 
 	if err != nil {
 		t.Fatal(err)
