@@ -29,9 +29,16 @@ func NewStateEntry(idstate *state.Object, chainstate *state.Object, db *smtdb.Ma
 }
 
 type ResponseValidateTX struct {
-	StateData   []byte           //acctypes.StateObject
-	EventData   []byte           //this should be events that need to get published
-	Submissions []*pb.Submission //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
+	StateData   *map[types.Bytes32]types.Bytes //acctypes.StateObject
+	EventData   []byte                         //this should be events that need to get published
+	Submissions []*pb.Submission               //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
+}
+
+func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []byte) {
+	if r.StateData == nil {
+		r.StateData = new(map[types.Bytes32]types.Bytes)
+	}
+	(*r.StateData)[*chainid] = stateData
 }
 
 type ValidatorInterface interface {

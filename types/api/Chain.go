@@ -10,7 +10,7 @@ import (
 type ChainSpec string
 
 const (
-	ChainSpecDBVC             string = "AIM/0/0.1"
+	ChainSpecDC               string = "AIM/0/0.1"
 	ChainSpecAdi                     = "AIM/1/0.1"
 	ChainSpecToken                   = "AIM/2/0.1"
 	ChainSpecTokenAccount            = "AIM/3/0.1"
@@ -21,8 +21,8 @@ const (
 type ChainType types.Bytes32
 
 var (
-	//ChainTypeDB Define the Directory Block Chain Validator type
-	ChainTypeDBVC ChainType = sha256.Sum256([]byte(ChainSpecDBVC))
+	//ChainTypeDC Define the Directory Block Chain Validator type
+	ChainTypeDC ChainType = sha256.Sum256([]byte(ChainSpecDC))
 
 	//ChainTypeAdi Define the ADI chain validator type
 	ChainTypeAdi ChainType = sha256.Sum256([]byte(ChainSpecAdi))
