@@ -70,7 +70,7 @@ func TestTokenIssuanceValidator_Validate(t *testing.T) {
 		t.Fatal("expecting a state object to be returned to add to a token coinbase chain")
 	}
 
-	ti := state.TokenAccount{}
+	ti := state.Token{}
 	err = ti.UnmarshalBinary(resp.StateData)
 
 	if err != nil {
