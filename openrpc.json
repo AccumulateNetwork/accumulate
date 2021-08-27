@@ -3,7 +3,7 @@
 	"info": {
 		"title": "Accumulate API",
 		"description": "A public JSON RPC API of the Accumulate Node",
-		"version": "0.1.0",
+		"version": "0.2.0",
 		"license": {
 			"name": "MIT"
 		}
@@ -54,27 +54,21 @@
 			],
 			"params": [
 				{
-					"name": "adi",
-					"summary": "New ADI",
+					"name": "tx",
+					"summary": "ADI create data",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/adi"
-					}
-				},
-				{
-					"name": "signer",
-					"summary": "Existing ADI signing the creation of new ADI",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/signer"
-					}
-				},
-				{
-					"name": "timestamp",
-					"summary": "Unix timestamp",
-					"required": true,
-					"schema": {
-						"type": "integer"
+						"properties": {
+							"data": {
+								"$ref": "#/components/schemas/adi"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/signer"
+							},
+							"timestamp": {
+								"$ref": "#/components/schemas/timestamp"
+							}
+						}
 					}
 				},
 				{
@@ -156,27 +150,21 @@
 			],
 			"params": [
 				{
-					"name": "token",
-					"summary": "New Token",
+					"name": "tx",
+					"summary": "Token create data",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/token"
-					}
-				},
-				{
-					"name": "signer",
-					"summary": "ADI signing the creation of new Token",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/signer"
-					}
-				},
-				{
-					"name": "timestamp",
-					"summary": "Unix timestamp",
-					"required": true,
-					"schema": {
-						"type": "integer"
+						"properties": {
+							"data": {
+								"$ref": "#/components/schemas/token"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/signer"
+							},
+							"timestamp": {
+								"$ref": "#/components/schemas/timestamp"
+							}
+						}
 					}
 				},
 				{
@@ -258,27 +246,21 @@
 			],
 			"params": [
 				{
-					"name": "tokenAccount",
-					"summary": "New Token Account",
+					"name": "tx",
+					"summary": "Token account create data",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/tokenAccount"
-					}
-				},
-				{
-					"name": "signer",
-					"summary": "ADI signing the creation of new Token Account",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/signer"
-					}
-				},
-				{
-					"name": "timestamp",
-					"summary": "Unix timestamp",
-					"required": true,
-					"schema": {
-						"type": "integer"
+						"properties": {
+							"data": {
+								"$ref": "#/components/schemas/tokenAccount"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/signer"
+							},
+							"timestamp": {
+								"$ref": "#/components/schemas/timestamp"
+							}
+						}
 					}
 				},
 				{
@@ -364,27 +346,21 @@
 			],
 			"params": [
 				{
-					"name": "tokenTx",
-					"summary": "New Token Transaction",
+					"name": "tx",
+					"summary": "Token tx create data",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/tokenTx"
-					}
-				},
-				{
-					"name": "signer",
-					"summary": "ADI signing the transaction",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/signer"
-					}
-				},
-				{
-					"name": "timestamp",
-					"summary": "Unix timestamp",
-					"required": true,
-					"schema": {
-						"type": "integer"
+						"properties": {
+							"data": {
+								"$ref": "#/components/schemas/tokenTx"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/signer"
+							},
+							"timestamp": {
+								"$ref": "#/components/schemas/timestamp"
+							}
+						}
 					}
 				},
 				{
@@ -443,6 +419,10 @@
 			"fullURL": {
 				"type": "string",
 				"pattern": "^[0-9a-zA-Z._-/]+$"
+			},
+			"timestamp": {
+				"title": "Unix timestamp",
+				"type": "integer"
 			},
 			"adi": {
 				"title": "ADI (Accumulate Digital Identity)",
