@@ -29,3 +29,8 @@ type APIRequestRawTx struct {
 	Signer    *Signer          `json:"signer" form:"signer" query:"signer" validate:"required"`
 	Timestamp int64            `json:"timestamp" form:"timestamp" query:"timestamp" validate:"required"`
 }
+
+// APIRequestURL is used to unmarshal URL param into API methods, that retrieves data by URL
+type APIRequestURL struct {
+	URL types.String `json:"url" form:"url" query:"url" validate:"required"`
+}
