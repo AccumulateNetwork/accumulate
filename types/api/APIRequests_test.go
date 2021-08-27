@@ -4,12 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/go-playground/validator/v10"
 	"github.com/mitchellh/mapstructure"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"testing"
-	"time"
 )
 
 func createAdiTx(adiUrl string, pubkey []byte) (string, error) {
@@ -91,7 +92,7 @@ func TestAPIRequest_Adi(t *testing.T) {
 
 	validate := validator.New()
 
-	req := &APIRequest{}
+	req := &APIRequestRaw{}
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
 		t.Fatal(err)
@@ -143,7 +144,7 @@ func TestAPIRequest_Token(t *testing.T) {
 
 	validate := validator.New()
 
-	req := &APIRequest{}
+	req := &APIRequestRaw{}
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
 		t.Fatal(err)

@@ -7,8 +7,8 @@ import (
 
 type Header struct {
 	Txid           types.Bytes32 `json:"txid"`
-	SourceIdentity types.Bytes32 `json:"source-identity"`
-	SourceChainId  types.Bytes32 `json:"source-chain-id"`
+	SourceIdentity types.Bytes32 `json:"sourceIdentity"`
+	SourceChainId  types.Bytes32 `json:"sourceChainId"`
 }
 
 const HeaderLen = 32 * 3
