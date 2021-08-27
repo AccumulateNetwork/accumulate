@@ -15,6 +15,7 @@ import (
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
+	"github.com/gorilla/mux"
 )
 
 type API struct {
@@ -34,6 +35,9 @@ func StartAPI(port int, client proto.ApiServiceClient) *API {
 	api.client = client
 
 	methods := jsonrpc2.MethodMap{
+		// URL
+		"get": api.getData,
+
 		// ADI
 		"adi":        api.getADI,
 		"adi-create": api.createADI,
@@ -48,26 +52,58 @@ func StartAPI(port int, client proto.ApiServiceClient) *API {
 	}
 
 	apiHandler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
-	http.HandleFunc("/v1", apiHandler)
 
-	go log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), nil))
+	apiRouter := mux.NewRouter().StrictSlash(true)
+	apiRouter.HandleFunc("/v1", apiHandler)
+
+	proxyRouter := mux.NewRouter().StrictSlash(true)
+	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
+
+	// start JSON RPC API
+	go log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), apiRouter))
+
+	// start REST proxy for JSON RPC API
+	go log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port+1), proxyRouter))
 
 	return api
 
+}
+
+// getData returns Accumulate Object by URL
+func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &acmeapi.APIRequestURL{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// validate URL
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp := &TokenAccount{}
+	resp.URL = req.URL
+
+	// Tendermint integration here
+
+	return resp
 }
 
 // getADI returns ADI info
 func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &ADI{}
+	req := &acmeapi.APIRequestURL{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
 	}
 
-	// validate only ADI.URL
-	if err = api.validate.StructPartial(req, "URL"); err != nil {
+	// validate URL
+	if err = api.validate.Struct(req); err != nil {
 		return NewValidatorError(err)
 	}
 
@@ -134,14 +170,14 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &Token{}
+	req := &acmeapi.APIRequestURL{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
 	}
 
-	// validate only Token.URL
-	if err = api.validate.StructPartial(req, "URL"); err != nil {
+	// validate URL
+	if err = api.validate.Struct(req); err != nil {
 		return NewValidatorError(err)
 	}
 
@@ -214,14 +250,14 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &TokenAccount{}
+	req := &acmeapi.APIRequestURL{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
 	}
 
-	// validate only TokenAddress.URL
-	if err = api.validate.StructPartial(req, "URL"); err != nil {
+	// validate URL
+	if err = api.validate.Struct(req); err != nil {
 		return NewValidatorError(err)
 	}
 
