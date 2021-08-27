@@ -60,10 +60,14 @@ func StartAPI(port int, client proto.ApiServiceClient) *API {
 	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
 
 	// start JSON RPC API
-	go log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), apiRouter))
+	go func() {
+		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), apiRouter))
+	}()
 
 	// start REST proxy for JSON RPC API
-	go log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port+1), proxyRouter))
+	go func() {
+		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port+1), proxyRouter))
+	}()
 
 	return api
 
