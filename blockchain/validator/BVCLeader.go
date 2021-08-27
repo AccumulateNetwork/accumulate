@@ -16,7 +16,7 @@ type BVCLeader struct {
 
 func NewBVCLeader() *BVCLeader {
 	v := BVCLeader{}
-	v.SetInfo(api.ChainTypeDBVC[:], api.ChainSpecDBVC, pb.AccInstruction_State_Query)
+	v.SetInfo(api.ChainTypeDC[:], api.ChainSpecDC, pb.AccInstruction_State_Query)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
