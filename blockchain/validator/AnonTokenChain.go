@@ -61,7 +61,7 @@ func (v *AnonTokenChain) processDeposit(currentState *StateEntry, submission *pb
 	tokenChain := types.GetChainIdFromChainPath(url)
 
 	//so now look up the token chain from the account
-	data := currentState.DB.Get("Entry", "", tokenChain[:])
+	data := currentState.DB.Get("StateEntries", "", tokenChain[:])
 
 	//Unmarshal or create the token account
 	account := &state.TokenAccount{}
@@ -108,6 +108,9 @@ func (v *AnonTokenChain) processDeposit(currentState *StateEntry, submission *pb
 
 	return nil
 }
+func (v *AnonTokenChain) processSendToken(currentState *StateEntry, submission *pb.Submission, resp *pb.Submission) error {
+	return nil
+}
 
 func (v *AnonTokenChain) Validate(currentState *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 
@@ -117,6 +120,7 @@ func (v *AnonTokenChain) Validate(currentState *StateEntry, submission *pb.Submi
 	case pb.AccInstruction_Synthetic_Token_Deposit:
 		v.processDeposit(currentState, submission, resp)
 	case pb.AccInstruction_Token_Transaction:
+		v.processSendToken(currentState, submission, resp)
 
 	}
 
