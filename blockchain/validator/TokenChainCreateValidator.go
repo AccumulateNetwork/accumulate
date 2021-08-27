@@ -107,7 +107,9 @@ func (v *TokenChainCreateValidator) Validate(currentstate *StateEntry, submissio
 		return nil, fmt.Errorf("cannot marshal state object for identity state create")
 	}
 	resp = &ResponseValidateTX{}
-	resp.StateData = statedata
+
+	//return a new state object for a token
+	resp.AddStateData(types.GetChainIdFromChainPath(chainpath), statedata)
 
 	return resp, nil
 }
