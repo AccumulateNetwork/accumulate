@@ -32,7 +32,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	//StartAPI(RandPort(), client)
 
 	req := api.APIRequestRaw{}
-	adi := &ADI{}
+	adi := &api.ADI{}
 	adi.URL = "WileECoyote"
 	adi.PublicKeyHash = sha256.Sum256(kpNewAdi.PubKey().Bytes())
 	data, err := json.Marshal(adi)

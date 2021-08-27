@@ -61,7 +61,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		t.Fatalf("Error marshalling txid")
 	}
 
-	if bytes.Compare(dep.SourceIdentity[:], dep2.SourceIdentity[:]) != 0 {
+	if bytes.Compare(dep.SourceAdiChain[:], dep2.SourceAdiChain[:]) != 0 {
 		t.Fatalf("Error marshalling sender identity hash")
 	}
 
@@ -74,7 +74,6 @@ func TestTokenTransactionDeposit(t *testing.T) {
 	}
 
 	if dep.Metadata != nil {
-
 		if bytes.Compare(*dep.Metadata, *dep2.Metadata) != 0 {
 			t.Fatalf("Error marshalling metadata")
 		}
@@ -109,7 +108,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		t.Fatalf("Error unmarshalling header from json")
 	}
 
-	if bytes.Compare(header.SourceIdentity[:], header2.SourceIdentity[:]) != 0 {
+	if bytes.Compare(header.SourceAdiChain[:], header2.SourceAdiChain[:]) != 0 {
 		t.Fatalf("Error unmarshalling header from json")
 	}
 

@@ -60,7 +60,7 @@ func StartAPI(port int, client proto.ApiServiceClient) *API {
 func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &ADI{}
+	req := &acmeapi.ADI{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
@@ -71,7 +71,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 		return NewValidatorError(err)
 	}
 
-	resp := &ADI{}
+	resp := &acmeapi.ADI{}
 	resp.URL = req.URL
 
 	// Tendermint integration here
@@ -84,7 +84,7 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 
 	var err error
 	req := &acmeapi.APIRequestRaw{}
-	data := &ADI{}
+	data := &acmeapi.ADI{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
@@ -134,7 +134,7 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &Token{}
+	req := &acmeapi.Token{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
@@ -145,7 +145,7 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 		return NewValidatorError(err)
 	}
 
-	resp := &Token{}
+	resp := &acmeapi.Token{}
 	resp.URL = req.URL
 
 	// Tendermint integration here
@@ -159,7 +159,7 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 
 	var err error
 	req := &acmeapi.APIRequestRaw{}
-	data := &Token{}
+	data := &acmeapi.Token{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
@@ -214,7 +214,7 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &TokenAccount{}
+	req := &acmeapi.TokenAccount{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
@@ -225,7 +225,7 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 		return NewValidatorError(err)
 	}
 
-	resp := &TokenAccount{}
+	resp := &acmeapi.TokenAccount{}
 	resp.URL = req.URL
 
 	// Tendermint integration here
@@ -239,7 +239,7 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 
 	var err error
 	req := &acmeapi.APIRequestRaw{}
-	data := &TokenAccount{}
+	data := &acmeapi.TokenAccount{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
@@ -291,7 +291,7 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &TokenTx{}
+	req := &acmeapi.TokenTx{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
@@ -324,7 +324,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 
 	var err error
 	req := &acmeapi.APIRequestRaw{}
-	data := &TokenTx{}
+	data := &acmeapi.TokenTx{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
