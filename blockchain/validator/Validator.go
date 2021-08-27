@@ -61,11 +61,10 @@ type ValidatorInfo struct {
 	typeid      uint64
 }
 
-func (h *ValidatorInfo) SetInfo(chainTypeId types.Bytes, chainSpec string, instructiontype pb.AccInstruction) error {
+func (h *ValidatorInfo) SetInfo(chainTypeId types.Bytes, chainSpec string, instructiontype pb.AccInstruction) {
 	copy(h.chainTypeId[:], chainTypeId)
 	h.chainSpec = chainSpec
 	h.typeid = uint64(instructiontype)
-	return nil
 }
 
 func (h *ValidatorInfo) GetValidatorChainTypeId() types.Bytes {
