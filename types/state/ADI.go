@@ -3,7 +3,6 @@ package state
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -105,57 +104,60 @@ func (is *AdiState) GetIdentityChainId() types.Bytes {
 
 func (is *AdiState) MarshalBinary() ([]byte, error) {
 
-	var data []byte
 	headerData, err := is.Chain.MarshalBinary()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unable to marshal chain header for AdiState, %v", err)
 	}
 
 	var buffer bytes.Buffer
 	buffer.Write(headerData)
 	buffer.WriteByte(byte(is.KeyType))
 
-	var intBuf [8]byte
-	//store the keyData size
-	i := binary.PutVarint(intBuf[:], int64(len(is.KeyData)))
-	data = append(data, intBuf[:i]...)
-	//store the key data
-	data = append(data, is.KeyData[:]...)
+	data, err := is.KeyData.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal key data for AdiState, %v", err)
+	}
 
-	return data, nil
+	buffer.Write(data)
+
+	return buffer.Bytes(), nil
 }
 
 func (is *AdiState) UnmarshalBinary(data []byte) error {
+
 	dlen := len(data)
 	if dlen == 0 {
 		return fmt.Errorf("cannot unmarshal Identity State, insuffient data")
 	}
 	i := 0
+
 	err := is.Chain.UnmarshalBinary(data)
 	if err != nil {
-		return err
+		return fmt.Errorf("unable to unmarshal data for AdiState, %v", err)
 	}
+
 	i += is.Chain.GetHeaderSize()
 
 	is.KeyType = KeyType(data[i])
 	i++
 	if dlen <= i {
-		return fmt.Errorf("cannot unmarshal Identity State after key type, insuffient data")
+		return fmt.Errorf("cannot unmarshal key type for AdiState, insuffient data")
 	}
 
-	v, l := binary.Varint(data[i:])
-	if l <= 0 {
-		return fmt.Errorf("cannot unmarshal Identity State after key data len, insuffient data")
+	err = is.KeyData.UnmarshalBinary(data[i:])
+	if err != nil {
+		return fmt.Errorf("unable to unmarshal key data for AdiState, %v", err)
 	}
-	i += l
-
-	if dlen < i {
-		return fmt.Errorf("cannot unmarshal Identity State before copy key data, insuffient data")
-	}
-	is.KeyData = make([]byte, v)
-	i += copy(is.KeyData, data[i:i+int(v)])
 
 	return nil
+}
+
+func (is *AdiState) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&is.adiState)
+}
+
+func (is *AdiState) UnmarshalJSON(data []byte) error {
+	return json.Unmarshal(data,&is.adiState)
 }
 
 func (k *KeyType) UnmarshalJSON(b []byte) error {

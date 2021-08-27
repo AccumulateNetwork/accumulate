@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
+
+	"github.com/AccumulateNetwork/accumulated/types"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
@@ -62,7 +63,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 	req := &ADI{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
-		return ErrorInvalidRequest
+		return NewValidatorError(err)
 	}
 
 	// validate only ADI.URL
@@ -87,7 +88,7 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
-		return ErrorInvalidRequest
+		return NewValidatorError(err)
 	}
 
 	// validate request
@@ -96,9 +97,9 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 	}
 
 	// parse req.tx.data
-	json.Unmarshal(*req.Tx.Data, data)
-	//Mapstructure doesn't unmarshal the hashes into the data
-	//mapstructure.Decode(req.Tx.Data, data)
+	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
+		return NewValidatorError(err)
+	}
 
 	// validate request data
 	if err = api.validate.Struct(data); err != nil {
@@ -136,7 +137,7 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 	req := &Token{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
-		return ErrorInvalidRequest
+		return NewValidatorError(err)
 	}
 
 	// validate only Token.URL
@@ -162,7 +163,7 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
-		return ErrorInvalidRequest
+		return NewValidatorError(err)
 	}
 
 	// validate request
@@ -171,8 +172,9 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 	}
 
 	// parse req.tx.data
-	json.Unmarshal(*req.Tx.Data, data)
-	//mapstructure.Decode(req.Tx.Data, data)
+	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
+		return NewValidatorError(err)
+	}
 
 	// validate request data
 	if err = api.validate.Struct(data); err != nil {
@@ -215,7 +217,7 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 	req := &TokenAccount{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
-		return ErrorInvalidRequest
+		return NewValidatorError(err)
 	}
 
 	// validate only TokenAddress.URL
@@ -241,7 +243,7 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
-		return ErrorInvalidRequest
+		return NewValidatorError(err)
 	}
 
 	// validate request
@@ -250,8 +252,9 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 	}
 
 	// parse req.tx.data
-	json.Unmarshal(*req.Tx.Data, data)
-	//mapstructure.Decode(req.Tx.Data, data)
+	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
+		return NewValidatorError(err)
+	}
 
 	// validate request data
 	if err = api.validate.Struct(data); err != nil {
@@ -291,15 +294,11 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	req := &TokenTx{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
-		return ErrorInvalidRequest
+		return NewValidatorError(err)
 	}
 
 	// validate only TokenTx.Hash (Assuming the hash is the txid)
-	if err = api.validate.StructPartial(req, "Hash"); err != nil {
-		return NewValidatorError(err)
-	}
-	// Validate only the From URL field of the token tx
-	if err = api.validate.StructPartial(req, "From"); err != nil {
+	if err = api.validate.StructPartial(req, "Hash", "From"); err != nil {
 		return NewValidatorError(err)
 	}
 
@@ -329,7 +328,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
-		return ErrorInvalidRequest
+		return NewValidatorError(err)
 	}
 
 	// validate request
@@ -338,8 +337,9 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 	}
 
 	// parse req.tx.data
-	json.Unmarshal(*req.Tx.Data, data)
-	//mapstructure.Decode(req.Tx.Data, data)
+	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
+		return NewValidatorError(err)
+	}
 
 	// validate request data
 	if err = api.validate.Struct(data); err != nil {
