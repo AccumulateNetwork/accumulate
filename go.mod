@@ -87,6 +87,7 @@ require (
 	github.com/tendermint/go-amino v0.16.0 // indirect
 	github.com/tendermint/tendermint v0.34.0
 	github.com/tendermint/tm-db v0.6.3
+	github.com/ybbus/jsonrpc/v2 v2.1.6 // indirect
 	go.uber.org/atomic v1.6.0 // indirect
 	go.uber.org/ratelimit v0.1.0 // indirect
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
