@@ -98,7 +98,10 @@ func main() {
 	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
 
 	//Next create a BVC
-	accvm := accnode.CreateAccumulateBVC(ConfigFile, WorkingDir)
+	accvm, err := accnode.CreateAccumulateBVC(ConfigFile, WorkingDir)
+	if err != nil {
+		panic(fmt.Errorf("unable to create accumulate BVC"))
+	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
 	accvmapi, _ := accvm.GetAPIClient()
