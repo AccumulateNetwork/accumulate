@@ -2,15 +2,12 @@ package validator
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
-	//"crypto/sha256"
-	"fmt"
-	//"github.com/AccumulateNetwork/SMT/managed"
-	acctypes "github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
-	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
 
@@ -27,7 +24,7 @@ func NewTokenChainCreateValidator() *TokenChainCreateValidator {
 	return &v
 }
 
-func (v *TokenChainCreateValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	if currentstate == nil {
 		return fmt.Errorf("current state not defined")
 	}
@@ -61,7 +58,7 @@ func (v *TokenChainCreateValidator) BeginBlock(height int64, time *time.Time) er
 	return nil
 }
 
-func (v *TokenChainCreateValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
@@ -100,7 +97,7 @@ func (v *TokenChainCreateValidator) Validate(currentstate *StateEntry, submissio
 		return nil, err
 	}
 
-	tas := acctypes.NewTokenAccount(types.UrlChain(chainpath), types.UrlChain(chainPathToken))
+	tas := state.NewTokenAccount(types.UrlChain(chainpath), types.UrlChain(chainPathToken))
 	//tas.AdiChainPath = submission.? //todo: need to obtain the adi chain path from the submission request
 	statedata, err := tas.MarshalBinary()
 	if err != nil {

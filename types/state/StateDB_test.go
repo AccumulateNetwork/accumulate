@@ -1,4 +1,4 @@
-package accnode
+package state
 
 import "testing"
 

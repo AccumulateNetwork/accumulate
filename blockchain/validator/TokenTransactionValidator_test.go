@@ -46,8 +46,7 @@ func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.
 	return &so
 }
 
-func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submission {
-	tokenchainname := "RoadRunner/ACME"
+func CreateFakeTokenTransaction(t *testing.T, accountUrl string, kp ed25519.PrivKey) *proto.Submission {
 
 	outputs := make(map[string]*big.Int)
 	outputs["WileECoyote/MyACMEToken"] = big.NewInt(5000)
@@ -56,14 +55,14 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 	amt := types.Amount{}
 	amt.SetInt64(5000)
 	tx.AddToAccount("WileECoyote/MyACMETokens", &amt)
-	tx.From = types.UrlChain(tokenchainname)
+	tx.From = types.UrlChain(accountUrl)
 
 	data, err := json.Marshal(&tx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ts := time.Now().Unix()
-	ledger := types.MarshalBinaryLedgerChainId(types.GetIdentityChainFromIdentity(tokenchainname)[:], data, ts)
+	ledger := types.MarshalBinaryLedgerChainId(types.GetIdentityChainFromIdentity(accountUrl)[:], data, ts)
 	sig, err := kp.Sign(ledger)
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +71,7 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 	builder := proto.SubmissionBuilder{}
 	sub, err := builder.
 		Data(data).
-		ChainUrl(tokenchainname).
+		ChainUrl(accountUrl).
 		Timestamp(ts).
 		PubKey(kp.PubKey().Bytes()).
 		Signature(sig).Instruction(proto.AccInstruction_Token_Transaction).
@@ -87,7 +86,7 @@ func CreateFakeTokenTransaction(t *testing.T, kp ed25519.PrivKey) *proto.Submiss
 func TestTokenTransactionValidator_Check(t *testing.T) {
 	kp := types.CreateKeyPair()
 	identitychainpath := "RoadRunner/ACME"
-	currentstate := StateEntry{}
+	currentstate := state.StateEntry{}
 	currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath, t)
 	var idhash []byte
 	currentstate.IdentityState, idhash = CreateFakeIdentityState(identitychainpath, kp)
@@ -96,7 +95,7 @@ func TestTokenTransactionValidator_Check(t *testing.T) {
 
 	ttv := NewTokenTransactionValidator()
 
-	faketx := CreateFakeTokenTransaction(t, kp)
+	faketx := CreateFakeTokenTransaction(t, "RoadRunner/ACME", kp)
 
 	//need to simulate a state entry for chain and token
 	err := ttv.Check(&currentstate, idhash, chainhash[:], 0, 0, faketx.Data)

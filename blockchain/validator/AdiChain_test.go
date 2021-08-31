@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	//"crypto/sha256"
@@ -14,11 +15,11 @@ import (
 	"time"
 )
 
-func createIdentityCreateSubmission(t *testing.T, identitychainpath string) (*StateEntry, *proto.Submission, *ed25519.PrivKey) {
+func createIdentityCreateSubmission(t *testing.T, identitychainpath string) (*state.StateEntry, *proto.Submission, *ed25519.PrivKey) {
 	kp := types.CreateKeyPair()
 	identityhash := types.GetIdentityChainFromIdentity(identitychainpath).Bytes()
 
-	currentstate := StateEntry{}
+	currentstate := state.StateEntry{}
 
 	//currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath,t)
 

@@ -1,7 +1,6 @@
 package validator
 
 import (
-	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 
@@ -10,23 +9,6 @@ import (
 	cfg "github.com/tendermint/tendermint/config"
 	"time"
 )
-
-type StateEntry struct {
-	IdentityState *state.Object
-	ChainState    *state.Object
-
-	DB *smtdb.Manager
-}
-
-func NewStateEntry(idstate *state.Object, chainstate *state.Object, db *smtdb.Manager) (*StateEntry, error) {
-	se := StateEntry{}
-	se.IdentityState = idstate
-
-	se.ChainState = chainstate
-	se.DB = db
-
-	return &se, nil
-}
 
 type ResponseValidateTX struct {
 	StateData   map[types.Bytes32]types.Bytes //acctypes.StateObject
@@ -44,9 +26,9 @@ func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []by
 type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
-	Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error
-	Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) //return persistent entry or error
-	EndBlock(mdroot []byte) error                                                              //do something with MD root
+	Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error
+	Validate(currentstate *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) //return persistent entry or error
+	EndBlock(mdroot []byte) error                                                                    //do something with MD root
 
 	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated
 	GetInfo() *ValidatorInfo

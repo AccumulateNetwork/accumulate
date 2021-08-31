@@ -6,6 +6,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 
 	//"crypto/sha256"
@@ -27,7 +28,7 @@ func NewAdiChain() *AdiChain {
 	return &v
 }
 
-func (v *AdiChain) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *AdiChain) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	if currentstate == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
@@ -49,7 +50,7 @@ func (v *AdiChain) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *AdiChain) Validate(currentstate *StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current State Not Defined")

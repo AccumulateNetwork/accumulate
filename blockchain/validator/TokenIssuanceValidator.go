@@ -9,7 +9,7 @@ import (
 	//"crypto/sha256"
 	"fmt"
 	//"github.com/AccumulateNetwork/SMT/managed"
-	acctypes "github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
 	//dbm "github.com/tendermint/tm-db"
 	"time"
@@ -26,7 +26,7 @@ func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	return &v
 }
 
-func (v *TokenIssuanceValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return nil
 }
 func (v *TokenIssuanceValidator) Initialize(config *cfg.Config) error {
@@ -42,7 +42,7 @@ func (v *TokenIssuanceValidator) BeginBlock(height int64, time *time.Time) error
 	return nil
 }
 
-func (v *TokenIssuanceValidator) Validate(currentState *StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
 	if currentState == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("Current State Not Defined")
@@ -56,7 +56,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *StateEntry, submission *
 		return nil, fmt.Errorf("Token chain already defined.  Unable to issue token.")
 	}
 
-	id := &acctypes.AdiState{}
+	id := &state.AdiState{}
 	err = id.UnmarshalBinary(currentState.IdentityState.Entry)
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *StateEntry, submission *
 	if adiState != adiToken {
 		return nil, fmt.Errorf("ADI URL doesn't match token ADI")
 	}
-	tas := acctypes.NewToken(types.UrlChain(tokenChain))
+	tas := state.NewToken(types.UrlChain(tokenChain))
 	tas.Precision = ti.Precision
 	tas.Meta = ti.Meta
 	tas.Symbol = ti.Symbol
