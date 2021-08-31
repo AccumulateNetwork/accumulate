@@ -28,14 +28,13 @@ var nodeName string
 const DBVCIndex = 0
 
 var (
-	BuildTag     string = "v0.0.1"
+	BuildTag string = "v0.0.1"
 )
-//var SpecialModeHeight int64 = 99999999999
 
 func init() {
 	usr,err := user.Current()
 	if err != nil {
-		log.Fatal( err )
+		log.Fatal(err)
 		os.Exit(1)
 	}
 	initdir := path.Join(usr.HomeDir , "/.accumulate" )
@@ -52,7 +51,7 @@ func init() {
 	flag.Parse()
 
 	if *version {
-		fmt.Printf("Accumulate BVC %s\n",BuildTag)
+		fmt.Printf("Accumulate BVC %s\n", BuildTag)
 		os.Exit(0)
 	}
 
@@ -79,7 +78,6 @@ func init() {
 	whichNode = *node
 }
 
-
 func main() {
 	nodeDir := fmt.Sprintf("Node%d", whichNode)
 
@@ -102,8 +100,11 @@ func main() {
 	urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
 	//temporary server for each vm.  will be replaced by url router.
-	//go router.Jsonrpcserver2(accvmapi)
-
+	routerClient, err := urlrouter.CreateGRPCClient()
+	if err != nil {
+		panic(fmt.Errorf("unable to create grpc tendermint router client"))
+	}
+	go router.StartAPI(25999, routerClient)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
