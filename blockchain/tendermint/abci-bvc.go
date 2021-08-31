@@ -8,8 +8,8 @@ import (
 	"github.com/tendermint/tendermint/abci/example/code"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	//"crypto/ed25519"
-	"crypto/sha256"
-	"github.com/AccumulateNetwork/SMT/pmt"
+	_ "crypto/sha256"
+	_ "github.com/AccumulateNetwork/SMT/pmt"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
@@ -48,8 +48,6 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"sync"
-	//"time"
-	smtdb "github.com/AccumulateNetwork/SMT/storage/database"
 )
 
 //
@@ -99,12 +97,6 @@ func prefixKey(key []byte) []byte {
 	return append(kvPairPrefixKey, key...)
 }
 
-type MerkleManagerState struct {
-	merklemgr          *managed.MerkleManager
-	currentstateobject state.Object
-	stateobjects       []state.Object //all the state objects for this height, if we don't care about history this can go byebye...
-}
-
 type AccumulatorVMApplication struct {
 	abcitypes.BaseApplication
 	RetainBlocks int64
@@ -135,9 +127,9 @@ type AccumulatorVMApplication struct {
 	amLeader   bool
 	dbvc       pb.BVCEntry
 
-	mmdb smtdb.Manager
-	mms  map[managed.Hash]*MerkleManagerState
-	bpt  *pmt.Manager
+	mmdb state.StateDB
+	//mms  map[managed.Hash]*MerkleManagerState
+	//bpt  *pmt.Manager
 
 	lasthash managed.Hash
 
@@ -272,14 +264,11 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	}
 
 	dbfilename := WorkingDir + "/" + "valacc.db"
-	dbtype := "badger"
-	//dbtype := "memory" ////for kicks just create an in-memory database for now
-	err = app.mmdb.Init(dbtype, dbfilename)
+	err = app.mmdb.Open(dbfilename, false, true)
+
 	if err != nil {
 		return err
 	}
-	app.mms = make(map[managed.Hash]*MerkleManagerState)
-	app.bpt = pmt.NewBPTManager(&app.mmdb)
 
 	return nil
 }
@@ -313,10 +302,6 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	networkid[31] = 1
 	app.ChainId = networkid
 
-	////an entry bucket --> do do determine if
-	//app.mmdb.AddBucket("Entry")
-	app.mmdb.AddBucket("Entries-Debug") //items will bet pushed into this bucket as the state entries change
-	app.mmdb.AddBucket("StateEntries")
 	////commits will be stored here and key'ed via entry hash.
 	//app.mmdb.AddBucket("Commit")
 
@@ -367,11 +352,11 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	if err != nil {
 		panic(err)
 	}
-	err = app.addStateEntry(identity[:], idstatedata)
+	err = app.mmdb.AddStateEntry(identity[:], idstatedata)
 	if err != nil {
 		panic(err)
 	}
-	err = app.addStateEntry(chainid[:], tasstatedata)
+	err = app.mmdb.AddStateEntry(chainid[:], tasstatedata)
 	if err != nil {
 		panic(err)
 	}
@@ -508,104 +493,105 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	return ret
 }
 
-//getCurrentState retrieve the current state object from the database based upon chainid
-func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*state.Object, error) {
-	var ret *state.Object
-	var key managed.Hash
-	key.Extract(chainid)
-	if mms := app.mms[key]; mms != nil {
-		ret = &mms.currentstateobject
-	} else {
-		//pull current state from the database.
-		data := app.mmdb.Get("StateEntries", "", chainid)
-		if data != nil {
-			ret = &state.Object{}
-			err := ret.Unmarshal(data)
-			if err != nil {
-				return nil, fmt.Errorf("no current state is defined")
-			}
-
-		}
-	}
-	return ret, nil
-}
-
-// addStateEntry add the entry to the smt and database based upon chainid
-func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte) error {
-	var mms *MerkleManagerState
-
-	hash := sha256.Sum256(entry)
-	var key managed.Hash
-	copy(key[:], chainid)
-	//note: keys will be added to the map, but a map won't store them in order added.
-	//this is ok since the chains are independent of one another.  The BPT will look
-	//the same no matter what order the chains are added for a particular block.
-	if mms = app.mms[key]; mms == nil {
-		mms = new(MerkleManagerState)
-		mms.merklemgr = managed.NewMerkleManager(&app.mmdb, chainid, 8)
-		app.mms[key] = mms
-	}
-	data := app.mmdb.Get("StateEntries", "", chainid)
-	if data != nil {
-		currso := state.Object{}
-		mms.currentstateobject.PrevStateHash = currso.PrevStateHash
-	}
-	mms.merklemgr.AddHash(hash)
-	mdroot := mms.merklemgr.MainChain.MS.GetMDRoot()
-
-	//The Entry feeds the Entry Hash, and the Entry Hash feeds the State Hash
-	//The MD Root is the current state
-	mms.currentstateobject.StateHash = mdroot.Bytes()
-	//The Entry hash is the hash of the state object being stored
-	mms.currentstateobject.EntryHash = hash[:]
-	//The Entry is the State object derived from the transaction
-	mms.currentstateobject.Entry = entry
-
-	//list of the state objects from the beginning of the block to the end, so don't know if this needs to be kept
-	mms.stateobjects = append(mms.stateobjects, mms.currentstateobject)
-	return nil
-}
-
-// writeStates will push the data to the database and update the patricia trie
-func (app *AccumulatorVMApplication) writeStates() []byte {
-	//loop through everything and write out states to the database.
-	for chainid, v := range app.mms {
-		mdroot := v.merklemgr.MainChain.MS.GetMDRoot()
-		if mdroot == nil {
-			//shouldn't get here, but will reject if I do
-			fmt.Printf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainid)
-			continue
-		}
-
-		app.bpt.Bpt.Insert(chainid, *mdroot)
-		datatostore, err := v.currentstateobject.Marshal()
-		if err != nil {
-			//need to log failure
-			continue
-		}
-		//store the current state for the chain
-		app.mmdb.Put("StateEntries", "", chainid.Bytes(), datatostore)
-
-		//iterate over the state objects updated as part of the state change and push the data for debugging
-		for i := range v.stateobjects {
-			data, err := v.stateobjects[i].Marshal()
-			if err != nil {
-				//shouldn't get here, but will reject if I do
-				fmt.Printf("shouldn't get here on writeState() on chain id %X for updated states", chainid)
-				continue
-			}
-
-			///TBD : this is not needed since we are maintaining only current state and not all states
-			//just keeping for debug history.
-			app.mmdb.Put("Entries-Debug", "", v.stateobjects[i].StateHash, data)
-		}
-		//delete it from our list.
-		delete(app.mms, chainid)
-	}
-	app.bpt.Bpt.Update()
-
-	return app.bpt.Bpt.Root.Hash[:]
-}
+//
+////getCurrentState retrieve the current state object from the database based upon chainid
+//func (app *AccumulatorVMApplication) getCurrentState(chainid []byte) (*state.Object, error) {
+//	var ret *state.Object
+//	var key managed.Hash
+//	key.Extract(chainid)
+//	if mms := app.mms[key]; mms != nil {
+//		ret = &mms.currentstateobject
+//	} else {
+//		//pull current state from the database.
+//		data := app.mmdb.GetDB().Get("StateEntries", "", chainid)
+//		if data != nil {
+//			ret = &state.Object{}
+//			err := ret.Unmarshal(data)
+//			if err != nil {
+//				return nil, fmt.Errorf("no current state is defined")
+//			}
+//
+//		}
+//	}
+//	return ret, nil
+//}
+//
+//// addStateEntry add the entry to the smt and database based upon chainid
+//func (app *AccumulatorVMApplication) addStateEntry(chainid []byte, entry []byte) error {
+//	var mms *MerkleManagerState
+//
+//	hash := sha256.Sum256(entry)
+//	var key managed.Hash
+//	copy(key[:], chainid)
+//	//note: keys will be added to the map, but a map won't store them in order added.
+//	//this is ok since the chains are independent of one another.  The BPT will look
+//	//the same no matter what order the chains are added for a particular block.
+//	if mms = app.mms[key]; mms == nil {
+//		mms = new(MerkleManagerState)
+//		mms.merklemgr = managed.NewMerkleManager(app.mmdb.GetDB(), chainid, 8)
+//		app.mms[key] = mms
+//	}
+//	data := app.mmdb.GetDB().Get("StateEntries", "", chainid)
+//	if data != nil {
+//		currso := state.Object{}
+//		mms.currentstateobject.PrevStateHash = currso.PrevStateHash
+//	}
+//	mms.merklemgr.AddHash(hash)
+//	mdroot := mms.merklemgr.MainChain.MS.GetMDRoot()
+//
+//	//The Entry feeds the Entry Hash, and the Entry Hash feeds the State Hash
+//	//The MD Root is the current state
+//	mms.currentstateobject.StateHash = mdroot.Bytes()
+//	//The Entry hash is the hash of the state object being stored
+//	mms.currentstateobject.EntryHash = hash[:]
+//	//The Entry is the State object derived from the transaction
+//	mms.currentstateobject.Entry = entry
+//
+//	//list of the state objects from the beginning of the block to the end, so don't know if this needs to be kept
+//	mms.stateobjects = append(mms.stateobjects, mms.currentstateobject)
+//	return nil
+//}
+//
+//// writeStates will push the data to the database and update the patricia trie
+//func (app *AccumulatorVMApplication) writeStates() []byte {
+//	//loop through everything and write out states to the database.
+//	for chainId, v := range app.mms {
+//		mdroot := v.merklemgr.MainChain.MS.GetMDRoot()
+//		if mdroot == nil {
+//			//shouldn't get here, but will reject if I do
+//			fmt.Printf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId)
+//			continue
+//		}
+//
+//		app.bpt.Bpt.Insert(chainId, *mdroot)
+//		dataToStore, err := v.currentstateobject.Marshal()
+//		if err != nil {
+//			//need to log failure
+//			continue
+//		}
+//		//store the current state for the chain
+//		app.mmdb.GetDB().Put("StateEntries", "", chainId.Bytes(), dataToStore)
+//
+//		//iterate over the state objects updated as part of the state change and push the data for debugging
+//		for i := range v.stateobjects {
+//			data, err := v.stateobjects[i].Marshal()
+//			if err != nil {
+//				//shouldn't get here, but will reject if I do
+//				fmt.Printf("shouldn't get here on writeState() on chain id %X for updated states", chainId)
+//				continue
+//			}
+//
+//			///TBD : this is not needed since we are maintaining only current state and not all states
+//			//just keeping for debug history.
+//			app.mmdb.GetDB().Put("Entries-Debug", "", v.stateobjects[i].StateHash, data)
+//		}
+//		//delete it from our list.
+//		delete(app.mms, chainId)
+//	}
+//	app.bpt.Bpt.Update()
+//
+//	return app.bpt.Bpt.Root.Hash[:]
+//}
 
 //processValidatedSubmissionRequest Figure out what to do with the processed validated transaction.  This may include firing off a synthetic TX or simply
 //updating the state of the transaction
@@ -671,7 +657,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 	//not finding the identity can be a big deal if this isn't a synthetic tx to create an identity
 	//from another bvc.  Need to send a Nak if this not a synthetic tx.
-	identitystate, err := app.getCurrentState(sub.GetIdentitychain()) //need the identity chain
+	identitystate, err := app.mmdb.GetCurrentState(sub.GetIdentitychain()) //need the identity chain
 
 	//lack of identity is an error. however we have a chicken and egg problem,
 	//need robust solution for genesis block
@@ -683,10 +669,10 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 	//retrieve the chain state.  If chain state is nil that means the chain has not been created nor typed
 	//not finding the chain id might not be a big deal if the chain doesn't exist yet, but needs more scrutiny from validator
-	chainstate, err := app.getCurrentState(sub.GetChainid())
+	chainstate, err := app.mmdb.GetCurrentState(sub.GetChainid())
 
 	//make a current state object to pass to the validator.
-	currentstate, err := validator.NewStateEntry(identitystate, chainstate, &app.mmdb)
+	currentstate, err := state.NewStateEntry(identitystate, chainstate, &app.mmdb)
 
 	if err != nil {
 		ret.Code = code.CodeTypeEncodingError
@@ -745,16 +731,18 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 		/// update the state data for the chain.
 		if vdata.StateData != nil {
-			header := state.Chain{}
-			err := header.UnmarshalBinary(vdata.StateData)
-			if err != nil {
-				ret.Code = 2
-				ret.GasWanted = 0
-				ret.GasUsed = 0
-				ret.Info = fmt.Sprintf("Invalid state object %v \n", val.GetChainSpec())
-				return ret
+			for k, v := range vdata.StateData {
+				header := state.Chain{}
+				err := header.UnmarshalBinary(v)
+				if err != nil {
+					ret.Code = 2
+					ret.GasWanted = 0
+					ret.GasUsed = 0
+					ret.Info = fmt.Sprintf("Invalid state object %v \n", val.GetChainSpec())
+					return ret
+				}
+				app.mmdb.AddStateEntry(k[:], v)
 			}
-			app.addStateEntry(sub.Chainid, vdata.StateData)
 		}
 
 		//now we need to store the data returned by the validator and feed into accumulator
@@ -810,7 +798,12 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	//end the current batch of transactions in the Stateful Merkle Tree
 
-	mdroot := app.writeStates()
+	mdroot, err := app.mmdb.WriteStates()
+
+	if err != nil {
+		//shouldn't get here.
+		panic(fmt.Errorf("fatal error, block not set, %v", err))
+	}
 
 	resp.Data = mdroot
 	//saveDBlock
@@ -905,7 +898,7 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 		return resQuery
 	}
 	//extract the state for the chain id
-	chainState, err := app.getCurrentState(q.ChainId)
+	chainState, err := app.mmdb.GetCurrentState(q.ChainId)
 	chainHeader := state.Chain{}
 	err = chainHeader.UnmarshalBinary(chainState.Entry)
 	if err != nil {
