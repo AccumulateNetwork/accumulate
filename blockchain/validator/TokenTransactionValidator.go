@@ -28,8 +28,15 @@ func NewTokenTransactionValidator() *TokenTransactionValidator {
 }
 
 // canTransact is a helper function to parse and check for errors in the transaction data
-func canSendTokens(currentState *StateEntry, data []byte) (*state.AdiState, *state.TokenAccount, *api.TokenTx, error) {
+func canSendTokens(currentState *state.StateEntry, data []byte) (*state.AdiState, *state.TokenAccount, *api.TokenTx, error) {
 
+	if currentState.ChainState == nil {
+		return nil, nil, nil, fmt.Errorf("no account exists for the chain")
+	}
+
+	if currentState.IdentityState == nil {
+		return nil, nil, nil, fmt.Errorf("no identity exists for the chain")
+	}
 	//unmarshal the data into a TokenTx structure, if this fails no point in continuing.
 	var tx api.TokenTx
 	err := json.Unmarshal(data, &tx)
@@ -53,7 +60,6 @@ func canSendTokens(currentState *StateEntry, data []byte) (*state.AdiState, *sta
 			return nil, nil, nil, err
 		}
 	}
-
 	tas := state.TokenAccount{}
 	err = tas.UnmarshalBinary(currentState.ChainState.Entry)
 	if err != nil {
@@ -61,7 +67,7 @@ func canSendTokens(currentState *StateEntry, data []byte) (*state.AdiState, *sta
 	}
 
 	//verify the tx.from is from the same identity
-	stateAdiChain := types.GetIdentityChainFromIdentity(string(ids.ChainUrl))
+	stateAdiChain := types.GetIdentityChainFromIdentity(string(chainHeader.ChainUrl))
 	fromAdiChain := types.GetIdentityChainFromIdentity(string(tx.From))
 	if bytes.Compare(stateAdiChain[:], fromAdiChain[:]) != 0 {
 		return nil, nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
@@ -90,7 +96,7 @@ func canSendTokens(currentState *StateEntry, data []byte) (*state.AdiState, *sta
 }
 
 // Check will perform a sanity check to make sure transaction seems reasonable
-func (v *TokenTransactionValidator) Check(currentState *StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *TokenTransactionValidator) Check(currentState *state.StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) error {
 	_, _, _, err := canSendTokens(currentState, data)
 	return err
 }
@@ -111,7 +117,7 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 }
 
 // Validate validates a token transaction
-func (v *TokenTransactionValidator) Validate(currentState *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
+func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
 	ids, tas, tx, err := canSendTokens(currentState, submission.GetData())
 

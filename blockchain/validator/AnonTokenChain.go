@@ -28,7 +28,7 @@ func NewAnonTokenChain() *AnonTokenChain {
 	return &v
 }
 
-func (v *AnonTokenChain) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *AnonTokenChain) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	//
 	//var err error
 	//resp := &ResponseValidateTX{}
@@ -57,7 +57,7 @@ func (v *AnonTokenChain) BeginBlock(height int64, time *time.Time) error {
 
 	return nil
 }
-func (v *AnonTokenChain) processDeposit(currentState *StateEntry, submission *pb.Submission, resp *ResponseValidateTX) error {
+func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submission *pb.Submission, resp *ResponseValidateTX) error {
 
 	//unmarshal the synthetic transaction based upon submission
 	deposit := synthetic.TokenTransactionDeposit{}
@@ -72,29 +72,17 @@ func (v *AnonTokenChain) processDeposit(currentState *StateEntry, submission *pb
 		return err
 	}
 
-	//the ADI is the Address, so now form the chain from the token type
-	url := fmt.Sprintf("%s/%s", adi, deposit.TokenUrl)
-	tokenChain := types.GetChainIdFromChainPath(url)
-
-	//so now look up the token chain from the account
-	data := currentState.DB.Get("StateEntries", "", tokenChain[:])
-
-	//Unmarshal or create the token account
-	account := &state.TokenAccount{}
-	if data == nil {
-		//we need to create a new state object.
-		account = state.NewTokenAccount(types.UrlChain(url), types.UrlChain(deposit.TokenUrl))
-	} else {
-		err = account.UnmarshalBinary(data)
-		if err != nil {
-			return err
-		}
-	}
+	//First GetOrCreateAdiChain
+	adiChain := types.GetIdentityChainFromIdentity(adi)
+	adiStateData, err := currentState.DB.GetStateObject(adiChain[:], false)
 
 	//now check if the anonymous chain already exists.
-	adiStateData := currentState.IdentityState
+	//adiStateData := currentState.IdentityState
 	chainState := state.Chain{}
-	if currentState.IdentityState != nil {
+	if adiStateData != nil {
+		if adiStateData.Entry == nil {
+			return fmt.Errorf("malformed anonymous token chain, no state entry for %s", adi)
+		}
 		err := chainState.UnmarshalBinary(adiStateData.Entry)
 		if err != nil {
 			return err
@@ -114,20 +102,47 @@ func (v *AnonTokenChain) processDeposit(currentState *StateEntry, submission *pb
 		resp.AddStateData(types.GetChainIdFromChainPath(adi), data)
 	}
 
+	//Next GetOrCreateTokenAccount
+	//the ADI is the Address, so now form the chain from the token type
+	url := fmt.Sprintf("%s/%s", adi, deposit.TokenUrl)
+	tokenChain := types.GetChainIdFromChainPath(url)
+
+	//so now look up the token chain from the account
+	//The token state *CAN* be nil, if so we need to create it...
+	tokenState, err := currentState.DB.GetStateObject(tokenChain[:], false)
+	//if err != nil {
+	//	return fmt.Errorf("unable to retrieve token chain for %s, %v", url, err)
+	//}
+
+	//Unmarshal or create the token account
+	account := &state.TokenAccount{}
+	if tokenState == nil {
+		//we need to create a new state object.
+		account = state.NewTokenAccount(types.UrlChain(url), types.UrlChain(deposit.TokenUrl))
+	} else {
+		if tokenState.Entry == nil {
+			return fmt.Errorf("unable to retrieve token chain entry for %s", url)
+		}
+		err = account.UnmarshalBinary(tokenState.Entry)
+		if err != nil {
+			return err
+		}
+	}
+
 	//all is good, so subtract the balance
 	err = account.AddBalance(&deposit.DepositAmount)
 	if err != nil {
 		return fmt.Errorf("unable to add deposit balance to account")
 	}
 
-	data, err = account.MarshalBinary()
+	data, err := account.MarshalBinary()
 
-	//todo: since we potentially added a state already, this one needs to be appended.
+	//add the token account state to the chain.
 	resp.AddStateData(tokenChain, data)
 
 	return nil
 }
-func (v *AnonTokenChain) processSendToken(currentState *StateEntry, submission *pb.Submission, resp *ResponseValidateTX) error {
+func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submission *pb.Submission, resp *ResponseValidateTX) error {
 	//unmarshal the synthetic transaction based upon submission
 	deposit := api.TokenTx{}
 	err := json.Unmarshal(submission.Data, &deposit)
@@ -140,6 +155,18 @@ func (v *AnonTokenChain) processSendToken(currentState *StateEntry, submission *
 	duration := time.Since(ts)
 	if duration.Minutes() > 1 {
 		return fmt.Errorf("transaction time of validity has elapesd by %f seconds", duration.Seconds()-60)
+	}
+
+	//need to derive chain id for coin type account.
+	accountChainId := types.GetChainIdFromChainPath(string(deposit.From))
+	currentState.ChainState, err = currentState.DB.GetCurrentState(accountChainId[:])
+	if err != nil {
+		return fmt.Errorf("chain state for account not esablished")
+	}
+
+	currentState.IdentityState, err = currentState.DB.GetCurrentState(submission.Identitychain)
+	if err != nil {
+		return fmt.Errorf("identity not established")
 	}
 
 	cs, tokenAccountState, tokenTx, err := canSendTokens(currentState, submission.Data)
@@ -245,7 +272,7 @@ func (v *AnonTokenChain) processSendToken(currentState *StateEntry, submission *
 	return nil
 }
 
-func (v *AnonTokenChain) Validate(currentState *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
+func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 
 	var err error
 	resp := &ResponseValidateTX{}

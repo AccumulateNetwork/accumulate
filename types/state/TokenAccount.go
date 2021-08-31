@@ -86,14 +86,20 @@ func (app *TokenAccount) AddBalance(amt *big.Int) error {
 //MarshalBinary creates a byte array of the state object needed for storage
 func (app *TokenAccount) MarshalBinary() (ret []byte, err error) {
 
+	tokenUrlData, err := app.TokenUrl.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("cannot marshal binary for token URL in TokenAccount, %v", err)
+	}
 	header, err := app.Chain.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	data := make([]byte, len(header)+32)
+	data := make([]byte, len(header)+32+len(tokenUrlData))
 
 	i := copy(data, header)
+
+	i += copy(data[i:], tokenUrlData)
 
 	app.Balance.FillBytes(data[i:])
 	i += 32
@@ -109,6 +115,13 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) error {
 	}
 
 	i := app.GetHeaderSize()
+
+	err = app.TokenUrl.UnmarshalBinary(data[i:])
+	if err != nil {
+		return fmt.Errorf("unable to unmarshal binary for token account, %v", err)
+	}
+
+	i += app.TokenUrl.Size(nil)
 
 	if len(data) < i+32 {
 		return fmt.Errorf("invalid data buffer to unmarshal account state")

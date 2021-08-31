@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-func createTokenIssuanceSubmission(t *testing.T, identitychainpath string) (*StateEntry, *proto.Submission) {
+func createTokenIssuanceSubmission(t *testing.T, identitychainpath string) (*state.StateEntry, *proto.Submission) {
 	kp := types.CreateKeyPair()
 	identityhash := types.GetIdentityChainFromIdentity(identitychainpath).Bytes()
 
-	currentstate := StateEntry{}
+	currentstate := state.StateEntry{}
 
 	//currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath,t)
 

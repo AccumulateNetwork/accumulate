@@ -4,8 +4,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
-	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
 
@@ -55,7 +55,7 @@ func NewEntryValidator() *EntryValidator {
 	return &v
 }
 
-func (v *EntryValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *EntryValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	return fmt.Errorf("Entry validator not yet implemented")
 }
 func (v *EntryValidator) Initialize(config *cfg.Config) error {
@@ -72,7 +72,7 @@ func (v *EntryValidator) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *EntryValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
+func (v *EntryValidator) Validate(currentstate *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 	//entry design is TBD...
 
 	//datalen := uint64(len(data))
