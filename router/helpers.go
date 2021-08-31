@@ -2,8 +2,9 @@ package router
 
 import (
 	"fmt"
+	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
+	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/spf13/viper"
