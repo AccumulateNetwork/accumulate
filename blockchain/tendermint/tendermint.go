@@ -23,7 +23,7 @@ import (
         abciserver "github.com/tendermint/tendermint/abci/server"
         abcitypes "github.com/tendermint/tendermint/abci/types"
         ctypes "github.com/tendermint/tendermint/rpc/core/types"
-        core_grpc "github.com/tendermint/tendermint/rpc/grpc"
+        coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"time"
         "github.com/AccumulateNetwork/accumulated/router"
 )
