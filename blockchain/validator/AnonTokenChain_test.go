@@ -12,7 +12,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/martinlindhe/base36"
-	"github.com/spaolacci/murmur3"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math"
 	"math/big"
@@ -151,8 +150,7 @@ func GenerateTestAddresses(seed uint32, checkLen uint32, t *testing.T) {
 	sqSum := 0.0
 
 	j := 0
-	var bucketsBig [32]byte
-	var bucketsLittle [32]byte
+	var bucketsBig [30]byte
 
 	numNetworks := uint64(len(bucketsBig))
 
@@ -163,14 +161,11 @@ func GenerateTestAddresses(seed uint32, checkLen uint32, t *testing.T) {
 	for j < maxAddresses {
 		kp := types.CreateKeyPair()
 		keyhash := sha256.Sum256(kp.PubKey().Bytes())
-		m := murmur3.New64()
-		m.Write(kp.PubKey().Bytes())
 
 		result := append(prefix[:], keyhash[:]...)
 		hash1 := sha256.Sum256(result)
 		hash2 := sha256.Sum256(hash1[:])
 		encodeThis := append(result, hash2[:checkLen]...)
-		//fmt.Printf("%v\n", encodeThis)
 
 		addr := base36.EncodeBytes(encodeThis)
 
@@ -183,7 +178,6 @@ func GenerateTestAddresses(seed uint32, checkLen uint32, t *testing.T) {
 		bn.Mod(bn, mod)
 
 		indexBig := bn.Uint64() //binary.BigEndian.Uint64(networkid[:])
-		indexLittle := uint64(indexBig)
 
 		addr = strings.ToLower(addr)
 
@@ -194,7 +188,6 @@ func GenerateTestAddresses(seed uint32, checkLen uint32, t *testing.T) {
 		sqSum += float64(indexBig) * float64(indexBig)
 
 		bucketsBig[indexBig]++
-		bucketsLittle[indexLittle%numNetworks]++
 
 		j++
 	}
@@ -204,7 +197,6 @@ func GenerateTestAddresses(seed uint32, checkLen uint32, t *testing.T) {
 	stddev := math.Sqrt(variance)
 
 	fmt.Printf("Distribution Big   : %v\n", bucketsBig)
-	fmt.Printf("Distribution Little: %v\n", bucketsLittle)
 
 	fmt.Printf("Big: sigma %f, mean %f, variance %f, 3sigma %f\n", stddev, mean, variance, 3*stddev)
 }
@@ -229,13 +221,13 @@ func TestBase36AddressGenerationFromPubKeyHash(t *testing.T) {
 	}
 
 	var prefix [4]byte
-	binary.LittleEndian.PutUint32(prefix[:], seed[1][0])
+	binary.LittleEndian.PutUint32(prefix[:], seed[0][0])
 	//	prefix := []byte{0x15, 0x0e, 0x2a, 0x00}
 	result := append(prefix[:], keyhash[:]...)
 	hash1 := sha256.Sum256(result)
 	hash2 := sha256.Sum256(hash1[:])
 	//our checksum is first 3 bytes of hash.
-	encodeThis := append(result, hash2[:seed[1][1]]...)
+	encodeThis := append(result, hash2[:seed[0][1]]...)
 	addr := base36.EncodeBytes(encodeThis)
 	fmt.Println(strings.ToLower(addr))
 
