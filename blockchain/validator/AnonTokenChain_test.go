@@ -2,6 +2,7 @@ package validator
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -11,7 +12,10 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/martinlindhe/base36"
+	"github.com/spaolacci/murmur3"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"math"
+	"math/big"
 	"strings"
 	"testing"
 	"time"
@@ -141,58 +145,100 @@ func TestAnonTokenChain_Validate(t *testing.T) {
 	//anon.Check()
 }
 
-func TestAddressGeneration(t *testing.T) {
-	var pubkey types.Bytes32
-	hex.Decode(pubkey[:], []byte("8301843BA7F7DE82901547EC1DC4F6505AB2BF078DB8F3460AE72D7B4250AD78"))
+//GenerateTestAddresses generate some test addresses to make sure the base36 prefix is fixed
+func GenerateTestAddresses(seed uint32, checkLen uint32, t *testing.T) {
+	sum := 0.0
+	sqSum := 0.0
 
-	keyhash := sha256.Sum256(pubkey[:])
-
-	addr := "nothinghere"
-	i := 0x000000
-	helloWorld := sha256.Sum256([]byte("hello world"))
-	fmt.Printf("%x\n", helloWorld)
-	//strings.Contains
-	//155e0001 9F5ACC sha256
-	//9T e001 sha256d
-	//5A 6e01 sha256d
-
-	for strings.Contains(addr, "ACM3") == false {
-		//prefix := fmt.Sprintf("%x", i)
-		var prefix [4]byte
-		hex.Decode(prefix[:], []byte(fmt.Sprintf("%x", i)))
-		result := append(prefix[:], keyhash[:]...)
-		hash1 := sha256.Sum256(result)
-		hash2 := sha256.Sum256(hash1[:])
-		encodeThis := append(result, hash2[:4]...)
-		addr = base36.EncodeBytes(encodeThis)
-		if i%1000 == 0 {
-			fmt.Printf("%s %04x\n", addr, i)
-		}
-
-		addrb := []byte(addr)
-		addr = string(addrb[:4])
-		i++
-		if i == 0xFFFF {
-			break
-		}
-	}
-
-	fmt.Printf("%s found at %x\n\n\n", addr, i)
 	j := 0
-	for j < 10000 {
+	var bucketsBig [32]byte
+	var bucketsLittle [32]byte
+
+	numNetworks := uint64(len(bucketsBig))
+
+	var prefix [4]byte
+	binary.LittleEndian.PutUint32(prefix[:], seed)
+
+	maxAddresses := 20000
+	for j < maxAddresses {
 		kp := types.CreateKeyPair()
-		var prefix [4]byte
-		hex.Decode(prefix[:], []byte(fmt.Sprintf("%x", i)))
-		keyhash := kp.PubKey().Bytes()
+		keyhash := sha256.Sum256(kp.PubKey().Bytes())
+		m := murmur3.New64()
+		m.Write(kp.PubKey().Bytes())
+
 		result := append(prefix[:], keyhash[:]...)
 		hash1 := sha256.Sum256(result)
 		hash2 := sha256.Sum256(hash1[:])
-		encodeThis := append(result, hash2[:4]...)
-		addr = base36.EncodeBytes(encodeThis)
+		encodeThis := append(result, hash2[:checkLen]...)
+		//fmt.Printf("%v\n", encodeThis)
 
-		fmt.Printf("%s %04x\n", addr, j)
+		addr := base36.EncodeBytes(encodeThis)
+
+		//idx := base36.Decode(addr) & 0xFFFF
+		//acc45if1
+		bn := big.NewInt(0)
+		bn.SetBytes(keyhash[:])
+		mod := big.NewInt(int64(numNetworks))
+
+		bn.Mod(bn, mod)
+
+		indexBig := bn.Uint64() //binary.BigEndian.Uint64(networkid[:])
+		indexLittle := uint64(indexBig)
+
+		addr = strings.ToLower(addr)
+
+		if !strings.HasPrefix(addr, "acc45") {
+			t.Fatalf("expecting acc45 prefix, but received %s", []byte(addr)[:5])
+		}
+		sum += float64(indexBig)
+		sqSum += float64(indexBig) * float64(indexBig)
+
+		bucketsBig[indexBig]++
+		bucketsLittle[indexLittle%numNetworks]++
 
 		j++
 	}
+
+	mean := sum / float64(maxAddresses)
+	variance := sqSum/float64(maxAddresses) - mean*mean
+	stddev := math.Sqrt(variance)
+
+	fmt.Printf("Distribution Big   : %v\n", bucketsBig)
+	fmt.Printf("Distribution Little: %v\n", bucketsLittle)
+
+	fmt.Printf("Big: sigma %f, mean %f, variance %f, 3sigma %f\n", stddev, mean, variance, 3*stddev)
+}
+
+func TestBase36AddressGenerationFromPubKeyHash(t *testing.T) {
+	var pubkey types.Bytes32
+
+	//generate base36 ADI from public key hash
+	hex.Decode(pubkey[:], []byte("8301843BA7F7DE82901547EC1DC4F6505AB2BF078DB8F3460AE72D7B4250AD78"))
+	keyhash := sha256.Sum256(pubkey[:])
+
+	//all prefixes are little endian
+	//34996a accumv 4 byte checksum len=61h
+	//180d03 anon  4 byte checksum len=61h
+	//1a5e6f at0kn 4 byte checksum 61h
+	//15bc95 acctn 2 byte checksum 59h
+	//2a0e15 acc45 3 byte checksum len=60h
+	seed := [][]uint32{
+		{uint32(0x2a0e15), 3}, //prefix=acc45 3 byte checksum len=60h
+		{uint32(0x180d03), 4}, //prefix=anon  4 byte checksum len=61h
+		{uint32(0x15bc95), 2}, //prefix=acctn 2 byte checksum len=59h
+	}
+
+	var prefix [4]byte
+	binary.LittleEndian.PutUint32(prefix[:], seed[1][0])
+	//	prefix := []byte{0x15, 0x0e, 0x2a, 0x00}
+	result := append(prefix[:], keyhash[:]...)
+	hash1 := sha256.Sum256(result)
+	hash2 := sha256.Sum256(hash1[:])
+	//our checksum is first 3 bytes of hash.
+	encodeThis := append(result, hash2[:seed[1][1]]...)
+	addr := base36.EncodeBytes(encodeThis)
+	fmt.Println(strings.ToLower(addr))
+
+	GenerateTestAddresses(seed[0][0], seed[0][1], t)
 
 }
