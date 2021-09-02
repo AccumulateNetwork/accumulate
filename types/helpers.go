@@ -87,6 +87,84 @@ func toJSON(m interface{}) (string, error) {
 	return strings.ReplaceAll(string(js), ",", ", "), nil
 }
 
+//// URLQueryParser helper function to take an acme url and generate a submission transaction.
+//func URLQueryParser(s string) (ret *proto.Submission, err error) {
+//
+//	if !utf8.ValidString(s) {
+//		return ret, fmt.Errorf("URL is has invalid UTF8 encoding")
+//	}
+//
+//	if !strings.HasPrefix(s, "acc://") {
+//		s = "acc://" + s
+//	}
+//
+//	var sub *proto.Submission
+//
+//	u, err := url.Parse(s)
+//	if err != nil {
+//		return ret, err
+//	}
+//
+//	fmt.Println(u.Scheme)
+//
+//	fmt.Println(u.Host)
+//	//so the primary is up to the "." if it is there.
+//	hostname := strings.ToLower(u.Hostname())
+//
+//	m, err := url.ParseQuery(u.RawQuery)
+//	if err != nil {
+//		return ret, err
+//	}
+//
+//	chainpath := hostname
+//	if len(u.Path) != 0 {
+//		chainpath += u.Path
+//	}
+//
+//	insidx := strings.Index(u.RawQuery, "&")
+//	if len(u.RawQuery) > 0 && insidx < 0 {
+//		insidx = len(u.RawQuery)
+//	}
+//
+//	var data []byte
+//	var timestamp int64
+//	var signature []byte
+//	var key []byte
+//	if insidx > 0 {
+//		k := u.RawQuery[:insidx]
+//		if k == "query" || k == "q" {
+//			if v := m["payload"]; v == nil {
+//				m.Del(k)
+//				js, err := toJSON(m)
+//				if err != nil {
+//					return nil, fmt.Errorf("unable to create url query %s, %v", s, err)
+//				}
+//				data = []byte(js)
+//
+//			}
+//		}
+//		//make the correct submission based upon raw query...  Light query needs to be handled differently.
+//		if v := m["payload"]; v != nil {
+//			if len(v) > 0 {
+//				data, err = hex.DecodeString(m["payload"][0])
+//				if err != nil {
+//					return nil, fmt.Errorf("unable to parse payload in url %s, %v", s, err)
+//				}
+//			}
+//		}
+//
+//		sub = MakeBVCSubmission(k, UrlAdi(hostname), UrlChain(chainpath), data, timestamp, signature, key)
+//	}
+//
+//	if sub == nil {
+//		sub = AssembleBVCSubmissionHeader(hostname, chainpath, proto.AccInstruction_Unknown)
+//	}
+//
+//	//json rpc params:
+//
+//	return sub, nil
+//}
+
 //// URLParser helper function to take an acme url and generate a submission transaction.
 //func URLParser(s string) (ret *proto.Submission, err error) {
 //
