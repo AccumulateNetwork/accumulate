@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 
@@ -68,6 +69,40 @@ type ValidatorContext struct {
 	currentTime   time.Time
 	lastHeight    int64
 	lastTime      time.Time
+
+	validators    map[types.Bytes32]*ValidatorContext     //validators keeps a map of child chain validators
+	validatorsIns map[pb.AccInstruction]*ValidatorContext //validators keeps a map of child chain validators
+}
+
+func (v *ValidatorContext) addValidator(context *ValidatorContext) {
+	if v.validatorsIns != nil {
+		v.validatorsIns = make(map[pb.AccInstruction]*ValidatorContext)
+	}
+
+	var key types.Bytes32
+	copy(key[:], context.GetValidatorChainTypeId())
+
+	v.validators[key] = context
+}
+
+func (v *ValidatorContext) getValidatorByIns(ins pb.AccInstruction) (*ValidatorContext, error) {
+	if val, ok := v.validatorsIns[ins]; ok {
+		return val, nil
+	}
+
+	return nil, fmt.Errorf("validator not found for instruction, %d", ins)
+}
+
+func (v *ValidatorContext) getValidatorByType(validatorType *types.Bytes32) (*ValidatorContext, error) {
+	if validatorType == nil {
+		return nil, fmt.Errorf("cannot find validator, validatorType is nil")
+	}
+
+	if val, ok := v.validators[*validatorType]; ok {
+		return val, nil
+	}
+
+	return nil, fmt.Errorf("validator not found for type")
 }
 
 func (v *ValidatorContext) GetInfo() *ValidatorInfo {
@@ -88,4 +123,18 @@ func (v *ValidatorContext) GetCurrentHeight() int64 {
 
 func (v *ValidatorContext) GetCurrentTime() *time.Time {
 	return &v.currentTime
+}
+
+// BeginBlock will set block parameters
+func (v *BlockValidatorChain) BeginBlock(height int64, time *time.Time) error {
+	v.lastHeight = v.currentHeight
+	v.lastTime = v.currentTime
+	v.currentHeight = height
+	v.currentTime = *time
+
+	for _, v := range v.validators {
+		v.BeginBlock(height, time)
+	}
+
+	return nil
 }
