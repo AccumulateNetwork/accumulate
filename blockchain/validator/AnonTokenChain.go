@@ -11,6 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	cfg "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	"math/big"
 	"time"
 )
@@ -144,6 +145,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 }
 func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submission *pb.Submission, resp *ResponseValidateTX) error {
 	//unmarshal the synthetic transaction based upon submission
+	//VerifySignatures
 	deposit := api.TokenTx{}
 	err := json.Unmarshal(submission.Data, &deposit)
 	if err != nil {
@@ -272,6 +274,24 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	return nil
 }
 
+// VerifySignatures so this is a little complicated because we need to determine the signature
+//scheme of the underlying address of the token.
+func (v *AnonTokenChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
+	sig types.Bytes, adiState *state.AdiState) error {
+
+	keyHash := sha256.Sum256(key.Bytes())
+	if !adiState.VerifyKey(keyHash[:]) {
+		return fmt.Errorf("key cannot be verified with adi key hash")
+	}
+
+	//make sure the request is legit.
+	if ed25519.PubKey(key.Bytes()).VerifySignature(ledger, sig.Bytes()) == false {
+		return fmt.Errorf("invalid signature")
+	}
+
+	return nil
+}
+
 func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 
 	var err error
@@ -279,6 +299,7 @@ func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *pb
 
 	switch submission.Instruction {
 	case pb.AccInstruction_Synthetic_Token_Deposit:
+		//need to verify synthetic deposit.
 		err = v.processDeposit(currentState, submission, resp)
 	case pb.AccInstruction_Token_Transaction:
 		err = v.processSendToken(currentState, submission, resp)

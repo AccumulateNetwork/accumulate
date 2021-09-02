@@ -8,6 +8,7 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 
 	//"crypto/sha256"
 	"fmt"
@@ -50,6 +51,28 @@ func (v *AdiChain) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
+func (v *AdiChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
+	sig types.Bytes, adiState *state.AdiState) error {
+
+	//if sub.GetInstruction()&0xFF00 > 0 {
+	//need to verify the sender is a legit bvc validator also need the dbvc receipt
+	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
+	//not an impostor. Need to figure out how to do this. Right now we just assume the syth request
+	//sender is legit.
+	//}
+	keyHash := sha256.Sum256(key.Bytes())
+	if !adiState.VerifyKey(keyHash[:]) {
+		return fmt.Errorf("key cannot be verified with adi key hash")
+	}
+
+	//make sure the request is legit.
+	if ed25519.PubKey(key.Bytes()).VerifySignature(ledger, sig.Bytes()) == false {
+		return fmt.Errorf("invalid signature")
+	}
+
+	return nil
+}
+
 func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
@@ -60,6 +83,16 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 		return nil, fmt.Errorf("sponsor identity is not defined")
 	}
 
+	adiState := state.AdiState{}
+	err = adiState.UnmarshalBinary(currentstate.IdentityState.Entry)
+	if err != nil {
+		return nil, fmt.Errorf("unable to unmarshal adi state entry, %v", err)
+	}
+
+	ledger := types.MarshalBinaryLedgerChainId(submission.Identitychain, submission.Data, submission.Timestamp)
+
+	err = v.VerifySignatures(ledger, submission.Key, submission.Signature, &adiState)
+
 	ic := api.ADI{}
 	err = json.Unmarshal(submission.Data, &ic)
 	if err != nil {
@@ -67,7 +100,6 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 	}
 
 	isc := synthetic.NewAdiStateCreate(string(ic.URL), &ic.PublicKeyHash)
-	ledger := types.MarshalBinaryLedgerChainId(submission.Identitychain, submission.Data, submission.Timestamp)
 
 	txid := sha256.Sum256(ledger)
 	copy(isc.Txid[:], txid[:])

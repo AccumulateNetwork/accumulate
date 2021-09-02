@@ -21,7 +21,6 @@ type TokenTxOutput struct {
 func NewTokenTx(from types.UrlChain) *TokenTx {
 	tx := &TokenTx{}
 	tx.From = from
-
 	return tx
 }
 
