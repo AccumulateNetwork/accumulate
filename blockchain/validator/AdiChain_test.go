@@ -15,11 +15,11 @@ import (
 	"time"
 )
 
-func createIdentityCreateSubmission(t *testing.T, identitychainpath string) (*StateEntry, *proto.Submission, *ed25519.PrivKey) {
+func createIdentityCreateSubmission(t *testing.T, identitychainpath string) (*state.StateEntry, *proto.Submission, *ed25519.PrivKey) {
 	kp := types.CreateKeyPair()
 	identityhash := types.GetIdentityChainFromIdentity(identitychainpath).Bytes()
 
-	currentstate := StateEntry{}
+	currentstate := state.StateEntry{}
 
 	//currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath,t)
 
@@ -68,9 +68,9 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 
 	currentstate, sub, kp := createIdentityCreateSubmission(t, identitychainpath)
 
-	resp, err := tiv.Validate(currentstate, sub)
+	txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(adihash.Bytes(), sub.Data, sub.Timestamp))
 
-	txid := sha256.Sum256(types.MarshalBinaryLedgerAdiChainPath(identitychainpath, sub.Data, sub.Timestamp))
+	resp, err := tiv.Validate(currentstate, sub)
 
 	if err != nil {
 		t.Fatal(err)
@@ -91,12 +91,12 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 	sub = resp.Submissions[0]
 
 	isc := synthetic.AdiStateCreate{}
-	err = json.Unmarshal(sub.Data, isc)
+	err = json.Unmarshal(sub.Data, &isc)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if bytes.Compare(isc.SourceIdentity[:], adihash[:]) != 0 {
+	if bytes.Compare(isc.SourceAdiChain[:], adihash[:]) != 0 {
 		t.Fatalf("Invalid source identity in synth tx")
 	}
 
@@ -109,12 +109,7 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 	}
 
 	keyhash := sha256.Sum256(kp.PubKey().Bytes())
-	if bytes.Compare(isc.KeyData, keyhash[:]) == 0 {
+	if bytes.Compare(isc.PublicKeyHash[:], keyhash[:]) != 0 {
 		t.Fatalf("Invalid public key data stored")
 	}
-
-	if isc.KeyType != state.KeyTypeSha256 {
-		t.Fatalf("Expected key type to be KeyType_sha256")
-	}
-
 }

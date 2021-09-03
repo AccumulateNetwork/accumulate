@@ -45,6 +45,16 @@ func createToken(tokenUrl string) (string, error) {
 	return string(ret), nil
 }
 
+func createTokenTx(url string) (string, error) {
+	tx := &TokenTx{}
+	tx.From = types.UrlChain(url + "/MyAcmeTokens")
+	amt := types.Amount{}
+	amt.SetInt64(1234)
+	tx.AddToAccount(types.UrlChain("redwagon/AcmeAccount"), &amt)
+	ret, err := json.Marshal(&tx)
+	return string(ret), err
+}
+
 func createRequest(t *testing.T, adiUrl string, kp *ed25519.PrivKey, message string) []byte {
 	req := &APIRequestRaw{}
 
@@ -180,4 +190,37 @@ func TestAPIRequest_Token(t *testing.T) {
 		//the data should have been unmarshalled correctly and the data is should be valid
 		t.Fatal(err)
 	}
+}
+
+func TestAPIRequest_TokenTx(t *testing.T) {
+	kp := types.CreateKeyPair()
+
+	adiUrl := "greentractor"
+
+	message, err := createTokenTx(adiUrl)
+	if err != nil {
+		t.Fatal(err)
+	}
+	params := createRequest(t, adiUrl, &kp, message)
+
+	validate := validator.New()
+
+	req := &APIRequestRaw{}
+	// unmarshal req
+	if err = json.Unmarshal(params, &req); err != nil {
+		t.Fatal(err)
+	}
+
+	// validate request
+	if err = validate.Struct(req); err != nil {
+		t.Fatal(err)
+	}
+
+	//tx, err := json.MarshalIndent(&req,"", "  ")
+	tx, err := json.Marshal(&req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("%s", string(tx))
 }

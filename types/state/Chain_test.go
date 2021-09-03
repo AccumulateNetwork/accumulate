@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"testing"
@@ -22,7 +23,7 @@ func TestStateHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if header.GetType() != header2.GetType() {
+	if bytes.Compare(header.GetType().Bytes(), header2.GetType().Bytes()) != 0 {
 		t.Fatalf("header type doesnt match")
 	}
 
