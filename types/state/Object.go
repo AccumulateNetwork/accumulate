@@ -109,3 +109,20 @@ func (app *Object) Unmarshal(data []byte) error {
 
 	return nil
 }
+
+type StateEntry struct {
+	IdentityState *Object
+	ChainState    *Object
+
+	DB *StateDB
+}
+
+func NewStateEntry(idstate *Object, chainstate *Object, db *StateDB) (*StateEntry, error) {
+	se := StateEntry{}
+	se.IdentityState = idstate
+
+	se.ChainState = chainstate
+	se.DB = db
+
+	return &se, nil
+}
