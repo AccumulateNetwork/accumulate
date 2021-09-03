@@ -30,7 +30,7 @@ func TestIdentityState(t *testing.T) {
 
 	ktype, keydata := ids.GetKeyData()
 
-	if ktype != 0 {
+	if ktype != KeyTypePublic {
 		t.Fatalf("Invalid Key Data Type")
 	}
 

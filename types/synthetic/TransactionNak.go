@@ -37,7 +37,7 @@ func NewTransactionNak(code NakCode, txid []byte, receiverid []byte, receivercha
 	}
 
 	copy(tan.Txid[:], txid)
-	copy(tan.SourceIdentity[:], receiverid)
+	copy(tan.SourceAdiChain[:], receiverid)
 	copy(tan.SourceChainId[:], receiverchainid)
 	if md != nil {
 		copy(tan.Metadata, *md)

@@ -7,10 +7,10 @@ import (
 )
 
 type TokenTx struct {
-	Hash types.Bytes32    `json:"hash" form:"hash" query:"hash" validate:"required"` //,hexadecimal"`
+	Hash types.Bytes32    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"` //,hexadecimal"`
 	From types.UrlChain   `json:"from" form:"from" query:"from" validate:"required"`
 	To   []*TokenTxOutput `json:"to" form:"to" query:"to" validate:"required"`
-	Meta json.RawMessage  `json:"meta" form:"meta" query:"meta" validate:"required"`
+	Meta json.RawMessage  `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
 type TokenTxOutput struct {
