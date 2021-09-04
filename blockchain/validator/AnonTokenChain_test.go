@@ -22,11 +22,11 @@ import (
 
 func CreateFakeSyntheticDeposit(t *testing.T, tokenUrl string, from string, to string, kp ed25519.PrivKey) *proto.Submission {
 	deposit := synthetic.NewTokenTransactionDeposit()
-	deposit.SourceChainId = *types.GetIdentityChainFromIdentity(from)
-	deposit.SourceAdiChain = *types.GetChainIdFromChainPath(from)
+	deposit.SourceChainId = *types.GetIdentityChainFromIdentity(&from)
+	deposit.SourceAdiChain = *types.GetChainIdFromChainPath(&from)
 	deposit.Txid = sha256.Sum256([]byte("generictxid"))
 	deposit.DepositAmount.SetInt64(5000)
-	deposit.SetTokenInfo(types.UrlChain(tokenUrl))
+	deposit.SetTokenInfo(tokenUrl)
 
 	data, err := json.Marshal(&deposit)
 	if err != nil {
@@ -57,9 +57,9 @@ func CreateFakeSyntheticDeposit(t *testing.T, tokenUrl string, from string, to s
 }
 
 func CreateFakeAnonymousTokenChain(addressUrl string) *state.Object {
-	adi, _, _ := types.ParseIdentityChainPath(addressUrl)
+	adi, _, _ := types.ParseIdentityChainPath(&addressUrl)
 
-	anonTokenChain := state.NewChain(types.UrlChain(adi), api.ChainTypeAnonTokenAccount[:])
+	anonTokenChain := state.NewChain(types.String(adi), api.ChainTypeAnonTokenAccount[:])
 
 	so := state.Object{}
 	so.Entry, _ = anonTokenChain.MarshalBinary()
@@ -78,9 +78,9 @@ func MakeAnonymousAddress(key []byte) string {
 	return address
 }
 
-func CreateFakeAnonTokenState(identitychainpath string, key ed25519.PrivKey) (*state.Object, []byte) {
+func CreateFakeAnonTokenState(adiChainPath string, key ed25519.PrivKey) (*state.Object, []byte) {
 
-	id, _, _ := types.ParseIdentityChainPath(identitychainpath)
+	id, _, _ := types.ParseIdentityChainPath(&adiChainPath)
 
 	idhash := sha256.Sum256([]byte(id))
 
@@ -93,6 +93,34 @@ func CreateFakeAnonTokenState(identitychainpath string, key ed25519.PrivKey) (*s
 	so.EntryHash = eh[:]
 	//we intentionally don't set the so.StateHash & so.PrevStateHash
 	return &so, idhash[:]
+}
+
+func TestAnonTokenChain_BVC(t *testing.T) {
+	bvc := NewBlockValidatorChain()
+	kp := types.CreateKeyPair()
+	address := MakeAnonymousAddress(kp.PubKey().Bytes())
+	//anon := NewAnonTokenChain()
+	tokenUrl := "roadrunner/MyAcmeTokens" //coinbase
+
+	//todo: create fake deposit. or set an initial account state.
+	//subDeposit := CreateFakeSyntheticDeposit(t, tokenUrl, tokenUrl, address, kp)
+	//stateObject := CreateFakeAnonymousTokenChain(address)
+
+	anonAccountUrl := address + "/" + tokenUrl
+	subTx := CreateFakeTokenTransaction(t, anonAccountUrl, kp)
+
+	stateDB := &state.StateDB{}
+	stateDB.Open("/var/tmp", true, true)
+
+	se, err := state.NewStateEntry(nil, nil, stateDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = bvc.Validate(se, subTx)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestAnonTokenChain_Validate(t *testing.T) {

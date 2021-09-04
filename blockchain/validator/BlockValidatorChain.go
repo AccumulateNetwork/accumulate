@@ -20,12 +20,16 @@ func NewBlockValidatorChain() *BlockValidatorChain {
 	//add chain validators (Adi, anon, accounts)
 	v.addValidator(&NewAdiChain().ValidatorContext)
 	v.addValidator(&NewAnonTokenChain().ValidatorContext)
+	//we will be moving towards the acount chain validator for token transactions and eventually data tx
 	//v.addValidator(&NewAccountChain().ValidatorContext) <-- handles deposits and sends
 
 	//add transaction validators for creation of adi, token, or account
 	v.addValidator(&NewSyntheticIdentityStateCreateValidator().ValidatorContext)
 	v.addValidator(&NewTokenIssuanceValidator().ValidatorContext)
 	v.addValidator(&NewTokenChainCreateValidator().ValidatorContext)
+
+	//for now this is validation by transaction, but we want to make it by chain since a chain must exist
+	v.addValidator(&NewTokenTransactionValidator().ValidatorContext)
 
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
@@ -44,8 +48,11 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 	//the state entry will be nil, anon addr, or adi state
 	currentState.IdentityState, err = currentState.DB.GetCurrentState(sub.GetIdentitychain()) //need the identity chain
 
-	//If adiState doesn't exist, we will process by transaction instruction type
 	if err != nil {
+		return nil, fmt.Errorf("error accessing state database for adi %s, %v", sub.AdiChainPath, err)
+	}
+	//If adiState doesn't exist, we will process by transaction instruction type
+	if currentState.IdentityState == nil {
 		//so the current state isn't defined, so we need to see if we need to create a token or anon chain.
 		val, err := v.getValidatorByIns(sub.Instruction)
 
@@ -66,9 +73,12 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 
 	//since we have a valid adiState, we now need to look up the chain
 	currentState.ChainState, err = currentState.DB.GetCurrentState(sub.GetChainid()) //need the identity chain
+	if err != nil {
+		return nil, fmt.Errorf("error accessing state database for chain url %s, %v", sub.AdiChainPath, err)
+	}
 
 	//If chain state doesn't exist, we will process by transaction instruction type
-	if err != nil {
+	if currentState.ChainState == nil {
 		//we have no chain state, so we need to process by transaction type.
 		val, err := v.getValidatorByIns(sub.Instruction)
 		if err != nil {

@@ -305,24 +305,25 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 }
 
 func (app *AccumulatorVMApplication) createBootstrapAccount() {
-	adi, chainpath, err := types.ParseIdentityChainPath("wileecoyote/ACME")
+	tokenUrl := "wileecoyote/ACME"
+	adi, chainPath, err := types.ParseIdentityChainPath(&tokenUrl)
 	if err != nil {
 		panic(err)
 	}
 
 	is := state.NewIdentityState(adi)
 	is.SetKeyData(state.KeyTypePublic, app.Key.PubKey.Bytes())
-	idstatedata, err := is.MarshalBinary()
+	idStateData, err := is.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
 
-	identity := types.GetIdentityChainFromIdentity(adi)
-	chainid := types.GetChainIdFromChainPath(chainpath)
+	identity := types.GetIdentityChainFromIdentity(&adi)
+	chainid := types.GetChainIdFromChainPath(&chainPath)
 
-	ti := api.NewToken(chainpath, "ACME", 8)
+	ti := api.NewToken(chainPath, "ACME", 8)
 
-	tas := state.NewToken(types.UrlChain(chainpath))
+	tas := state.NewToken(chainPath)
 	tas.Precision = ti.Precision
 	tas.Symbol = ti.Symbol
 	tas.Meta = ti.Meta
@@ -331,7 +332,7 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	if err != nil {
 		panic(err)
 	}
-	err = app.mmdb.AddStateEntry(identity[:], idstatedata)
+	err = app.mmdb.AddStateEntry(identity[:], idStateData)
 	if err != nil {
 		panic(err)
 	}
@@ -641,11 +642,11 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 		dbvc.Submissions = make([]*pb.Submission, 1)
 		dbvc.Submissions[0] = &pb.Submission{}
 		dbvc.Submissions[0].Instruction = 0
-		chainadi := "dbvc"
-		chainid := types.GetChainIdFromChainPath(chainadi)
+		chainAdi := "dbvc"
+		chainId := types.GetChainIdFromChainPath(&chainAdi)
 		//chainaddr, _ := smt.BytesUint64(chainid)
-		dbvc.Submissions[0].Identitychain = chainid[:] //1 is the chain id of the DBVC
-		dbvc.Submissions[0].Chainid = chainid[:]
+		dbvc.Submissions[0].Identitychain = chainId[:] //1 is the chain id of the DBVC
+		dbvc.Submissions[0].Chainid = chainId[:]
 
 		dbvc.Submissions[0].Instruction = pb.AccInstruction_Data_Entry //this may be irrelevant...
 		dbvc.Submissions[0].Param1 = 0

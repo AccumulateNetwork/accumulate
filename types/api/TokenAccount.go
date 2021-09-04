@@ -16,7 +16,7 @@ type TokenAccountWithBalance struct {
 }
 
 func NewTokenAccount(accountURL types.UrlChain, issuingTokenURL types.UrlChain) *TokenAccount {
-	tcc := &TokenAccount{types.String(accountURL), types.String(issuingTokenURL)}
+	tcc := &TokenAccount{accountURL.String, issuingTokenURL.String}
 	return tcc
 }
 

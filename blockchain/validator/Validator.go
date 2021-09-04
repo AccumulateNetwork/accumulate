@@ -75,8 +75,11 @@ type ValidatorContext struct {
 }
 
 func (v *ValidatorContext) addValidator(context *ValidatorContext) {
-	if v.validatorsIns != nil {
+	if v.validatorsIns == nil {
 		v.validatorsIns = make(map[pb.AccInstruction]*ValidatorContext)
+	}
+	if v.validators == nil {
+		v.validators = make(map[types.Bytes32]*ValidatorContext)
 	}
 
 	var key types.Bytes32

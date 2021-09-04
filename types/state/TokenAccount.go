@@ -9,8 +9,8 @@ import (
 
 type tokenAccount struct {
 	Chain
-	TokenUrl types.String `json:"tokenUrl"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
-	Balance  big.Int      `json:"balance"`  //store the balance as a big int.
+	TokenUrl types.UrlChain `json:"tokenUrl"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
+	Balance  big.Int        `json:"balance"`  //store the balance as a big int.
 }
 
 type TokenAccount struct {
@@ -19,11 +19,11 @@ type TokenAccount struct {
 }
 
 //NewTokenAccount create a new token account.  Requires the identity/chain id's and coinbase if applicable
-func NewTokenAccount(accountUrl types.UrlChain, tokenUrl types.UrlChain) *TokenAccount {
+func NewTokenAccount(accountUrl string, tokenUrl string) *TokenAccount {
 	tas := TokenAccount{}
 
-	tas.SetHeader(accountUrl, api.ChainTypeTokenAccount[:])
-	tas.TokenUrl = types.String(tokenUrl)
+	tas.SetHeader(types.String(accountUrl), api.ChainTypeTokenAccount[:])
+	tas.TokenUrl.String = types.String(tokenUrl)
 
 	return &tas
 }

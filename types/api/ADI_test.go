@@ -11,7 +11,8 @@ import (
 
 func TestIdentityCreate(t *testing.T) {
 	ic := ADI{}
-	_ = ic.SetName("WileECoyote")
+	adiName := "wileecoyote"
+	_ = ic.SetAdi(&adiName)
 	kp := types.CreateKeyPair()
 	kh := types.Bytes32(sha256.Sum256(kp.PubKey().Bytes()))
 	ic.SetKeyHash(&kh)
