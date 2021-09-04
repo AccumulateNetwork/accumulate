@@ -12,11 +12,11 @@ import (
 	"time"
 )
 
-func createTokenIssuanceSubmission(t *testing.T, identitychainpath string) (*StateEntry, *proto.Submission) {
+func createTokenIssuanceSubmission(t *testing.T, identitychainpath string) (*state.StateEntry, *proto.Submission) {
 	kp := types.CreateKeyPair()
 	identityhash := types.GetIdentityChainFromIdentity(identitychainpath).Bytes()
 
-	currentstate := StateEntry{}
+	currentstate := state.StateEntry{}
 
 	//currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath,t)
 
@@ -70,8 +70,17 @@ func TestTokenIssuanceValidator_Validate(t *testing.T) {
 		t.Fatal("expecting a state object to be returned to add to a token coinbase chain")
 	}
 
-	ti := state.TokenAccount{}
-	err = ti.UnmarshalBinary(resp.StateData)
+	ti := state.Token{}
+	chainid := types.GetChainIdFromChainPath(identitychainpath)
+	if resp.StateData == nil {
+		t.Fatal("expecting state object from token transaction")
+	}
+
+	val, ok := resp.StateData[*chainid]
+	if !ok {
+		t.Fatalf("token transaction account chain not found %s", identitychainpath)
+	}
+	err = ti.UnmarshalBinary(val)
 
 	if err != nil {
 		t.Fatal(err)

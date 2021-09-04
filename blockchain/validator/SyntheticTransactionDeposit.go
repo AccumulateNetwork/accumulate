@@ -23,7 +23,7 @@ func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValid
 	return &v
 }
 
-func (v *SyntheticTransactionDepositValidator) Check(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *SyntheticTransactionDepositValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
 	_, _, _, err := v.canTransact(currentstate, identitychain, chainid, p1, p2, data)
 	return err
 }
@@ -40,7 +40,7 @@ func (v *SyntheticTransactionDepositValidator) BeginBlock(height int64, time *ti
 	return nil
 }
 
-func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccount, *synthetic.TokenTransactionDeposit, error) {
+func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccount, *synthetic.TokenTransactionDeposit, error) {
 
 	ttd := synthetic.NewTokenTransactionDeposit()
 	err := ttd.UnmarshalBinary(data)
@@ -77,13 +77,13 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Sub
 	retsub.Submissions = make([]*pb.Submission, 1)
 	retsub.Submissions[0] = &pb.Submission{}
 	rs := retsub.Submissions[0]
-	rs.Identitychain = ttd.SourceIdentity[:]
+	rs.Identitychain = ttd.SourceAdiChain[:]
 	rs.Chainid = ttd.SourceChainId[:]
 	rs.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 	//this will reverse the deposit and send it back to the sender.
 	retdep := synthetic.TokenTransactionDeposit{}
 	copy(retdep.Txid[:], ttd.Txid[:])
-	copy(retdep.SourceIdentity[:], submission.Identitychain)
+	copy(retdep.SourceAdiChain[:], submission.Identitychain)
 	copy(retdep.SourceChainId[:], submission.Chainid)
 	retdep.TokenUrl = ttd.TokenUrl
 	err := retdep.Metadata.UnmarshalJSON([]byte("{\"deposit failed\"}"))
@@ -100,7 +100,7 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Sub
 	return &retsub, nil
 }
 
-func (v *SyntheticTransactionDepositValidator) Validate(currentstate *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
+func (v *SyntheticTransactionDepositValidator) Validate(currentstate *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 
 	_, tas, ttd, err := v.canTransact(currentstate, submission.Identitychain, submission.Chainid,
 		submission.Param1, submission.Param2, submission.Data)
@@ -136,7 +136,7 @@ func (v *SyntheticTransactionDepositValidator) Validate(currentstate *StateEntry
 	//TODO: should we send back an ack tx to the sender? ret.Submissions = make([]pb.Submission, 1)
 
 	//Marshal the state change...
-	ret.StateData, err = tas.MarshalBinary()
+	stateData, err := tas.MarshalBinary()
 
 	//make sure marshalling went ok, if it didn't send the transaction back to sender.
 	if err != nil {
@@ -148,6 +148,8 @@ func (v *SyntheticTransactionDepositValidator) Validate(currentstate *StateEntry
 		}
 		return rts, err
 	}
+
+	ret.AddStateData(types.GetChainIdFromChainPath(tas.GetChainUrl()), stateData)
 
 	return &ret, nil
 }

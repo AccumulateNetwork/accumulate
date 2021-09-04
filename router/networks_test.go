@@ -2,7 +2,7 @@ package router
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
 )
 
@@ -10,7 +10,7 @@ func TestNetworkAddress(t *testing.T) {
 	m := make(map[uint64]string)
 	n := make(map[uint64][]string)
 	for i := range Networks {
-		addr := types.GetAddressFromIdentityName(Networks[i].Name + ".accumulate")
+		addr := types.GetAddressFromIdentity(Networks[i].Name + ".accumulate")
 		networkid := addr % uint64(len(Networks))
 		if mms := m[networkid]; mms == "" {
 			fmt.Printf("Found New ID : %d for network %s\n", networkid, Networks[i])

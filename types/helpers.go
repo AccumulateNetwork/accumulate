@@ -283,10 +283,13 @@ func (s *Bytes) MarshalBinary() ([]byte, error) {
 func (s *Bytes) UnmarshalBinary(data []byte) error {
 	slen, l := binary.Varint(data)
 	if l == 0 {
-		return fmt.Errorf("cannot unmarshal string")
+		return nil
+	}
+	if l < 0 {
+		return fmt.Errorf("invalid data to unmarshal")
 	}
 	if len(data) < int(slen)+l {
-		return fmt.Errorf("insufficient data to unmarshal string")
+		return fmt.Errorf("insufficient data to unmarshal")
 	}
 	*s = data[l : int(slen)+l]
 	return nil
@@ -318,7 +321,7 @@ func (s *Bytes32) UnmarshalJSON(data []byte) error {
 }
 
 // Bytes returns the bite slice of the 32 byte array
-func (s Bytes32) Bytes() []byte {
+func (s *Bytes32) Bytes() []byte {
 	return s[:]
 }
 
@@ -425,7 +428,15 @@ func (s *Byte) UnmarshalBinary(data []byte) error {
 
 type UrlAdi string
 
+func (s *UrlAdi) AsString() *string {
+	return (*string)(s)
+}
+
 type UrlChain string
+
+func (s *UrlChain) AsString() *string {
+	return (*string)(s)
+}
 
 type Amount struct {
 	big.Int

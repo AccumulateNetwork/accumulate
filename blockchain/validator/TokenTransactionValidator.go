@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -27,8 +28,15 @@ func NewTokenTransactionValidator() *TokenTransactionValidator {
 }
 
 // canTransact is a helper function to parse and check for errors in the transaction data
-func (v *TokenTransactionValidator) canSendTokens(currentState *StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccount, *api.TokenTx, error) {
+func canSendTokens(currentState *state.StateEntry, data []byte) (*state.AdiState, *state.TokenAccount, *api.TokenTx, error) {
 
+	if currentState.ChainState == nil {
+		return nil, nil, nil, fmt.Errorf("no account exists for the chain")
+	}
+
+	if currentState.IdentityState == nil {
+		return nil, nil, nil, fmt.Errorf("no identity exists for the chain")
+	}
 	//unmarshal the data into a TokenTx structure, if this fails no point in continuing.
 	var tx api.TokenTx
 	err := json.Unmarshal(data, &tx)
@@ -36,21 +44,44 @@ func (v *TokenTransactionValidator) canSendTokens(currentState *StateEntry, iden
 		return nil, nil, nil, err
 	}
 
-	ids := state.AdiState{}
-	err = ids.UnmarshalBinary(currentState.IdentityState.Entry)
+	//extract the chain header, we don't need the entire id
+	chainHeader := state.Chain{}
+	err = chainHeader.UnmarshalBinary(currentState.IdentityState.Entry)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
+	//now check to see if the chain header is an ADI chain. If so, load the AdiState
+	var ids *state.AdiState
+	if bytes.Compare(chainHeader.Type[:], api.ChainTypeAdi[:]) == 0 {
+		ids = &state.AdiState{}
+		err = ids.UnmarshalBinary(currentState.IdentityState.Entry)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
 	tas := state.TokenAccount{}
 	err = tas.UnmarshalBinary(currentState.ChainState.Entry)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
+	//verify the tx.from is from the same identity
+	stateAdiChain := types.GetIdentityChainFromIdentity(string(chainHeader.ChainUrl))
+	fromAdiChain := types.GetIdentityChainFromIdentity(string(tx.From))
+	if bytes.Compare(stateAdiChain[:], fromAdiChain[:]) != 0 {
+		return nil, nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
+	}
+
+	//verify the tx.from is from the same chain
+	stateChainId := types.GetChainIdFromChainPath(string(tas.ChainUrl))
+	fromChainId := types.GetChainIdFromChainPath(string(tx.From))
+	if bytes.Compare(stateChainId[:], fromChainId[:]) != 0 {
+		return nil, nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
+	}
+
 	//now check to see if we can transact
 	//really only need to provide one input...
-
 	amt := types.Amount{}
 	for _, val := range tx.To {
 		amt.Add(amt.AsBigInt(), val.Amount.AsBigInt())
@@ -61,12 +92,12 @@ func (v *TokenTransactionValidator) canSendTokens(currentState *StateEntry, iden
 		///insufficient balance
 		return nil, nil, nil, fmt.Errorf("insufficient balance")
 	}
-	return &ids, &tas, &tx, nil
+	return ids, &tas, &tx, nil
 }
 
 // Check will perform a sanity check to make sure transaction seems reasonable
-func (v *TokenTransactionValidator) Check(currentState *StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) error {
-	_, _, _, err := v.canSendTokens(currentState, identityChain, chainId, p1, p2, data)
+func (v *TokenTransactionValidator) Check(currentState *state.StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) error {
+	_, _, _, err := canSendTokens(currentState, data)
 	return err
 }
 
@@ -86,13 +117,28 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 }
 
 // Validate validates a token transaction
-func (v *TokenTransactionValidator) Validate(currentState *StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
+func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
-	_, tas, tx, err := v.canSendTokens(currentState, submission.Identitychain, submission.Chainid,
-		submission.GetParam1(), submission.GetParam2(), submission.GetData())
+	ids, tas, tx, err := canSendTokens(currentState, submission.GetData())
+
+	if ids == nil {
+		return nil, fmt.Errorf("invalid identity state retrieved for token transaction")
+	}
 
 	if err != nil {
 		return nil, err
+	}
+
+	keyHash := sha256.Sum256(submission.Key)
+	if !ids.VerifyKey(keyHash[:]) {
+		return nil, fmt.Errorf("key not authorized for signing transaction")
+	}
+
+	ts := time.Unix(submission.Timestamp, 0)
+
+	duration := time.Since(ts)
+	if duration.Minutes() > 1 {
+		return nil, fmt.Errorf("transaction time of validity has elapesd by %f seconds", duration.Seconds()-60)
 	}
 
 	ret := ResponseValidateTX{}
@@ -156,10 +202,15 @@ func (v *TokenTransactionValidator) Validate(currentState *StateEntry, submissio
 	}
 
 	//issue a state change...
-	ret.StateData, err = tas.MarshalBinary()
+	tasso, err := tas.MarshalBinary()
+
 	if err != nil {
 		return nil, err
 	}
+
+	//return a transaction state object
+	ret.AddStateData(types.GetChainIdFromChainPath(string(tx.From)), tasso)
+
 	return &ret, nil
 }
 
