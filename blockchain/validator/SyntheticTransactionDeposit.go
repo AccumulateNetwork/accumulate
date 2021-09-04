@@ -149,7 +149,7 @@ func (v *SyntheticTransactionDepositValidator) Validate(currentstate *state.Stat
 		return rts, err
 	}
 
-	ret.AddStateData(types.GetChainIdFromChainPath(tas.GetChainUrl()), stateData)
+	ret.AddStateData(types.GetChainIdFromChainPath(tas.ChainUrl.AsString()), stateData)
 
 	return &ret, nil
 }

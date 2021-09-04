@@ -12,14 +12,14 @@ type ADI struct {
 	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"` //",hexadecimal"`
 }
 
-func NewADI(name string, keyHash *types.Bytes32) *ADI {
+func NewADI(name *string, keyHash *types.Bytes32) *ADI {
 	ic := &ADI{}
-	ic.SetName(name)
+	ic.SetAdi(name)
 	ic.SetKeyHash(keyHash)
 	return ic
 }
 
-func (ic *ADI) SetName(name string) error {
+func (ic *ADI) SetAdi(name *string) error {
 	adi, _, err := types.ParseIdentityChainPath(name)
 
 	if err != nil {

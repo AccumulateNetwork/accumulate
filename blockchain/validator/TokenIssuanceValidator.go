@@ -45,15 +45,15 @@ func (v *TokenIssuanceValidator) BeginBlock(height int64, time *time.Time) error
 func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
 	if currentState == nil {
 		//but this is to be expected...
-		return nil, fmt.Errorf("Current State Not Defined")
+		return nil, fmt.Errorf("current State not defined")
 	}
 
 	if currentState.IdentityState == nil {
-		return nil, fmt.Errorf("Identity not defined. Unable to issue token.")
+		return nil, fmt.Errorf("identity not defined, unable to issue token")
 	}
 
 	if currentState.ChainState != nil {
-		return nil, fmt.Errorf("Token chain already defined.  Unable to issue token.")
+		return nil, fmt.Errorf("token chain already defined, unable to issue token")
 	}
 
 	id := &state.AdiState{}
@@ -70,8 +70,8 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 
 	//do some ti validation
 
-	adiState, _, err := types.ParseIdentityChainPath(string(id.GetChainUrl()))
-	adiToken, tokenChain, err := types.ParseIdentityChainPath(string(ti.URL))
+	adiState, _, err := types.ParseIdentityChainPath(id.ChainUrl.AsString())
+	adiToken, tokenChain, err := types.ParseIdentityChainPath(ti.URL.AsString())
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 	if adiState != adiToken {
 		return nil, fmt.Errorf("ADI URL doesn't match token ADI")
 	}
-	tas := state.NewToken(types.UrlChain(tokenChain))
+	tas := state.NewToken(tokenChain)
 	tas.Precision = ti.Precision
 	tas.Meta = ti.Meta
 	tas.Symbol = ti.Symbol
@@ -91,9 +91,9 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 	resp = &ResponseValidateTX{}
 
 	//return a new state object for a token
-	chainid := types.Bytes32{}
-	copy(chainid[:], submission.Chainid)
-	resp.AddStateData(&chainid, tasso)
+	chainId := types.Bytes32{}
+	copy(chainId[:], submission.Chainid)
+	resp.AddStateData(&chainId, tasso)
 
 	return resp, nil
 }

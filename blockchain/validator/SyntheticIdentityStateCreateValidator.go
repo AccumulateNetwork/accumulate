@@ -81,7 +81,7 @@ func (v *SyntheticIdentityStateCreateValidator) Validate(currentstate *state.Sta
 	}
 	resp = &ResponseValidateTX{}
 
-	resp.AddStateData(types.GetIdentityChainFromIdentity(string(is.ChainUrl)), statedata)
+	resp.AddStateData(types.GetIdentityChainFromIdentity(is.ChainUrl.AsString()), statedata)
 
 	return resp, nil
 }

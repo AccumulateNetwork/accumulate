@@ -22,9 +22,9 @@ type Token struct {
 	token
 }
 
-func NewToken(tokenUrl types.UrlChain) *Token {
+func NewToken(tokenUrl string) *Token {
 	token := &Token{}
-	token.SetHeader(tokenUrl, api.ChainTypeToken[:])
+	token.SetHeader(types.String(tokenUrl), api.ChainTypeToken[:])
 	return token
 }
 

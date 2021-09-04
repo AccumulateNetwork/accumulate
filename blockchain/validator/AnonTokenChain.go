@@ -29,7 +29,7 @@ func NewAnonTokenChain() *AnonTokenChain {
 	return &v
 }
 
-func (v *AnonTokenChain) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *AnonTokenChain) Check(currentState *state.StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) error {
 	//
 	//var err error
 	//resp := &ResponseValidateTX{}
@@ -68,13 +68,13 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 	}
 
 	//derive the chain for the token account
-	adi, _, err := types.ParseIdentityChainPath(submission.AdiChainPath)
+	adi, _, err := types.ParseIdentityChainPath(&submission.AdiChainPath)
 	if err != nil {
 		return err
 	}
 
 	//First GetOrCreateAdiChain
-	adiChain := types.GetIdentityChainFromIdentity(adi)
+	adiChain := types.GetIdentityChainFromIdentity(&adi)
 	adiStateData, err := currentState.DB.GetStateObject(adiChain[:], false)
 
 	//now check if the anonymous chain already exists.
@@ -94,19 +94,19 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 		//we have an adi state, so now compare the key and validation
 	} else {
 		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
-		chainState.SetHeader(types.UrlChain(adi), api.ChainTypeAnonTokenAccount[:])
+		chainState.SetHeader(types.String(adi), api.ChainTypeAnonTokenAccount[:])
 		//need to flag this as an anonymous account
 		data, err := chainState.MarshalBinary()
 		if err != nil {
 			return nil
 		}
-		resp.AddStateData(types.GetChainIdFromChainPath(adi), data)
+		resp.AddStateData(types.GetChainIdFromChainPath(&adi), data)
 	}
 
 	//Next GetOrCreateTokenAccount
 	//the ADI is the Address, so now form the chain from the token type
 	url := fmt.Sprintf("%s/%s", adi, deposit.TokenUrl)
-	tokenChain := types.GetChainIdFromChainPath(url)
+	tokenChain := types.GetChainIdFromChainPath(&url)
 
 	//so now look up the token chain from the account
 	//The token state *CAN* be nil, if so we need to create it...
@@ -119,7 +119,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 	account := &state.TokenAccount{}
 	if tokenState == nil {
 		//we need to create a new state object.
-		account = state.NewTokenAccount(types.UrlChain(url), types.UrlChain(deposit.TokenUrl))
+		account = state.NewTokenAccount(url, *deposit.TokenUrl.AsString())
 	} else {
 		if tokenState.Entry == nil {
 			return fmt.Errorf("unable to retrieve token chain entry for %s", url)
@@ -160,7 +160,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	}
 
 	//need to derive chain id for coin type account.
-	accountChainId := types.GetChainIdFromChainPath(string(deposit.From))
+	accountChainId := types.GetChainIdFromChainPath(deposit.From.AsString())
 	currentState.ChainState, err = currentState.DB.GetCurrentState(accountChainId[:])
 	if err != nil {
 		return fmt.Errorf("chain state for account not esablished")
@@ -198,7 +198,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	}
 
 	//verify the from address
-	txFromAdi, txFromChain, err := types.ParseIdentityChainPath(string(tokenTx.From))
+	txFromAdi, txFromChain, err := types.ParseIdentityChainPath(tokenTx.From.AsString())
 	if err != nil {
 		return fmt.Errorf("unable to parse tokenTx.From, %v", err)
 	}
@@ -228,13 +228,13 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		txAmt.Add(txAmt, amt)
 
 		//extract the target identity and chain from the url
-		adi, chainPath, err := types.ParseIdentityChainPath(string(val.URL))
+		adi, chainPath, err := types.ParseIdentityChainPath(val.URL.AsString())
 		if err != nil {
 			return err
 		}
 
 		//get the identity id from the adi
-		idChain := types.GetIdentityChainFromIdentity(adi)
+		idChain := types.GetIdentityChainFromIdentity(&adi)
 		if idChain == nil {
 			return fmt.Errorf("Invalid identity chain for %s", adi)
 		}
@@ -247,7 +247,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		sub.Identitychain = idChain[:]
 
 		//set the chain id for the destination
-		destChainId := types.GetChainIdFromChainPath(chainPath)
+		destChainId := types.GetChainIdFromChainPath(&chainPath)
 		sub.Chainid = destChainId[:]
 
 		//set the transaction instruction type to a synthetic token deposit
@@ -260,7 +260,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 			return fmt.Errorf("unable to set deposit for synthetic token deposit transaction, %v", err)
 		}
 
-		err = depositTx.SetTokenInfo(types.UrlChain(tokenAccountState.GetChainUrl()))
+		err = depositTx.SetTokenInfo(tokenAccountState.GetChainUrl())
 		if err != nil {
 			return fmt.Errorf("unable to set token information for synthetic token deposit transaction, %v", err)
 		}
