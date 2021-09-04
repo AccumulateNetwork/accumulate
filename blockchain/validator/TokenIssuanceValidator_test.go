@@ -12,19 +12,19 @@ import (
 	"time"
 )
 
-func createTokenIssuanceSubmission(t *testing.T, identitychainpath string) (*state.StateEntry, *proto.Submission) {
+func createTokenIssuanceSubmission(t *testing.T, adiChainPath string) (*state.StateEntry, *proto.Submission) {
 	kp := types.CreateKeyPair()
-	identityhash := types.GetIdentityChainFromIdentity(identitychainpath).Bytes()
+	identityhash := types.GetIdentityChainFromIdentity(&adiChainPath).Bytes()
 
 	currentstate := state.StateEntry{}
 
 	//currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath,t)
 
-	currentstate.IdentityState, identityhash = CreateFakeIdentityState(identitychainpath, kp)
+	currentstate.IdentityState, identityhash = CreateFakeIdentityState(adiChainPath, kp)
 
-	chainid := types.GetChainIdFromChainPath(identitychainpath).Bytes()
+	chainid := types.GetChainIdFromChainPath(&adiChainPath).Bytes()
 
-	ti := api.NewToken(identitychainpath, "ACME", 1)
+	ti := api.NewToken(adiChainPath, "ACME", 1)
 
 	//build a submission message
 	sub := proto.Submission{}
@@ -71,7 +71,7 @@ func TestTokenIssuanceValidator_Validate(t *testing.T) {
 	}
 
 	ti := state.Token{}
-	chainid := types.GetChainIdFromChainPath(identitychainpath)
+	chainid := types.GetChainIdFromChainPath(&identitychainpath)
 	if resp.StateData == nil {
 		t.Fatal("expecting state object from token transaction")
 	}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -35,4 +36,61 @@ func (t *TokenTx) SetMetadata(md *json.RawMessage) error {
 	}
 	copy(t.Meta[:], (*md)[:])
 	return nil
+}
+
+func (t *TokenTx) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	data, err := t.From.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling From %s,%v", t.From, err)
+	}
+	buffer.Write(data)
+
+	for i, v := range t.To {
+		data, err = v.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling To[%d] %s,%v", i, v.URL, err)
+		}
+		buffer.Write(data)
+	}
+
+	a := types.Bytes(t.Meta)
+	data, err = a.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("error marshalling meta data, %v", err)
+	}
+	buffer.Write(data)
+
+	return buffer.Bytes(), nil
+}
+
+func (t *TokenTxOutput) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	data, err := t.URL.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(data)
+
+	data, err = t.Amount.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(data)
+	return buffer.Bytes(), nil
+}
+
+func (t *TokenTxOutput) UnmarshalBinary(data []byte) error {
+
+	err := t.URL.UnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+	l := t.URL.Size(nil)
+	if l > len(data) {
+		return fmt.Errorf("insufficient data to unmarshal amount")
+	}
+	return t.Amount.UnmarshalBinary(data[l:])
 }

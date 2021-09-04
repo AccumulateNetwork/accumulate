@@ -67,15 +67,15 @@ func canSendTokens(currentState *state.StateEntry, data []byte) (*state.AdiState
 	}
 
 	//verify the tx.from is from the same identity
-	stateAdiChain := types.GetIdentityChainFromIdentity(string(chainHeader.ChainUrl))
-	fromAdiChain := types.GetIdentityChainFromIdentity(string(tx.From))
+	stateAdiChain := types.GetIdentityChainFromIdentity(chainHeader.ChainUrl.AsString())
+	fromAdiChain := types.GetIdentityChainFromIdentity(tx.From.AsString())
 	if bytes.Compare(stateAdiChain[:], fromAdiChain[:]) != 0 {
 		return nil, nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
 	}
 
 	//verify the tx.from is from the same chain
-	stateChainId := types.GetChainIdFromChainPath(string(tas.ChainUrl))
-	fromChainId := types.GetChainIdFromChainPath(string(tx.From))
+	stateChainId := types.GetChainIdFromChainPath(tas.ChainUrl.AsString())
+	fromChainId := types.GetChainIdFromChainPath(tx.From.AsString())
 	if bytes.Compare(stateChainId[:], fromChainId[:]) != 0 {
 		return nil, nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
 	}
@@ -152,13 +152,13 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		txAmt.Add(txAmt, amt)
 
 		//extract the target identity and chain from the url
-		adi, chainPath, err := types.ParseIdentityChainPath(string(val.URL))
+		adi, chainPath, err := types.ParseIdentityChainPath(val.URL.AsString())
 		if err != nil {
 			return nil, err
 		}
 
 		//get the identity id from the adi
-		idChain := types.GetIdentityChainFromIdentity(adi)
+		idChain := types.GetIdentityChainFromIdentity(&adi)
 		if idChain == nil {
 			return nil, fmt.Errorf("Invalid identity chain for %s", adi)
 		}
@@ -171,7 +171,7 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		sub.Identitychain = idChain[:]
 
 		//set the chain id for the destination
-		destChainId := types.GetChainIdFromChainPath(chainPath)
+		destChainId := types.GetChainIdFromChainPath(&chainPath)
 		sub.Chainid = destChainId[:]
 
 		//set the transaction instruction type to a synthetic token deposit
@@ -184,7 +184,7 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction")
 		}
 
-		err = depositTx.SetTokenInfo(types.UrlChain(tas.GetChainUrl()))
+		err = depositTx.SetTokenInfo(tas.GetChainUrl())
 		if err != nil {
 			return nil, fmt.Errorf("unable to set token information for synthetic token deposit transaction")
 		}
@@ -209,7 +209,7 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 	}
 
 	//return a transaction state object
-	ret.AddStateData(types.GetChainIdFromChainPath(string(tx.From)), tasso)
+	ret.AddStateData(types.GetChainIdFromChainPath(tx.From.AsString()), tasso)
 
 	return &ret, nil
 }
