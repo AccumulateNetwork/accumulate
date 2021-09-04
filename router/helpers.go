@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
-	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+//	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
+//	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/rpc/client/local"
+//	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+//	"github.com/tendermint/tendermint/rpc/client/local"
 	"google.golang.org/grpc"
 )
 
@@ -58,6 +58,7 @@ func makeClientAndServer(t *testing.T, routeraddress string) (proto.ApiServiceCl
 }
 func boostrapBVC(t *testing.T, configfile string, workingdir string, baseport int) error {
 
+/*
 	ABCIAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
 	RPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+1)
 	GRPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+2)
@@ -66,9 +67,9 @@ func boostrapBVC(t *testing.T, configfile string, workingdir string, baseport in
 	RouterPublicAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
 
 	//create the default configuration files for the blockchain.
-	tendermint.Initialize("accumulate.routertest", ABCIAddress, RPCAddress, GRPCAddress,
+	tendedrmint.Initialize("accumulate.routertest", ABCIAddress, RPCAddress, GRPCAddress,
 		AccRPCInternalAddress, RouterPublicAddress, configfile, workingdir)
-
+*/
 	viper.SetConfigFile(configfile)
 	viper.AddConfigPath(workingdir)
 	viper.ReadInConfig()
@@ -89,6 +90,7 @@ func boostrapBVC(t *testing.T, configfile string, workingdir string, baseport in
 	return nil
 }
 
+/*
 func makeBVC(t *testing.T, configfile string, workingdir string) *tendermint.AccumulatorVMApplication {
 	app, err := accnode.CreateAccumulateBVC(configfile, workingdir)
 	if err != nil {
@@ -96,7 +98,6 @@ func makeBVC(t *testing.T, configfile string, workingdir string) *tendermint.Acc
 	}
 	return app
 }
-
 func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceClient, *RouterConfig, *local.Local, *rpchttp.HTTP) {
 
 	//Select a base port to open.  Ports 43210, 43211, 43212, 43213,43214 need to be open
@@ -134,3 +135,4 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 
 	return client, routerserver, &lc, rpcc
 }
+*/
