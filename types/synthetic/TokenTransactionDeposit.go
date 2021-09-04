@@ -48,7 +48,7 @@ func (tx *TokenTransactionDeposit) SetSenderInfo(senderidentity []byte, senderch
 	return nil
 }
 
-func (tx *TokenTransactionDeposit) SetTokenInfo(tokenUrl types.UrlChain) error {
+func (tx *TokenTransactionDeposit) SetTokenInfo(tokenUrl string) error {
 	//err := tokenUrl.MakeValid()
 	//if err != nil {
 	//	return err

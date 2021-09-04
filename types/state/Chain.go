@@ -13,15 +13,15 @@ type Chain struct {
 	Type     types.Bytes32 `json:"type" form:"type" query:"type" validate:"required"`
 }
 
-func NewChain(chainUrl types.UrlChain, chainType types.Bytes) *Chain {
+func NewChain(chainUrl types.String, chainType types.Bytes) *Chain {
 	chain := &Chain{}
 	chain.SetHeader(chainUrl, chainType)
 	return chain
 }
 
 //SetHeader sets the data for a chain header
-func (h *Chain) SetHeader(chainUrl types.UrlChain, chainType types.Bytes) {
-	h.ChainUrl = types.String(chainUrl)
+func (h *Chain) SetHeader(chainUrl types.String, chainType types.Bytes) {
+	h.ChainUrl = chainUrl
 	copy(h.Type[:], chainType)
 }
 
@@ -37,7 +37,7 @@ func (h *Chain) GetType() *types.Bytes32 {
 
 //GetAdiChainPath returns the url to the chain of this object
 func (h *Chain) GetChainUrl() string {
-	return string(h.ChainUrl)
+	return *h.ChainUrl.AsString()
 }
 
 //MarshalBinary serializes the header
