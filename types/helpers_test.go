@@ -2,7 +2,7 @@ package types
 
 import (
 	"crypto/sha256"
-	"github.com/Factom-Asset-Tokens/factom/fat"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"time"
 
@@ -56,11 +56,7 @@ func BuildAccumulateURL(fullchainpath string, ins string, payload []byte, timest
 }
 
 func MakeTokenIssueURL(fullchainpath string, supply int64, precision uint, symbol string, issuerkey ed25519.PrivKey) string {
-	tx := fat.Issuance{}
-	tx.Type = fat.TypeFAT0
-	tx.Supply = supply
-	tx.Precision = precision
-	tx.Symbol = symbol
+	tx := api.NewToken(fullchainpath, symbol, byte(precision))
 	payload, err := json.Marshal(tx)
 	if err != nil {
 		return ""
