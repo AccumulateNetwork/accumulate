@@ -9,7 +9,6 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 
@@ -21,18 +20,19 @@ import (
 type API struct {
 	port     int
 	validate *validator.Validate
-	client   proto.ApiServiceClient // Replace this with a dispatcher that contains clients to each BVC
+	client   proto.ApiServiceClient
+	query    *Query
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(port int, client proto.ApiServiceClient) *API {
+func StartAPI(port int, q *Query) *API {
 
 	fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
 	api := &API{}
 	api.port = port
 	api.validate = validator.New()
-	api.client = client
+	api.query = q
 
 	methods := jsonrpc2.MethodMap{
 		// URL
@@ -185,10 +185,12 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 		return NewValidatorError(err)
 	}
 
-	resp := &Token{}
-	resp.URL = req.URL
+	//query tendermint
+	resp, err := api.query.GetToken(req.URL.AsString())
 
-	// Tendermint integration here
+	if err != nil {
+		return NewAccumulateError(err)
+	}
 
 	return resp
 
@@ -265,12 +267,13 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 		return NewValidatorError(err)
 	}
 
-	resp := &TokenAccount{}
-	resp.URL = req.URL
-
 	// Tendermint integration here
+	taResp, err := api.query.GetTokenAccount(req.URL.AsString())
+	if err != nil {
+		return NewValidatorError(err)
+	}
 
-	return resp
+	return taResp
 
 }
 
@@ -343,20 +346,12 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	}
 
 	// Tendermint's integration here
-	// need to know the ADI and ChainID, deriving adi and chain id from TokenTx.From
-	q := proto.Query{}
-	q.ChainUrl = string(req.From)
-	adichain := types.GetIdentityChainFromIdentity(q.ChainUrl)
-	chainId := types.GetChainIdFromChainPath(q.ChainUrl)
-	q.AdiChain = adichain.Bytes()
-	q.ChainId = chainId.Bytes()
-	q.Ins = proto.AccInstruction_Token_Transaction
-	q.Query = req.Hash.Bytes()
+	resp, err := api.query.GetTokenTx(req.From.AsString(), req.Hash[:])
+	if err != nil {
+		return NewValidatorError(err)
+	}
 
-	//this is only temporary until we get router setup. This is slow
-	qresp, err := api.client.ProcessQuery(context.Background(), &q)
-
-	return qresp
+	return resp
 }
 
 // createTokenTx creates Token Tx

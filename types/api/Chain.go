@@ -20,6 +20,10 @@ const (
 //ChainType is the hash of the chain spec.
 type ChainType types.Bytes32
 
+func (c *ChainType) AsBytes32() *types.Bytes32 {
+	return (*types.Bytes32)(c)
+}
+
 var (
 	//ChainTypeDC Define the Directory Block Chain Validator type
 	ChainTypeDC ChainType = sha256.Sum256([]byte(ChainSpecDC))
@@ -36,6 +40,14 @@ var (
 	//ChainTypeAnonTokenAccount Define an Anonymous Token chain validator type
 	ChainTypeAnonTokenAccount ChainType = sha256.Sum256([]byte(ChainSpecAnonTokenAccount))
 )
+
+var ChainTypeSpecMap = map[types.Bytes32]string{
+	*ChainTypeDC.AsBytes32():               ChainSpecDC,
+	*ChainTypeAdi.AsBytes32():              ChainSpecAdi,
+	*ChainTypeToken.AsBytes32():            ChainSpecToken,
+	*ChainTypeTokenAccount.AsBytes32():     ChainSpecTokenAccount,
+	*ChainTypeAnonTokenAccount.AsBytes32(): ChainSpecAnonTokenAccount,
+}
 
 // Chain will define a new chain to be registered. It will be initialized to the default state
 // as defined by validator referenced by the ChainType
