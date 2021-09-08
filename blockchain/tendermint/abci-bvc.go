@@ -2,6 +2,7 @@ package tendermint
 
 import (
 	"context"
+	"crypto/sha256"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -117,7 +118,7 @@ type AccumulatorVMApplication struct {
 	//Val *validator.ValidatorContext //change to use chainval below instead
 	//chainval map[uint64]*validator.ValidatorContext //use this instead to make a group of validators that can be accessed via chain address.
 
-	bvc validator.BlockValidatorChain
+	bvc *validator.BlockValidatorChain
 	//begin deprecation
 	DB vadb.DB
 
@@ -135,8 +136,6 @@ type AccumulatorVMApplication struct {
 	dbvc       pb.BVCEntry
 
 	mmdb state.StateDB
-	//mms  map[managed.Hash]*MerkleManagerState
-	//bpt  *pmt.Manager
 
 	lasthash managed.Hash
 
@@ -262,12 +261,16 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 		return fmt.Errorf("failed to create node accumulator database: %w", err)
 	}
 
+	networkId := viper.GetString("instrumentation/namespace")
+	bvcId := sha256.Sum256([]byte(networkId))
 	dbfilename := WorkingDir + "/" + "valacc.db"
-	err = app.mmdb.Open(dbfilename, false, true)
+	err = app.mmdb.Open(dbfilename, bvcId[:], false, true)
 
 	if err != nil {
 		return err
 	}
+
+	app.bvc = validator.NewBlockValidatorChain()
 
 	return nil
 }
@@ -413,6 +416,7 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 ///   Commit
 // new transaction is added to the Tendermint Core. Check if it is valid.
 func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcitypes.ResponseCheckTx {
+
 	//create a default response
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
@@ -429,29 +433,24 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
 
-	//get ready to lookup the validator that we need to use for this request
-	var val *validator.ValidatorContext
+	currentState, err := state.NewStateEntry(nil, nil, &app.mmdb)
 
-	//resolve the validator's bve to obtain public key for given height
-	var key managed.Hash
-
-	//make sure we have a chain id
-	if sub.Chainid == nil {
-		return abcitypes.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
-			Log: fmt.Sprintf("Chain ID is not set for transaction %X", sub.Identitychain)}
+	//placeholder for special validation rules for synthetic transactions.
+	if sub.GetInstruction()&0xFF00 > 0 {
+		//need to verify the sender is a legit bvc validator also need the dbvc receipt
+		//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
+		//not an impostor. Need to figure out how to do this. Right now we just assume the syth request
+		//sender is legit.
 	}
 
-	//todo: look up validator rules for this chain to make sure we can do what we want here.
+	//run through the validation routine
+	err = app.bvc.Check(currentState, sub.Identitychain, sub.Chainid, 0, 0, sub.Data)
 
-	key.Extract(sub.GetChainid())
-
-	//do a quick check to make sure this this transaction has a high probability of passing given further testing upon delivery
-	err = app.bvc.Check(nil, sub.Identitychain, sub.Chainid, sub.Param1, sub.Param2, sub.Data)
 	if err != nil {
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("Entry check failed %v on validator %s \n", sub.Type, *val.GetInfo().GetChainSpec())
+		ret.Info = fmt.Sprintf("entry check failed %v for url %s, %v \n", sub.Type, sub.AdiChainPath, err)
 		return ret
 	}
 
@@ -627,7 +626,8 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 		panic(fmt.Errorf("fatal error, block not set, %v", err))
 	}
 
-	resp.Data = mdroot
+	resp.Data = app.lasthash[:]
+	// mdroot
 	//saveDBlock
 
 	//I think we need to get this from the bpt

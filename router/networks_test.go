@@ -2,15 +2,17 @@ package router
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 func TestNetworkAddress(t *testing.T) {
 	m := make(map[uint64]string)
 	n := make(map[uint64][]string)
 	for i := range Networks {
-		addr := types.GetAddressFromIdentity( Networks[i] + ".accumulate")
+		network := Networks[i] + ".accumulate"
+		addr := types.GetAddressFromIdentity(&network)
 		networkid := addr % uint64(len(Networks))
 		if mms := m[networkid]; mms == "" {
 			fmt.Printf("Found New ID : %d for network %s\n", networkid, Networks[i])
