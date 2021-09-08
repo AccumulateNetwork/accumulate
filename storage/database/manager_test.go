@@ -84,13 +84,13 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 
 }
 
-func TestSalt(t *testing.T) {
+func TestAppID(t *testing.T) {
 
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	defer dbManager.Close()
 
-	dbManager.SetSalt([]byte("one"))
+	dbManager.SetAppID([]byte("one"))
 	dbManager.AddBucket("a")
 	dbManager.AddBucket("b")
 	dbManager.AddBucket("c")
@@ -104,7 +104,7 @@ func TestSalt(t *testing.T) {
 	v2 := dbManager.Get("b", "", []byte("horse"))
 	v3 := dbManager.Get("c", "", []byte("horse"))
 
-	dbManager.SetSalt([]byte("two"))
+	dbManager.SetAppID([]byte("two"))
 	dbManager.AddBucket("a")
 	dbManager.AddBucket("b")
 	dbManager.AddBucket("c")

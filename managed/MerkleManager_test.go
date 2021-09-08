@@ -13,12 +13,17 @@ import (
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
 
-func TestAddSalt(t *testing.T) {
-	Salt := sha256.Sum256([]byte{1})
-	Salt2 := add2Salt(Salt[:], 1)
-	if bytes.Equal(Salt[:], Salt2) {
-		t.Errorf("These should not be equal \n%x \n%x", Salt, Salt2)
+func TestAddAppID(t *testing.T) {
+	AppID := sha256.Sum256([]byte{1})
+	AppID2 := Add2AppID(AppID[:], 1) // update the AppID to create AppID2
+	if bytes.Equal(AppID[:], AppID2) {
+		t.Errorf("These should not be equal \n%x \n%x", AppID, AppID2)
 	}
+	AppID2 = Add2AppID(AppID2[:], 0xFF) // Back out our update (0xFF is the unsigned 2's complement of 1)
+	if !bytes.Equal(AppID[:], AppID2) {
+		t.Errorf("These should be equal \n%x \n%x", AppID, AppID2)
+	}
+
 }
 
 func TestIndexing(t *testing.T) {
@@ -31,8 +36,8 @@ func TestIndexing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	salt := sha256.Sum256([]byte("root"))
-	MM1 := NewMerkleManager(dbManager, salt[:], 2)
+	appID := sha256.Sum256([]byte("root"))
+	MM1 := NewMerkleManager(dbManager, appID[:], 2)
 
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
@@ -69,7 +74,7 @@ func TestIndexing(t *testing.T) {
 		hash = sha256.Sum256(hash[:])
 	}
 
-	MM2 := NewMerkleManager(dbManager, salt[:], 2)
+	MM2 := NewMerkleManager(dbManager, appID[:], 2)
 
 	if MM1.MainChain.MS.Count != MM2.MainChain.MS.Count {
 		t.Fatal("failed to properly load from a database")
@@ -102,8 +107,8 @@ func TestMerkleManager(t *testing.T) {
 	MarkMask := MarkFreq - 1
 
 	// Set up a MM1 that uses a MarkPower of 2
-	salt := sha256.Sum256([]byte("root"))
-	MM1 := NewMerkleManager(dbManager, salt[:], MarkPower)
+	appID := sha256.Sum256([]byte("root"))
+	MM1 := NewMerkleManager(dbManager, appID[:], MarkPower)
 
 	if MarkPower != MM1.MarkPower ||
 		MarkFreq != MM1.MarkFreq ||
@@ -161,7 +166,7 @@ func TestBlockIndexes(t *testing.T) {
 	if err != nil {
 		t.Fatal("no database")
 	}
-	chainID := sha256.Sum256([]byte("one"))          //              Create a MerkleManager with a particular salt
+	chainID := sha256.Sum256([]byte("one"))          //              Create a MerkleManager with a particular appID
 	MM := NewMerkleManager(dbManager, chainID[:], 4) //
 
 	rand.Seed(1)                   //                                Start rand from a particular seed
