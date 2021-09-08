@@ -97,7 +97,7 @@ func makeBVC(t *testing.T, configfile string, workingdir string) *tendermint.Acc
 	return app
 }
 
-func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceClient, *RouterConfig, *local.Local, *rpchttp.HTTP) {
+func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceClient, *RouterConfig, *local.Local, *rpchttp.HTTP, *tendermint.AccumulatorVMApplication) {
 
 	//Select a base port to open.  Ports 43210, 43211, 43212, 43213,43214 need to be open
 	baseport := 43210
@@ -132,5 +132,5 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 
 	rpcc, _ := rpchttp.New(laddr, "/websocket")
 
-	return client, routerserver, &lc, rpcc
+	return client, routerserver, &lc, rpcc, accvm
 }

@@ -4,36 +4,52 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
+	"io/ioutil"
+	"os"
+	"path"
+	"testing"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/go-playground/validator/v10"
-	"testing"
-	"time"
 )
 
 func TestJsonRpcAdi(t *testing.T) {
 
-	kpSponsor := types.CreateKeyPair()
-
-	adiSponsor := "RoadRunner"
+	//"wileecoyote/ACME"
+	adiSponsor := "wileecoyote"
 
 	kpNewAdi := types.CreateKeyPair()
-	routerAddress := fmt.Sprintf("tcp://localhost:%d", RandPort())
+	//routerAddress := fmt.Sprintf("tcp://localhost:%d", RandPort())
 
 	//make a client, and also spin up the router grpc
-	client, _, err := makeApiServiceClientAndServer(routerAddress)
-	//r.AddBVCClient("network1", tmgrpc)
+	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
+	cfg := path.Join(dir, "/config/config.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	client, _, _, _, vm := makeBVCandRouter(t, cfg, dir)
+
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	jsonapi := API{RandPort(), validator.New(), client}
+	//kpSponsor := types.CreateKeyPair()
+
+	query := NewQuery(vm)
+
+	jsonapi := API{RandPort(), validator.New(), client, query}
+
 	//StartAPI(RandPort(), client)
+
+	kpSponsor := types.CreateKeyPairFromSeed(vm.Key.PrivKey.Bytes())
 
 	req := api.APIRequestRaw{}
 	adi := &api.ADI{}
-	adi.URL = "WileECoyote"
+	adi.URL = "RoadRunner"
 	adi.PublicKeyHash = sha256.Sum256(kpNewAdi.PubKey().Bytes())
 	data, err := json.Marshal(adi)
 	if err != nil {

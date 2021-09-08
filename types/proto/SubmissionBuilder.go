@@ -3,6 +3,7 @@ package proto
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 

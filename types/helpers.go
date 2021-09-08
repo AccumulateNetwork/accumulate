@@ -55,6 +55,10 @@ func CreateKeyPair() ed25519.PrivKey {
 	return ed25519.GenPrivKey()
 }
 
+func CreateKeyPairFromSeed(seed []byte) ed25519.PrivKey {
+	return ed25519.GenPrivKeyFromSecret(seed)
+}
+
 // ParseIdentityChainPath helpful parser to extract the identity name and chainpath
 //for example RedWagon/MyAccAddress becomes identity=redwagon and chainpath=redwagon/MyAccAddress
 func ParseIdentityChainPath(adiChainPath *string) (adi string, chainPath string, err error) {

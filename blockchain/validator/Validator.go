@@ -2,13 +2,15 @@ package validator
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
-	cfg "github.com/tendermint/tendermint/config"
 	"time"
+
+	cfg "github.com/tendermint/tendermint/config"
 )
 
 type ResponseValidateTX struct {
@@ -44,10 +46,10 @@ type ValidatorInfo struct {
 	typeid      uint64
 }
 
-func (h *ValidatorInfo) SetInfo(chainTypeId types.Bytes, chainSpec string, instructiontype pb.AccInstruction) {
+func (h *ValidatorInfo) SetInfo(chainTypeId types.Bytes, chainSpec string, instructionType pb.AccInstruction) {
 	copy(h.chainTypeId[:], chainTypeId)
 	h.chainSpec = chainSpec
-	h.typeid = uint64(instructiontype)
+	h.typeid = uint64(instructionType)
 }
 
 func (h *ValidatorInfo) GetValidatorChainTypeId() types.Bytes {
@@ -86,6 +88,7 @@ func (v *ValidatorContext) addValidator(context *ValidatorContext) {
 	copy(key[:], context.GetValidatorChainTypeId())
 
 	v.validators[key] = context
+	v.validatorsIns[pb.AccInstruction(context.GetInfo().GetTypeId())] = context
 }
 
 func (v *ValidatorContext) getValidatorByIns(ins pb.AccInstruction) (*ValidatorContext, error) {
