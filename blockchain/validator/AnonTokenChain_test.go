@@ -6,6 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math"
+	"math/big"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
@@ -13,11 +19,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/martinlindhe/base36"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"math"
-	"math/big"
-	"strings"
-	"testing"
-	"time"
 )
 
 func CreateFakeSyntheticDeposit(t *testing.T, tokenUrl string, from string, to string, kp ed25519.PrivKey) *proto.Submission {
@@ -63,8 +64,7 @@ func CreateFakeAnonymousTokenChain(addressUrl string) *state.Object {
 
 	so := state.Object{}
 	so.Entry, _ = anonTokenChain.MarshalBinary()
-	eh := sha256.Sum256(so.Entry)
-	so.EntryHash = eh[:]
+
 	//we intentionally don't set the so.StateHash & so.PrevStateHash
 	return &so
 }
@@ -89,8 +89,6 @@ func CreateFakeAnonTokenState(adiChainPath string, key ed25519.PrivKey) (*state.
 	ids.SetKeyData(state.KeyTypeSha256, key.PubKey().Bytes())
 	so.Entry, _ = ids.MarshalBinary()
 
-	eh := sha256.Sum256(so.Entry)
-	so.EntryHash = eh[:]
 	//we intentionally don't set the so.StateHash & so.PrevStateHash
 	return &so, idhash[:]
 }
@@ -205,7 +203,7 @@ func GenerateTestAddresses(seed uint32, checkLen uint32, t *testing.T) {
 
 		bn.Mod(bn, mod)
 
-		indexBig := bn.Uint64() //binary.BigEndian.Uint64(networkid[:])
+		indexBig := bn.Uint64()
 
 		addr = strings.ToLower(addr)
 

@@ -3,14 +3,15 @@ package validator
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"math/big"
+	"testing"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"math/big"
-	"testing"
-	"time"
 )
 
 func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*state.Object, []byte) {
@@ -23,8 +24,6 @@ func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*st
 	ids.SetKeyData(state.KeyTypeSha256, key.PubKey().Bytes())
 	so.Entry, _ = ids.MarshalBinary()
 
-	eh := sha256.Sum256(so.Entry)
-	so.EntryHash = eh[:]
 	//we intentionally don't set the so.StateHash & so.PrevStateHash
 	return &so, idhash[:]
 }
@@ -40,8 +39,6 @@ func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.
 
 	so := state.Object{}
 	so.Entry, _ = tas.MarshalBinary()
-	eh := sha256.Sum256(so.Entry)
-	so.EntryHash = eh[:]
 	//we intentionally don't set the so.StateHash & so.PrevStateHash
 	return &so
 }

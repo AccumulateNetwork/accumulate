@@ -3,12 +3,14 @@ package state
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 //Chain information for the state object.  Each state object will contain a header
 //that will consist of the chain type enumerator
 type Chain struct {
+	Entry
 	ChainUrl types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	Type     types.Bytes32 `json:"type" form:"type" query:"type" validate:"required"`
 }
