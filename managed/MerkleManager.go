@@ -58,7 +58,7 @@ func Add2AppID(AppID []byte, offset byte) (appID []byte) {
 // The markPower is the log 2 frequency used to collect states in the Merkle Tree
 func NewMerkleManager(
 	DBManager *database.Manager, //      database that can be shared with other MerkleManager instances
-	appID []byte, //      AppID identifying an application space in the DBManager
+	appID []byte, //                     AppID identifying an application space in the DBManager
 	markPower int64) *MerkleManager { // log 2 of the frequency of creating marks in the Merkle Tree
 
 	if len(appID) != 32 { // Panic: appID is bad
@@ -72,8 +72,16 @@ func NewMerkleManager(
 
 // Copy
 // Create a copy of the MerkleManager.  The MerkleManager can be pointed to
-// particular merkle trees by setting the AppID.  This is a brand
-// new MerkleManager pointed towards a particular chain and its shadow chains
+// particular merkle trees by setting the AppID. While the AppID is generally
+// the management of a particular merkle tree, it can be used to define any
+// application context within the database.
+//
+// Copy creates a MerkleManager that points it to a particular ChainID (use
+// the chainID as the appID)
+//
+// Copy creates a brand new MerkleManager pointed towards a particular
+// chain and its shadow chains (chains that track information about the
+// main chain, i.e. the pending chain and the block index chain)
 func (m MerkleManager) Copy(appID []byte) *MerkleManager {
 	bAppID := Add2AppID(appID, BlkIdxOff)                              // appID for block Index shadow chain
 	pAppID := Add2AppID(appID, PendingOff)                             // appID for pending shadow chain
