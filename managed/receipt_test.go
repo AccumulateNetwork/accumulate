@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dustin/go-humanize"
-
 	"github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/dustin/go-humanize"
 )
 
 func GetHash(i int) Hash {
@@ -27,8 +26,8 @@ func TestReceipt(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	// Create a MerkleManager for the memory database
-	salt := sha256.Sum256([]byte("test"))
-	manager := NewMerkleManager(dbManager, salt[:], 4)
+	AppID := sha256.Sum256([]byte("test"))
+	manager := NewMerkleManager(dbManager, AppID[:], 4)
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
@@ -80,8 +79,8 @@ func TestReceiptAll(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	// Create a MerkleManager for the memory database
-	salt := sha256.Sum256([]byte("test"))
-	manager := NewMerkleManager(dbManager, salt[:], 4)
+	appID := sha256.Sum256([]byte("test"))
+	manager := NewMerkleManager(dbManager, appID[:], 4)
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
@@ -134,8 +133,8 @@ func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (ma
 	}
 
 	// Create a MerkleManager for the memory database
-	salt := sha256.Sum256([]byte("test"))
-	manager = NewMerkleManager(dbManager, salt[:], 2)
+	appID := sha256.Sum256([]byte("test"))
+	manager = NewMerkleManager(dbManager, appID[:], 2)
 	return manager, dir
 }
 

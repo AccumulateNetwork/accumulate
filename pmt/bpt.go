@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 )
 
 // BPT
@@ -53,7 +53,7 @@ func (b *BPT) Equal(b2 *BPT) (equal bool) {
 // to the BPT
 func (b *BPT) Marshal() (data []byte) {
 	data = append(data, byte(b.MaxHeight))
-	data = append(data, storage.Uint64Bytes(b.MaxNodeID)...)
+	data = append(data, common.Uint64Bytes(b.MaxNodeID)...)
 	data = append(data, byte(b.power>>8), byte(b.power))
 	data = append(data, byte(b.mask>>8), byte(b.mask))
 	data = append(data, b.Root.Marshal()...)
@@ -66,7 +66,7 @@ func (b *BPT) Marshal() (data []byte) {
 func (b *BPT) UnMarshal(data []byte) (newData []byte) {
 	b.DirtyMap = make(map[uint64]*Node)
 	b.MaxHeight, data = int(data[0]), data[1:]
-	b.MaxNodeID, data = storage.BytesUint64(data)
+	b.MaxNodeID, data = common.BytesUint64(data)
 	b.power, data = int(data[0])<<8+int(data[1]), data[2:]
 	b.mask, data = int(data[0])<<8+int(data[1]), data[2:]
 	data = b.Root.UnMarshal(data)
@@ -98,9 +98,9 @@ func (b *BPT) NewValue(key, hash [32]byte) (value *Value) {
 }
 
 // IsDirty
-// Check if a node is in the dirty tracking. Allows batching updates for greater
+// Sort if a node is in the dirty tracking. Allows batching updates for greater
 // efficiency.
-func (b *BPT) IsDirty(node *Node) bool { // Check if node is in our Dirty Map
+func (b *BPT) IsDirty(node *Node) bool { // Sort if node is in our Dirty Map
 	_, ok := b.DirtyMap[node.GetID()] //     do the check
 	return ok                         //     return result
 }
@@ -171,7 +171,7 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 
 	Insert := func(e *Entry) { //                                    Again, to avoid redundant code, Left and Right
 		switch { //                                                  processing is done once here.
-		case *e == nil: //                                           Check if the Left/Right is nil.
+		case *e == nil: //                                           Sort if the Left/Right is nil.
 			v := b.NewValue(key, hash) //                            If it is, we can put the value here
 			*e = v                     //                            so just do so.
 			b.Dirty(node)              //                            And changing the value of a node makes it dirty
@@ -221,7 +221,7 @@ func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value i
 // GetHash
 // Makes the code just a bit more simple.  Checks for nils
 func GetHash(e Entry) []byte {
-	if e == nil { //              Check for nil, return nil if e is nil.
+	if e == nil { //              Sort for nil, return nil if e is nil.
 		return nil
 	}
 	return e.GetHash() //         Otherwise, call the function to return the Hash for the entry.
@@ -238,12 +238,12 @@ func (b *BPT) Update() {
 			if n.Height != h { //                          Note when the height is done,
 				break //                                     bap out
 			} //
-			if h&b.mask == 0 && b.manager != nil { //      Check and see if at the root node for a byte block
+			if h&b.mask == 0 && b.manager != nil { //      Sort and see if at the root node for a byte block
 				b.manager.FlushNode(n) //                  If so, flush the byte block; it has already been updated
 			} //
 			L := GetHash(n.Left)  //                       Get the Left Branch
 			R := GetHash(n.Right) //                       Get the Right Branch
-			switch {              //                       Check four conditions:
+			switch {              //                       Sort four conditions:
 			case L != nil && R != nil: //                  If we have both L and R then combine
 				n.Hash = sha256.Sum256(append(L, R...)) // Take the hash of L+R
 			case L != nil: //                              The next condition is where we only have L
@@ -297,21 +297,21 @@ func (b *BPT) MarshalByteBlock(borderNode *Node) (data []byte) {
 func (b *BPT) MarshalEntry(entry Entry, data []byte) []byte { //
 
 	switch {
-	case entry == nil: //                                      Check if nil
+	case entry == nil: //                                      Sort if nil
 		data = append(data, TNil) //                           Mark as nil,
 		return data               //                           We are done
-	case entry.T() == TValue: //                               Check if Value
+	case entry.T() == TValue: //                               Sort if Value
 		data = append(data, TValue)             //             Tag Left as a value
 		data = append(data, entry.Marshal()...) //             And marshal the value
 		return data                             //             Done
-	case entry.T() == TNode && //                              Check if TNode
+	case entry.T() == TNode && //                              Sort if TNode
 		entry.(*Node).Height&b.mask == 0: //                   See if entry is going into
 		data = append(data, TNode)              //             Mark as going into a node
 		data = append(data, entry.Marshal()...) //             Put the fields into the slice
 		data = append(data, TNotLoaded)         //             Left is going into next Byte Block
 		data = append(data, TNotLoaded)         //             Right is going into next Byte Block
 		return data                             //             Return the data
-	case entry.T() == TNotLoaded: //                           Check if node isn't loaded
+	case entry.T() == TNotLoaded: //                           Sort if node isn't loaded
 		data = append(data, TNotLoaded)
 	default: //                                                In this case, we have a node to marshal
 		data = append(data, TNode)                       //    Mark as going into a node

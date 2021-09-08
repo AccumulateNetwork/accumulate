@@ -6,6 +6,8 @@ import (
 	"math"
 	"sync"
 
+	"github.com/AccumulateNetwork/SMT/common"
+
 	"github.com/AccumulateNetwork/SMT/storage"
 	"github.com/AccumulateNetwork/SMT/storage/badger"
 	"github.com/AccumulateNetwork/SMT/storage/memory"
@@ -13,61 +15,64 @@ import (
 
 type Manager struct {
 	DB      storage.KeyValueDB // Underlying database implementation
-	Salt    []byte             // Used to share a database with other applications
+	AppID   []byte             // Allows apps to share a database
 	Buckets map[string]byte    // one byte to indicate a bucket
 	Labels  map[string]byte    // one byte to indicate a label
 	TXList  TXList             // Transaction List
 }
 
 // Copy
-// Create a copy of the manager that uses the given salt.  Salts allow multiple Merkle Trees
-// to be managed within the same database.  All keys for a particular merkle tree are salted
-// with their particular salts.  Note that maps are pointers, so Buckets and Labels
-// are shared over copies of the Manager
-func (m Manager) Copy(Salt []byte) *Manager {
-	m.SetSalt(Salt) // Set the Salt
-	m.TXList.Init() // Make the TXList independent of the original TXList
-	return &m       // Return a pointer
+// Create a copy of the manager that uses the given AppID.  the AppID allows
+// multiple Merkle Trees to be managed within the same database.  All keys
+// for a particular merkle tree are salted with their particular AppID.
+// Note that maps are pointers, so Buckets and Labels are shared over
+// copies of the Manager but not include elements from processes using their
+// own AppID.
+func (m Manager) Copy(AppID []byte) *Manager {
+	m.SetAppID(AppID) // Set the AppID
+	m.TXList.Init()   // Make the TXList independent of the original TXList
+	return &m         // Return a pointer
 }
 
-var SaltMutex sync.Mutex // Creating new Salts has to be atomic
+var AppIDMutex sync.Mutex // Creating new AppIDs has to be atomic
 
-// SetSalt
-// Set a Salt (possibly replacing an existing salt) to this manager. This allows
-// the use of the same database to be shared by applications/uses without overlap
+// SetAppID
+// Set a AppID (possibly replacing an existing AppID) to this manager. This
+// allows the use of the same database to be shared by applications/uses
+// without overlap
 //
-// Note that Salts are managed in the database outside of salts.  First
-// the salt must be cleared to access the Salt bucket and its labels.  Then
-// the salt can be set so the appropriate buckets can be accessed under
-// the salt
-func (m Manager) SetSalt(salt []byte) {
+// Note the use of an AppID is managed in the database outside of manager.
+// First the AppID must be cleared to access the AppID tracking key/values,
+// i.e. the AppID bucket and its labels.  Then the AppID can be set so the
+// appropriate buckets can be accessed under the AppID
+func (m Manager) SetAppID(appID []byte) {
 
-	m.Salt = m.Salt[:0]                                 // clear the salt to get salt data
-	saltIndex := m.GetInt64("Salt", "Salt2Index", salt) // Check index for existing salt
-	if saltIndex < 0 {                                  // A index < 0 => salt does not exist
-		SaltMutex.Lock()                          //       Lock salt creation so creation is atomic
-		count := m.GetInt64("Salt", "", []byte{}) //       Get the count of existing salts
-		if count == 0 {                           //       The 0 index isn't used.
-			count++ //                                     So if zero, increment the count
+	m.AppID = m.AppID[:0]                                 // clear the appID to get AppID data
+	appIDIdx := m.GetInt64("AppID", "AppID2Index", appID) // Sort index for existing AppID
+	if appIDIdx < 0 {                                     // A index < 0 => AppID does not exist
+		AppIDMutex.Lock()                          //       Lock AppID creation so creation is atomic
+		count := m.GetInt64("AppID", "", []byte{}) //       Get the count of existing AppIDs
+		if count == 0 {                            //       The 0 index isn't used.
+			count++ //                                      So if zero, increment the count
 		}
-		// Note that we don't batch updating of salts.  the batch processing does not need
+		// Note that we don't batch updating of appIDs.  the batch processing does not need
 		// to be flushed however.
-		_ = m.Put("Salt", "Index2Salt", storage.Int64Bytes(count), salt) // Index to Salt
-		_ = m.PutInt64("Salt", "Salt2Index", salt, count)                // Salt to Index
-		_ = m.PutInt64("Salt", "", []byte{}, count+1)                    // increment the count in the database.
-		SaltMutex.Unlock()
+		_ = m.Put("AppID", "Index2AppID", common.Int64Bytes(count), appID) // Index to AppID
+		_ = m.PutInt64("AppID", "AppID2Index", appID, count)               // AppID to Index
+		_ = m.PutInt64("AppID", "", []byte{}, count+1)                     // increment the count in the database.
+		AppIDMutex.Unlock()
 	}
-	m.Salt = append(m.Salt[:0], salt...) // copy the given salt over the current salt
+	m.AppID = append(m.AppID[:0], appID...) // copy the given appID over the current AppID
 }
 
-// CurrentSalt
-// Return the current salt used by the MerkleManager
-func (m *Manager) CurrentSalt() (salt []byte) {
-	if salt == nil {
+// CurrentAppID
+// Return the current appID used by the MerkleManager
+func (m *Manager) CurrentAppID() (appID []byte) {
+	if appID == nil {
 		return nil
 	}
-	salt = append(salt, m.Salt...)
-	return salt
+	appID = append(appID, m.AppID...)
+	return appID
 }
 
 // NewDBManager
@@ -89,9 +94,9 @@ func (m *Manager) Init(databaseTag, filename string) error {
 	m.Buckets = make(map[string]byte) // Buckets hold sets of key value pairs
 	m.Labels = make(map[string]byte)  // Labels hold subsets of key value pairs within a bucket
 
-	m.AddBucket("Salt")      //                          Maintains the maximum index count   /count
-	m.AddLabel("Index2Salt") //                          Given a salt index returns a salt   index/salt
-	m.AddLabel("Salt2Index") //                          Given a salt, provides an index     salt/index
+	m.AddBucket("AppID")      //                         Maintains the maximum index count   /count
+	m.AddLabel("Index2AppID") //                         Given a appID index returns a appID   index/appID
+	m.AddLabel("AppID2Index") //                         Given a appID, provides an index     appID/index
 
 	m.AddBucket("ElementIndex") //                       element hash / element index
 	m.AddBucket("States")       //                       element index / merkle state
@@ -122,7 +127,7 @@ func (m *Manager) GetCount() int64 {
 	if data == nil {                                           // If not, nothing is there
 		return 0 //                                                 return zero
 	}
-	v, _ := storage.BytesInt64(data) //                           Return the recorded count
+	v, _ := common.BytesInt64(data) //                           Return the recorded count
 	return v
 }
 
@@ -170,7 +175,7 @@ func (m *Manager) AddLabel(label string) bool {
 // GetKey
 // Given a Bucket Name, a Label name, and a key, GetKey returns a single
 // key to be used in a key/value database.
-// Note that the use of the salt means parallel managers for different
+// Note that the use of the AppID means parallel managers for different
 // Merkle Trees can still share a database.
 func (m *Manager) GetKey(Bucket, Label string, key []byte) (DBKey [storage.KeyLength]byte) {
 	var ok bool
@@ -180,7 +185,7 @@ func (m *Manager) GetKey(Bucket, Label string, key []byte) (DBKey [storage.KeyLe
 	if _, ok = m.Labels[Label]; len(Label) > 0 && !ok { //                If a label is specified, is it defined?
 		panic(fmt.Sprintf("label %s undefined or invalid", Label)) //        Panic if not.
 	}
-	DBKey = sha256.Sum256(append(key, m.Salt...)) // To get a fixed length key, hash the key and salt together
+	DBKey = sha256.Sum256(append(key, m.AppID...)) // To get a fixed length key, hash the key and appID together
 	//                                               A hash is very secure so losing two bytes won't hurt anything
 	DBKey[0] = m.Buckets[Bucket] //                  Replace the first byte with the bucket index
 	DBKey[1] = 0                 //                  Assume no label (0 -- means no label
@@ -213,7 +218,7 @@ func (m *Manager) PutString(Bucket, Label string, key []byte, value string) erro
 // PutInt64
 // Put a int64 value into the underlying database
 func (m *Manager) PutInt64(Bucket, Label string, key []byte, value int64) error {
-	return m.Put(Bucket, Label, key, storage.Int64Bytes(value)) // Do the conversion of int64 to bytes
+	return m.Put(Bucket, Label, key, common.Int64Bytes(value)) // Do the conversion of int64 to bytes
 }
 
 // Get
@@ -239,7 +244,7 @@ func (m *Manager) GetInt64(Bucket, Label string, key []byte) (value int64) {
 	if bv == nil {
 		return math.MinInt64
 	}
-	v, _ := storage.BytesInt64(bv) // Do the bytes to int64 conversion
+	v, _ := common.BytesInt64(bv) // Do the bytes to int64 conversion
 	return v
 }
 
@@ -250,7 +255,7 @@ func (m *Manager) GetIndex(element []byte) int64 {
 	if data == nil {                           // in the merkle tree.  Note that nil means it does not yet exist
 		return -1 //                              in which case, return an invalid index (-1)
 	}
-	v, _ := storage.BytesInt64(data) //           Convert the index to an int64
+	v, _ := common.BytesInt64(data) //           Convert the index to an int64
 	return v
 }
 

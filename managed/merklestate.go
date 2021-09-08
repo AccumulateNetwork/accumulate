@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 )
 
 // MerkleState
@@ -135,16 +135,16 @@ func (m MerkleState) Equal(m2 MerkleState) (isEqual bool) {
 // Marshal
 // Encodes the Merkle State so it can be embedded into the Merkle Tree
 func (m *MerkleState) Marshal() (MSBytes []byte) {
-	MSBytes = append(MSBytes, storage.Int64Bytes(m.Count)...) // Count
-	cnt := m.Count                                            // Each bit set in Count, indicates a Sub Merkle Tree root
-	for i := 0; cnt > 0; i++ {                                // For each bit in cnt,
+	MSBytes = append(MSBytes, common.Int64Bytes(m.Count)...) // Count
+	cnt := m.Count                                           // Each bit set in Count, indicates a Sub Merkle Tree root
+	for i := 0; cnt > 0; i++ {                               // For each bit in cnt,
 		if cnt&1 > 0 { //                                         if the bit is set in cnt, record the hash
 			MSBytes = append(MSBytes, m.Pending[i][:]...)
 		} //                                                   If the bit is not set, ignore (it is nil anyway)
 		cnt = cnt >> 1 //                                      Shift cnt so we can check the next bit
 	}
-	MSBytes = append(MSBytes, storage.Int64Bytes(int64(len(m.HashList)))...) // Write out the HashList
-	for _, v := range m.HashList {                                           // For every Hash
+	MSBytes = append(MSBytes, common.Int64Bytes(int64(len(m.HashList)))...) // Write out the HashList
+	for _, v := range m.HashList {                                          // For every Hash
 		MSBytes = append(MSBytes, v[:]...) // Add it to MSBytes
 	}
 	return MSBytes
@@ -155,10 +155,10 @@ func (m *MerkleState) Marshal() (MSBytes []byte) {
 // in this instance of MSMarshal to the state defined by MSBytes.  It is assumed that the
 // hash function has been set by the caller.
 func (m *MerkleState) UnMarshal(MSBytes []byte) {
-	m.Count, MSBytes = storage.BytesInt64(MSBytes) // Extract the Count
-	m.Pending = m.Pending[:0]                      // Set Pending to zero, then use the bits of Count
-	cnt := m.Count                                 //   to guide the extraction of the List of Sub Merkle State roots
-	for i := 0; cnt > 0; i++ {                     // To do this, go through the count
+	m.Count, MSBytes = common.BytesInt64(MSBytes) // Extract the Count
+	m.Pending = m.Pending[:0]                     // Set Pending to zero, then use the bits of Count
+	cnt := m.Count                                //   to guide the extraction of the List of Sub Merkle State roots
+	for i := 0; cnt > 0; i++ {                    // To do this, go through the count
 		m.Pending = append(m.Pending, nil) //         Make a spot, which will leave nil if the bit in count is zero
 		if cnt&1 > 0 {                     //         If the bit is set, then extract the next hash and put it here
 			m.Pending[i] = new(Hash)            //    Add the storage for the hash
@@ -168,9 +168,9 @@ func (m *MerkleState) UnMarshal(MSBytes []byte) {
 		cnt = cnt >> 1 //                             Shift cnt to the right to look at the next bit
 	}
 
-	m.HashList = m.HashList[:0]                    // Clear any possible existing HashList
-	length, MSBytes := storage.BytesInt64(MSBytes) // Extract the length of the HashList
-	for i := int64(0); i < length; i++ {           // Extract each Hash
+	m.HashList = m.HashList[:0]                   // Clear any possible existing HashList
+	length, MSBytes := common.BytesInt64(MSBytes) // Extract the length of the HashList
+	for i := int64(0); i < length; i++ {          // Extract each Hash
 		m.HashList = append(m.HashList, Hash{}) //    Add the storage for the Hash, then
 		copy(m.HashList[i][:], MSBytes[:32])    //      copy over its value
 		MSBytes = MSBytes[32:]                  //    Advance MSBytes by the hash size

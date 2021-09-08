@@ -8,17 +8,22 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
 
-func TestAddSalt(t *testing.T) {
-	Salt := sha256.Sum256([]byte{1})
-	Salt2 := add2Salt(Salt[:], 1)
-	if bytes.Equal(Salt[:], Salt2) {
-		t.Errorf("These should not be equal \n%x \n%x", Salt, Salt2)
+func TestAddAppID(t *testing.T) {
+	AppID := sha256.Sum256([]byte{1})
+	AppID2 := Add2AppID(AppID[:], 1) // update the AppID to create AppID2
+	if bytes.Equal(AppID[:], AppID2) {
+		t.Errorf("These should not be equal \n%x \n%x", AppID, AppID2)
 	}
+	AppID2 = Add2AppID(AppID2[:], 0xFF) // Back out our update (0xFF is the unsigned 2's complement of 1)
+	if !bytes.Equal(AppID[:], AppID2) {
+		t.Errorf("These should be equal \n%x \n%x", AppID, AppID2)
+	}
+
 }
 
 func TestIndexing(t *testing.T) {
@@ -31,8 +36,8 @@ func TestIndexing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	salt := sha256.Sum256([]byte("root"))
-	MM1 := NewMerkleManager(dbManager, salt[:], 2)
+	appID := sha256.Sum256([]byte("root"))
+	MM1 := NewMerkleManager(dbManager, appID[:], 2)
 
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
@@ -48,7 +53,7 @@ func TestIndexing(t *testing.T) {
 	for i := int64(0); i < testlen; i++ {
 		if (i+1)%blocklen == 0 {
 			bi := new(BlockIndex)
-			data := MM1.MainChain.Manager.Get("BlockIndex", "", storage.Int64Bytes(i/blocklen))
+			data := MM1.MainChain.Manager.Get("BlockIndex", "", common.Int64Bytes(i/blocklen))
 			bi.UnMarshal(data)
 			if bi.MainIndex != i {
 				t.Fatalf("the MainIndex doesn't match v %d i %d",
@@ -69,7 +74,7 @@ func TestIndexing(t *testing.T) {
 		hash = sha256.Sum256(hash[:])
 	}
 
-	MM2 := NewMerkleManager(dbManager, salt[:], 2)
+	MM2 := NewMerkleManager(dbManager, appID[:], 2)
 
 	if MM1.MainChain.MS.Count != MM2.MainChain.MS.Count {
 		t.Fatal("failed to properly load from a database")
@@ -102,8 +107,8 @@ func TestMerkleManager(t *testing.T) {
 	MarkMask := MarkFreq - 1
 
 	// Set up a MM1 that uses a MarkPower of 2
-	salt := sha256.Sum256([]byte("root"))
-	MM1 := NewMerkleManager(dbManager, salt[:], MarkPower)
+	appID := sha256.Sum256([]byte("root"))
+	MM1 := NewMerkleManager(dbManager, appID[:], MarkPower)
 
 	if MarkPower != MM1.MarkPower ||
 		MarkFreq != MM1.MarkFreq ||
@@ -124,7 +129,7 @@ func TestMerkleManager(t *testing.T) {
 
 	dbManager.EndBatch()
 
-	// Check the Indexing
+	// Sort the Indexing
 	for i := int64(0); i < testLen; i++ {
 		ms := MM1.GetState(i)
 		m := MM1.GetNext(i)
@@ -161,7 +166,7 @@ func TestBlockIndexes(t *testing.T) {
 	if err != nil {
 		t.Fatal("no database")
 	}
-	chainID := sha256.Sum256([]byte("one"))          //              Create a MerkleManager with a particular salt
+	chainID := sha256.Sum256([]byte("one"))          //              Create a MerkleManager with a particular appID
 	MM := NewMerkleManager(dbManager, chainID[:], 4) //
 
 	rand.Seed(1)                   //                                Start rand from a particular seed
@@ -193,10 +198,10 @@ func TestBlockIndexes(t *testing.T) {
 		v := rand.Int63()       //                                                      Get v again
 		_ = v                   //                                                      (v to see (in debugger))
 		if rand.Intn(30) == 0 { //                                                      Same rate
-			data := MM.BlkIdxChain.Manager.Get("BlockIndex", "", storage.Int64Bytes(blkIdx)) // Get the next element of
-			blkIdx++                                                                         // BlockIndexChain. Inc that cnt
-			bi.UnMarshal(data)                                                               // Get the struct
-			if bi.BlockIndex != blkCnt ||                                                    // Should match our blk count
+			data := MM.BlkIdxChain.Manager.Get("BlockIndex", "", common.Int64Bytes(blkIdx)) // Get the next element of
+			blkIdx++                                                                        // BlockIndexChain. Inc that cnt
+			bi.UnMarshal(data)                                                              // Get the struct
+			if bi.BlockIndex != blkCnt ||                                                   // Should match our blk count
 				bi.PendingIndex != pendingIdx || //                                     Should match our pendingIdx
 				bi.MainIndex != i { //                                                  Should match i
 				t.Fatal("Didn't see what we expected") //  If any of that isn't true, flag
