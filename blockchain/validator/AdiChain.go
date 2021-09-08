@@ -3,6 +3,7 @@ package validator
 import (
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"

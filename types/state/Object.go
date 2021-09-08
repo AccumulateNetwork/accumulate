@@ -2,7 +2,9 @@ package state
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -14,97 +16,45 @@ type Entry interface {
 }
 
 type Object struct {
-	Chain
-	StateHash     types.Bytes `json:"stateHash"`     //this is the same as the entry hash.
-	PrevStateHash types.Bytes `json:"prevStateHash"` //not sure if we need this since we are only keeping up with current state
-	EntryHash     types.Bytes `json:"entryHash"`     //not sure if this is needed since it is baked into state hash...
-	Entry         types.Bytes `json:"entry"`         //this is the state data that stores the current state of the chain
+	StateIndex int64       `json:"stateIndex"` //this is the same as the entry hash.
+	Entry      types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
 }
 
-func (app *Object) Marshal() ([]byte, error) {
+func (app *Object) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	data, err := app.Chain.MarshalBinary()
+	data, err := app.Entry.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
-	buffer.Write(data)
 
-	data, err = app.StateHash.MarshalBinary()
-	if err != nil {
-		return nil, err
+	var state [8]byte
+	n := binary.PutVarint(state[:], app.StateIndex)
+	if n <= 0 {
+		return nil, fmt.Errorf("unable to marshal state index to a varint")
 	}
-	buffer.Write(data)
 
-	data, err = app.PrevStateHash.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(data)
-
-	data, err = app.EntryHash.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(data)
-
-	data, err = app.Entry.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
+	buffer.Write(state[:])
 	buffer.Write(data)
 
 	return buffer.Bytes(), nil
 }
 
-func (app *Object) Unmarshal(data []byte) error {
-	err := app.Chain.UnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
+func (app *Object) UnmarshalBinary(data []byte) error {
 
-	i := app.GetHeaderSize()
+	n, i := binary.Varint(data)
+	if i <= 0 {
+		return fmt.Errorf("insufficient data to unmarshal state index")
+	}
+	app.StateIndex = n
 
 	if len(data) < i {
-		return fmt.Errorf("invalid data before state hash")
+		return fmt.Errorf("insufficicient data associated with state entry")
 	}
 
-	err = app.StateHash.UnmarshalBinary(data[i:])
+	err := app.Entry.UnmarshalBinary(data[i:])
 	if err != nil {
-		return err
-	}
-
-	i += app.StateHash.Size(nil)
-
-	if len(data) < i {
-		return fmt.Errorf("invalid data before previous state hash")
-	}
-
-	err = app.PrevStateHash.UnmarshalBinary(data[i:])
-	if err != nil {
-		return err
-	}
-
-	i += app.PrevStateHash.Size(nil)
-
-	if len(data) < i {
-		return fmt.Errorf("invalid data before entry hash")
-	}
-
-	err = app.EntryHash.UnmarshalBinary(data[i:])
-	if err != nil {
-		return err
-	}
-
-	i += app.EntryHash.Size(nil)
-
-	if len(data) < i {
-		return fmt.Errorf("invalid data before entry")
-	}
-
-	err = app.Entry.UnmarshalBinary(data[i:])
-	if err != nil {
-		return err
+		return fmt.Errorf("no state object associated with state entry, %v", err)
 	}
 
 	return nil
@@ -117,11 +67,11 @@ type StateEntry struct {
 	DB *StateDB
 }
 
-func NewStateEntry(idstate *Object, chainstate *Object, db *StateDB) (*StateEntry, error) {
+func NewStateEntry(idState *Object, chainState *Object, db *StateDB) (*StateEntry, error) {
 	se := StateEntry{}
-	se.IdentityState = idstate
+	se.IdentityState = idState
 
-	se.ChainState = chainstate
+	se.ChainState = chainState
 	se.DB = db
 
 	return &se, nil

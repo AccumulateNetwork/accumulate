@@ -9,7 +9,7 @@ type TokenAccount struct {
 	TokenURL types.String `json:"tokenURL" form:"tokenURL" query:"tokenURL" validate:"required,uri"`
 }
 
-func NewTokenAccount(accountURL types.UrlChain, issuingTokenURL types.UrlChain) *TokenAccount {
-	tcc := &TokenAccount{accountURL.String, issuingTokenURL.String}
+func NewTokenAccount(accountURL types.String, issuingTokenURL types.String) *TokenAccount {
+	tcc := &TokenAccount{accountURL, issuingTokenURL}
 	return tcc
 }

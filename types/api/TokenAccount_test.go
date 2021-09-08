@@ -3,21 +3,30 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 func TestTokenAccount(t *testing.T) {
-	account := NewTokenAccount("WileECoyote/ACME", "RoadRunner/BeepBeep")
-
-	bal := big.NewInt(10000)
-	accountBalance := NewTokenAccountWithBalance(account, bal)
-
-	if accountBalance.Balance.Cmp(bal) != 0 {
-		t.Fatalf("balance should be equal")
+	tokenUrl := types.String("RoadRunner/BeepBeep")
+	adiChainPath := types.String("WileECoyote/ACME")
+	adi, chain, err := types.ParseIdentityChainPath(adiChainPath.AsString())
+	if err != nil {
+		t.Fatalf("%v", err)
 	}
 
-	data, err := json.Marshal(&accountBalance)
+	account := NewTokenAccount(adiChainPath, tokenUrl)
+
+	if *account.TokenURL.AsString() != chain {
+		t.Fatalf("token Url didn't match")
+	}
+
+	if *account.URL.AsString() != adi {
+		t.Fatalf("adi URL")
+	}
+
+	data, err := json.Marshal(account)
 	if err != nil {
 		t.Fatal(err)
 	}
