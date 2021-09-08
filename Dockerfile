@@ -1,4 +1,4 @@
-FROM golang:1.13.1 AS builder
+FROM golang:1.15 AS builder
 
 ARG GOBIN=/go/bin/
 ARG GOOS=linux
