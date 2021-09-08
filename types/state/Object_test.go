@@ -1,38 +1,35 @@
 package state
 
 import (
-	"crypto/sha256"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 )
 
 func TestStateObject(t *testing.T) {
 
+	var err error
+
 	so := Object{}
 
-	th := sha256.Sum256([]byte("headerTypeTest"))
+	so.StateIndex = 1234
 
-	so.Chain.Type = th
-	so.Chain.ChainUrl = "object/type/path"
+	adi := types.String("myadi")
+	chain := NewChain(adi, api.ChainTypeAnonTokenAccount[:])
+	so.Entry, err = chain.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	hash := sha256.Sum256([]byte("stateHashTest"))
-	so.StateHash = hash[:]
-
-	hash = sha256.Sum256([]byte("prevStateHashTest"))
-	so.PrevStateHash = hash[:]
-
-	so.Entry = []byte("This is a fake test entry")
-
-	hash = sha256.Sum256(so.Entry)
-	so.EntryHash = hash[:]
-
-	data, err := so.Marshal()
+	data, err := so.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	so2 := Object{}
 
-	err = so2.Unmarshal(data)
+	err = so2.UnmarshalBinary(data)
 	if err != nil {
 		t.Fatal(err)
 	}
