@@ -94,6 +94,8 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 
 	err = v.VerifySignatures(ledger, submission.Key, submission.Signature, &adiState)
 
+	//fix this
+	panic(err)
 	ic := api.ADI{}
 	err = json.Unmarshal(submission.Data, &ic)
 	if err != nil {

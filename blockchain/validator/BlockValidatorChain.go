@@ -48,10 +48,10 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 
 	//the state entry will be nil, anon addr, or adi state
 	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(sub.GetIdentitychain()) //need the identity chain
-
 	if err != nil {
-		return nil, fmt.Errorf("error accessing state database for adi %s, %v", sub.AdiChainPath, err)
+		return nil, fmt.Errorf("identity not defined %v", sub.AdiChainPath)
 	}
+
 	//If adiState doesn't exist, we will process by transaction instruction type
 	if currentState.IdentityState == nil {
 		//so the current state isn't defined, so we need to see if we need to create a token or anon chain.
@@ -61,9 +61,9 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", sub.Instruction)
 		}
 
-		//valid actions for identity are to create an adi or create an account for anonymous address
+		//valid actions for identity are to create an adi or create an account for anonymous address from synth transactions
 		switch sub.Instruction {
-		case pb.AccInstruction_Identity_Creation:
+		case pb.AccInstruction_Synthetic_Identity_Creation: //a sponsor will generate the synth identity creation msg
 			fallthrough
 		case pb.AccInstruction_Synthetic_Token_Deposit: // for synth deposits, only anon addresses will be accepted
 			return val.Validate(currentState, sub)
@@ -74,9 +74,9 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 
 	//since we have a valid adiState, we now need to look up the chain
 	currentState.ChainState, err = currentState.DB.GetCurrentEntry(sub.GetChainid()) //need the identity chain
-	if err != nil {
-		return nil, fmt.Errorf("error accessing state database for chain url %s, %v", sub.AdiChainPath, err)
-	}
+	//if err != nil {
+	//	return nil, fmt.Errorf("error accessing state database for chain url %s, %v", sub.AdiChainPath, err)
+	//}
 
 	//If chain state doesn't exist, we will process by transaction instruction type
 	if currentState.ChainState == nil {
@@ -86,8 +86,10 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", sub.Instruction)
 		}
 
-		//valid actions are to create account, token, scratch chain, or data chain
+		//valid instruction actions are to create account, token, identity, scratch chain, or data chain
 		switch sub.Instruction {
+		case pb.AccInstruction_Identity_Creation:
+			fallthrough
 		case pb.AccInstruction_Scratch_Chain_Creation:
 			fallthrough
 		case pb.AccInstruction_Data_Chain_Creation:
