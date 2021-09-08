@@ -2,6 +2,7 @@ package validator
 
 import (
 	"fmt"
+
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
@@ -46,7 +47,7 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 	var err error
 
 	//the state entry will be nil, anon addr, or adi state
-	currentState.IdentityState, err = currentState.DB.GetCurrentState(sub.GetIdentitychain()) //need the identity chain
+	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(sub.GetIdentitychain()) //need the identity chain
 
 	if err != nil {
 		return nil, fmt.Errorf("error accessing state database for adi %s, %v", sub.AdiChainPath, err)
@@ -72,7 +73,7 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 	}
 
 	//since we have a valid adiState, we now need to look up the chain
-	currentState.ChainState, err = currentState.DB.GetCurrentState(sub.GetChainid()) //need the identity chain
+	currentState.ChainState, err = currentState.DB.GetCurrentEntry(sub.GetChainid()) //need the identity chain
 	if err != nil {
 		return nil, fmt.Errorf("error accessing state database for chain url %s, %v", sub.AdiChainPath, err)
 	}

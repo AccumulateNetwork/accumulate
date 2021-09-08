@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -12,8 +15,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"math/big"
-	"time"
 )
 
 type AnonTokenChain struct {
@@ -75,24 +76,15 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 
 	//First GetOrCreateAdiChain
 	adiChain := types.GetIdentityChainFromIdentity(&adi)
-	adiStateData, err := currentState.DB.GetStateObject(adiChain[:], false)
+
+	//get the state data for the identity.  If no identity is returned we create one, so don't worry about any error in the GetCurrentEntry
+	adiStateData, _ := currentState.DB.GetCurrentEntry(adiChain[:])
 
 	//now check if the anonymous chain already exists.
 	//adiStateData := currentState.IdentityState
 	chainState := state.Chain{}
-	if adiStateData != nil {
-		if adiStateData.Entry == nil {
-			return fmt.Errorf("malformed anonymous token chain, no state entry for %s", adi)
-		}
-		err := chainState.UnmarshalBinary(adiStateData.Entry)
-		if err != nil {
-			return err
-		}
-		if bytes.Compare(chainState.Type.Bytes(), api.ChainTypeAnonTokenAccount[:]) != 0 {
-			return fmt.Errorf("adi for an anoymous chain is not an anonymous account")
-		}
-		//we have an adi state, so now compare the key and validation
-	} else {
+
+	if adiStateData == nil {
 		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
 		chainState.SetHeader(types.String(adi), api.ChainTypeAnonTokenAccount[:])
 		//need to flag this as an anonymous account
@@ -101,6 +93,15 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 			return nil
 		}
 		resp.AddStateData(types.GetChainIdFromChainPath(&adi), data)
+	} else {
+		err := chainState.UnmarshalBinary(adiStateData.Entry)
+		if err != nil {
+			return err
+		}
+		if bytes.Compare(chainState.Type.Bytes(), api.ChainTypeAnonTokenAccount[:]) != 0 {
+			return fmt.Errorf("adi for an anoymous chain is not an anonymous account")
+		}
+		//we have an adi state, so now compare the key and validation
 	}
 
 	//Next GetOrCreateTokenAccount
@@ -110,7 +111,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 
 	//so now look up the token chain from the account
 	//The token state *CAN* be nil, if so we need to create it...
-	tokenState, err := currentState.DB.GetStateObject(tokenChain[:], false)
+	tokenState, err := currentState.DB.GetCurrentEntry(tokenChain[:])
 	//if err != nil {
 	//	return fmt.Errorf("unable to retrieve token chain for %s, %v", url, err)
 	//}
@@ -121,9 +122,6 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 		//we need to create a new state object.
 		account = state.NewTokenAccount(url, *deposit.TokenUrl.AsString())
 	} else {
-		if tokenState.Entry == nil {
-			return fmt.Errorf("unable to retrieve token chain entry for %s", url)
-		}
 		err = account.UnmarshalBinary(tokenState.Entry)
 		if err != nil {
 			return err
@@ -161,12 +159,12 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 
 	//need to derive chain id for coin type account.
 	accountChainId := types.GetChainIdFromChainPath(deposit.From.AsString())
-	currentState.ChainState, err = currentState.DB.GetCurrentState(accountChainId[:])
+	currentState.ChainState, err = currentState.DB.GetCurrentEntry(accountChainId[:])
 	if err != nil {
 		return fmt.Errorf("chain state for account not esablished")
 	}
 
-	currentState.IdentityState, err = currentState.DB.GetCurrentState(submission.Identitychain)
+	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(submission.Identitychain)
 	if err != nil {
 		return fmt.Errorf("identity not established")
 	}

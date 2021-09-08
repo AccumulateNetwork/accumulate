@@ -2,23 +2,27 @@ package tendermint
 
 import (
 	"context"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
+
 	//"crypto/ed25519"
 	_ "crypto/sha256"
+	"net"
+
 	_ "github.com/AccumulateNetwork/SMT/pmt"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"google.golang.org/grpc"
-	"net"
 
 	"encoding/json"
 	"fmt"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"time"
+
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
@@ -34,19 +38,22 @@ import (
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/version"
 	"os"
 
+	"github.com/tendermint/tendermint/libs/service"
+	"github.com/tendermint/tendermint/version"
+
 	"bytes"
+
 	"github.com/AccumulateNetwork/SMT/managed"
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
+
+	"sync"
 
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
-	"sync"
 )
 
 //
@@ -613,7 +620,7 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	//end the current batch of transactions in the Stateful Merkle Tree
 
-	mdroot, err := app.mmdb.WriteStates()
+	mdroot, err := app.mmdb.WriteStates(app.Height)
 
 	if err != nil {
 		//shouldn't get here.
@@ -713,7 +720,7 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 		return resQuery
 	}
 	//extract the state for the chain id
-	chainState, err := app.mmdb.GetCurrentState(q.ChainId)
+	chainState, err := app.mmdb.GetPersistentEntry(q.ChainId, false)
 	chainHeader := state.Chain{}
 	err = chainHeader.UnmarshalBinary(chainState.Entry)
 	if err != nil {
