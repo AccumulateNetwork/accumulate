@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/AccumulateNetwork/SMT/common"
+
 	"github.com/AccumulateNetwork/SMT/storage"
 
 	"github.com/AccumulateNetwork/SMT/storage/database"
@@ -15,7 +17,7 @@ const PendingOff = byte(1) // Offset to the chain holding pending transactions f
 const BlkIdxOff = byte(2)  // Offset to the chain holding the block indexes for the chain and the pending chain
 
 type MerkleManager struct {
-	RootDBManager *database.Manager // Salt-less Manager for writing to the general DBState
+	RootDBManager *database.Manager // AppID-less Manager for writing to the general DBState
 	MainChain     ChainManager      // The used to hold entries to be kept forever
 	PendingChain  ChainManager      // Managed pend entries unsigned by validators in this Scratch chain to be signed
 	BlkIdxChain   ChainManager      // Tracks the indexes of the minor blocks
@@ -25,9 +27,11 @@ type MerkleManager struct {
 	blkidx        *BlockIndex       // The Last BlockIndex seen
 }
 
-// add2Salt
-// Compute the Salt for a shadow chain for a Merkle Tree. Simply a convenience
-// function, but an opportunity to talk about shadow chains here
+// Add2AppID
+// Compute the AppID for a shadow chain for a Merkle Tree. Note that bumping
+// the index of the AppID allows shadow chains to exist within a different
+// application space, and allows the underlying Patricia Tree to maintain
+// its balanced nature.
 //
 // The reason for shadow chains is to track information about the construction
 // and validation of entries in a main chain that we do not wish to persist
@@ -42,10 +46,10 @@ type MerkleManager struct {
 // resolution even after the minor blocks are rewritten into major blocks.
 // Parties interested in this finer resolution can preserve these timestamps
 // by simply getting a receipt and preserving it off chain or on chain.
-func add2Salt(Salt []byte, offset byte) (salt []byte) {
-	salt = append(salt, Salt...) // Make a copy of the salt
-	salt[0] += offset            // Add offset to the first byte -> new salt
-	return salt                  // and return new salt
+func Add2AppID(AppID []byte, offset byte) (appID []byte) {
+	appID = append(appID, AppID...) // Make a copy of the appID
+	appID[0] += offset              // Add offset to the first byte -> new appID
+	return appID                    // and return new appID
 }
 
 // NewMerkleManager
@@ -54,39 +58,39 @@ func add2Salt(Salt []byte, offset byte) (salt []byte) {
 // The markPower is the log 2 frequency used to collect states in the Merkle Tree
 func NewMerkleManager(
 	DBManager *database.Manager, //      database that can be shared with other MerkleManager instances
-	initialSalt []byte, //               Initial Salt identifying a Merkle Tree
+	appID []byte, //      AppID identifying an application space in the DBManager
 	markPower int64) *MerkleManager { // log 2 of the frequency of creating marks in the Merkle Tree
 
-	if len(initialSalt) != 32 { // Panic salt is bad
-		panic(fmt.Sprintf("salt must be 32 bytes long. got %x", initialSalt))
+	if len(appID) != 32 { // Panic: appID is bad
+		panic(fmt.Sprintf("appID must be 32 bytes long. got %x", appID))
 	}
 
 	mm := new(MerkleManager)
-	mm.init(DBManager, initialSalt, markPower)
+	mm.init(DBManager, appID, markPower)
 	return mm
 }
 
 // Copy
 // Create a copy of the MerkleManager.  The MerkleManager can be pointed to
-// particular merkle trees by setting the Salt.  This is a brand new MerkleManager pointed
-// towards a particular chain and its shadow chains
-func (m MerkleManager) Copy(salt []byte) *MerkleManager {
-	bSalt := add2Salt(salt, BlkIdxOff)                                 // salt for block Index shadow chain
-	pSalt := add2Salt(salt, PendingOff)                                // salt for pending shadow chain
-	m.MainChain.Manager = m.MainChain.Manager.Copy(salt)               // MainChain.Manager uses salt
+// particular merkle trees by setting the AppID.  This is a brand
+// new MerkleManager pointed towards a particular chain and its shadow chains
+func (m MerkleManager) Copy(appID []byte) *MerkleManager {
+	bAppID := Add2AppID(appID, BlkIdxOff)                              // appID for block Index shadow chain
+	pAppID := Add2AppID(appID, PendingOff)                             // appID for pending shadow chain
+	m.MainChain.Manager = m.MainChain.Manager.Copy(appID)              // MainChain.Manager uses appID
 	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount())       // Get Main Merkle State from the database
 	m.MainChain.MS.InitSha256()                                        // Use Sha256
-	m.BlkIdxChain.Manager = m.BlkIdxChain.Manager.Copy(bSalt)          // BlkIdxChain.Manager uses bSalt
+	m.BlkIdxChain.Manager = m.BlkIdxChain.Manager.Copy(bAppID)         // BlkIdxChain.Manager uses bAppID
 	m.BlkIdxChain.MS = *m.GetState(m.BlkIdxChain.Manager.GetCount())   // Get block Merkle State from the database
 	m.BlkIdxChain.MS.InitSha256()                                      // Use Sha256
-	m.PendingChain.Manager = m.PendingChain.Manager.Copy(pSalt)        // PendingChain uses pSalt
+	m.PendingChain.Manager = m.PendingChain.Manager.Copy(pAppID)       // PendingChain uses pAppID
 	m.PendingChain.MS = *m.GetState(m.PendingChain.Manager.GetCount()) // Get Pending Merkle State from the database
 	m.PendingChain.MS.InitSha256()                                     // Use Sha256
 	return &m
 }
 
 // getElementCount()
-// Return the number of elements in the Merkle Tree managed by this MerkleManager
+// Return number of elements in the Merkle Tree managed by this MerkleManager
 func (m *MerkleManager) GetElementCount() (elementCount int64) {
 	return m.MainChain.MS.Count
 }
@@ -97,23 +101,23 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 //
 // This is an internal routine; calling init outside of constructing the first
 // reference to the MerkleManager doesn't make much sense.
-func (m *MerkleManager) init(DBManager *database.Manager, salt []byte, markPower int64) {
-	m.RootDBManager = DBManager.Copy(nil) // Add a Database manager without a salt
+func (m *MerkleManager) init(DBManager *database.Manager, appID []byte, markPower int64) {
+	m.RootDBManager = DBManager.Copy(nil) // Add a Database manager without a appID
 	_ = DBManager.AddBucket("BlockIndex") // Add a bucket to track block indexes
 	_ = DBManager.AddBucket("Transactions")
-	m.MainChain.Manager = DBManager.Copy(salt)                          // Save the database
-	m.PendingChain.Manager = DBManager.Copy(add2Salt(salt, PendingOff)) //
-	m.BlkIdxChain.Manager = DBManager.Copy(add2Salt(salt, BlkIdxOff))   //
-	m.MainChain.Manager.BeginBatch()                                    // Start our batch mode
-	m.MarkPower = markPower                                             // # levels in Merkle Tree to be indexed
-	m.MarkFreq = int64(math.Pow(2, float64(markPower)))                 // The number of elements between indexes
-	m.MarkMask = m.MarkFreq - 1                                         // Mask to index of next mark (0 if at a mark)
-	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount())        // Get the main Merkle State from the database
-	m.MainChain.MS.InitSha256()                                         // Use Sha256
-	m.BlkIdxChain.MS = *m.GetState(m.BlkIdxChain.Manager.GetCount())    // Get block Merkle State from the database
-	m.BlkIdxChain.MS.InitSha256()                                       // Use Sha256
-	m.PendingChain.MS = *m.GetState(m.PendingChain.Manager.GetCount())  // Get pending Merkle State from the database
-	m.PendingChain.MS.InitSha256()                                      // Use Sha256
+	m.MainChain.Manager = DBManager.Copy(appID)                           // Save the database
+	m.PendingChain.Manager = DBManager.Copy(Add2AppID(appID, PendingOff)) //
+	m.BlkIdxChain.Manager = DBManager.Copy(Add2AppID(appID, BlkIdxOff))   //
+	m.MainChain.Manager.BeginBatch()                                      // Start our batch mode
+	m.MarkPower = markPower                                               // # levels in Merkle Tree to be indexed
+	m.MarkFreq = int64(math.Pow(2, float64(markPower)))                   // The number of elements between indexes
+	m.MarkMask = m.MarkFreq - 1                                           // Mask to index of next mark (0 if at a mark)
+	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount())          // Get the main Merkle State from the database
+	m.MainChain.MS.InitSha256()                                           // Use Sha256
+	m.BlkIdxChain.MS = *m.GetState(m.BlkIdxChain.Manager.GetCount())      // Get block Merkle State from the database
+	m.BlkIdxChain.MS.InitSha256()                                         // Use Sha256
+	m.PendingChain.MS = *m.GetState(m.PendingChain.Manager.GetCount())    // Get pending Merkle State from the database
+	m.PendingChain.MS.InitSha256()                                        // Use Sha256
 
 }
 
@@ -148,7 +152,7 @@ func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
 	m.BlkIdxChain.MS.AddToMerkleTree(biHash)            //               Add the bi hash to the BlkIdxChain
 	blkIdx := m.BlkIdxChain.MS.Count - 1                //               Use a variable to make tidy
 	_ = m.BlkIdxChain.Manager.Put(                      //
-		"BlockIndex", "", storage.Int64Bytes(blkIdx), bbi) //            blkIdx -> bbi struct
+		"BlockIndex", "", common.Int64Bytes(blkIdx), bbi) //            blkIdx -> bbi struct
 	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", []byte{}, bbi) //    Mark as highest block
 }
 
@@ -162,8 +166,8 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	if element == 0 {
 		return new(MerkleState)
 	}
-	data := m.MainChain.Manager.Get("States", "", storage.Int64Bytes(element)) // Get the data at this height
-	if data == nil {                                                           //         If nil, there is no state saved
+	data := m.MainChain.Manager.Get("States", "", common.Int64Bytes(element)) // Get the data at this height
+	if data == nil {                                                          //         If nil, there is no state saved
 		return nil //                                                             return nil, as no state exists
 	}
 	ms := new(MerkleState) //                                                     Get a fresh new MerkleState
@@ -174,7 +178,7 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 // GetNext
 // Get the next hash to be added to a state at this height
 func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
-	data := m.MainChain.Manager.Get("NextElement", "", storage.Int64Bytes(element))
+	data := m.MainChain.Manager.Get("NextElement", "", common.Int64Bytes(element))
 	if data == nil || len(data) != storage.KeyLength {
 		return nil
 	}

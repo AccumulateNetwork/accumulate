@@ -8,7 +8,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/common"
 
 	"github.com/AccumulateNetwork/SMT/storage/database"
 )
@@ -63,15 +63,15 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	}
 
 	for i := 0; i < 10; i++ {
-		if err := dbManager.PutBatch("a", "", storage.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
+		if err := dbManager.PutBatch("a", "", common.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
 			t.Error(err)
 		}
 	}
 	dbManager.EndBatch()
 
-	// Check that I can read all thousand entries
+	// Sort that I can read all thousand entries
 	for i := 0; i < 10; i++ {
-		eKey := dbManager.GetKey("a", "", storage.Int64Bytes(int64(i)))
+		eKey := dbManager.GetKey("a", "", common.Int64Bytes(int64(i)))
 		eValue := []byte(fmt.Sprint(i))
 
 		fmt.Printf("key %x value %s\n", eKey, eValue)
@@ -84,13 +84,13 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 
 }
 
-func TestSalt(t *testing.T) {
+func TestAppID(t *testing.T) {
 
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	defer dbManager.Close()
 
-	dbManager.SetSalt([]byte("one"))
+	dbManager.SetAppID([]byte("one"))
 	dbManager.AddBucket("a")
 	dbManager.AddBucket("b")
 	dbManager.AddBucket("c")
@@ -104,7 +104,7 @@ func TestSalt(t *testing.T) {
 	v2 := dbManager.Get("b", "", []byte("horse"))
 	v3 := dbManager.Get("c", "", []byte("horse"))
 
-	dbManager.SetSalt([]byte("two"))
+	dbManager.SetAppID([]byte("two"))
 	dbManager.AddBucket("a")
 	dbManager.AddBucket("b")
 	dbManager.AddBucket("c")

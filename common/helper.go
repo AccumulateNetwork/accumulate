@@ -8,90 +8,14 @@
 //
 // This allows us to put the raw directory block at DBlockBucket+L_raw, and meta data
 // about the directory block at DBlockBucket+MetaLabel
-package storage
+package common
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
-	"os"
-	"os/user"
 	"time"
 )
-
-// GetHomeDir
-// Used to find the Home Directory from which the configuration directory for the ValAcc application to
-// use for its database.  This is not a terribly refined way of configuring the ValAcc and may be
-// refined in the future.
-func GetHomeDir() string {
-	anchorPlatformHome := os.Getenv("ANCHOR_PLATFORM")
-	if anchorPlatformHome != "" {
-		return anchorPlatformHome
-	}
-
-	// Get the OS specific home directory via the Go standard lib.
-	var homeDir string
-	usr, err := user.Current()
-	if err == nil {
-		homeDir = usr.HomeDir
-	}
-
-	// Fall back to standard HOME environment variable that works
-	// for most POSIX OSes if the directory from the Go standard
-	// lib failed.
-	if err != nil || homeDir == "" {
-		homeDir = os.Getenv("HOME")
-	}
-	return homeDir
-}
-
-// s2a
-// Slice to 32 byte Array
-func s2a(s []byte) (a [32]byte) {
-	copy(a[:], s)
-	return a
-}
-
-// BoolBytes
-// Marshal a Bool
-func BoolBytes(b bool) []byte {
-	if b {
-		return append([]byte{}, 1)
-	}
-	return append([]byte{}, 0)
-}
-
-// BytesBool
-// Unmarshal a Uint8
-func BytesBool(data []byte) (f bool, newData []byte) {
-	if data[0] != 0 {
-		f = true
-	}
-	return f, data[1:]
-}
-
-// Uint16Bytes
-// Marshal a int32 (big endian)
-func Uint16Bytes(i uint16) []byte {
-	return append([]byte{}, byte(i>>8), byte(i))
-}
-
-// BytesUint16
-// Unmarshal a uint32 (big endian)
-func BytesUint16(data []byte) (uint16, []byte) {
-	return uint16(data[0])<<8 + uint16(data[1]), data[2:]
-}
-
-// Uint32Bytes
-// Marshal a int32 (big endian)
-func Uint32Bytes(i uint32) []byte {
-	return append([]byte{}, byte(i>>24), byte(i>>16), byte(i>>8), byte(i))
-}
-
-// BytesUint32
-// Unmarshal a uint32 (big endian)
-func BytesUint32(data []byte) (uint32, []byte) {
-	return uint32(data[0])<<24 + uint32(data[1])<<16 + uint32(data[2])<<8 + uint32(data[3]), data[4:]
-}
 
 // Uint64Bytes
 // Marshal a uint64 (big endian)
@@ -126,7 +50,7 @@ func BytesInt64(data []byte) (int64, []byte) {
 	return value, data[count:]
 }
 
-// DurationFormat
+// FormatTimeLapse
 // Simple formatting for duration time.  Prints all results within a fixed field of text.
 func FormatTimeLapse(d time.Duration) string {
 	return FormatTimeLapseSeconds(int64(d.Seconds()))
@@ -150,4 +74,32 @@ func FormatTimeLapseSeconds(total int64) string {
 	} else {
 		return fmt.Sprintf("          %2d s      ", seconds)
 	}
+}
+
+// SliceBytes
+// Append a Uvarint length infront of a slice, effectively converting a slice to a counted string
+func SliceBytes(slice []byte) []byte {
+	var varInt [16]byte                                              // Buffer to hold a Uvarint
+	countOfBytes := binary.PutUvarint(varInt[:], uint64(len(slice))) // calculate the Uvarint of the len of the slice
+	counted := append(varInt[:countOfBytes], slice...)               // Now put the Uvarint right in front of the slice
+	return counted                                                   // Return the resulting counted string
+}
+
+// BytesSlice
+// Convert a counted byte array (which is a count followed by the byte values) to a slice.  We return what is
+// left of the data once the counted byte array is removed
+func BytesSlice(data []byte) (slice []byte, data2 []byte) {
+	countOfBytes, count := binary.Uvarint(data) // Get the number of bytes in the slice, and count of bytes used for the count
+	data = data[count:]
+	slice = append(slice, data[:countOfBytes]...)
+	data = data[countOfBytes:]
+	return slice, data
+}
+
+func hexToBytes(hexStr string) []byte {
+	raw, err := hex.DecodeString(hexStr)
+	if err != nil {
+		panic(err)
+	}
+	return raw
 }
