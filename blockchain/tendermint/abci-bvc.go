@@ -2,6 +2,7 @@ package tendermint
 
 import (
 	"context"
+	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -41,7 +42,6 @@ import (
 
 	"bytes"
 	"github.com/AccumulateNetwork/SMT/managed"
-	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
@@ -107,7 +107,6 @@ type AccumulatorVMApplication struct {
 
 	ChainId [32]byte
 
-	tmvalidators map[string]crypto.PubKey
 	//Val *validator.ValidatorContext //change to use chainval below instead
 	chainval map[uint64]*validator.ValidatorContext //use this instead to make a group of validators that can be accessed via chain address.
 
@@ -116,7 +115,6 @@ type AccumulatorVMApplication struct {
 
 	state State
 
-	valTypeRegDB dbm.DB
 	//end deprecation
 
 	config     *cfg.Config
@@ -257,11 +255,6 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 
 	str := "ValTypeReg"
 	fmt.Printf("Creating %s\n", str)
-	cdb, err := nm.DefaultDBProvider(&nm.DBContext{ID: str, Config: app.config})
-	app.valTypeRegDB = cdb
-	if err != nil {
-		return fmt.Errorf("failed to create node accumulator database: %w", err)
-	}
 
 	dbfilename := WorkingDir + "/" + "valacc.db"
 	err = app.mmdb.Open(dbfilename, false, true)
@@ -275,15 +268,6 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 
 // InitChain /ABCI call
 func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
-	/*
-		type RequestInitChain struct {
-			Time            time.Time         `protobuf:"bytes,1,opt,name=time,proto3,stdtime" json:"time"`
-			ChainId         string            `protobuf:"bytes,2,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
-			ConsensusParams *ConsensusParams  `protobuf:"bytes,3,opt,name=consensus_params,json=consensusParams,proto3" json:"consensus_params,omitempty"`
-			Validators      []ValidatorUpdate `protobuf:"bytes,4,rep,name=validators,proto3" json:"validators"`
-			AppStateBytes   []byte            `protobuf:"bytes,5,opt,name=app_state_bytes,json=appStateBytes,proto3" json:"app_state_bytes,omitempty"`
-			InitialHeight   int64             `protobuf:"varint,6,opt,name=initial_height,json=initialHeight,proto3" json:"initial_height,omitempty"`
-		}*/
 
 	fmt.Printf("Initalizing Accumulator Router\n")
 
@@ -373,36 +357,12 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
 //Here we create a batch, which will store block's transactions.
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	//app.currentBatch = app.db.NewTransaction(true)
-	//app.Height = req.Header.Height
-	// reset valset changes
+
 	app.timer = time.Now()
 
 	fmt.Printf("Begin Block %d on shard %s\n", req.Header.Height, req.Header.ChainID)
 	app.txct = 0
 
-	/*
-		app.ValUpdates = make([]types.ValidatorUpdate, 0)
-
-		// Punish validators who committed equivocation.
-		for _, ev := range req.ByzantineValidators {
-			if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
-				addr := string(ev.Validator.Address)
-				if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
-					app.updateValidator(types.ValidatorUpdate{
-						PubKey: pubKey,
-						Power:  ev.Validator.Power - 1,
-					})
-					app.logger.Info("Decreased val power by 1 because of the equivocation",
-						"val", addr)
-				} else {
-					app.logger.Error("Wanted to punish val, but can't find it",
-						"val", addr)
-				}
-			}
-		}
-
-	*/
 	//TODO: Purge any expired entry / chain commits
 
 	//Identify the leader for this block.

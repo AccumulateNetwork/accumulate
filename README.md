@@ -1,8 +1,19 @@
 # Accumulate
 ### Abstract
-Accumulate is a highly unique blockchain network built to address the biggest fundamental issues with blockchain technology:  security, validation, scaling, pruning, and integration.
-Accumulate is the first blockchain to be completely organized around Decentralized Digital Identity and Identifiers (DDIIs). Accumulate Digital Identifiers (ADIs) have powerful and novel uses within Accumulate to allow the blockchain network to be applied to a huge set of use cases.  ADIs allow smart contracts, consensus building, validator networks, and enterprise level management of digital assets that goes beyond the simple and constrained smart contract based frameworks of other blockchains.
-Accumulate anticipates a world where the blockchain is a network of blockchain services, data, and endpoints for processes supporting payments, business, education, regulation, entertainment, social networks and more.  To this end, Accumulate will be the first indexable blockchain using URLs to index anything within Accumulate.
+Accumulate is a highly unique blockchain network built to address the biggest 
+fundamental issues with blockchain technology:  security, validation, scaling, 
+pruning, and integration. Accumulate is the first blockchain to be completely 
+organized around Decentralized Digital Identity and Identifiers (DDIIs). 
+Accumulate Digital Identifiers (ADIs) have powerful and novel uses within 
+Accumulate to allow the blockchain network to be applied to a huge set of use 
+cases.  ADIs allow smart contracts, consensus building, validator networks, and 
+enterprise level management of digital assets that goes beyond the simple and 
+constrained smart contract based frameworks of other blockchains. Accumulate 
+anticipates a world where the blockchain is a network of blockchain services, 
+data, and endpoints for processes supporting payments, business, education, 
+regulation, entertainment, social networks and more.  To this end, Accumulate 
+will be the first indexable blockchain using URLs to index anything within 
+Accumulate.
 
 ## Introduction
 A typical blockchain is organized around addresses, as pioneered by Bitcoin,
@@ -64,13 +75,24 @@ have to be issued just because a company must shift responsibilities over
 time.  The departure of an employee should not require new ADIs, just new 
 security.
 
-Even the technology of keys and signing should allow upgrades in Accumulate without major upending of the actual ADIs.
+Even the technology of keys and signing should allow upgrades in Accumulate 
+without major upending of the actual ADIs.
 
-Accumulate also anticipates the need for ADIs to manage identities, processes, tokens, and data.  Everything in Accumulate can be addressed through UDIs. Applying Internet standards for addressing and routing to the blockchain allows blockchains to scale just as the Internet has proven to be able to scale.
+Accumulate also anticipates the need for ADIs to manage identities, processes, 
+tokens, and data.  Everything in Accumulate can be addressed through UDIs. 
+Applying Internet standards for addressing and routing to the blockchain allows 
+blockchains to scale just as the Internet has proven to be able to scale.
 
-One of the issues with much security in blockchains is the off blockchain processes that are needed to arrive at an entry on the blockchain.  Developers are faced with a trade off between the expense and difficulty of showing their work on the blockchain, and the lack of accountability when the work of coming to consensus is done off blockchain.  
+One of the issues with much security in blockchains is the off blockchain 
+processes that are needed to arrive at an entry on the blockchain.  Developers 
+are faced with a trade off between the expense and difficulty of showing their 
+work on the blockchain, and the lack of accountability when the work of coming 
+to consensus is done off blockchain.  
 
-Accumulate provides scratch space on the blockchain that can be used by parties to come to consensus, but whose data availability is not enforced by Accumulate forever.  Scratch space allows processes to provide cryptographic proof of validation and process without over burdening the blockchain.
+Accumulate provides scratch space on the blockchain that can be used by parties 
+to come to consensus, but whose data availability is not enforced by Accumulate 
+forever.  Scratch space allows processes to provide cryptographic proof of
+validation and process without over burdening the blockchain.
 
 # Factom/Accumulate Innovations
 A quick summary of the innovations and advantages of Factom and Accumulate that 
@@ -115,9 +137,9 @@ blockchain technology:
        maintained on validator nodes separate from data nodes for accessing 
        the past state of the blockchain
   * URLs
-     * URL addressing of Accumulate identities, data, transactions, and state
-Traditional technology stacks easily integrate with URL addressable data and endpoints
-Much improved user experience
-Enables integration with browsers
+     * URL addressing of Accumulate identities, data, transactions, and state 
+       Traditional technology stacks easily integrate with URL addressable 
+       data and endpoints Much improved user experience Enables integration 
+       with browsers
      * Tokens can be sent to human readable URLs rather than odd collections 
        of characters

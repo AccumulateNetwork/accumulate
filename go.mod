@@ -15,7 +15,7 @@ require (
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/golang/protobuf v1.4.3
 	github.com/gorilla/mux v1.7.4-0.20190720201435-e67b3c02c719
-	github.com/martinlindhe/base36 v1.1.0 // indirect
+	github.com/martinlindhe/base36 v1.1.0
 	github.com/mitchellh/mapstructure v1.4.1
 	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/spf13/afero v1.3.4 // indirect
@@ -30,3 +30,5 @@ require (
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/ini.v1 v1.58.0 // indirect
 )
+
+replace github.com/AccumulateNetwork/SMT => ../SMT
