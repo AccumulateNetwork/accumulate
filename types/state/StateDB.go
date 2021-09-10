@@ -172,6 +172,8 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 // WriteStates will push the data to the database and update the patricia trie
 func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 	//build a list of keys from the map
+
+	sdb.mm.SetBlockIndex(blockHeight)
 	keys := make([]managed.Hash, 0, len(sdb.mms))
 	for chainId := range sdb.mms {
 		keys = append(keys, chainId)
@@ -189,7 +191,6 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 		//hash := sha256.Sum256(v.stateEntry.Entry)
 		//
 		//v.merkleMgr.AddHash(hash)
-		v.merkleMgr.SetBlockIndex(blockHeight)
 
 		v.stateEntry.StateIndex = v.merkleMgr.GetElementCount()
 		mdRoot := v.merkleMgr.MainChain.MS.GetMDRoot()
@@ -208,6 +209,7 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 			return nil, fmt.Errorf("failed to store data entry in StateEntries bucket, %v", err)
 		}
 	}
+
 	sdb.bpt.Bpt.Update()
 
 	sdb.mms = make(map[managed.Hash]*merkleManagerState)

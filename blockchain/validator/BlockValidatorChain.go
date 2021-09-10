@@ -48,9 +48,9 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 
 	//the state entry will be nil, anon addr, or adi state
 	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(sub.GetIdentitychain()) //need the identity chain
-	if err != nil {
-		return nil, fmt.Errorf("identity not defined %v", sub.AdiChainPath)
-	}
+	//if err != nil {
+	//	return nil, fmt.Errorf("identity not defined %v", sub.AdiChainPath)
+	//}
 
 	//If adiState doesn't exist, we will process by transaction instruction type
 	if currentState.IdentityState == nil {
@@ -73,10 +73,7 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.S
 	}
 
 	//since we have a valid adiState, we now need to look up the chain
-	currentState.ChainState, err = currentState.DB.GetCurrentEntry(sub.GetChainid()) //need the identity chain
-	//if err != nil {
-	//	return nil, fmt.Errorf("error accessing state database for chain url %s, %v", sub.AdiChainPath, err)
-	//}
+	currentState.ChainState, _ = currentState.DB.GetCurrentEntry(sub.GetChainid()) //need the identity chain
 
 	//If chain state doesn't exist, we will process by transaction instruction type
 	if currentState.ChainState == nil {

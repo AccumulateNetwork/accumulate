@@ -65,6 +65,7 @@ func CreateAccumulateBVC(config string, path string) (*tendermint.AccumulatorVMA
 	go acc.Start()
 
 	acc.Wait()
+
 	return acc, nil
 }
 
