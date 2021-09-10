@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
@@ -44,14 +45,21 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	kpSponsor := types.CreateKeyPairFromSeed(vm.Key.PrivKey.Bytes())
 
-	//use the public key of the bvc...
-	adiSponsor := types.GenerateAcmeAddress(kpSponsor.PubKey().Bytes())
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
+	adiSponsor := types.String(types.GenerateAcmeAddress(kpSponsor.PubKey().Bytes()))
+
+	//set destination url address
+	destAddress := types.String(types.GenerateAcmeAddress(kpNewAdi.PubKey().Bytes()))
+
+	txid := sha256.Sum256([]byte("txid"))
+
+	tokenUrl := types.String("dc/ACME")
 
 	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit()
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
 	deposit.DepositAmount.SetInt64(5000)
-	deposit.TokenUrl = "dc/ACME"
-	deposit.Txid = sha256.Sum256([]byte("txid")) //just use a fake txid
+	deposit.TokenUrl = tokenUrl
+
 	data, err := deposit.MarshalBinary()
 	sig, err := kpSponsor.Sign(data)
 	if err != nil {
@@ -64,11 +72,29 @@ func TestJsonRpcAnonToken(t *testing.T) {
 		Data(data).
 		PubKey(kpSponsor.PubKey().Bytes()).
 		Timestamp(time.Now().Unix()).
-		AdiUrl(adiSponsor).
+		AdiUrl(*destAddress.AsString()).
 		Signature(sig).
 		Build()
 
-	//query
+	_, err = client.ProcessTx(context.Background(), sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//wait 3 seconds for the transaction to process and block to finish.
+	time.Sleep(3000 * time.Millisecond)
+	queryTokenUrl := destAddress + "/" + tokenUrl
+	resp, err := query.GetTokenAccount(queryTokenUrl.AsString())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	output, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(output)
+
 	//req := api.{}
 	//adi := &api.ADI{}
 	//adi.URL = "RoadRunner"
@@ -100,11 +126,6 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//
 	////now we can send in json rpc calls.
 	//ret := jsonapi.createADI(context.Background(), jsonReq)
-
-	_, err = client.ProcessTx(context.Background(), sub)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 }
 

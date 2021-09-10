@@ -294,6 +294,9 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	networkid[31] = 1
 	app.ChainId = networkid
 
+	//for testnet...
+	app.createBootstrapAccount()
+
 	////commits will be stored here and key'ed via entry hash.
 
 	//Temporary work around for chicken / egg problem at genesis block
@@ -322,7 +325,7 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 
 	is := state.NewIdentityState(adi)
 	keyHash := sha256.Sum256(app.Key.PubKey.Bytes())
-	is.SetKeyData(state.KeyTypeSha256, keyHash[:])
+	_ = is.SetKeyData(state.KeyTypeSha256, keyHash[:])
 	idStateData, err := is.MarshalBinary()
 	if err != nil {
 		panic(err)
@@ -366,9 +369,7 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	//app.currentBatch = app.db.NewTransaction(true)
 	//app.Height = req.Header.Height
 	// reset valset changes
-	if req.GetHeader().Height == 2 {
-		app.createBootstrapAccount()
-	}
+
 	app.timer = time.Now()
 
 	fmt.Printf("Begin Block %d on shard %s\n", req.Header.Height, req.Header.ChainID)
@@ -622,16 +623,16 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	//end the current batch of transactions in the Stateful Merkle Tree
 
-	mdroot, err := app.mmdb.WriteStates(app.Height)
+	mdRoot, err := app.mmdb.WriteStates(app.Height)
 
 	if err != nil {
 		//shouldn't get here.
 		panic(fmt.Errorf("fatal error, block not set, %v", err))
 	}
 
-	resp.Data = app.lasthash[:]
-	// mdroot
-	//saveDBlock
+	if mdRoot != nil {
+		resp.Data = mdRoot
+	}
 
 	//I think we need to get this from the bpt
 	//app.bpt.Bpt.Root.Hash
@@ -639,22 +640,12 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	if app.amLeader && app.txct > 0 {
 
 		//now we create a synthetic transaction and publish to the directory block validator
-		//bve := BVCEntry{}
-		//bve.Version = 1
-		//bve.BVCHeight = app.Height
-		//bve.DDII = make([]byte, len("placeholder")+1)
-		//copy(bve.DDII, []byte(string("placeholder")))
-		//bve.Timestamp = uint64(valacctypes.GetCurrentTimeStamp())
-		//copy(bve.MDRoot.Bytes(), mdroot)
-		//
-
 		dbvc := validator.ResponseValidateTX{}
 		dbvc.Submissions = make([]*pb.Submission, 1)
 		dbvc.Submissions[0] = &pb.Submission{}
 		dbvc.Submissions[0].Instruction = 0
 		chainAdi := "dbvc"
 		chainId := types.GetChainIdFromChainPath(&chainAdi)
-		//chainaddr, _ := smt.BytesUint64(chainid)
 		dbvc.Submissions[0].Identitychain = chainId[:] //1 is the chain id of the DBVC
 		dbvc.Submissions[0].Chainid = chainId[:]
 
@@ -673,7 +664,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 
 	//save the state
 	app.state.Size += app.txct
-	app.state.AppHash = mdroot
+	app.state.AppHash = mdRoot
 	app.state.Height++
 	//saveState(app.state)
 
@@ -722,8 +713,16 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
+
+	fmt.Printf("query %s", q.ChainUrl)
 	//extract the state for the chain id
-	chainState, err := app.mmdb.GetPersistentEntry(q.ChainId, false)
+	chainState, err := app.mmdb.GetCurrentEntry(q.ChainId)
+	if err != nil {
+		resQuery.Info = fmt.Sprintf("chain id query, %v", err)
+		resQuery.Code = code.CodeTypeUnauthorized
+		return resQuery
+	}
+
 	chainHeader := state.Chain{}
 	err = chainHeader.UnmarshalBinary(chainState.Entry)
 	if err != nil {
@@ -731,15 +730,10 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
-	//
-	//switch q.Ins {
-	//case pb.AccInstruction_Token_Transaction:
-	//	txid := q.Query
-	//	fmt.Printf("txid : %v\n", txid)
-	//case pb.
-	//}
-
-	// app.chainval[chainHeader.Type[:]].Query(q, chainState.Entry)
+	//if we get here, we have a valid state object, so let's return it.
+	resQuery.Code = code.CodeTypeOK
+	//return a generic state object for the chain and let the query deal with decoding it
+	resQuery.Value = chainState.Entry
 
 	fmt.Printf("Query URI: %s", q.Query)
 
@@ -747,29 +741,6 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 	///1 get current height
 	///2 get block data for height X
 	///3 get block data for given hash
-
-	/*
-		err := app.db.View(func(txn *badger.Txn) error {
-			item, err := txn.Get(reqQuery.Data)
-			if err != nil && err != badger.ErrKeyNotFound {
-				return err
-			}
-			if err == badger.ErrKeyNotFound {
-				resQuery.Log = "does not exist"
-			} else {
-				return item.Value(func(val []byte) error {
-					resQuery.Log = "exists"
-					resQuery.Value = val
-					return nil
-				})
-			}
-			return nil
-		})
-		if err != nil {
-			panic(err)
-		}
-
-	*/
 	return
 }
 
