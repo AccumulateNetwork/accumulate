@@ -152,18 +152,18 @@ type AccumulatorVMApplication struct {
 }
 
 func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
-	name := "kvstore"
-	db, err := dbm.NewGoLevelDB(name, WorkingDir)
-	if err != nil {
-		panic(err)
-	}
-
-	tmstate := loadState(db)
+	//name := "kvstore"
+	//db, err := dbm.NewGoLevelDB(name, WorkingDir)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//
+	//tmstate := loadState(db)
 
 	app := AccumulatorVMApplication{
 		//router: new(router2.Router),
 		RetainBlocks: 1, //only retain current block, we will manage our own tmstate
-		state:        tmstate,
+		//state:        tmstate,
 	}
 	_ = app.Initialize(ConfigFile, WorkingDir)
 
@@ -245,13 +245,13 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	//defer conn.Close()
 	app.RouterClient = pb.NewApiServiceClient(conn)
 
-	name := "blockstate"
-	db, err := dbm.NewGoLevelDB(name, WorkingDir)
-	if err != nil {
-		panic(err)
-	}
+	//name := "blockstate"
+	//db, err := dbm.NewGoLevelDB(name, WorkingDir)
+	//if err != nil {
+	//	panic(err)
+	//}
 
-	app.state = loadState(db)
+	//app.state = loadState(db)
 
 	str := "ValTypeReg"
 	fmt.Printf("Creating %s\n", str)
@@ -298,7 +298,6 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 
 	//Temporary work around for chicken / egg problem at genesis block
 	//we could use admin chains go get around this
-	app.createBootstrapAccount()
 
 	for _, v := range req.Validators {
 		r := app.updateValidator(v)
@@ -322,7 +321,8 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 	}
 
 	is := state.NewIdentityState(adi)
-	is.SetKeyData(state.KeyTypePublic, app.Key.PubKey.Bytes())
+	keyHash := sha256.Sum256(app.Key.PubKey.Bytes())
+	is.SetKeyData(state.KeyTypeSha256, keyHash[:])
 	idStateData, err := is.MarshalBinary()
 	if err != nil {
 		panic(err)
@@ -366,6 +366,9 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 	//app.currentBatch = app.db.NewTransaction(true)
 	//app.Height = req.Header.Height
 	// reset valset changes
+	if req.GetHeader().Height == 2 {
+		app.createBootstrapAccount()
+	}
 	app.timer = time.Now()
 
 	fmt.Printf("Begin Block %d on shard %s\n", req.Header.Height, req.Header.ChainID)
@@ -672,7 +675,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	app.state.Size += app.txct
 	app.state.AppHash = mdroot
 	app.state.Height++
-	saveState(app.state)
+	//saveState(app.state)
 
 	duration := time.Since(app.timer)
 	fmt.Printf("TPS: %d in %f for %f\n", app.txct, duration.Seconds(), float64(app.txct)/duration.Seconds())
@@ -807,7 +810,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 
 	//sk := ed25519.PrivateKey{}
 
-	app.Key = pv.Key //.PrivKey
+	app.Key = pv.Key
 	app.Address = make([]byte, len(pv.Key.PubKey.Address()))
 	copy(app.Address, pv.Key.PubKey.Address())
 
@@ -854,13 +857,11 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		fmt.Println("Tendermint Stopped")
 	}()
 
-	//time.Sleep(10000*time.Millisecond)
 	if node.IsListening() {
 		fmt.Print("node is listening")
 	}
 	app.waitgroup.Done()
 	node.Wait()
-
 	return node, nil
 }
 
