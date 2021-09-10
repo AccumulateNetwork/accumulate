@@ -3,15 +3,16 @@ package synthetic
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"math/big"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type TokenTransactionDeposit struct {
 	Header
-	DepositAmount big.Int          `json:"amount"` //amount
-	TokenUrl      types.String     `json:"tokenUrl"`
-	Metadata      *json.RawMessage `json:"metadata,omitempty"`
+	DepositAmount big.Int          `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
+	TokenUrl      types.String     `json:"tokenURL" form:"tokenURL" query:"tokenURL" validate:"required,uri"`
+	Metadata      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
 const tokenTransactionDepositMinLen = HeaderLen + 32 + 32 + 32
