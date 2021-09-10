@@ -55,14 +55,11 @@ func (v *AdiChain) BeginBlock(height int64, time *time.Time) error {
 func (v *AdiChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
 	sig types.Bytes, adiState *state.AdiState) error {
 
-	//if sub.GetInstruction()&0xFF00 > 0 {
-	//need to verify the sender is a legit bvc validator also need the dbvc receipt
-	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
-	//not an impostor. Need to figure out how to do this. Right now we just assume the syth request
-	//sender is legit.
-	//}
-	keyHash := sha256.Sum256(key.Bytes())
-	if !adiState.VerifyKey(keyHash[:]) {
+	//if this is a synthtic transaction, we need to verify the sender is a legit bvc validator by checkit
+	//the dbvc receipt fpr the synth tx. This would be the appropriate place to this.
+
+	//verify the key is valid against what is stored with the identity.
+	if !adiState.VerifyKey(key) {
 		return fmt.Errorf("key cannot be verified with adi key hash")
 	}
 
@@ -94,8 +91,10 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 
 	err = v.VerifySignatures(ledger, submission.Key, submission.Signature, &adiState)
 
-	//fix this
-	panic(err)
+	if err != nil {
+		return nil, fmt.Errorf("error validating the sponsor identity key, %v", err)
+	}
+
 	ic := api.ADI{}
 	err = json.Unmarshal(submission.Data, &ic)
 	if err != nil {

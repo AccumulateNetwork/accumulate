@@ -2,13 +2,14 @@ package synthetic
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type Header struct {
-	Txid           types.Bytes32 `json:"txid"`
-	SourceAdiChain types.Bytes32 `json:"sourceAdiChain"`
-	SourceChainId  types.Bytes32 `json:"sourceChainId"`
+	Txid           types.Bytes32 `json:"txid" form:"txid" query:"txid" validate:"required"`
+	SourceAdiChain types.Bytes32 `json:"from" form:"from" query:"from" validate:"required"`
+	SourceChainId  types.Bytes32 `json:"fromChainId,omitempty" form:"fromChainId" query:"fromChainId" validate:"required"`
 }
 
 const HeaderLen = 32 * 3

@@ -142,6 +142,8 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		return nil, fmt.Errorf("transaction time of validity has elapesd by %f seconds", duration.Seconds()-60)
 	}
 
+	txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp))
+
 	ret := ResponseValidateTX{}
 	ret.Submissions = make([]*pb.Submission, len(tx.To)+1)
 
@@ -179,7 +181,6 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		sub.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 
 		depositTx := synthetic.NewTokenTransactionDeposit()
-		txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp))
 		err = depositTx.SetDeposit(txid[:], amt)
 		if err != nil {
 			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction")
@@ -191,6 +192,11 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		}
 
 		err = depositTx.SetSenderInfo(submission.Identitychain, submission.Chainid)
+		if err != nil {
+			return nil, fmt.Errorf("unable to set sender info for synthetic token deposit transaction")
+		}
+
+		sub.Data, err = depositTx.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("unable to set sender info for synthetic token deposit transaction")
 		}

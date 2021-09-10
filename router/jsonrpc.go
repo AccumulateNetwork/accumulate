@@ -8,6 +8,11 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	"github.com/FactomProject/factomd/common/primitives/random"
 
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
@@ -49,6 +54,7 @@ func StartAPI(port int, q *Query) *API {
 		"token-account-create": api.createTokenAccount,
 		"token-tx":             api.getTokenTx,
 		"token-tx-create":      api.createTokenTx,
+		"faucet":               api.faucet,
 	}
 
 	apiHandler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
@@ -399,6 +405,65 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 
 	//This client connects us to the router, the router will send the message to the correct BVC network
 	resp, err := api.client.ProcessTx(context.Background(), submission)
+	if err != nil {
+		return NewAccumulateError(err)
+	}
+
+	//Need to decide what the appropriate response should be.
+	return resp
+}
+
+// createTokenTx creates Token Tx
+func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &acmeapi.APIRequestRaw{}
+	data := &synthetic.TokenTransactionDeposit{}
+
+	// unmarshal req
+	if err = json.Unmarshal(params, &req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// validate request
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// parse req.tx.data
+	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// validate request data
+	if err = api.validate.Struct(data); err != nil {
+		return NewValidatorError(err)
+	}
+
+	copy(data.Txid[:], random.RandByteSliceOfLen(32))
+
+	mData, err := data.MarshalBinary()
+	kpSponsor := types.CreateKeyPair()
+	sig, err := kpSponsor.Sign(mData)
+
+	//back dooring a synthetic deposit (this won't after testnet)
+
+	// Tendermint integration here
+	builder := proto.SubmissionBuilder{}
+	sub, err := builder.
+		Instruction(proto.AccInstruction_Synthetic_Token_Deposit).
+		Data(mData).
+		PubKey(kpSponsor.PubKey().Bytes()).
+		Timestamp(time.Now().Unix()).
+		AdiUrl(types.GenerateAcmeAddress(kpSponsor.PubKey().Bytes())).
+		Signature(sig).
+		Build()
+	if err != nil {
+		return NewSubmissionError(err)
+	}
+
+	//This client connects us to the router, the router will send the message to the correct BVC network
+	resp, err := api.client.ProcessTx(context.Background(), sub)
 	if err != nil {
 		return NewAccumulateError(err)
 	}

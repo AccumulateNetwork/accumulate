@@ -63,7 +63,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 
 	//unmarshal the synthetic transaction based upon submission
 	deposit := synthetic.TokenTransactionDeposit{}
-	err := json.Unmarshal(submission.Data, &deposit)
+	err := deposit.UnmarshalBinary(submission.Data)
 	if err != nil {
 		return err
 	}
