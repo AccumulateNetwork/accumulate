@@ -455,7 +455,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 		Data(mData).
 		PubKey(kpSponsor.PubKey().Bytes()).
 		Timestamp(time.Now().Unix()).
-		AdiUrl(types.GenerateAcmeAddress(kpSponsor.PubKey().Bytes())).
+		AdiUrl(*data.Header.ToUrl.AsString()).
 		Signature(sig).
 		Build()
 	if err != nil {

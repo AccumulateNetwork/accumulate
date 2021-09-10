@@ -165,7 +165,8 @@ func (s *Bytes) UnmarshalBinary(data []byte) error {
 	if len(data) < int(slen)+l {
 		return fmt.Errorf("insufficient data to unmarshal")
 	}
-	*s = data[l : int(slen)+l]
+	ds := data[l : int(slen)+l]
+	*s = ds
 	return nil
 }
 
@@ -176,6 +177,7 @@ func (s *Bytes) Size(varintbuf *[8]byte) int {
 	}
 	l := int64(len(*s))
 	i := binary.PutVarint(buf[:], l)
+
 	return i + int(l)
 }
 
@@ -332,6 +334,10 @@ type Amount struct {
 
 func (a *Amount) AsBigInt() *big.Int {
 	return &a.Int
+}
+
+func (a *Amount) Size() int {
+	return len(a.Int.Bytes()) + 1
 }
 
 func (a *Amount) MarshalBinary() ([]byte, error) {

@@ -3,19 +3,19 @@ package synthetic
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 func TestNewAdiStateCreate(t *testing.T) {
 	kp := types.CreateKeyPair()
 	pubKeyHash := types.Bytes32(sha256.Sum256(kp.PubKey().Bytes()))
-	adi := "redwagon"
-	adiStateCreate := NewAdiStateCreate(adi, &pubKeyHash)
+	fromAdi := types.String("greenrock")
+	toAdi := types.String("redwagon")
 
-	adiStateCreate.Txid = types.Bytes32(sha256.Sum256([]byte("sometxid")))
-	adiStateCreate.SourceAdiChain = types.Bytes32(sha256.Sum256([]byte("greenrock")))
-	adiStateCreate.SourceChainId = types.Bytes32(sha256.Sum256([]byte("greenrock/somesource")))
+	txid := types.Bytes32(sha256.Sum256([]byte("sometxid")))
+	adiStateCreate := NewAdiStateCreate(txid[:], &fromAdi, &toAdi, &pubKeyHash)
 
 	data, err := json.Marshal(adiStateCreate)
 	if err != nil {

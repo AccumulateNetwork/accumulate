@@ -185,11 +185,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		return err
 	}
 
-	keyHash := sha256.Sum256(submission.Key)
-	checkSum := sha256.Sum256(keyHash[:20])
-	addrBytes := append(keyHash[:20], checkSum[:4]...)
-	//generate the address from the key hash.
-	address := fmt.Sprintf("0x%x", addrBytes)
+	address := types.GenerateAcmeAddress(submission.Key)
 
 	if address != string(chainHeader.ChainUrl) {
 		return fmt.Errorf("invalid address, public key address is %s but account %s ", address, chainHeader.ChainUrl)
@@ -251,21 +247,16 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		//set the transaction instruction type to a synthetic token deposit
 		sub.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 
-		depositTx := synthetic.NewTokenTransactionDeposit()
 		txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp))
-		err = depositTx.SetDeposit(txid[:], amt)
+		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &tokenTx.From.String, &val.URL.String)
+		err = depositTx.SetDeposit(&tokenAccountState.ChainUrl, amt)
 		if err != nil {
 			return fmt.Errorf("unable to set deposit for synthetic token deposit transaction, %v", err)
 		}
 
-		err = depositTx.SetTokenInfo(tokenAccountState.GetChainUrl())
+		sub.Data, err = depositTx.MarshalBinary()
 		if err != nil {
-			return fmt.Errorf("unable to set token information for synthetic token deposit transaction, %v", err)
-		}
-
-		err = depositTx.SetSenderInfo(submission.Identitychain, submission.Chainid)
-		if err != nil {
-			return fmt.Errorf("unable to set sender info for synthetic token deposit transaction, %v", err)
+			return fmt.Errorf("unable to marshal synthetic token transaction deposit, %v", err)
 		}
 	}
 
