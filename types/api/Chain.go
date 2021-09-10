@@ -2,6 +2,8 @@ package api
 
 import (
 	"crypto/sha256"
+	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -52,6 +54,37 @@ var ChainTypeSpecMap = map[types.Bytes32]string{
 // Chain will define a new chain to be registered. It will be initialized to the default state
 // as defined by validator referenced by the ChainType
 type Chain struct {
-	URL       types.String `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	ChainType ChainType    `json:"chainType" form:"chainType" query:"chainType" validate:"required"`
+	URL       types.String `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+}
+
+func (c *Chain) Size() int {
+	return 32 + c.URL.Size(nil)
+}
+
+func (c *Chain) MarshalBinary() ([]byte, error) {
+	idn, err := c.URL.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	data := make([]byte, len(idn)+32)
+	i := copy(data[:], c.ChainType[:])
+	copy(data[i:], idn)
+	return data, nil
+}
+
+func (c *Chain) UnmarshalBinary(data []byte) error {
+
+	if len(data) < 33 {
+		return fmt.Errorf("insufficient data to decode chain header")
+	}
+	copy(c.ChainType[:], data[32:])
+
+	err := c.URL.UnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

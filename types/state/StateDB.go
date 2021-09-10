@@ -119,6 +119,7 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 // GetCurrentEntry retrieves the current state object from the database based upon chainId.  Current state either comes
 // from a previously saves state for the current block, or it is from the database
 func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
+
 	if chainId == nil {
 		return nil, fmt.Errorf("chain id is invalid, thus unable to retrieve current entry")
 	}
@@ -132,6 +133,7 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 		//pull current state from the database.
 		ret, err = sdb.GetPersistentEntry(chainId, false)
 		if err != nil {
+
 			return nil, fmt.Errorf("no current state is defined, %v", err)
 		}
 	}
@@ -166,6 +168,7 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 
 	////The Entry is the State object derived from the transaction
 	mms.stateEntry.Entry = entry
+
 	return nil
 }
 
@@ -173,8 +176,12 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 	//build a list of keys from the map
 
-	sdb.mm.SetBlockIndex(blockHeight)
-	keys := make([]managed.Hash, 0, len(sdb.mms))
+	currentStateCount := len(sdb.mms)
+	if currentStateCount > 0 {
+		//only attempt to record the block if we have any data.
+		sdb.mm.SetBlockIndex(blockHeight)
+	}
+	keys := make([]managed.Hash, 0, currentStateCount)
 	for chainId := range sdb.mms {
 		keys = append(keys, chainId)
 	}
