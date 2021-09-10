@@ -3,13 +3,14 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	proto1 "github.com/golang/protobuf/proto"
-	"github.com/tendermint/tendermint/abci/client"
+	abcicli "github.com/tendermint/tendermint/abci/client"
 	tmtypes "github.com/tendermint/tendermint/abci/types"
 )
 
@@ -124,21 +125,28 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (interface{}, error) {
 	}
 
 	//this QuerySync call is only temporary until we get router setup.
-	//qResp, err := q.client.QuerySync(req)
+	qResp, err := q.client.QuerySync(req)
 	//
-	//if err != nil {
-	//	return nil, fmt.Errorf("bvc token query returned error, %v", err)
-	//}
-
-	//unpack the response
-	tokResp := response.TokenAccount{}
-	//err = tokResp.UnmarshalBinary(qResp.Value)
-
 	if err != nil {
-		return nil, fmt.Errorf("cannot extract token information")
+		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return tokResp, err
+	var ret interface{}
+	ret = qResp
+	if qResp.Code == 0 {
+
+		//unpack the response
+		tokResp := response.TokenAccount{}
+
+		err = json.Unmarshal(qResp.Value, &tokResp)
+
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract token information")
+		}
+		ret = tokResp
+	}
+
+	return ret, err
 }
 
 func (q *Query) GetTokenTx(tokenAccountUrl *string, txid []byte) (resp interface{}, err error) {
