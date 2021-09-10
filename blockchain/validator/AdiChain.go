@@ -89,6 +89,8 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 
 	ledger := types.MarshalBinaryLedgerChainId(submission.Identitychain, submission.Data, submission.Timestamp)
 
+	txid := sha256.Sum256(ledger)
+
 	err = v.VerifySignatures(ledger, submission.Key, submission.Signature, &adiState)
 
 	if err != nil {
@@ -101,12 +103,8 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
-	isc := synthetic.NewAdiStateCreate(string(ic.URL), &ic.PublicKeyHash)
+	isc := synthetic.NewAdiStateCreate(txid[:], &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
 
-	txid := sha256.Sum256(ledger)
-	copy(isc.Txid[:], txid[:])
-	copy(isc.SourceAdiChain[:], submission.Identitychain)
-	copy(isc.SourceChainId[:], submission.Chainid)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +123,7 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 	resp.Submissions[0], err = builder.
 		Type(v.GetValidatorChainTypeId()).
 		Instruction(pb.AccInstruction_Synthetic_Identity_Creation).
-		AdiUrl(string(isc.URL)).
+		AdiUrl(*isc.ToUrl.AsString()).
 		Data(iscData).
 		Timestamp(time.Now().Unix()).
 		BuildUnsigned()

@@ -44,7 +44,7 @@ func (v *SyntheticTransactionDepositValidator) BeginBlock(height int64, time *ti
 
 func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) (*state.AdiState, *state.TokenAccount, *synthetic.TokenTransactionDeposit, error) {
 
-	ttd := synthetic.NewTokenTransactionDeposit()
+	ttd := &synthetic.TokenTransactionDeposit{}
 	err := ttd.UnmarshalBinary(data)
 
 	if err != nil {
@@ -79,14 +79,13 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Sub
 	retsub.Submissions = make([]*pb.Submission, 1)
 	retsub.Submissions[0] = &pb.Submission{}
 	rs := retsub.Submissions[0]
-	rs.Identitychain = ttd.SourceAdiChain[:]
-	rs.Chainid = ttd.SourceChainId[:]
+	senderIdChain := types.GetIdentityChainFromIdentity(ttd.FromUrl.AsString())
+	senderAccountChain := types.GetChainIdFromChainPath(ttd.FromUrl.AsString())
+	rs.Identitychain = senderIdChain.Bytes()
+	rs.Chainid = senderAccountChain.Bytes()
 	rs.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 	//this will reverse the deposit and send it back to the sender.
-	retdep := synthetic.TokenTransactionDeposit{}
-	copy(retdep.Txid[:], ttd.Txid[:])
-	copy(retdep.SourceAdiChain[:], submission.Identitychain)
-	copy(retdep.SourceChainId[:], submission.Chainid)
+	retdep := synthetic.NewTokenTransactionDeposit(ttd.Txid[:], &ttd.ToUrl, &ttd.FromUrl)
 	retdep.TokenUrl = ttd.TokenUrl
 	err := retdep.Metadata.UnmarshalJSON([]byte("{\"deposit failed\"}"))
 	if err != nil {

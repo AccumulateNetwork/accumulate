@@ -180,20 +180,10 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		//set the transaction instruction type to a synthetic token deposit
 		sub.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 
-		depositTx := synthetic.NewTokenTransactionDeposit()
-		err = depositTx.SetDeposit(txid[:], amt)
+		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &tas.ChainUrl, &val.URL.String)
+		err = depositTx.SetDeposit(&tas.TokenUrl.String, amt)
 		if err != nil {
 			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction")
-		}
-
-		err = depositTx.SetTokenInfo(tas.GetChainUrl())
-		if err != nil {
-			return nil, fmt.Errorf("unable to set token information for synthetic token deposit transaction")
-		}
-
-		err = depositTx.SetSenderInfo(submission.Identitychain, submission.Chainid)
-		if err != nil {
-			return nil, fmt.Errorf("unable to set sender info for synthetic token deposit transaction")
 		}
 
 		sub.Data, err = depositTx.MarshalBinary()

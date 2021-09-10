@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -9,7 +10,7 @@ import (
 // all chain paths following the ADI domain will be ignored
 type ADI struct {
 	URL           types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"` //",hexadecimal"`
+	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 }
 
 func NewADI(name *string, keyHash *types.Bytes32) *ADI {
