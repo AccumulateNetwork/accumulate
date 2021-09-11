@@ -131,19 +131,29 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (interface{}, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	var ret interface{}
-	ret = qResp
+	ret := acmeapi.APIDataResponse{}
+	ret.Type = "tokenAccount"
+
 	if qResp.Code == 0 {
 
-		//unpack the response
-		tokResp := response.TokenAccount{}
+		//unpack the state object returned from the query
+		tokState := &state.TokenAccount{}
+		err = tokState.UnmarshalBinary(qResp.Value)
 
-		err = json.Unmarshal(qResp.Value, &tokResp)
-
+		ta := acmeapi.NewTokenAccount(tokState.ChainUrl, tokState.TokenUrl.String)
+		tokResp := response.NewTokenAccount(ta, tokState.GetBalance())
+		//package the response data into json
+		var data json.RawMessage
+		data, err = json.Marshal(tokResp)
 		if err != nil {
 			return nil, fmt.Errorf("cannot extract token information")
 		}
-		ret = tokResp
+
+		ret.Data = &data
+	} else {
+		var data json.RawMessage
+		data, err = json.Marshal(qResp.Value)
+		ret.Data = &data
 	}
 
 	return ret, err

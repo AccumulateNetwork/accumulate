@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -19,10 +20,14 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+//
+//func sendFaucetTokenDeposit(client, address) {
+//
+//}
+
 func TestJsonRpcAnonToken(t *testing.T) {
 
-	kpNewAdi := types.CreateKeyPair()
-	_ = kpNewAdi
+	_, kpNewAdi, _ := ed25519.GenerateKey(nil)
 
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
@@ -43,13 +48,14 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	jsonapi := API{RandPort(), validator.New(), client, query}
 	_ = jsonapi
 
-	kpSponsor := types.CreateKeyPairFromSeed(vm.Key.PrivKey.Bytes())
+	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	kpSponsor := ed25519.NewKeyFromSeed(vm.Key.PrivKey.Bytes()[:32])
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	adiSponsor := types.String(types.GenerateAcmeAddress(kpSponsor.PubKey().Bytes()))
+	adiSponsor := types.String(types.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	//set destination url address
-	destAddress := types.String(types.GenerateAcmeAddress(kpNewAdi.PubKey().Bytes()))
+	destAddress := types.String(types.GenerateAcmeAddress(kpNewAdi.Public().(ed25519.PublicKey)))
 
 	txid := sha256.Sum256([]byte("txid"))
 
@@ -61,7 +67,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	deposit.TokenUrl = tokenUrl
 
 	data, err := deposit.MarshalBinary()
-	sig, err := kpSponsor.Sign(data)
+	sig := ed25519.Sign(kpSponsor, data)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +76,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	sub, err := builder.
 		Instruction(proto.AccInstruction_Synthetic_Token_Deposit).
 		Data(data).
-		PubKey(kpSponsor.PubKey().Bytes()).
+		PubKey(types.Bytes(kpSponsor.Public().(ed25519.PublicKey))).
 		Timestamp(time.Now().Unix()).
 		AdiUrl(*destAddress.AsString()).
 		Signature(sig).
@@ -125,7 +131,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//}
 	//
 	////now we can send in json rpc calls.
-	//ret := jsonapi.createADI(context.Background(), jsonReq)
+	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 }
 
