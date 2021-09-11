@@ -2,6 +2,7 @@ package router
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -18,6 +19,10 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/go-playground/validator/v10"
 )
+
+func sendFaucetTokenDeposit(client, address) {
+
+}
 
 func TestJsonRpcAnonToken(t *testing.T) {
 
@@ -43,10 +48,11 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	jsonapi := API{RandPort(), validator.New(), client, query}
 	_ = jsonapi
 
-	kpSponsor := types.CreateKeyPairFromSeed(vm.Key.PrivKey.Bytes())
+	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	kpSponsor := ed25519.NewKeyFromSeed(vm.Key.PrivKey.Bytes()[:32])
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	adiSponsor := types.String(types.GenerateAcmeAddress(kpSponsor.PubKey().Bytes()))
+	adiSponsor := types.String(types.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	//set destination url address
 	destAddress := types.String(types.GenerateAcmeAddress(kpNewAdi.PubKey().Bytes()))
@@ -125,7 +131,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//}
 	//
 	////now we can send in json rpc calls.
-	//ret := jsonapi.createADI(context.Background(), jsonReq)
+	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 }
 
