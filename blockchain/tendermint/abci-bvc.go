@@ -277,7 +277,7 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 
 // InitChain /ABCI call
 func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
-	fmt.Printf("Initalizing Accumulator Router\n")
+	fmt.Printf("Initializing Accumulator Router\n")
 
 	//this is more like network ID for us...  so perhaps should simply be number 1 to N
 	///in theory these can be used to host the administration chains.
@@ -293,9 +293,6 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	var networkid [32]byte
 	networkid[31] = 1
 	app.ChainId = networkid
-
-	//for testnet...
-	app.createBootstrapAccount()
 
 	////commits will be stored here and key'ed via entry hash.
 
@@ -366,9 +363,11 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
 //Here we create a batch, which will store block's transactions.
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	//app.currentBatch = app.db.NewTransaction(true)
-	//app.Height = req.Header.Height
-	// reset valset changes
+
+	if req.Header.Height == 2 {
+		//for testnet...
+		//app.createBootstrapAccount()
+	}
 
 	app.timer = time.Now()
 
