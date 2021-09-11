@@ -34,7 +34,7 @@ type AdiState struct {
 // NewIdentityState this will eventually be the key groups and potentially just a multi-map of types to chain paths controlled by the identity
 func NewIdentityState(adi string) *AdiState {
 	r := &AdiState{}
-	r.SetHeader(types.UrlChain(adi), api.ChainTypeAdi[:])
+	r.SetHeader(types.String(adi), api.ChainTypeAdi[:])
 	return r
 }
 
@@ -95,7 +95,7 @@ func (is *AdiState) GetKeyData() (KeyType, types.Bytes) {
 }
 
 func (is *AdiState) GetIdentityChainId() types.Bytes {
-	h := types.GetIdentityChainFromIdentity(is.GetChainUrl())
+	h := types.GetIdentityChainFromIdentity(is.ChainUrl.AsString())
 	if h == nil {
 		return types.Bytes{}
 	}
@@ -125,8 +125,8 @@ func (is *AdiState) MarshalBinary() ([]byte, error) {
 
 func (is *AdiState) UnmarshalBinary(data []byte) error {
 
-	dlen := len(data)
-	if dlen == 0 {
+	dLen := len(data)
+	if dLen == 0 {
 		return fmt.Errorf("cannot unmarshal Identity State, insuffient data")
 	}
 	i := 0
@@ -140,7 +140,7 @@ func (is *AdiState) UnmarshalBinary(data []byte) error {
 
 	is.KeyType = KeyType(data[i])
 	i++
-	if dlen <= i {
+	if dLen <= i {
 		return fmt.Errorf("cannot unmarshal key type for AdiState, insuffient data")
 	}
 

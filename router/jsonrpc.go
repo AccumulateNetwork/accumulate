@@ -8,8 +8,12 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	"github.com/FactomProject/factomd/common/primitives/random"
+
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 
@@ -21,18 +25,19 @@ import (
 type API struct {
 	port     int
 	validate *validator.Validate
-	client   proto.ApiServiceClient // Replace this with a dispatcher that contains clients to each BVC
+	client   proto.ApiServiceClient
+	query    *Query
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(port int, client proto.ApiServiceClient) *API {
+func StartAPI(port int, q *Query) *API {
 
 	fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
 	api := &API{}
 	api.port = port
 	api.validate = validator.New()
-	api.client = client
+	api.query = q
 
 	methods := jsonrpc2.MethodMap{
 		// URL
@@ -49,6 +54,7 @@ func StartAPI(port int, client proto.ApiServiceClient) *API {
 		"token-account-create": api.createTokenAccount,
 		"token-tx":             api.getTokenTx,
 		"token-tx-create":      api.createTokenTx,
+		"faucet":               api.faucet,
 	}
 
 	apiHandler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
@@ -185,10 +191,12 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 		return NewValidatorError(err)
 	}
 
-	resp := &Token{}
-	resp.URL = req.URL
+	//query tendermint
+	resp, err := api.query.GetToken(req.URL.AsString())
 
-	// Tendermint integration here
+	if err != nil {
+		return NewAccumulateError(err)
+	}
 
 	return resp
 
@@ -265,12 +273,13 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 		return NewValidatorError(err)
 	}
 
-	resp := &TokenAccount{}
-	resp.URL = req.URL
-
 	// Tendermint integration here
+	taResp, err := api.query.GetTokenAccount(req.URL.AsString())
+	if err != nil {
+		return NewValidatorError(err)
+	}
 
-	return resp
+	return taResp
 
 }
 
@@ -343,20 +352,12 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	}
 
 	// Tendermint's integration here
-	// need to know the ADI and ChainID, deriving adi and chain id from TokenTx.From
-	q := proto.Query{}
-	q.ChainUrl = string(req.From)
-	adichain := types.GetIdentityChainFromIdentity(q.ChainUrl)
-	chainId := types.GetChainIdFromChainPath(q.ChainUrl)
-	q.AdiChain = adichain.Bytes()
-	q.ChainId = chainId.Bytes()
-	q.Ins = proto.AccInstruction_Token_Transaction
-	q.Query = req.Hash.Bytes()
+	resp, err := api.query.GetTokenTx(req.From.AsString(), req.Hash[:])
+	if err != nil {
+		return NewValidatorError(err)
+	}
 
-	//this is only temporary until we get router setup. This is slow
-	qresp, err := api.client.ProcessQuery(context.Background(), &q)
-
-	return qresp
+	return resp
 }
 
 // createTokenTx creates Token Tx
@@ -404,6 +405,65 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 
 	//This client connects us to the router, the router will send the message to the correct BVC network
 	resp, err := api.client.ProcessTx(context.Background(), submission)
+	if err != nil {
+		return NewAccumulateError(err)
+	}
+
+	//Need to decide what the appropriate response should be.
+	return resp
+}
+
+// createTokenTx creates Token Tx
+func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &acmeapi.APIRequestRaw{}
+	data := &synthetic.TokenTransactionDeposit{}
+
+	// unmarshal req
+	if err = json.Unmarshal(params, &req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// validate request
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// parse req.tx.data
+	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// validate request data
+	if err = api.validate.Struct(data); err != nil {
+		return NewValidatorError(err)
+	}
+
+	copy(data.Txid[:], random.RandByteSliceOfLen(32))
+
+	mData, err := data.MarshalBinary()
+	kpSponsor := types.CreateKeyPair()
+	sig, err := kpSponsor.Sign(mData)
+
+	//back dooring a synthetic deposit (this won't after testnet)
+
+	// Tendermint integration here
+	builder := proto.SubmissionBuilder{}
+	sub, err := builder.
+		Instruction(proto.AccInstruction_Synthetic_Token_Deposit).
+		Data(mData).
+		PubKey(kpSponsor.PubKey().Bytes()).
+		Timestamp(time.Now().Unix()).
+		AdiUrl(*data.Header.ToUrl.AsString()).
+		Signature(sig).
+		Build()
+	if err != nil {
+		return NewSubmissionError(err)
+	}
+
+	//This client connects us to the router, the router will send the message to the correct BVC network
+	resp, err := api.client.ProcessTx(context.Background(), sub)
 	if err != nil {
 		return NewAccumulateError(err)
 	}

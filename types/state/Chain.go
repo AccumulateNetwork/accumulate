@@ -3,25 +3,27 @@ package state
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 //Chain information for the state object.  Each state object will contain a header
 //that will consist of the chain type enumerator
 type Chain struct {
+	Entry
 	ChainUrl types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	Type     types.Bytes32 `json:"type" form:"type" query:"type" validate:"required"`
 }
 
-func NewChain(chainUrl types.UrlChain, chainType types.Bytes) *Chain {
+func NewChain(chainUrl types.String, chainType types.Bytes) *Chain {
 	chain := &Chain{}
 	chain.SetHeader(chainUrl, chainType)
 	return chain
 }
 
 //SetHeader sets the data for a chain header
-func (h *Chain) SetHeader(chainUrl types.UrlChain, chainType types.Bytes) {
-	h.ChainUrl = types.String(chainUrl)
+func (h *Chain) SetHeader(chainUrl types.String, chainType types.Bytes) {
+	h.ChainUrl = chainUrl
 	copy(h.Type[:], chainType)
 }
 
@@ -37,7 +39,7 @@ func (h *Chain) GetType() *types.Bytes32 {
 
 //GetAdiChainPath returns the url to the chain of this object
 func (h *Chain) GetChainUrl() string {
-	return string(h.ChainUrl)
+	return *h.ChainUrl.AsString()
 }
 
 //MarshalBinary serializes the header

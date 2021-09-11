@@ -5,14 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"math/big"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	cfg "github.com/tendermint/tendermint/config"
-	"math/big"
-	"time"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 type AnonTokenChain struct {
@@ -28,7 +30,7 @@ func NewAnonTokenChain() *AnonTokenChain {
 	return &v
 }
 
-func (v *AnonTokenChain) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *AnonTokenChain) Check(currentState *state.StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) error {
 	//
 	//var err error
 	//resp := &ResponseValidateTX{}
@@ -61,28 +63,37 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 
 	//unmarshal the synthetic transaction based upon submission
 	deposit := synthetic.TokenTransactionDeposit{}
-	err := json.Unmarshal(submission.Data, &deposit)
+	err := deposit.UnmarshalBinary(submission.Data)
 	if err != nil {
 		return err
 	}
 
 	//derive the chain for the token account
-	adi, _, err := types.ParseIdentityChainPath(submission.AdiChainPath)
+	adi, _, err := types.ParseIdentityChainPath(&submission.AdiChainPath)
 	if err != nil {
 		return err
 	}
 
 	//First GetOrCreateAdiChain
-	adiChain := types.GetIdentityChainFromIdentity(adi)
-	adiStateData, err := currentState.DB.GetStateObject(adiChain[:], false)
+	adiChain := types.GetIdentityChainFromIdentity(&adi)
+
+	//get the state data for the identity.  If no identity is returned we create one, so don't worry about any error in the GetCurrentEntry
+	adiStateData, _ := currentState.DB.GetCurrentEntry(adiChain[:])
 
 	//now check if the anonymous chain already exists.
 	//adiStateData := currentState.IdentityState
 	chainState := state.Chain{}
-	if adiStateData != nil {
-		if adiStateData.Entry == nil {
-			return fmt.Errorf("malformed anonymous token chain, no state entry for %s", adi)
+
+	if adiStateData == nil {
+		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
+		chainState.SetHeader(types.String(adi), api.ChainTypeAnonTokenAccount[:])
+		//need to flag this as an anonymous account
+		data, err := chainState.MarshalBinary()
+		if err != nil {
+			return nil
 		}
+		resp.AddStateData(types.GetChainIdFromChainPath(&adi), data)
+	} else {
 		err := chainState.UnmarshalBinary(adiStateData.Entry)
 		if err != nil {
 			return err
@@ -91,25 +102,16 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 			return fmt.Errorf("adi for an anoymous chain is not an anonymous account")
 		}
 		//we have an adi state, so now compare the key and validation
-	} else {
-		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
-		chainState.SetHeader(types.UrlChain(adi), api.ChainTypeAnonTokenAccount[:])
-		//need to flag this as an anonymous account
-		data, err := chainState.MarshalBinary()
-		if err != nil {
-			return nil
-		}
-		resp.AddStateData(types.GetChainIdFromChainPath(adi), data)
 	}
 
 	//Next GetOrCreateTokenAccount
 	//the ADI is the Address, so now form the chain from the token type
 	url := fmt.Sprintf("%s/%s", adi, deposit.TokenUrl)
-	tokenChain := types.GetChainIdFromChainPath(url)
+	tokenChain := types.GetChainIdFromChainPath(&url)
 
 	//so now look up the token chain from the account
 	//The token state *CAN* be nil, if so we need to create it...
-	tokenState, err := currentState.DB.GetStateObject(tokenChain[:], false)
+	tokenState, err := currentState.DB.GetCurrentEntry(tokenChain[:])
 	//if err != nil {
 	//	return fmt.Errorf("unable to retrieve token chain for %s, %v", url, err)
 	//}
@@ -118,11 +120,8 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 	account := &state.TokenAccount{}
 	if tokenState == nil {
 		//we need to create a new state object.
-		account = state.NewTokenAccount(types.UrlChain(url), types.UrlChain(deposit.TokenUrl))
+		account = state.NewTokenAccount(url, *deposit.TokenUrl.AsString())
 	} else {
-		if tokenState.Entry == nil {
-			return fmt.Errorf("unable to retrieve token chain entry for %s", url)
-		}
 		err = account.UnmarshalBinary(tokenState.Entry)
 		if err != nil {
 			return err
@@ -144,6 +143,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 }
 func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submission *pb.Submission, resp *ResponseValidateTX) error {
 	//unmarshal the synthetic transaction based upon submission
+	//VerifySignatures
 	deposit := api.TokenTx{}
 	err := json.Unmarshal(submission.Data, &deposit)
 	if err != nil {
@@ -158,13 +158,13 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	}
 
 	//need to derive chain id for coin type account.
-	accountChainId := types.GetChainIdFromChainPath(string(deposit.From))
-	currentState.ChainState, err = currentState.DB.GetCurrentState(accountChainId[:])
+	accountChainId := types.GetChainIdFromChainPath(deposit.From.AsString())
+	currentState.ChainState, err = currentState.DB.GetCurrentEntry(accountChainId[:])
 	if err != nil {
 		return fmt.Errorf("chain state for account not esablished")
 	}
 
-	currentState.IdentityState, err = currentState.DB.GetCurrentState(submission.Identitychain)
+	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(submission.Identitychain)
 	if err != nil {
 		return fmt.Errorf("identity not established")
 	}
@@ -185,18 +185,14 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		return err
 	}
 
-	keyHash := sha256.Sum256(submission.Key)
-	checkSum := sha256.Sum256(keyHash[:20])
-	addrBytes := append(keyHash[:20], checkSum[:4]...)
-	//generate the address from the key hash.
-	address := fmt.Sprintf("0x%x", addrBytes)
+	address := types.GenerateAcmeAddress(submission.Key)
 
 	if address != string(chainHeader.ChainUrl) {
 		return fmt.Errorf("invalid address, public key address is %s but account %s ", address, chainHeader.ChainUrl)
 	}
 
 	//verify the from address
-	txFromAdi, txFromChain, err := types.ParseIdentityChainPath(string(tokenTx.From))
+	txFromAdi, txFromChain, err := types.ParseIdentityChainPath(tokenTx.From.AsString())
 	if err != nil {
 		return fmt.Errorf("unable to parse tokenTx.From, %v", err)
 	}
@@ -226,13 +222,13 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		txAmt.Add(txAmt, amt)
 
 		//extract the target identity and chain from the url
-		adi, chainPath, err := types.ParseIdentityChainPath(string(val.URL))
+		adi, chainPath, err := types.ParseIdentityChainPath(val.URL.AsString())
 		if err != nil {
 			return err
 		}
 
 		//get the identity id from the adi
-		idChain := types.GetIdentityChainFromIdentity(adi)
+		idChain := types.GetIdentityChainFromIdentity(&adi)
 		if idChain == nil {
 			return fmt.Errorf("Invalid identity chain for %s", adi)
 		}
@@ -245,28 +241,41 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		sub.Identitychain = idChain[:]
 
 		//set the chain id for the destination
-		destChainId := types.GetChainIdFromChainPath(chainPath)
+		destChainId := types.GetChainIdFromChainPath(&chainPath)
 		sub.Chainid = destChainId[:]
 
 		//set the transaction instruction type to a synthetic token deposit
 		sub.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 
-		depositTx := synthetic.NewTokenTransactionDeposit()
 		txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp))
-		err = depositTx.SetDeposit(txid[:], amt)
+		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &tokenTx.From.String, &val.URL.String)
+		err = depositTx.SetDeposit(&tokenAccountState.ChainUrl, amt)
 		if err != nil {
 			return fmt.Errorf("unable to set deposit for synthetic token deposit transaction, %v", err)
 		}
 
-		err = depositTx.SetTokenInfo(types.UrlChain(tokenAccountState.GetChainUrl()))
+		sub.Data, err = depositTx.MarshalBinary()
 		if err != nil {
-			return fmt.Errorf("unable to set token information for synthetic token deposit transaction, %v", err)
+			return fmt.Errorf("unable to marshal synthetic token transaction deposit, %v", err)
 		}
+	}
 
-		err = depositTx.SetSenderInfo(submission.Identitychain, submission.Chainid)
-		if err != nil {
-			return fmt.Errorf("unable to set sender info for synthetic token deposit transaction, %v", err)
-		}
+	return nil
+}
+
+// VerifySignatures so this is a little complicated because we need to determine the signature
+//scheme of the underlying address of the token.
+func (v *AnonTokenChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
+	sig types.Bytes, adiState *state.AdiState) error {
+
+	keyHash := sha256.Sum256(key.Bytes())
+	if !adiState.VerifyKey(keyHash[:]) {
+		return fmt.Errorf("key cannot be verified with adi key hash")
+	}
+
+	//make sure the request is legit.
+	if ed25519.PubKey(key.Bytes()).VerifySignature(ledger, sig.Bytes()) == false {
+		return fmt.Errorf("invalid signature")
 	}
 
 	return nil
@@ -279,6 +288,7 @@ func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *pb
 
 	switch submission.Instruction {
 	case pb.AccInstruction_Synthetic_Token_Deposit:
+		//need to verify synthetic deposit.
 		err = v.processDeposit(currentState, submission, resp)
 	case pb.AccInstruction_Token_Transaction:
 		err = v.processSendToken(currentState, submission, resp)

@@ -1,15 +1,16 @@
 package synthetic
 
 import (
+	"testing"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
-	"testing"
 )
 
 func TestTransactionNak(t *testing.T) {
 	adichainpath := "wileecoyote/acme"
-	chainid := types.GetChainIdFromChainPath(adichainpath)
-	idhash := types.GetIdentityChainFromIdentity(adichainpath)
+	chainid := types.GetChainIdFromChainPath(&adichainpath)
+	idhash := types.GetIdentityChainFromIdentity(&adichainpath)
 
 	sub := &proto.Submission{}
 	sub.Identitychain = idhash[:]

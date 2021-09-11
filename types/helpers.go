@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
@@ -14,9 +15,9 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
-// MarshalBinaryLedgerAdiChainPath fullchainpath == identityname/chainpath
+// MarshalBinaryLedgerAdiChainPath adiChainPath == adi/chain/path
 //This function will generate a ledger needed for ed25519 signing or sha256 hashed to produce TXID
-func MarshalBinaryLedgerAdiChainPath(fullchainpath string, payload []byte, timestamp int64) []byte {
+func MarshalBinaryLedgerAdiChainPath(adiChainPath string, payload []byte, timestamp int64) []byte {
 	var msg []byte
 
 	//the timestamp will act
@@ -25,7 +26,7 @@ func MarshalBinaryLedgerAdiChainPath(fullchainpath string, payload []byte, times
 	msg = append(msg, tsbytes[:]...)
 
 	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
-	chainid := sha256.Sum256([]byte(fullchainpath))
+	chainid := sha256.Sum256([]byte(adiChainPath))
 	msg = append(msg, chainid[:]...)
 
 	msg = append(msg, payload...)
@@ -34,7 +35,7 @@ func MarshalBinaryLedgerAdiChainPath(fullchainpath string, payload []byte, times
 }
 
 // MarshalBinaryLedgerChainId create a ledger that can be used for signing or generating a txid
-func MarshalBinaryLedgerChainId(chainid []byte, payload []byte, timestamp int64) []byte {
+func MarshalBinaryLedgerChainId(chainId []byte, payload []byte, timestamp int64) []byte {
 	var msg []byte
 
 	var tsbytes [8]byte
@@ -42,7 +43,7 @@ func MarshalBinaryLedgerChainId(chainid []byte, payload []byte, timestamp int64)
 	msg = append(msg, tsbytes[:]...)
 
 	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
-	msg = append(msg, chainid[:]...)
+	msg = append(msg, chainId[:]...)
 
 	msg = append(msg, payload...)
 
@@ -54,9 +55,16 @@ func CreateKeyPair() ed25519.PrivKey {
 	return ed25519.GenPrivKey()
 }
 
+func CreateKeyPairFromSeed(seed ed25519.PrivKey) (ret ed25519.PrivKey) {
+	ret = seed
+	return ret
+}
+
 // ParseIdentityChainPath helpful parser to extract the identity name and chainpath
 //for example RedWagon/MyAccAddress becomes identity=redwagon and chainpath=redwagon/MyAccAddress
-func ParseIdentityChainPath(s string) (identity string, chainpath string, err error) {
+func ParseIdentityChainPath(adiChainPath *string) (adi string, chainPath string, err error) {
+
+	s := *adiChainPath
 
 	if !utf8.ValidString(s) {
 		return "", "", fmt.Errorf("URL is has invalid UTF8 encoding")
@@ -70,139 +78,27 @@ func ParseIdentityChainPath(s string) (identity string, chainpath string, err er
 	if err != nil {
 		return "", "", err
 	}
-	identity = strings.ToLower(u.Hostname())
-	chainpath = identity
+	adi = strings.ToLower(u.Hostname())
+	chainPath = adi
 	if len(u.Path) != 0 {
-		chainpath += u.Path
+		chainPath += u.Path
 	}
-	return identity, chainpath, nil
+	return adi, chainPath, nil
 }
-
-// toJSON marshal object to json
-func toJSON(m interface{}) (string, error) {
-	js, err := json.Marshal(m)
-	if err != nil {
-		return "", err
-	}
-	return strings.ReplaceAll(string(js), ",", ", "), nil
-}
-
-//// URLParser helper function to take an acme url and generate a submission transaction.
-//func URLParser(s string) (ret *proto.Submission, err error) {
-//
-//	if !utf8.ValidString(s) {
-//		return ret, fmt.Errorf("URL is has invalid UTF8 encoding")
-//	}
-//
-//	if !strings.HasPrefix(s, "acc://") {
-//		s = "acc://" + s
-//	}
-//
-//	var sub *proto.Submission
-//
-//	u, err := url.Parse(s)
-//	if err != nil {
-//		return ret, err
-//	}
-//
-//	fmt.Println(u.Scheme)
-//
-//	fmt.Println(u.Host)
-//	//so the primary is up to the "." if it is there.
-//	hostname := strings.ToLower(u.Hostname())
-//
-//	m, err := url.ParseQuery(u.RawQuery)
-//	if err != nil {
-//		return ret, err
-//	}
-//
-//	chainpath := hostname
-//	if len(u.Path) != 0 {
-//		chainpath += u.Path
-//	}
-//
-//	insidx := strings.Index(u.RawQuery, "&")
-//	if len(u.RawQuery) > 0 && insidx < 0 {
-//		insidx = len(u.RawQuery)
-//	}
-//
-//	var data []byte
-//	var timestamp int64
-//	var signature []byte
-//	var key []byte
-//	if insidx > 0 {
-//		k := u.RawQuery[:insidx]
-//		if k == "query" || k == "q" {
-//			if v := m["payload"]; v == nil {
-//				m.Del(k)
-//				js, err := toJSON(m)
-//				if err != nil {
-//					return nil, fmt.Errorf("unable to create url query %s, %v", s, err)
-//				}
-//				data = []byte(js)
-//
-//			}
-//		}
-//		//make the correct submission based upon raw query...  Light query needs to be handled differently.
-//		if v := m["payload"]; v != nil {
-//			if len(v) > 0 {
-//				data, err = hex.DecodeString(m["payload"][0])
-//				if err != nil {
-//					return nil, fmt.Errorf("unable to parse payload in url %s, %v", s, err)
-//				}
-//			}
-//		}
-//		if v := m["timestamp"]; v != nil {
-//			if len(v) > 0 {
-//				timestamp, err = strconv.ParseInt(v[0], 10, 64)
-//				if err != nil {
-//					return nil, fmt.Errorf("unable to parse timestamp in url %s, %v", s, err)
-//				}
-//			}
-//		}
-//
-//		if v := m["sig"]; v != nil {
-//			if len(v) > 0 {
-//				signature, err = hex.DecodeString(m["sig"][0])
-//				if err != nil {
-//					return nil, fmt.Errorf("unable to parse signature in url %s, %v", s, err)
-//				}
-//			}
-//		}
-//		if v := m["key"]; v != nil {
-//			if len(v) > 0 {
-//				key, err = hex.DecodeString(m["key"][0])
-//				if err != nil {
-//					return nil, fmt.Errorf("unable to parse signature in url %s, %v", s, err)
-//				}
-//			}
-//		}
-//
-//		sub = MakeBVCSubmission(k, UrlAdi(hostname), UrlChain(chainpath), data, timestamp, signature, key)
-//	}
-//
-//	if sub == nil {
-//		sub = AssembleBVCSubmissionHeader(hostname, chainpath, proto.AccInstruction_Unknown)
-//	}
-//
-//	//json rpc params:
-//
-//	return sub, nil
-//}
 
 // GetChainIdFromChainPath this expects an identity chain path to produce the chainid.  RedWagon/Acc/Chain/Path
-func GetChainIdFromChainPath(identitychainpath string) *Bytes32 {
-	_, chainpathformatted, err := ParseIdentityChainPath(identitychainpath)
+func GetChainIdFromChainPath(adiChainPath *string) *Bytes32 {
+	_, chainPathFormatted, err := ParseIdentityChainPath(adiChainPath)
 	if err != nil {
 		return nil
 	}
 
-	h := Bytes32(sha256.Sum256([]byte(chainpathformatted)))
+	h := Bytes32(sha256.Sum256([]byte(chainPathFormatted)))
 	return &h
 }
 
 // GetIdentityChainFromIdentity Helper function to generate an identity chain from adi. can return nil, if the adi is malformed
-func GetIdentityChainFromIdentity(adi string) *Bytes32 {
+func GetIdentityChainFromIdentity(adi *string) *Bytes32 {
 	namelower, _, err := ParseIdentityChainPath(adi)
 	if err != nil {
 		return nil
@@ -219,39 +115,17 @@ func GetAddressFromIdentityChain(identitychain []byte) uint64 {
 }
 
 //GetAddressFromIdentity given a string, return the address used for bvc routing
-func GetAddressFromIdentity(name string) uint64 {
+func GetAddressFromIdentity(name *string) uint64 {
 	b := GetIdentityChainFromIdentity(name)
 	return GetAddressFromIdentityChain(b[:])
 }
-
-//This function will build a chain from an DDII / ADI.  If the string is 64 characters in length, then it is assumed
-//to be a hex encoded ChainID instead.
-//func BuildChainIdFromAdi(chainadi *string) ([]byte, error) {
-//
-//	chainidlen := len(*chainadi)
-//	var chainid managed.Hash
-//
-//	if chainidlen < 32 {
-//		chainid = sha256.Sum256([]byte(*chainadi))
-//	} else if chainidlen == 64 {
-//		_, err := hex.Decode(chainid[:], []byte(*chainadi))
-//		if err != nil {
-//			fmt.Errorf("[Error] cannot decode chainid %s", *chainadi)
-//			return nil, err
-//		}
-//	} else {
-//		return nil, fmt.Errorf("[Error] invalid chainid for validator on shard %s", *chainadi)
-//	}
-//
-//	return chainid.Bytes(), nil
-//}
 
 type Bytes []byte
 
 // MarshalJSON serializes ByteArray to hex
 func (s *Bytes) MarshalJSON() ([]byte, error) {
-	bytes, err := json.Marshal(fmt.Sprintf("%x", string(*s)))
-	return bytes, err
+	b, err := json.Marshal(fmt.Sprintf("%x", string(*s)))
+	return b, err
 }
 
 // UnmarshalJSON serializes ByteArray to hex
@@ -267,7 +141,7 @@ func (s *Bytes) UnmarshalJSON(data []byte) error {
 }
 
 func (s *Bytes) Bytes() []byte {
-	return []byte(*s)
+	return *s
 }
 
 func (s *Bytes) MarshalBinary() ([]byte, error) {
@@ -291,7 +165,8 @@ func (s *Bytes) UnmarshalBinary(data []byte) error {
 	if len(data) < int(slen)+l {
 		return fmt.Errorf("insufficient data to unmarshal")
 	}
-	*s = data[l : int(slen)+l]
+	ds := data[l : int(slen)+l]
+	*s = ds
 	return nil
 }
 
@@ -302,6 +177,7 @@ func (s *Bytes) Size(varintbuf *[8]byte) int {
 	}
 	l := int64(len(*s))
 	i := binary.PutVarint(buf[:], l)
+
 	return i + int(l)
 }
 
@@ -310,8 +186,8 @@ type Bytes32 [32]byte
 
 // MarshalJSON serializes ByteArray to hex
 func (s *Bytes32) MarshalJSON() ([]byte, error) {
-	bytes, err := json.Marshal(s.ToString())
-	return bytes, err
+	b, err := json.Marshal(s.ToString())
+	return b, err
 }
 
 // UnmarshalJSON serializes ByteArray to hex
@@ -345,13 +221,13 @@ func (s *Bytes32) ToString() String {
 	return String(hex.EncodeToString(s[:]))
 }
 
-// Bytes32 is a fixed array of 32 bytes
+// Bytes64 is a fixed array of 32 bytes
 type Bytes64 [64]byte
 
 // MarshalJSON serializes ByteArray to hex
 func (s *Bytes64) MarshalJSON() ([]byte, error) {
-	bytes, err := json.Marshal(s.ToString())
-	return bytes, err
+	b, err := json.Marshal(s.ToString())
+	return b, err
 }
 
 // UnmarshalJSON serializes ByteArray to hex
@@ -426,16 +302,30 @@ func (s *Byte) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-type UrlAdi string
-
-func (s *UrlAdi) AsString() *string {
-	return (*string)(s)
+type UrlAdi struct {
+	String
 }
 
-type UrlChain string
+func (s *UrlAdi) IsValid() bool {
+	adi, _, err := s.Parse()
+	return !(adi == "" || err != nil)
+}
 
-func (s *UrlChain) AsString() *string {
-	return (*string)(s)
+func (s *UrlAdi) Parse() (string, string, error) {
+	return ParseIdentityChainPath(s.AsString())
+}
+
+type UrlChain struct {
+	String
+}
+
+func (s *UrlChain) IsValid() bool {
+	adi, chainPath, err := s.Parse()
+	return !(adi == "" || chainPath == "" || err != nil)
+}
+
+func (s *UrlChain) Parse() (string, string, error) {
+	return ParseIdentityChainPath(s.AsString())
 }
 
 type Amount struct {
@@ -444,4 +334,31 @@ type Amount struct {
 
 func (a *Amount) AsBigInt() *big.Int {
 	return &a.Int
+}
+
+func (a *Amount) Size() int {
+	return len(a.Int.Bytes()) + 1
+}
+
+func (a *Amount) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+	data := a.Int.Bytes()
+	buffer.WriteByte(byte(len(data)))
+	buffer.Write(data)
+	return buffer.Bytes(), nil
+}
+
+func (a *Amount) UnmarshalBinary(data []byte) error {
+	length := len(data)
+	if length < 1 {
+		return fmt.Errorf("insufficient data to unmarshal amount header, length == 0")
+	}
+
+	amtLen := int(data[0])
+	if length < amtLen {
+		return fmt.Errorf("insuffcient data to unmarshal amount, len = %d but provided %d", amtLen, length)
+	}
+
+	a.Int.SetBytes(data[1:amtLen])
+	return nil
 }

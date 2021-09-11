@@ -76,13 +76,13 @@ func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, sub
 		return nil, fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
 
-	adi, chainpath, err := types.ParseIdentityChainPath(string(tcc.URL))
+	adi, chainPath, err := types.ParseIdentityChainPath(tcc.URL.AsString())
 	if err != nil {
 		return nil, err
 	}
 
-	issuingidentityhash := types.GetIdentityChainFromIdentity(adi)
-	issuingchainid := types.GetChainIdFromChainPath(chainpath)
+	issuingidentityhash := types.GetIdentityChainFromIdentity(&adi)
+	issuingchainid := types.GetChainIdFromChainPath(&chainPath)
 
 	if issuingidentityhash == nil {
 		return nil, fmt.Errorf("issuing identity adi is invalid")
@@ -92,12 +92,12 @@ func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, sub
 		return nil, fmt.Errorf("issuing identity chain id is invalid")
 	}
 
-	_, chainPathToken, err := types.ParseIdentityChainPath(string(tcc.TokenURL))
+	_, chainPathToken, err := types.ParseIdentityChainPath(tcc.TokenURL.AsString())
 	if err != nil {
 		return nil, err
 	}
 
-	tas := state.NewTokenAccount(types.UrlChain(chainpath), types.UrlChain(chainPathToken))
+	tas := state.NewTokenAccount(chainPath, chainPathToken)
 	//tas.AdiChainPath = submission.? //todo: need to obtain the adi chain path from the submission request
 	statedata, err := tas.MarshalBinary()
 	if err != nil {
@@ -106,7 +106,7 @@ func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, sub
 	resp = &ResponseValidateTX{}
 
 	//return a new state object for a token
-	resp.AddStateData(types.GetChainIdFromChainPath(chainpath), statedata)
+	resp.AddStateData(types.GetChainIdFromChainPath(&chainPath), statedata)
 
 	return resp, nil
 }
