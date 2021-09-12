@@ -7,18 +7,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/rand"
 	"os"
 	"path"
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/proto"
-	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/go-playground/validator/v10"
+	ptypes "github.com/tendermint/tendermint/abci/types"
 )
 
 //
@@ -28,7 +29,7 @@ import (
 
 func TestJsonRpcAnonToken(t *testing.T) {
 
-	_, kpNewAdi, _ := ed25519.GenerateKey(nil)
+	_, privateKey, _ := ed25519.GenerateKey(nil)
 
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
@@ -56,7 +57,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	adiSponsor := types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	//set destination url address
-	destAddress := types.String(anon.GenerateAcmeAddress(kpNewAdi.Public().(ed25519.PublicKey)))
+	destAddress := types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
 
 	txid := sha256.Sum256([]byte("txid"))
 
@@ -88,7 +89,9 @@ func TestJsonRpcAnonToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//wait 3 seconds for the transaction to process and block to finish.
+	Load(t, query, privateKey)
+
+	//wait 3 seconds for the transaction to process for the block to complete.
 	time.Sleep(3000 * time.Millisecond)
 	queryTokenUrl := destAddress + "/" + tokenUrl
 	resp, err := query.GetTokenAccount(queryTokenUrl.AsString())
@@ -106,7 +109,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//req := api.{}
 	//adi := &api.ADI{}
 	//adi.URL = "RoadRunner"
-	//adi.PublicKeyHash = sha256.Sum256(kpNewAdi.PubKey().Bytes())
+	//adi.PublicKeyHash = sha256.Sum256(privateKey.PubKey().Bytes())
 	//data, err := json.Marshal(adi)
 	//if err != nil {
 	//	t.Fatal(err)
@@ -135,6 +138,40 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	////now we can send in json rpc calls.
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
+}
+
+func Load(t *testing.T, query *Query, Origin ed25519.PrivateKey) {
+	srcURL := anon.GenerateAcmeAddress(Origin[32:])
+	var SetOKeys []ed25519.PrivateKey
+	var Addresses []string
+	for i := 0; i < 1000; i++ {
+		_, key, _ := ed25519.GenerateKey(nil)
+		SetOKeys = append(SetOKeys, key)
+		Addresses = append(Addresses, anon.GenerateAcmeAddress(key[32:]))
+	}
+	if len(Addresses) == 0 || len(SetOKeys) == 0 {
+		t.Fatal("no addresses")
+	}
+	for i := 0; i < 100; i++ {
+		d := rand.Int() % len(SetOKeys)
+		out := proto.Output{Dest: Addresses[d], Amount: 10 * 1000000}
+		send := proto.NewTokenSend(srcURL, out)
+		txData := send.Marshal()
+		gtx := new(proto.GenTransaction)
+		gtx.Transaction = txData
+		if err := gtx.SetRoutingChainID(Addresses[d]); err != nil {
+			t.Fatal("bad url generated")
+		}
+		s := ed25519.Sign(SetOKeys[d], txData)
+		ed := new(proto.ED25519Sig)
+		ed.PublicKey = SetOKeys[d][32:]
+		ed.Signature = s
+		gtx.Signature = append(gtx.Signature, ed)
+
+		deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
+		deliverRequestTXAsync.Tx = gtx.Marshal()
+		query.client.DeliverTxAsync(*deliverRequestTXAsync)
+	}
 }
 
 func _TestJsonRpcAdi(t *testing.T) {
