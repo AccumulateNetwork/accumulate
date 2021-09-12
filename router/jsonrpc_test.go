@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -39,7 +41,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	client, _, _, _, vm := makeBVCandRouter(cfg, dir)
+	client, _, _, rpcClient, vm := makeBVCandRouter(cfg, dir)
 
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +76,8 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	if err := gtx.SetRoutingChainID(*destAddress.AsString()); err != nil {
 		t.Fatal("bad url generated")
 	}
-	s := ed25519.Sign(privateKey, depData)
+	dataToSign := gtx.MarshalBinary()
+	s := ed25519.Sign(privateKey, dataToSign)
 	ed := new(proto.ED25519Sig)
 	ed.PublicKey = privateKey[32:]
 	ed.Signature = s
@@ -82,9 +85,9 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
 	deliverRequestTXAsync.Tx = gtx.Marshal()
-	query.client.DeliverTxAsync(*deliverRequestTXAsync)
+	rpcClient.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 
-	Load(t, query, privateKey)
+	Load(t, rpcClient, privateKey)
 
 	//wait 3 seconds for the transaction to process for the block to complete.
 	time.Sleep(3000 * time.Millisecond)
@@ -135,7 +138,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 }
 
-func Load(t *testing.T, query *Query, Origin ed25519.PrivateKey) {
+func Load(t *testing.T, rpcClient *rpchttp.HTTP, Origin ed25519.PrivateKey) {
 	srcURL := anon.GenerateAcmeAddress(Origin[32:])
 	var SetOKeys []ed25519.PrivateKey
 	var Addresses []string
@@ -157,7 +160,10 @@ func Load(t *testing.T, query *Query, Origin ed25519.PrivateKey) {
 		if err := gtx.SetRoutingChainID(Addresses[d]); err != nil {
 			t.Fatal("bad url generated")
 		}
-		s := ed25519.Sign(SetOKeys[d], txData)
+
+		dataToSign := gtx.MarshalBinary()
+		s := ed25519.Sign(SetOKeys[d], dataToSign)
+
 		ed := new(proto.ED25519Sig)
 		ed.PublicKey = SetOKeys[d][32:]
 		ed.Signature = s
@@ -165,7 +171,8 @@ func Load(t *testing.T, query *Query, Origin ed25519.PrivateKey) {
 
 		deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
 		deliverRequestTXAsync.Tx = gtx.Marshal()
-		query.client.DeliverTxAsync(*deliverRequestTXAsync)
+
+		rpcClient.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 	}
 }
 

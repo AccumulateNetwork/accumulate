@@ -16,7 +16,7 @@ type Entry interface {
 }
 
 type Object struct {
-	StateIndex int64       `json:"stateIndex"` //this is the same as the entry hash.
+	StateIndex int64       `json:"stateIndex"` //
 	Entry      types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
 }
 
@@ -64,6 +64,13 @@ type StateEntry struct {
 	IdentityState *Object
 	ChainState    *Object
 
+	//useful cached info
+	ChainId  types.Bytes
+	AdiChain types.Bytes
+
+	ChainHeader *Chain
+	AdiHeader   *Chain
+
 	DB *StateDB
 }
 
@@ -75,4 +82,39 @@ func NewStateEntry(idState *Object, chainState *Object, db *StateDB) *StateEntry
 	se.DB = db
 
 	return &se
+}
+
+const (
+	MaskChainState  = 0x01
+	MaskAdiState    = 0x02
+	MaskChainHeader = 0x04
+	MaskAdiHeader   = 0x08
+)
+
+func (s *StateEntry) IsValid(mask int) bool {
+	if mask&MaskChainState == 1 {
+		if s.IdentityState == nil {
+			return false
+		}
+	}
+
+	if mask&MaskAdiState == 1 {
+		if s.IdentityState == nil {
+			return false
+		}
+	}
+
+	if mask&MaskChainHeader == 1 {
+		if s.ChainHeader == nil {
+			return false
+		}
+	}
+
+	if mask&MaskAdiHeader == 1 {
+		if s.AdiHeader == nil {
+			return false
+		}
+	}
+
+	return true
 }
