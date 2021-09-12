@@ -35,11 +35,21 @@ func (t *GenTransaction) SetRoutingChainID(destURL string) error {
 	return nil
 }
 
+// TxId
+// Returns the transaction hash which serves as the identifier for this transaction
+func (t *GenTransaction) TxId() []byte {
+	h := sha256.Sum256(t.MarshalBinary())
+	return h[:]
+}
+
 // ValidateSig
 // We validate the signature of the transaction.
-func (t *GenTransaction) ValidateSig() bool {
-	h := sha256.Sum256(t.MarshalBinary())
+func (t *GenTransaction) ValidateSig(keyHash []byte) bool {
+	h := t.TxId()
 	for _, v := range t.Signature {
+		if !v.CanVerify(keyHash) {
+			return false
+		}
 		if !v.Verify(h[:]) {
 			return false
 		}
@@ -48,11 +58,12 @@ func (t *GenTransaction) ValidateSig() bool {
 }
 
 // MarshalBinary
-// Marshal the portion of the transaction that must be signed
+// Marshal the portion of the transaction that must be hashed then signed
 func (t *GenTransaction) MarshalBinary() (data []byte) {
+	//missing nonce.
 	data = append(data, common.Uint64Bytes(t.Routing)...)
 	data = append(data, common.SliceBytes(t.ChainID)...)
-
+	data = append(data, t.Transaction[:]...)
 	return data
 }
 
