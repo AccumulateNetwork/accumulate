@@ -2,6 +2,10 @@ package proto
 
 import (
 	"crypto/sha256"
+	"net/url"
+	"strings"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 
 	"github.com/AccumulateNetwork/SMT/common"
 )
@@ -15,6 +19,20 @@ type GenTransaction struct {
 	Routing     uint64        // The first 8 bytes of the hash of the identity
 	ChainID     []byte        // The hash of the chain URL
 	Transaction []byte        // The transaction that follows
+}
+
+func (t *GenTransaction) SetRoutingChainID(destURL string) error {
+	u, err := url.Parse(destURL)
+	if err != nil {
+		return err
+	}
+	host := strings.ToLower(u.Host)
+	h := sha256.Sum256([]byte(host))
+	t.Routing = uint64(h[0])<<56 | uint64(h[1])<<48 | uint64(h[2])<<40 |
+		uint64(h[3])<<32 | uint64(h[4])<<24 | uint64(h[5])<<16 |
+		uint64(h[6])<<8 | uint64(h[7])
+	t.ChainID = types.GetChainIdFromChainPath(&destURL)[:]
+	return nil
 }
 
 // ValidateSig
