@@ -34,7 +34,7 @@ func (app *Object) MarshalBinary() ([]byte, error) {
 		return nil, fmt.Errorf("unable to marshal state index to a varint")
 	}
 
-	buffer.Write(state[:])
+	buffer.Write(state[:n])
 	buffer.Write(data)
 
 	return buffer.Bytes(), nil
