@@ -315,10 +315,10 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 	//the submission is the format of the Tx input
-	sub := &pb.Submission{}
+	sub := &pb.GenTransaction{}
 
 	//unpack the request
-	err := proto.Unmarshal(req.Tx, sub)
+	err := sub.UnMarshal(req.Tx)
 
 	//check to see if there was an error decoding the submission
 	if err != nil {
@@ -327,13 +327,13 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
 
-	err = app.chainValidatorNode.CanTransact(sub)
+	err2 := app.chainValidatorNode.CanTransact(sub)
 
-	if err != nil {
+	if err2 != nil {
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("entry check failed %v for url %s, %v \n", sub.Type, sub.AdiChainPath, err)
+		ret.Info = fmt.Sprintf("entry check failed %v for url %x, %v \n", sub.GetTransactionType(), sub.GetChainID(), err2)
 		return ret
 	}
 
@@ -353,10 +353,10 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: nil, Code: code.CodeTypeUnknownError}
 
-	sub := &pb.Submission{}
+	sub := &pb.GenTransaction{}
 
 	//unpack the request
-	err := proto.Unmarshal(req.Tx, sub)
+	err := sub.UnMarshal(req.Tx)
 
 	if err != nil {
 		//reject it
@@ -365,13 +365,13 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	}
 
 	//run through the validation node
-	err = app.chainValidatorNode.Validate(sub)
+	err2 := app.chainValidatorNode.Validate(sub)
 
-	if err != nil {
+	if err2 != nil {
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.Type, err)
+		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.GetTransactionType(), err2)
 		return ret
 	}
 
