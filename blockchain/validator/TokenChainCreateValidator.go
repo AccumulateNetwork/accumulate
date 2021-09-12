@@ -3,12 +3,13 @@ package validator
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
-	"time"
 )
 
 type TokenChainCreateValidator struct {
@@ -19,7 +20,7 @@ type TokenChainCreateValidator struct {
 
 func NewTokenChainCreateValidator() *TokenChainCreateValidator {
 	v := TokenChainCreateValidator{}
-	v.SetInfo(api.ChainTypeTokenAccount[:], api.ChainSpecTokenAccount, pb.AccInstruction_Token_URL_Creation)
+	v.SetInfo(types.ChainTypeTokenAccount[:], types.ChainSpecTokenAccount, pb.AccInstruction_Token_URL_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
