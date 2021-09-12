@@ -38,7 +38,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	client, _, _, _, vm := makeBVCandRouter(t, cfg, dir)
+	client, _, _, _, vm := makeBVCandRouter(cfg, dir)
 
 	if err != nil {
 		t.Fatal(err)
@@ -153,7 +153,7 @@ func _TestJsonRpcAdi(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	client, _, _, _, vm := makeBVCandRouter(t, cfg, dir)
+	client, _, _, _, vm := makeBVCandRouter(cfg, dir)
 
 	if err != nil {
 		t.Fatal(err)

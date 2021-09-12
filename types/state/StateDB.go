@@ -173,7 +173,7 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 }
 
 // WriteStates will push the data to the database and update the patricia trie
-func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
+func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//build a list of keys from the map
 
 	currentStateCount := len(sdb.mms)
@@ -203,7 +203,7 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 		mdRoot := v.merkleMgr.MainChain.MS.GetMDRoot()
 		if mdRoot == nil {
 			//shouldn't get here, but will reject if I do
-			return nil, fmt.Errorf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId)
+			panic(fmt.Sprintf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId))
 		}
 
 		sdb.bpt.Bpt.Insert(chainId, *mdRoot)
@@ -213,7 +213,8 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 		err = v.merkleMgr.RootDBManager.Put("StateEntries", "", chainId.Bytes(), dataToStore)
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to store data entry in StateEntries bucket, %v", err)
+			//shouldn't get here, and bad if I do...
+			panic(fmt.Sprintf("failed to store data entry in StateEntries bucket, %v", err))
 		}
 	}
 
@@ -221,5 +222,5 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 
 	sdb.mms = make(map[managed.Hash]*merkleManagerState)
 
-	return sdb.bpt.Bpt.Root.Hash[:], nil
+	return sdb.bpt.Bpt.Root.Hash[:], currentStateCount, nil
 }

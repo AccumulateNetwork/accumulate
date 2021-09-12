@@ -67,12 +67,12 @@ type StateEntry struct {
 	DB *StateDB
 }
 
-func NewStateEntry(idState *Object, chainState *Object, db *StateDB) (*StateEntry, error) {
+func NewStateEntry(idState *Object, chainState *Object, db *StateDB) *StateEntry {
 	se := StateEntry{}
 	se.IdentityState = idState
 
 	se.ChainState = chainState
 	se.DB = db
 
-	return &se, nil
+	return &se
 }
