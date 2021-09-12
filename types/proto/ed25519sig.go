@@ -16,6 +16,15 @@ type ED25519Sig struct {
 	Signature []byte // a set of 64 byte signatures
 }
 
+// Equal
+// Return true if the given Signature has the same Nonce, PublicKey,
+// and Signature
+func (e *ED25519Sig) Equal(e2 *ED25519Sig) bool {
+	return e.Nonce == e2.Nonce && //                 Return true if the Nonce is the same and
+		bytes.Equal(e.PublicKey, e2.PublicKey) && //  the publickey is the same and
+		bytes.Equal(e.Signature, e2.Signature) //     the signature is the same
+}
+
 // Sign
 // Returns the signature for the given message.  What happens is the message
 // is hashed with sha256, then the hash is signed.  The signature of the hash
