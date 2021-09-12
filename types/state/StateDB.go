@@ -126,7 +126,9 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 	var ret *Object
 	var err error
 	var key managed.Hash
-	key.Extract(chainId)
+
+	copy(key[:32], chainId[:32])
+
 	if mms := sdb.mms[key]; mms != nil {
 		ret = &mms.stateEntry
 	} else {
