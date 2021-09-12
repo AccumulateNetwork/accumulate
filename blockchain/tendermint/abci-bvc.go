@@ -349,17 +349,16 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 //   <Commit>
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
-func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (response abcitypes.ResponseDeliverTx) {
+func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcitypes.ResponseDeliverTx {
 
-	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: nil, Code: code.CodeTypeUnknownError}
+	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: nil, Code: code.CodeTypeOK}
 
 	sub := &pb.GenTransaction{}
 
 	//unpack the request
-	err := sub.UnMarshal(req.Tx)
-
-	if err != nil {
-		//reject it
+	//how do i detect errors?  This causes segfaults if not tightly checked.
+	whatevs := sub.UnMarshal(req.Tx)
+	if len(whatevs) != 0 {
 		return abcitypes.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
@@ -368,7 +367,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	err2 := app.chainValidatorNode.Validate(sub)
 
 	if err2 != nil {
-		ret.Code = 2
+		ret.Code = code.CodeTypeUnauthorized
 		ret.GasWanted = 0
 		ret.GasUsed = 0
 		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.GetTransactionType(), err2)
@@ -378,7 +377,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	//now we need to store the data returned by the validator and feed into accumulator
 	app.txct++
 
-	return response
+	return ret
 }
 
 // EndBlock ABCI / block calls

@@ -89,8 +89,6 @@ func (app *Node) Validate(transaction *pb.GenTransaction) error {
 
 	currentState := state.NewStateEntry(nil, nil, &app.mmDB)
 
-	_, err := app.chainValidator.Validate(currentState, transaction)
-
 	//placeholder for special validation rules for synthetic transactions.
 	if transaction.GetTransactionType()&0xFF00 > 0 {
 		//need to verify the sender is a legit bvc validator also need the dbvc receipt
