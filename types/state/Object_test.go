@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 )
 
 func TestStateObject(t *testing.T) {
@@ -16,7 +15,7 @@ func TestStateObject(t *testing.T) {
 	so.StateIndex = 1234
 
 	adi := types.String("myadi")
-	chain := NewChain(adi, api.ChainTypeAnonTokenAccount[:])
+	chain := NewChain(adi, types.ChainTypeAnonTokenAccount[:])
 	so.Entry, err = chain.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)

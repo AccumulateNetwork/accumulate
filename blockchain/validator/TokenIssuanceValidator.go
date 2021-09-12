@@ -23,7 +23,7 @@ type TokenIssuanceValidator struct {
 
 func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	v := TokenIssuanceValidator{}
-	v.SetInfo(api.ChainTypeToken[:], api.ChainSpecToken, pb.AccInstruction_Token_Issue)
+	v.SetInfo(types.ChainTypeToken[:], types.ChainSpecToken, pb.AccInstruction_Token_Issue)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -100,6 +100,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 	return resp, nil
 }
 
-func (v *TokenIssuanceValidator) EndBlock(mdroot []byte) error {
+func (v *TokenIssuanceValidator) EndBlock(mdRoot []byte) error {
+	_ = mdRoot
 	return nil
 }

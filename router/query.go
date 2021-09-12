@@ -104,7 +104,7 @@ func (q *Query) GetToken(tokenUrl *string) (interface{}, error) {
 	return tokResp, err
 }
 
-func (q *Query) GetTokenAccount(adiChainPath *string) (interface{}, error) {
+func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeapi.APIDataResponse, error) {
 
 	var err error
 
@@ -131,19 +131,29 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (interface{}, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	var ret interface{}
-	ret = qResp
+	ret := &acmeapi.APIDataResponse{}
+	ret.Type = "tokenAccount"
+
 	if qResp.Code == 0 {
 
-		//unpack the response
-		tokResp := response.TokenAccount{}
+		//unpack the state object returned from the query
+		tokState := &state.TokenAccount{}
+		err = tokState.UnmarshalBinary(qResp.Value)
 
-		err = json.Unmarshal(qResp.Value, &tokResp)
-
+		ta := acmeapi.NewTokenAccount(tokState.ChainUrl, tokState.TokenUrl.String)
+		tokResp := response.NewTokenAccount(ta, tokState.GetBalance())
+		//package the response data into json
+		var data json.RawMessage
+		data, err = json.Marshal(tokResp)
 		if err != nil {
 			return nil, fmt.Errorf("cannot extract token information")
 		}
-		ret = tokResp
+
+		ret.Data = &data
+	} else {
+		var data json.RawMessage
+		data, err = json.Marshal(qResp.Value)
+		ret.Data = &data
 	}
 
 	return ret, err
@@ -215,28 +225,28 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txid []byte) (resp interface
 }
 
 var ChainStates = map[types.Bytes32]interface{}{
-	*acmeapi.ChainTypeAdi.AsBytes32(): func(data []byte) (interface{}, error) {
+	*types.ChainTypeAdi.AsBytes32(): func(data []byte) (interface{}, error) {
 		r := state.AdiState{}
 		if err := r.UnmarshalBinary(data); err != nil {
 			return nil, err
 		}
 		return &r, nil
 	},
-	*acmeapi.ChainTypeToken.AsBytes32(): func(data []byte) (interface{}, error) {
+	*types.ChainTypeToken.AsBytes32(): func(data []byte) (interface{}, error) {
 		r := state.Token{}
 		if err := r.UnmarshalBinary(data); err != nil {
 			return nil, err
 		}
 		return &r, nil
 	},
-	*acmeapi.ChainTypeTokenAccount.AsBytes32(): func(data []byte) (interface{}, error) {
+	*types.ChainTypeTokenAccount.AsBytes32(): func(data []byte) (interface{}, error) {
 		r := state.TokenAccount{}
 		if err := r.UnmarshalBinary(data); err != nil {
 			return nil, err
 		}
 		return &r, nil
 	},
-	*acmeapi.ChainTypeAnonTokenAccount.AsBytes32(): func(data []byte) (interface{}, error) {
+	*types.ChainTypeAnonTokenAccount.AsBytes32(): func(data []byte) (interface{}, error) {
 		r := state.Chain{}
 		if err := r.UnmarshalBinary(data); err != nil {
 			return nil, err
@@ -283,7 +293,7 @@ func (q *Query) getChainState(adiChainPath *string) (interface{}, error) {
 	if val, ok := ChainStates[chainHeader.Type]; ok {
 		resp, err = val.(func([]byte) (interface{}, error))(qResp.Value)
 	} else {
-		err = fmt.Errorf("unable to unmarshal state object for chain of type %s at %s", acmeapi.ChainTypeSpecMap[chainHeader.Type], chainHeader.ChainUrl)
+		err = fmt.Errorf("unable to unmarshal state object for chain of type %s at %s", types.ChainTypeSpecMap[chainHeader.Type], chainHeader.ChainUrl)
 	}
 
 	return resp, err

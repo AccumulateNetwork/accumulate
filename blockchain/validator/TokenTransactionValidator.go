@@ -23,7 +23,7 @@ type TokenTransactionValidator struct {
 //this token validator belings in both a Token (coinbase) and Token Account validator.
 func NewTokenTransactionValidator() *TokenTransactionValidator {
 	v := TokenTransactionValidator{}
-	v.SetInfo(api.ChainTypeToken[:], "token-transaction", pb.AccInstruction_Token_Transaction)
+	v.SetInfo(types.ChainTypeToken[:], "token-transaction", pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -54,7 +54,7 @@ func canSendTokens(currentState *state.StateEntry, data []byte) (*state.AdiState
 
 	//now check to see if the chain header is an ADI chain. If so, load the AdiState
 	var ids *state.AdiState
-	if bytes.Compare(chainHeader.Type[:], api.ChainTypeAdi[:]) == 0 {
+	if bytes.Compare(chainHeader.Type[:], types.ChainTypeAdi[:]) == 0 {
 		ids = &state.AdiState{}
 		err = ids.UnmarshalBinary(currentState.IdentityState.Entry)
 		if err != nil {
@@ -212,6 +212,7 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 }
 
 // EndBlock
-func (v *TokenTransactionValidator) EndBlock(mdroot []byte) error {
+func (v *TokenTransactionValidator) EndBlock(mdRoot []byte) error {
+	_ = mdRoot
 	return nil
 }

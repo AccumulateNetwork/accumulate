@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -20,7 +19,7 @@ type SyntheticTransactionDepositValidator struct {
 
 func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValidator {
 	v := SyntheticTransactionDepositValidator{}
-	v.SetInfo(api.ChainTypeTokenAccount[:], "synthetic-transaction-deposit", pb.AccInstruction_Synthetic_Token_Deposit)
+	v.SetInfo(types.ChainTypeTokenAccount[:], "synthetic-transaction-deposit", pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -155,6 +154,7 @@ func (v *SyntheticTransactionDepositValidator) Validate(currentstate *state.Stat
 	return &ret, nil
 }
 
-func (v *SyntheticTransactionDepositValidator) EndBlock(mdroot []byte) error {
+func (v *SyntheticTransactionDepositValidator) EndBlock(mdRoot []byte) error {
+	_ = mdRoot
 	return nil
 }

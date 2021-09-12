@@ -8,6 +8,8 @@ import (
 	"math/big"
 	"time"
 
+	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -25,7 +27,7 @@ type AnonTokenChain struct {
 
 func NewAnonTokenChain() *AnonTokenChain {
 	v := AnonTokenChain{}
-	v.SetInfo(api.ChainTypeAnonTokenAccount[:], api.ChainSpecAnonTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
+	v.SetInfo(types.ChainTypeAnonTokenAccount[:], types.ChainSpecAnonTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -86,7 +88,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 
 	if adiStateData == nil {
 		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
-		chainState.SetHeader(types.String(adi), api.ChainTypeAnonTokenAccount[:])
+		chainState.SetHeader(types.String(adi), types.ChainTypeAnonTokenAccount[:])
 		//need to flag this as an anonymous account
 		data, err := chainState.MarshalBinary()
 		if err != nil {
@@ -98,7 +100,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 		if err != nil {
 			return err
 		}
-		if bytes.Compare(chainState.Type.Bytes(), api.ChainTypeAnonTokenAccount[:]) != 0 {
+		if bytes.Compare(chainState.Type.Bytes(), types.ChainTypeAnonTokenAccount[:]) != 0 {
 			return fmt.Errorf("adi for an anoymous chain is not an anonymous account")
 		}
 		//we have an adi state, so now compare the key and validation
@@ -185,7 +187,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		return err
 	}
 
-	address := types.GenerateAcmeAddress(submission.Key)
+	address := types2.GenerateAcmeAddress(submission.Key)
 
 	if address != string(chainHeader.ChainUrl) {
 		return fmt.Errorf("invalid address, public key address is %s but account %s ", address, chainHeader.ChainUrl)

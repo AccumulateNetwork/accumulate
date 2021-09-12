@@ -104,10 +104,6 @@ func TestRouter(t *testing.T) {
 const hexseed = "36422e9560f56e0ead53a83b33aec9571d379291b5e292b88dec641a98ef05d8"
 
 func createKeyPair() ed25519.PrivateKey {
-	seed := make([]byte, 32)
-	hex.Decode(seed, []byte(hexseed))
-
-	//return ed25519.NewKeyFromSeed(seed)
 	_, sk, _ := ed25519.GenerateKey(nil)
 	return sk
 }
@@ -149,7 +145,7 @@ func createTransaction(t *testing.T) *proto.Submission {
 	adiChainPath := "RedWagon/acc"
 	sub.Identitychain = types.GetIdentityChainFromIdentity(&adiChainPath).Bytes()
 	sub.Chainid = types.GetChainIdFromChainPath(&adiChainPath).Bytes()
-	sub.Type = api.ChainTypeToken[:]
+	sub.Type = types.ChainTypeToken[:]
 	sub.Instruction = proto.AccInstruction_Token_Transaction
 
 	//transaction := `{"inputs":{"FA3tM2R3T2ZT2gPrTfxjqhnFsdiqQUyKboKxvka3z5c1JF9yQck5":100,"FA3tM2R3T2ZT2gPrTfxjqhnFsdiqQUyKboKxvka3z5c1JF9yQck5":100,"FA3rCRnpU95ieYCwh7YGH99YUWPjdVEjk73mpjqnVpTDt3rUUhX8":10},"metadata":[0],"outputs":{"FA1zT4aFpEvcnPqPCigB3fvGu4Q4mTXY22iiuV69DqE1pNhdF2MC":10,"FA3sjgNF4hrJAiD9tQxAVjWS9Ca1hMqyxtuVSZTBqJiPwD7bnHkn":90,"FA2uyZviB3vs28VkqkfnhoXRD8XdKP1zaq7iukq2gBfCq3hxeuE8":10}}`

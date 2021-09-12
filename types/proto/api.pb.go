@@ -47,6 +47,7 @@ const (
 	AccInstruction_Data_Store                     AccInstruction = 12 //Data Store can only be sent and thus authorized by an authority node
 	AccInstruction_State_Store                    AccInstruction = 13
 	AccInstruction_Admin_Vote                     AccInstruction = 14
+	AccInstruction_Multisig_Transaction           AccInstruction = 15
 	AccInstruction_Synthetic_Identity_Creation    AccInstruction = 17
 	AccInstruction_Synthetic_Token_Transaction    AccInstruction = 19
 	AccInstruction_Synthetic_Token_Deposit        AccInstruction = 20
