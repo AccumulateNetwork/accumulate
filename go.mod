@@ -3,7 +3,7 @@ module github.com/AccumulateNetwork/accumulated
 go 1.15
 
 require (
-	github.com/AccumulateNetwork/SMT v0.0.22
+	github.com/AccumulateNetwork/SMT v0.0.24
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106
 	github.com/ChainSafe/go-schnorrkel v0.0.0-20200626160457-b38283118816 // indirect
