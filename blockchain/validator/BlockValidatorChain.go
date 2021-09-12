@@ -46,9 +46,6 @@ func (v *BlockValidatorChain) Initialize(config *cfg.Config) error {
 func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.GenTransaction) (*ResponseValidateTX, error) {
 	var err error
 
-	//the state entry will be nil, anon addr, or adi state
-	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(sub.GetChainID()) //need the identity chain
-
 	//If adiState doesn't exist, we will process by transaction instruction type
 	if currentState.IdentityState == nil {
 		//so the current state isn't defined, so we need to see if we need to create a token or anon chain.
