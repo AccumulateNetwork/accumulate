@@ -9,20 +9,20 @@ import (
 )
 
 func TestTokenAccount(t *testing.T) {
-	tokenUrl := types.String("RoadRunner/BeepBeep")
+	tokenUrl := types.String("roadrunner/BeepBeep")
 	adiChainPath := types.String("WileECoyote/ACME")
-	adi, chain, err := types.ParseIdentityChainPath(adiChainPath.AsString())
+	_, chain, err := types.ParseIdentityChainPath(adiChainPath.AsString())
 	if err != nil {
 		t.Fatalf("%v", err)
 	}
 
-	account := NewTokenAccount(adiChainPath, tokenUrl)
+	account := NewTokenAccount(types.String(chain), tokenUrl)
 
-	if *account.TokenURL.AsString() != chain {
+	if account.TokenURL != tokenUrl {
 		t.Fatalf("token Url didn't match")
 	}
 
-	if *account.URL.AsString() != adi {
+	if *account.URL.AsString() != chain {
 		t.Fatalf("adi URL")
 	}
 

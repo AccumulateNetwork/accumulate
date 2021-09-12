@@ -3,12 +3,12 @@ package validator
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
-	"time"
 )
 
 //todo fold this into the AdiChain validator
@@ -22,7 +22,7 @@ type SyntheticIdentityStateCreateValidator struct {
 func NewSyntheticIdentityStateCreateValidator() *SyntheticIdentityStateCreateValidator {
 	v := SyntheticIdentityStateCreateValidator{}
 	//this needs to be changed to use AdiChain
-	v.SetInfo(api.ChainTypeAdi[:], "create-identity-state", pb.AccInstruction_Synthetic_Identity_Creation)
+	v.SetInfo(types.ChainTypeAdi[:], "create-identity-state", pb.AccInstruction_Synthetic_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
@@ -86,6 +86,7 @@ func (v *SyntheticIdentityStateCreateValidator) Validate(currentstate *state.Sta
 	return resp, nil
 }
 
-func (v *SyntheticIdentityStateCreateValidator) EndBlock(mdroot []byte) error {
+func (v *SyntheticIdentityStateCreateValidator) EndBlock(mdRoot []byte) error {
+	_ = mdRoot
 	return nil
 }

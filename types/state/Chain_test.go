@@ -2,14 +2,14 @@ package state
 
 import (
 	"bytes"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 func TestStateHeader(t *testing.T) {
 
-	header := Chain{"acme/chain/path", types.Bytes32(api.ChainTypeAnonTokenAccount)}
+	header := Chain{ChainUrl: "acme/chain/path", Type: types.Bytes32(types.ChainTypeAnonTokenAccount)}
 
 	data, err := header.MarshalBinary()
 	if err != nil {
