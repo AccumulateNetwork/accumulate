@@ -5,9 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"strings"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type KeyType byte
@@ -34,7 +34,7 @@ type AdiState struct {
 // NewIdentityState this will eventually be the key groups and potentially just a multi-map of types to chain paths controlled by the identity
 func NewIdentityState(adi string) *AdiState {
 	r := &AdiState{}
-	r.SetHeader(types.String(adi), api.ChainTypeAdi[:])
+	r.SetHeader(types.String(adi), types.ChainTypeAdi[:])
 	return r
 }
 
