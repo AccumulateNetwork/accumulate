@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"net/url"
 	"strings"
@@ -19,6 +20,17 @@ type GenTransaction struct {
 	Routing     uint64        // The first 8 bytes of the hash of the identity
 	ChainID     []byte        // The hash of the chain URL
 	Transaction []byte        // The transaction that follows
+}
+
+func (t *GenTransaction) Equal(t2 *GenTransaction) bool {
+	isEqual := true
+	for i, sig := range t.Signature {
+		isEqual = isEqual && sig.Equal(t2.Signature[i])
+	}
+	return isEqual &&
+		t.Routing == t2.Routing &&
+		bytes.Equal(t.ChainID, t2.ChainID) &&
+		bytes.Equal(t.Transaction, t2.Transaction)
 }
 
 func (t *GenTransaction) SetRoutingChainID(destURL string) error {
@@ -60,10 +72,17 @@ func (t *GenTransaction) ValidateSig(keyHash []byte) bool {
 // MarshalBinary
 // Marshal the portion of the transaction that must be hashed then signed
 func (t *GenTransaction) MarshalBinary() (data []byte) {
-	//missing nonce.
 	data = append(data, common.Uint64Bytes(t.Routing)...)
 	data = append(data, common.SliceBytes(t.ChainID)...)
-	data = append(data, t.Transaction[:]...)
+	data = append(data, common.SliceBytes(t.Transaction)...)
+
+	return data
+}
+
+func (t *GenTransaction) UnmarshalBinary(data []byte) []byte {
+	t.Routing, data = common.BytesUint64(data)
+	t.ChainID, data = common.BytesSlice(data)
+	t.Transaction, data = common.BytesSlice(data)
 	return data
 }
 
@@ -71,30 +90,29 @@ func (t *GenTransaction) MarshalBinary() (data []byte) {
 // Create the binary representation of the GenTransaction
 func (t *GenTransaction) Marshal() (data []byte) {
 	sLen := uint64(len(t.Signature))
-	if sLen == 0 {
-		panic("must have signed transactions")
+	if sLen == 0 || sLen > 100 {
+		panic("must have 1 to 100 signatures")
 	}
 	data = common.Uint64Bytes(sLen)
 	for _, v := range t.Signature {
 		data = append(data, v.Marshal()...)
 	}
 	data = append(data, t.MarshalBinary()...)
-
 	return data
 }
 
 func (t *GenTransaction) UnMarshal(data []byte) []byte {
-	slen, data := common.BytesUint64(data)
-	if slen < 1 || slen > 100 {
+	var sLen uint64
+	sLen, data = common.BytesUint64(data)
+	if sLen < 1 || sLen > 100 {
 		panic("signature length out of range")
 	}
-	for i := uint64(0); i < slen; i++ {
+	for i := uint64(0); i < sLen; i++ {
 		sig := new(ED25519Sig)
 		data = sig.Unmarshal(data)
 		t.Signature = append(t.Signature, sig)
 	}
-	t.Routing, data = common.BytesUint64(data)
-	t.ChainID, data = common.BytesSlice(data)
+	data = t.UnmarshalBinary(data)
 	return data
 }
 

@@ -3,8 +3,6 @@ package validator
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
@@ -47,6 +45,30 @@ func (v *BlockValidatorChain) Initialize(config *cfg.Config) error {
 
 func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.GenTransaction) (*ResponseValidateTX, error) {
 	var err error
+
+	//the state entry will be nil, anon addr, or adi state
+	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(sub.GetChainID()) //need the identity chain
+
+	//If adiState doesn't exist, we will process by transaction instruction type
+	if currentState.IdentityState == nil {
+		//so the current state isn't defined, so we need to see if we need to create a token or anon chain.
+		val, err := v.getValidatorByIns(pb.AccInstruction(sub.GetTransactionType()))
+
+		if err != nil {
+			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", sub.GetTransactionType())
+		}
+
+		//valid actions for identity are to create an adi or create an account for anonymous address from synth transactions
+		switch pb.AccInstruction(sub.GetTransactionType()) {
+		case pb.AccInstruction_Synthetic_Identity_Creation: //a sponsor will generate the synth identity creation msg
+			fallthrough
+		case pb.AccInstruction_Synthetic_Token_Deposit: // for synth deposits, only anon addresses will be accepted
+			return val.Validate(currentState, sub)
+		default:
+			return nil, fmt.Errorf("invalid instruction issued for identity transaction, %d", sub.GetTransactionType)
+		}
+	}
+
 	//since we have a valid adiState, we now need to look up the chain
 	currentState.ChainState, _ = currentState.DB.GetCurrentEntry(sub.GetChainID()) //need the identity chain
 
@@ -80,30 +102,6 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.G
 	err = chain.UnmarshalBinary(currentState.ChainState.Entry)
 	if err != nil {
 		return nil, fmt.Errorf("unable to marshal chain header for BlockValidatorChain, %v", err)
-	}
-
-	adiChain := types.GetIdentityChainFromIdentity(chain.ChainUrl.AsString()).Bytes()
-	//the state entry will be nil, anon addr, or adi state
-	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(adiChain) //need the identity chain
-
-	//If adiState doesn't exist, we will process by transaction instruction type
-	if currentState.IdentityState == nil {
-		//so the current state isn't defined, so we need to see if we need to create a token or anon chain.
-		val, err := v.getValidatorByIns(pb.AccInstruction(sub.GetTransactionType()))
-
-		if err != nil {
-			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", sub.GetTransactionType())
-		}
-
-		//valid actions for identity are to create an adi or create an account for anonymous address from synth transactions
-		switch pb.AccInstruction(sub.GetTransactionType()) {
-		case pb.AccInstruction_Synthetic_Identity_Creation: //a sponsor will generate the synth identity creation msg
-			fallthrough
-		case pb.AccInstruction_Synthetic_Token_Deposit: // for synth deposits, only anon addresses will be accepted
-			return val.Validate(currentState, sub)
-		default:
-			return nil, fmt.Errorf("invalid instruction issued for identity transaction, %d", sub.GetTransactionType)
-		}
 	}
 
 	//retrieve the validator based upon chain type

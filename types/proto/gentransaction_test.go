@@ -30,9 +30,33 @@ func TestTokenTransaction(t *testing.T) {
 	s := Sign(GetKey(), th[:])
 	trans.Signature = append(trans.Signature, s)
 
+	{
+		data := s.Marshal()
+		s2 := new(ED25519Sig)
+		s2.Unmarshal(data)
+		if !s.Equal(s2) {
+			t.Fatal("Can't marshal a signature")
+		}
+		data = append(data, s2.Marshal()...)
+		if data == nil {
+			t.Fatal("couldn't marshal an ED25519Sig struct")
+		}
+		s3 := new(ED25519Sig)
+		s4 := new(ED25519Sig)
+		data = s3.Unmarshal(data)
+		data = s4.Unmarshal(data)
+		if !s2.Equal(s3) || !s3.Equal(s4) || len(data) != 0 {
+			t.Fatal("Can't marshal a multi-signature")
+		}
+	}
+
 	data := trans.Marshal()
 	to := new(GenTransaction)
 	to.UnMarshal(data)
+
+	if !trans.Equal(to) {
+		t.Error("should be equal")
+	}
 
 	if !to.ValidateSig(nil) {
 		t.Error("failed to validate signature")
