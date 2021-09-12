@@ -2,9 +2,9 @@ package state
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"math/big"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type tokenAccount struct {
@@ -22,7 +22,7 @@ type TokenAccount struct {
 func NewTokenAccount(accountUrl string, tokenUrl string) *TokenAccount {
 	tas := TokenAccount{}
 
-	tas.SetHeader(types.String(accountUrl), api.ChainTypeTokenAccount[:])
+	tas.SetHeader(types.String(accountUrl), types.ChainTypeTokenAccount[:])
 	tas.TokenUrl.String = types.String(tokenUrl)
 
 	return &tas

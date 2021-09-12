@@ -16,6 +16,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 
 	"github.com/AccumulateNetwork/accumulated/types"
+	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/go-playground/validator/v10"
 )
@@ -52,10 +53,10 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	kpSponsor := ed25519.NewKeyFromSeed(vm.Key.PrivKey.Bytes()[:32])
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	adiSponsor := types.String(types.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	adiSponsor := types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	//set destination url address
-	destAddress := types.String(types.GenerateAcmeAddress(kpNewAdi.Public().(ed25519.PublicKey)))
+	destAddress := types.String(anon.GenerateAcmeAddress(kpNewAdi.Public().(ed25519.PublicKey)))
 
 	txid := sha256.Sum256([]byte("txid"))
 
@@ -95,6 +96,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	fmt.Println(string(*resp.Data))
 	output, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatal(err)

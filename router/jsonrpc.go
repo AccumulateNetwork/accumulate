@@ -156,7 +156,7 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 	submission, err := proto.Builder().
 		AdiUrl(*req.Tx.Signer.URL.AsString()).
 		Instruction(proto.AccInstruction_Identity_Creation).
-		Type(acmeapi.ChainTypeAdi[:]). //The type is only needed for chain create messages
+		Type(types.ChainTypeAdi[:]). //The type is only needed for chain create messages
 		Data(*req.Tx.Data).
 		PubKey(req.Tx.Signer.PublicKey.Bytes()).
 		Signature(req.Sig.Bytes()).
@@ -234,7 +234,7 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 		AdiUrl(*req.Tx.Signer.URL.AsString()).
 		ChainUrl(*data.URL.AsString()). //this chain shouldn't exist yet
 		Instruction(proto.AccInstruction_Token_Issue).
-		Type(acmeapi.ChainTypeToken[:]). //Needed since this is a chain create messages
+		Type(types.ChainTypeToken[:]). //Needed since this is a chain create messages
 		Data(*req.Tx.Data).
 		PubKey(req.Tx.Signer.PublicKey.Bytes()).
 		Signature(req.Sig.Bytes()).
@@ -315,7 +315,7 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 		AdiUrl(*req.Tx.Signer.URL.AsString()).
 		ChainUrl(*data.URL.AsString()). // This chain shouldn't exist yet.
 		Instruction(proto.AccInstruction_Token_URL_Creation).
-		Type(acmeapi.ChainTypeToken[:]). // The type is only needed for chain create messages
+		Type(types.ChainTypeToken[:]). // The type is only needed for chain create messages
 		Data(*req.Tx.Data).
 		PubKey(req.Tx.Signer.PublicKey.Bytes()).
 		Signature(req.Sig.Bytes()).
@@ -392,7 +392,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 		AdiUrl(*req.Tx.Signer.URL.AsString()).
 		ChainUrl(*data.From.AsString()). // This chain shouldn't exist yet.
 		Instruction(proto.AccInstruction_Token_Transaction).
-		Type(acmeapi.ChainTypeToken[:]). // The type is only needed for chain create messages
+		Type(types.ChainTypeToken[:]). // The type is only needed for chain create messages
 		Data(*req.Tx.Data).
 		PubKey(req.Tx.Signer.PublicKey.Bytes()).
 		Signature(req.Sig.Bytes()).
