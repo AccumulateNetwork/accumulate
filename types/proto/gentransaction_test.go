@@ -4,9 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
-	"net/url"
 	"sort"
-	"strings"
 	"testing"
 )
 
@@ -23,16 +21,10 @@ func GetKey() []byte {
 func TestTokenTransaction(t *testing.T) {
 	testurl := "acc://0x411abc253de31674f"
 	trans := new(GenTransaction)
-	u, err := url.Parse(testurl)
-	if err != nil {
-		t.Error(err)
+	if err := trans.SetRoutingChainID(testurl); err != nil {
+		t.Fatal("could not create the Routing value")
 	}
-	host := strings.ToLower(u.Host)
-	h := sha256.Sum256([]byte(host))
-	trans.Routing = uint64(h[0])<<56 | uint64(h[1])<<48 | uint64(h[2])<<40 | uint64(h[3])<<32 |
-		uint64(h[4])<<24 | uint64(h[5])<<16 | uint64(h[6])<<8 | uint64(h[7])
-	h = sha256.Sum256([]byte(testurl))
-	trans.ChainID = h[:]
+
 	trans.Transaction = []byte("this is a message to who ever is about")
 	th := sha256.Sum256(trans.MarshalBinary())
 	s := Sign(GetKey(), th[:])
