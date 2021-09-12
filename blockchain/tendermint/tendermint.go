@@ -56,6 +56,12 @@ func Initialize(shardname string, index int, WorkingDir string){
 	   config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", localAddress, router.Networks[index].Port+2)
 	   config.P2P.ListenAddress = fmt.Sprintf("%s:%d", localAddress, router.Networks[index].Port)
 	   config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", router.Networks[index].Port)
+	   config.Consensus.TimeoutCommit = 2000 * time.Millisecond
+	   config.Consensus.TimeoutPrecommit = 2000 * time.Millisecond
+	   config.Consensus.TimeoutPrecommitDelta = 1000 * time.Millisecond
+	   config.Consensus.TimeoutPrevote = 2000 * time.Millisecond
+	   config.Consensus.TimeoutPrevoteDelta = 1000 * time.Millisecond
+	   config.Consensus.TimeoutProposeDelta = 1000 * time.Millisecond
 	   err := os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
            if err != nil {
               _ = os.RemoveAll(WorkingDir)
