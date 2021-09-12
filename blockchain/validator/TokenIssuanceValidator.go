@@ -28,7 +28,7 @@ func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	return &v
 }
 
-func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
 	return nil
 }
 func (v *TokenIssuanceValidator) Initialize(config *cfg.Config) error {
@@ -44,7 +44,7 @@ func (v *TokenIssuanceValidator) BeginBlock(height int64, time *time.Time) error
 	return nil
 }
 
-func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentState == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current State not defined")
@@ -65,7 +65,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 	}
 
 	ti := &api.Token{}
-	err = json.Unmarshal(submission.Data, ti)
+	err = json.Unmarshal(submission.Transaction, ti)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +94,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 
 	//return a new state object for a token
 	chainId := types.Bytes32{}
-	copy(chainId[:], submission.Chainid)
+	copy(chainId[:], submission.GetChainID())
 	resp.AddStateData(&chainId, tasso)
 
 	return resp, nil

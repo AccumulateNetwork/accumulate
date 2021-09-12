@@ -22,10 +22,10 @@ type TokenTransactionValidator struct {
 
 //this token validator belings in both a Token (coinbase) and Token Account validator.
 func NewTokenTransactionValidator() *TokenTransactionValidator {
-	v := TokenTransactionValidator{}
+	v := &TokenTransactionValidator{}
 	v.SetInfo(types.ChainTypeToken[:], "token-transaction", pb.AccInstruction_Token_Transaction)
-	v.ValidatorContext.ValidatorInterface = &v
-	return &v
+	v.ValidatorContext.ValidatorInterface = v
+	return v
 }
 
 // canTransact is a helper function to parse and check for errors in the transaction data
@@ -97,8 +97,8 @@ func canSendTokens(currentState *state.StateEntry, data []byte) (*state.AdiState
 }
 
 // Check will perform a sanity check to make sure transaction seems reasonable
-func (v *TokenTransactionValidator) Check(currentState *state.StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) error {
-	_, _, _, err := canSendTokens(currentState, data)
+func (v *TokenTransactionValidator) Check(currentState *state.StateEntry, submission *pb.GenTransaction) error {
+	_, _, _, err := canSendTokens(currentState, submission.Transaction)
 	return err
 }
 
@@ -118,9 +118,9 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 }
 
 // Validate validates a token transaction
-func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
+func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
-	ids, tas, tx, err := canSendTokens(currentState, submission.GetData())
+	ids, tas, tx, err := canSendTokens(currentState, submission.Transaction)
 
 	if ids == nil {
 		return nil, fmt.Errorf("invalid identity state retrieved for token transaction")
@@ -130,19 +130,29 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		return nil, err
 	}
 
-	keyHash := sha256.Sum256(submission.Key)
+	keyHash := sha256.Sum256(submission.Signature[0].PublicKey)
 	if !ids.VerifyKey(keyHash[:]) {
 		return nil, fmt.Errorf("key not authorized for signing transaction")
 	}
 
-	ts := time.Unix(submission.Timestamp, 0)
+	//ts := time.Unix(submission.Timestamp, 0)
+	//
+	//duration := time.Since(ts)
+	//if duration.Minutes() > 1 {
+	//	return nil, fmt.Errorf("transaction time of validity has elapesd by %f seconds", duration.Seconds()-60)
+	//}
 
-	duration := time.Since(ts)
-	if duration.Minutes() > 1 {
-		return nil, fmt.Errorf("transaction time of validity has elapesd by %f seconds", duration.Seconds()-60)
+	adiChain := state.Chain{}
+	err = adiChain.UnmarshalBinary(currentState.IdentityState.Entry)
+	if err != nil {
+		return nil, fmt.Errorf("unable to unmarshal adiChain")
+	}
+	//need to do a nonce check.
+	if submission.Signature[0].Nonce <= ids.Nonce {
+		return nil, fmt.Errorf("invalid nonce in transaction, cannot proceed")
 	}
 
-	txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp))
+	txid := submission.TxId()
 
 	ret := ResponseValidateTX{}
 	ret.Submissions = make([]*pb.Submission, len(tx.To)+1)

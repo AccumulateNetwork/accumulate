@@ -25,7 +25,7 @@ func NewTokenChainCreateValidator() *TokenChainCreateValidator {
 	return &v
 }
 
-func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
 	if currentstate == nil {
 		return fmt.Errorf("current state not defined")
 	}
@@ -38,7 +38,7 @@ func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, identi
 		return fmt.Errorf("chain already defined")
 	}
 	tcc := api.TokenAccount{}
-	err := json.Unmarshal(data, &tcc)
+	err := json.Unmarshal(submission.Transaction, &tcc)
 	if err != nil {
 		return fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
@@ -59,7 +59,7 @@ func (v *TokenChainCreateValidator) BeginBlock(height int64, time *time.Time) er
 	return nil
 }
 
-func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
@@ -72,7 +72,7 @@ func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, sub
 		return nil, fmt.Errorf("chain already defined")
 	}
 	tcc := api.TokenAccount{}
-	err = json.Unmarshal(submission.Data, &tcc)
+	err = json.Unmarshal(submission.Transaction, &tcc)
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}

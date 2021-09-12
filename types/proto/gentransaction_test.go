@@ -34,11 +34,11 @@ func TestTokenTransaction(t *testing.T) {
 	to := new(GenTransaction)
 	to.UnMarshal(data)
 
-	if !to.ValidateSig() {
+	if !to.ValidateSig(nil) {
 		t.Error("failed to validate signature")
 	}
 	to.Routing++
-	if to.ValidateSig() {
+	if to.ValidateSig(nil) {
 		t.Error("failed to invalidate signature")
 	}
 }
