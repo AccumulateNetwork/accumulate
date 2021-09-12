@@ -1,23 +1,17 @@
 package tendermint
 
 import (
-	"context"
-	"crypto/sha256"
+	"bytes"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 
 	//"crypto/ed25519"
 	_ "crypto/sha256"
-	"net"
 
 	_ "github.com/AccumulateNetwork/SMT/pmt"
-	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
-	"google.golang.org/grpc"
 
 	"encoding/json"
 	"fmt"
@@ -44,14 +38,11 @@ import (
 	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/version"
 
-	"bytes"
-
 	"github.com/AccumulateNetwork/SMT/managed"
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 
 	"sync"
 
-	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -118,7 +109,6 @@ type AccumulatorVMApplication struct {
 	//Val *validator.ValidatorContext //change to use chainval below instead
 	//chainval map[uint64]*validator.ValidatorContext //use this instead to make a group of validators that can be accessed via chain address.
 
-	bvc *validator.BlockValidatorChain
 	//begin deprecation
 	DB vadb.DB
 
@@ -149,22 +139,24 @@ type AccumulatorVMApplication struct {
 	RouterClient pb.ApiServiceClient
 
 	LocalClient *local.Local
+
+	chainValidatorNode *validator.Node
 }
 
 func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
-	//name := "kvstore"
-	//db, err := dbm.NewGoLevelDB(name, WorkingDir)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//
-	//tmstate := loadState(db)
+	name := "kvstore"
+	db, err := dbm.NewGoLevelDB(name, WorkingDir)
+	if err != nil {
+		panic(err)
+	}
+
+	tmState := loadState(db)
 
 	app := AccumulatorVMApplication{
-		//router: new(router2.Router),
-		RetainBlocks: 1, //only retain current block, we will manage our own tmstate
-		//state:        tmstate,
+		RetainBlocks: 1,       //only retain current block, we will manage our own states
+		state:        tmState, //this will save the current state of the blockchain we can use if we need to restart
 	}
+
 	_ = app.Initialize(ConfigFile, WorkingDir)
 
 	return &app
@@ -172,23 +164,13 @@ func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *Accumula
 
 var _ abcitypes.Application = (*AccumulatorVMApplication)(nil)
 
-func (app *AccumulatorVMApplication) AddValidator(val *validator.ValidatorContext) error {
-	//validators are mapped to registered type id's.
-	//getTypeId(val.GetChainId())
-
-	//so perhaps, the validator should lookup typeid by chainid in the validator registration database.
-
-	//TODO: Revisit chainid to address.
-	return nil
-}
-
-func (app *AccumulatorVMApplication) GetHeight() int64 {
-	return app.state.Height
-}
-
 func (app *AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
 
-	//todo: load up the merkle databases to the same state we're at...
+	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
+
+	if app.chainValidatorNode == nil {
+		panic("Chain Validator Node not set!")
+	}
 
 	return abcitypes.ResponseInfo{
 		Data:             fmt.Sprintf("{\"size\":%v}", app.state.Size),
@@ -211,11 +193,24 @@ func (app *AccumulatorVMApplication) GetAPIClient() (coregrpc.BroadcastAPIClient
 }
 
 func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
+	app.RetainBlocks = 1
+
 	app.waitgroup.Add(1)
 	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
 	app.config = cfg.DefaultConfig()
 	app.config.SetRoot(WorkingDir)
+
+	// read private validator
+	pv := privval.LoadFilePV(
+		app.config.PrivValidatorKeyFile(),
+		app.config.PrivValidatorStateFile(),
+	)
+	fmt.Printf("Node Public Address: 0x%X\n", pv.Key.PubKey.Address())
+	app.Key = pv.Key
+	app.Address = make([]byte, len(pv.Key.PubKey.Address()))
+
+	copy(app.Address, pv.Key.PubKey.Address())
 
 	v := viper.New()
 	v.SetConfigFile(ConfigFile)
@@ -230,75 +225,24 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	if err := app.config.ValidateBasic(); err != nil {
 		return fmt.Errorf("config is invalid: %w", err)
 	}
-	app.Accrpcaddr = v.GetString("accumulate.AccRPCAddress")
-
-	//create a connection to the router.
-	routeraddress := v.GetString("accumulate.RouterAddress")
-	if len(routeraddress) == 0 {
-		return fmt.Errorf("accumulate.RouterAddress token not specified in config file")
-	}
-
-	conn, err := grpc.Dial(routeraddress, grpc.WithBlock(), grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
-	if err != nil {
-		return fmt.Errorf("error Openning GRPC client in router")
-	}
-	//defer conn.Close()
-	app.RouterClient = pb.NewApiServiceClient(conn)
-
-	//name := "blockstate"
-	//db, err := dbm.NewGoLevelDB(name, WorkingDir)
-	//if err != nil {
-	//	panic(err)
-	//}
-
-	//app.state = loadState(db)
-
-	str := "ValTypeReg"
-	fmt.Printf("Creating %s\n", str)
-	cdb, err := nm.DefaultDBProvider(&nm.DBContext{ID: str, Config: app.config})
-	app.valTypeRegDB = cdb
-	if err != nil {
-		return fmt.Errorf("failed to create node accumulator database: %w", err)
-	}
-
-	networkId := viper.GetString("instrumentation/namespace")
-	bvcId := sha256.Sum256([]byte(networkId))
-	dbfilename := WorkingDir + "/" + "valacc.db"
-	err = app.mmdb.Open(dbfilename, bvcId[:], false, true)
-
-	if err != nil {
-		return err
-	}
-
-	app.bvc = validator.NewBlockValidatorChain()
 
 	return nil
 }
 
-// InitChain /ABCI call
-func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
-	fmt.Printf("Initializing Accumulator Router\n")
+// SetAccumulateNode will set the chain validator set to use
+func (app *AccumulatorVMApplication) SetAccumulateNode(node *validator.Node) {
+	app.chainValidatorNode = node
+}
 
-	//this is more like network ID for us...  so perhaps should simply be number 1 to N
-	///in theory these can be used to host the administration chains.
-	///adi "hash" of network 1 is
-	///0x0000000000000000000000000000000000000000000000000000000000000001
-	///0x0000000000000000000000000000000000000000000000000000000000000002
-	///0x0000000000000000000000000000000000000000000000000000000000000003
-	///...
-	///url would look like acc://000000000000000000000000000000000000000000000000000000000000000N/whatevs,
-	///where N is the network ID
-	/// one use case of this chain would be to hold all the pubkeys for all the validtors on the other networks.
-	/// the chain would get updated by the dbvc every time a bvc adds or removes a node validator.
+// InitChain /ABCI call is issued only 1 time at the creation of the chain.
+func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
+	fmt.Printf("Initializing tendermint chain\n")
+
 	var networkid [32]byte
 	networkid[31] = 1
 	app.ChainId = networkid
 
-	////commits will be stored here and key'ed via entry hash.
-
-	//Temporary work around for chicken / egg problem at genesis block
-	//we could use admin chains go get around this
-
+	//register a list of the validators.
 	for _, v := range req.Validators {
 		r := app.updateValidator(v)
 		if r.IsErr() {
@@ -307,49 +251,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 		}
 	}
 
-	app.submission = make(chan pb.Submission)
-	//go app.dispatch()
-
 	return abcitypes.ResponseInitChain{AppHash: app.ChainId[:]}
-}
-
-func (app *AccumulatorVMApplication) createBootstrapAccount() {
-	tokenUrl := "wileecoyote/ACME"
-	adi, chainPath, err := types.ParseIdentityChainPath(&tokenUrl)
-	if err != nil {
-		panic(err)
-	}
-
-	is := state.NewIdentityState(adi)
-	keyHash := sha256.Sum256(app.Key.PubKey.Bytes())
-	_ = is.SetKeyData(state.KeyTypeSha256, keyHash[:])
-	idStateData, err := is.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
-
-	identity := types.GetIdentityChainFromIdentity(&adi)
-	chainid := types.GetChainIdFromChainPath(&chainPath)
-
-	ti := api.NewToken(chainPath, "ACME", 8)
-
-	tas := state.NewToken(chainPath)
-	tas.Precision = ti.Precision
-	tas.Symbol = ti.Symbol
-	tas.Meta = ti.Meta
-
-	tasstatedata, err := tas.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
-	err = app.mmdb.AddStateEntry(identity[:], idStateData)
-	if err != nil {
-		panic(err)
-	}
-	err = app.mmdb.AddStateEntry(chainid[:], tasstatedata)
-	if err != nil {
-		panic(err)
-	}
 }
 
 // BeginBlock /ABCI / block calls
@@ -364,14 +266,14 @@ func (app *AccumulatorVMApplication) createBootstrapAccount() {
 //Here we create a batch, which will store block's transactions.
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
 
-	if req.Header.Height == 2 {
-		//for testnet...
-		//app.createBootstrapAccount()
-	}
+	//Identify the leader for this block, if we are the proposer... then we are the leader.
+	leader := bytes.Compare(app.Address.Bytes(), req.Header.GetProposerAddress()) == 0
+	app.chainValidatorNode.BeginBlock(req.Header.Height, &req.Header.Time, leader)
 
 	app.timer = time.Now()
 
-	fmt.Printf("Begin Block %d on shard %s\n", req.Header.Height, req.Header.ChainID)
+	fmt.Printf("Begin Block %d on network id %s\n", req.Header.Height, req.Header.ChainID)
+
 	app.txct = 0
 
 	/*
@@ -396,18 +298,7 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 		}
 
 	*/
-	//TODO: Purge any expired entry / chain commits
 
-	//Identify the leader for this block.
-	//if we are the proposer... then we are the leader.
-	app.amLeader = bytes.Compare(app.Address.Bytes(), req.Header.GetProposerAddress()) == 0
-
-	//fmt.Printf("Public Address: 0x%X\n",app.Address)
-	//fmt.Printf("Public Address: 0x%X\n",req.Header.GetProposerAddress())
-
-	if app.amLeader {
-		//TODO: determine if anything needs to be done here.
-	}
 	return abcitypes.ResponseBeginBlock{}
 }
 
@@ -436,18 +327,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
 
-	currentState, err := state.NewStateEntry(nil, nil, &app.mmdb)
-
-	//placeholder for special validation rules for synthetic transactions.
-	if sub.GetInstruction()&0xFF00 > 0 {
-		//need to verify the sender is a legit bvc validator also need the dbvc receipt
-		//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
-		//not an impostor. Need to figure out how to do this. Right now we just assume the syth request
-		//sender is legit.
-	}
-
-	//run through the validation routine
-	err = app.bvc.Check(currentState, sub.Identitychain, sub.Chainid, 0, 0, sub.Data)
+	err = app.chainValidatorNode.CanTransact(sub)
 
 	if err != nil {
 		ret.Code = 2
@@ -459,45 +339,6 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 
 	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
 	return ret
-}
-
-//processValidatedSubmissionRequest Figure out what to do with the processed validated transaction.  This may include firing off a synthetic TX or simply
-//updating the state of the transaction
-func (app *AccumulatorVMApplication) processValidatedSubmissionRequest(vdata *validator.ResponseValidateTX) error {
-
-	for i := range vdata.Submissions {
-		//generate a synthetic tx and send to the router.
-		//need to track txid to make sure they get processed....
-		if app.amLeader {
-			//we may want to reconsider making this a go call since using grpc could delay things considerably.
-			//we only need to make sure it is processed by the next EndBlock so place in pending queue.
-			var sk valacctypes.PrivateKey
-			copy(sk[:], app.Key.PrivKey.Bytes())
-
-			//The validator must have created a valid request with the timestamp included
-			if vdata.Submissions[i].Timestamp == 0 {
-				return fmt.Errorf("invalid synthetic transaction request.  Timestamp not set")
-			}
-
-			//derive the ledger to sign the data.
-			ledger := types.MarshalBinaryLedgerChainId(vdata.Submissions[i].Chainid, vdata.Submissions[i].Data,
-				vdata.Submissions[i].Timestamp)
-
-			///if we are the leader then we are responsible for dispatching the synth tx.
-			var err error
-			vdata.Submissions[i].Signature, err = app.Key.PrivKey.Sign(ledger)
-
-			if err != nil {
-				return fmt.Errorf("error signing validated submission request")
-			}
-
-			//using protobuffers grpc is quite slow, so we need to use batch and dispatch
-			//buffering these calls up into a batch and send them out at the end of frame instead.
-			//this is a good place to experiment with different optimizations
-			app.RouterClient.ProcessTx(context.Background(), vdata.Submissions[i])
-		}
-	}
-	return nil
 }
 
 // DeliverTx ABCI / block calls
@@ -523,18 +364,8 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
 
-	currentState, err := state.NewStateEntry(nil, nil, &app.mmdb)
-
-	//placeholder for special validation rules for synthetic transactions.
-	if sub.GetInstruction()&0xFF00 > 0 {
-		//need to verify the sender is a legit bvc validator also need the dbvc receipt
-		//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
-		//not an impostor. Need to figure out how to do this. Right now we just assume the syth request
-		//sender is legit.
-	}
-
-	//run through the validation routine
-	vdata, err := app.bvc.Validate(currentState, sub)
+	//run through the validation node
+	err = app.chainValidatorNode.Validate(sub)
 
 	if err != nil {
 		ret.Code = 2
@@ -543,41 +374,9 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.Type, err)
 		return ret
 	}
-	if vdata == nil {
-		ret.Code = 2
-		ret.GasWanted = 0
-		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("insufficent Entry Data on validator %v \n", err)
-		return ret
-	}
-
-	/// batch any synthetic tx's generated by the validator
-	app.processValidatedSubmissionRequest(vdata)
-
-	/// update the state data for the chain.
-	if vdata.StateData != nil {
-		for k, v := range vdata.StateData {
-			header := state.Chain{}
-			err := header.UnmarshalBinary(v)
-			if err != nil {
-				ret.Code = 2
-				ret.GasWanted = 0
-				ret.GasUsed = 0
-				ret.Info = fmt.Sprintf("invalid state object after submissinon processing")
-				return ret
-			}
-			app.mmdb.AddStateEntry(k[:], v)
-		}
-	}
 
 	//now we need to store the data returned by the validator and feed into accumulator
 	app.txct++
-
-	if err != nil {
-		ret.Code = 2
-		ret.GasWanted = 0
-		return ret
-	}
 
 	return response
 }
@@ -622,42 +421,17 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	//end the current batch of transactions in the Stateful Merkle Tree
 
-	mdRoot, err := app.mmdb.WriteStates(app.Height)
+	mdRoot, err := app.chainValidatorNode.EndBlock()
+	resp.Data = mdRoot
 
 	if err != nil {
-		//shouldn't get here.
-		panic(fmt.Errorf("fatal error, block not set, %v", err))
-	}
-
-	if mdRoot != nil {
-		resp.Data = mdRoot
-	}
-
-	//I think we need to get this from the bpt
-	//app.bpt.Bpt.Root.Hash
-	//if we have no transactions this block then don't publish anything
-	if app.amLeader && app.txct > 0 {
-
-		//now we create a synthetic transaction and publish to the directory block validator
-		dbvc := validator.ResponseValidateTX{}
-		dbvc.Submissions = make([]*pb.Submission, 1)
-		dbvc.Submissions[0] = &pb.Submission{}
-		dbvc.Submissions[0].Instruction = 0
-		chainAdi := "dbvc"
-		chainId := types.GetChainIdFromChainPath(&chainAdi)
-		dbvc.Submissions[0].Identitychain = chainId[:] //1 is the chain id of the DBVC
-		dbvc.Submissions[0].Chainid = chainId[:]
-
-		dbvc.Submissions[0].Instruction = pb.AccInstruction_Data_Entry //this may be irrelevant...
-		dbvc.Submissions[0].Param1 = 0
-		dbvc.Submissions[0].Param2 = 0
-
+		//should never get here.
+		panic(err)
 	}
 
 	//this will truncate what tendermint stores since we only care about current state
 	if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
-		//todo: add this back when done with debugging. right now we are retaining everything for test net until
-		//we get bootstrapping sync working...
+		//todo: uncomment the next line when we have smt state syncing complete. For now, we are retaining everything for test net
 		//resp.RetainHeight = app.Height - app.RetainBlocks + 1
 	}
 
@@ -673,7 +447,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	return resp
 }
 
-//------------------------
+//------------------------ Query Stuff ------------------------
 
 func (app *AccumulatorVMApplication) ListSnapshots(
 	req abcitypes.RequestListSnapshots) abcitypes.ResponseListSnapshots {
@@ -703,8 +477,8 @@ func (app *AccumulatorVMApplication) ApplySnapshotChunk(
 
 //Query when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
 func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
-	resQuery.Key = reqQuery.Data
 
+	resQuery.Key = reqQuery.Data
 	q := pb.Query{}
 	err := proto.Unmarshal(reqQuery.Data, &q)
 	if err != nil {
@@ -714,27 +488,19 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 	}
 
 	fmt.Printf("query %s", q.ChainUrl)
-	//extract the state for the chain id
-	chainState, err := app.mmdb.GetCurrentEntry(q.ChainId)
+
+	ret, err := app.chainValidatorNode.Query(&q)
+
 	if err != nil {
-		resQuery.Info = fmt.Sprintf("chain id query, %v", err)
+		resQuery.Info = fmt.Sprintf("%v", err)
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
 
-	chainHeader := state.Chain{}
-	err = chainHeader.UnmarshalBinary(chainState.Entry)
-	if err != nil {
-		resQuery.Info = fmt.Sprintf("unable to extract chain header\n")
-		resQuery.Code = code.CodeTypeUnauthorized
-		return resQuery
-	}
 	//if we get here, we have a valid state object, so let's return it.
 	resQuery.Code = code.CodeTypeOK
 	//return a generic state object for the chain and let the query deal with decoding it
-	resQuery.Value = chainState.Entry
-
-	fmt.Printf("Query URI: %s", q.Query)
+	resQuery.Value = ret
 
 	///implement lazy sync calls. If a node falls behind it needs to have several query calls
 	///1 get current height
@@ -748,10 +514,6 @@ func (app *AccumulatorVMApplication) GetName() string {
 }
 func (app *AccumulatorVMApplication) Wait() {
 	app.waitgroup.Wait()
-}
-
-func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
-	return tmnet.Connect(addr)
 }
 
 func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
@@ -776,15 +538,6 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		return nil, fmt.Errorf("failed to load node's key: %w", err)
 	}
 
-	fmt.Printf("Public Address: 0x%X\n", pv.Key.PubKey.Address())
-
-	//sk := ed25519.PrivateKey{}
-
-	app.Key = pv.Key
-	app.Address = make([]byte, len(pv.Key.PubKey.Address()))
-	copy(app.Address, pv.Key.PubKey.Address())
-
-	//this should be done outside of here...
 	// create node
 	node, err := nm.NewNode(
 		app.config,
@@ -811,16 +564,10 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	WaitForRPC(app.config.RPC.ListenAddress)
 
 	app.LocalClient = local.New(node)
-
-	//makeGRPCServer(app,app.Accrpcaddr )//app.config.RPC.GRPCListenAddress)
-
-	//return &api, nil
-
 	client := GetGRPCClient(app.config.RPC.GRPCListenAddress) //makeGRPCClient(app.Accrpcaddr)//app.config.RPC.GRPCListenAddress)
 
 	app.APIClient = client
 
-	//s := node.Listeners()
 	defer func() {
 		node.Stop()
 		node.Wait()
