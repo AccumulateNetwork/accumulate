@@ -84,7 +84,15 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.GenTr
 		return nil, fmt.Errorf("unable to unmarshal adi state entry, %v", err)
 	}
 
-	if !submission.ValidateSig(adiState.KeyData) {
+	if !adiState.VerifyKey(submission.Signature[0].PublicKey) {
+		return nil, fmt.Errorf("key is not supported by current ADI state")
+	}
+
+	if !adiState.VerifyAndUpdateNonce(submission.Signature[0].Nonce) {
+		return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Signature[0].Nonce)
+	}
+
+	if !submission.ValidateSig() {
 		return nil, fmt.Errorf("error validating the sponsor identity key, %v", err)
 	}
 
