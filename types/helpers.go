@@ -110,7 +110,7 @@ func GetIdentityChainFromIdentity(adi *string) *Bytes32 {
 
 //GetAddressFromIdentityChain get the 8-bit address from the identity chain.  this is used for bvc routing
 func GetAddressFromIdentityChain(identitychain []byte) uint64 {
-	addr := binary.LittleEndian.Uint64(identitychain)
+	addr := binary.BigEndian.Uint64(identitychain)
 	return addr
 }
 

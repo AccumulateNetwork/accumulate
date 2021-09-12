@@ -59,7 +59,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//set destination url address
 	destAddress := types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
 
-	txid := sha256.Sum256([]byte("txid"))
+	txid := sha256.Sum256([]byte("fake txid"))
 
 	tokenUrl := types.String("dc/ACME")
 
@@ -68,26 +68,21 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	deposit.DepositAmount.SetInt64(5000)
 	deposit.TokenUrl = tokenUrl
 
-	data, err := deposit.MarshalBinary()
-	sig := ed25519.Sign(kpSponsor, data)
-	if err != nil {
-		t.Fatal(err)
+	depData, err := deposit.MarshalBinary()
+	gtx := new(proto.GenTransaction)
+	gtx.Transaction = depData
+	if err := gtx.SetRoutingChainID(*destAddress.AsString()); err != nil {
+		t.Fatal("bad url generated")
 	}
+	s := ed25519.Sign(privateKey, depData)
+	ed := new(proto.ED25519Sig)
+	ed.PublicKey = privateKey[32:]
+	ed.Signature = s
+	gtx.Signature = append(gtx.Signature, ed)
 
-	builder := proto.SubmissionBuilder{}
-	sub, err := builder.
-		Instruction(proto.AccInstruction_Synthetic_Token_Deposit).
-		Data(data).
-		PubKey(types.Bytes(kpSponsor.Public().(ed25519.PublicKey))).
-		Timestamp(time.Now().Unix()).
-		AdiUrl(*destAddress.AsString()).
-		Signature(sig).
-		Build()
-
-	_, err = client.ProcessTx(context.Background(), sub)
-	if err != nil {
-		t.Fatal(err)
-	}
+	deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
+	deliverRequestTXAsync.Tx = gtx.Marshal()
+	query.client.DeliverTxAsync(*deliverRequestTXAsync)
 
 	Load(t, query, privateKey)
 
