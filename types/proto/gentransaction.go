@@ -56,12 +56,9 @@ func (t *GenTransaction) TxId() []byte {
 
 // ValidateSig
 // We validate the signature of the transaction.
-func (t *GenTransaction) ValidateSig(keyHash []byte) bool {
-	h := t.TxId()
+func (t *GenTransaction) ValidateSig() bool {
+	h := t.MarshalBinary()
 	for _, v := range t.Signature {
-		if !v.CanVerify(keyHash) {
-			return false
-		}
 		if !v.Verify(h[:]) {
 			return false
 		}

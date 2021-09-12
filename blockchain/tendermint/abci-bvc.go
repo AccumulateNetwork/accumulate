@@ -318,10 +318,10 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) abcit
 	sub := &pb.GenTransaction{}
 
 	//unpack the request
-	err := sub.UnMarshal(req.Tx)
+	whatevs := sub.UnMarshal(req.Tx)
 
 	//check to see if there was an error decoding the submission
-	if err != nil {
+	if len(whatevs) != 0 {
 		//reject it
 		return abcitypes.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: fmt.Sprintf("Unable to decode transaction")}

@@ -41,9 +41,12 @@ func NewIdentityState(adi string) *AdiState {
 	return r
 }
 
-func (is *AdiState) IncrementNonce() uint64 {
-	is.Nonce++
-	return is.Nonce
+func (is *AdiState) VerifyAndUpdateNonce(nonce uint64) bool {
+	if is.Nonce < nonce {
+		is.Nonce = nonce
+	}
+	is.Nonce = nonce
+	return true
 }
 
 func (is *AdiState) GetChainUrl() string {
