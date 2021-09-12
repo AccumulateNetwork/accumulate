@@ -8,9 +8,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api"
-
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
@@ -72,22 +71,28 @@ func (app *Node) BeginBlock(height int64, Time *time.Time, leader bool) error {
 }
 
 // CanTransact will do light validation on the transaction
-func (app *Node) CanTransact(transaction *pb.Submission) error {
+func (app *Node) CanTransact(transaction *pb.GenTransaction) error {
 	currentState := state.NewStateEntry(nil, nil, &app.mmDB)
-	app.chainValidator.Check(currentState, nil, nil, 0, 0, transaction.Data)
+
+	//need to also provide a public key hash of the identity...
+	if !transaction.ValidateSig(nil) {
+		return fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType())
+	}
+
+	app.chainValidator.Check(currentState, transaction)
 	return nil
 }
 
 // Validate will do a deep validation of the transaction.  This is done by ALL the validators in the network
 // transaction []byte will be replaced by transaction RawTransaction
-func (app *Node) Validate(transaction *pb.Submission) error {
+func (app *Node) Validate(transaction *pb.GenTransaction) error {
 
 	currentState := state.NewStateEntry(nil, nil, &app.mmDB)
 
 	_, err := app.chainValidator.Validate(currentState, transaction)
 
 	//placeholder for special validation rules for synthetic transactions.
-	if transaction.GetInstruction()&0xFF00 > 0 {
+	if transaction.GetTransactionType()&0xFF00 > 0 {
 		//need to verify the sender is a legit bvc validator also need the dbvc receipt
 		//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
 		//not an impostor. Need to figure out how to do this. Right now we just assume the synth request

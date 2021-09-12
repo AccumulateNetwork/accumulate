@@ -3,7 +3,6 @@ package validator
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -26,13 +25,13 @@ type AnonTokenChain struct {
 }
 
 func NewAnonTokenChain() *AnonTokenChain {
-	v := AnonTokenChain{}
+	v := &AnonTokenChain{}
 	v.SetInfo(types.ChainTypeAnonTokenAccount[:], types.ChainSpecAnonTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
-	v.ValidatorContext.ValidatorInterface = &v
-	return &v
+	v.ValidatorContext.ValidatorInterface = v
+	return v
 }
 
-func (v *AnonTokenChain) Check(currentState *state.StateEntry, identityChain []byte, chainId []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *AnonTokenChain) Check(currentState *state.StateEntry, submission *pb.GenTransaction) error {
 	//
 	//var err error
 	//resp := &ResponseValidateTX{}
@@ -61,17 +60,17 @@ func (v *AnonTokenChain) BeginBlock(height int64, time *time.Time) error {
 
 	return nil
 }
-func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submission *pb.Submission, resp *ResponseValidateTX) error {
+func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submission *pb.GenTransaction, resp *ResponseValidateTX) error {
 
 	//unmarshal the synthetic transaction based upon submission
 	deposit := synthetic.TokenTransactionDeposit{}
-	err := deposit.UnmarshalBinary(submission.Data)
+	err := deposit.UnmarshalBinary(submission.Transaction)
 	if err != nil {
 		return err
 	}
 
 	//derive the chain for the token account
-	adi, _, err := types.ParseIdentityChainPath(&submission.AdiChainPath)
+	adi, _, err := types.ParseIdentityChainPath(deposit.ToUrl.AsString())
 	if err != nil {
 		return err
 	}
@@ -143,41 +142,28 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 
 	return nil
 }
-func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submission *pb.Submission, resp *ResponseValidateTX) error {
+func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submission *pb.GenTransaction, resp *ResponseValidateTX) error {
 	//unmarshal the synthetic transaction based upon submission
 	//VerifySignatures
 	deposit := api.TokenTx{}
-	err := json.Unmarshal(submission.Data, &deposit)
+	err := deposit.UnmarshalBinary(submission.Transaction)
+
 	if err != nil {
 		return fmt.Errorf("error with send token, %v", err)
 	}
 
-	ts := time.Unix(submission.Timestamp, 0)
-
-	duration := time.Since(ts)
-	if duration.Minutes() > 1 {
-		return fmt.Errorf("transaction time of validity has elapesd by %f seconds", duration.Seconds()-60)
-	}
+	//ts := time.Unix(submission.Timestamp, 0)
+	//
+	//duration := time.Since(ts)
+	//if duration.Minutes() > 1 {
+	//	return fmt.Errorf("transaction time of validity has elapesd by %f seconds", duration.Seconds()-60)
+	//}
 
 	//need to derive chain id for coin type account.
 	accountChainId := types.GetChainIdFromChainPath(deposit.From.AsString())
 	currentState.ChainState, err = currentState.DB.GetCurrentEntry(accountChainId[:])
 	if err != nil {
 		return fmt.Errorf("chain state for account not esablished")
-	}
-
-	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(submission.Identitychain)
-	if err != nil {
-		return fmt.Errorf("identity not established")
-	}
-
-	cs, tokenAccountState, tokenTx, err := canSendTokens(currentState, submission.Data)
-	if err != nil {
-		return err
-	}
-
-	if cs != nil {
-		return fmt.Errorf("chain state is of the incorrect type")
 	}
 
 	//extract the chain header, we don't need the entire id
@@ -187,7 +173,22 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		return err
 	}
 
-	address := types2.GenerateAcmeAddress(submission.Key)
+	adiChain := types.GetIdentityChainFromIdentity(chainHeader.ChainUrl.AsString()).Bytes()
+	currentState.IdentityState, err = currentState.DB.GetCurrentEntry(adiChain)
+	if err != nil {
+		return fmt.Errorf("identity not established")
+	}
+
+	cs, tokenAccountState, tokenTx, err := canSendTokens(currentState, submission.Transaction)
+	if err != nil {
+		return err
+	}
+
+	if cs != nil {
+		return fmt.Errorf("chain state is of the incorrect type")
+	}
+
+	address := types2.GenerateAcmeAddress(submission.Signature[0].PublicKey)
 
 	if address != string(chainHeader.ChainUrl) {
 		return fmt.Errorf("invalid address, public key address is %s but account %s ", address, chainHeader.ChainUrl)
@@ -215,6 +216,8 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 
 	//now build the synthetic transactions.
 	resp.Submissions = make([]*pb.Submission, len(tokenTx.To)+1)
+
+	txid := submission.TxId()
 
 	txAmt := big.NewInt(0)
 	for i, val := range tokenTx.To {
@@ -249,7 +252,6 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		//set the transaction instruction type to a synthetic token deposit
 		sub.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
 
-		txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(submission.Chainid, submission.Data, submission.Timestamp))
 		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &tokenTx.From.String, &val.URL.String)
 		err = depositTx.SetDeposit(&tokenAccountState.ChainUrl, amt)
 		if err != nil {
@@ -283,19 +285,19 @@ func (v *AnonTokenChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
 	return nil
 }
 
-func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
+func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
 
 	var err error
 	resp := &ResponseValidateTX{}
 
-	switch submission.Instruction {
-	case pb.AccInstruction_Synthetic_Token_Deposit:
+	switch submission.GetTransactionType() {
+	case uint64(pb.AccInstruction_Synthetic_Token_Deposit):
 		//need to verify synthetic deposit.
 		err = v.processDeposit(currentState, submission, resp)
-	case pb.AccInstruction_Token_Transaction:
+	case uint64(pb.AccInstruction_Token_Transaction):
 		err = v.processSendToken(currentState, submission, resp)
 	default:
-		err = fmt.Errorf("unable to process anonomous token with invalid instruction, %d", submission.Instruction)
+		err = fmt.Errorf("unable to process anonomous token with invalid instruction, %d", submission.GetTransactionType())
 	}
 
 	return resp, err

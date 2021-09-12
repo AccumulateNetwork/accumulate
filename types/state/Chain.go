@@ -60,13 +60,12 @@ func (h *Chain) MarshalBinary() ([]byte, error) {
 
 //UnmarshalBinary deserializes the data array into the header object
 func (h *Chain) UnmarshalBinary(data []byte) error {
-
-	if len(data) < 32 {
+	if len(data[:]) < 32 {
 		return fmt.Errorf("state header buffer too short for unmarshal")
 	}
-	i := copy(h.Type[:], data[:32])
+	n := copy(h.Type[:], data[:32])
 
-	err := h.ChainUrl.UnmarshalBinary(data[i:])
+	err := h.ChainUrl.UnmarshalBinary(data[n:])
 	if err != nil {
 		return err
 	}

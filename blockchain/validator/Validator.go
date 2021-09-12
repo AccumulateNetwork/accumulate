@@ -29,9 +29,9 @@ func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []by
 type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
-	Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error
-	Validate(currentstate *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) //return persistent entry or error
-	EndBlock(mdroot []byte) error                                                                    //do something with MD root
+	Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error
+	Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) //return persistent entry or error
+	EndBlock(mdroot []byte) error                                                                        //do something with MD root
 
 	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated
 	GetInfo() *ValidatorInfo

@@ -3,6 +3,7 @@ package state
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -22,8 +23,10 @@ const (
 
 type adiState struct {
 	Chain
+
 	KeyType KeyType     `json:"keyType"`
 	KeyData types.Bytes `json:"keyData"`
+	Nonce   uint64      `json:"nonce"`
 }
 
 type AdiState struct {
@@ -36,6 +39,11 @@ func NewIdentityState(adi string) *AdiState {
 	r := &AdiState{}
 	r.SetHeader(types.String(adi), types.ChainTypeAdi[:])
 	return r
+}
+
+func (is *AdiState) IncrementNonce() uint64 {
+	is.Nonce++
+	return is.Nonce
 }
 
 func (is *AdiState) GetChainUrl() string {
@@ -112,13 +120,16 @@ func (is *AdiState) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 	buffer.Write(headerData)
 	buffer.WriteByte(byte(is.KeyType))
-
 	data, err := is.KeyData.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("unable to marshal key data for AdiState, %v", err)
 	}
 
 	buffer.Write(data)
+
+	var nonce [8]byte
+	n := binary.PutUvarint(nonce[:], is.Nonce)
+	buffer.Write(nonce[:n])
 
 	return buffer.Bytes(), nil
 }
@@ -147,6 +158,17 @@ func (is *AdiState) UnmarshalBinary(data []byte) error {
 	err = is.KeyData.UnmarshalBinary(data[i:])
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal key data for AdiState, %v", err)
+	}
+	i += is.KeyData.Size(nil)
+
+	if dLen <= i {
+		return fmt.Errorf("cannot nonce for AdiState, insuffient data")
+	}
+
+	var n int
+	is.Nonce, n = binary.Uvarint(data)
+	if n <= 0 {
+		return fmt.Errorf("error unmarshalling nonce for adi")
 	}
 
 	return nil

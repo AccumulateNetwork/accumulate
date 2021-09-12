@@ -1,6 +1,7 @@
 package proto
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 
@@ -34,6 +35,19 @@ func SignHash(privateKey []byte, hash []byte) *ED25519Sig {
 	ed25519sig.PublicKey = append([]byte{}, privateKey[32:]...) // Note that the last 32 bytes of a private key is the
 	ed25519sig.Signature = s                                    // public key.  Save the signature.
 	return ed25519sig
+}
+
+// CanVerify
+// will check to see if the keyHash of the public key, matches the key
+// hash of the key that is part of this transaction. This is useful for
+// situations where we need to see if the sender has permission to sign
+// the transaction.
+func (e *ED25519Sig) CanVerify(keyHash []byte) bool {
+	if keyHash == nil { //if no key hash is provided assume the caller
+		return true
+	}
+	pubKeyHash := sha256.Sum256(e.PublicKey)
+	return bytes.Compare(keyHash, pubKeyHash[:]) == 0
 }
 
 // Verify

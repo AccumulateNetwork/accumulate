@@ -1,9 +1,6 @@
 package validator
 
 import (
-	"crypto/sha256"
-	"encoding/json"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -30,7 +27,7 @@ func NewAdiChain() *AdiChain {
 	return &v
 }
 
-func (v *AdiChain) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *AdiChain) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
 	if currentstate == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
@@ -71,7 +68,7 @@ func (v *AdiChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
 	return nil
 }
 
-func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current State Not Defined")
@@ -87,29 +84,24 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 		return nil, fmt.Errorf("unable to unmarshal adi state entry, %v", err)
 	}
 
-	ledger := types.MarshalBinaryLedgerChainId(submission.Identitychain, submission.Data, submission.Timestamp)
-
-	txid := sha256.Sum256(ledger)
-
-	err = v.VerifySignatures(ledger, submission.Key, submission.Signature, &adiState)
-
-	if err != nil {
+	if !submission.ValidateSig(adiState.KeyData) {
 		return nil, fmt.Errorf("error validating the sponsor identity key, %v", err)
 	}
 
 	ic := api.ADI{}
-	err = json.Unmarshal(submission.Data, &ic)
+	err = ic.UnmarshalBinary(submission.Transaction)
+
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
-	isc := synthetic.NewAdiStateCreate(txid[:], &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
+	isc := synthetic.NewAdiStateCreate(submission.TxId(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
 
 	if err != nil {
 		return nil, err
 	}
 
-	iscData, err := json.Marshal(isc)
+	iscData, err := isc.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
