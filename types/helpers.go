@@ -165,8 +165,7 @@ func (s *Bytes) UnmarshalBinary(data []byte) error {
 	if len(data) < int(slen)+l {
 		return fmt.Errorf("insufficient data to unmarshal")
 	}
-	ds := data[l : int(slen)+l]
-	*s = ds
+	*s = data[l : int(slen)+l]
 	return nil
 }
 
