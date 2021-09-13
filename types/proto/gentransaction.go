@@ -3,6 +3,7 @@ package proto
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -50,17 +51,24 @@ func (t *GenTransaction) SetRoutingChainID(destURL string) error {
 // TxId
 // Returns the transaction hash which serves as the identifier for this transaction
 func (t *GenTransaction) TxId() []byte {
-	h := sha256.Sum256(t.MarshalBinary())
-	return h[:]
+	if data, err := t.MarshalBinary(); err != nil {
+		return nil
+	} else {
+		h := sha256.Sum256(data)
+		return h[:]
+	}
 }
 
 // ValidateSig
 // We validate the signature of the transaction.
 func (t *GenTransaction) ValidateSig() bool {
-	h := t.MarshalBinary()
-	for _, v := range t.Signature {
-		if !v.Verify(h[:]) {
-			return false
+	if h, err := t.MarshalBinary(); err != nil {
+		return false
+	} else {
+		for _, v := range t.Signature {
+			if !v.Verify(h[:]) {
+				return false
+			}
 		}
 	}
 	return true
@@ -68,37 +76,65 @@ func (t *GenTransaction) ValidateSig() bool {
 
 // MarshalBinary
 // Marshal the portion of the transaction that must be hashed then signed
-func (t *GenTransaction) MarshalBinary() (data []byte) {
+func (t *GenTransaction) MarshalBinary() (data []byte, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			err = fmt.Errorf("error MarshalBinary genTransaction %v", err)
+		}
+	}()
 	data = append(data, common.Uint64Bytes(t.Routing)...)
 	data = append(data, common.SliceBytes(t.ChainID)...)
 	data = append(data, common.SliceBytes(t.Transaction)...)
 
-	return data
+	return data, nil
 }
 
-func (t *GenTransaction) UnmarshalBinary(data []byte) []byte {
+func (t *GenTransaction) UnmarshalBinary(data []byte) (nextData []byte, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			err = fmt.Errorf("error unmarshaling ED25519Sig %v", err)
+		}
+	}()
 	t.Routing, data = common.BytesUint64(data)
 	t.ChainID, data = common.BytesSlice(data)
 	t.Transaction, data = common.BytesSlice(data)
-	return data
+	return data, nil
 }
 
 // UnMarshal
 // Create the binary representation of the GenTransaction
-func (t *GenTransaction) Marshal() (data []byte) {
+func (t *GenTransaction) Marshal() (data []byte, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			err = fmt.Errorf("error marshaling GenTransaction %v", err)
+		}
+	}()
 	sLen := uint64(len(t.Signature))
 	if sLen == 0 || sLen > 100 {
 		panic("must have 1 to 100 signatures")
 	}
 	data = common.Uint64Bytes(sLen)
 	for _, v := range t.Signature {
-		data = append(data, v.Marshal()...)
+		if sig, err := v.Marshal(); err == nil {
+			data = append(data, sig...)
+		} else {
+			return data, err
+		}
 	}
-	data = append(data, t.MarshalBinary()...)
-	return data
+	if tdata, err := t.MarshalBinary(); err != nil {
+		return nil, err
+	} else {
+		data = append(data, tdata...)
+	}
+	return data, nil
 }
 
-func (t *GenTransaction) UnMarshal(data []byte) []byte {
+func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			err = fmt.Errorf("error unmarshaling GenTransaction %v", err)
+		}
+	}()
 	var sLen uint64
 	sLen, data = common.BytesUint64(data)
 	if sLen < 1 || sLen > 100 {
@@ -106,11 +142,13 @@ func (t *GenTransaction) UnMarshal(data []byte) []byte {
 	}
 	for i := uint64(0); i < sLen; i++ {
 		sig := new(ED25519Sig)
-		data = sig.Unmarshal(data)
+		if data, err = sig.Unmarshal(data); err != nil {
+			return nil, err
+		}
 		t.Signature = append(t.Signature, sig)
 	}
-	data = t.UnmarshalBinary(data)
-	return data
+	data, err = t.UnmarshalBinary(data)
+	return data, err
 }
 
 // GetTransactionType

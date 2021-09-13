@@ -26,31 +26,54 @@ func TestTokenTransaction(t *testing.T) {
 	}
 
 	trans.Transaction = []byte("this is a message to who ever is about")
-	th := sha256.Sum256(trans.MarshalBinary())
-	s := Sign(GetKey(), th[:])
-	trans.Signature = append(trans.Signature, s)
+	key := GetKey()
+	eSig := new(ED25519Sig)
+	eSig.Nonce = 0
+	eSig.PublicKey = key[32:]
+	transData, err := trans.MarshalBinary()
+	if err != nil {
+		t.Error(err)
+	}
+	if err := eSig.Sign(key, transData); err != nil {
+		t.Errorf("error signing tx %v", err)
+	}
+
+	trans.Signature = append(trans.Signature, eSig)
 
 	{
-		data := s.Marshal()
+		data, err := eSig.Marshal()
+		if err != nil {
+			t.Error(err)
+		}
 		s2 := new(ED25519Sig)
 		s2.Unmarshal(data)
-		if !s.Equal(s2) {
+		if !eSig.Equal(s2) {
 			t.Fatal("Can't marshal a signature")
 		}
-		data = append(data, s2.Marshal()...)
+		s2Data, err := s2.Marshal()
+		if err != nil {
+			t.Error("fail to marshal")
+		}
+		data = append(data, s2Data...)
 		if data == nil {
 			t.Fatal("couldn't marshal an ED25519Sig struct")
 		}
 		s3 := new(ED25519Sig)
 		s4 := new(ED25519Sig)
-		data = s3.Unmarshal(data)
-		data = s4.Unmarshal(data)
-		if !s2.Equal(s3) || !s3.Equal(s4) || len(data) != 0 {
+		var err1, err2 error
+		data, err1 = s3.Unmarshal(data)
+		data, err2 = s4.Unmarshal(data)
+		if err1 != nil || err2 != nil {
+			t.Errorf("err1: %v err2 %v", err1, err2)
+		} else if !s2.Equal(s3) || !s3.Equal(s4) || len(data) != 0 {
 			t.Fatal("Can't marshal a multi-signature")
 		}
 	}
 
-	data := trans.Marshal()
+	data, err := trans.Marshal()
+	if err != nil {
+		t.Error(err)
+	}
 	to := new(GenTransaction)
 	to.UnMarshal(data)
 
@@ -58,11 +81,11 @@ func TestTokenTransaction(t *testing.T) {
 		t.Error("should be equal")
 	}
 
-	if !to.ValidateSig(nil) {
+	if !to.ValidateSig() {
 		t.Error("failed to validate signature")
 	}
 	to.Routing++
-	if to.ValidateSig(nil) {
+	if to.ValidateSig() {
 		t.Error("failed to invalidate signature")
 	}
 }
