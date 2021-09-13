@@ -67,7 +67,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	//create a fake synthetic deposit for faucet.
 	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
-	deposit.DepositAmount.SetInt64(5000)
+	deposit.DepositAmount.SetInt64(500000000000)
 	deposit.TokenUrl = tokenUrl
 
 	depData, err := deposit.MarshalBinary()
@@ -85,9 +85,12 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
 	deliverRequestTXAsync.Tx = gtx.Marshal()
-	rpcClient.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
+	batch := rpcClient.NewBatch()
+	batch.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 
-	Load(t, rpcClient, privateKey)
+	Load(t, batch, privateKey)
+
+	batch.Send(context.Background())
 
 	//wait 3 seconds for the transaction to process for the block to complete.
 	time.Sleep(3000 * time.Millisecond)
@@ -136,9 +139,12 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	////now we can send in json rpc calls.
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
+	//wait 30 seconds before shutting down.
+	time.Sleep(30000 * time.Millisecond)
+
 }
 
-func Load(t *testing.T, rpcClient *rpchttp.HTTP, Origin ed25519.PrivateKey) {
+func Load(t *testing.T, rpcClient *rpchttp.BatchHTTP, Origin ed25519.PrivateKey) {
 	srcURL := anon.GenerateAcmeAddress(Origin[32:])
 	var SetOKeys []ed25519.PrivateKey
 	var Addresses []string
@@ -150,22 +156,23 @@ func Load(t *testing.T, rpcClient *rpchttp.HTTP, Origin ed25519.PrivateKey) {
 	if len(Addresses) == 0 || len(SetOKeys) == 0 {
 		t.Fatal("no addresses")
 	}
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 		d := rand.Int() % len(SetOKeys)
-		out := proto.Output{Dest: Addresses[d], Amount: 10 * 1000000}
+		out := proto.Output{Dest: Addresses[d], Amount: 10 * 100000000}
 		send := proto.NewTokenSend(srcURL, out)
 		txData := send.Marshal()
 		gtx := new(proto.GenTransaction)
 		gtx.Transaction = txData
-		if err := gtx.SetRoutingChainID(Addresses[d]); err != nil {
+		//the send is routed to the srcUrl...
+		if err := gtx.SetRoutingChainID(srcURL); err != nil {
 			t.Fatal("bad url generated")
 		}
 
 		dataToSign := gtx.MarshalBinary()
-		s := ed25519.Sign(SetOKeys[d], dataToSign)
+		s := ed25519.Sign(Origin, dataToSign)
 
 		ed := new(proto.ED25519Sig)
-		ed.PublicKey = SetOKeys[d][32:]
+		ed.PublicKey = Origin[32:]
 		ed.Signature = s
 		gtx.Signature = append(gtx.Signature, ed)
 
