@@ -15,8 +15,9 @@ import (
 
 type ResponseValidateTX struct {
 	StateData   map[types.Bytes32]types.Bytes //acctypes.StateObject
+	PendingData map[types.Bytes32]types.Bytes //stuff to store on pending chain.
 	EventData   []byte                        //this should be events that need to get published
-	Submissions []*pb.Submission              //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
+	Submissions []*pb.GenTransaction          //this is a list of synthetic transactions
 }
 
 func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []byte) {

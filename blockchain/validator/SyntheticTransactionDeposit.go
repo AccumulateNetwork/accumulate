@@ -75,14 +75,11 @@ func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *state.S
 
 func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
 	retsub := ResponseValidateTX{}
-	retsub.Submissions = make([]*pb.Submission, 1)
-	retsub.Submissions[0] = &pb.Submission{}
+	retsub.Submissions = make([]*pb.GenTransaction, 1)
+	retsub.Submissions[0] = &pb.GenTransaction{}
 	rs := retsub.Submissions[0]
-	senderIdChain := types.GetIdentityChainFromIdentity(ttd.FromUrl.AsString())
-	senderAccountChain := types.GetChainIdFromChainPath(ttd.FromUrl.AsString())
-	rs.Identitychain = senderIdChain.Bytes()
-	rs.Chainid = senderAccountChain.Bytes()
-	rs.Instruction = pb.AccInstruction_Synthetic_Token_Deposit
+	rs.Routing = types.GetAddressFromIdentity(ttd.FromUrl.AsString())
+	rs.ChainID = types.GetChainIdFromChainPath(ttd.FromUrl.AsString()).Bytes()
 	//this will reverse the deposit and send it back to the sender.
 	retdep := synthetic.NewTokenTransactionDeposit(ttd.Txid[:], &ttd.ToUrl, &ttd.FromUrl)
 	retdep.TokenUrl = ttd.TokenUrl
@@ -96,7 +93,7 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Gen
 		//shouldn't get here.
 		return nil, err
 	}
-	rs.Data = retdepdata
+	rs.Transaction = retdepdata
 	return &retsub, nil
 }
 
