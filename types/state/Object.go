@@ -15,6 +15,7 @@ type Entry interface {
 	GetChainUrl() string
 }
 
+//maybe we should have Chain header then entry, rather than entry containing all the Headers
 type Object struct {
 	StateIndex int64       `json:"stateIndex"` //
 	Entry      types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
@@ -65,8 +66,8 @@ type StateEntry struct {
 	ChainState    *Object
 
 	//useful cached info
-	ChainId  types.Bytes
-	AdiChain types.Bytes
+	ChainId  *types.Bytes32
+	AdiChain *types.Bytes32
 
 	ChainHeader *Chain
 	AdiHeader   *Chain
