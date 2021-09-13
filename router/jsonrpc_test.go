@@ -67,7 +67,8 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	//create a fake synthetic deposit for faucet.
 	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
-	deposit.DepositAmount.SetInt64(500000000000)
+	amtToDeposit := int64(50000) //deposit 50k tokens
+	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000)
 	deposit.TokenUrl = tokenUrl
 
 	depData, err := deposit.MarshalBinary()
