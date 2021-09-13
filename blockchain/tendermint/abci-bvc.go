@@ -367,9 +367,10 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) a
 	err2 := app.chainValidatorNode.Validate(sub)
 
 	if err2 != nil {
-		ret.Code = code.CodeTypeUnauthorized
-		ret.GasWanted = 0
-		ret.GasUsed = 0
+		//ret.Code = code.CodeTypeUnauthorized
+		//ret.GasWanted = 0
+		//ret.GasUsed = 0
+		//we don't care about failure as far as tendermint is concerned.
 		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.GetTransactionType(), err2)
 		return ret
 	}
