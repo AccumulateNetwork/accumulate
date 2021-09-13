@@ -252,6 +252,9 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		return fmt.Errorf("error subtracting balance from account acc://%s, %v", currentState.AdiHeader.ChainUrl, err)
 	}
 
+	data, _ := tokenAccountState.MarshalBinary()
+	resp.AddStateData(accountChainId, data)
+
 	return nil
 }
 
