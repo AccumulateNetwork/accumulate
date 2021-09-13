@@ -9,6 +9,8 @@ import (
 
 	//"encoding/binary"
 	"fmt"
+	"os"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
@@ -19,7 +21,6 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 	"github.com/tendermint/tendermint/version"
-	"os"
 
 	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
@@ -28,7 +29,6 @@ import (
 	ed25519 "golang.org/x/crypto/ed25519"
 
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/merkleDag"
-	//	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 )
 
