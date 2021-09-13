@@ -76,7 +76,10 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	if err := gtx.SetRoutingChainID(*destAddress.AsString()); err != nil {
 		t.Fatal("bad url generated")
 	}
-	dataToSign := gtx.MarshalBinary()
+	dataToSign, err := gtx.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
 	s := ed25519.Sign(privateKey, dataToSign)
 	ed := new(proto.ED25519Sig)
 	ed.PublicKey = privateKey[32:]
@@ -84,7 +87,10 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	gtx.Signature = append(gtx.Signature, ed)
 
 	deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
-	deliverRequestTXAsync.Tx = gtx.Marshal()
+	deliverRequestTXAsync.Tx, err = gtx.Marshal()
+	if err != nil {
+		t.Fatal(err)
+	}
 	rpcClient.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 
 	Load(t, rpcClient, privateKey)
@@ -139,6 +145,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 }
 
 func Load(t *testing.T, rpcClient *rpchttp.HTTP, Origin ed25519.PrivateKey) {
+	nonce := uint64(1)
 	srcURL := anon.GenerateAcmeAddress(Origin[32:])
 	var SetOKeys []ed25519.PrivateKey
 	var Addresses []string
@@ -150,7 +157,7 @@ func Load(t *testing.T, rpcClient *rpchttp.HTTP, Origin ed25519.PrivateKey) {
 	if len(Addresses) == 0 || len(SetOKeys) == 0 {
 		t.Fatal("no addresses")
 	}
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1; i++ {
 		d := rand.Int() % len(SetOKeys)
 		out := proto.Output{Dest: Addresses[d], Amount: 10 * 1000000}
 		send := proto.NewTokenSend(srcURL, out)
@@ -161,17 +168,23 @@ func Load(t *testing.T, rpcClient *rpchttp.HTTP, Origin ed25519.PrivateKey) {
 			t.Fatal("bad url generated")
 		}
 
-		dataToSign := gtx.MarshalBinary()
+		dataToSign, err := gtx.MarshalBinary()
+		if err != nil {
+			t.Fatal(err)
+		}
 		s := ed25519.Sign(SetOKeys[d], dataToSign)
 
 		ed := new(proto.ED25519Sig)
+		ed.Nonce = nonce
+		nonce++
 		ed.PublicKey = SetOKeys[d][32:]
 		ed.Signature = s
 		gtx.Signature = append(gtx.Signature, ed)
 
 		deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
-		deliverRequestTXAsync.Tx = gtx.Marshal()
-
+		if deliverRequestTXAsync.Tx, err = gtx.Marshal(); err != nil {
+			t.Fatal(err)
+		}
 		rpcClient.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 	}
 }
