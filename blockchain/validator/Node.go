@@ -174,7 +174,6 @@ func (app *Node) Validate(transaction *pb.GenTransaction) error {
 		//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
 		//sender is legit.
 	}
-
 	//run through the validation routine
 	vdata, err := app.chainValidator.Validate(currentState, transaction)
 
@@ -228,6 +227,8 @@ func (app *Node) EndBlock() ([]byte, error) {
 	//probably should use channels here instead.
 	go app.dispatch(int(app.height % 2))
 
+	fmt.Printf("DB time %f\n", app.mmDB.TimeBucket)
+	app.mmDB.TimeBucket = 0
 	return mdRoot, nil
 }
 

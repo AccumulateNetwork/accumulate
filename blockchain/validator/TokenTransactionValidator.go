@@ -27,7 +27,7 @@ func NewTokenTransactionValidator() *TokenTransactionValidator {
 }
 
 // canTransact is a helper function to parse and check for errors in the transaction data
-func canSendTokens(currentState *state.StateEntry, withdrawl *pb.TokenSend) (*state.AdiState, *state.TokenAccount, error) {
+func canSendTokens(currentState *state.StateEntry, withdrawal *pb.TokenSend) (*state.AdiState, *state.TokenAccount, error) {
 
 	if currentState.ChainState == nil {
 		return nil, nil, fmt.Errorf("no account exists for the chain")
@@ -35,7 +35,8 @@ func canSendTokens(currentState *state.StateEntry, withdrawl *pb.TokenSend) (*st
 	if currentState.IdentityState == nil {
 		return nil, nil, fmt.Errorf("no identity exists for the chain")
 	}
-	if withdrawl == nil {
+
+	if withdrawal == nil {
 		//defensive check / shouldn't get where.
 		return nil, nil, fmt.Errorf("withdrawl account doesn't exist")
 	}
@@ -56,13 +57,13 @@ func canSendTokens(currentState *state.StateEntry, withdrawl *pb.TokenSend) (*st
 	}
 
 	//verify the tx.from is from the same identity
-	fromAdiChain := types.GetIdentityChainFromIdentity(&withdrawl.AccountURL)
+	fromAdiChain := types.GetIdentityChainFromIdentity(&withdrawal.AccountURL)
 	if bytes.Compare(currentState.AdiChain[:], fromAdiChain[:]) != 0 {
 		return nil, nil, fmt.Errorf("account state object transaction account doesn't match transaction")
 	}
 
 	//verify the tx.from is from the same chain
-	fromChainId := types.GetChainIdFromChainPath(&withdrawl.AccountURL)
+	fromChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
 	if bytes.Compare(currentState.ChainId[:], fromChainId[:]) != 0 {
 		return nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
 	}
@@ -71,7 +72,7 @@ func canSendTokens(currentState *state.StateEntry, withdrawl *pb.TokenSend) (*st
 	//really only need to provide one input...
 	amt := types.Amount{}
 	var outAmt big.Int
-	for _, val := range withdrawl.Outputs {
+	for _, val := range withdrawal.Outputs {
 		amt.Add(amt.AsBigInt(), outAmt.SetUint64(val.Amount))
 	}
 
