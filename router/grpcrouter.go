@@ -46,7 +46,7 @@ func (app *RouterConfig) GetNodeInfo(context.Context, *empty.Empty) (*proto.Node
 func (app *RouterConfig) QueryShardCount(context.Context, *empty.Empty) (*proto.ShardCountResponse, error) {
 	scr := proto.ShardCountResponse{}
 
-	fmt.Printf("TODO: need to implement blockchain query to dbvc for number of shards\n")
+	// fmt.Printf("TODO: need to implement blockchain query to dbvc for number of shards\n")
 	scr.Numshards = app.GetNumShardsInSystem() //todo: Need to query blockchain for this number....
 	return &scr, nil
 }
