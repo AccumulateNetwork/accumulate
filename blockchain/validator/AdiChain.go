@@ -116,17 +116,14 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.GenTr
 
 	resp = &ResponseValidateTX{}
 
-	builder := pb.SubmissionBuilder{}
+	//builder := pb.SubmissionBuilder{}
 
 	//send of a synthetic transaction to the correct network
-	resp.Submissions = make([]*pb.Submission, 1)
-	resp.Submissions[0], err = builder.
-		Type(v.GetValidatorChainTypeId()).
-		Instruction(pb.AccInstruction_Synthetic_Identity_Creation).
-		AdiUrl(*isc.ToUrl.AsString()).
-		Data(iscData).
-		Timestamp(time.Now().Unix()).
-		BuildUnsigned()
+	resp.Submissions = make([]*pb.GenTransaction, 1)
+	sub := resp.Submissions[0]
+	sub.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
+	sub.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
+	sub.Transaction = iscData
 
 	if err != nil {
 		return nil, err

@@ -3,9 +3,13 @@ package tendermint
 import (
 	"context"
 	"fmt"
+
 	"github.com/spf13/viper"
 	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
+
 	//"github.com/btcsuite/btcd/rpcclient"
+	"time"
+
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -20,13 +24,12 @@ import (
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"github.com/tendermint/tendermint/types"
 	tmtime "github.com/tendermint/tendermint/types/time"
-	"time"
 )
 
 func Initialize(shardname string,
 	ABCIAppAddress string, RPCAddress string, GRPCAddress string, AccRPCAddress string, RouterAddress string,
 	ConfigFile string, WorkingDir string) error {
-	fmt.Println("Tendermint Initialize")
+	// fmt.Println("Tendermint Initialize")
 	config.EnsureRoot(WorkingDir)
 	var newConfig = cfg.DefaultConfig()
 	newConfig.SetRoot(WorkingDir)
@@ -83,14 +86,14 @@ func InitFilesWithConfig(config *cfg.Config, chainid *string) error {
 			return err
 		}
 		//		logger.Info("Generated node key", "path", nodeKeyFile)
-		fmt.Println("Generated node key", "path", nodeKeyFile)
+		// fmt.Println("Generated node key", "path", nodeKeyFile)
 	}
 
 	// genesis file
 	genFile := config.GenesisFile()
 	if tmos.FileExists(genFile) {
 		//		logger.Info("Found genesis file", "path", genFile)
-		fmt.Println("Found genesis file", "path", genFile)
+		// fmt.Println("Found genesis file", "path", genFile)
 	} else {
 		genDoc := types.GenesisDoc{
 			ChainID:         *chainid, //fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
@@ -111,7 +114,7 @@ func InitFilesWithConfig(config *cfg.Config, chainid *string) error {
 			return err
 		}
 		//	logger.Info("Generated genesis file", "path", genFile)
-		fmt.Println("Generated genesis file", "path", genFile)
+		// fmt.Println("Generated genesis file", "path", genFile)
 	}
 
 	return nil
@@ -164,7 +167,7 @@ func WaitForRPC(laddr string) {
 			return
 		}
 
-		fmt.Println("error", err)
+		// fmt.Println("error", err)
 		time.Sleep(time.Millisecond)
 	}
 }

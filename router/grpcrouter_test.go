@@ -207,7 +207,7 @@ func createTransaction(t *testing.T) *proto.Submission {
 //	if err != nil {
 //		t.Fatalf("Error sending query for shard count")
 //	}
-//	fmt.Printf("URL Querty Test string %s result: %d\n", urlstring, res.Code)
+//	// fmt.Printf("URL Querty Test string %s result: %d\n", urlstring, res.Code)
 //
 //	sub := createIdentity(t)
 //
@@ -247,11 +247,11 @@ func createTransaction(t *testing.T) *proto.Submission {
 //
 //	// Send the batch of 2 transactions
 //	for i, batch := range batches {
-//		//fmt.Printf("Sending batch %d of %d\n", i, len(batches))
+//		//// fmt.Printf("Sending batch %d of %d\n", i, len(batches))
 //		time.Sleep(200 * time.Millisecond)
 //		if _, err := batch.Send(context.Background()); err != nil {
 //			for err != nil {
-//				fmt.Printf("Resending batch %d of %d\n", i, len(batches))
+//				// fmt.Printf("Resending batch %d of %d\n", i, len(batches))
 //				_, err = batch.Send(context.Background())
 //			}
 //			//t.Fatal(err)

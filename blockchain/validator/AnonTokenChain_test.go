@@ -161,7 +161,7 @@ func TestAnonTokenChain_Validate(t *testing.T) {
 		}
 	}
 
-	fmt.Printf("address = %s, chain spec %s\n", address, *anon.GetChainSpec())
+	// fmt.Printf("address = %s, chain spec %s\n", address, *anon.GetChainSpec())
 	resp, err = anon.Validate(&currentState, subTx)
 
 	if err != nil {
