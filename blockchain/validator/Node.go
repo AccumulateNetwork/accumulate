@@ -246,13 +246,13 @@ func (app *Node) Query(q *pb.Query) ([]byte, error) {
 		return nil, fmt.Errorf("unable to extract chain header\n")
 	}
 
-	fmt.Printf("Query URI: %s", q.Query)
+	// fmt.Printf("Query URI: %s", q.Query)
 	return chainState.Entry, nil
 }
 
 //processValidatedSubmissionRequest Figure out what to do with the processed validated transaction.  This may include firing off a synthetic TX or simply
 //updating the state of the transaction
-func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) error {
+func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (err error) {
 	if vdata == nil {
 		return nil
 	}
@@ -280,11 +280,17 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) er
 			v.Signature = append(v.Signature, ed)
 
 			deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
-			deliverRequestTXAsync.Tx = v.Marshal()
-
+			deliverRequestTXAsync.Tx, err = v.Marshal()
+			if err != nil {
+				return err
+			}
 			//app.batchRequests = append(app.batchRequests, deliverRequestTXAsync)
 
-			app.batch[app.height%2].BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
+			_, err = app.batch[app.height%2].BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
+			if err != nil {
+				return err
+			}
+
 		}
 	}
 	return nil
