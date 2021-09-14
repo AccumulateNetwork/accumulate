@@ -67,7 +67,8 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	//create a fake synthetic deposit for faucet.
 	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
-	deposit.DepositAmount.SetInt64(5000)
+	amtToDeposit := int64(50000)                             //deposit 50k tokens
+	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
 	deposit.TokenUrl = tokenUrl
 
 	depData, err := deposit.MarshalBinary()
@@ -91,19 +92,22 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	rpcClient.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
+	batch := rpcClient.NewBatch()
+	batch.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 
-	Load(t, rpcClient, privateKey)
+	Load(t, batch, privateKey)
+
+	batch.Send(context.Background())
 
 	//wait 3 seconds for the transaction to process for the block to complete.
-	time.Sleep(3000 * time.Millisecond)
+	time.Sleep(3 * time.Second)
 	queryTokenUrl := destAddress + "/" + tokenUrl
 	resp, err := query.GetTokenAccount(queryTokenUrl.AsString())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fmt.Println(string(*resp.Data))
+	// fmt.Println(string(*resp.Data))
 	output, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatal(err)
@@ -142,50 +146,78 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	////now we can send in json rpc calls.
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
+	//wait 30 seconds before shutting down.
+	time.Sleep(30000 * time.Millisecond)
+
 }
 
-func Load(t *testing.T, rpcClient *rpchttp.HTTP, Origin ed25519.PrivateKey) {
-	nonce := uint64(1)
-	srcURL := anon.GenerateAcmeAddress(Origin[32:])
-	var SetOKeys []ed25519.PrivateKey
-	var Addresses []string
-	for i := 0; i < 1000; i++ {
-		_, key, _ := ed25519.GenerateKey(nil)
-		SetOKeys = append(SetOKeys, key)
-		Addresses = append(Addresses, anon.GenerateAcmeAddress(key[32:]))
+type walletEntry struct {
+	PrivateKey ed25519.PrivateKey // 32 bytes private key, 32 bytes public key
+	Nonce      uint64             // Nonce for the signature
+	Addr       string             // The address url for the anonymous token chain
+}
+
+// Sign
+// Makes it easier to sign transactions.  Create the ED25519Sig object, sign
+// the message, and return the ED25519Sig object to caller
+func (we *walletEntry) Sign(message []byte) *proto.ED25519Sig { // sign a message
+	sig := new(proto.ED25519Sig)     //                            create a signature object
+	sig.Sign(we.PrivateKey, message) //                            sign the message
+	return sig                       //                            return the signature object
+}
+
+func (we *walletEntry) Public() []byte {
+	return we.PrivateKey[32:]
+}
+
+// Load
+// Generate load in our test.  Create a bunch of transactions, and submit them.
+func Load(t *testing.T,
+	rpcClient *rpchttp.BatchHTTP,
+	Origin ed25519.PrivateKey) {
+
+	var wallet []*walletEntry
+
+	wallet = append(wallet, new(walletEntry))              // wallet[0] is where we put 5000 ACME tokens
+	wallet[0].Nonce = 1                                    // start the nonce at 1
+	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
+	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
+
+	for i := 1; i < 300; i++ { //                            create a 1000 addresses for anonymous token chains
+		wallet = append(wallet, new(walletEntry))                            // create a new wallet entry
+		wallet[i].Nonce = 1                                                  // starting nonce of 1
+		_, wallet[i].PrivateKey, _ = ed25519.GenerateKey(nil)                // generate a private key
+		wallet[i].Addr = anon.GenerateAcmeAddress(wallet[i].PrivateKey[32:]) // generate the address encoding URL
 	}
-	if len(Addresses) == 0 || len(SetOKeys) == 0 {
-		t.Fatal("no addresses")
-	}
-	for i := 0; i < 1; i++ {
-		d := rand.Int() % len(SetOKeys)
-		out := proto.Output{Dest: Addresses[d], Amount: 10 * 1000000}
-		send := proto.NewTokenSend(srcURL, out)
-		txData := send.Marshal()
-		gtx := new(proto.GenTransaction)
-		gtx.Transaction = txData
-		if err := gtx.SetRoutingChainID(Addresses[d]); err != nil {
-			t.Fatal("bad url generated")
+
+	for i := 0; i < 100; i++ { // Make a bunch of transactions
+		time.Sleep(5 * time.Millisecond)
+		origin := 0
+		randDest := rand.Int() % len(wallet)                                   // pick a destination address
+		out := proto.Output{Dest: wallet[randDest].Addr, Amount: 10 * 1000000} // create the transaction output
+		send := proto.NewTokenSend(wallet[origin].Addr, out)                   // Create a send token transaction
+		gtx := new(proto.GenTransaction)                                       // wrap in a GenTransaction
+		gtx.Transaction = send.Marshal()                                       // place in the send the transaction (must be sent to source)
+		if err := gtx.SetRoutingChainID(wallet[origin].Addr); err != nil {     // Routing ChainID is the tx source
+			t.Fatal("bad url generated") // error should never happen
 		}
 
-		dataToSign, err := gtx.MarshalBinary()
+		binaryGtx, err := gtx.MarshalBinary() // Must sign the GenTransaction
+		if err != nil {                       // should never fail
+			t.Fatal(err)
+		}
+		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
+
+		deliverRequestTXAsync := new(ptypes.RequestDeliverTx)          // Get a RequestDeliverTX
+		if deliverRequestTXAsync.Tx, err = gtx.Marshal(); err != nil { // and marshal gtx into RequestDeliverTX
+			t.Fatal(err) //                                                 <= marshal should never fail
+		}
+		_, err = rpcClient.BroadcastTxAsync( //                           send off the requestDeliverTX
+			context.Background(),     //                                  The context (do in background)
+			deliverRequestTXAsync.Tx) //                                  the wrapped transaction
 		if err != nil {
-			t.Fatal(err)
+			t.Fatal(err) //                                                 <= should never happen
 		}
-		s := ed25519.Sign(SetOKeys[d], dataToSign)
-
-		ed := new(proto.ED25519Sig)
-		ed.Nonce = nonce
-		nonce++
-		ed.PublicKey = SetOKeys[d][32:]
-		ed.Signature = s
-		gtx.Signature = append(gtx.Signature, ed)
-
-		deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
-		if deliverRequestTXAsync.Tx, err = gtx.Marshal(); err != nil {
-			t.Fatal(err)
-		}
-		rpcClient.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 	}
 }
 

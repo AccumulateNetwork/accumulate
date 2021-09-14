@@ -19,7 +19,7 @@ func CreateAccumulateBVC(config string, path string) (*tendermint.AccumulatorVMA
 	bvc := NewBVCNode(config, path, key)
 
 	//give the tendermint application the validator node to use
-	acc.SetAccumulateNode(&bvc.Node)
+	acc.SetAccumulateNode(bvc)
 
 	//fire up the tendermint processing...
 	go acc.Start()
@@ -29,7 +29,7 @@ func CreateAccumulateBVC(config string, path string) (*tendermint.AccumulatorVMA
 	return acc, nil
 }
 
-func CreateAccumulateDBVC(config string, path string) *tendermint.AccumulatorVMApplication {
+func CreateAccumulateDC(config string, path string) *tendermint.AccumulatorVMApplication {
 	//create a tendermint AccumulatorVM
 	acc := tendermint.NewAccumulatorVMApplication(config, path)
 
@@ -41,7 +41,7 @@ func CreateAccumulateDBVC(config string, path string) *tendermint.AccumulatorVMA
 	dc := NewDCNode(config, path, key)
 
 	//give the tendermint application the validator node to use
-	acc.SetAccumulateNode(&dc.Node)
+	acc.SetAccumulateNode(dc)
 
 	//fire up the tendermint processing...
 	go acc.Start()
@@ -54,30 +54,20 @@ type BVCNode struct {
 	validator.Node
 }
 
-func NewBVCNode(configFile string, path string, key ed25519.PrivateKey) *BVCNode {
-	bvc := &BVCNode{}
+func NewBVCNode(configFile string, path string, key ed25519.PrivateKey) *validator.Node {
+	bvc := &validator.Node{}
 	bvc.Initialize(configFile, path, key, &validator.NewBlockValidatorChain().ValidatorContext)
 	return bvc
 }
 
-// DCNode Directory Chain Node
-type DCNode struct {
-	validator.Node
-}
-
-func NewDCNode(configFile string, path string, key ed25519.PrivateKey) *BVCNode {
-	bvc := &BVCNode{}
+func NewDCNode(configFile string, path string, key ed25519.PrivateKey) *validator.Node {
+	bvc := &validator.Node{}
 	//bvc.Initialize(configFile, path, key, &validator.NewDirectoryChain().ValidatorContext)
 	return bvc
 }
 
-// DSNode Data store node
-type DSNode struct {
-	validator.Node
-}
-
-func NewDSNode(configFile string, path string, key ed25519.PrivateKey) *BVCNode {
-	bvc := &BVCNode{}
+func NewDSNode(configFile string, path string, key ed25519.PrivateKey) *validator.Node {
+	bvc := &validator.Node{}
 	//bvc.Initialize(configFile, path, key, &validator.NewDataStore().ValidatorContext)
 	return bvc
 }
