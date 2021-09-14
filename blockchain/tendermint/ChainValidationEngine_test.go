@@ -1,7 +1,6 @@
 package tendermint
 
 import (
-	"fmt"
 	"testing"
 )
 
@@ -11,5 +10,5 @@ func TestChainValidationEngine(t *testing.T) {
 
 	<-done
 
-	fmt.Printf("All done...")
+	// fmt.Printf("All done...")
 }
