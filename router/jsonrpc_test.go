@@ -97,8 +97,6 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	Load(t, batch, privateKey)
 
-	batch.Send(context.Background())
-
 	//wait 3 seconds for the transaction to process for the block to complete.
 	time.Sleep(3 * time.Second)
 	queryTokenUrl := destAddress + "/" + tokenUrl
@@ -112,7 +110,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(output)
+	fmt.Println(string(output))
 
 	//req := api.{}
 	//adi := &api.ADI{}
@@ -147,7 +145,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down.
-	time.Sleep(30000 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 
 }
 
@@ -161,7 +159,9 @@ type walletEntry struct {
 // Makes it easier to sign transactions.  Create the ED25519Sig object, sign
 // the message, and return the ED25519Sig object to caller
 func (we *walletEntry) Sign(message []byte) *proto.ED25519Sig { // sign a message
+	we.Nonce++                       //                            Everytime we sign, increment the nonce
 	sig := new(proto.ED25519Sig)     //                            create a signature object
+	sig.Nonce = we.Nonce             //                            use the updated nonce
 	sig.Sign(we.PrivateKey, message) //                            sign the message
 	return sig                       //                            return the signature object
 }
@@ -183,22 +183,25 @@ func Load(t *testing.T,
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
-	for i := 1; i < 300; i++ { //                            create a 1000 addresses for anonymous token chains
+	for i := 1; i <= 20; i++ { //                            create a 1000 addresses for anonymous token chains
 		wallet = append(wallet, new(walletEntry))                            // create a new wallet entry
 		wallet[i].Nonce = 1                                                  // starting nonce of 1
 		_, wallet[i].PrivateKey, _ = ed25519.GenerateKey(nil)                // generate a private key
 		wallet[i].Addr = anon.GenerateAcmeAddress(wallet[i].PrivateKey[32:]) // generate the address encoding URL
 	}
 
-	for i := 0; i < 100; i++ { // Make a bunch of transactions
-		time.Sleep(5 * time.Millisecond)
-		origin := 0
-		randDest := rand.Int() % len(wallet)                                   // pick a destination address
-		out := proto.Output{Dest: wallet[randDest].Addr, Amount: 10 * 1000000} // create the transaction output
-		send := proto.NewTokenSend(wallet[origin].Addr, out)                   // Create a send token transaction
-		gtx := new(proto.GenTransaction)                                       // wrap in a GenTransaction
-		gtx.Transaction = send.Marshal()                                       // place in the send the transaction (must be sent to source)
-		if err := gtx.SetRoutingChainID(wallet[origin].Addr); err != nil {     // Routing ChainID is the tx source
+	for i := 1; i < 20000; i++ { // Make a bunch of transactions
+		if i%200 == 0 {
+			rpcClient.Send(context.Background())
+			//time.Sleep(10 * time.Millisecond)
+		}
+		const origin = 0
+		randDest := rand.Int()%(len(wallet)-1) + 1                         // pick a destination address
+		out := proto.Output{Dest: wallet[randDest].Addr, Amount: 1000}     // create the transaction output
+		send := proto.NewTokenSend(wallet[origin].Addr, out)               // Create a send token transaction
+		gtx := new(proto.GenTransaction)                                   // wrap in a GenTransaction
+		gtx.Transaction = send.Marshal()                                   // place in the send the transaction (must be sent to source)
+		if err := gtx.SetRoutingChainID(wallet[origin].Addr); err != nil { // Routing ChainID is the tx source
 			t.Fatal("bad url generated") // error should never happen
 		}
 
@@ -212,11 +215,14 @@ func Load(t *testing.T,
 		if deliverRequestTXAsync.Tx, err = gtx.Marshal(); err != nil { // and marshal gtx into RequestDeliverTX
 			t.Fatal(err) //                                                 <= marshal should never fail
 		}
-		_, err = rpcClient.BroadcastTxAsync( //                           send off the requestDeliverTX
-			context.Background(),     //                                  The context (do in background)
-			deliverRequestTXAsync.Tx) //                                  the wrapped transaction
-		if err != nil {
+		if resp, err := rpcClient.BroadcastTxAsync( //                           send off the requestDeliverTX
+			context.Background(), //                                  The context (do in background)
+			deliverRequestTXAsync.Tx); err != nil {
 			t.Fatal(err) //                                                 <= should never happen
+		} else {
+			if len(resp.Log) > 0 {
+				fmt.Printf("<%d>%v<<\n", i, resp.Log)
+			}
 		}
 	}
 }
