@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/SMT/pmt"
@@ -37,6 +38,8 @@ type StateDB struct {
 	bpt   *pmt.Manager                         //pbt is the global patricia trie for the application
 	mm    *managed.MerkleManager               //mm is the merkle manager for the application.  The salt is set by the appId
 	appId []byte
+
+	TimeBucket float64
 }
 
 // Open database to manage the smt and chain states
@@ -164,9 +167,14 @@ func (sdb *StateDB) getOrCreateChainMerkleManager(chainId []byte, loadState bool
 // AddStateEntry add the entry to the smt and database based upon chainId
 func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 
+	begin := time.Now()
+
 	mms := sdb.getOrCreateChainMerkleManager(chainId, false)
-	//now load the state
+
+	//add the state to the merkle tree
 	mms.merkleMgr.AddHash(sha256.Sum256(entry))
+
+	sdb.TimeBucket = sdb.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
 
 	////The Entry is the State object derived from the transaction
 	mms.stateEntry.Entry = entry

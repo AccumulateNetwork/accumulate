@@ -97,6 +97,8 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	Load(t, batch, privateKey)
 
+	batch.Send(context.Background())
+
 	//wait 3 seconds for the transaction to process for the block to complete.
 	time.Sleep(3 * time.Second)
 	queryTokenUrl := destAddress + "/" + tokenUrl
@@ -145,7 +147,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down.
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(30000 * time.Millisecond)
 
 }
 
