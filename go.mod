@@ -29,3 +29,5 @@ require (
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/ini.v1 v1.58.0 // indirect
 )
+
+replace github.com/AccumulateNetwork/SMT => ../SMT
