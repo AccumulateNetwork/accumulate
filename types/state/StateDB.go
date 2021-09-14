@@ -197,11 +197,7 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//loop through everything and write out states to the database.
 	for _, chainId := range keys {
 		v := sdb.mms[chainId]
-		//hash := sha256.Sum256(v.stateEntry.Entry)
-		//
-		//v.merkleMgr.AddHash(hash)
 
-		v.stateEntry.StateIndex = v.merkleMgr.GetElementCount()
 		mdRoot := v.merkleMgr.MainChain.MS.GetMDRoot()
 		if mdRoot == nil {
 			//shouldn't get here, but will reject if I do
