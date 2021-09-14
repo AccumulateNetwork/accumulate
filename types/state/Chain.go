@@ -11,8 +11,8 @@ import (
 //that will consist of the chain type enumerator
 type Chain struct {
 	Entry
-	ChainUrl types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	Type     types.Bytes32 `json:"type" form:"type" query:"type" validate:"required"`
+	ChainUrl types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 }
 
 func NewChain(chainUrl types.String, chainType types.Bytes) *Chain {
@@ -48,12 +48,12 @@ func (h *Chain) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(h.Type.Bytes())
 
-	htdata, err := h.ChainUrl.MarshalBinary()
+	urlData, err := h.ChainUrl.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	buffer.Write(htdata)
+	buffer.Write(urlData)
 
 	return buffer.Bytes(), nil
 }
