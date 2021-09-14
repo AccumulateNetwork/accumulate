@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"errors"
+	"fmt"
 
 	"github.com/AccumulateNetwork/SMT/common"
 )
@@ -29,21 +31,27 @@ func (e *ED25519Sig) Equal(e2 *ED25519Sig) bool {
 // Returns the signature for the given message.  What happens is the message
 // is hashed with sha256, then the hash is signed.  The signature of the hash
 // is returned.
-func Sign(privateKey []byte, message []byte) *ED25519Sig {
+func (e *ED25519Sig) Sign(privateKey []byte, message []byte) error {
 	h := sha256.Sum256(message)
-	return SignHash(privateKey, h[:])
+	return e.SignHash(privateKey, h[:])
 }
 
 // SignHash
 // Signs the hash of a message.  This is needed to separate the signatures from
 // the messages we sign.  In theory we could avoid the extra hash, but the
 // libraries we use don't provide a function to avoid the extra hash.
-func SignHash(privateKey []byte, hash []byte) *ED25519Sig {
-	ed25519sig := new(ED25519Sig)                               // Create a new ed25519sig
-	s := ed25519.Sign(privateKey, hash[:])                      // Sign the hash
-	ed25519sig.PublicKey = append([]byte{}, privateKey[32:]...) // Note that the last 32 bytes of a private key is the
-	ed25519sig.Signature = s                                    // public key.  Save the signature.
-	return ed25519sig
+//
+// Note that the hash must be of the varInt of the nonce concatenated with the
+// message
+func (e *ED25519Sig) SignHash(privateKey []byte, hash []byte) error {
+	nHash := append(common.Uint64Bytes(e.Nonce), hash...) //       Add nonce to hash
+	s := ed25519.Sign(privateKey, nHash)                  //       Sign the nonce+hash
+	e.PublicKey = append([]byte{}, privateKey[32:]...)    //       Note that the last 32 bytes of a private key is the
+	if !bytes.Equal(e.PublicKey, privateKey[32:]) {       //       Check that we have the proper keys to sign
+		return errors.New("privateKey cannot sign this struct") // Return error that the doesn't match
+	}
+	e.Signature = s // public key.  Save the signature. // Save away the signature.
+	return nil
 }
 
 // CanVerify
@@ -70,28 +78,41 @@ func (e *ED25519Sig) Verify(message []byte) bool {
 // VerifyHash
 // Verifies the hash of a message.
 func (e *ED25519Sig) VerifyHash(hash []byte) bool {
-	return ed25519.Verify(e.PublicKey, hash, e.Signature)
+	n := common.Uint64Bytes(e.Nonce)
+	return ed25519.Verify(e.PublicKey, append(n, hash...), e.Signature)
 }
 
 // Marshal
-// Marshal a signature
-func (e *ED25519Sig) Marshal() (data []byte) {
+// Marshal a signature.  The data can be unmarshaled
+func (e *ED25519Sig) Marshal() (data []byte, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			err = fmt.Errorf("error marshaling ED25519Sig %v", err)
+		}
+	}()
+
 	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
-		return nil
+		return nil, fmt.Errorf("poorly formed signature")
 	}
 	data = common.Uint64Bytes(e.Nonce)
 	data = append(data, e.PublicKey...)
 	data = append(data, e.Signature...)
-	return data
+	return data, nil
 }
 
 // Unmarshal
 // UnMarshal a signature
-func (e *ED25519Sig) Unmarshal(data []byte) []byte {
+// further unmarshalling can be done with the returned data
+func (e *ED25519Sig) Unmarshal(data []byte) (nextData []byte, err error) {
+	defer func() {
+		if err := recover(); err != nil {
+			err = fmt.Errorf("error unmarshaling ED25519Sig %v", err)
+		}
+	}()
 	e.Nonce, data = common.BytesUint64(data)
 	e.PublicKey = append([]byte{}, data[:32]...)
 	data = data[32:]
 	e.Signature = append([]byte{}, data[:64]...)
 	data = data[64:]
-	return data
+	return data, nil
 }

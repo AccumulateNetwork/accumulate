@@ -38,7 +38,7 @@ func init() {
 	flag.StringVar(&initdir, "workingdir", usr.HomeDir+"/.accumulate", "Path to data directory")
 	flag.Parse()
 	if *version {
-		fmt.Printf("Accumulate BVC %s\n", BuildTag)
+		// fmt.Printf("Accumulate BVC %s\n", BuildTag)
 		os.Exit(0)
 	}
 	for i := range router.Networks {
@@ -50,10 +50,10 @@ func init() {
 
 func main() {
 
-	fmt.Printf("Working dir: %v\n", WorkingDir[0])
-	fmt.Printf("Working VM1 dir: %v\n", ConfigFile[1])
-	fmt.Printf("Config File: %v\n", ConfigFile[0])
-	fmt.Printf("Config File VM1: %v\n", ConfigFile[1])
+	// fmt.Printf("Working dir: %v\n", WorkingDir[0])
+	// fmt.Printf("Working VM1 dir: %v\n", ConfigFile[1])
+	// fmt.Printf("Config File: %v\n", ConfigFile[0])
+	// fmt.Printf("Config File VM1: %v\n", ConfigFile[1])
 
 	n := len(os.Args)
 	for i := 0; i < n; i++ {

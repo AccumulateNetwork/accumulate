@@ -222,5 +222,5 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Printf("%s", string(tx))
+	// fmt.Printf("%s", string(tx))
 }

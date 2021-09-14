@@ -3,7 +3,6 @@ package router
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -32,7 +31,7 @@ type API struct {
 // StartAPI starts new JSON-RPC server
 func StartAPI(port int, q *Query) *API {
 
-	fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
+	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
 	api := &API{}
 	api.port = port

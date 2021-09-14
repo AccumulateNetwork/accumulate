@@ -2,14 +2,16 @@ package router
 
 import (
 	"crypto/sha256"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/Factom-Asset-Tokens/factom/fat"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"time"
 
 	//"crypto/ed25519"
 	"encoding/json"
 	"fmt"
+
 	//"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	"math/big"
 	"testing"
@@ -64,7 +66,7 @@ func TestTokenTransfer(t *testing.T) {
 	//	t.Fatalf("Failed to make a token rpc call %v", err)
 	//}
 	//
-	//fmt.Println(string(sub.Data))
+	//// fmt.Println(string(sub.Data))
 	//
 	//if !json.Valid(sub.Data) {
 	//	t.Fatal("Transaction test created invalid json")
@@ -193,7 +195,7 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 //	}
 //	params.Set("RedWagon", q)
 //	result, _ := params.MarshalJSON()
-//	fmt.Println(string(result))
+//	// fmt.Println(string(result))
 //
 //	urlstring = "acc://RedWagon/acc?query&block=1000"
 //	q, err = URLParser(urlstring)
@@ -202,7 +204,7 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 //	}
 //	params.Set("RedWagon/acc", q)
 //	result, _ = params.MarshalJSON()
-//	fmt.Println(string(result))
+//	// fmt.Println(string(result))
 //
 //	if string(q.Data) != "{\"block\":[\"1000\"]}" {
 //		t.Fatalf("URL query failed:  expected block=1000 received %s", string(q.Data))
@@ -215,7 +217,7 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 //	}
 //	params.Set("RedWagon/acc", q)
 //	result, _ = params.MarshalJSON()
-//	fmt.Println(string(result))
+//	// fmt.Println(string(result))
 //
 //	identityname := "RedWagon"
 //
@@ -230,7 +232,7 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 //	}
 //	params.Set(identityname, q)
 //	result, _ = params.MarshalJSON()
-//	fmt.Println(string(result))
+//	// fmt.Println(string(result))
 //
 //	urlstring = MakeUpdateKeyURL(identityname, kp1, kp2.PubKey().(ed25519.PubKey))
 //	q, err = URLParser(urlstring)
@@ -239,7 +241,7 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 //	}
 //	params.Set(identityname, q)
 //	result, _ = params.MarshalJSON()
-//	fmt.Println(string(result))
+//	// fmt.Println(string(result))
 //
 //	chainpath := identityname + "/" + "ATKCoinbase"
 //	urlstring = MakeTokenIssueURL(chainpath, 500000000, 8, "ATK", kp1)
@@ -249,7 +251,7 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 //	}
 //	params.Set(chainpath, q)
 //	result, _ = params.MarshalJSON()
-//	fmt.Println(string(result))
+//	// fmt.Println(string(result))
 //
 //	chainpath = identityname + "/" + "MyAtkTokens"
 //
@@ -271,6 +273,6 @@ func MakeTokenTransactionURL(intputfullchainpath string, inputamt *big.Int, outp
 //
 //	params.Set(chainpath, q)
 //	result, _ = params.MarshalJSON()
-//	fmt.Println(string(result))
+//	// fmt.Println(string(result))
 //	//the q objects can be submitted to the router for processing.
 //}
