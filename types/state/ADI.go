@@ -14,9 +14,8 @@ import (
 type KeyType byte
 
 const (
-	KeyTypeUnknown KeyType = iota
+	KeyTypeSha256 KeyType = iota
 	KeyTypePublic
-	KeyTypeSha256
 	KeyTypeSha256d
 	KeyTypeChain
 )
@@ -198,7 +197,7 @@ func (k *KeyType) UnmarshalJSON(b []byte) error {
 	case str == "chain":
 		*k = KeyTypeChain
 	default:
-		*k = KeyTypeUnknown
+		*k = KeyTypeSha256
 	}
 
 	return nil
@@ -216,7 +215,7 @@ func (k *KeyType) MarshalJSON() ([]byte, error) {
 	case KeyTypeChain:
 		str = "chain"
 	default:
-		str = "unknown"
+		str = "sha256"
 	}
 
 	data, _ := json.Marshal(str)

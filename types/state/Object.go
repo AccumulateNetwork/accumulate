@@ -2,9 +2,7 @@ package state
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -17,43 +15,41 @@ type Entry interface {
 
 //maybe we should have Chain header then entry, rather than entry containing all the Headers
 type Object struct {
-	StateIndex int64       `json:"stateIndex"` //
-	Entry      types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
+	ChainHeader Chain       `json:"chainHeader"`
+	Entry       types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
 }
 
 func (app *Object) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	data, err := app.Entry.MarshalBinary()
+	data, err := app.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
+	buffer.Write(data)
 
-	var state [8]byte
-	n := binary.PutVarint(state[:], app.StateIndex)
-	if n <= 0 {
-		return nil, fmt.Errorf("unable to marshal state index to a varint")
+	data, err = app.Entry.MarshalBinary()
+	if err != nil {
+		return nil, err
 	}
-
-	buffer.Write(state[:n])
 	buffer.Write(data)
 
 	return buffer.Bytes(), nil
 }
 
 func (app *Object) UnmarshalBinary(data []byte) error {
-
-	n, i := binary.Varint(data)
-	if i <= 0 {
-		return fmt.Errorf("insufficient data to unmarshal state index")
-	}
-	app.StateIndex = n
-
-	if len(data) < i {
+	//minimum length of a chain header is 33 bytes
+	if len(data) < 33 {
 		return fmt.Errorf("insufficicient data associated with state entry")
 	}
 
-	err := app.Entry.UnmarshalBinary(data[i:])
+	err := app.ChainHeader.UnmarshalBinary(data)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
+	}
+	i := app.ChainHeader.GetHeaderSize()
+
+	err = app.Entry.UnmarshalBinary(data[i:])
 	if err != nil {
 		return fmt.Errorf("no state object associated with state entry, %v", err)
 	}
