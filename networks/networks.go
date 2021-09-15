@@ -33,5 +33,13 @@ func init() {
 				"127.0.0.1",
 			},
 		},
+		RouterNode{
+			Name: "EastXeons",
+			Port: 33000,
+			Ip: []string{
+				"18.119.26.7",
+				"18.119.149.208",
+			},
+		},
 	}
 }
