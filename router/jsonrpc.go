@@ -3,6 +3,8 @@ package router
 import (
 	"context"
 	"encoding/json"
+
+	//"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"log"
 	"net/http"
 	"os"
@@ -93,10 +95,12 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 		return NewValidatorError(err)
 	}
 
-	resp := &TokenAccount{}
-	resp.URL = req.URL
-
 	// Tendermint integration here
+	resp, err := api.query.GetChainState(req.URL.AsString())
+
+	if err != nil {
+		return NewAccumulateError(err)
+	}
 
 	return resp
 }
@@ -116,10 +120,12 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 		return NewValidatorError(err)
 	}
 
-	resp := &ADI{}
-	resp.URL = req.URL
-
 	// Tendermint integration here
+	resp, err := api.query.GetAdi(req.URL.AsString())
+
+	if err != nil {
+		return NewAccumulateError(err)
+	}
 
 	return resp
 }

@@ -77,7 +77,7 @@ func (sdb *StateDB) GetDB() *smtDB.Manager {
 }
 
 //AddPendingTx adds the pending tx raw data and signature of that data to tx, signature needs to be a signed hash of the tx.
-func (sdb *StateDB) AddPendingTx(chainId []byte, txRaw []byte, sig []byte, pubKey []byte) error {
+func (sdb *StateDB) AddPendingTx(chainId []byte, txRaw []byte) error {
 
 	mms := sdb.getOrCreateChainMerkleManager(chainId, false)
 	txId := sha256.Sum256(txRaw)
@@ -91,9 +91,8 @@ func (sdb *StateDB) AddPendingTx(chainId []byte, txRaw []byte, sig []byte, pubKe
 	ptx.tx = txRaw
 
 	pvs.pendingTx = ptx
-	pvs.sig = sig
-	pvs.pubKey = pubKey
-
+	//pvs.sig = sig
+	//pvs.pubKey = pubKey
 	mms.pending = append(mms.pending, pvs)
 
 	return nil

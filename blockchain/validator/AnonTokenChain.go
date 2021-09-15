@@ -78,6 +78,12 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 		return err
 	}
 
+	//make sure this is an anonymous address
+	if err = types2.IsAcmeAddress(adi); err != nil {
+		//need to return to sender
+		return fmt.Errorf("deposit token account does not exist and the deposit address is not an anonymous account, %v", err)
+	}
+
 	//now check if the anonymous chain already exists.
 	//adiStateData := currentState.IdentityState
 	chainState := state.Chain{}
