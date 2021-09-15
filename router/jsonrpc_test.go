@@ -118,7 +118,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
 
 	//dir += "/Node0"
-	cfg := path.Join(dir, "Node0/config/config.toml")
+	cfg := path.Join(dir, "/Node0/config/config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
