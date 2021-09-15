@@ -272,7 +272,7 @@ func Load(t *testing.T,
 		wallet[i].Addr = anon.GenerateAcmeAddress(wallet[i].PrivateKey[32:]) // generate the address encoding URL
 	}
 
-	for i := 1; i < 20000; i++ { // Make a bunch of transactions
+	for i := 1; i < 10000; i++ { // Make a bunch of transactions
 		if i%2000 == 0 {
 			txBouncer.BatchSend()
 			time.Sleep(500 * time.Millisecond)
