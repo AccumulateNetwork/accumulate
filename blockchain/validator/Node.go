@@ -44,6 +44,8 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 
 		return fmt.Errorf("viper failed to read config file: %w", err)
 	}
+
+	//create a connection to the router.
 	app.AccRpcAddr = v.GetString("accumulate.AccRPCAddress")
 
 	//create a connection to the router.

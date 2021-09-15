@@ -1,6 +1,7 @@
-package router
+package networks
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types"

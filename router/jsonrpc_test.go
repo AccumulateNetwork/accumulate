@@ -35,7 +35,9 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
-	cfg := path.Join(dir, "/config/config.toml")
+	//dir += "/Node0"
+	os.MkdirAll(dir+"/Node0/config", nodeDirPerm)
+	cfg := path.Join(dir, "/Node0/config/config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,6 +241,10 @@ func Load(t *testing.T,
 	}
 }
 
+const (
+	nodeDirPerm = 0755
+)
+
 func _TestJsonRpcAdi(t *testing.T) {
 
 	//"wileecoyote/ACME"
@@ -249,6 +255,8 @@ func _TestJsonRpcAdi(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
+	dir += "/Node0"
+	os.MkdirAll(dir+"/config", nodeDirPerm)
 	cfg := path.Join(dir, "/config/config.toml")
 	if err != nil {
 		t.Fatal(err)

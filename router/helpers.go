@@ -2,19 +2,20 @@ package router
 
 import (
 	"fmt"
-	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 
 	//	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	//	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/spf13/viper"
+
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
 
-	//	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	//	"github.com/tendermint/tendermint/rpc/client/local"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	//"github.com/tendermint/tendermint/rpc/client/local"
 	"google.golang.org/grpc"
 )
 
@@ -62,19 +63,21 @@ func makeClientAndServer(routeraddress string) (proto.ApiServiceClient, *RouterC
 }
 func boostrapBVC(configfile string, workingdir string, baseport int) error {
 
-	ABCIAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
-	RPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+1)
-	GRPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+2)
+	//ABCIAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
+	//RPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+1)
+	//GRPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+2)
+	//
+	//AccRPCInternalAddress := fmt.Sprintf("tcp://localhost:%d", baseport+3) //no longer needed
+	//
+	//RouterPublicAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
 
-	AccRPCInternalAddress := fmt.Sprintf("tcp://localhost:%d", baseport+3) //no longer needed
-	RouterPublicAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
-
+	tendermint.Initialize("accumulate.", 2, workingdir)
 	//create the default configuration files for the blockchain.
-	tendedrmint.Initialize("accumulate.routertest", ABCIAddress, RPCAddress, GRPCAddress,
-		AccRPCInternalAddress, RouterPublicAddress, configfile, workingdir)
+	//tendedrmint.Initialize("accumulate.routertest", ABCIAddress, RPCAddress, GRPCAddress,
+	//	AccRPCInternalAddress, RouterPublicAddress, configfile, workingdir)
 
 	viper.SetConfigFile(configfile)
-	viper.AddConfigPath(workingdir)
+	viper.AddConfigPath(workingdir + "/Node0")
 	viper.ReadInConfig()
 	//[mempool]
 	//	broadcast = true
@@ -93,14 +96,15 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 	return nil
 }
 
-func makeBVC(t *testing.T, configfile string, workingdir string) *tendermint.AccumulatorVMApplication {
-	app, err := accnode.CreateAccumulateBVC(configfile, workingdir)
+func makeBVC(configfile string, workingdir string) *tendermint.AccumulatorVMApplication {
+	app, err := accumulate.CreateAccumulateBVC(configfile, workingdir)
 	if err != nil {
 		panic(err)
 	}
 	return app
 }
-func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceClient, *RouterConfig, *local.Local, *rpchttp.HTTP, *tendermint.AccumulatorVMApplication) {
+
+func makeBVCandRouter(cfg string, dir string) (proto.ApiServiceClient, *RouterConfig, *local.Local, *rpchttp.HTTP, *tendermint.AccumulatorVMApplication) {
 
 	//Select a base port to open.  Ports 43210, 43211, 43212, 43213,43214 need to be open
 	baseport := 43210
@@ -121,7 +125,7 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 	client, routerserver := makeClientAndServer(routeraddress)
 
 	///Build a BVC we'll use for our test
-	accvm := makeBVC(cfg, dir)
+	accvm := makeBVC(cfg, dir+"/Node0")
 
 	//This will register the Tendermint RPC client of the BVC with the router
 	accvmapi, _ := accvm.GetAPIClient()
