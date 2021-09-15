@@ -2,14 +2,19 @@ package router
 
 import (
 	"fmt"
+	"testing"
 
-//	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
-//	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+
+	//	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
+	//	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
-//	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-//	"github.com/tendermint/tendermint/rpc/client/local"
+	"github.com/tendermint/tendermint/rpc/client/local"
+
+	//	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	//	"github.com/tendermint/tendermint/rpc/client/local"
 	"google.golang.org/grpc"
 )
 
@@ -57,7 +62,6 @@ func makeClientAndServer(routeraddress string) (proto.ApiServiceClient, *RouterC
 }
 func boostrapBVC(configfile string, workingdir string, baseport int) error {
 
-/*
 	ABCIAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
 	RPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+1)
 	GRPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+2)
@@ -68,7 +72,7 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 	//create the default configuration files for the blockchain.
 	tendedrmint.Initialize("accumulate.routertest", ABCIAddress, RPCAddress, GRPCAddress,
 		AccRPCInternalAddress, RouterPublicAddress, configfile, workingdir)
-*/
+
 	viper.SetConfigFile(configfile)
 	viper.AddConfigPath(workingdir)
 	viper.ReadInConfig()
@@ -89,7 +93,6 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 	return nil
 }
 
-/*
 func makeBVC(t *testing.T, configfile string, workingdir string) *tendermint.AccumulatorVMApplication {
 	app, err := accnode.CreateAccumulateBVC(configfile, workingdir)
 	if err != nil {
@@ -134,4 +137,3 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 
 	return client, routerserver, &lc, rpcc, accvm
 }
-*/
