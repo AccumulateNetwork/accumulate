@@ -8,8 +8,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/networks"
-
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 
 	ptypes "github.com/tendermint/tendermint/abci/types"
@@ -20,6 +18,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
+	"google.golang.org/grpc"
 )
 
 // Node implements the general parameters to stimulate the validators, provide synthetic transactions, and issue state changes
@@ -280,7 +279,7 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 			}
 
 			ed := new(pb.ED25519Sig)
-			ed.Nonce = 1 //uint64(time.Now().Unix())
+			ed.Nonce = uint64(time.Now().Unix())
 			ed.PublicKey = app.key[32:]
 			err := ed.Sign(app.key, dataToSign)
 			if err != nil {
