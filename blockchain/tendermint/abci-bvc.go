@@ -48,21 +48,6 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
 
-//
-//var (
-//	stateKey        = []byte("stateKey")
-//	kvPairPrefixKey = []byte("kvPairKey:")
-//
-//	ProtocolVersion uint64 = 0x1
-//)
-//
-//type State struct {
-//	db      dbm.DB
-//	Size    int64  `json:"size"`
-//	Height  int64  `json:"height"`
-//	AppHash []byte `json:"app_hash"`
-//}
-
 func loadState(db dbm.DB) State {
 	var tmstate State
 	tmstate.db = db
