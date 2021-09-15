@@ -13,27 +13,97 @@ import (
 	"testing"
 	"time"
 
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/go-playground/validator/v10"
-	ptypes "github.com/tendermint/tendermint/abci/types"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-//
-//func sendFaucetTokenDeposit(client, address) {
-//
-//}
+//RouterNode{
+//Name: "Arches",
+//Port: 33000,
+//Ip: []string{
+//"13.51.10.110",
+//"13.232.230.216",
+//},
+//},
+//RouterNode{
+//Name: "AmericanSamoa",
+//Port: 33000,
+//Ip: []string{
+//"18.221.39.36",
+//"44.236.45.58",
+//},
 
-func TestLoadOnRemote(t *testing.T) {
-	laddr := "tcp://18.221.39.36"
-	rpcc, _ := rpchttp.New(laddr, "/websocket")
+func makeBouncer() *Bouncer {
+	//laddr := []string { "tcp://18.221.39.36:33001", "tcp://44.236.45.58:33001","tcp://13.51.10.110:33001", "tcp://13.232.230.216:33001" }
+	lAddr := []string{"tcp://18.221.39.36:33001", "tcp://13.51.10.110:33001"}
 
+	rpcClients := []*rpchttp.HTTP{}
+
+	rpcClient1, _ := rpchttp.New(lAddr[0], "/websocket")
+	rpcClient2, _ := rpchttp.New(lAddr[1], "/websocket")
+	rpcClients = append(rpcClients, rpcClient1)
+	rpcClients = append(rpcClients, rpcClient2)
+	txBouncer := NewBouncer(rpcClients)
+	return txBouncer
+}
+
+func _TestLoadOnRemote(t *testing.T) {
+
+	txBouncer := makeBouncer()
+
+	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 	_, privateKey, _ := ed25519.GenerateKey(nil)
+
+	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	kpSponsor := privateKeySponsor
+
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
+	adiSponsor := types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+
+	//set destination url address
+	destAddress := types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
+
+	txid := sha256.Sum256([]byte("fake txid"))
+
+	tokenUrl := types.String("dc/ACME")
+
+	//create a fake synthetic deposit for faucet.
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
+	amtToDeposit := int64(50000)                             //deposit 50k tokens
+	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
+	deposit.TokenUrl = tokenUrl
+
+	depData, err := deposit.MarshalBinary()
+	gtx := new(proto.GenTransaction)
+	gtx.Transaction = depData
+	if err := gtx.SetRoutingChainID(*destAddress.AsString()); err != nil {
+		t.Fatal("bad url generated")
+	}
+	dataToSign, err := gtx.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ed := new(proto.ED25519Sig)
+	ed.Nonce = 1
+	ed.PublicKey = privateKey[32:]
+	err = ed.Sign(privateKey, dataToSign)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gtx.Signature = append(gtx.Signature, ed)
+
+	txBouncer.SendTx(gtx)
+
+	Load(t, txBouncer, privateKey)
+
+	txBouncer.BatchSend()
 
 }
 
@@ -50,6 +120,9 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	client, _, _, rpcClient, vm := makeBVCandRouter(cfg, dir)
+
+	rpcClients := []*rpchttp.HTTP{rpcClient}
+	txBouncer := NewBouncer(rpcClients)
 
 	if err != nil {
 		t.Fatal(err)
@@ -100,18 +173,11 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
-	deliverRequestTXAsync.Tx, err = gtx.Marshal()
-	if err != nil {
-		t.Fatal(err)
-	}
+	txBouncer.BatchTx(gtx)
 
-	batch := rpcClient.NewBatch()
-	batch.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
+	Load(t, txBouncer, privateKey)
 
-	Load(t, batch, privateKey)
-
-	batch.Send(context.Background())
+	txBouncer.BatchSend()
 
 	//wait 3 seconds for the transaction to process for the block to complete.
 	time.Sleep(3 * time.Second)
@@ -189,7 +255,7 @@ func (we *walletEntry) Public() []byte {
 // Load
 // Generate load in our test.  Create a bunch of transactions, and submit them.
 func Load(t *testing.T,
-	rpcClient *rpchttp.BatchHTTP,
+	txBouncer *Bouncer,
 	Origin ed25519.PrivateKey) {
 
 	var wallet []*walletEntry
@@ -207,9 +273,9 @@ func Load(t *testing.T,
 	}
 
 	for i := 1; i < 20000; i++ { // Make a bunch of transactions
-		if i%200 == 0 {
-			rpcClient.Send(context.Background())
-			//time.Sleep(10 * time.Millisecond)
+		if i%2000 == 0 {
+			txBouncer.BatchSend()
+			time.Sleep(500 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                         // pick a destination address
@@ -227,13 +293,7 @@ func Load(t *testing.T,
 		}
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
 
-		deliverRequestTXAsync := new(ptypes.RequestDeliverTx)          // Get a RequestDeliverTX
-		if deliverRequestTXAsync.Tx, err = gtx.Marshal(); err != nil { // and marshal gtx into RequestDeliverTX
-			t.Fatal(err) //                                                 <= marshal should never fail
-		}
-		if resp, err := rpcClient.BroadcastTxAsync( //                           send off the requestDeliverTX
-			context.Background(), //                                  The context (do in background)
-			deliverRequestTXAsync.Tx); err != nil {
+		if resp, err := txBouncer.BatchTx(gtx); err != nil {
 			t.Fatal(err) //                                                 <= should never happen
 		} else {
 			if len(resp.Log) > 0 {
