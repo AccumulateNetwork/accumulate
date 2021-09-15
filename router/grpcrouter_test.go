@@ -211,10 +211,11 @@ func createKeyPair() ed25519.PrivateKey {
 	_, sk, _ := ed25519.GenerateKey(nil)
 	return sk
 }
-func createIdentity(t *testing.T) *proto.Submission {
-	kp := createKeyPair()
 
-	sub := proto.Submission{}
+//func createIdentity(t *testing.T) *proto.Submission {
+//	kp := createKeyPair()
+//
+//	sub := proto.Submission{}
 
 	name := "RedWagon"
 	sub.Identitychain = types.GetIdentityChainFromAdi(name).Bytes()
@@ -489,4 +490,3 @@ func hexToBytes(hexStr string) []byte {
 	}
 	return raw
 }
-
