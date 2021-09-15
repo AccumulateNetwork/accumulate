@@ -24,8 +24,6 @@ func (b *Bouncer) Initialize(clients []*rpchttp.HTTP) error {
 	return nil
 }
 
-func (b *Bouncer) BatchTx
-
 func (b *Bouncer) BatchTx(tx *proto.GenTransaction) {
 
 }
