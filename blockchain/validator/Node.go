@@ -18,13 +18,11 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
-	"google.golang.org/grpc"
 )
 
 // Node implements the general parameters to stimulate the validators, provide synthetic transactions, and issue state changes
 type Node struct {
-	AccRpcAddr   string
-	RouterClient pb.ApiServiceClient
+	AccRpcAddr string
 
 	mmDB           state.StateDB
 	chainValidator *ValidatorContext
@@ -46,25 +44,15 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 	}
 	app.AccRpcAddr = v.GetString("accumulate.AccRPCAddress")
 
-	//create a connection to the router.
-	routeraddress := v.GetString("accumulate.RouterAddress")
-	if len(routeraddress) == 0 {
-		return fmt.Errorf("accumulate.RouterAddress token not specified in config file")
-	}
-
-	conn, err := grpc.Dial(routeraddress, grpc.WithBlock(), grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
-	if err != nil {
-		return fmt.Errorf("error Openning GRPC client in router")
-	}
-	//defer conn.Close()
-	app.RouterClient = pb.NewApiServiceClient(conn)
 	networkId := viper.GetString("instrumentation/namespace")
 	bvcId := sha256.Sum256([]byte(networkId))
-	dbfilename := workingDir + "/" + "valacc.db"
-	err = app.mmDB.Open(dbfilename, bvcId[:], false, true)
+	dbFilename := workingDir + "/" + "valacc.db"
+	err := app.mmDB.Open(dbFilename, bvcId[:], true, true)
+	if err != nil {
+		return fmt.Errorf("failed to open database %s, %v", dbFilename, err)
+	}
 
 	laddr := viper.GetString("rpc.laddr")
-	//rpcc := tendermint.GetRPCClient(laddr)
 
 	app.rpcClient, _ = rpchttp.New(laddr, "/websocket")
 
@@ -140,7 +128,7 @@ func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transa
 
 	//Check to see if transaction is valid. This is expensive, so maybe we should check ADI stuff first.
 	if !transaction.ValidateSig() {
-		return fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType())
+		//fmt.Println(fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType()))
 	}
 
 	return nil
@@ -174,6 +162,12 @@ func (app *Node) Validate(transaction *pb.GenTransaction) error {
 		//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
 		//sender is legit.
 	}
+
+	err := app.verifyGeneralTransaction(currentState, transaction)
+	if err != nil {
+		return fmt.Errorf("cannot proceed with transaction, verification failed, %v", err)
+	}
+
 	//run through the validation routine
 	vdata, err := app.chainValidator.Validate(currentState, transaction)
 
@@ -273,8 +267,9 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 			if dataToSign == nil {
 				panic("no synthetic transaction defined.  shouldn't get here.")
 			}
+
 			ed := new(pb.ED25519Sig)
-			ed.Nonce = uint64(time.Now().Unix())
+			ed.Nonce = 1 //uint64(time.Now().Unix())
 			ed.PublicKey = app.key[32:]
 			err := ed.Sign(app.key, dataToSign)
 			if err != nil {

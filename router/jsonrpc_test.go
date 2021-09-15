@@ -82,10 +82,6 @@ func TestJsonRpcAnonToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	we := walletEntry{}
-	we.Nonce = 1
-	we.PrivateKey = privateKey
-	we.Sign(dataToSign)
 	ed := new(proto.ED25519Sig)
 	ed.Nonce = 1
 	ed.PublicKey = privateKey[32:]
