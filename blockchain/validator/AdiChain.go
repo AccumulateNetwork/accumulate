@@ -116,8 +116,6 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.GenTr
 
 	resp = &ResponseValidateTX{}
 
-	//builder := pb.SubmissionBuilder{}
-
 	//send of a synthetic transaction to the correct network
 	resp.Submissions = make([]*pb.GenTransaction, 1)
 	sub := resp.Submissions[0]
