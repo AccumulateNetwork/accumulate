@@ -3,7 +3,8 @@ package router
 import (
 	"context"
 	"encoding/json"
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
+
+	//"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"log"
 	"net/http"
 	"os"
@@ -94,11 +95,8 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 		return NewValidatorError(err)
 	}
 
-	resp := &TokenAccount{}
-	resp.URL = req.URL
-
 	// Tendermint integration here
-	resp, err := api.query.getChainState(req.URL.AsString())
+	resp, err := api.query.GetChainState(req.URL.AsString())
 
 	if err != nil {
 		return NewAccumulateError(err)
