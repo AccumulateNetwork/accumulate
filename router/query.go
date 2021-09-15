@@ -30,7 +30,7 @@ func NewQuery(app tmtypes.Application) *Query {
 //"GetTokenTx()"
 //"GetData()" Submit url into, and receive ADI/Token/TokenAccount/TokenTx
 
-func (q *Query) GetAdi(adi *string) (interface{}, error) {
+func (q *Query) GetAdi(adi *string) (*acmeapi.APIDataResponse, error) {
 
 	var err error
 
@@ -49,24 +49,40 @@ func (q *Query) GetAdi(adi *string) (interface{}, error) {
 	}
 
 	//this is only temporary until we get router setup.
-	resp, err := q.client.QuerySync(req)
+	qResp, err := q.client.QuerySync(req)
 
 	if err != nil {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
 	//unpack the response
-	adiResp := response.ADI{}
-	err = adiResp.ADI.UnmarshalBinary(resp.Value)
+	ret := &acmeapi.APIDataResponse{}
+	ret.Type = "adi"
 
-	if err != nil {
-		return nil, fmt.Errorf("cannot extract adi information")
+	if qResp.Code == 0 {
+
+		//unpack the state object returned from the query
+		adiResp := response.ADI{}
+		err = adiResp.ADI.UnmarshalBinary(resp.Value)
+
+		//package the response data into json
+		var data json.RawMessage
+		data, err = json.Marshal(adiResp)
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract token information")
+		}
+
+		ret.Data = &data
+	} else {
+		var data json.RawMessage
+		data, err = json.Marshal(qResp.Value)
+		ret.Data = &data
 	}
 
-	return adiResp, nil
+	return ret, err
 }
 
-func (q *Query) GetToken(tokenUrl *string) (interface{}, error) {
+func (q *Query) GetToken(tokenUrl *string) (*acmeapi.APIDataResponse, error) {
 
 	var err error
 
@@ -94,14 +110,37 @@ func (q *Query) GetToken(tokenUrl *string) (interface{}, error) {
 	}
 
 	//unpack the response
-	tokResp := response.Token{}
-	err = tokResp.Token.UnmarshalBinary(qResp.Value)
 
-	if err != nil {
-		return nil, fmt.Errorf("cannot extract token information")
+	ret := &acmeapi.APIDataResponse{}
+	ret.Type = "token"
+
+	if qResp.Code == 0 {
+
+		//unpack the state object returned from the query
+		tokState := &state.Token{}
+		err = tokState.UnmarshalBinary(qResp.Value)
+
+		tokResp := response.Token{}
+
+		tokResp.Precision = tokState.Precision
+		tokResp.URL = tokState.ChainUrl
+		tokResp.Symbol = tokState.Symbol
+		tokResp.Meta = tokState.Meta
+		//package the response data into json
+		var data json.RawMessage
+		data, err = json.Marshal(tokResp)
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract token information")
+		}
+
+		ret.Data = &data
+	} else {
+		var data json.RawMessage
+		data, err = json.Marshal(qResp.Value)
+		ret.Data = &data
 	}
 
-	return tokResp, err
+	return ret, err
 }
 
 func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeapi.APIDataResponse, error) {
@@ -225,39 +264,25 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txid []byte) (resp interface
 }
 
 var ChainStates = map[types.Bytes32]interface{}{
-	*types.ChainTypeAdi.AsBytes32(): func(data []byte) (interface{}, error) {
-		r := state.AdiState{}
-		if err := r.UnmarshalBinary(data); err != nil {
-			return nil, err
-		}
-		return &r, nil
+	*types.ChainTypeAdi.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeapi.APIDataResponse, error) {
+		return q.GetAdi(url)
 	},
-	*types.ChainTypeToken.AsBytes32(): func(data []byte) (interface{}, error) {
-		r := state.Token{}
-		if err := r.UnmarshalBinary(data); err != nil {
-			return nil, err
-		}
-		return &r, nil
+	*types.ChainTypeToken.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeapi.APIDataResponse, error) {
+		return q.GetToken(url)
 	},
-	*types.ChainTypeTokenAccount.AsBytes32(): func(data []byte) (interface{}, error) {
-		r := state.TokenAccount{}
-		if err := r.UnmarshalBinary(data); err != nil {
-			return nil, err
-		}
-		return &r, nil
+	*types.ChainTypeTokenAccount.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeapi.APIDataResponse, error) {
+		return q.GetTokenAccount(url)
 	},
-	*types.ChainTypeAnonTokenAccount.AsBytes32(): func(data []byte) (interface{}, error) {
-		r := state.Chain{}
-		if err := r.UnmarshalBinary(data); err != nil {
-			return nil, err
-		}
-		return &r, nil
+	*types.ChainTypeAnonTokenAccount.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeapi.APIDataResponse, error){
+		adi, _, _ := types.ParseIdentityChainPath(url)
+		adi += "dc/ACME"
+		return q.GetTokenAccount(url)
 	},
 }
 
 // getChainState will return the state object of the chain, which include the chain
 // header and the current state data for the chain
-func (q *Query) getChainState(adiChainPath *string) (interface{}, error) {
+func (q *Query) GetChainState(adiChainPath *string) (interface{}, error) {
 
 	var err error
 
@@ -287,7 +312,7 @@ func (q *Query) getChainState(adiChainPath *string) (interface{}, error) {
 		return nil, fmt.Errorf("invalid state object returned from query, %v", err)
 	}
 
-	var resp interface{}
+	var resp acmeapi.APIDataResponse{}
 
 	//unmarshal the state object if available
 	if val, ok := ChainStates[chainHeader.Type]; ok {
