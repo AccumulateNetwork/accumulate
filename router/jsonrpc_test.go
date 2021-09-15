@@ -29,6 +29,14 @@ import (
 //
 //}
 
+func TestLoadOnRemote(t *testing.T) {
+	laddr := "tcp://18.221.39.36"
+	rpcc, _ := rpchttp.New(laddr, "/websocket")
+
+	_, privateKey, _ := ed25519.GenerateKey(nil)
+
+}
+
 func TestJsonRpcAnonToken(t *testing.T) {
 
 	_, privateKey, _ := ed25519.GenerateKey(nil)
