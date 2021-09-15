@@ -81,10 +81,19 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := ed25519.Sign(privateKey, dataToSign)
+
+	we := walletEntry{}
+	we.Nonce = 1
+	we.PrivateKey = privateKey
+	we.Sign(dataToSign)
 	ed := new(proto.ED25519Sig)
+	ed.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	ed.Signature = s
+	err = ed.Sign(privateKey, dataToSign)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	gtx.Signature = append(gtx.Signature, ed)
 
 	deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
@@ -92,6 +101,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
 	batch := rpcClient.NewBatch()
 	batch.BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 
