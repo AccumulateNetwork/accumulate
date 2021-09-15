@@ -4,17 +4,20 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"testing"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types/proto"
+
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 )
 
 func TestTokenTransactionDeposit(t *testing.T) {
 	amt := types.Amount{}
 	amt.SetInt64(1000)
-	fromAccount := types.UrlChain("MyIdentity/MyAcmeAccount")
-	toAccount := types.UrlChain("YourIdentity/MyAcmeAccount")
+	fromAccount := types.String("MyIdentity/MyAcmeAccount")
+	toAccount := types.String("YourIdentity/MyAcmeAccount")
 	tx := api.NewTokenTx(fromAccount)
 	tx.AddToAccount(toAccount, &amt)
 
@@ -26,17 +29,17 @@ func TestTokenTransactionDeposit(t *testing.T) {
 
 	ledger := types.MarshalBinaryLedgerAdiChainPath(string(toAccount), data, time.Now().Unix())
 
-	dep := NewTokenTransactionDeposit()
-
 	//create a fake coinbase identity and token chain
-	idchp := "fakecoinbaseid/fakecoinbasetoken"
-	id := types.GetIdentityChainFromIdentity(idchp)
-	cp := types.GetChainIdFromChainPath(idchp)
+	idCoinbase := types.String("fakecoinbaseid/fakecoinbasetoken")
 
 	txid := sha256.Sum256(ledger)
-	dep.SetDeposit(txid[:], amt.AsBigInt())
-	dep.SetTokenInfo(types.UrlChain(idchp))
-	dep.SetSenderInfo(id[:], cp[:])
+	dep := NewTokenTransactionDeposit(txid[:], &fromAccount, &toAccount)
+	err = dep.SetDeposit(&idCoinbase, amt.AsBigInt())
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	err = dep.Valid()
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +50,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dep2 := NewTokenTransactionDeposit()
+	dep2 := TokenTransactionDeposit{}
 	err = dep2.UnmarshalBinary(data)
 	if err != nil {
 		t.Fatal(err)
@@ -61,11 +64,11 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		t.Fatalf("Error marshalling txid")
 	}
 
-	if bytes.Compare(dep.SourceAdiChain[:], dep2.SourceAdiChain[:]) != 0 {
+	if dep.FromUrl[:] != dep2.FromUrl[:] {
 		t.Fatalf("Error marshalling sender identity hash")
 	}
 
-	if bytes.Compare(dep.SourceChainId[:], dep2.SourceChainId[:]) != 0 {
+	if dep.ToUrl[:] != dep2.ToUrl[:] {
 		t.Fatalf("Error marshalling sender chain id")
 	}
 
@@ -79,10 +82,15 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		}
 	}
 
-	//now test to see if we can extract only header.
+	//now just peek at the transaction type
+	if data[0] != byte(proto.AccInstruction_Synthetic_Token_Deposit) {
+		t.Fatal("invalid transaction type")
+	}
 
+	//now test to see if we can extract only header.
 	header := Header{}
-	err = header.UnmarshalBinary(data)
+
+	err = header.UnmarshalBinary(data[1:])
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +100,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 	}
 
 	//now try again in json land
-	data, err = json.Marshal(dep2)
+	data, err = json.Marshal(&dep2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,11 +116,11 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		t.Fatalf("Error unmarshalling header from json")
 	}
 
-	if bytes.Compare(header.SourceAdiChain[:], header2.SourceAdiChain[:]) != 0 {
+	if header.FromUrl[:] != header2.FromUrl[:] {
 		t.Fatalf("Error unmarshalling header from json")
 	}
 
-	if bytes.Compare(header.SourceChainId[:], header2.SourceChainId[:]) != 0 {
+	if header.ToUrl[:] != header2.ToUrl[:] {
 		t.Fatalf("Error unmarshalling header from json")
 	}
 

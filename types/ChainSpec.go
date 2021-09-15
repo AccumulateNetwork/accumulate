@@ -1,8 +1,7 @@
-package api
+package types
 
 import (
 	"crypto/sha256"
-	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 //ChainSpec enumerates the latest versions of the Accumulate IMprovements (AIM)
@@ -15,10 +14,15 @@ const (
 	ChainSpecToken                   = "AIM/2/0.1"
 	ChainSpecTokenAccount            = "AIM/3/0.1"
 	ChainSpecAnonTokenAccount        = "AIM/4/0.1"
+	ChainSpecTransaction             = "AIM/5/0.1"
 )
 
 //ChainType is the hash of the chain spec.
-type ChainType types.Bytes32
+type ChainType Bytes32
+
+func (c *ChainType) AsBytes32() *Bytes32 {
+	return (*Bytes32)(c)
+}
 
 var (
 	//ChainTypeDC Define the Directory Block Chain Validator type
@@ -35,11 +39,16 @@ var (
 
 	//ChainTypeAnonTokenAccount Define an Anonymous Token chain validator type
 	ChainTypeAnonTokenAccount ChainType = sha256.Sum256([]byte(ChainSpecAnonTokenAccount))
+
+	//ChainTypeTransaction Defines the transaction chains for pending and accepted transactions
+	ChainTypeTransaction ChainType = sha256.Sum256([]byte(ChainSpecTransaction))
 )
 
-// Chain will define a new chain to be registered. It will be initialized to the default state
-// as defined by validator referenced by the ChainType
-type Chain struct {
-	URL       types.String `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	ChainType ChainType    `json:"chainType" form:"chainType" query:"chainType" validate:"required"`
+var ChainTypeSpecMap = map[Bytes32]string{
+	*ChainTypeDC.AsBytes32():               ChainSpecDC,
+	*ChainTypeAdi.AsBytes32():              ChainSpecAdi,
+	*ChainTypeToken.AsBytes32():            ChainSpecToken,
+	*ChainTypeTokenAccount.AsBytes32():     ChainSpecTokenAccount,
+	*ChainTypeAnonTokenAccount.AsBytes32(): ChainSpecAnonTokenAccount,
+	*ChainTypeTransaction.AsBytes32():      ChainSpecTransaction,
 }
