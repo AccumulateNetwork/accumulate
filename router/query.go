@@ -163,12 +163,12 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txid []byte) (resp interface
 	// need to know the ADI and ChainID, deriving adi and chain id from TokenTx.From
 	pq := proto.Query{}
 	pq.ChainUrl = *tokenAccountUrl
-	adichain := types.GetIdentityChainFromIdentity(&pq.ChainUrl)
-	chainId := types.GetChainIdFromChainPath(&pq.ChainUrl)
-	pq.AdiChain = adichain.Bytes()
-	pq.ChainId = chainId.Bytes()
+	adiChain := types.GetIdentityChainFromIdentity(&pq.ChainUrl)
+	//chainId := types.GetChainIdFromChainPath(&pq.ChainUrl)
+	pq.AdiChain = adiChain.Bytes()
+	pq.ChainId = txid //chainId.Bytes()
 	pq.Ins = proto.AccInstruction_Token_Transaction
-	pq.Query = txid
+	//pq.Query = txid
 
 	req := tmtypes.RequestQuery{}
 
