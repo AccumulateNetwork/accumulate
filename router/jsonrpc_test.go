@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/networks"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -38,7 +40,7 @@ import (
 //"44.236.45.58",
 //},
 
-func makeBouncer() *Bouncer {
+func makeBouncer() *networks.Bouncer {
 	//laddr := []string { "tcp://18.221.39.36:33001", "tcp://44.236.45.58:33001","tcp://13.51.10.110:33001", "tcp://13.232.230.216:33001" }
 	lAddr := []string{"tcp://18.221.39.36:33001", "tcp://13.51.10.110:33001"}
 
@@ -48,7 +50,7 @@ func makeBouncer() *Bouncer {
 	rpcClient2, _ := rpchttp.New(lAddr[1], "/websocket")
 	rpcClients = append(rpcClients, rpcClient1)
 	rpcClients = append(rpcClients, rpcClient2)
-	txBouncer := NewBouncer(rpcClients)
+	txBouncer := networks.NewBouncer(rpcClients)
 	return txBouncer
 }
 
@@ -122,7 +124,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	client, _, _, rpcClient, vm := makeBVCandRouter(cfg, dir)
 
 	rpcClients := []*rpchttp.HTTP{rpcClient}
-	txBouncer := NewBouncer(rpcClients)
+	txBouncer := networks.NewBouncer(rpcClients)
 
 	if err != nil {
 		t.Fatal(err)
@@ -255,7 +257,7 @@ func (we *walletEntry) Public() []byte {
 // Load
 // Generate load in our test.  Create a bunch of transactions, and submit them.
 func Load(t *testing.T,
-	txBouncer *Bouncer,
+	txBouncer *networks.Bouncer,
 	Origin ed25519.PrivateKey) {
 
 	var wallet []*walletEntry

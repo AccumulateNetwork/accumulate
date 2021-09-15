@@ -8,6 +8,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/networks"
+
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 
 	ptypes "github.com/tendermint/tendermint/abci/types"
@@ -30,8 +32,8 @@ type Node struct {
 	key            ed25519.PrivateKey
 	rpcClient      *rpchttp.HTTP
 	batch          [2]*rpchttp.BatchHTTP
-	//txBouncer      router.Bouncer
-	height int64
+	txBouncer      networks.Bouncer
+	height         int64
 }
 
 // Initialize will setup the node with the given parameters.  What we really need here are the bouncer, and private key
@@ -72,8 +74,6 @@ func (app *Node) BeginBlock(height int64, Time *time.Time, leader bool) error {
 	app.leader = leader
 	app.height = height
 	app.chainValidator.BeginBlock(height, Time)
-
-	//app.batchRequests = nil
 	return nil
 }
 
