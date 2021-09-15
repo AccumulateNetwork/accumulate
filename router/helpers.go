@@ -2,19 +2,20 @@ package router
 
 import (
 	"fmt"
-	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 
 	//	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 	//	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/spf13/viper"
+
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
 
-	//	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	//	"github.com/tendermint/tendermint/rpc/client/local"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	//"github.com/tendermint/tendermint/rpc/client/local"
 	"google.golang.org/grpc"
 )
 
@@ -131,7 +132,7 @@ func makeBVCandRouter(cfg string, dir string) (proto.ApiServiceClient, *RouterCo
 	client, routerserver := makeClientAndServer(routeraddress)
 
 	///Build a BVC we'll use for our test
-	accvm := makeBVC(cfg, dir)
+	accvm := makeBVC(cfg, dir+"/Node0")
 
 	//This will register the Tendermint RPC client of the BVC with the router
 	accvmapi, _ := accvm.GetAPIClient()
