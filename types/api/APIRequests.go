@@ -34,3 +34,9 @@ type APIRequestRawTx struct {
 type APIRequestURL struct {
 	URL types.String `json:"url" form:"url" query:"url" validate:"required"`
 }
+
+// APIDataResponse is used in "get" API method response
+type APIDataResponse struct {
+	Type types.String     `json:"url" form:"url" query:"url" validate:"oneof:adi,token,tokenAccount,tokenTx"`
+	Data *json.RawMessage `json:"data" form:"data" query:"data"`
+}

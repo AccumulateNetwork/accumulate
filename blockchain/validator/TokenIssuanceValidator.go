@@ -2,6 +2,7 @@ package validator
 
 import (
 	"encoding/json"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -11,6 +12,7 @@ import (
 	//"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
+
 	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
@@ -21,12 +23,12 @@ type TokenIssuanceValidator struct {
 
 func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	v := TokenIssuanceValidator{}
-	v.SetInfo(api.ChainTypeToken[:], api.ChainSpecToken, pb.AccInstruction_Token_Issue)
+	v.SetInfo(types.ChainTypeToken[:], types.ChainSpecToken, pb.AccInstruction_Token_Issue)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
 	return nil
 }
 func (v *TokenIssuanceValidator) Initialize(config *cfg.Config) error {
@@ -42,18 +44,18 @@ func (v *TokenIssuanceValidator) BeginBlock(height int64, time *time.Time) error
 	return nil
 }
 
-func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentState == nil {
 		//but this is to be expected...
-		return nil, fmt.Errorf("Current State Not Defined")
+		return nil, fmt.Errorf("current State not defined")
 	}
 
 	if currentState.IdentityState == nil {
-		return nil, fmt.Errorf("Identity not defined. Unable to issue token.")
+		return nil, fmt.Errorf("identity not defined, unable to issue token")
 	}
 
 	if currentState.ChainState != nil {
-		return nil, fmt.Errorf("Token chain already defined.  Unable to issue token.")
+		return nil, fmt.Errorf("token chain already defined, unable to issue token")
 	}
 
 	id := &state.AdiState{}
@@ -63,15 +65,15 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 	}
 
 	ti := &api.Token{}
-	err = json.Unmarshal(submission.Data, ti)
+	err = json.Unmarshal(submission.Transaction, ti)
 	if err != nil {
 		return nil, err
 	}
 
 	//do some ti validation
 
-	adiState, _, err := types.ParseIdentityChainPath(string(id.GetChainUrl()))
-	adiToken, tokenChain, err := types.ParseIdentityChainPath(string(ti.URL))
+	adiState, _, err := types.ParseIdentityChainPath(id.ChainUrl.AsString())
+	adiToken, tokenChain, err := types.ParseIdentityChainPath(ti.URL.AsString())
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +81,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 	if adiState != adiToken {
 		return nil, fmt.Errorf("ADI URL doesn't match token ADI")
 	}
-	tas := state.NewToken(types.UrlChain(tokenChain))
+	tas := state.NewToken(tokenChain)
 	tas.Precision = ti.Precision
 	tas.Meta = ti.Meta
 	tas.Symbol = ti.Symbol
@@ -91,13 +93,14 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 	resp = &ResponseValidateTX{}
 
 	//return a new state object for a token
-	chainid := types.Bytes32{}
-	copy(chainid[:], submission.Chainid)
-	resp.AddStateData(&chainid, tasso)
+	chainId := types.Bytes32{}
+	copy(chainId[:], submission.GetChainID())
+	resp.AddStateData(&chainId, tasso)
 
 	return resp, nil
 }
 
-func (v *TokenIssuanceValidator) EndBlock(mdroot []byte) error {
+func (v *TokenIssuanceValidator) EndBlock(mdRoot []byte) error {
+	_ = mdRoot
 	return nil
 }
