@@ -47,10 +47,10 @@ func createToken(tokenUrl string) (string, error) {
 
 func createTokenTx(url string) (string, error) {
 	tx := &TokenTx{}
-	tx.From = types.UrlChain(url + "/MyAcmeTokens")
+	tx.From.String = types.String(url + "/MyAcmeTokens")
 	amt := types.Amount{}
 	amt.SetInt64(1234)
-	tx.AddToAccount(types.UrlChain("redwagon/AcmeAccount"), &amt)
+	tx.AddToAccount("redwagon/AcmeAccount", &amt)
 	ret, err := json.Marshal(&tx)
 	return string(ret), err
 }
@@ -222,5 +222,5 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Printf("%s", string(tx))
+	// fmt.Printf("%s", string(tx))
 }

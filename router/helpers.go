@@ -2,7 +2,6 @@ package router
 
 import (
 	"fmt"
-	"testing"
 
 //	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
 //	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
@@ -40,23 +39,23 @@ func makeApiServiceClientAndServer(routeraddress string) (proto.ApiServiceClient
 	return client, r, nil
 }
 
-func makeClientAndServer(t *testing.T, routeraddress string) (proto.ApiServiceClient, *RouterConfig) {
+func makeClientAndServer(routeraddress string) (proto.ApiServiceClient, *RouterConfig) {
 
 	r := NewRouter(routeraddress)
 
 	if r == nil {
-		t.Fatal("Failed to create router")
+		panic("Failed to create router")
 	}
 	conn, err := grpc.Dial(routeraddress, grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
 	if err != nil {
-		t.Fatalf("Error Openning GRPC client in router")
+		panic("Error Openning GRPC client in router")
 	}
 
 	client := proto.NewApiServiceClient(conn)
 
 	return client, r
 }
-func boostrapBVC(t *testing.T, configfile string, workingdir string, baseport int) error {
+func boostrapBVC(configfile string, workingdir string, baseport int) error {
 
 /*
 	ABCIAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
@@ -104,9 +103,9 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 	baseport := 43210
 
 	//generate the config files needed to run a test BVC
-	err := boostrapBVC(t, cfg, dir, baseport)
+	err := boostrapBVC(cfg, dir, baseport)
 	if err != nil {
-		t.Fatal(err)
+		panic(err)
 	}
 
 	//First we need to build a Router.  The router has to be done first since the BVC connects to it.
@@ -116,10 +115,10 @@ func makeBVCandRouter(t *testing.T, cfg string, dir string) (proto.ApiServiceCli
 	viper.AddConfigPath(dir)
 	viper.ReadInConfig()
 	routeraddress := viper.GetString("accumulate.RouterAddress")
-	client, routerserver := makeClientAndServer(t, routeraddress)
+	client, routerserver := makeClientAndServer(routeraddress)
 
 	///Build a BVC we'll use for our test
-	accvm := makeBVC(t, cfg, dir)
+	accvm := makeBVC(cfg, dir)
 
 	//This will register the Tendermint RPC client of the BVC with the router
 	accvmapi, _ := accvm.GetAPIClient()

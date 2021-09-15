@@ -9,6 +9,8 @@ import (
 
 	//"encoding/binary"
 	"fmt"
+	"os"
+
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
@@ -18,8 +20,6 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
-	"github.com/tendermint/tendermint/version"
-	"os"
 
 	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
@@ -28,7 +28,6 @@ import (
 	ed25519 "golang.org/x/crypto/ed25519"
 
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/merkleDag"
-	//	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/accumulator"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 )
 
@@ -74,7 +73,7 @@ func (DirectoryBlockChain) SetOption(abci.RequestSetOption) abci.ResponseSetOpti
 func (app *DirectoryBlockChain) resolveDDIIatHeight(ddii []byte, bvcheight int64) (ed25519.PublicKey, error) {
 	//just give me a key...
 
-	fmt.Printf("%s", string(ddii[:]))
+	// fmt.Printf("%s", string(ddii[:]))
 	//TODO: need to find out what the public key for ddii was at height bvcheight
 	//only temporary... create a valid key
 	//The DBVC will subscribe to the DDII - BVC nodes and will cache the latest valid public key for the BVC DDII
@@ -91,7 +90,7 @@ func (app *DirectoryBlockChain) verifyBVCMasterChain(ddii []byte) error {
 
 //InitChain will get called at the initialization of the dbvc
 func (app *DirectoryBlockChain) InitChain(abci.RequestInitChain) abci.ResponseInitChain {
-	fmt.Printf("Initalizing Accumulator Router\n")
+	// fmt.Printf("Initalizing Accumulator Router\n")
 
 	//TODO: do a load state here to continue on with where we were.
 	//loadState(...)
@@ -281,7 +280,7 @@ func (app *DirectoryBlockChain) Query(reqQuery abci.RequestQuery) (resQuery abci
 }
 
 func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
-	fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
+	// fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
 	config := cfg.DefaultConfig()
 	config.SetRoot(WorkingDir)
@@ -318,7 +317,7 @@ func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm
 	}
 
 	//if database.InitDBs(config, nm.DefaultDBProvider ) !=nil {
-	//	fmt.Println("DB Error")
+	//	// fmt.Println("DB Error")
 	//	return nil,nil //TODO
 	//}
 
@@ -336,7 +335,7 @@ func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
 
-	fmt.Println("Tendermint Start")
+	// fmt.Println("Tendermint Start")
 	err = node.Start()
 	if err != nil {
 		return nil, fmt.Errorf("failed to start Tendermint node %w", err)
@@ -346,7 +345,7 @@ func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm
 		_ = node.Stop()
 
 		node.Wait()
-		fmt.Println("Tendermint Stopped")
+		// fmt.Println("Tendermint Stopped")
 	}()
 
 	node.Wait()

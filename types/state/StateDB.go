@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"sort"
+	"time"
 
 	"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/SMT/pmt"
@@ -37,6 +38,8 @@ type StateDB struct {
 	bpt   *pmt.Manager                         //pbt is the global patricia trie for the application
 	mm    *managed.MerkleManager               //mm is the merkle manager for the application.  The salt is set by the appId
 	appId []byte
+
+	TimeBucket float64
 }
 
 // Open database to manage the smt and chain states
@@ -126,7 +129,9 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 	var ret *Object
 	var err error
 	var key managed.Hash
-	key.Extract(chainId)
+
+	copy(key[:32], chainId[:32])
+
 	if mms := sdb.mms[key]; mms != nil {
 		ret = &mms.stateEntry
 	} else {
@@ -162,9 +167,14 @@ func (sdb *StateDB) getOrCreateChainMerkleManager(chainId []byte, loadState bool
 // AddStateEntry add the entry to the smt and database based upon chainId
 func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 
+	begin := time.Now()
+
 	mms := sdb.getOrCreateChainMerkleManager(chainId, false)
-	//now load the state
+
+	//add the state to the merkle tree
 	mms.merkleMgr.AddHash(sha256.Sum256(entry))
+
+	sdb.TimeBucket = sdb.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
 
 	////The Entry is the State object derived from the transaction
 	mms.stateEntry.Entry = entry
@@ -173,7 +183,7 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 }
 
 // WriteStates will push the data to the database and update the patricia trie
-func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
+func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//build a list of keys from the map
 
 	currentStateCount := len(sdb.mms)
@@ -195,15 +205,11 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 	//loop through everything and write out states to the database.
 	for _, chainId := range keys {
 		v := sdb.mms[chainId]
-		//hash := sha256.Sum256(v.stateEntry.Entry)
-		//
-		//v.merkleMgr.AddHash(hash)
 
-		v.stateEntry.StateIndex = v.merkleMgr.GetElementCount()
 		mdRoot := v.merkleMgr.MainChain.MS.GetMDRoot()
 		if mdRoot == nil {
 			//shouldn't get here, but will reject if I do
-			return nil, fmt.Errorf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId)
+			panic(fmt.Sprintf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId))
 		}
 
 		sdb.bpt.Bpt.Insert(chainId, *mdRoot)
@@ -213,7 +219,8 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 		err = v.merkleMgr.RootDBManager.Put("StateEntries", "", chainId.Bytes(), dataToStore)
 
 		if err != nil {
-			return nil, fmt.Errorf("failed to store data entry in StateEntries bucket, %v", err)
+			//shouldn't get here, and bad if I do...
+			panic(fmt.Sprintf("failed to store data entry in StateEntries bucket, %v", err))
 		}
 	}
 
@@ -221,5 +228,5 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, error) {
 
 	sdb.mms = make(map[managed.Hash]*merkleManagerState)
 
-	return sdb.bpt.Bpt.Root.Hash[:], nil
+	return sdb.bpt.Bpt.Root.Hash[:], currentStateCount, nil
 }

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
+	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/viper"
 
@@ -35,7 +35,6 @@ func init() {
 	usr,err := user.Current()
 	if err != nil {
 		log.Fatal(err)
-		os.Exit(1)
 	}
 	initdir := path.Join(usr.HomeDir , "/.accumulate" )
 	nodeName = "Acadia"
@@ -51,7 +50,7 @@ func init() {
 	flag.Parse()
 
 	if *version {
-		fmt.Printf("Accumulate BVC %s\n", BuildTag)
+		// fmt.Printf("Accumulate BVC %s\n", BuildTag)
 		os.Exit(0)
 	}
 
@@ -93,14 +92,14 @@ func main() {
 	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
 
 	//Next create a BVC
-	accvm, err := accnode.CreateAccumulateBVC(ConfigFile, WorkingDir)
+	accvm, err := accumulate.CreateAccumulateBVC(ConfigFile, WorkingDir)
 	if err != nil {
 		panic(fmt.Errorf("unable to create accumulate BVC"))
 	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
 	accvmapi, _ := accvm.GetAPIClient()
-	urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
+	_ = urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
 	//the query object connects to the BVC, will be replaced with network client router
 	query := router.NewQuery(accvm)

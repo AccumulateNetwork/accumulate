@@ -2,22 +2,21 @@ package router
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/storage"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	types2 "github.com/tendermint/tendermint/abci/types"
 
-	//vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	proto1 "github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	"google.golang.org/grpc"
+
+	//vtypes "github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
 	"net"
 	"net/url"
-	"strings"
 )
 
 type RouterConfig struct {
@@ -47,7 +46,7 @@ func (app *RouterConfig) GetNodeInfo(context.Context, *empty.Empty) (*proto.Node
 func (app *RouterConfig) QueryShardCount(context.Context, *empty.Empty) (*proto.ShardCountResponse, error) {
 	scr := proto.ShardCountResponse{}
 
-	fmt.Printf("TODO: need to implement blockchain query to dbvc for number of shards\n")
+	// fmt.Printf("TODO: need to implement blockchain query to dbvc for number of shards\n")
 	scr.Numshards = app.GetNumShardsInSystem() //todo: Need to query blockchain for this number....
 	return &scr, nil
 }
@@ -165,33 +164,4 @@ func (app *RouterConfig) CreateGRPCClient() (proto.ApiServiceClient, error) {
 	}
 	api := proto.NewApiServiceClient(conn)
 	return api, nil
-}
-
-func SendTransaction(senderurl string, receiverurl string) error {
-	su, err := url.Parse(senderurl)
-	if err != nil {
-		return fmt.Errorf("Unable to parse Sender URL %v", err)
-	}
-	ru, err := url.Parse(receiverurl)
-	if err != nil {
-		return fmt.Errorf("Unable to parse Receiver URL %v", err)
-	}
-
-	//convert URL host identity to lowercase standard
-	senderidentity := strings.ToLower(su.Host)
-	receiveridentity := strings.ToLower(ru.Host)
-
-	sh := sha256.Sum256([]byte(senderidentity))
-	rh := sha256.Sum256([]byte(receiveridentity))
-
-	sendaddr, _ := storage.BytesUint64(sh[:])
-	recvaddr, _ := storage.BytesUint64(rh[:])
-
-	sendtokentype := su.Path
-
-	receivetokentype := ru.Path
-
-	fmt.Printf("%d%d%s%s", sendaddr, recvaddr, sendtokentype, receivetokentype)
-
-	return nil
 }

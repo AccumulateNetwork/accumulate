@@ -2,9 +2,7 @@ package state
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -15,44 +13,43 @@ type Entry interface {
 	GetChainUrl() string
 }
 
+//maybe we should have Chain header then entry, rather than entry containing all the Headers
 type Object struct {
-	StateIndex int64       `json:"stateIndex"` //this is the same as the entry hash.
-	Entry      types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
+	ChainHeader Chain       `json:"chainHeader"`
+	Entry       types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
 }
 
 func (app *Object) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	data, err := app.Entry.MarshalBinary()
+	data, err := app.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
+	buffer.Write(data)
 
-	var state [8]byte
-	n := binary.PutVarint(state[:], app.StateIndex)
-	if n <= 0 {
-		return nil, fmt.Errorf("unable to marshal state index to a varint")
+	data, err = app.Entry.MarshalBinary()
+	if err != nil {
+		return nil, err
 	}
-
-	buffer.Write(state[:])
 	buffer.Write(data)
 
 	return buffer.Bytes(), nil
 }
 
 func (app *Object) UnmarshalBinary(data []byte) error {
-
-	n, i := binary.Varint(data)
-	if i <= 0 {
-		return fmt.Errorf("insufficient data to unmarshal state index")
-	}
-	app.StateIndex = n
-
-	if len(data) < i {
+	//minimum length of a chain header is 33 bytes
+	if len(data) < 33 {
 		return fmt.Errorf("insufficicient data associated with state entry")
 	}
 
-	err := app.Entry.UnmarshalBinary(data[i:])
+	err := app.ChainHeader.UnmarshalBinary(data)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
+	}
+	i := app.ChainHeader.GetHeaderSize()
+
+	err = app.Entry.UnmarshalBinary(data[i:])
 	if err != nil {
 		return fmt.Errorf("no state object associated with state entry, %v", err)
 	}
@@ -64,15 +61,57 @@ type StateEntry struct {
 	IdentityState *Object
 	ChainState    *Object
 
+	//useful cached info
+	ChainId  *types.Bytes32
+	AdiChain *types.Bytes32
+
+	ChainHeader *Chain
+	AdiHeader   *Chain
+
 	DB *StateDB
 }
 
-func NewStateEntry(idState *Object, chainState *Object, db *StateDB) (*StateEntry, error) {
+func NewStateEntry(idState *Object, chainState *Object, db *StateDB) *StateEntry {
 	se := StateEntry{}
 	se.IdentityState = idState
 
 	se.ChainState = chainState
 	se.DB = db
 
-	return &se, nil
+	return &se
+}
+
+const (
+	MaskChainState  = 0x01
+	MaskAdiState    = 0x02
+	MaskChainHeader = 0x04
+	MaskAdiHeader   = 0x08
+)
+
+func (s *StateEntry) IsValid(mask int) bool {
+	if mask&MaskChainState == 1 {
+		if s.IdentityState == nil {
+			return false
+		}
+	}
+
+	if mask&MaskAdiState == 1 {
+		if s.IdentityState == nil {
+			return false
+		}
+	}
+
+	if mask&MaskChainHeader == 1 {
+		if s.ChainHeader == nil {
+			return false
+		}
+	}
+
+	if mask&MaskAdiHeader == 1 {
+		if s.AdiHeader == nil {
+			return false
+		}
+	}
+
+	return true
 }

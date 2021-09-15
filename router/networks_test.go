@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -26,36 +25,36 @@ func TestNetworkAddress(t *testing.T) {
 
 	for i := range Networks {
 		if mms := m[uint64(i)]; mms == "" {
-			fmt.Printf("No Network Found for ID : %d\n", i)
+			// fmt.Printf("No Network Found for ID : %d\n", i)
 		}
 	}
 
 	dupct := 0
 	for i := range Networks {
 		if mms := m[uint64(i)]; mms != "" {
-			fmt.Printf("Network %s ID %d, Duplicates %d : ", mms, i, len(n[uint64(i)])-1)
+			// fmt.Printf("Network %s ID %d, Duplicates %d : ", mms, i, len(n[uint64(i)])-1)
 			if len(n[uint64(i)]) == 1 {
-				fmt.Printf("\n")
+				// fmt.Printf("\n")
 				continue
 			}
 			for v := range n[uint64(i)] {
 				if v == 0 {
 					continue
 				}
-				fmt.Printf("%s,", n[uint64(i)][v])
+				// fmt.Printf("%s,", n[uint64(i)][v])
 			}
 			dupct++
-			fmt.Printf("\n")
+			// fmt.Printf("\n")
 		} else {
-			fmt.Printf("Network %d Unused\n", i)
+			// fmt.Printf("Network %d Unused\n", i)
 		}
 	}
-	fmt.Printf("Total number of with Duplicates : %d\n", dupct)
-	fmt.Printf("Total number of Unused Networks : %d\n", len(Networks)-len(m))
+	// fmt.Printf("Total number of with Duplicates : %d\n", dupct)
+	// fmt.Printf("Total number of Unused Networks : %d\n", len(Networks)-len(m))
 	//
 	//for i := range Networks {
 	//	if mms := dupct[uint64(i)]; mms != 0 {
-	//		fmt.Printf("Duplicate ID %d\n",i, )
+	//		// fmt.Printf("Duplicate ID %d\n",i, )
 	//	}
 	//}
 }

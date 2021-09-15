@@ -1,9 +1,6 @@
 package validator
 
 import (
-	"crypto/sha256"
-	"encoding/json"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -25,12 +22,12 @@ type AdiChain struct {
 
 func NewAdiChain() *AdiChain {
 	v := AdiChain{}
-	v.SetInfo(api.ChainTypeAdi[:], api.ChainSpecAdi, pb.AccInstruction_Identity_Creation)
+	v.SetInfo(types.ChainTypeAdi[:], types.ChainSpecAdi, pb.AccInstruction_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-func (v *AdiChain) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *AdiChain) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
 	if currentstate == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
@@ -71,7 +68,7 @@ func (v *AdiChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
 	return nil
 }
 
-func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current State Not Defined")
@@ -87,46 +84,46 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.Submi
 		return nil, fmt.Errorf("unable to unmarshal adi state entry, %v", err)
 	}
 
-	ledger := types.MarshalBinaryLedgerChainId(submission.Identitychain, submission.Data, submission.Timestamp)
+	if !adiState.VerifyKey(submission.Signature[0].PublicKey) {
+		return nil, fmt.Errorf("key is not supported by current ADI state")
+	}
 
-	txid := sha256.Sum256(ledger)
+	if !adiState.VerifyAndUpdateNonce(submission.Signature[0].Nonce) {
+		return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Signature[0].Nonce)
+	}
 
-	err = v.VerifySignatures(ledger, submission.Key, submission.Signature, &adiState)
-
-	if err != nil {
+	if !submission.ValidateSig() {
 		return nil, fmt.Errorf("error validating the sponsor identity key, %v", err)
 	}
 
 	ic := api.ADI{}
-	err = json.Unmarshal(submission.Data, &ic)
+	err = ic.UnmarshalBinary(submission.Transaction)
+
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
-	isc := synthetic.NewAdiStateCreate(txid[:], &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
+	isc := synthetic.NewAdiStateCreate(submission.TxId(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
 
 	if err != nil {
 		return nil, err
 	}
 
-	iscData, err := json.Marshal(isc)
+	iscData, err := isc.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
 	resp = &ResponseValidateTX{}
 
-	builder := pb.SubmissionBuilder{}
+	//builder := pb.SubmissionBuilder{}
 
 	//send of a synthetic transaction to the correct network
-	resp.Submissions = make([]*pb.Submission, 1)
-	resp.Submissions[0], err = builder.
-		Type(v.GetValidatorChainTypeId()).
-		Instruction(pb.AccInstruction_Synthetic_Identity_Creation).
-		AdiUrl(*isc.ToUrl.AsString()).
-		Data(iscData).
-		Timestamp(time.Now().Unix()).
-		BuildUnsigned()
+	resp.Submissions = make([]*pb.GenTransaction, 1)
+	sub := resp.Submissions[0]
+	sub.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
+	sub.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
+	sub.Transaction = iscData
 
 	if err != nil {
 		return nil, err

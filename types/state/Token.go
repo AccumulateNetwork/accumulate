@@ -5,8 +5,8 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 )
 
 type token struct {
@@ -24,7 +24,7 @@ type Token struct {
 
 func NewToken(tokenUrl string) *Token {
 	token := &Token{}
-	token.SetHeader(types.String(tokenUrl), api.ChainTypeToken[:])
+	token.SetHeader(types.String(tokenUrl), types.ChainTypeToken[:])
 	return token
 }
 

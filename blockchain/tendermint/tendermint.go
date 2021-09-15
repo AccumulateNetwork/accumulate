@@ -267,7 +267,7 @@ func WaitForRPC(laddr string) {
 			return
 		}
 
-		fmt.Println("error", err)
+		// fmt.Println("error", err)
 		time.Sleep(time.Millisecond)
 	}
 }

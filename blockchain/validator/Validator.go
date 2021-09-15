@@ -15,8 +15,9 @@ import (
 
 type ResponseValidateTX struct {
 	StateData   map[types.Bytes32]types.Bytes //acctypes.StateObject
+	PendingData map[types.Bytes32]types.Bytes //stuff to store on pending chain.
 	EventData   []byte                        //this should be events that need to get published
-	Submissions []*pb.Submission              //this is a list of submission instructions for the BVC: entry commit/reveal, synth tx, etc.
+	Submissions []*pb.GenTransaction          //this is a list of synthetic transactions
 }
 
 func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []byte) {
@@ -26,12 +27,19 @@ func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []by
 	r.StateData[*chainid] = stateData
 }
 
+func (r *ResponseValidateTX) AddPendingData(chainid *types.Bytes32, stateData []byte) {
+	if r.PendingData == nil {
+		r.PendingData = make(map[types.Bytes32]types.Bytes)
+	}
+	r.PendingData[*chainid] = stateData
+}
+
 type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
-	Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error
-	Validate(currentstate *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) //return persistent entry or error
-	EndBlock(mdroot []byte) error                                                                    //do something with MD root
+	Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error
+	Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) //return persistent entry or error
+	EndBlock(mdroot []byte) error                                                                        //do something with MD root
 
 	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated
 	GetInfo() *ValidatorInfo

@@ -22,7 +22,7 @@ func MarshalBinaryLedgerAdiChainPath(adiChainPath string, payload []byte, timest
 
 	//the timestamp will act
 	var tsbytes [8]byte
-	binary.LittleEndian.PutUint64(tsbytes[:], uint64(timestamp))
+	binary.BigEndian.PutUint64(tsbytes[:], uint64(timestamp))
 	msg = append(msg, tsbytes[:]...)
 
 	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
@@ -39,7 +39,7 @@ func MarshalBinaryLedgerChainId(chainId []byte, payload []byte, timestamp int64)
 	var msg []byte
 
 	var tsbytes [8]byte
-	binary.LittleEndian.PutUint64(tsbytes[:], uint64(timestamp))
+	binary.BigEndian.PutUint64(tsbytes[:], uint64(timestamp))
 	msg = append(msg, tsbytes[:]...)
 
 	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
@@ -110,7 +110,7 @@ func GetIdentityChainFromIdentity(adi *string) *Bytes32 {
 
 //GetAddressFromIdentityChain get the 8-bit address from the identity chain.  this is used for bvc routing
 func GetAddressFromIdentityChain(identitychain []byte) uint64 {
-	addr := binary.LittleEndian.Uint64(identitychain)
+	addr := binary.BigEndian.Uint64(identitychain)
 	return addr
 }
 
@@ -165,8 +165,7 @@ func (s *Bytes) UnmarshalBinary(data []byte) error {
 	if len(data) < int(slen)+l {
 		return fmt.Errorf("insufficient data to unmarshal")
 	}
-	ds := data[l : int(slen)+l]
-	*s = ds
+	*s = data[l : int(slen)+l]
 	return nil
 }
 
