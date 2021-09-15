@@ -3,18 +3,19 @@ package validator
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"math/big"
+	"testing"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"math/big"
-	"testing"
-	"time"
 )
 
 func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*state.Object, []byte) {
-	id, _, _ := types.ParseIdentityChainPath(identitychainpath)
+	id, _, _ := types.ParseIdentityChainPath(&identitychainpath)
 
 	idhash := sha256.Sum256([]byte(id))
 
@@ -23,25 +24,21 @@ func CreateFakeIdentityState(identitychainpath string, key ed25519.PrivKey) (*st
 	ids.SetKeyData(state.KeyTypeSha256, key.PubKey().Bytes())
 	so.Entry, _ = ids.MarshalBinary()
 
-	eh := sha256.Sum256(so.Entry)
-	so.EntryHash = eh[:]
 	//we intentionally don't set the so.StateHash & so.PrevStateHash
 	return &so, idhash[:]
 }
 
 func CreateFakeTokenAccountState(identitychainpath string, t *testing.T) *state.Object {
-	_, cp, _ := types.ParseIdentityChainPath(identitychainpath)
+	_, cp, _ := types.ParseIdentityChainPath(&identitychainpath)
 
 	tokenPath := "wileecoyote/Acme"
-	tas := state.NewTokenAccount(types.UrlChain(cp), types.UrlChain(tokenPath))
+	tas := state.NewTokenAccount(cp, tokenPath)
 
 	deposit := big.NewInt(5000)
 	tas.AddBalance(deposit)
 
 	so := state.Object{}
 	so.Entry, _ = tas.MarshalBinary()
-	eh := sha256.Sum256(so.Entry)
-	so.EntryHash = eh[:]
 	//we intentionally don't set the so.StateHash & so.PrevStateHash
 	return &so
 }
@@ -54,15 +51,16 @@ func CreateFakeTokenTransaction(t *testing.T, accountUrl string, kp ed25519.Priv
 	tx := api.TokenTx{}
 	amt := types.Amount{}
 	amt.SetInt64(5000)
-	tx.AddToAccount("WileECoyote/MyACMETokens", &amt)
-	tx.From = types.UrlChain(accountUrl)
+	adiChainPath := types.UrlChain{"WileECoyote/MyACMETokens"}
+	tx.AddToAccount(adiChainPath, &amt)
+	tx.From.String = types.String(accountUrl)
 
 	data, err := json.Marshal(&tx)
 	if err != nil {
 		t.Fatal(err)
 	}
 	ts := time.Now().Unix()
-	ledger := types.MarshalBinaryLedgerChainId(types.GetIdentityChainFromIdentity(accountUrl)[:], data, ts)
+	ledger := types.MarshalBinaryLedgerChainId(types.GetIdentityChainFromIdentity(&accountUrl)[:], data, ts)
 	sig, err := kp.Sign(ledger)
 	if err != nil {
 		t.Fatal(err)

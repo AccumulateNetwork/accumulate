@@ -4,14 +4,15 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 func TestIdentityCreate(t *testing.T) {
 	ic := ADI{}
-	_ = ic.SetName("WileECoyote")
+	adiName := "wileecoyote"
+	_ = ic.SetAdi(&adiName)
 	kp := types.CreateKeyPair()
 	kh := types.Bytes32(sha256.Sum256(kp.PubKey().Bytes()))
 	ic.SetKeyHash(&kh)
@@ -27,7 +28,7 @@ func TestIdentityCreate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Println(string(data))
+	// fmt.Println(string(data))
 
 	data, err = ic.MarshalBinary()
 	if err != nil {

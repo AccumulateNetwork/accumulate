@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+
 	"github.com/AccumulateNetwork/SMT/managed"
-	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
 )
 
 ////bvc entry header:
@@ -37,7 +37,7 @@ func (entry *BVCEntry) MarshalBinary() ([]byte, error) {
 
 	entry.Version = 1
 
-	valacctypes.EncodeVarInt(&b, uint64(entry.Version))
+	b.WriteByte(entry.Version)
 
 	offset++
 	endoffset++
@@ -68,14 +68,19 @@ func (entry *BVCEntry) MarshalBinary() ([]byte, error) {
 }
 
 func (entry *BVCEntry) UnmarshalBinary(data []byte) ([][]byte, error) {
-
-	//version, offset := varintf.Decode(data)
-	version, _ := valacctypes.DecodeVarInt(data)
 	offset := 0
-	if version != 1 {
-		return nil, fmt.Errorf("Invalid version")
+
+	length := len(data)
+	if length < 1 {
+		return nil, fmt.Errorf("insufficient data")
 	}
-	entry.Version = byte(version)
+
+	entry.Version = data[offset]
+	if entry.Version != 1 {
+		return nil, fmt.Errorf("invalid version")
+	}
+
+	offset++
 	ddiilen := data[offset]
 	if ddiilen > 32 && ddiilen > 0 {
 		return nil, fmt.Errorf("Invalid DDII Length.  Must be > 0 && <= 32")

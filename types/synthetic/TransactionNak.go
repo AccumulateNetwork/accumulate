@@ -3,6 +3,8 @@ package synthetic
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type NakCode int
@@ -23,22 +25,12 @@ type TransactionNak struct {
 	Metadata json.RawMessage `json:"metadata,omitempty"` // Reason for Pass / Fail
 }
 
-func NewTransactionNak(code NakCode, txid []byte, receiverid []byte, receiverchainid []byte, md *json.RawMessage) *TransactionNak {
+func NewTransactionNak(txid types.Bytes, from *types.String, to *types.String, code NakCode, md *json.RawMessage) *TransactionNak {
 	tan := &TransactionNak{}
 	tan.Code = code
-	if len(txid) != 32 {
-		return nil
-	}
-	if len(receiverid) != 32 {
-		return nil
-	}
-	if len(receiverchainid) != 32 {
-		return nil
-	}
 
-	copy(tan.Txid[:], txid)
-	copy(tan.SourceAdiChain[:], receiverid)
-	copy(tan.SourceChainId[:], receiverchainid)
+	tan.SetHeader(txid, from, to)
+
 	if md != nil {
 		copy(tan.Metadata, *md)
 	}

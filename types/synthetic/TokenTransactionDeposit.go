@@ -1,25 +1,24 @@
 package synthetic
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"math/big"
+
+	"github.com/AccumulateNetwork/accumulated/types/proto"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type TokenTransactionDeposit struct {
 	Header
-	DepositAmount big.Int          `json:"amount"` //amount
-	TokenUrl      types.String     `json:"tokenUrl"`
-	Metadata      *json.RawMessage `json:"metadata,omitempty"`
+	DepositAmount big.Int          `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
+	TokenUrl      types.String     `json:"tokenURL" form:"tokenURL" query:"tokenURL" validate:"required,uri"`
+	Metadata      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
-const tokenTransactionDepositMinLen = HeaderLen + 32 + 32 + 32
-
-func (tx *TokenTransactionDeposit) SetDeposit(txid []byte, amt *big.Int) error {
-	if len(txid) != 32 {
-		return fmt.Errorf("Invalid txid")
-	}
+func (tx *TokenTransactionDeposit) SetDeposit(tokenUrl *types.String, amt *big.Int) error {
 
 	if amt == nil {
 		return fmt.Errorf("No deposito amount specified")
@@ -29,42 +28,30 @@ func (tx *TokenTransactionDeposit) SetDeposit(txid []byte, amt *big.Int) error {
 		return fmt.Errorf("Deposit amount must be greater than 0")
 	}
 
-	copy(tx.Txid[:], txid)
+	tx.TokenUrl = *tokenUrl
 	tx.DepositAmount.Set(amt)
 
 	return nil
 }
 
-func (tx *TokenTransactionDeposit) SetSenderInfo(senderidentity []byte, senderchainid []byte) error {
-	if len(senderidentity) != 32 {
-		return fmt.Errorf("Sender identity invalid")
-	}
-
-	if len(senderchainid) != 32 {
-		return fmt.Errorf("Sender chain id invalid")
-	}
-	copy(tx.SourceAdiChain[:], senderidentity)
-	copy(tx.SourceChainId[:], senderchainid)
-	return nil
-}
-
-func (tx *TokenTransactionDeposit) SetTokenInfo(tokenUrl types.UrlChain) error {
-	//err := tokenUrl.MakeValid()
-	//if err != nil {
-	//	return err
-	//}
-	tx.TokenUrl = types.String(tokenUrl)
-	return nil
-}
-
-func NewTokenTransactionDeposit() *TokenTransactionDeposit {
+func NewTokenTransactionDeposit(txid types.Bytes, from *types.String, to *types.String) *TokenTransactionDeposit {
 	tx := TokenTransactionDeposit{}
+	tx.SetHeader(txid, from, to)
 	return &tx
 }
 
 func (tx *TokenTransactionDeposit) Valid() error {
+
+	if err := tx.Header.Valid(); err != nil {
+		return err
+	}
+
 	if tx.DepositAmount.Sign() <= 0 {
-		return fmt.Errorf("Invalid deposit amount, amount muct be greater than zero.")
+		return fmt.Errorf("invalid deposit amount for token transaction deposit, amount must be greater than zero")
+	}
+
+	if len(tx.TokenUrl) == 0 {
+		return fmt.Errorf("invalid tokenUrl set for token transaction deposit")
 	}
 
 	return nil
@@ -84,46 +71,62 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 		}
 	}
 
-	txLen := tokenTransactionDepositMinLen
-	txLen += len(md)
-	ret := make([]byte, txLen)
+	var ret bytes.Buffer
+	ret.WriteByte(byte(proto.AccInstruction_Synthetic_Token_Deposit))
 
-	header, err := tx.Header.MarshalBinary()
+	data, err := tx.Header.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	i := copy(ret[:], header)
+	ret.Write(data)
 
-	tx.DepositAmount.FillBytes(ret[i : i+32])
-	i += 32
-	sdata, err := tx.TokenUrl.MarshalBinary()
+	b := types.Bytes(tx.DepositAmount.Bytes())
+	ret.WriteByte(byte(len(b)))
+	ret.Write(b)
+
+	data, err = tx.TokenUrl.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
-	i += copy(ret[i:], sdata)
+	ret.Write(data)
 
 	if len(md) > 0 {
-		i += copy(ret[i:], md)
+		ret.Write(md)
 	}
-	return ret, nil
+
+	return ret.Bytes(), nil
 }
 
 func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) error {
-	if tokenTransactionDepositMinLen > len(data) {
-		return fmt.Errorf("Insufficient data to unmarshal for transaction deposit")
-	}
 
-	err := tx.Header.UnmarshalBinary(data)
+	length := len(data)
+	if length < 1 {
+		return fmt.Errorf("insufficient data to unmarshal Token Transaction Deposit")
+	}
+	if data[0] != byte(proto.AccInstruction_Synthetic_Token_Deposit) {
+		return fmt.Errorf("data is not of a identity creation type")
+	}
+	i := 1
+	err := tx.Header.UnmarshalBinary(data[i:])
 	if err != nil {
 		return err
 	}
 
-	i := HeaderLen
-	tx.DepositAmount.SetBytes(data[i : i+32])
-	i += 32
+	i += tx.Header.Size()
 
-	if len(data) < i {
+	if length < i {
+		fmt.Errorf("unable to unmarshal binary after token transaction deposit header")
+	}
+	l := i + int(data[i]) + 1
+	if length < l {
+		fmt.Errorf("unable to unmarshal binary for deposit amount")
+	}
+
+	tx.DepositAmount.SetBytes(data[i+1 : l])
+	i = l
+
+	if length < i {
 		return fmt.Errorf("unable to unmarshal binary before token url")
 	}
 
@@ -134,7 +137,8 @@ func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) error {
 
 	i += tx.TokenUrl.Size(nil)
 
-	if i < len(data) {
+	//if we still have stuff left over then it is the json raw message
+	if i < length {
 		var b types.Bytes
 		err = b.UnmarshalBinary(data[i:])
 		if err != nil {

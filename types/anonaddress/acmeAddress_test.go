@@ -2,7 +2,6 @@ package types
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"testing"
 )
 
@@ -12,7 +11,7 @@ func TestGenerateAcmeAddressst(t *testing.T) {
 	var list []string
 	for i := 0; i < 100; i++ {
 		adr := GenerateAcmeAddress(pub[:])
-		fmt.Printf("%X ", pub)
+		// fmt.Printf("%X ", pub)
 		if err := IsAcmeAddress(adr); err != nil {
 			t.Error(err)
 		}

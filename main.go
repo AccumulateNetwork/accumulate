@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/AccumulateNetwork/accumulated/blockchain/accnode"
+	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/viper"
 
@@ -31,7 +31,6 @@ func init() {
 	usr, err := user.Current()
 	if err != nil {
 		log.Fatal(err)
-		os.Exit(1)
 	}
 	initdir := path.Join(usr.HomeDir, "/.accumulate")
 
@@ -39,7 +38,7 @@ func init() {
 	flag.StringVar(&initdir, "workingdir", usr.HomeDir+"/.accumulate", "Path to data directory")
 	flag.Parse()
 	if *version {
-		fmt.Printf("Accumulate BVC %s\n", BuildTag)
+		// fmt.Printf("Accumulate BVC %s\n", BuildTag)
 		os.Exit(0)
 	}
 	for i := range router.Networks {
@@ -51,10 +50,10 @@ func init() {
 
 func main() {
 
-	fmt.Printf("Working dir: %v\n", WorkingDir[0])
-	fmt.Printf("Working VM1 dir: %v\n", ConfigFile[1])
-	fmt.Printf("Config File: %v\n", ConfigFile[0])
-	fmt.Printf("Config File VM1: %v\n", ConfigFile[1])
+	// fmt.Printf("Working dir: %v\n", WorkingDir[0])
+	// fmt.Printf("Working VM1 dir: %v\n", ConfigFile[1])
+	// fmt.Printf("Config File: %v\n", ConfigFile[0])
+	// fmt.Printf("Config File VM1: %v\n", ConfigFile[1])
 
 	n := len(os.Args)
 	for i := 0; i < n; i++ {
@@ -68,7 +67,7 @@ func main() {
 				accRCPAddress := fmt.Sprintf("tcp://localhost:%d", baseport+3)
 				routerAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
 				baseport += 5
-				tendermint.Initialize("accumulate."+router.Networks[i], abciAppAddress, rcpAddress, grpcAddress, accRCPAddress, routerAddress, ConfigFile[i], WorkingDir[i])
+				_ = tendermint.Initialize("accumulate."+router.Networks[i], abciAppAddress, rcpAddress, grpcAddress, accRCPAddress, routerAddress, ConfigFile[i], WorkingDir[i])
 			}
 			os.Exit(0)
 		case "dbvc":
@@ -79,25 +78,23 @@ func main() {
 	//First create a router
 	viper.SetConfigFile(ConfigFile[1])
 	viper.AddConfigPath(WorkingDir[1])
-	viper.ReadInConfig()
+	_ = viper.ReadInConfig()
 	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
 
 	//Next create a BVC
-	accvm, err := accnode.CreateAccumulateBVC(ConfigFile[1], WorkingDir[1])
+	accvm, err := accumulate.CreateAccumulateBVC(ConfigFile[1], WorkingDir[1])
 	if err != nil {
 		panic(err)
 	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
 	accvmapi, _ := accvm.GetAPIClient()
-	urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
+	_ = urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
-	//temporary server for each vm.  will be replaced by url router.
-	routerClient, err := urlrouter.CreateGRPCClient()
-	if err != nil {
-		panic(fmt.Errorf("unable to create grpc tendermint router client"))
-	}
-	go router.StartAPI(25999, routerClient)
+	//the query object connects to the BVC, will be replaced with network client router
+	query := router.NewQuery(accvm)
+
+	go router.StartAPI(34000, query)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

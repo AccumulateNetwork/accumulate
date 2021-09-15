@@ -3,10 +3,11 @@ package validator
 import (
 	"crypto/sha256"
 	"fmt"
+	"time"
+
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
-	"time"
 )
 
 type EntryValidator struct {
@@ -55,8 +56,8 @@ func NewEntryValidator() *EntryValidator {
 	return &v
 }
 
-func (v *EntryValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
-	return fmt.Errorf("Entry validator not yet implemented")
+func (v *EntryValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+	return fmt.Errorf("entry validator not yet implemented")
 }
 func (v *EntryValidator) Initialize(config *cfg.Config) error {
 	return nil
@@ -72,7 +73,7 @@ func (v *EntryValidator) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *EntryValidator) Validate(currentstate *state.StateEntry, submission *pb.Submission) (*ResponseValidateTX, error) {
+func (v *EntryValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
 	//entry design is TBD...
 
 	//datalen := uint64(len(data))
