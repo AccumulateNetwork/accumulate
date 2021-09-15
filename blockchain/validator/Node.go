@@ -140,7 +140,7 @@ func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transa
 
 	//Check to see if transaction is valid. This is expensive, so maybe we should check ADI stuff first.
 	if !transaction.ValidateSig() {
-		//return fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType())
+		return fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType())
 	}
 
 	return nil
@@ -271,13 +271,16 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 
 			dataToSign := v.Transaction
 			if dataToSign == nil {
-				//!error!
+				panic("no synthetic transaction defined.  shouldn't get here.")
 			}
-			s := ed25519.Sign(app.key, dataToSign)
-
 			ed := new(pb.ED25519Sig)
+			ed.Nonce = uint64(time.Now().Unix())
 			ed.PublicKey = app.key[32:]
-			ed.Signature = s
+			err := ed.Sign(app.key, dataToSign)
+			if err != nil {
+				panic(fmt.Sprintf("cannot sign synthetic transaction, shoudn't get here, %v", err))
+			}
+
 			v.Signature = append(v.Signature, ed)
 
 			deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
@@ -285,7 +288,6 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 			if err != nil {
 				return err
 			}
-			//app.batchRequests = append(app.batchRequests, deliverRequestTXAsync)
 
 			_, err = app.batch[app.height%2].BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 			if err != nil {
