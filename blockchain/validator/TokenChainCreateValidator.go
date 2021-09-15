@@ -3,12 +3,13 @@ package validator
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
-	"time"
 )
 
 type TokenChainCreateValidator struct {
@@ -19,12 +20,12 @@ type TokenChainCreateValidator struct {
 
 func NewTokenChainCreateValidator() *TokenChainCreateValidator {
 	v := TokenChainCreateValidator{}
-	v.SetInfo(api.ChainTypeTokenAccount[:], api.ChainSpecTokenAccount, pb.AccInstruction_Token_URL_Creation)
+	v.SetInfo(types.ChainTypeTokenAccount[:], types.ChainSpecTokenAccount, pb.AccInstruction_Token_URL_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, identitychain []byte, chainid []byte, p1 uint64, p2 uint64, data []byte) error {
+func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
 	if currentstate == nil {
 		return fmt.Errorf("current state not defined")
 	}
@@ -37,7 +38,7 @@ func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, identi
 		return fmt.Errorf("chain already defined")
 	}
 	tcc := api.TokenAccount{}
-	err := json.Unmarshal(data, &tcc)
+	err := json.Unmarshal(submission.Transaction, &tcc)
 	if err != nil {
 		return fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
@@ -58,7 +59,7 @@ func (v *TokenChainCreateValidator) BeginBlock(height int64, time *time.Time) er
 	return nil
 }
 
-func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.Submission) (resp *ResponseValidateTX, err error) {
+func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
@@ -71,18 +72,18 @@ func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, sub
 		return nil, fmt.Errorf("chain already defined")
 	}
 	tcc := api.TokenAccount{}
-	err = json.Unmarshal(submission.Data, &tcc)
+	err = json.Unmarshal(submission.Transaction, &tcc)
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
 
-	adi, chainpath, err := types.ParseIdentityChainPath(string(tcc.URL))
+	adi, chainPath, err := types.ParseIdentityChainPath(tcc.URL.AsString())
 	if err != nil {
 		return nil, err
 	}
 
-	issuingidentityhash := types.GetIdentityChainFromIdentity(adi)
-	issuingchainid := types.GetChainIdFromChainPath(chainpath)
+	issuingidentityhash := types.GetIdentityChainFromIdentity(&adi)
+	issuingchainid := types.GetChainIdFromChainPath(&chainPath)
 
 	if issuingidentityhash == nil {
 		return nil, fmt.Errorf("issuing identity adi is invalid")
@@ -92,12 +93,12 @@ func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, sub
 		return nil, fmt.Errorf("issuing identity chain id is invalid")
 	}
 
-	_, chainPathToken, err := types.ParseIdentityChainPath(string(tcc.TokenURL))
+	_, chainPathToken, err := types.ParseIdentityChainPath(tcc.TokenURL.AsString())
 	if err != nil {
 		return nil, err
 	}
 
-	tas := state.NewTokenAccount(types.UrlChain(chainpath), types.UrlChain(chainPathToken))
+	tas := state.NewTokenAccount(chainPath, chainPathToken)
 	//tas.AdiChainPath = submission.? //todo: need to obtain the adi chain path from the submission request
 	statedata, err := tas.MarshalBinary()
 	if err != nil {
@@ -106,7 +107,7 @@ func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, sub
 	resp = &ResponseValidateTX{}
 
 	//return a new state object for a token
-	resp.AddStateData(types.GetChainIdFromChainPath(chainpath), statedata)
+	resp.AddStateData(types.GetChainIdFromChainPath(&chainPath), statedata)
 
 	return resp, nil
 }

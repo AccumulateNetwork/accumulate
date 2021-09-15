@@ -15,21 +15,22 @@ import (
 	"time"
 )
 
-func createIdentityCreateSubmission(t *testing.T, identitychainpath string) (*state.StateEntry, *proto.Submission, *ed25519.PrivKey) {
+func createIdentityCreateSubmission(t *testing.T, adiChainPath string) (*state.StateEntry, *proto.Submission, *ed25519.PrivKey) {
 	kp := types.CreateKeyPair()
-	identityhash := types.GetIdentityChainFromIdentity(identitychainpath).Bytes()
+	identityhash := types.GetIdentityChainFromIdentity(&adiChainPath).Bytes()
 
 	currentstate := state.StateEntry{}
 
-	//currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath,t)
+	//currentstate.ChainState = CreateFakeTokenAccountState(adiChainPath,t)
 
-	currentstate.IdentityState, identityhash = CreateFakeIdentityState(identitychainpath, kp)
+	currentstate.IdentityState, identityhash = CreateFakeIdentityState(adiChainPath, kp)
 
-	chainid := types.GetChainIdFromChainPath(identitychainpath).Bytes()
+	chainid := types.GetChainIdFromChainPath(&adiChainPath).Bytes()
 
 	var keyhash types.Bytes32
 	keyhash = types.Bytes32(sha256.Sum256(kp.PubKey().Bytes()))
-	ic := api.NewADI("ACME", &keyhash)
+	tokenSymbol := "ACME"
+	ic := api.NewADI(&tokenSymbol, &keyhash)
 	if ic == nil {
 		t.Fatalf("Identity Create is nil")
 	}
@@ -48,8 +49,8 @@ func createIdentityCreateSubmission(t *testing.T, identitychainpath string) (*st
 
 func TestIdentityCreateValidator_Check(t *testing.T) {
 	tiv := NewAdiChain()
-	identitychainpath := "RoadRunner/ACME"
-	currentstate, sub, _ := createIdentityCreateSubmission(t, identitychainpath)
+	adiChainPath := "RoadRunner/ACME"
+	currentstate, sub, _ := createIdentityCreateSubmission(t, adiChainPath)
 
 	err := tiv.Check(currentstate, sub.Identitychain, sub.Chainid, 0, 0, sub.Data)
 
@@ -61,12 +62,12 @@ func TestIdentityCreateValidator_Check(t *testing.T) {
 func TestIdentityCreateValidator_Validate(t *testing.T) {
 	//	kp := types.CreateKeyPair()
 	tiv := NewAdiChain()
-	identitychainpath := "RoadRunner/ACME"
-	adi, chainpath, err := types.ParseIdentityChainPath(identitychainpath)
-	adihash := types.GetIdentityChainFromIdentity(adi)
-	chainid := types.GetChainIdFromChainPath(chainpath)
+	adiChainPath := "RoadRunner/ACME"
+	adi, chainPath, err := types.ParseIdentityChainPath(&adiChainPath)
+	adihash := types.GetIdentityChainFromIdentity(&adi)
+	chainid := types.GetChainIdFromChainPath(&chainPath)
 
-	currentstate, sub, kp := createIdentityCreateSubmission(t, identitychainpath)
+	currentstate, sub, kp := createIdentityCreateSubmission(t, adiChainPath)
 
 	txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(adihash.Bytes(), sub.Data, sub.Timestamp))
 

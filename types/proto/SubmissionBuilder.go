@@ -3,8 +3,8 @@ package proto
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 // SubmissionBuilder helps build an accumulated submission to the BVC.
@@ -43,18 +43,18 @@ func (sb *SubmissionBuilder) Type(chainType types.Bytes) *SubmissionBuilder {
 }
 
 func (sb *SubmissionBuilder) ChainUrl(url string) *SubmissionBuilder {
-	adi, chain, _ := types.ParseIdentityChainPath(url)
-	sb.sub.Chainid = types.GetChainIdFromChainPath(chain).Bytes()
+	adi, chain, _ := types.ParseIdentityChainPath(&url)
+	sb.sub.Chainid = types.GetChainIdFromChainPath(&chain).Bytes()
 	sb.sub.AdiChainPath = chain
 	if len(sb.sub.Identitychain) == 0 {
-		sb.sub.Identitychain = types.GetIdentityChainFromIdentity(adi).Bytes()
+		sb.sub.Identitychain = types.GetIdentityChainFromIdentity(&adi).Bytes()
 	}
 	return sb
 }
 
 func (sb *SubmissionBuilder) AdiUrl(url string) *SubmissionBuilder {
-	adi, _, _ := types.ParseIdentityChainPath(url)
-	sb.sub.Identitychain = types.GetIdentityChainFromIdentity(adi).Bytes()
+	adi, _, _ := types.ParseIdentityChainPath(&url)
+	sb.sub.Identitychain = types.GetIdentityChainFromIdentity(&adi).Bytes()
 	if len(sb.sub.AdiChainPath) == 0 {
 		sb.sub.AdiChainPath = adi
 	}
@@ -104,33 +104,6 @@ func (sb *SubmissionBuilder) Build() (*Submission, error) {
 
 func Builder() *SubmissionBuilder {
 	return &SubmissionBuilder{}
-}
-
-// AssembleBVCSubmissionHeader This will populate the identity chain, chainId, and instruction fields for a BVC submission
-func AssembleBVCSubmissionHeader(identityname string, chainpath string, ins AccInstruction) *Submission {
-	sub := Submission{}
-
-	sub.Identitychain = types.GetIdentityChainFromIdentity(identityname).Bytes()
-	if chainpath == "" {
-		chainpath = identityname
-	}
-	sub.Chainid = types.GetChainIdFromChainPath(chainpath).Bytes()
-	sub.Instruction = ins
-	return &sub
-}
-
-// MakeBVCSubmission This will make the BVC submision protobuf transaction
-func MakeBVCSubmission(ins string, adi types.UrlAdi, chainUrl types.UrlChain, payload []byte, timestamp int64, signature []byte, pubkey ed25519.PubKey) *Submission {
-	v := InstructionTypeMap[ins]
-	if v == 0 {
-		return nil
-	}
-	sub := AssembleBVCSubmissionHeader(string(adi), string(chainUrl), v)
-	sub.Data = payload
-	sub.Timestamp = timestamp
-	sub.Signature = signature
-	sub.Key = pubkey
-	return sub
 }
 
 var InstructionTypeMap = map[string]AccInstruction{
