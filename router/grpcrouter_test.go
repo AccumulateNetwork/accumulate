@@ -107,10 +107,11 @@ func createKeyPair() ed25519.PrivateKey {
 	_, sk, _ := ed25519.GenerateKey(nil)
 	return sk
 }
-func createIdentity(t *testing.T) *proto.Submission {
-	kp := createKeyPair()
 
-	sub := proto.Submission{}
+//func createIdentity(t *testing.T) *proto.Submission {
+//	kp := createKeyPair()
+//
+//	sub := proto.Submission{}
 
 //func createIdentity(t *testing.T) *proto.Submission {
 //	kp := createKeyPair()
@@ -165,7 +166,7 @@ func createTransaction(t *testing.T) *proto.Submission {
 		t.Fatal(err)
 	}
 	kp := createKeyPair()
-	sub.Signature = ed25519.Sign(kp.Seed(),sub.Data)
+	sub.Signature = ed25519.Sign(kp.Seed(), sub.Data)
 	sub.Key = kp.Public().(ed25519.PublicKey)
 
 	return &sub
@@ -287,4 +288,3 @@ func hexToBytes(hexStr string) []byte {
 	}
 	return raw
 }
-
