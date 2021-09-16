@@ -3,106 +3,215 @@ package tendermint
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
+	"strings"
 
 	"github.com/spf13/viper"
-	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 
-	//"github.com/btcsuite/btcd/rpcclient"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/networks"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/config"
 	cfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
+	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
-	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
+	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
+	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"github.com/tendermint/tendermint/types"
 	tmtime "github.com/tendermint/tendermint/types/time"
 )
 
-func Initialize(shardname string,
-	ABCIAppAddress string, RPCAddress string, GRPCAddress string, AccRPCAddress string, RouterAddress string,
-	ConfigFile string, WorkingDir string) error {
-	// fmt.Println("Tendermint Initialize")
-	config.EnsureRoot(WorkingDir)
-	var newConfig = cfg.DefaultConfig()
-	newConfig.SetRoot(WorkingDir)
-	//newConfig.BaseConfig.
-	newConfig.Instrumentation.Namespace = shardname
-	newConfig.ProxyApp = ABCIAppAddress
-	newConfig.RPC.ListenAddress = RPCAddress
-	newConfig.RPC.GRPCListenAddress = GRPCAddress
-	config.WriteConfigFile(ConfigFile, newConfig)
+const (
+	nodeDirPerm = 0755
+)
 
-	v := viper.New()
-	v.SetConfigFile(ConfigFile)
-	v.AddConfigPath(WorkingDir)
-	err := v.ReadInConfig()
-	if err != nil {
-		return err
-	}
-	//type config struct {
-	//	Port int
-	//	Name string
-	//}
-	v.Set("accumulate.AccRPCAddress", AccRPCAddress)
-	v.Set("accumulate.RouterAddress", RouterAddress)
-	v.WriteConfig()
+func Initialize(shardname string, index int, WorkingDir string) {
+	var nValidators int
+	var defNodeName string
+	var localAddress string
 
-	err = InitFilesWithConfig(newConfig, &shardname)
-	if err != nil {
-		return err
+	localAddress = "tcp://0.0.0.0"
+	defNodeName = "Node"
+	fmt.Println("Tendermint Initialize")
+
+	nValidators = len(networks.Networks[index].Ip)
+	config := cfg.DefaultConfig()
+
+	genVals := make([]types.GenesisValidator, nValidators)
+
+	for i := 0; i < nValidators; i++ {
+		nodeDirName := fmt.Sprintf("%s%d", defNodeName, i)
+		nodeDir := path.Join(WorkingDir, nodeDirName)
+		config.SetRoot(nodeDir)
+		config.Instrumentation.Namespace = shardname
+		config.ProxyApp = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port)
+		if nValidators > 1 {
+			config.RPC.ListenAddress = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port+1)
+			config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port+2)
+			config.P2P.ListenAddress = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port)
+		}
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", networks.Networks[index].Port)
+		err := os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
+		if err != nil {
+			_ = os.RemoveAll(WorkingDir)
+			fmt.Printf("Can't make config directory: %s/config\n", nodeDir)
+			return
+		}
+
+		err = os.MkdirAll(path.Join(nodeDir, "data"), nodeDirPerm)
+		if err != nil {
+			_ = os.RemoveAll(WorkingDir)
+			fmt.Printf("Can't make data directory: %s/data\n", nodeDir)
+			return
+		}
+
+		if err := initFilesWithConfig(config, &networks.Networks[index].Name); err != nil {
+			fmt.Printf("Init Files with Config failed\n")
+			return
+		}
+
+		pvKeyFile := path.Join(nodeDir, config.BaseConfig.PrivValidatorKey)
+		pvStateFile := path.Join(nodeDir, config.BaseConfig.PrivValidatorState)
+		pv := privval.LoadFilePV(pvKeyFile, pvStateFile)
+
+		pubKey, err := pv.GetPubKey()
+		if err != nil {
+			fmt.Printf("can't get pubkey: %w\n", err)
+			return
+		}
+		genVals[i] = types.GenesisValidator{
+			Address: pubKey.Address(),
+			PubKey:  pubKey,
+			Power:   1,
+			Name:    nodeDirName,
+		}
 	}
-	return nil
+	// Generate genesis doc from generated validators
+	genDoc := &types.GenesisDoc{
+		ChainID:         "chain-" + tmrand.Str(6),
+		GenesisTime:     tmtime.Now(),
+		InitialHeight:   0,
+		Validators:      genVals,
+		ConsensusParams: types.DefaultConsensusParams(),
+	}
+	// Write genesis file.
+	for i := 0; i < nValidators; i++ {
+		nodeDir := path.Join(WorkingDir, fmt.Sprintf("%s%d", defNodeName, i))
+		if err := genDoc.SaveAs(path.Join(nodeDir, config.BaseConfig.Genesis)); err != nil {
+			_ = os.RemoveAll(WorkingDir)
+			fmt.Printf("Can't save gen doc file %s/%s\n", nodeDir, config.BaseConfig.Genesis)
+			return
+		}
+	}
+	// Gather persistent peer addresses.
+
+	persistentPeers := make([]string, nValidators)
+
+	IPs := networks.Networks[index].Ip
+
+	for i := 0; i < nValidators; i++ {
+		nodeDir := path.Join(WorkingDir, fmt.Sprintf("%s%d", defNodeName, i))
+		config.SetRoot(nodeDir)
+		nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
+		if err != nil {
+			_ = os.RemoveAll(WorkingDir)
+			fmt.Printf("Can't load node key ID\n")
+			return
+		}
+		persistentPeers[i] = p2p.IDAddressString(nodeKey.ID(), fmt.Sprintf("%s:%d", IPs[i], networks.Networks[index].Port))
+	}
+
+	// Overwrite default config.
+	config.LogLevel = "main:info,state:info,statesync:info,*:error"
+	for i := 0; i < nValidators; i++ {
+		nodeDir := path.Join(WorkingDir, fmt.Sprintf("%s%d", defNodeName, i))
+		config.SetRoot(nodeDir)
+		if nValidators > 1 {
+			config.P2P.AddrBookStrict = false
+			config.P2P.AllowDuplicateIP = true
+			config.P2P.PersistentPeers = strings.Join(persistentPeers, ",")
+		} else {
+			config.P2P.AddrBookStrict = true
+			config.P2P.AllowDuplicateIP = false
+		}
+		config.Moniker = fmt.Sprintf("%s%d", defNodeName, i)
+
+		ConfigFile := nodeDir + "/config/config.toml"
+
+		cfg.WriteConfigFile(ConfigFile, config)
+
+		v := viper.New()
+		v.SetConfigFile(ConfigFile)
+		v.ReadInConfig()
+
+		// accRCPAddress
+		addr := fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port+3)
+		v.Set("accumulate.AccRPCAddress", addr)
+
+		// routerAddress
+		addr = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port+4)
+		v.Set("accumulate.RouterAddress", addr)
+
+		v.WriteConfig()
+	}
+
+	fmt.Printf("Successfully initialized %v node directories\n", nValidators)
+
+	return
+
 }
 
-func InitFilesWithConfig(config *cfg.Config, chainid *string) error {
+func initFilesWithConfig(config *cfg.Config, chainid *string) error {
+
+	logger := tmlog.NewNopLogger()
+
 	// private validator
 	privValKeyFile := config.PrivValidatorKeyFile()
 	privValStateFile := config.PrivValidatorStateFile()
 	var pv *privval.FilePV
 	if tmos.FileExists(privValKeyFile) {
 		pv = privval.LoadFilePV(privValKeyFile, privValStateFile)
-		//		logger.Info("Found private validator", "keyFile", privValKeyFile,
-		//			"stateFile", privValStateFile)
+		logger.Info("Found private validator", "keyFile", privValKeyFile,
+			"stateFile", privValStateFile)
 	} else {
 		pv = privval.GenFilePV(privValKeyFile, privValStateFile)
 		pv.Save()
-		//		logger.Info("Generated private validator", "keyFile", privValKeyFile,
-		//			"stateFile", privValStateFile)
+		logger.Info("Generated private validator", "keyFile", privValKeyFile,
+			"stateFile", privValStateFile)
 	}
 
 	nodeKeyFile := config.NodeKeyFile()
 	if tmos.FileExists(nodeKeyFile) {
-		//		logger.Info("Found node key", "path", nodeKeyFile)
+		logger.Info("Found node key", "path", nodeKeyFile)
 	} else {
 		if _, err := p2p.LoadOrGenNodeKey(nodeKeyFile); err != nil {
+			fmt.Printf("Can't load or gen node key\n")
 			return err
 		}
-		//		logger.Info("Generated node key", "path", nodeKeyFile)
-		// fmt.Println("Generated node key", "path", nodeKeyFile)
+		logger.Info("Generated node key", "path", nodeKeyFile)
 	}
-
 	// genesis file
 	genFile := config.GenesisFile()
 	if tmos.FileExists(genFile) {
-		//		logger.Info("Found genesis file", "path", genFile)
-		// fmt.Println("Found genesis file", "path", genFile)
+		logger.Info("Found genesis file", "path", genFile)
 	} else {
 		genDoc := types.GenesisDoc{
-			ChainID:         *chainid, //fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
+			ChainID:         *chainid,
 			GenesisTime:     tmtime.Now(),
 			ConsensusParams: types.DefaultConsensusParams(),
 		}
 		pubKey, err := pv.GetPubKey()
 		if err != nil {
-			return fmt.Errorf("can't get pubkey: %w", err)
+			fmt.Printf("can't get pubkey: %w\n", err)
+			return err
 		}
 		genDoc.Validators = []types.GenesisValidator{{
 			Address: pubKey.Address(),
@@ -111,10 +220,10 @@ func InitFilesWithConfig(config *cfg.Config, chainid *string) error {
 		}}
 
 		if err := genDoc.SaveAs(genFile); err != nil {
+			fmt.Printf("Can't save genFile: %s\n", genFile)
 			return err
 		}
-		//	logger.Info("Generated genesis file", "path", genFile)
-		// fmt.Println("Generated genesis file", "path", genFile)
+		logger.Info("Generated genesis file", "path", genFile)
 	}
 
 	return nil
@@ -171,8 +280,8 @@ func WaitForRPC(laddr string) {
 		time.Sleep(time.Millisecond)
 	}
 }
-func GetGRPCClient(grpcAddr string) coregrpc.BroadcastAPIClient {
-	return coregrpc.StartGRPCClient(grpcAddr)
+func GetGRPCClient(grpcAddr string) core_grpc.BroadcastAPIClient {
+	return core_grpc.StartGRPCClient(grpcAddr)
 }
 
 func GetRPCClient(rpcAddr string) *rpcclient.Client {
@@ -188,7 +297,7 @@ func GetRPCClient(rpcAddr string) *rpcclient.Client {
 func WaitForGRPC(grpcAddr string) {
 	client := GetGRPCClient(grpcAddr)
 	for {
-		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
+		_, err := client.Ping(context.Background(), &core_grpc.RequestPing{})
 		if err == nil {
 			return
 		}
