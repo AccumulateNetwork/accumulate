@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/viper"
 
