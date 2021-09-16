@@ -55,7 +55,7 @@ func makeBouncer() *networks.Bouncer {
 	return txBouncer
 }
 
-func _TestLoadOnRemote(t *testing.T) {
+func TestLoadOnRemote(t *testing.T) {
 
 	txBouncer := makeBouncer()
 
@@ -110,7 +110,7 @@ func _TestLoadOnRemote(t *testing.T) {
 
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func _TestJsonRpcAnonToken(t *testing.T) {
 
 	_, privateKey, _ := ed25519.GenerateKey(nil)
 

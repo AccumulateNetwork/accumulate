@@ -56,7 +56,7 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 	networkId := viper.GetString("instrumentation/namespace")
 	bvcId := sha256.Sum256([]byte(networkId))
 	dbFilename := workingDir + "/" + "valacc.db"
-	err := app.mmDB.Open(dbFilename, bvcId[:], false, true)
+	err := app.mmDB.Open(dbFilename, bvcId[:], true, true)
 	if err != nil {
 		return fmt.Errorf("failed to open database %s, %v", dbFilename, err)
 	}
