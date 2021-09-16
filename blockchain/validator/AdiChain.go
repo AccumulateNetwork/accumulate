@@ -22,6 +22,7 @@ type AdiChain struct {
 
 func NewAdiChain() *AdiChain {
 	v := AdiChain{}
+	//the only transactions an adi chain can process is to create another identity or update key (TBD)
 	v.SetInfo(types.ChainTypeAdi[:], types.ChainSpecAdi, pb.AccInstruction_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
@@ -68,50 +69,47 @@ func (v *AdiChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
 	return nil
 }
 
-func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *pb.GenTransaction, resp *ResponseValidateTX) error {
 	if currentstate == nil {
 		//but this is to be expected...
-		return nil, fmt.Errorf("current State Not Defined")
+		return fmt.Errorf("current State Not Defined")
 	}
 
 	if currentstate.IdentityState == nil {
-		return nil, fmt.Errorf("sponsor identity is not defined")
+		return fmt.Errorf("sponsor identity is not defined")
 	}
 
 	adiState := state.AdiState{}
-	err = adiState.UnmarshalBinary(currentstate.IdentityState.Entry)
+	err := adiState.UnmarshalBinary(currentstate.IdentityState.Entry)
 	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshal adi state entry, %v", err)
+		return fmt.Errorf("unable to unmarshal adi state entry, %v", err)
 	}
 
+	//this should be done at a higher level...
 	if !adiState.VerifyKey(submission.Signature[0].PublicKey) {
-		return nil, fmt.Errorf("key is not supported by current ADI state")
+		return fmt.Errorf("key is not supported by current ADI state")
 	}
 
 	if !adiState.VerifyAndUpdateNonce(submission.Signature[0].Nonce) {
-		return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Signature[0].Nonce)
-	}
-
-	if !submission.ValidateSig() {
-		return nil, fmt.Errorf("error validating the sponsor identity key, %v", err)
+		return fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Signature[0].Nonce)
 	}
 
 	ic := api.ADI{}
 	err = ic.UnmarshalBinary(submission.Transaction)
 
 	if err != nil {
-		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
+		return fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
 	isc := synthetic.NewAdiStateCreate(submission.TxId(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	iscData, err := isc.MarshalBinary()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	resp = &ResponseValidateTX{}
@@ -124,10 +122,15 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.GenTr
 	sub.Transaction = iscData
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return resp, nil
+	return nil
+}
+
+func (v *AdiChain) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+	err = v.processAdiCreate(currentState, submission, resp)
+	return resp, err
 }
 
 func (v *AdiChain) EndBlock(mdroot []byte) error {
