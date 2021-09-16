@@ -42,7 +42,8 @@ import (
 
 func makeBouncer() *networks.Bouncer {
 	//laddr := []string { "tcp://18.221.39.36:33001", "tcp://44.236.45.58:33001","tcp://13.51.10.110:33001", "tcp://13.232.230.216:33001" }
-	lAddr := []string{"tcp://18.221.39.36:33001", "tcp://13.51.10.110:33001"}
+	//lAddr := []string{"tcp://18.221.39.36:33001", "tcp://13.51.10.110:33001"}
+	lAddr := []string{"tcp://18.119.149.208:33001", "tcp://18.119.26.7:33001"}
 
 	rpcClients := []*rpchttp.HTTP{}
 
@@ -54,7 +55,7 @@ func makeBouncer() *networks.Bouncer {
 	return txBouncer
 }
 
-func _TestLoadOnRemote(t *testing.T) {
+func TestLoadOnRemote(t *testing.T) {
 
 	txBouncer := makeBouncer()
 
@@ -109,7 +110,7 @@ func _TestLoadOnRemote(t *testing.T) {
 
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func _TestJsonRpcAnonToken(t *testing.T) {
 
 	_, privateKey, _ := ed25519.GenerateKey(nil)
 
@@ -275,7 +276,7 @@ func Load(t *testing.T,
 	}
 
 	for i := 1; i < 10000; i++ { // Make a bunch of transactions
-		if i%2000 == 0 {
+		if i%1000 == 0 {
 			txBouncer.BatchSend()
 			time.Sleep(500 * time.Millisecond)
 		}
