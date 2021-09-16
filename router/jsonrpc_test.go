@@ -278,9 +278,9 @@ func Load(t *testing.T,
 	}
 
 	for i := 1; i < 10000; i++ { // Make a bunch of transactions
-		if i%100 == 0 {
+		if i%500 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(1000 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                         // pick a destination address
