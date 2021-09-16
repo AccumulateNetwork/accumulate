@@ -21,11 +21,11 @@ require (
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/viper v1.7.1
-	github.com/tendermint/tendermint v0.34.0
-	github.com/tendermint/tm-db v0.6.3
+	github.com/tendermint/tendermint v0.34.12
+	github.com/tendermint/tm-db v0.6.4
 	github.com/ybbus/jsonrpc/v2 v2.1.6
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
-	google.golang.org/grpc v1.35.0
+	google.golang.org/grpc v1.37.0
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/ini.v1 v1.58.0 // indirect
 )
