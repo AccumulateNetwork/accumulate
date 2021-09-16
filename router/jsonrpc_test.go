@@ -55,7 +55,7 @@ func makeBouncer() *networks.Bouncer {
 	return txBouncer
 }
 
-func TestLoadOnRemote(t *testing.T) {
+func _TestLoadOnRemote(t *testing.T) {
 
 	txBouncer := makeBouncer()
 
@@ -110,13 +110,15 @@ func TestLoadOnRemote(t *testing.T) {
 
 }
 
-func _TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcAnonToken(t *testing.T) {
 
 	_, privateKey, _ := ed25519.GenerateKey(nil)
 
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
-	cfg := path.Join(dir, "/config/config.toml")
+
+	//dir += "/Node0"
+	cfg := path.Join(dir, "Node0/config/config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}

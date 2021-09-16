@@ -57,23 +57,20 @@ func makeClientAndServer(routeraddress string) (proto.ApiServiceClient, *RouterC
 }
 func boostrapBVC(configfile string, workingdir string, baseport int) error {
 
-	ABCIAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
-	RPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+1)
-	GRPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+2)
-
-	AccRPCInternalAddress := fmt.Sprintf("tcp://localhost:%d", baseport+3) //no longer needed
-	RouterPublicAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
+	//ABCIAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
+	//RPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+1)
+	//GRPCAddress := fmt.Sprintf("tcp://localhost:%d", baseport+2)
+	//
+	//AccRPCInternalAddress := fmt.Sprintf("tcp://localhost:%d", baseport+3) //no longer needed
+	//RouterPublicAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
 
 	//create the default configuration files for the blockchain.
-	err := tendermint.Initialize("accumulate.routertest", ABCIAddress, RPCAddress, GRPCAddress,
-		AccRPCInternalAddress, RouterPublicAddress, configfile, workingdir)
-	if err != nil {
-		panic(err)
-	}
+	localNodeFromNetworks := 2
+	tendermint.Initialize("accumulate.routertest", localNodeFromNetworks, workingdir)
 
 	viper.SetConfigFile(configfile)
 	viper.AddConfigPath(workingdir)
-	err = viper.ReadInConfig()
+	err := viper.ReadInConfig()
 	if err != nil {
 		panic(err)
 	}
@@ -88,10 +85,11 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 	//	wal_dir = ""
 	//
 
-	//viper.Set("mempool.max_batch_bytes", "10485760")
+	//viper.Set("mempool.keep-invalid-txs-in-cache, "false"
 	//viper.Set("mempool.max_txs_bytes", "1073741824")
-	viper.Set("mempool.cache_size", "1000000")
-	viper.Set("mempool.size", "50000")
+	viper.Set("mempool.max_batch_bytes", 1048576)
+	viper.Set("mempool.cache_size", 1048576)
+	viper.Set("mempool.size", 50000)
 	err = viper.WriteConfig()
 	if err != nil {
 		panic(err)
@@ -129,7 +127,7 @@ func makeBVCandRouter(cfg string, dir string) (proto.ApiServiceClient, *RouterCo
 	client, routerserver := makeClientAndServer(routeraddress)
 
 	///Build a BVC we'll use for our test
-	accvm := makeBVC(cfg, dir)
+	accvm := makeBVC(cfg, dir + "/Node0")
 
 	//This will register the Tendermint RPC client of the BVC with the router
 	accvmapi, _ := accvm.GetAPIClient()
