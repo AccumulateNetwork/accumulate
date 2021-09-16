@@ -365,8 +365,8 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 
 	//unpack the request
 	//how do i detect errors?  This causes segfaults if not tightly checked.
-	whatevs, err := sub.UnMarshal(req.Tx)
-	if err != nil || len(whatevs) != 0 {
+	_, err := sub.UnMarshal(req.Tx)
+	if err != nil {
 		return abcitypes.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
