@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"net"
 	"sync"
 	"time"
@@ -19,7 +20,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
-	"google.golang.org/grpc"
 )
 
 // Node implements the general parameters to stimulate the validators, provide synthetic transactions, and issue state changes
@@ -146,8 +146,10 @@ func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transa
 // CanTransact will do light validation on the transaction
 func (app *Node) CanTransact(transaction *pb.GenTransaction) error {
 
+	app.mutex.Lock()
 	//populate the current state from the StateDB
 	currentState, _ := app.getCurrentState(transaction.GetChainID())
+	app.mutex.Unlock()
 
 	if err := app.verifyGeneralTransaction(currentState, transaction); err != nil {
 		return fmt.Errorf("cannot proceed with transaction, verification failed, %v", err)
@@ -160,22 +162,22 @@ func (app *Node) CanTransact(transaction *pb.GenTransaction) error {
 
 func (app *Node) doValidation(transaction *pb.GenTransaction) error {
 
-	//app.mutex.Lock()
-	//
-	//var group *sync.WaitGroup
-	//if group = app.chainWait[transaction.Routing]; group == nil {
-	//	group = &sync.WaitGroup{}
-	//	app.chainWait[transaction.Routing] = group
-	//
-	//}
-	//group.Wait()
-	//group.Add(1)
-	//defer func() {
-	//	group.Done()
-	//	app.wait.Add(-1)
-	//}()
-	//
-	//app.mutex.Unlock()
+	app.mutex.Lock()
+
+	var group *sync.WaitGroup
+	if group = app.chainWait[transaction.Routing]; group == nil {
+		group = &sync.WaitGroup{}
+		app.chainWait[transaction.Routing] = group
+
+	}
+	group.Wait()
+	group.Add(1)
+	defer func() {
+		group.Done()
+		app.wait.Add(-1)
+	}()
+
+	app.mutex.Unlock()
 
 	currentState, _ := app.getCurrentState(transaction.GetChainID())
 
@@ -227,7 +229,7 @@ func (app *Node) doValidation(transaction *pb.GenTransaction) error {
 // transaction []byte will be replaced by transaction RawTransaction
 func (app *Node) Validate(transaction *pb.GenTransaction) error {
 
-	//app.wait.Add(1)
+	app.wait.Add(1)
 	err := app.doValidation(transaction)
 	return err
 }
