@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api"
+
 	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -25,6 +27,7 @@ type AnonTokenChain struct {
 
 func NewAnonTokenChain() *AnonTokenChain {
 	v := &AnonTokenChain{}
+	//we want to set the default behavior to SyntheticTokenDeposit since it will create itself if doesn't exist.
 	v.SetInfo(types.ChainTypeAnonTokenAccount[:], types.ChainSpecAnonTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = v
 	return v
@@ -300,6 +303,60 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	return nil
 }
 
+func (v *AnonTokenChain) processAdiCreate(currentState *state.StateEntry, submission *pb.GenTransaction, resp *ResponseValidateTX) error {
+	//make sure identity state exists.  no point in continuing if the anonymous identity was never created
+	if currentState.IdentityState == nil {
+		return fmt.Errorf("identity state does not exist for anonymous account")
+	}
+
+	//now check to make sure this is really an anon account
+	if bytes.Compare(currentState.AdiHeader.Type.Bytes(), types.ChainTypeAnonTokenAccount[:]) != 0 {
+		return fmt.Errorf("account adi is not an anonymous account type")
+	}
+
+	//this should be done at a higher level...
+	//if !adiState.VerifyKey(submission.Signature[0].PublicKey) {
+	//	return fmt.Errorf("key is not supported by current ADI state")
+	//}
+	//
+	//if !adiState.VerifyAndUpdateNonce(submission.Signature[0].Nonce) {
+	//	return fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Signature[0].Nonce)
+	//}
+
+	ic := api.ADI{}
+	err := ic.UnmarshalBinary(submission.Transaction)
+
+	if err != nil {
+		return fmt.Errorf("data payload of submission is not a valid identity create message")
+	}
+
+	isc := synthetic.NewAdiStateCreate(submission.TxId(), &currentState.AdiHeader.ChainUrl, &ic.URL, &ic.PublicKeyHash)
+
+	if err != nil {
+		return err
+	}
+
+	iscData, err := isc.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	resp = &ResponseValidateTX{}
+
+	//send of a synthetic transaction to the correct network
+	resp.Submissions = make([]*pb.GenTransaction, 1)
+	sub := resp.Submissions[0]
+	sub.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
+	sub.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
+	sub.Transaction = iscData
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // VerifySignatures so this is a little complicated because we need to determine the signature
 //scheme of the underlying address of the token.
 func (v *AnonTokenChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
@@ -324,6 +381,9 @@ func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *pb
 	resp := &ResponseValidateTX{}
 
 	switch submission.GetTransactionType() {
+	case uint64(pb.AccInstruction_Identity_Creation):
+		//this chain will sponsor creation of a new ADI
+		err = v.processAdiCreate(currentState, submission, resp)
 	case uint64(pb.AccInstruction_Synthetic_Token_Deposit):
 		//need to verify synthetic deposit.
 		err = v.processDeposit(currentState, submission, resp)

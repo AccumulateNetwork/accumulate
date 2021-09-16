@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
@@ -33,6 +34,10 @@ type Node struct {
 	batch          [2]*rpchttp.BatchHTTP
 	txBouncer      networks.Bouncer
 	height         int64
+
+	wait      sync.WaitGroup
+	chainWait map[uint64]*sync.WaitGroup
+	mutex     sync.Mutex
 }
 
 // Initialize will setup the node with the given parameters.  What we really need here are the bouncer, and private key
@@ -75,6 +80,8 @@ func (app *Node) BeginBlock(height int64, Time *time.Time, leader bool) error {
 	app.leader = leader
 	app.height = height
 	app.chainValidator.BeginBlock(height, Time)
+	app.chainWait = make(map[uint64]*sync.WaitGroup)
+
 	return nil
 }
 
@@ -151,9 +158,24 @@ func (app *Node) CanTransact(transaction *pb.GenTransaction) error {
 	return nil
 }
 
-// Validate will do a deep validation of the transaction.  This is done by ALL the validators in the network
-// transaction []byte will be replaced by transaction RawTransaction
-func (app *Node) Validate(transaction *pb.GenTransaction) error {
+func (app *Node) doValidation(transaction *pb.GenTransaction) error {
+
+	//app.mutex.Lock()
+	//
+	//var group *sync.WaitGroup
+	//if group = app.chainWait[transaction.Routing]; group == nil {
+	//	group = &sync.WaitGroup{}
+	//	app.chainWait[transaction.Routing] = group
+	//
+	//}
+	//group.Wait()
+	//group.Add(1)
+	//defer func() {
+	//	group.Done()
+	//	app.wait.Add(-1)
+	//}()
+	//
+	//app.mutex.Unlock()
 
 	currentState, _ := app.getCurrentState(transaction.GetChainID())
 
@@ -198,12 +220,21 @@ func (app *Node) Validate(transaction *pb.GenTransaction) error {
 			app.mmDB.AddPendingTx(k[:], v)
 		}
 	}
+	return nil
+}
+
+// Validate will do a deep validation of the transaction.  This is done by ALL the validators in the network
+// transaction []byte will be replaced by transaction RawTransaction
+func (app *Node) Validate(transaction *pb.GenTransaction) error {
+
+	//app.wait.Add(1)
+	err := app.doValidation(transaction)
 	return err
 }
 
 // EndBlock will return the merkle DAG root of the current state
 func (app *Node) EndBlock() ([]byte, error) {
-
+	app.wait.Wait()
 	mdRoot, numStateChanges, err := app.mmDB.WriteStates(app.chainValidator.GetCurrentHeight())
 
 	if err != nil {
