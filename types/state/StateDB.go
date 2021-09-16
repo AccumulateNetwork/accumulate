@@ -80,8 +80,8 @@ func (sdb *StateDB) GetDB() *smtDB.Manager {
 
 //AddPendingTx adds the pending tx raw data and signature of that data to tx, signature needs to be a signed hash of the tx.
 func (sdb *StateDB) AddPendingTx(chainId []byte, txRaw []byte) error {
-	sdb.mutex.Lock()
-	defer sdb.mutex.Unlock()
+	//sdb.mutex.Lock()
+	//defer sdb.mutex.Unlock()
 
 	mms := sdb.getOrCreateChainMerkleManager(chainId, false)
 	txId := sha256.Sum256(txRaw)
@@ -126,8 +126,8 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 // GetCurrentEntry retrieves the current state object from the database based upon chainId.  Current state either comes
 // from a previously saves state for the current block, or it is from the database
 func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
-	sdb.mutex.Lock()
-	defer sdb.mutex.Unlock()
+	//sdb.mutex.Lock()
+	//defer sdb.mutex.Unlock()
 
 	if chainId == nil {
 		return nil, fmt.Errorf("chain id is invalid, thus unable to retrieve current entry")
@@ -177,8 +177,8 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 
 	mms := sdb.getOrCreateChainMerkleManager(chainId, false)
 
-	sdb.mutex.Lock()
-	defer sdb.mutex.Unlock()
+	//sdb.mutex.Lock()
+	//defer sdb.mutex.Unlock()
 	//add the state to the merkle tree
 	mms.merkleMgr.AddHash(sha256.Sum256(entry))
 
@@ -193,8 +193,8 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 // WriteStates will push the data to the database and update the patricia trie
 func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//build a list of keys from the map
-	sdb.mutex.Lock()
-	defer sdb.mutex.Unlock()
+	//sdb.mutex.Lock()
+	//defer sdb.mutex.Unlock()
 	currentStateCount := len(sdb.mms)
 	if currentStateCount > 0 {
 		//only attempt to record the block if we have any data.

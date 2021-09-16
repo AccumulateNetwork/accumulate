@@ -95,7 +95,7 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 	viper.Set("mempool.max_batch_bytes", 1048576)
 	viper.Set("mempool.cache_size", 1048576)
 	viper.Set("mempool.size", 50000)
-	err = viper.WriteConfig()
+	err := viper.WriteConfig()
 	if err != nil {
 		panic(err)
 	}
