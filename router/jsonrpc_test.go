@@ -278,7 +278,7 @@ func Load(t *testing.T,
 	}
 
 	for i := 1; i < 10000; i++ { // Make a bunch of transactions
-		if i%1000 == 0 {
+		if i%100 == 0 {
 			txBouncer.BatchSend()
 			time.Sleep(500 * time.Millisecond)
 		}

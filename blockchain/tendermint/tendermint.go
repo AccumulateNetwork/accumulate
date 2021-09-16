@@ -7,11 +7,12 @@ import (
 	"path"
 	"strings"
 
-        "github.com/spf13/viper"
+	"github.com/AccumulateNetwork/accumulated/networks"
+
+	"github.com/spf13/viper"
 
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/networks"
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -23,7 +24,7 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
-	core_grpc "github.com/tendermint/tendermint/rpc/grpc"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"github.com/tendermint/tendermint/types"
 	tmtime "github.com/tendermint/tendermint/types/time"
@@ -53,12 +54,13 @@ func Initialize(shardname string, index int, WorkingDir string) {
 		config.SetRoot(nodeDir)
 		config.Instrumentation.Namespace = shardname
 		config.ProxyApp = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port)
+		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port+1)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port+2)
 		if nValidators > 1 {
-			config.RPC.ListenAddress = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port+1)
-			config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port+2)
 			config.P2P.ListenAddress = fmt.Sprintf("%s:%d", localAddress, networks.Networks[index].Port)
 		}
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", networks.Networks[index].Port)
+		//	   config.Consensus.CreateEmptyBlocks = false
 		err := os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
 			_ = os.RemoveAll(WorkingDir)
@@ -117,7 +119,7 @@ func Initialize(shardname string, index int, WorkingDir string) {
 
 	IPs := networks.Networks[index].Ip
 
-	for i := 0; i < nValidators; i++ {
+	for i := 1; i < nValidators; i++ {
 		nodeDir := path.Join(WorkingDir, fmt.Sprintf("%s%d", defNodeName, i))
 		config.SetRoot(nodeDir)
 		nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
@@ -130,10 +132,10 @@ func Initialize(shardname string, index int, WorkingDir string) {
 	}
 
 	// Overwrite default config.
-	config.LogLevel = "main:info,state:info,statesync:info,*:error"
 	for i := 0; i < nValidators; i++ {
 		nodeDir := path.Join(WorkingDir, fmt.Sprintf("%s%d", defNodeName, i))
 		config.SetRoot(nodeDir)
+		config.LogLevel = "main:info,state:info,statesync:info,*:error"
 		if nValidators > 1 {
 			config.P2P.AddrBookStrict = false
 			config.P2P.AllowDuplicateIP = true
@@ -166,7 +168,6 @@ func Initialize(shardname string, index int, WorkingDir string) {
 	fmt.Printf("Successfully initialized %v node directories\n", nValidators)
 
 	return
-
 }
 
 func initFilesWithConfig(config *cfg.Config, chainid *string) error {
@@ -280,8 +281,8 @@ func WaitForRPC(laddr string) {
 		time.Sleep(time.Millisecond)
 	}
 }
-func GetGRPCClient(grpcAddr string) core_grpc.BroadcastAPIClient {
-	return core_grpc.StartGRPCClient(grpcAddr)
+func GetGRPCClient(grpcAddr string) coregrpc.BroadcastAPIClient {
+	return coregrpc.StartGRPCClient(grpcAddr)
 }
 
 func GetRPCClient(rpcAddr string) *rpcclient.Client {
@@ -297,7 +298,7 @@ func GetRPCClient(rpcAddr string) *rpcclient.Client {
 func WaitForGRPC(grpcAddr string) {
 	client := GetGRPCClient(grpcAddr)
 	for {
-		_, err := client.Ping(context.Background(), &core_grpc.RequestPing{})
+		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
 		if err == nil {
 			return
 		}
