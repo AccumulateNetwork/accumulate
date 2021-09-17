@@ -3,6 +3,8 @@ package tendermint
 import (
 	"bytes"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 
@@ -321,7 +323,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) (rct 
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 	//the submission is the format of the Tx input
-	sub := &pb.GenTransaction{}
+	sub := &transactions.GenTransaction{}
 
 	//unpack the request
 	whatevs, err1 := sub.UnMarshal(req.Tx)
@@ -361,7 +363,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	}()
 	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: nil, Code: code.CodeTypeOK}
 
-	sub := &pb.GenTransaction{}
+	sub := &transactions.GenTransaction{}
 
 	//unpack the request
 	//how do i detect errors?  This causes segfaults if not tightly checked.

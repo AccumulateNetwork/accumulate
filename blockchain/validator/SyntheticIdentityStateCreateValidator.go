@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -28,7 +30,7 @@ func NewSyntheticIdentityStateCreateValidator() *SyntheticIdentityStateCreateVal
 	return &v
 }
 
-func (v *SyntheticIdentityStateCreateValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *SyntheticIdentityStateCreateValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	if currentstate == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
@@ -60,7 +62,7 @@ func (v *SyntheticIdentityStateCreateValidator) BeginBlock(height int64, time *t
 	return nil
 }
 
-func (v *SyntheticIdentityStateCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *SyntheticIdentityStateCreateValidator) Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current state not defined")
