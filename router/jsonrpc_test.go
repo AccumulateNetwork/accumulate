@@ -43,7 +43,7 @@ import (
 func makeBouncer() *networks.Bouncer {
 	//laddr := []string { "tcp://18.221.39.36:33001", "tcp://44.236.45.58:33001","tcp://13.51.10.110:33001", "tcp://13.232.230.216:33001" }
 	//lAddr := []string{"tcp://18.221.39.36:33001", "tcp://13.51.10.110:33001"}
-	lAddr := []string{"tcp://18.119.149.208:33001", "tcp://18.119.26.7:33001"}
+	lAddr := []string{"tcp://18.119.26.7:33001", "tcp://18.119.149.208:33001"}
 
 	rpcClients := []*rpchttp.HTTP{}
 
@@ -104,9 +104,9 @@ func TestLoadOnRemote(t *testing.T) {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	txBouncer.SendTx(gtx)
+	//txBouncer.SendTx(gtx)
 
-	Load(t, txBouncer, privateKeySponsor)
+	//Load(t, txBouncer, privateKeySponsor)
 
 	//txBouncer.BatchSend()
 
@@ -115,6 +115,8 @@ func TestLoadOnRemote(t *testing.T) {
 	queryTokenUrl := destAddress + "/" + tokenUrl
 	query := NewQuery(txBouncer)
 
+	queryme := "acme-ab3e629babc101a6c60457bc8516c6eb9bbe38bba8d7ff1a" //acme-b8d3aa6a4da74ca2a2cfeee0c0f03f78bb47f2fda8d1732f" ///dc/ACME"
+	queryTokenUrl = types.String(queryme)
 	resp, err := query.GetChainState(queryTokenUrl.AsString())
 	if err != nil {
 		t.Fatal(err)
@@ -127,7 +129,6 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	queryme := "acme-b8d3aa6a4da74ca2a2cfeee0c0f03f78bb47f2fda8d1732f" ///dc/ACME"
 	jsonapi := API{RandPort(), validator.New(), nil, query, txBouncer}
 	_ = jsonapi
 
