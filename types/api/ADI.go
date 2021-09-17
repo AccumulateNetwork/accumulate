@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -9,13 +10,15 @@ import (
 // ADI structure holds the identity name in the URL.  The name can be stored as acc://<name> or simply <name>
 // all chain paths following the ADI domain will be ignored
 type ADI struct {
+	encoding.BinaryMarshaler
+	encoding.BinaryUnmarshaler
 	URL           types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 }
 
 func NewADI(name *string, keyHash *types.Bytes32) *ADI {
 	ic := &ADI{}
-	ic.SetAdi(name)
+	_ = ic.SetAdi(name)
 	ic.SetKeyHash(keyHash)
 	return ic
 }
