@@ -60,7 +60,7 @@ func TestLoadOnRemote(t *testing.T) {
 	txBouncer := makeBouncer()
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
-	_, privateKey, _ := ed25519.GenerateKey(nil)
+	//_, privateKey, _ := ed25519.GenerateKey(nil)
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
 	kpSponsor := privateKeySponsor
@@ -69,7 +69,7 @@ func TestLoadOnRemote(t *testing.T) {
 	adiSponsor := types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	//set destination url address
-	destAddress := types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
+	destAddress := adiSponsor //types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
 
 	println(adiSponsor)
 	println(destAddress)
@@ -96,8 +96,8 @@ func TestLoadOnRemote(t *testing.T) {
 
 	ed := new(proto.ED25519Sig)
 	ed.Nonce = 1
-	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(privateKey, dataToSign)
+	ed.PublicKey = privateKeySponsor[32:]
+	err = ed.Sign(privateKeySponsor, dataToSign)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestLoadOnRemote(t *testing.T) {
 
 	txBouncer.SendTx(gtx)
 
-	//Load(t, txBouncer, privateKey)
+	Load(t, txBouncer, privateKeySponsor)
 
 	//txBouncer.BatchSend()
 
@@ -151,7 +151,7 @@ func TestLoadOnRemote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println(string(output))
+	//fmt.Println(string(output))
 }
 
 func _TestJsonRpcAnonToken(t *testing.T) {
