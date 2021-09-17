@@ -1,4 +1,4 @@
-package proto
+package transactions
 
 import (
 	"crypto/ed25519"
