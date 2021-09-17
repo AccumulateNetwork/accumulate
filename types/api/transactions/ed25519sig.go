@@ -13,7 +13,7 @@ import (
 // ED25519Sig
 // Implements signing and validating ED25519 signatures
 type ED25519Sig struct {
-	Nonce     uint64 // We increment the Nonce on the signature to eliminate duplicates
+	Nonce     uint64 // Nonce of Signature
 	PublicKey []byte // 32 byte public key
 	Signature []byte // a set of 64 byte signatures
 }
@@ -22,32 +22,20 @@ type ED25519Sig struct {
 // Return true if the given Signature has the same Nonce, PublicKey,
 // and Signature
 func (e *ED25519Sig) Equal(e2 *ED25519Sig) bool {
-	return e.Nonce == e2.Nonce && //                 Return true if the Nonce is the same and
-		bytes.Equal(e.PublicKey, e2.PublicKey) && //  the publickey is the same and
-		bytes.Equal(e.Signature, e2.Signature) //     the signature is the same
+	return bytes.Equal(e.PublicKey, e2.PublicKey) && //  the publickey is the same and
+		bytes.Equal(e.Signature, e2.Signature) //        the signature is the same
 }
 
 // Sign
 // Returns the signature for the given message.  What happens is the message
 // is hashed with sha256, then the hash is signed.  The signature of the hash
 // is returned.
-func (e *ED25519Sig) Sign(privateKey []byte, message []byte) error {
-	h := sha256.Sum256(message)
-	return e.SignHash(privateKey, h[:])
-}
-
-// SignHash
-// Signs the hash of a message.  This is needed to separate the signatures from
-// the messages we sign.  In theory we could avoid the extra hash, but the
-// libraries we use don't provide a function to avoid the extra hash.
-//
-// Note that the hash must be of the varInt of the nonce concatenated with the
-// message
-func (e *ED25519Sig) SignHash(privateKey []byte, hash []byte) error {
-	nHash := append(common.Uint64Bytes(e.Nonce), hash...) //       Add nonce to hash
-	s := ed25519.Sign(privateKey, nHash)                  //       Sign the nonce+hash
-	e.PublicKey = append([]byte{}, privateKey[32:]...)    //       Note that the last 32 bytes of a private key is the
-	if !bytes.Equal(e.PublicKey, privateKey[32:]) {       //       Check that we have the proper keys to sign
+func (e *ED25519Sig) Sign(nonce uint64, privateKey []byte, hash []byte) error {
+	e.Nonce = nonce
+	nHash := append(common.Uint64Bytes(nonce), hash...) //       Add nonce to hash
+	s := ed25519.Sign(privateKey, nHash)                //       Sign the nonce+hash
+	e.PublicKey = append([]byte{}, privateKey[32:]...)  //       Note that the last 32 bytes of a private key is the
+	if !bytes.Equal(e.PublicKey, privateKey[32:]) {     //       Check that we have the proper keys to sign
 		return errors.New("privateKey cannot sign this struct") // Return error that the doesn't match
 	}
 	e.Signature = s // public key.  Save the signature. // Save away the signature.
@@ -70,34 +58,30 @@ func (e *ED25519Sig) CanVerify(keyHash []byte) bool {
 // Verify
 // Returns true if the signature matches the message.  Involves a hash of the
 // message.
-func (e *ED25519Sig) Verify(message []byte) bool {
-	h := sha256.Sum256(message)
-	return e.VerifyHash(h[:])
-}
-
-// VerifyHash
-// Verifies the hash of a message.
-func (e *ED25519Sig) VerifyHash(hash []byte) bool {
-	n := common.Uint64Bytes(e.Nonce)
-	return ed25519.Verify(e.PublicKey, append(n, hash...), e.Signature)
+func (e *ED25519Sig) Verify(hash []byte) bool {
+	return ed25519.Verify( //                               ed25519 verify signature
+		e.PublicKey, //                                     with the public key of the signature
+		append(common.Uint64Bytes(e.Nonce), hash...), //    Of the nonce+transaction hash
+		e.Signature) //                                     with the signature
 }
 
 // Marshal
 // Marshal a signature.  The data can be unmarshaled
-func (e *ED25519Sig) Marshal() (data []byte, err error) {
-	defer func() {
-		if err := recover(); err != nil {
-			err = fmt.Errorf("error marshaling ED25519Sig %v", err)
-		}
-	}()
+func (e *ED25519Sig) Marshal() (data []byte, err error) { //
 
-	if len(e.PublicKey) != 32 || len(e.Signature) != 64 {
-		return nil, fmt.Errorf("poorly formed signature")
-	}
-	data = common.Uint64Bytes(e.Nonce)
-	data = append(data, e.PublicKey...)
-	data = append(data, e.Signature...)
-	return data, nil
+	defer func() { //                                                   On any error, just report the error
+		if err := recover(); err != nil { //                            Check for error on exist
+			err = fmt.Errorf("error marshaling ED25519Sig %v", err) //  Generate the error message
+		} //
+	}() //                                                              If no error occurs, err will be nil
+
+	if len(e.PublicKey) != 32 || len(e.Signature) != 64 { //            Double check data sizes
+		return nil, fmt.Errorf("poorly formed signature") //            Report error if sizes are wrong
+	} //
+	data = append(data, common.Uint64Bytes(e.Nonce)...) //              Add Nonce
+	data = append(data, e.PublicKey...)                 //              Add Public Key
+	data = append(data, e.Signature...)                 //              Add Signature
+	return data, nil                                    //              Return the bytes
 }
 
 // Unmarshal

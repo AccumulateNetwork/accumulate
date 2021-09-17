@@ -19,9 +19,15 @@ func GetKey() []byte {
 }
 
 func TestTokenTransaction(t *testing.T) {
+
+	var nonce uint64 = 1
+
 	testurl := "acc://0x411abc253de31674f"
 	trans := new(GenTransaction)
-	if err := trans.SetRoutingChainID(testurl); err != nil {
+	trans.SigInfo = new(SignatureInfo)
+	trans.SigInfo.URL = testurl
+	trans.SigInfo.Nonce = nonce
+	if err := trans.SetRoutingChainID(); err != nil {
 		t.Fatal("could not create the Routing value")
 	}
 
@@ -30,11 +36,9 @@ func TestTokenTransaction(t *testing.T) {
 	eSig := new(ED25519Sig)
 	eSig.Nonce = 0
 	eSig.PublicKey = key[32:]
-	transData, err := trans.MarshalBinary()
-	if err != nil {
-		t.Error(err)
-	}
-	if err := eSig.Sign(key, transData); err != nil {
+	transHash := trans.TransactionHash()
+
+	if err := eSig.Sign(nonce, key, transHash); err != nil {
 		t.Errorf("error signing tx %v", err)
 	}
 
@@ -46,11 +50,15 @@ func TestTokenTransaction(t *testing.T) {
 			t.Error(err)
 		}
 		s2 := new(ED25519Sig)
-		s2.Unmarshal(data)
+		_, err = s2.Unmarshal(data)
+		if err != nil {
+			t.Error(err)
+		}
 		if !eSig.Equal(s2) {
 			t.Fatal("Can't marshal a signature")
 		}
-		s2Data, err := s2.Marshal()
+		var s2Data []byte
+		s2Data, err = s2.Marshal()
 		if err != nil {
 			t.Error("fail to marshal")
 		}
