@@ -3,6 +3,8 @@ package validator
 import (
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
@@ -36,14 +38,14 @@ func NewBlockValidatorChain() *BlockValidatorChain {
 	return &v
 }
 
-func (v *BlockValidatorChain) Check(currentState *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *BlockValidatorChain) Check(currentState *state.StateEntry, submission *transactions.GenTransaction) error {
 	return nil
 }
 func (v *BlockValidatorChain) Initialize(config *cfg.Config) error {
 	return nil
 }
 
-func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.GenTransaction) (*ResponseValidateTX, error) {
+func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *transactions.GenTransaction) (*ResponseValidateTX, error) {
 	var err error
 
 	//If adiState doesn't exist, we will process by transaction instruction type

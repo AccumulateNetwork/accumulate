@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -30,7 +32,7 @@ func NewAnonTokenChain() *AnonTokenChain {
 	return v
 }
 
-func (v *AnonTokenChain) Check(currentState *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *AnonTokenChain) Check(currentState *state.StateEntry, submission *transactions.GenTransaction) error {
 	//
 	//var err error
 	//resp := &ResponseValidateTX{}
@@ -59,7 +61,7 @@ func (v *AnonTokenChain) BeginBlock(height int64, time *time.Time) error {
 
 	return nil
 }
-func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submission *pb.GenTransaction, resp *ResponseValidateTX) error {
+func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submission *transactions.GenTransaction, resp *ResponseValidateTX) error {
 
 	//unmarshal the synthetic transaction based upon submission
 	deposit := synthetic.TokenTransactionDeposit{}
@@ -165,7 +167,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 
 	return nil
 }
-func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submission *pb.GenTransaction, resp *ResponseValidateTX) error {
+func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submission *transactions.GenTransaction, resp *ResponseValidateTX) error {
 	//make sure identity state exists.  no point in continuing if the anonymous identity was never created
 	if currentState.IdentityState == nil {
 		return fmt.Errorf("identity state does not exist for anonymous transaction")
@@ -176,7 +178,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		return fmt.Errorf("account adi is not an anonymous account type")
 	}
 
-	withdrawal := pb.TokenSend{} //api.TokenTx{}
+	withdrawal := transactions.TokenSend{} //api.TokenTx{}
 	leftover := withdrawal.Unmarshal(submission.Transaction)
 
 	//shouldn't be any leftover bytes to unmarshal.
@@ -224,7 +226,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	}
 
 	//now build the synthetic transactions.
-	resp.Submissions = make([]*pb.GenTransaction, len(withdrawal.Outputs))
+	resp.Submissions = make([]*transactions.GenTransaction, len(withdrawal.Outputs))
 
 	txid := submission.TxId()
 	txAmt := big.NewInt(0)
@@ -247,7 +249,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		}
 
 		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
-		sub := &pb.GenTransaction{}
+		sub := &transactions.GenTransaction{}
 		resp.Submissions[i] = sub
 
 		//set the identity chain for the destination
@@ -318,7 +320,7 @@ func (v *AnonTokenChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
 	return nil
 }
 
-func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
+func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
 
 	var err error
 	resp := &ResponseValidateTX{}

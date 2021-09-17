@@ -2,8 +2,9 @@ package transactions
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"net/url"
+
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 
 	"github.com/AccumulateNetwork/SMT/common"
 )
