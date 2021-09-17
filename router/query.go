@@ -256,7 +256,7 @@ func (q *Query) GetChainState(adiChainPath *string) (interface{}, error) {
 	err = chainHeader.UnmarshalBinary(qResp.Value)
 
 	if err != nil {
-		return nil, fmt.Errorf("invalid state object returned from query, %v", err)
+		return nil, fmt.Errorf("invalid state object returned from query of url %s, %v", *adiChainPath, err)
 	}
 
 	var resp *acmeApi.APIDataResponse
