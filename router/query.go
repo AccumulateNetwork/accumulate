@@ -264,7 +264,7 @@ func (q *Query) GetChainState(adiChainPath *string) (interface{}, error) {
 	//unmarshal the state object if available
 	if val, ok := ChainStates[chainHeader.Type]; ok {
 		//resp, err = val.(func([]byte) (interface{}, error))(qResp.Value)
-		resp, err = val.(func(*Query, *string, []byte) (*acmeApi.APIDataResponse, error))(q, adiChainPath, []byte{})
+		resp, err = val.(func(*Query, *string, []byte) (*acmeApi.APIDataResponse, error))(q, chainHeader.ChainUrl.AsString(), []byte{})
 	} else {
 		err = fmt.Errorf("unable to unmarshal state object for chain of type %s at %s", types.ChainTypeSpecMap[chainHeader.Type], chainHeader.ChainUrl)
 	}
