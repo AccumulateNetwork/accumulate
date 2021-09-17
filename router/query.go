@@ -219,7 +219,7 @@ var ChainStates = map[types.Bytes32]interface{}{
 	},
 	*types.ChainTypeAnonTokenAccount.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		adi, _, _ := types.ParseIdentityChainPath(url)
-		adi += "dc/ACME"
+		adi += "/dc/ACME"
 		return q.GetTokenAccount(&adi)
 	},
 }
