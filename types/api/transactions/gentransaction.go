@@ -29,13 +29,16 @@ type GenTransaction struct {
 // is equal to another.  In testing we marshal and unmarshal a GenTransaction
 // and test that the information in the GenTransaction is preserved
 func (t *GenTransaction) Equal(t2 *GenTransaction) bool {
-	isEqual := true
-	for i, sig := range t.Signature {
-		isEqual = isEqual && sig.Equal(t2.Signature[i])
+	t.TransactionHash() //                                              make sure both have TransactionHashes computed
+	t2.TransactionHash()
+	for i, sig := range t.Signature { //                                for every signature
+		if !sig.Equal(t2.Signature[i]) { //                             check they are the same
+			return false //                                             return false if they are not.
+		}
 	}
-	return isEqual &&
-		bytes.Equal(t.TxHash, t2.TxHash) &&
-		bytes.Equal(t.Transaction, t2.Transaction)
+	return t.SigInfo.Equal(t2.SigInfo) && //                            The SigInfo has to be the same
+		bytes.Equal(t.TransactionHash(), t2.TransactionHash()) && //    Check the Transaction hash
+		bytes.Equal(t.Transaction, t2.Transaction) //                   and the transaction. Mismatch is false
 }
 
 // TransactionHash
@@ -63,8 +66,11 @@ func (t *GenTransaction) Marshal() (data []byte, err error) {
 			err = fmt.Errorf("error marshaling GenTransaction %v", err)
 		}
 	}()
+	if err := t.SetRoutingChainID(); err != nil {
+		return nil, err
+	}
 	sLen := uint64(len(t.Signature))
-	if sLen == 0 || sLen > 100 {
+	if sLen < 1 || sLen > 100 {
 		panic("must have 1 to 100 signatures")
 	}
 	data = common.Uint64Bytes(sLen)
@@ -106,17 +112,17 @@ func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
 		} //
 		t.Signature = append(t.Signature, sig) //           Add each signature to list, and repeat until all done
 	} //
-	si := new(SignatureInfo)       //                       Get a SignatureInfo struct
-	data, err = si.UnMarshal(data) //                       And unmarshal it.
-	if err != nil {                //                       Get an error? Complain to caller!
+	t.SigInfo = new(SignatureInfo)        //                Get a SignatureInfo struct
+	data, err = t.SigInfo.UnMarshal(data) //                And unmarshal it.
+	if err != nil {                       //                Get an error? Complain to caller!
 		return nil, err //
 	} //
-	t.Transaction, data = common.BytesSlice(data) // Get the Transaction out of the data
-	err = t.SetRoutingChainID()                   // Now compute the Routing and ChainID
-	if err != nil {                               // If an error, then complain
-		return nil, err //                           return no data, and an error
+	t.Transaction, data = common.BytesSlice(data) //        Get the Transaction out of the data
+	err = t.SetRoutingChainID()                   //        Now compute the Routing and ChainID
+	if err != nil {                               //        If an error, then complain
+		return nil, err //                                  return no data, and an error
 	} //
-	return data, nil //                              Return the data and the fact all is well.
+	return data, nil //                                     Return the data and the fact all is well.
 } //
 
 // SetRoutingChainID

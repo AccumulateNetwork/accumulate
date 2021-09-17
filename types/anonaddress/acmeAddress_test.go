@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestGenerateAcmeAddressst(t *testing.T) {
+func TestGenerateAcmeAddress(t *testing.T) {
 
 	pub := sha256.Sum256([]byte{1, 2, 3, 3, 2, 1}) // can't tell a public key from a hash.
 	var list []string
