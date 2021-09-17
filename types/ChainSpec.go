@@ -15,6 +15,7 @@ const (
 	ChainSpecTokenAccount            = "AIM/3/0.1"
 	ChainSpecAnonTokenAccount        = "AIM/4/0.1"
 	ChainSpecTransaction             = "AIM/5/0.1"
+	ChainSpecSignatureGroup          = "AIM/6/0.1"
 )
 
 //ChainType is the hash of the chain spec.
@@ -42,6 +43,9 @@ var (
 
 	//ChainTypeTransaction Defines the transaction chains for pending and accepted transactions
 	ChainTypeTransaction ChainType = sha256.Sum256([]byte(ChainSpecTransaction))
+
+	//ChainTypeSignatureGroup Defines the transaction chains for pending and accepted transactions
+	ChainTypeSignatureGroup ChainType = sha256.Sum256([]byte(ChainSpecSignatureGroup))
 )
 
 var ChainTypeSpecMap = map[Bytes32]string{
@@ -51,4 +55,5 @@ var ChainTypeSpecMap = map[Bytes32]string{
 	*ChainTypeTokenAccount.AsBytes32():     ChainSpecTokenAccount,
 	*ChainTypeAnonTokenAccount.AsBytes32(): ChainSpecAnonTokenAccount,
 	*ChainTypeTransaction.AsBytes32():      ChainSpecTransaction,
+	*ChainTypeSignatureGroup.AsBytes32():   ChainSpecSignatureGroup,
 }

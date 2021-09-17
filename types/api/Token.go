@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
@@ -11,6 +12,8 @@ import (
 type TokenCirculationMode int
 
 type Token struct {
+	encoding.BinaryMarshaler
+	encoding.BinaryUnmarshaler
 	URL       types.String     `json:"url" form:"url" query:"url" validate:"required"`
 	Symbol    types.String     `json:"symbol" form:"symbol" query:"symbol" validate:"required,alphanum"`
 	Precision types.Byte       `json:"precision" form:"precision" query:"precision" validate:"required,min=0,max=18"`
@@ -18,7 +21,7 @@ type Token struct {
 }
 
 func NewToken(url string, symbol string, precision byte) *Token {
-	t := &Token{types.String(url), types.String(symbol), types.Byte(precision), nil}
+	t := &Token{URL: types.String(url), Symbol: types.String(symbol), Precision: types.Byte(precision), Meta: nil}
 	return t
 }
 

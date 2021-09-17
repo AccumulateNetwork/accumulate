@@ -217,6 +217,9 @@ var ChainStates = map[types.Bytes32]interface{}{
 	*types.ChainTypeTokenAccount.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		return q.GetTokenAccount(url)
 	},
+	*types.ChainTypeSignatureGroup.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+		return q.GetTokenAccount(url)
+	},
 	*types.ChainTypeAnonTokenAccount.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		adi, _, _ := types.ParseIdentityChainPath(url)
 		adi += "/dc/ACME"
@@ -253,7 +256,16 @@ func (q *Query) GetChainState(adiChainPath *string) (interface{}, error) {
 		//resp, err = val.(func([]byte) (interface{}, error))(qResp.Value)
 		resp, err = val.(func(*Query, *string, []byte) (*acmeApi.APIDataResponse, error))(q, chainHeader.ChainUrl.AsString(), []byte{})
 	} else {
-		err = fmt.Errorf("unable to unmarshal state object for chain of type %s at %s", types.ChainTypeSpecMap[chainHeader.Type], chainHeader.ChainUrl)
+		resp = &acmeApi.APIDataResponse{}
+		var chainType string
+		if chainType = types.ChainTypeSpecMap[chainHeader.Type]; chainType != "" {
+			resp.Type = types.String(chainType)
+		} else {
+			resp.Type = "unknown"
+		}
+		msg := json.RawMessage{}
+		msg = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", qResp.Value))
+		resp.Data = &msg
 	}
 
 	return resp, err
