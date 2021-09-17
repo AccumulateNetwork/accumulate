@@ -220,7 +220,7 @@ var ChainStates = map[types.Bytes32]interface{}{
 	*types.ChainTypeAnonTokenAccount.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		adi, _, _ := types.ParseIdentityChainPath(url)
 		adi += "dc/ACME"
-		return q.GetTokenAccount(url)
+		return q.GetTokenAccount(&adi)
 	},
 }
 
@@ -231,19 +231,6 @@ func (q *Query) GetChainState(adiChainPath *string) (interface{}, error) {
 	var err error
 
 	var qResp *tmtypes.ResponseQuery
-
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
-	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
 
 	//this QuerySync call is only temporary until we get router setup.
 	aResp, err := q.txBouncer.Query(adiChainPath, nil)
