@@ -47,6 +47,10 @@ func (v *TokenIssuanceValidator) BeginBlock(height int64, time *time.Time) error
 }
 
 func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
+	if err := submission.SetRoutingChainID(); err != nil {
+		return nil, err
+	}
+
 	if currentState == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current State not defined")
@@ -96,7 +100,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 
 	//return a new state object for a token
 	chainId := types.Bytes32{}
-	copy(chainId[:], submission.GetChainID())
+	copy(chainId[:], submission.ChainID)
 	resp.AddStateData(&chainId, tasso)
 
 	return resp, nil

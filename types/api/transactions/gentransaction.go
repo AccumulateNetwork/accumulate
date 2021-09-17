@@ -156,3 +156,10 @@ func (t *GenTransaction) ValidateSig() bool { // Validate the signatures on the 
 	}
 	return true //                               Return all is well.
 }
+
+// TransactionType
+// Return the type of the Transaction (the first VarInt)
+func (t *GenTransaction) TransactionType() (transType uint64) {
+	transType, _ = common.BytesUint64(t.Transaction)
+	return transType
+}

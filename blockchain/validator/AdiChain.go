@@ -89,8 +89,8 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *transact
 		return nil, fmt.Errorf("key is not supported by current ADI state")
 	}
 
-	if !adiState.VerifyAndUpdateNonce(submission.Nonce) {
-		return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Nonce)
+	if !adiState.VerifyAndUpdateNonce(submission.SigInfo.Nonce) {
+		return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.SigInfo.Nonce)
 	}
 
 	if !submission.ValidateSig() {
@@ -104,7 +104,7 @@ func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *transact
 		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
-	isc := synthetic.NewAdiStateCreate(submission.TxId(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
+	isc := synthetic.NewAdiStateCreate(submission.TransactionHash(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
 
 	if err != nil {
 		return nil, err

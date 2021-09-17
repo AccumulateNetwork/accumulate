@@ -323,7 +323,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) (rct 
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 	//the submission is the format of the Tx input
-	sub := &transactions.GenTransaction{}
+	sub := new(transactions.GenTransaction)
 
 	//unpack the request
 	whatevs, err1 := sub.UnMarshal(req.Tx)
@@ -341,7 +341,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) (rct 
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("entry check failed %v for url %x, %v \n", sub.GetTransactionType(), sub.GetChainID(), err2)
+		ret.Info = fmt.Sprintf("entry check failed %v for url %x, %v \n", sub.TransactionType(), sub.ChainID, err2)
 		return ret
 	}
 
@@ -381,7 +381,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 		//ret.GasWanted = 0
 		//ret.GasUsed = 0
 		//we don't care about failure as far as tendermint is concerned.
-		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.GetTransactionType(), err2)
+		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.TransactionType(), err2)
 		return ret
 	}
 

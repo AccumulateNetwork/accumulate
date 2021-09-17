@@ -155,11 +155,11 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		return nil, fmt.Errorf("unable to unmarshal adiChain")
 	}
 	//need to do a nonce check.
-	if submission.Nonce <= ids.Nonce {
+	if submission.SigInfo.Nonce <= ids.Nonce {
 		return nil, fmt.Errorf("invalid nonce in transaction, cannot proceed")
 	}
 
-	txid := submission.TxId()
+	txid := submission.TransactionHash()
 
 	ret := ResponseValidateTX{}
 	ret.Submissions = make([]*transactions.GenTransaction, len(withdrawl.Outputs)+1)

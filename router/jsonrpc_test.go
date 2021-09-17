@@ -84,22 +84,23 @@ func _TestLoadOnRemote(t *testing.T) {
 	depData, err := deposit.MarshalBinary()
 	gtx := new(transactions.GenTransaction)
 	gtx.Transaction = depData
-	if err := gtx.SetRoutingChainID(*destAddress.AsString()); err != nil {
+	gtx.SigInfo.URL = *destAddress.AsString()
+	if err := gtx.SetRoutingChainID(); err != nil {
 		t.Fatal("bad url generated")
 	}
-	dataToSign := gtx.TxId()
+	dataToSign := gtx.TransactionHash()
 
 	ed := new(transactions.ED25519Sig)
-	gtx.Nonce = 1
+	gtx.SigInfo.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.Nonce, privateKey, dataToSign)
+	err = ed.Sign(gtx.SigInfo.Nonce, privateKey, dataToSign)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	txBouncer.SendTx(gtx)
+	_, _ = txBouncer.SendTx(gtx)
 
 	Load(t, txBouncer, privateKey)
 
@@ -154,26 +155,26 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	depData, err := deposit.MarshalBinary()
 	gtx := new(transactions.GenTransaction)
+	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.Transaction = depData
-	if err := gtx.SetRoutingChainID(*destAddress.AsString()); err != nil {
+	gtx.SigInfo.URL = *destAddress.AsString()
+	if err := gtx.SetRoutingChainID(); err != nil {
 		t.Fatal("bad url generated")
-	}
-	dataToSign, err := gtx.MarshalBinary()
-	if err != nil {
-		t.Fatal(err)
 	}
 
 	ed := new(transactions.ED25519Sig)
-	gtx.Nonce = 1
+	gtx.SigInfo.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.Nonce, privateKey, dataToSign)
+	err = ed.Sign(gtx.SigInfo.Nonce, privateKey, gtx.TransactionHash())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	txBouncer.BatchTx(gtx)
+	if _, err := txBouncer.BatchTx(gtx); err != nil {
+		t.Fatal(err)
+	}
 
 	Load(t, txBouncer, privateKey)
 
@@ -281,15 +282,15 @@ func Load(t *testing.T,
 		out := transactions.Output{Dest: wallet[randDest].Addr, Amount: 1000} // create the transaction output
 		send := transactions.NewTokenSend(wallet[origin].Addr, out)           // Create a send token transaction
 		gtx := new(transactions.GenTransaction)                               // wrap in a GenTransaction
-		gtx.Transaction = send.Marshal()                                      // place in the send the transaction (must be sent to source)
-		if err := gtx.SetRoutingChainID(wallet[origin].Addr); err != nil {    // Routing ChainID is the tx source
+		gtx.SigInfo = new(transactions.SignatureInfo)                         // Get a Signature Info block
+		gtx.Transaction = send.Marshal()                                      // add  send transaction
+		gtx.SigInfo.URL = wallet[origin].Addr                                 // URL of source
+		if err := gtx.SetRoutingChainID(); err != nil {                       // Routing ChainID is the tx source
 			t.Fatal("bad url generated") // error should never happen
 		}
 
-		binaryGtx, err := gtx.MarshalBinary() // Must sign the GenTransaction
-		if err != nil {                       // should never fail
-			t.Fatal(err)
-		}
+		binaryGtx := gtx.TransactionHash() // Must sign the GenTransaction
+
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
 
 		if resp, err := txBouncer.BatchTx(gtx); err != nil {
