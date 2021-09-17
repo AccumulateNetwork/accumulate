@@ -59,6 +59,9 @@ func TestLoadOnRemote(t *testing.T) {
 
 	txBouncer := makeBouncer()
 
+	networksList := []int{3}
+	txBouncer = networks.MakeBouncer(networksList)
+
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 	//_, privateKey, _ := ed25519.GenerateKey(nil)
 
@@ -104,19 +107,23 @@ func TestLoadOnRemote(t *testing.T) {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	//txBouncer.SendTx(gtx)
+	sendRes, err := txBouncer.SendTx(gtx)
+	if err != nil {
+		t.Fatalf("error sending transaction, %s, %v", sendRes.Log, err)
+	}
 
-	//Load(t, txBouncer, privateKeySponsor)
+	Load(t, txBouncer, privateKeySponsor)
 
-	//txBouncer.BatchSend()
+	txBouncer.BatchSend()
 
 	time.Sleep(3000 * time.Millisecond)
 
 	queryTokenUrl := destAddress + "/" + tokenUrl
 	query := NewQuery(txBouncer)
 
-	queryme := "acme-ab3e629babc101a6c60457bc8516c6eb9bbe38bba8d7ff1a" //acme-b8d3aa6a4da74ca2a2cfeee0c0f03f78bb47f2fda8d1732f" ///dc/ACME"
+	queryme := "acme-4cd95cb589e0211f9c6b5fd858cf8fab80f4586af35b6160" //acme-b8d3aa6a4da74ca2a2cfeee0c0f03f78bb47f2fda8d1732f" ///dc/ACME"
 	queryTokenUrl = types.String(queryme)
+	//queryme = *queryTokenUrl.AsString()
 	resp, err := query.GetChainState(queryTokenUrl.AsString())
 	if err != nil {
 		t.Fatal(err)
@@ -257,9 +264,10 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
+	queryTokenUrl = "acme-005448d8e0d88051389bc09975455130a89fdb5e6950c07f"
 	params := &api.APIRequestURL{URL: queryTokenUrl}
 	gParams, err := json.Marshal(params)
-	//ret, err := txBouncer.Query(queryTokenUrl.AsString())
+	//ret, err := txBouncer.Query(queryTokenUrl.AsString(), nil)
 	theData := jsonapi.getData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
@@ -331,7 +339,7 @@ func Load(t *testing.T,
 	for i := 1; i < 10000; i++ { // Make a bunch of transactions
 		if i%500 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(1000 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                         // pick a destination address
