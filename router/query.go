@@ -232,6 +232,19 @@ func (q *Query) GetChainState(adiChainPath *string) (interface{}, error) {
 
 	var qResp *tmtypes.ResponseQuery
 
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+	fmt.Printf("Received query request for URL %s\n", *adiChainPath)
+
 	//this QuerySync call is only temporary until we get router setup.
 	aResp, err := q.txBouncer.Query(adiChainPath, nil)
 	if err != nil {
