@@ -2,11 +2,11 @@ package networks
 
 import (
 	"context"
-
-	ctypes "github.com/tendermint/tendermint/rpc/core/types"
-
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
+	proto1 "github.com/golang/protobuf/proto"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
 // Bouncer is the structure used to relay messages to the correct BVC.  Transactions can either be batched and dispatched
@@ -76,4 +76,25 @@ func (b *Bouncer) SendTx(tx *proto.GenTransaction) (*ctypes.ResultBroadcastTx, e
 		return nil, err
 	}
 	return b.rpcClient[int(tx.Routing)%b.numNetworks].BroadcastTxAsync(context.Background(), data)
+}
+
+// Query
+// This function will return the state object from the accumulate network for a given URL.
+func (b *Bouncer) Query(url *string, txId []byte) (ret *ctypes.ResultABCIQuery, err error) {
+	addr := types.GetAddressFromIdentity(url)
+
+	pq := proto.Query{}
+	pq.ChainUrl = *url
+	adiChain := types.GetIdentityChainFromIdentity(url)
+	chainId := types.GetChainIdFromChainPath(url)
+	pq.AdiChain = adiChain.Bytes()
+	pq.ChainId = chainId.Bytes()
+	pq.Ins = proto.AccInstruction_State_Query
+
+	data, err := proto1.Marshal(&pq)
+	if err != nil {
+		return nil, err
+	}
+
+	return b.rpcClient[addr%uint64(b.numNetworks)].ABCIQuery(context.Background(), "/abci_query", data)
 }

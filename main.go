@@ -102,10 +102,13 @@ func main() {
 	accvmapi, _ := accvm.GetAPIClient()
 	_ = urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
-	//the query object connects to the BVC, will be replaced with network client router
-	query := router.NewQuery(accvm)
+	networkList := []int{3}
+	txBouncer := networks.MakeBouncer(networkList)
 
-	go router.StartAPI(34000, query)
+	//the query object connects to the BVC, will be replaced with network client router
+	query := router.NewQuery(txBouncer)
+
+	go router.StartAPI(34000, query, txBouncer)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

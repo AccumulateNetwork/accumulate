@@ -28,7 +28,7 @@ func init() {
 		},
 		RouterNode{
 			Name: "Badlands",
-			Port: 35000,
+			Port: 35550,
 			Ip: []string{
 				"127.0.0.1",
 			},
