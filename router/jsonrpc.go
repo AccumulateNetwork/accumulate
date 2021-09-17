@@ -39,6 +39,7 @@ func StartAPI(port int, q *Query, txBouncer *networks.Bouncer) *API {
 	api.port = port
 	api.validate = validator.New()
 	api.query = q
+	api.txBouncer = txBouncer
 
 	methods := jsonrpc2.MethodMap{
 		// URL
