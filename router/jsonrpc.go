@@ -96,6 +96,10 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 		return NewValidatorError(err)
 	}
 
+	fmt.Printf("=============== jsonrpc Is going to send : %s ===========\n\n\n", *req.URL.AsString())
+
+	h := types.GetChainIdFromChainPath(req.URL.AsString())
+	fmt.Printf("\n\n jsonrpc request chainid : %x\n\n", h[:])
 	// Tendermint integration here
 	resp, err := api.query.GetChainState(req.URL.AsString())
 
