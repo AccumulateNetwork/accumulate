@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -21,7 +22,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/go-playground/validator/v10"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 //RouterNode{
@@ -71,6 +71,8 @@ func TestLoadOnRemote(t *testing.T) {
 	//set destination url address
 	destAddress := types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
 
+	println(adiSponsor)
+	println(destAddress)
 	txid := sha256.Sum256([]byte("fake txid"))
 
 	tokenUrl := types.String("dc/ACME")
@@ -111,9 +113,6 @@ func TestLoadOnRemote(t *testing.T) {
 }
 
 func _TestJsonRpcAnonToken(t *testing.T) {
-
-	_, privateKey, _ := ed25519.GenerateKey(nil)
-
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
 
@@ -124,18 +123,20 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	client, _, _, rpcClient, vm := makeBVCandRouter(cfg, dir)
+	client, _, _, rpc, vm := makeBVCandRouter(cfg, dir)
 
-	rpcClients := []*rpchttp.HTTP{rpcClient}
+	//networksList := []int{2}
+	//txBouncer := networks.MakeBouncer(networksList)
+
+	rpcClients := []*rpchttp.HTTP{rpc}
 	txBouncer := networks.NewBouncer(rpcClients)
-
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	query := NewQuery(vm)
+	query := NewQuery(txBouncer)
 
-	jsonapi := API{RandPort(), validator.New(), client, query}
+	jsonapi := API{RandPort(), validator.New(), client, query, txBouncer}
 	_ = jsonapi
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
@@ -144,6 +145,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	adiSponsor := types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
+	_, privateKey, _ := ed25519.GenerateKey(nil)
 	//set destination url address
 	destAddress := types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
 
@@ -178,7 +180,8 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	txBouncer.BatchTx(gtx)
+	txBouncer.SendTx(gtx)
+	//txBouncer.BatchTx(gtx)
 
 	Load(t, txBouncer, privateKey)
 
@@ -199,6 +202,30 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
+	resp2, err := query.GetChainState(queryTokenUrl.AsString())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// fmt.Println(string(*resp.Data))
+	output, err = json.Marshal(resp2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(output))
+
+	params := &api.APIRequestURL{URL: queryTokenUrl}
+	gParams, err := json.Marshal(params)
+	//ret, err := txBouncer.Query(queryTokenUrl.AsString())
+	theData := jsonapi.getData(context.Background(), gParams)
+	theJsonData, err := json.Marshal(theData)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//ret.Response.Value
+
+	fmt.Println(theJsonData) //ret.Response.Value)
 	//req := api.{}
 	//adi := &api.ADI{}
 	//adi.URL = "RoadRunner"
@@ -236,27 +263,6 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 
 }
 
-type walletEntry struct {
-	PrivateKey ed25519.PrivateKey // 32 bytes private key, 32 bytes public key
-	Nonce      uint64             // Nonce for the signature
-	Addr       string             // The address url for the anonymous token chain
-}
-
-// Sign
-// Makes it easier to sign transactions.  Create the ED25519Sig object, sign
-// the message, and return the ED25519Sig object to caller
-func (we *walletEntry) Sign(message []byte) *proto.ED25519Sig { // sign a message
-	we.Nonce++                       //                            Everytime we sign, increment the nonce
-	sig := new(proto.ED25519Sig)     //                            create a signature object
-	sig.Nonce = we.Nonce             //                            use the updated nonce
-	sig.Sign(we.PrivateKey, message) //                            sign the message
-	return sig                       //                            return the signature object
-}
-
-func (we *walletEntry) Public() []byte {
-	return we.PrivateKey[32:]
-}
-
 // Load
 // Generate load in our test.  Create a bunch of transactions, and submit them.
 func Load(t *testing.T,
@@ -265,7 +271,7 @@ func Load(t *testing.T,
 
 	var wallet []*walletEntry
 
-	wallet = append(wallet, new(walletEntry))              // wallet[0] is where we put 5000 ACME tokens
+	wallet = append(wallet, NewWalletEntry())              // wallet[0] is where we put 5000 ACME tokens
 	wallet[0].Nonce = 1                                    // start the nonce at 1
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
@@ -275,6 +281,8 @@ func Load(t *testing.T,
 		wallet[i].Nonce = 1                                                  // starting nonce of 1
 		_, wallet[i].PrivateKey, _ = ed25519.GenerateKey(nil)                // generate a private key
 		wallet[i].Addr = anon.GenerateAcmeAddress(wallet[i].PrivateKey[32:]) // generate the address encoding URL
+
+		println(wallet[i].Addr)
 	}
 
 	for i := 1; i < 10000; i++ { // Make a bunch of transactions
@@ -310,6 +318,8 @@ func Load(t *testing.T,
 
 func _TestJsonRpcAdi(t *testing.T) {
 
+	networksList := []int{2}
+	txBouncer := networks.MakeBouncer(networksList)
 	//"wileecoyote/ACME"
 	adiSponsor := "wileecoyote"
 
@@ -332,9 +342,9 @@ func _TestJsonRpcAdi(t *testing.T) {
 
 	//kpSponsor := types.CreateKeyPair()
 
-	query := NewQuery(vm)
+	query := NewQuery(txBouncer)
 
-	jsonapi := API{RandPort(), validator.New(), client, query}
+	jsonapi := API{RandPort(), validator.New(), client, query, txBouncer}
 
 	//StartAPI(RandPort(), client)
 
