@@ -12,7 +12,8 @@ func MakeBouncer(networkList []int) *Bouncer {
 
 	rpcClients := []*rpchttp.HTTP{}
 	for i := range networkList {
-		lAddr := fmt.Sprintf("tcp://%s:%d", Networks[i].Ip[0], Networks[i].Port+1)
+		j := networkList[i]
+		lAddr := fmt.Sprintf("tcp://%s:%d", Networks[j].Ip[0], Networks[j].Port+1)
 		client, err := rpchttp.New(lAddr, "/websocket")
 		if err != nil {
 			return nil
