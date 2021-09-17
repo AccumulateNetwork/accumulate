@@ -106,10 +106,52 @@ func TestLoadOnRemote(t *testing.T) {
 
 	txBouncer.SendTx(gtx)
 
-	Load(t, txBouncer, privateKey)
+	//Load(t, txBouncer, privateKey)
 
-	txBouncer.BatchSend()
+	//txBouncer.BatchSend()
 
+	time.Sleep(3000 * time.Millisecond)
+
+	queryTokenUrl := destAddress + "/" + tokenUrl
+	query := NewQuery(txBouncer)
+
+	resp, err := query.GetChainState(queryTokenUrl.AsString())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// fmt.Println(string(*resp.Data))
+	output, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(output))
+
+	queryme := "acme-b8d3aa6a4da74ca2a2cfeee0c0f03f78bb47f2fda8d1732f" ///dc/ACME"
+	jsonapi := API{RandPort(), validator.New(), nil, query, txBouncer}
+	_ = jsonapi
+
+	params := &api.APIRequestURL{URL: types.String(queryme)}
+	gParams, err := json.Marshal(params)
+	//ret, err := txBouncer.Query(queryTokenUrl.AsString())
+	theData := jsonapi.getData(context.Background(), gParams)
+	theJsonData, err := json.Marshal(theData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	println(string(theJsonData))
+
+	resp, err = query.GetChainState(&queryme)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// fmt.Println(string(*resp.Data))
+	output, err = json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(output))
 }
 
 func _TestJsonRpcAnonToken(t *testing.T) {
