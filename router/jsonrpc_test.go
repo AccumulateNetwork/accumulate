@@ -13,12 +13,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/networks"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/go-playground/validator/v10"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
@@ -81,20 +82,17 @@ func _TestLoadOnRemote(t *testing.T) {
 	deposit.TokenUrl = tokenUrl
 
 	depData, err := deposit.MarshalBinary()
-	gtx := new(proto.GenTransaction)
+	gtx := new(transactions.GenTransaction)
 	gtx.Transaction = depData
 	if err := gtx.SetRoutingChainID(*destAddress.AsString()); err != nil {
 		t.Fatal("bad url generated")
 	}
-	dataToSign, err := gtx.MarshalBinary()
-	if err != nil {
-		t.Fatal(err)
-	}
+	dataToSign := gtx.TxId()
 
-	ed := new(proto.ED25519Sig)
-	ed.Nonce = 1
+	ed := new(transactions.ED25519Sig)
+	gtx.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(privateKey, dataToSign)
+	err = ed.Sign(gtx.Nonce, privateKey, dataToSign)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +153,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	deposit.TokenUrl = tokenUrl
 
 	depData, err := deposit.MarshalBinary()
-	gtx := new(proto.GenTransaction)
+	gtx := new(transactions.GenTransaction)
 	gtx.Transaction = depData
 	if err := gtx.SetRoutingChainID(*destAddress.AsString()); err != nil {
 		t.Fatal("bad url generated")
@@ -165,10 +163,10 @@ func TestJsonRpcAnonToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ed := new(proto.ED25519Sig)
-	ed.Nonce = 1
+	ed := new(transactions.ED25519Sig)
+	gtx.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(privateKey, dataToSign)
+	err = ed.Sign(gtx.Nonce, privateKey, dataToSign)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +227,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down.
-	time.Sleep(30000 * time.Millisecond)
+	time.Sleep(10000 * time.Millisecond)
 
 }
 
@@ -242,12 +240,11 @@ type walletEntry struct {
 // Sign
 // Makes it easier to sign transactions.  Create the ED25519Sig object, sign
 // the message, and return the ED25519Sig object to caller
-func (we *walletEntry) Sign(message []byte) *proto.ED25519Sig { // sign a message
-	we.Nonce++                       //                            Everytime we sign, increment the nonce
-	sig := new(proto.ED25519Sig)     //                            create a signature object
-	sig.Nonce = we.Nonce             //                            use the updated nonce
-	sig.Sign(we.PrivateKey, message) //                            sign the message
-	return sig                       //                            return the signature object
+func (we *walletEntry) Sign(message []byte) *transactions.ED25519Sig { // sign a message
+	we.Nonce++                                 //                         Everytime we sign, increment the nonce
+	sig := new(transactions.ED25519Sig)        //                         create a signature object
+	sig.Sign(we.Nonce, we.PrivateKey, message) //                         sign the message
+	return sig                                 //                         return the signature object
 }
 
 func (we *walletEntry) Public() []byte {
@@ -267,25 +264,25 @@ func Load(t *testing.T,
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
-	for i := 1; i <= 20; i++ { //                            create a 1000 addresses for anonymous token chains
+	for i := 1; i <= 2000; i++ { //                            create a 1000 addresses for anonymous token chains
 		wallet = append(wallet, new(walletEntry))                            // create a new wallet entry
 		wallet[i].Nonce = 1                                                  // starting nonce of 1
 		_, wallet[i].PrivateKey, _ = ed25519.GenerateKey(nil)                // generate a private key
 		wallet[i].Addr = anon.GenerateAcmeAddress(wallet[i].PrivateKey[32:]) // generate the address encoding URL
 	}
 
-	for i := 1; i < 10000; i++ { // Make a bunch of transactions
-		if i%2000 == 0 {
+	for i := 1; i < 100000; i++ { // Make a bunch of transactions
+		if i%100 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 		}
 		const origin = 0
-		randDest := rand.Int()%(len(wallet)-1) + 1                         // pick a destination address
-		out := proto.Output{Dest: wallet[randDest].Addr, Amount: 1000}     // create the transaction output
-		send := proto.NewTokenSend(wallet[origin].Addr, out)               // Create a send token transaction
-		gtx := new(proto.GenTransaction)                                   // wrap in a GenTransaction
-		gtx.Transaction = send.Marshal()                                   // place in the send the transaction (must be sent to source)
-		if err := gtx.SetRoutingChainID(wallet[origin].Addr); err != nil { // Routing ChainID is the tx source
+		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address
+		out := transactions.Output{Dest: wallet[randDest].Addr, Amount: 1000} // create the transaction output
+		send := transactions.NewTokenSend(wallet[origin].Addr, out)           // Create a send token transaction
+		gtx := new(transactions.GenTransaction)                               // wrap in a GenTransaction
+		gtx.Transaction = send.Marshal()                                      // place in the send the transaction (must be sent to source)
+		if err := gtx.SetRoutingChainID(wallet[origin].Addr); err != nil {    // Routing ChainID is the tx source
 			t.Fatal("bad url generated") // error should never happen
 		}
 
