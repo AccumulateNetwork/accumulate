@@ -21,7 +21,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 
 	// make "get" request to JSON RPC API
 	vars := mux.Vars(r)
-	fmt.Printf("=============== proxyHandler ================== %s", vars["url"])
+	fmt.Printf("=============== proxyHandler Is going to send : %s ===========\n\n\n", vars["url"])
 	params := &acmeapi.APIRequestURL{URL: types.String(vars["url"])}
 
 	result, err := c.Call("get", params)
