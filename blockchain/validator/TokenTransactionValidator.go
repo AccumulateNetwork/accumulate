@@ -159,7 +159,7 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		return nil, fmt.Errorf("invalid nonce in transaction, cannot proceed")
 	}
 
-	txid := submission.TxHash
+	txid := submission.TransactionHash()
 
 	ret := ResponseValidateTX{}
 	ret.Submissions = make([]*transactions.GenTransaction, len(withdrawl.Outputs)+1)
