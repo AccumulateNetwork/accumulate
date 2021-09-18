@@ -2,20 +2,13 @@ package validator
 
 import (
 	"encoding/json"
-
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
+	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
-
-	//"crypto/sha256"
-	"fmt"
-	//"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
-
-	//dbm "github.com/tendermint/tm-db"
 	"time"
 )
 
