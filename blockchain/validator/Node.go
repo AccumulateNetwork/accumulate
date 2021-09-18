@@ -6,22 +6,18 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"net"
-	"sync"
-	"time"
-
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
 	"github.com/AccumulateNetwork/accumulated/networks"
-
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	"net"
+	"sync"
+	"time"
 )
 
 // Node implements the general parameters to stimulate the validators, provide synthetic transactions, and issue state changes

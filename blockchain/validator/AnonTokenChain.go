@@ -4,15 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"math/big"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
-	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
-
 	"github.com/AccumulateNetwork/accumulated/types"
+	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
+	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"

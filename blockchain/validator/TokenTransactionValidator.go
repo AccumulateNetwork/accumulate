@@ -7,9 +7,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
