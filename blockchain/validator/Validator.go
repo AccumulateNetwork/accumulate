@@ -3,6 +3,8 @@ package validator
 import (
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 
@@ -14,10 +16,10 @@ import (
 )
 
 type ResponseValidateTX struct {
-	StateData   map[types.Bytes32]types.Bytes //acctypes.StateObject
-	PendingData map[types.Bytes32]types.Bytes //stuff to store on pending chain.
-	EventData   []byte                        //this should be events that need to get published
-	Submissions []*pb.GenTransaction          //this is a list of synthetic transactions
+	StateData   map[types.Bytes32]types.Bytes  //acctypes.StateObject
+	PendingData map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
+	EventData   []byte                         //this should be events that need to get published
+	Submissions []*transactions.GenTransaction //this is a list of synthetic transactions
 }
 
 func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []byte) {
@@ -37,9 +39,9 @@ func (r *ResponseValidateTX) AddPendingData(chainid *types.Bytes32, stateData []
 type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error
-	Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error
-	Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) //return persistent entry or error
-	EndBlock(mdroot []byte) error                                                                        //do something with MD root
+	Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error
+	Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) //return persistent entry or error
+	EndBlock(mdroot []byte) error                                                                                  //do something with MD root
 
 	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated
 	GetInfo() *ValidatorInfo

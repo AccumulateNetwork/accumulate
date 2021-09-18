@@ -3,6 +3,8 @@ package validator
 import (
 	"encoding/json"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -28,7 +30,7 @@ func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	return &v
 }
 
-func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	return nil
 }
 func (v *TokenIssuanceValidator) Initialize(config *cfg.Config) error {
@@ -44,7 +46,7 @@ func (v *TokenIssuanceValidator) BeginBlock(height int64, time *time.Time) error
 	return nil
 }
 
-func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentState == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current State not defined")
@@ -94,7 +96,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 
 	//return a new state object for a token
 	chainId := types.Bytes32{}
-	copy(chainId[:], submission.GetChainID())
+	copy(chainId[:], submission.ChainID)
 	resp.AddStateData(&chainId, tasso)
 
 	return resp, nil

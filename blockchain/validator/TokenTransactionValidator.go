@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -27,7 +29,7 @@ func NewTokenTransactionValidator() *TokenTransactionValidator {
 }
 
 // canTransact is a helper function to parse and check for errors in the transaction data
-func canSendTokens(currentState *state.StateEntry, withdrawal *pb.TokenSend) (*state.AdiState, *state.TokenAccount, error) {
+func canSendTokens(currentState *state.StateEntry, withdrawal *transactions.TokenSend) (*state.AdiState, *state.TokenAccount, error) {
 
 	if currentState.ChainState == nil {
 		return nil, nil, fmt.Errorf("no account exists for the chain")
@@ -85,13 +87,13 @@ func canSendTokens(currentState *state.StateEntry, withdrawal *pb.TokenSend) (*s
 }
 
 // Check will perform a sanity check to make sure transaction seems reasonable
-func (v *TokenTransactionValidator) Check(currentState *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *TokenTransactionValidator) Check(currentState *state.StateEntry, submission *transactions.GenTransaction) error {
 
 	if currentState.IdentityState == nil {
 		return fmt.Errorf("identity state does not exist for anonymous transaction")
 	}
 
-	withdrawl := pb.TokenSend{} //api.TokenTx{}
+	withdrawl := transactions.TokenSend{} //api.TokenTx{}
 	leftover := withdrawl.Unmarshal(submission.Transaction)
 	if leftover != nil {
 		return fmt.Errorf("error with send token")
@@ -117,9 +119,9 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 }
 
 // Validate validates a token transaction
-func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
+func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
-	withdrawl := pb.TokenSend{} //api.TokenTx{}
+	withdrawl := transactions.TokenSend{} //api.TokenTx{}
 	leftover := withdrawl.Unmarshal(submission.Transaction)
 	if leftover != nil {
 		return nil, fmt.Errorf("error with send token")
@@ -153,14 +155,14 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		return nil, fmt.Errorf("unable to unmarshal adiChain")
 	}
 	//need to do a nonce check.
-	if submission.Signature[0].Nonce <= ids.Nonce {
+	if submission.SigInfo.Nonce <= ids.Nonce {
 		return nil, fmt.Errorf("invalid nonce in transaction, cannot proceed")
 	}
 
-	txid := submission.TxId()
+	txid := submission.TxHash
 
 	ret := ResponseValidateTX{}
-	ret.Submissions = make([]*pb.GenTransaction, len(withdrawl.Outputs)+1)
+	ret.Submissions = make([]*transactions.GenTransaction, len(withdrawl.Outputs)+1)
 
 	txAmt := big.NewInt(0)
 	var amt big.Int
@@ -184,7 +186,7 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		}
 
 		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
-		sub := pb.GenTransaction{}
+		sub := transactions.GenTransaction{}
 		ret.Submissions[i] = &sub
 
 		//set the identity chain for the destination
