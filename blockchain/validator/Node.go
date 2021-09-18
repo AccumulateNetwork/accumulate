@@ -16,8 +16,6 @@ import (
 
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 
-	ptypes "github.com/tendermint/tendermint/abci/types"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -35,10 +33,9 @@ type Node struct {
 	leader         bool
 	key            ed25519.PrivateKey
 	nonce          uint64
-	rpcClient      *rpchttp.HTTP
-	batch          [2]*rpchttp.BatchHTTP
-	txBouncer      networks.Bouncer
-	height         int64
+
+	txBouncer *networks.Bouncer
+	height    int64
 
 	wait      sync.WaitGroup
 	chainWait map[uint64]*sync.WaitGroup
@@ -68,15 +65,15 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 
 	laddr := viper.GetString("rpc.laddr")
 
-	app.rpcClient, _ = rpchttp.New(laddr, "/websocket")
+	rpcClient, _ := rpchttp.New(laddr, "/websocket")
 
 	app.chainValidator = chainValidator
 	app.leader = false
 
 	app.key = key
 
-	app.batch[0] = app.rpcClient.NewBatch()
-	app.batch[1] = app.rpcClient.NewBatch()
+	rpcClients := []*rpchttp.HTTP{rpcClient}
+	app.txBouncer = networks.NewBouncer(rpcClients)
 	return nil
 }
 
@@ -153,10 +150,10 @@ func (app *Node) CanTransact(transaction *transactions.GenTransaction) error {
 	if err := transaction.SetRoutingChainID(); err != nil {
 		return err
 	}
-	app.mutex.Lock()
+	//app.mutex.Lock()
 	//populate the current state from the StateDB
 	currentState, _ := app.getCurrentState(transaction.ChainID)
-	app.mutex.Unlock()
+	//app.mutex.Unlock()
 
 	if err := app.verifyGeneralTransaction(currentState, transaction); err != nil {
 		return fmt.Errorf("cannot proceed with transaction, verification failed, %v", err)
@@ -169,26 +166,27 @@ func (app *Node) CanTransact(transaction *transactions.GenTransaction) error {
 func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 
 	if transaction.Transaction == nil || transaction.SigInfo == nil ||
-		len(transaction.ChainID) != 32 || len(transaction.TxHash) != 32 {
+		len(transaction.ChainID) != 32 {
 		return fmt.Errorf("malformd general transaction")
 	}
 
-	app.mutex.Lock()
+	_ = transaction.TransactionHash()
 
-	var group *sync.WaitGroup
-	if group = app.chainWait[transaction.Routing]; group == nil {
-		group = &sync.WaitGroup{}
-		app.chainWait[transaction.Routing] = group
-
-	}
-	group.Wait()
-	group.Add(1)
-	defer func() {
-		group.Done()
-		app.wait.Add(-1)
-	}()
-
-	app.mutex.Unlock()
+	//app.mutex.Lock()
+	//
+	//var group *sync.WaitGroup
+	//if group = app.chainWait[transaction.Routing]; group == nil {
+	//	group = &sync.WaitGroup{}
+	//	app.chainWait[transaction.Routing] = group
+	//
+	//}
+	//group.Wait()
+	//group.Add(1)
+	//defer func() {
+	//	group.Done()
+	//	app.wait.Add(-1)
+	//}()
+	//app.mutex.Unlock()
 
 	currentState, _ := app.getCurrentState(transaction.ChainID)
 
@@ -249,14 +247,14 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 // transaction []byte will be replaced by transaction RawTransaction
 func (app *Node) Validate(transaction *transactions.GenTransaction) error {
 
-	app.wait.Add(1)
+	//app.wait.Add(1)
 	err := app.doValidation(transaction)
 	return err
 }
 
 // EndBlock will return the merkle DAG root of the current state
 func (app *Node) EndBlock() ([]byte, error) {
-	app.wait.Wait()
+	//app.wait.Wait()
 	mdRoot, numStateChanges, err := app.mmDB.WriteStates(app.chainValidator.GetCurrentHeight())
 
 	if err != nil {
@@ -279,10 +277,7 @@ func (app *Node) EndBlock() ([]byte, error) {
 		//app.processValidatedSubmissionRequest(&dbvc)
 	}
 
-	//probably should use channels here instead.
-	go app.dispatch(int(app.height % 2))
-
-	//app.txBouncer.BatchSend()
+	app.txBouncer.BatchSend()
 
 	fmt.Printf("DB time %f\n", app.mmDB.TimeBucket)
 	app.mmDB.TimeBucket = 0
@@ -333,6 +328,11 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 
 			ed := new(transactions.ED25519Sig)
 			ed.PublicKey = app.key[32:]
+			if v.SigInfo == nil {
+				panic("siginfo for synthetic transaction is not set, shouldn't get here")
+			}
+
+			v.SigInfo.Nonce = uint64(time.Now().Unix())
 			err := ed.Sign(1, app.key, dataToSign)
 			if err != nil {
 				panic(fmt.Sprintf("cannot sign synthetic transaction, shoudn't get here, %v", err))
@@ -340,13 +340,8 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 
 			v.Signature = append(v.Signature, ed)
 
-			deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
-			deliverRequestTXAsync.Tx, err = v.Marshal()
-			if err != nil {
-				return err
-			}
+			app.txBouncer.BatchTx(v)
 
-			_, err = app.batch[app.height%2].BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 			if err != nil {
 				return err
 			}
@@ -354,13 +349,6 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 		}
 	}
 	return nil
-}
-
-func (app *Node) dispatch(batchNum int) {
-	if app.batch[batchNum].Count() > 0 {
-		app.batch[batchNum].Send(context.Background())
-		app.batch[batchNum].Clear()
-	}
 }
 
 // dialerFunc is a helper function for protobuffers

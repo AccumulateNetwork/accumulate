@@ -54,7 +54,13 @@ func (t *TokenSend) Marshal() []byte {
 
 // Unmarshal
 // Unmarshal a transaction
-func (t *TokenSend) Unmarshal(data []byte) []byte { //                       Pull the state out of the data into the tx
+func (t *TokenSend) Unmarshal(data []byte) ([]byte, error) { //                       Pull the state out of the data into the tx
+	defer func() {
+		if err := recover(); err != nil {
+			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		}
+	}()
+
 	tag, data := common.BytesUint64(data)                      //       Get the tag
 	if tag != uint64(proto.AccInstruction_Token_Transaction) { //       Tag better be right
 		panic(fmt.Sprintf("not a token transaction, expected %d got %d", // Blow up if not, and we don't have to save
@@ -72,7 +78,7 @@ func (t *TokenSend) Unmarshal(data []byte) []byte { //                       Pul
 		output.Dest = string(url)                      //
 		t.Outputs = append(t.Outputs, output)          //                      Add the output
 	} //
-	return data //                                                          Return the data
+	return data, nil //                                                          Return the data
 }
 
 /*

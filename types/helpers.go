@@ -154,7 +154,12 @@ func (s *Bytes) MarshalBinary() ([]byte, error) {
 	return data, nil
 }
 
-func (s *Bytes) UnmarshalBinary(data []byte) error {
+func (s *Bytes) UnmarshalBinary(data []byte) (err error) {
+	defer func() { //
+		if recover() != nil { //
+			err = fmt.Errorf("error unmarshaling byte array %v", err) //
+		} //
+	}()
 	slen, l := binary.Varint(data)
 	if l == 0 {
 		return nil
@@ -166,7 +171,7 @@ func (s *Bytes) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("insufficient data to unmarshal")
 	}
 	*s = data[l : int(slen)+l]
-	return nil
+	return err
 }
 
 func (s *Bytes) Size(varintbuf *[8]byte) int {

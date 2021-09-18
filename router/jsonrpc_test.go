@@ -191,7 +191,9 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	if _, err := txBouncer.BatchTx(gtx); err != nil {
+	_, err = txBouncer.SendTx(gtx)
+	//_, err := txBouncer.BatchTx(gtx)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -272,7 +274,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down.
-	time.Sleep(10000 * time.Millisecond)
+	time.Sleep(30000 * time.Millisecond)
 
 }
 
@@ -282,18 +284,15 @@ func Load(t *testing.T,
 	txBouncer *networks.Bouncer,
 	Origin ed25519.PrivateKey) {
 
-	var wallet []*walletEntry
+	var wallet []*transactions.WalletEntry
 
-	wallet = append(wallet, NewWalletEntry())              // wallet[0] is where we put 5000 ACME tokens
+	wallet = append(wallet, transactions.NewWalletEntry()) // wallet[0] is where we put 5000 ACME tokens
 	wallet[0].Nonce = 1                                    // start the nonce at 1
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
 	for i := 1; i <= 2000; i++ { //                            create a 1000 addresses for anonymous token chains
-		wallet = append(wallet, new(walletEntry))                            // create a new wallet entry
-		wallet[i].Nonce = 1                                                  // starting nonce of 1
-		_, wallet[i].PrivateKey, _ = ed25519.GenerateKey(nil)                // generate a private key
-		wallet[i].Addr = anon.GenerateAcmeAddress(wallet[i].PrivateKey[32:]) // generate the address encoding URL
+		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
 	}
 
 	for i := 1; i < 100000; i++ { // Make a bunch of transactions

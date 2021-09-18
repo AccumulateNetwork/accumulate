@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"encoding"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -10,8 +9,6 @@ import (
 )
 
 type MultiSigTx struct {
-	encoding.BinaryMarshaler
-	encoding.BinaryUnmarshaler
 	TxHash types.Bytes32 `json:"hash" form:"url" query:"url" validate:"required"`
 }
 

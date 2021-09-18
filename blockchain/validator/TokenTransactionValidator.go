@@ -93,13 +93,13 @@ func (v *TokenTransactionValidator) Check(currentState *state.StateEntry, submis
 		return fmt.Errorf("identity state does not exist for anonymous transaction")
 	}
 
-	withdrawl := transactions.TokenSend{} //api.TokenTx{}
-	leftover := withdrawl.Unmarshal(submission.Transaction)
-	if leftover != nil {
-		return fmt.Errorf("error with send token")
+	withdrawal := transactions.TokenSend{} //api.TokenTx{}
+	_, err := withdrawal.Unmarshal(submission.Transaction)
+	if err != nil {
+		return fmt.Errorf("error with send token in TokenTransactionValidator.Check, %v", err)
 	}
 
-	_, _, err := canSendTokens(currentState, &withdrawl)
+	_, _, err = canSendTokens(currentState, &withdrawal)
 	return err
 }
 
@@ -122,9 +122,9 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
 	withdrawl := transactions.TokenSend{} //api.TokenTx{}
-	leftover := withdrawl.Unmarshal(submission.Transaction)
-	if leftover != nil {
-		return nil, fmt.Errorf("error with send token")
+	_, err := withdrawl.Unmarshal(submission.Transaction)
+	if err != nil {
+		return nil, fmt.Errorf("error with send token in TokenTransactionValidator.Validate, %v", err)
 	}
 
 	ids, tas, err := canSendTokens(currentState, &withdrawl)

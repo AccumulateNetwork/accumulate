@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -30,6 +31,6 @@ func TestTokenAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// fmt.Printf("%s", string(data))
+	fmt.Printf("%s", string(data))
 
 }
