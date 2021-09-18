@@ -3,6 +3,7 @@ package validator
 import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -28,7 +29,7 @@ func NewAdiChain() *AdiChain {
 	return &v
 }
 
-func (v *AdiChain) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *AdiChain) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	if currentstate == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
@@ -69,7 +70,7 @@ func (v *AdiChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
 	return nil
 }
 
-func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *pb.GenTransaction, resp *ResponseValidateTX) error {
+func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *transactions.GenTransaction, resp *ResponseValidateTX) error {
 	if currentstate == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current State Not Defined")
@@ -90,8 +91,8 @@ func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *
 		return fmt.Errorf("key is not supported by current ADI state")
 	}
 
-	if !adiState.VerifyAndUpdateNonce(submission.Signature[0].Nonce) {
-		return fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Signature[0].Nonce)
+	if !adiState.VerifyAndUpdateNonce(submission.SigInfo.Nonce) {
+		return fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.SigInfo.Nonce)
 	}
 
 	ic := api.ADI{}
@@ -101,7 +102,7 @@ func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *
 		return fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
-	isc := synthetic.NewAdiStateCreate(submission.TxId(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
+	isc := synthetic.NewAdiStateCreate(submission.TransactionHash(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
 
 	if err != nil {
 		return err
@@ -115,7 +116,7 @@ func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *
 	resp = &ResponseValidateTX{}
 
 	//send of a synthetic transaction to the correct network
-	resp.Submissions = make([]*pb.GenTransaction, 1)
+	resp.Submissions = make([]*transactions.GenTransaction, 1)
 	sub := resp.Submissions[0]
 	sub.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
 	sub.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
@@ -128,7 +129,7 @@ func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *
 	return nil
 }
 
-func (v *AdiChain) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *AdiChain) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
 	err = v.processAdiCreate(currentState, submission, resp)
 	return resp, err
 }

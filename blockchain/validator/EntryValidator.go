@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
@@ -56,7 +58,7 @@ func NewEntryValidator() *EntryValidator {
 	return &v
 }
 
-func (v *EntryValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *EntryValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	return fmt.Errorf("entry validator not yet implemented")
 }
 func (v *EntryValidator) Initialize(config *cfg.Config) error {
@@ -73,7 +75,7 @@ func (v *EntryValidator) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *EntryValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
+func (v *EntryValidator) Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
 	//entry design is TBD...
 
 	//datalen := uint64(len(data))

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -25,7 +27,7 @@ func NewTokenChainCreateValidator() *TokenChainCreateValidator {
 	return &v
 }
 
-func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	if currentstate == nil {
 		return fmt.Errorf("current state not defined")
 	}
@@ -59,7 +61,7 @@ func (v *TokenChainCreateValidator) BeginBlock(height int64, time *time.Time) er
 	return nil
 }
 
-func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}

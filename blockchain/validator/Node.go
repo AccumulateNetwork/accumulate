@@ -4,11 +4,15 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/networks"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
+	"github.com/AccumulateNetwork/accumulated/networks"
 
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 
@@ -26,10 +30,11 @@ import (
 type Node struct {
 	AccRpcAddr string
 
-	mmDB           state.StateDB
-	chainValidator *ValidatorContext
+	mmDB           state.StateDB     // State database
+	chainValidator *ValidatorContext // Chain Validator
 	leader         bool
 	key            ed25519.PrivateKey
+	nonce          uint64
 	rpcClient      *rpchttp.HTTP
 	batch          [2]*rpchttp.BatchHTTP
 	txBouncer      networks.Bouncer
@@ -128,7 +133,7 @@ func (app *Node) getCurrentState(chainId []byte) (*state.StateEntry, error) {
 
 // verifyGeneralTransaction will check the nonce (if applicable), check the public key for the transaction,
 // and verify the signature of the transaction.
-func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transaction *pb.GenTransaction) error {
+func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transaction *transactions.GenTransaction) error {
 
 	if currentState.IsValid(state.MaskChainState | state.MaskAdiState) {
 		//1. verify nonce
@@ -144,11 +149,11 @@ func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transa
 }
 
 // CanTransact will do light validation on the transaction
-func (app *Node) CanTransact(transaction *pb.GenTransaction) error {
+func (app *Node) CanTransact(transaction *transactions.GenTransaction) error {
 
 	app.mutex.Lock()
 	//populate the current state from the StateDB
-	currentState, _ := app.getCurrentState(transaction.GetChainID())
+	currentState, _ := app.getCurrentState(transaction.ChainID)
 	app.mutex.Unlock()
 
 	if err := app.verifyGeneralTransaction(currentState, transaction); err != nil {
@@ -160,7 +165,12 @@ func (app *Node) CanTransact(transaction *pb.GenTransaction) error {
 	return nil
 }
 
-func (app *Node) doValidation(transaction *pb.GenTransaction) error {
+func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
+
+	if transaction.Transaction == nil || transaction.SigInfo == nil ||
+		len(transaction.ChainID) != 32 || len(transaction.TxHash) != 32 {
+		return fmt.Errorf("malformd general transaction")
+	}
 
 	app.mutex.Lock()
 
@@ -179,10 +189,11 @@ func (app *Node) doValidation(transaction *pb.GenTransaction) error {
 
 	app.mutex.Unlock()
 
-	currentState, _ := app.getCurrentState(transaction.GetChainID())
+	currentState, _ := app.getCurrentState(transaction.ChainID)
 
+	transactionType, _ := binary.Varint(transaction.Transaction)
 	//placeholder for special validation rules for synthetic transactions.
-	if transaction.GetTransactionType()&0xFF00 > 0 {
+	if transactionType&0xFF00 > 0 {
 		//need to verify the sender is a legit bvc validator also need the dbvc receipt
 		//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
 		//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
@@ -227,7 +238,7 @@ func (app *Node) doValidation(transaction *pb.GenTransaction) error {
 
 // Validate will do a deep validation of the transaction.  This is done by ALL the validators in the network
 // transaction []byte will be replaced by transaction RawTransaction
-func (app *Node) Validate(transaction *pb.GenTransaction) error {
+func (app *Node) Validate(transaction *transactions.GenTransaction) error {
 
 	app.wait.Add(1)
 	err := app.doValidation(transaction)
@@ -248,8 +259,8 @@ func (app *Node) EndBlock() ([]byte, error) {
 	if app.leader && numStateChanges > 0 {
 		//now we create a synthetic transaction and publish to the directory block validator
 		dbvc := ResponseValidateTX{}
-		dbvc.Submissions = make([]*pb.GenTransaction, 1)
-		dbvc.Submissions[0] = &pb.GenTransaction{}
+		dbvc.Submissions = make([]*transactions.GenTransaction, 1)
+		dbvc.Submissions[0] = &transactions.GenTransaction{}
 		dcAdi := "dc"
 		dbvc.Submissions[0].ChainID = types.GetChainIdFromChainPath(&dcAdi).Bytes()
 		dbvc.Submissions[0].Routing = types.GetAddressFromIdentity(&dcAdi)
@@ -311,10 +322,9 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 				panic("no synthetic transaction defined.  shouldn't get here.")
 			}
 
-			ed := new(pb.ED25519Sig)
-			ed.Nonce = uint64(time.Now().Unix())
+			ed := new(transactions.ED25519Sig)
 			ed.PublicKey = app.key[32:]
-			err := ed.Sign(app.key, dataToSign)
+			err := ed.Sign(1, app.key, dataToSign)
 			if err != nil {
 				panic(fmt.Sprintf("cannot sign synthetic transaction, shoudn't get here, %v", err))
 			}

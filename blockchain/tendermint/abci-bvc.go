@@ -3,6 +3,8 @@ package tendermint
 import (
 	"bytes"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 
@@ -321,25 +323,25 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) (rct 
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 	//the submission is the format of the Tx input
-	sub := &pb.GenTransaction{}
+	sub := &transactions.GenTransaction{}
 
 	//unpack the request
-	whatevs, err1 := sub.UnMarshal(req.Tx)
+	rem, err := sub.UnMarshal(req.Tx)
 
 	//check to see if there was an error decoding the submission
-	if len(whatevs) != 0 {
+	if len(rem) != 0 || err != nil {
 		//reject it
 		return abcitypes.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
 
-	err2 := app.chainValidatorNode.CanTransact(sub)
+	err = app.chainValidatorNode.CanTransact(sub)
 
-	if err1 != nil || err2 != nil {
+	if err != nil {
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("entry check failed %v for url %x, %v \n", sub.GetTransactionType(), sub.GetChainID(), err2)
+		ret.Info = fmt.Sprintf("entry check failed %v for url %x, %v \n", sub.Transaction[0], sub.ChainID, err)
 		return ret
 	}
 
@@ -361,7 +363,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	}()
 	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: nil, Code: code.CodeTypeOK}
 
-	sub := &pb.GenTransaction{}
+	sub := &transactions.GenTransaction{}
 
 	//unpack the request
 	//how do i detect errors?  This causes segfaults if not tightly checked.
@@ -372,14 +374,14 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	}
 
 	//run through the validation node
-	err2 := app.chainValidatorNode.Validate(sub)
+	err = app.chainValidatorNode.Validate(sub)
 
-	if err2 != nil {
+	if err != nil {
 		ret.Code = code.CodeTypeUnauthorized
 		//ret.GasWanted = 0
 		//ret.GasUsed = 0
 		//we don't care about failure as far as tendermint is concerned.
-		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.GetTransactionType(), err2)
+		ret.Info = fmt.Sprintf("entry check failed on validator %v \n", err)
 		return ret
 	}
 
