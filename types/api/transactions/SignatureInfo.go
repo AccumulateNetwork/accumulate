@@ -35,12 +35,6 @@ import (
 // The nonce of the transaction submission must be equal to the nonce of
 // the signature that submitted the transaction.
 type SignatureInfo struct {
-
-	// Routing and ChainID are computed when the transaction is constructed, or
-	// when a constructed transaction is unmarshalled.
-	Routing uint64 //            first 8 bytes of hash of identity [NOT marshaled]
-	ChainID []byte //            hash of chain URL [NOT marshaled]
-
 	// The following elements are all part of the Transaction that goes onto
 	// the main chain.  But the only thing that varies from one transaction
 	// to another is the transaction itself.

@@ -229,7 +229,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	//now build the synthetic transactions.
 	resp.Submissions = make([]*transactions.GenTransaction, len(withdrawal.Outputs))
 
-	txid := submission.TxHash
+	txid := submission.TransactionHash()
 	txAmt := big.NewInt(0)
 	amt := types.Amount{}
 	for i, val := range withdrawal.Outputs {
@@ -380,17 +380,14 @@ func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *tr
 	var err error
 	resp := &ResponseValidateTX{}
 
-	switch pb.AccInstruction(submission.Transaction[0]) {
-	case pb.AccInstruction_Identity_Creation:
-		//this chain will sponsor creation of a new ADI
-		err = v.processAdiCreate(currentState, submission, resp)
-	case pb.AccInstruction_Synthetic_Token_Deposit:
+	switch t := submission.TransactionType(); t {
+	case uint64(pb.AccInstruction_Synthetic_Token_Deposit):
 		//need to verify synthetic deposit.
 		err = v.processDeposit(currentState, submission, resp)
-	case pb.AccInstruction_Token_Transaction:
+	case uint64(pb.AccInstruction_Token_Transaction):
 		err = v.processSendToken(currentState, submission, resp)
 	default:
-		err = fmt.Errorf("unable to process anonomous token with invalid instruction, %d", submission.Transaction[0])
+		err = fmt.Errorf("unable to process anonomous token with invalid instruction, %d", t)
 	}
 
 	return resp, err

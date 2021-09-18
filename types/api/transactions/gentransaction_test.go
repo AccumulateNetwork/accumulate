@@ -92,7 +92,7 @@ func TestTokenTransaction(t *testing.T) {
 	if !to.ValidateSig() {
 		t.Error("failed to validate signature")
 	}
-	to.Routing++
+	to.Signature[0].Nonce++
 	if to.ValidateSig() {
 		t.Error("failed to invalidate signature")
 	}

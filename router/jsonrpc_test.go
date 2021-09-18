@@ -25,45 +25,12 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-//RouterNode{
-//Name: "Arches",
-//Port: 33000,
-//Ip: []string{
-//"13.51.10.110",
-//"13.232.230.216",
-//},
-//},
-//RouterNode{
-//Name: "AmericanSamoa",
-//Port: 33000,
-//Ip: []string{
-//"18.221.39.36",
-//"44.236.45.58",
-//},
-
-func makeBouncer() *networks.Bouncer {
-	//laddr := []string { "tcp://18.221.39.36:33001", "tcp://44.236.45.58:33001","tcp://13.51.10.110:33001", "tcp://13.232.230.216:33001" }
-	lAddr := []string{"tcp://18.221.39.36:33001", "tcp://13.51.10.110:33001"}
-
-	rpcClients := []*rpchttp.HTTP{}
-
-	rpcClient1, _ := rpchttp.New(lAddr[0], "/websocket")
-	rpcClient2, _ := rpchttp.New(lAddr[1], "/websocket")
-	rpcClients = append(rpcClients, rpcClient1)
-	rpcClients = append(rpcClients, rpcClient2)
-	txBouncer := networks.NewBouncer(rpcClients)
-	return txBouncer
-}
-
 func _TestLoadOnRemote(t *testing.T) {
 
-	txBouncer := makeBouncer()
-
 	networksList := []int{3}
-	txBouncer = networks.MakeBouncer(networksList)
+	txBouncer := networks.MakeBouncer(networksList)
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
-	//_, privateKey, _ := ed25519.GenerateKey(nil)
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
 	kpSponsor := privateKeySponsor
@@ -88,12 +55,14 @@ func _TestLoadOnRemote(t *testing.T) {
 	depData, err := deposit.MarshalBinary()
 	gtx := new(transactions.GenTransaction)
 	gtx.Transaction = depData
-	gtx.ChainID = types.GetChainIdFromChainPath(destAddress.AsString())[:]
-	gtx.Routing = types.GetAddressFromIdentity(destAddress.AsString())
+	gtx.SigInfo = new(transactions.SignatureInfo)
+	gtx.SigInfo.URL = *destAddress.AsString()
+	if err := gtx.SetRoutingChainID(); err != nil {
+		t.Fatal("bad url generated")
+	}
 	dataToSign := gtx.TransactionHash()
 
 	ed := new(transactions.ED25519Sig)
-	gtx.SigInfo = &transactions.SignatureInfo{}
 	gtx.SigInfo.Nonce = 1
 	ed.PublicKey = privateKeySponsor[32:]
 	err = ed.Sign(gtx.SigInfo.Nonce, privateKeySponsor, dataToSign)
@@ -150,7 +119,6 @@ func _TestLoadOnRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// fmt.Println(string(*resp.Data))
 	output, err = json.Marshal(resp)
 	if err != nil {
 		t.Fatal(err)
@@ -158,7 +126,7 @@ func _TestLoadOnRemote(t *testing.T) {
 	//fmt.Println(string(output))
 }
 
-func _TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
 
@@ -207,24 +175,25 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 
 	depData, err := deposit.MarshalBinary()
 	gtx := new(transactions.GenTransaction)
+	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.Transaction = depData
+	gtx.SigInfo.URL = *destAddress.AsString()
 	gtx.ChainID = types.GetChainIdFromChainPath(destAddress.AsString())[:]
 	gtx.Routing = types.GetAddressFromIdentity(destAddress.AsString())
-	gtx.SigInfo = &transactions.SignatureInfo{}
-
-	dataToSign := gtx.TransactionHash()
 
 	ed := new(transactions.ED25519Sig)
 	gtx.SigInfo.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.SigInfo.Nonce, privateKey, dataToSign)
+	err = ed.Sign(gtx.SigInfo.Nonce, privateKey, gtx.TransactionHash())
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	txBouncer.SendTx(gtx)
+	if _, err := txBouncer.BatchTx(gtx); err != nil {
+		t.Fatal(err)
+	}
 
 	Load(t, txBouncer, privateKey)
 
@@ -337,12 +306,14 @@ func Load(t *testing.T,
 		out := transactions.Output{Dest: wallet[randDest].Addr, Amount: 1000} // create the transaction output
 		send := transactions.NewTokenSend(wallet[origin].Addr, out)           // Create a send token transaction
 		gtx := new(transactions.GenTransaction)                               // wrap in a GenTransaction
-		gtx.Transaction = send.Marshal()                                      // place in the send the transaction (must be sent to source)
-		gtx.SigInfo = &transactions.SignatureInfo{}
-		gtx.ChainID = types.GetChainIdFromChainPath(&wallet[origin].Addr)[:]
-		gtx.Routing = types.GetAddressFromIdentity(&wallet[origin].Addr)
+		gtx.SigInfo = new(transactions.SignatureInfo)                         // Get a Signature Info block
+		gtx.Transaction = send.Marshal()                                      // add  send transaction
+		gtx.SigInfo.URL = wallet[origin].Addr                                 // URL of source
+		if err := gtx.SetRoutingChainID(); err != nil {                       // Routing ChainID is the tx source
+			t.Fatal("bad url generated") // error should never happen
+		}
 
-		binaryGtx := gtx.TransactionHash() // txid
+		binaryGtx := gtx.TransactionHash() // Must sign the GenTransaction
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
 
