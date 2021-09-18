@@ -2,7 +2,6 @@ package state
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"math/big"
 	"testing"
 )
@@ -12,7 +11,7 @@ func TestTokenBalanceState(t *testing.T) {
 	tokenUrl := "MyADI/MyTokenType"
 
 	accountUrl := "MyADI/MyTokens"
-	token := NewTokenAccount(types.UrlChain(accountUrl), types.UrlChain(tokenUrl))
+	token := NewTokenAccount(accountUrl, tokenUrl)
 
 	fmt.Println(token.GetBalance())
 

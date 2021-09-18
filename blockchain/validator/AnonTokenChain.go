@@ -147,23 +147,15 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 	resp.AddStateData(tokenChain, data)
 
 	//if we get here it is successful. Store tx body on main chain, and verification data on pending
-	txState := state.NewTransaction()
-	tx := types.Bytes(submission.Transaction)
-	txState.Transaction = &tx
-	copy(txState.Type[:], types.ChainTypeTransaction[:])
-	txState.ChainUrl = chainState.ChainUrl
+	txPendingState := state.NewPendingTransaction(submission)
+	txState, txPendingState := state.NewTransaction(txPendingState)
+
 	data, err = txState.MarshalBinary()
 	resp.AddStateData(&deposit.Txid, data)
 
 	// since we have a successful transaction, we only need to store the transaction
 	// header that we can use to verify what is on the main chain. need to store reason...
-	ptxState := state.NewPendingTransaction()
-	copy(ptxState.Type[:], types.ChainTypeTransaction[:])
-	ptxState.ChainUrl = chainState.ChainUrl
-	ptxState.KeyType = 0
-	ptxState.Signature = submission.Signature[0].Signature
-	ptxState.PublicKey = submission.Signature[0].PublicKey
-	data, _ = ptxState.MarshalBinary()
+	data, _ = txPendingState.MarshalBinary()
 	resp.AddPendingData(&deposit.Txid, data)
 
 	return nil
@@ -179,12 +171,12 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		return fmt.Errorf("account adi is not an anonymous account type")
 	}
 
+	var err error
 	withdrawal := transactions.TokenSend{} //api.TokenTx{}
-	leftover := withdrawal.Unmarshal(submission.Transaction)
+	_, err = withdrawal.Unmarshal(submission.Transaction)
 
-	//shouldn't be any leftover bytes to unmarshal.
-	if len(leftover) != 0 {
-		return fmt.Errorf("error with send token")
+	if err != nil {
+		return fmt.Errorf("error with send token, %v", err)
 	}
 
 	//need to derive chain id for coin type account.
@@ -202,7 +194,6 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	accountChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
 
 	//because we use a different chain for the anonymous account, we need to fetch it.
-	var err error
 	currentState.ChainId = accountChainId
 	currentState.ChainState, err = currentState.DB.GetCurrentEntry(accountChainId[:])
 	if err != nil {
@@ -243,12 +234,6 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		}
 		destUrl := types.String(destChainPath)
 
-		//get the identity id from the adi
-		idChain := types.GetIdentityChainFromIdentity(&adi)
-		if idChain == nil {
-			return fmt.Errorf("Invalid identity chain for %s", adi)
-		}
-
 		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
 		sub := &transactions.GenTransaction{}
 		resp.Submissions[i] = sub
@@ -256,6 +241,8 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		//set the identity chain for the destination
 		sub.Routing = types.GetAddressFromIdentity(&destAdi)
 		sub.ChainID = types.GetChainIdFromChainPath(destUrl.AsString()).Bytes()
+		sub.SigInfo = &transactions.SignatureInfo{}
+		sub.SigInfo.URL = destAdi
 
 		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &currentState.AdiHeader.ChainUrl, &destUrl)
 		err = depositTx.SetDeposit(&acmeTokenUrl, amt.AsBigInt())
@@ -281,23 +268,15 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	var txHash types.Bytes32
 	copy(txHash[:], txid)
 	//if we get here it is successful. Store tx body on main chain, and verification data on pending
-	txState := state.NewTransaction()
-	tx := types.Bytes(submission.Transaction)
-	txState.Transaction = &tx
-	copy(txState.Type[:], types.ChainTypeAnonTokenAccount[:])
-	txState.ChainUrl = currentState.AdiChain.ToString()
+	txPendingState := state.NewPendingTransaction(submission)
+	txState, txPendingState := state.NewTransaction(txPendingState)
 	data, _ = txState.MarshalBinary()
 	resp.AddStateData(&txHash, data)
 
 	// since we have a successful transaction, we only need to store the transaction
 	// header that we can use to verify what is on the main chain. need to store reason...
-	ptxState := state.NewPendingTransaction()
-	copy(ptxState.Type[:], types.ChainTypeAnonTokenAccount[:])
-	ptxState.ChainUrl = currentState.AdiChain.ToString()
-	ptxState.KeyType = 0
-	ptxState.Signature = submission.Signature[0].Signature
-	ptxState.PublicKey = submission.Signature[0].PublicKey
-	data, _ = ptxState.MarshalBinary()
+	// need to redo this based upon updated transactions.SigInfo struct.  Need to store marshaled SigInfo + ED25519
+	data, _ = txPendingState.MarshalBinary()
 	resp.AddPendingData(&txHash, data)
 
 	return nil

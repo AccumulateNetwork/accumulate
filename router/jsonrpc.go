@@ -9,6 +9,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	//"github.com/AccumulateNetwork/accumulated/blockchain/validator"
@@ -276,7 +277,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 		return ret
 	}
 
-	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", genTx.TxId(), resp.Log))
+	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", genTx.TransactionHash(), resp.Log))
 	ret.Data = &msg
 	return ret
 }
@@ -404,7 +405,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	var destAccount types.String
 	destAccount = types.String(adi)
 
-	wallet := NewWalletEntry()
+	wallet := transactions.NewWalletEntry()
 	fromAccount := types.String(wallet.Addr)
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
@@ -419,20 +420,18 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	deposit.TokenUrl = tokenUrl
 
 	depData, err := deposit.MarshalBinary()
-	gtx := new(proto.GenTransaction)
+	gtx := new(transactions.GenTransaction)
+	gtx.SigInfo = new(transactions.SignatureInfo)
+	gtx.SigInfo.URL = wallet.Addr
+	gtx.SigInfo.Nonce = wallet.Nonce
 	gtx.Transaction = depData
-	if err := gtx.SetRoutingChainID(*destAccount.AsString()); err != nil {
+	if err := gtx.SetRoutingChainID(); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", adi), err)
 	}
-	dataToSign, err := gtx.MarshalBinary()
-	if err != nil {
-		return NewSubmissionError(err)
-	}
+	dataToSign := gtx.TransactionHash()
 
-	ed := new(proto.ED25519Sig)
-	ed.Nonce = wallet.Nonce
-	ed.PublicKey = wallet.Public()
-	err = ed.Sign(wallet.PrivateKey, dataToSign)
+	ed := new(transactions.ED25519Sig)
+	err = ed.Sign(wallet.Nonce, wallet.PrivateKey, dataToSign)
 	if err != nil {
 		return NewSubmissionError(err)
 	}
@@ -448,7 +447,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	ret := acmeapi.APIDataResponse{}
 	ret.Type = "faucet"
 	var msg json.RawMessage
-	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TxId(), resp.Log))
+	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TransactionHash(), resp.Log))
 	ret.Data = &msg
 	return &ret
 }

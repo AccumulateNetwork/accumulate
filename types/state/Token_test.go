@@ -3,7 +3,6 @@ package state
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
 )
 
@@ -14,7 +13,7 @@ func TestTokenCoinbase(t *testing.T) {
 	//issuedToken := api.NewToken(tokenUrl, "fct", 8)
 
 	//accountUrl := "MyADI/MyTokens"
-	account := NewToken(types.UrlChain(tokenUrl))
+	account := NewToken(tokenUrl)
 
 	jm := json.RawMessage{}
 	jm = []byte("{\"test\":\"me\"}")

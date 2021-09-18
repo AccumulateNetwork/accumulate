@@ -120,6 +120,8 @@ func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *
 	sub := resp.Submissions[0]
 	sub.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
 	sub.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
+	sub.SigInfo = &transactions.SignatureInfo{}
+	sub.SigInfo.URL = *isc.ToUrl.AsString()
 	sub.Transaction = iscData
 
 	if err != nil {
