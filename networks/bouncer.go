@@ -3,6 +3,7 @@ package networks
 import (
 	"context"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 	proto1 "github.com/golang/protobuf/proto"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
@@ -43,7 +44,7 @@ func (b *Bouncer) resetBatches() {
 	}
 }
 
-func (b *Bouncer) BatchTx(tx *proto.GenTransaction) (*ctypes.ResultBroadcastTx, error) {
+func (b *Bouncer) BatchTx(tx *transactions.GenTransaction) (*ctypes.ResultBroadcastTx, error) {
 	data, err := tx.Marshal()
 	if err != nil {
 		return nil, err
@@ -70,7 +71,7 @@ func dispatch(batches []*rpchttp.BatchHTTP) {
 // SendTx
 // This function will send an individual transaction and return the result.  However, this is a broadcast asynchronous
 // call to tendermint, so it won't provide tendermint results from CheckTx or DeliverTx
-func (b *Bouncer) SendTx(tx *proto.GenTransaction) (*ctypes.ResultBroadcastTx, error) {
+func (b *Bouncer) SendTx(tx *transactions.GenTransaction) (*ctypes.ResultBroadcastTx, error) {
 	data, err := tx.Marshal()
 	if err != nil {
 		return nil, err
