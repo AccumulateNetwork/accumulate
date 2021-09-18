@@ -1,20 +1,17 @@
 package validator
 
 import (
+	"fmt"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-
-	//"crypto/sha256"
-	"fmt"
-
 	cfg "github.com/tendermint/tendermint/config"
-	//dbm "github.com/tendermint/tm-db"
-	"time"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 type AdiChain struct {
