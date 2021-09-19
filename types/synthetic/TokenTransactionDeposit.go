@@ -2,9 +2,12 @@ package synthetic
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math/big"
+
+	"github.com/AccumulateNetwork/SMT/common"
 
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 
@@ -72,7 +75,10 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 	}
 
 	var ret bytes.Buffer
-	ret.WriteByte(byte(proto.AccInstruction_Synthetic_Token_Deposit))
+
+	var vi [8]byte
+	_ = binary.PutVarint(vi[:], int64(proto.AccInstruction_Synthetic_Token_Deposit))
+	ret.Write(vi[:])
 
 	data, err := tx.Header.MarshalBinary()
 	if err != nil {
@@ -98,22 +104,30 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 	return ret.Bytes(), nil
 }
 
-func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) error {
+func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		}
+	}()
 
 	length := len(data)
-	if length < 1 {
-		return fmt.Errorf("insufficient data to unmarshal Token Transaction Deposit")
+	if length < 2 {
+		return fmt.Errorf("insufficient data to unmarshal binary for TokenTransactionDeposit")
 	}
-	if data[0] != byte(proto.AccInstruction_Synthetic_Token_Deposit) {
-		return fmt.Errorf("data is not of a identity creation type")
+
+	txType, data := common.BytesUint64(data) //                                 Get the url
+
+	if txType != uint64(proto.AccInstruction_Synthetic_Token_Deposit) {
+		return fmt.Errorf("invalid transaction type, expecting TokenTx")
 	}
-	i := 1
-	err := tx.Header.UnmarshalBinary(data[i:])
+
+	err = tx.Header.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
 
-	i += tx.Header.Size()
+	i := tx.Header.Size()
 
 	if length < i {
 		fmt.Errorf("unable to unmarshal binary after token transaction deposit header")
