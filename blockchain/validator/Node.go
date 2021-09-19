@@ -1,12 +1,10 @@
 package validator
 
 import (
-	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"net"
 	"sync"
 	"time"
 
@@ -17,7 +15,6 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
-	tmnet "github.com/tendermint/tendermint/libs/net"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
@@ -136,7 +133,7 @@ func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transa
 
 	//Check to see if transaction is valid. This is expensive, so maybe we should check ADI stuff first.
 	if !transaction.ValidateSig() {
-		//fmt.Println(fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType()))
+		return fmt.Errorf("invalid signature for transaction %d", transaction.TransactionType())
 	}
 
 	return nil
@@ -337,7 +334,7 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 
 			v.Signature = append(v.Signature, ed)
 
-			app.txBouncer.BatchTx(v)
+			_, err = app.txBouncer.BatchTx(v)
 
 			if err != nil {
 				return err
@@ -346,11 +343,6 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 		}
 	}
 	return nil
-}
-
-// dialerFunc is a helper function for protobuffers
-func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
-	return tmnet.Connect(addr)
 }
 
 func (app *Node) createBootstrapAccount() {
