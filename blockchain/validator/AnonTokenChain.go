@@ -216,12 +216,10 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	}
 
 	//now build the synthetic transactions.
-	resp.Submissions = make([]*transactions.GenTransaction, len(withdrawal.Outputs))
-
 	txid := submission.TransactionHash()
 	txAmt := big.NewInt(0)
 	amt := types.Amount{}
-	for i, val := range withdrawal.Outputs {
+	for _, val := range withdrawal.Outputs {
 		//accumulate the total amount of the transaction
 		txAmt.Add(txAmt, amt.SetUint64(val.Amount))
 
@@ -234,7 +232,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 
 		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
 		sub := &transactions.GenTransaction{}
-		resp.Submissions[i] = sub
+		resp.AddSyntheticTransaction(sub)
 
 		//set the identity chain for the destination
 		sub.Routing = types.GetAddressFromIdentity(&destAdi)
