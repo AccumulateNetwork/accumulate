@@ -6,6 +6,10 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"net"
+	"sync"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -15,9 +19,6 @@ import (
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"net"
-	"sync"
-	"time"
 )
 
 // Node implements the general parameters to stimulate the validators, provide synthetic transactions, and issue state changes
@@ -77,10 +78,10 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 func (app *Node) BeginBlock(height int64, Time *time.Time, leader bool) error {
 	app.leader = leader
 	app.height = height
-	app.chainValidator.BeginBlock(height, Time)
+	err := app.chainValidator.BeginBlock(height, Time)
 	app.chainWait = make(map[uint64]*sync.WaitGroup)
 
-	return nil
+	return err
 }
 
 // getCurrentState will populate the basic state structure with needed information

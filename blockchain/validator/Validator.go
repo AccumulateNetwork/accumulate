@@ -36,6 +36,10 @@ func (r *ResponseValidateTX) AddPendingData(chainid *types.Bytes32, stateData []
 	r.PendingData[*chainid] = stateData
 }
 
+func (r *ResponseValidateTX) AddSyntheticTransaction(tx *transactions.GenTransaction) {
+	r.Submissions = append(r.Submissions, tx)
+}
+
 type ValidatorInterface interface {
 	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
 	BeginBlock(height int64, Time *time.Time) error

@@ -1,41 +1,39 @@
 package validator
 
 import (
-	"encoding/json"
-	"github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/state"
-
-	//"crypto/sha256"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"testing"
-	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
-func createTokenIssuanceSubmission(t *testing.T, adiChainPath string) (*state.StateEntry, *proto.Submission) {
+func createTokenIssuanceSubmission(t *testing.T, adiChainPath string) (currentState *state.StateEntry, sub *transactions.GenTransaction) {
 	kp := types.CreateKeyPair()
-	identityhash := types.GetIdentityChainFromIdentity(&adiChainPath).Bytes()
 
-	currentstate := state.StateEntry{}
+	currentState = &state.StateEntry{}
 
 	//currentstate.ChainState = CreateFakeTokenAccountState(identitychainpath,t)
 
-	currentstate.IdentityState, identityhash = CreateFakeIdentityState(adiChainPath, kp)
-
-	chainid := types.GetChainIdFromChainPath(&adiChainPath).Bytes()
+	currentState.IdentityState, _ = CreateFakeIdentityState(adiChainPath, kp)
 
 	ti := api.NewToken(adiChainPath, "ACME", 1)
 
-	//build a submission message
-	sub := proto.Submission{}
-	sub.Data, _ = json.Marshal(ti)
+	data, err := ti.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	sub.Instruction = proto.AccInstruction_Token_Issue
-	sub.Chainid = chainid[:]
-	sub.Identitychain = identityhash[:]
-	sub.Timestamp = time.Now().Unix()
+	sub.Routing = types.GetAddressFromIdentity(&adiChainPath)
+	sub.ChainID = types.GetChainIdFromChainPath(&adiChainPath).Bytes()
+	sub.SigInfo = &transactions.SignatureInfo{}
+	sub.SigInfo.URL = adiChainPath
+	sub.Transaction = data
+	ed := new(transactions.ED25519Sig)
+	ed.Sign(1, kp.Bytes(), sub.TransactionHash())
 
-	return &currentstate, &sub
+	return currentState, sub
 }
 
 func TestTokenIssuanceValidator_Check(t *testing.T) {
@@ -43,7 +41,7 @@ func TestTokenIssuanceValidator_Check(t *testing.T) {
 	identitychainpath := "RoadRunner/ACME"
 	currentstate, sub := createTokenIssuanceSubmission(t, identitychainpath)
 
-	err := tiv.Check(currentstate, sub.Identitychain, sub.Chainid, 0, 0, sub.Data)
+	err := tiv.Check(currentstate, sub)
 
 	if err != nil {
 		t.Fatal(err)

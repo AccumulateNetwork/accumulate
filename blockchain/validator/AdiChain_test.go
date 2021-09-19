@@ -4,17 +4,20 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+
 	//"crypto/sha256"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
-func createIdentityCreateSubmission(t *testing.T, adiChainPath string) (*state.StateEntry, *proto.GenTransaction, *ed25519.PrivKey) {
+func createIdentityCreateSubmission(t *testing.T, adiChainPath string) (*state.StateEntry, *transactions.GenTransaction, *ed25519.PrivKey) {
 	kp := types.CreateKeyPair()
 	identityhash := types.GetIdentityChainFromIdentity(&adiChainPath).Bytes()
 
@@ -35,13 +38,21 @@ func createIdentityCreateSubmission(t *testing.T, adiChainPath string) (*state.S
 	}
 
 	//build a submission message
-	sub := proto.Submission{}
-	sub.Data, _ = json.Marshal(ic)
-
-	gtx := &proto.GenTransaction{}
+	data, err := ic.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gtx := &transactions.GenTransaction{}
 	gtx.ChainID = chainid[:]
 	gtx.Routing = types.GetAddressFromIdentityChain(identityhash)
-
+	gtx.Routing = types.GetAddressFromIdentity(&adiChainPath)
+	gtx.ChainID = types.GetChainIdFromChainPath(&adiChainPath).Bytes()
+	gtx.SigInfo = &transactions.SignatureInfo{}
+	gtx.SigInfo.URL = adiChainPath
+	gtx.Transaction = data
+	ed := new(transactions.ED25519Sig)
+	ed.Sign(1, kp.Bytes(), gtx.TransactionHash())
+	gtx.Signature = append([]*transactions.ED25519Sig{}, ed)
 	return &currentstate, gtx, &kp
 }
 
@@ -64,7 +75,7 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 
 	currentstate, sub, kp := createIdentityCreateSubmission(t, adiChainPath)
 
-	txid := sub.TxId()
+	txid := sub.TransactionHash()
 
 	resp, err := tiv.Validate(currentstate, sub)
 

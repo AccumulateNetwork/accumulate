@@ -77,6 +77,10 @@ func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *
 		return fmt.Errorf("sponsor identity is not defined")
 	}
 
+	if submission.Signature == nil {
+		return fmt.Errorf("no signatures available")
+	}
+
 	adiState := state.AdiState{}
 	err := adiState.UnmarshalBinary(currentstate.IdentityState.Entry)
 	if err != nil {
@@ -110,16 +114,15 @@ func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *
 		return err
 	}
 
-	resp = &ResponseValidateTX{}
-
 	//send of a synthetic transaction to the correct network
-	resp.Submissions = make([]*transactions.GenTransaction, 1)
-	sub := resp.Submissions[0]
+	sub := new(transactions.GenTransaction)
 	sub.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
 	sub.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
 	sub.SigInfo = &transactions.SignatureInfo{}
 	sub.SigInfo.URL = *isc.ToUrl.AsString()
 	sub.Transaction = iscData
+
+	resp.AddSyntheticTransaction(sub)
 
 	if err != nil {
 		return err
@@ -129,6 +132,7 @@ func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *
 }
 
 func (v *AdiChain) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
+	resp = new(ResponseValidateTX)
 	err = v.processAdiCreate(currentState, submission, resp)
 	return resp, err
 }

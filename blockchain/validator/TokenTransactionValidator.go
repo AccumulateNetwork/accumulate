@@ -120,13 +120,13 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 // Validate validates a token transaction
 func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
-	withdrawl := transactions.TokenSend{} //api.TokenTx{}
-	_, err := withdrawl.Unmarshal(submission.Transaction)
+	withdrawal := transactions.TokenSend{} //api.TokenTx{}
+	_, err := withdrawal.Unmarshal(submission.Transaction)
 	if err != nil {
 		return nil, fmt.Errorf("error with send token in TokenTransactionValidator.Validate, %v", err)
 	}
 
-	ids, tas, err := canSendTokens(currentState, &withdrawl)
+	ids, tas, err := canSendTokens(currentState, &withdrawal)
 
 	if ids == nil {
 		return nil, fmt.Errorf("invalid identity state retrieved for token transaction")
@@ -161,11 +161,11 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 	txid := submission.TransactionHash()
 
 	ret := ResponseValidateTX{}
-	ret.Submissions = make([]*transactions.GenTransaction, len(withdrawl.Outputs)+1)
+	ret.Submissions = make([]*transactions.GenTransaction, len(withdrawal.Outputs)+1)
 
 	txAmt := big.NewInt(0)
 	var amt big.Int
-	for i, val := range withdrawl.Outputs {
+	for i, val := range withdrawal.Outputs {
 		amt.SetUint64(val.Amount)
 
 		//accumulate the total amount of the transaction
