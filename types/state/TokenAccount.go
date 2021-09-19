@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 
@@ -85,26 +86,25 @@ func (app *TokenAccount) AddBalance(amt *big.Int) error {
 
 //MarshalBinary creates a byte array of the state object needed for storage
 func (app *TokenAccount) MarshalBinary() (ret []byte, err error) {
+	var buffer bytes.Buffer
+
+	header, err := app.Chain.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(header)
 
 	tokenUrlData, err := app.TokenUrl.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal binary for token URL in TokenAccount, %v", err)
 	}
-	header, err := app.Chain.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
+	buffer.Write(tokenUrlData)
 
-	data := make([]byte, len(header)+32+len(tokenUrlData))
+	var buff types.Bytes32
+	app.Balance.FillBytes(buff[:])
+	buffer.Write(buff[:])
 
-	i := copy(data, header)
-
-	i += copy(data[i:], tokenUrlData)
-
-	app.Balance.FillBytes(data[i:])
-	i += 32
-
-	return data, nil
+	return buffer.Bytes(), nil
 }
 
 //UnmarshalBinary will deserialize a byte array
@@ -128,7 +128,6 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) error {
 	}
 
 	app.Balance.SetBytes(data[i : i+32])
-	i += 32
 
 	return nil
 }
