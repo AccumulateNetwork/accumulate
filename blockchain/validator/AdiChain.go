@@ -21,7 +21,7 @@ type AdiChain struct {
 func NewAdiChain() *AdiChain {
 	v := AdiChain{}
 	//the only transactions an adi chain can process is to create another identity or update key (TBD)
-	v.SetInfo(types.ChainTypeAdi[:], types.ChainSpecAdi, pb.AccInstruction_Identity_Creation)
+	v.SetInfo(types.ChainTypeAdi, pb.AccInstruction_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
