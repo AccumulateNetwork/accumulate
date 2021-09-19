@@ -22,6 +22,8 @@ type AnonTokenChain struct {
 	ValidatorContext
 
 	mdroot [32]byte
+
+	currentBalanceState map[types.Bytes32]*state.TokenAccount
 }
 
 func NewAnonTokenChain() *AnonTokenChain {
@@ -57,6 +59,8 @@ func (v *AnonTokenChain) BeginBlock(height int64, time *time.Time) error {
 	v.lastTime = v.currentTime
 	v.currentHeight = height
 	v.currentTime = *time
+
+	v.currentBalanceState = make(map[types.Bytes32]*state.TokenAccount)
 
 	return nil
 }
@@ -159,9 +163,8 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 	return nil
 }
 func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submission *transactions.GenTransaction, resp *ResponseValidateTX) error {
-	//make sure identity state exists.  no point in continuing if the anonymous identity was never created
 	if currentState.IdentityState == nil {
-		return fmt.Errorf("identity state does not exist for anonymous transaction")
+		return fmt.Errorf("identity state does not exist for anonymous account")
 	}
 
 	//now check to make sure this is really an anon account
@@ -170,7 +173,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	}
 
 	var err error
-	withdrawal := transactions.TokenSend{} //api.TokenTx{}
+	withdrawal := transactions.TokenSend{}
 	_, err = withdrawal.Unmarshal(submission.Transaction)
 
 	if err != nil {
@@ -191,26 +194,39 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	//get the ChainId of the acme account for the anon address.
 	accountChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
 
-	//because we use a different chain for the anonymous account, we need to fetch it.
-	currentState.ChainId = accountChainId
-	currentState.ChainState, err = currentState.DB.GetCurrentEntry(accountChainId[:])
-	if err != nil {
-		return fmt.Errorf("chain state for account not esablished")
+	var tokenAccountState *state.TokenAccount
+	if tokenAccountState = v.currentBalanceState[*accountChainId]; tokenAccountState == nil {
+		//because we use a different chain for the anonymous account, we need to fetch it.
+		currentState.ChainId = accountChainId
+		currentState.ChainState, err = currentState.DB.GetCurrentEntry(accountChainId[:])
+		if err != nil {
+			return fmt.Errorf("chain state for account not esablished")
+		}
+
+		err := tokenAccountState.UnmarshalBinary(currentState.ChainState.Entry)
+		if err != nil {
+			return err
+		}
 	}
 
+	//now check to see if we can transact
+	//really only need to provide one input...
 	//now check to see if the account is good to send tokens from
-	cs, tokenAccountState, err := canSendTokens(currentState, &withdrawal)
-	if err != nil {
-		return err
+	amt := types.Amount{}
+	var outAmt big.Int
+	for _, val := range withdrawal.Outputs {
+		amt.Add(amt.AsBigInt(), outAmt.SetUint64(val.Amount))
 	}
 
-	if cs != nil {
-		return fmt.Errorf("chain state is of the incorrect type")
+	if !tokenAccountState.CanTransact(amt.AsBigInt()) {
+		return fmt.Errorf("insufficient balance")
 	}
 
 	//so far, so good.  Now we need to check to make sure the signing address is ok.  maybe look at moving this upstream from here.
+	//if we get to this function we know we at least have 1 signature
 	address := types2.GenerateAcmeAddress(submission.Signature[0].PublicKey)
 
+	//check the addresses to make sure they match
 	if address != string(currentState.AdiHeader.ChainUrl) {
 		return fmt.Errorf("invalid address, public key address is %s but account %s ", address, currentState.AdiHeader.ChainUrl)
 	}
@@ -218,11 +234,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	//now build the synthetic transactions.
 	txid := submission.TransactionHash()
 	txAmt := big.NewInt(0)
-	amt := types.Amount{}
 	for _, val := range withdrawal.Outputs {
-		//accumulate the total amount of the transaction
-		txAmt.Add(txAmt, amt.SetUint64(val.Amount))
-
 		//extract the target identity and chain from the url
 		destAdi, destChainPath, err := types.ParseIdentityChainPath(&val.Dest)
 		if err != nil {
@@ -257,16 +269,15 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		return fmt.Errorf("error subtracting balance from account acc://%s, %v", currentState.AdiHeader.ChainUrl, err)
 	}
 
-	data, _ := tokenAccountState.MarshalBinary()
-	resp.AddStateData(accountChainId, data)
+	v.currentBalanceState[*accountChainId] = tokenAccountState
 
-	//if we get here it is successful.
+	//if we get here we were successful so we can put the signature on the pending chain and transaction on the main chain
 	var txHash types.Bytes32
 	copy(txHash[:], txid)
 	//if we get here it is successful. Store tx body on main chain, and verification data on pending
 	txPendingState := state.NewPendingTransaction(submission)
 	txState, txPendingState := state.NewTransaction(txPendingState)
-	data, _ = txState.MarshalBinary()
+	data, _ := txState.MarshalBinary()
 	resp.AddStateData(&txHash, data)
 
 	// since we have a successful transaction, we only need to store the transaction
@@ -288,15 +299,6 @@ func (v *AnonTokenChain) processAdiCreate(currentState *state.StateEntry, submis
 	if bytes.Compare(currentState.AdiHeader.Type.Bytes(), types.ChainTypeAnonTokenAccount[:]) != 0 {
 		return fmt.Errorf("account adi is not an anonymous account type")
 	}
-
-	//this should be done at a higher level...
-	//if !adiState.VerifyKey(submission.Signature[0].PublicKey) {
-	//	return fmt.Errorf("key is not supported by current ADI state")
-	//}
-	//
-	//if !adiState.VerifyAndUpdateNonce(submission.Signature[0].Nonce) {
-	//	return fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Signature[0].Nonce)
-	//}
 
 	ic := api.ADI{}
 	err := ic.UnmarshalBinary(submission.Transaction)
@@ -368,8 +370,11 @@ func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *tr
 	return resp, err
 }
 
-func (v *AnonTokenChain) EndBlock(mdroot []byte) error {
-	copy(v.mdroot[:], mdroot[:])
+func (v *AnonTokenChain) EndBlock(DB *state.StateDB) error {
+	//persist any changes to the balance to the database
+	for chainId, account := range v.currentBalanceState {
+
+	}
 	return nil
 }
 

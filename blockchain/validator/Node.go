@@ -136,7 +136,7 @@ func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transa
 
 	//Check to see if transaction is valid. This is expensive, so maybe we should check ADI stuff first.
 	if !transaction.ValidateSig() {
-		//fmt.Println(fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType()))
+		return fmt.Errorf("invalid signature for transaction %d", transaction.TransactionType())
 	}
 
 	return nil
@@ -147,10 +147,10 @@ func (app *Node) CanTransact(transaction *transactions.GenTransaction) error {
 	if err := transaction.SetRoutingChainID(); err != nil {
 		return err
 	}
-	//app.mutex.Lock()
+	app.mutex.Lock()
 	//populate the current state from the StateDB
 	currentState, _ := app.getCurrentState(transaction.ChainID)
-	//app.mutex.Unlock()
+	app.mutex.Unlock()
 
 	if err := app.verifyGeneralTransaction(currentState, transaction); err != nil {
 		return fmt.Errorf("cannot proceed with transaction, verification failed, %v", err)
@@ -169,21 +169,21 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 
 	_ = transaction.TransactionHash()
 
-	//app.mutex.Lock()
-	//
-	//var group *sync.WaitGroup
-	//if group = app.chainWait[transaction.Routing]; group == nil {
-	//	group = &sync.WaitGroup{}
-	//	app.chainWait[transaction.Routing] = group
-	//
-	//}
-	//group.Wait()
-	//group.Add(1)
-	//defer func() {
-	//	group.Done()
-	//	app.wait.Add(-1)
-	//}()
-	//app.mutex.Unlock()
+	app.mutex.Lock()
+
+	var group *sync.WaitGroup
+	if group = app.chainWait[transaction.Routing]; group == nil {
+		group = &sync.WaitGroup{}
+		app.chainWait[transaction.Routing] = group
+
+	}
+	group.Wait()
+	group.Add(1)
+	defer func() {
+		group.Done()
+		app.wait.Add(-1)
+	}()
+	app.mutex.Unlock()
 
 	currentState, _ := app.getCurrentState(transaction.ChainID)
 
@@ -244,14 +244,14 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 // transaction []byte will be replaced by transaction RawTransaction
 func (app *Node) Validate(transaction *transactions.GenTransaction) error {
 
-	//app.wait.Add(1)
+	app.wait.Add(1)
 	err := app.doValidation(transaction)
 	return err
 }
 
 // EndBlock will return the merkle DAG root of the current state
 func (app *Node) EndBlock() ([]byte, error) {
-	//app.wait.Wait()
+	app.wait.Wait()
 	mdRoot, numStateChanges, err := app.mmDB.WriteStates(app.chainValidator.GetCurrentHeight())
 
 	if err != nil {

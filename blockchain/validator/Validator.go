@@ -2,16 +2,12 @@ package validator
 
 import (
 	"fmt"
-
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/state"
-
-	pb "github.com/AccumulateNetwork/accumulated/types/proto"
-	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
 )
 
@@ -41,11 +37,11 @@ func (r *ResponseValidateTX) AddSyntheticTransaction(tx *transactions.GenTransac
 }
 
 type ValidatorInterface interface {
-	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
+	Initialize(config *cfg.Config, db *state.StateDB) error
 	BeginBlock(height int64, Time *time.Time) error
 	Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error
 	Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) //return persistent entry or error
-	EndBlock(mdroot []byte) error                                                                                  //do something with MD root
+	EndBlock([]byte) error                                                                                         //do something with MD root?
 
 	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated
 	GetInfo() *ValidatorInfo
@@ -85,6 +81,7 @@ type ValidatorContext struct {
 	currentTime   time.Time
 	lastHeight    int64
 	lastTime      time.Time
+	db            *state.StateDB
 
 	validators    map[types.Bytes32]*ValidatorContext     //validators keeps a map of child chain validators
 	validatorsIns map[pb.AccInstruction]*ValidatorContext //validators keeps a map of child chain validators
@@ -103,6 +100,11 @@ func (v *ValidatorContext) addValidator(context *ValidatorContext) {
 
 	v.validators[key] = context
 	v.validatorsIns[pb.AccInstruction(context.GetInfo().GetTypeId())] = context
+}
+
+func (v *ValidatorContext) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
 }
 
 func (v *ValidatorContext) getValidatorByIns(ins pb.AccInstruction) (*ValidatorContext, error) {

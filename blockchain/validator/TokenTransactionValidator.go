@@ -28,45 +28,24 @@ func NewTokenTransactionValidator() *TokenTransactionValidator {
 }
 
 // canTransact is a helper function to parse and check for errors in the transaction data
-func canSendTokens(currentState *state.StateEntry, withdrawal *transactions.TokenSend) (*state.AdiState, *state.TokenAccount, error) {
+func canSendTokens(currentState *state.StateEntry, tas *state.TokenAccount, withdrawal *transactions.TokenSend) (*state.AdiState, error) {
 
 	if currentState.ChainState == nil {
-		return nil, nil, fmt.Errorf("no account exists for the chain")
+		return nil, fmt.Errorf("no account exists for the chain")
 	}
 	if currentState.IdentityState == nil {
-		return nil, nil, fmt.Errorf("no identity exists for the chain")
+		return nil, fmt.Errorf("no identity exists for the chain")
 	}
 
 	if withdrawal == nil {
 		//defensive check / shouldn't get where.
-		return nil, nil, fmt.Errorf("withdrawl account doesn't exist")
-	}
-
-	//now check to see if the chain header is an ADI chain. If so, load the AdiState
-	var ids *state.AdiState
-	if bytes.Compare(currentState.AdiHeader.Type[:], types.ChainTypeAdi[:]) == 0 {
-		ids = &state.AdiState{}
-		err := ids.UnmarshalBinary(currentState.IdentityState.Entry)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	tas := state.TokenAccount{}
-	err := tas.UnmarshalBinary(currentState.ChainState.Entry)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	//verify the tx.from is from the same identity
-	fromAdiChain := types.GetIdentityChainFromIdentity(&withdrawal.AccountURL)
-	if bytes.Compare(currentState.AdiChain[:], fromAdiChain[:]) != 0 {
-		return nil, nil, fmt.Errorf("account state object transaction account doesn't match transaction")
+		return nil, fmt.Errorf("withdrawl account doesn't exist")
 	}
 
 	//verify the tx.from is from the same chain
 	fromChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
 	if bytes.Compare(currentState.ChainId[:], fromChainId[:]) != 0 {
-		return nil, nil, fmt.Errorf("from state object transaction account doesn't match transaction")
+		return nil, fmt.Errorf("from state object transaction account doesn't match transaction")
 	}
 
 	//now check to see if we can transact
@@ -80,9 +59,9 @@ func canSendTokens(currentState *state.StateEntry, withdrawal *transactions.Toke
 	//make sure the user has enough in the account to perform the transaction
 	if tas.GetBalance().Cmp(amt.AsBigInt()) < 0 {
 		///insufficient balance
-		return nil, nil, fmt.Errorf("insufficient balance")
+		return nil, fmt.Errorf("insufficient balance")
 	}
-	return ids, &tas, nil
+	return nil
 }
 
 // Check will perform a sanity check to make sure transaction seems reasonable
@@ -140,13 +119,6 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 	if !ids.VerifyKey(keyHash[:]) {
 		return nil, fmt.Errorf("key not authorized for signing transaction")
 	}
-
-	//ts := time.Unix(submission.Timestamp, 0)
-	//
-	//duration := time.Since(ts)
-	//if duration.Minutes() > 1 {
-	//	return nil, fmt.Errorf("transaction time of validity has elapesd by %f seconds", duration.Seconds()-60)
-	//}
 
 	adiChain := state.Chain{}
 	err = adiChain.UnmarshalBinary(currentState.IdentityState.Entry)
