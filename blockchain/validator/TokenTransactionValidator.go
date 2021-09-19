@@ -44,7 +44,7 @@ func canSendTokens(currentState *state.StateEntry, withdrawal *transactions.Toke
 
 	//now check to see if the chain header is an ADI chain. If so, load the AdiState
 	var ids *state.AdiState
-	if currentState.AdiHeader.Type != types.ChainTypeAdi {
+	if currentState.AdiHeader.Type == types.ChainTypeAdi {
 		ids = &state.AdiState{}
 		err := ids.UnmarshalBinary(currentState.IdentityState.Entry)
 		if err != nil {
