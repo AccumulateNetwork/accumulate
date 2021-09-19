@@ -6,13 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path"
 	"testing"
 	"time"
+
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
@@ -25,7 +26,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func _TestLoadOnRemote(t *testing.T) {
+func TestLoadOnRemote(t *testing.T) {
 
 	networksList := []int{3}
 	txBouncer := networks.MakeBouncer(networksList)
@@ -123,10 +124,10 @@ func _TestLoadOnRemote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	//fmt.Println(string(output))
+	fmt.Println(string(output))
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func _TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
 
