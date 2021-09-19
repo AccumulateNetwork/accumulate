@@ -315,8 +315,6 @@ func (v *AnonTokenChain) processAdiCreate(currentState *state.StateEntry, submis
 		return err
 	}
 
-	resp = &ResponseValidateTX{}
-
 	//send of a synthetic transaction to the correct network
 	resp.Submissions = make([]*transactions.GenTransaction, 1)
 	sub := resp.Submissions[0]

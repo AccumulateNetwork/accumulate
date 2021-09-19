@@ -2,6 +2,7 @@ package state
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 
 	"github.com/AccumulateNetwork/SMT/common"
@@ -31,7 +32,9 @@ func (h *Chain) SetHeader(chainUrl types.String, chainType uint64) {
 
 //GetHeaderSize will return the marshalled binary size of the header.
 func (h *Chain) GetHeaderSize() int {
-	return 32 + h.ChainUrl.Size(nil)
+	var buf [8]byte
+	i := binary.PutUvarint(buf[:], h.Type)
+	return i + h.ChainUrl.Size(nil)
 }
 
 //GetType will return the chain type
@@ -62,7 +65,7 @@ func (h *Chain) MarshalBinary() ([]byte, error) {
 
 //UnmarshalBinary deserializes the data array into the header object
 func (h *Chain) UnmarshalBinary(data []byte) error {
-	if len(data[:]) < 32 {
+	if len(data[:]) < 8 {
 		return fmt.Errorf("state header buffer too short for unmarshal")
 	}
 	h.Type, data = common.BytesUint64(data)

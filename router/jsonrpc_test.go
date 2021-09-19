@@ -6,13 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path"
 	"testing"
 	"time"
+
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
@@ -101,7 +102,7 @@ func _TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	jsonapi := API{RandPort(), validator.New(), nil, query, txBouncer}
+	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
 	_ = jsonapi
 
 	params := &api.APIRequestURL{URL: types.String(queryme)}
@@ -137,7 +138,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	client, _, _, rpc, vm := makeBVCandRouter(cfg, dir)
+	_, rpc, vm := makeBVCandRouter(cfg, dir)
 
 	//networksList := []int{2}
 	//txBouncer := networks.MakeBouncer(networksList)
@@ -150,7 +151,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	query := NewQuery(txBouncer)
 
-	jsonapi := API{RandPort(), validator.New(), client, query, txBouncer}
+	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
 	_ = jsonapi
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
@@ -274,7 +275,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down.
-	time.Sleep(30000 * time.Millisecond)
+	time.Sleep(10000 * time.Millisecond)
 
 }
 
@@ -344,7 +345,7 @@ func _TestJsonRpcAdi(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	client, _, _, _, vm := makeBVCandRouter(cfg, dir)
+	_, _, vm := makeBVCandRouter(cfg, dir)
 
 	if err != nil {
 		t.Fatal(err)
@@ -354,7 +355,7 @@ func _TestJsonRpcAdi(t *testing.T) {
 
 	query := NewQuery(txBouncer)
 
-	jsonapi := API{RandPort(), validator.New(), client, query, txBouncer}
+	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
 
 	//StartAPI(RandPort(), client)
 
