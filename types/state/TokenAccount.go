@@ -22,7 +22,7 @@ type TokenAccount struct {
 func NewTokenAccount(accountUrl string, tokenUrl string) *TokenAccount {
 	tas := TokenAccount{}
 
-	tas.SetHeader(types.String(accountUrl), types.ChainTypeTokenAccount[:])
+	tas.SetHeader(types.String(accountUrl), types.ChainTypeTokenAccount)
 	tas.TokenUrl.String = types.String(tokenUrl)
 
 	return &tas

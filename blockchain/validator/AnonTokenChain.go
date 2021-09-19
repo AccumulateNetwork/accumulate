@@ -1,7 +1,6 @@
 package validator
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"math/big"
@@ -26,7 +25,7 @@ type AnonTokenChain struct {
 
 func NewAnonTokenChain() *AnonTokenChain {
 	v := &AnonTokenChain{}
-	v.SetInfo(types.ChainTypeAnonTokenAccount[:], types.ChainSpecAnonTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
+	v.SetInfo(types.ChainTypeAnonTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = v
 	return v
 }
@@ -92,7 +91,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 	// if the identity state is nil, then it means we do not have any anon accts setup yet.
 	if currentState.IdentityState == nil {
 		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
-		chainState.SetHeader(types.String(adi), types.ChainTypeAnonTokenAccount[:])
+		chainState.SetHeader(types.String(adi), types.ChainTypeAnonTokenAccount)
 		//need to flag this as an anonymous account
 		data, err := chainState.MarshalBinary()
 		if err != nil {
@@ -104,7 +103,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 		if err != nil {
 			return err
 		}
-		if bytes.Compare(chainState.Type.Bytes(), types.ChainTypeAnonTokenAccount[:]) != 0 {
+		if chainState.Type != types.ChainTypeAnonTokenAccount {
 			return fmt.Errorf("adi for an anoymous chain is not an anonymous account")
 		}
 	}
@@ -165,7 +164,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	}
 
 	//now check to make sure this is really an anon account
-	if bytes.Compare(currentState.AdiHeader.Type.Bytes(), types.ChainTypeAnonTokenAccount[:]) != 0 {
+	if currentState.AdiHeader.Type != types.ChainTypeAnonTokenAccount {
 		return fmt.Errorf("account adi is not an anonymous account type")
 	}
 
@@ -285,7 +284,7 @@ func (v *AnonTokenChain) processAdiCreate(currentState *state.StateEntry, submis
 	}
 
 	//now check to make sure this is really an anon account
-	if bytes.Compare(currentState.AdiHeader.Type.Bytes(), types.ChainTypeAnonTokenAccount[:]) != 0 {
+	if currentState.AdiHeader.Type != types.ChainTypeAnonTokenAccount {
 		return fmt.Errorf("account adi is not an anonymous account type")
 	}
 
