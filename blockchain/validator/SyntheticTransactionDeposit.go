@@ -2,13 +2,14 @@ package validator
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	cfg "github.com/tendermint/tendermint/config"
-	"time"
 )
 
 type SyntheticTransactionDepositValidator struct {
@@ -17,7 +18,7 @@ type SyntheticTransactionDepositValidator struct {
 
 func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValidator {
 	v := SyntheticTransactionDepositValidator{}
-	v.SetInfo(types.ChainTypeTokenAccount[:], "synthetic-transaction-deposit", pb.AccInstruction_Synthetic_Token_Deposit)
+	v.SetInfo(types.ChainTypeTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }

@@ -22,7 +22,7 @@ type TokenTransactionValidator struct {
 //this token validator belings in both a Token (coinbase) and Token Account validator.
 func NewTokenTransactionValidator() *TokenTransactionValidator {
 	v := &TokenTransactionValidator{}
-	v.SetInfo(types.ChainTypeToken[:], "token-transaction", pb.AccInstruction_Token_Transaction)
+	v.SetInfo(types.ChainTypeToken, pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = v
 	return v
 }
@@ -44,7 +44,7 @@ func canSendTokens(currentState *state.StateEntry, withdrawal *transactions.Toke
 
 	//now check to see if the chain header is an ADI chain. If so, load the AdiState
 	var ids *state.AdiState
-	if bytes.Compare(currentState.AdiHeader.Type[:], types.ChainTypeAdi[:]) == 0 {
+	if currentState.AdiHeader.Type != types.ChainTypeAdi {
 		ids = &state.AdiState{}
 		err := ids.UnmarshalBinary(currentState.IdentityState.Entry)
 		if err != nil {
