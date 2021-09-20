@@ -12,24 +12,32 @@ import (
 )
 
 type ResponseValidateTX struct {
-	StateData   map[types.Bytes32]types.Bytes  //acctypes.StateObject
-	PendingData map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
-	EventData   []byte                         //this should be events that need to get published
-	Submissions []*transactions.GenTransaction //this is a list of synthetic transactions
+	StateData     map[types.Bytes32]types.Bytes  //acctypes.StateObject
+	MainChainData map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
+	PendingData   map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
+	EventData     []byte                         //this should be events that need to get published
+	Submissions   []*transactions.GenTransaction //this is a list of synthetic transactions
 }
 
-func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []byte) {
+func (r *ResponseValidateTX) AddMainChainData(chainid *types.Bytes32, data []byte) {
+	if r.MainChainData == nil {
+		r.MainChainData = make(map[types.Bytes32]types.Bytes)
+	}
+	r.MainChainData[*chainid] = data
+}
+
+func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, data []byte) {
 	if r.StateData == nil {
 		r.StateData = make(map[types.Bytes32]types.Bytes)
 	}
-	r.StateData[*chainid] = stateData
+	r.StateData[*chainid] = data
 }
 
-func (r *ResponseValidateTX) AddPendingData(chainid *types.Bytes32, stateData []byte) {
+func (r *ResponseValidateTX) AddPendingData(txId *types.Bytes32, data []byte) {
 	if r.PendingData == nil {
 		r.PendingData = make(map[types.Bytes32]types.Bytes)
 	}
-	r.PendingData[*chainid] = stateData
+	r.PendingData[*txId] = data
 }
 
 func (r *ResponseValidateTX) AddSyntheticTransaction(tx *transactions.GenTransaction) {

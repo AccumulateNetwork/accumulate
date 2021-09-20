@@ -148,7 +148,7 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 	txState, txPendingState := state.NewTransaction(txPendingState)
 
 	data, err = txState.MarshalBinary()
-	resp.AddStateData(&deposit.Txid, data)
+	resp.AddMainChainData(tokenChain, data)
 
 	// since we have a successful transaction, we only need to store the transaction
 	// header that we can use to verify what is on the main chain. need to store reason...
@@ -273,7 +273,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	txPendingState := state.NewPendingTransaction(submission)
 	txState, txPendingState := state.NewTransaction(txPendingState)
 	data, _ := txState.MarshalBinary()
-	resp.AddStateData(&txHash, data)
+	resp.AddMainChainData(accountChainId, data)
 
 	// since we have a successful transaction, we only need to store the transaction
 	// header that we can use to verify what is on the main chain. need to store reason...
@@ -365,10 +365,13 @@ func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *tr
 
 func (v *AnonTokenChain) EndBlock(mdroot []byte) error {
 	//persist any changes to the balance to the database
-	//for chainId, account := range v.currentBalanceState {
-	//account.
-	//v.db.
-	//}
+	for chainId, account := range v.currentBalanceState {
+		data, err := account.MarshalBinary()
+		if err != nil {
+			panic("anon token end block, error marshaling state.")
+		}
+		v.db.AddStateEntry(chainId[:], data)
+	}
 	return nil
 }
 

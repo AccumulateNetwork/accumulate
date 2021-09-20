@@ -2,7 +2,6 @@ package synthetic
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -76,9 +75,7 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 
 	var ret bytes.Buffer
 
-	var vi [8]byte
-	_ = binary.PutVarint(vi[:], int64(proto.AccInstruction_Synthetic_Token_Deposit))
-	ret.Write(vi[:])
+	ret.Write(common.Uint64Bytes(uint64(proto.AccInstruction_Synthetic_Token_Deposit)))
 
 	data, err := tx.Header.MarshalBinary()
 	if err != nil {

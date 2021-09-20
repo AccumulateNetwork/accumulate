@@ -208,7 +208,7 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 		return err
 	}
 
-	/// update the state data for the chain.
+	/// update the state data for the chain. <== move to end block!
 	if vdata.StateData != nil {
 		for k, v := range vdata.StateData {
 			header := state.Chain{}
@@ -217,6 +217,19 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 				panic("invalid state object after submission processing, should never get here")
 			}
 			if err := app.mmDB.AddStateEntry(k[:], v); err != nil {
+				panic("should not error adding state entry")
+			}
+		}
+	}
+
+	if vdata.MainChainData != nil {
+		for k, v := range vdata.MainChainData {
+			header := state.Chain{}
+			err := header.UnmarshalBinary(v)
+			if err != nil {
+				panic("invalid state object after submission processing, should never get here")
+			}
+			if err := app.mmDB.AddMainTx(k[:], v); err != nil {
 				panic("should not error adding state entry")
 			}
 		}
@@ -249,6 +262,7 @@ func (app *Node) Validate(transaction *transactions.GenTransaction) error {
 // EndBlock will return the merkle DAG root of the current state
 func (app *Node) EndBlock() ([]byte, error) {
 	app.wait.Wait()
+	app.chainValidator.EndBlock([]byte{})
 	mdRoot, numStateChanges, err := app.mmDB.WriteStates(app.chainValidator.GetCurrentHeight())
 
 	if err != nil {
