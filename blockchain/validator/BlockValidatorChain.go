@@ -119,5 +119,8 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *tran
 }
 
 func (v *BlockValidatorChain) EndBlock(mdroot []byte) error {
+	for _, val := range v.validatorsIns {
+		val.EndBlock(mdroot)
+	}
 	return nil
 }

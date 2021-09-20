@@ -26,7 +26,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func TestLoadOnRemote(t *testing.T) {
+func _TestLoadOnRemote(t *testing.T) {
 
 	networksList := []int{3}
 	txBouncer := networks.MakeBouncer(networksList)
@@ -127,7 +127,7 @@ func TestLoadOnRemote(t *testing.T) {
 	fmt.Println(string(output))
 }
 
-func _TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
 
@@ -198,9 +198,9 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	Load(t, txBouncer, privateKey)
+	//Load(t, txBouncer, privateKey)
 
-	txBouncer.BatchSend()
+	//txBouncer.BatchSend()
 
 	//wait 3 seconds for the transaction to process for the block to complete.
 	time.Sleep(3 * time.Second)
@@ -274,8 +274,8 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	////now we can send in json rpc calls.
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
-	//wait 30 seconds before shutting down.
-	time.Sleep(10000 * time.Millisecond)
+	//wait 30 seconds before shutting down is useful when debugging the tendermint core callbacks
+	time.Sleep(30000 * time.Millisecond)
 
 }
 
