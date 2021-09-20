@@ -10,7 +10,6 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
@@ -32,10 +31,6 @@ func (v *AdiChain) Check(currentstate *state.StateEntry, submission *transaction
 		return fmt.Errorf("current state not defined")
 	}
 
-	return nil
-}
-
-func (v *AdiChain) Initialize(config *cfg.Config) error {
 	return nil
 }
 

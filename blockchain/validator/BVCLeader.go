@@ -11,6 +11,7 @@ import (
 	"time"
 )
 
+// BVCLeader is a boilerplate
 type BVCLeader struct {
 	ValidatorContext
 
@@ -24,10 +25,11 @@ func NewBVCLeader() *BVCLeader {
 	return &v
 }
 
-func (v *BVCLeader) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
-	return nil
+func (v *BVCLeader) Initialize(config *cfg.Config, db *state.StateDB) error {
+	return v.ValidatorContext.Initialize(config, db)
 }
-func (v *BVCLeader) Initialize(config *cfg.Config) error {
+
+func (v *BVCLeader) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	return nil
 }
 
