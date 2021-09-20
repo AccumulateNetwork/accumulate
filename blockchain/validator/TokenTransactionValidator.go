@@ -21,7 +21,7 @@ type TokenTransactionValidator struct {
 //this token validator belings in both a Token (coinbase) and Token Account validator.
 func NewTokenTransactionValidator() *TokenTransactionValidator {
 	v := &TokenTransactionValidator{}
-	v.SetInfo(types.ChainTypeToken[:], "token-transaction", pb.AccInstruction_Token_Transaction)
+	v.SetInfo(types.ChainTypeToken, pb.AccInstruction_Token_Transaction)
 	v.ValidatorContext.ValidatorInterface = v
 	return v
 }

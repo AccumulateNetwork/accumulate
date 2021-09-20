@@ -17,7 +17,7 @@ type SyntheticTransactionDepositValidator struct {
 
 func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValidator {
 	v := SyntheticTransactionDepositValidator{}
-	v.SetInfo(types.ChainTypeTokenAccount[:], "synthetic-transaction-deposit", pb.AccInstruction_Synthetic_Token_Deposit)
+	v.SetInfo(types.ChainTypeTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
