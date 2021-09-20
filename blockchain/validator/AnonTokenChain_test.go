@@ -46,7 +46,7 @@ func CreateFakeSyntheticDeposit(t *testing.T, tokenUrl types.String, from types.
 func CreateFakeAnonymousTokenChain(addressUrl string) *state.Object {
 	adi, _, _ := types.ParseIdentityChainPath(&addressUrl)
 
-	anonTokenChain := state.NewChain(types.String(adi), types.ChainTypeAnonTokenAccount[:])
+	anonTokenChain := state.NewChain(types.String(adi), types.ChainTypeAnonTokenAccount)
 
 	so := state.Object{}
 	so.Entry, _ = anonTokenChain.MarshalBinary()

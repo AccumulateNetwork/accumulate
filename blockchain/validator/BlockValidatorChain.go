@@ -109,7 +109,7 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *tran
 	}
 
 	//retrieve the validator based upon chain type
-	val, err := v.getValidatorByType(&chain.Type)
+	val, err := v.getValidatorByType(chain.Type)
 	if err != nil {
 		return nil, fmt.Errorf("cannot find validator for BlockValidationChain %s (err %v)", chain.ChainUrl, err)
 	}

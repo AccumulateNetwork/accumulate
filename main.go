@@ -89,18 +89,17 @@ func main() {
 	//First create a router
 	viper.SetConfigFile(ConfigFile)
 	viper.AddConfigPath(WorkingDir)
-	viper.ReadInConfig()
-	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
-
-	//Next create a BVC
-	accvm, err := accumulate.CreateAccumulateBVC(ConfigFile, WorkingDir)
+	err := viper.ReadInConfig()
 	if err != nil {
-		panic(fmt.Errorf("unable to create accumulate BVC"))
+		panic("failed to read config file")
+	}
+	//Next create a BVC
+	_, err = accumulate.CreateAccumulateBVC(ConfigFile, WorkingDir)
+	if err != nil {
+		panic("failed create bvc")
 	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
-	accvmapi, _ := accvm.GetAPIClient()
-	_ = urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
 
 	networkList := []int{3}
 	txBouncer := networks.MakeBouncer(networkList)

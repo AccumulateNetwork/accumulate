@@ -3,6 +3,7 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeApi "github.com/AccumulateNetwork/accumulated/types/api"
@@ -207,20 +208,20 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 	return txResp, err
 }
 
-var ChainStates = map[types.Bytes32]interface{}{
-	*types.ChainTypeAdi.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+var ChainStates = map[uint64]interface{}{
+	types.ChainTypeAdi: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		return q.GetAdi(url)
 	},
-	*types.ChainTypeToken.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+	types.ChainTypeToken: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		return q.GetToken(url)
 	},
-	*types.ChainTypeTokenAccount.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+	types.ChainTypeTokenAccount: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		return q.GetTokenAccount(url)
 	},
-	*types.ChainTypeSignatureGroup.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+	types.ChainTypeSignatureGroup: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		return q.GetTokenAccount(url)
 	},
-	*types.ChainTypeAnonTokenAccount.AsBytes32(): func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+	types.ChainTypeAnonTokenAccount: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		adi, _, _ := types.ParseIdentityChainPath(url)
 		adi += "/dc/ACME"
 		return q.GetTokenAccount(&adi)
@@ -257,12 +258,7 @@ func (q *Query) GetChainState(adiChainPath *string) (interface{}, error) {
 		resp, err = val.(func(*Query, *string, []byte) (*acmeApi.APIDataResponse, error))(q, chainHeader.ChainUrl.AsString(), []byte{})
 	} else {
 		resp = &acmeApi.APIDataResponse{}
-		var chainType string
-		if chainType = types.ChainTypeSpecMap[chainHeader.Type]; chainType != "" {
-			resp.Type = types.String(chainType)
-		} else {
-			resp.Type = "unknown"
-		}
+		resp.Type = types.String(types.ChainTypeString(chainHeader.Type))
 		msg := json.RawMessage{}
 		msg = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", qResp.Value))
 		resp.Data = &msg

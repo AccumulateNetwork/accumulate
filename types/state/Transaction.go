@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/SMT/common"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
@@ -25,7 +26,7 @@ type transactionState struct {
 // NewPendingTransaction will create a new pending transaction from a general transaction
 func NewPendingTransaction(gtx *transactions.GenTransaction) *PendingTransaction {
 	ret := &PendingTransaction{}
-	ret.Chain.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypeTransaction[:])
+	ret.Chain.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypeTransaction)
 	ret.Signature = gtx.Signature
 	ret.TransactionState = &transactionState{}
 	ret.TransactionState.SigInfo = gtx.SigInfo
@@ -63,7 +64,7 @@ func (is *Transaction) GetChainUrl() string {
 	return is.Chain.GetChainUrl()
 }
 
-func (is *Transaction) GetType() *types.Bytes32 {
+func (is *Transaction) GetType() uint64 {
 	return is.Chain.GetType()
 }
 
@@ -215,6 +216,6 @@ func (t *PendingTransaction) GetChainUrl() string {
 	return t.Chain.GetChainUrl()
 }
 
-func (t *PendingTransaction) GetType() *types.Bytes32 {
+func (t *PendingTransaction) GetType() uint64 {
 	return t.Chain.GetType()
 }
