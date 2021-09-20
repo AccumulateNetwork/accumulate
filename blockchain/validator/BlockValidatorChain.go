@@ -40,8 +40,9 @@ func NewBlockValidatorChain() *BlockValidatorChain {
 func (v *BlockValidatorChain) Check(currentState *state.StateEntry, submission *transactions.GenTransaction) error {
 	return nil
 }
-func (v *BlockValidatorChain) Initialize(config *cfg.Config) error {
-	return nil
+
+func (v *BlockValidatorChain) Initialize(config *cfg.Config, db *state.StateDB) error {
+	return v.ValidatorContext.Initialize(config, db)
 }
 
 func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *transactions.GenTransaction) (*ResponseValidateTX, error) {

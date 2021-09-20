@@ -3,13 +3,13 @@ package validator
 import (
 	"encoding/json"
 	"fmt"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	cfg "github.com/tendermint/tendermint/config"
-	"time"
 )
 
 type TokenIssuanceValidator struct {
@@ -24,9 +24,6 @@ func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 }
 
 func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
-	return nil
-}
-func (v *TokenIssuanceValidator) Initialize(config *cfg.Config) error {
 	return nil
 }
 

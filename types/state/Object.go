@@ -3,6 +3,7 @@ package state
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
