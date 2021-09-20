@@ -52,18 +52,17 @@ type ValidatorInterface interface {
 
 type ValidatorInfo struct {
 	chainSpec   string //
-	chainTypeId types.Bytes32
+	chainTypeId uint64
 	typeid      uint64
 }
 
-func (h *ValidatorInfo) SetInfo(chainTypeId types.Bytes, chainSpec string, instructionType pb.AccInstruction) {
-	copy(h.chainTypeId[:], chainTypeId)
-	h.chainSpec = chainSpec
+func (h *ValidatorInfo) SetInfo(chainTypeId uint64, instructionType pb.AccInstruction) {
+	h.chainTypeId = chainTypeId
 	h.typeid = uint64(instructionType)
 }
 
-func (h *ValidatorInfo) GetValidatorChainTypeId() types.Bytes {
-	return h.chainTypeId[:]
+func (h *ValidatorInfo) GetValidatorChainTypeId() uint64 {
+	return h.chainTypeId
 }
 
 func (h *ValidatorInfo) GetChainSpec() *string {
@@ -83,7 +82,7 @@ type ValidatorContext struct {
 	lastTime      time.Time
 	db            *state.StateDB
 
-	validators    map[types.Bytes32]*ValidatorContext     //validators keeps a map of child chain validators
+	validators    map[uint64]*ValidatorContext            //validators keeps a map of child chain validators
 	validatorsIns map[pb.AccInstruction]*ValidatorContext //validators keeps a map of child chain validators
 }
 
@@ -92,11 +91,10 @@ func (v *ValidatorContext) addValidator(context *ValidatorContext) {
 		v.validatorsIns = make(map[pb.AccInstruction]*ValidatorContext)
 	}
 	if v.validators == nil {
-		v.validators = make(map[types.Bytes32]*ValidatorContext)
+		v.validators = make(map[uint64]*ValidatorContext)
 	}
 
-	var key types.Bytes32
-	copy(key[:], context.GetValidatorChainTypeId())
+	var key = context.GetValidatorChainTypeId()
 
 	v.validators[key] = context
 	v.validatorsIns[pb.AccInstruction(context.GetInfo().GetTypeId())] = context
@@ -115,12 +113,9 @@ func (v *ValidatorContext) getValidatorByIns(ins pb.AccInstruction) (*ValidatorC
 	return nil, fmt.Errorf("validator not found for instruction, %d", ins)
 }
 
-func (v *ValidatorContext) getValidatorByType(validatorType *types.Bytes32) (*ValidatorContext, error) {
-	if validatorType == nil {
-		return nil, fmt.Errorf("cannot find validator, validatorType is nil")
-	}
+func (v *ValidatorContext) getValidatorByType(validatorType uint64) (*ValidatorContext, error) {
 
-	if val, ok := v.validators[*validatorType]; ok {
+	if val, ok := v.validators[validatorType]; ok {
 		return val, nil
 	}
 

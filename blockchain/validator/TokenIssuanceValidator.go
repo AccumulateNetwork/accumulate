@@ -18,7 +18,7 @@ type TokenIssuanceValidator struct {
 
 func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	v := TokenIssuanceValidator{}
-	v.SetInfo(types.ChainTypeToken[:], types.ChainSpecToken, pb.AccInstruction_Token_Issue)
+	v.SetInfo(types.ChainTypeToken, pb.AccInstruction_Token_Issue)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }

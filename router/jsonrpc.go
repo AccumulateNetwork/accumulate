@@ -5,13 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+
 	//"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"log"
 	"net/http"
@@ -26,7 +27,6 @@ import (
 type API struct {
 	port      int
 	validate  *validator.Validate
-	client    proto.ApiServiceClient
 	query     *Query
 	txBouncer *networks.Bouncer
 }
