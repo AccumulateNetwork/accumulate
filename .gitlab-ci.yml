@@ -1,0 +1,108 @@
+stages:
+- test
+- build
+- deploy
+
+.test:
+  stage: test
+  tags:
+  - docker
+  - linux
+  script:
+  - go build ./...
+  - go test ./...
+
+test go1.16:
+  extends: .test
+  image: golang:1.16
+
+test go1.17:
+  extends: .test
+  image: golang:1.17
+
+git describe:
+  stage: test
+  tags:
+  - docker
+  - linux
+  script:
+  - git fetch --unshallow
+  - echo "GIT_DESCRIBE=$(git describe --dirty)" >> git.env
+  artifacts:
+    reports:
+      dotenv: git.env
+
+build:
+  stage: build
+  tags:
+  - docker
+  - linux
+  image: golang:1.17
+  before_script:
+  - |
+    function build {
+      export GOOS=$1
+      export GOARCH=$2
+      BIN=accumulated-${GOOS}-${GOARCH}
+      [ $GOOS == windows ] && BIN=${BIN}.exe
+      export BUILDFLAGS="-o ${BIN}"
+      echo Build $BIN
+      make GIT_COMMIT=${CI_COMMIT_SHA} GIT_DESCRIBE=${GIT_DESCRIBE}
+    }
+  script:
+  - build linux amd64
+  - build linux arm64
+  - build windows amd64
+  - build windows arm64
+  - build darwin amd64
+  - build darwin arm64
+  artifacts:
+    paths:
+    - accumulated-*
+
+.deploy:
+  stage: deploy
+  only:
+  - ${CI_DEFAULT_BRANCH} # only run on the main branch
+  tags:
+  - docker
+  - linux
+  script:
+  - mkdir ~/.ssh
+  - cp ${SSH_KNOWN_HOSTS} ~/.ssh/known_hosts
+  - cp ${SSH_PRIV_KEY} ~/.ssh/id_rsa
+  - cp ${SSH_PUB_KEY} ~/.ssh/id_rsa.pub
+  - chmod -R 600 ~/.ssh
+  - scp ${BIN} ec2-user@${HOST}:.local/bin/accumulated
+  - |
+    ssh ec2-user@${HOST} '
+      screen -ls
+      go version
+      export PATH="$PATH:$HOME/.local/bin"
+      which accumulated
+      accumulated version
+    '
+
+deploy 13.51.10.110:
+  extends: .deploy
+  variables: { BIN: accumulated-linux-arm64, HOST: 13.51.10.110 }
+
+deploy 13.232.230.216:
+  extends: .deploy
+  variables: { BIN: accumulated-linux-arm64, HOST: 13.232.230.216 }
+
+deploy 18.221.39.36:
+  extends: .deploy
+  variables: { BIN: accumulated-linux-arm64, HOST: 18.221.39.36 }
+
+deploy 44.236.45.58:
+  extends: .deploy
+  variables: { BIN: accumulated-linux-arm64, HOST: 44.236.45.58 }
+
+deploy 18.119.26.7:
+  extends: .deploy
+  variables: { BIN: accumulated-linux-amd64, HOST: 18.119.26.7 }
+
+deploy 18.119.149.208:
+  extends: .deploy
+  variables: { BIN: accumulated-linux-amd64, HOST: 18.119.149.208 }
