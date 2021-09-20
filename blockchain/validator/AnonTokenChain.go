@@ -14,7 +14,6 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
@@ -48,9 +47,6 @@ func (v *AnonTokenChain) Check(currentState *state.StateEntry, submission *trans
 	//}
 	//
 	//return resp, err
-	return nil
-}
-func (v *AnonTokenChain) Initialize(config *cfg.Config) error {
 	return nil
 }
 
@@ -370,11 +366,12 @@ func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *tr
 	return resp, err
 }
 
-func (v *AnonTokenChain) EndBlock(DB *state.StateDB) error {
+func (v *AnonTokenChain) EndBlock(mdroot []byte) error {
 	//persist any changes to the balance to the database
-	for chainId, account := range v.currentBalanceState {
-
-	}
+	//for chainId, account := range v.currentBalanceState {
+	//account.
+	//v.db.
+	//}
 	return nil
 }
 

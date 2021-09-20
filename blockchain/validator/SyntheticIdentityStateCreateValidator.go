@@ -2,13 +2,13 @@ package validator
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	cfg "github.com/tendermint/tendermint/config"
-	"time"
 )
 
 //todo fold this into the AdiChain validator
@@ -43,10 +43,6 @@ func (v *SyntheticIdentityStateCreateValidator) Check(currentstate *state.StateE
 		return fmt.Errorf("data payload of submission is not a valid identity state create message")
 	}
 
-	return nil
-}
-
-func (v *SyntheticIdentityStateCreateValidator) Initialize(config *cfg.Config) error {
 	return nil
 }
 

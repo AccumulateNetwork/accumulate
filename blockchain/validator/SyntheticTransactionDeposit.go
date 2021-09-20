@@ -2,13 +2,13 @@ package validator
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-	cfg "github.com/tendermint/tendermint/config"
-	"time"
 )
 
 type SyntheticTransactionDepositValidator struct {
@@ -25,9 +25,6 @@ func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValid
 func (v *SyntheticTransactionDepositValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	_, _, _, err := v.canTransact(currentstate, submission.Transaction)
 	return err
-}
-func (v *SyntheticTransactionDepositValidator) Initialize(config *cfg.Config) error {
-	return nil
 }
 
 func (v *SyntheticTransactionDepositValidator) BeginBlock(height int64, time *time.Time) error {

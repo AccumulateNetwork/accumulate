@@ -12,7 +12,6 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-	cfg "github.com/tendermint/tendermint/config"
 )
 
 type TokenTransactionValidator struct {
@@ -28,24 +27,24 @@ func NewTokenTransactionValidator() *TokenTransactionValidator {
 }
 
 // canTransact is a helper function to parse and check for errors in the transaction data
-func canSendTokens(currentState *state.StateEntry, tas *state.TokenAccount, withdrawal *transactions.TokenSend) (*state.AdiState, error) {
+func canSendTokens(currentState *state.StateEntry, tas *state.TokenAccount, withdrawal *transactions.TokenSend) error {
 
 	if currentState.ChainState == nil {
-		return nil, fmt.Errorf("no account exists for the chain")
+		return fmt.Errorf("no account exists for the chain")
 	}
 	if currentState.IdentityState == nil {
-		return nil, fmt.Errorf("no identity exists for the chain")
+		return fmt.Errorf("no identity exists for the chain")
 	}
 
 	if withdrawal == nil {
 		//defensive check / shouldn't get where.
-		return nil, fmt.Errorf("withdrawl account doesn't exist")
+		return fmt.Errorf("withdrawl account doesn't exist")
 	}
 
 	//verify the tx.from is from the same chain
 	fromChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
 	if bytes.Compare(currentState.ChainId[:], fromChainId[:]) != 0 {
-		return nil, fmt.Errorf("from state object transaction account doesn't match transaction")
+		return fmt.Errorf("from state object transaction account doesn't match transaction")
 	}
 
 	//now check to see if we can transact
@@ -59,7 +58,7 @@ func canSendTokens(currentState *state.StateEntry, tas *state.TokenAccount, with
 	//make sure the user has enough in the account to perform the transaction
 	if tas.GetBalance().Cmp(amt.AsBigInt()) < 0 {
 		///insufficient balance
-		return nil, fmt.Errorf("insufficient balance")
+		return fmt.Errorf("insufficient balance")
 	}
 	return nil
 }
@@ -77,13 +76,13 @@ func (v *TokenTransactionValidator) Check(currentState *state.StateEntry, submis
 		return fmt.Errorf("error with send token in TokenTransactionValidator.Check, %v", err)
 	}
 
-	_, _, err = canSendTokens(currentState, &withdrawal)
+	tas := &state.TokenAccount{}
+	err = tas.UnmarshalBinary(currentState.ChainState.Entry)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal token account, %v", err)
+	}
+	err = canSendTokens(currentState, tas, &withdrawal)
 	return err
-}
-
-// Initialize
-func (v *TokenTransactionValidator) Initialize(config *cfg.Config) error {
-	return nil
 }
 
 // BeginBlock Sets time and height information for beginning of block
@@ -98,6 +97,7 @@ func (v *TokenTransactionValidator) BeginBlock(height int64, time *time.Time) er
 
 // Validate validates a token transaction
 func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
+
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
 	withdrawal := transactions.TokenSend{} //api.TokenTx{}
 	_, err := withdrawal.Unmarshal(submission.Transaction)
@@ -105,7 +105,19 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		return nil, fmt.Errorf("error with send token in TokenTransactionValidator.Validate, %v", err)
 	}
 
-	ids, tas, err := canSendTokens(currentState, &withdrawal)
+	ids := &state.AdiState{}
+	err = ids.UnmarshalBinary(currentState.IdentityState.Entry)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling adi")
+	}
+
+	tas := &state.TokenAccount{}
+	err = tas.UnmarshalBinary(currentState.IdentityState.Entry)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling token account")
+	}
+
+	err = canSendTokens(currentState, tas, &withdrawal)
 
 	if ids == nil {
 		return nil, fmt.Errorf("invalid identity state retrieved for token transaction")
@@ -120,11 +132,6 @@ func (v *TokenTransactionValidator) Validate(currentState *state.StateEntry, sub
 		return nil, fmt.Errorf("key not authorized for signing transaction")
 	}
 
-	adiChain := state.Chain{}
-	err = adiChain.UnmarshalBinary(currentState.IdentityState.Entry)
-	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshal adiChain")
-	}
 	//need to do a nonce check.
 	if submission.SigInfo.Nonce <= ids.Nonce {
 		return nil, fmt.Errorf("invalid nonce in transaction, cannot proceed")

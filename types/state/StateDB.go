@@ -171,7 +171,7 @@ func (sdb *StateDB) getOrCreateChainMerkleManager(chainId []byte, loadState bool
 }
 
 // AddStateEntry add the entry to the smt and database based upon chainId
-func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
+func (sdb *StateDB) AddMainTx(chainId []byte, tx []byte) error {
 
 	begin := time.Now()
 
@@ -180,7 +180,19 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 	//sdb.mutex.Lock()
 	//defer sdb.mutex.Unlock()
 	//add the state to the merkle tree
-	mms.merkleMgr.AddHash(sha256.Sum256(entry))
+	mms.merkleMgr.AddHash(sha256.Sum256(tx))
+
+	sdb.TimeBucket = sdb.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
+
+	return nil
+}
+
+// AddStateEntry add the entry to the smt and database based upon chainId
+func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
+
+	begin := time.Now()
+
+	mms := sdb.getOrCreateChainMerkleManager(chainId, false)
 
 	sdb.TimeBucket = sdb.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
 

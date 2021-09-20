@@ -60,8 +60,8 @@ func NewEntryValidator() *EntryValidator {
 func (v *EntryValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	return fmt.Errorf("entry validator not yet implemented")
 }
-func (v *EntryValidator) Initialize(config *cfg.Config) error {
-	return nil
+func (v *EntryValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	return v.ValidatorContext.Initialize(config, db)
 }
 
 func (v *EntryValidator) BeginBlock(height int64, time *time.Time) error {
