@@ -15,14 +15,12 @@ import (
 
 type SyntheticIdentityStateCreateValidator struct {
 	ValidatorContext
-
-	EV *EntryValidator
 }
 
 func NewSyntheticIdentityStateCreateValidator() *SyntheticIdentityStateCreateValidator {
 	v := SyntheticIdentityStateCreateValidator{}
 	//this needs to be changed to use AdiChain
-	v.SetInfo(types.ChainTypeAdi[:], "create-identity-state", pb.AccInstruction_Synthetic_Identity_Creation)
+	v.SetInfo(types.ChainTypeAdi, pb.AccInstruction_Synthetic_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
