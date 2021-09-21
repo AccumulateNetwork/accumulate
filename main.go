@@ -29,7 +29,7 @@ var nodeName string
 const DBVCIndex = 0
 
 var (
-	BuildTag string = "v0.0.1"
+	BuildTag string = "unknown"
 )
 
 func init() {
@@ -51,7 +51,7 @@ func init() {
 	flag.Parse()
 
 	if *version {
-		// fmt.Printf("Accumulate BVC %s\n", BuildTag)
+		fmt.Printf("Accumulate BVC %s\n", BuildTag)
 		os.Exit(0)
 	}
 
