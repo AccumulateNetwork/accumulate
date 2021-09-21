@@ -433,7 +433,7 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 //    Commit <---
 func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	defer func() {
-		// fmt.Printf("*** return Commit %v \n", "")
+		//fmt.Printf("*** return Commit %v \n", "")
 	}()
 	//end the current batch of transactions in the Stateful Merkle Tree
 

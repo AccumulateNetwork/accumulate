@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	cfg "github.com/tendermint/tendermint/config"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -21,6 +23,11 @@ func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	v.SetInfo(types.ChainTypeToken, pb.AccInstruction_Token_Issue)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
+}
+
+func (v *TokenIssuanceValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
 }
 
 func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {

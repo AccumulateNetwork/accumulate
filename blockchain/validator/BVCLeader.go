@@ -26,7 +26,8 @@ func NewBVCLeader() *BVCLeader {
 }
 
 func (v *BVCLeader) Initialize(config *cfg.Config, db *state.StateDB) error {
-	return v.ValidatorContext.Initialize(config, db)
+	v.db = db
+	return nil
 }
 
 func (v *BVCLeader) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
