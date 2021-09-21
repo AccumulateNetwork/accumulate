@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	cfg "github.com/tendermint/tendermint/config"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -20,6 +22,11 @@ func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValid
 	v.SetInfo(types.ChainTypeTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
+}
+
+func (v *SyntheticTransactionDepositValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
 }
 
 func (v *SyntheticTransactionDepositValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {

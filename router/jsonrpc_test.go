@@ -203,7 +203,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//txBouncer.BatchSend()
 
 	//wait 3 seconds for the transaction to process for the block to complete.
-	time.Sleep(3 * time.Second)
+	time.Sleep(30 * time.Second)
 	queryTokenUrl := destAddress + "/" + tokenUrl
 	resp, err := query.GetTokenAccount(queryTokenUrl.AsString())
 	if err != nil {
