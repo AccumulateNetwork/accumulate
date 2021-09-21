@@ -7,6 +7,8 @@ import (
 	"math/big"
 	"time"
 
+	cfg "github.com/tendermint/tendermint/config"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
@@ -60,6 +62,11 @@ func canSendTokens(currentState *state.StateEntry, tas *state.TokenAccount, with
 		///insufficient balance
 		return fmt.Errorf("insufficient balance")
 	}
+	return nil
+}
+
+func (v *TokenTransactionValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
 	return nil
 }
 

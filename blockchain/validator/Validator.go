@@ -108,11 +108,6 @@ func (v *ValidatorContext) addValidator(context *ValidatorContext) {
 	v.validatorsIns[pb.AccInstruction(context.GetInfo().GetTypeId())] = context
 }
 
-func (v *ValidatorContext) Initialize(config *cfg.Config, db *state.StateDB) error {
-	v.db = db
-	return nil
-}
-
 func (v *ValidatorContext) getValidatorByIns(ins pb.AccInstruction) (*ValidatorContext, error) {
 	if val, ok := v.validatorsIns[ins]; ok {
 		return val, nil

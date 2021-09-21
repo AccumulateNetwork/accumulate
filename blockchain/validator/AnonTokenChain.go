@@ -6,6 +6,8 @@ import (
 	"math/big"
 	"time"
 
+	cfg "github.com/tendermint/tendermint/config"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -22,6 +24,7 @@ type AnonTokenChain struct {
 	mdroot [32]byte
 
 	currentBalanceState map[types.Bytes32]*state.TokenAccount
+	currentChainState   map[types.Bytes32]*state.Chain
 }
 
 func NewAnonTokenChain() *AnonTokenChain {
@@ -29,6 +32,11 @@ func NewAnonTokenChain() *AnonTokenChain {
 	v.SetInfo(types.ChainTypeAnonTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = v
 	return v
+}
+
+func (v *AnonTokenChain) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
 }
 
 func (v *AnonTokenChain) Check(currentState *state.StateEntry, submission *transactions.GenTransaction) error {
@@ -56,9 +64,11 @@ func (v *AnonTokenChain) BeginBlock(height int64, time *time.Time) error {
 	v.currentTime = *time
 
 	v.currentBalanceState = make(map[types.Bytes32]*state.TokenAccount)
+	v.currentChainState = make(map[types.Bytes32]*state.Chain)
 
 	return nil
 }
+
 func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submission *transactions.GenTransaction, resp *ResponseValidateTX) error {
 
 	//unmarshal the synthetic transaction based upon submission
@@ -93,11 +103,11 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
 		chainState.SetHeader(types.String(adi), types.ChainTypeAnonTokenAccount)
 		//need to flag this as an anonymous account
-		data, err := chainState.MarshalBinary()
-		if err != nil {
-			return nil
-		}
-		resp.AddStateData(types.GetChainIdFromChainPath(&adi), data)
+		//data, err := chainState.MarshalBinary()
+		//if err != nil {
+		//	return nil
+		//}
+		v.currentChainState[*types.GetChainIdFromChainPath(&adi)] = &chainState
 	} else {
 		err := chainState.UnmarshalBinary(currentState.IdentityState.Entry)
 		if err != nil {
@@ -138,22 +148,22 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 		return fmt.Errorf("unable to add deposit balance to account")
 	}
 
-	data, err := account.MarshalBinary()
+	//data, err := account.MarshalBinary()
 
 	//add the token account state to the chain.
-	resp.AddStateData(tokenChain, data)
-
+	//resp.AddStateData(tokenChain, data)
+	v.currentBalanceState[*tokenChain] = account
 	//if we get here it is successful. Store tx body on main chain, and verification data on pending
-	txPendingState := state.NewPendingTransaction(submission)
-	txState, txPendingState := state.NewTransaction(txPendingState)
-
-	data, err = txState.MarshalBinary()
-	resp.AddMainChainData(tokenChain, data)
+	//txPendingState := state.NewPendingTransaction(submission)
+	//txState, txPendingState := state.NewTransaction(txPendingState)
+	//
+	//data, err = txState.MarshalBinary()
+	//resp.AddMainChainData(tokenChain, data)
 
 	// since we have a successful transaction, we only need to store the transaction
 	// header that we can use to verify what is on the main chain. need to store reason...
-	data, _ = txPendingState.MarshalBinary()
-	resp.AddPendingData(&deposit.Txid, data)
+	//data, _ = txPendingState.MarshalBinary()
+	//resp.AddPendingData(&deposit.Txid, data)
 
 	return nil
 }
@@ -368,7 +378,15 @@ func (v *AnonTokenChain) EndBlock(mdroot []byte) error {
 	for chainId, account := range v.currentBalanceState {
 		data, err := account.MarshalBinary()
 		if err != nil {
-			panic("anon token end block, error marshaling state.")
+			panic("anon token end block, error marshaling account state.")
+		}
+		v.db.AddStateEntry(chainId[:], data)
+	}
+
+	for chainId, chain := range v.currentChainState {
+		data, err := chain.MarshalBinary()
+		if err != nil {
+			panic("anon token end block, error marshaling chain state")
 		}
 		v.db.AddStateEntry(chainId[:], data)
 	}

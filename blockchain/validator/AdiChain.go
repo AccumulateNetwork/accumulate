@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	cfg "github.com/tendermint/tendermint/config"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -23,6 +25,11 @@ func NewAdiChain() *AdiChain {
 	v.SetInfo(types.ChainTypeAdi, pb.AccInstruction_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
+}
+
+func (v *AdiChain) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
 }
 
 func (v *AdiChain) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
