@@ -42,7 +42,11 @@ func (v *BlockValidatorChain) Check(currentState *state.StateEntry, submission *
 }
 
 func (v *BlockValidatorChain) Initialize(config *cfg.Config, db *state.StateDB) error {
-	return v.ValidatorContext.Initialize(config, db)
+	v.db = db
+	for _, val := range v.validatorsIns {
+		val.Initialize(config, db)
+	}
+	return nil
 }
 
 func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *transactions.GenTransaction) (*ResponseValidateTX, error) {

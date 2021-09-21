@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"time"
 
+	cfg "github.com/tendermint/tendermint/config"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -22,7 +24,10 @@ func NewTokenChainCreateValidator() *TokenChainCreateValidator {
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
-
+func (v *TokenChainCreateValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
+}
 func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	if currentstate == nil {
 		return fmt.Errorf("current state not defined")

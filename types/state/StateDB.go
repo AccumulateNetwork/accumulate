@@ -106,6 +106,7 @@ func (sdb *StateDB) GetDB() *smtDB.Manager {
 }
 
 //AddPendingTx adds the pending tx raw data and signature of that data to tx, signature needs to be a signed hash of the tx.
+//todo: change this so that the validator returns a list of transaction id's associated with a state change.
 func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txPending *PendingTransaction, txValidated *Transaction) error {
 	var bu *blockUpdates
 
@@ -169,12 +170,14 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 	if currentState != nil {
 		ret = currentState.stateData
 	} else {
+		currentState := blockUpdates{}
 		//pull current state entry from the database.
 		currentState.stateData, err = sdb.GetPersistentEntry(chainId, false)
 		if err != nil {
-
 			return nil, fmt.Errorf("no current state is defined, %v", err)
 		}
+		//if we have valid data, store off the state
+		sdb.updates[key] = &currentState
 	}
 
 	return ret, nil
@@ -214,7 +217,9 @@ func (sdb *StateDB) AddStateEntry(chainId []byte, entry []byte) error {
 	sdb.mutex.Unlock()
 
 	if updates == nil {
-		panic("cannot update states without validated transactions")
+		updates = new(blockUpdates)
+		sdb.updates[key] = updates
+		//panic("cannot update states without validated transactions")
 	}
 	if updates.stateData == nil {
 		updates.stateData = new(Object)
