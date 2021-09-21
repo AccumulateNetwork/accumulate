@@ -275,7 +275,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down.
-	time.Sleep(10000 * time.Millisecond)
+	time.Sleep(5000 * time.Millisecond)
 
 }
 
@@ -299,7 +299,7 @@ func Load(t *testing.T,
 	for i := 1; i < 100000; i++ { // Make a bunch of transactions
 		if i%100 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(250 * time.Millisecond)
+			time.Sleep(90 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address

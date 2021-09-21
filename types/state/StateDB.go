@@ -35,6 +35,16 @@ type pendingValidationState struct {
 type StateDB struct {
 	db    *smtDB.Manager
 	debug bool
+	// TODO:  Need a couple of things:
+	//     ChainState interface
+	//     Lets you marshal a ChainState to disk, and lets you unmarshal them
+	//     later.  Holds the type of the chain, and all the state about the
+	//     chain needed to validate transactions on the chain. (accounts for
+	//     example Balance, SigSpecGroup (hash), URL)  All ChainState
+	//     instances hold the MerkleManagerState for the chain. MDRoot
+	//     .
+	//     On the other side, allows a ChainState to be unmarshaled for updates
+	//     and access.
 	mms   map[managed.Hash]*merkleManagerState //mms is the merkle manager state map cached for the block, it is reset after each call to WriteState
 	bpt   *pmt.Manager                         //pbt is the global patricia trie for the application
 	mm    *managed.MerkleManager               //mm is the merkle manager for the application.  The salt is set by the appId
@@ -214,24 +224,27 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//loop through everything and write out states to the database.
 	for _, chainId := range keys {
 		v := sdb.mms[chainId]
-
+		// ToDo: We get ChainState objects here, instead. And THAT will hold
+		//       the MerkleStateManager for the chain.
 		mdRoot := v.merkleMgr.MainChain.MS.GetMDRoot()
 		if mdRoot == nil {
 			//shouldn't get here, but will reject if I do
 			panic(fmt.Sprintf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId))
 		}
 
-		sdb.bpt.Bpt.Insert(chainId, *mdRoot)
+		sdb.bpt.Bpt.Insert(chainId, *mdRoot) // TODo: This is supposed to be the ChainState object hash.
 
 		//store the current state for the chain
 		dataToStore, err := v.stateEntry.MarshalBinary()
-		err = v.merkleMgr.RootDBManager.Put("StateEntries", "", chainId.Bytes(), dataToStore)
+		err = v.merkleMgr.RootDBManager.PutBatch("StateEntries", "", chainId.Bytes(), dataToStore)
 
 		if err != nil {
 			//shouldn't get here, and bad if I do...
 			panic(fmt.Sprintf("failed to store data entry in StateEntries bucket, %v", err))
 		}
 	}
+
+	sdb.mm.RootDBManager.EndBatch()
 
 	sdb.bpt.Bpt.Update()
 
