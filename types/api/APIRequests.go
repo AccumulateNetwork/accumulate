@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
@@ -30,9 +31,10 @@ type APIRequestRawTx struct {
 	Timestamp int64            `json:"timestamp" form:"timestamp" query:"timestamp" validate:"required"`
 }
 
-// APIRequestURL is used to unmarshal URL param into API methods, that retrieves data by URL
-type APIRequestURL struct {
-	URL types.String `json:"url" form:"url" query:"url" validate:"required"`
+// APIRequestGet is used to unmarshal URL and Hash param into API methods, that retrieves data by URL or Hash
+type APIRequestGet struct {
+	URL  types.String  `json:"url" form:"url" query:"url" validate:"required"`
+	Hash types.Bytes32 `json:"hash" form:"hash" query:"hash" validate:"required"`
 }
 
 // APIDataResponse is used in "get" API method response

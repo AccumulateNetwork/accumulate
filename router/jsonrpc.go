@@ -66,7 +66,8 @@ func StartAPI(port int, q *Query, txBouncer *networks.Bouncer) *API {
 	apiRouter.HandleFunc("/v1", apiHandler)
 
 	proxyRouter := mux.NewRouter().StrictSlash(true)
-	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
+	proxyRouter.HandleFunc(`/url/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
+	proxyRouter.HandleFunc(`/tx/{tx:[a-fA-F0-9]+}`, proxyHandler)
 
 	// start JSON RPC API
 	go func() {
@@ -86,19 +87,26 @@ func StartAPI(port int, q *Query, txBouncer *networks.Bouncer) *API {
 func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &acmeapi.APIRequestURL{}
+	var resp interface{}
+	req := &acmeapi.APIRequestGet{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
 	}
 
-	// validate URL
-	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
+	// validate URL or Hash
+	if req.URL != "" {
+		if err = api.validate.StructPartial(req, "URL"); err != nil {
+			return NewValidatorError(err)
+		}
+		resp, err = api.query.GetChainState(req.URL.AsString())
+	} else {
+		if err = api.validate.StructPartial(req, "Hash"); err != nil {
+			return NewValidatorError(err)
+		}
+		// need to define if we need tokenaccount or not
+		resp, err = api.query.GetTokenTx(req.Hash[:])
 	}
-
-	// Tendermint integration here
-	resp, err := api.query.GetChainState(req.URL.AsString())
 
 	if err != nil {
 		return NewAccumulateError(err)
@@ -111,7 +119,7 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &acmeapi.APIRequestURL{}
+	req := &acmeapi.APIRequestGet{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
@@ -174,7 +182,7 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &acmeapi.APIRequestURL{}
+	req := &acmeapi.APIRequestGet{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
@@ -238,7 +246,7 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &acmeapi.APIRequestURL{}
+	req := &acmeapi.APIRequestGet{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
@@ -324,19 +332,19 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &TokenTx{}
+	req := &acmeapi.APIRequestGet{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
 	}
 
 	// validate only TokenTx.Hash (Assuming the hash is the txid)
-	if err = api.validate.StructPartial(req, "Hash", "From"); err != nil {
+	if err = api.validate.StructPartial(req, "Hash"); err != nil {
 		return NewValidatorError(err)
 	}
 
 	// Tendermint's integration here
-	resp, err := api.query.GetTokenTx(req.From.AsString(), req.Hash[:])
+	resp, err := api.query.GetTokenTx(req.Hash[:])
 	if err != nil {
 		return NewValidatorError(err)
 	}
@@ -386,7 +394,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &acmeapi.APIRequestURL{}
+	req := &acmeapi.APIRequestGet{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
