@@ -3,7 +3,6 @@ package state
 import (
 	"bytes"
 	"fmt"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -17,7 +16,9 @@ type Entry interface {
 //maybe we should have Chain header then entry, rather than entry containing all the Headers
 type Object struct {
 	ChainHeader Chain       `json:"chainHeader"`
-	Entry       types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
+	MDRoot      types.Bytes `json:"pendingMDRoot"`
+	//BPTRoot       types.Bytes `json:"bptRoot"`
+	Entry types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
 }
 
 func (app *Object) MarshalBinary() ([]byte, error) {

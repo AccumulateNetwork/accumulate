@@ -14,8 +14,9 @@ import (
 //that will consist of the chain type enumerator
 type Chain struct {
 	Entry
-	Type     uint64       `json:"type" form:"type" query:"type" validate:"required"`
-	ChainUrl types.String `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	Type      uint64        `json:"type" form:"type" query:"type" validate:"required"`
+	SigSpecId types.Bytes32 `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
+	ChainUrl  types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 }
 
 func NewChain(chainUrl types.String, chainType uint64) *Chain {

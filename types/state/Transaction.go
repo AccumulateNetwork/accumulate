@@ -10,17 +10,18 @@ import (
 )
 
 // transactionHeader is the structure that stores the basic information needed
-type transactionPendingState struct {
+type txPendingState struct {
 	Signature        []*transactions.ED25519Sig
-	TransactionState *transactionState
+	TransactionState *txState
 	Status           string `json:"status" form:"status" query:"status" validate:"required"`
 }
 
 //transaction object will either be on main chain or combined with the header and placed on pending chain.  If this is
 // part of the transactionPending, the Transaction can be nil which means the transaction contents are on the main chain
-type transactionState struct {
-	SigInfo     *transactions.SignatureInfo
-	Transaction *types.Bytes `json:"tx,omitempty" form:"tx" query:"tx" validate:"optional"`
+type txState struct {
+	SigInfo         *transactions.SignatureInfo
+	Transaction     *types.Bytes `json:"tx,omitempty" form:"tx" query:"tx" validate:"optional"`
+	transactionHash *types.Bytes32
 }
 
 // NewPendingTransaction will create a new pending transaction from a general transaction
@@ -28,10 +29,13 @@ func NewPendingTransaction(gtx *transactions.GenTransaction) *PendingTransaction
 	ret := &PendingTransaction{}
 	ret.Chain.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypeTransaction)
 	ret.Signature = gtx.Signature
-	ret.TransactionState = &transactionState{}
+	ret.TransactionState = &txState{}
 	ret.TransactionState.SigInfo = gtx.SigInfo
 	ret.TransactionState.Transaction = &types.Bytes{}
 	*ret.TransactionState.Transaction = gtx.Transaction
+	txId := new(types.Bytes32)
+	copy(txId[:], gtx.TransactionHash())
+	ret.TransactionState.transactionHash = txId
 	return ret
 }
 
@@ -41,6 +45,7 @@ func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransact
 	txState := &Transaction{}
 	txState.Transaction = pending.TransactionState.Transaction
 	txState.SigInfo = pending.TransactionState.SigInfo
+	txState.transactionHash = pending.TransactionState.transactionHash
 	pending.TransactionState.Transaction = nil
 	return txState, pending
 }
@@ -51,13 +56,13 @@ func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransact
 type Transaction struct {
 	Entry
 	Chain
-	transactionState
+	txState
 }
 
 type PendingTransaction struct {
 	Entry
 	Chain
-	transactionPendingState
+	txPendingState
 }
 
 func (is *Transaction) GetChainUrl() string {
@@ -197,7 +202,7 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 		} //
 		t.Signature = append(t.Signature, sig) //           Add each signature to list, and repeat until all done
 	} //
-	t.TransactionState = &transactionState{}
+	t.TransactionState = &txState{}
 	t.TransactionState.SigInfo = new(transactions.SignatureInfo) //                Get a SignatureInfo struct
 	data, err = t.TransactionState.SigInfo.UnMarshal(data)       //                And unmarshal it.
 	if err != nil {                                              //                Get an error? Complain to caller!
