@@ -51,7 +51,10 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	IPs := make([]string, flagTestNet.NumValidators)
+	n := flagTestNet.NumValidators
+	IPs := make([]string, n)
+	config := make([]*cfg.Config, n)
+
 	for i := range IPs {
 		ip := make(net.IP, len(baseIP))
 		copy(ip, baseIP)
@@ -59,9 +62,8 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		IPs[i] = fmt.Sprintf("tcp://%v", ip)
 	}
 
-	config := make([]*cfg.Config, flagTestNet.NumValidators)
 	for i := range config {
-		config[i] = cfg.Default()
+		config[i] = cfg.DefaultValidator()
 		if flagTestNet.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
 		}

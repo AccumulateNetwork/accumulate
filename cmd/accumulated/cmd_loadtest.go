@@ -56,7 +56,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 	for _, n := range flagLoadTest.Networks {
 		net := networks.Networks[n]
 		lAddr := fmt.Sprintf("tcp://%s:%d", net.Ip[0], net.Port+1)
-		client, err := rpc.New(lAddr, "/websocket")
+		client, err := rpc.New(lAddr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for network %d: %v\n", n, err)
 			os.Exit(1)
@@ -78,7 +78,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 
-		client, err := rpc.New(r, "/websocket")
+		client, err := rpc.New(r)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for remote %s: %v\n", r, err)
 			os.Exit(1)
