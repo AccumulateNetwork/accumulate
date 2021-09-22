@@ -385,15 +385,16 @@ func (app *Node) createBootstrapAccount() {
 	tas.Symbol = ti.Symbol
 	tas.Meta = ti.Meta
 
+	txid := types.Bytes32(sha256.Sum256([]byte("genesis")))
 	tasstatedata, err := tas.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
-	err = app.mmDB.AddStateEntry(identity[:], idStateData)
+	err = app.mmDB.AddStateEntry(identity, &txid, idStateData)
 	if err != nil {
 		panic(err)
 	}
-	err = app.mmDB.AddStateEntry(chainid[:], tasstatedata)
+	err = app.mmDB.AddStateEntry(chainid, &txid, tasstatedata)
 	if err != nil {
 		panic(err)
 	}
