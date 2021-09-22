@@ -2,8 +2,9 @@ package state
 
 import (
 	"bytes"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
 func TestTransactionState(t *testing.T) {
@@ -52,7 +53,7 @@ func TestTransactionState(t *testing.T) {
 	if txPendingState.TransactionState.Transaction == nil {
 		t.Fatalf("error unmarshaling transaction, it is nil")
 	}
-	if bytes.Compare(txPendingState2.TransactionState.Transaction.Bytes(), txPendingState.TransactionState.Transaction.Bytes()) != 0 {
+	if !bytes.Equal(txPendingState2.TransactionState.Transaction.Bytes(), txPendingState.TransactionState.Transaction.Bytes()) {
 		t.Fatalf("error unmarshalling transaction")
 	}
 	//if bytes.Compare(txPendingState2.Type[:], txPendingState.Type[:]) != 0 {
@@ -93,12 +94,14 @@ func TestTransactionState(t *testing.T) {
 	if txState2.Transaction == nil {
 		t.Fatalf("error unmarshaling transaction, it is nil")
 	}
-	if bytes.Compare(txState2.Transaction.Bytes(), txState.Transaction.Bytes()) != 0 {
+	if !bytes.Equal(txState2.Transaction.Bytes(), txState.Transaction.Bytes()) {
 		t.Fatalf("error unmarshalling transaction")
 	}
-	//if bytes.Compare(txState.Type[:], txState2.Type[:]) != 0 {
-	//	t.Fatalf("error unmarshaling header")
-	//}
+
+	if txState.Type != txState2.Type {
+		t.Fatalf("error unmarshaling header")
+	}
+
 	if !txState2.SigInfo.Equal(txState.SigInfo) {
 		t.Fatalf("sig info doesn't match")
 	}

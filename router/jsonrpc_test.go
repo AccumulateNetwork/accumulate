@@ -145,7 +145,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//rpcClients := []*rpchttp.HTTP{rpc}
 	//txBouncer := networks.NewBouncer(rpcClients)
 
-	networksList := []int{3}
+	networksList := []int{2}
 	txBouncer := networks.MakeBouncer(networksList)
 	if err != nil {
 		t.Fatal(err)
@@ -298,10 +298,10 @@ func Load(t *testing.T,
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
 	}
 
-	for i := 1; i < 100000; i++ { // Make a bunch of transactions
-		if i%100 == 0 {
+	for i := 1; i < 10000; i++ { // Make a bunch of transactions
+		if i%250 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(90 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address

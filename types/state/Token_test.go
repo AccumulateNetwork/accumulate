@@ -15,7 +15,7 @@ func TestTokenCoinbase(t *testing.T) {
 	//accountUrl := "MyADI/MyTokens"
 	account := NewToken(tokenUrl)
 
-	jm := json.RawMessage{}
+	var jm json.RawMessage
 	jm = []byte("{\"test\":\"me\"}")
 	account.Meta = &jm
 	actData, err := account.MarshalBinary()
@@ -39,7 +39,7 @@ func TestTokenCoinbase(t *testing.T) {
 		t.Fatalf("chain url's do not match")
 	}
 
-	if bytes.Compare(account.GetType().Bytes(), account2.GetType().Bytes()) != 0 {
+	if account.GetType() != account2.GetType() {
 		t.Fatalf("chain types don't match")
 	}
 
@@ -50,7 +50,7 @@ func TestTokenCoinbase(t *testing.T) {
 	if account2.Meta == nil {
 		t.Fatalf("meta is nil")
 	}
-	if bytes.Compare(*account2.Meta, jm) != 0 {
+	if !bytes.Equal(*account2.Meta, jm) {
 		t.Fatalf("meta data doesn't match")
 	}
 }

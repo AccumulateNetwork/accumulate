@@ -10,7 +10,7 @@ import (
 type Entry interface {
 	MarshalBinary() ([]byte, error)
 	UnmarshalBinary(data []byte) error
-	GetType() *types.Bytes32 //return the Chain Type for the entry.
+	GetType() uint64 //return the Chain Type for the entry.
 	GetChainUrl() string
 }
 
