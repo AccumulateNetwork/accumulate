@@ -256,8 +256,8 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 func (app *Node) Validate(transaction *transactions.GenTransaction) (err error) {
 
 	app.wait.Add(1)
-	err = app.doValidation(transaction)
-	//go app.doValidation(transaction)
+	//err = app.doValidation(transaction)
+	go app.doValidation(transaction)
 	return err
 }
 

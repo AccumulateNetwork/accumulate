@@ -13,8 +13,6 @@ import (
 	"testing"
 	"time"
 
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
 	"github.com/AccumulateNetwork/accumulated/networks"
@@ -87,8 +85,8 @@ func _TestLoadOnRemote(t *testing.T) {
 	queryTokenUrl := destAddress + "/" + tokenUrl
 	query := NewQuery(txBouncer)
 
-	queryme := "acme-4cd95cb589e0211f9c6b5fd858cf8fab80f4586af35b6160" //acme-b8d3aa6a4da74ca2a2cfeee0c0f03f78bb47f2fda8d1732f" ///dc/ACME"
-	queryTokenUrl = types.String(queryme)
+	//queryme := "acme-4cd95cb589e0211f9c6b5fd858cf8fab80f4586af35b6160" //acme-b8d3aa6a4da74ca2a2cfeee0c0f03f78bb47f2fda8d1732f" ///dc/ACME"
+	//queryTokenUrl = types.String(queryme)
 	//queryme = *queryTokenUrl.AsString()
 	resp, err := query.GetChainState(queryTokenUrl.AsString())
 	if err != nil {
@@ -105,7 +103,7 @@ func _TestLoadOnRemote(t *testing.T) {
 	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
 	_ = jsonapi
 
-	params := &api.APIRequestURL{URL: types.String(queryme)}
+	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
 	//ret, err := txBouncer.Query(queryTokenUrl.AsString())
 	theData := jsonapi.getData(context.Background(), gParams)
@@ -115,7 +113,7 @@ func _TestLoadOnRemote(t *testing.T) {
 	}
 	println(string(theJsonData))
 
-	resp, err = query.GetChainState(&queryme)
+	resp, err = query.GetChainState(queryTokenUrl.AsString())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,11 +138,15 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	_, rpc, vm := makeBVCandRouter(cfg, dir)
 
+	_ = rpc
 	//networksList := []int{2}
 	//txBouncer := networks.MakeBouncer(networksList)
 
-	rpcClients := []*rpchttp.HTTP{rpc}
-	txBouncer := networks.NewBouncer(rpcClients)
+	//rpcClients := []*rpchttp.HTTP{rpc}
+	//txBouncer := networks.NewBouncer(rpcClients)
+
+	networksList := []int{3}
+	txBouncer := networks.MakeBouncer(networksList)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -296,8 +298,8 @@ func Load(t *testing.T,
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
 	}
 
-	for i := 1; i < 10000; i++ { // Make a bunch of transactions
-		if i%100 == 0 {
+	for i := 1; i < 100000; i++ { // Make a bunch of transactions
+		if i%1000 == 0 {
 			txBouncer.BatchSend()
 			time.Sleep(250 * time.Millisecond)
 		}
