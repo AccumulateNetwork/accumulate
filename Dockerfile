@@ -25,7 +25,7 @@ RUN set -xe && \
 WORKDIR /home/app
 
 COPY --from=builder /go/bin/accumulated ./
-COPY --from=builder /root/.accumulate /root/.accumulate
+COPY --from=builder /root/.accumulate ./.accumulate
 COPY ./entrypoint.sh ./entrypoint.sh
 
 RUN \
@@ -34,7 +34,6 @@ RUN \
 
 USER app
 
-EXPOSE 25999 26000
+EXPOSE 34000 34001
 
-CMD [ "./accumulated" ]
-#CMD [ "./accumulated", "-c", "/home/app/values/config.yaml" ]
+CMD [ "./accumulated", "-i", "0" ]
