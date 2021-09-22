@@ -12,6 +12,7 @@ WORKDIR ${PKG_PATH}
 COPY . ${PKG_PATH}/
 
 RUN go mod download
+RUN go run main.go --init -n Badlands -i 0
 RUN go build -o /go/bin/accumulated main.go
 
 FROM alpine:3.7
@@ -24,6 +25,7 @@ RUN set -xe && \
 WORKDIR /home/app
 
 COPY --from=builder /go/bin/accumulated ./
+COPY --from=builder /root/.accumulate /root/.accumulate
 COPY ./entrypoint.sh ./entrypoint.sh
 
 RUN \
