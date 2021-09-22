@@ -13,16 +13,6 @@ import (
 	smtDB "github.com/AccumulateNetwork/SMT/storage/database"
 )
 
-type pendingTxState struct {
-	tx   []byte
-	txId *types.Bytes32
-}
-
-type validatedTxState struct {
-	tx   []byte
-	txId *types.Bytes32
-}
-
 type transactionLists struct {
 	validatedTx []*Transaction
 	pendingTx   []*PendingTransaction
@@ -55,6 +45,7 @@ type StateDB struct {
 	mutex        sync.Mutex
 	updates      map[types.Bytes32]*blockUpdates
 	transactions transactionLists
+	sync         sync.WaitGroup
 }
 
 // Open database to manage the smt and chain states
@@ -92,6 +83,10 @@ func (sdb *StateDB) GetDB() *smtDB.Manager {
 	return sdb.db
 }
 
+func (sdb *StateDB) Sync() {
+	sdb.sync.Wait()
+}
+
 //AddPendingTx adds the pending tx raw data and signature of that data to tx, signature needs to be a signed hash of the tx.
 func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txPending *PendingTransaction, txValidated *Transaction) error {
 	_ = chainId
@@ -107,6 +102,7 @@ func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txPending *PendingTrans
 
 //GetPersistentEntry will pull the data from the database for the StateEntries bucket.
 func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, error) {
+	sdb.Sync()
 
 	if sdb.db == nil {
 		return nil, fmt.Errorf("database has not been initialized")
@@ -123,9 +119,9 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 	if err != nil {
 		return nil, fmt.Errorf("entry in database is not found for %x", chainId)
 	}
-	if verify {
-		//todo: generate and verify data to make sure the state matches what is in the patricia trie
-	}
+	//if verify {
+	//todo: generate and verify data to make sure the state matches what is in the patricia trie
+	//}
 	return ret, nil
 }
 
@@ -259,6 +255,10 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 
 		//now store the state object
 		chainStateObject, err := currentState.stateData.MarshalBinary()
+		if err != nil {
+			panic("failed to marshal binary for state data")
+		}
+
 		err = sdb.GetDB().PutBatch("StateEntries", "", chainId.Bytes(), chainStateObject)
 
 		if err != nil {
@@ -280,6 +280,11 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 	//	//todo:  Determine how we purge pending tx's after 2 weeks.
 	//	sdb.bpt.Bpt.Insert(chainId, *mdRoot)
 	//}
+}
+
+func (sdb *StateDB) writeBatches() {
+	defer sdb.sync.Done()
+	sdb.mm.RootDBManager.EndBatch()
 }
 
 // WriteStates will push the data to the database and update the patricia trie
@@ -334,10 +339,12 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	}
 	group.Wait()
 
-	sdb.mm.RootDBManager.EndBatch()
 	sdb.bpt.Bpt.Update()
 
 	//reset out block update buffer to get ready for the next round
+	sdb.sync.Add(1)
+	sdb.writeBatches()
+
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
