@@ -53,7 +53,8 @@ func (app *TokenAccount) GetChainUrl() string {
 // CanTransact returns true/false if there is a sufficient balance
 func (app *TokenAccount) CanTransact(amt *big.Int) bool {
 	//make sure the user has enough in the account to perform the transaction
-	return app.GetBalance().Cmp(amt) < 0
+	//if the balance is greater than or equal to the amount, then we are good.
+	return app.GetBalance().Cmp(amt) >= 0
 }
 
 //SubBalance will subtract a balance form the account.  If this is a coinbase account,
@@ -64,7 +65,7 @@ func (app *TokenAccount) SubBalance(amt *big.Int) error {
 	}
 
 	if app.Balance.Cmp(amt) < 0 {
-		return fmt.Errorf("{ \"insufficient-balance\" : { \"available\" : \"%d\" , \"requested\", \"%d\" } }", app.GetBalance(), amt)
+		return fmt.Errorf("insufficient balance, amount available : %d, requested, %d", app.GetBalance(), amt)
 	}
 
 	app.Balance.Sub(&app.Balance, amt)
