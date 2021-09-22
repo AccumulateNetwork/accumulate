@@ -18,12 +18,17 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
+type tokenAccountTx struct {
+	account *state.TokenAccount
+	txHash  []*types.Bytes32
+}
+
 type AnonTokenChain struct {
 	ValidatorContext
 
 	mdroot [32]byte
 
-	currentBalanceState map[types.Bytes32]*state.TokenAccount
+	currentBalanceState map[types.Bytes32]*tokenAccountTx
 	currentChainState   map[types.Bytes32]*state.Chain
 }
 
@@ -63,7 +68,7 @@ func (v *AnonTokenChain) BeginBlock(height int64, time *time.Time) error {
 	v.currentHeight = height
 	v.currentTime = *time
 
-	v.currentBalanceState = make(map[types.Bytes32]*state.TokenAccount)
+	v.currentBalanceState = make(map[types.Bytes32]*tokenAccountTx)
 	v.currentChainState = make(map[types.Bytes32]*state.Chain)
 
 	return nil
@@ -98,16 +103,23 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 	//adiStateData := currentState.IdentityState
 	chainState := state.Chain{}
 
+	var txHash types.Bytes32
+	copy(txHash[:], submission.TransactionHash())
+	adiChainId := types.GetChainIdFromChainPath(&adi)
+
 	// if the identity state is nil, then it means we do not have any anon accts setup yet.
 	if currentState.IdentityState == nil {
 		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
 		chainState.SetHeader(types.String(adi), types.ChainTypeAnonTokenAccount)
 		//need to flag this as an anonymous account
-		//data, err := chainState.MarshalBinary()
-		//if err != nil {
-		//	return nil
-		//}
+		data, err := chainState.MarshalBinary()
+		if err != nil {
+			return nil
+		}
 		v.currentChainState[*types.GetChainIdFromChainPath(&adi)] = &chainState
+
+		v.db.AddStateEntry(adiChainId, &txHash, data)
+
 	} else {
 		err := chainState.UnmarshalBinary(currentState.IdentityState.Entry)
 		if err != nil {
@@ -152,7 +164,20 @@ func (v *AnonTokenChain) processDeposit(currentState *state.StateEntry, submissi
 
 	//add the token account state to the chain.
 	//resp.AddStateData(tokenChain, data)
-	v.currentBalanceState[*tokenChain] = account
+
+	taTx := &tokenAccountTx{}
+	taTx.account = account
+	taTx.txHash = append(taTx.txHash, &txHash)
+	v.currentBalanceState[*tokenChain] = taTx
+
+	//this will be optimized later.  really only need to record the tx's as a function of chain id then at end block record Tx
+	//want to pass back just an interface rather than marshaled data.
+	data, err := account.MarshalBinary()
+	if err != nil {
+		panic("anon token end block, error marshaling account state.")
+	}
+	v.db.AddStateEntry(tokenChain, &txHash, data)
+
 	//if we get here it is successful. Store tx body on main chain, and verification data on pending
 	//txPendingState := state.NewPendingTransaction(submission)
 	//txState, txPendingState := state.NewTransaction(txPendingState)
@@ -200,7 +225,9 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	accountChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
 
 	var tokenAccountState *state.TokenAccount
-	if tokenAccountState = v.currentBalanceState[*accountChainId]; tokenAccountState == nil {
+	var taTx *tokenAccountTx
+	if taTx = v.currentBalanceState[*accountChainId]; taTx == nil {
+
 		//because we use a different chain for the anonymous account, we need to fetch it.
 		currentState.ChainId = accountChainId
 		currentState.ChainState, err = currentState.DB.GetCurrentEntry(accountChainId[:])
@@ -208,11 +235,20 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 			return fmt.Errorf("chain state for account not esablished")
 		}
 
+		tokenAccountState = new(state.TokenAccount)
 		err := tokenAccountState.UnmarshalBinary(currentState.ChainState.Entry)
 		if err != nil {
 			return err
 		}
+
+		taTx = &tokenAccountTx{}
+		v.currentBalanceState[*accountChainId] = taTx
+		taTx.account = tokenAccountState
+		txHash := new(types.Bytes32)
+		copy(txHash[:], submission.TransactionHash())
+		taTx.txHash = append(taTx.txHash, txHash)
 	}
+	tokenAccountState = taTx.account
 
 	//now check to see if we can transact
 	//really only need to provide one input...
@@ -273,23 +309,33 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	if err != nil {
 		return fmt.Errorf("error subtracting balance from account acc://%s, %v", currentState.AdiHeader.ChainUrl, err)
 	}
-
-	v.currentBalanceState[*accountChainId] = tokenAccountState
-
-	//if we get here we were successful so we can put the signature on the pending chain and transaction on the main chain
 	var txHash types.Bytes32
 	copy(txHash[:], txid)
+
+	//taTx := &tokenAccountTx{}
+	//taTx.account = tokenAccountState
+	//taTx.txHash = &txHash
+	//v.currentBalanceState[*accountChainId] = taTx
+	//this will be optimized later.  really only need to record the tx's as a function of chain id then at end block record Tx
+	//want to pass back just an interface rather than marshaled data.
+	data, err := tokenAccountState.MarshalBinary()
+	if err != nil {
+		panic("anon token end block, error marshaling account state.")
+	}
+	v.db.AddStateEntry(accountChainId, &txHash, data)
+	//if we get here we were successful so we can put the signature on the pending chain and transaction on the main chain
+
 	//if we get here it is successful. Store tx body on main chain, and verification data on pending
-	txPendingState := state.NewPendingTransaction(submission)
-	txState, txPendingState := state.NewTransaction(txPendingState)
-	data, _ := txState.MarshalBinary()
-	resp.AddMainChainData(accountChainId, data)
+	//txPendingState := state.NewPendingTransaction(submission)
+	//txState, txPendingState := state.NewTransaction(txPendingState)
+	//data, _ := txState.MarshalBinary()
+	//resp.AddMainChainData(accountChainId, data)
 
 	// since we have a successful transaction, we only need to store the transaction
 	// header that we can use to verify what is on the main chain. need to store reason...
 	// need to redo this based upon updated transactions.SigInfo struct.  Need to store marshaled SigInfo + ED25519
-	data, _ = txPendingState.MarshalBinary()
-	resp.AddPendingData(&txHash, data)
+	//data, _ = txPendingState.MarshalBinary()
+	//resp.AddPendingData(&txHash, data)
 
 	return nil
 }
@@ -375,21 +421,21 @@ func (v *AnonTokenChain) Validate(currentState *state.StateEntry, submission *tr
 
 func (v *AnonTokenChain) EndBlock(mdroot []byte) error {
 	//persist any changes to the balance to the database
-	for chainId, account := range v.currentBalanceState {
-		data, err := account.MarshalBinary()
-		if err != nil {
-			panic("anon token end block, error marshaling account state.")
-		}
-		v.db.AddStateEntry(chainId[:], data)
-	}
-
-	for chainId, chain := range v.currentChainState {
-		data, err := chain.MarshalBinary()
-		if err != nil {
-			panic("anon token end block, error marshaling chain state")
-		}
-		v.db.AddStateEntry(chainId[:], data)
-	}
+	//for chainId, account := range v.currentBalanceState {
+	//	data, err := account.MarshalBinary()
+	//	if err != nil {
+	//		panic("anon token end block, error marshaling account state.")
+	//	}
+	//	v.db.AddStateEntry(chainId[:], data)
+	//}
+	//
+	//for chainId, chain := range v.currentChainState {
+	//	data, err := chain.MarshalBinary()
+	//	if err != nil {
+	//		panic("anon token end block, error marshaling chain state")
+	//	}
+	//	v.db.AddStateEntry(chainId[:], data)
+	//}
 	return nil
 }
 

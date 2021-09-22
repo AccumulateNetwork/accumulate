@@ -198,12 +198,12 @@ func TestJsonRpcAnonToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//Load(t, txBouncer, privateKey)
+	Load(t, txBouncer, privateKey)
 
-	//txBouncer.BatchSend()
+	txBouncer.BatchSend()
 
 	//wait 3 seconds for the transaction to process for the block to complete.
-	time.Sleep(30 * time.Second)
+	time.Sleep(3 * time.Second)
 	queryTokenUrl := destAddress + "/" + tokenUrl
 	resp, err := query.GetTokenAccount(queryTokenUrl.AsString())
 	if err != nil {
@@ -296,10 +296,10 @@ func Load(t *testing.T,
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
 	}
 
-	for i := 1; i < 100000; i++ { // Make a bunch of transactions
+	for i := 1; i < 10000; i++ { // Make a bunch of transactions
 		if i%100 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(90 * time.Millisecond)
+			time.Sleep(250 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address
