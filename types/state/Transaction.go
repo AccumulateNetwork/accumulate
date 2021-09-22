@@ -1,6 +1,7 @@
 package state
 
 import (
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/AccumulateNetwork/SMT/common"
@@ -65,6 +66,12 @@ type PendingTransaction struct {
 	txPendingState
 }
 
+func (is *Transaction) TransactionHash() *types.Bytes32 {
+	data, _ := is.MarshalBinary()
+	txHash := types.Bytes32(sha256.Sum256(data))
+	return &txHash
+}
+
 func (is *Transaction) GetChainUrl() string {
 	return is.Chain.GetChainUrl()
 }
@@ -79,13 +86,13 @@ func (is *Transaction) MarshalBinary() (data []byte, err error) {
 			err = fmt.Errorf("error marshaling transaction state %v", err)
 		}
 	}()
-
-	headerData, err := is.Chain.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("unable to marshal chain header for transaction, %v", err)
-	}
-
-	data = append(data, headerData...)
+	//
+	//headerData, err := is.Chain.MarshalBinary()
+	//if err != nil {
+	//	return nil, fmt.Errorf("unable to marshal chain header for transaction, %v", err)
+	//}
+	//
+	//data = append(data, headerData...)
 
 	if is.SigInfo == nil {
 		panic("no SigInfo for state, shouldn't get here")
@@ -101,20 +108,20 @@ func (is *Transaction) MarshalBinary() (data []byte, err error) {
 	return data, nil
 }
 
-func (is *Transaction) UnmarshalBinary(data []byte) error {
+func (is *Transaction) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
-		if err := recover(); err != nil {
+		if recover(); err != nil {
 			err = fmt.Errorf("error unmarshaling transaction state %v", err)
 		}
 	}()
 	i := 0
-
-	err := is.Chain.UnmarshalBinary(data)
-	if err != nil {
-		return fmt.Errorf("unable to unmarshal data for transaction, %v", err)
-	}
-
-	i += is.Chain.GetHeaderSize()
+	//
+	//err := is.Chain.UnmarshalBinary(data)
+	//if err != nil {
+	//	return fmt.Errorf("unable to unmarshal data for transaction, %v", err)
+	//}
+	//
+	//i += is.Chain.GetHeaderSize()
 
 	if len(data) < i {
 		return fmt.Errorf("unable to unmarshal raw transaction data")
