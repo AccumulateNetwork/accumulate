@@ -167,7 +167,7 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 			return nil, fmt.Errorf("no current state is defined, %v", err)
 		}
 		//if we have valid data, store off the state
-		sdb.updates[key] = &currentState
+		ret = currentState.stateData
 	}
 
 	return ret, nil
@@ -297,6 +297,8 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 
 	//reset out block update buffer to get ready for the next round
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
+	sdb.transactions.validatedTx = nil
+	sdb.transactions.pendingTx = nil
 
 	//return the state of the BPT for the state of the block
 	return sdb.bpt.Bpt.Root.Hash[:], currentStateCount, nil
