@@ -52,7 +52,7 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 	networkId := viper.GetString("instrumentation/namespace")
 	bvcId := sha256.Sum256([]byte(networkId))
 	dbFilename := workingDir + "/" + "valacc.db"
-	err := app.mmDB.Open(dbFilename, bvcId[:], true, true)
+	err := app.mmDB.Open(dbFilename, bvcId[:], false, true)
 	if err != nil {
 		return fmt.Errorf("failed to open database %s, %v", dbFilename, err)
 	}
@@ -167,22 +167,21 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 
 	_ = transaction.TransactionHash()
 
-	//app.mutex.Lock()
-	//
-	//var group *sync.WaitGroup
-	//if group = app.chainWait[transaction.Routing]; group == nil {
-	//	group = &sync.WaitGroup{}
-	//	app.chainWait[transaction.Routing] = group
-	//
-	//}
-	//group.Wait()
-	//group.Add(1)
-	//app.mutex.Unlock()
-	//
-	//defer func() {
-	//	group.Done()
-	//	app.wait.Add(-1)
-	//}()
+	app.mutex.Lock()
+
+	var group *sync.WaitGroup
+	if group = app.chainWait[transaction.Routing%4]; group == nil {
+		group = &sync.WaitGroup{}
+		app.chainWait[transaction.Routing%4] = group
+	}
+	group.Wait()
+	group.Add(1)
+	app.mutex.Unlock()
+
+	defer func() {
+		group.Done()
+		app.wait.Done()
+	}()
 
 	currentState, _ := app.getCurrentState(transaction.ChainID)
 
@@ -203,6 +202,7 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 	txPending := state.NewPendingTransaction(transaction)
 
 	//run through the validation routine
+	//todo: vdata should return a list of chainId's the transaction touched.
 	vdata, err := app.chainValidator.Validate(currentState, transaction)
 
 	var chainId types.Bytes32
@@ -219,7 +219,7 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 	}
 
 	//so now we need to store the tx state
-	app.mmDB.AddPendingTx(&chainId, txPending, txAccepted)
+	err = app.mmDB.AddPendingTx(&chainId, txPending, txAccepted)
 
 	if err != nil {
 		//if we did get an error we just need to return.
@@ -253,16 +253,17 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 
 // Validate will do a deep validation of the transaction.  This is done by ALL the validators in the network
 // transaction []byte will be replaced by transaction RawTransaction
-func (app *Node) Validate(transaction *transactions.GenTransaction) error {
+func (app *Node) Validate(transaction *transactions.GenTransaction) (err error) {
 
-	//app.wait.Add(1)
-	err := app.doValidation(transaction)
+	app.wait.Add(1)
+	err = app.doValidation(transaction)
+	//go app.doValidation(transaction)
 	return err
 }
 
 // EndBlock will return the merkle DAG root of the current state
 func (app *Node) EndBlock() ([]byte, error) {
-	//	app.wait.Wait()
+	app.wait.Wait()
 	app.chainValidator.EndBlock([]byte{})
 	mdRoot, numStateChanges, err := app.mmDB.WriteStates(app.chainValidator.GetCurrentHeight())
 

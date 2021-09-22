@@ -254,9 +254,9 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 	//really only need to provide one input...
 	//now check to see if the account is good to send tokens from
 	amt := types.Amount{}
-	var outAmt big.Int
+	txAmt := big.NewInt(0)
 	for _, val := range withdrawal.Outputs {
-		amt.Add(amt.AsBigInt(), outAmt.SetUint64(val.Amount))
+		amt.Add(amt.AsBigInt(), txAmt.SetUint64(val.Amount))
 	}
 
 	if !tokenAccountState.CanTransact(amt.AsBigInt()) {
@@ -274,8 +274,8 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 
 	//now build the synthetic transactions.
 	txid := submission.TransactionHash()
-	txAmt := big.NewInt(0)
 	for _, val := range withdrawal.Outputs {
+		txAmt.SetUint64(val.Amount)
 		//extract the target identity and chain from the url
 		destAdi, destChainPath, err := types.ParseIdentityChainPath(&val.Dest)
 		if err != nil {
@@ -294,7 +294,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		sub.SigInfo.URL = destAdi
 
 		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &currentState.AdiHeader.ChainUrl, &destUrl)
-		err = depositTx.SetDeposit(&acmeTokenUrl, amt.AsBigInt())
+		err = depositTx.SetDeposit(&acmeTokenUrl, txAmt)
 		if err != nil {
 			return fmt.Errorf("unable to set deposit for synthetic token deposit transaction, %v", err)
 		}
@@ -305,7 +305,7 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		}
 	}
 
-	err = tokenAccountState.SubBalance(txAmt)
+	err = tokenAccountState.SubBalance(amt.AsBigInt())
 	if err != nil {
 		return fmt.Errorf("error subtracting balance from account acc://%s, %v", currentState.AdiHeader.ChainUrl, err)
 	}
