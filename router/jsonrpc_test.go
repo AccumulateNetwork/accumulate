@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -129,10 +130,9 @@ func _TestLoadOnRemote(t *testing.T) {
 
 func TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
-	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
+	dir, err := ioutil.TempDir("", "AccRouterTest-")
 
-	//dir += "/Node0"
-	cfg := path.Join(dir, "/Node0/config/config.toml")
+	cfg := filepath.Join(dir, "Node0", "config", "config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}

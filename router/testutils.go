@@ -79,7 +79,7 @@ func makeBVCandRouter(cfg string, dir string) (*local.Local, *rpchttp.HTTP, *ten
 	laddr := viper.GetString("rpc.laddr")
 	//rpcc := tendermint.GetRPCClient(laddr)
 
-	rpcc, _ := rpchttp.New(laddr, "/websocket")
+	rpcc, _ := rpchttp.New(laddr)
 
 	return &lc, rpcc, accvm
 }
