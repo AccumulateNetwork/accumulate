@@ -1,7 +1,6 @@
 package state
 
 import (
-	"bytes"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -9,7 +8,7 @@ import (
 
 func TestStateHeader(t *testing.T) {
 
-	header := Chain{ChainUrl: "acme/chain/path", Type: types.Bytes32(types.ChainTypeAnonTokenAccount)}
+	header := Chain{ChainUrl: "acme/chain/path", Type: types.ChainTypeAnonTokenAccount}
 
 	data, err := header.MarshalBinary()
 	if err != nil {
@@ -23,7 +22,7 @@ func TestStateHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if bytes.Compare(header.GetType().Bytes(), header2.GetType().Bytes()) != 0 {
+	if header.GetType() != header2.GetType() {
 		t.Fatalf("header type doesnt match")
 	}
 

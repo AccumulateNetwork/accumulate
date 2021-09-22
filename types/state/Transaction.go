@@ -82,7 +82,7 @@ func (is *Transaction) GetType() uint64 {
 
 func (is *Transaction) MarshalBinary() (data []byte, err error) {
 	defer func() {
-		if err := recover(); err != nil {
+		if rerr := recover(); rerr != nil {
 			err = fmt.Errorf("error marshaling transaction state %v", err)
 		}
 	}()
@@ -110,7 +110,7 @@ func (is *Transaction) MarshalBinary() (data []byte, err error) {
 
 func (is *Transaction) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
-		if recover(); err != nil {
+		if rerr := recover(); rerr != nil {
 			err = fmt.Errorf("error unmarshaling transaction state %v", err)
 		}
 	}()
@@ -135,7 +135,7 @@ func (is *Transaction) UnmarshalBinary(data []byte) (err error) {
 
 	if len(data) != 0 {
 		is.Transaction = &types.Bytes{}
-		*is.Transaction, data = common.BytesSlice(data) //        Get the Transaction out of the data
+		*is.Transaction, _ = common.BytesSlice(data) //        Get the Transaction out of the data
 	}
 
 	return nil
@@ -143,7 +143,7 @@ func (is *Transaction) UnmarshalBinary(data []byte) (err error) {
 
 func (t *PendingTransaction) MarshalBinary() (data []byte, err error) {
 	defer func() {
-		if err := recover(); err != nil {
+		if recover(); err != nil {
 			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
 		}
 	}()
@@ -218,7 +218,7 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 
 	if len(data) != 0 {
 		t.TransactionState.Transaction = &types.Bytes{}
-		*t.TransactionState.Transaction, data = common.BytesSlice(data) //        Get the Transaction out of the data
+		*t.TransactionState.Transaction, _ = common.BytesSlice(data) //        Get the Transaction out of the data
 	}
 
 	return nil
