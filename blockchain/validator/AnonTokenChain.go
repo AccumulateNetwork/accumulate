@@ -284,14 +284,13 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 		destUrl := types.String(destChainPath)
 
 		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
-		sub := &transactions.GenTransaction{}
-		resp.AddSyntheticTransaction(sub)
+		gtx := new(transactions.GenTransaction)
 
 		//set the identity chain for the destination
-		sub.Routing = types.GetAddressFromIdentity(&destAdi)
-		sub.ChainID = types.GetChainIdFromChainPath(destUrl.AsString()).Bytes()
-		sub.SigInfo = &transactions.SignatureInfo{}
-		sub.SigInfo.URL = destAdi
+		gtx.Routing = types.GetAddressFromIdentity(&destAdi)
+		gtx.ChainID = types.GetChainIdFromChainPath(destUrl.AsString()).Bytes()
+		gtx.SigInfo = new(transactions.SignatureInfo)
+		gtx.SigInfo.URL = destAdi
 
 		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &currentState.AdiHeader.ChainUrl, &destUrl)
 		err = depositTx.SetDeposit(&acmeTokenUrl, txAmt)
@@ -299,10 +298,12 @@ func (v *AnonTokenChain) processSendToken(currentState *state.StateEntry, submis
 			return fmt.Errorf("unable to set deposit for synthetic token deposit transaction, %v", err)
 		}
 
-		sub.Transaction, err = depositTx.MarshalBinary()
+		gtx.Transaction, err = depositTx.MarshalBinary()
 		if err != nil {
 			return fmt.Errorf("unable to marshal synthetic token transaction deposit, %v", err)
 		}
+
+		resp.AddSyntheticTransaction(gtx)
 	}
 
 	err = tokenAccountState.SubBalance(amt.AsBigInt())
