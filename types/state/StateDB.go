@@ -301,18 +301,8 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	group := new(sync.WaitGroup)
 	group.Add(1)
 	group.Add(len(sdb.updates))
+	//to try the multi-threading add "go" in front of the next line
 	sdb.writeTxs(group)
-	//go sdb.writeTxs(group)
-	//
-	//keys := make([]types.Bytes32, 0, currentStateCount)
-	//for chainId := range sdb.updates {
-	//	keys = append(keys, chainId)
-	//}
-	//
-	////sort the keys
-	//sort.Slice(keys, func(i, j int) bool {
-	//	return bytes.Compare(keys[i][:], keys[j][:]) < 0
-	//})
 
 	mutex := new(sync.Mutex)
 	//then run through the list and record them
@@ -324,7 +314,7 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	}
 	//for _, chainId := range keys {
 	for chainId := range sdb.updates {
-
+		//to enable multi-threading put "go" in front
 		sdb.writeChainState(group, mutex, merkleMgrMap[chainId], chainId)
 
 		//TODO: figure out how to do this with new way state is derived
@@ -344,8 +334,9 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 
 	//reset out block update buffer to get ready for the next round
 	sdb.sync.Add(1)
-	//go sdb.writeBatches()
+	//to enable threaded batch writes, put go in front of next line.
 	sdb.writeBatches()
+
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
