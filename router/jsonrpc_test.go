@@ -24,7 +24,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func _TestLoadOnRemote(t *testing.T) {
+func TestLoadOnRemote(t *testing.T) {
 
 	networksList := []int{3}
 	txBouncer := networks.MakeBouncer(networksList)
@@ -33,10 +33,7 @@ func _TestLoadOnRemote(t *testing.T) {
 
 	addrList := runLoadTest(t, txBouncer, &privateKeySponsor)
 
-	for _, v := range addrList[1:] {
-		fmt.Println(v)
-	}
-	time.Sleep(3000 * time.Millisecond)
+	time.Sleep(10000 * time.Millisecond)
 
 	tokenUrl := "dc/ACME"
 	queryTokenUrl := addrList[1] + "/" + tokenUrl
@@ -140,7 +137,7 @@ func runLoadTest(t *testing.T, txBouncer *networks.Bouncer, origin *ed25519.Priv
 
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func _TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
 	cfg := path.Join(dir, "/Node0/config/config.toml")
@@ -274,9 +271,9 @@ func Load(t *testing.T,
 
 	addrCountMap := make(map[string]int)
 	for i := 1; i < 10*len(wallet); i++ { // Make a bunch of transactions
-		if i%200 == 0 {
+		if i%100 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(400 * time.Millisecond)
+			time.Sleep(500 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address
