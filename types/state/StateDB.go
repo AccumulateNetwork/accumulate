@@ -343,8 +343,8 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 
 	//reset out block update buffer to get ready for the next round
 	sdb.sync.Add(1)
-	go sdb.writeBatches()
-
+	//go sdb.writeBatches()
+	sdb.writeBatches()
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
