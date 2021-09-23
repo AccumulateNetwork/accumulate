@@ -265,7 +265,7 @@ func Load(t *testing.T,
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
-	for i := 1; i <= 1000; i++ { //                            create a 1000 addresses for anonymous token chains
+	for i := 1; i <= 100; i++ { //                            create a 1000 addresses for anonymous token chains
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
 	}
 
