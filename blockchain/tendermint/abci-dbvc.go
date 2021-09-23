@@ -9,23 +9,20 @@ import (
 
 	//"encoding/binary"
 	"fmt"
-	"os"
 
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
-	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
-	"github.com/tendermint/tendermint/p2p"
-	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 
 	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
 	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	abci "github.com/tendermint/tendermint/abci/types"
-	ed25519 "golang.org/x/crypto/ed25519"
+	"golang.org/x/crypto/ed25519"
 
 	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/merkleDag"
 	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
@@ -50,6 +47,8 @@ type DirectoryBlockChain struct {
 	//	BootstrapHeight int64
 	Height uint64
 
+	config *cfg.Config
+
 	md        merkleDag.MD
 	AppMDRoot valacctypes.Hash
 
@@ -64,10 +63,6 @@ func (app *DirectoryBlockChain) GetHeight() uint64 {
 
 func (DirectoryBlockChain) Info(abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{}
-}
-
-func (DirectoryBlockChain) SetOption(abci.RequestSetOption) abci.ResponseSetOption {
-	return abci.ResponseSetOption{}
 }
 
 func (app *DirectoryBlockChain) resolveDDIIatHeight(ddii []byte, bvcheight int64) (ed25519.PublicKey, error) {
@@ -212,14 +207,14 @@ func (app *DirectoryBlockChain) DeliverTx(req abci.RequestDeliverTx) (response a
 			Type: "bvc",
 			Attributes: []abci.EventAttribute{
 				//want to be able to search by BVC chain.
-				{Key: []byte("chain"), Value: bvcreq.GetHeader().GetBvcMasterChainDDII(), Index: true},
+				{Key: "chain", Value: string(bvcreq.GetHeader().GetBvcMasterChainDDII()), Index: true},
 				//want to be able to search by height, but probably should be AND'ed with the chain
-				{Key: []byte("height"), Value: entry_slices[BVCHeight_type], Index: true},
+				{Key: "height", Value: string(entry_slices[BVCHeight_type]), Index: true},
 				//want to be able to search by ddii (optional AND'ed with chain or height)
-				{Key: []byte("ddii"), Value: entry_slices[DDII_type], Index: true},
+				{Key: "ddii", Value: string(entry_slices[DDII_type]), Index: true},
 				//don't care about searching by bvc timestamp or valacc hash
-				{Key: []byte("timestamp"), Value: entry_slices[Timestamp_type], Index: false},
-				{Key: []byte("mdroot"), Value: entry_slices[MDRoot_type], Index: false},
+				{Key: "timestamp", Value: string(entry_slices[Timestamp_type]), Index: false},
+				{Key: "mdroot", Value: string(entry_slices[MDRoot_type]), Index: false},
 			},
 		},
 	}
@@ -279,7 +274,7 @@ func (app *DirectoryBlockChain) Query(reqQuery abci.RequestQuery) (resQuery abci
 	return
 }
 
-func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm.Node, error) {
+func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (service.Service, error) {
 	// fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
 	config := cfg.DefaultConfig()
@@ -297,23 +292,9 @@ func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm
 	}
 
 	// create logger
-	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
-	var err error
-	logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, cfg.DefaultLogLevel)
+	logger, err := log.NewDefaultLogger(app.config.LogFormat, app.config.LogLevel, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse log level: %w", err)
-	}
-
-	// read private validator
-	pv := privval.LoadFilePV(
-		config.PrivValidatorKeyFile(),
-		config.PrivValidatorStateFile(),
-	)
-
-	// read node key
-	nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load node's key: %w", err)
 	}
 
 	//if database.InitDBs(config, nm.DefaultDBProvider ) !=nil {
@@ -322,15 +303,11 @@ func (app *DirectoryBlockChain) Start(ConfigFile string, WorkingDir string) (*nm
 	//}
 
 	// create node
-	node, err := nm.NewNode(
-		config,
-		pv,
-		nodeKey,
+	node, err := nm.New(
+		app.config,
+		logger,
 		proxy.NewLocalClientCreator(app),
-		nm.DefaultGenesisDocProviderFunc(config),
-		nm.DefaultDBProvider,
-		nm.DefaultMetricsProvider(config.Instrumentation),
-		logger)
+		nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}

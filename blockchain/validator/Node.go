@@ -59,10 +59,7 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 
 	laddr := viper.GetString("rpc.laddr")
 
-	rpcClient, err := rpchttp.New(laddr, "/websocket")
-	if err != nil {
-		panic(err)
-	}
+	rpcClient, _ := rpchttp.New(laddr)
 
 	app.chainValidator = chainValidator
 	app.leader = false

@@ -2,6 +2,7 @@ package networks
 
 import (
 	"fmt"
+
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
@@ -14,7 +15,7 @@ func MakeBouncer(networkList []int) *Bouncer {
 	for i := range networkList {
 		j := networkList[i]
 		lAddr := fmt.Sprintf("tcp://%s:%d", Networks[j].Ip[0], Networks[j].Port+1)
-		client, err := rpchttp.New(lAddr, "/websocket")
+		client, err := rpchttp.New(lAddr)
 		if err != nil {
 			return nil
 		}

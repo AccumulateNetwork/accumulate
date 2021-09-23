@@ -22,10 +22,16 @@ func CreateAccumulateBVC(config string, path string) (*tendermint.AccumulatorVMA
 	acc.SetAccumulateNode(bvc)
 
 	//fire up the tendermint processing...
-	go acc.Start()
+	var err error
+	go func() {
+		_, err = acc.Start()
+	}()
 
 	acc.Wait()
 
+	if err != nil {
+		return nil, err
+	}
 	return acc, nil
 }
 

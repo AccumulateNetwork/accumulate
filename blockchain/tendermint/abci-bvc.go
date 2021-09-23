@@ -25,17 +25,13 @@ import (
 	"github.com/spf13/viper"
 	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
-	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
 	nm "github.com/tendermint/tendermint/node"
 
-	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	dbm "github.com/tendermint/tm-db"
-
-	"os"
 
 	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/version"
@@ -171,14 +167,6 @@ func (app *AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.R
 	}
 }
 
-func (app *AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
-	defer func() {
-		// fmt.Printf("*** return SetOption %v \n", "")
-	}()
-
-	return app.BaseApplication.SetOption(req)
-}
-
 func (app *AccumulatorVMApplication) GetLocalClient() (local.Local, error) {
 	return *app.LocalClient, nil
 }
@@ -199,10 +187,14 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	app.config.SetRoot(WorkingDir)
 
 	// read private validator
-	pv := privval.LoadFilePV(
-		app.config.PrivValidatorKeyFile(),
-		app.config.PrivValidatorStateFile(),
+	pv, err := privval.LoadFilePV(
+		app.config.PrivValidator.KeyFile(),
+		app.config.PrivValidator.StateFile(),
 	)
+	if err != nil {
+		return err
+	}
+
 	// fmt.Printf("Node Public Address: 0x%X\n", pv.Key.PubKey.Address())
 	app.Key = pv.Key
 	app.Address = make([]byte, len(pv.Key.PubKey.Address()))
@@ -558,41 +550,26 @@ func (app *AccumulatorVMApplication) Wait() {
 	app.waitgroup.Wait()
 }
 
-func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
-
+func (app *AccumulatorVMApplication) Start() (node service.Service, err error) {
 	defer func() {
-		// fmt.Printf("*** return Start %v \n", "")
+		if err != nil {
+			// Ensure that waiters are not permanently blocked waiting for us
+			app.waitgroup.Done()
+		}
 	}()
+
 	// create logger
-	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
-	var err error
-	logger, err = tmflags.ParseLogLevel(app.config.LogLevel, logger, cfg.DefaultLogLevel)
+	logger, err := log.NewDefaultLogger(app.config.LogFormat, app.config.LogLevel, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse log level: %w", err)
 	}
 
-	// read private validator
-	pv := privval.LoadFilePV(
-		app.config.PrivValidatorKeyFile(),
-		app.config.PrivValidatorStateFile(),
-	)
-
-	// read node key
-	nodeKey, err := p2p.LoadNodeKey(app.config.NodeKeyFile())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load node's key: %w", err)
-	}
-
 	// create node
-	node, err := nm.NewNode(
+	node, err = nm.New(
 		app.config,
-		pv,
-		nodeKey,
+		logger,
 		proxy.NewLocalClientCreator(app),
-		nm.DefaultGenesisDocProviderFunc(app.config),
-		nm.DefaultDBProvider,
-		nm.DefaultMetricsProvider(app.config.Instrumentation),
-		logger)
+		nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
@@ -608,7 +585,15 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	WaitForGRPC(app.config.RPC.GRPCListenAddress)
 	WaitForRPC(app.config.RPC.ListenAddress)
 
-	app.LocalClient = local.New(node)
+	localns, ok := node.(local.NodeService)
+	if !ok {
+		return nil, fmt.Errorf("node cannot be used as a local node service")
+	}
+
+	app.LocalClient, err = local.New(localns)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create local client: %w", err)
+	}
 	client := GetGRPCClient(app.config.RPC.GRPCListenAddress) //makeGRPCClient(app.Accrpcaddr)//app.config.RPC.GRPCListenAddress)
 
 	app.APIClient = client
@@ -619,9 +604,6 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		// fmt.Println("Tendermint Stopped")
 	}()
 
-	if node.IsListening() {
-		// fmt.Print("node is listening")
-	}
 	app.waitgroup.Done()
 	node.Wait()
 	return node, nil

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulated/networks"
@@ -21,13 +22,12 @@ import (
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/p2p"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/privval"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"github.com/tendermint/tendermint/types"
-	tmtime "github.com/tendermint/tendermint/types/time"
 )
 
 const (
@@ -80,13 +80,17 @@ func Initialize(shardname string, index int, WorkingDir string) {
 			return
 		}
 
-		pvKeyFile := path.Join(nodeDir, config.BaseConfig.PrivValidatorKey)
-		pvStateFile := path.Join(nodeDir, config.BaseConfig.PrivValidatorState)
-		pv := privval.LoadFilePV(pvKeyFile, pvStateFile)
-
-		pubKey, err := pv.GetPubKey()
+		pvKeyFile := path.Join(nodeDir, config.PrivValidator.Key)
+		pvStateFile := path.Join(nodeDir, config.PrivValidator.State)
+		pv, err := privval.LoadFilePV(pvKeyFile, pvStateFile)
 		if err != nil {
-			fmt.Printf("can't get pubkey: %w\n", err)
+			fmt.Printf("can't get private validator: %v\n", err)
+			return
+		}
+
+		pubKey, err := pv.GetPubKey(context.Background())
+		if err != nil {
+			fmt.Printf("can't get pubkey: %v\n", err)
 			return
 		}
 		genVals[i] = types.GenesisValidator{
@@ -122,20 +126,23 @@ func Initialize(shardname string, index int, WorkingDir string) {
 	for i := 1; i < nValidators; i++ {
 		nodeDir := path.Join(WorkingDir, fmt.Sprintf("%s%d", defNodeName, i))
 		config.SetRoot(nodeDir)
-		nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
+		nodeKey, err := types.LoadNodeKey(config.NodeKeyFile())
 		if err != nil {
 			_ = os.RemoveAll(WorkingDir)
 			fmt.Printf("Can't load node key ID\n")
 			return
 		}
-		persistentPeers[i] = p2p.IDAddressString(nodeKey.ID(), fmt.Sprintf("%s:%d", IPs[i], networks.Networks[index].Port))
+		persistentPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", IPs[i], networks.Networks[index].Port))
 	}
 
 	// Overwrite default config.
 	for i := 0; i < nValidators; i++ {
 		nodeDir := path.Join(WorkingDir, fmt.Sprintf("%s%d", defNodeName, i))
 		config.SetRoot(nodeDir)
-		config.LogLevel = "main:info,state:info,statesync:info,*:error"
+		config.Mode = "validator"
+		config.LogFormat = "plain"
+		config.LogLevel = "info"
+		// config.LogLevel = "main:info,state:info,statesync:info,*:error"
 		if nValidators > 1 {
 			config.P2P.AddrBookStrict = false
 			config.P2P.AllowDuplicateIP = true
@@ -146,11 +153,10 @@ func Initialize(shardname string, index int, WorkingDir string) {
 		}
 		config.Moniker = fmt.Sprintf("%s%d", defNodeName, i)
 
-		ConfigFile := nodeDir + "/config/config.toml"
-
-		cfg.WriteConfigFile(ConfigFile, config)
+		cfg.WriteConfigFile(nodeDir, config)
 
 		v := viper.New()
+		ConfigFile := filepath.Join(nodeDir, "config", "config.toml")
 		v.SetConfigFile(ConfigFile)
 		v.ReadInConfig()
 
@@ -175,15 +181,22 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	logger := tmlog.NewNopLogger()
 
 	// private validator
-	privValKeyFile := config.PrivValidatorKeyFile()
-	privValStateFile := config.PrivValidatorStateFile()
+	privValKeyFile := config.PrivValidator.KeyFile()
+	privValStateFile := config.PrivValidator.StateFile()
 	var pv *privval.FilePV
+	var err error
 	if tmos.FileExists(privValKeyFile) {
-		pv = privval.LoadFilePV(privValKeyFile, privValStateFile)
+		pv, err = privval.LoadFilePV(privValKeyFile, privValStateFile)
+		if err != nil {
+			return fmt.Errorf("failed to load private validator: %w", err)
+		}
 		logger.Info("Found private validator", "keyFile", privValKeyFile,
 			"stateFile", privValStateFile)
 	} else {
-		pv = privval.GenFilePV(privValKeyFile, privValStateFile)
+		pv, err = privval.GenFilePV(privValKeyFile, privValStateFile, "")
+		if err != nil {
+			return fmt.Errorf("failed to gen private validator: %w", err)
+		}
 		pv.Save()
 		logger.Info("Generated private validator", "keyFile", privValKeyFile,
 			"stateFile", privValStateFile)
@@ -193,7 +206,7 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	if tmos.FileExists(nodeKeyFile) {
 		logger.Info("Found node key", "path", nodeKeyFile)
 	} else {
-		if _, err := p2p.LoadOrGenNodeKey(nodeKeyFile); err != nil {
+		if _, err := types.LoadOrGenNodeKey(nodeKeyFile); err != nil {
 			fmt.Printf("Can't load or gen node key\n")
 			return err
 		}
@@ -209,9 +222,9 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 			GenesisTime:     tmtime.Now(),
 			ConsensusParams: types.DefaultConsensusParams(),
 		}
-		pubKey, err := pv.GetPubKey()
+		pubKey, err := pv.GetPubKey(context.Background())
 		if err != nil {
-			fmt.Printf("can't get pubkey: %w\n", err)
+			fmt.Printf("can't get pubkey: %v\n", err)
 			return err
 		}
 		genDoc.Validators = []types.GenesisValidator{{
