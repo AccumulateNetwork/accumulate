@@ -2,8 +2,6 @@ package networks
 
 import (
 	"context"
-	"fmt"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
@@ -58,19 +56,22 @@ func (b *Bouncer) BatchTx(tx *transactions.GenTransaction) (*ctypes.ResultBroadc
 // This will dispatch all the transactions that have been put into batches. The calling function does not have to
 // wait for batch to be sent.  This is a fire and forget operation
 func (b *Bouncer) BatchSend() {
-	go dispatch(b.batches)
+	sendBatches := make([]*rpchttp.BatchHTTP, b.numNetworks)
+	for i, batch := range b.batches {
+		sendBatches[i] = batch
+	}
+	go dispatch(sendBatches)
 	b.resetBatches()
 }
 
 // dispatch
 // This function is executed as a go routine to send out all the batches
 func dispatch(batches []*rpchttp.BatchHTTP) {
-
 	for i := range batches {
 		if batches[i].Count() > 0 {
 			_, err := batches[i].Send(context.Background())
 			if err != nil {
-				fmt.Println("error sending batch, %v", err)
+				//	fmt.Println("error sending batch, %v", err)
 			}
 		}
 	}
@@ -84,7 +85,7 @@ func (b *Bouncer) SendTx(tx *transactions.GenTransaction) (*ctypes.ResultBroadca
 	if err != nil {
 		return nil, err
 	}
-	return b.rpcClient[int(tx.Routing)%b.numNetworks].BroadcastTxAsync(context.Background(), data)
+	return b.rpcClient[int(tx.Routing)%b.numNetworks].BroadcastTxSync(context.Background(), data)
 }
 
 // Query

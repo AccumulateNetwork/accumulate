@@ -268,19 +268,20 @@ func Load(t *testing.T,
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
-	for i := 1; i <= 2000; i++ { //                            create a 1000 addresses for anonymous token chains
+	for i := 1; i <= 1000; i++ { //                            create a 1000 addresses for anonymous token chains
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
-		addrList = append(addrList, wallet[i].Addr)
 	}
 
-	for i := 1; i < 2; i++ { // Make a bunch of transactions
-		if i%250 == 0 {
+	addrCountMap := make(map[string]int)
+	for i := 1; i < 10*len(wallet); i++ { // Make a bunch of transactions
+		if i%200 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(250 * time.Millisecond)
+			time.Sleep(400 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address
 		out := transactions.Output{Dest: wallet[randDest].Addr, Amount: 1000} // create the transaction output
+		addrCountMap[wallet[randDest].Addr]++                                 // count the number of deposits to output
 		send := transactions.NewTokenSend(wallet[origin].Addr, out)           // Create a send token transaction
 		gtx := new(transactions.GenTransaction)                               // wrap in a GenTransaction
 		gtx.SigInfo = new(transactions.SignatureInfo)                         // Get a Signature Info block
@@ -289,7 +290,6 @@ func Load(t *testing.T,
 		if err := gtx.SetRoutingChainID(); err != nil {                       // Routing ChainID is the tx source
 			t.Fatal("bad url generated") // error should never happen
 		}
-
 		binaryGtx := gtx.TransactionHash() // Must sign the GenTransaction
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
@@ -303,7 +303,11 @@ func Load(t *testing.T,
 		}
 	}
 	txBouncer.BatchSend()
-
+	for addr, ct := range addrCountMap {
+		addrList = append(addrList, addr)
+		_ = ct
+		fmt.Printf("%s : %d\n", addr, ct*1000)
+	}
 	return addrList
 }
 
