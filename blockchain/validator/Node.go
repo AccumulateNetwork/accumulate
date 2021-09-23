@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/SMT/common"
 	"sync"
 	"time"
 
@@ -299,22 +300,28 @@ func (app *Node) EndBlock() ([]byte, error) {
 }
 
 // Query will take a query object, process it, and return either the data or error
-func (app *Node) Query(q *pb.Query) ([]byte, error) {
+func (app *Node) Query(q *pb.Query) (ret []byte, err error) {
 
-	//extract the state for the chain id
-	chainState, err := app.mmDB.GetCurrentEntry(q.ChainId)
-	if err != nil {
-		return nil, fmt.Errorf("chain id query, %v", err)
+	if q.Query != nil {
+		tx, pendingTx, _ := app.mmDB.GetTx(q.Query)
+		ret = common.SliceBytes(tx)
+		ret = append(ret, common.SliceBytes(pendingTx)...)
+	} else {
+		//extract the state for the chain id
+		chainState, err := app.mmDB.GetCurrentEntry(q.ChainId)
+		if err != nil {
+			return nil, fmt.Errorf("chain id query, %v", err)
+		}
+
+		chainHeader := state.Chain{}
+		err = chainHeader.UnmarshalBinary(chainState.Entry)
+		if err != nil {
+			return nil, fmt.Errorf("unable to extract chain header\n")
+		}
+		ret = chainState.Entry
 	}
-
-	chainHeader := state.Chain{}
-	err = chainHeader.UnmarshalBinary(chainState.Entry)
-	if err != nil {
-		return nil, fmt.Errorf("unable to extract chain header\n")
-	}
-
 	// fmt.Printf("Query URI: %s", q.Query)
-	return chainState.Entry, nil
+	return ret, nil
 }
 
 //processValidatedSubmissionRequest Figure out what to do with the processed validated transaction.  This may include firing off a synthetic TX or simply

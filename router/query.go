@@ -3,6 +3,8 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -173,10 +175,18 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 	}
 	qResp := aResp.Response
 
+	data, txRaw := common.BytesSlice(qResp.Value)
+	data, txPending := common.BytesSlice(data)
+	_ = txPending
+	txState := state.Transaction{}
+	err = txState.UnmarshalBinary(txRaw)
+	if err != nil {
+		return resp, NewAccumulateError(err)
+	}
 	//now unmarshal the token transaction on-chain
-	tx := acmeApi.TokenTx{}
-	err = json.Unmarshal(qResp.Value, &tx)
-
+	//need to identify type of TX, for now only support token tx
+	tx := transactions.TokenSend{}
+	_, err = tx.Unmarshal(txState.Transaction.Bytes())
 	if err != nil {
 		return resp, NewAccumulateError(err)
 	}
@@ -185,20 +195,19 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 	copy(txResp.TxId[:], txId)
 
 	//should receive tx,unmarshal to output accounts
-	for _, v := range tx.To {
-
+	for _, v := range tx.Outputs {
 		aResp, err := q.txBouncer.Query(tokenAccountUrl, txId)
 
 		txStatus := response.TokenTxAccountStatus{}
 		if err != nil {
-			txStatus.Status = types.String(fmt.Sprintf("transaction not found for %s, %v", v.URL, err))
-			txStatus.AccountUrl = v.URL.String
+			txStatus.Status = types.String(fmt.Sprintf("transaction not found for %s, %v", v.Dest, err))
+			txStatus.AccountUrl = types.String(v.Dest)
 		} else {
 			qResp = aResp.Response
 			err = txStatus.UnmarshalBinary(qResp.Value)
 			if err != nil {
 				txStatus.Status = types.String(fmt.Sprintf("%v", err))
-				txStatus.AccountUrl = v.URL.String
+				txStatus.AccountUrl = types.String(v.Dest)
 			}
 		}
 
@@ -231,37 +240,39 @@ var ChainStates = map[uint64]interface{}{
 // GetChainState
 // will return the state object of the chain, which include the chain
 // header and the current state data for the chain
-func (q *Query) GetChainState(adiChainPath *string) (interface{}, error) {
+func (q *Query) GetChainState(adiChainPath *string, txId []byte) (interface{}, error) {
 	var err error
 
 	var qResp *tmtypes.ResponseQuery
 
 	//this QuerySync call is only temporary until we get router setup.
-	aResp, err := q.txBouncer.Query(adiChainPath, nil)
+	aResp, err := q.txBouncer.Query(adiChainPath, txId)
 	if err != nil {
-		return nil, fmt.Errorf("bvc token tx query returned error, %v", err)
+		return nil, fmt.Errorf("bvc token chain query returned error, %v", err)
 	}
 	qResp = &aResp.Response
 
-	chainHeader := state.Chain{}
-	err = chainHeader.UnmarshalBinary(qResp.Value)
-
-	if err != nil {
-		return nil, fmt.Errorf("invalid state object returned from query of url %s, %v", *adiChainPath, err)
-	}
-
 	var resp *acmeApi.APIDataResponse
+	if len(txId) == 0 {
+		chainHeader := state.Chain{}
 
-	//unmarshal the state object if available
-	if val, ok := ChainStates[chainHeader.Type]; ok {
-		//resp, err = val.(func([]byte) (interface{}, error))(qResp.Value)
-		resp, err = val.(func(*Query, *string, []byte) (*acmeApi.APIDataResponse, error))(q, chainHeader.ChainUrl.AsString(), []byte{})
-	} else {
-		resp = &acmeApi.APIDataResponse{}
-		resp.Type = types.String(types.ChainTypeString(chainHeader.Type))
-		msg := json.RawMessage{}
-		msg = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", qResp.Value))
-		resp.Data = &msg
+		err = chainHeader.UnmarshalBinary(qResp.Value)
+
+		if err != nil {
+			return nil, fmt.Errorf("invalid state object returned from query of url %s, %v", *adiChainPath, err)
+		}
+
+		//unmarshal the state object if available
+		if val, ok := ChainStates[chainHeader.Type]; ok {
+			//resp, err = val.(func([]byte) (interface{}, error))(qResp.Value)
+			resp, err = val.(func(*Query, *string, []byte) (*acmeApi.APIDataResponse, error))(q, chainHeader.ChainUrl.AsString(), []byte{})
+		} else {
+			resp = &acmeApi.APIDataResponse{}
+			resp.Type = types.String(types.ChainTypeString(chainHeader.Type))
+			msg := json.RawMessage{}
+			msg = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", qResp.Value))
+			resp.Data = &msg
+		}
 	}
 
 	return resp, err

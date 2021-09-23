@@ -39,7 +39,7 @@ func TestLoadOnRemote(t *testing.T) {
 	queryTokenUrl := addrList[1] + "/" + tokenUrl
 	query := NewQuery(txBouncer)
 
-	resp, err := query.GetChainState(&queryTokenUrl)
+	resp, err := query.GetChainState(&queryTokenUrl, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	println(string(theJsonData))
 
-	resp, err = query.GetChainState(&queryTokenUrl)
+	resp, err = query.GetChainState(&queryTokenUrl, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -73,7 +73,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 	for _, v := range addrList[1:] {
-		resp, err := query.GetChainState(&v)
+		resp, err := query.GetChainState(&v, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -179,7 +179,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	resp2, err := query.GetChainState(&queryTokenUrl)
+	resp2, err := query.GetChainState(&queryTokenUrl, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 
 	fmt.Println(theJsonData) //ret.Response.Value)
 	for _, v := range addrList[1:] {
-		resp, err := query.GetChainState(&v)
+		resp, err := query.GetChainState(&v, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
