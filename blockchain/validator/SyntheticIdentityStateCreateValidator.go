@@ -4,31 +4,34 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api"
+	cfg "github.com/tendermint/tendermint/config"
 
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	cfg "github.com/tendermint/tendermint/config"
 )
 
 //todo fold this into the AdiChain validator
 
 type SyntheticIdentityStateCreateValidator struct {
 	ValidatorContext
-
-	EV *EntryValidator
 }
 
 func NewSyntheticIdentityStateCreateValidator() *SyntheticIdentityStateCreateValidator {
 	v := SyntheticIdentityStateCreateValidator{}
 	//this needs to be changed to use AdiChain
-	v.SetInfo(types.ChainTypeAdi[:], "create-identity-state", pb.AccInstruction_Synthetic_Identity_Creation)
+	v.SetInfo(types.ChainTypeAdi, pb.AccInstruction_Synthetic_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
+func (v *SyntheticIdentityStateCreateValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
+}
 
-func (v *SyntheticIdentityStateCreateValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *SyntheticIdentityStateCreateValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	if currentstate == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
@@ -47,10 +50,6 @@ func (v *SyntheticIdentityStateCreateValidator) Check(currentstate *state.StateE
 	return nil
 }
 
-func (v *SyntheticIdentityStateCreateValidator) Initialize(config *cfg.Config) error {
-	return nil
-}
-
 func (v *SyntheticIdentityStateCreateValidator) BeginBlock(height int64, time *time.Time) error {
 	v.lastHeight = v.currentHeight
 	v.lastTime = v.currentTime
@@ -60,7 +59,7 @@ func (v *SyntheticIdentityStateCreateValidator) BeginBlock(height int64, time *t
 	return nil
 }
 
-func (v *SyntheticIdentityStateCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *SyntheticIdentityStateCreateValidator) Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current state not defined")

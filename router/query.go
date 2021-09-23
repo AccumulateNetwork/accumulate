@@ -3,24 +3,25 @@ package router
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	acmeApi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	proto1 "github.com/golang/protobuf/proto"
-	abcicli "github.com/tendermint/tendermint/abci/client"
 	tmtypes "github.com/tendermint/tendermint/abci/types"
 )
 
 type Query struct {
-	client abcicli.Client
+	txBouncer *networks.Bouncer
 }
 
-func NewQuery(app tmtypes.Application) *Query {
+func NewQuery(txBouncer *networks.Bouncer) *Query {
 	q := Query{}
-	q.client = abcicli.NewLocalClient(nil, app)
+	//q.client = abcicli.NewLocalClient(nil, app)
+	q.txBouncer = txBouncer
 	return &q
 }
 
@@ -30,108 +31,111 @@ func NewQuery(app tmtypes.Application) *Query {
 //"GetTokenTx()"
 //"GetData()" Submit url into, and receive ADI/Token/TokenAccount/TokenTx
 
-func (q *Query) GetAdi(adi *string) (interface{}, error) {
+// GetAdi get the adi state object. Use this to get the nonce.
+func (q *Query) GetAdi(adi *string) (*acmeApi.APIDataResponse, error) {
 
 	var err error
-
-	pq := proto.Query{}
-	pq.ChainUrl = *adi
-	adiChain := types.GetIdentityChainFromIdentity(adi)
-	pq.AdiChain = adiChain.Bytes()
-	pq.Ins = proto.AccInstruction_Token_Issue
-
-	req := tmtypes.RequestQuery{}
-
-	req.Data, err = proto1.Marshal(&pq)
-
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal query for Token issuance")
 	}
 
-	//this is only temporary until we get router setup.
-	resp, err := q.client.QuerySync(req)
+	aResp, err := q.txBouncer.Query(adi, nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
+	}
+
+	qResp := aResp.Response
 
 	if err != nil {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
 	//unpack the response
-	adiResp := response.ADI{}
-	err = adiResp.ADI.UnmarshalBinary(resp.Value)
+	ret := &acmeApi.APIDataResponse{}
+	ret.Type = "adi"
 
-	if err != nil {
-		return nil, fmt.Errorf("cannot extract adi information")
+	if qResp.Code == 0 {
+		//unpack the state object returned from the query
+		adiResp := response.ADI{}
+		err = adiResp.ADI.UnmarshalBinary(qResp.Value)
+
+		//package the response data into json
+		var data json.RawMessage
+		data, err = json.Marshal(adiResp)
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract token information")
+		}
+
+		ret.Data = &data
+	} else {
+		var data json.RawMessage
+		data, err = json.Marshal(qResp.Value)
+		ret.Data = &data
 	}
 
-	return adiResp, nil
+	return ret, err
 }
 
-func (q *Query) GetToken(tokenUrl *string) (interface{}, error) {
+// GetToken
+// retrieve the informatin regarding a token
+func (q *Query) GetToken(tokenUrl *string) (*acmeApi.APIDataResponse, error) {
 
 	var err error
-
-	pq := proto.Query{}
-	pq.ChainUrl = *tokenUrl
-	adiChain := types.GetIdentityChainFromIdentity(tokenUrl)
-	chainId := types.GetChainIdFromChainPath(tokenUrl)
-	pq.AdiChain = adiChain.Bytes()
-	pq.ChainId = chainId.Bytes()
-	pq.Ins = proto.AccInstruction_Token_Issue
-
-	req := tmtypes.RequestQuery{}
-
-	req.Data, err = proto1.Marshal(&pq)
-
-	if err != nil {
-		return nil, fmt.Errorf("cannot marshal query for Token issuance")
-	}
-
-	//this is only temporary until we get router setup.
-	qResp, err := q.client.QuerySync(req)
+	aResp, err := q.txBouncer.Query(tokenUrl, nil)
 
 	if err != nil {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
+	qResp := aResp.Response
 
 	//unpack the response
-	tokResp := response.Token{}
-	err = tokResp.Token.UnmarshalBinary(qResp.Value)
 
-	if err != nil {
-		return nil, fmt.Errorf("cannot extract token information")
+	ret := &acmeApi.APIDataResponse{}
+	ret.Type = "token"
+
+	if qResp.Code == 0 {
+
+		//unpack the state object returned from the query
+		tokState := &state.Token{}
+		err = tokState.UnmarshalBinary(qResp.Value)
+
+		tokResp := response.Token{}
+
+		tokResp.Precision = tokState.Precision
+		tokResp.URL = tokState.ChainUrl
+		tokResp.Symbol = tokState.Symbol
+		tokResp.Meta = tokState.Meta
+		//package the response data into json
+		var data json.RawMessage
+		data, err = json.Marshal(tokResp)
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract token information")
+		}
+
+		ret.Data = &data
+	} else {
+		var data json.RawMessage
+		data, err = json.Marshal(qResp.Value)
+		ret.Data = &data
 	}
 
-	return tokResp, err
+	return ret, err
 }
 
-func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeapi.APIDataResponse, error) {
+// GetTokenAccount get the token balance for a given url
+func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeApi.APIDataResponse, error) {
 
 	var err error
 
-	pq := proto.Query{}
-	pq.ChainUrl = *adiChainPath
-	adiChain := types.GetIdentityChainFromIdentity(adiChainPath)
-	chainId := types.GetChainIdFromChainPath(adiChainPath)
-	pq.AdiChain = adiChain.Bytes()
-	pq.ChainId = chainId.Bytes()
-	pq.Ins = proto.AccInstruction_Token_URL_Creation
-
-	req := tmtypes.RequestQuery{}
-
-	req.Data, err = proto1.Marshal(&pq)
+	aResp, err := q.txBouncer.Query(adiChainPath, nil)
 
 	if err != nil {
-		return nil, fmt.Errorf("cannot marshal query for Token issuance")
+		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
 	}
+	qResp := aResp.Response
 
-	//this QuerySync call is only temporary until we get router setup.
-	qResp, err := q.client.QuerySync(req)
-	//
-	if err != nil {
-		return nil, fmt.Errorf("bvc token query returned error, %v", err)
-	}
-
-	ret := &acmeapi.APIDataResponse{}
+	ret := &acmeApi.APIDataResponse{}
 	ret.Type = "tokenAccount"
 
 	if qResp.Code == 0 {
@@ -140,7 +144,7 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeapi.APIDataResponse,
 		tokState := &state.TokenAccount{}
 		err = tokState.UnmarshalBinary(qResp.Value)
 
-		ta := acmeapi.NewTokenAccount(tokState.ChainUrl, tokState.TokenUrl.String)
+		ta := acmeApi.NewTokenAccount(tokState.ChainUrl, tokState.TokenUrl.String)
 		tokResp := response.NewTokenAccount(ta, tokState.GetBalance())
 		//package the response data into json
 		var data json.RawMessage
@@ -159,63 +163,52 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeapi.APIDataResponse,
 	return ret, err
 }
 
-func (q *Query) GetTokenTx(tokenAccountUrl *string, txid []byte) (resp interface{}, err error) {
+// GetTokenTx
+// get the token tx from the primary adi, then query all the output accounts to get the status
+func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface{}, err error) {
 	// need to know the ADI and ChainID, deriving adi and chain id from TokenTx.From
-	pq := proto.Query{}
-	pq.ChainUrl = *tokenAccountUrl
-	adiChain := types.GetIdentityChainFromIdentity(&pq.ChainUrl)
-	//chainId := types.GetChainIdFromChainPath(&pq.ChainUrl)
-	pq.AdiChain = adiChain.Bytes()
-	pq.ChainId = txid //chainId.Bytes()
-	pq.Ins = proto.AccInstruction_Token_Transaction
-	//pq.Query = txid
 
-	req := tmtypes.RequestQuery{}
-
-	req.Data, err = proto1.Marshal(&pq)
+	aResp, err := q.txBouncer.Query(tokenAccountUrl, txId)
 
 	if err != nil {
-		return resp, fmt.Errorf("cannot marshal query")
+		return nil, fmt.Errorf("bvc token tx query returned error, %v", err)
 	}
+	qResp := aResp.Response
 
-	//this is only temporary until we get router setup.
-	qResp, err := q.client.QuerySync(req)
-
-	tx := acmeapi.TokenTx{}
-	err = json.Unmarshal(qResp.Value, &tx)
-
+	data, txRaw := common.BytesSlice(qResp.Value)
+	data, txPending := common.BytesSlice(data)
+	_ = txPending
+	txState := state.Transaction{}
+	err = txState.UnmarshalBinary(txRaw)
+	if err != nil {
+		return resp, NewAccumulateError(err)
+	}
+	//now unmarshal the token transaction on-chain
+	//need to identify type of TX, for now only support token tx
+	tx := transactions.TokenSend{}
+	_, err = tx.Unmarshal(txState.Transaction.Bytes())
 	if err != nil {
 		return resp, NewAccumulateError(err)
 	}
 	txResp := response.TokenTx{}
 	txResp.FromUrl = types.String(*tokenAccountUrl)
-	copy(txResp.TxId[:], txid)
+	copy(txResp.TxId[:], txId)
 
-	//should receive tx,unmarshal to To accounts
-	for _, v := range tx.To {
-		pq.ChainUrl = *v.URL.AsString()
-		adiChain := types.GetIdentityChainFromIdentity(&pq.ChainUrl)
-		chainId := types.GetChainIdFromChainPath(&pq.ChainUrl)
-		pq.AdiChain = adiChain.Bytes()
-		pq.ChainId = chainId.Bytes()
-		pq.Ins = proto.AccInstruction_Token_Transaction
-		pq.Query = txid
+	//should receive tx,unmarshal to output accounts
+	for _, v := range tx.Outputs {
+		aResp, err := q.txBouncer.Query(tokenAccountUrl, txId)
 
-		req := tmtypes.RequestQuery{}
-
-		req.Data, err = proto1.Marshal(&pq)
-
-		if err != nil {
-			return resp, fmt.Errorf("cannot marshal query")
-		}
-
-		//this is only temporary until we get a proper router setup.
-		qResp, err := q.client.QuerySync(req)
 		txStatus := response.TokenTxAccountStatus{}
-		err = txStatus.UnmarshalBinary(qResp.Value)
 		if err != nil {
-			txStatus.Status = types.String(fmt.Sprintf("%v", err))
-			txStatus.AccountUrl = v.URL.String
+			txStatus.Status = types.String(fmt.Sprintf("transaction not found for %s, %v", v.Dest, err))
+			txStatus.AccountUrl = types.String(v.Dest)
+		} else {
+			qResp = aResp.Response
+			err = txStatus.UnmarshalBinary(qResp.Value)
+			if err != nil {
+				txStatus.Status = types.String(fmt.Sprintf("%v", err))
+				txStatus.AccountUrl = types.String(v.Dest)
+			}
 		}
 
 		txResp.ToAccount = append(txResp.ToAccount, txStatus)
@@ -224,76 +217,62 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txid []byte) (resp interface
 	return txResp, err
 }
 
-var ChainStates = map[types.Bytes32]interface{}{
-	*types.ChainTypeAdi.AsBytes32(): func(data []byte) (interface{}, error) {
-		r := state.AdiState{}
-		if err := r.UnmarshalBinary(data); err != nil {
-			return nil, err
-		}
-		return &r, nil
+var ChainStates = map[uint64]interface{}{
+	types.ChainTypeAdi: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+		return q.GetAdi(url)
 	},
-	*types.ChainTypeToken.AsBytes32(): func(data []byte) (interface{}, error) {
-		r := state.Token{}
-		if err := r.UnmarshalBinary(data); err != nil {
-			return nil, err
-		}
-		return &r, nil
+	types.ChainTypeToken: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+		return q.GetToken(url)
 	},
-	*types.ChainTypeTokenAccount.AsBytes32(): func(data []byte) (interface{}, error) {
-		r := state.TokenAccount{}
-		if err := r.UnmarshalBinary(data); err != nil {
-			return nil, err
-		}
-		return &r, nil
+	types.ChainTypeTokenAccount: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+		return q.GetTokenAccount(url)
 	},
-	*types.ChainTypeAnonTokenAccount.AsBytes32(): func(data []byte) (interface{}, error) {
-		r := state.Chain{}
-		if err := r.UnmarshalBinary(data); err != nil {
-			return nil, err
-		}
-		return &r, nil
+	types.ChainTypeSignatureGroup: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+		return q.GetTokenAccount(url)
+	},
+	types.ChainTypeAnonTokenAccount: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
+		adi, _, _ := types.ParseIdentityChainPath(url)
+		adi += "/dc/ACME"
+		return q.GetTokenAccount(&adi)
 	},
 }
 
-// getChainState will return the state object of the chain, which include the chain
+// GetChainState
+// will return the state object of the chain, which include the chain
 // header and the current state data for the chain
-func (q *Query) getChainState(adiChainPath *string) (interface{}, error) {
-
+func (q *Query) GetChainState(adiChainPath *string, txId []byte) (interface{}, error) {
 	var err error
 
-	pq := proto.Query{}
-	pq.ChainUrl = *adiChainPath
-	adiChain := types.GetIdentityChainFromIdentity(adiChainPath)
-	chainId := types.GetChainIdFromChainPath(adiChainPath)
-	pq.AdiChain = adiChain.Bytes()
-	pq.ChainId = chainId.Bytes()
-	pq.Ins = proto.AccInstruction_State_Query
-
-	req := tmtypes.RequestQuery{}
-
-	req.Data, err = proto1.Marshal(&pq)
-
-	if err != nil {
-		return nil, fmt.Errorf("cannot marshal query for Token issuance")
-	}
+	var qResp *tmtypes.ResponseQuery
 
 	//this QuerySync call is only temporary until we get router setup.
-	qResp, err := q.client.QuerySync(req)
-
-	chainHeader := state.Chain{}
-	err = chainHeader.UnmarshalBinary(qResp.Value)
-
+	aResp, err := q.txBouncer.Query(adiChainPath, txId)
 	if err != nil {
-		return nil, fmt.Errorf("invalid state object returned from query, %v", err)
+		return nil, fmt.Errorf("bvc token chain query returned error, %v", err)
 	}
+	qResp = &aResp.Response
 
-	var resp interface{}
+	var resp *acmeApi.APIDataResponse
+	if len(txId) == 0 {
+		chainHeader := state.Chain{}
 
-	//unmarshal the state object if available
-	if val, ok := ChainStates[chainHeader.Type]; ok {
-		resp, err = val.(func([]byte) (interface{}, error))(qResp.Value)
-	} else {
-		err = fmt.Errorf("unable to unmarshal state object for chain of type %s at %s", types.ChainTypeSpecMap[chainHeader.Type], chainHeader.ChainUrl)
+		err = chainHeader.UnmarshalBinary(qResp.Value)
+
+		if err != nil {
+			return nil, fmt.Errorf("invalid state object returned from query of url %s, %v", *adiChainPath, err)
+		}
+
+		//unmarshal the state object if available
+		if val, ok := ChainStates[chainHeader.Type]; ok {
+			//resp, err = val.(func([]byte) (interface{}, error))(qResp.Value)
+			resp, err = val.(func(*Query, *string, []byte) (*acmeApi.APIDataResponse, error))(q, chainHeader.ChainUrl.AsString(), []byte{})
+		} else {
+			resp = &acmeApi.APIDataResponse{}
+			resp.Type = types.String(types.ChainTypeString(chainHeader.Type))
+			msg := json.RawMessage{}
+			msg = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", qResp.Value))
+			resp.Data = &msg
+		}
 	}
 
 	return resp, err

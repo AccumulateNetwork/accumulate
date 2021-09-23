@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/viper"
 
@@ -19,82 +20,94 @@ import (
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 )
 
-var ConfigFile []string
-var WorkingDir []string
+var ConfigFile string
+var WorkingDir string
+var RouterNodeName string
+var whichNode int
+var nodeName string
+
+const DBVCIndex = 0
 
 var (
 	BuildTag string = "v0.0.1"
 )
 
 func init() {
-
 	usr, err := user.Current()
 	if err != nil {
 		log.Fatal(err)
 	}
 	initdir := path.Join(usr.HomeDir, "/.accumulate")
+	nodeName = "Acadia"
 
 	version := flag.Bool("v", false, "prints the current version")
 	flag.StringVar(&initdir, "workingdir", usr.HomeDir+"/.accumulate", "Path to data directory")
+	flag.StringVar(&nodeName, "n", "Acadia", "Node to build configs for")
+	node := flag.Int("i", -1, "Which Node are we?  Required (0-n)")
+
+	wantInit := flag.Bool("init", false, "Initialize")
+	wantDBVC := flag.Bool("dbvc", false, "DBVC Initialize")
+
 	flag.Parse()
+
 	if *version {
 		// fmt.Printf("Accumulate BVC %s\n", BuildTag)
 		os.Exit(0)
 	}
-	for i := range router.Networks {
-		WorkingDir = append(WorkingDir, path.Join(initdir, router.Networks[i]))
-		ConfigFile = append(ConfigFile, path.Join(WorkingDir[i], "/config/config.toml"))
-	}
 
+	WorkingDir = initdir
+	fmt.Printf("Working dir: %v\n", WorkingDir)
+
+	if *wantInit {
+		for j := range networks.Networks {
+			if networks.Networks[j].Name == nodeName {
+				fmt.Printf("Building configs for %s\n", nodeName)
+				tendermint.Initialize("accumulate.", j, WorkingDir)
+				break
+			}
+		}
+		os.Exit(0)
+	}
+	if *wantDBVC {
+		os.Exit(0)
+	}
+	if *node == -1 {
+		fmt.Printf("Must specify which node we are running, 0-n")
+		os.Exit(0)
+	}
+	whichNode = *node
 }
 
 func main() {
+	nodeDir := fmt.Sprintf("Node%d", whichNode)
 
-	// fmt.Printf("Working dir: %v\n", WorkingDir[0])
-	// fmt.Printf("Working VM1 dir: %v\n", ConfigFile[1])
-	// fmt.Printf("Config File: %v\n", ConfigFile[0])
-	// fmt.Printf("Config File VM1: %v\n", ConfigFile[1])
+	WorkingDir = path.Join(WorkingDir, nodeDir)
+	ConfigFile = path.Join(WorkingDir, "/config/config.toml")
 
-	n := len(os.Args)
-	for i := 0; i < n; i++ {
-		switch os.Args[i] {
-		case "init":
-			baseport := 26600
-			for i := range router.Networks {
-				abciAppAddress := fmt.Sprintf("tcp://localhost:%d", baseport)
-				rcpAddress := fmt.Sprintf("tcp://localhost:%d", baseport+1)
-				grpcAddress := fmt.Sprintf("tcp://localhost:%d", baseport+2)
-				accRCPAddress := fmt.Sprintf("tcp://localhost:%d", baseport+3)
-				routerAddress := fmt.Sprintf("tcp://localhost:%d", baseport+4)
-				baseport += 5
-				_ = tendermint.Initialize("accumulate."+router.Networks[i], abciAppAddress, rcpAddress, grpcAddress, accRCPAddress, routerAddress, ConfigFile[i], WorkingDir[i])
-			}
-			os.Exit(0)
-		case "dbvc":
-			os.Exit(0)
-		}
-	}
+	fmt.Printf("%s\n", ConfigFile)
 
 	//First create a router
-	viper.SetConfigFile(ConfigFile[1])
-	viper.AddConfigPath(WorkingDir[1])
-	_ = viper.ReadInConfig()
-	urlrouter := router.NewRouter(viper.GetString("accumulate.RouterAddress"))
-
-	//Next create a BVC
-	accvm, err := accumulate.CreateAccumulateBVC(ConfigFile[1], WorkingDir[1])
+	viper.SetConfigFile(ConfigFile)
+	viper.AddConfigPath(WorkingDir)
+	err := viper.ReadInConfig()
 	if err != nil {
-		panic(err)
+		panic("failed to read config file")
+	}
+	//Next create a BVC
+	_, err = accumulate.CreateAccumulateBVC(ConfigFile, WorkingDir)
+	if err != nil {
+		panic("failed create bvc")
 	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
-	accvmapi, _ := accvm.GetAPIClient()
-	_ = urlrouter.AddBVCClient(accvm.GetName(), accvmapi)
+
+	networkList := []int{3}
+	txBouncer := networks.MakeBouncer(networkList)
 
 	//the query object connects to the BVC, will be replaced with network client router
-	query := router.NewQuery(accvm)
+	query := router.NewQuery(txBouncer)
 
-	go router.StartAPI(34000, query)
+	go router.StartAPI(34000, query, txBouncer)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)

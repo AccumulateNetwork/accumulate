@@ -2,45 +2,39 @@ package validator
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"math/big"
 	"testing"
-	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
-func CreateFakeSyntheticDeposit(t *testing.T, tokenUrl types.String, from types.String, to types.String, kp ed25519.PrivKey) *proto.Submission {
+func CreateFakeSyntheticDeposit(t *testing.T, tokenUrl types.String, from types.String, to types.String, kp ed25519.PrivKey) (sub *transactions.GenTransaction) {
 	txId := sha256.Sum256([]byte("Transaction Hash of Orig Tx"))
 	deposit := synthetic.NewTokenTransactionDeposit(txId[:], &from, &to)
 	_ = deposit.SetDeposit(&tokenUrl, big.NewInt(5000))
 
-	data, err := json.Marshal(&deposit)
+	data, err := deposit.MarshalBinary()
 	if err != nil {
 		return nil
 	}
 
-	ts := time.Now().Unix()
-	chainId := types.GetChainIdFromChainPath(to.AsString())
-	ledger := types.MarshalBinaryLedgerChainId(chainId[:], data, ts)
-	sig, err := kp.Sign(ledger)
+	sub.Routing = types.GetAddressFromIdentity(from.AsString())
+	sub.ChainID = types.GetChainIdFromChainPath(from.AsString()).Bytes()
+	sub.SigInfo = &transactions.SignatureInfo{}
+	sub.SigInfo.URL = *from.AsString()
+	sub.Transaction = data
+	ed := new(transactions.ED25519Sig)
+	err = ed.Sign(1, kp.Bytes(), sub.TransactionHash())
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	builder := proto.SubmissionBuilder{}
-	sub, err := builder.
-		Data(data).
-		AdiUrl(*to.AsString()).
-		Timestamp(ts).
-		PubKey(kp.PubKey().Bytes()).
-		Signature(sig).Instruction(proto.AccInstruction_Synthetic_Token_Deposit).
-		Build()
+	sub.Signature = append([]*transactions.ED25519Sig{}, ed)
 
 	if err != nil {
 		t.Fatalf("Failed to make a token rpc call %v", err)
@@ -52,7 +46,7 @@ func CreateFakeSyntheticDeposit(t *testing.T, tokenUrl types.String, from types.
 func CreateFakeAnonymousTokenChain(addressUrl string) *state.Object {
 	adi, _, _ := types.ParseIdentityChainPath(&addressUrl)
 
-	anonTokenChain := state.NewChain(types.String(adi), types.ChainTypeAnonTokenAccount[:])
+	anonTokenChain := state.NewChain(types.String(adi), types.ChainTypeAnonTokenAccount)
 
 	so := state.Object{}
 	so.Entry, _ = anonTokenChain.MarshalBinary()
@@ -107,10 +101,7 @@ func TestAnonTokenChain_BVC(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	se, err := state.NewStateEntry(nil, nil, stateDB)
-	if err != nil {
-		t.Fatal(err)
-	}
+	se := state.NewStateEntry(nil, nil, stateDB)
 
 	_, err = bvc.Validate(se, subTx)
 	if err != nil {

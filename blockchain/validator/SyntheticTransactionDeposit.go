@@ -2,15 +2,15 @@ package validator
 
 import (
 	"fmt"
+	"time"
+
+	cfg "github.com/tendermint/tendermint/config"
 
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-	cfg "github.com/tendermint/tendermint/config"
-
-	//dbm "github.com/tendermint/tm-db"
-	"time"
 )
 
 type SyntheticTransactionDepositValidator struct {
@@ -19,17 +19,19 @@ type SyntheticTransactionDepositValidator struct {
 
 func NewSyntheticTransactionDepositValidator() *SyntheticTransactionDepositValidator {
 	v := SyntheticTransactionDepositValidator{}
-	v.SetInfo(types.ChainTypeTokenAccount[:], "synthetic-transaction-deposit", pb.AccInstruction_Synthetic_Token_Deposit)
+	v.SetInfo(types.ChainTypeTokenAccount, pb.AccInstruction_Synthetic_Token_Deposit)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-func (v *SyntheticTransactionDepositValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *SyntheticTransactionDepositValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
+}
+
+func (v *SyntheticTransactionDepositValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	_, _, _, err := v.canTransact(currentstate, submission.Transaction)
 	return err
-}
-func (v *SyntheticTransactionDepositValidator) Initialize(config *cfg.Config) error {
-	return nil
 }
 
 func (v *SyntheticTransactionDepositValidator) BeginBlock(height int64, time *time.Time) error {
@@ -73,10 +75,10 @@ func (v *SyntheticTransactionDepositValidator) canTransact(currentstate *state.S
 	return &ids, &tas, ttd, nil
 }
 
-func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
+func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
 	retsub := ResponseValidateTX{}
-	retsub.Submissions = make([]*pb.GenTransaction, 1)
-	retsub.Submissions[0] = &pb.GenTransaction{}
+	retsub.Submissions = make([]*transactions.GenTransaction, 1)
+	retsub.Submissions[0] = &transactions.GenTransaction{}
 	rs := retsub.Submissions[0]
 	rs.Routing = types.GetAddressFromIdentity(ttd.FromUrl.AsString())
 	rs.ChainID = types.GetChainIdFromChainPath(ttd.FromUrl.AsString()).Bytes()
@@ -97,7 +99,7 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *pb.Gen
 	return &retsub, nil
 }
 
-func (v *SyntheticTransactionDepositValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
+func (v *SyntheticTransactionDepositValidator) Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
 
 	_, tas, ttd, err := v.canTransact(currentstate, submission.Transaction)
 

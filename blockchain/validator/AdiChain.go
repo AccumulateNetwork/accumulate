@@ -1,19 +1,18 @@
 package validator
 
 import (
+	"fmt"
+	"time"
+
+	cfg "github.com/tendermint/tendermint/config"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-
-	//"crypto/sha256"
-	"fmt"
-
-	cfg "github.com/tendermint/tendermint/config"
-	//dbm "github.com/tendermint/tm-db"
-	"time"
 )
 
 type AdiChain struct {
@@ -22,21 +21,23 @@ type AdiChain struct {
 
 func NewAdiChain() *AdiChain {
 	v := AdiChain{}
-	v.SetInfo(types.ChainTypeAdi[:], types.ChainSpecAdi, pb.AccInstruction_Identity_Creation)
+	//the only transactions an adi chain can process is to create another identity or update key (TBD)
+	v.SetInfo(types.ChainTypeAdi, pb.AccInstruction_Identity_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-func (v *AdiChain) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *AdiChain) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
+}
+
+func (v *AdiChain) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	if currentstate == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
 	}
 
-	return nil
-}
-
-func (v *AdiChain) Initialize(config *cfg.Config) error {
 	return nil
 }
 
@@ -68,68 +69,74 @@ func (v *AdiChain) VerifySignatures(ledger types.Bytes, key types.Bytes,
 	return nil
 }
 
-func (v *AdiChain) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *AdiChain) processAdiCreate(currentstate *state.StateEntry, submission *transactions.GenTransaction, resp *ResponseValidateTX) error {
 	if currentstate == nil {
 		//but this is to be expected...
-		return nil, fmt.Errorf("current State Not Defined")
+		return fmt.Errorf("current State Not Defined")
 	}
 
 	if currentstate.IdentityState == nil {
-		return nil, fmt.Errorf("sponsor identity is not defined")
+		return fmt.Errorf("sponsor identity is not defined")
+	}
+
+	if submission.Signature == nil {
+		return fmt.Errorf("no signatures available")
 	}
 
 	adiState := state.AdiState{}
-	err = adiState.UnmarshalBinary(currentstate.IdentityState.Entry)
+	err := adiState.UnmarshalBinary(currentstate.IdentityState.Entry)
 	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshal adi state entry, %v", err)
+		return fmt.Errorf("unable to unmarshal adi state entry, %v", err)
 	}
 
+	//this should be done at a higher level...
 	if !adiState.VerifyKey(submission.Signature[0].PublicKey) {
-		return nil, fmt.Errorf("key is not supported by current ADI state")
+		return fmt.Errorf("key is not supported by current ADI state")
 	}
 
-	if !adiState.VerifyAndUpdateNonce(submission.Signature[0].Nonce) {
-		return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.Signature[0].Nonce)
-	}
-
-	if !submission.ValidateSig() {
-		return nil, fmt.Errorf("error validating the sponsor identity key, %v", err)
+	if !adiState.VerifyAndUpdateNonce(submission.SigInfo.Nonce) {
+		return fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, submission.SigInfo.Nonce)
 	}
 
 	ic := api.ADI{}
 	err = ic.UnmarshalBinary(submission.Transaction)
 
 	if err != nil {
-		return nil, fmt.Errorf("data payload of submission is not a valid identity create message")
+		return fmt.Errorf("data payload of submission is not a valid identity create message")
 	}
 
-	isc := synthetic.NewAdiStateCreate(submission.TxId(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
+	isc := synthetic.NewAdiStateCreate(submission.TransactionHash(), &adiState.ChainUrl, &ic.URL, &ic.PublicKeyHash)
 
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	iscData, err := isc.MarshalBinary()
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	resp = &ResponseValidateTX{}
-
-	//builder := pb.SubmissionBuilder{}
 
 	//send of a synthetic transaction to the correct network
-	resp.Submissions = make([]*pb.GenTransaction, 1)
-	sub := resp.Submissions[0]
+	sub := new(transactions.GenTransaction)
 	sub.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
 	sub.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
+	sub.SigInfo = &transactions.SignatureInfo{}
+	sub.SigInfo.URL = *isc.ToUrl.AsString()
 	sub.Transaction = iscData
 
+	resp.AddSyntheticTransaction(sub)
+
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return resp, nil
+	return nil
+}
+
+func (v *AdiChain) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
+	resp = new(ResponseValidateTX)
+	err = v.processAdiCreate(currentState, submission, resp)
+	return resp, err
 }
 
 func (v *AdiChain) EndBlock(mdroot []byte) error {
