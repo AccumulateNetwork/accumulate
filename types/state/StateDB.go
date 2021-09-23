@@ -87,6 +87,16 @@ func (sdb *StateDB) Sync() {
 	sdb.sync.Wait()
 }
 
+//GetTx get the transaction by transaction ID
+func (sdb *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, err error) {
+	tx = sdb.db.Get("Tx", "", txId)
+
+	pendingTxId := sdb.db.Get("MainToPending", "", txId)
+	pendingTx = sdb.db.Get("PendingTx", "", pendingTxId)
+
+	return tx, pendingTx, nil
+}
+
 //AddPendingTx adds the pending tx raw data and signature of that data to tx, signature needs to be a signed hash of the tx.
 func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txPending *PendingTransaction, txValidated *Transaction) error {
 	_ = chainId
