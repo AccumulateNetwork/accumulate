@@ -59,7 +59,10 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 
 	laddr := viper.GetString("rpc.laddr")
 
-	rpcClient, _ := rpchttp.New(laddr, "/websocket")
+	rpcClient, err := rpchttp.New(laddr, "/websocket")
+	if err != nil {
+		panic(err)
+	}
 
 	app.chainValidator = chainValidator
 	app.leader = false
@@ -323,7 +326,7 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 
 	//need to pass this to a threaded batcher / dispatcher to do both signing and sending of synth tx.  No need to
 	//spend valuable time here doing that.
-	for _, v := range vdata.Submissions {
+	for _, gtx := range vdata.Submissions {
 
 		//generate a synthetic tx and send to the router.
 		//need to track txid to make sure they get processed....
@@ -332,26 +335,26 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 			//we only need to make sure it is processed by the next EndBlock so place in pending queue.
 			///if we are the leader then we are responsible for dispatching the synth tx.
 
-			dataToSign := v.Transaction
+			dataToSign := gtx.Transaction
 			if dataToSign == nil {
 				panic("no synthetic transaction defined.  shouldn't get here.")
 			}
 
-			ed := new(transactions.ED25519Sig)
-			ed.PublicKey = app.key[32:]
-			if v.SigInfo == nil {
+			if gtx.SigInfo == nil {
 				panic("siginfo for synthetic transaction is not set, shouldn't get here")
 			}
 
-			v.SigInfo.Nonce = uint64(time.Now().Unix())
-			err := ed.Sign(1, app.key, dataToSign)
+			ed := new(transactions.ED25519Sig)
+			gtx.SigInfo.Nonce = uint64(time.Now().Unix())
+			ed.PublicKey = app.key[32:]
+			err = ed.Sign(gtx.SigInfo.Nonce, app.key, gtx.TransactionHash())
 			if err != nil {
-				panic(fmt.Sprintf("cannot sign synthetic transaction, shoudn't get here, %v", err))
+				panic(err)
 			}
 
-			v.Signature = append(v.Signature, ed)
+			gtx.Signature = append(gtx.Signature, ed)
 
-			_, err = app.txBouncer.BatchTx(v)
+			_, err = app.txBouncer.BatchTx(gtx)
 
 			if err != nil {
 				return err
