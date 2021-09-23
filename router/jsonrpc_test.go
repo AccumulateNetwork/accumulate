@@ -31,69 +31,22 @@ func _TestLoadOnRemote(t *testing.T) {
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
-	kpSponsor := privateKeySponsor
+	addrList := runLoadTest(t, txBouncer, &privateKeySponsor)
 
-	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	adiSponsor := types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
-
-	//set destination url address
-	destAddress := adiSponsor //types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
-
-	println(destAddress)
-	txid := sha256.Sum256([]byte("fake txid"))
-
-	tokenUrl := types.String("dc/ACME")
-
-	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
-	amtToDeposit := int64(50000)                             //deposit 50k tokens
-	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
-	deposit.TokenUrl = tokenUrl
-
-	depData, err := deposit.MarshalBinary()
-	gtx := new(transactions.GenTransaction)
-	gtx.Transaction = depData
-	gtx.SigInfo = new(transactions.SignatureInfo)
-	gtx.SigInfo.URL = *destAddress.AsString()
-	if err := gtx.SetRoutingChainID(); err != nil {
-		t.Fatal("bad url generated")
+	for _, v := range addrList[1:] {
+		fmt.Println(v)
 	}
-	dataToSign := gtx.TransactionHash()
-
-	ed := new(transactions.ED25519Sig)
-	gtx.SigInfo.Nonce = 1
-	ed.PublicKey = privateKeySponsor[32:]
-	err = ed.Sign(gtx.SigInfo.Nonce, privateKeySponsor, dataToSign)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	gtx.Signature = append(gtx.Signature, ed)
-
-	sendRes, err := txBouncer.SendTx(gtx)
-	if err != nil {
-		t.Fatalf("error sending transaction, %s, %v", sendRes.Log, err)
-	}
-
-	Load(t, txBouncer, privateKeySponsor)
-
-	txBouncer.BatchSend()
-
 	time.Sleep(3000 * time.Millisecond)
 
-	queryTokenUrl := destAddress + "/" + tokenUrl
+	tokenUrl := "dc/ACME"
+	queryTokenUrl := addrList[1] + "/" + tokenUrl
 	query := NewQuery(txBouncer)
 
-	//queryme := "acme-4cd95cb589e0211f9c6b5fd858cf8fab80f4586af35b6160" //acme-b8d3aa6a4da74ca2a2cfeee0c0f03f78bb47f2fda8d1732f" ///dc/ACME"
-	//queryTokenUrl = types.String(queryme)
-	//queryme = *queryTokenUrl.AsString()
-	resp, err := query.GetChainState(queryTokenUrl.AsString())
+	resp, err := query.GetChainState(&queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// fmt.Println(string(*resp.Data))
 	output, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatal(err)
@@ -105,7 +58,6 @@ func _TestLoadOnRemote(t *testing.T) {
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
-	//ret, err := txBouncer.Query(queryTokenUrl.AsString())
 	theData := jsonapi.getData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
@@ -113,7 +65,7 @@ func _TestLoadOnRemote(t *testing.T) {
 	}
 	println(string(theJsonData))
 
-	resp, err = query.GetChainState(queryTokenUrl.AsString())
+	resp, err = query.GetChainState(&queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,44 +75,23 @@ func _TestLoadOnRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Println(string(output))
+	for _, v := range addrList[1:] {
+		resp, err := query.GetChainState(&v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		output, err := json.Marshal(resp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Printf("%s : %s\n", v, string(output))
+	}
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
-	//make a client, and also spin up the router grpc
-	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
-
-	//dir += "/Node0"
-	cfg := path.Join(dir, "/Node0/config/config.toml")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-
-	_, rpc, vm := makeBVCandRouter(cfg, dir)
-
-	_ = rpc
-	//networksList := []int{2}
-	//txBouncer := networks.MakeBouncer(networksList)
-
-	//rpcClients := []*rpchttp.HTTP{rpc}
-	//txBouncer := networks.NewBouncer(rpcClients)
-
-	networksList := []int{2}
-	txBouncer := networks.MakeBouncer(networksList)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	query := NewQuery(txBouncer)
-
-	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
-	_ = jsonapi
-
-	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
-	kpSponsor := ed25519.NewKeyFromSeed(vm.Key.PrivKey.Bytes()[:32])
+func runLoadTest(t *testing.T, txBouncer *networks.Bouncer, origin *ed25519.PrivateKey) (addrList []string) {
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	adiSponsor := types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	adiSponsor := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
 
 	_, privateKey, _ := ed25519.GenerateKey(nil)
 	//set destination url address
@@ -195,19 +126,51 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	gtx.Signature = append(gtx.Signature, ed)
 
 	_, err = txBouncer.SendTx(gtx)
-	//_, err := txBouncer.BatchTx(gtx)
+
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	Load(t, txBouncer, privateKey)
+	addresses := Load(t, txBouncer, privateKey)
 
-	txBouncer.BatchSend()
+	addrList = append(addrList, *adiSponsor.AsString())
+	addrList = append(addrList, *destAddress.AsString())
+	addrList = append(addrList, addresses...)
+	return addrList
+
+}
+
+func TestJsonRpcAnonToken(t *testing.T) {
+	//make a client, and also spin up the router grpc
+	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
+	cfg := path.Join(dir, "/Node0/config/config.toml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+
+	_, rpc, vm := makeBVCandRouter(cfg, dir)
+	_ = rpc
+
+	networksList := []int{2}
+	txBouncer := networks.MakeBouncer(networksList)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	query := NewQuery(txBouncer)
+
+	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	kpSponsor := ed25519.NewKeyFromSeed(vm.Key.PrivKey.Bytes()[:32])
+
+	addrList := runLoadTest(t, txBouncer, &kpSponsor)
 
 	//wait 3 seconds for the transaction to process for the block to complete.
-	time.Sleep(3 * time.Second)
-	queryTokenUrl := destAddress + "/" + tokenUrl
-	resp, err := query.GetTokenAccount(queryTokenUrl.AsString())
+	time.Sleep(10 * time.Second)
+
+	tokenUrl := "dc/ACME"
+	queryTokenUrl := addrList[1] + "/" + tokenUrl
+	resp, err := query.GetTokenAccount(&queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +182,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	resp2, err := query.GetChainState(queryTokenUrl.AsString())
+	resp2, err := query.GetChainState(&queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -231,19 +194,30 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	queryTokenUrl = "acme-005448d8e0d88051389bc09975455130a89fdb5e6950c07f"
-	params := &api.APIRequestURL{URL: queryTokenUrl}
+	// now use the JSON rpc api's to get the data
+	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
+
+	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
-	//ret, err := txBouncer.Query(queryTokenUrl.AsString(), nil)
 	theData := jsonapi.getData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	//ret.Response.Value
-
 	fmt.Println(theJsonData) //ret.Response.Value)
+	for _, v := range addrList[1:] {
+		resp, err := query.GetChainState(&v)
+		if err != nil {
+			t.Fatal(err)
+		}
+		output, err := json.Marshal(resp)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fmt.Printf("%s : %s\n", v, string(output))
+	}
+
 	//req := api.{}
 	//adi := &api.ADI{}
 	//adi.URL = "RoadRunner"
@@ -277,7 +251,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down is useful when debugging the tendermint core callbacks
-	time.Sleep(30000 * time.Millisecond)
+	time.Sleep(10000 * time.Millisecond)
 
 }
 
@@ -285,7 +259,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 // Generate load in our test.  Create a bunch of transactions, and submit them.
 func Load(t *testing.T,
 	txBouncer *networks.Bouncer,
-	Origin ed25519.PrivateKey) {
+	Origin ed25519.PrivateKey) (addrList []string) {
 
 	var wallet []*transactions.WalletEntry
 
@@ -296,9 +270,10 @@ func Load(t *testing.T,
 
 	for i := 1; i <= 2000; i++ { //                            create a 1000 addresses for anonymous token chains
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
+		addrList = append(addrList, wallet[i].Addr)
 	}
 
-	for i := 1; i < 10000; i++ { // Make a bunch of transactions
+	for i := 1; i < 2; i++ { // Make a bunch of transactions
 		if i%250 == 0 {
 			txBouncer.BatchSend()
 			time.Sleep(250 * time.Millisecond)
@@ -327,6 +302,9 @@ func Load(t *testing.T,
 			}
 		}
 	}
+	txBouncer.BatchSend()
+
+	return addrList
 }
 
 func _TestJsonRpcAdi(t *testing.T) {

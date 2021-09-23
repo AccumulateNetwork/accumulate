@@ -2,6 +2,8 @@ package networks
 
 import (
 	"context"
+	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
@@ -63,8 +65,14 @@ func (b *Bouncer) BatchSend() {
 // dispatch
 // This function is executed as a go routine to send out all the batches
 func dispatch(batches []*rpchttp.BatchHTTP) {
+
 	for i := range batches {
-		batches[i].Send(context.Background())
+		if batches[i].Count() > 0 {
+			_, err := batches[i].Send(context.Background())
+			if err != nil {
+				fmt.Println("error sending batch, %v", err)
+			}
+		}
 	}
 }
 
