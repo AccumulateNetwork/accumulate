@@ -361,7 +361,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	defer func() {
 		// fmt.Printf("*** return DeliverTx IsOk %v IsErr %v \n", rdt.IsOK(), rdt.IsErr())
 	}()
-	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: nil, Code: code.CodeTypeOK}
+	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: code.CodeTypeOK}
 
 	sub := &transactions.GenTransaction{}
 
