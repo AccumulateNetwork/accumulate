@@ -3,6 +3,8 @@ package tendermint
 import (
 	"bytes"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 
@@ -47,21 +49,6 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
-
-//
-//var (
-//	stateKey        = []byte("stateKey")
-//	kvPairPrefixKey = []byte("kvPairKey:")
-//
-//	ProtocolVersion uint64 = 0x1
-//)
-//
-//type State struct {
-//	db      dbm.DB
-//	Size    int64  `json:"size"`
-//	Height  int64  `json:"height"`
-//	AppHash []byte `json:"app_hash"`
-//}
 
 func loadState(db dbm.DB) State {
 	var tmstate State
@@ -336,25 +323,25 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) (rct 
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 	//the submission is the format of the Tx input
-	sub := &pb.GenTransaction{}
+	sub := new(transactions.GenTransaction)
 
 	//unpack the request
-	whatevs, err1 := sub.UnMarshal(req.Tx)
+	rem, err := sub.UnMarshal(req.Tx)
 
 	//check to see if there was an error decoding the submission
-	if len(whatevs) != 0 {
+	if len(rem) != 0 || err != nil {
 		//reject it
 		return abcitypes.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
 
-	err2 := app.chainValidatorNode.CanTransact(sub)
+	err = app.chainValidatorNode.CanTransact(sub)
 
-	if err1 != nil || err2 != nil {
+	if err != nil {
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("entry check failed %v for url %x, %v \n", sub.GetTransactionType(), sub.GetChainID(), err2)
+		ret.Info = fmt.Sprintf("entry check failed %v for url %x, %v \n", sub.TransactionType(), sub.ChainID, err)
 		return ret
 	}
 
@@ -374,27 +361,27 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	defer func() {
 		// fmt.Printf("*** return DeliverTx IsOk %v IsErr %v \n", rdt.IsOK(), rdt.IsErr())
 	}()
-	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: nil, Code: code.CodeTypeOK}
+	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: code.CodeTypeOK}
 
-	sub := &pb.GenTransaction{}
+	sub := &transactions.GenTransaction{}
 
 	//unpack the request
 	//how do i detect errors?  This causes segfaults if not tightly checked.
-	whatevs, err := sub.UnMarshal(req.Tx)
-	if err != nil || len(whatevs) != 0 {
+	_, err := sub.UnMarshal(req.Tx)
+	if err != nil {
 		return abcitypes.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: fmt.Sprintf("Unable to decode transaction")}
 	}
 
 	//run through the validation node
-	err2 := app.chainValidatorNode.Validate(sub)
+	err = app.chainValidatorNode.Validate(sub)
 
-	if err2 != nil {
+	if err != nil {
 		ret.Code = code.CodeTypeUnauthorized
 		//ret.GasWanted = 0
 		//ret.GasUsed = 0
 		//we don't care about failure as far as tendermint is concerned.
-		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.GetTransactionType(), err2)
+		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.TransactionType(), err)
 		return ret
 	}
 
@@ -446,7 +433,7 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 //    Commit <---
 func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	defer func() {
-		// fmt.Printf("*** return Commit %v \n", "")
+		//fmt.Printf("*** return Commit %v \n", "")
 	}()
 	//end the current batch of transactions in the Stateful Merkle Tree
 
@@ -579,7 +566,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	// create logger
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 	var err error
-	logger, err = tmflags.ParseLogLevel(app.config.LogLevel, logger, cfg.DefaultLogLevel())
+	logger, err = tmflags.ParseLogLevel(app.config.LogLevel, logger, cfg.DefaultLogLevel)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse log level: %w", err)
 	}

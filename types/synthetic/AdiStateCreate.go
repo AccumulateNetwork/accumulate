@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/AccumulateNetwork/SMT/common"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
@@ -23,7 +25,8 @@ func NewAdiStateCreate(txid types.Bytes, from *types.String, to *types.String, k
 
 func (a *AdiStateCreate) MarshalBinary() ([]byte, error) {
 	var buf bytes.Buffer
-	buf.WriteByte(byte(proto.AccInstruction_Synthetic_Identity_Creation))
+
+	buf.Write(common.Uint64Bytes(uint64(proto.AccInstruction_Synthetic_Identity_Creation)))
 	data, err := a.Header.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal header for Adi State Create message, %v", err)
@@ -34,24 +37,26 @@ func (a *AdiStateCreate) MarshalBinary() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (a *AdiStateCreate) UnmarshalBinary(data []byte) error {
-	length := len(data)
-	if length < 2 {
-		return fmt.Errorf("insufficient data to unmarshal Adi State Create message")
-	}
+func (a *AdiStateCreate) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		}
+	}()
 
-	if data[0] != byte(proto.AccInstruction_Synthetic_Identity_Creation) {
+	txType, data := common.BytesUint64(data)
+	if txType != uint64(proto.AccInstruction_Synthetic_Identity_Creation) {
 		return fmt.Errorf("data is not of a identity creation type")
 	}
-	err := a.Header.UnmarshalBinary(data[1:])
+	err = a.Header.UnmarshalBinary(data)
 	if err != nil {
 		return fmt.Errorf("insufficient data to unmarshal Adi State Create message header, %v", err)
 	}
 	i := 1 + a.Header.Size()
-	if length < i+32 {
+	if len(data) < i+32 {
 		return fmt.Errorf("insufficient data to unmarshal Adi State Create message key hash")
 	}
 	copy(a.PublicKeyHash[:], data[i:])
 
-	return nil
+	return err
 }

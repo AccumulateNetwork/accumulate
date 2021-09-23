@@ -15,7 +15,7 @@ type ADI struct {
 
 func NewADI(name *string, keyHash *types.Bytes32) *ADI {
 	ic := &ADI{}
-	ic.SetAdi(name)
+	_ = ic.SetAdi(name)
 	ic.SetKeyHash(keyHash)
 	return ic
 }

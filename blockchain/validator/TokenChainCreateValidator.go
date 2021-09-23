@@ -5,27 +5,30 @@ import (
 	"fmt"
 	"time"
 
+	cfg "github.com/tendermint/tendermint/config"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	cfg "github.com/tendermint/tendermint/config"
 )
 
 type TokenChainCreateValidator struct {
 	ValidatorContext
-
-	EV *EntryValidator
 }
 
 func NewTokenChainCreateValidator() *TokenChainCreateValidator {
 	v := TokenChainCreateValidator{}
-	v.SetInfo(types.ChainTypeTokenAccount[:], types.ChainSpecTokenAccount, pb.AccInstruction_Token_URL_Creation)
+	v.SetInfo(types.ChainTypeTokenAccount, pb.AccInstruction_Token_URL_Creation)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
-
-func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *TokenChainCreateValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	return nil
+}
+func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	if currentstate == nil {
 		return fmt.Errorf("current state not defined")
 	}
@@ -46,10 +49,6 @@ func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submis
 	return nil
 }
 
-func (v *TokenChainCreateValidator) Initialize(config *cfg.Config) error {
-	return nil
-}
-
 func (v *TokenChainCreateValidator) BeginBlock(height int64, time *time.Time) error {
 	v.lastHeight = v.currentHeight
 	v.lastTime = v.currentTime
@@ -59,7 +58,7 @@ func (v *TokenChainCreateValidator) BeginBlock(height int64, time *time.Time) er
 	return nil
 }
 
-func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
 	if currentstate == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}

@@ -2,44 +2,54 @@ package validator
 
 import (
 	"fmt"
-
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/state"
-
-	pb "github.com/AccumulateNetwork/accumulated/types/proto"
-	//nm "github.com/AccumulateNetwork/accumulated/vbc/node"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
 )
 
 type ResponseValidateTX struct {
-	StateData   map[types.Bytes32]types.Bytes //acctypes.StateObject
-	PendingData map[types.Bytes32]types.Bytes //stuff to store on pending chain.
-	EventData   []byte                        //this should be events that need to get published
-	Submissions []*pb.GenTransaction          //this is a list of synthetic transactions
+	StateData     map[types.Bytes32]types.Bytes  //acctypes.StateObject
+	MainChainData map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
+	PendingData   map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
+	EventData     []byte                         //this should be events that need to get published
+	Submissions   []*transactions.GenTransaction //this is a list of synthetic transactions
 }
 
-func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, stateData []byte) {
+func (r *ResponseValidateTX) AddMainChainData(chainid *types.Bytes32, data []byte) {
+	if r.MainChainData == nil {
+		r.MainChainData = make(map[types.Bytes32]types.Bytes)
+	}
+	r.MainChainData[*chainid] = data
+}
+
+func (r *ResponseValidateTX) AddStateData(chainid *types.Bytes32, data []byte) {
 	if r.StateData == nil {
 		r.StateData = make(map[types.Bytes32]types.Bytes)
 	}
-	r.StateData[*chainid] = stateData
+	r.StateData[*chainid] = data
 }
 
-func (r *ResponseValidateTX) AddPendingData(chainid *types.Bytes32, stateData []byte) {
+func (r *ResponseValidateTX) AddPendingData(txId *types.Bytes32, data []byte) {
 	if r.PendingData == nil {
 		r.PendingData = make(map[types.Bytes32]types.Bytes)
 	}
-	r.PendingData[*chainid] = stateData
+	r.PendingData[*txId] = data
+}
+
+func (r *ResponseValidateTX) AddSyntheticTransaction(tx *transactions.GenTransaction) {
+	r.Submissions = append(r.Submissions, tx)
 }
 
 type ValidatorInterface interface {
-	Initialize(config *cfg.Config) error //what info do we need here, we need enough info to perform synthetic transactions.
+	Initialize(config *cfg.Config, db *state.StateDB) error
 	BeginBlock(height int64, Time *time.Time) error
-	Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error
-	Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) //return persistent entry or error
-	EndBlock(mdroot []byte) error                                                                        //do something with MD root
+	Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error
+	Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) //return persistent entry or error
+	EndBlock([]byte) error                                                                                         //do something with MD root?
 
 	SetCurrentBlock(height int64, Time *time.Time, chainid *string) //deprecated
 	GetInfo() *ValidatorInfo
@@ -50,18 +60,17 @@ type ValidatorInterface interface {
 
 type ValidatorInfo struct {
 	chainSpec   string //
-	chainTypeId types.Bytes32
+	chainTypeId uint64
 	typeid      uint64
 }
 
-func (h *ValidatorInfo) SetInfo(chainTypeId types.Bytes, chainSpec string, instructionType pb.AccInstruction) {
-	copy(h.chainTypeId[:], chainTypeId)
-	h.chainSpec = chainSpec
+func (h *ValidatorInfo) SetInfo(chainTypeId uint64, instructionType pb.AccInstruction) {
+	h.chainTypeId = chainTypeId
 	h.typeid = uint64(instructionType)
 }
 
-func (h *ValidatorInfo) GetValidatorChainTypeId() types.Bytes {
-	return h.chainTypeId[:]
+func (h *ValidatorInfo) GetValidatorChainTypeId() uint64 {
+	return h.chainTypeId
 }
 
 func (h *ValidatorInfo) GetChainSpec() *string {
@@ -79,8 +88,9 @@ type ValidatorContext struct {
 	currentTime   time.Time
 	lastHeight    int64
 	lastTime      time.Time
+	db            *state.StateDB
 
-	validators    map[types.Bytes32]*ValidatorContext     //validators keeps a map of child chain validators
+	validators    map[uint64]*ValidatorContext            //validators keeps a map of child chain validators
 	validatorsIns map[pb.AccInstruction]*ValidatorContext //validators keeps a map of child chain validators
 }
 
@@ -89,11 +99,10 @@ func (v *ValidatorContext) addValidator(context *ValidatorContext) {
 		v.validatorsIns = make(map[pb.AccInstruction]*ValidatorContext)
 	}
 	if v.validators == nil {
-		v.validators = make(map[types.Bytes32]*ValidatorContext)
+		v.validators = make(map[uint64]*ValidatorContext)
 	}
 
-	var key types.Bytes32
-	copy(key[:], context.GetValidatorChainTypeId())
+	var key = context.GetValidatorChainTypeId()
 
 	v.validators[key] = context
 	v.validatorsIns[pb.AccInstruction(context.GetInfo().GetTypeId())] = context
@@ -107,12 +116,9 @@ func (v *ValidatorContext) getValidatorByIns(ins pb.AccInstruction) (*ValidatorC
 	return nil, fmt.Errorf("validator not found for instruction, %d", ins)
 }
 
-func (v *ValidatorContext) getValidatorByType(validatorType *types.Bytes32) (*ValidatorContext, error) {
-	if validatorType == nil {
-		return nil, fmt.Errorf("cannot find validator, validatorType is nil")
-	}
+func (v *ValidatorContext) getValidatorByType(validatorType uint64) (*ValidatorContext, error) {
 
-	if val, ok := v.validators[*validatorType]; ok {
+	if val, ok := v.validators[validatorType]; ok {
 		return val, nil
 	}
 

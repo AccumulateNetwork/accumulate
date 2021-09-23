@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"fmt"
 	"math/big"
 
@@ -22,7 +23,7 @@ type TokenAccount struct {
 func NewTokenAccount(accountUrl string, tokenUrl string) *TokenAccount {
 	tas := TokenAccount{}
 
-	tas.SetHeader(types.String(accountUrl), types.ChainTypeTokenAccount[:])
+	tas.SetHeader(types.String(accountUrl), types.ChainTypeTokenAccount)
 	tas.TokenUrl.String = types.String(tokenUrl)
 
 	return &tas
@@ -40,13 +41,20 @@ func (app *TokenAccount) Set(accountState *TokenAccount) {
 }
 
 // GetType is an implemented interface that returns the chain type of the object
-func (app *TokenAccount) GetType() *types.Bytes32 {
-	return app.GetType()
+func (app *TokenAccount) GetType() uint64 {
+	return app.Type
 }
 
 // GetChainUrl returns the chain path for the object in the chain.
 func (app *TokenAccount) GetChainUrl() string {
 	return app.Chain.GetChainUrl()
+}
+
+// CanTransact returns true/false if there is a sufficient balance
+func (app *TokenAccount) CanTransact(amt *big.Int) bool {
+	//make sure the user has enough in the account to perform the transaction
+	//if the balance is greater than or equal to the amount, then we are good.
+	return app.GetBalance().Cmp(amt) >= 0
 }
 
 //SubBalance will subtract a balance form the account.  If this is a coinbase account,
@@ -57,7 +65,7 @@ func (app *TokenAccount) SubBalance(amt *big.Int) error {
 	}
 
 	if app.Balance.Cmp(amt) < 0 {
-		return fmt.Errorf("{ \"insufficient-balance\" : { \"available\" : \"%d\" , \"requested\", \"%d\" } }", app.GetBalance(), amt)
+		return fmt.Errorf("insufficient balance, amount available : %d, requested, %d", app.GetBalance(), amt)
 	}
 
 	app.Balance.Sub(&app.Balance, amt)
@@ -85,26 +93,25 @@ func (app *TokenAccount) AddBalance(amt *big.Int) error {
 
 //MarshalBinary creates a byte array of the state object needed for storage
 func (app *TokenAccount) MarshalBinary() (ret []byte, err error) {
+	var buffer bytes.Buffer
+
+	header, err := app.Chain.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(header)
 
 	tokenUrlData, err := app.TokenUrl.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal binary for token URL in TokenAccount, %v", err)
 	}
-	header, err := app.Chain.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
+	buffer.Write(tokenUrlData)
 
-	data := make([]byte, len(header)+32+len(tokenUrlData))
+	var buff types.Bytes32
+	app.Balance.FillBytes(buff[:])
+	buffer.Write(buff[:])
 
-	i := copy(data, header)
-
-	i += copy(data[i:], tokenUrlData)
-
-	app.Balance.FillBytes(data[i:])
-	i += 32
-
-	return data, nil
+	return buffer.Bytes(), nil
 }
 
 //UnmarshalBinary will deserialize a byte array
@@ -128,7 +135,6 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) error {
 	}
 
 	app.Balance.SetBytes(data[i : i+32])
-	i += 32
 
 	return nil
 }

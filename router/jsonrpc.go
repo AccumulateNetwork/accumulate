@@ -2,19 +2,22 @@ package router
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
+
+	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulated/types"
+	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+
+	//"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"log"
 	"net/http"
 	"os"
 	"strconv"
-	"time"
-
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-	"github.com/FactomProject/factomd/common/primitives/random"
-
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
@@ -22,14 +25,14 @@ import (
 )
 
 type API struct {
-	port     int
-	validate *validator.Validate
-	client   proto.ApiServiceClient
-	query    *Query
+	port      int
+	validate  *validator.Validate
+	query     *Query
+	txBouncer *networks.Bouncer
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(port int, q *Query) *API {
+func StartAPI(port int, q *Query, txBouncer *networks.Bouncer) *API {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
@@ -37,6 +40,7 @@ func StartAPI(port int, q *Query) *API {
 	api.port = port
 	api.validate = validator.New()
 	api.query = q
+	api.txBouncer = txBouncer
 
 	methods := jsonrpc2.MethodMap{
 		// URL
@@ -93,10 +97,12 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 		return NewValidatorError(err)
 	}
 
-	resp := &TokenAccount{}
-	resp.URL = req.URL
-
 	// Tendermint integration here
+	resp, err := api.query.GetChainState(req.URL.AsString(), nil)
+
+	if err != nil {
+		return NewAccumulateError(err)
+	}
 
 	return resp
 }
@@ -116,10 +122,12 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 		return NewValidatorError(err)
 	}
 
-	resp := &ADI{}
-	resp.URL = req.URL
-
 	// Tendermint integration here
+	resp, err := api.query.GetAdi(req.URL.AsString())
+
+	if err != nil {
+		return NewAccumulateError(err)
+	}
 
 	return resp
 }
@@ -129,7 +137,7 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 
 	var err error
 	req := &acmeapi.APIRequestRaw{}
-	data := &ADI{}
+	data := &acmeapi.ADI{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
@@ -152,27 +160,14 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 	}
 
 	// Tendermint integration here
-	submission, err := proto.Builder().
-		AdiUrl(*req.Tx.Signer.URL.AsString()).
-		Instruction(proto.AccInstruction_Identity_Creation).
-		Type(types.ChainTypeAdi[:]). //The type is only needed for chain create messages
-		Data(*req.Tx.Data).
-		PubKey(req.Tx.Signer.PublicKey.Bytes()).
-		Signature(req.Sig.Bytes()).
-		Timestamp(req.Tx.Timestamp).
-		Build()
-
-	if err != nil {
-		return NewSubmissionError(err)
+	var payload types.Bytes
+	if payload, err = data.MarshalBinary(); err != nil {
+		return NewValidatorError(err)
 	}
 
-	//This client connects us to the router, the router will send the message to the correct BVC network
-	resp, err := api.client.ProcessTx(context.Background(), submission)
-	if err != nil {
-		return NewAccumulateError(err)
-	}
-
-	return resp
+	ret := api.sendTx(req, payload)
+	ret.Type = "tokenTx"
+	return ret
 }
 
 // getToken returns Token info
@@ -206,7 +201,7 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 
 	var err error
 	req := &acmeapi.APIRequestRaw{}
-	data := &Token{}
+	data := &acmeapi.Token{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
@@ -229,32 +224,14 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 	}
 
 	// Tendermint integration here
-	submission, err := proto.Builder().
-		AdiUrl(*req.Tx.Signer.URL.AsString()).
-		ChainUrl(*data.URL.AsString()). //this chain shouldn't exist yet
-		Instruction(proto.AccInstruction_Token_Issue).
-		Type(types.ChainTypeToken[:]). //Needed since this is a chain create messages
-		Data(*req.Tx.Data).
-		PubKey(req.Tx.Signer.PublicKey.Bytes()).
-		Signature(req.Sig.Bytes()).
-		Timestamp(req.Tx.Timestamp).
-		Build()
-
-	if err != nil {
-		return NewSubmissionError(err)
+	var payload types.Bytes
+	if payload, err = data.MarshalBinary(); err != nil {
+		return NewValidatorError(err)
 	}
 
-	//This client connects us to the router, the router will send the message to the correct BVC network
-	//this uses grpc to route but that isn't necessary (and slow), we should develop a simple dispatcher
-	//that contains a client connection to each BVC
-	resp, err := api.client.ProcessTx(context.Background(), submission)
-	if err != nil {
-		return NewAccumulateError(err)
-	}
-
-	//Need to decide what kind of response is desired.
-	return resp
-
+	ret := api.sendTx(req, payload)
+	ret.Type = "token"
+	return ret
 }
 
 // getTokenAccount returns Token Account info
@@ -282,12 +259,35 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 
 }
 
+func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
+	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, req.Tx.Timestamp, payload)
+
+	ret := &acmeapi.APIDataResponse{}
+	var msg json.RawMessage
+
+	if err != nil {
+		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
+		ret.Data = &msg
+		return ret
+	}
+	resp, err := api.txBouncer.SendTx(genTx)
+	if err != nil {
+		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
+		ret.Data = &msg
+		return ret
+	}
+
+	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", genTx.TransactionHash(), resp.Log))
+	ret.Data = &msg
+	return ret
+}
+
 // createTokenAccount creates Token Account
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
 	req := &acmeapi.APIRequestRaw{}
-	data := &TokenAccount{}
+	data := &acmeapi.TokenAccount{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
@@ -310,29 +310,14 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 	}
 
 	// Tendermint integration here
-	submission, err := proto.Builder().
-		AdiUrl(*req.Tx.Signer.URL.AsString()).
-		ChainUrl(*data.URL.AsString()). // This chain shouldn't exist yet.
-		Instruction(proto.AccInstruction_Token_URL_Creation).
-		Type(types.ChainTypeToken[:]). // The type is only needed for chain create messages
-		Data(*req.Tx.Data).
-		PubKey(req.Tx.Signer.PublicKey.Bytes()).
-		Signature(req.Sig.Bytes()).
-		Timestamp(req.Tx.Timestamp).
-		Build()
-
-	if err != nil {
-		return NewSubmissionError(err)
+	var payload types.Bytes
+	if payload, err = data.MarshalBinary(); err != nil {
+		return NewValidatorError(err)
 	}
 
-	//This client connects us to the router, the router will send the message to the correct BVC network
-	resp, err := api.client.ProcessTx(context.Background(), submission)
-	if err != nil {
-		return NewAccumulateError(err)
-	}
-
-	//Need to decide what the appropriate response should be.
-	return resp
+	ret := api.sendTx(req, payload)
+	ret.Type = "tokenAccount"
+	return ret
 }
 
 // getTokenTx returns Token Tx info
@@ -364,7 +349,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 
 	var err error
 	req := &acmeapi.APIRequestRaw{}
-	data := &TokenTx{}
+	data := &acmeapi.TokenTx{}
 
 	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
@@ -387,86 +372,82 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 	}
 
 	// Tendermint integration here
-	submission, err := proto.Builder().
-		AdiUrl(*req.Tx.Signer.URL.AsString()).
-		ChainUrl(*data.From.AsString()). // This chain shouldn't exist yet.
-		Instruction(proto.AccInstruction_Token_Transaction).
-		Type(types.ChainTypeToken[:]). // The type is only needed for chain create messages
-		Data(*req.Tx.Data).
-		PubKey(req.Tx.Signer.PublicKey.Bytes()).
-		Signature(req.Sig.Bytes()).
-		Timestamp(req.Tx.Timestamp).
-		Build()
-
-	if err != nil {
-		return NewSubmissionError(err)
+	var payload types.Bytes
+	if payload, err = data.MarshalBinary(); err != nil {
+		return NewValidatorError(err)
 	}
 
-	//This client connects us to the router, the router will send the message to the correct BVC network
-	resp, err := api.client.ProcessTx(context.Background(), submission)
-	if err != nil {
-		return NewAccumulateError(err)
-	}
-
-	//Need to decide what the appropriate response should be.
-	return resp
+	ret := api.sendTx(req, payload)
+	ret.Type = "tokenTx"
+	return ret
 }
 
 // createTokenTx creates Token Tx
 func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &acmeapi.APIRequestRaw{}
-	data := &synthetic.TokenTransactionDeposit{}
+	req := &acmeapi.APIRequestURL{}
 
-	// unmarshal req
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
 	}
 
-	// validate request
+	// validate URL
 	if err = api.validate.Struct(req); err != nil {
 		return NewValidatorError(err)
 	}
 
-	// parse req.tx.data
-	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
-		return NewValidatorError(err)
+	adi, _, _ := types.ParseIdentityChainPath(req.URL.AsString())
+
+	if err = anon.IsAcmeAddress(adi); err != nil {
+		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", adi), err)
 	}
+	var destAccount types.String
+	destAccount = types.String(adi)
 
-	// validate request data
-	if err = api.validate.Struct(data); err != nil {
-		return NewValidatorError(err)
+	wallet := transactions.NewWalletEntry()
+	fromAccount := types.String(wallet.Addr)
+
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
+	txid := sha256.Sum256([]byte("faucet"))
+
+	tokenUrl := types.String("dc/ACME")
+
+	//create a fake synthetic deposit for faucet.
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &fromAccount, &destAccount)
+	amtToDeposit := int64(10)                                //deposit 50k tokens
+	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
+	deposit.TokenUrl = tokenUrl
+
+	depData, err := deposit.MarshalBinary()
+	gtx := new(transactions.GenTransaction)
+	gtx.SigInfo = new(transactions.SignatureInfo)
+	gtx.SigInfo.URL = wallet.Addr
+	gtx.SigInfo.Nonce = wallet.Nonce
+	gtx.Transaction = depData
+	if err := gtx.SetRoutingChainID(); err != nil {
+		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", adi), err)
 	}
+	dataToSign := gtx.TransactionHash()
 
-	copy(data.Txid[:], random.RandByteSliceOfLen(32))
-
-	mData, err := data.MarshalBinary()
-	kpSponsor := types.CreateKeyPair()
-	sig, err := kpSponsor.Sign(mData)
-
-	//back dooring a synthetic deposit (this won't after testnet)
-
-	// Tendermint integration here
-	builder := proto.SubmissionBuilder{}
-	sub, err := builder.
-		Instruction(proto.AccInstruction_Synthetic_Token_Deposit).
-		Data(mData).
-		PubKey(kpSponsor.PubKey().Bytes()).
-		Timestamp(time.Now().Unix()).
-		AdiUrl(*data.Header.ToUrl.AsString()).
-		Signature(sig).
-		Build()
+	ed := new(transactions.ED25519Sig)
+	err = ed.Sign(wallet.Nonce, wallet.PrivateKey, dataToSign)
 	if err != nil {
 		return NewSubmissionError(err)
 	}
 
-	//This client connects us to the router, the router will send the message to the correct BVC network
-	resp, err := api.client.ProcessTx(context.Background(), sub)
+	gtx.Signature = append(gtx.Signature, ed)
+
+	resp, err := api.txBouncer.SendTx(gtx)
+
 	if err != nil {
 		return NewAccumulateError(err)
 	}
 
-	//Need to decide what the appropriate response should be.
-	return resp
+	ret := acmeapi.APIDataResponse{}
+	ret.Type = "faucet"
+	var msg json.RawMessage
+	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TransactionHash(), resp.Log))
+	ret.Data = &msg
+	return &ret
 }

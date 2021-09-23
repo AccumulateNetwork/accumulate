@@ -3,6 +3,7 @@ package validator
 import (
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
@@ -36,49 +37,59 @@ func NewBlockValidatorChain() *BlockValidatorChain {
 	return &v
 }
 
-func (v *BlockValidatorChain) Check(currentState *state.StateEntry, submission *pb.GenTransaction) error {
-	return nil
-}
-func (v *BlockValidatorChain) Initialize(config *cfg.Config) error {
+func (v *BlockValidatorChain) Check(currentState *state.StateEntry, submission *transactions.GenTransaction) error {
 	return nil
 }
 
-func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.GenTransaction) (*ResponseValidateTX, error) {
+func (v *BlockValidatorChain) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
+	for _, val := range v.validatorsIns {
+		val.Initialize(config, db)
+	}
+	return nil
+}
+
+func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *transactions.GenTransaction) (*ResponseValidateTX, error) {
 	var err error
+	TransType := sub.TransactionType()
+	if err := sub.SetRoutingChainID(); err != nil {
+		return nil, err
+	}
 
 	//If adiState doesn't exist, we will process by transaction instruction type
 	if currentState.IdentityState == nil {
 		//so the current state isn't defined, so we need to see if we need to create a token or anon chain.
-		val, err := v.getValidatorByIns(pb.AccInstruction(sub.GetTransactionType()))
+
+		val, err := v.getValidatorByIns(pb.AccInstruction(TransType))
 
 		if err != nil {
-			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", sub.GetTransactionType())
+			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", TransType)
 		}
 
 		//valid actions for identity are to create an adi or create an account for anonymous address from synth transactions
-		switch pb.AccInstruction(sub.GetTransactionType()) {
+		switch pb.AccInstruction(TransType) {
 		case pb.AccInstruction_Synthetic_Identity_Creation: //a sponsor will generate the synth identity creation msg
 			fallthrough
 		case pb.AccInstruction_Synthetic_Token_Deposit: // for synth deposits, only anon addresses will be accepted
 			return val.Validate(currentState, sub)
 		default:
-			return nil, fmt.Errorf("invalid instruction issued for identity transaction, %d", sub.GetTransactionType)
+			return nil, fmt.Errorf("invalid instruction issued for identity transaction, %d", TransType)
 		}
 	}
 
 	//since we have a valid adiState, we now need to look up the chain
-	currentState.ChainState, _ = currentState.DB.GetCurrentEntry(sub.GetChainID()) //need the identity chain
+	currentState.ChainState, _ = currentState.DB.GetCurrentEntry(sub.ChainID) //need the identity chain
 
 	//If chain state doesn't exist, we will process by transaction instruction type
 	if currentState.ChainState == nil {
 		//we have no chain state, so we need to process by transaction type.
-		val, err := v.getValidatorByIns(pb.AccInstruction(sub.GetTransactionType()))
+		val, err := v.getValidatorByIns(pb.AccInstruction(TransType))
 		if err != nil {
-			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", sub.GetTransactionType)
+			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", TransType)
 		}
 
 		//valid instruction actions are to create account, token, identity, scratch chain, or data chain
-		switch pb.AccInstruction(sub.GetTransactionType()) {
+		switch pb.AccInstruction(TransType) {
 		case pb.AccInstruction_Identity_Creation:
 			fallthrough
 		case pb.AccInstruction_Scratch_Chain_Creation:
@@ -90,7 +101,7 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.G
 		case pb.AccInstruction_Token_URL_Creation:
 			return val.Validate(currentState, sub)
 		default:
-			return nil, fmt.Errorf("invalid instruction issued for chain transaction, %d", sub.GetTransactionType)
+			return nil, fmt.Errorf("invalid instruction issued for chain transaction, %d", TransType)
 		}
 	}
 
@@ -102,7 +113,7 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.G
 	}
 
 	//retrieve the validator based upon chain type
-	val, err := v.getValidatorByType(&chain.Type)
+	val, err := v.getValidatorByType(chain.Type)
 	if err != nil {
 		return nil, fmt.Errorf("cannot find validator for BlockValidationChain %s (err %v)", chain.ChainUrl, err)
 	}
@@ -112,5 +123,8 @@ func (v *BlockValidatorChain) Validate(currentState *state.StateEntry, sub *pb.G
 }
 
 func (v *BlockValidatorChain) EndBlock(mdroot []byte) error {
+	for _, val := range v.validatorsIns {
+		val.EndBlock(mdroot)
+	}
 	return nil
 }

@@ -24,7 +24,7 @@ type Token struct {
 
 func NewToken(tokenUrl string) *Token {
 	token := &Token{}
-	token.SetHeader(types.String(tokenUrl), types.ChainTypeToken[:])
+	token.SetHeader(types.String(tokenUrl), types.ChainTypeToken)
 	return token
 }
 
@@ -32,7 +32,7 @@ func (t *Token) GetChainUrl() string {
 	return t.Chain.GetChainUrl()
 }
 
-func (t *Token) GetType() *types.Bytes32 {
+func (t *Token) GetType() uint64 {
 	return t.Chain.GetType()
 }
 

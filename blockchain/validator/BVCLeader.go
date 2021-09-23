@@ -2,6 +2,7 @@ package validator
 
 import (
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
@@ -10,6 +11,7 @@ import (
 	"time"
 )
 
+// BVCLeader is a boilerplate
 type BVCLeader struct {
 	ValidatorContext
 
@@ -18,15 +20,17 @@ type BVCLeader struct {
 
 func NewBVCLeader() *BVCLeader {
 	v := BVCLeader{}
-	v.SetInfo(types.ChainTypeDC[:], types.ChainSpecDC, pb.AccInstruction_State_Query)
+	v.SetInfo(types.ChainTypeDC, pb.AccInstruction_State_Query)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-func (v *BVCLeader) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *BVCLeader) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
 	return nil
 }
-func (v *BVCLeader) Initialize(config *cfg.Config) error {
+
+func (v *BVCLeader) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	return nil
 }
 
@@ -39,7 +43,7 @@ func (v *BVCLeader) BeginBlock(height int64, time *time.Time) error {
 	return nil
 }
 
-func (v *BVCLeader) Validate(currentstate *state.StateEntry, submission *pb.GenTransaction) (*ResponseValidateTX, error) {
+func (v *BVCLeader) Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (*ResponseValidateTX, error) {
 	//return persistent entry or error
 	return nil, nil
 }

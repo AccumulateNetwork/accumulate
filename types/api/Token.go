@@ -5,7 +5,10 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+
+	"github.com/AccumulateNetwork/SMT/common"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 type TokenCirculationMode int
@@ -18,12 +21,18 @@ type Token struct {
 }
 
 func NewToken(url string, symbol string, precision byte) *Token {
-	t := &Token{types.String(url), types.String(symbol), types.Byte(precision), nil}
+	t := &Token{URL: types.String(url), Symbol: types.String(symbol), Precision: types.Byte(precision), Meta: nil}
 	return t
 }
 
 func (t *Token) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
+
+	var ret bytes.Buffer
+
+	var vi [8]byte
+	_ = binary.PutVarint(vi[:], int64(proto.AccInstruction_Token_Issue))
+	ret.Write(vi[:])
 
 	//marshal URL
 	d, err := t.URL.MarshalBinary()
@@ -53,9 +62,25 @@ func (t *Token) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (t *Token) UnmarshalBinary(data []byte) error {
+func (t *Token) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		}
+	}()
 
-	err := t.URL.UnmarshalBinary(data)
+	length := len(data)
+	if length < 2 {
+		return fmt.Errorf("insufficient data to unmarshal binary for TokenTx")
+	}
+
+	txType, data := common.BytesUint64(data)
+
+	if txType != uint64(proto.AccInstruction_Token_Issue) {
+		return fmt.Errorf("invalid transaction type, expecting token issuance")
+	}
+
+	err = t.URL.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}

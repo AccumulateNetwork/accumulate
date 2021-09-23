@@ -1,38 +1,40 @@
 package validator
 
 import (
-	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"errors"
 	"fmt"
-	"net"
+	"github.com/AccumulateNetwork/SMT/common"
+	"sync"
 	"time"
 
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-
-	ptypes "github.com/tendermint/tendermint/abci/types"
-
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
-	tmnet "github.com/tendermint/tendermint/libs/net"
-	"google.golang.org/grpc"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 // Node implements the general parameters to stimulate the validators, provide synthetic transactions, and issue state changes
 type Node struct {
-	AccRpcAddr   string
-	RouterClient pb.ApiServiceClient
+	AccRpcAddr string
 
-	mmDB           state.StateDB
-	chainValidator *ValidatorContext
+	mmDB           state.StateDB     // State database
+	chainValidator *ValidatorContext // Chain Validator
 	leader         bool
 	key            ed25519.PrivateKey
-	rpcClient      *rpchttp.HTTP
-	batch          [2]*rpchttp.BatchHTTP
-	height         int64
+	nonce          uint64
+
+	txBouncer *networks.Bouncer
+	height    int64
+
+	wait      sync.WaitGroup
+	chainWait map[uint64]*sync.WaitGroup
+	mutex     sync.Mutex
 }
 
 // Initialize will setup the node with the given parameters.  What we really need here are the bouncer, and private key
@@ -44,37 +46,33 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 
 		return fmt.Errorf("viper failed to read config file: %w", err)
 	}
-	app.AccRpcAddr = v.GetString("accumulate.AccRPCAddress")
 
 	//create a connection to the router.
-	routeraddress := v.GetString("accumulate.RouterAddress")
-	if len(routeraddress) == 0 {
-		return fmt.Errorf("accumulate.RouterAddress token not specified in config file")
-	}
+	app.AccRpcAddr = v.GetString("accumulate.AccRPCAddress")
 
-	conn, err := grpc.Dial(routeraddress, grpc.WithBlock(), grpc.WithInsecure(), grpc.WithContextDialer(dialerFunc))
-	if err != nil {
-		return fmt.Errorf("error Openning GRPC client in router")
-	}
-	//defer conn.Close()
-	app.RouterClient = pb.NewApiServiceClient(conn)
 	networkId := viper.GetString("instrumentation/namespace")
 	bvcId := sha256.Sum256([]byte(networkId))
-	dbfilename := workingDir + "/" + "valacc.db"
-	err = app.mmDB.Open(dbfilename, bvcId[:], false, true)
+	dbFilename := workingDir + "/" + "valacc.db"
+	err := app.mmDB.Open(dbFilename, bvcId[:], false, true)
+	if err != nil {
+		return fmt.Errorf("failed to open database %s, %v", dbFilename, err)
+	}
 
 	laddr := viper.GetString("rpc.laddr")
-	//rpcc := tendermint.GetRPCClient(laddr)
 
-	app.rpcClient, _ = rpchttp.New(laddr, "/websocket")
+	rpcClient, err := rpchttp.New(laddr, "/websocket")
+	if err != nil {
+		panic(err)
+	}
 
 	app.chainValidator = chainValidator
 	app.leader = false
 
 	app.key = key
 
-	app.batch[0] = app.rpcClient.NewBatch()
-	app.batch[1] = app.rpcClient.NewBatch()
+	rpcClients := []*rpchttp.HTTP{rpcClient}
+	app.txBouncer = networks.NewBouncer(rpcClients)
+	app.chainValidator.Initialize(nil, &app.mmDB)
 	return nil
 }
 
@@ -82,10 +80,10 @@ func (app *Node) Initialize(configFile string, workingDir string, key ed25519.Pr
 func (app *Node) BeginBlock(height int64, Time *time.Time, leader bool) error {
 	app.leader = leader
 	app.height = height
-	app.chainValidator.BeginBlock(height, Time)
+	err := app.chainValidator.BeginBlock(height, Time)
+	app.chainWait = make(map[uint64]*sync.WaitGroup)
 
-	//app.batchRequests = nil
-	return nil
+	return err
 }
 
 // getCurrentState will populate the basic state structure with needed information
@@ -131,7 +129,7 @@ func (app *Node) getCurrentState(chainId []byte) (*state.StateEntry, error) {
 
 // verifyGeneralTransaction will check the nonce (if applicable), check the public key for the transaction,
 // and verify the signature of the transaction.
-func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transaction *pb.GenTransaction) error {
+func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transaction *transactions.GenTransaction) error {
 
 	if currentState.IsValid(state.MaskChainState | state.MaskAdiState) {
 		//1. verify nonce
@@ -140,68 +138,138 @@ func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transa
 
 	//Check to see if transaction is valid. This is expensive, so maybe we should check ADI stuff first.
 	if !transaction.ValidateSig() {
-		return fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType())
+		return fmt.Errorf("invalid signature for transaction %d", transaction.TransactionType())
 	}
 
 	return nil
 }
 
 // CanTransact will do light validation on the transaction
-func (app *Node) CanTransact(transaction *pb.GenTransaction) error {
-
+func (app *Node) CanTransact(transaction *transactions.GenTransaction) error {
+	if err := transaction.SetRoutingChainID(); err != nil {
+		return err
+	}
+	app.mutex.Lock()
 	//populate the current state from the StateDB
-	currentState, _ := app.getCurrentState(transaction.GetChainID())
+	currentState, _ := app.getCurrentState(transaction.ChainID)
+	app.mutex.Unlock()
 
 	if err := app.verifyGeneralTransaction(currentState, transaction); err != nil {
 		return fmt.Errorf("cannot proceed with transaction, verification failed, %v", err)
 	}
 
 	//run the chain validator...
-	app.chainValidator.Check(currentState, transaction)
-	return nil
+	return app.chainValidator.Check(currentState, transaction)
 }
 
-// Validate will do a deep validation of the transaction.  This is done by ALL the validators in the network
-// transaction []byte will be replaced by transaction RawTransaction
-func (app *Node) Validate(transaction *pb.GenTransaction) error {
+func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 
-	currentState, _ := app.getCurrentState(transaction.GetChainID())
+	if transaction.Transaction == nil || transaction.SigInfo == nil ||
+		len(transaction.ChainID) != 32 {
+		return fmt.Errorf("malformd general transaction")
+	}
+
+	_ = transaction.TransactionHash()
+
+	app.mutex.Lock()
+
+	var group *sync.WaitGroup
+	if group = app.chainWait[transaction.Routing%4]; group == nil {
+		group = &sync.WaitGroup{}
+		app.chainWait[transaction.Routing%4] = group
+	}
+	group.Wait()
+	group.Add(1)
+	app.mutex.Unlock()
+
+	defer func() {
+		group.Done()
+		app.wait.Done()
+	}()
+
+	currentState, _ := app.getCurrentState(transaction.ChainID)
 
 	//placeholder for special validation rules for synthetic transactions.
-	if transaction.GetTransactionType()&0xFF00 > 0 {
+	if transaction.TransactionType()&0xF0 > 0 {
 		//need to verify the sender is a legit bvc validator also need the dbvc receipt
 		//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
 		//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
 		//sender is legit.
 	}
-	//run through the validation routine
-	vdata, err := app.chainValidator.Validate(currentState, transaction)
 
-	//if err != nil {
-	//	return err
-	//}
-
-	/// batch any synthetic tx's generated by the validator
-	app.processValidatedSubmissionRequest(vdata)
-
-	/// update the state data for the chain.
-	if vdata.StateData != nil {
-		for k, v := range vdata.StateData {
-			header := state.Chain{}
-			err := header.UnmarshalBinary(v)
-			if err != nil {
-				panic("invalid state object after submission processing, should never get here")
-			}
-			app.mmDB.AddStateEntry(k[:], v)
-		}
+	err := app.verifyGeneralTransaction(currentState, transaction)
+	if err != nil {
+		return fmt.Errorf("cannot proceed with transaction, verification failed, %v", err)
 	}
 
+	//first configure the pending state which is the basis for the transaction
+	txPending := state.NewPendingTransaction(transaction)
+
+	//run through the validation routine
+	//todo: vdata should return a list of chainId's the transaction touched.
+	vdata, err := app.chainValidator.Validate(currentState, transaction)
+
+	var chainId types.Bytes32
+	copy(chainId[:], transaction.ChainID)
+
+	//now check to see if the transaction was accepted
+	var txAccepted *state.Transaction
+	if err == nil {
+		//If we get here, we were successful in validating.  So, we need to split the transaction in 2,
+		//he body (i.e. TxAccepted), and the validation material (i.e. TxPending).  The body of the transaction
+		//gets put on the main chain, and the validation material gets put on the pending chain which is purged
+		//after about 2 weeks
+		txAccepted, txPending = state.NewTransaction(txPending)
+	}
+
+	//so now we need to store the tx state
+	err = app.mmDB.AddPendingTx(&chainId, txPending, txAccepted)
+
+	if err != nil {
+		//if we did get an error we just need to return.
+		return err
+	}
+
+	/// batch any synthetic tx's generated by the validator
+	if err := app.processValidatedSubmissionRequest(vdata); err != nil || vdata == nil {
+		if vdata == nil {
+			err = errors.New("no chain validation")
+		}
+		return err
+	}
+
+	/// update the state data for the chain. <== move to end block!
+	//if vdata.StateData != nil {
+	//	for k, v := range vdata.StateData {
+	//		header := state.Chain{}
+	//		err := header.UnmarshalBinary(v)
+	//		if err != nil {
+	//			panic("invalid state object after submission processing, should never get here")
+	//		}
+	//		if err := app.mmDB.AddStateEntry(k[:], v); err != nil {
+	//			panic("should not error adding state entry")
+	//		}
+	//	}
+	//}
+
+	return nil
+}
+
+// Validate will do a deep validation of the transaction.  This is done by ALL the validators in the network
+// transaction []byte will be replaced by transaction RawTransaction
+func (app *Node) Validate(transaction *transactions.GenTransaction) (err error) {
+
+	app.wait.Add(1)
+	err = app.doValidation(transaction)
+	//causes mempool overflows. need to investigate more.
+	//go app.doValidation(transaction)
 	return err
 }
 
 // EndBlock will return the merkle DAG root of the current state
 func (app *Node) EndBlock() ([]byte, error) {
-
+	app.wait.Wait()
+	app.chainValidator.EndBlock([]byte{})
 	mdRoot, numStateChanges, err := app.mmDB.WriteStates(app.chainValidator.GetCurrentHeight())
 
 	if err != nil {
@@ -213,8 +281,8 @@ func (app *Node) EndBlock() ([]byte, error) {
 	if app.leader && numStateChanges > 0 {
 		//now we create a synthetic transaction and publish to the directory block validator
 		dbvc := ResponseValidateTX{}
-		dbvc.Submissions = make([]*pb.GenTransaction, 1)
-		dbvc.Submissions[0] = &pb.GenTransaction{}
+		dbvc.Submissions = make([]*transactions.GenTransaction, 1)
+		dbvc.Submissions[0] = &transactions.GenTransaction{}
 		dcAdi := "dc"
 		dbvc.Submissions[0].ChainID = types.GetChainIdFromChainPath(&dcAdi).Bytes()
 		dbvc.Submissions[0].Routing = types.GetAddressFromIdentity(&dcAdi)
@@ -224,8 +292,7 @@ func (app *Node) EndBlock() ([]byte, error) {
 		//app.processValidatedSubmissionRequest(&dbvc)
 	}
 
-	//probably should use channels here instead.
-	go app.dispatch(int(app.height % 2))
+	app.txBouncer.BatchSend()
 
 	fmt.Printf("DB time %f\n", app.mmDB.TimeBucket)
 	app.mmDB.TimeBucket = 0
@@ -233,22 +300,28 @@ func (app *Node) EndBlock() ([]byte, error) {
 }
 
 // Query will take a query object, process it, and return either the data or error
-func (app *Node) Query(q *pb.Query) ([]byte, error) {
+func (app *Node) Query(q *pb.Query) (ret []byte, err error) {
 
-	//extract the state for the chain id
-	chainState, err := app.mmDB.GetCurrentEntry(q.ChainId)
-	if err != nil {
-		return nil, fmt.Errorf("chain id query, %v", err)
+	if q.Query != nil {
+		tx, pendingTx, _ := app.mmDB.GetTx(q.Query)
+		ret = common.SliceBytes(tx)
+		ret = append(ret, common.SliceBytes(pendingTx)...)
+	} else {
+		//extract the state for the chain id
+		chainState, err := app.mmDB.GetCurrentEntry(q.ChainId)
+		if err != nil {
+			return nil, fmt.Errorf("chain id query, %v", err)
+		}
+
+		chainHeader := state.Chain{}
+		err = chainHeader.UnmarshalBinary(chainState.Entry)
+		if err != nil {
+			return nil, fmt.Errorf("unable to extract chain header\n")
+		}
+		ret = chainState.Entry
 	}
-
-	chainHeader := state.Chain{}
-	err = chainHeader.UnmarshalBinary(chainState.Entry)
-	if err != nil {
-		return nil, fmt.Errorf("unable to extract chain header\n")
-	}
-
 	// fmt.Printf("Query URI: %s", q.Query)
-	return chainState.Entry, nil
+	return ret, nil
 }
 
 //processValidatedSubmissionRequest Figure out what to do with the processed validated transaction.  This may include firing off a synthetic TX or simply
@@ -260,7 +333,7 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 
 	//need to pass this to a threaded batcher / dispatcher to do both signing and sending of synth tx.  No need to
 	//spend valuable time here doing that.
-	for _, v := range vdata.Submissions {
+	for _, gtx := range vdata.Submissions {
 
 		//generate a synthetic tx and send to the router.
 		//need to track txid to make sure they get processed....
@@ -269,27 +342,27 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 			//we only need to make sure it is processed by the next EndBlock so place in pending queue.
 			///if we are the leader then we are responsible for dispatching the synth tx.
 
-			dataToSign := v.Transaction
+			dataToSign := gtx.Transaction
 			if dataToSign == nil {
 				panic("no synthetic transaction defined.  shouldn't get here.")
 			}
-			ed := new(pb.ED25519Sig)
-			ed.Nonce = uint64(time.Now().Unix())
+
+			if gtx.SigInfo == nil {
+				panic("siginfo for synthetic transaction is not set, shouldn't get here")
+			}
+
+			ed := new(transactions.ED25519Sig)
+			gtx.SigInfo.Nonce = uint64(time.Now().Unix())
 			ed.PublicKey = app.key[32:]
-			err := ed.Sign(app.key, dataToSign)
+			err = ed.Sign(gtx.SigInfo.Nonce, app.key, gtx.TransactionHash())
 			if err != nil {
-				panic(fmt.Sprintf("cannot sign synthetic transaction, shoudn't get here, %v", err))
+				panic(err)
 			}
 
-			v.Signature = append(v.Signature, ed)
+			gtx.Signature = append(gtx.Signature, ed)
 
-			deliverRequestTXAsync := new(ptypes.RequestDeliverTx)
-			deliverRequestTXAsync.Tx, err = v.Marshal()
-			if err != nil {
-				return err
-			}
+			_, err = app.txBouncer.BatchTx(gtx)
 
-			_, err = app.batch[app.height%2].BroadcastTxAsync(context.Background(), deliverRequestTXAsync.Tx)
 			if err != nil {
 				return err
 			}
@@ -297,18 +370,6 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 		}
 	}
 	return nil
-}
-
-func (app *Node) dispatch(batchNum int) {
-	if app.batch[batchNum].Count() > 0 {
-		app.batch[batchNum].Send(context.Background())
-		app.batch[batchNum].Clear()
-	}
-}
-
-// dialerFunc is a helper function for protobuffers
-func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
-	return tmnet.Connect(addr)
 }
 
 func (app *Node) createBootstrapAccount() {
@@ -336,15 +397,16 @@ func (app *Node) createBootstrapAccount() {
 	tas.Symbol = ti.Symbol
 	tas.Meta = ti.Meta
 
+	txid := types.Bytes32(sha256.Sum256([]byte("genesis")))
 	tasstatedata, err := tas.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
-	err = app.mmDB.AddStateEntry(identity[:], idStateData)
+	err = app.mmDB.AddStateEntry(identity, &txid, idStateData)
 	if err != nil {
 		panic(err)
 	}
-	err = app.mmDB.AddStateEntry(chainid[:], tasstatedata)
+	err = app.mmDB.AddStateEntry(chainid, &txid, tasstatedata)
 	if err != nil {
 		panic(err)
 	}

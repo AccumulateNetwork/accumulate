@@ -7,7 +7,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/gorilla/mux"
 	"github.com/ybbus/jsonrpc/v2"
 )
 
@@ -17,11 +16,11 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
 	// create new JSON RPC client
-	c := jsonrpc.NewClient("http://localhost:25999/v1")
+	c := jsonrpc.NewClient("http://localhost:34000/v1")
 
 	// make "get" request to JSON RPC API
-	vars := mux.Vars(r)
-	params := &acmeapi.APIRequestURL{URL: types.String(vars["url"])}
+	fmt.Printf("=============== proxyHandler Is going to send : %s ===========\n\n\n", r.URL)
+	params := &acmeapi.APIRequestURL{URL: types.String(r.URL.String()[1:])}
 
 	result, err := c.Call("get", params)
 	if err != nil {
