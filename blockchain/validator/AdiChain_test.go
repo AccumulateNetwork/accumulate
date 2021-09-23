@@ -4,18 +4,20 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+
 	//"crypto/sha256"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"testing"
-	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
-func createIdentityCreateSubmission(t *testing.T, adiChainPath string) (*state.StateEntry, *proto.Submission, *ed25519.PrivKey) {
+func createIdentityCreateSubmission(t *testing.T, adiChainPath string) (*state.StateEntry, *transactions.GenTransaction, *ed25519.PrivKey) {
 	kp := types.CreateKeyPair()
 	identityhash := types.GetIdentityChainFromIdentity(&adiChainPath).Bytes()
 
@@ -36,15 +38,22 @@ func createIdentityCreateSubmission(t *testing.T, adiChainPath string) (*state.S
 	}
 
 	//build a submission message
-	sub := proto.Submission{}
-	sub.Data, _ = json.Marshal(ic)
-
-	sub.Instruction = proto.AccInstruction_Identity_Creation
-	sub.Chainid = chainid[:]
-	sub.Identitychain = identityhash[:]
-	sub.Timestamp = time.Now().Unix()
-
-	return &currentstate, &sub, &kp
+	data, err := ic.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	gtx := &transactions.GenTransaction{}
+	gtx.ChainID = chainid[:]
+	gtx.Routing = types.GetAddressFromIdentityChain(identityhash)
+	gtx.Routing = types.GetAddressFromIdentity(&adiChainPath)
+	gtx.ChainID = types.GetChainIdFromChainPath(&adiChainPath).Bytes()
+	gtx.SigInfo = &transactions.SignatureInfo{}
+	gtx.SigInfo.URL = adiChainPath
+	gtx.Transaction = data
+	ed := new(transactions.ED25519Sig)
+	ed.Sign(1, kp.Bytes(), gtx.TransactionHash())
+	gtx.Signature = append([]*transactions.ED25519Sig{}, ed)
+	return &currentstate, gtx, &kp
 }
 
 func TestIdentityCreateValidator_Check(t *testing.T) {
@@ -52,7 +61,7 @@ func TestIdentityCreateValidator_Check(t *testing.T) {
 	adiChainPath := "RoadRunner/ACME"
 	currentstate, sub, _ := createIdentityCreateSubmission(t, adiChainPath)
 
-	err := tiv.Check(currentstate, sub.Identitychain, sub.Chainid, 0, 0, sub.Data)
+	err := tiv.Check(currentstate, sub)
 
 	if err != nil {
 		t.Fatal(err)
@@ -63,13 +72,10 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 	//	kp := types.CreateKeyPair()
 	tiv := NewAdiChain()
 	adiChainPath := "RoadRunner/ACME"
-	adi, chainPath, err := types.ParseIdentityChainPath(&adiChainPath)
-	adihash := types.GetIdentityChainFromIdentity(&adi)
-	chainid := types.GetChainIdFromChainPath(&chainPath)
 
 	currentstate, sub, kp := createIdentityCreateSubmission(t, adiChainPath)
 
-	txid := sha256.Sum256(types.MarshalBinaryLedgerChainId(adihash.Bytes(), sub.Data, sub.Timestamp))
+	txid := sub.TransactionHash()
 
 	resp, err := tiv.Validate(currentstate, sub)
 
@@ -92,17 +98,9 @@ func TestIdentityCreateValidator_Validate(t *testing.T) {
 	sub = resp.Submissions[0]
 
 	isc := synthetic.AdiStateCreate{}
-	err = json.Unmarshal(sub.Data, &isc)
+	err = json.Unmarshal(sub.Transaction, &isc)
 	if err != nil {
 		t.Fatal(err)
-	}
-
-	if bytes.Compare(isc.SourceAdiChain[:], adihash[:]) != 0 {
-		t.Fatalf("Invalid source identity in synth tx")
-	}
-
-	if bytes.Compare(isc.SourceChainId[:], chainid[:]) != 0 {
-		t.Fatalf("Invalid source chain id in synth tx")
 	}
 
 	if bytes.Compare(isc.Txid[:], txid[:]) != 0 {

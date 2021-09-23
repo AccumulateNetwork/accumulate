@@ -1,8 +1,10 @@
-package proto
+package transactions
 
 import (
 	"fmt"
 	"net/url"
+
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 
 	"github.com/AccumulateNetwork/SMT/common"
 )
@@ -40,10 +42,10 @@ func (t *TokenSend) Equal(t2 *TokenSend) (ret bool) {
 // Marshal
 // Marshal a transaction
 func (t *TokenSend) Marshal() []byte {
-	data := common.Uint64Bytes(uint64(AccInstruction_Token_Transaction)) //      The Transaction type
-	data = append(data, common.SliceBytes([]byte(t.AccountURL))...)      //      The source URL
-	data = append(data, common.Uint64Bytes(uint64(len(t.Outputs)))...)   //      The number of outputs
-	for _, v := range t.Outputs {                                        //      For each output
+	data := common.Uint64Bytes(uint64(proto.AccInstruction_Token_Transaction)) //      The Transaction type
+	data = append(data, common.SliceBytes([]byte(t.AccountURL))...)            //      The source URL
+	data = append(data, common.Uint64Bytes(uint64(len(t.Outputs)))...)         //      The number of outputs
+	for _, v := range t.Outputs {                                              //      For each output
 		data = append(data, common.Uint64Bytes(uint64(v.Amount))...) //           the amount sent
 		data = append(data, common.SliceBytes([]byte(v.Dest))...)    //           the destination for the amount
 	}
@@ -52,11 +54,17 @@ func (t *TokenSend) Marshal() []byte {
 
 // Unmarshal
 // Unmarshal a transaction
-func (t *TokenSend) Unmarshal(data []byte) []byte { //                       Pull the state out of the data into the tx
-	tag, data := common.BytesUint64(data)                //       Get the tag
-	if tag != uint64(AccInstruction_Token_Transaction) { //       Tag better be right
+func (t *TokenSend) Unmarshal(data []byte) ([]byte, error) { //                       Pull the state out of the data into the tx
+	defer func() {
+		if err := recover(); err != nil {
+			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		}
+	}()
+
+	tag, data := common.BytesUint64(data)                      //       Get the tag
+	if tag != uint64(proto.AccInstruction_Token_Transaction) { //       Tag better be right
 		panic(fmt.Sprintf("not a token transaction, expected %d got %d", // Blow up if not, and we don't have to save
-			AccInstruction_Token_Transaction, tag)) //              the tag.
+			proto.AccInstruction_Token_Transaction, tag)) //              the tag.
 	} //
 	var url []byte                       //                                 Working variable for computing urls
 	var num uint64                       //                                 Working variable for getting output count
@@ -70,7 +78,7 @@ func (t *TokenSend) Unmarshal(data []byte) []byte { //                       Pul
 		output.Dest = string(url)                      //
 		t.Outputs = append(t.Outputs, output)          //                      Add the output
 	} //
-	return data //                                                          Return the data
+	return data, nil //                                                          Return the data
 }
 
 /*

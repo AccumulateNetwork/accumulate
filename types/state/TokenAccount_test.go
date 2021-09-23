@@ -2,7 +2,6 @@ package state
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"math/big"
 	"testing"
 )
@@ -12,7 +11,7 @@ func TestTokenBalanceState(t *testing.T) {
 	tokenUrl := "MyADI/MyTokenType"
 
 	accountUrl := "MyADI/MyTokens"
-	token := NewTokenAccount(types.UrlChain(accountUrl), types.UrlChain(tokenUrl))
+	token := NewTokenAccount(accountUrl, tokenUrl)
 
 	fmt.Println(token.GetBalance())
 
@@ -78,6 +77,9 @@ func TestTokenBalanceState(t *testing.T) {
 	//Add 5001 to the balance
 	deposit.SetInt64(5001)
 	err = token.AddBalance(deposit)
+	if err != nil {
+		t.Fatal(err)
+	}
 	//since we emptied the account it should be 5001
 	expectedBalance.SetInt64(5001)
 	if token.GetBalance().Cmp(expectedBalance) != 0 {

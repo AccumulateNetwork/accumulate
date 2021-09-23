@@ -2,19 +2,16 @@ package validator
 
 import (
 	"encoding/json"
+	"fmt"
+	"time"
+
+	cfg "github.com/tendermint/tendermint/config"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
-
-	//"crypto/sha256"
-	"fmt"
-	//"github.com/AccumulateNetwork/SMT/managed"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	cfg "github.com/tendermint/tendermint/config"
-
-	//dbm "github.com/tendermint/tm-db"
-	"time"
 )
 
 type TokenIssuanceValidator struct {
@@ -23,15 +20,17 @@ type TokenIssuanceValidator struct {
 
 func NewTokenIssuanceValidator() *TokenIssuanceValidator {
 	v := TokenIssuanceValidator{}
-	v.SetInfo(types.ChainTypeToken[:], types.ChainSpecToken, pb.AccInstruction_Token_Issue)
+	v.SetInfo(types.ChainTypeToken, pb.AccInstruction_Token_Issue)
 	v.ValidatorContext.ValidatorInterface = &v
 	return &v
 }
 
-func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, submission *pb.GenTransaction) error {
+func (v *TokenIssuanceValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
+	v.db = db
 	return nil
 }
-func (v *TokenIssuanceValidator) Initialize(config *cfg.Config) error {
+
+func (v *TokenIssuanceValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
 	return nil
 }
 
@@ -44,7 +43,11 @@ func (v *TokenIssuanceValidator) BeginBlock(height int64, time *time.Time) error
 	return nil
 }
 
-func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *pb.GenTransaction) (resp *ResponseValidateTX, err error) {
+func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
+	if err := submission.SetRoutingChainID(); err != nil {
+		return nil, err
+	}
+
 	if currentState == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current State not defined")
@@ -94,7 +97,7 @@ func (v *TokenIssuanceValidator) Validate(currentState *state.StateEntry, submis
 
 	//return a new state object for a token
 	chainId := types.Bytes32{}
-	copy(chainId[:], submission.GetChainID())
+	copy(chainId[:], submission.ChainID)
 	resp.AddStateData(&chainId, tasso)
 
 	return resp, nil
