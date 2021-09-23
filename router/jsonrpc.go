@@ -98,7 +98,7 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	// Tendermint integration here
-	resp, err := api.query.GetChainState(req.URL.AsString())
+	resp, err := api.query.GetChainState(req.URL.AsString(), nil)
 
 	if err != nil {
 		return NewAccumulateError(err)
