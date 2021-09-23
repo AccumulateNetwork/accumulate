@@ -301,7 +301,8 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	group := new(sync.WaitGroup)
 	group.Add(1)
 	group.Add(len(sdb.updates))
-	go sdb.writeTxs(group)
+	sdb.writeTxs(group)
+	//go sdb.writeTxs(group)
 	//
 	//keys := make([]types.Bytes32, 0, currentStateCount)
 	//for chainId := range sdb.updates {
@@ -324,7 +325,7 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//for _, chainId := range keys {
 	for chainId := range sdb.updates {
 
-		go sdb.writeChainState(group, mutex, merkleMgrMap[chainId], chainId)
+		sdb.writeChainState(group, mutex, merkleMgrMap[chainId], chainId)
 
 		//TODO: figure out how to do this with new way state is derived
 		//if len(currentState.pendingTx) != 0 {
