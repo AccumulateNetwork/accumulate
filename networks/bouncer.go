@@ -100,6 +100,7 @@ func (b *Bouncer) Query(url *string, txId []byte) (ret *ctypes.ResultABCIQuery, 
 	pq.AdiChain = adiChain.Bytes()
 	pq.ChainId = chainId.Bytes()
 	pq.Ins = proto.AccInstruction_State_Query
+	pq.Query = txId
 
 	data, err := proto1.Marshal(&pq)
 	if err != nil {
