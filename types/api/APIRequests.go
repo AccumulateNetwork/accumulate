@@ -2,8 +2,8 @@ package api
 
 import (
 	"encoding/json"
-
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
 // API Request Support Structure
@@ -39,4 +39,22 @@ type APIRequestURL struct {
 type APIDataResponse struct {
 	Type types.String     `json:"url" form:"url" query:"url" validate:"oneof:adi,token,tokenAccount,tokenTx"`
 	Data *json.RawMessage `json:"data" form:"data" query:"data"`
+}
+
+// NewAPIRequest will convert create general transaction which is used inside of Accumulate and wraps a transaction type
+func NewAPIRequest(sig *types.Bytes64, signer *Signer, timestamp int64, data []byte) (*transactions.GenTransaction, error) {
+
+	gtx := new(transactions.GenTransaction)
+	gtx.Routing = types.GetAddressFromIdentity(signer.URL.AsString())
+	gtx.ChainID = types.GetChainIdFromChainPath(signer.URL.AsString())[:]
+	gtx.Transaction = data
+
+	ed := new(transactions.ED25519Sig)
+	ed.Nonce = uint64(timestamp)
+	ed.PublicKey = signer.PublicKey[:]
+	ed.Signature = sig.Bytes()
+
+	gtx.Signature = append(gtx.Signature, ed)
+
+	return gtx, nil
 }

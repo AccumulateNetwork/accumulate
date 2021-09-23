@@ -3,19 +3,21 @@ package state
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type Entry interface {
 	MarshalBinary() ([]byte, error)
 	UnmarshalBinary(data []byte) error
-	GetType() *types.Bytes32 //return the Chain Type for the entry.
+	GetType() uint64 //return the Chain Type for the entry.
 	GetChainUrl() string
 }
 
 //maybe we should have Chain header then entry, rather than entry containing all the Headers
 type Object struct {
 	ChainHeader Chain       `json:"chainHeader"`
+	MDRoot      types.Bytes `json:"pendingMDRoot"`
 	Entry       types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
 }
 
