@@ -7,17 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"sync"
 	"time"
 
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/smt/managed"
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
-	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/golang/protobuf/proto"
 	"github.com/tendermint/tendermint/abci/example/code"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
@@ -26,7 +23,6 @@ import (
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
@@ -66,48 +62,27 @@ func saveState(state State) {
 	}
 }
 
-func prefixKey(key []byte) []byte {
-	return append(kvPairPrefixKey, key...)
-}
-
 type AccumulatorVMApplication struct {
 	abcitypes.BaseApplication
 	RetainBlocks int64
-	mutex        sync.Mutex
 
 	Height int64
 
 	ChainId [32]byte
 
-	tmvalidators map[string]crypto.PubKey
-	//Val *validator.ValidatorContext //change to use chainval below instead
-	//chainval map[uint64]*validator.ValidatorContext //use this instead to make a group of validators that can be accessed via chain address.
-
-	//begin deprecation
 	DB vadb.DB
 
 	state State
-
-	valTypeRegDB dbm.DB
-	//end deprecation
 
 	config     *config.Config
 	Address    crypto.Address
 	Key        privval.FilePVKey
 	RPCContext rpctypes.Context
-	server     service.Service
-	amLeader   bool
-	dbvc       pb.BVCEntry
-
-	mmdb state.StateDB
-
-	lasthash managed.Hash
 
 	txct int64
 
 	timer time.Time
 
-	submission   chan pb.Submission
 	APIClient    coregrpc.BroadcastAPIClient
 	RouterClient pb.ApiServiceClient
 
@@ -176,7 +151,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 	for _, v := range req.Validators {
 		r := app.updateValidator(v)
 		if r.IsErr() {
-			//app.logger.Error("Error updating validators", "r", r)
+			app.LocalClient.Logger.Error("Error updating validators", "r", r)
 			// fmt.Printf("Error updating validators \n")
 		}
 	}
@@ -357,10 +332,10 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	}
 
 	//this will truncate what tendermint stores since we only care about current state
-	if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
-		//todo: uncomment the next line when we have smt state syncing complete. For now, we are retaining everything for test net
-		//resp.RetainHeight = app.Height - app.RetainBlocks + 1
-	}
+	//todo: uncomment the next line when we have smt state syncing complete. For now, we are retaining everything for test net
+	// if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
+	// 	resp.RetainHeight = app.Height - app.RetainBlocks + 1
+	// }
 
 	//save the state
 	app.state.Size += app.txct
@@ -413,8 +388,6 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
-
-	// fmt.Printf("query %s", q.ChainUrl)
 
 	ret, err := app.chainValidatorNode.Query(&q)
 
@@ -474,9 +447,6 @@ func (app *AccumulatorVMApplication) Start() error {
 	if err != nil {
 		return fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
-	//node.
-
-	// fmt.Println("Accumulate Start" + app.config.ChainID())
 
 	err = node.Start()
 	if err != nil {
