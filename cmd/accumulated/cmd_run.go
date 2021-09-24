@@ -5,7 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
+	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/router"
@@ -45,9 +46,17 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	_, err = accumulate.CreateAccumulateBVC(config)
+	// Create tendermint
+	app, err := tendermint.NewApplication(config, &validator.NewBlockValidatorChain().ValidatorContext)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: creating BVC: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: failed to initialize Tendermint: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Start tendermint
+	err = app.Start()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to launch Tendermint: %v\n", err)
 		os.Exit(1)
 	}
 
