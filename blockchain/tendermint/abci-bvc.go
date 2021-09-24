@@ -74,7 +74,6 @@ type AccumulatorVMApplication struct {
 	abcitypes.BaseApplication
 	RetainBlocks int64
 	mutex        sync.Mutex
-	waitgroup    sync.WaitGroup
 
 	Height int64
 
@@ -167,10 +166,6 @@ func (app *AccumulatorVMApplication) GetAPIClient() (coregrpc.BroadcastAPIClient
 
 func (app *AccumulatorVMApplication) Initialize(config *config.Config) error {
 	app.RetainBlocks = 1
-
-	app.waitgroup.Add(1)
-	// fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
-
 	app.config = config
 
 	// read private validator
@@ -464,17 +459,14 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 func (app *AccumulatorVMApplication) GetName() string {
 	return app.config.ChainID()
 }
-func (app *AccumulatorVMApplication) Wait() {
-	app.waitgroup.Wait()
-}
 
-func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
+func (app *AccumulatorVMApplication) Start() error {
 	// create logger
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 	var err error
 	logger, err = tmflags.ParseLogLevel(app.config.LogLevel, logger, cfg.DefaultLogLevel)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse log level: %w", err)
+		return fmt.Errorf("failed to parse log level: %w", err)
 	}
 
 	// read private validator
@@ -486,7 +478,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	// read node key
 	nodeKey, err := p2p.LoadNodeKey(app.config.NodeKeyFile())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load node's key: %w", err)
+		return fmt.Errorf("failed to load node's key: %w", err)
 	}
 
 	// create node
@@ -500,7 +492,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		nm.DefaultMetricsProvider(app.config.Instrumentation),
 		logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
+		return fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
 	//node.
 
@@ -518,16 +510,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	client := GetGRPCClient(app.config.RPC.GRPCListenAddress) //makeGRPCClient(app.Accrpcaddr)//app.config.RPC.GRPCListenAddress)
 
 	app.APIClient = client
-
-	defer func() {
-		node.Stop()
-		node.Wait()
-		// fmt.Println("Tendermint Stopped")
-	}()
-
-	app.waitgroup.Done()
-	node.Wait()
-	return node, nil
+	return nil
 }
 
 //updateValidator add, update, or remove a validator
