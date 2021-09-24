@@ -34,10 +34,10 @@ func init() {
 }
 
 func main() {
-	cmdMain.Execute()
+	_ = cmdMain.Execute()
 }
 
 func printUsageAndExit1(cmd *cobra.Command, args []string) {
-	cmd.Usage()
+	_ = cmd.Usage()
 	os.Exit(1)
 }

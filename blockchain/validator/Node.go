@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -20,8 +22,6 @@ import (
 
 // Node implements the general parameters to stimulate the validators, provide synthetic transactions, and issue state changes
 type Node struct {
-	AccRpcAddr string
-
 	mmDB           state.StateDB     // State database
 	chainValidator *ValidatorContext // Chain Validator
 	leader         bool
@@ -37,29 +37,20 @@ type Node struct {
 }
 
 // Initialize will setup the node with the given parameters.  What we really need here are the bouncer, and private key
-func (app *Node) Initialize(configFile string, workingDir string, key ed25519.PrivateKey, chainValidator *ValidatorContext) error {
-	v := viper.New()
-	v.SetConfigFile(configFile)
-	v.AddConfigPath(workingDir)
-	if err := v.ReadInConfig(); err != nil {
-
-		return fmt.Errorf("viper failed to read config file: %w", err)
-	}
-
-	//create a connection to the router.
-	app.AccRpcAddr = v.GetString("accumulate.AccRPCAddress")
-
-	networkId := viper.GetString("instrumentation/namespace")
+func (app *Node) Initialize(config *config.Config, key ed25519.PrivateKey, chainValidator *ValidatorContext) error {
+	networkId := config.Instrumentation.Namespace
 	bvcId := sha256.Sum256([]byte(networkId))
-	dbFilename := workingDir + "/" + "valacc.db"
+	dbFilename := filepath.Join(config.RootDir, "valacc.db")
 	err := app.mmDB.Open(dbFilename, bvcId[:], false, true)
 	if err != nil {
-		return fmt.Errorf("failed to open database %s, %v", dbFilename, err)
+		return fmt.Errorf("opening database %s: %v", dbFilename, err)
 	}
 
 	laddr := viper.GetString("rpc.laddr")
-
-	rpcClient, _ := rpchttp.New(laddr)
+	rpcClient, err := rpchttp.New(laddr)
+	if err != nil {
+		return fmt.Errorf("creating RPC client: %v", err)
+	}
 
 	app.chainValidator = chainValidator
 	app.leader = false

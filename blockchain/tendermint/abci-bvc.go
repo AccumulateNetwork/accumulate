@@ -2,48 +2,35 @@ package tendermint
 
 import (
 	"bytes"
-
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
-	"github.com/AccumulateNetwork/accumulated/types/state"
-	"github.com/tendermint/tendermint/abci/example/code"
-
-	//"crypto/ed25519"
 	_ "crypto/sha256"
-
-	_ "github.com/AccumulateNetwork/SMT/pmt"
-	"github.com/tendermint/tendermint/rpc/client/local"
-	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
-
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-
+	"github.com/AccumulateNetwork/SMT/managed"
+	_ "github.com/AccumulateNetwork/SMT/pmt"
+	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
+	"github.com/AccumulateNetwork/accumulated/config"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/golang/protobuf/proto"
-	"github.com/spf13/viper"
-	cfg "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/abci/example/code"
+	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
-
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
+	"github.com/tendermint/tendermint/rpc/client/local"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
-	dbm "github.com/tendermint/tm-db"
-
-	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/version"
-
-	"github.com/AccumulateNetwork/SMT/managed"
-	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
-
-	"sync"
-
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
-	pb "github.com/AccumulateNetwork/accumulated/types/proto"
-	abcitypes "github.com/tendermint/tendermint/abci/types"
+	dbm "github.com/tendermint/tm-db"
 )
 
 func loadState(db dbm.DB) State {
@@ -100,7 +87,7 @@ type AccumulatorVMApplication struct {
 	valTypeRegDB dbm.DB
 	//end deprecation
 
-	config     *cfg.Config
+	config     *config.Config
 	Address    crypto.Address
 	Key        privval.FilePVKey
 	RPCContext rpctypes.Context
@@ -118,7 +105,6 @@ type AccumulatorVMApplication struct {
 
 	submission   chan pb.Submission
 	APIClient    coregrpc.BroadcastAPIClient
-	Accrpcaddr   string
 	RouterClient pb.ApiServiceClient
 
 	LocalClient *local.Local
@@ -126,9 +112,9 @@ type AccumulatorVMApplication struct {
 	chainValidatorNode *validator.Node
 }
 
-func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *AccumulatorVMApplication {
+func NewAccumulatorVMApplication(config *config.Config) *AccumulatorVMApplication {
 	name := "kvstore"
-	db, err := dbm.NewGoLevelDB(name, WorkingDir)
+	db, err := dbm.NewGoLevelDB(name, config.RootDir)
 	if err != nil {
 		panic(err)
 	}
@@ -140,7 +126,7 @@ func NewAccumulatorVMApplication(ConfigFile string, WorkingDir string) *Accumula
 		state:        tmState, //this will save the current state of the blockchain we can use if we need to restart
 	}
 
-	_ = app.Initialize(ConfigFile, WorkingDir)
+	_ = app.Initialize(config)
 
 	return &app
 }
@@ -174,7 +160,7 @@ func (app *AccumulatorVMApplication) GetAPIClient() (coregrpc.BroadcastAPIClient
 	return app.APIClient, nil
 }
 
-func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir string) error {
+func (app *AccumulatorVMApplication) Initialize(config *config.Config) error {
 	defer func() {
 		// fmt.Printf("*** return Initialize %v \n", "")
 	}()
@@ -183,8 +169,7 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	app.waitgroup.Add(1)
 	// fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
 
-	app.config = cfg.DefaultConfig()
-	app.config.SetRoot(WorkingDir)
+	app.config = config
 
 	// read private validator
 	pv, err := privval.LoadFilePV(
@@ -200,21 +185,6 @@ func (app *AccumulatorVMApplication) Initialize(ConfigFile string, WorkingDir st
 	app.Address = make([]byte, len(pv.Key.PubKey.Address()))
 
 	copy(app.Address, pv.Key.PubKey.Address())
-
-	v := viper.New()
-	v.SetConfigFile(ConfigFile)
-	v.AddConfigPath(WorkingDir)
-	if err := v.ReadInConfig(); err != nil {
-
-		return fmt.Errorf("viper failed to read config file: %w", err)
-	}
-	if err := v.Unmarshal(app.config); err != nil {
-		return fmt.Errorf("viper failed to unmarshal config: %w", err)
-	}
-	if err := app.config.ValidateBasic(); err != nil {
-		return fmt.Errorf("config is invalid: %w", err)
-	}
-
 	return nil
 }
 
@@ -566,7 +536,7 @@ func (app *AccumulatorVMApplication) Start() (node service.Service, err error) {
 
 	// create node
 	node, err = nm.New(
-		app.config,
+		&app.config.Config,
 		logger,
 		proxy.NewLocalClientCreator(app),
 		nil)
@@ -594,7 +564,7 @@ func (app *AccumulatorVMApplication) Start() (node service.Service, err error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create local client: %w", err)
 	}
-	client := GetGRPCClient(app.config.RPC.GRPCListenAddress) //makeGRPCClient(app.Accrpcaddr)//app.config.RPC.GRPCListenAddress)
+	client := GetGRPCClient(app.config.RPC.GRPCListenAddress)
 
 	app.APIClient = client
 

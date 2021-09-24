@@ -27,7 +27,7 @@ import (
 
 func TestLoadOnRemote(t *testing.T) {
 
-	networksList := []int{3}
+	networksList := []int{4}
 	txBouncer := networks.MakeBouncer(networksList)
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
