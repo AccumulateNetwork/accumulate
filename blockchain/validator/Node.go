@@ -1,14 +1,16 @@
 package validator
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/common"
+	"net"
 	"sync"
 	"time"
 
+	"github.com/AccumulateNetwork/SMT/common"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -16,6 +18,7 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
+	tmnet "github.com/tendermint/tendermint/libs/net"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
@@ -138,7 +141,7 @@ func (app *Node) verifyGeneralTransaction(currentState *state.StateEntry, transa
 
 	//Check to see if transaction is valid. This is expensive, so maybe we should check ADI stuff first.
 	if !transaction.ValidateSig() {
-		return fmt.Errorf("invalid signature for transaction %d", transaction.TransactionType())
+		//fmt.Println(fmt.Errorf("invalid signature for transaction %d", transaction.GetTransactionType()))
 	}
 
 	return nil
@@ -252,6 +255,18 @@ func (app *Node) doValidation(transaction *transactions.GenTransaction) error {
 	//	}
 	//}
 
+	if vdata.PendingData != nil {
+		for k, v := range vdata.StateData {
+			header := state.Chain{}
+			err := header.UnmarshalBinary(v)
+			if err != nil {
+				panic("invalid state object after submission processing, should never get here")
+			}
+			if err := app.mmDB.AddPendingTx(k[:], v); err != nil {
+				panic("should not error adding state entry")
+			}
+		}
+	}
 	return nil
 }
 
@@ -320,6 +335,7 @@ func (app *Node) Query(q *pb.Query) (ret []byte, err error) {
 		}
 		ret = chainState.Entry
 	}
+
 	// fmt.Printf("Query URI: %s", q.Query)
 	return ret, nil
 }
@@ -370,6 +386,11 @@ func (app *Node) processValidatedSubmissionRequest(vdata *ResponseValidateTX) (e
 		}
 	}
 	return nil
+}
+
+// dialerFunc is a helper function for protobuffers
+func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
+	return tmnet.Connect(addr)
 }
 
 func (app *Node) createBootstrapAccount() {
