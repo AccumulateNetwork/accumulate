@@ -1,7 +1,7 @@
 package security
 
 import (
-	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/SMT/smt/common"
 )
 
 const (

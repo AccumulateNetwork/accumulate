@@ -1,7 +1,7 @@
 package database
 
 import (
-	"github.com/AccumulateNetwork/SMT/storage"
+	"github.com/AccumulateNetwork/SMT/smt/storage"
 )
 
 type TXList struct {
