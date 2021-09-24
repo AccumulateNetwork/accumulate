@@ -38,21 +38,21 @@ import (
 	dbm "github.com/tendermint/tm-db"
 )
 
-func loadState(db dbm.DB) State {
+func loadState(db dbm.DB) (State, error) {
 	var tmstate State
 	tmstate.db = db
 	stateBytes, err := db.Get(stateKey)
 	if err != nil {
-		panic(err)
+		return State{}, fmt.Errorf("failed to load state: %v", err)
 	}
 	if len(stateBytes) == 0 {
-		return tmstate
+		return tmstate, nil
 	}
 	err = json.Unmarshal(stateBytes, &tmstate)
 	if err != nil {
-		panic(err)
+		return State{}, fmt.Errorf("failed to unmarshal state: %v", err)
 	}
-	return tmstate
+	return tmstate, nil
 }
 
 func saveState(state State) {
@@ -116,25 +116,6 @@ type AccumulatorVMApplication struct {
 	chainValidatorNode *validator.Node
 }
 
-func NewAccumulatorVMApplication(config *config.Config) *AccumulatorVMApplication {
-	name := "kvstore"
-	db, err := dbm.NewGoLevelDB(name, config.RootDir)
-	if err != nil {
-		panic(err)
-	}
-
-	tmState := loadState(db)
-
-	app := AccumulatorVMApplication{
-		RetainBlocks: 1,       //only retain current block, we will manage our own states
-		state:        tmState, //this will save the current state of the blockchain we can use if we need to restart
-	}
-
-	_ = app.Initialize(config)
-
-	return &app
-}
-
 var _ abcitypes.Application = (*AccumulatorVMApplication)(nil)
 
 func (app *AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
@@ -164,7 +145,7 @@ func (app *AccumulatorVMApplication) GetAPIClient() (coregrpc.BroadcastAPIClient
 	return app.APIClient, nil
 }
 
-func (app *AccumulatorVMApplication) Initialize(config *config.Config) error {
+func (app *AccumulatorVMApplication) initialize(config *config.Config) {
 	app.RetainBlocks = 1
 	app.config = config
 
@@ -178,7 +159,6 @@ func (app *AccumulatorVMApplication) Initialize(config *config.Config) error {
 	app.Address = make([]byte, len(pv.Key.PubKey.Address()))
 
 	copy(app.Address, pv.Key.PubKey.Address())
-	return nil
 }
 
 // SetAccumulateNode will set the chain validator set to use
