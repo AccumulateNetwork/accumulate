@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/AccumulateNetwork/SMT/smt/storage/database"
 	"github.com/dustin/go-humanize"
 )
 

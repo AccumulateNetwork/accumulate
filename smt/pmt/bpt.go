@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/SMT/smt/common"
 )
 
 // BPT

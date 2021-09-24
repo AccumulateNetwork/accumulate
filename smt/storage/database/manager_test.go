@@ -8,9 +8,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/SMT/smt/common"
 
-	"github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/AccumulateNetwork/SMT/smt/storage/database"
 )
 
 func TestDBManager_TransactionsBadger(t *testing.T) {

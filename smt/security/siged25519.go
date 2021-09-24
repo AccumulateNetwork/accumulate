@@ -3,7 +3,7 @@ package security
 import (
 	"bytes"
 
-	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/SMT/smt/common"
 
 	"golang.org/x/crypto/ed25519"
 )
