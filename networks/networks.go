@@ -42,7 +42,7 @@ func init() {
 			},
 		},
 		{
-			Name: "LAN",
+			Name: "Localhost",
 			Port: 26656,
 			Ip: []string{
 				"127.0.1.1",

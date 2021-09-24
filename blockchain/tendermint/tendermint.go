@@ -74,7 +74,7 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+2)
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", port)
 
-		config.Consensus.CreateEmptyBlocks = false
+		// config.Consensus.CreateEmptyBlocks = false
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
 			return fmt.Errorf("failed to create config dir: %v", err)
@@ -150,9 +150,9 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 		}
 		config.Moniker = fmt.Sprintf("Node%d", i)
 
-		config.Accumulate.RPC.ListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+3)
-		config.Accumulate.Router.JSONListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+4)
-		config.Accumulate.Router.RESTListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+5)
+		config.Accumulate.AccRPC.ListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+3)
+		config.Accumulate.AccRouter.JSONListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+4)
+		config.Accumulate.AccRouter.RESTListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+5)
 
 		err := cfg.Store(config)
 		if err != nil {

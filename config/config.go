@@ -11,14 +11,20 @@ import (
 	tm "github.com/tendermint/tendermint/config"
 )
 
+func Default() *Config {
+	c := new(Config)
+	c.Config = *tm.DefaultConfig()
+	return c
+}
+
 type Config struct {
 	tm.Config  `mapstructure:",squash"`
 	Accumulate Accumulate `mapstructure:",squash"`
 }
 
 type Accumulate struct {
-	RPC    RPC    `toml:"acc-rpc" mapstructure:"acc-rpc"`
-	Router Router `toml:"acc-router" mapstructure:"acc-router"`
+	AccRPC    RPC    `toml:"acc-rpc" mapstructure:"acc-rpc"`
+	AccRouter Router `toml:"acc-router" mapstructure:"acc-router"`
 }
 
 type RPC struct {
@@ -57,10 +63,12 @@ func LoadFile(dir, file string) (*Config, error) {
 }
 
 func Store(config *Config) error {
-	// panics on fail
-	tm.WriteConfigFile(config.RootDir, &config.Config)
+	file := filepath.Join(config.RootDir, "config", "config.toml")
 
-	f, err := os.OpenFile(filepath.Join(config.RootDir, "config", "config.toml"), os.O_WRONLY, 0600)
+	// exits on fail
+	tm.WriteConfigFile(file, &config.Config)
+
+	f, err := os.OpenFile(file, os.O_WRONLY, 0600)
 	if err != nil {
 		return err
 	}
