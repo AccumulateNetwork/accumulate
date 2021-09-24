@@ -8,7 +8,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/cobra"
 )
@@ -61,13 +61,12 @@ func runNode(cmd *cobra.Command, args []string) {
 	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
-	networkList := []int{3}
-	txBouncer := networks.MakeBouncer(networkList)
+	txRelay := relay.NewWithNetworks(3)
 
 	//the query object connects to the BVC, will be replaced with network client router
-	query := router.NewQuery(txBouncer)
+	query := router.NewQuery(txRelay)
 
-	router.StartAPI(&config.Accumulate.AccRouter, query, txBouncer)
+	router.StartAPI(&config.Accumulate.AccRouter, query, txRelay)
 
 	//Block forever
 	select {}
