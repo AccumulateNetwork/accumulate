@@ -7,10 +7,8 @@ import (
 	"math/big"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-
-	"github.com/AccumulateNetwork/accumulated/types/proto"
-
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 type TokenTransactionDeposit struct {
