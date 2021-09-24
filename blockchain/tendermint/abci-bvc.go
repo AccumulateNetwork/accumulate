@@ -170,7 +170,7 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 //Here we create a batch, which will store block's transactions.
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	leader := bytes.Compare(app.Address.Bytes(), req.Header.GetProposerAddress()) == 0
+	leader := bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress())
 	app.chainValidatorNode.BeginBlock(req.Header.Height, &req.Header.Time, leader)
 
 	app.timer = time.Now()
@@ -226,7 +226,7 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) (rct 
 	if len(rem) != 0 || err != nil {
 		//reject it
 		return abcitypes.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
-			Log: fmt.Sprintf("Unable to decode transaction")}
+			Log: "Unable to decode transaction"}
 	}
 
 	err = app.chainValidatorNode.CanTransact(sub)
@@ -261,7 +261,7 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 	_, err := sub.UnMarshal(req.Tx)
 	if err != nil {
 		return abcitypes.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
-			Log: fmt.Sprintf("Unable to decode transaction")}
+			Log: "Unable to decode transaction"}
 	}
 
 	//run through the validation node
@@ -383,7 +383,7 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 	q := pb.Query{}
 	err := proto.Unmarshal(reqQuery.Data, &q)
 	if err != nil {
-		resQuery.Info = fmt.Sprintf("requst is not an Accumulate Query\n")
+		resQuery.Info = "requst is not an Accumulate Query\n"
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}

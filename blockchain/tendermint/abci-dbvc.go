@@ -132,7 +132,7 @@ func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCh
 
 		if err != nil {
 			return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
-				Log: fmt.Sprintf("Unable to decode BVC Protobuf Transaction")}
+				Log: "Unable to decode BVC Protobuf Transaction"}
 		}
 
 		bve := BVCEntry{}
