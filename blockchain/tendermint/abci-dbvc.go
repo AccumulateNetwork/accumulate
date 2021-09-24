@@ -1,18 +1,17 @@
 package tendermint
 
 import (
-	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
-	"github.com/tendermint/tendermint/abci/example/code"
-	dbm "github.com/tendermint/tm-db"
-
-	//"github.com/Workiva/go-datastructures/threadsafe/err"
-
-	//"encoding/binary"
 	"fmt"
 	"os"
 
+	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
+	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/merkleDag"
+	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
+	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/golang/protobuf/proto"
 	"github.com/spf13/viper"
+	"github.com/tendermint/tendermint/abci/example/code"
+	abci "github.com/tendermint/tendermint/abci/types"
 	cfg "github.com/tendermint/tendermint/config"
 	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
@@ -20,15 +19,8 @@ import (
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
-
-	//"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/node"
-	//router2 "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/router"
-	pb "github.com/AccumulateNetwork/accumulated/types/proto"
-	abci "github.com/tendermint/tendermint/abci/types"
-	ed25519 "golang.org/x/crypto/ed25519"
-
-	"github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/merkleDag"
-	valacctypes "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/types"
+	dbm "github.com/tendermint/tm-db"
+	"golang.org/x/crypto/ed25519"
 )
 
 var (
@@ -50,6 +42,8 @@ type DirectoryBlockChain struct {
 	//	BootstrapHeight int64
 	Height uint64
 
+	config *cfg.Config
+
 	md        merkleDag.MD
 	AppMDRoot valacctypes.Hash
 
@@ -64,10 +58,6 @@ func (app *DirectoryBlockChain) GetHeight() uint64 {
 
 func (DirectoryBlockChain) Info(abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{}
-}
-
-func (DirectoryBlockChain) SetOption(abci.RequestSetOption) abci.ResponseSetOption {
-	return abci.ResponseSetOption{}
 }
 
 func (app *DirectoryBlockChain) resolveDDIIatHeight(ddii []byte, bvcheight int64) (ed25519.PublicKey, error) {
