@@ -6,11 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-
 	"github.com/AccumulateNetwork/accumulated/smt/managed"
 	"github.com/AccumulateNetwork/accumulated/smt/pmt"
 	smtDB "github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type transactionLists struct {

@@ -4,17 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-
-	//"crypto/sha256"
-	"testing"
-
-	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 func createIdentityCreateSubmission(t *testing.T, adiChainPath string) (*state.StateEntry, *transactions.GenTransaction, *ed25519.PrivKey) {
