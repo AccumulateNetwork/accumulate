@@ -4,18 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/json"
+	"testing"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
-	"github.com/mitchellh/mapstructure"
-
-	//"github.com/mitchellh/mapstructure"
-	"testing"
-	"time"
-
-	//"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
+	"github.com/mitchellh/mapstructure"
 )
 
 func createAdiTxJson(t *testing.T) []byte {

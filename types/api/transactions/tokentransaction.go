@@ -4,9 +4,8 @@ import (
 	"fmt"
 	"net/url"
 
-	"github.com/AccumulateNetwork/accumulated/types/proto"
-
 	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 // TokenSend

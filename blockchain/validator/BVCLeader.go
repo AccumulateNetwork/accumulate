@@ -1,14 +1,13 @@
 package validator
 
 import (
+	"time"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	cfg "github.com/tendermint/tendermint/config"
-
-	//dbm "github.com/tendermint/tm-db"
-	"time"
 )
 
 // BVCLeader is a boilerplate

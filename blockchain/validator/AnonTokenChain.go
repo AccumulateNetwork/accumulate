@@ -6,8 +6,6 @@ import (
 	"math/big"
 	"time"
 
-	cfg "github.com/tendermint/tendermint/config"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -15,6 +13,7 @@ import (
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	cfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 

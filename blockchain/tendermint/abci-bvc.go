@@ -3,7 +3,6 @@ package tendermint
 import (
 	"bytes"
 	_ "crypto/sha256"
-
 	"encoding/json"
 	"fmt"
 	"os"
