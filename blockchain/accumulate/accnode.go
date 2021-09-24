@@ -26,9 +26,10 @@ func CreateAccumulateBVC(config *config.Config) (*tendermint.AccumulatorVMApplic
 	acc.SetAccumulateNode(bvc)
 
 	//fire up the tendermint processing...
-	go acc.Start()
-
-	acc.Wait()
+	err = acc.Start()
+	if err != nil {
+		return nil, err
+	}
 
 	return acc, nil
 }
@@ -51,9 +52,11 @@ func CreateAccumulateDC(config *config.Config) (*tendermint.AccumulatorVMApplica
 	acc.SetAccumulateNode(dc)
 
 	//fire up the tendermint processing...
-	go acc.Start()
+	err = acc.Start()
+	if err != nil {
+		return nil, err
+	}
 
-	acc.Wait()
 	return acc, nil
 }
 
