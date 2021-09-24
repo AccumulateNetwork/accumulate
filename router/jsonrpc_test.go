@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -44,6 +45,7 @@ func TestLoadOnRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// fmt.Println(string(*resp.Data))
 	output, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatal(err)
@@ -55,6 +57,7 @@ func TestLoadOnRemote(t *testing.T) {
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
+	//ret, err := txBouncer.Query(queryTokenUrl.AsString())
 	theData := jsonapi.getData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
@@ -196,6 +199,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
+	//ret, err := txBouncer.Query(queryTokenUrl.AsString(), nil)
 	theData := jsonapi.getData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
@@ -215,6 +219,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 		fmt.Printf("%s : %s\n", v, string(output))
 	}
 
+	fmt.Println(theJsonData) //ret.Response.Value)
 	//req := api.{}
 	//adi := &api.ADI{}
 	//adi.URL = "RoadRunner"
@@ -287,6 +292,7 @@ func Load(t *testing.T,
 		if err := gtx.SetRoutingChainID(); err != nil {                       // Routing ChainID is the tx source
 			t.Fatal("bad url generated") // error should never happen
 		}
+
 		binaryGtx := gtx.TransactionHash() // Must sign the GenTransaction
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))

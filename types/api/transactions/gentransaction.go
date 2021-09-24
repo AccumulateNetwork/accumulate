@@ -61,26 +61,26 @@ func (t *GenTransaction) TransactionHash() []byte {
 // UnMarshal
 // Create the binary representation of the GenTransaction
 func (t *GenTransaction) Marshal() (data []byte, err error) {
-	defer func() {
-		if err := recover(); err != nil {
-			err = fmt.Errorf("error marshaling GenTransaction %v", err)
-		}
-	}()
-	if err := t.SetRoutingChainID(); err != nil {
-		return nil, err
-	}
-	sLen := uint64(len(t.Signature))
-	if sLen < 1 || sLen > 100 {
-		panic("must have 1 to 100 signatures")
-	}
-	data = common.Uint64Bytes(sLen)
-	for _, v := range t.Signature {
-		if sig, err := v.Marshal(); err == nil {
-			data = append(data, sig...)
-		} else {
-			return data, err
-		}
-	}
+	defer func() { //														If any sort of error occurs,
+		if err := recover(); err != nil { //                                then marshalling fails, and report
+			err = fmt.Errorf("error marshaling GenTransaction %v", err) //  the error.
+		} //
+	}() //
+	if err := t.SetRoutingChainID(); err != nil { //                        Make sure routing and chainID are set
+		return nil, err //                                                  Not clear if this is necessary
+	} //
+	sLen := uint64(len(t.Signature)) //                                     Marshal the signatures, where
+	if sLen < 1 || sLen > 100 {      //                                     we must have at least one of them.
+		panic("must have 1 to 100 signatures") //                           Otherwise we don't have a nonce to
+	} //                                                                    make the translation unique
+	data = common.Uint64Bytes(sLen) //                                      marshal the length, then each
+	for _, v := range t.Signature { //                                      signature struct.
+		if sig, err := v.Marshal(); err == nil { //
+			data = append(data, sig...) //
+		} else { //
+			return data, err //
+		} //
+	} //
 	var si []byte                 // Someplace to marshal the SigInfo
 	si, err = t.SigInfo.Marshal() // Marshal SigInfo
 	if err != nil {               // If we have an error, report it.
