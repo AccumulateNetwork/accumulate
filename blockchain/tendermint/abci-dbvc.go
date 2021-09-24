@@ -24,8 +24,7 @@ import (
 )
 
 var (
-	stateKey        = []byte("stateKey")
-	kvPairPrefixKey = []byte("kvPairKey:")
+	stateKey = []byte("stateKey")
 
 	ProtocolVersion uint64 = 0x1
 )
