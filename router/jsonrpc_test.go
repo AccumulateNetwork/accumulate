@@ -13,11 +13,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
 	"github.com/AccumulateNetwork/accumulated/networks"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/go-playground/validator/v10"
 )
@@ -42,7 +44,6 @@ func TestLoadOnRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// fmt.Println(string(*resp.Data))
 	output, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +55,6 @@ func TestLoadOnRemote(t *testing.T) {
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
-	//ret, err := txBouncer.Query(queryTokenUrl.AsString())
 	theData := jsonapi.getData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
@@ -137,13 +137,10 @@ func runLoadTest(t *testing.T, txBouncer *networks.Bouncer, origin *ed25519.Priv
 
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func _TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
-
-	//t.Skip("ignore for now")
-
-	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
-	cfg := path.Join(dir, "/Node0/config/config.toml")
+	dir, err := ioutil.TempDir("", "AccRouterTest-")
+	cfg := filepath.Join(dir, "Node0", "config", "config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,6 +151,9 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	networksList := []int{2}
 	txBouncer := networks.MakeBouncer(networksList)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	query := NewQuery(txBouncer)
 
@@ -196,7 +196,6 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
-	//ret, err := txBouncer.Query(queryTokenUrl.AsString(), nil)
 	theData := jsonapi.getData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
@@ -216,7 +215,6 @@ func TestJsonRpcAnonToken(t *testing.T) {
 		fmt.Printf("%s : %s\n", v, string(output))
 	}
 
-	fmt.Println(theJsonData) //ret.Response.Value)
 	//req := api.{}
 	//adi := &api.ADI{}
 	//adi.URL = "RoadRunner"
@@ -272,7 +270,7 @@ func Load(t *testing.T,
 	}
 
 	addrCountMap := make(map[string]int)
-	for i := 1; i < 100000*len(wallet); i++ { // Make a bunch of transactions
+	for i := 1; i < 10*len(wallet); i++ { // Make a bunch of transactions
 		if i%200 == 0 {
 			txBouncer.BatchSend()
 			time.Sleep(200 * time.Millisecond)
@@ -313,7 +311,6 @@ func Load(t *testing.T,
 
 func TestJsonRpcAdi(t *testing.T) {
 
-	t.Skip("ignore")
 	networksList := []int{2}
 	txBouncer := networks.MakeBouncer(networksList)
 	//"wileecoyote/ACME"
