@@ -52,11 +52,11 @@ func (t *GenTransaction) Equal(t2 *GenTransaction) bool {
 // compute the transaction hash from the elements of the GenTransaction.
 // This is used to populate the TxHash field.
 func (t *GenTransaction) TransactionHash() []byte {
-	if t.TxHash != nil { //                  Check if I have the hash already
-		return t.TxHash //                   Return it if I do
+	if t.TxHash != nil { //                                Check if I have the hash already
+		return t.TxHash //                                  Return it if I do
 	} //
-	data, err := t.SigInfo.Marshal() //      Get the SigInfo (all the indexes to signatures)
-	if err != nil {                  //      On an error, return a nil
+	data, err := t.SigInfo.Marshal() //                    Get the SigInfo (all the indexes to signatures)
+	if err != nil {                  //                    On an error, return a nil
 		return nil //
 	} //
 	sHash := sha256.Sum256(data)                        // Compute the SigHash
@@ -69,17 +69,17 @@ func (t *GenTransaction) TransactionHash() []byte {
 // UnMarshal
 // Create the binary representation of the GenTransaction
 func (t *GenTransaction) Marshal() (data []byte, err error) {
-	defer func() { //                                                       If any sort of error occurs,
-		if err := recover(); err != nil { //                                then marshalling fails, and report
+	defer func() { //                                                     If any sort of error occurs,
+		if err := recover(); err != nil { //                               then marshalling fails, and report
 			err = fmt.Errorf("error marshaling GenTransaction %v", err) //  the error.
 		} //
 	}() //
 	if err := t.SetRoutingChainID(); err != nil { //                        Make sure routing and chainID are set
-		return nil, err //                                                  Not clear if this is necessary
+		return nil, err //                                                   Not clear if this is necessary
 	} //
 	sLen := uint64(len(t.Signature)) //                                     Marshal the signatures, where
 	if sLen < 1 || sLen > 100 {      //                                     we must have at least one of them.
-		panic("must have 1 to 100 signatures") //                           Otherwise we don't have a nonce to
+		panic("must have 1 to 100 signatures") //                            Otherwise we don't have a nonce to
 	} //                                                                    make the translation unique
 	data = common.Uint64Bytes(sLen) //                                      marshal the length, then each
 	for _, v := range t.Signature { //                                      signature struct.
