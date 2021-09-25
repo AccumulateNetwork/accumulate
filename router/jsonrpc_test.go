@@ -146,8 +146,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	_, rpc, vm := makeBVCandRouter(cfg, dir)
-	_ = rpc
+	node := startBVC(cfg, dir)
 
 	txBouncer := relay.NewWithNetworks(*testnet)
 	if err != nil {
@@ -157,7 +156,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	query := NewQuery(txBouncer)
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
-	kpSponsor := ed25519.NewKeyFromSeed(vm.Key.PrivKey.Bytes()[:32])
+	kpSponsor := ed25519.NewKeyFromSeed(node.PV.Key.PrivKey.Bytes()[:32])
 
 	addrList := runLoadTest(t, txBouncer, &kpSponsor)
 
@@ -325,7 +324,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	_, _, vm := makeBVCandRouter(cfg, dir)
+	node := startBVC(cfg, dir)
 
 	if err != nil {
 		t.Fatal(err)
@@ -339,7 +338,7 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	//StartAPI(RandPort(), client)
 
-	kpSponsor := types.CreateKeyPairFromSeed(vm.Key.PrivKey.Bytes())
+	kpSponsor := types.CreateKeyPairFromSeed(node.PV.Key.PrivKey.Bytes())
 
 	req := api.APIRequestRaw{}
 	adi := &api.ADI{}

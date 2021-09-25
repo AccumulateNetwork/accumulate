@@ -1,27 +1,18 @@
-package tendermint
+package node
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path"
-	"time"
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/networks"
-	abcicli "github.com/tendermint/tendermint/abci/client"
-	abciserver "github.com/tendermint/tendermint/abci/server"
-	abcitypes "github.com/tendermint/tendermint/abci/types"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
-	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
-	ctypes "github.com/tendermint/tendermint/rpc/core/types"
-	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
-	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 	"github.com/tendermint/tendermint/types"
 	tmtime "github.com/tendermint/tendermint/types/time"
 )
@@ -30,7 +21,9 @@ const (
 	nodeDirPerm = 0755
 )
 
-func Initialize(shardname string, index int, WorkingDir string) {
+// InitForNetwork creates the initial configuration for a set of nodes for the
+// given network.
+func InitForNetwork(shardname string, index int, WorkingDir string) {
 	network := networks.Networks[index]
 
 	listenIP := make([]string, len(network.Ip))
@@ -48,6 +41,9 @@ func Initialize(shardname string, index int, WorkingDir string) {
 	}
 }
 
+// InitWithConfig creates the initial configuration for a set of nodes, using
+// the given configuration. Config, remoteIP, and listenIP must all be of equal
+// length.
 func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.Config, remoteIP []string, listenIP []string) (err error) {
 	defer func() {
 		if err != nil {
@@ -222,79 +218,4 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	}
 
 	return nil
-}
-
-func makeGRPCClient(addr string) (abcicli.Client, error) { //grpccore.BroadcastAPIClient, error) {//abcicli.Client, error) {
-	// Start the listener
-	socket := addr                 //fmt.Sprintf("unix://%s.sock", addr)
-	logger := tmlog.NewNopLogger() //TestingLogger()
-
-	//client := grpccore.StartGRPCClient(addr)
-	client := abcicli.NewGRPCClient(socket, true)
-
-	client.SetLogger(logger.With("module", "abci-client"))
-	if err := client.Start(); err != nil {
-		return nil, err
-	}
-	return client, nil
-}
-
-//
-//func makeRPCClient(addr string) rpcclient.ABCIClient {
-//}
-//
-
-func makeGRPCServer(app abcitypes.Application, name string) (service.Service, error) {
-	// Start the listener
-	socket := name                 // fmt.Sprintf("unix://%s.sock", name)
-	logger := tmlog.NewNopLogger() //TestingLogger()
-
-	gapp := abcitypes.NewGRPCApplication(app)
-	server := abciserver.NewGRPCServer(socket, gapp)
-	server.SetLogger(logger.With("module", "abci-server"))
-	if err := server.Start(); err != nil {
-		return nil, err
-	}
-
-	return server, nil
-}
-func WaitForRPC(laddr string) {
-	//laddr := GetConfig().RPC.ListenAddress
-	client, err := rpcclient.New(laddr)
-	if err != nil {
-		panic(err)
-	}
-	result := new(ctypes.ResultStatus)
-	for {
-		_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
-		if err == nil {
-			return
-		}
-
-		// fmt.Println("error", err)
-		time.Sleep(time.Millisecond)
-	}
-}
-func GetGRPCClient(grpcAddr string) coregrpc.BroadcastAPIClient {
-	return coregrpc.StartGRPCClient(grpcAddr)
-}
-
-func GetRPCClient(rpcAddr string) *rpcclient.Client {
-	client, _ := rpcclient.New(rpcAddr)
-	//b := client.NewRequestBatch()
-	//
-	//result := new(ctypes.ResultStatus)
-	//_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
-	//b.Call()
-	return client
-}
-
-func WaitForGRPC(grpcAddr string) {
-	client := GetGRPCClient(grpcAddr)
-	for {
-		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
-		if err == nil {
-			return
-		}
-	}
 }

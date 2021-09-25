@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/spf13/cobra"
 )
@@ -28,13 +28,12 @@ func init() {
 }
 
 func initNode(*cobra.Command, []string) {
-	for j := range networks.Networks {
-		if networks.Networks[j].Name == flagInit.Net {
-			fmt.Printf("Building configs for %s\n", flagInit.Net)
-			tendermint.Initialize("accumulate.", j, flagMain.WorkDir)
-			return
-		}
+	i := networks.IndexOf(flagInit.Net)
+	if i < 0 {
+		fmt.Fprintf(os.Stderr, "Unknown network %q\n", flagInit.Net)
+		os.Exit(1)
 	}
 
-	fmt.Fprintf(os.Stderr, "Unknown network %q\n", flagInit.Net)
+	fmt.Printf("Building configs for %s\n", flagInit.Net)
+	node.InitForNetwork("accumulate.", i, flagMain.WorkDir)
 }
