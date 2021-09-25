@@ -70,7 +70,7 @@ func (t *GenTransaction) TransactionHash() []byte {
 // UnMarshal
 // Create the binary representation of the GenTransaction
 func (t *GenTransaction) Marshal() (data []byte, err error) {
-	defer func() { //														If any sort of error occurs,
+	defer func() { //                                                       If any sort of error occurs,
 		if err := recover(); err != nil { //                                then marshalling fails, and report
 			err = fmt.Errorf("error marshaling GenTransaction %v", err) //  the error.
 		} //
