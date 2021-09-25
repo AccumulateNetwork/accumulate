@@ -83,7 +83,9 @@ func TestTokenTransaction(t *testing.T) {
 		t.Error(err)
 	}
 	to := new(GenTransaction)
-	to.UnMarshal(data)
+	if _, err := to.UnMarshal(data); err != nil {
+		t.Error("failure to unmarshal data")
+	}
 
 	if !trans.Equal(to) {
 		t.Error("should be equal")
