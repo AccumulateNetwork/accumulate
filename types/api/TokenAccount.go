@@ -4,7 +4,8 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/common"
+
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 )

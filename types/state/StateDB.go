@@ -8,9 +8,9 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/types"
 
-	"github.com/AccumulateNetwork/SMT/managed"
-	"github.com/AccumulateNetwork/SMT/pmt"
-	smtDB "github.com/AccumulateNetwork/SMT/storage/database"
+	"github.com/AccumulateNetwork/accumulated/smt/managed"
+	"github.com/AccumulateNetwork/accumulated/smt/pmt"
+	smtDB "github.com/AccumulateNetwork/accumulated/smt/storage/database"
 )
 
 type transactionLists struct {

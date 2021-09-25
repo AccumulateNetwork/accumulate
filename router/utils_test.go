@@ -1,20 +1,26 @@
 package router
 
 import (
+	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
-func RandPort() int {
+func randomRouterPorts() *config.Router {
 	port, err := tmnet.GetFreePort()
 	if err != nil {
 		panic(err)
 	}
-	return port
+	return &config.Router{
+		JSONListenAddress: fmt.Sprintf("localhost:%d", port),
+		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
+	}
 }
 
 func boostrapBVC(configfile string, workingdir string, baseport int) error {
@@ -47,7 +53,12 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 }
 
 func makeBVC(configfile string, workingdir string) *tendermint.AccumulatorVMApplication {
-	app, err := accumulate.CreateAccumulateBVC(configfile, workingdir)
+	cfg, err := config.LoadFile(workingdir, configfile)
+	if err != nil {
+		panic(err)
+	}
+
+	app, err := accumulate.CreateAccumulateBVC(cfg)
 	if err != nil {
 		panic(err)
 	}
