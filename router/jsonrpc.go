@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -16,8 +17,8 @@ import (
 	//"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
-	"strconv"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
@@ -25,19 +26,18 @@ import (
 )
 
 type API struct {
-	port      int
+	config    *config.Router
 	validate  *validator.Validate
 	query     *Query
 	txBouncer *networks.Bouncer
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(port int, q *Query, txBouncer *networks.Bouncer) *API {
+func StartAPI(config *config.Router, q *Query, txBouncer *networks.Bouncer) *API {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
 	api := &API{}
-	api.port = port
 	api.validate = validator.New()
 	api.query = q
 	api.txBouncer = txBouncer
@@ -69,17 +69,29 @@ func StartAPI(port int, q *Query, txBouncer *networks.Bouncer) *API {
 	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
 
 	// start JSON RPC API
-	go func() {
-		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), apiRouter))
-	}()
+	go listenAndServe(config.JSONListenAddress, apiRouter)
 
 	// start REST proxy for JSON RPC API
-	go func() {
-		log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port+1), proxyRouter))
-	}()
+	go listenAndServe(config.RESTListenAddress, proxyRouter)
 
 	return api
 
+}
+
+func listenAndServe(address string, handler http.Handler) {
+	u, err := url.Parse(address)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if u.Scheme != "tcp" {
+		log.Fatalf("http.ListenAndServe does not support %q", u.Scheme)
+	}
+
+	err = http.ListenAndServe(u.Host, handler)
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 // getData returns Accumulate Object by URL
