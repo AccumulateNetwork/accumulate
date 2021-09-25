@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"io/ioutil"
 	"math/rand"
 	"os"
@@ -14,13 +13,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
 	"github.com/AccumulateNetwork/accumulated/networks"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/go-playground/validator/v10"
 )
@@ -140,8 +137,11 @@ func runLoadTest(t *testing.T, txBouncer *networks.Bouncer, origin *ed25519.Priv
 
 }
 
-func _TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
+
+	//t.Skip("ignore for now")
+
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
 	cfg := path.Join(dir, "/Node0/config/config.toml")
 	if err != nil {
@@ -253,7 +253,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down is useful when debugging the tendermint core callbacks
-	time.Sleep(10000 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 }
 
@@ -275,10 +275,10 @@ func Load(t *testing.T,
 	}
 
 	addrCountMap := make(map[string]int)
-	for i := 1; i < 10*len(wallet); i++ { // Make a bunch of transactions
-		if i%100 == 0 {
+	for i := 1; i < 100000*len(wallet); i++ { // Make a bunch of transactions
+		if i%200 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address

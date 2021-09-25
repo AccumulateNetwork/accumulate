@@ -14,6 +14,14 @@ import (
 // Every transaction that goes through the Accumulate protocol is packaged
 // as a GenTransaction.  This means we implement this once, and most of the
 // transaction validation and processing is done in one and only one way.
+//
+// Note we Hash the SigInfo (that makes every transaction unique) and
+// we hash the Transaction (which implements the action or data) then
+// we hash them together to create the Transaction Hash.
+//
+// Since all transactions need the SigInfo, no point in implementing it
+// over and over.  But a range of transactions are needed, this the
+// Transaction.
 type GenTransaction struct {
 	Routing uint64 //            first 8 bytes of hash of identity [NOT marshaled]
 	ChainID []byte //            hash of chain URL [NOT marshaled]
@@ -52,10 +60,11 @@ func (t *GenTransaction) TransactionHash() []byte {
 	if err != nil {                  //      On an error, return a nil
 		return nil //
 	} //
-	data = append(data, t.Transaction...) // Add the transaction to the SigInfo
-	txh := sha256.Sum256(data)            // Take the hash
-	t.TxHash = txh[:]                     // cache it
-	return txh[:]                         // And return it
+	sHash := sha256.Sum256(data)                        // Compute the SigHash
+	tHash := sha256.Sum256(t.Transaction)               // Compute the transaction Hash
+	txh := sha256.Sum256(append(sHash[:], tHash[:]...)) // Take hash of SigHash on left and hash of sub tx on right
+	t.TxHash = txh[:]                                   // cache it
+	return txh[:]                                       // And return it
 }
 
 // UnMarshal
