@@ -7,7 +7,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/types"
 
-	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
 
 // GenTransaction
