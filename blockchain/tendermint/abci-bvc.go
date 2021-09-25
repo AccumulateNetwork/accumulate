@@ -455,7 +455,7 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 	app.state.Size += app.txct
 	app.state.AppHash = mdRoot
 	app.state.Height++
-	//saveState(app.state)
+	saveState(app.state)
 
 	duration := time.Since(app.timer)
 	fmt.Printf("%d transactions in %f seconds for a TPS of %f\n", app.txct, duration.Seconds(), float64(app.txct)/duration.Seconds())
