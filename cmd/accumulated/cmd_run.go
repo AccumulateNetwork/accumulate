@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
+	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var cmdRun = &cobra.Command{
@@ -24,41 +25,40 @@ var flagRun struct {
 func init() {
 	cmdMain.AddCommand(cmdRun)
 
-	cmdRun.Flags().IntVarP(&flagRun.Node, "node", "n", -1, "Which node are we? Required [0, n)")
-
-	cmdRun.MarkFlagRequired("node")
+	cmdRun.Flags().IntVarP(&flagRun.Node, "node", "n", -1, "Which node are we? [0, n)")
 }
 
-func runNode(*cobra.Command, []string) {
-	nodeDir := fmt.Sprintf("Node%d", flagRun.Node)
-
-	workDir := filepath.Join(flagMain.WorkDir, nodeDir)
-	configFile := filepath.Join(workDir, "config", "config.toml")
-
-	fmt.Printf("%s\n", configFile)
-
-	//First create a router
-	viper.SetConfigFile(configFile)
-	viper.AddConfigPath(workDir)
-	err := viper.ReadInConfig()
-	if err != nil {
-		panic("failed to read config file")
+func runNode(cmd *cobra.Command, args []string) {
+	workDir := flagMain.WorkDir
+	if cmd.Flag("node").Changed {
+		nodeDir := fmt.Sprintf("Node%d", flagRun.Node)
+		workDir = filepath.Join(workDir, nodeDir)
+	} else if !cmd.Flag("work-dir").Changed {
+		fmt.Fprint(os.Stderr, "Error: at least one of --work-dir or --node is required\n")
+		_ = cmd.Usage()
+		os.Exit(1)
 	}
-	//Next create a BVC
-	_, err = accumulate.CreateAccumulateBVC(configFile, workDir)
+
+	config, err := config.Load(workDir)
 	if err != nil {
-		panic("failed create bvc")
+		fmt.Fprintf(os.Stderr, "Error: reading config file: %v\n", err)
+		os.Exit(1)
+	}
+
+	_, err = accumulate.CreateAccumulateBVC(config)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: creating BVC: %v\n", err)
+		os.Exit(1)
 	}
 
 	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
-
 	networkList := []int{3}
 	txBouncer := networks.MakeBouncer(networkList)
 
 	//the query object connects to the BVC, will be replaced with network client router
 	query := router.NewQuery(txBouncer)
 
-	go router.StartAPI(34000, query, txBouncer)
+	router.StartAPI(&config.Accumulate.AccRouter, query, txBouncer)
 
 	//Block forever
 	select {}

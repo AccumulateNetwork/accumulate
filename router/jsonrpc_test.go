@@ -5,11 +5,13 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -24,9 +26,11 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+var testnet = flag.Int("testnet", 4, "Testnet to load test")
+
 func TestLoadOnRemote(t *testing.T) {
 
-	networksList := []int{3}
+	networksList := []int{*testnet} // select the localhost testnet
 	txBouncer := networks.MakeBouncer(networksList)
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
@@ -50,7 +54,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
+	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
 	_ = jsonapi
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
@@ -139,8 +143,8 @@ func runLoadTest(t *testing.T, txBouncer *networks.Bouncer, origin *ed25519.Priv
 
 func _TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
-	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
-	cfg := path.Join(dir, "/Node0/config/config.toml")
+	dir, err := ioutil.TempDir("", "AccRouterTest-")
+	cfg := filepath.Join(dir, "Node0", "config", "config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +196,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	fmt.Println(string(output))
 
 	// now use the JSON rpc api's to get the data
-	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
+	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
@@ -336,7 +340,7 @@ func _TestJsonRpcAdi(t *testing.T) {
 
 	query := NewQuery(txBouncer)
 
-	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
+	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
 
 	//StartAPI(RandPort(), client)
 
