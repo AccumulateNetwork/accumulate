@@ -10,11 +10,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/SMT/managed"
-	_ "github.com/AccumulateNetwork/SMT/pmt"
 	vadb "github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc/database"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
+	"github.com/AccumulateNetwork/accumulated/smt/managed"
+	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	pb "github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
