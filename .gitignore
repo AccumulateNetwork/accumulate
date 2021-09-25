@@ -27,6 +27,7 @@ engine/overrideversion.go
 *~
 *.kate-swp
 *.orig
+*.bak
 debug
 *.txt
 *.log
