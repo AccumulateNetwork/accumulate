@@ -154,9 +154,6 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	networksList := []int{2}
 	txBouncer := networks.MakeBouncer(networksList)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	query := NewQuery(txBouncer)
 
@@ -314,8 +311,9 @@ func Load(t *testing.T,
 	return addrList
 }
 
-func _TestJsonRpcAdi(t *testing.T) {
+func TestJsonRpcAdi(t *testing.T) {
 
+	t.Skip("ignore")
 	networksList := []int{2}
 	txBouncer := networks.MakeBouncer(networksList)
 	//"wileecoyote/ACME"
