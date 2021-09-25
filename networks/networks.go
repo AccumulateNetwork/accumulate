@@ -52,3 +52,12 @@ func init() {
 		},
 	}
 }
+
+func IndexOf(name string) int {
+	for i, net := range Networks {
+		if net.Name == name {
+			return i
+		}
+	}
+	return -1
+}

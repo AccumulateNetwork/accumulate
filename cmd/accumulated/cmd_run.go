@@ -5,12 +5,16 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
+	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/cobra"
+	tmabci "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/privval"
+	tmdb "github.com/tendermint/tm-db"
 )
 
 var cmdRun = &cobra.Command{
@@ -46,17 +50,33 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Create tendermint
-	app, err := tendermint.NewApplication(config, &validator.NewBlockValidatorChain().ValidatorContext)
+	// Load state DB
+	db, err := tmdb.NewGoLevelDB("kvstore", config.RootDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to initialize Tendermint: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: failed to create GoLevelDB: %v", err)
 		os.Exit(1)
 	}
 
-	// Start tendermint
-	err = app.Start()
+	// Create node
+	node, err := node.New(config, func(pv *privval.FilePV) (tmabci.Application, error) {
+		vnode := new(validator.Node)
+		vchain := &validator.NewBlockValidatorChain().ValidatorContext
+		err = vnode.Initialize(config, pv.Key.PrivKey.Bytes(), vchain)
+		if err != nil {
+			return nil, err
+		}
+
+		return abci.NewAccumulator(db, pv, vnode)
+	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to launch Tendermint: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: failed to initialize node: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Start node
+	err = node.Start()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to start node: %v\n", err)
 		os.Exit(1)
 	}
 

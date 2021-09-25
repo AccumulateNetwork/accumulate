@@ -5,8 +5,8 @@ import (
 	"net"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	cfg "github.com/AccumulateNetwork/accumulated/config"
+	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/spf13/cobra"
 )
 
@@ -51,7 +51,8 @@ func initTestNet(cmd *cobra.Command, args []string) {
 
 	IPs := make([]string, flagTestNet.NumValidators)
 	for i := range IPs {
-		ip := baseIP
+		ip := make(net.IP, len(baseIP))
+		copy(ip, baseIP)
 		ip[15] += byte(i)
 		IPs[i] = fmt.Sprintf("tcp://%v", ip)
 	}
@@ -61,7 +62,7 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		config[i] = cfg.Default()
 	}
 
-	err := tendermint.InitWithConfig(flagMain.WorkDir, "LocalhostTestNet", "LocalhostTestNet", flagTestNet.BasePort, config, IPs, IPs)
+	err := node.InitWithConfig(flagMain.WorkDir, "LocalhostTestNet", "LocalhostTestNet", flagTestNet.BasePort, config, IPs, IPs)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
