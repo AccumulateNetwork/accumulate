@@ -5,13 +5,11 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
 	"os"
 	"path"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -26,11 +24,9 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-var testnet = flag.Int("testnet", 4, "Testnet to load test")
-
 func TestLoadOnRemote(t *testing.T) {
 
-	networksList := []int{*testnet} // select the localhost testnet
+	networksList := []int{3}
 	txBouncer := networks.MakeBouncer(networksList)
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
@@ -54,7 +50,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
+	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
 	_ = jsonapi
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
@@ -196,7 +192,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	fmt.Println(string(output))
 
 	// now use the JSON rpc api's to get the data
-	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
+	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
@@ -252,7 +248,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	//ret := jsonapi.faucet(context.Background(), jsonReq)
 
 	//wait 30 seconds before shutting down is useful when debugging the tendermint core callbacks
-	time.Sleep(10000 * time.Millisecond)
+	time.Sleep(1000 * time.Millisecond)
 
 }
 
@@ -275,9 +271,9 @@ func Load(t *testing.T,
 
 	addrCountMap := make(map[string]int)
 	for i := 1; i < 10*len(wallet); i++ { // Make a bunch of transactions
-		if i%100 == 0 {
+		if i%200 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(200 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address
@@ -291,6 +287,7 @@ func Load(t *testing.T,
 		if err := gtx.SetRoutingChainID(); err != nil {                       // Routing ChainID is the tx source
 			t.Fatal("bad url generated") // error should never happen
 		}
+
 		binaryGtx := gtx.TransactionHash() // Must sign the GenTransaction
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
@@ -312,7 +309,7 @@ func Load(t *testing.T,
 	return addrList
 }
 
-func _TestJsonRpcAdi(t *testing.T) {
+func TestJsonRpcAdi(t *testing.T) {
 
 	networksList := []int{2}
 	txBouncer := networks.MakeBouncer(networksList)
@@ -340,7 +337,7 @@ func _TestJsonRpcAdi(t *testing.T) {
 
 	query := NewQuery(txBouncer)
 
-	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
+	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
 
 	//StartAPI(RandPort(), client)
 

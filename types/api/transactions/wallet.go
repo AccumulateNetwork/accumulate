@@ -2,6 +2,7 @@ package transactions
 
 import (
 	"crypto/ed25519"
+
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 )
 
