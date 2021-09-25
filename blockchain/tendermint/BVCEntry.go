@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/AccumulateNetwork/SMT/managed"
+	"github.com/AccumulateNetwork/accumulated/smt/managed"
 )
 
 ////bvc entry header:

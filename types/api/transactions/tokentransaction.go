@@ -6,7 +6,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/types/proto"
 
-	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
 
 // TokenSend
