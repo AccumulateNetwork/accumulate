@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"os"
 	"path"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -50,7 +51,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
+	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
 	_ = jsonapi
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
@@ -192,7 +193,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	fmt.Println(string(output))
 
 	// now use the JSON rpc api's to get the data
-	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
+	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
@@ -265,12 +266,12 @@ func Load(t *testing.T,
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
-	for i := 1; i <= 100; i++ { //                            create a 1000 addresses for anonymous token chains
+	for i := 1; i <= 3; i++ { //                            create a 1000 addresses for anonymous token chains
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
 	}
 
 	addrCountMap := make(map[string]int)
-	for i := 1; i < 10*len(wallet); i++ { // Make a bunch of transactions
+	for i := 1; i < 1*len(wallet); i++ { // Make a bunch of transactions
 		if i%200 == 0 {
 			txBouncer.BatchSend()
 			time.Sleep(200 * time.Millisecond)
@@ -317,7 +318,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	adiSponsor := "wileecoyote"
 
 	kpNewAdi := types.CreateKeyPair()
-	//routerAddress := fmt.Sprintf("tcp://localhost:%d", RandPort())
+	//routerAddress := fmt.Sprintf("tcp://localhost:%d", randomRouterPorts())
 
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
@@ -337,9 +338,9 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	query := NewQuery(txBouncer)
 
-	jsonapi := API{RandPort(), validator.New(), query, txBouncer}
+	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
 
-	//StartAPI(RandPort(), client)
+	//StartAPI(randomRouterPorts(), client)
 
 	kpSponsor := types.CreateKeyPairFromSeed(vm.Key.PrivKey.Bytes())
 
