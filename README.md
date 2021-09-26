@@ -2,6 +2,7 @@
 
 doot1
 doot2
+doot3
 
 ### Abstract
 Accumulate is a highly unique blockchain network built to address the biggest fundamental issues with blockchain technology:  security, validation, scaling, pruning, and integration.
