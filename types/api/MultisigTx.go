@@ -3,9 +3,9 @@ package api
 import (
 	"bytes"
 	"fmt"
+	"github.com/AccumulateNetwork/SMT/common"
 
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 type MultiSigTx struct {
@@ -14,19 +14,23 @@ type MultiSigTx struct {
 
 func (m *MultiSigTx) MarshalBinary() ([]byte, error) {
 	var buf bytes.Buffer
-	buf.WriteByte(byte(proto.AccInstruction_Multisig_Transaction))
+	buf.Write(common.Int64Bytes(int64(types.TxTypeMultisigTx)))
 	buf.Write(m.TxHash[:])
 
 	return buf.Bytes(), nil
 }
 
-func (m *MultiSigTx) UnmarshalBinary(data []byte) error {
-	if len(data) != 33 {
-		return fmt.Errorf("insufficent data to unmarshal MultiSigTx")
-	}
-	if data[0] != byte(proto.AccInstruction_Multisig_Transaction) {
+func (m *MultiSigTx) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("insufficent data to unmarshal MultiSigTx %v", err)
+		}
+	}()
+
+	txType, data := common.BytesInt64(data)
+	if txType != int64(types.TxTypeMultisigTx) {
 		return fmt.Errorf("attempting to unmarshal incompatible type")
 	}
-	copy(m.TxHash[:], data[1:])
+	copy(m.TxHash[:], data)
 	return nil
 }

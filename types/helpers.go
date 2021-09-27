@@ -363,6 +363,6 @@ func (a *Amount) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("insuffcient data to unmarshal amount, len = %d but provided %d", amtLen, length)
 	}
 
-	a.Int.SetBytes(data[1:amtLen])
+	a.Int.SetBytes(data[1 : amtLen+1])
 	return nil
 }
