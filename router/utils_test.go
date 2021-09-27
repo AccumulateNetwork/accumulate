@@ -3,9 +3,9 @@ package router
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/spf13/viper"
 	"github.com/tendermint/tendermint/abci/types"
@@ -66,14 +66,13 @@ func newBVC(configfile string, workingdir string) *node.Node {
 	}
 
 	node, err := node.New(cfg, func(pv *privval.FilePV) (types.Application, error) {
-		vnode := new(validator.Node)
-		vchain := &validator.NewBlockValidatorChain().ValidatorContext
-		err = vnode.Initialize(cfg, pv.Key.PrivKey.Bytes(), vchain)
+		bvc := chain.NewBlockValidator()
+		mgr, err := chain.NewManager(cfg, pv.Key.PrivKey.Bytes(), bvc)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
-		return abci.NewAccumulator(db, pv, vnode)
+		return abci.NewAccumulator(db, pv, mgr)
 	})
 	if err != nil {
 		panic(err)

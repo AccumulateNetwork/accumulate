@@ -59,14 +59,13 @@ func runNode(cmd *cobra.Command, args []string) {
 
 	// Create node
 	node, err := node.New(config, func(pv *privval.FilePV) (tmabci.Application, error) {
-		vnode := new(validator.Node)
-		vchain := &validator.NewBlockValidatorChain().ValidatorContext
-		err = vnode.Initialize(config, pv.Key.PrivKey.Bytes(), vchain)
+		bvc := validator.NewBlockValidatorChain()
+		mgr, err := validator.NewNode(config, pv.Key.PrivKey.Bytes(), bvc)
 		if err != nil {
 			return nil, err
 		}
 
-		return abci.NewAccumulator(db, pv, vnode)
+		return abci.NewAccumulator(db, pv, mgr)
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize node: %v\n", err)
