@@ -77,3 +77,12 @@ func (h *Chain) UnmarshalBinary(data []byte) error {
 
 	return nil
 }
+
+func UnmarshalChain(data []byte) (*Chain, error) {
+	ch := new(Chain)
+	err := ch.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+	return ch, nil
+}
