@@ -61,6 +61,44 @@ func TestManager(t *testing.T) {
 		key := sha256.Sum256([]byte(fmt.Sprintf("1 key %d", i)))
 		value := sha256.Sum256([]byte(fmt.Sprintf("1 key %d", i)))
 		bptManager.InsertKV(key, value)
-
 	}
+}
+
+func TestManagerSeries(t *testing.T) {
+
+	// A set of key value pairs.  We are going to set 100 of them,
+	// Then update those value over a running test.
+	SetOfValues := make(map[[32]byte][32]byte)
+	d := 100
+
+	dbManager, err := database.NewDBManager("memory", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	{
+		bptManager := NewBPTManager(dbManager)
+
+		for i := 0; i < 3; i++ {
+			for j := 0; j < 3; j++ {
+				for k, v := range SetOfValues {
+					SetOfValues[k] = sha256.Sum256(v[:]) // Update the value
+				}
+
+				for k := 0; k < d; k++ {
+					key := sha256.Sum256([]byte(fmt.Sprintf("k key %d %d %d", i, j, k)))
+					value := sha256.Sum256([]byte(fmt.Sprintf("v key %d %d %d", i, j, k)))
+					SetOfValues[key] = value
+					bptManager.InsertKV(key, value)
+				}
+			}
+			priorRoot := bptManager.GetRootHash()
+			bptManager.Bpt.Update()
+			currentRoot := bptManager.GetRootHash()
+			fmt.Printf(" prior %x current %x\n", priorRoot, currentRoot)
+		}
+	}
+
+	bptManager := NewBPTManager(dbManager)
+	fmt.Printf(" current %x\n", bptManager.GetRootHash())
+
 }

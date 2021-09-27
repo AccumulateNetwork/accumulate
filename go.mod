@@ -3,6 +3,7 @@ module github.com/AccumulateNetwork/accumulated
 go 1.15
 
 require (
+	github.com/AccumulateNetwork/SMT v0.0.24
 	github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106
 	github.com/DataDog/zstd v1.4.5 // indirect
@@ -26,6 +27,7 @@ require (
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/viper v1.8.1
 	github.com/stretchr/objx v0.3.0 // indirect
+	github.com/stretchr/testify v1.7.0
 	github.com/tendermint/tendermint v0.34.12
 	github.com/tendermint/tm-db v0.6.4
 	github.com/ybbus/jsonrpc/v2 v2.1.6
