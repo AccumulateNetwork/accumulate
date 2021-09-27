@@ -259,6 +259,20 @@ func (b *BPT) Update() {
 	}
 }
 
+func (b *BPT) EnsureRootHash() {
+	n := b.Root
+	L := GetHash(n.Left)  //                       Get the Left Branch
+	R := GetHash(n.Right) //                       Get the Right Branch
+	switch {              //                       Sort four conditions:
+	case L != nil && R != nil: //                  If we have both L and R then combine
+		n.Hash = sha256.Sum256(append(L, R...)) // Take the hash of L+R
+	case L != nil: //                              The next condition is where we only have L
+		copy(n.Hash[:], L) //                      Just use L.  No hash required
+	case R != nil: //                              Just have R.  Again, just use R.
+		copy(n.Hash[:], R) //                      No Hash Required
+	}
+}
+
 // New BPT
 // Allocate a new BPT and set up the structures required to get to work with
 // Binary Patricia Trees.

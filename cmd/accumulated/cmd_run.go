@@ -1,16 +1,18 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/router"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/cobra"
 	tmabci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/privval"
@@ -57,16 +59,24 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	dbPath := filepath.Join(config.RootDir, "valacc.db")
+	bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
+	sdb := new(state.StateDB)
+	err = sdb.Open(dbPath, bvcId[:], false, true)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to open database %s: %v", dbPath, err)
+		os.Exit(1)
+	}
+
 	// Create node
 	node, err := node.New(config, func(pv *privval.FilePV) (tmabci.Application, error) {
-		vnode := new(validator.Node)
-		vchain := &validator.NewBlockValidatorChain().ValidatorContext
-		err = vnode.Initialize(config, pv.Key.PrivKey.Bytes(), vchain)
+		bvc := chain.NewBlockValidator()
+		mgr, err := chain.NewManager(config, sdb, pv.Key.PrivKey.Bytes(), bvc)
 		if err != nil {
 			return nil, err
 		}
 
-		return abci.NewAccumulator(db, pv, vnode)
+		return abci.NewAccumulator(db, sdb, pv, mgr)
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize node: %v\n", err)
