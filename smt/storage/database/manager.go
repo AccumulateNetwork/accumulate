@@ -84,11 +84,7 @@ func NewDBManager(databaseTag, filename string) (*Manager, error) {
 	return manager, nil
 }
 
-// Init
-// Initialize the Manager with a specified underlying database. databaseTag
-// can currently be either badger or memory.  The filename indicates where
-// the database is persisted (ignored by memory).PendingChain
-func (m *Manager) Init(databaseTag, filename string) error {
+func (m *Manager) init() {
 	// Set up Buckets for use by the Stateful Merkle Trees
 	m.Buckets = make(map[string]byte) // Buckets hold sets of key value pairs
 	m.Labels = make(map[string]byte)  // Labels hold subsets of key value pairs within a bucket
@@ -104,6 +100,15 @@ func (m *Manager) Init(databaseTag, filename string) error {
 	m.AddBucket("BPT")          //                       Binary Patricia Tree Byte Blocks (blocks of BPT nodes)
 	m.AddLabel("Root")          //                       The Root node of the BPT
 
+}
+
+// Init
+// Initialize the Manager with a specified underlying database. databaseTag
+// can currently be either badger or memory.  The filename indicates where
+// the database is persisted (ignored by memory).PendingChain
+func (m *Manager) Init(databaseTag, filename string) error {
+	m.init()
+
 	switch databaseTag { //                              match with a supported databaseTag
 	case "badger": //                                    Badger database indicated
 		m.DB = new(badger.DB)                         // Create a badger struct
@@ -115,6 +120,11 @@ func (m *Manager) Init(databaseTag, filename string) error {
 		_ = m.DB.InitDB(filename) //                     filename is ignored, but must allocate the underlying map
 	}
 	return nil
+}
+
+func (m *Manager) InitWithDB(db storage.KeyValueDB) {
+	m.init()
+	m.DB = db
 }
 
 // GetCount
