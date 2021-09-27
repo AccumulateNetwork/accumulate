@@ -296,6 +296,10 @@ func (sdb *StateDB) writeBatches() {
 	sdb.mm.RootDBManager.EndBatch()
 }
 
+func (sdb *StateDB) BlockIndex() int64 {
+	return sdb.mm.BlockIndex()
+}
+
 // WriteStates will push the data to the database and update the patricia trie
 func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//build a list of keys from the map
@@ -349,5 +353,15 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
-	return sdb.bpt.Bpt.Root.Hash[:], currentStateCount, nil
+	fmt.Printf("Committed height=%d hash=%X\n", blockHeight, sdb.RootHash())
+	return sdb.RootHash(), currentStateCount, nil
+}
+
+func (sdb *StateDB) RootHash() []byte {
+	return sdb.bpt.Bpt.Root.Hash[:]
+}
+
+func (sdb *StateDB) EnsureRootHash() []byte {
+	sdb.bpt.Bpt.EnsureRootHash()
+	return sdb.RootHash()
 }

@@ -127,9 +127,7 @@ func (m *MerkleManager) init(DBManager *database.Manager, appID []byte, markPowe
 
 }
 
-// SetBlockIndex
-// Keep track of where the blocks are in the Merkle Tree.
-func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
+func (m *MerkleManager) BlockIndex() int64 {
 	if m.blkidx == nil { //                                              Load cache if first use
 		m.blkidx = new(BlockIndex)                                    // Create blockIndex to store
 		data := m.BlkIdxChain.Manager.Get("BlockIndex", "", []byte{}) // Look see the current bbi
@@ -141,6 +139,17 @@ func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
 			m.blkidx.UnMarshal(data) //                                  get all the values from the database
 		}
 	}
+
+	if m.blkidx.BlockIndex < 0 {
+		return 0
+	}
+	return m.blkidx.BlockIndex
+}
+
+// SetBlockIndex
+// Keep track of where the blocks are in the Merkle Tree.
+func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
+	m.BlockIndex()                         //                            Ensure blkidx is loaded
 	if m.blkidx.BlockIndex >= blockIndex { //                            Block Index must increment
 		panic("should not have block indexes that go backwards or stay constant")
 	}
