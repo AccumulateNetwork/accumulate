@@ -1,46 +1,42 @@
-package validator
+package chain
 
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	pb "github.com/AccumulateNetwork/accumulated/types/proto"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	cfg "github.com/tendermint/tendermint/config"
 )
 
-type TokenChainCreateValidator struct {
-	ValidatorContext
+type TokenChainCreate struct{}
+
+func (TokenChainCreate) chainType() chainTypeId {
+	return chainTypeId(types.ChainTypeTokenAccount)
 }
 
-func NewTokenChainCreateValidator() *TokenChainCreateValidator {
-	v := TokenChainCreateValidator{}
-	v.SetInfo(types.ChainTypeTokenAccount, pb.AccInstruction_Token_URL_Creation)
-	v.ValidatorContext.ValidatorInterface = &v
-	return &v
+func (TokenChainCreate) instruction() proto.AccInstruction {
+	return proto.AccInstruction_Token_URL_Creation
 }
-func (v *TokenChainCreateValidator) Initialize(config *cfg.Config, db *state.StateDB) error {
-	v.db = db
-	return nil
-}
-func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submission *transactions.GenTransaction) error {
-	if currentstate == nil {
+
+func (TokenChainCreate) BeginBlock() {}
+
+func (TokenChainCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+	if st == nil {
 		return fmt.Errorf("current state not defined")
 	}
 
-	if currentstate.IdentityState == nil {
+	if st.IdentityState == nil {
 		return fmt.Errorf("identity not defined")
 	}
 
-	if currentstate.ChainState != nil {
+	if st.ChainState != nil {
 		return fmt.Errorf("chain already defined")
 	}
 	tcc := api.TokenAccount{}
-	err := json.Unmarshal(submission.Transaction, &tcc)
+	err := json.Unmarshal(tx.Transaction, &tcc)
 	if err != nil {
 		return fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
@@ -48,29 +44,20 @@ func (v *TokenChainCreateValidator) Check(currentstate *state.StateEntry, submis
 	return nil
 }
 
-func (v *TokenChainCreateValidator) BeginBlock(height int64, time *time.Time) error {
-	v.lastHeight = v.currentHeight
-	v.lastTime = v.currentTime
-	v.currentHeight = height
-	v.currentTime = *time
-
-	return nil
-}
-
-func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, submission *transactions.GenTransaction) (resp *ResponseValidateTX, err error) {
-	if currentstate == nil {
+func (TokenChainCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+	if st == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
 
-	if currentstate.IdentityState == nil {
+	if st.IdentityState == nil {
 		return nil, fmt.Errorf("identity not defined")
 	}
 
-	if currentstate.ChainState != nil {
+	if st.ChainState != nil {
 		return nil, fmt.Errorf("chain already defined")
 	}
 	tcc := api.TokenAccount{}
-	err = json.Unmarshal(submission.Transaction, &tcc)
+	err := json.Unmarshal(tx.Transaction, &tcc)
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
@@ -102,14 +89,9 @@ func (v *TokenChainCreateValidator) Validate(currentstate *state.StateEntry, sub
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal state object for identity state create")
 	}
-	resp = &ResponseValidateTX{}
 
 	//return a new state object for a token
-	resp.AddStateData(types.GetChainIdFromChainPath(&chainPath), statedata)
-
-	return resp, nil
-}
-
-func (v *TokenChainCreateValidator) EndBlock(mdroot []byte) error {
-	return nil
+	res := new(DeliverTxResult)
+	res.AddStateData(types.GetChainIdFromChainPath(&chainPath), statedata)
+	return res, nil
 }
