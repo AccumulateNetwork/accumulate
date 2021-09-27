@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"math/rand"
@@ -14,9 +15,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
-	"github.com/AccumulateNetwork/accumulated/networks"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -25,10 +25,10 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-func TestLoadOnRemote(t *testing.T) {
+var testnet = flag.Int("testnet", 4, "TestNet to load test")
 
-	networksList := []int{3}
-	txBouncer := networks.MakeBouncer(networksList)
+func TestLoadOnRemote(t *testing.T) {
+	txBouncer := relay.NewWithNetworks(*testnet)
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
@@ -86,7 +86,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func runLoadTest(t *testing.T, txBouncer *networks.Bouncer, origin *ed25519.PrivateKey) (addrList []string) {
+func runLoadTest(t *testing.T, txBouncer *relay.Relay, origin *ed25519.PrivateKey) (addrList []string) {
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	adiSponsor := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
@@ -150,8 +150,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	_, rpc, vm := makeBVCandRouter(cfg, dir)
 	_ = rpc
 
-	networksList := []int{2}
-	txBouncer := networks.MakeBouncer(networksList)
+	txBouncer := relay.NewWithNetworks(*testnet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -256,7 +255,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 // Load
 // Generate load in our test.  Create a bunch of transactions, and submit them.
 func Load(t *testing.T,
-	txBouncer *networks.Bouncer,
+	txBouncer *relay.Relay,
 	Origin ed25519.PrivateKey) (addrList []string) {
 
 	var wallet []*transactions.WalletEntry
@@ -311,9 +310,8 @@ func Load(t *testing.T,
 }
 
 func TestJsonRpcAdi(t *testing.T) {
+	txBouncer := relay.NewWithNetworks(*testnet)
 
-	networksList := []int{2}
-	txBouncer := networks.MakeBouncer(networksList)
 	//"wileecoyote/ACME"
 	adiSponsor := "wileecoyote"
 

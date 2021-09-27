@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -29,7 +29,7 @@ type Node struct {
 	key            ed25519.PrivateKey
 	nonce          uint64
 
-	txBouncer *networks.Bouncer
+	txBouncer *relay.Relay
 	height    int64
 
 	wait      sync.WaitGroup
@@ -59,8 +59,7 @@ func (app *Node) Initialize(config *config.Config, key ed25519.PrivateKey, chain
 
 	app.key = key
 
-	rpcClients := []*rpchttp.HTTP{rpcClient}
-	app.txBouncer = networks.NewBouncer(rpcClients)
+	app.txBouncer = relay.New(rpcClient)
 	app.chainValidator.Initialize(nil, &app.mmDB)
 	return nil
 }
