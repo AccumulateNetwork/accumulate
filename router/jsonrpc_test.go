@@ -25,6 +25,8 @@ import (
 )
 
 var testnet = flag.Int("testnet", 4, "TestNet to load test")
+var loadWalletCount = flag.Int("loadtest-wallet-count", 100, "Number of wallets")
+var loadTxCount = flag.Int("loadtest-tx-count", 1000, "Number of transactions per wallet")
 
 func TestLoadOnRemote(t *testing.T) {
 	txBouncer := relay.NewWithNetworks(*testnet)
@@ -263,12 +265,12 @@ func Load(t *testing.T,
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
-	for i := 0; i < 100; i++ { //                            create a 1000 addresses for anonymous token chains
+	for i := 0; i < *loadWalletCount; i++ { //                            create a 1000 addresses for anonymous token chains
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
 	}
 
 	addrCountMap := make(map[string]int)
-	for i := 0; i < 10*len(wallet); i++ { // Make a bunch of transactions
+	for i := 0; i < *loadTxCount; i++ { // Make a bunch of transactions
 		if i%200 == 0 {
 			txBouncer.BatchSend()
 			time.Sleep(200 * time.Millisecond)

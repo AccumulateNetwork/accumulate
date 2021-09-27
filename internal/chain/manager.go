@@ -2,10 +2,8 @@ package chain
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -37,20 +35,15 @@ type Manager struct {
 
 var _ abci.Chain = (*Manager)(nil)
 
-func NewManager(config *config.Config, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
+func NewManager(config *config.Config, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
 	m := new(Manager)
-	m.db = new(state.StateDB)
+	m.db = db
 	m.chain = chain
 	m.key = key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
 
-	dbPath := filepath.Join(config.RootDir, "valacc.db")
-	bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
-	err := m.db.Open(dbPath, bvcId[:], false, true)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
-	}
+	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
 
 	rpcClient, err := rpchttp.New(config.RPC.ListenAddress, "/websocket")
 	if err != nil {
