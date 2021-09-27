@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
@@ -29,11 +29,11 @@ type API struct {
 	config    *config.Router
 	validate  *validator.Validate
 	query     *Query
-	txBouncer *networks.Bouncer
+	txBouncer *relay.Relay
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(config *config.Router, q *Query, txBouncer *networks.Bouncer) *API {
+func StartAPI(config *config.Router, q *Query, txBouncer *relay.Relay) *API {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
