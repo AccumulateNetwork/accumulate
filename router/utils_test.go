@@ -3,13 +3,15 @@ package router
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
 	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
+	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/spf13/viper"
+	"github.com/tendermint/tendermint/abci/types"
 	tmnet "github.com/tendermint/tendermint/libs/net"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/rpc/client/local"
+	"github.com/tendermint/tendermint/privval"
+	tmdb "github.com/tendermint/tm-db"
 )
 
 func randomRouterPorts() *config.Router {
@@ -24,7 +26,7 @@ func randomRouterPorts() *config.Router {
 }
 
 func boostrapBVC(configfile string, workingdir string, baseport int) error {
-	tendermint.Initialize("accumulate.", 2, workingdir)
+	node.InitForNetwork("accumulate.", 2, workingdir)
 	viper.SetConfigFile(configfile)
 	viper.AddConfigPath(workingdir + "/Node0")
 	viper.ReadInConfig()
@@ -52,20 +54,34 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 	return nil
 }
 
-func makeBVC(configfile string, workingdir string) *tendermint.AccumulatorVMApplication {
+func newBVC(configfile string, workingdir string) *node.Node {
 	cfg, err := config.LoadFile(workingdir, configfile)
 	if err != nil {
 		panic(err)
 	}
 
-	app, err := tendermint.NewApplication(cfg, &validator.NewBlockValidatorChain().ValidatorContext)
+	db, err := tmdb.NewGoLevelDB("kvstore", workingdir)
 	if err != nil {
 		panic(err)
 	}
-	return app
+
+	node, err := node.New(cfg, func(pv *privval.FilePV) (types.Application, error) {
+		vnode := new(validator.Node)
+		vchain := &validator.NewBlockValidatorChain().ValidatorContext
+		err = vnode.Initialize(cfg, pv.Key.PrivKey.Bytes(), vchain)
+		if err != nil {
+			panic(err)
+		}
+
+		return abci.NewAccumulator(db, pv, vnode)
+	})
+	if err != nil {
+		panic(err)
+	}
+	return node
 }
 
-func makeBVCandRouter(cfg string, dir string) (*local.Local, *rpchttp.HTTP, *tendermint.AccumulatorVMApplication) {
+func startBVC(cfg string, dir string) *node.Node {
 
 	//Select a base port to open.  Ports 43210, 43211, 43212, 43213,43214 need to be open
 	baseport := 35550
@@ -84,13 +100,11 @@ func makeBVCandRouter(cfg string, dir string) (*local.Local, *rpchttp.HTTP, *ten
 	viper.ReadInConfig()
 
 	///Build a BVC we'll use for our test
-	accvm := makeBVC(cfg, dir+"/Node0")
+	node := newBVC(cfg, dir+"/Node0")
+	err = node.Start()
+	if err != nil {
+		panic(err)
+	}
 
-	lc, _ := accvm.GetLocalClient()
-	laddr := viper.GetString("rpc.laddr")
-	//rpcc := tendermint.GetRPCClient(laddr)
-
-	rpcc, _ := rpchttp.New(laddr, "/websocket")
-
-	return &lc, rpcc, accvm
+	return node
 }
