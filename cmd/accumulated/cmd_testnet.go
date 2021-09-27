@@ -20,6 +20,7 @@ var flagTestNet struct {
 	NumValidators int
 	BasePort      int
 	BaseIP        string
+	NoEmptyBlocks bool
 }
 
 func init() {
@@ -28,6 +29,7 @@ func init() {
 	cmdTestNet.Flags().IntVarP(&flagTestNet.NumValidators, "validators", "v", 3, "Number of validator nodes to configure")
 	cmdTestNet.Flags().IntVar(&flagTestNet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdTestNet.Flags().StringVar(&flagTestNet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
+	cmdTestNet.Flags().BoolVar(&flagTestNet.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 }
 
 func initTestNet(cmd *cobra.Command, args []string) {
@@ -60,6 +62,9 @@ func initTestNet(cmd *cobra.Command, args []string) {
 	config := make([]*cfg.Config, flagTestNet.NumValidators)
 	for i := range config {
 		config[i] = cfg.Default()
+		if flagTestNet.NoEmptyBlocks {
+			config[i].Consensus.CreateEmptyBlocks = false
+		}
 	}
 
 	err := node.InitWithConfig(flagMain.WorkDir, "LocalhostTestNet", "LocalhostTestNet", flagTestNet.BasePort, config, IPs, IPs)
