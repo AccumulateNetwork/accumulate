@@ -8,7 +8,6 @@ import (
 
 	"github.com/AccumulateNetwork/SMT/common"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 type TokenCirculationMode int
@@ -28,11 +27,7 @@ func NewToken(url string, symbol string, precision byte) *Token {
 func (t *Token) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	var ret bytes.Buffer
-
-	var vi [8]byte
-	_ = binary.PutVarint(vi[:], int64(proto.AccInstruction_Token_Issue))
-	ret.Write(vi[:])
+	buffer.Write(common.Int64Bytes(int64(types.TxTypeTokenIssue)))
 
 	//marshal URL
 	d, err := t.URL.MarshalBinary()
@@ -69,14 +64,9 @@ func (t *Token) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 
-	length := len(data)
-	if length < 2 {
-		return fmt.Errorf("insufficient data to unmarshal binary for TokenTx")
-	}
+	txType, data := common.BytesInt64(data)
 
-	txType, data := common.BytesUint64(data)
-
-	if txType != uint64(proto.AccInstruction_Token_Issue) {
+	if txType != int64(types.TxTypeTokenIssue) {
 		return fmt.Errorf("invalid transaction type, expecting token issuance")
 	}
 
