@@ -65,12 +65,6 @@ func loadTest(cmd *cobra.Command, args []string) {
 		clients = append(clients, client)
 	}
 
-	if len(clients) == 0 {
-		fmt.Fprintf(os.Stderr, "Error: at least one --network or --remote is required\n")
-		cmd.Usage()
-		os.Exit(1)
-	}
-
 	// Create clients for remotes
 	for _, r := range flagLoadTest.Remotes {
 		u, err := url.Parse(r)
@@ -91,6 +85,12 @@ func loadTest(cmd *cobra.Command, args []string) {
 		}
 
 		clients = append(clients, client)
+	}
+
+	if len(clients) == 0 {
+		fmt.Fprintf(os.Stderr, "Error: at least one --network or --remote is required\n")
+		cmd.Usage()
+		os.Exit(1)
 	}
 
 	relay := relay.New(clients...)
