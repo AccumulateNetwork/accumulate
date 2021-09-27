@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/memory"
