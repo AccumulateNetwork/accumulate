@@ -1,4 +1,4 @@
-package tendermint
+package abci
 
 import (
 	"bytes"
@@ -18,7 +18,7 @@ const (
 	MDRoot_type    int = 3
 )
 
-type BVCEntry struct {
+type directoryEntry struct {
 	Version   byte
 	DDII      []byte
 	BVCHeight int64 /// (4 bytes) Height of master chain block
@@ -26,7 +26,7 @@ type BVCEntry struct {
 	MDRoot    managed.Hash
 }
 
-func (entry *BVCEntry) MarshalBinary() ([]byte, error) {
+func (entry *directoryEntry) MarshalBinary() ([]byte, error) {
 	ret := make([]byte, 1+1+len(entry.DDII)+4+8+32)
 
 	offset := 0
@@ -45,7 +45,7 @@ func (entry *BVCEntry) MarshalBinary() ([]byte, error) {
 	ret[offset] = byte(len(entry.DDII))
 
 	if ret[offset] == 0 {
-		return nil, fmt.Errorf("BVCEntry marshal error: entry.DDII has zero length")
+		return nil, fmt.Errorf("directoryEntry marshal error: entry.DDII has zero length")
 	}
 	endoffset += int(ret[offset])
 	offset++
@@ -67,7 +67,7 @@ func (entry *BVCEntry) MarshalBinary() ([]byte, error) {
 	return ret[:], nil
 }
 
-func (entry *BVCEntry) UnmarshalBinary(data []byte) ([][]byte, error) {
+func (entry *directoryEntry) UnmarshalBinary(data []byte) ([][]byte, error) {
 	offset := 0
 
 	length := len(data)
