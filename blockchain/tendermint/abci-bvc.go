@@ -38,21 +38,21 @@ import (
 	dbm "github.com/tendermint/tm-db"
 )
 
-func loadState(db dbm.DB) State {
+func loadState(db dbm.DB) (State, error) {
 	var tmstate State
 	tmstate.db = db
 	stateBytes, err := db.Get(stateKey)
 	if err != nil {
-		panic(err)
+		return State{}, fmt.Errorf("failed to load state: %v", err)
 	}
 	if len(stateBytes) == 0 {
-		return tmstate
+		return tmstate, nil
 	}
 	err = json.Unmarshal(stateBytes, &tmstate)
 	if err != nil {
-		panic(err)
+		return State{}, fmt.Errorf("failed to unmarshal state: %v", err)
 	}
-	return tmstate
+	return tmstate, nil
 }
 
 func saveState(state State) {
@@ -74,7 +74,6 @@ type AccumulatorVMApplication struct {
 	abcitypes.BaseApplication
 	RetainBlocks int64
 	mutex        sync.Mutex
-	waitgroup    sync.WaitGroup
 
 	Height int64
 
@@ -117,32 +116,9 @@ type AccumulatorVMApplication struct {
 	chainValidatorNode *validator.Node
 }
 
-func NewAccumulatorVMApplication(config *config.Config) *AccumulatorVMApplication {
-	name := "kvstore"
-	db, err := dbm.NewGoLevelDB(name, config.RootDir)
-	if err != nil {
-		panic(err)
-	}
-
-	tmState := loadState(db)
-
-	app := AccumulatorVMApplication{
-		RetainBlocks: 1,       //only retain current block, we will manage our own states
-		state:        tmState, //this will save the current state of the blockchain we can use if we need to restart
-	}
-
-	_ = app.Initialize(config)
-
-	return &app
-}
-
 var _ abcitypes.Application = (*AccumulatorVMApplication)(nil)
 
 func (app *AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.ResponseInfo {
-
-	defer func() {
-		// fmt.Printf("*** return Info %v \n", "")
-	}()
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
 
 	if app.chainValidatorNode == nil {
@@ -159,10 +135,6 @@ func (app *AccumulatorVMApplication) Info(req abcitypes.RequestInfo) abcitypes.R
 }
 
 func (app *AccumulatorVMApplication) SetOption(req abcitypes.RequestSetOption) abcitypes.ResponseSetOption {
-	defer func() {
-		// fmt.Printf("*** return SetOption %v \n", "")
-	}()
-
 	return app.BaseApplication.SetOption(req)
 }
 
@@ -173,15 +145,8 @@ func (app *AccumulatorVMApplication) GetAPIClient() (coregrpc.BroadcastAPIClient
 	return app.APIClient, nil
 }
 
-func (app *AccumulatorVMApplication) Initialize(config *config.Config) error {
-	defer func() {
-		// fmt.Printf("*** return Initialize %v \n", "")
-	}()
+func (app *AccumulatorVMApplication) initialize(config *config.Config) {
 	app.RetainBlocks = 1
-
-	app.waitgroup.Add(1)
-	// fmt.Printf("Starting Tendermint (version: %v)\n", version.ABCIVersion)
-
 	app.config = config
 
 	// read private validator
@@ -194,25 +159,15 @@ func (app *AccumulatorVMApplication) Initialize(config *config.Config) error {
 	app.Address = make([]byte, len(pv.Key.PubKey.Address()))
 
 	copy(app.Address, pv.Key.PubKey.Address())
-	return nil
 }
 
 // SetAccumulateNode will set the chain validator set to use
 func (app *AccumulatorVMApplication) SetAccumulateNode(node *validator.Node) {
-	defer func() {
-		// fmt.Printf("*** return SetAccumulateNode %v \n", "")
-	}()
 	app.chainValidatorNode = node
 }
 
 // InitChain /ABCI call is issued only 1 time at the creation of the chain.
 func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) abcitypes.ResponseInitChain {
-	defer func() {
-		// fmt.Printf("*** return InitChain %v \n", "")
-	}()
-
-	// fmt.Printf("Initializing tendermint chain\n")
-
 	var networkid [32]byte
 	networkid[31] = 1
 	app.ChainId = networkid
@@ -240,9 +195,6 @@ func (app *AccumulatorVMApplication) InitChain(req abcitypes.RequestInitChain) a
 // BeginBlock, one DeliverTx per transaction and EndBlock in the end.
 //Here we create a batch, which will store block's transactions.
 func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock) abcitypes.ResponseBeginBlock {
-	defer func() {
-		// fmt.Printf("*** return BeginBlock %v \n", "")
-	}()
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	leader := bytes.Compare(app.Address.Bytes(), req.Header.GetProposerAddress()) == 0
 	app.chainValidatorNode.BeginBlock(req.Header.Height, &req.Header.Time, leader)
@@ -287,9 +239,6 @@ func (app *AccumulatorVMApplication) BeginBlock(req abcitypes.RequestBeginBlock)
 ///   Commit
 // new transaction is added to the Tendermint Core. Check if it is valid.
 func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) (rct abcitypes.ResponseCheckTx) {
-	defer func() {
-		//// fmt.Printf("*** return CheckTx IsErr %v IsOK %v \n", rct.IsErr(), rct.IsOK())
-	}()
 	//create a default response
 	ret := abcitypes.ResponseCheckTx{Code: 0, GasWanted: 1}
 
@@ -329,9 +278,6 @@ func (app *AccumulatorVMApplication) CheckTx(req abcitypes.RequestCheckTx) (rct 
 // Invalid transactions, we again return the non-zero code.
 // Otherwise, we add it to the current batch.
 func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (rdt abcitypes.ResponseDeliverTx) {
-	defer func() {
-		// fmt.Printf("*** return DeliverTx IsOk %v IsErr %v \n", rdt.IsOK(), rdt.IsErr())
-	}()
 	ret := abcitypes.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: code.CodeTypeOK}
 
 	sub := &transactions.GenTransaction{}
@@ -370,9 +316,6 @@ func (app *AccumulatorVMApplication) DeliverTx(req abcitypes.RequestDeliverTx) (
 //   Commit
 // Update the validator set
 func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (resp abcitypes.ResponseEndBlock) {
-	defer func() {
-		// fmt.Printf("*** return EndBlock %v \n", "")
-	}()
 	// Select our leader who will initiate consensus on dbvc chain.
 	//resp.ConsensusParamUpdates
 	//for _, ev := range req.ByzantineValidators {
@@ -403,9 +346,6 @@ func (app *AccumulatorVMApplication) EndBlock(req abcitypes.RequestEndBlock) (re
 //    EndBlock
 //    Commit <---
 func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
-	defer func() {
-		//fmt.Printf("*** return Commit %v \n", "")
-	}()
 	//end the current batch of transactions in the Stateful Merkle Tree
 
 	mdRoot, err := app.chainValidatorNode.EndBlock()
@@ -439,19 +379,12 @@ func (app *AccumulatorVMApplication) Commit() (resp abcitypes.ResponseCommit) {
 func (app *AccumulatorVMApplication) ListSnapshots(
 	req abcitypes.RequestListSnapshots) abcitypes.ResponseListSnapshots {
 
-	defer func() {
-		// fmt.Printf("*** return ListSnkapshots %v \n", "")
-	}()
 	req.ProtoMessage()
 	return abcitypes.ResponseListSnapshots{}
 }
 
 func (app *AccumulatorVMApplication) LoadSnapshotChunk(
 	req abcitypes.RequestLoadSnapshotChunk) abcitypes.ResponseLoadSnapshotChunk {
-
-	defer func() {
-		// fmt.Printf("*** return LoadSnapshotChunk %v \n", "")
-	}()
 
 	//req.Height
 	//resp := abcitypes.ResponseLoadSnapshotChunk{}
@@ -462,29 +395,16 @@ func (app *AccumulatorVMApplication) LoadSnapshotChunk(
 
 func (app *AccumulatorVMApplication) OfferSnapshot(
 	req abcitypes.RequestOfferSnapshot) abcitypes.ResponseOfferSnapshot {
-	defer func() {
-		// fmt.Printf("*** return OfferSnapshot %v \n", "")
-	}()
 	return abcitypes.ResponseOfferSnapshot{Result: abcitypes.ResponseOfferSnapshot_ABORT}
 }
 
 func (app *AccumulatorVMApplication) ApplySnapshotChunk(
-
 	req abcitypes.RequestApplySnapshotChunk) abcitypes.ResponseApplySnapshotChunk {
-	defer func() {
-		// fmt.Printf("*** return ApplySnapshotChunk %v \n", "")
-	}()
-
 	return abcitypes.ResponseApplySnapshotChunk{Result: abcitypes.ResponseApplySnapshotChunk_ABORT}
 }
 
 //Query when the client wants to know whenever a particular key/value exist, it will call Tendermint Core RPC /abci_query endpoint
 func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (resQuery abcitypes.ResponseQuery) {
-
-	defer func() {
-		// fmt.Printf("*** return Qirtu %v \n", "")
-	}()
-
 	resQuery.Key = reqQuery.Data
 	q := pb.Query{}
 	err := proto.Unmarshal(reqQuery.Data, &q)
@@ -517,29 +437,16 @@ func (app *AccumulatorVMApplication) Query(reqQuery abcitypes.RequestQuery) (res
 }
 
 func (app *AccumulatorVMApplication) GetName() string {
-	defer func() {
-		// fmt.Printf("*** return GetName %v \n", "")
-	}()
 	return app.config.ChainID()
 }
-func (app *AccumulatorVMApplication) Wait() {
-	defer func() {
-		// fmt.Printf("*** return Wait %v \n", "")
-	}()
-	app.waitgroup.Wait()
-}
 
-func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
-
-	defer func() {
-		// fmt.Printf("*** return Start %v \n", "")
-	}()
+func (app *AccumulatorVMApplication) Start() error {
 	// create logger
 	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
 	var err error
 	logger, err = tmflags.ParseLogLevel(app.config.LogLevel, logger, cfg.DefaultLogLevel)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse log level: %w", err)
+		return fmt.Errorf("failed to parse log level: %w", err)
 	}
 
 	// read private validator
@@ -551,7 +458,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	// read node key
 	nodeKey, err := p2p.LoadNodeKey(app.config.NodeKeyFile())
 	if err != nil {
-		return nil, fmt.Errorf("failed to load node's key: %w", err)
+		return fmt.Errorf("failed to load node's key: %w", err)
 	}
 
 	// create node
@@ -565,7 +472,7 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 		nm.DefaultMetricsProvider(app.config.Instrumentation),
 		logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
+		return fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
 	//node.
 
@@ -583,26 +490,11 @@ func (app *AccumulatorVMApplication) Start() (*nm.Node, error) {
 	client := GetGRPCClient(app.config.RPC.GRPCListenAddress) //makeGRPCClient(app.Accrpcaddr)//app.config.RPC.GRPCListenAddress)
 
 	app.APIClient = client
-
-	defer func() {
-		node.Stop()
-		node.Wait()
-		// fmt.Println("Tendermint Stopped")
-	}()
-
-	if node.IsListening() {
-		// fmt.Print("node is listening")
-	}
-	app.waitgroup.Done()
-	node.Wait()
-	return node, nil
+	return nil
 }
 
 //updateValidator add, update, or remove a validator
 func (app *AccumulatorVMApplication) updateValidator(v abcitypes.ValidatorUpdate) abcitypes.ResponseDeliverTx {
-	defer func() {
-		// fmt.Printf("*** return updateValidator %v \n", "")
-	}()
 	pubkey, _ := cryptoenc.PubKeyFromProto(v.PubKey)
 
 	fmt.Printf("Val Pub Key 0x%X\n", pubkey.Address())

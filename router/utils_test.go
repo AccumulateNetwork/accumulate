@@ -3,8 +3,8 @@ package router
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
 	"github.com/AccumulateNetwork/accumulated/blockchain/tendermint"
+	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
@@ -58,7 +58,7 @@ func makeBVC(configfile string, workingdir string) *tendermint.AccumulatorVMAppl
 		panic(err)
 	}
 
-	app, err := accumulate.CreateAccumulateBVC(cfg)
+	app, err := tendermint.NewApplication(cfg, &validator.NewBlockValidatorChain().ValidatorContext)
 	if err != nil {
 		panic(err)
 	}
