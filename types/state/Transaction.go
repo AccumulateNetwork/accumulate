@@ -5,9 +5,8 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
 // transactionHeader is the structure that stores the basic information needed

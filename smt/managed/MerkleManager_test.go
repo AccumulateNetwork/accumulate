@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 )
 

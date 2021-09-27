@@ -4,7 +4,6 @@ import (
 	"bytes"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-
 	"golang.org/x/crypto/ed25519"
 )
 

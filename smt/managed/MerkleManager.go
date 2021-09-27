@@ -7,9 +7,7 @@ import (
 	"math"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
-
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 )
 

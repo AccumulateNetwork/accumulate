@@ -24,8 +24,7 @@ import (
 )
 
 var (
-	stateKey        = []byte("stateKey")
-	kvPairPrefixKey = []byte("kvPairKey:")
+	stateKey = []byte("stateKey")
 
 	ProtocolVersion uint64 = 0x1
 )
@@ -133,7 +132,7 @@ func (app *DirectoryBlockChain) CheckTx(req abci.RequestCheckTx) abci.ResponseCh
 
 		if err != nil {
 			return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
-				Log: fmt.Sprintf("Unable to decode BVC Protobuf Transaction")}
+				Log: "Unable to decode BVC Protobuf Transaction"}
 		}
 
 		bve := BVCEntry{}
