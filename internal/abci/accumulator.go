@@ -9,6 +9,7 @@ import (
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
+	statetypes "github.com/AccumulateNetwork/accumulated/types/state"
 	protobuf "github.com/golang/protobuf/proto"
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -19,8 +20,23 @@ import (
 	dbm "github.com/tendermint/tm-db"
 )
 
+// Accumulator is an ABCI application that accumulates validated transactions in
+// a hash tree.
+type Accumulator struct {
+	abci.BaseApplication
+
+	retainBlocks int64
+	chainId      [32]byte
+	state        state
+	sdb          *statetypes.StateDB
+	address      crypto.Address
+	txct         int64
+	timer        time.Time
+	chain        Chain
+}
+
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db dbm.DB, privval *privval.FilePV, chain Chain) (*Accumulator, error) {
+func NewAccumulator(db dbm.DB, sdb *statetypes.StateDB, privval *privval.FilePV, chain Chain) (*Accumulator, error) {
 	state, err := loadState(db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load state: %v", err)
@@ -28,6 +44,7 @@ func NewAccumulator(db dbm.DB, privval *privval.FilePV, chain Chain) (*Accumulat
 
 	app := &Accumulator{
 		state: state,
+		sdb:   sdb,
 		chain: chain,
 
 		//only retain current block, we will manage our own states
@@ -39,20 +56,6 @@ func NewAccumulator(db dbm.DB, privval *privval.FilePV, chain Chain) (*Accumulat
 	copy(app.address, address)
 
 	return app, nil
-}
-
-// Accumulator is an ABCI application that accumulates validated transactions in
-// a hash tree.
-type Accumulator struct {
-	abci.BaseApplication
-
-	retainBlocks int64
-	chainId      [32]byte
-	state        state
-	address      crypto.Address
-	txct         int64
-	timer        time.Time
-	chain        Chain
 }
 
 var _ abci.Application = (*Accumulator)(nil)
@@ -69,8 +72,8 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		Data:             fmt.Sprintf("{\"size\":%v}", app.state.Size),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
-		LastBlockHeight:  app.state.Height,
-		LastBlockAppHash: app.state.AppHash,
+		LastBlockHeight:  app.sdb.BlockIndex(),
+		LastBlockAppHash: app.sdb.EnsureRootHash(),
 	}
 }
 
