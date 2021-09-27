@@ -37,6 +37,8 @@ cloud.google.com/go/storage v1.6.0/go.mod h1:N7U0C8pVQ/+NIKOBQyamJIeKQKkZ+mxpohl
 cloud.google.com/go/storage v1.8.0/go.mod h1:Wv1Oy7z6Yz3DshWRJFhqM/UCfaWIRTdp0RXyy7KQOVs=
 cloud.google.com/go/storage v1.10.0/go.mod h1:FLPqc6j+Ki4BU591ie1oL6qBQGu2Bl/tZ9ullr3+Kg0=
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
+github.com/AccumulateNetwork/SMT v0.0.24 h1:3kSgYFe55DfbttIeGxs9cIy/TH/m/8XTOI63eO+WozQ=
+github.com/AccumulateNetwork/SMT v0.0.24/go.mod h1:OAYTR1TNgYOh01rs66UtHNXukXx7MG/7A8DUxfqLP4g=
 github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03 h1:YeSKCsAcgRMblJcT9d+2sbuJh5DwYISdnkgtoKd0o9I=
 github.com/AccumulateNetwork/ValidatorAccumulator/ValAcc v0.0.0-20201027214006-47dd1dba5f03/go.mod h1:HGQgdvw2ZQah3rwhLB3KLQe0nBW8hPgJZbJmeR3VqNk=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106 h1:+PPbYmYZ02KDz3FJfxELkwsw/hq8N03E/K59+0c/WBg=
