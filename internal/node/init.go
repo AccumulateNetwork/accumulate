@@ -70,7 +70,6 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+2)
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", port)
 
-		config.Consensus.CreateEmptyBlocks = false
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
 			return fmt.Errorf("failed to create config dir: %v", err)
