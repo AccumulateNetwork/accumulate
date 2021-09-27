@@ -257,9 +257,9 @@ func (b *BPT) Update() {
 			b.Dirty(n.Parent) //                           The Parent is dirty cause it must consider this new state
 		}
 	}
-	if b.manager != nil {
-		b.manager.FlushNode(b.Root)
-	}
+	if b.manager != nil { //                             Root doesn't get flushed (has no parent)
+		b.manager.FlushNode(b.Root) //                    So flush it special
+	} //
 }
 
 func (b *BPT) EnsureRootHash() {
