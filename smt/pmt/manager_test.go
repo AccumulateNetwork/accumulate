@@ -1,6 +1,7 @@
 package pmt
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"testing"
@@ -75,30 +76,39 @@ func TestManagerSeries(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	{
-		bptManager := NewBPTManager(dbManager)
+	var previous [32]byte // Previous final root
+	for h := 0; h < 3; h++ {
+		{
+			bptManager := NewBPTManager(dbManager)
 
-		for i := 0; i < 3; i++ {
-			for j := 0; j < 3; j++ {
-				for k, v := range SetOfValues {
-					SetOfValues[k] = sha256.Sum256(v[:]) // Update the value
-				}
+			for i := 0; i < 3; i++ {
+				for j := 0; j < 3; j++ {
+					for k, v := range SetOfValues {
+						SetOfValues[k] = sha256.Sum256(v[:]) // Update the value
+					}
 
-				for k := 0; k < d; k++ {
-					key := sha256.Sum256([]byte(fmt.Sprintf("k key %d %d %d", i, j, k)))
-					value := sha256.Sum256([]byte(fmt.Sprintf("v key %d %d %d", i, j, k)))
-					SetOfValues[key] = value
-					bptManager.InsertKV(key, value)
+					for k := 0; k < d; k++ {
+						key := sha256.Sum256([]byte(fmt.Sprintf("k key %d %d %d %d", h, i, j, k)))
+						value := sha256.Sum256([]byte(fmt.Sprintf("v key %d %d %d %d", h, i, j, k)))
+						SetOfValues[key] = value
+						bptManager.InsertKV(key, value)
+					}
 				}
+				priorRoot := bptManager.GetRootHash()
+				bptManager.Bpt.Update()
+				currentRoot := bptManager.GetRootHash()
+				if bytes.Equal(priorRoot[:], currentRoot[:]) {
+					t.Error("added stuff, hash should not be equal")
+				}
+				//fmt.Printf("%x %x\n", priorRoot, currentRoot)
+				previous = currentRoot
 			}
-			priorRoot := bptManager.GetRootHash()
-			bptManager.Bpt.Update()
-			currentRoot := bptManager.GetRootHash()
-			fmt.Printf(" prior %x current %x\n", priorRoot, currentRoot)
+		}
+		bptManager := NewBPTManager(dbManager)
+		currentRoot := bptManager.GetRootHash()
+		//fmt.Printf("=> %x %x\n", previous, currentRoot)
+		if !bytes.Equal(previous[:], currentRoot[:]) {
+			t.Error("loading the BPT should have the same root as previous root")
 		}
 	}
-
-	bptManager := NewBPTManager(dbManager)
-	fmt.Printf(" current %x\n", bptManager.GetRootHash())
-
 }
