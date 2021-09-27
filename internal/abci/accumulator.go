@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/proto"
+	statetypes "github.com/AccumulateNetwork/accumulated/types/state"
 	protobuf "github.com/golang/protobuf/proto"
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -20,16 +20,32 @@ import (
 	dbm "github.com/tendermint/tm-db"
 )
 
+// Accumulator is an ABCI application that accumulates validated transactions in
+// a hash tree.
+type Accumulator struct {
+	abci.BaseApplication
+
+	retainBlocks int64
+	chainId      [32]byte
+	state        state
+	sdb          *statetypes.StateDB
+	address      crypto.Address
+	txct         int64
+	timer        time.Time
+	chain        Chain
+}
+
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db dbm.DB, privval *privval.FilePV, chain *validator.Node) (*Accumulator, error) {
+func NewAccumulator(db dbm.DB, sdb *statetypes.StateDB, privval *privval.FilePV, chain Chain) (*Accumulator, error) {
 	state, err := loadState(db)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load state: %v", err)
 	}
 
 	app := &Accumulator{
-		state:              state,
-		chainValidatorNode: chain,
+		state: state,
+		sdb:   sdb,
+		chain: chain,
 
 		//only retain current block, we will manage our own states
 		retainBlocks: 1,
@@ -42,27 +58,13 @@ func NewAccumulator(db dbm.DB, privval *privval.FilePV, chain *validator.Node) (
 	return app, nil
 }
 
-// Accumulator is an ABCI application that accumulates validated transactions in
-// a hash tree.
-type Accumulator struct {
-	abci.BaseApplication
-
-	retainBlocks       int64
-	chainId            [32]byte
-	state              state
-	address            crypto.Address
-	txct               int64
-	timer              time.Time
-	chainValidatorNode *validator.Node
-}
-
 var _ abci.Application = (*Accumulator)(nil)
 
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
 
-	if app.chainValidatorNode == nil {
+	if app.chain == nil {
 		panic("Chain Validator Node not set!")
 	}
 
@@ -70,8 +72,8 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		Data:             fmt.Sprintf("{\"size\":%v}", app.state.Size),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
-		LastBlockHeight:  app.state.Height,
-		LastBlockAppHash: app.state.AppHash,
+		LastBlockHeight:  app.sdb.BlockIndex(),
+		LastBlockAppHash: app.sdb.EnsureRootHash(),
 	}
 }
 
@@ -85,16 +87,15 @@ func (app *Accumulator) SetOption(req abci.RequestSetOption) abci.ResponseSetOpt
 // Exposed as Tendermint RCP /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
-	q := proto.Query{}
-	err := protobuf.Unmarshal(reqQuery.Data, &q)
+	query := new(proto.Query)
+	err := protobuf.Unmarshal(reqQuery.Data, query)
 	if err != nil {
 		resQuery.Info = "requst is not an Accumulate Query\n"
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
 
-	ret, err := app.chainValidatorNode.Query(&q)
-
+	ret, err := app.chain.Query(query)
 	if err != nil {
 		resQuery.Info = fmt.Sprintf("%v", err)
 		resQuery.Code = code.CodeTypeUnauthorized
@@ -132,8 +133,11 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	leader := bytes.Equal(app.address.Bytes(), req.Header.GetProposerAddress())
-	app.chainValidatorNode.BeginBlock(req.Header.Height, &req.Header.Time, leader)
+	app.chain.BeginBlock(BeginBlockRequest{
+		IsLeader: bytes.Equal(app.address.Bytes(), req.Header.GetProposerAddress()),
+		Height:   req.Header.Height,
+		Time:     req.Header.Time,
+	})
 
 	app.timer = time.Now()
 
@@ -187,7 +191,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			Log: "Unable to decode transaction"}
 	}
 
-	err = app.chainValidatorNode.CanTransact(sub)
+	err = app.chain.CheckTx(sub)
 
 	if err != nil {
 		ret.Code = 2
@@ -218,7 +222,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	//run through the validation node
-	err = app.chainValidatorNode.Validate(sub)
+	err = app.chain.DeliverTx(sub)
 
 	if err != nil {
 		ret.Code = code.CodeTypeUnauthorized
@@ -265,7 +269,7 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 	//end the current batch of transactions in the Stateful Merkle Tree
 
-	mdRoot, err := app.chainValidatorNode.EndBlock()
+	mdRoot, err := app.chain.Commit()
 	resp.Data = mdRoot
 
 	if err != nil {

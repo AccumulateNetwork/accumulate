@@ -1,12 +1,16 @@
 package router
 
 import (
+	"crypto/sha256"
 	"fmt"
+	"os"
+	"path/filepath"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/validator"
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
 	"github.com/tendermint/tendermint/abci/types"
 	tmnet "github.com/tendermint/tendermint/libs/net"
@@ -65,15 +69,23 @@ func newBVC(configfile string, workingdir string) *node.Node {
 		panic(err)
 	}
 
+	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
+	bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
+	sdb := new(state.StateDB)
+	err = sdb.Open(dbPath, bvcId[:], false, true)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to open database %s: %v", dbPath, err)
+		os.Exit(1)
+	}
+
 	node, err := node.New(cfg, func(pv *privval.FilePV) (types.Application, error) {
-		vnode := new(validator.Node)
-		vchain := &validator.NewBlockValidatorChain().ValidatorContext
-		err = vnode.Initialize(cfg, pv.Key.PrivKey.Bytes(), vchain)
+		bvc := chain.NewBlockValidator()
+		mgr, err := chain.NewManager(cfg, sdb, pv.Key.PrivKey.Bytes(), bvc)
 		if err != nil {
-			panic(err)
+			return nil, err
 		}
 
-		return abci.NewAccumulator(db, pv, vnode)
+		return abci.NewAccumulator(db, sdb, pv, mgr)
 	})
 	if err != nil {
 		panic(err)
