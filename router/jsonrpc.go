@@ -5,6 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
@@ -13,13 +17,6 @@ import (
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-
-	//"github.com/AccumulateNetwork/accumulated/blockchain/validator"
-	"log"
-	"net/http"
-	"net/url"
-	"os"
-
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
@@ -414,8 +411,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	if err = anon.IsAcmeAddress(adi); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", adi), err)
 	}
-	var destAccount types.String
-	destAccount = types.String(adi)
+	destAccount := types.String(adi)
 
 	wallet := transactions.NewWalletEntry()
 	fromAccount := types.String(wallet.Addr)
@@ -458,8 +454,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	ret := acmeapi.APIDataResponse{}
 	ret.Type = "faucet"
-	var msg json.RawMessage
-	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TransactionHash(), resp.Log))
+	msg := json.RawMessage(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TransactionHash(), resp.Log))
 	ret.Data = &msg
 	return &ret
 }
