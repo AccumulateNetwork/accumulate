@@ -265,15 +265,15 @@ func Load(t *testing.T,
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
-	for i := 1; i <= 100; i++ { //                            create a 1000 addresses for anonymous token chains
+	for i := 1; i <= 10; i++ { //                            create a 1000 addresses for anonymous token chains
 		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
 	}
 
 	addrCountMap := make(map[string]int)
-	for i := 1; i < 10*len(wallet); i++ { // Make a bunch of transactions
-		if i%100 == 0 {
+	for i := 1; i < 1000*len(wallet); i++ { // Make a bunch of transactions
+		if i%750 == 0 {
 			txBouncer.BatchSend()
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(2000 * time.Millisecond)
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address
@@ -302,8 +302,7 @@ func Load(t *testing.T,
 	txBouncer.BatchSend()
 	for addr, ct := range addrCountMap {
 		addrList = append(addrList, addr)
-		_ = ct
-		fmt.Printf("%s : %d\n", addr, ct*1000)
+		fmt.Printf("%s : %d\n", addr, ct)
 	}
 	return addrList
 }
