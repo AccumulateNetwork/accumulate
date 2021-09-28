@@ -53,8 +53,7 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 
 	fmt.Println("Tendermint Initialize")
 
-	nValidators := len(config)
-	genVals := make([]types.GenesisValidator, nValidators)
+	genVals := make([]types.GenesisValidator, 0, len(config))
 
 	for i, config := range config {
 		nodeDirName := fmt.Sprintf("Node%d", i)
@@ -96,11 +95,13 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 			return fmt.Errorf("failed to get public key: %v", err)
 		}
 
-		genVals[i] = types.GenesisValidator{
-			Address: pubKey.Address(),
-			PubKey:  pubKey,
-			Power:   1,
-			Name:    nodeDirName,
+		if config.Mode == tmcfg.ModeValidator {
+			genVals = append(genVals, types.GenesisValidator{
+				Address: pubKey.Address(),
+				PubKey:  pubKey,
+				Power:   1,
+				Name:    nodeDirName,
+			})
 		}
 	}
 
@@ -120,23 +121,28 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 		}
 	}
 
-	// Gather persistent peer addresses.
-	persistentPeers := make([]string, nValidators)
+	// Gather validator peer addresses.
+	validatorPeers := map[int]string{}
 	for i, config := range config {
+		// if config.Mode != tmcfg.ModeValidator {
+		// 	continue
+		// }
+
 		nodeKey, err := types.LoadNodeKey(config.NodeKeyFile())
 		if err != nil {
 			return fmt.Errorf("failed to load node key: %v", err)
 		}
-		persistentPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", remoteIP[i], port))
+		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", remoteIP[i], port))
 	}
 
 	// Overwrite default config.
+	nConfig := len(config)
 	for i, config := range config {
-		if nValidators > 1 {
+		if nConfig > 1 {
 			config.P2P.AddrBookStrict = false
 			config.P2P.AllowDuplicateIP = true
 			config.P2P.PersistentPeers = ""
-			for j, peer := range persistentPeers {
+			for j, peer := range validatorPeers {
 				if j != i {
 					config.P2P.PersistentPeers += "," + peer
 				}
@@ -158,7 +164,14 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 		}
 	}
 
-	fmt.Printf("Successfully initialized %v node directories\n", nValidators)
+	switch nValidators := len(genVals); nValidators {
+	case 0:
+		fmt.Printf("Successfully initialized %v follower nodes\n", nConfig)
+	case nConfig:
+		fmt.Printf("Successfully initialized %v validator nodes\n", nConfig)
+	default:
+		fmt.Printf("Successfully initialized %v validator and %v follower nodes\n", nValidators, nConfig-nValidators)
+	}
 	return nil
 }
 
