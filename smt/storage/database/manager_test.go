@@ -10,7 +10,9 @@ import (
 	"os"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand" // deterministic, repeatable randomness
 )
 
@@ -61,7 +63,6 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 	}
 	var submissions []ent // Every key/value submitted goes here, in order
 	add := func() {       // Generate a key/value pair, add to db, and record
-		println()
 		key := randSHA()   // Generate next key
 		value := randSHA() // Generate next value
 
@@ -74,30 +75,25 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 
 	// Now this is the actual test
 	for i := byte(0); i < cnt; i++ {
-
 		add()
 		for i, pair := range submissions {
 			fmt.Printf("Tested Key %x value %x\n", pair.Key, pair.Value)
-			if v, ok := dbManager.TXCache[pair.Key]; !ok {
-				t.Errorf("%d key/value pair added was not present later", i)
-			} else if !bytes.Equal(v[:], pair.Value[:]) {
-				t.Errorf("%d value was not the value expected", i)
-			}
+			require.NotNil(t, dbManager.TXCache[pair.Key], "Entry %d missing", i)
+			require.Equal(t, pair.Value[:], dbManager.TXCache[pair.Key], "Entry %d has wrong value", i)
 		}
-
+		fmt.Println()
 	}
+
 	dbManager.EndBatch()
 	for i, pair := range submissions {
 		DBValue := dbManager.DB.Get(pair.Key)
 		fmt.Printf("Final Tested Key %x value %x\n", pair.Key, pair.Value)
-		if !bytes.Equal(DBValue, pair.Value[:]) {
-			t.Errorf(
-				"entry %d failed to retrieve value; expected %x got %x",
-				i, pair.Value[:], DBValue)
-		}
+		require.NotNil(t, DBValue, "Entry %d missing", i)
+		require.Equal(t, pair.Value[:], DBValue, "Entry %d has wrong value", i)
 	}
 
 }
+
 func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	dbManager.AddBucket("a")
 	dbManager.AddBucket("b")
