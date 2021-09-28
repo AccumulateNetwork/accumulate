@@ -3,8 +3,9 @@ package state
 import (
 	"encoding/hex"
 	"encoding/json"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"testing"
+
+	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 func TestIdentityState(t *testing.T) {
