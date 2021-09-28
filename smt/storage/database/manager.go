@@ -233,7 +233,6 @@ func (m *Manager) PutInt64(Bucket, Label string, key []byte, value int64) error 
 // or on an error
 func (m *Manager) Get(Bucket, Label string, key []byte) (value []byte) {
 	Key := m.GetKey(Bucket, Label, key)
-	fmt.Printf("DB.Get generated Key %x\n", Key)
 	if v, ok := m.TXCache[Key]; ok { // If the value is in the cache, return it
 		return v
 	}
