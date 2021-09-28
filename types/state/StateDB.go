@@ -14,6 +14,8 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
+const debugStateDBWrites = false
+
 var ErrNotFound = errors.New("not found")
 
 type transactionLists struct {
@@ -186,6 +188,9 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, entry []byte) error {
+	if debugStateDBWrites {
+		fmt.Printf("AddStateEntry chainId=%X txHash=%X entry=%X\n", *chainId, *txHash, entry)
+	}
 	begin := time.Now()
 
 	sdb.TimeBucket = sdb.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
@@ -309,6 +314,7 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 func (sdb *StateDB) writeBatches() {
 	defer sdb.sync.Done()
 	sdb.mm.RootDBManager.EndBatch()
+	sdb.bpt.DBManager.EndBatch()
 }
 
 func (sdb *StateDB) BlockIndex() int64 {
@@ -368,6 +374,9 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
+	if debugStateDBWrites {
+		fmt.Printf("WriteStates height=%d hash=%X\n", blockHeight, sdb.RootHash())
+	}
 	return sdb.RootHash(), currentStateCount, nil
 }
 
