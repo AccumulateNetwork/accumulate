@@ -31,6 +31,7 @@ require (
 	github.com/tendermint/tm-db v0.6.4
 	github.com/ybbus/jsonrpc/v2 v2.1.6
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
+	golang.org/x/exp v0.0.0-20210916165020-5cb4fee858ee
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/sys v0.0.0-20210917161153-d61c044b1678 // indirect
 	golang.org/x/text v0.3.7 // indirect
