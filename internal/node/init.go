@@ -7,7 +7,6 @@ import (
 	"path"
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/networks"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -21,53 +20,45 @@ const (
 	nodeDirPerm = 0755
 )
 
-// InitForNetwork creates the initial configuration for a set of nodes for the
-// given network.
-func InitForNetwork(shardname string, index int, WorkingDir string) {
-	network := networks.Networks[index]
-
-	listenIP := make([]string, len(network.Ip))
-	config := make([]*cfg.Config, len(network.Ip))
-
-	for i := range network.Ip {
-		listenIP[i] = "tcp://0.0.0.0"
-		config[i] = new(cfg.Config)
-		config[i].Config = *tmcfg.DefaultValidatorConfig()
-	}
-
-	err := InitWithConfig(WorkingDir, shardname, network.Name, network.Port, config, network.Ip, listenIP)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize: %v\n", err)
-	}
+type InitOptions struct {
+	WorkDir    string
+	ShardName  string
+	ChainID    string
+	Port       int
+	GenesisDoc *types.GenesisDoc
+	Config     []*cfg.Config
+	RemoteIP   []string
+	ListenIP   []string
 }
 
-// InitWithConfig creates the initial configuration for a set of nodes, using
-// the given configuration. Config, remoteIP, and listenIP must all be of equal
+// Init creates the initial configuration for a set of nodes, using
+// the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.Config, remoteIP []string, listenIP []string) (err error) {
+func Init(opts InitOptions) (err error) {
 	defer func() {
 		if err != nil {
-			_ = os.RemoveAll(workDir)
+			_ = os.RemoveAll(opts.WorkDir)
 		}
 	}()
 
 	fmt.Println("Tendermint Initialize")
 
+	config := opts.Config
 	genVals := make([]types.GenesisValidator, 0, len(config))
 
 	for i, config := range config {
 		nodeDirName := fmt.Sprintf("Node%d", i)
-		nodeDir := path.Join(workDir, nodeDirName)
+		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
-		config.Instrumentation.Namespace = shardName
+		config.Instrumentation.Namespace = opts.ShardName
 
-		// config.ProxyApp = fmt.Sprintf("%s:%d", IPs[i], port)
+		// config.ProxyApp = fmt.Sprintf("%s:%d", IPs[i], opts.Port)
 		config.ProxyApp = ""
-		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port)
-		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+1)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+2)
-		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", port)
+		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port)
+		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+1)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+2)
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port)
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
@@ -79,7 +70,7 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 			return fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &chainID); err != nil {
+		if err := initFilesWithConfig(config, &opts.ChainID); err != nil {
 			return err
 		}
 
@@ -106,12 +97,15 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 	}
 
 	// Generate genesis doc from generated validators
-	genDoc := &types.GenesisDoc{
-		ChainID:         "chain-" + tmrand.Str(6),
-		GenesisTime:     tmtime.Now(),
-		InitialHeight:   0,
-		Validators:      genVals,
-		ConsensusParams: types.DefaultConsensusParams(),
+	genDoc := opts.GenesisDoc
+	if genDoc == nil {
+		genDoc = &types.GenesisDoc{
+			ChainID:         "chain-" + tmrand.Str(6),
+			GenesisTime:     tmtime.Now(),
+			InitialHeight:   0,
+			Validators:      genVals,
+			ConsensusParams: types.DefaultConsensusParams(),
+		}
 	}
 
 	// Write genesis file.
@@ -132,7 +126,7 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 		if err != nil {
 			return fmt.Errorf("failed to load node key: %v", err)
 		}
-		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", remoteIP[i], port))
+		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", opts.RemoteIP[i], opts.Port))
 	}
 
 	// Overwrite default config.
@@ -142,21 +136,23 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 			config.P2P.AddrBookStrict = false
 			config.P2P.AllowDuplicateIP = true
 			config.P2P.PersistentPeers = ""
-			for j, peer := range validatorPeers {
-				if j != i {
-					config.P2P.PersistentPeers += "," + peer
+			if config.P2P.PersistentPeers == "" {
+				for j, peer := range validatorPeers {
+					if j != i {
+						config.P2P.PersistentPeers += "," + peer
+					}
 				}
+				config.P2P.PersistentPeers = config.P2P.PersistentPeers[1:]
 			}
-			config.P2P.PersistentPeers = config.P2P.PersistentPeers[1:]
 		} else {
 			config.P2P.AddrBookStrict = true
 			config.P2P.AllowDuplicateIP = false
 		}
 		config.Moniker = fmt.Sprintf("Node%d", i)
 
-		config.Accumulate.AccRPC.ListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+3)
-		config.Accumulate.AccRouter.JSONListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+4)
-		config.Accumulate.AccRouter.RESTListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+5)
+		config.Accumulate.AccRPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+3)
+		config.Accumulate.AccRouter.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+4)
+		config.Accumulate.AccRouter.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+5)
 
 		err := cfg.Store(config)
 		if err != nil {
