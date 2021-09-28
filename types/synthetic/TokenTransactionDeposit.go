@@ -21,11 +21,11 @@ type TokenTransactionDeposit struct {
 func (tx *TokenTransactionDeposit) SetDeposit(tokenUrl *types.String, amt *big.Int) error {
 
 	if amt == nil {
-		return fmt.Errorf("No deposito amount specified")
+		return fmt.Errorf("no deposito amount specified")
 	}
 
 	if amt.Sign() <= 0 {
-		return fmt.Errorf("Deposit amount must be greater than 0")
+		return fmt.Errorf("deposit amount must be greater than 0")
 	}
 
 	tx.TokenUrl = *tokenUrl
@@ -34,9 +34,9 @@ func (tx *TokenTransactionDeposit) SetDeposit(tokenUrl *types.String, amt *big.I
 	return nil
 }
 
-func NewTokenTransactionDeposit(txid types.Bytes, from *types.String, to *types.String) *TokenTransactionDeposit {
+func NewTokenTransactionDeposit(txId types.Bytes, from *types.String, to *types.String) *TokenTransactionDeposit {
 	tx := TokenTransactionDeposit{}
-	tx.SetHeader(txid, from, to)
+	tx.SetHeader(txId, from, to)
 	return &tx
 }
 
@@ -101,8 +101,8 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 
 func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
-		if recover() != nil {
-			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		if rErr := recover(); rErr != nil {
+			err = fmt.Errorf("error marshaling Token Transaction Deposit %v", rErr)
 		}
 	}()
 
@@ -111,10 +111,12 @@ func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) (err error) {
 		return fmt.Errorf("insufficient data to unmarshal binary for TokenTransactionDeposit")
 	}
 
-	txType, data := common.BytesUint64(data) //                                 Get the url
+	//compare the type to make sure it is a synthetic tx.
+	txType, data := common.BytesUint64(data)
 
-	if txType != uint64(proto.AccInstruction_Synthetic_Token_Deposit) {
-		return fmt.Errorf("invalid transaction type, expecting TokenTx")
+	if txType != uint64(types.TxTypeSyntheticTokenDeposit) {
+		return fmt.Errorf("invalid transaction type, expecting %s, but received %s",
+			types.TxTypeSyntheticTokenDeposit.Name(), types.TxType(txType).Name())
 	}
 
 	err = tx.Header.UnmarshalBinary(data)
