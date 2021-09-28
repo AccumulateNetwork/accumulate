@@ -6,7 +6,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
@@ -15,7 +14,7 @@ type ADI struct{}
 
 func (ADI) chainType() chainTypeId { return chainTypeId(types.ChainTypeAdi) }
 
-func (ADI) instruction() proto.AccInstruction { return proto.AccInstruction_Identity_Creation }
+func (ADI) instruction() types.TxType { return types.TxTypeIdentityCreate }
 
 func (ADI) BeginBlock() {}
 
