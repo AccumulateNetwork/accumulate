@@ -3,14 +3,15 @@ package database_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"os"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"golang.org/x/exp/rand" // deterministic, repeatable randomness
 )
 
 func TestDBManager_TransactionsBadger(t *testing.T) {
@@ -43,21 +44,26 @@ func TestDBManager_TransactionsMemory(t *testing.T) {
 	dbManager.Close()
 }
 
+func randSHA() [32]byte {
+	v := rand.Uint64()
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], v)
+	return sha256.Sum256(b[:])
+}
+
 func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 	const cnt = 10 // how many test values used
 
-	seed := [32]byte{1, 2, 3, 4, 5} // A deterministic seed
-	dbManager.AddBucket("a")        // add a bucket for putting data into the db
-	type ent struct {               // Keep a history
+	dbManager.AddBucket("a") // add a bucket for putting data into the db
+	type ent struct {        // Keep a history
 		Key   [32]byte
 		Value []byte
 	}
 	var submissions []ent // Every key/value submitted goes here, in order
 	add := func() {       // Generate a key/value pair, add to db, and record
 		println()
-		key := sha256.Sum256(seed[:])  // Generate next key
-		value := sha256.Sum256(key[:]) // Generate next value
-		seed = sha256.Sum256(value[:]) // Update seed
+		key := randSHA()   // Generate next key
+		value := randSHA() // Generate next value
 
 		theKey := dbManager.GetKey("a", "", key[:])
 		submissions = append(submissions, ent{Key: theKey, Value: value[:]}) // Keep a history
