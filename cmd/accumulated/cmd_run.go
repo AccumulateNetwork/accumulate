@@ -15,7 +15,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
-	tmdb "github.com/tendermint/tm-db"
 )
 
 var cmdRun = &cobra.Command{
@@ -51,17 +50,10 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	// Load state DB
-	db, err := tmdb.NewGoLevelDB("kvstore", config.RootDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to create GoLevelDB: %v", err)
-		os.Exit(1)
-	}
-
 	dbPath := filepath.Join(config.RootDir, "valacc.db")
 	bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
-	sdb := new(state.StateDB)
-	err = sdb.Open(dbPath, bvcId[:], false, true)
+	db := new(state.StateDB)
+	err = db.Open(dbPath, bvcId[:], false, true)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to open database %s: %v", dbPath, err)
 		os.Exit(1)
@@ -78,13 +70,13 @@ func runNode(cmd *cobra.Command, args []string) {
 	}
 
 	bvc := chain.NewBlockValidator()
-	mgr, err := chain.NewManager(config, sdb, pv.Key.PrivKey.Bytes(), bvc)
+	mgr, err := chain.NewManager(config, db, pv.Key.PrivKey.Bytes(), bvc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize chain manager: %v", err)
 		os.Exit(1)
 	}
 
-	app, err := abci.NewAccumulator(db, sdb, pv, mgr)
+	app, err := abci.NewAccumulator(db, pv, mgr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize ACBI app: %v", err)
 		os.Exit(1)
