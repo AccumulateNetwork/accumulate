@@ -2,7 +2,7 @@ package synthetic
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -10,6 +10,7 @@ import (
 // If a BVC, then this is used to send information about the state of the BVC to the DC. If a DC, then
 // this sends the information about the state of the DC to the BVC's
 type AccStateSubmit struct {
+	LeaderUrl string
 	NetworkId int64
 	Height    int64
 	BptHash   types.Bytes32
@@ -18,6 +19,7 @@ type AccStateSubmit struct {
 // MarshalBinary serializes the AccStateSubmit struct
 func (s *AccStateSubmit) MarshalBinary() (data []byte, err error) {
 	data = common.Uint64Bytes(uint64(types.TxTypeBvcSubmission))
+	data = append(data, common.SliceBytes([]byte(s.LeaderUrl))...)
 	data = append(data, common.Int64Bytes(s.NetworkId)...)
 	data = append(data, common.Int64Bytes(s.Height)...)
 	data = append(data, common.SliceBytes(s.BptHash[:])...)
@@ -39,6 +41,8 @@ func (s *AccStateSubmit) UnmarshalBinary(data []byte) (err error) {
 			types.TxTypeBvcSubmission.Name())
 	}
 
+	leaderUrl, data := common.BytesSlice(data)
+	s.LeaderUrl = string(leaderUrl)
 	s.NetworkId, data = common.BytesInt64(data)
 	s.Height, data = common.BytesInt64(data)
 	bptHash, data := common.BytesSlice(data)

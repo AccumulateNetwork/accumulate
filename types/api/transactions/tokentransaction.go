@@ -2,6 +2,7 @@ package transactions
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"net/url"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -41,10 +42,10 @@ func (t *TokenSend) Equal(t2 *TokenSend) (ret bool) {
 // Marshal
 // Marshal a transaction
 func (t *TokenSend) Marshal() []byte {
-	data := common.Uint64Bytes(uint64(proto.AccInstruction_Token_Transaction)) //      The Transaction type
-	data = append(data, common.SliceBytes([]byte(t.AccountURL))...)            //      The source URL
-	data = append(data, common.Uint64Bytes(uint64(len(t.Outputs)))...)         //      The number of outputs
-	for _, v := range t.Outputs {                                              //      For each output
+	data := common.Uint64Bytes(uint64(types.TxTypeTokenTx))            //      The Transaction type
+	data = append(data, common.SliceBytes([]byte(t.AccountURL))...)    //      The source URL
+	data = append(data, common.Uint64Bytes(uint64(len(t.Outputs)))...) //      The number of outputs
+	for _, v := range t.Outputs {                                      //      For each output
 		data = append(data, common.Uint64Bytes(uint64(v.Amount))...) //           the amount sent
 		data = append(data, common.SliceBytes([]byte(v.Dest))...)    //           the destination for the amount
 	}

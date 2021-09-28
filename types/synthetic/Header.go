@@ -14,9 +14,9 @@ type Header struct {
 }
 
 // SetHeader helper function to make sure all information is set for the header
-func (h *Header) SetHeader(txid types.Bytes, from *types.String, to *types.String) {
-	if txid != nil {
-		copy(h.Txid[:], txid)
+func (h *Header) SetHeader(txId types.Bytes, from *types.String, to *types.String) {
+	if txId != nil {
+		copy(h.Txid[:], txId)
 	}
 
 	if from != nil {
@@ -30,10 +30,6 @@ func (h *Header) SetHeader(txid types.Bytes, from *types.String, to *types.Strin
 
 // Valid checks to see if the header is valid, returns error if not
 func (h *Header) Valid() error {
-
-	if len(h.Txid) != 32 {
-		return fmt.Errorf("invalid txid length")
-	}
 
 	if len(h.FromUrl) == 0 {
 		return fmt.Errorf("from URL not specified for token transaction deposit")

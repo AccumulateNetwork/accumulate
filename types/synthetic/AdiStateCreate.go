@@ -14,9 +14,9 @@ type AdiStateCreate struct {
 	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 }
 
-func NewAdiStateCreate(txid types.Bytes, from *types.String, to *types.String, keyHash *types.Bytes32) *AdiStateCreate {
+func NewAdiStateCreate(txId types.Bytes, from *types.String, to *types.String, keyHash *types.Bytes32) *AdiStateCreate {
 	ctas := &AdiStateCreate{}
-	ctas.SetHeader(txid, from, to)
+	ctas.SetHeader(txId, from, to)
 	ctas.PublicKeyHash = *keyHash
 
 	return ctas
@@ -44,9 +44,11 @@ func (a *AdiStateCreate) UnmarshalBinary(data []byte) (err error) {
 	}()
 
 	txType, data := common.BytesUint64(data)
-	if txType != uint64(proto.AccInstruction_Synthetic_Identity_Creation) {
-		return fmt.Errorf("data is not of a identity creation type")
+	if txType != uint64(types.TxTypeSyntheticIdentityCreate) {
+		return fmt.Errorf("data is not of a synthetic identity creation type, expected %s, but received %s",
+			types.TxTypeSyntheticTokenDeposit.Name(), types.TxType(txType).Name())
 	}
+
 	err = a.Header.UnmarshalBinary(data)
 	if err != nil {
 		return fmt.Errorf("insufficient data to unmarshal Adi State Create message header, %v", err)
