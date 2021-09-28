@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
@@ -12,7 +13,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/viper"
-	"github.com/tendermint/tendermint/abci/types"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/privval"
 	tmdb "github.com/tendermint/tm-db"
@@ -58,7 +58,7 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 	return nil
 }
 
-func newBVC(configfile string, workingdir string) *node.Node {
+func newBVC(t *testing.T, configfile string, workingdir string) (*config.Config, *privval.FilePV, *node.Node) {
 	cfg, err := config.LoadFile(workingdir, configfile)
 	if err != nil {
 		panic(err)
@@ -78,45 +78,50 @@ func newBVC(configfile string, workingdir string) *node.Node {
 		os.Exit(1)
 	}
 
-	node, err := node.New(cfg, func(pv *privval.FilePV) (types.Application, error) {
-		bvc := chain.NewBlockValidator()
-		mgr, err := chain.NewManager(cfg, sdb, pv.Key.PrivKey.Bytes(), bvc)
-		if err != nil {
-			return nil, err
-		}
-
-		return abci.NewAccumulator(db, sdb, pv, mgr)
-	})
+	// read private validator
+	pv, err := privval.LoadFilePV(
+		cfg.PrivValidator.KeyFile(),
+		cfg.PrivValidator.StateFile(),
+	)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
-	return node
+
+	bvc := chain.NewBlockValidator()
+	mgr, err := chain.NewManager(cfg, sdb, pv.Key.PrivKey.Bytes(), bvc)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	app, err := abci.NewAccumulator(db, sdb, pv, mgr)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	node, err := node.New(cfg, app)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cfg, pv, node
 }
 
-func startBVC(cfg string, dir string) *node.Node {
+func startBVC(t *testing.T, cfgPath string, dir string) (*config.Config, *privval.FilePV, *node.Node) {
 
 	//Select a base port to open.  Ports 43210, 43211, 43212, 43213,43214 need to be open
 	baseport := 35550
 
 	//generate the config files needed to run a test BVC
-	err := boostrapBVC(cfg, dir, baseport)
+	err := boostrapBVC(cfgPath, dir, baseport)
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
-
-	//First we need to build a Router.  The router has to be done first since the BVC connects to it.
-	//Make the router's client (i.e. Public facing GRPC client that will route the message to the correct network) and
-	//server (i.e. The GRPC that will convert public GRPC messages into messages to communicate with the BVC application)
-	viper.SetConfigFile(cfg)
-	viper.AddConfigPath(dir)
-	viper.ReadInConfig()
 
 	///Build a BVC we'll use for our test
-	node := newBVC(cfg, dir+"/Node0")
+	cfg, pv, node := newBVC(t, cfgPath, dir+"/Node0")
 	err = node.Start()
 	if err != nil {
-		panic(err)
+		t.Fatal(err)
 	}
 
-	return node
+	return cfg, pv, node
 }
