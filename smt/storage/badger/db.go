@@ -78,16 +78,18 @@ func (d *DB) Put(key [storage.KeyLength]byte, value []byte) error {
 // PutBatch
 // Write all the transactions in a given batch of pending transactions.  The
 // batch is emptied, so it can be reused.
-func (d *DB) PutBatch(TXList []storage.TX) error {
+func (d *DB) EndBatch(TXCache map[[32]byte][]byte) error {
 	txn := d.badgerDB.NewTransaction(true)
-	for _, e := range TXList {
-		if err := txn.Set(e.Key[:], e.Value); err != nil {
-			panic(err)
-		}
+	defer txn.Discard()
 
+	for k, v := range TXCache {
+		if err := txn.Set(k[:], v); err != nil {
+			return err
+		}
 	}
+
 	if err := txn.Commit(); err != nil {
-		panic(err)
+		return err
 	}
 
 	return nil
