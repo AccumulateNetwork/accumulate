@@ -4,10 +4,9 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/AccumulateNetwork/SMT/common"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
 // transactionHeader is the structure that stores the basic information needed

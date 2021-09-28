@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/SMT/common"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
 
 // ED25519Sig
@@ -18,12 +18,34 @@ type ED25519Sig struct {
 	Signature []byte // a set of 64 byte signatures
 }
 
+var _ Signature = (*ED25519Sig)(nil) // Verify at compile time that ED25519Sig implements the Signature interface
+
+// GetNonce
+// Returns the nonce for this signature.  All signatures use a nonce, and this
+// is done to avoid replay attacks.
+func (e *ED25519Sig) GetNonce() uint64 {
+	return e.Nonce
+}
+
+// GetPublicKey
+// Return the Public Key used by this signature
+func (e *ED25519Sig) GetPublicKey() []byte {
+	return e.PublicKey
+}
+
+// GetSignature
+// Returns the signature used to sign the hash of some transaction
+func (e *ED25519Sig) GetSignature() []byte {
+	return e.Signature
+}
+
 // Equal
 // Return true if the given Signature has the same Nonce, PublicKey,
 // and Signature
-func (e *ED25519Sig) Equal(e2 *ED25519Sig) bool {
-	return bytes.Equal(e.PublicKey, e2.PublicKey) && //  the publickey is the same and
-		bytes.Equal(e.Signature, e2.Signature) //        the signature is the same
+func (e *ED25519Sig) Equal(e2 Signature) bool {
+	return e.Nonce == e2.GetNonce() &&
+		bytes.Equal(e.PublicKey, e2.GetPublicKey()) && //  the publickey is the same and
+		bytes.Equal(e.Signature, e2.GetSignature()) //        the signature is the same
 }
 
 // Sign
@@ -48,7 +70,7 @@ func (e *ED25519Sig) Sign(nonce uint64, privateKey []byte, hash []byte) error {
 // situations where we need to see if the sender has permission to sign
 // the transaction.
 func (e *ED25519Sig) CanVerify(keyHash []byte) bool {
-	if keyHash == nil { //if no key hash is provided assume the caller
+	if keyHash == nil { //if no key hash is provided assume the caller has no specification to compare
 		return true
 	}
 	pubKeyHash := sha256.Sum256(e.PublicKey)
