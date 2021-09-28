@@ -39,28 +39,30 @@ func TestDBManager_TransactionsMemory(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	writeAndReadBatch(t, dbManager)
-	writeAndRead(t, dbManager)
+	//writeAndRead(t, dbManager)
 	dbManager.Close()
 }
 
 func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
-	const cnt = 2 // how many test values used
+	const cnt = 10 // how many test values used
 
-	seed := [32]byte{1, 2, 3, 4} // A deterministic seed
-	dbManager.AddBucket("a")     // add a bucket for putting data into the db
-	type ent struct {            // Keep a history
+	seed := [32]byte{1, 2, 3, 4, 5} // A deterministic seed
+	dbManager.AddBucket("a")        // add a bucket for putting data into the db
+	type ent struct {               // Keep a history
 		Key   [32]byte
 		Value []byte
 	}
 	var submissions []ent // Every key/value submitted goes here, in order
 	add := func() {       // Generate a key/value pair, add to db, and record
 		println()
-		key := sha256.Sum256(seed[:])                                     // Generate next key
-		value := sha256.Sum256(key[:])                                    // Generate next value
-		seed = sha256.Sum256(value[:])                                    // Update seed
-		submissions = append(submissions, ent{Key: key, Value: value[:]}) // Keep a history
+		key := sha256.Sum256(seed[:])  // Generate next key
+		value := sha256.Sum256(key[:]) // Generate next value
+		seed = sha256.Sum256(value[:]) // Update seed
+
 		theKey := dbManager.GetKey("a", "", key[:])
-		fmt.Printf("Generated Key %x\n", theKey)
+		submissions = append(submissions, ent{Key: theKey, Value: value[:]}) // Keep a history
+
+		fmt.Printf("Generated Key %x value %x\n", theKey, value)
 		dbManager.PutBatch("a", "", key[:], value[:]) // Put into the database
 	}
 
@@ -69,9 +71,8 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 
 		add()
 		for i, pair := range submissions {
-			theKey := dbManager.GetKey("a", "", pair.Key[:])
-			fmt.Printf("Tested Key %x\n", theKey)
-			if v, ok := dbManager.TXCache[theKey]; !ok {
+			fmt.Printf("Tested Key %x value %x\n", pair.Key, pair.Value)
+			if v, ok := dbManager.TXCache[pair.Key]; !ok {
 				t.Errorf("%d key/value pair added was not present later", i)
 			} else if !bytes.Equal(v[:], pair.Value[:]) {
 				t.Errorf("%d value was not the value expected", i)
@@ -81,7 +82,8 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 	}
 	dbManager.EndBatch()
 	for i, pair := range submissions {
-		DBValue := dbManager.Get("a", "", pair.Key[:])
+		DBValue := dbManager.DB.Get(pair.Key)
+		fmt.Printf("Final Tested Key %x value %x\n", pair.Key, pair.Value)
 		if !bytes.Equal(DBValue, pair.Value[:]) {
 			t.Errorf(
 				"entry %d failed to retrieve value; expected %x got %x",
