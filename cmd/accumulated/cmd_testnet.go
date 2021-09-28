@@ -75,7 +75,15 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	err := node.InitWithConfig(flagMain.WorkDir, "LocalhostTestNet", "LocalhostTestNet", flagTestNet.BasePort, config, IPs, IPs)
+	err := node.Init(node.InitOptions{
+		WorkDir:   flagMain.WorkDir,
+		ShardName: "LocalhostTestNet",
+		ChainID:   "LocalhostTestNet",
+		Port:      flagTestNet.BasePort,
+		Config:    config,
+		RemoteIP:  IPs,
+		ListenIP:  IPs,
+	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
