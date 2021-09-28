@@ -193,11 +193,11 @@ func (m *Manager) GetKey(Bucket, Label string, key []byte) (DBKey [storage.KeyLe
 		panic(fmt.Sprintf("label %s undefined or invalid", Label)) //        Panic if not.
 	}
 	DBKey = sha256.Sum256(append(key, m.AppID...)) // To get a fixed length key, hash the key and appID together
-	//                                               A hash is very secure so losing two bytes won't hurt anything
-	DBKey[0] = m.Buckets[Bucket] //                  Replace the first byte with the bucket index
-	DBKey[1] = 0                 //                  Assume no label (0 -- means no label
-	if len(Label) > 0 {          //                  But if a label is specified, (zero labels not allowed) then
-		DBKey[1] = m.Labels[Label] //                   set the label's byte value.
+	//                                                  A hash is very secure so losing two bytes won't hurt anything
+	DBKey[30] = m.Buckets[Bucket] //                    Replace the first byte with the bucket index
+	DBKey[31] = 0                 //                    Assume no label (0 -- means no label
+	if len(Label) > 0 {           //                    But if a label is specified, (zero labels not allowed) then
+		DBKey[31] = m.Labels[Label] //                   set the label's byte value.
 	}
 
 	return DBKey
@@ -276,7 +276,7 @@ func (m *Manager) GetIndex(element []byte) int64 {
 // written to the database together.
 func (m *Manager) PutBatch(Bucket, Label string, key []byte, value []byte) {
 	theKey := m.GetKey(Bucket, Label, key) // Put a key value pair into the batch list
-	fmt.Printf("PutBatch Key %x\n", theKey)
+	fmt.Printf("PutBatch Key %x Value %x\n", theKey, value)
 	m.TXCache[theKey] = value // Return any error that might occur
 }
 
