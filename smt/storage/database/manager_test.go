@@ -31,7 +31,7 @@ func TestDBManager_TransactionsBadger(t *testing.T) {
 	if err := dbManager.Init("badger", dir); err != nil {
 		t.Error(err)
 	} else {
-		//	writeAndRead(t, dbManager)
+		writeAndRead(t, dbManager)
 		writeAndReadBatch(t, dbManager)
 
 	}
@@ -42,7 +42,7 @@ func TestDBManager_TransactionsMemory(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	writeAndReadBatch(t, dbManager)
-	//writeAndRead(t, dbManager)
+	writeAndRead(t, dbManager)
 	dbManager.Close()
 }
 
