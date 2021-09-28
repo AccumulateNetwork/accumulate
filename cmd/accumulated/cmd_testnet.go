@@ -18,16 +18,20 @@ var cmdTestNet = &cobra.Command{
 
 var flagTestNet struct {
 	NumValidators int
+	NumFollowers  int
 	BasePort      int
 	BaseIP        string
+	NoEmptyBlocks bool
 }
 
 func init() {
 	cmdMain.AddCommand(cmdTestNet)
 
-	cmdTestNet.Flags().IntVarP(&flagTestNet.NumValidators, "validators", "v", 3, "Number of validator nodes to configure")
+	cmdTestNet.Flags().IntVarP(&flagTestNet.NumValidators, "validators", "v", 2, "Number of validator nodes to configure")
+	cmdTestNet.Flags().IntVarP(&flagTestNet.NumFollowers, "followers", "f", 1, "Number of follower nodes to configure")
 	cmdTestNet.Flags().IntVar(&flagTestNet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdTestNet.Flags().StringVar(&flagTestNet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
+	cmdTestNet.Flags().BoolVar(&flagTestNet.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 }
 
 func initTestNet(cmd *cobra.Command, args []string) {
@@ -49,7 +53,10 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	IPs := make([]string, flagTestNet.NumValidators)
+	n := flagTestNet.NumValidators + flagTestNet.NumFollowers
+	IPs := make([]string, n)
+	config := make([]*cfg.Config, n)
+
 	for i := range IPs {
 		ip := make(net.IP, len(baseIP))
 		copy(ip, baseIP)
@@ -57,9 +64,15 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		IPs[i] = fmt.Sprintf("tcp://%v", ip)
 	}
 
-	config := make([]*cfg.Config, flagTestNet.NumValidators)
 	for i := range config {
-		config[i] = cfg.Default()
+		if i < flagTestNet.NumValidators {
+			config[i] = cfg.DefaultValidator()
+		} else {
+			config[i] = cfg.Default()
+		}
+		if flagTestNet.NoEmptyBlocks {
+			config[i].Consensus.CreateEmptyBlocks = false
+		}
 	}
 
 	err := node.InitWithConfig(flagMain.WorkDir, "LocalhostTestNet", "LocalhostTestNet", flagTestNet.BasePort, config, IPs, IPs)
