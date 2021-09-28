@@ -3,16 +3,13 @@ package node
 import (
 	"context"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	abci "github.com/tendermint/tendermint/abci/types"
-	tmconfig "github.com/tendermint/tendermint/config"
-	tmflags "github.com/tendermint/tendermint/libs/cli/flags"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
-	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 	"github.com/tendermint/tendermint/rpc/client/local"
@@ -26,54 +23,26 @@ type AppFactory func(*privval.FilePV) (abci.Application, error)
 
 // Node wraps a Tendermint node.
 type Node struct {
-	*nm.Node
+	service.Service
 	config      *config.Config
-	PV          *privval.FilePV
 	APIClient   coregrpc.BroadcastAPIClient
 	LocalClient *local.Local
 }
 
 // New initializes a Tendermint node for the given ABCI application.
-func New(config *config.Config, appFactory AppFactory) (*Node, error) {
+func New(config *config.Config, app abci.Application) (*Node, error) {
 	node := new(Node)
 	node.config = config
 
 	// create logger
 	var err error
-	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
-	logger, err = tmflags.ParseLogLevel(config.LogLevel, logger, tmconfig.DefaultLogLevel)
+	logger, err := log.NewDefaultLogger(config.LogFormat, config.LogLevel, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse log level: %w", err)
 	}
 
-	// read private validator
-	node.PV = privval.LoadFilePV(
-		config.PrivValidatorKeyFile(),
-		config.PrivValidatorStateFile(),
-	)
-
-	// read node key
-	nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
-	if err != nil {
-		return nil, fmt.Errorf("failed to load node's key: %w", err)
-	}
-
-	// initialize application
-	app, err := appFactory(node.PV)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize application: %w", err)
-	}
-
 	// create node
-	node.Node, err = nm.NewNode(
-		&config.Config,
-		node.PV,
-		nodeKey,
-		proxy.NewLocalClientCreator(app),
-		nm.DefaultGenesisDocProviderFunc(&config.Config),
-		nm.DefaultDBProvider,
-		nm.DefaultMetricsProvider(config.Instrumentation),
-		logger)
+	node.Service, err = nm.New(&config.Config, logger, proxy.NewLocalClientCreator(app), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)
 	}
@@ -83,14 +52,22 @@ func New(config *config.Config, appFactory AppFactory) (*Node, error) {
 
 // Start starts the Tendermint node.
 func (n *Node) Start() error {
-	err := n.Node.Start()
+	err := n.Service.Start()
 	if err != nil {
 		return err
 	}
 
-	n.LocalClient = local.New(n.Node)
-	n.APIClient = n.waitForGRPC()
+	localns, ok := n.Service.(local.NodeService)
+	if !ok {
+		return fmt.Errorf("node cannot be used as a local node service")
+	}
 
+	n.LocalClient, err = local.New(localns)
+	if err != nil {
+		return fmt.Errorf("failed to create local client: %w", err)
+	}
+
+	n.APIClient = n.waitForGRPC()
 	return n.waitForRPC()
 }
 
