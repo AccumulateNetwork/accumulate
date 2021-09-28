@@ -168,14 +168,14 @@ func (app *Directory) DeliverTx(req abci.RequestDeliverTx) (response abci.Respon
 			Type: "bvc",
 			Attributes: []abci.EventAttribute{
 				//want to be able to search by BVC chain.
-				{Key: []byte("chain"), Value: bvcreq.GetHeader().GetBvcMasterChainDDII(), Index: true},
+				{Key: "chain", Value: string(bvcreq.GetHeader().GetBvcMasterChainDDII()), Index: true},
 				//want to be able to search by height, but probably should be AND'ed with the chain
-				{Key: []byte("height"), Value: entry_slices[BVCHeight_type], Index: true},
+				{Key: "height", Value: string(entry_slices[BVCHeight_type]), Index: true},
 				//want to be able to search by ddii (optional AND'ed with chain or height)
-				{Key: []byte("ddii"), Value: entry_slices[DDII_type], Index: true},
+				{Key: "ddii", Value: string(entry_slices[DDII_type]), Index: true},
 				//don't care about searching by bvc timestamp or valacc hash
-				{Key: []byte("timestamp"), Value: entry_slices[Timestamp_type], Index: false},
-				{Key: []byte("mdroot"), Value: entry_slices[MDRoot_type], Index: false},
+				{Key: "timestamp", Value: string(entry_slices[Timestamp_type]), Index: false},
+				{Key: "mdroot", Value: string(entry_slices[MDRoot_type]), Index: false},
 			},
 		},
 	}
