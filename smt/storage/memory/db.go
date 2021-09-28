@@ -11,11 +11,9 @@ type DB struct {
 	mutex   sync.Mutex
 }
 
-func (m *DB) PutBatch(txList []storage.TX) error {
-	for _, v := range txList {
-		var key [32]byte
-		copy(key[:], v.Key)
-		_ = m.Put(key, v.Value)
+func (m *DB) EndBatch(txCache map[[storage.KeyLength]byte][]byte) error {
+	for k, v := range txCache {
+		_ = m.Put(k, v)
 	}
 	return nil
 }

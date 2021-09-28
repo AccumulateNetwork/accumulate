@@ -2,6 +2,7 @@ package database_test
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -27,7 +28,9 @@ func TestDBManager_TransactionsBadger(t *testing.T) {
 	if err := dbManager.Init("badger", dir); err != nil {
 		t.Error(err)
 	} else {
-		writeAndRead(t, dbManager)
+		//	writeAndRead(t, dbManager)
+		writeAndReadBatch(t, dbManager)
+
 	}
 }
 
@@ -35,10 +38,58 @@ func TestDBManager_TransactionsMemory(t *testing.T) {
 
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
+	writeAndReadBatch(t, dbManager)
 	writeAndRead(t, dbManager)
 	dbManager.Close()
 }
 
+func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
+	const cnt = 2 // how many test values used
+
+	seed := [32]byte{1, 2, 3, 4} // A deterministic seed
+	dbManager.AddBucket("a")     // add a bucket for putting data into the db
+	type ent struct {            // Keep a history
+		Key   [32]byte
+		Value []byte
+	}
+	var submissions []ent // Every key/value submitted goes here, in order
+	add := func() {       // Generate a key/value pair, add to db, and record
+		println()
+		key := sha256.Sum256(seed[:])                                     // Generate next key
+		value := sha256.Sum256(key[:])                                    // Generate next value
+		seed = sha256.Sum256(value[:])                                    // Update seed
+		submissions = append(submissions, ent{Key: key, Value: value[:]}) // Keep a history
+		theKey := dbManager.GetKey("a", "", key[:])
+		fmt.Printf("Generated Key %x\n", theKey)
+		dbManager.PutBatch("a", "", key[:], value[:]) // Put into the database
+	}
+
+	// Now this is the actual test
+	for i := byte(0); i < cnt; i++ {
+
+		add()
+		for i, pair := range submissions {
+			theKey := dbManager.GetKey("a", "", pair.Key[:])
+			fmt.Printf("Tested Key %x\n", theKey)
+			if v, ok := dbManager.TXCache[theKey]; !ok {
+				t.Errorf("%d key/value pair added was not present later", i)
+			} else if !bytes.Equal(v[:], pair.Value[:]) {
+				t.Errorf("%d value was not the value expected", i)
+			}
+		}
+
+	}
+	dbManager.EndBatch()
+	for i, pair := range submissions {
+		DBValue := dbManager.Get("a", "", pair.Key[:])
+		if !bytes.Equal(DBValue, pair.Value[:]) {
+			t.Errorf(
+				"entry %d failed to retrieve value; expected %x got %x",
+				i, pair.Value[:], DBValue)
+		}
+	}
+
+}
 func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	dbManager.AddBucket("a")
 	dbManager.AddBucket("b")
@@ -62,10 +113,9 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	}
 
 	for i := 0; i < 10; i++ {
-		if err := dbManager.PutBatch("a", "", common.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
-			t.Error(err)
-		}
+		dbManager.PutBatch("a", "", common.Int64Bytes(int64(i)), []byte(fmt.Sprint(i)))
 	}
+
 	dbManager.EndBatch()
 
 	// Sort that I can read all thousand entries
