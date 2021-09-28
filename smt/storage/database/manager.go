@@ -276,8 +276,7 @@ func (m *Manager) GetIndex(element []byte) int64 {
 // written to the database together.
 func (m *Manager) PutBatch(Bucket, Label string, key []byte, value []byte) {
 	theKey := m.GetKey(Bucket, Label, key) // Put a key value pair into the batch list
-	fmt.Printf("PutBatch Key %x Value %x\n", theKey, value)
-	m.TXCache[theKey] = value // Return any error that might occur
+	m.TXCache[theKey] = value              // Return any error that might occur
 }
 
 // EndBatch

@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"os"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/rand" // deterministic, repeatable randomness
 )
 
 func TestDBManager_TransactionsBadger(t *testing.T) {
@@ -69,7 +69,6 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 		theKey := dbManager.GetKey("a", "", key[:])
 		submissions = append(submissions, ent{Key: theKey, Value: value[:]}) // Keep a history
 
-		fmt.Printf("Generated Key %x value %x\n", theKey, value)
 		dbManager.PutBatch("a", "", key[:], value[:]) // Put into the database
 	}
 
@@ -77,17 +76,14 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 	for i := byte(0); i < cnt; i++ {
 		add()
 		for i, pair := range submissions {
-			fmt.Printf("Tested Key %x value %x\n", pair.Key, pair.Value)
 			require.NotNil(t, dbManager.TXCache[pair.Key], "Entry %d missing", i)
 			require.Equal(t, pair.Value[:], dbManager.TXCache[pair.Key], "Entry %d has wrong value", i)
 		}
-		fmt.Println()
 	}
 
 	dbManager.EndBatch()
 	for i, pair := range submissions {
 		DBValue := dbManager.DB.Get(pair.Key)
-		fmt.Printf("Final Tested Key %x value %x\n", pair.Key, pair.Value)
 		require.NotNil(t, DBValue, "Entry %d missing", i)
 		require.Equal(t, pair.Value[:], DBValue, "Entry %d has wrong value", i)
 	}
