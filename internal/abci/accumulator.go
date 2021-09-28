@@ -77,11 +77,6 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	}
 }
 
-// SetOption implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) SetOption(req abci.RequestSetOption) abci.ResponseSetOption {
-	return app.BaseApplication.SetOption(req)
-}
-
 // Query implements github.com/tendermint/tendermint/abci/types.Application.
 //
 // Exposed as Tendermint RCP /abci_query.
