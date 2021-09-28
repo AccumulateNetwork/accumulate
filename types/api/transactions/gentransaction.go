@@ -5,15 +5,22 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
-
-	"github.com/AccumulateNetwork/SMT/common"
 )
 
 // GenTransaction
 // Every transaction that goes through the Accumulate protocol is packaged
 // as a GenTransaction.  This means we implement this once, and most of the
 // transaction validation and processing is done in one and only one way.
+//
+// Note we Hash the SigInfo (that makes every transaction unique) and
+// we hash the Transaction (which implements the action or data) then
+// we hash them together to create the Transaction Hash.
+//
+// Since all transactions need the SigInfo, no point in implementing it
+// over and over.  But a range of transactions are needed, this the
+// Transaction.
 type GenTransaction struct {
 	Routing uint64 //            first 8 bytes of hash of identity [NOT marshaled]
 	ChainID []byte //            hash of chain URL [NOT marshaled]
@@ -45,42 +52,43 @@ func (t *GenTransaction) Equal(t2 *GenTransaction) bool {
 // compute the transaction hash from the elements of the GenTransaction.
 // This is used to populate the TxHash field.
 func (t *GenTransaction) TransactionHash() []byte {
-	if t.TxHash != nil { //                  Check if I have the hash already
-		return t.TxHash //                   Return it if I do
+	if t.TxHash != nil { //                                Check if I have the hash already
+		return t.TxHash //                                  Return it if I do
 	} //
-	data, err := t.SigInfo.Marshal() //      Get the SigInfo (all the indexes to signatures)
-	if err != nil {                  //      On an error, return a nil
+	data, err := t.SigInfo.Marshal() //                    Get the SigInfo (all the indexes to signatures)
+	if err != nil {                  //                    On an error, return a nil
 		return nil //
 	} //
-	data = append(data, t.Transaction...) // Add the transaction to the SigInfo
-	txh := sha256.Sum256(data)            // Take the hash
-	t.TxHash = txh[:]                     // cache it
-	return txh[:]                         // And return it
+	sHash := sha256.Sum256(data)                        // Compute the SigHash
+	tHash := sha256.Sum256(t.Transaction)               // Compute the transaction Hash
+	txh := sha256.Sum256(append(sHash[:], tHash[:]...)) // Take hash of SigHash on left and hash of sub tx on right
+	t.TxHash = txh[:]                                   // cache it
+	return txh[:]                                       // And return it
 }
 
 // UnMarshal
 // Create the binary representation of the GenTransaction
 func (t *GenTransaction) Marshal() (data []byte, err error) {
-	defer func() {
-		if err := recover(); err != nil {
-			err = fmt.Errorf("error marshaling GenTransaction %v", err)
-		}
-	}()
-	if err := t.SetRoutingChainID(); err != nil {
-		return nil, err
-	}
-	sLen := uint64(len(t.Signature))
-	if sLen < 1 || sLen > 100 {
-		panic("must have 1 to 100 signatures")
-	}
-	data = common.Uint64Bytes(sLen)
-	for _, v := range t.Signature {
-		if sig, err := v.Marshal(); err == nil {
-			data = append(data, sig...)
-		} else {
-			return data, err
-		}
-	}
+	defer func() { //                                                     If any sort of error occurs,
+		if err := recover(); err != nil { //                               then marshalling fails, and report
+			err = fmt.Errorf("error marshaling GenTransaction %v", err) //  the error.
+		} //
+	}() //
+	if err := t.SetRoutingChainID(); err != nil { //                        Make sure routing and chainID are set
+		return nil, err //                                                   Not clear if this is necessary
+	} //
+	sLen := uint64(len(t.Signature)) //                                     Marshal the signatures, where
+	if sLen < 1 || sLen > 100 {      //                                     we must have at least one of them.
+		panic("must have 1 to 100 signatures") //                            Otherwise we don't have a nonce to
+	} //                                                                    make the translation unique
+	data = common.Uint64Bytes(sLen) //                                      marshal the length, then each
+	for _, v := range t.Signature { //                                      signature struct.
+		if sig, err := v.Marshal(); err == nil { //
+			data = append(data, sig...) //
+		} else { //
+			return data, err //
+		} //
+	} //
 	var si []byte                 // Someplace to marshal the SigInfo
 	si, err = t.SigInfo.Marshal() // Marshal SigInfo
 	if err != nil {               // If we have an error, report it.

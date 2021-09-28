@@ -2,19 +2,15 @@ package router
 
 import (
 	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"math/big"
+	"testing"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/Factom-Asset-Tokens/factom/fat"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-
-	//"crypto/ed25519"
-	"encoding/json"
-	"fmt"
-
-	//"github.com/AccumulateNetwork/accumulated/blockchain/validator/types"
-	"math/big"
-	"testing"
 )
 
 //

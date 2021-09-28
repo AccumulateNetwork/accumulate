@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/AccumulateNetwork/SMT/common"
-
-	"github.com/AccumulateNetwork/accumulated/types/proto"
-
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 type TokenTransactionDeposit struct {
@@ -127,11 +125,11 @@ func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) (err error) {
 	i := tx.Header.Size()
 
 	if length < i {
-		fmt.Errorf("unable to unmarshal binary after token transaction deposit header")
+		return fmt.Errorf("unable to unmarshal binary after token transaction deposit header")
 	}
 	l := i + int(data[i]) + 1
 	if length < l {
-		fmt.Errorf("unable to unmarshal binary for deposit amount")
+		return fmt.Errorf("unable to unmarshal binary for deposit amount")
 	}
 
 	tx.DepositAmount.SetBytes(data[i+1 : l])

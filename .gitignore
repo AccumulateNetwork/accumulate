@@ -8,6 +8,8 @@
 # Test binary, built with `go test -c`
 *.test
 
+/.nodes
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
@@ -16,7 +18,7 @@
 # Special build files
 engine/overrideversion.go
 # Executable
-accumulated*
+/accumulated
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
 *.a
@@ -25,6 +27,7 @@ accumulated*
 *~
 *.kate-swp
 *.orig
+*.bak
 debug
 *.txt
 *.log

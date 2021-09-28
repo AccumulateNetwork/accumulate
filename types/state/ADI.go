@@ -59,7 +59,7 @@ func (is *AdiState) GetType() uint64 {
 func (is *AdiState) VerifyKey(key []byte) bool {
 	//check if key is a valid public key for identity
 	if key[0] == is.KeyData[0] {
-		if bytes.Compare(key, is.KeyData) == 0 {
+		if bytes.Equal(key, is.KeyData) {
 			return true
 		}
 	}
@@ -67,7 +67,7 @@ func (is *AdiState) VerifyKey(key []byte) bool {
 	//check if key is a valid sha256(key) for identity
 	kh := sha256.Sum256(key)
 	if kh[0] == is.KeyData[0] {
-		if bytes.Compare(key, kh[:]) == 0 {
+		if bytes.Equal(key, kh[:]) {
 			return true
 		}
 	}
@@ -75,7 +75,7 @@ func (is *AdiState) VerifyKey(key []byte) bool {
 	//check if key is a valid sha256d(key) for identity
 	kh = sha256.Sum256(kh[:])
 	if kh[0] == is.KeyData[0] {
-		if bytes.Compare(key, kh[:]) == 0 {
+		if bytes.Equal(key, kh[:]) {
 			return true
 		}
 	}
