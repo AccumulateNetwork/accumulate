@@ -1,9 +1,10 @@
 package response
 
 import (
+	"math/big"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
-	"math/big"
 )
 
 type TokenAccount struct {
