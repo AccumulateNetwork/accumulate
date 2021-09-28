@@ -89,3 +89,8 @@ func (t TxType) Name() string {
 func (t *TxType) SetType(s string) {
 	*t = TxTypeValue[s]
 }
+
+//AsUint64 casts as a uint64
+func (t TxType) AsUint64() uint64 {
+	return uint64(t)
+}
