@@ -12,8 +12,8 @@ func TestTokenSend(t *testing.T) {
 	nts2data := nts2.Marshal()
 	nts1b := new(TokenSend)
 	nts2b := new(TokenSend)
-	_ = nts1b.Unmarshal(nts1data)
-	_ = nts2b.Unmarshal(nts2data)
+	_, _ = nts1b.Unmarshal(nts1data)
+	_, _ = nts2b.Unmarshal(nts2data)
 
 	if !nts1.Equal(nts1b) || nts1.Equal(nts2b) {
 		t.Error("check expected relationship between nts1 and nts2")
