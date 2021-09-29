@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sort"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 var Seed = sha256.Sum256([]byte{1, 2, 3})
@@ -126,4 +128,21 @@ func TestDistribution(t *testing.T) {
 		(float64(routes[0])-float64(routes[bvcs-1]))/
 			float64(routes[bvcs-1])*100)
 
+}
+
+func TestGenTransaction_Marshal(t *testing.T) {
+	t.Run("Returns error on failure", func(t *testing.T) {
+		tx := new(GenTransaction)
+		b, err := tx.Marshal()
+		require.Nil(t, b)
+		require.Error(t, err)
+	})
+}
+
+func TestGenTransaction_UnMarshal(t *testing.T) {
+	t.Run("Returns error on failure", func(t *testing.T) {
+		tx := new(GenTransaction)
+		_, err := tx.UnMarshal([]byte{})
+		require.Error(t, err)
+	})
 }
