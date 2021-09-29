@@ -4,17 +4,16 @@ import (
 	"bytes"
 	_ "crypto/sha256"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	statetypes "github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/version"
 )
 
@@ -24,7 +23,7 @@ type Accumulator struct {
 	abci.BaseApplication
 
 	chainId [32]byte
-	db      *statetypes.StateDB
+	state   State
 	address crypto.Address
 	txct    int64
 	timer   time.Time
@@ -32,13 +31,12 @@ type Accumulator struct {
 }
 
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db *statetypes.StateDB, privval *privval.FilePV, chain Chain) (*Accumulator, error) {
+func NewAccumulator(db State, address crypto.Address, chain Chain) (*Accumulator, error) {
 	app := &Accumulator{
-		db:    db,
+		state: db,
 		chain: chain,
 	}
 
-	address := privval.Key.PubKey.Address()
 	app.address = make([]byte, len(address))
 	copy(app.address, address)
 
@@ -58,8 +56,8 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
-		LastBlockHeight:  app.db.BlockIndex(),
-		LastBlockAppHash: app.db.EnsureRootHash(),
+		LastBlockHeight:  app.state.BlockIndex(),
+		LastBlockAppHash: app.state.EnsureRootHash(),
 	}
 }
 
