@@ -56,8 +56,8 @@ func (m *Manager) LoadNode(node *Node) *Node {
 // FlushNode
 // Flushes the Byte Block to disk
 func (m *Manager) FlushNode(node *Node) { //   Flush a Byte Block
-	data := m.Bpt.MarshalByteBlock(node)                     //
-	_ = m.DBManager.PutBatch("BPT", "", node.BBKey[:], data) //
+	data := m.Bpt.MarshalByteBlock(node)                 //
+	m.DBManager.PutBatch("BPT", "", node.BBKey[:], data) //
 	if node.Height == 0 {
 		data = m.Bpt.Marshal()
 		m.DBManager.PutBatch("BPT", "Root", []byte{}, data)
