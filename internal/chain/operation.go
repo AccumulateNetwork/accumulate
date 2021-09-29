@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"

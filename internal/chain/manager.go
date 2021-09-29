@@ -4,9 +4,10 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"sync"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
