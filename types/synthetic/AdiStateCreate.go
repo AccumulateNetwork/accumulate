@@ -6,7 +6,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 type AdiStateCreate struct {
@@ -25,7 +24,7 @@ func NewAdiStateCreate(txId types.Bytes, from *types.String, to *types.String, k
 func (a *AdiStateCreate) MarshalBinary() ([]byte, error) {
 	var buf bytes.Buffer
 
-	buf.Write(common.Uint64Bytes(uint64(proto.AccInstruction_Synthetic_Identity_Creation)))
+	buf.Write(common.Uint64Bytes(types.TxTypeSyntheticIdentityCreate.AsUint64()))
 	data, err := a.Header.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal header for Adi State Create message, %v", err)
@@ -44,7 +43,7 @@ func (a *AdiStateCreate) UnmarshalBinary(data []byte) (err error) {
 	}()
 
 	txType, data := common.BytesUint64(data)
-	if txType != uint64(types.TxTypeSyntheticIdentityCreate) {
+	if txType != types.TxTypeSyntheticIdentityCreate.AsUint64() {
 		return fmt.Errorf("data is not of a synthetic identity creation type, expected %s, but received %s",
 			types.TxTypeSyntheticTokenDeposit.Name(), types.TxType(txType).Name())
 	}

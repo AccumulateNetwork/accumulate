@@ -8,15 +8,14 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
 type TokenTx struct{}
 
-func (TokenTx) chainType() chainTypeId            { return chainTypeId(types.ChainTypeToken) }
-func (TokenTx) instruction() proto.AccInstruction { return proto.AccInstruction_Token_Transaction }
+func (TokenTx) chainType() types.ChainType { return types.ChainTypeToken }
+func (TokenTx) instruction() types.TxType  { return types.TxTypeTokenTx }
 
 func (TokenTx) BeginBlock() {}
 
