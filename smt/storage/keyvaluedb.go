@@ -9,10 +9,5 @@ type KeyValueDB interface {
 	InitDB(filepath string) error                // Sets up the database, returns error if it fails
 	Get(key [KeyLength]byte) (value []byte)      // Get key from database, on not found, error returns nil
 	Put(key [KeyLength]byte, value []byte) error // Put the value in the database, throws an error if fails
-	PutBatch(TXs []TX) error                     // End and commit a batch of transactions
-}
-type TX struct {
-	Key   []byte
-	Value []byte
-	Meta  byte
+	EndBatch(map[[KeyLength]byte][]byte) error   // End and commit a batch of transactions
 }

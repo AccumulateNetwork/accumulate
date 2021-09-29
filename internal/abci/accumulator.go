@@ -16,7 +16,6 @@ import (
 	"github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/version"
-	dbm "github.com/tendermint/tm-db"
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -24,30 +23,19 @@ import (
 type Accumulator struct {
 	abci.BaseApplication
 
-	retainBlocks int64
-	chainId      [32]byte
-	state        state
-	sdb          *statetypes.StateDB
-	address      crypto.Address
-	txct         int64
-	timer        time.Time
-	chain        Chain
+	chainId [32]byte
+	db      *statetypes.StateDB
+	address crypto.Address
+	txct    int64
+	timer   time.Time
+	chain   Chain
 }
 
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db dbm.DB, sdb *statetypes.StateDB, privval *privval.FilePV, chain Chain) (*Accumulator, error) {
-	state, err := loadState(db)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load state: %v", err)
-	}
-
+func NewAccumulator(db *statetypes.StateDB, privval *privval.FilePV, chain Chain) (*Accumulator, error) {
 	app := &Accumulator{
-		state: state,
-		sdb:   sdb,
+		db:    db,
 		chain: chain,
-
-		//only retain current block, we will manage our own states
-		retainBlocks: 1,
 	}
 
 	address := privval.Key.PubKey.Address()
@@ -68,17 +56,11 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	}
 
 	return abci.ResponseInfo{
-		Data:             fmt.Sprintf("{\"size\":%v}", app.state.Size),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
-		LastBlockHeight:  app.sdb.BlockIndex(),
-		LastBlockAppHash: app.sdb.EnsureRootHash(),
+		LastBlockHeight:  app.db.BlockIndex(),
+		LastBlockAppHash: app.db.EnsureRootHash(),
 	}
-}
-
-// SetOption implements github.com/tendermint/tendermint/abci/types.Application.
-func (app *Accumulator) SetOption(req abci.RequestSetOption) abci.ResponseSetOption {
-	return app.BaseApplication.SetOption(req)
 }
 
 // Query implements github.com/tendermint/tendermint/abci/types.Application.
@@ -281,12 +263,6 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 	// if app.RetainBlocks > 0 && app.Height >= app.RetainBlocks {
 	// 	resp.RetainHeight = app.Height - app.RetainBlocks + 1
 	// }
-
-	//save the state
-	app.state.Size += app.txct
-	app.state.AppHash = mdRoot
-	app.state.Height++
-	saveState(app.state)
 
 	duration := time.Since(app.timer)
 	fmt.Printf("%d transactions in %f seconds for a TPS of %f\n", app.txct, duration.Seconds(), float64(app.txct)/duration.Seconds())

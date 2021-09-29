@@ -45,7 +45,7 @@ func NewManager(config *config.Config, db *state.StateDB, key ed25519.PrivateKey
 
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
 
-	rpcClient, err := rpchttp.New(config.RPC.ListenAddress, "/websocket")
+	rpcClient, err := rpchttp.New(config.RPC.ListenAddress)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create RPC client: %v", err)
 	}
