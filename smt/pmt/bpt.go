@@ -215,7 +215,7 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
 func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value is determined by the key, and the value
-	b.insertAtNode(0, 1, b.Root, key, hash) //         in that location is the hash.  We start at byte 0, lowest
+	b.insertAtNode(0, 1, b.Root, key, hash) //          in that location is the hash.  We start at byte 0, lowest
 } //                                                   significant bit. (which is masked with a 1)
 
 // GetHash
@@ -228,28 +228,28 @@ func GetHash(e Entry) []byte {
 }
 
 // Update the Patricia Tree hashes with the values from the
-// updates since the last update, and return the root hash
+// updates since the last update
 func (b *BPT) Update() {
-	for len(b.DirtyMap) > 0 { //                           While the DirtyMap has nodes to process
+	for len(b.DirtyMap) > 0 { //                          While the DirtyMap has nodes to process
 		dirtyList := b.GetDirtyList() //                   Get the Dirty List. Note sorted by height, High to low
 
 		h := dirtyList[0].Height      //                   Get current height so we do one pass at one height at a time.
 		for _, n := range dirtyList { //                   go through the list, and add parents to the dirty map
-			if n.Height != h { //                          Note when the height is done,
+			if n.Height != h { //                           Note when the height is done,
 				break //                                     bap out
 			} //
 			if h&b.mask == 0 && b.manager != nil { //      Sort and see if at the root node for a byte block
-				b.manager.FlushNode(n) //                  If so, flush the byte block; it has already been updated
+				b.manager.FlushNode(n) //                   If so, flush the byte block; it has already been updated
 			} //
 			L := GetHash(n.Left)  //                       Get the Left Branch
 			R := GetHash(n.Right) //                       Get the Right Branch
 			switch {              //                       Sort four conditions:
 			case L != nil && R != nil: //                  If we have both L and R then combine
-				n.Hash = sha256.Sum256(append(L, R...)) // Take the hash of L+R
+				n.Hash = sha256.Sum256(append(L, R...)) //  Take the hash of L+R
 			case L != nil: //                              The next condition is where we only have L
-				copy(n.Hash[:], L) //                      Just use L.  No hash required
+				copy(n.Hash[:], L) //                       Just use L.  No hash required
 			case R != nil: //                              Just have R.  Again, just use R.
-				copy(n.Hash[:], R) //                      No Hash Required
+				copy(n.Hash[:], R) //                       No Hash Required
 			default: //                                    The fourth condition never happens, and bad if it does.
 				panic("dead nodes should not exist") //      This is a node without a child somewhere up the tree.
 			}
@@ -257,6 +257,9 @@ func (b *BPT) Update() {
 			b.Dirty(n.Parent) //                           The Parent is dirty cause it must consider this new state
 		}
 	}
+	if b.manager != nil { //                             Root doesn't get flushed (has no parent)
+		b.manager.FlushNode(b.Root) //                    So flush it special
+	} //
 }
 
 func (b *BPT) EnsureRootHash() {

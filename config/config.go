@@ -17,6 +17,12 @@ func Default() *Config {
 	return c
 }
 
+func DefaultValidator() *Config {
+	c := new(Config)
+	c.Config = *tm.DefaultValidatorConfig()
+	return c
+}
+
 type Config struct {
 	tm.Config  `mapstructure:",squash"`
 	Accumulate Accumulate `mapstructure:",squash"`
@@ -66,7 +72,7 @@ func Store(config *Config) error {
 	file := filepath.Join(config.RootDir, "config", "config.toml")
 
 	// exits on fail
-	tm.WriteConfigFile(file, &config.Config)
+	tm.WriteConfigFile(config.RootDir, &config.Config)
 
 	f, err := os.OpenFile(file, os.O_WRONLY, 0600)
 	if err != nil {
