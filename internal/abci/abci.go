@@ -12,11 +12,14 @@
 package abci
 
 import (
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
+
+//go:generate go run github.com/golang/mock/mockgen -source abci.go -destination ../mock/abci/abci.go
 
 // Version is the version of the ABCI applications.
 const Version uint64 = 0x1
@@ -37,4 +40,15 @@ type Chain interface {
 	DeliverTx(*transactions.GenTransaction) error
 	EndBlock(EndBlockRequest)
 	Commit() ([]byte, error)
+}
+
+type State interface {
+	// BlockIndex returns the current block index/height of the chain
+	BlockIndex() int64
+
+	// RootHash returns the root hash of the chain
+	RootHash() []byte
+
+	// TODO I think this can be removed
+	EnsureRootHash() []byte
 }
