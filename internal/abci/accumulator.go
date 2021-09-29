@@ -4,13 +4,12 @@ import (
 	"bytes"
 	_ "crypto/sha256"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"time"
 
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	statetypes "github.com/AccumulateNetwork/accumulated/types/state"
-	protobuf "github.com/golang/protobuf/proto"
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -87,8 +86,8 @@ func (app *Accumulator) SetOption(req abci.RequestSetOption) abci.ResponseSetOpt
 // Exposed as Tendermint RCP /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
-	query := new(proto.Query)
-	err := protobuf.Unmarshal(reqQuery.Data, query)
+	query := new(api.Query)
+	err := query.UnmarshalBinary(reqQuery.Data)
 	if err != nil {
 		resQuery.Info = "requst is not an Accumulate Query\n"
 		resQuery.Code = code.CodeTypeUnauthorized

@@ -8,7 +8,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 type TokenTransactionDeposit struct {
@@ -73,7 +72,7 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 
 	var ret bytes.Buffer
 
-	ret.Write(common.Uint64Bytes(uint64(proto.AccInstruction_Synthetic_Token_Deposit)))
+	ret.Write(common.Uint64Bytes(types.TxTypeSyntheticTokenDeposit.AsUint64()))
 
 	data, err := tx.Header.MarshalBinary()
 	if err != nil {

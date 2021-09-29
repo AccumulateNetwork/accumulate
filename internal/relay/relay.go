@@ -2,11 +2,10 @@ package relay
 
 import (
 	"context"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
-	proto1 "github.com/golang/protobuf/proto"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 )
@@ -94,16 +93,13 @@ func (b *Relay) SendTx(tx *transactions.GenTransaction) (*ctypes.ResultBroadcast
 func (b *Relay) Query(url *string, txId []byte) (ret *ctypes.ResultABCIQuery, err error) {
 	addr := types.GetAddressFromIdentity(url)
 
-	pq := proto.Query{}
-	pq.ChainUrl = *url
-	adiChain := types.GetIdentityChainFromIdentity(url)
-	chainId := types.GetChainIdFromChainPath(url)
-	pq.AdiChain = adiChain.Bytes()
-	pq.ChainId = chainId.Bytes()
-	pq.Ins = proto.AccInstruction_State_Query
-	pq.Query = txId
+	pq := api.Query{}
+	pq.Url = *url
+	pq.RouteId = addr
+	pq.ChainId = types.GetChainIdFromChainPath(url).Bytes()
+	pq.Content = txId
 
-	data, err := proto1.Marshal(&pq)
+	data, err := pq.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}

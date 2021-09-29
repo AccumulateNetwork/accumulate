@@ -6,16 +6,15 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
 type SynIdentityCreate struct{}
 
-func (SynIdentityCreate) chainType() chainTypeId { return chainTypeId(types.ChainTypeAdi) }
+func (SynIdentityCreate) chainType() types.ChainType { return types.ChainTypeUnknown }
 
-func (SynIdentityCreate) instruction() proto.AccInstruction {
-	return proto.AccInstruction_Synthetic_Identity_Creation
+func (SynIdentityCreate) instruction() types.TxType {
+	return types.TxTypeSyntheticIdentityCreate
 }
 
 func (SynIdentityCreate) BeginBlock() {}

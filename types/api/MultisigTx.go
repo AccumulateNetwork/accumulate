@@ -21,8 +21,8 @@ func (m *MultiSigTx) MarshalBinary() ([]byte, error) {
 
 func (m *MultiSigTx) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
-		if recover() != nil {
-			err = fmt.Errorf("insufficent data to unmarshal MultiSigTx %v", err)
+		if rErr := recover(); rErr != nil {
+			err = fmt.Errorf("insufficent data to unmarshal MultiSigTx %v", rErr)
 		}
 	}()
 

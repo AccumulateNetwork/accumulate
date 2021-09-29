@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
@@ -47,13 +48,13 @@ func boostrapBVC(configfile string, workingdir string, baseport int) error {
 
 	//viper.Set("mempool.keep-invalid-txs-in-cache, "false"
 	//viper.Set("mempool.max_txs_bytes", "1073741824")
-	viper.Set("mempool.max_batch_bytes", 1048576)
-	viper.Set("mempool.cache_size", 1048576)
-	viper.Set("mempool.size", 50000)
-	err := viper.WriteConfig()
-	if err != nil {
-		panic(err)
-	}
+	//viper.Set("mempool.max_batch_bytes", 1048576)
+	//viper.Set("mempool.cache_size", 1048576)
+	//viper.Set("mempool.size", 50000)
+	//err := viper.WriteConfig()
+	//if err != nil {
+	//	panic(err)
+	//}
 
 	return nil
 }
@@ -114,6 +115,8 @@ func startBVC(cfg string, dir string) *node.Node {
 	///Build a BVC we'll use for our test
 	node := newBVC(cfg, dir+"/Node0")
 	err = node.Start()
+	time.Sleep(15 * time.Second)
+
 	if err != nil {
 		panic(err)
 	}

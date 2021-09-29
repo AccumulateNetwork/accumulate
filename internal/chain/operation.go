@@ -2,22 +2,22 @@ package chain
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
 type chainTypeId uint64
 
 type operations struct {
-	byType  map[chainTypeId]operation
-	byInstr map[proto.AccInstruction]operation
+	byType  map[types.ChainType]operation
+	byInstr map[types.TxType]operation
 }
 
 type operation interface {
-	chainType() chainTypeId
-	instruction() proto.AccInstruction
+	chainType() types.ChainType
+	instruction() types.TxType
 
 	BeginBlock()
 	CheckTx(*state.StateEntry, *transactions.GenTransaction) error
@@ -27,8 +27,8 @@ type operation interface {
 func (m *operations) add(chain operation) {
 	typ, ins := chain.chainType(), chain.instruction()
 	if m.byType == nil {
-		m.byType = map[chainTypeId]operation{typ: chain}
-		m.byInstr = map[proto.AccInstruction]operation{ins: chain}
+		m.byType = map[types.ChainType]operation{typ: chain}
+		m.byInstr = map[types.TxType]operation{ins: chain}
 		return
 	}
 

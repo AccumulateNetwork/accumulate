@@ -13,7 +13,7 @@ const (
 	TxTypeDataEntry //per 256 btes
 	TxTypeScratchChainCreate
 	TxTypeScratchEntry //per 256 bytes
-	TxTypeTokenIssue
+	TxTypeTokenCreate
 	TxTypeKeyUpdate //update keys on the keychain the identity
 	TxTypeMultisigTx
 	TxTypeStateQuery //sends a query to a chain and returns its state information
@@ -40,7 +40,7 @@ var (
 		TxTypeDataEntry:               "dataEntry",
 		TxTypeScratchChainCreate:      "scratchChainCreate",
 		TxTypeScratchEntry:            "scratchEntry",
-		TxTypeTokenIssue:              "token", //Token Issuance
+		TxTypeTokenCreate:             "tokenCreate", //Token Issuance
 		TxTypeKeyUpdate:               "keyUpdate",
 		TxTypeStateQuery:              "stateQuery",
 		TxTypeDataStore:               "dataStore",
@@ -62,7 +62,7 @@ var (
 		"dataEntry":               TxTypeDataEntry,
 		"scratchChainCreate":      TxTypeScratchChainCreate,
 		"scratchEntry":            TxTypeScratchEntry,
-		"token":                   TxTypeTokenIssue,
+		"tokenCreate":             TxTypeTokenCreate,
 		"keyUpdate":               TxTypeKeyUpdate,
 		"stateQuery":              TxTypeStateQuery,
 		"dataStore":               TxTypeDataStore,
