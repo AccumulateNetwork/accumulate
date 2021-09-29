@@ -25,7 +25,7 @@ var testnet = flag.Int("testnet", 4, "TestNet to load test")
 var loadWalletCount = flag.Int("loadtest-wallet-count", 100, "Number of wallets")
 var loadTxCount = flag.Int("loadtest-tx-count", 1000, "Number of transactions")
 
-func TestLoadOnRemote(t *testing.T) {
+func _TestLoadOnRemote(t *testing.T) {
 	txBouncer := relay.NewWithNetworks(*testnet)
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
@@ -87,7 +87,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func _TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("", "AccRouterTest-")
 	cfg := filepath.Join(dir, "Node0", "config", "config.toml")
@@ -214,7 +214,7 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
-	cfg := path.Join(dir, "/config/config.toml")
+	cfg := path.Join(dir, "Node0/config/config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
