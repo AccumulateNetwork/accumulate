@@ -20,7 +20,7 @@ const (
 	nodeDirPerm = 0755
 
 	tmP2pPortOffset         = 0
-	tmRpcPortOffset         = 1
+	TmRpcPortOffset         = 1
 	tmRpcGrpcPortOffset     = 2
 	accRpcPortOffset        = 3
 	accRouterJsonPortOffset = 4
@@ -64,7 +64,7 @@ func Init(opts InitOptions) (err error) {
 		// config.ProxyApp = fmt.Sprintf("%s:%d", IPs[i], opts.Port)
 		config.ProxyApp = ""
 		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmP2pPortOffset)
-		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmRpcPortOffset)
+		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+TmRpcPortOffset)
 		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmRpcGrpcPortOffset)
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+tmPrometheusPortOffset)
 
