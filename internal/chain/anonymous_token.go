@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -112,9 +113,9 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 	//so now look up the token chain from the account
 	//The token state *CAN* be nil, if so we need to create it...
 	tokenState, err := st.DB.GetCurrentEntry(tokenChain[:])
-	//if err != nil {
-	//	return fmt.Errorf("unable to retrieve token chain for %s, %v", url, err)
-	//}
+	if err != nil && !errors.Is(err, state.ErrNotFound) {
+		return nil, fmt.Errorf("unable to retrieve token chain for %s: %w", url, err)
+	}
 
 	//Unmarshal or create the token account
 	account := &state.TokenAccount{}

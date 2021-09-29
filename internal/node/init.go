@@ -1,76 +1,65 @@
 package node
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/networks"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
-	"github.com/tendermint/tendermint/p2p"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
-	tmtime "github.com/tendermint/tendermint/types/time"
 )
 
 const (
 	nodeDirPerm = 0755
 )
 
-// InitForNetwork creates the initial configuration for a set of nodes for the
-// given network.
-func InitForNetwork(shardname string, index int, WorkingDir string) {
-	network := networks.Networks[index]
-
-	listenIP := make([]string, len(network.Ip))
-	config := make([]*cfg.Config, len(network.Ip))
-
-	for i := range network.Ip {
-		listenIP[i] = "tcp://0.0.0.0"
-		config[i] = new(cfg.Config)
-		config[i].Config = *tmcfg.DefaultConfig()
-	}
-
-	err := InitWithConfig(WorkingDir, shardname, network.Name, network.Port, config, network.Ip, listenIP)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to initialize: %v\n", err)
-	}
+type InitOptions struct {
+	WorkDir    string
+	ShardName  string
+	ChainID    string
+	Port       int
+	GenesisDoc *types.GenesisDoc
+	Config     []*cfg.Config
+	RemoteIP   []string
+	ListenIP   []string
 }
 
-// InitWithConfig creates the initial configuration for a set of nodes, using
-// the given configuration. Config, remoteIP, and listenIP must all be of equal
+// Init creates the initial configuration for a set of nodes, using
+// the given configuration. Config, remoteIP, and opts.ListenIP must all be of equal
 // length.
-func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.Config, remoteIP []string, listenIP []string) (err error) {
+func Init(opts InitOptions) (err error) {
 	defer func() {
 		if err != nil {
-			_ = os.RemoveAll(workDir)
+			_ = os.RemoveAll(opts.WorkDir)
 		}
 	}()
 
 	fmt.Println("Tendermint Initialize")
 
-	nValidators := len(config)
-	genVals := make([]types.GenesisValidator, nValidators)
+	config := opts.Config
+	genVals := make([]types.GenesisValidator, 0, len(config))
 
 	for i, config := range config {
 		nodeDirName := fmt.Sprintf("Node%d", i)
-		nodeDir := path.Join(workDir, nodeDirName)
+		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
-		config.Instrumentation.Namespace = shardName
+		config.Instrumentation.Namespace = opts.ShardName
 
-		// config.ProxyApp = fmt.Sprintf("%s:%d", IPs[i], port)
+		// config.ProxyApp = fmt.Sprintf("%s:%d", IPs[i], opts.Port)
 		config.ProxyApp = ""
-		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port)
-		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+1)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+2)
-		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", port)
+		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port)
+		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+1)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+2)
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port)
 
-		config.Consensus.CreateEmptyBlocks = false
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
 			return fmt.Errorf("failed to create config dir: %v", err)
@@ -81,33 +70,42 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 			return fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &chainID); err != nil {
+		if err := initFilesWithConfig(config, &opts.ChainID); err != nil {
 			return err
 		}
 
-		pvKeyFile := path.Join(nodeDir, config.PrivValidatorKey)
-		pvStateFile := path.Join(nodeDir, config.PrivValidatorState)
-		pv := privval.LoadFilePV(pvKeyFile, pvStateFile)
+		pvKeyFile := path.Join(nodeDir, config.PrivValidator.Key)
+		pvStateFile := path.Join(nodeDir, config.PrivValidator.State)
+		pv, err := privval.LoadFilePV(pvKeyFile, pvStateFile)
+		if err != nil {
+			return fmt.Errorf("failed to load private validator: %v", err)
+		}
 
-		pubKey, err := pv.GetPubKey()
+		pubKey, err := pv.GetPubKey(context.Background())
 		if err != nil {
 			return fmt.Errorf("failed to get public key: %v", err)
 		}
-		genVals[i] = types.GenesisValidator{
-			Address: pubKey.Address(),
-			PubKey:  pubKey,
-			Power:   1,
-			Name:    nodeDirName,
+
+		if config.Mode == tmcfg.ModeValidator {
+			genVals = append(genVals, types.GenesisValidator{
+				Address: pubKey.Address(),
+				PubKey:  pubKey,
+				Power:   1,
+				Name:    nodeDirName,
+			})
 		}
 	}
 
 	// Generate genesis doc from generated validators
-	genDoc := &types.GenesisDoc{
-		ChainID:         "chain-" + tmrand.Str(6),
-		GenesisTime:     tmtime.Now(),
-		InitialHeight:   0,
-		Validators:      genVals,
-		ConsensusParams: types.DefaultConsensusParams(),
+	genDoc := opts.GenesisDoc
+	if genDoc == nil {
+		genDoc = &types.GenesisDoc{
+			ChainID:         "chain-" + tmrand.Str(6),
+			GenesisTime:     tmtime.Now(),
+			InitialHeight:   0,
+			Validators:      genVals,
+			ConsensusParams: types.DefaultConsensusParams(),
+		}
 	}
 
 	// Write genesis file.
@@ -117,38 +115,44 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 		}
 	}
 
-	// Gather persistent peer addresses.
-	persistentPeers := make([]string, nValidators)
+	// Gather validator peer addresses.
+	validatorPeers := map[int]string{}
 	for i, config := range config {
-		nodeKey, err := p2p.LoadNodeKey(config.NodeKeyFile())
+		// if config.Mode != tmcfg.ModeValidator {
+		// 	continue
+		// }
+
+		nodeKey, err := types.LoadNodeKey(config.NodeKeyFile())
 		if err != nil {
 			return fmt.Errorf("failed to load node key: %v", err)
 		}
-		persistentPeers[i] = p2p.IDAddressString(nodeKey.ID(), fmt.Sprintf("%s:%d", remoteIP[i], port))
+		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", opts.RemoteIP[i], opts.Port))
 	}
 
 	// Overwrite default config.
+	nConfig := len(config)
 	for i, config := range config {
-		config.LogLevel = "main:info,state:info,statesync:info,*:error"
-		if nValidators > 1 {
+		if nConfig > 1 {
 			config.P2P.AddrBookStrict = false
 			config.P2P.AllowDuplicateIP = true
 			config.P2P.PersistentPeers = ""
-			for j, peer := range persistentPeers {
-				if j != i {
-					config.P2P.PersistentPeers += "," + peer
+			if config.P2P.PersistentPeers == "" {
+				for j, peer := range validatorPeers {
+					if j != i {
+						config.P2P.PersistentPeers += "," + peer
+					}
 				}
+				config.P2P.PersistentPeers = config.P2P.PersistentPeers[1:]
 			}
-			config.P2P.PersistentPeers = config.P2P.PersistentPeers[1:]
 		} else {
 			config.P2P.AddrBookStrict = true
 			config.P2P.AllowDuplicateIP = false
 		}
 		config.Moniker = fmt.Sprintf("Node%d", i)
 
-		config.Accumulate.AccRPC.ListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+3)
-		config.Accumulate.AccRouter.JSONListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+4)
-		config.Accumulate.AccRouter.RESTListenAddress = fmt.Sprintf("%s:%d", listenIP[i], port+5)
+		config.Accumulate.AccRPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+3)
+		config.Accumulate.AccRouter.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+4)
+		config.Accumulate.AccRouter.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+5)
 
 		err := cfg.Store(config)
 		if err != nil {
@@ -156,7 +160,14 @@ func InitWithConfig(workDir, shardName, chainID string, port int, config []*cfg.
 		}
 	}
 
-	fmt.Printf("Successfully initialized %v node directories\n", nValidators)
+	switch nValidators := len(genVals); nValidators {
+	case 0:
+		fmt.Printf("Successfully initialized %v follower nodes\n", nConfig)
+	case nConfig:
+		fmt.Printf("Successfully initialized %v validator nodes\n", nConfig)
+	default:
+		fmt.Printf("Successfully initialized %v validator and %v follower nodes\n", nValidators, nConfig-nValidators)
+	}
 	return nil
 }
 
@@ -165,15 +176,22 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	logger := tmlog.NewNopLogger()
 
 	// private validator
-	privValKeyFile := config.PrivValidatorKeyFile()
-	privValStateFile := config.PrivValidatorStateFile()
+	privValKeyFile := config.PrivValidator.KeyFile()
+	privValStateFile := config.PrivValidator.StateFile()
 	var pv *privval.FilePV
+	var err error
 	if tmos.FileExists(privValKeyFile) {
-		pv = privval.LoadFilePV(privValKeyFile, privValStateFile)
+		pv, err = privval.LoadFilePV(privValKeyFile, privValStateFile)
+		if err != nil {
+			return fmt.Errorf("failed to load private validator: %w", err)
+		}
 		logger.Info("Found private validator", "keyFile", privValKeyFile,
 			"stateFile", privValStateFile)
 	} else {
-		pv = privval.GenFilePV(privValKeyFile, privValStateFile)
+		pv, err = privval.GenFilePV(privValKeyFile, privValStateFile, "")
+		if err != nil {
+			return fmt.Errorf("failed to gen private validator: %w", err)
+		}
 		pv.Save()
 		logger.Info("Generated private validator", "keyFile", privValKeyFile,
 			"stateFile", privValStateFile)
@@ -183,9 +201,8 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	if tmos.FileExists(nodeKeyFile) {
 		logger.Info("Found node key", "path", nodeKeyFile)
 	} else {
-		if _, err := p2p.LoadOrGenNodeKey(nodeKeyFile); err != nil {
-			fmt.Printf("Can't load or gen node key\n")
-			return err
+		if _, err := types.LoadOrGenNodeKey(nodeKeyFile); err != nil {
+			return fmt.Errorf("can't load or gen node key: %v", err)
 		}
 		logger.Info("Generated node key", "path", nodeKeyFile)
 	}
@@ -199,10 +216,9 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 			GenesisTime:     tmtime.Now(),
 			ConsensusParams: types.DefaultConsensusParams(),
 		}
-		pubKey, err := pv.GetPubKey()
+		pubKey, err := pv.GetPubKey(context.Background())
 		if err != nil {
-			fmt.Printf("can't get pubkey: %v\n", err)
-			return err
+			return fmt.Errorf("can't get pubkey: %v", err)
 		}
 		genDoc.Validators = []types.GenesisValidator{{
 			Address: pubKey.Address(),
@@ -211,8 +227,7 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 		}}
 
 		if err := genDoc.SaveAs(genFile); err != nil {
-			fmt.Printf("Can't save genFile: %s\n", genFile)
-			return err
+			return fmt.Errorf("can't save genFile: %s: %v", genFile, err)
 		}
 		logger.Info("Generated genesis file", "path", genFile)
 	}
