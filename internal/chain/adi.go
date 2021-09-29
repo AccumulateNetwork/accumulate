@@ -12,7 +12,7 @@ import (
 
 type ADI struct{}
 
-func (ADI) chainType() chainTypeId { return chainTypeId(types.ChainTypeAdi) }
+func (ADI) chainType() types.ChainType { return types.ChainTypeAdi }
 
 func (ADI) instruction() types.TxType { return types.TxTypeIdentityCreate }
 
