@@ -14,7 +14,7 @@ type Query struct {
 }
 
 func (t *Query) MarshalBinary() (data []byte, err error) {
-	data = append(data, []byte(t.Url)...)
+	data = append(data, common.SliceBytes([]byte(t.Url))...)
 	data = append(data, common.Uint64Bytes(t.RouteId)...)
 	data = append(data, common.SliceBytes(t.ChainId)...)
 	data = append(data, common.SliceBytes(t.Content)...)
