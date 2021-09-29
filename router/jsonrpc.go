@@ -333,7 +333,7 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &TokenTx{}
+	req := &acmeapi.TokenTx{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)

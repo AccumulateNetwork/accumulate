@@ -2,10 +2,10 @@ package transactions
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"net/url"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 // TokenSend
@@ -41,10 +41,10 @@ func (t *TokenSend) Equal(t2 *TokenSend) (ret bool) {
 // Marshal
 // Marshal a transaction
 func (t *TokenSend) Marshal() []byte {
-	data := common.Uint64Bytes(uint64(proto.AccInstruction_Token_Transaction)) //      The Transaction type
-	data = append(data, common.SliceBytes([]byte(t.AccountURL))...)            //      The source URL
-	data = append(data, common.Uint64Bytes(uint64(len(t.Outputs)))...)         //      The number of outputs
-	for _, v := range t.Outputs {                                              //      For each output
+	data := common.Uint64Bytes(uint64(types.TxTypeTokenTx))            //      The Transaction type
+	data = append(data, common.SliceBytes([]byte(t.AccountURL))...)    //      The source URL
+	data = append(data, common.Uint64Bytes(uint64(len(t.Outputs)))...) //      The number of outputs
+	for _, v := range t.Outputs {                                      //      For each output
 		data = append(data, common.Uint64Bytes(uint64(v.Amount))...) //           the amount sent
 		data = append(data, common.SliceBytes([]byte(v.Dest))...)    //           the destination for the amount
 	}
@@ -60,10 +60,10 @@ func (t *TokenSend) Unmarshal(data []byte) ([]byte, error) { //                 
 		}
 	}()
 
-	tag, data := common.BytesUint64(data)                      //       Get the tag
-	if tag != uint64(proto.AccInstruction_Token_Transaction) { //       Tag better be right
+	tag, data := common.BytesUint64(data)      //       Get the tag
+	if tag != types.TxTypeTokenTx.AsUint64() { //       Tag better be right
 		panic(fmt.Sprintf("not a token transaction, expected %d got %d", // Blow up if not, and we don't have to save
-			proto.AccInstruction_Token_Transaction, tag)) //              the tag.
+			types.TxTypeTokenTx, tag)) //              the tag.
 	} //
 	var url []byte                       //                                 Working variable for computing urls
 	var num uint64                       //                                 Working variable for getting output count

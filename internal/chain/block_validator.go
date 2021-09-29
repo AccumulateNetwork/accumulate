@@ -2,9 +2,9 @@ package chain
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
@@ -38,7 +38,7 @@ func (v *BlockValidator) CheckTx(st *state.StateEntry, tx *transactions.GenTrans
 }
 
 func (v *BlockValidator) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	txType := tx.TransactionType()
+	txType := types.TxType(tx.TransactionType())
 
 	var err error
 	if err := tx.SetRoutingChainID(); err != nil {
@@ -49,16 +49,16 @@ func (v *BlockValidator) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 	if st.IdentityState == nil {
 		//so the current state isn't defined, so we need to see if we need to create a token or anon chain.
 
-		val := v.byInstr[proto.AccInstruction(txType)]
+		val := v.byInstr[txType]
 		if val == nil {
 			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", txType)
 		}
 
 		//valid actions for identity are to create an adi or create an account for anonymous address from synth transactions
-		switch proto.AccInstruction(txType) {
-		case proto.AccInstruction_Synthetic_Identity_Creation: //a sponsor will generate the synth identity creation msg
+		switch txType {
+		case types.TxTypeSyntheticIdentityCreate: //a sponsor will generate the synth identity creation msg
 			fallthrough
-		case proto.AccInstruction_Synthetic_Token_Deposit: // for synth deposits, only anon addresses will be accepted
+		case types.TxTypeSyntheticTokenDeposit: // for synth deposits, only anon addresses will be accepted
 			return val.DeliverTx(st, tx)
 		default:
 			return nil, fmt.Errorf("invalid instruction issued for identity transaction, %d", txType)
@@ -71,22 +71,22 @@ func (v *BlockValidator) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 	//If chain state doesn't exist, we will process by transaction instruction type
 	if st.ChainState == nil {
 		//we have no chain state, so we need to process by transaction type.
-		val := v.byInstr[proto.AccInstruction(txType)]
+		val := v.byInstr[txType]
 		if val == nil {
 			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", txType)
 		}
 
 		//valid instruction actions are to create account, token, identity, scratch chain, or data chain
-		switch proto.AccInstruction(txType) {
-		case proto.AccInstruction_Identity_Creation:
+		switch txType {
+		case types.TxTypeIdentityCreate:
 			fallthrough
-		case proto.AccInstruction_Scratch_Chain_Creation:
+		case types.TxTypeScratchChainCreate:
 			fallthrough
-		case proto.AccInstruction_Data_Chain_Creation:
+		case types.TxTypeDataChainCreate:
 			fallthrough
-		case proto.AccInstruction_Token_Issue:
+		case types.TxTypeTokenCreate:
 			fallthrough
-		case proto.AccInstruction_Token_URL_Creation:
+		case types.TxTypeTokenAccountCreate:
 			return val.DeliverTx(st, tx)
 		default:
 			return nil, fmt.Errorf("invalid instruction issued for chain transaction, %d", txType)
@@ -101,7 +101,7 @@ func (v *BlockValidator) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 	}
 
 	//retrieve the validator based upon chain type
-	val := v.byType[chainTypeId(chain.Type)]
+	val := v.byType[chain.Type]
 	if val == nil {
 		return nil, fmt.Errorf("cannot find validator for BlockValidationChain %s (err %v)", chain.ChainUrl, err)
 	}

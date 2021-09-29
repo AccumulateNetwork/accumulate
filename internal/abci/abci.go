@@ -12,10 +12,10 @@
 package abci
 
 import (
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 // Version is the version of the ABCI applications.
@@ -30,7 +30,7 @@ type BeginBlockRequest struct {
 type EndBlockRequest struct{}
 
 type Chain interface {
-	Query(*proto.Query) ([]byte, error)
+	Query(*api.Query) ([]byte, error)
 
 	BeginBlock(BeginBlockRequest)
 	CheckTx(*transactions.GenTransaction) error

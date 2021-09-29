@@ -14,8 +14,8 @@ func TestNewAdiStateCreate(t *testing.T) {
 	fromAdi := types.String("greenrock")
 	toAdi := types.String("redwagon")
 
-	txid := types.Bytes32(sha256.Sum256([]byte("sometxid")))
-	adiStateCreate := NewAdiStateCreate(txid[:], &fromAdi, &toAdi, &pubKeyHash)
+	txId := types.Bytes32(sha256.Sum256([]byte("sometxid")))
+	adiStateCreate := NewAdiStateCreate(txId[:], &fromAdi, &toAdi, &pubKeyHash)
 
 	data, err := json.Marshal(adiStateCreate)
 	if err != nil {

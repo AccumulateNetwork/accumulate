@@ -3,6 +3,7 @@ package router
 import (
 	"crypto/sha256"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,7 +16,6 @@ import (
 	"github.com/spf13/viper"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/privval"
-	tmdb "github.com/tendermint/tm-db"
 )
 
 func randomRouterPorts() *config.Router {
@@ -30,9 +30,15 @@ func randomRouterPorts() *config.Router {
 }
 
 func boostrapBVC(configfile string, workingdir string, baseport int) error {
-	node.InitForNetwork("accumulate.", 2, workingdir)
+	idx := networks.IndexOf("Localhost")
+	opts := node.InitOptions{}
+	opts.WorkDir = workingdir
+	opts.Port = networks.Networks[idx].Port
+	opts.ListenIP = networks.Networks[idx].Ip
+	node.Init(opts)
+
 	viper.SetConfigFile(configfile)
-	viper.AddConfigPath(workingdir + "/Node0")
+	viper.AddConfigPath(filepath.Join(workingdir, "Node0"))
 	viper.ReadInConfig()
 	//[mempool]
 	//	broadcast = true
@@ -64,11 +70,6 @@ func newBVC(t *testing.T, configfile string, workingdir string) (*config.Config,
 		panic(err)
 	}
 
-	db, err := tmdb.NewGoLevelDB("kvstore", workingdir)
-	if err != nil {
-		panic(err)
-	}
-
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
 	sdb := new(state.StateDB)
@@ -93,7 +94,7 @@ func newBVC(t *testing.T, configfile string, workingdir string) (*config.Config,
 		t.Fatal(err)
 	}
 
-	app, err := abci.NewAccumulator(db, sdb, pv, mgr)
+	app, err := abci.NewAccumulator(sdb, pv, mgr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +118,7 @@ func startBVC(t *testing.T, cfgPath string, dir string) (*config.Config, *privva
 	}
 
 	///Build a BVC we'll use for our test
-	cfg, pv, node := newBVC(t, cfgPath, dir+"/Node0")
+	cfg, pv, node := newBVC(t, cfgPath, filepath.Join(dir, "Node0"))
 	err = node.Start()
 	if err != nil {
 		t.Fatal(err)

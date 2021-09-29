@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"sync"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -54,10 +54,10 @@ func NewManager(config *config.Config, db *state.StateDB, key ed25519.PrivateKey
 	return m, nil
 }
 
-func (m *Manager) Query(q *proto.Query) ([]byte, error) {
-	if q.Query != nil {
+func (m *Manager) Query(q *api.Query) ([]byte, error) {
+	if q.Content != nil {
 		// TODO handle error
-		tx, pendingTx, _ := m.db.GetTx(q.Query)
+		tx, pendingTx, _ := m.db.GetTx(q.Content)
 		return append(common.SliceBytes(tx), common.SliceBytes(pendingTx)...), nil
 	}
 

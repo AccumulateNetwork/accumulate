@@ -2,14 +2,13 @@ package api
 
 import (
 	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
-
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
+
+const MaxTokenTxOutputs = 100
 
 type TokenTx struct {
 	Hash types.Bytes32    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"` //,hexadecimal"`
@@ -46,10 +45,7 @@ func (t *TokenTx) SetMetadata(md *json.RawMessage) error {
 func (t *TokenTx) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	var vi [8]byte
-	_ = binary.PutVarint(vi[:], int64(proto.AccInstruction_Synthetic_Token_Transaction))
-
-	buffer.Write(vi[:])
+	buffer.Write(common.Int64Bytes(int64(types.TxTypeSyntheticTokenTx)))
 
 	data, err := t.From.MarshalBinary()
 	if err != nil {
@@ -57,8 +53,14 @@ func (t *TokenTx) MarshalBinary() ([]byte, error) {
 	}
 	buffer.Write(data)
 
-	_ = binary.PutVarint(vi[:], int64(len(t.To)))
-	buffer.Write(vi[:])
+	numOutputs := int64(len(t.To))
+	if numOutputs > MaxTokenTxOutputs {
+		return nil, fmt.Errorf("too many outputs for token transaction, please specify between 1 and %d outputs", MaxTokenTxOutputs)
+	}
+	if numOutputs < 1 {
+		return nil, fmt.Errorf("insufficient token transaction outputs, please specify between 1 and %d outputs", MaxTokenTxOutputs)
+	}
+	buffer.Write(common.Int64Bytes(numOutputs))
 	for i, v := range t.To {
 		data, err = v.MarshalBinary()
 		if err != nil {
@@ -68,11 +70,13 @@ func (t *TokenTx) MarshalBinary() ([]byte, error) {
 	}
 
 	a := types.Bytes(t.Meta)
-	data, err = a.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("error marshalling meta data, %v", err)
+	if a != nil {
+		data, err = a.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("error marshalling meta data, %v", err)
+		}
+		buffer.Write(data)
 	}
-	buffer.Write(data)
 
 	return buffer.Bytes(), nil
 }
@@ -81,52 +85,40 @@ func (t *TokenTx) MarshalBinary() ([]byte, error) {
 func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
 		if recover() != nil {
-			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+			err = fmt.Errorf("error marshaling TokenTx State %v", err)
 		}
 	}()
 
-	length := len(data)
-	if length < 2 {
-		return fmt.Errorf("insufficient data to unmarshal binary for TokenTx")
-	}
+	txType, data := common.BytesInt64(data) // get the type
 
-	txType, data := common.BytesUint64(data) //                                 Get the url
-
-	if txType != uint64(proto.AccInstruction_Synthetic_Token_Transaction) {
+	if txType != int64(types.TxTypeSyntheticTokenTx) {
 		return fmt.Errorf("invalid transaction type, expecting TokenTx")
 	}
 
-	i := 1
-
-	err = t.From.UnmarshalBinary(data[i:])
+	err = t.From.UnmarshalBinary(data)
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal FromUrl in transaction, %v", err)
 	}
 
-	i += t.From.Size(nil)
-	if length < i {
-		return fmt.Errorf("insufficient data to obtain number of token tx outputs for transaction")
+	//get the length of the outputs
+	toLen, data := common.BytesInt64(data[t.From.Size(nil):])
+
+	if toLen > 100 || toLen < 1 {
+		return fmt.Errorf("invalid number of outputs for transaction")
 	}
-
-	toLen, n := binary.Varint(data[i:])
-	i += n
-
-	if length < i {
-		return fmt.Errorf("insufficient data to unmarshal token tx outputs for transaction")
-	}
-
 	t.To = make([]*TokenTxOutput, toLen)
+	i := 0
 	for j := int64(0); j < toLen; j++ {
 		txOut := &TokenTxOutput{}
 		err := txOut.UnmarshalBinary(data[i:])
-		i += txOut.Size()
 		if err != nil {
-			return fmt.Errorf("unable to unmarshal token tx output for index %d", i)
+			return fmt.Errorf("unable to unmarshal token tx output for index %d", j)
 		}
-		t.To[i] = txOut
+		i += txOut.Size()
+		t.To[j] = txOut
 	}
 
-	if length < i {
+	if len(data) > i {
 		//we have metadata
 		b := types.Bytes{}
 		err := b.UnmarshalBinary(data[i:])
