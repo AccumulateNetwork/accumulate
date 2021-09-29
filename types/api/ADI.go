@@ -1,8 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
-
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -37,27 +38,36 @@ func (ic *ADI) SetKeyHash(hash *types.Bytes32) {
 }
 
 func (ic *ADI) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+	buffer.Write(common.Int64Bytes(int64(types.TxTypeIdentityCreate)))
+
 	idn, err := ic.URL.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	data := make([]byte, len(idn)+32)
-	i := copy(data, idn)
-	copy(data[i:], ic.PublicKeyHash.Bytes())
-	return data, nil
+	buffer.Write(idn)
+	buffer.Write(ic.PublicKeyHash.Bytes())
+
+	return buffer.Bytes(), nil
 }
 
-func (ic *ADI) UnmarshalBinary(data []byte) error {
-	err := ic.URL.UnmarshalBinary(data)
+func (ic *ADI) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = fmt.Errorf("insufficent data to unmarshal MultiSigTx %v", err)
+		}
+	}()
+	txType, data := common.BytesInt64(data)
+	if txType != int64(types.TxTypeIdentityCreate) {
+		return fmt.Errorf("unable to unmarshal ADI, expecting identity type")
+	}
+	err = ic.URL.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
 
 	l := ic.URL.Size(nil)
-	if len(data) < l+32 {
-		return fmt.Errorf("key hash length too short for identity create")
-	}
 
 	copy(ic.PublicKeyHash[:], data[l:])
 
