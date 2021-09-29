@@ -2,15 +2,21 @@ package state
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/smt/managed"
 	"github.com/AccumulateNetwork/accumulated/smt/pmt"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	smtDB "github.com/AccumulateNetwork/accumulated/smt/storage/database"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
+
+const debugStateDBWrites = false
+
+var ErrNotFound = errors.New("not found")
 
 type transactionLists struct {
 	validatedTx []*Transaction
@@ -47,19 +53,8 @@ type StateDB struct {
 	sync         sync.WaitGroup
 }
 
-// Open database to manage the smt and chain states
-func (sdb *StateDB) Open(dbFilename string, appId []byte, useMemDB bool, debug bool) error {
-	dbType := "badger"
+func (sdb *StateDB) init(appId []byte, debug bool) {
 	markPower := int64(8)
-	if useMemDB {
-		dbType = "memory"
-	}
-
-	sdb.db = &smtDB.Manager{}
-	err := sdb.db.Init(dbType, dbFilename)
-	if err != nil {
-		return err
-	}
 
 	sdb.db.AddBucket("StateEntries")
 	sdb.db.AddBucket("MainToPending")
@@ -75,7 +70,29 @@ func (sdb *StateDB) Open(dbFilename string, appId []byte, useMemDB bool, debug b
 	sdb.bpt = pmt.NewBPTManager(sdb.db)
 	sdb.mm = managed.NewMerkleManager(sdb.db, appId, markPower)
 	sdb.appId = appId
+}
+
+// Open database to manage the smt and chain states
+func (sdb *StateDB) Open(dbFilename string, appId []byte, useMemDB bool, debug bool) error {
+	dbType := "badger"
+	if useMemDB {
+		dbType = "memory"
+	}
+
+	sdb.db = &smtDB.Manager{}
+	err := sdb.db.Init(dbType, dbFilename)
+	if err != nil {
+		return err
+	}
+
+	sdb.init(appId, debug)
 	return nil
+}
+
+func (sdb *StateDB) Load(db storage.KeyValueDB, appId []byte, debug bool) {
+	sdb.db = new(smtDB.Manager)
+	sdb.db.InitWithDB(db)
+	sdb.init(appId, debug)
 }
 
 func (sdb *StateDB) GetDB() *smtDB.Manager {
@@ -120,7 +137,7 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 	data := sdb.db.Get("StateEntries", "", chainId)
 
 	if data == nil {
-		return nil, fmt.Errorf("no current state is defined")
+		return nil, fmt.Errorf("%w: no state defined for %X", ErrNotFound, chainId)
 	}
 
 	ret := &Object{}
@@ -157,7 +174,7 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 		//pull current state entry from the database.
 		currentState.stateData, err = sdb.GetPersistentEntry(chainId, false)
 		if err != nil {
-			return nil, fmt.Errorf("no current state is defined, %v", err)
+			return nil, err
 		}
 		//if we have valid data, store off the state
 		ret = currentState.stateData
@@ -171,6 +188,9 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, entry []byte) error {
+	if debugStateDBWrites {
+		fmt.Printf("AddStateEntry chainId=%X txHash=%X entry=%X\n", *chainId, *txHash, entry)
+	}
 	begin := time.Now()
 
 	sdb.TimeBucket = sdb.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
@@ -294,6 +314,7 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 func (sdb *StateDB) writeBatches() {
 	defer sdb.sync.Done()
 	sdb.mm.RootDBManager.EndBatch()
+	sdb.bpt.DBManager.EndBatch()
 }
 
 func (sdb *StateDB) BlockIndex() int64 {
@@ -353,7 +374,9 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
-	fmt.Printf("Committed height=%d hash=%X\n", blockHeight, sdb.RootHash())
+	if debugStateDBWrites {
+		fmt.Printf("WriteStates height=%d hash=%X\n", blockHeight, sdb.RootHash())
+	}
 	return sdb.RootHash(), currentStateCount, nil
 }
 
