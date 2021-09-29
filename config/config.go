@@ -47,6 +47,7 @@ func Load(dir string) (*Config, error) {
 }
 
 func LoadFile(dir, file string) (*Config, error) {
+
 	viper.SetConfigFile(file)
 	viper.AddConfigPath(dir)
 	err := viper.ReadInConfig()

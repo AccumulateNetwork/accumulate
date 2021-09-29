@@ -5,17 +5,16 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
 type SynTxDeposit struct{}
 
-func (SynTxDeposit) chainType() chainTypeId { return chainTypeId(types.ChainTypeTokenAccount) }
+func (SynTxDeposit) chainType() types.ChainType { return types.ChainTypeUnknown }
 
-func (SynTxDeposit) instruction() proto.AccInstruction {
-	return proto.AccInstruction_Synthetic_Token_Deposit
+func (SynTxDeposit) instruction() types.TxType {
+	return types.TxTypeSyntheticTokenDeposit
 }
 
 func (SynTxDeposit) BeginBlock() {}

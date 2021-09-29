@@ -8,7 +8,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
@@ -23,10 +22,10 @@ type tokenAccountTx struct {
 	txHash  []*types.Bytes32
 }
 
-func (*AnonToken) chainType() chainTypeId { return chainTypeId(types.ChainTypeAnonTokenAccount) }
+func (*AnonToken) chainType() types.ChainType { return types.ChainTypeAnonTokenAccount }
 
-func (*AnonToken) instruction() proto.AccInstruction {
-	return proto.AccInstruction_Synthetic_Token_Deposit
+func (*AnonToken) instruction() types.TxType {
+	return types.TxTypeSyntheticTokenDeposit
 }
 
 func (c *AnonToken) BeginBlock() {
@@ -40,9 +39,9 @@ func (c *AnonToken) CheckTx(st *state.StateEntry, tx *transactions.GenTransactio
 
 func (c *AnonToken) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
 	switch tx.TransactionType() {
-	case uint64(proto.AccInstruction_Synthetic_Token_Deposit):
+	case uint64(types.TxTypeSyntheticTokenDeposit):
 		return c.deposit(st, tx)
-	case uint64(proto.AccInstruction_Token_Transaction):
+	case uint64(types.TxTypeTokenTx):
 		return c.sendToken(st, tx)
 	default:
 		return nil, fmt.Errorf("invalid instruction %d for anonymous token", tx.TransactionType())
