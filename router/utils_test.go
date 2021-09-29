@@ -3,10 +3,11 @@ package router
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/networks"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/networks"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
@@ -94,7 +95,7 @@ func newBVC(t *testing.T, configfile string, workingdir string) (*config.Config,
 		t.Fatal(err)
 	}
 
-	app, err := abci.NewAccumulator(sdb, pv, mgr)
+	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr)
 	if err != nil {
 		t.Fatal(err)
 	}
