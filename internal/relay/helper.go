@@ -15,7 +15,7 @@ func NewWithNetworks(networkList ...int) *Relay {
 	rpcClients := []*rpchttp.HTTP{}
 	for i := range networkList {
 		j := networkList[i]
-		lAddr := fmt.Sprintf("tcp://%s:%d", networks.Networks[j].Ip[0], networks.Networks[j].Port+1)
+		lAddr := fmt.Sprintf("tcp://%s:%d", networks.Networks[j].Nodes[0], networks.Networks[j].Port+1)
 		client, err := rpchttp.New(lAddr)
 		if err != nil {
 			return nil

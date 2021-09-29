@@ -3,10 +3,11 @@ package router
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/networks"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/networks"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
@@ -31,10 +32,14 @@ func randomRouterPorts() *config.Router {
 
 func boostrapBVC(configfile string, workingdir string, baseport int) error {
 	idx := networks.IndexOf("Localhost")
+	net := networks.Networks[idx]
 	opts := node.InitOptions{}
 	opts.WorkDir = workingdir
-	opts.Port = networks.Networks[idx].Port
-	opts.ListenIP = networks.Networks[idx].Ip
+	opts.Port = net.Port
+	opts.ListenIP = make([]string, len(net.Nodes))
+	for i, node := range net.Nodes {
+		opts.ListenIP[i] = node.IP
+	}
 	node.Init(opts)
 
 	viper.SetConfigFile(configfile)
