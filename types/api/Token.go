@@ -27,7 +27,7 @@ func NewToken(url string, symbol string, precision byte) *Token {
 func (t *Token) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(common.Int64Bytes(int64(types.TxTypeTokenIssue)))
+	buffer.Write(common.Int64Bytes(int64(types.TxTypeTokenCreate)))
 
 	//marshal URL
 	d, err := t.URL.MarshalBinary()
@@ -66,7 +66,7 @@ func (t *Token) UnmarshalBinary(data []byte) (err error) {
 
 	txType, data := common.BytesInt64(data)
 
-	if txType != int64(types.TxTypeTokenIssue) {
+	if txType != int64(types.TxTypeTokenCreate) {
 		return fmt.Errorf("invalid transaction type, expecting token issuance")
 	}
 

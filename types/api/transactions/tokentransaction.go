@@ -6,7 +6,6 @@ import (
 	"net/url"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types/proto"
 )
 
 // TokenSend
@@ -61,10 +60,10 @@ func (t *TokenSend) Unmarshal(data []byte) ([]byte, error) { //                 
 		}
 	}()
 
-	tag, data := common.BytesUint64(data)                      //       Get the tag
-	if tag != uint64(proto.AccInstruction_Token_Transaction) { //       Tag better be right
+	tag, data := common.BytesUint64(data)      //       Get the tag
+	if tag != types.TxTypeTokenTx.AsUint64() { //       Tag better be right
 		panic(fmt.Sprintf("not a token transaction, expected %d got %d", // Blow up if not, and we don't have to save
-			proto.AccInstruction_Token_Transaction, tag)) //              the tag.
+			types.TxTypeTokenTx, tag)) //              the tag.
 	} //
 	var url []byte                       //                                 Working variable for computing urls
 	var num uint64                       //                                 Working variable for getting output count
