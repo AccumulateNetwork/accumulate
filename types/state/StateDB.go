@@ -219,10 +219,8 @@ func (sdb *StateDB) writeTxs(group *sync.WaitGroup) {
 	for _, tx := range sdb.transactions.validatedTx {
 		data, _ := tx.MarshalBinary()
 		//store the transaction
-		err := sdb.mm.RootDBManager.PutBatch("Tx", "", tx.TransactionHash().Bytes(), data)
-		if err != nil {
-			panic("failed to put batch for validated transaction write")
-		}
+		sdb.mm.RootDBManager.PutBatch("Tx", "", tx.TransactionHash().Bytes(), data)
+
 	}
 
 	//record pending transactions
@@ -234,16 +232,10 @@ func (sdb *StateDB) writeTxs(group *sync.WaitGroup) {
 
 		//Store the mapping of the Transaction hash to the pending transaction hash which can be used for validation so we can find
 		//the pending transaction
-		err := sdb.mm.RootDBManager.PutBatch("MainToPending", "", tx.TransactionState.transactionHash.Bytes(), pendingHash[:])
-		if err != nil {
-			panic("failed to put batch \"MainToPending\" for transaction write")
-		}
+		sdb.mm.RootDBManager.PutBatch("MainToPending", "", tx.TransactionState.transactionHash.Bytes(), pendingHash[:])
 
 		//store the pending transaction by the pending tx hash
-		err = sdb.mm.RootDBManager.PutBatch("PendingTx", "", pendingHash[:], data)
-		if err != nil {
-			panic("failed to put batch \"PendingTx\" for transaction write")
-		}
+		sdb.mm.RootDBManager.PutBatch("PendingTx", "", pendingHash[:], data)
 	}
 
 	//clear out the transactions after they have been processed
@@ -288,12 +280,8 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 			panic("failed to marshal binary for state data")
 		}
 
-		err = sdb.GetDB().PutBatch("StateEntries", "", chainId.Bytes(), chainStateObject)
+		sdb.GetDB().PutBatch("StateEntries", "", chainId.Bytes(), chainStateObject)
 
-		if err != nil {
-			//shouldn't get here, and bad if I do...
-			panic(fmt.Sprintf("failed to store data entry in StateEntries bucket, %v", err))
-		}
 		mutex.Lock()
 		// The bpt stores the hash of the ChainState object hash.
 		sdb.bpt.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
