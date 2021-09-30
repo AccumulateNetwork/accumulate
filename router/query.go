@@ -176,9 +176,14 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 	}
 	qResp := aResp.Response
 
-	data, txRaw := common.BytesSlice(qResp.Value)
-	data, txPending := common.BytesSlice(data)
-	_ = txPending
+	if qResp.Value == nil {
+		return nil, fmt.Errorf("no data available for txid %x", txId)
+	}
+	_, txRaw := common.BytesSlice(qResp.Value)
+	if txRaw == nil {
+		return nil, fmt.Errorf("unable to obtain data from value")
+	}
+
 	txState := state.Transaction{}
 	err = txState.UnmarshalBinary(txRaw)
 	if err != nil {
