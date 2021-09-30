@@ -3,6 +3,8 @@
 Accumulate is a novel blockchain network designed to be hugely scalable while
 maintaining security. [More details](docs/Accumulate.md)
 
+testing
+
 ## CLI
 
 The CLI lives in `./cmd/accumulated`. It can be run directly via `go run
