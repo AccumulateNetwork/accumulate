@@ -9,68 +9,98 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/networks"
 
-	"github.com/AccumulateNetwork/accumulated/config"
+	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	"github.com/spf13/viper"
+	tmcfg "github.com/tendermint/tendermint/config"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/privval"
 )
 
-func randomRouterPorts() *config.Router {
+func randomRouterPorts() *cfg.Router {
 	port, err := tmnet.GetFreePort()
 	if err != nil {
 		panic(err)
 	}
-	return &config.Router{
+	return &cfg.Router{
 		JSONListenAddress: fmt.Sprintf("localhost:%d", port),
 		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
 	}
 }
 
-func boostrapBVC(configfile string, workingdir string, baseport int) error {
-	idx := networks.IndexOf("Localhost")
-	net := networks.Networks[idx]
-	opts := node.InitOptions{}
-	opts.WorkDir = workingdir
-	opts.Port = net.Port
-	opts.ListenIP = make([]string, len(net.Nodes))
-	for i, node := range net.Nodes {
-		opts.ListenIP[i] = node.IP
-	}
-	node.Init(opts)
+func initOptsForNetwork(t *testing.T, name string) node.InitOptions {
+	t.Helper()
 
-	viper.SetConfigFile(configfile)
-	viper.AddConfigPath(filepath.Join(workingdir, "Node0"))
-	viper.ReadInConfig()
-	//[mempool]
-	//	broadcast = true
-	//	cache_size = 100000
-	//	max_batch_bytes = 10485760
-	//	max_tx_bytes = 1048576
-	//	max_txs_bytes = 1073741824
-	//	recheck = true
-	//	size = 50000
-	//	wal_dir = ""
-	//
+	// This will panic if `name` is wrong, causing the test to immediately fail
+	network := networks.Networks[networks.IndexOf(name)]
+	listenIP := make([]string, len(network.Nodes))
+	remoteIP := make([]string, len(network.Nodes))
+	config := make([]*cfg.Config, len(network.Nodes))
 
-	//viper.Set("mempool.keep-invalid-txs-in-cache, "false"
-	//viper.Set("mempool.max_txs_bytes", "1073741824")
-	viper.Set("mempool.max_batch_bytes", 1048576)
-	viper.Set("mempool.cache_size", 1048576)
-	viper.Set("mempool.size", 50000)
-	err := viper.WriteConfig()
-	if err != nil {
-		panic(err)
+	for i, net := range network.Nodes {
+		listenIP[i] = "tcp://0.0.0.0"
+		remoteIP[i] = net.IP
+		config[i] = new(cfg.Config)
+		config[i].Accumulate.Type = string(network.Type)
+
+		switch net.Type {
+		case cfg.Validator:
+			config[i].Config = *tmcfg.DefaultValidatorConfig()
+		case cfg.Follower:
+			config[i].Config = *tmcfg.DefaultValidatorConfig()
+		default:
+			fmt.Fprintf(os.Stderr, "Error: hard-coded network has invalid node type: %q\n", net.Type)
+			os.Exit(1)
+		}
 	}
 
-	return nil
+	return node.InitOptions{
+		ShardName: "accumulate.",
+		ChainID:   network.Name,
+		Port:      network.Port,
+		Config:    config,
+		RemoteIP:  remoteIP,
+		ListenIP:  listenIP,
+	}
 }
 
-func newBVC(t *testing.T, configfile string, workingdir string) (*config.Config, *privval.FilePV, *node.Node) {
-	cfg, err := config.LoadFile(workingdir, configfile)
+func boostrapBVC(t *testing.T, configfile string, workingdir string) {
+	t.Helper()
+
+	opts := initOptsForNetwork(t, "Badlands")
+	opts.WorkDir = workingdir
+
+	for _, config := range opts.Config {
+		//[mempool]
+		//	broadcast = true
+		//	cache_size = 100000
+		//	max_batch_bytes = 10485760
+		//	max_tx_bytes = 1048576
+		//	max_txs_bytes = 1073741824
+		//	recheck = true
+		//	size = 50000
+		//	wal_dir = ""
+		//
+
+		// config.Mempool.KeepInvalidTxsInCache = false
+		// config.Mempool.MaxTxsBytes = 1073741824
+		config.Mempool.MaxBatchBytes = 1048576
+		config.Mempool.CacheSize = 1048576
+		config.Mempool.Size = 50000
+	}
+
+	err := node.Init(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func newBVC(t *testing.T, configfile string, workingdir string) (*cfg.Config, *privval.FilePV, *node.Node) {
+	t.Helper()
+
+	cfg, err := cfg.LoadFile(workingdir, configfile)
 	if err != nil {
 		panic(err)
 	}
@@ -111,20 +141,15 @@ func newBVC(t *testing.T, configfile string, workingdir string) (*config.Config,
 	return cfg, pv, node
 }
 
-func startBVC(t *testing.T, cfgPath string, dir string) (*config.Config, *privval.FilePV, *node.Node) {
-
-	//Select a base port to open.  Ports 43210, 43211, 43212, 43213,43214 need to be open
-	baseport := 35550
+func startBVC(t *testing.T, cfgPath string, dir string) (*cfg.Config, *privval.FilePV, *node.Node) {
+	t.Helper()
 
 	//generate the config files needed to run a test BVC
-	err := boostrapBVC(cfgPath, dir, baseport)
-	if err != nil {
-		t.Fatal(err)
-	}
+	boostrapBVC(t, cfgPath, dir)
 
 	///Build a BVC we'll use for our test
 	cfg, pv, node := newBVC(t, cfgPath, filepath.Join(dir, "Node0"))
-	err = node.Start()
+	err := node.Start()
 	if err != nil {
 		t.Fatal(err)
 	}
