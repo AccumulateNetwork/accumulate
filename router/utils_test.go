@@ -99,7 +99,7 @@ func newBVC(t *testing.T, configfile string, workingdir string) (*config.Config,
 		t.Fatal(err)
 	}
 
-	app, err := abci.NewAccumulator(sdb, pv, mgr)
+	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr)
 	if err != nil {
 		t.Fatal(err)
 	}

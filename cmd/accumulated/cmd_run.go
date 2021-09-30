@@ -76,7 +76,7 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	app, err := abci.NewAccumulator(db, pv, mgr)
+	app, err := abci.NewAccumulator(db, pv.Key.PubKey.Address(), mgr)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize ACBI app: %v", err)
 		os.Exit(1)
