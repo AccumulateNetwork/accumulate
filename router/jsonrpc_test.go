@@ -16,17 +16,25 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/go-playground/validator/v10"
 )
 
-var testnet = flag.Int("testnet", 4, "TestNet to load test")
+var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
 var loadWalletCount = flag.Int("loadtest-wallet-count", 100, "Number of wallets")
 var loadTxCount = flag.Int("loadtest-tx-count", 1000, "Number of transactions")
 
-func _TestLoadOnRemote(t *testing.T) {
-	txBouncer := relay.NewWithNetworks(*testnet)
+func TestLoadOnRemote(t *testing.T) {
+	if os.Getenv("CI") == "true" {
+		t.Skip("This test is not appropriate for CI")
+	}
+
+	txBouncer, err := relay.NewWithNetworks(networks.IndexOf(*testnet))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
@@ -88,8 +96,6 @@ func _TestLoadOnRemote(t *testing.T) {
 }
 
 func TestJsonRpcAnonToken(t *testing.T) {
-	t.Skip("broken test") // ToDo: Broken Test
-
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("", "AccRouterTest-")
 	cfg := filepath.Join(dir, "Node0", "config", "config.toml")
@@ -98,9 +104,10 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	_, pv, _ := startBVC(t, cfg, dir)
+	_, pv, node := startBVC(t, cfg, dir)
+	defer node.Stop()
 
-	txBouncer := relay.NewWithNetworks(*testnet)
+	txBouncer, err := relay.NewWithNetworks(networks.IndexOf("Badlands"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,8 +213,10 @@ func TestJsonRpcAnonToken(t *testing.T) {
 }
 
 func TestJsonRpcAdi(t *testing.T) {
-	t.Skip("Test Broken") // ToDo: Broken Test
-	txBouncer := relay.NewWithNetworks(*testnet)
+	txBouncer, err := relay.NewWithNetworks(networks.IndexOf(*testnet))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	//"wileecoyote/ACME"
 	adiSponsor := "wileecoyote"
@@ -223,7 +232,8 @@ func TestJsonRpcAdi(t *testing.T) {
 	}
 	defer os.RemoveAll(dir)
 
-	_, pv, _ := startBVC(t, cfg, dir)
+	_, pv, node := startBVC(t, cfg, dir)
+	defer node.Stop()
 
 	if err != nil {
 		t.Fatal(err)
@@ -271,6 +281,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	//now we can send in json rpc calls.
 	ret := jsonapi.createADI(context.Background(), jsonReq)
 
+	t.Skip("Needs acceptance criteria for create-adi response")
 	t.Fatal(ret)
 
 }
