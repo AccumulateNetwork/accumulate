@@ -38,7 +38,6 @@ func addStateEntry(t *testing.T, sdb *state.StateDB, chainId, txHash, entry stri
 }
 
 func TestStateDBConsistency(t *testing.T) {
-	t.Skip("Test Broken") // ToDo: Broken Test
 	dir := t.TempDir()
 	db := new(badger.DB)
 	err := db.InitDB(filepath.Join(dir, "valacc.db"))
