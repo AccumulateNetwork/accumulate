@@ -18,8 +18,6 @@ import (
 	"golang.org/x/term"
 )
 
-const defaultInitNet = "Acadia"
-
 var cmdInit = &cobra.Command{
 	Use:   "init [follower]",
 	Short: "Initialize node",
@@ -45,7 +43,7 @@ func init() {
 	cmdMain.AddCommand(cmdInit)
 	cmdInit.AddCommand(cmdInitFollower)
 
-	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", defaultInitNet, "Node to build configs for")
+	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
@@ -56,20 +54,32 @@ func init() {
 func initNode(*cobra.Command, []string) {
 	i := networks.IndexOf(flagInit.Net)
 	if i < 0 {
-		fmt.Fprintf(os.Stderr, "Unknown network %q\n", flagInit.Net)
+		fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
 		os.Exit(1)
 	}
 	network := networks.Networks[i]
 
-	fmt.Printf("Building configs for %s\n", network.Name)
+	fmt.Printf("Building config for %s\n", network.Name)
 
-	listenIP := make([]string, len(network.Ip))
-	config := make([]*cfg.Config, len(network.Ip))
+	listenIP := make([]string, len(network.Nodes))
+	remoteIP := make([]string, len(network.Nodes))
+	config := make([]*cfg.Config, len(network.Nodes))
 
-	for i := range network.Ip {
+	for i, net := range network.Nodes {
 		listenIP[i] = "tcp://0.0.0.0"
+		remoteIP[i] = net.IP
 		config[i] = new(cfg.Config)
-		config[i].Config = *tmcfg.DefaultValidatorConfig()
+		config[i].Accumulate.Type = string(network.Type)
+
+		switch net.Type {
+		case cfg.Validator:
+			config[i].Config = *tmcfg.DefaultValidatorConfig()
+		case cfg.Follower:
+			config[i].Config = *tmcfg.DefaultValidatorConfig()
+		default:
+			fmt.Fprintf(os.Stderr, "Error: hard-coded network has invalid node type: %q\n", net.Type)
+			os.Exit(1)
+		}
 	}
 
 	err := node.Init(node.InitOptions{
@@ -78,7 +88,7 @@ func initNode(*cobra.Command, []string) {
 		ChainID:   network.Name,
 		Port:      network.Port,
 		Config:    config,
-		RemoteIP:  network.Ip,
+		RemoteIP:  remoteIP,
 		ListenIP:  listenIP,
 	})
 	if err != nil {
@@ -111,8 +121,8 @@ func initFollower(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	peers := make([]string, len(network.Ip))
-	for i, ip := range network.Ip {
+	peers := make([]string, len(network.Nodes))
+	for i, ip := range network.Nodes {
 		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", ip, network.Port+1))
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: failed to connect to %s: %v\n", ip, err)

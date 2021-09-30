@@ -18,6 +18,14 @@ import (
 
 const (
 	nodeDirPerm = 0755
+
+	tmP2pPortOffset         = 0
+	TmRpcPortOffset         = 1
+	tmRpcGrpcPortOffset     = 2
+	accRpcPortOffset        = 3
+	accRouterJsonPortOffset = 4
+	accRouterRestPortOffset = 5
+	tmPrometheusPortOffset  = 6
 )
 
 type InitOptions struct {
@@ -55,10 +63,10 @@ func Init(opts InitOptions) (err error) {
 
 		// config.ProxyApp = fmt.Sprintf("%s:%d", IPs[i], opts.Port)
 		config.ProxyApp = ""
-		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port)
-		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+1)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+2)
-		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port)
+		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmP2pPortOffset)
+		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+TmRpcPortOffset)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmRpcGrpcPortOffset)
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+tmPrometheusPortOffset)
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
@@ -150,9 +158,9 @@ func Init(opts InitOptions) (err error) {
 		}
 		config.Moniker = fmt.Sprintf("Node%d", i)
 
-		config.Accumulate.AccRPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+3)
-		config.Accumulate.AccRouter.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+4)
-		config.Accumulate.AccRouter.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+5)
+		config.Accumulate.AccRPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRpcPortOffset)
+		config.Accumulate.AccRouter.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRouterJsonPortOffset)
+		config.Accumulate.AccRouter.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRouterRestPortOffset)
 
 		err := cfg.Store(config)
 		if err != nil {
