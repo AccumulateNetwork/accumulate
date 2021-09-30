@@ -5,6 +5,13 @@ maintaining security. [More details](docs/Accumulate.md)
 
 ## CLI
 
+The CLI lives in `./cmd/accumulated`. It can be run directly via `go run
+./cmd/accumulated ...`, which builds to a temporary directory and executes the
+binary in one go. It can be built via `go build ./cmd/accumualted`, which
+creates `accumulated` or `accumulated.exe` in the current directory. Or it can
+be installed to `$GOPATH/bin/accumulated` (GOPATH defaults to `$HOME/go`) via
+`go install ./cmd/accumulated`.
+
 ### Main TestNet
 
 To initialize node configuration in `~/.accumulate`, choose a network from
@@ -41,3 +48,14 @@ Accumulate is broken into the following components:
 - `router` - Accumulate API
 - `smt` - Stateful Merkle Tree
 - `types` - Data type definitions, used for RPC and persistence
+
+### Load Test
+
+To load test an Accumulate network, run `accumulated testnet --network <name>`
+or `accumulated testnet --remote <ip-addr>`. These flags can be combined.
+
+- `--network` adds the first IP of the named or numbered network to the target list.
+- `--remote` adds the given IP to the target list.
+- `--wallets` sets the number of generated wallets.
+- `--transactions` sets the number of generated transactions.
+
