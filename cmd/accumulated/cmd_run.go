@@ -8,10 +8,10 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
@@ -104,9 +104,9 @@ func runNode(cmd *cobra.Command, args []string) {
 	}
 
 	// The query object connects to the BVC, will be replaced with network client router
-	query := router.NewQuery(txRelay)
+	query := api.NewQuery(txRelay)
 
-	router.StartAPI(&config.Accumulate.AccRouter, query, txRelay)
+	api.StartAPI(&config.Accumulate.AccRouter, query, txRelay)
 
 	// Block forever
 	select {}
