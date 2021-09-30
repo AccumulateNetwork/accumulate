@@ -73,7 +73,7 @@ func PrintAccountGenerate() {
 }
 
 func PrintAccountList() {
-	fmt.Println("  accumulate account list			Display anon token accounts")
+	fmt.Println("  accumulate account list			Display all anon token accounts")
 }
 
 func PrintAccountImport() {

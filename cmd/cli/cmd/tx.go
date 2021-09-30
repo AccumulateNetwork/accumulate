@@ -48,11 +48,11 @@ func init() {
 }
 
 func PrintTXGet() {
-	fmt.Println("  accumulate tx get [TOKEN ACCOUNT] [HASH]							Get token tx by token account and hash")
+	fmt.Println("  accumulate tx get [token account] [txid]			Get token tx by token account and txid")
 }
 
 func PrintTXCreate() {
-	fmt.Println("  accumulate tx create [SENDER TOKEN ACCOUNT] [RECEIVER TOKEN ACCOUNT] [AMOUNT] [SIGNER ADI]	Create new token tx")
+	fmt.Println("  accumulate tx create [from] [to] [amount]	Create new token tx")
 }
 
 func PrintTX() {
