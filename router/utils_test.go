@@ -33,8 +33,7 @@ func randomRouterPorts() *cfg.Router {
 func initOptsForNetwork(t *testing.T, name string) node.InitOptions {
 	t.Helper()
 
-	// This will panic if `name` is wrong, causing the test to immediately fail
-	network := networks.Networks[networks.IndexOf(name)]
+	network := networks.Networks[name]
 	listenIP := make([]string, len(network.Nodes))
 	remoteIP := make([]string, len(network.Nodes))
 	config := make([]*cfg.Config, len(network.Nodes))

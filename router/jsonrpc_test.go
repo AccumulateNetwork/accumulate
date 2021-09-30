@@ -16,7 +16,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
-	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/go-playground/validator/v10"
@@ -31,7 +30,7 @@ func TestLoadOnRemote(t *testing.T) {
 		t.Skip("This test is not appropriate for CI")
 	}
 
-	txBouncer, err := relay.NewWithNetworks(networks.IndexOf(*testnet))
+	txBouncer, err := relay.NewWithNetworks(*testnet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,7 +106,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	_, pv, node := startBVC(t, cfg, dir)
 	defer node.Stop()
 
-	txBouncer, err := relay.NewWithNetworks(networks.IndexOf("Badlands"))
+	txBouncer, err := relay.NewWithNetworks("Badlands")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +212,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 }
 
 func TestJsonRpcAdi(t *testing.T) {
-	txBouncer, err := relay.NewWithNetworks(networks.IndexOf(*testnet))
+	txBouncer, err := relay.NewWithNetworks(*testnet)
 	if err != nil {
 		t.Fatal(err)
 	}

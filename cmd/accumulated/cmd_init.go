@@ -52,12 +52,11 @@ func init() {
 }
 
 func initNode(*cobra.Command, []string) {
-	i := networks.IndexOf(flagInit.Net)
-	if i < 0 {
+	network := networks.Networks[flagInit.Net]
+	if network == nil {
 		fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
 		os.Exit(1)
 	}
-	network := networks.Networks[i]
 
 	fmt.Printf("Building config for %s\n", network.Name)
 
@@ -104,12 +103,11 @@ func initFollower(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	i := networks.IndexOf(flagInit.Net)
-	if i < 0 {
+	network := networks.Networks[flagInit.Net]
+	if network == nil {
 		fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
 		os.Exit(1)
 	}
-	network := networks.Networks[i]
 
 	var genDoc *types.GenesisDoc
 	var err error
