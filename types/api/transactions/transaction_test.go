@@ -25,7 +25,7 @@ func TestTokenTransaction(t *testing.T) {
 	var nonce uint64 = 1
 
 	testurl := "acc://0x411abc253de31674f"
-	trans := new(GenTransaction)
+	trans := new(Transaction)
 	trans.SigInfo = new(SignatureInfo)
 	trans.SigInfo.URL = testurl
 	trans.SigInfo.Nonce = nonce
@@ -33,7 +33,7 @@ func TestTokenTransaction(t *testing.T) {
 		t.Fatal("could not create the Routing value")
 	}
 
-	trans.Transaction = []byte("this is a message to who ever is about")
+	trans.Payload = []byte("this is a message to who ever is about")
 	key := GetKey()
 	eSig := new(ED25519Sig)
 	eSig.Nonce = 0
@@ -84,7 +84,7 @@ func TestTokenTransaction(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	to := new(GenTransaction)
+	to := new(Transaction)
 	if _, err := to.UnMarshal(data); err != nil {
 		t.Error("failure to unmarshal data")
 	}
@@ -132,7 +132,7 @@ func TestDistribution(t *testing.T) {
 
 func TestGenTransaction_Marshal(t *testing.T) {
 	t.Run("Returns error on failure", func(t *testing.T) {
-		tx := new(GenTransaction)
+		tx := new(Transaction)
 		b, err := tx.Marshal()
 		require.Nil(t, b)
 		require.Error(t, err)
@@ -141,7 +141,7 @@ func TestGenTransaction_Marshal(t *testing.T) {
 
 func TestGenTransaction_UnMarshal(t *testing.T) {
 	t.Run("Returns error on failure", func(t *testing.T) {
-		tx := new(GenTransaction)
+		tx := new(Transaction)
 		_, err := tx.UnMarshal([]byte{})
 		require.Error(t, err)
 	})

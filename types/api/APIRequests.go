@@ -43,12 +43,12 @@ type APIDataResponse struct {
 }
 
 // NewAPIRequest will convert create general transaction which is used inside of Accumulate and wraps a transaction type
-func NewAPIRequest(sig *types.Bytes64, signer *Signer, timestamp int64, data []byte) (*transactions.GenTransaction, error) {
+func NewAPIRequest(sig *types.Bytes64, signer *Signer, timestamp int64, data []byte) (*transactions.Transaction, error) {
 
-	gtx := new(transactions.GenTransaction)
+	gtx := new(transactions.Transaction)
 	gtx.Routing = types.GetAddressFromIdentity(signer.URL.AsString())
 	gtx.ChainID = types.GetChainIdFromChainPath(signer.URL.AsString())[:]
-	gtx.Transaction = data
+	gtx.Payload = data
 
 	ed := new(transactions.ED25519Sig)
 	ed.Nonce = uint64(timestamp)

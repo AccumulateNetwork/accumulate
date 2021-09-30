@@ -18,14 +18,14 @@ func (ADI) instruction() types.TxType { return types.TxTypeIdentityCreate }
 
 func (ADI) BeginBlock() {}
 
-func (ADI) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (ADI) CheckTx(st *state.StateEntry, tx *transactions.Transaction) error {
 	if st == nil {
 		return fmt.Errorf("current state not defined")
 	}
 	return nil
 }
 
-func (ADI) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (ADI) DeliverTx(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 	if st == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
@@ -52,7 +52,7 @@ func (ADI) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*De
 	}
 
 	ic := api.ADI{}
-	err = ic.UnmarshalBinary(tx.Transaction)
+	err = ic.UnmarshalBinary(tx.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("transaction is not a valid identity create message")
 	}
@@ -63,12 +63,12 @@ func (ADI) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*De
 		return nil, fmt.Errorf("failed to marshal synthetic transaction")
 	}
 
-	syn := new(transactions.GenTransaction)
+	syn := new(transactions.Transaction)
 	syn.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
 	syn.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
 	syn.SigInfo = &transactions.SignatureInfo{}
 	syn.SigInfo.URL = *isc.ToUrl.AsString()
-	syn.Transaction = iscData
+	syn.Payload = iscData
 
 	res := new(DeliverTxResult)
 	res.AddSyntheticTransaction(syn)

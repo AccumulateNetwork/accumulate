@@ -36,8 +36,8 @@ type Chain interface {
 	Query(*api.Query) ([]byte, error)
 
 	BeginBlock(BeginBlockRequest)
-	CheckTx(*transactions.GenTransaction) error
-	DeliverTx(*transactions.GenTransaction) error
+	CheckTx(*transactions.Transaction) error
+	DeliverTx(*transactions.Transaction) error
 	EndBlock(EndBlockRequest)
 	Commit() ([]byte, error)
 }

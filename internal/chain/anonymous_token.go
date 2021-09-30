@@ -33,11 +33,11 @@ func (c *AnonToken) BeginBlock() {
 	c.currentChainState = map[types.Bytes32]*state.Chain{}
 }
 
-func (c *AnonToken) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (c *AnonToken) CheckTx(st *state.StateEntry, tx *transactions.Transaction) error {
 	return nil
 }
 
-func (c *AnonToken) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (c *AnonToken) DeliverTx(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 	switch tx.TransactionType() {
 	case uint64(types.TxTypeSyntheticTokenDeposit):
 		return c.deposit(st, tx)
@@ -48,11 +48,11 @@ func (c *AnonToken) DeliverTx(st *state.StateEntry, tx *transactions.GenTransact
 	}
 }
 
-func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 
 	//unmarshal the synthetic transaction based upon submission
 	deposit := synthetic.TokenTransactionDeposit{}
-	err := deposit.UnmarshalBinary(tx.Transaction)
+	err := deposit.UnmarshalBinary(tx.Payload)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +169,7 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 	return new(DeliverTxResult), nil
 }
 
-func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 	res := new(DeliverTxResult)
 
 	if st.IdentityState == nil {
@@ -183,7 +183,7 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 
 	var err error
 	withdrawal := transactions.TokenSend{}
-	_, err = withdrawal.Unmarshal(tx.Transaction)
+	_, err = withdrawal.Unmarshal(tx.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("error with send token, %v", err)
 	}
@@ -262,7 +262,7 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 		destUrl := types.String(destChainPath)
 
 		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
-		gtx := new(transactions.GenTransaction)
+		gtx := new(transactions.Transaction)
 
 		//set the identity chain for the destination
 		gtx.Routing = types.GetAddressFromIdentity(&destAdi)
@@ -276,7 +276,7 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction, %v", err)
 		}
 
-		gtx.Transaction, err = depositTx.MarshalBinary()
+		gtx.Payload, err = depositTx.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("unable to marshal synthetic token transaction deposit, %v", err)
 		}

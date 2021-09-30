@@ -19,13 +19,13 @@ func (TokenTx) instruction() types.TxType  { return types.TxTypeTokenTx }
 
 func (TokenTx) BeginBlock() {}
 
-func (TokenTx) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (TokenTx) CheckTx(st *state.StateEntry, tx *transactions.Transaction) error {
 	if st.IdentityState == nil {
 		return fmt.Errorf("identity state does not exist for anonymous transaction")
 	}
 
 	withdrawal := transactions.TokenSend{} //api.TokenTx{}
-	_, err := withdrawal.Unmarshal(tx.Transaction)
+	_, err := withdrawal.Unmarshal(tx.Payload)
 	if err != nil {
 		return fmt.Errorf("error with send token in TokenTransactionValidator.CheckTx, %v", err)
 	}
@@ -39,10 +39,10 @@ func (TokenTx) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) er
 	return err
 }
 
-func (TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
 	withdrawal := transactions.TokenSend{} //api.TokenTx{}
-	_, err := withdrawal.Unmarshal(tx.Transaction)
+	_, err := withdrawal.Unmarshal(tx.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("error with send token in TokenTransactionValidator.DeliverTx, %v", err)
 	}
@@ -82,7 +82,7 @@ func (TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) 
 	txid := tx.TransactionHash()
 
 	res := new(DeliverTxResult)
-	res.Submissions = make([]*transactions.GenTransaction, 0, len(withdrawal.Outputs))
+	res.Submissions = make([]*transactions.Transaction, 0, len(withdrawal.Outputs))
 
 	txAmt := big.NewInt(0)
 	var amt big.Int
@@ -106,7 +106,7 @@ func (TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) 
 		}
 
 		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
-		sub := new(transactions.GenTransaction)
+		sub := new(transactions.Transaction)
 		res.AddSyntheticTransaction(sub)
 
 		//set the identity chain for the destination
@@ -122,7 +122,7 @@ func (TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) 
 			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction")
 		}
 
-		sub.Transaction, err = depositTx.MarshalBinary()
+		sub.Payload, err = depositTx.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("unable to set sender info for synthetic token deposit transaction")
 		}

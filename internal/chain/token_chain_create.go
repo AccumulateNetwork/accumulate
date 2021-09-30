@@ -22,7 +22,7 @@ func (TokenChainCreate) instruction() types.TxType {
 
 func (TokenChainCreate) BeginBlock() {}
 
-func (TokenChainCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (TokenChainCreate) CheckTx(st *state.StateEntry, tx *transactions.Transaction) error {
 	if st == nil {
 		return fmt.Errorf("current state not defined")
 	}
@@ -35,7 +35,7 @@ func (TokenChainCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransa
 		return fmt.Errorf("chain already defined")
 	}
 	tcc := api.TokenAccount{}
-	err := json.Unmarshal(tx.Transaction, &tcc)
+	err := json.Unmarshal(tx.Payload, &tcc)
 	if err != nil {
 		return fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
@@ -43,7 +43,7 @@ func (TokenChainCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransa
 	return nil
 }
 
-func (TokenChainCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (TokenChainCreate) DeliverTx(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 	if st == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
@@ -56,7 +56,7 @@ func (TokenChainCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTran
 		return nil, fmt.Errorf("chain already defined")
 	}
 	tcc := api.TokenAccount{}
-	err := json.Unmarshal(tx.Transaction, &tcc)
+	err := json.Unmarshal(tx.Payload, &tcc)
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}

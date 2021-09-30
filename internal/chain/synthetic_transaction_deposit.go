@@ -19,13 +19,13 @@ func (SynTxDeposit) instruction() types.TxType {
 
 func (SynTxDeposit) BeginBlock() {}
 
-func (SynTxDeposit) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	_, _, _, err := checkSynTxDeposit(st, tx.Transaction)
+func (SynTxDeposit) CheckTx(st *state.StateEntry, tx *transactions.Transaction) error {
+	_, _, _, err := checkSynTxDeposit(st, tx.Payload)
 	return err
 }
 
-func (SynTxDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	_, tas, ttd, err := checkSynTxDeposit(st, tx.Transaction)
+func (SynTxDeposit) DeliverTx(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
+	_, tas, ttd, err := checkSynTxDeposit(st, tx.Payload)
 
 	if ttd != nil && err != nil {
 		//return to sender...
@@ -106,10 +106,10 @@ func checkSynTxDeposit(st *state.StateEntry, data []byte) (*state.AdiState, *sta
 	return &ids, &tas, ttd, nil
 }
 
-func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *transactions.GenTransaction) (*DeliverTxResult, error) {
+func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *transactions.Transaction) (*DeliverTxResult, error) {
 	res := new(DeliverTxResult)
-	res.Submissions = make([]*transactions.GenTransaction, 1)
-	res.Submissions[0] = &transactions.GenTransaction{}
+	res.Submissions = make([]*transactions.Transaction, 1)
+	res.Submissions[0] = &transactions.Transaction{}
 	rs := res.Submissions[0]
 	rs.Routing = types.GetAddressFromIdentity(ttd.FromUrl.AsString())
 	rs.ChainID = types.GetChainIdFromChainPath(ttd.FromUrl.AsString()).Bytes()
@@ -126,6 +126,6 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *transa
 		//shouldn't get here.
 		return nil, err
 	}
-	rs.Transaction = retdepdata
+	rs.Payload = retdepdata
 	return res, nil
 }

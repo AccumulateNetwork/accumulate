@@ -40,9 +40,9 @@ func Load(txBouncer *relay.Relay, Origin ed25519.PrivateKey, walletCount, txCoun
 		out := transactions.Output{Dest: wallet[randDest].Addr, Amount: 1000} // create the transaction output
 		addrCountMap[wallet[randDest].Addr]++                                 // count the number of deposits to output
 		send := transactions.NewTokenSend(wallet[origin].Addr, out)           // Create a send token transaction
-		gtx := new(transactions.GenTransaction)                               // wrap in a GenTransaction
+		gtx := new(transactions.Transaction)                               // wrap in a GenTransaction
 		gtx.SigInfo = new(transactions.SignatureInfo)                         // Get a Signature Info block
-		gtx.Transaction = send.Marshal()                                      // add  send transaction
+		gtx.Payload = send.Marshal()                                      // add  send transaction
 		gtx.SigInfo.URL = wallet[origin].Addr                                 // URL of source
 		if err := gtx.SetRoutingChainID(); err != nil {                       // Routing ChainID is the tx source
 			return nil, fmt.Errorf("failed to set routing chain ID: %v", err)
@@ -93,9 +93,9 @@ func RunLoadTest(txBouncer *relay.Relay, origin *ed25519.PrivateKey, walletCount
 		return nil, fmt.Errorf("failed to marshal deposit: %v", err)
 	}
 
-	gtx := new(transactions.GenTransaction)
+	gtx := new(transactions.Transaction)
 	gtx.SigInfo = new(transactions.SignatureInfo)
-	gtx.Transaction = depData
+	gtx.Payload = depData
 	gtx.SigInfo.URL = *destAddress.AsString()
 	gtx.ChainID = types.GetChainIdFromChainPath(destAddress.AsString())[:]
 	gtx.Routing = types.GetAddressFromIdentity(destAddress.AsString())

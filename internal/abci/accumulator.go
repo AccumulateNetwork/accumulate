@@ -158,7 +158,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 	//the submission is the format of the Tx input
-	sub := new(transactions.GenTransaction)
+	sub := new(transactions.Transaction)
 
 	//unpack the request
 	rem, err := sub.UnMarshal(req.Tx)
@@ -190,7 +190,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
 	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: code.CodeTypeOK}
 
-	sub := &transactions.GenTransaction{}
+	sub := &transactions.Transaction{}
 
 	//unpack the request
 	//how do i detect errors?  This causes segfaults if not tightly checked.

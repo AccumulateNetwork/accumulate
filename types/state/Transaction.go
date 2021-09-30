@@ -25,14 +25,14 @@ type txState struct {
 }
 
 // NewPendingTransaction will create a new pending transaction from a general transaction
-func NewPendingTransaction(gtx *transactions.GenTransaction) *PendingTransaction {
+func NewPendingTransaction(gtx *transactions.Transaction) *PendingTransaction {
 	ret := &PendingTransaction{}
 	ret.Chain.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypeTransaction)
 	ret.Signature = gtx.Signature
 	ret.TransactionState = &txState{}
 	ret.TransactionState.SigInfo = gtx.SigInfo
 	ret.TransactionState.Transaction = &types.Bytes{}
-	*ret.TransactionState.Transaction = gtx.Transaction
+	*ret.TransactionState.Transaction = gtx.Payload
 	txId := new(types.Bytes32)
 	copy(txId[:], gtx.TransactionHash())
 	ret.TransactionState.transactionHash = txId

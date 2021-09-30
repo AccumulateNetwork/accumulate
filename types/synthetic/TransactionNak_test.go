@@ -14,7 +14,7 @@ func TestTransactionNak(t *testing.T) {
 	toAccount := "wileecoyote/acme"
 	chainid := types.GetChainIdFromChainPath(&toAccount)
 
-	tx := &transactions.GenTransaction{}
+	tx := &transactions.Transaction{}
 	tx.Signature = append(tx.Signature, nil) // add bogus signature for Marshal
 	tx.Routing = types.GetAddressFromIdentity(&toAccount)
 	tx.ChainID = chainid[:]
@@ -28,7 +28,7 @@ func TestTransactionNak(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tx.Transaction = data
+	tx.Payload = data
 
 	_, err = tx.Marshal()
 	if err != nil {

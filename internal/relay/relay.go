@@ -44,7 +44,7 @@ func (b *Relay) resetBatches() {
 	}
 }
 
-func (b *Relay) BatchTx(tx *transactions.GenTransaction) (*ctypes.ResultBroadcastTx, error) {
+func (b *Relay) BatchTx(tx *transactions.Transaction) (*ctypes.ResultBroadcastTx, error) {
 	data, err := tx.Marshal()
 	if err != nil {
 		return nil, err
@@ -80,7 +80,7 @@ func dispatch(batches []*rpchttp.BatchHTTP) {
 // SendTx
 // This function will send an individual transaction and return the result.  However, this is a broadcast asynchronous
 // call to tendermint, so it won't provide tendermint results from CheckTx or DeliverTx
-func (b *Relay) SendTx(tx *transactions.GenTransaction) (*ctypes.ResultBroadcastTx, error) {
+func (b *Relay) SendTx(tx *transactions.Transaction) (*ctypes.ResultBroadcastTx, error) {
 	data, err := tx.Marshal()
 	if err != nil {
 		return nil, err

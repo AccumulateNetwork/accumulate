@@ -9,9 +9,9 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
-// GenTransaction
+// Transaction
 // Every transaction that goes through the Accumulate protocol is packaged
-// as a GenTransaction.  This means we implement this once, and most of the
+// as a Transaction.  This means we implement this once, and most of the
 // transaction validation and processing is done in one and only one way.
 //
 // Note we Hash the SigInfo (that makes every transaction unique) and
@@ -21,21 +21,21 @@ import (
 // Since all transactions need the SigInfo, no point in implementing it
 // over and over.  But a range of transactions are needed, this the
 // Transaction.
-type GenTransaction struct {
+type Transaction struct {
 	Routing uint64 //            first 8 bytes of hash of identity [NOT marshaled]
 	ChainID []byte //            hash of chain URL [NOT marshaled]
 
-	Signature   []*ED25519Sig  // Signature(s) of the transaction
-	TxHash      []byte         // Hash of the Transaction
-	SigInfo     *SignatureInfo // Information that is included with the Transaction
-	Transaction []byte         // The transaction that follows
+	Signature []*ED25519Sig  // Signature(s) of the transaction
+	TxHash    []byte         // Hash of the Transaction
+	SigInfo   *SignatureInfo // Information that is included with the Transaction
+	Payload   []byte         // The transaction that follows
 }
 
 // Equal
 // Largely used in testing, but allows the testing that one GenTransaction
 // is equal to another.  In testing we marshal and unmarshal a GenTransaction
 // and test that the information in the GenTransaction is preserved
-func (t *GenTransaction) Equal(t2 *GenTransaction) bool {
+func (t *Transaction) Equal(t2 *Transaction) bool {
 	t.TransactionHash() //                                              make sure both have TransactionHashes computed
 	t2.TransactionHash()
 	for i, sig := range t.Signature { //                                for every signature
@@ -45,13 +45,13 @@ func (t *GenTransaction) Equal(t2 *GenTransaction) bool {
 	}
 	return t.SigInfo.Equal(t2.SigInfo) && //                            The SigInfo has to be the same
 		bytes.Equal(t.TransactionHash(), t2.TransactionHash()) && //    Check the Transaction hash
-		bytes.Equal(t.Transaction, t2.Transaction) //                   and the transaction. Mismatch is false
+		bytes.Equal(t.Payload, t2.Payload) //                   and the transaction. Mismatch is false
 }
 
 // TransactionHash
 // compute the transaction hash from the elements of the GenTransaction.
 // This is used to populate the TxHash field.
-func (t *GenTransaction) TransactionHash() []byte {
+func (t *Transaction) TransactionHash() []byte {
 	if t.TxHash != nil { //                                Check if I have the hash already
 		return t.TxHash //                                  Return it if I do
 	} //
@@ -60,7 +60,7 @@ func (t *GenTransaction) TransactionHash() []byte {
 		return nil //
 	} //
 	sHash := sha256.Sum256(data)                        // Compute the SigHash
-	tHash := sha256.Sum256(t.Transaction)               // Compute the transaction Hash
+	tHash := sha256.Sum256(t.Payload)                   // Compute the transaction Hash
 	txh := sha256.Sum256(append(sHash[:], tHash[:]...)) // Take hash of SigHash on left and hash of sub tx on right
 	t.TxHash = txh[:]                                   // cache it
 	return txh[:]                                       // And return it
@@ -68,7 +68,7 @@ func (t *GenTransaction) TransactionHash() []byte {
 
 // UnMarshal
 // Create the binary representation of the GenTransaction
-func (t *GenTransaction) Marshal() (data []byte, err error) {
+func (t *Transaction) Marshal() (data []byte, err error) {
 	defer func() { //                                                     If any sort of error occurs,
 		if r := recover(); r != nil { //                               then marshalling fails, and report
 			err = fmt.Errorf("error marshaling GenTransaction %v", r) //  the error.
@@ -94,15 +94,15 @@ func (t *GenTransaction) Marshal() (data []byte, err error) {
 	if err != nil {               // If we have an error, report it.
 		return nil, err //
 	}
-	data = append(data, si...)                               // Add the SigInfo
-	data = append(data, common.SliceBytes(t.Transaction)...) // Add the transaction
+	data = append(data, si...)                           // Add the SigInfo
+	data = append(data, common.SliceBytes(t.Payload)...) // Add the transaction
 	return data, nil
 }
 
 // UnMarshal
 // Take a bunch of bytes in data a []byte and pull out all the values for
 // the GenTransaction
-func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
+func (t *Transaction) UnMarshal(data []byte) (nextData []byte, err error) {
 	defer func() { //
 		if r := recover(); r != nil { //
 			err = fmt.Errorf("error unmarshaling GenTransaction: %v", r) //
@@ -125,9 +125,9 @@ func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
 	if err != nil {                       //                Get an error? Complain to caller!
 		return nil, err //
 	} //
-	t.Transaction, data = common.BytesSlice(data) //        Get the Transaction out of the data
-	err = t.SetRoutingChainID()                   //        Now compute the Routing and ChainID
-	if err != nil {                               //        If an error, then complain
+	t.Payload, data = common.BytesSlice(data) //        Get the Transaction out of the data
+	err = t.SetRoutingChainID()               //        Now compute the Routing and ChainID
+	if err != nil {                           //        If an error, then complain
 		return nil, err //                                  return no data, and an error
 	} //
 	return data, nil //                                     Return the data and the fact all is well.
@@ -136,7 +136,7 @@ func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
 // SetRoutingChainID
 // Take the URL in the GenTransaction and compute the Routing number and
 // the ChainID
-func (t *GenTransaction) SetRoutingChainID() error { //
+func (t *Transaction) SetRoutingChainID() error { //
 	if t.Routing > 0 && t.ChainID != nil { //                               Check if there is anything to do
 		return nil //                                                       If routing and chainID are set, good
 	}
@@ -155,7 +155,7 @@ func (t *GenTransaction) SetRoutingChainID() error { //
 
 // ValidateSig
 // We validate the signature of the transaction.
-func (t *GenTransaction) ValidateSig() bool { // Validate the signatures on the GenTransaction
+func (t *Transaction) ValidateSig() bool { // Validate the signatures on the GenTransaction
 	th := t.TransactionHash()       //           Get the transaction hash (computes it if it must)
 	for _, v := range t.Signature { //           All signatures must verify the TxHash
 		if !v.Verify(th) { //                    Verify each signature
@@ -167,7 +167,7 @@ func (t *GenTransaction) ValidateSig() bool { // Validate the signatures on the 
 
 // TransactionType
 // Return the type of the Transaction (the first VarInt)
-func (t *GenTransaction) TransactionType() (transType uint64) {
-	transType, _ = common.BytesUint64(t.Transaction)
+func (t *Transaction) TransactionType() (transType uint64) {
+	transType, _ = common.BytesUint64(t.Payload)
 	return transType
 }

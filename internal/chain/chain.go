@@ -11,10 +11,10 @@ type Chain interface {
 	BeginBlock()
 
 	// CheckTx partially validates the transaction.
-	CheckTx(*state.StateEntry, *transactions.GenTransaction) error
+	CheckTx(*state.StateEntry, *transactions.Transaction) error
 
 	// DeliverTx fully validates the transaction.
-	DeliverTx(*state.StateEntry, *transactions.GenTransaction) (*DeliverTxResult, error)
+	DeliverTx(*state.StateEntry, *transactions.Transaction) (*DeliverTxResult, error)
 
 	// Commit commits the block.
 	Commit()
@@ -25,7 +25,7 @@ type DeliverTxResult struct {
 	MainChainData map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
 	PendingData   map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
 	EventData     []byte                         //this should be events that need to get published
-	Submissions   []*transactions.GenTransaction //this is a list of synthetic transactions
+	Submissions   []*transactions.Transaction //this is a list of synthetic transactions
 }
 
 func (r *DeliverTxResult) AddMainChainData(chainid *types.Bytes32, data []byte) {
@@ -49,6 +49,6 @@ func (r *DeliverTxResult) AddPendingData(txId *types.Bytes32, data []byte) {
 	r.PendingData[*txId] = data
 }
 
-func (r *DeliverTxResult) AddSyntheticTransaction(tx *transactions.GenTransaction) {
+func (r *DeliverTxResult) AddSyntheticTransaction(tx *transactions.Transaction) {
 	r.Submissions = append(r.Submissions, tx)
 }

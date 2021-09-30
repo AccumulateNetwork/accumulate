@@ -53,7 +53,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 	})
 
 	s.Run("Passes valid TX to chain", func() {
-		tx := &transactions.GenTransaction{
+		tx := &transactions.Transaction{
 			Routing:   1,
 			ChainID:   []byte{2},
 			Signature: []*transactions.ED25519Sig{nil},
@@ -68,7 +68,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 	})
 
 	s.Run("Rejects TX if chain returns an error", func() {
-		tx := &transactions.GenTransaction{
+		tx := &transactions.Transaction{
 			Routing:   1,
 			ChainID:   []byte{2},
 			Signature: []*transactions.ED25519Sig{nil},
@@ -92,7 +92,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 	})
 
 	s.Run("Passes valid TX to chain", func() {
-		tx := &transactions.GenTransaction{
+		tx := &transactions.Transaction{
 			Routing:   1,
 			ChainID:   []byte{2},
 			Signature: []*transactions.ED25519Sig{nil},
@@ -107,7 +107,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 	})
 
 	s.Run("Rejects TX if chain returns an error", func() {
-		tx := &transactions.GenTransaction{
+		tx := &transactions.Transaction{
 			Routing:   1,
 			ChainID:   []byte{2},
 			Signature: []*transactions.ED25519Sig{nil},

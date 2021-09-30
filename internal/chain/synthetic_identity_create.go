@@ -19,7 +19,7 @@ func (SynIdentityCreate) instruction() types.TxType {
 
 func (SynIdentityCreate) BeginBlock() {}
 
-func (SynIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (SynIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.Transaction) error {
 	if st == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
@@ -30,7 +30,7 @@ func (SynIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTrans
 	}
 
 	is := api.ADI{}
-	err := is.UnmarshalBinary(tx.Transaction)
+	err := is.UnmarshalBinary(tx.Payload)
 	if err != nil {
 		return fmt.Errorf("data payload of submission is not a valid identity state create message")
 	}
@@ -38,7 +38,7 @@ func (SynIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTrans
 	return nil
 }
 
-func (SynIdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (SynIdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 	if st == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current state not defined")
@@ -49,7 +49,7 @@ func (SynIdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 	}
 
 	is := api.ADI{}
-	err := is.UnmarshalBinary(tx.Transaction)
+	err := is.UnmarshalBinary(tx.Payload)
 	if err != nil {
 		return nil, fmt.Errorf("data payload of submission is not a valid identity state create message")
 	}

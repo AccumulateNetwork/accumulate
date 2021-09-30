@@ -13,7 +13,7 @@ func TestTransactionState(t *testing.T) {
 	var nonce uint64 = 1
 
 	we := transactions.NewWalletEntry()
-	trans := new(transactions.GenTransaction)
+	trans := new(transactions.Transaction)
 	trans.SigInfo = new(transactions.SignatureInfo)
 	trans.SigInfo.URL = we.Addr
 	trans.SigInfo.Nonce = nonce
@@ -21,7 +21,7 @@ func TestTransactionState(t *testing.T) {
 		t.Fatal("could not create the Routing value")
 	}
 
-	trans.Transaction = nts1.Marshal()
+	trans.Payload = nts1.Marshal()
 
 	eSig := new(transactions.ED25519Sig)
 	transHash := trans.TransactionHash()

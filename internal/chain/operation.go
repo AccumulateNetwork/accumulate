@@ -21,8 +21,8 @@ type operation interface {
 	instruction() types.TxType
 
 	BeginBlock()
-	CheckTx(*state.StateEntry, *transactions.GenTransaction) error
-	DeliverTx(*state.StateEntry, *transactions.GenTransaction) (*DeliverTxResult, error)
+	CheckTx(*state.StateEntry, *transactions.Transaction) error
+	DeliverTx(*state.StateEntry, *transactions.Transaction) (*DeliverTxResult, error)
 }
 
 func (m *operations) add(chain operation) {

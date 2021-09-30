@@ -33,12 +33,12 @@ func (v *BlockValidator) BeginBlock() {
 	v.operations.BeginBlock()
 }
 
-func (v *BlockValidator) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (v *BlockValidator) CheckTx(st *state.StateEntry, tx *transactions.Transaction) error {
 	// TODO shouldn't this be checking the subchains?
 	return nil
 }
 
-func (v *BlockValidator) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (v *BlockValidator) DeliverTx(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 	txType := types.TxType(tx.TransactionType())
 
 	var err error

@@ -17,11 +17,11 @@ func (TokenIssuance) instruction() types.TxType  { return types.TxTypeTokenCreat
 
 func (TokenIssuance) BeginBlock() {}
 
-func (TokenIssuance) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (TokenIssuance) CheckTx(st *state.StateEntry, tx *transactions.Transaction) error {
 	return nil
 }
 
-func (TokenIssuance) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (TokenIssuance) DeliverTx(st *state.StateEntry, tx *transactions.Transaction) (*DeliverTxResult, error) {
 	if err := tx.SetRoutingChainID(); err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (TokenIssuance) DeliverTx(st *state.StateEntry, tx *transactions.GenTransac
 	}
 
 	ti := &api.Token{}
-	err = json.Unmarshal(tx.Transaction, ti)
+	err = json.Unmarshal(tx.Payload, ti)
 	if err != nil {
 		return nil, err
 	}

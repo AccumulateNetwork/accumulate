@@ -428,11 +428,11 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	deposit.TokenUrl = tokenUrl
 
 	depData, err := deposit.MarshalBinary()
-	gtx := new(transactions.GenTransaction)
+	gtx := new(transactions.Transaction)
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = wallet.Addr
 	gtx.SigInfo.Nonce = wallet.Nonce
-	gtx.Transaction = depData
+	gtx.Payload = depData
 	if err := gtx.SetRoutingChainID(); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", adi), err)
 	}

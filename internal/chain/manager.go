@@ -84,7 +84,7 @@ func (m *Manager) BeginBlock(req abci.BeginBlockRequest) {
 }
 
 // CheckTx implements ./abci.Chain
-func (m *Manager) CheckTx(tx *transactions.GenTransaction) error {
+func (m *Manager) CheckTx(tx *transactions.Transaction) error {
 	err := tx.SetRoutingChainID()
 	if err != nil {
 		return err
@@ -104,7 +104,7 @@ func (m *Manager) CheckTx(tx *transactions.GenTransaction) error {
 }
 
 // DeliverTx implements ./abci.Chain
-func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
+func (m *Manager) DeliverTx(tx *transactions.Transaction) error {
 	m.wg.Add(1)
 
 	// If this is done async (`go m.deliverTxAsync(tx)`), how would an error
@@ -113,7 +113,7 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 
 	defer m.wg.Done()
 
-	if tx.Transaction == nil || tx.SigInfo == nil || len(tx.ChainID) != 32 {
+	if tx.Payload == nil || tx.SigInfo == nil || len(tx.ChainID) != 32 {
 		return fmt.Errorf("malformed transaction")
 	}
 
@@ -207,8 +207,8 @@ func (m *Manager) Commit() ([]byte, error) {
 		// Now we create a synthetic transaction and publish to the directory
 		// block validator
 		dbvc := DeliverTxResult{}
-		dbvc.Submissions = make([]*transactions.GenTransaction, 1)
-		dbvc.Submissions[0] = &transactions.GenTransaction{}
+		dbvc.Submissions = make([]*transactions.Transaction, 1)
+		dbvc.Submissions[0] = &transactions.Transaction{}
 		dcAdi := "dc"
 		dbvc.Submissions[0].ChainID = types.GetChainIdFromChainPath(&dcAdi).Bytes()
 		dbvc.Submissions[0].Routing = types.GetAddressFromIdentity(&dcAdi)
@@ -257,7 +257,7 @@ func (m *Manager) getState(id []byte) (*state.StateEntry, error) {
 
 // isSane will check the nonce (if applicable), check the public key for the transaction,
 // and verify the signature of the transaction.
-func (m *Manager) isSane(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (m *Manager) isSane(st *state.StateEntry, tx *transactions.Transaction) error {
 	// if st.IsValid(state.MaskChainState | state.MaskAdiState) {
 	// 	//1. verify nonce
 	// 	//2. verify public key against state
@@ -281,7 +281,7 @@ func (m *Manager) submitSyntheticTx(vtx *DeliverTxResult) error {
 		// processed by the next EndBlock so place in pending queue. If we are
 		// the leader then we are responsible for dispatching the synth tx.
 
-		if tx.Transaction == nil {
+		if tx.Payload == nil {
 			// This should never happen
 			panic("submission is missing its synthetic transaction")
 		}
