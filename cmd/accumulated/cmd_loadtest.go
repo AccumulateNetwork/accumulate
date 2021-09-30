@@ -8,11 +8,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/networks"
-	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/cobra"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -111,7 +111,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	time.Sleep(10000 * time.Millisecond)
 
-	query := router.NewQuery(relay)
+	query := api.NewQuery(relay)
 	for _, v := range addrList[1:] {
 		resp, err := query.GetChainState(&v, nil)
 		if err != nil {
