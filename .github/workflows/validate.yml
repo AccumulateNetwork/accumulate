@@ -1,11 +1,7 @@
 name: Validate
 # This workflow validates that the project builds and passes tests
 
-on:
-  push:
-    branches: [ '*' ]
-  pull_request:
-    branches: [ '*' ]
+on: [push, pull_request]
 
 jobs:
   build:
