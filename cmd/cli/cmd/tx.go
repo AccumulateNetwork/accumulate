@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/spf13/cobra"
 )
@@ -64,10 +65,12 @@ func GetTX(account string, hash string) {
 
 	var res interface{}
 	var str []byte
+	var hashbytes types.Bytes32
 
 	params := acmeapi.TokenTx{}
-	//params.From = account
-	//params.Hash = hash
+	params.From = types.UrlChain{types.String(account)}
+	hashbytes.FromString(hash)
+	params.Hash = hashbytes
 
 	if err := Client.Request(context.Background(), "token-tx", params, &res); err != nil {
 		log.Fatal(err)
