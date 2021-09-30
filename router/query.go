@@ -180,7 +180,7 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 		return nil, fmt.Errorf("no data available for txid %x", txId)
 	}
 	_, txRaw := common.BytesSlice(qResp.Value)
-	if txRaw != nil {
+	if txRaw == nil {
 		return nil, fmt.Errorf("unable to obtain data from value")
 	}
 
