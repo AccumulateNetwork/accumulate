@@ -7,21 +7,16 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func NewWithNetworks(networkList ...int) *Relay {
-	if len(networkList) > len(networks.Networks) {
-		return nil
-	}
-
+func NewWithNetworks(networkList ...int) (*Relay, error) {
 	rpcClients := []*rpchttp.HTTP{}
-	for i := range networkList {
-		j := networkList[i]
-		lAddr := fmt.Sprintf("tcp://%s:%d", networks.Networks[j].Nodes[0], networks.Networks[j].Port+1)
+	for _, i := range networkList {
+		lAddr := fmt.Sprintf("tcp://%s:%d", networks.Networks[i].Nodes[0].IP, networks.Networks[i].Port+1)
 		client, err := rpchttp.New(lAddr)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		rpcClients = append(rpcClients, client)
 	}
 	txBouncer := New(rpcClients...)
-	return txBouncer
+	return txBouncer, nil
 }
