@@ -16,7 +16,7 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
 	// create new JSON RPC client
-	c := jsonrpc.NewClient("http://localhost:34000/v1")
+	c := jsonrpc.NewClient("http://localhost:35554/v1")
 
 	// make "get" request to JSON RPC API
 	fmt.Printf("=============== proxyHandler Is going to send : %s ===========\n\n\n", r.URL)
