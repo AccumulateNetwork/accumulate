@@ -1,13 +1,8 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"log"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -67,7 +62,7 @@ func PrintADIGet() {
 }
 
 func PrintADIPublic() {
-	fmt.Println("  accumulate adi public [URL]			Print public key hash for chosen ADI")
+	fmt.Println("  accumulate adi public [URL]			Print public keys hashes for chosen ADI")
 }
 
 func PrintADICreate() {
@@ -87,33 +82,43 @@ func PrintADI() {
 
 func GetADI(url string) {
 
-	var res interface{}
-	var str []byte
+	/*
+		var res interface{}
+		var str []byte
 
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(url)
+		params := acmeapi.APIRequestURL{}
+		params.URL = types.String(url)
 
-	if err := Client.Request(context.Background(), "adi", params, &res); err != nil {
-		log.Fatal(err)
-	}
+		if err := Client.Request(context.Background(), "adi", params, &res); err != nil {
+			log.Fatal(err)
+		}
 
-	str, err := json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
+		str, err := json.Marshal(res)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	fmt.Println(string(str))
+		fmt.Println(string(str))
+	*/
+
+	fmt.Println("ADI functionality is not available on Testnet")
 
 }
 
 func PublicADI(url string) {
-	fmt.Println("Public key hash of ADI " + url)
+
+	fmt.Println("ADI functionality is not available on Testnet")
+
 }
 
 func NewADI(url string) {
-	fmt.Println("Generating new ADI " + url)
+
+	fmt.Println("ADI functionality is not available on Testnet")
+
 }
 
 func ImportADI(url string, pk string) {
-	fmt.Println("Importing ADI " + url + " with private key " + pk)
+
+	fmt.Println("ADI functionality is not available on Testnet")
+
 }
