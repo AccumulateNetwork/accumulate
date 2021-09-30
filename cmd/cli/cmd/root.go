@@ -37,7 +37,7 @@ var rootCmd = func() *cobra.Command {
 	}
 
 	flags := cmd.PersistentFlags()
-	flags.StringVarP(&Client.Server, "server", "s", "http://localhost:34000/v1", "Accumulated server")
+	flags.StringVarP(&Client.Server, "server", "s", "http://localhost:35554/v1", "Accumulated server")
 	flags.DurationVarP(&Client.Timeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
 	flags.BoolVarP(&Client.DebugRequest, "debug", "d", false, "Print accumulated API calls")
 
