@@ -11,6 +11,20 @@ import (
 	tm "github.com/tendermint/tendermint/config"
 )
 
+type NetworkType string
+
+const (
+	BVC NetworkType = "bvc"
+	DC  NetworkType = "dc"
+)
+
+type NodeType string
+
+const (
+	Validator NodeType = "validator"
+	Follower  NodeType = "follower"
+)
+
 func Default() *Config {
 	c := new(Config)
 	c.Config = *tm.DefaultConfig()
@@ -24,13 +38,17 @@ func DefaultValidator() *Config {
 }
 
 type Config struct {
-	tm.Config  `mapstructure:",squash"`
-	Accumulate Accumulate `mapstructure:",squash"`
+	tm.Config `mapstructure:",squash"`
+
+	Accumulate struct {
+		Accumulate `toml:"acc" mapstructure:"acc"`
+	}
 }
 
 type Accumulate struct {
-	AccRPC    RPC    `toml:"acc-rpc" mapstructure:"acc-rpc"`
-	AccRouter Router `toml:"acc-router" mapstructure:"acc-router"`
+	Type      string `toml:"type" mapstructure:"type"` // 'BVC' or 'DC'
+	AccRPC    RPC    `toml:"rpc" mapstructure:"rpc"`
+	AccRouter Router `toml:"router" mapstructure:"router"`
 }
 
 type RPC struct {

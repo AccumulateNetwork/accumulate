@@ -2,8 +2,9 @@ package synthetic
 
 import (
 	"crypto/sha256"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"testing"
+
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 )
@@ -14,6 +15,7 @@ func TestTransactionNak(t *testing.T) {
 	chainid := types.GetChainIdFromChainPath(&toAccount)
 
 	tx := &transactions.GenTransaction{}
+	tx.Signature = append(tx.Signature, nil) // add bogus signature for Marshal
 	tx.Routing = types.GetAddressFromIdentity(&toAccount)
 	tx.ChainID = chainid[:]
 	tx.SigInfo = new(transactions.SignatureInfo)
