@@ -30,7 +30,7 @@ func init() {
 }
 
 func PrintGet() {
-	fmt.Println("  accumulate get [URL] 		Get data by Accumulate URL")
+	fmt.Println("  accumulate get [url] 		Get data by Accumulate URL")
 }
 
 func Get(url string) {
