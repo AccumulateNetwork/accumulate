@@ -72,7 +72,7 @@ func GetTX(account string, hash string) {
 	hashbytes.FromString(hash)
 	params.Hash = hashbytes
 
-	jsondata, err := json.Marshal(params)
+	jsondata, err := json.Marshal(&params)
 	if err != nil {
 		log.Fatal(err)
 	}
