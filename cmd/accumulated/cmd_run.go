@@ -15,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 var cmdRun = &cobra.Command{
@@ -69,8 +70,14 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	rpcClient, err := rpchttp.New(config.RPC.ListenAddress)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to reate RPC client: %v", err)
+		os.Exit(1)
+	}
+
 	bvc := chain.NewBlockValidator()
-	mgr, err := chain.NewManager(config, db, pv.Key.PrivKey.Bytes(), bvc)
+	mgr, err := chain.NewManager(rpcClient, db, pv.Key.PrivKey.Bytes(), bvc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize chain manager: %v", err)
 		os.Exit(1)
