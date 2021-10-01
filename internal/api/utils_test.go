@@ -19,12 +19,12 @@ import (
 	"github.com/tendermint/tendermint/privval"
 )
 
-func randomRouterPorts() *cfg.Router {
+func randomRouterPorts() *cfg.API {
 	port, err := tmnet.GetFreePort()
 	if err != nil {
 		panic(err)
 	}
-	return &cfg.Router{
+	return &cfg.API{
 		JSONListenAddress: fmt.Sprintf("localhost:%d", port),
 		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
 	}
@@ -65,7 +65,7 @@ func initOptsForNetwork(t *testing.T, name string) node.InitOptions {
 	}
 }
 
-func boostrapBVC(t *testing.T, configfile string, workingdir string) {
+func boostrapBVC(t *testing.T, workingdir string) {
 	t.Helper()
 
 	opts := initOptsForNetwork(t, "Badlands")
@@ -96,10 +96,10 @@ func boostrapBVC(t *testing.T, configfile string, workingdir string) {
 	}
 }
 
-func newBVC(t *testing.T, configfile string, workingdir string) (*cfg.Config, *privval.FilePV, *node.Node) {
+func newBVC(t *testing.T, workingdir string) (*cfg.Config, *privval.FilePV, *node.Node) {
 	t.Helper()
 
-	cfg, err := cfg.LoadFile(workingdir, configfile)
+	cfg, err := cfg.Load(workingdir)
 	if err != nil {
 		panic(err)
 	}
@@ -140,14 +140,14 @@ func newBVC(t *testing.T, configfile string, workingdir string) (*cfg.Config, *p
 	return cfg, pv, node
 }
 
-func startBVC(t *testing.T, cfgPath string, dir string) (*cfg.Config, *privval.FilePV, *node.Node) {
+func startBVC(t *testing.T, dir string) (*cfg.Config, *privval.FilePV, *node.Node) {
 	t.Helper()
 
 	//generate the config files needed to run a test BVC
-	boostrapBVC(t, cfgPath, dir)
+	boostrapBVC(t, dir)
 
 	///Build a BVC we'll use for our test
-	cfg, pv, node := newBVC(t, cfgPath, filepath.Join(dir, "Node0"))
+	cfg, pv, node := newBVC(t, filepath.Join(dir, "Node0"))
 	err := node.Start()
 	if err != nil {
 		t.Fatal(err)

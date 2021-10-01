@@ -16,9 +16,8 @@ func TestPersistence(t *testing.T) {
 	cfg := DefaultValidator()
 	cfg.SetRoot(dir)
 	cfg.Accumulate.Type = BVC
-	cfg.Accumulate.AccRPC.ListenAddress = "rpc-listen"
-	cfg.Accumulate.AccRouter.JSONListenAddress = "api-json-listen"
-	cfg.Accumulate.AccRouter.RESTListenAddress = "api-rest-listen"
+	cfg.Accumulate.API.JSONListenAddress = "api-json-listen"
+	cfg.Accumulate.API.RESTListenAddress = "api-rest-listen"
 
 	// Small changes to make Equal happy
 	cfg.StateSync.RPCServers = []string{}
