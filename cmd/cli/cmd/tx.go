@@ -72,11 +72,16 @@ func GetTX(account string, hash string) {
 	hashbytes.FromString(hash)
 	params.Hash = hashbytes
 
-	if err := Client.Request(context.Background(), "token-tx", params, &res); err != nil {
+	jsondata, err := json.Marshal(params)
+	if err != nil {
 		log.Fatal(err)
 	}
 
-	str, err := json.Marshal(res)
+	if err := Client.Request(context.Background(), "token-tx", jsondata, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	str, err = json.Marshal(res)
 	if err != nil {
 		log.Fatal(err)
 	}
