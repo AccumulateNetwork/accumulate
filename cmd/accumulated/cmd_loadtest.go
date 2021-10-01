@@ -61,7 +61,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 
-		lAddr := fmt.Sprintf("tcp://%s:%d", net.Nodes[0], net.Port+node.TmRpcPortOffset)
+		lAddr := fmt.Sprintf("tcp://%s:%d", net.Nodes[0].IP, net.Port+node.TmRpcPortOffset)
 		client, err := rpc.New(lAddr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for network %q: %v\n", name, err)
