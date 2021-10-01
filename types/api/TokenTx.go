@@ -20,6 +20,11 @@ type TokenTx struct {
 	Meta json.RawMessage  `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
+type TokenTxRequest struct {
+	Hash types.String `json:"hash" form:"hash" query:"hash" validate:"required"` //,hexadecimal"`
+	From types.String `json:"from" form:"from" query:"from" validate:"required"`
+}
+
 type TokenTxOutput struct {
 	URL    types.UrlChain `json:"url" form:"url" query:"url" validate:"required"`
 	Amount types.Amount   `json:"amount" form:"amount" query:"amount" validate:"gt=0"`

@@ -65,12 +65,10 @@ func GetTX(account string, hash string) {
 
 	var res interface{}
 	var str []byte
-	var hashbytes types.Bytes32
 
-	params := acmeapi.TokenTx{}
-	params.From = types.UrlChain{types.String(account)}
-	hashbytes.FromString(hash)
-	params.Hash = hashbytes
+	params := acmeapi.TokenTxRequest{}
+	params.From = types.String(account)
+	params.Hash = types.String(hash)
 
 	if err := Client.Request(context.Background(), "token-tx", params, &res); err != nil {
 		log.Fatal(err)

@@ -336,19 +336,22 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &TokenTx{}
+	req := &acmeapi.TokenTxRequest{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
 	}
 
 	// validate only TokenTx.Hash (Assuming the hash is the txid)
-	if err = api.validate.StructPartial(req, "Hash", "From"); err != nil {
+	if err = api.validate.Struct(req); err != nil {
 		return NewValidatorError(err)
 	}
 
+	var hash types.Bytes32
+	hash.FromString(*req.Hash.AsString())
+
 	// Tendermint's integration here
-	resp, err := api.query.GetTokenTx(req.From.AsString(), req.Hash[:])
+	resp, err := api.query.GetTokenTx(req.From.AsString(), hash.Bytes())
 	if err != nil {
 		return NewValidatorError(err)
 	}
