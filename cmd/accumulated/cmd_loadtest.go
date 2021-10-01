@@ -55,17 +55,16 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	// Create clients for networks
 	for _, name := range flagLoadTest.Networks {
-		i := networks.IndexOf(name)
-		if i < 0 {
+		net := networks.Networks[name]
+		if net == nil {
 			fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
 			os.Exit(1)
 		}
 
-		net := networks.Networks[i]
 		lAddr := fmt.Sprintf("tcp://%s:%d", net.Nodes[0], net.Port+node.TmRpcPortOffset)
 		client, err := rpc.New(lAddr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for network %d: %v\n", i, err)
+			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for network %q: %v\n", name, err)
 			os.Exit(1)
 		}
 
