@@ -125,7 +125,10 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	m.mu.Unlock()
 
 	// TODO differentiate between real errors and not-found
-	st, _ := m.getState(tx.ChainID)
+	st, err := m.getState(tx.ChainID)
+	if err != nil {
+		return fmt.Errorf("failed to get state: %v", err)
+	}
 
 	// //placeholder for special validation rules for synthetic transactions.
 	// if tx.TransactionType()&0xF0 > 0 {
@@ -135,7 +138,7 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	// 	//sender is legit.
 	// }
 
-	err := m.isSane(st, tx)
+	err = m.isSane(st, tx)
 	if err != nil {
 		return err
 	}
@@ -223,12 +226,14 @@ func (m *Manager) getState(id []byte) (*state.StateEntry, error) {
 	st.DB = m.db
 
 	// TODO check error
-	st.ChainState, _ = m.db.GetCurrentEntry(id)
-	if st.ChainState == nil {
+	var err error
+	st.ChainState, err = m.db.GetCurrentEntry(id)
+	if errors.Is(err, state.ErrNotFound) {
 		return st, nil
+	} else if err != nil {
+		return nil, err
 	}
 
-	var err error
 	st.ChainHeader, err = state.UnmarshalChain(st.ChainState.Entry)
 	if err != nil {
 		return st, fmt.Errorf("failed to unmarshal chain header: %v", err)

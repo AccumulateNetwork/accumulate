@@ -3,6 +3,7 @@ package transactions
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -170,4 +171,31 @@ func (t *GenTransaction) ValidateSig() bool { // Validate the signatures on the 
 func (t *GenTransaction) TransactionType() (transType uint64) {
 	transType, _ = common.BytesUint64(t.Transaction)
 	return transType
+}
+
+// As unmarshals the transaction payload as the given sub transaction type.
+func (t *GenTransaction) As(subTx encoding.BinaryUnmarshaler) error {
+	return subTx.UnmarshalBinary(t.Transaction)
+}
+
+func New(wallet *WalletEntry, subTx encoding.BinaryMarshaler) (*GenTransaction, error) {
+	payload, err := subTx.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	tx := new(GenTransaction)
+	tx.SigInfo = new(SignatureInfo)
+	tx.SigInfo.URL = wallet.Addr
+	tx.Signature = make([]*ED25519Sig, 1)
+	tx.Transaction = payload
+
+	err = tx.SetRoutingChainID()
+	if err != nil {
+		return nil, err
+	}
+
+	hash := tx.TransactionHash()
+	tx.Signature[0] = wallet.Sign(hash)
+	return tx, nil
 }
