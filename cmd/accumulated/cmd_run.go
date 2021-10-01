@@ -106,7 +106,7 @@ func runNode(cmd *cobra.Command, args []string) {
 	// The query object connects to the BVC, will be replaced with network client router
 	query := api.NewQuery(txRelay)
 
-	api.StartAPI(&config.Accumulate.AccRouter, query, txRelay)
+	api.StartAPI(&config.Accumulate.API, query, txRelay)
 
 	// Block forever
 	select {}
