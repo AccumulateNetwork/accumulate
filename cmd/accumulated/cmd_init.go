@@ -9,6 +9,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/config"
 	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -31,7 +32,8 @@ var cmdInitFollower = &cobra.Command{
 }
 
 var flagInit struct {
-	Net string
+	Net   string
+	Relay []string
 }
 
 var flagInitFollower struct {
@@ -44,6 +46,7 @@ func init() {
 	cmdInit.AddCommand(cmdInitFollower)
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
+	cmdInit.PersistentFlags().StringSliceVarP(&flagInit.Relay, "relay-to", "r", nil, "Other networks that should be relayed to")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
@@ -51,10 +54,22 @@ func init() {
 	cmdInitFollower.MarkFlagRequired("listen")
 }
 
-func initNode(*cobra.Command, []string) {
+func initNode(cmd *cobra.Command, args []string) {
 	network := networks.Networks[flagInit.Net]
 	if network == nil {
 		fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
+		os.Exit(1)
+	}
+
+	if !stringSliceContains(flagInit.Relay, flagInit.Net) {
+		fmt.Fprintf(os.Stderr, "Error: the node's own network, %q, must be included in --relay-to\n", flagInit.Net)
+		cmd.Usage()
+		os.Exit(1)
+	}
+
+	_, err := relay.NewWith(flagInit.Relay...)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: --relay-to: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -69,6 +84,7 @@ func initNode(*cobra.Command, []string) {
 		remoteIP[i] = net.IP
 		config[i] = new(cfg.Config)
 		config[i].Accumulate.Type = network.Type
+		config[i].Accumulate.Networks = flagInit.Relay
 
 		switch net.Type {
 		case cfg.Validator:
@@ -81,7 +97,7 @@ func initNode(*cobra.Command, []string) {
 		}
 	}
 
-	err := node.Init(node.InitOptions{
+	err = node.Init(node.InitOptions{
 		WorkDir:   flagMain.WorkDir,
 		ShardName: "accumulate.",
 		ChainID:   network.Name,
@@ -168,4 +184,13 @@ func initFollower(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func stringSliceContains(s []string, t string) bool {
+	for _, s := range s {
+		if s == t {
+			return true
+		}
+	}
+	return false
 }
