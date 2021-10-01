@@ -23,14 +23,14 @@ import (
 )
 
 type API struct {
-	config    *config.Router
+	config    *config.API
 	validate  *validator.Validate
 	query     *Query
 	txBouncer *relay.Relay
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(config *config.Router, q *Query, txBouncer *relay.Relay) *API {
+func StartAPI(config *config.API, q *Query, txBouncer *relay.Relay) *API {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
