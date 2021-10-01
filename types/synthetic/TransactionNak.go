@@ -2,6 +2,8 @@ package synthetic
 
 import (
 	"encoding/json"
+	"fmt"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -36,6 +38,46 @@ func NewTransactionNak(txid types.Bytes, from *types.String, to *types.String, c
 	}
 
 	return tan
+}
+
+func (t *TransactionNak) MarshalBinary() (data []byte, err error) {
+	data = append(data, common.Uint64Bytes(types.TxTypeSyntheticTxResponse.AsUint64())...)
+	header, err := t.Header.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("cannot marshal transactionnak, %v", err)
+	}
+	data = append(data, header...)
+	data = append(data, common.Uint64Bytes(uint64(t.Code))...)
+	data = append(data, common.SliceBytes(t.Metadata)...)
+	return data, nil
+}
+
+func (t *TransactionNak) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if rerr := recover(); rerr != nil {
+			err = fmt.Errorf("error unmarshaling TransactionNak %v", rerr)
+		}
+	}()
+
+	txType, data := common.BytesUint64(data)
+	if txType != types.TxTypeSyntheticTxResponse.AsUint64() {
+		return fmt.Errorf("invalid transaction type, expecting %s received %s",
+			types.TxTypeSyntheticTxResponse.Name(), types.TxType(txType).Name())
+	}
+
+	err = t.Header.UnmarshalBinary(data)
+	if err != nil {
+		return fmt.Errorf("")
+	}
+
+	data = data[t.Header.Size():]
+
+	code, data := common.BytesUint64(data)
+	t.Code = NakCode(code)
+
+	t.Metadata, _ = common.BytesSlice(data)
+
+	return nil
 }
 
 func (k *NakCode) MarshalJSON() ([]byte, error) {

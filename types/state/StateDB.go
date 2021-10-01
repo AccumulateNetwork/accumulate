@@ -2,16 +2,21 @@ package state
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-
 	"github.com/AccumulateNetwork/accumulated/smt/managed"
 	"github.com/AccumulateNetwork/accumulated/smt/pmt"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	smtDB "github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulated/types"
 )
+
+const debugStateDBWrites = false
+
+var ErrNotFound = errors.New("not found")
 
 type transactionLists struct {
 	validatedTx []*Transaction
@@ -48,19 +53,8 @@ type StateDB struct {
 	sync         sync.WaitGroup
 }
 
-// Open database to manage the smt and chain states
-func (sdb *StateDB) Open(dbFilename string, appId []byte, useMemDB bool, debug bool) error {
-	dbType := "badger"
+func (sdb *StateDB) init(appId []byte, debug bool) {
 	markPower := int64(8)
-	if useMemDB {
-		dbType = "memory"
-	}
-
-	sdb.db = &smtDB.Manager{}
-	err := sdb.db.Init(dbType, dbFilename)
-	if err != nil {
-		return err
-	}
 
 	sdb.db.AddBucket("StateEntries")
 	sdb.db.AddBucket("MainToPending")
@@ -76,7 +70,29 @@ func (sdb *StateDB) Open(dbFilename string, appId []byte, useMemDB bool, debug b
 	sdb.bpt = pmt.NewBPTManager(sdb.db)
 	sdb.mm = managed.NewMerkleManager(sdb.db, appId, markPower)
 	sdb.appId = appId
+}
+
+// Open database to manage the smt and chain states
+func (sdb *StateDB) Open(dbFilename string, appId []byte, useMemDB bool, debug bool) error {
+	dbType := "badger"
+	if useMemDB {
+		dbType = "memory"
+	}
+
+	sdb.db = &smtDB.Manager{}
+	err := sdb.db.Init(dbType, dbFilename)
+	if err != nil {
+		return err
+	}
+
+	sdb.init(appId, debug)
 	return nil
+}
+
+func (sdb *StateDB) Load(db storage.KeyValueDB, appId []byte, debug bool) {
+	sdb.db = new(smtDB.Manager)
+	sdb.db.InitWithDB(db)
+	sdb.init(appId, debug)
 }
 
 func (sdb *StateDB) GetDB() *smtDB.Manager {
@@ -121,7 +137,7 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 	data := sdb.db.Get("StateEntries", "", chainId)
 
 	if data == nil {
-		return nil, fmt.Errorf("no current state is defined")
+		return nil, fmt.Errorf("%w: no state defined for %X", ErrNotFound, chainId)
 	}
 
 	ret := &Object{}
@@ -158,7 +174,7 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 		//pull current state entry from the database.
 		currentState.stateData, err = sdb.GetPersistentEntry(chainId, false)
 		if err != nil {
-			return nil, fmt.Errorf("no current state is defined, %v", err)
+			return nil, err
 		}
 		//if we have valid data, store off the state
 		ret = currentState.stateData
@@ -172,6 +188,9 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, entry []byte) error {
+	if debugStateDBWrites {
+		fmt.Printf("AddStateEntry chainId=%X txHash=%X entry=%X\n", *chainId, *txHash, entry)
+	}
 	begin := time.Now()
 
 	sdb.TimeBucket = sdb.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
@@ -200,10 +219,8 @@ func (sdb *StateDB) writeTxs(group *sync.WaitGroup) {
 	for _, tx := range sdb.transactions.validatedTx {
 		data, _ := tx.MarshalBinary()
 		//store the transaction
-		err := sdb.mm.RootDBManager.PutBatch("Tx", "", tx.TransactionHash().Bytes(), data)
-		if err != nil {
-			panic("failed to put batch for validated transaction write")
-		}
+		sdb.mm.RootDBManager.PutBatch("Tx", "", tx.TransactionHash().Bytes(), data)
+
 	}
 
 	//record pending transactions
@@ -215,16 +232,10 @@ func (sdb *StateDB) writeTxs(group *sync.WaitGroup) {
 
 		//Store the mapping of the Transaction hash to the pending transaction hash which can be used for validation so we can find
 		//the pending transaction
-		err := sdb.mm.RootDBManager.PutBatch("MainToPending", "", tx.TransactionState.transactionHash.Bytes(), pendingHash[:])
-		if err != nil {
-			panic("failed to put batch \"MainToPending\" for transaction write")
-		}
+		sdb.mm.RootDBManager.PutBatch("MainToPending", "", tx.TransactionState.transactionHash.Bytes(), pendingHash[:])
 
 		//store the pending transaction by the pending tx hash
-		err = sdb.mm.RootDBManager.PutBatch("PendingTx", "", pendingHash[:], data)
-		if err != nil {
-			panic("failed to put batch \"PendingTx\" for transaction write")
-		}
+		sdb.mm.RootDBManager.PutBatch("PendingTx", "", pendingHash[:], data)
 	}
 
 	//clear out the transactions after they have been processed
@@ -269,12 +280,8 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 			panic("failed to marshal binary for state data")
 		}
 
-		err = sdb.GetDB().PutBatch("StateEntries", "", chainId.Bytes(), chainStateObject)
+		sdb.GetDB().PutBatch("StateEntries", "", chainId.Bytes(), chainStateObject)
 
-		if err != nil {
-			//shouldn't get here, and bad if I do...
-			panic(fmt.Sprintf("failed to store data entry in StateEntries bucket, %v", err))
-		}
 		mutex.Lock()
 		// The bpt stores the hash of the ChainState object hash.
 		sdb.bpt.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
@@ -295,6 +302,11 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 func (sdb *StateDB) writeBatches() {
 	defer sdb.sync.Done()
 	sdb.mm.RootDBManager.EndBatch()
+	sdb.bpt.DBManager.EndBatch()
+}
+
+func (sdb *StateDB) BlockIndex() int64 {
+	return sdb.mm.BlockIndex()
 }
 
 // WriteStates will push the data to the database and update the patricia trie
@@ -350,5 +362,17 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
-	return sdb.bpt.Bpt.Root.Hash[:], currentStateCount, nil
+	if debugStateDBWrites {
+		fmt.Printf("WriteStates height=%d hash=%X\n", blockHeight, sdb.RootHash())
+	}
+	return sdb.RootHash(), currentStateCount, nil
+}
+
+func (sdb *StateDB) RootHash() []byte {
+	return sdb.bpt.Bpt.Root.Hash[:]
+}
+
+func (sdb *StateDB) EnsureRootHash() []byte {
+	sdb.bpt.Bpt.EnsureRootHash()
+	return sdb.RootHash()
 }
