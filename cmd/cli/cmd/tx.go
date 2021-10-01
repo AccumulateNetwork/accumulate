@@ -77,8 +77,9 @@ func GetTX(account string, hash string) {
 	params.Hash = hashbytes
 
 	log.Println("checkpoint 1")
-	jsondata, err := json.Marshal(params)
-	log.Println("checkpoint 2")
+	data, err := json.Marshal(params)
+	jsondata := json.RawMessage(data)
+	log.Println(jsondata)
 	if err != nil {
 		log.Fatal(err)
 	}
