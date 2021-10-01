@@ -1,8 +1,6 @@
 package networks
 
 import (
-	"strconv"
-
 	. "github.com/AccumulateNetwork/accumulated/config"
 )
 
@@ -18,8 +16,8 @@ type Node struct {
 	Type NodeType
 }
 
-var Networks = []Network{
-	{
+var Networks = map[string]*Network{
+	"Arches": {
 		Name: "Arches",
 		Type: BVC,
 		Port: 33000,
@@ -28,7 +26,7 @@ var Networks = []Network{
 			{"13.232.230.216", Validator},
 		},
 	},
-	{
+	"AmericanSamoa": {
 		Name: "AmericanSamoa",
 		Type: BVC,
 		Port: 33000,
@@ -37,7 +35,7 @@ var Networks = []Network{
 			{"44.236.45.58", Validator},
 		},
 	},
-	{
+	"Badlands": {
 		Name: "Badlands",
 		Type: BVC,
 		Port: 35550,
@@ -45,7 +43,7 @@ var Networks = []Network{
 			{"127.0.0.1", Validator},
 		},
 	},
-	{
+	"EastXeons": {
 		Name: "EastXeons",
 		Type: BVC,
 		Port: 33000,
@@ -54,7 +52,7 @@ var Networks = []Network{
 			{"18.119.149.208", Validator},
 		},
 	},
-	{
+	"EastXeons-DC": {
 		Name: "EastXeons-DC",
 		Type: DC,
 		Port: 33100,
@@ -63,7 +61,7 @@ var Networks = []Network{
 			{"18.119.149.208", Validator},
 		},
 	},
-	{
+	"Localhost": {
 		Name: "Localhost",
 		Type: BVC,
 		Port: 26656,
@@ -73,19 +71,4 @@ var Networks = []Network{
 			{"127.0.1.3", Validator},
 		},
 	},
-}
-
-func IndexOf(name string) int {
-	// If name is a number between 0 and len(Networks), accept that
-	n, err := strconv.ParseInt(name, 10, 32)
-	if err == nil && 0 <= n && int(n) < len(Networks) {
-		return int(n)
-	}
-
-	for i, net := range Networks {
-		if net.Name == name {
-			return i
-		}
-	}
-	return -1
 }

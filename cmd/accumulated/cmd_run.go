@@ -96,18 +96,18 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
-	txRelay, err := relay.NewWithNetworks(3)
+	// We really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
+	txRelay, err := relay.NewWithNetworks("EastXeons")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to create RPC clients: %v\n", err)
 		os.Exit(1)
 	}
 
-	//the query object connects to the BVC, will be replaced with network client router
+	// The query object connects to the BVC, will be replaced with network client router
 	query := router.NewQuery(txRelay)
 
 	router.StartAPI(&config.Accumulate.AccRouter, query, txRelay)
 
-	//Block forever
+	// Block forever
 	select {}
 }
