@@ -59,8 +59,12 @@ func init() {
 func initDB() *bolt.DB {
 	//make sure working directory exists
 	if _, err := os.Stat(defaultWorkDir); os.IsNotExist(err) {
-		os.MkdirAll(defaultWorkDir, 0600)
+		err := os.MkdirAll(defaultWorkDir, 0700)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
+
 	wallet := filepath.Join(defaultWorkDir, "wallet.db")
 	db, err := bolt.Open(wallet, 0600, nil)
 	if err != nil {
