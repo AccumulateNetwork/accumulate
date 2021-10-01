@@ -7,16 +7,16 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/networks"
-
 	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/privval"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 func randomRouterPorts() *cfg.Router {
@@ -122,8 +122,14 @@ func newBVC(t *testing.T, configfile string, workingdir string) (*cfg.Config, *p
 		t.Fatal(err)
 	}
 
+	rpcClient, err := rpchttp.New(cfg.RPC.ListenAddress)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to reate RPC client: %v", err)
+		os.Exit(1)
+	}
+
 	bvc := chain.NewBlockValidator()
-	mgr, err := chain.NewManager(cfg, sdb, pv.Key.PrivKey.Bytes(), bvc)
+	mgr, err := chain.NewManager(rpcClient, sdb, pv.Key.PrivKey.Bytes(), bvc)
 	if err != nil {
 		t.Fatal(err)
 	}
