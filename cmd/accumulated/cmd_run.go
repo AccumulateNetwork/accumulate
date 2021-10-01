@@ -1,15 +1,20 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/AccumulateNetwork/accumulated/blockchain/accumulate"
 	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	"github.com/AccumulateNetwork/accumulated/internal/chain"
+	"github.com/AccumulateNetwork/accumulated/internal/node"
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/router"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/spf13/cobra"
+	"github.com/tendermint/tendermint/privval"
 )
 
 var cmdRun = &cobra.Command{
@@ -45,21 +50,64 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	_, err = accumulate.CreateAccumulateBVC(config)
+	dbPath := filepath.Join(config.RootDir, "valacc.db")
+	bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
+	db := new(state.StateDB)
+	err = db.Open(dbPath, bvcId[:], false, true)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: creating BVC: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error: failed to open database %s: %v", dbPath, err)
 		os.Exit(1)
 	}
 
-	///we really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
-	networkList := []int{3}
-	txBouncer := networks.MakeBouncer(networkList)
+	// read private validator
+	pv, err := privval.LoadFilePV(
+		config.PrivValidator.KeyFile(),
+		config.PrivValidator.StateFile(),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to load private validator: %v", err)
+		os.Exit(1)
+	}
 
-	//the query object connects to the BVC, will be replaced with network client router
-	query := router.NewQuery(txBouncer)
+	bvc := chain.NewBlockValidator()
+	mgr, err := chain.NewManager(config, db, pv.Key.PrivKey.Bytes(), bvc)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to initialize chain manager: %v", err)
+		os.Exit(1)
+	}
 
-	router.StartAPI(&config.Accumulate.AccRouter, query, txBouncer)
+	app, err := abci.NewAccumulator(db, pv.Key.PubKey.Address(), mgr)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to initialize ACBI app: %v", err)
+		os.Exit(1)
+	}
 
-	//Block forever
+	// Create node
+	node, err := node.New(config, app)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to initialize node: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Start node
+	err = node.Start()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to start node: %v\n", err)
+		os.Exit(1)
+	}
+
+	// We really need to open up ports to ALL shards in the system.  Maybe this should be a query to the DBVC blockchain.
+	txRelay, err := relay.NewWithNetworks("Badlands")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to create RPC clients: %v\n", err)
+		os.Exit(1)
+	}
+
+	// The query object connects to the BVC, will be replaced with network client router
+	query := router.NewQuery(txRelay)
+
+	router.StartAPI(&config.Accumulate.AccRouter, query, txRelay)
+
+	// Block forever
 	select {}
 }
