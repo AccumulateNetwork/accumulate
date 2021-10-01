@@ -9,7 +9,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/types/api"
 
-	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -36,22 +35,16 @@ type Manager struct {
 
 var _ abci.Chain = (*Manager)(nil)
 
-func NewManager(config *config.Config, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
+func NewManager(client *rpchttp.HTTP, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
 	m := new(Manager)
 	m.db = db
 	m.chain = chain
 	m.key = key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
+	m.relay = relay.New(client)
 
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
-
-	rpcClient, err := rpchttp.New(config.RPC.ListenAddress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create RPC client: %v", err)
-	}
-	m.relay = relay.New(rpcClient)
-
 	return m, nil
 }
 
