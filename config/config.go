@@ -42,13 +42,13 @@ type Config struct {
 
 	Accumulate struct {
 		Accumulate `toml:"acc" mapstructure:"acc"`
-	}
+	} `mapstructure:",squash"`
 }
 
 type Accumulate struct {
-	Type      string `toml:"type" mapstructure:"type"` // 'BVC' or 'DC'
-	AccRPC    RPC    `toml:"rpc" mapstructure:"rpc"`
-	AccRouter Router `toml:"router" mapstructure:"router"`
+	Type      NetworkType `toml:"type" mapstructure:"type"` // 'BVC' or 'DC'
+	AccRPC    RPC         `toml:"rpc" mapstructure:"rpc"`
+	AccRouter Router      `toml:"router" mapstructure:"router"`
 }
 
 type RPC struct {
