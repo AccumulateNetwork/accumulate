@@ -67,19 +67,27 @@ func GetTX(account string, hash string) {
 	var str []byte
 	var hashbytes types.Bytes32
 
-	params := acmeapi.TokenTx{}
+	params := new(acmeapi.TokenTx)
 	params.From = types.UrlChain{types.String(account)}
-	hashbytes.FromString(hash)
-	params.Hash = hashbytes
-
-	jsondata, err := json.Marshal(&params)
+	err := hashbytes.FromString(hash)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	params.Hash = hashbytes
+
+	log.Println("checkpoint 1")
+	jsondata, err := json.Marshal(params)
+	log.Println("checkpoint 2")
+	if err != nil {
+		log.Fatal(err)
+	}
+	log.Println("checkpoint 3")
+
 	if err := Client.Request(context.Background(), "token-tx", jsondata, &res); err != nil {
 		log.Fatal(err)
 	}
+	log.Println("checkpoint 4")
 
 	str, err = json.Marshal(res)
 	if err != nil {
