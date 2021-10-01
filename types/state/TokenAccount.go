@@ -42,7 +42,7 @@ func (app *TokenAccount) Set(accountState *TokenAccount) {
 
 // GetType is an implemented interface that returns the chain type of the object
 func (app *TokenAccount) GetType() uint64 {
-	return app.Type
+	return app.Type.AsUint64()
 }
 
 // GetChainUrl returns the chain path for the object in the chain.

@@ -70,8 +70,8 @@ func (t *GenTransaction) TransactionHash() []byte {
 // Create the binary representation of the GenTransaction
 func (t *GenTransaction) Marshal() (data []byte, err error) {
 	defer func() { //                                                     If any sort of error occurs,
-		if err := recover(); err != nil { //                               then marshalling fails, and report
-			err = fmt.Errorf("error marshaling GenTransaction %v", err) //  the error.
+		if r := recover(); r != nil { //                               then marshalling fails, and report
+			err = fmt.Errorf("error marshaling GenTransaction %v", r) //  the error.
 		} //
 	}() //
 	if err := t.SetRoutingChainID(); err != nil { //                        Make sure routing and chainID are set
@@ -104,8 +104,8 @@ func (t *GenTransaction) Marshal() (data []byte, err error) {
 // the GenTransaction
 func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
 	defer func() { //
-		if err := recover(); err != nil { //
-			err = fmt.Errorf("error unmarshaling GenTransaction %v", err) //
+		if r := recover(); r != nil { //
+			err = fmt.Errorf("error unmarshaling GenTransaction: %v", r) //
 		} //
 	}() //
 	var sLen uint64                       //                Get how many signatures we have

@@ -7,18 +7,17 @@ import (
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/memory"
 )
 
 type Manager struct {
-	DB      storage.KeyValueDB // Underlying database implementation
-	AppID   []byte             // Allows apps to share a database
-	Buckets map[string]byte    // one byte to indicate a bucket
-	Labels  map[string]byte    // one byte to indicate a label
-	TXList  TXList             // Transaction List
+	DB      storage.KeyValueDB                 // Underlying database implementation
+	AppID   []byte                             // Allows apps to share a database
+	Buckets map[string]byte                    // one byte to indicate a bucket
+	Labels  map[string]byte                    // one byte to indicate a label
+	TXCache map[[storage.KeyLength]byte][]byte // TX Cache:  Holds pending tx for the db
 }
 
 // Copy
@@ -26,11 +25,9 @@ type Manager struct {
 // multiple Merkle Trees to be managed within the same database.  All keys
 // for a particular merkle tree are salted with their particular AppID.
 // Note that maps are pointers, so Buckets and Labels are shared over
-// copies of the Manager but not include elements from processes using their
-// own AppID.
+// copies of the Manager.
 func (m Manager) Copy(AppID []byte) *Manager {
 	m.SetAppID(AppID) // Set the AppID
-	m.TXList.Init()   // Make the TXList independent of the original TXList
 	return &m         // Return a pointer
 }
 
@@ -85,11 +82,7 @@ func NewDBManager(databaseTag, filename string) (*Manager, error) {
 	return manager, nil
 }
 
-// Init
-// Initialize the Manager with a specified underlying database. databaseTag
-// can currently be either badger or memory.  The filename indicates where
-// the database is persisted (ignored by memory).PendingChain
-func (m *Manager) Init(databaseTag, filename string) error {
+func (m *Manager) init() {
 	// Set up Buckets for use by the Stateful Merkle Trees
 	m.Buckets = make(map[string]byte) // Buckets hold sets of key value pairs
 	m.Labels = make(map[string]byte)  // Labels hold subsets of key value pairs within a bucket
@@ -105,6 +98,15 @@ func (m *Manager) Init(databaseTag, filename string) error {
 	m.AddBucket("BPT")          //                       Binary Patricia Tree Byte Blocks (blocks of BPT nodes)
 	m.AddLabel("Root")          //                       The Root node of the BPT
 
+	m.TXCache = make(map[[storage.KeyLength]byte][]byte, 100) // Preallocate 100 slots
+}
+
+// Init
+// Initialize the Manager with a specified underlying database. databaseTag
+// can currently be either badger or memory.  The filename indicates where
+// the database is persisted (ignored by memory).PendingChain
+func (m *Manager) Init(databaseTag, filename string) error {
+	m.init()
 	switch databaseTag { //                              match with a supported databaseTag
 	case "badger": //                                    Badger database indicated
 		m.DB = new(badger.DB)                         // Create a badger struct
@@ -116,6 +118,11 @@ func (m *Manager) Init(databaseTag, filename string) error {
 		_ = m.DB.InitDB(filename) //                     filename is ignored, but must allocate the underlying map
 	}
 	return nil
+}
+
+func (m *Manager) InitWithDB(db storage.KeyValueDB) {
+	m.init()
+	m.DB = db
 }
 
 // GetCount
@@ -186,11 +193,11 @@ func (m *Manager) GetKey(Bucket, Label string, key []byte) (DBKey [storage.KeyLe
 		panic(fmt.Sprintf("label %s undefined or invalid", Label)) //        Panic if not.
 	}
 	DBKey = sha256.Sum256(append(key, m.AppID...)) // To get a fixed length key, hash the key and appID together
-	//                                               A hash is very secure so losing two bytes won't hurt anything
-	DBKey[0] = m.Buckets[Bucket] //                  Replace the first byte with the bucket index
-	DBKey[1] = 0                 //                  Assume no label (0 -- means no label
-	if len(Label) > 0 {          //                  But if a label is specified, (zero labels not allowed) then
-		DBKey[1] = m.Labels[Label] //                   set the label's byte value.
+	//                                                  A hash is very secure so losing two bytes won't hurt anything
+	DBKey[30] = m.Buckets[Bucket] //                    Replace the first byte with the bucket index
+	DBKey[31] = 0                 //                    Assume no label (0 -- means no label
+	if len(Label) > 0 {           //                    But if a label is specified, (zero labels not allowed) then
+		DBKey[31] = m.Labels[Label] //                   set the label's byte value.
 	}
 
 	return DBKey
@@ -225,8 +232,11 @@ func (m *Manager) PutInt64(Bucket, Label string, key []byte, value int64) error 
 // Get a []byte value from the underlying database.  Returns a nil if not found,
 // or on an error
 func (m *Manager) Get(Bucket, Label string, key []byte) (value []byte) {
-	m.EndBatch()                                  // Flush any pending writes to the database, so we can get a value
-	return m.DB.Get(m.GetKey(Bucket, Label, key)) // that might not quite yet have been written to the database
+	Key := m.GetKey(Bucket, Label, key)
+	if v, ok := m.TXCache[Key]; ok { // If the value is in the cache, return it
+		return v
+	}
+	return m.DB.Get(Key) // Otherwise return what we have in the database
 }
 
 // GetString
@@ -251,6 +261,7 @@ func (m *Manager) GetInt64(Bucket, Label string, key []byte) (value int64) {
 // GetIndex
 // Return the int64 value tied to the element hash in the ElementIndex bucket
 func (m *Manager) GetIndex(element []byte) int64 {
+
 	data := m.Get("ElementIndex", "", element) // Look for the first index of a hash that might exist
 	if data == nil {                           // in the merkle tree.  Note that nil means it does not yet exist
 		return -1 //                              in which case, return an invalid index (-1)
@@ -262,25 +273,35 @@ func (m *Manager) GetIndex(element []byte) int64 {
 // PutBatch
 // put the write of a key value into the pending batch.  These will all be
 // written to the database together.
-func (m *Manager) PutBatch(Bucket, Label string, key []byte, value []byte) error {
+func (m *Manager) PutBatch(Bucket, Label string, key []byte, value []byte) {
 	theKey := m.GetKey(Bucket, Label, key) // Put a key value pair into the batch list
-	return m.TXList.Put(theKey, value)     // Return any error that might occur
+	m.TXCache[theKey] = value              // Return any error that might occur
 }
 
 // EndBatch
 // Flush anything in the batch list to the database.
 func (m *Manager) EndBatch() {
-	if len(m.TXList.List) == 0 { // If there is nothing to do, do nothing
+	if len(m.TXCache) == 0 { // If there is nothing to do, do nothing
 		return
 	}
-	if err := m.DB.PutBatch(m.TXList.List); err != nil {
+	if err := m.DB.EndBatch(m.TXCache); err != nil {
 		panic("batch failed to persist to the database")
 	}
-	m.TXList.List = m.TXList.List[:0] // Reset the List to allow it to be reused
+
+	m.resetCache()
 }
 
 // BeginBatch
 // initializes the batch list to empty.  Note that we really only support one level of batch processing.
 func (m *Manager) BeginBatch() {
-	m.TXList.List = m.TXList.List[:0]
+	m.resetCache()
+}
+
+func (m *Manager) resetCache() {
+	// The compiler optimizes away the loop. This is demonstrably faster and
+	// less memory intensive than re-making the map. The savings in GC presure
+	// scale proportionally with the batch size.
+	for k := range m.TXCache {
+		delete(m.TXCache, k)
+	}
 }

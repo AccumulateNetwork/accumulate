@@ -7,8 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/proto"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 )
@@ -83,7 +81,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 	}
 
 	//now just peek at the transaction type
-	if data[0] != byte(proto.AccInstruction_Synthetic_Token_Deposit) {
+	if data[0] != byte(types.TxTypeSyntheticTokenDeposit) {
 		t.Fatal("invalid transaction type")
 	}
 
