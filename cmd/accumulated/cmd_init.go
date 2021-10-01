@@ -68,7 +68,7 @@ func initNode(*cobra.Command, []string) {
 		listenIP[i] = "tcp://0.0.0.0"
 		remoteIP[i] = net.IP
 		config[i] = new(cfg.Config)
-		config[i].Accumulate.Type = string(network.Type)
+		config[i].Accumulate.Type = network.Type
 
 		switch net.Type {
 		case cfg.Validator:
