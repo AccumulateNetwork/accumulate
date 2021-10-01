@@ -2,6 +2,8 @@ package database_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/binary"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -9,8 +11,9 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 func TestDBManager_TransactionsBadger(t *testing.T) {
@@ -29,6 +32,8 @@ func TestDBManager_TransactionsBadger(t *testing.T) {
 		t.Error(err)
 	} else {
 		writeAndRead(t, dbManager)
+		writeAndReadBatch(t, dbManager)
+
 	}
 }
 
@@ -36,8 +41,53 @@ func TestDBManager_TransactionsMemory(t *testing.T) {
 
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
+	writeAndReadBatch(t, dbManager)
 	writeAndRead(t, dbManager)
 	dbManager.Close()
+}
+
+func randSHA() [32]byte {
+	v := rand.Uint64()
+	var b [8]byte
+	binary.BigEndian.PutUint64(b[:], v)
+	return sha256.Sum256(b[:])
+}
+
+func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
+	const cnt = 10 // how many test values used
+
+	dbManager.AddBucket("a") // add a bucket for putting data into the db
+	type ent struct {        // Keep a history
+		Key   [32]byte
+		Value []byte
+	}
+	var submissions []ent // Every key/value submitted goes here, in order
+	add := func() {       // Generate a key/value pair, add to db, and record
+		key := randSHA()   // Generate next key
+		value := randSHA() // Generate next value
+
+		theKey := dbManager.GetKey("a", "", key[:])
+		submissions = append(submissions, ent{Key: theKey, Value: value[:]}) // Keep a history
+
+		dbManager.PutBatch("a", "", key[:], value[:]) // Put into the database
+	}
+
+	// Now this is the actual test
+	for i := byte(0); i < cnt; i++ {
+		add()
+		for i, pair := range submissions {
+			require.NotNil(t, dbManager.TXCache[pair.Key], "Entry %d missing", i)
+			require.Equal(t, pair.Value[:], dbManager.TXCache[pair.Key], "Entry %d has wrong value", i)
+		}
+	}
+
+	dbManager.EndBatch()
+	for i, pair := range submissions {
+		DBValue := dbManager.DB.Get(pair.Key)
+		require.NotNil(t, DBValue, "Entry %d missing", i)
+		require.Equal(t, pair.Value[:], DBValue, "Entry %d has wrong value", i)
+	}
+
 }
 
 func writeAndRead(t *testing.T, dbManager *database.Manager) {
@@ -63,10 +113,9 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	}
 
 	for i := 0; i < 10; i++ {
-		if err := dbManager.PutBatch("a", "", common.Int64Bytes(int64(i)), []byte(fmt.Sprint(i))); err != nil {
-			t.Error(err)
-		}
+		dbManager.PutBatch("a", "", common.Int64Bytes(int64(i)), []byte(fmt.Sprint(i)))
 	}
+
 	dbManager.EndBatch()
 
 	// Sort that I can read all thousand entries

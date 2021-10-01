@@ -4,22 +4,21 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-
-	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeApi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	tmtypes "github.com/tendermint/tendermint/abci/types"
 )
 
 type Query struct {
-	txBouncer *networks.Bouncer
+	txBouncer *relay.Relay
 }
 
-func NewQuery(txBouncer *networks.Bouncer) *Query {
+func NewQuery(txBouncer *relay.Relay) *Query {
 	q := Query{}
 	//q.client = abcicli.NewLocalClient(nil, app)
 	q.txBouncer = txBouncer
@@ -223,7 +222,7 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 	return txResp, err
 }
 
-var ChainStates = map[uint64]interface{}{
+var ChainStates = map[types.ChainType]interface{}{
 	types.ChainTypeAdi: func(q *Query, url *string, txid []byte) (*acmeApi.APIDataResponse, error) {
 		return q.GetAdi(url)
 	},
@@ -274,7 +273,7 @@ func (q *Query) GetChainState(adiChainPath *string, txId []byte) (interface{}, e
 			resp, err = val.(func(*Query, *string, []byte) (*acmeApi.APIDataResponse, error))(q, chainHeader.ChainUrl.AsString(), []byte{})
 		} else {
 			resp = &acmeApi.APIDataResponse{}
-			resp.Type = types.String(types.ChainTypeString(chainHeader.Type))
+			resp.Type = types.String(chainHeader.Type.Name())
 			msg := json.RawMessage{}
 			msg = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", qResp.Value))
 			resp.Data = &msg

@@ -1,6 +1,7 @@
 package pmt
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"testing"
@@ -61,6 +62,56 @@ func TestManager(t *testing.T) {
 		key := sha256.Sum256([]byte(fmt.Sprintf("1 key %d", i)))
 		value := sha256.Sum256([]byte(fmt.Sprintf("1 key %d", i)))
 		bptManager.InsertKV(key, value)
+	}
+}
 
+func TestManagerSeries(t *testing.T) {
+
+	// A set of key value pairs.  We are going to set 100 of them,
+	// Then update those value over a running test.
+	SetOfValues := make(map[[32]byte][32]byte) // Keep up with key/values we add
+	d := 100                                   // Add 100 entries each pass.
+
+	dbManager, err := database.NewDBManager("memory", "") // One dbManager, memory based
+	if err != nil {
+		t.Fatal(err)
+	}
+	var previous [32]byte    // Previous final root
+	for h := 0; h < 3; h++ { // Run our test 3 times, each time killing one manager, building another which must
+		{ //                     get its state from "disk"
+			bptManager := NewBPTManager(dbManager) // Get manager from disk.  First time empty, and more elements each pass
+			current := bptManager.GetRootHash()    // Check that previous == current, on every pass
+			if !bytes.Equal(previous[:], current[:]) {
+				t.Errorf("previous %x should be the same as current %x", previous, current)
+			}
+			for i := 0; i < 3; i++ { // Add stuff in 3 passes
+				for j := 0; j < 3; j++ { // Add more stuff in 3 more passes
+					for k, v := range SetOfValues { // Update any existing entries
+						SetOfValues[k] = sha256.Sum256(v[:]) // Update the value by hashing it
+					}
+
+					for k := 0; k < d; k++ { // Now add d new entries
+						key := sha256.Sum256([]byte(fmt.Sprintf("k key %d %d %d %d", h, i, j, k)))   // use h,i,j,k to make entry unique
+						value := sha256.Sum256([]byte(fmt.Sprintf("v key %d %d %d %d", h, i, j, k))) // Same. (k,v) makes key != value
+						SetOfValues[key] = value                                                     // Set the key value
+						bptManager.InsertKV(key, value)                                              // Add to BPT
+					}
+				}
+				priorRoot := bptManager.GetRootHash()          //        Get the prior root (cause no update yet)
+				bptManager.Bpt.Update()                        //        Update the value
+				currentRoot := bptManager.GetRootHash()        //        Get the Root Hash.  Note this is in memory
+				if bytes.Equal(priorRoot[:], currentRoot[:]) { //        Prior should be different, cause we added stuff
+					t.Error("added stuff, hash should not be equal") //
+				} //
+				//fmt.Printf("%x %x\n", priorRoot, currentRoot)
+				previous = currentRoot //                                Make previous track current state of database
+			}
+		}
+		bptManager := NewBPTManager(dbManager)  //  One more check that previous is the same as current when
+		currentRoot := bptManager.GetRootHash() //  we build a new BPTManager from the database
+		//fmt.Printf("=> %x %x\n", previous, currentRoot)
+		if !bytes.Equal(previous[:], currentRoot[:]) { //
+			t.Error("loading the BPT should have the same root as previous root") //
+		}
 	}
 }

@@ -11,20 +11,44 @@ import (
 	tm "github.com/tendermint/tendermint/config"
 )
 
+type NetworkType string
+
+const (
+	BVC NetworkType = "bvc"
+	DC  NetworkType = "dc"
+)
+
+type NodeType string
+
+const (
+	Validator NodeType = "validator"
+	Follower  NodeType = "follower"
+)
+
 func Default() *Config {
 	c := new(Config)
 	c.Config = *tm.DefaultConfig()
 	return c
 }
 
+func DefaultValidator() *Config {
+	c := new(Config)
+	c.Config = *tm.DefaultValidatorConfig()
+	return c
+}
+
 type Config struct {
-	tm.Config  `mapstructure:",squash"`
-	Accumulate Accumulate `mapstructure:",squash"`
+	tm.Config `mapstructure:",squash"`
+
+	Accumulate struct {
+		Accumulate `toml:"acc" mapstructure:"acc"`
+	}
 }
 
 type Accumulate struct {
-	AccRPC    RPC    `toml:"acc-rpc" mapstructure:"acc-rpc"`
-	AccRouter Router `toml:"acc-router" mapstructure:"acc-router"`
+	Type      string `toml:"type" mapstructure:"type"` // 'BVC' or 'DC'
+	AccRPC    RPC    `toml:"rpc" mapstructure:"rpc"`
+	AccRouter Router `toml:"router" mapstructure:"router"`
 }
 
 type RPC struct {
@@ -41,6 +65,7 @@ func Load(dir string) (*Config, error) {
 }
 
 func LoadFile(dir, file string) (*Config, error) {
+
 	viper.SetConfigFile(file)
 	viper.AddConfigPath(dir)
 	err := viper.ReadInConfig()
@@ -66,7 +91,7 @@ func Store(config *Config) error {
 	file := filepath.Join(config.RootDir, "config", "config.toml")
 
 	// exits on fail
-	tm.WriteConfigFile(file, &config.Config)
+	tm.WriteConfigFile(config.RootDir, &config.Config)
 
 	f, err := os.OpenFile(file, os.O_WRONLY, 0600)
 	if err != nil {
