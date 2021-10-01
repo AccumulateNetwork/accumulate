@@ -1,4 +1,4 @@
-package router
+package api
 
 import (
 	"context"
@@ -9,8 +9,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -97,13 +95,12 @@ func TestLoadOnRemote(t *testing.T) {
 func TestJsonRpcAnonToken(t *testing.T) {
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("", "AccRouterTest-")
-	cfg := filepath.Join(dir, "Node0", "config", "config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 
-	_, pv, node := startBVC(t, cfg, dir)
+	_, pv, node := startBVC(t, dir)
 	defer node.Stop()
 
 	txBouncer, err := relay.NewWithNetworks("Badlands")
@@ -225,13 +222,12 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir, err := ioutil.TempDir("/tmp", "AccRouterTest-")
-	cfg := path.Join(dir, "Node0/config/config.toml")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(dir)
 
-	_, pv, node := startBVC(t, cfg, dir)
+	_, pv, node := startBVC(t, dir)
 	defer node.Stop()
 
 	if err != nil {

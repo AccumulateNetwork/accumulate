@@ -1,4 +1,4 @@
-package router
+package api
 
 import (
 	"context"
@@ -23,14 +23,14 @@ import (
 )
 
 type API struct {
-	config    *config.Router
+	config    *config.API
 	validate  *validator.Validate
 	query     *Query
 	txBouncer *relay.Relay
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(config *config.Router, q *Query, txBouncer *relay.Relay) *API {
+func StartAPI(config *config.API, q *Query, txBouncer *relay.Relay) *API {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
@@ -66,23 +66,29 @@ func StartAPI(config *config.Router, q *Query, txBouncer *relay.Relay) *API {
 	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
 
 	// start JSON RPC API
-	go listenAndServe(config.JSONListenAddress, apiRouter)
+	go listenAndServe("JSONRPC API", config.JSONListenAddress, apiRouter)
 
 	// start REST proxy for JSON RPC API
-	go listenAndServe(config.RESTListenAddress, proxyRouter)
+	go listenAndServe("REST API", config.RESTListenAddress, proxyRouter)
 
 	return api
 
 }
 
-func listenAndServe(address string, handler http.Handler) {
+func listenAndServe(label, address string, handler http.Handler) {
+	if address == "" {
+		log.Fatalf("Address for %s is empty", label)
+	}
+
 	u, err := url.Parse(address)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	if u.Scheme == "" {
+		log.Fatalf("Address for %s is missing a scheme: %q", label, address)
+	}
 	if u.Scheme != "tcp" {
-		log.Fatalf("http.ListenAndServe does not support %q", u.Scheme)
+		log.Fatalf("Failed to start HTTP server for %s: unsupported scheme %q", label, address)
 	}
 
 	err = http.ListenAndServe(u.Host, handler)
