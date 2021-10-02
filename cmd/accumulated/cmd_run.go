@@ -76,8 +76,9 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	query := api.NewQuery(relay.New(rpcClient))
 	bvc := chain.NewBlockValidator()
-	mgr, err := chain.NewManager(rpcClient, db, pv.Key.PrivKey.Bytes(), bvc)
+	mgr, err := chain.NewManager(query, db, pv.Key.PrivKey.Bytes(), bvc)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize chain manager: %v", err)
 		os.Exit(1)
@@ -110,9 +111,9 @@ func runNode(cmd *cobra.Command, args []string) {
 	}
 
 	// The query object connects to the BVC, will be replaced with network client router
-	query := api.NewQuery(txRelay)
+	query = api.NewQuery(txRelay)
 
-	api.StartAPI(&config.Accumulate.API, query, txRelay)
+	api.StartAPI(&config.Accumulate.API, query)
 
 	// Block forever
 	select {}

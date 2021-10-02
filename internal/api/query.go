@@ -7,11 +7,13 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	acmeApi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	tmtypes "github.com/tendermint/tendermint/abci/types"
+	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
 type Query struct {
@@ -23,6 +25,36 @@ func NewQuery(txBouncer *relay.Relay) *Query {
 	//q.client = abcicli.NewLocalClient(nil, app)
 	q.txBouncer = txBouncer
 	return &q
+}
+
+func (q *Query) BroadcastTx(gtx *transactions.GenTransaction) (*ctypes.ResultBroadcastTx, error) {
+	payload, err := gtx.Marshal()
+	if err != nil {
+		return nil, err
+	}
+	return q.txBouncer.BatchTx(payload)
+}
+
+func (q *Query) Query(url string, txid []byte) (*ctypes.ResultABCIQuery, error) {
+	addr := types.GetAddressFromIdentity(&url)
+
+	query := api.Query{}
+	query.Url = url
+	query.RouteId = addr
+	query.ChainId = types.GetChainIdFromChainPath(&url).Bytes()
+	query.Content = txid
+
+	payload, err := query.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	return q.txBouncer.Query(payload)
+}
+
+// BatchSend calls the underlying client's BatchSend method, if it has one
+func (q *Query) BatchSend() {
+	q.txBouncer.BatchSend()
 }
 
 //"GetADI()"
@@ -39,7 +71,7 @@ func (q *Query) GetAdi(adi *string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("cannot marshal query for Token issuance")
 	}
 
-	aResp, err := q.txBouncer.Query(adi, nil)
+	aResp, err := q.Query(*adi, nil)
 
 	if err != nil {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
@@ -82,7 +114,7 @@ func (q *Query) GetAdi(adi *string) (*acmeApi.APIDataResponse, error) {
 func (q *Query) GetToken(tokenUrl *string) (*acmeApi.APIDataResponse, error) {
 
 	var err error
-	aResp, err := q.txBouncer.Query(tokenUrl, nil)
+	aResp, err := q.Query(*tokenUrl, nil)
 
 	if err != nil {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
@@ -128,7 +160,7 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeApi.APIDataResponse,
 
 	var err error
 
-	aResp, err := q.txBouncer.Query(adiChainPath, nil)
+	aResp, err := q.Query(*adiChainPath, nil)
 
 	if err != nil {
 		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
@@ -168,7 +200,7 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeApi.APIDataResponse,
 func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface{}, err error) {
 	// need to know the ADI and ChainID, deriving adi and chain id from TokenTx.From
 
-	aResp, err := q.txBouncer.Query(tokenAccountUrl, txId)
+	aResp, err := q.Query(*tokenAccountUrl, txId)
 
 	if err != nil {
 		return nil, fmt.Errorf("bvc token tx query returned error, %v", err)
@@ -196,7 +228,7 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 
 	//should receive tx,unmarshal to output accounts
 	for _, v := range tx.Outputs {
-		aResp, err := q.txBouncer.Query(tokenAccountUrl, txId)
+		aResp, err := q.Query(*tokenAccountUrl, txId)
 
 		txStatus := response.TokenTxAccountStatus{}
 		if err != nil {
@@ -246,7 +278,7 @@ func (q *Query) GetChainState(adiChainPath *string, txId []byte) (interface{}, e
 	var qResp *tmtypes.ResponseQuery
 
 	//this QuerySync call is only temporary until we get router setup.
-	aResp, err := q.txBouncer.Query(adiChainPath, txId)
+	aResp, err := q.Query(*adiChainPath, txId)
 	if err != nil {
 		return nil, fmt.Errorf("bvc token chain query returned error, %v", err)
 	}
