@@ -7,15 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api"
-
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
+	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 const chainWGSize = 4
@@ -24,7 +22,7 @@ type Manager struct {
 	db    *state.StateDB
 	chain Chain
 	key   ed25519.PrivateKey
-	relay *relay.Relay
+	query *accapi.Query
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -35,14 +33,14 @@ type Manager struct {
 
 var _ abci.Chain = (*Manager)(nil)
 
-func NewManager(client *rpchttp.HTTP, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
+func NewManager(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
 	m := new(Manager)
 	m.db = db
 	m.chain = chain
 	m.key = key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
-	m.relay = relay.New(client)
+	m.query = query
 
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
 	return m, nil
@@ -214,7 +212,7 @@ func (m *Manager) Commit() ([]byte, error) {
 		//m.processValidatedSubmissionRequest(&dbvc)
 	}
 
-	m.relay.BatchSend()
+	m.query.BatchSend()
 
 	fmt.Printf("DB time %f\n", m.db.TimeBucket)
 	m.db.TimeBucket = 0
@@ -299,7 +297,7 @@ func (m *Manager) submitSyntheticTx(vtx *DeliverTxResult) error {
 		}
 
 		tx.Signature = append(tx.Signature, ed)
-		_, err = m.relay.BatchTx(tx)
+		_, err = m.query.BroadcastTx(tx)
 		if err != nil {
 			return err
 		}
