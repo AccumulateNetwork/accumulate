@@ -1,4 +1,4 @@
-package api
+package api_test
 
 import (
 	"context"
@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/go-playground/validator/v10"
 )
 
 var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
@@ -33,9 +33,10 @@ func TestLoadOnRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	query := NewQuery(txBouncer)
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	addrList, err := acctesting.RunLoadTest(txBouncer, &privateKeySponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +45,6 @@ func TestLoadOnRemote(t *testing.T) {
 
 	tokenUrl := "dc/ACME"
 	queryTokenUrl := addrList[1] + "/" + tokenUrl
-	query := NewQuery(txBouncer)
 
 	resp, err := query.GetChainState(&queryTokenUrl, nil)
 	if err != nil {
@@ -57,12 +57,12 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
+	jsonapi := NewTest(query)
 	_ = jsonapi
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
-	theData := jsonapi.getData(context.Background(), gParams)
+	theData := jsonapi.GetData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
 		t.Fatal(err)
@@ -113,7 +113,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
 	kpSponsor := ed25519.NewKeyFromSeed(pv.Key.PrivKey.Bytes()[:32])
 
-	addrList, err := acctesting.RunLoadTest(txBouncer, &kpSponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, &kpSponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,11 +148,11 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	fmt.Println(string(output))
 
 	// now use the JSON rpc api's to get the data
-	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
+	jsonapi := NewTest(query)
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
-	theData := jsonapi.getData(context.Background(), gParams)
+	theData := jsonapi.GetData(context.Background(), gParams)
 	theJsonData, err := json.Marshal(theData)
 	if err != nil {
 		t.Fatal(err)
@@ -237,8 +237,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	//kpSponsor := types.CreateKeyPair()
 
 	query := NewQuery(txBouncer)
-
-	jsonapi := API{randomRouterPorts(), validator.New(), query, txBouncer}
+	jsonapi := NewTest(query)
 
 	//StartAPI(randomRouterPorts(), client)
 
@@ -274,7 +273,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	}
 
 	//now we can send in json rpc calls.
-	ret := jsonapi.createADI(context.Background(), jsonReq)
+	ret := jsonapi.CreateADI(context.Background(), jsonReq)
 
 	t.Skip("Needs acceptance criteria for create-adi response")
 	t.Fatal(ret)
