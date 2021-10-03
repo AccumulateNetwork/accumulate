@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -104,7 +106,7 @@ func createApp(t testing.TB) abcitypes.Application {
 	require.NoError(t, err)
 
 	bvc := chain.NewBlockValidator()
-	mgr, err := chain.NewManager(rpcClient, db, bvcKey, bvc)
+	mgr, err := chain.NewManager(accapi.NewQuery(relay.New(rpcClient)), db, bvcKey, bvc)
 	require.NoError(t, err)
 
 	app, err := abci.NewAccumulator(db, crypto.Address{}, mgr)
