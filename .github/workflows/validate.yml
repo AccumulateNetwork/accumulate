@@ -23,3 +23,48 @@ jobs:
 
     - name: Test
       run: go test -v ./...
+
+  cli-test:
+    name: CLI Integration Test
+    runs-on: ubuntu-latest
+    steps:
+
+    - name: Set up Go 1.x
+      uses: actions/setup-go@v2
+      with:
+        go-version: ^1.15
+      id: go
+
+    - name: Check out code into the Go module directory
+      uses: actions/checkout@v2
+
+    - name: Build
+      run: go build ./cmd/accumulated
+
+    - name: Init main
+      run: ./accumulated init -w .nodes -n EastXeons -r EastXeons
+
+    - name: Init follower
+      run: |
+        rm -rf .nodes
+        ./accumulated init follower -w .nodes -n EastXeons -l tcp://127.0.2.1:3000
+
+    - name: Run follower
+      run: |
+        ./accumulated run -w .nodes/Node0 &
+        PID=$!
+        ( sleep 5; kill -9 $PID; touch .nodes/did-kill ) &
+        wait $PID || [ -e .nodes/did-kill ]
+
+    - name: Init localhost
+      run: |
+        rm -rf .nodes
+        ./accumulated testnet -w .nodes -v 1 -f 0 --no-empty-blocks
+
+    - name: Run and load test localhost
+      run: |
+        ./accumulated run -w .nodes/Node0 &
+        PID=$!
+        sleep 5
+        ./accumulated loadtest -r tcp://127.0.1.1:26657
+        kill -9 $PID
