@@ -100,10 +100,11 @@ func loadTest(cmd *cobra.Command, args []string) {
 	}
 
 	relay := relay.New(clients...)
+	query := api.NewQuery(relay)
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	addrList, err := acctesting.RunLoadTest(relay, &privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.WalletCount*flagLoadTest.TransactionCount)
+	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.WalletCount*flagLoadTest.TransactionCount)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -111,7 +112,6 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	time.Sleep(10000 * time.Millisecond)
 
-	query := api.NewQuery(relay)
 	for _, v := range addrList[1:] {
 		resp, err := query.GetChainState(&v, nil)
 		if err != nil {
