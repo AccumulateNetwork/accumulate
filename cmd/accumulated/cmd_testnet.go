@@ -70,7 +70,7 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		} else {
 			config[i] = cfg.Default()
 		}
-		config[i].Accumulate.Networks = []string{IPs[0]}
+		config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], flagTestNet.BasePort+node.TmRpcPortOffset)}
 		if flagTestNet.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
 		}
