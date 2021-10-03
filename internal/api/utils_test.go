@@ -43,6 +43,7 @@ func initOptsForNetwork(t *testing.T, name string) node.InitOptions {
 		remoteIP[i] = net.IP
 		config[i] = new(cfg.Config)
 		config[i].Accumulate.Type = network.Type
+		config[i].Accumulate.Networks = []string{remoteIP[0]}
 
 		switch net.Type {
 		case cfg.Validator:

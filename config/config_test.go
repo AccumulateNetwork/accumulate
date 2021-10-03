@@ -19,8 +19,10 @@ func TestPersistence(t *testing.T) {
 	cfg.Accumulate.API.JSONListenAddress = "api-json-listen"
 	cfg.Accumulate.API.RESTListenAddress = "api-rest-listen"
 
-	// Small changes to make Equal happy
+	// Slice values are unmarshalled as empty. This avoids issues with empty
+	// slice != nil.
 	cfg.StateSync.RPCServers = []string{}
+	cfg.Accumulate.Networks = []string{}
 
 	// Store
 	require.NoError(t, Store(cfg))
