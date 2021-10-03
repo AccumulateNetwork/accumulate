@@ -28,7 +28,7 @@ func TestLoadOnRemote(t *testing.T) {
 		t.Skip("This test is not appropriate for CI")
 	}
 
-	txBouncer, err := relay.NewWithNetworks(*testnet)
+	txBouncer, err := relay.NewWith(*testnet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	_, pv, node := startBVC(t, dir)
 	defer node.Stop()
 
-	txBouncer, err := relay.NewWithNetworks("Badlands")
+	txBouncer, err := relay.NewWith("Badlands")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 }
 
 func TestJsonRpcAdi(t *testing.T) {
-	txBouncer, err := relay.NewWithNetworks(*testnet)
+	txBouncer, err := relay.NewWith(*testnet)
 	if err != nil {
 		t.Fatal(err)
 	}
