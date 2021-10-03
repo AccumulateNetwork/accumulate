@@ -63,7 +63,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 
 // Query implements github.com/tendermint/tendermint/abci/types.Application.
 //
-// Exposed as Tendermint RCP /abci_query.
+// Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 	query := new(api.Query)

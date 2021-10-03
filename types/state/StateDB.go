@@ -134,6 +134,9 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
+	if debugStateDBWrites {
+		fmt.Printf("Get StateEntries chain=%X\n", chainId)
+	}
 	data := sdb.db.Get("StateEntries", "", chainId)
 
 	if data == nil {
