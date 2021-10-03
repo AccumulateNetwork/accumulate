@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulated/config"
@@ -50,7 +52,7 @@ func init() {
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
-	cmdInitFollower.Flags().StringVar(&flagInitFollower.ListenIP, "listen", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
+	cmdInitFollower.Flags().StringVarP(&flagInitFollower.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
 	cmdInitFollower.MarkFlagRequired("listen")
 }
 
@@ -113,10 +115,21 @@ func initNode(cmd *cobra.Command, args []string) {
 }
 
 func initFollower(cmd *cobra.Command, args []string) {
-	if !strings.HasPrefix(flagInitFollower.ListenIP, "tcp://") {
-		fmt.Fprintf(os.Stderr, "Error: --listen must start with 'tcp://'\n")
-		cmd.Usage()
+	u, err := url.Parse(flagInitFollower.ListenIP)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid --listen %q: %v\n", flagInitFollower.ListenIP, err)
 		os.Exit(1)
+	}
+
+	port := 26656
+	if u.Port() != "" {
+		p, err := strconv.ParseInt(u.Port(), 10, 16)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: invalid port number %q\n", u.Port())
+			os.Exit(1)
+		}
+		port = int(p)
+		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
 	}
 
 	network := networks.Networks[flagInit.Net]
@@ -126,7 +139,6 @@ func initFollower(cmd *cobra.Command, args []string) {
 	}
 
 	var genDoc *types.GenesisDoc
-	var err error
 	if cmd.Flag("genesis-doc").Changed {
 		genDoc, err = types.GenesisDocFromFile(flagInitFollower.GenesisDoc)
 		if err != nil {
@@ -174,11 +186,11 @@ func initFollower(cmd *cobra.Command, args []string) {
 		WorkDir:    flagMain.WorkDir,
 		ShardName:  "accumulate.",
 		ChainID:    network.Name,
-		Port:       network.Port,
+		Port:       port,
 		GenesisDoc: genDoc,
 		Config:     []*cfg.Config{config},
 		RemoteIP:   []string{""},
-		ListenIP:   []string{flagInitFollower.ListenIP},
+		ListenIP:   []string{u.String()},
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
