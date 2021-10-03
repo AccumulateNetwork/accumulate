@@ -58,7 +58,7 @@ func Init(opts InitOptions) (err error) {
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
-		config.Instrumentation.Namespace = opts.ShardName
+//		config.Instrumentation.Namespace = opts.ShardName
 
 		// config.ProxyApp = fmt.Sprintf("%s:%d", IPs[i], opts.Port)
 		config.ProxyApp = ""
