@@ -119,7 +119,6 @@ func loadAccumulate(dir, file string) (*Accumulate, error) {
 }
 
 func load(dir, file string, c interface{}) error {
-	fmt.Println(file)
 	v := viper.New()
 	v.SetConfigFile(file)
 	v.AddConfigPath(dir)
