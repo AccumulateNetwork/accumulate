@@ -9,7 +9,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/types/api"
 
-	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -36,22 +35,16 @@ type Manager struct {
 
 var _ abci.Chain = (*Manager)(nil)
 
-func NewManager(config *config.Config, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
+func NewManager(client *rpchttp.HTTP, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
 	m := new(Manager)
 	m.db = db
 	m.chain = chain
 	m.key = key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
+	m.relay = relay.New(client)
 
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
-
-	rpcClient, err := rpchttp.New(config.RPC.ListenAddress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create RPC client: %v", err)
-	}
-	m.relay = relay.New(rpcClient)
-
 	return m, nil
 }
 
@@ -132,7 +125,10 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	m.mu.Unlock()
 
 	// TODO differentiate between real errors and not-found
-	st, _ := m.getState(tx.ChainID)
+	st, err := m.getState(tx.ChainID)
+	if err != nil {
+		return fmt.Errorf("failed to get state: %v", err)
+	}
 
 	// //placeholder for special validation rules for synthetic transactions.
 	// if tx.TransactionType()&0xF0 > 0 {
@@ -142,7 +138,7 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	// 	//sender is legit.
 	// }
 
-	err := m.isSane(st, tx)
+	err = m.isSane(st, tx)
 	if err != nil {
 		return err
 	}
@@ -230,12 +226,14 @@ func (m *Manager) getState(id []byte) (*state.StateEntry, error) {
 	st.DB = m.db
 
 	// TODO check error
-	st.ChainState, _ = m.db.GetCurrentEntry(id)
-	if st.ChainState == nil {
+	var err error
+	st.ChainState, err = m.db.GetCurrentEntry(id)
+	if errors.Is(err, state.ErrNotFound) {
 		return st, nil
+	} else if err != nil {
+		return nil, err
 	}
 
-	var err error
 	st.ChainHeader, err = state.UnmarshalChain(st.ChainState.Entry)
 	if err != nil {
 		return st, fmt.Errorf("failed to unmarshal chain header: %v", err)

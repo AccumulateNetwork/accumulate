@@ -2,8 +2,9 @@ package transactions
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"net/url"
+
+	"github.com/AccumulateNetwork/accumulated/types"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
@@ -49,6 +50,10 @@ func (t *TokenSend) Marshal() []byte {
 		data = append(data, common.SliceBytes([]byte(v.Dest))...)    //           the destination for the amount
 	}
 	return data
+}
+
+func (t *TokenSend) MarshalBinary() ([]byte, error) {
+	return t.Marshal(), nil
 }
 
 // Unmarshal
