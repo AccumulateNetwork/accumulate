@@ -136,23 +136,23 @@ func initFollower(cmd *cobra.Command, args []string) {
 	}
 
 	peers := make([]string, len(network.Nodes))
-	for i, ip := range network.Nodes {
-		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", ip, network.Port+1))
+	for i, n := range network.Nodes {
+		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", n.IP, network.Port+node.TmRpcPortOffset))
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to connect to %s: %v\n", ip, err)
+			fmt.Fprintf(os.Stderr, "Error: failed to connect to %s: %v\n", n.IP, err)
 			os.Exit(1)
 		}
 
 		if genDoc == nil {
 			msg := "WARNING!!! You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!\n"
 			if term.IsTerminal(int(os.Stderr.Fd())) {
-				fmt.Fprint(os.Stderr, color.RedString(msg, ip))
+				fmt.Fprint(os.Stderr, color.RedString(msg, n.IP))
 			} else {
-				fmt.Fprintf(os.Stderr, msg, ip)
+				fmt.Fprintf(os.Stderr, msg, n.IP)
 			}
 			rgen, err := client.Genesis(context.Background())
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: failed to get genesis of %s: %v\n", ip, err)
+				fmt.Fprintf(os.Stderr, "Error: failed to get genesis of %s: %v\n", n.IP, err)
 				os.Exit(1)
 			}
 			genDoc = rgen.Genesis
@@ -160,11 +160,11 @@ func initFollower(cmd *cobra.Command, args []string) {
 
 		status, err := client.Status(context.Background())
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to get status of %s: %v\n", ip, err)
+			fmt.Fprintf(os.Stderr, "Error: failed to get status of %s: %v\n", n, err)
 			os.Exit(1)
 		}
 
-		peers[i] = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, ip, network.Port)
+		peers[i] = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, n.IP, network.Port)
 	}
 
 	config := config.Default()
