@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types/api"
-
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
