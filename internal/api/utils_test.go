@@ -1,4 +1,4 @@
-package api
+package api_test
 
 import (
 	"crypto/sha256"
@@ -9,26 +9,16 @@ import (
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
+	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	tmcfg "github.com/tendermint/tendermint/config"
-	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
-
-func randomRouterPorts() *cfg.API {
-	port, err := tmnet.GetFreePort()
-	if err != nil {
-		panic(err)
-	}
-	return &cfg.API{
-		JSONListenAddress: fmt.Sprintf("localhost:%d", port),
-		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
-	}
-}
 
 func initOptsForNetwork(t *testing.T, name string) node.InitOptions {
 	t.Helper()
@@ -130,7 +120,7 @@ func newBVC(t *testing.T, workingdir string) (*cfg.Config, *privval.FilePV, *nod
 	}
 
 	bvc := chain.NewBlockValidator()
-	mgr, err := chain.NewManager(rpcClient, sdb, pv.Key.PrivKey.Bytes(), bvc)
+	mgr, err := chain.NewManager(api.NewQuery(relay.New(rpcClient)), sdb, pv.Key.PrivKey.Bytes(), bvc)
 	if err != nil {
 		t.Fatal(err)
 	}

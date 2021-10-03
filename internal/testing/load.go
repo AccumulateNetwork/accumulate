@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
+	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -16,7 +16,7 @@ import (
 
 // Load
 // Generate load in our test.  Create a bunch of transactions, and submit them.
-func Load(txBouncer *relay.Relay, Origin ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
+func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
 
 	var wallet []*transactions.WalletEntry
 
@@ -32,7 +32,7 @@ func Load(txBouncer *relay.Relay, Origin ed25519.PrivateKey, walletCount, txCoun
 	addrCountMap := make(map[string]int)
 	for i := 0; i < txCount; i++ { // Make a bunch of transactions
 		if i%200 == 0 {
-			txBouncer.BatchSend()
+			query.BatchSend()
 			time.Sleep(200 * time.Millisecond)
 		}
 		const origin = 0
@@ -52,7 +52,7 @@ func Load(txBouncer *relay.Relay, Origin ed25519.PrivateKey, walletCount, txCoun
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
 
-		if resp, err := txBouncer.BatchTx(gtx); err != nil {
+		if resp, err := query.BroadcastTx(gtx); err != nil {
 			return nil, fmt.Errorf("failed to send TX: %v", err)
 		} else {
 			if len(resp.Log) > 0 {
@@ -60,7 +60,7 @@ func Load(txBouncer *relay.Relay, Origin ed25519.PrivateKey, walletCount, txCoun
 			}
 		}
 	}
-	txBouncer.BatchSend()
+	query.BatchSend()
 	for addr, ct := range addrCountMap {
 		addrList = append(addrList, addr)
 		_ = ct
@@ -70,7 +70,7 @@ func Load(txBouncer *relay.Relay, Origin ed25519.PrivateKey, walletCount, txCoun
 	return addrList, nil
 }
 
-func RunLoadTest(txBouncer *relay.Relay, origin *ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
+func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	adiSponsor := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
 
@@ -110,12 +110,13 @@ func RunLoadTest(txBouncer *relay.Relay, origin *ed25519.PrivateKey, walletCount
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	_, err = txBouncer.SendTx(gtx)
+	_, err = query.BroadcastTx(gtx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send TX: %v", err)
 	}
+	query.BatchSend()
 
-	addresses, err := Load(txBouncer, privateKey, walletCount, txCount)
+	addresses, err := Load(query, privateKey, walletCount, txCount)
 	if err != nil {
 		return nil, err
 	}
