@@ -300,6 +300,17 @@ func (s *String) AsString() *string {
 	return (*string)(s)
 }
 
+func (s *String) MarshalJSON() ([]byte, error) {
+	str := string(*s)
+	b, err := json.Marshal(&str)
+	return b, err
+}
+
+func (s *String) UnmarshalJSON(data []byte) error {
+	*s = String(strings.Trim(string(data), `"`))
+	return nil
+}
+
 type Byte byte
 
 func (s *Byte) MarshalBinary() ([]byte, error) {
@@ -333,13 +344,40 @@ type UrlChain struct {
 	String
 }
 
-func (s *UrlChain) IsValid() bool {
+func (s *UrlChain) IsValid() error {
 	adi, chainPath, err := s.Parse()
-	return !(adi == "" || chainPath == "" || err != nil)
+	if err != nil {
+		return fmt.Errorf("invalid URL (%s), %v", s.String, err)
+	} else if adi == "" || chainPath == "" {
+		return fmt.Errorf("adi and chainPath cannot be empty, %s (adi), %s (chain)", adi, chainPath)
+	}
+	return nil
 }
 
 func (s *UrlChain) Parse() (string, string, error) {
 	return ParseIdentityChainPath(s.AsString())
+}
+
+func (s *UrlChain) MarshalJSON() ([]byte, error) {
+	err := s.IsValid()
+	if err != nil {
+		return nil, fmt.Errorf("invalid UrlChain when marshaling json, %v", err)
+	}
+	b, err := json.Marshal(s.String)
+	return b, err
+}
+
+// UnmarshalJSON serializes ByteArray to hex
+func (s *UrlChain) UnmarshalJSON(data []byte) error {
+	err := json.Unmarshal(data, &s.String)
+	if err != nil {
+		return fmt.Errorf("error unmarshaling json UrlChain, %v", err)
+	}
+	err = s.IsValid()
+	if err != nil {
+		return fmt.Errorf("invalid UrlChain when unmarshaling json, %v", err)
+	}
+	return nil
 }
 
 type Amount struct {
