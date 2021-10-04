@@ -3,12 +3,39 @@ package transactions
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/stretchr/testify/require"
 )
+
+type FakeTx string
+
+func (tx *FakeTx) Type() types.TxType {
+	return math.MaxUint64
+}
+
+func (tx *FakeTx) MarshalBinary() ([]byte, error) {
+	b := MarshalType(tx.Type())
+	c := common.SliceBytes([]byte(*tx))
+	return append(b, c...), nil
+}
+
+func (tx *FakeTx) UnmarshalBinary(b []byte) error {
+	typ, b := UnmarshalType(b)
+	if typ != tx.Type() {
+		return errors.New("wrong type")
+	}
+
+	c, _ := common.BytesSlice(b)
+	*tx = FakeTx(c)
+	return nil
+}
 
 var Seed = sha256.Sum256([]byte{1, 2, 3})
 
@@ -33,7 +60,8 @@ func TestTokenTransaction(t *testing.T) {
 		t.Fatal("could not create the Routing value")
 	}
 
-	trans.Transaction = []byte("this is a message to who ever is about")
+	ftx := FakeTx("this is a message to who ever is about")
+	trans.Transaction = &ftx
 	key := GetKey()
 	eSig := new(ED25519Sig)
 	eSig.Nonce = 0

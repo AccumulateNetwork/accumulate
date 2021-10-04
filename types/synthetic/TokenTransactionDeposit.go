@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
 type TokenTransactionDeposit struct {
@@ -39,6 +39,12 @@ func NewTokenTransactionDeposit(txId types.Bytes, from *types.String, to *types.
 	return &tx
 }
 
+func init() {
+	transactions.RegisterPayload(func() transactions.Payload {
+		return new(TokenTransactionDeposit)
+	})
+}
+
 func (tx *TokenTransactionDeposit) Valid() error {
 
 	if err := tx.Header.Valid(); err != nil {
@@ -54,6 +60,10 @@ func (tx *TokenTransactionDeposit) Valid() error {
 	}
 
 	return nil
+}
+
+func (*TokenTransactionDeposit) Type() types.TxType {
+	return types.TxTypeSyntheticTokenDeposit
 }
 
 func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
@@ -72,7 +82,7 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 
 	var ret bytes.Buffer
 
-	ret.Write(common.Uint64Bytes(types.TxTypeSyntheticTokenDeposit.AsUint64()))
+	ret.Write(transactions.MarshalType(tx.Type()))
 
 	data, err := tx.Header.MarshalBinary()
 	if err != nil {
@@ -111,9 +121,9 @@ func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) (err error) {
 	}
 
 	//compare the type to make sure it is a synthetic tx.
-	txType, data := common.BytesUint64(data)
+	txType, data := transactions.UnmarshalType(data)
 
-	if txType != uint64(types.TxTypeSyntheticTokenDeposit) {
+	if txType != types.TxTypeSyntheticTokenDeposit {
 		return fmt.Errorf("invalid transaction type, expecting %s, but received %s",
 			types.TxTypeSyntheticTokenDeposit.Name(), types.TxType(txType).Name())
 	}

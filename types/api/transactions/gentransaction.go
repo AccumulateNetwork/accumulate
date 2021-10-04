@@ -3,7 +3,6 @@ package transactions
 import (
 	"bytes"
 	"crypto/sha256"
-	"encoding"
 	"errors"
 	"fmt"
 
@@ -30,7 +29,7 @@ type GenTransaction struct {
 	Signature   []*ED25519Sig  // Signature(s) of the transaction
 	TxHash      []byte         // Hash of the Transaction
 	SigInfo     *SignatureInfo // Information that is included with the Transaction
-	Transaction []byte         // The transaction that follows
+	Transaction Payload        // The transaction that follows
 }
 
 // Equal
@@ -47,7 +46,7 @@ func (t *GenTransaction) Equal(t2 *GenTransaction) bool {
 	}
 	return t.SigInfo.Equal(t2.SigInfo) && //                            The SigInfo has to be the same
 		bytes.Equal(t.TransactionHash(), t2.TransactionHash()) && //    Check the Transaction hash
-		bytes.Equal(t.Transaction, t2.Transaction) //                   and the transaction. Mismatch is false
+		t.Transaction == t2.Transaction //                   and the transaction. Mismatch is false
 }
 
 // TransactionHash
@@ -57,12 +56,16 @@ func (t *GenTransaction) TransactionHash() []byte {
 	if t.TxHash != nil { //                                Check if I have the hash already
 		return t.TxHash //                                  Return it if I do
 	} //
-	data, err := t.SigInfo.Marshal() //                    Get the SigInfo (all the indexes to signatures)
-	if err != nil {                  //                    On an error, return a nil
+	sData, err := t.SigInfo.Marshal() //                    Get the SigInfo (all the indexes to signatures)
+	if err != nil {                   //                    On an error, return a nil
 		return nil //
 	} //
-	sHash := sha256.Sum256(data)                        // Compute the SigHash
-	tHash := sha256.Sum256(t.Transaction)               // Compute the transaction Hash
+	tData, err := t.Transaction.MarshalBinary()
+	if err != nil {
+		return nil
+	}
+	sHash := sha256.Sum256(sData)                       // Compute the SigHash
+	tHash := sha256.Sum256(tData)                       // Compute the transaction Hash
 	txh := sha256.Sum256(append(sHash[:], tHash[:]...)) // Take hash of SigHash on left and hash of sub tx on right
 	t.TxHash = txh[:]                                   // cache it
 	return txh[:]                                       // And return it
@@ -91,8 +94,13 @@ func (t *GenTransaction) Marshal() (data []byte, err error) {
 	if err != nil {               // If we have an error, report it.
 		return nil, err //
 	}
-	data = append(data, si...)                               // Add the SigInfo
-	data = append(data, common.SliceBytes(t.Transaction)...) // Add the transaction
+	data = append(data, si...) // Add the SigInfo
+
+	tData, err := marshalPayload(t.Transaction)
+	if err != nil {
+		return nil, err
+	}
+	data = append(data, common.SliceBytes(tData)...) // Add the transaction
 	return data, nil
 }
 
@@ -117,9 +125,13 @@ func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
 	if err != nil {                       //                Get an error? Complain to caller!
 		return nil, err //
 	} //
-	t.Transaction, data = common.BytesSlice(data) //        Get the Transaction out of the data
-	err = t.SetRoutingChainID()                   //        Now compute the Routing and ChainID
-	if err != nil {                               //        If an error, then complain
+	tData, data := common.BytesSlice(data)
+	t.Transaction, err = unmarshalPayload(tData)
+	if err != nil {
+		return
+	}
+	err = t.SetRoutingChainID() //        Now compute the Routing and ChainID
+	if err != nil {             //        If an error, then complain
 		return nil, err //                                  return no data, and an error
 	} //
 	return data, nil //                                     Return the data and the fact all is well.
@@ -163,28 +175,17 @@ func (t *GenTransaction) ValidateSig() bool { // Validate the signatures on the 
 // TransactionType
 // Return the type of the Transaction (the first VarInt)
 func (t *GenTransaction) TransactionType() (transType uint64) {
-	transType, _ = common.BytesUint64(t.Transaction)
-	return transType
+	return t.Transaction.Type().AsUint64()
 }
 
-// As unmarshals the transaction payload as the given sub transaction type.
-func (t *GenTransaction) As(subTx encoding.BinaryUnmarshaler) error {
-	return subTx.UnmarshalBinary(t.Transaction)
-}
-
-func New(wallet *WalletEntry, subTx encoding.BinaryMarshaler) (*GenTransaction, error) {
-	payload, err := subTx.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
+func New(wallet *WalletEntry, payload Payload) (*GenTransaction, error) {
 	tx := new(GenTransaction)
 	tx.SigInfo = new(SignatureInfo)
 	tx.SigInfo.URL = wallet.Addr
 	tx.Signature = make([]*ED25519Sig, 1)
 	tx.Transaction = payload
 
-	err = tx.SetRoutingChainID()
+	err := tx.SetRoutingChainID()
 	if err != nil {
 		return nil, err
 	}
