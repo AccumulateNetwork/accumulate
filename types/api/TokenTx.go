@@ -12,15 +12,15 @@ import (
 const MaxTokenTxOutputs = 100
 
 type TokenTx struct {
-	Hash types.Bytes32    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"` //,hexadecimal"`
+	Hash types.Bytes32    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
 	From types.UrlChain   `json:"from" form:"from" query:"from" validate:"required"`
 	To   []*TokenTxOutput `json:"to" form:"to" query:"to" validate:"required"`
 	Meta json.RawMessage  `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
 type TokenTxRequest struct {
-	Hash types.String `json:"hash" form:"hash" query:"hash" validate:"required"` //,hexadecimal"`
-	From types.String `json:"from" form:"from" query:"from" validate:"required"`
+	Hash types.Bytes32  `json:"hash" form:"hash" query:"hash" validate:"required"`
+	From types.UrlChain `json:"from" form:"from" query:"from" validate:"required"`
 }
 
 //TokenTxOutput is the structure for the output.  Only handles 64 bit amounts at this time.
@@ -31,7 +31,7 @@ type TokenTxOutput struct {
 
 func NewTokenTx(from types.String) *TokenTx {
 	tx := &TokenTx{}
-	tx.From = types.UrlChain{String: from}
+	tx.From = types.UrlChain{from}
 	return tx
 }
 
