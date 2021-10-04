@@ -320,12 +320,12 @@ func (m *Manager) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResult
 				return fmt.Errorf("error signing sythetic transaction, %v", err)
 			}
 
-		tx.Signature = append(tx.Signature, ed)
-		_, err = m.query.BroadcastTx(tx)
-		if err != nil {
-			return err
+			tx.Signature = append(tx.Signature, ed)
+			_, err = m.query.BroadcastTx(tx)
+			if err != nil {
+				return err
+			}
 		}
-	}
 
 		// Create the state object to store the unsigned pending transaction
 		txSynthetic := state.NewPendingTransaction(tx)
