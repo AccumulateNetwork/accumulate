@@ -2,13 +2,15 @@ package state
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
 func TestTransactionState(t *testing.T) {
-	nts1 := transactions.NewTokenSend("RedWagon", transactions.Output{100 * 100000000, "BlueWagon"})
+	nts1 := transactions.NewTokenSend("RedWagon/myAccount", transactions.Output{100 * 100000000, "BlueWagon"})
 
 	var nonce uint64 = 1
 
@@ -108,6 +110,22 @@ func TestTransactionState(t *testing.T) {
 
 	if !txState2.SigInfo.Equal(txPendingState2.TransactionState.SigInfo) {
 		t.Fatalf("sig info doesn't match against pending")
+	}
+
+	txPendingStateObject := Object{}
+	mdRoot := sha256.Sum256([]byte("some mdroot"))
+	txPendingStateObject.MDRoot = mdRoot[:]
+	txPendingStateObject.Entry = data
+	txPendingStateObject.ChainHeader.SetHeader(types.String("RedWagon/myAccount"), types.ChainTypePendingTransaction)
+	pendingStateData, err := txPendingStateObject.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	txPendingStateObject2 := Object{}
+	err = txPendingStateObject2.UnmarshalBinary(pendingStateData)
+	if err != nil {
+		t.Fatal(err)
 	}
 
 }
