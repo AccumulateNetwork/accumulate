@@ -2,6 +2,8 @@ package state
 
 import (
 	"bytes"
+	"encoding"
+	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -52,9 +54,13 @@ func (app *Object) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (o *Object) As(entry encoding.BinaryUnmarshaler) error {
+	return entry.UnmarshalBinary(o.Entry)
+}
+
 type StateEntry struct {
-	IdentityState *Object
-	ChainState    *Object
+	AdiState   *Object
+	ChainState *Object
 
 	//useful cached info
 	ChainId  *types.Bytes32
@@ -66,47 +72,36 @@ type StateEntry struct {
 	DB *StateDB
 }
 
-func NewStateEntry(idState *Object, chainState *Object, db *StateDB) *StateEntry {
-	se := StateEntry{}
-	se.IdentityState = idState
-
-	se.ChainState = chainState
-	se.DB = db
-
-	return &se
-}
-
-const (
-	MaskChainState  = 0x01
-	MaskAdiState    = 0x02
-	MaskChainHeader = 0x04
-	MaskAdiHeader   = 0x08
-)
-
-func (s *StateEntry) IsValid(mask int) bool {
-	if mask&MaskChainState == 1 {
-		if s.IdentityState == nil {
-			return false
-		}
+// LoadChainAndADI retrieves the specified chain and unmarshals it, and
+// retrieves its ADI and unmarshals it.
+func (db *StateDB) LoadChainAndADI(chainId []byte) (*StateEntry, error) {
+	chainState, chainHeader, err := db.LoadChain(chainId)
+	if errors.Is(err, ErrNotFound) {
+		return &StateEntry{
+			DB: db,
+		}, nil
+	} else if err != nil {
+		return nil, err
 	}
 
-	if mask&MaskAdiState == 1 {
-		if s.IdentityState == nil {
-			return false
-		}
+	adiChain, adiState, adiHeader, err := db.LoadChainADI(chainHeader)
+	if errors.Is(err, ErrNotFound) {
+		return &StateEntry{
+			DB:          db,
+			ChainState:  chainState,
+			ChainHeader: chainHeader,
+			AdiChain:    adiChain,
+		}, nil
+	} else if err != nil {
+		return nil, err
 	}
 
-	if mask&MaskChainHeader == 1 {
-		if s.ChainHeader == nil {
-			return false
-		}
-	}
-
-	if mask&MaskAdiHeader == 1 {
-		if s.AdiHeader == nil {
-			return false
-		}
-	}
-
-	return true
+	return &StateEntry{
+		DB:          db,
+		ChainState:  chainState,
+		ChainHeader: chainHeader,
+		AdiChain:    adiChain,
+		AdiState:    adiState,
+		AdiHeader:   adiHeader,
+	}, nil
 }
