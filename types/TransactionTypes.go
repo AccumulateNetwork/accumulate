@@ -70,7 +70,7 @@ var (
 		"adminVote":               TxTypeAdminVote,
 		"multisigTx":              TxTypeMultisigTx,
 		"syntheticIdentityCreate": TxTypeSyntheticIdentityCreate,
-		"syntheticTokenTx":        TxTypeTokenTx,
+		"syntheticTokenTx":        TxTypeSyntheticTokenTx,
 		"syntheticTokenDeposit":   TxTypeSyntheticTokenDeposit,
 		"syntheticTxResponse":     TxTypeSyntheticTxResponse,
 		"bvcSubmission":           TxTypeBvcSubmission,
