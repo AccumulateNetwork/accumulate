@@ -130,7 +130,7 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 	}
 
 	//all is good, so subtract the balance
-	err = account.AddBalance(&deposit.DepositAmount)
+	err = account.AddBalance(deposit.DepositAmount.AsBigInt())
 	if err != nil {
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
@@ -147,6 +147,12 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 
 	//this will be optimized later.  really only need to record the tx's as a function of chain id then at end block record Tx
 	//want to pass back just an interface rather than marshaled data.
+
+	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.  This will reference the txid to keep the history
+
+	//increment the token transaction count
+	account.TxCount++
+
 	data, err := account.MarshalBinary()
 	if err != nil {
 		// TODO why is this a panic?
