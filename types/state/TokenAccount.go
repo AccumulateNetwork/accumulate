@@ -8,15 +8,10 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
-type tokenAccount struct {
+type TokenAccount struct {
 	Chain
 	TokenUrl types.UrlChain `json:"tokenUrl"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
 	Balance  big.Int        `json:"balance"`  //store the balance as a big int.
-}
-
-type TokenAccount struct {
-	Entry
-	tokenAccount
 }
 
 //NewTokenAccount create a new token account.  Requires the identity/chain id's and coinbase if applicable
