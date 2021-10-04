@@ -196,7 +196,7 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeApi.APIDataResponse,
 	return ret, err
 }
 
-func (q *Query) packTokenTxResponse(tokenTxRaw []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*acmeApi.APIDataResponse, error) {
+func (q *Query) packTokenTxResponse(url string, tokenTxRaw []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*acmeApi.APIDataResponse, error) {
 	tx := acmeApi.TokenTx{}
 	err := tx.UnmarshalBinary(tokenTxRaw)
 	if err != nil {
@@ -205,6 +205,12 @@ func (q *Query) packTokenTxResponse(tokenTxRaw []byte, txId types.Bytes, txSynth
 	txResp := response.TokenTx{}
 	txResp.From = tx.From.String
 	txResp.TxId = txId
+
+	_, queryPath, err := types.ParseIdentityChainPath(&url)
+	_, txPath, err := types.ParseIdentityChainPath(tx.From.AsString())
+	if queryPath != txPath {
+		return nil, fmt.Errorf("url doesn't match transaction query, expecting %s but received %s", txPath, queryPath)
+	}
 
 	if len(txSynthTxIds)/32 != len(tx.To) {
 		return nil, fmt.Errorf("number of synthetic tx, does not match number of outputs")
@@ -233,7 +239,7 @@ func (q *Query) packTokenTxResponse(tokenTxRaw []byte, txId types.Bytes, txSynth
 	return &resp, err
 }
 
-func (q *Query) packSynthTokenDepositResponse(tokenTxRaw []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*acmeApi.APIDataResponse, error) {
+func (q *Query) packSynthTokenDepositResponse(url string, tokenTxRaw []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*acmeApi.APIDataResponse, error) {
 	tx := synthetic.TokenTransactionDeposit{}
 	err := tx.UnmarshalBinary(tokenTxRaw)
 	if err != nil {
@@ -242,6 +248,18 @@ func (q *Query) packSynthTokenDepositResponse(tokenTxRaw []byte, txId types.Byte
 
 	if len(txSynthTxIds) != 0 {
 		return nil, fmt.Errorf("there should be no synthetic transaction associated with this transaction")
+	}
+
+	_, queryPath, err := types.ParseIdentityChainPath(&url)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing query url path, %v", err)
+	}
+	_, txPath, err := types.ParseIdentityChainPath(tx.ToUrl.AsString())
+	if err != nil {
+		return nil, fmt.Errorf("error parsing url path associated with transaction, %v", err)
+	}
+	if queryPath != txPath {
+		return nil, fmt.Errorf("url doesn't match transaction query, expecting %s but received %s", txPath, queryPath)
 	}
 
 	data, err := json.Marshal(&tx)
@@ -303,9 +321,9 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 	txType, _ := common.BytesUint64(txState.Transaction.Bytes())
 	switch types.TxType(txType) {
 	case types.TxTypeTokenTx:
-		resp, err = q.packTokenTxResponse(txState.Transaction.Bytes(), txId, txSynthTxIds)
+		resp, err = q.packTokenTxResponse(*tokenAccountUrl, txState.Transaction.Bytes(), txId, txSynthTxIds)
 	case types.TxTypeSyntheticTokenDeposit:
-		resp, err = q.packSynthTokenDepositResponse(txState.Transaction.Bytes(), txId, txSynthTxIds)
+		resp, err = q.packSynthTokenDepositResponse(*tokenAccountUrl, txState.Transaction.Bytes(), txId, txSynthTxIds)
 	default:
 		err = fmt.Errorf("unable to extract transaction info for type %s : %x", types.TxType(txType).Name(), txState.Transaction.Bytes())
 	}
