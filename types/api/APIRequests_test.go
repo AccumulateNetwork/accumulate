@@ -48,9 +48,8 @@ func createToken(tokenUrl string) (string, error) {
 func createTokenTx(url string) (string, error) {
 	tx := &TokenTx{}
 	tx.From.String = types.String(url + "/MyAcmeTokens")
-	amt := types.Amount{}
-	amt.SetInt64(1234)
-	tx.AddToAccount("redwagon/AcmeAccount", &amt)
+	amt := uint64(1234)
+	tx.AddToAccount("redwagon/AcmeAccount", amt)
 	ret, err := json.Marshal(&tx)
 	return string(ret), err
 }

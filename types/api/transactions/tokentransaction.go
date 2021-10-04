@@ -45,18 +45,18 @@ func (t *TokenSend) Marshal() []byte {
 	data = append(data, common.SliceBytes([]byte(t.AccountURL))...)    //      The source URL
 	data = append(data, common.Uint64Bytes(uint64(len(t.Outputs)))...) //      The number of outputs
 	for _, v := range t.Outputs {                                      //      For each output
-		data = append(data, common.Uint64Bytes(uint64(v.Amount))...) //           the amount sent
 		data = append(data, common.SliceBytes([]byte(v.Dest))...)    //           the destination for the amount
+		data = append(data, common.Uint64Bytes(uint64(v.Amount))...) //           the amount sent
 	}
 	return data
 }
 
 // Unmarshal
 // Unmarshal a transaction
-func (t *TokenSend) Unmarshal(data []byte) ([]byte, error) { //                       Pull the state out of the data into the tx
+func (t *TokenSend) Unmarshal(data []byte) (ret []byte, err error) { //                       Pull the state out of the data into the tx
 	defer func() {
-		if err := recover(); err != nil {
-			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		if rErr := recover(); rErr != nil {
+			err = fmt.Errorf("error marshaling Pending Transaction State %v", rErr)
 		}
 	}()
 
@@ -72,10 +72,10 @@ func (t *TokenSend) Unmarshal(data []byte) ([]byte, error) { //                 
 	num, data = common.BytesUint64(data) //                                 Get the count of outputs
 	for i := uint64(0); i < num; i++ {   //                                 For all outputs
 		output := new(Output)                          //                      Create an output
-		output.Amount, data = common.BytesUint64(data) //                      with the amount
 		url, data = common.BytesSlice(data)            //                      and a destination URL
 		output.Dest = string(url)                      //
 		t.Outputs = append(t.Outputs, output)          //                      Add the output
+		output.Amount, data = common.BytesUint64(data) //                      with the amount
 	} //
 	return data, nil //                                                          Return the data
 }

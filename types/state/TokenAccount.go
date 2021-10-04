@@ -3,6 +3,7 @@ package state
 import (
 	"bytes"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"math/big"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -12,6 +13,7 @@ type tokenAccount struct {
 	Chain
 	TokenUrl types.UrlChain `json:"tokenUrl"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
 	Balance  big.Int        `json:"balance"`  //store the balance as a big int.
+	TxCount  uint64         `json:"txCount"`  //the number of transactions associated with this account (this is used to derive the txurl)
 }
 
 type TokenAccount struct {
@@ -107,16 +109,21 @@ func (app *TokenAccount) MarshalBinary() (ret []byte, err error) {
 	}
 	buffer.Write(tokenUrlData)
 
-	var buff types.Bytes32
-	app.Balance.FillBytes(buff[:])
-	buffer.Write(buff[:])
+	buffer.Write(common.SliceBytes(app.Balance.Bytes()))
+	buffer.Write(common.Uint64Bytes(app.TxCount))
 
 	return buffer.Bytes(), nil
 }
 
 //UnmarshalBinary will deserialize a byte array
-func (app *TokenAccount) UnmarshalBinary(data []byte) error {
-	err := app.Chain.UnmarshalBinary(data)
+func (app *TokenAccount) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("error marshaling TokenTx State %v", r)
+		}
+	}()
+
+	err = app.Chain.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
@@ -130,11 +137,10 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) error {
 
 	i += app.TokenUrl.Size(nil)
 
-	if len(data) < i+32 {
-		return fmt.Errorf("invalid data buffer to unmarshal account state")
-	}
+	bal, data := common.BytesSlice(data[i:])
 
-	app.Balance.SetBytes(data[i : i+32])
+	app.Balance.SetBytes(bal)
+	app.TxCount, _ = common.BytesUint64(data)
 
 	return nil
 }

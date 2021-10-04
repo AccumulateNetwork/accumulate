@@ -3,13 +3,13 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeApi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	tmtypes "github.com/tendermint/tendermint/abci/types"
 )
@@ -163,6 +163,65 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeApi.APIDataResponse,
 	return ret, err
 }
 
+func (q *Query) packTokenTxResponse(tokenTxRaw []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*acmeApi.APIDataResponse, error) {
+	tx := acmeApi.TokenTx{}
+	err := tx.UnmarshalBinary(tokenTxRaw)
+	if err != nil {
+		return nil, NewAccumulateError(err)
+	}
+	txResp := response.TokenTx{}
+	txResp.From = tx.From.String
+	txResp.TxId = txId
+
+	if len(txSynthTxIds)/32 != len(tx.To) {
+		return nil, fmt.Errorf("number of synthetic tx, does not match number of outputs")
+	}
+
+	//should receive tx,unmarshal to output accounts
+	for i, v := range tx.To {
+		j := i * 32
+		synthTxId := txSynthTxIds[j : j+32]
+		txStatus := response.TokenTxOutputStatus{}
+		txStatus.TokenTxOutput.URL = v.URL
+		txStatus.TokenTxOutput.Amount = v.Amount
+		txStatus.SyntheticTxId = synthTxId
+
+		txResp.ToAccount = append(txResp.ToAccount, txStatus)
+	}
+
+	data, err := json.Marshal(&txResp)
+	if err != nil {
+		return nil, err
+	}
+	resp := acmeApi.APIDataResponse{}
+	resp.Type = types.String(types.TxTypeTokenTx.Name())
+	resp.Data = new(json.RawMessage)
+	*resp.Data = data
+	return &resp, err
+}
+
+func (q *Query) packSynthTokenDepositResponse(tokenTxRaw []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*acmeApi.APIDataResponse, error) {
+	tx := synthetic.TokenTransactionDeposit{}
+	err := tx.UnmarshalBinary(tokenTxRaw)
+	if err != nil {
+		return nil, NewAccumulateError(err)
+	}
+
+	if len(txSynthTxIds) != 0 {
+		return nil, fmt.Errorf("there should be no synthetic transaction associated with this transaction")
+	}
+
+	data, err := json.Marshal(&tx)
+	if err != nil {
+		return nil, err
+	}
+	resp := acmeApi.APIDataResponse{}
+	resp.Type = types.String(types.TxTypeSyntheticTokenDeposit.Name())
+	resp.Data = new(json.RawMessage)
+	*resp.Data = data
+	return &resp, err
+}
+
 // GetTokenTx
 // get the token tx from the primary adi, then query all the output accounts to get the status
 func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface{}, err error) {
@@ -178,48 +237,47 @@ func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface
 	if qResp.Value == nil {
 		return nil, fmt.Errorf("no data available for txid %x", txId)
 	}
-	_, txRaw := common.BytesSlice(qResp.Value)
-	if txRaw != nil {
+
+	txData, txPendingRaw := common.BytesSlice(qResp.Value)
+	if txPendingRaw == nil {
 		return nil, fmt.Errorf("unable to obtain data from value")
+	}
+	txPendingData, txSynthTxIdsRaw := common.BytesSlice(txPendingRaw)
+	_ = txPendingData
+
+	if txSynthTxIdsRaw == nil {
+		return nil, fmt.Errorf("unable to obtain synth txids")
+	}
+
+	txSynthTxIds, _ := common.BytesSlice(txSynthTxIdsRaw)
+
+	if len(txSynthTxIds)%32 != 0 {
+		return nil, fmt.Errorf("invalid synth txids")
+	}
+
+	txObject := state.Object{}
+	err = txObject.UnmarshalBinary(txData)
+	if err != nil {
+		return nil, fmt.Errorf("invalid transaction object for query, %v", err)
 	}
 
 	txState := state.Transaction{}
-	err = txState.UnmarshalBinary(txRaw)
+	err = txState.UnmarshalBinary(txObject.Entry)
 	if err != nil {
 		return resp, NewAccumulateError(err)
 	}
-	//now unmarshal the token transaction on-chain
-	//need to identify type of TX, for now only support token tx
-	tx := transactions.TokenSend{}
-	_, err = tx.Unmarshal(txState.Transaction.Bytes())
-	if err != nil {
-		return resp, NewAccumulateError(err)
-	}
-	txResp := response.TokenTx{}
-	txResp.FromUrl = types.String(*tokenAccountUrl)
-	copy(txResp.TxId[:], txId)
 
-	//should receive tx,unmarshal to output accounts
-	for _, v := range tx.Outputs {
-		aResp, err := q.txBouncer.Query(tokenAccountUrl, txId)
-
-		txStatus := response.TokenTxAccountStatus{}
-		if err != nil {
-			txStatus.Status = types.String(fmt.Sprintf("transaction not found for %s, %v", v.Dest, err))
-			txStatus.AccountUrl = types.String(v.Dest)
-		} else {
-			qResp = aResp.Response
-			err = txStatus.UnmarshalBinary(qResp.Value)
-			if err != nil {
-				txStatus.Status = types.String(fmt.Sprintf("%v", err))
-				txStatus.AccountUrl = types.String(v.Dest)
-			}
-		}
-
-		txResp.ToAccount = append(txResp.ToAccount, txStatus)
+	txType, _ := common.BytesUint64(txState.Transaction.Bytes())
+	switch types.TxType(txType) {
+	case types.TxTypeTokenTx:
+		resp, err = q.packTokenTxResponse(txState.Transaction.Bytes(), txId, txSynthTxIds)
+	case types.TxTypeSyntheticTokenDeposit:
+		resp, err = q.packSynthTokenDepositResponse(txState.Transaction.Bytes(), txId, txSynthTxIds)
+	default:
+		err = fmt.Errorf("unable to extract transaction info for type %s : %x", types.TxType(txType).Name(), txState.Transaction.Bytes())
 	}
 
-	return txResp, err
+	return resp, err
 }
 
 var ChainStates = map[types.ChainType]interface{}{

@@ -1,8 +1,8 @@
 package state
 
 import (
-	"crypto/sha256"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -66,8 +66,11 @@ type PendingTransaction struct {
 }
 
 func (is *Transaction) TransactionHash() *types.Bytes32 {
-	data, _ := is.MarshalBinary()
-	txHash := types.Bytes32(sha256.Sum256(data))
+	gtx := transactions.GenTransaction{}
+	gtx.SigInfo = is.SigInfo
+	gtx.Transaction = *is.Transaction
+	var txHash types.Bytes32
+	copy(txHash[:], gtx.TransactionHash())
 	return &txHash
 }
 
@@ -114,18 +117,18 @@ func (is *Transaction) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 	i := 0
-	//
-	//err := is.Chain.UnmarshalBinary(data)
+
+	//err = is.Chain.UnmarshalBinary(data)
 	//if err != nil {
 	//	return fmt.Errorf("unable to unmarshal data for transaction, %v", err)
 	//}
 	//
 	//i += is.Chain.GetHeaderSize()
-
-	if len(data) < i {
-		return fmt.Errorf("unable to unmarshal raw transaction data")
-	}
-
+	//
+	//if len(data) < i {
+	//	return fmt.Errorf("unable to unmarshal raw transaction data")
+	//}
+	//
 	is.SigInfo = new(transactions.SignatureInfo) //                Get a SignatureInfo struct
 	data, err = is.SigInfo.UnMarshal(data[i:])   //                And unmarshal it.
 	if err != nil {                              //                Get an error? Complain to caller!
@@ -147,15 +150,15 @@ func (t *PendingTransaction) MarshalBinary() (data []byte, err error) {
 		}
 	}()
 
-	headerData, err := t.Chain.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("unable to marshal chain header for transaction, %v", err)
-	}
-
-	data = append(data, headerData...)
+	//headerData, err := t.Chain.MarshalBinary()
+	//if err != nil {
+	//	return nil, fmt.Errorf("unable to marshal chain header for transaction, %v", err)
+	//}
+	//
+	//data = append(data, headerData...)
 
 	sLen := uint64(len(t.Signature))
-	if sLen < 1 || sLen > 100 {
+	if sLen < 1 || sLen > api.MaxTokenTxOutputs {
 		panic("must have 1 to 100 signatures")
 	}
 	data = append(data, common.Uint64Bytes(sLen)...)
@@ -189,21 +192,22 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 			err = fmt.Errorf("error unmarshaling GenTransaction %v", err) //
 		} //
 	}() //
-
-	err = t.Chain.UnmarshalBinary(data)
-	if err != nil {
-		return fmt.Errorf("cannot unmarshal chain header for transaction state,%v", err)
-	}
-
-	data = data[t.Chain.GetHeaderSize():]
-	var sLen uint64                       //                Get how many signatures we have
-	sLen, data = common.BytesUint64(data) //                Of course, need it in an int of some sort
-	if sLen < 1 || sLen > 100 {           //                If the count isn't reasonable, die
+	//
+	//err = t.Chain.UnmarshalBinary(data)
+	//if err != nil {
+	//	return fmt.Errorf("cannot unmarshal chain header for transaction state,%v", err)
+	//}
+	//
+	//data = data[t.Chain.GetHeaderSize():]
+	var sLen uint64                               //                Get how many signatures we have
+	sLen, data = common.BytesUint64(data)         //                Of course, need it in an int of some sort
+	if sLen < 1 || sLen > api.MaxTokenTxOutputs { //                If the count isn't reasonable, die
 		panic("signature length out of range") //           With a panic
 	} //
 	for i := uint64(0); i < sLen; i++ { //                  Okay, now cycle for every signature
-		sig := new(transactions.ED25519Sig)              // And unmarshal a signature
-		if data, err = sig.Unmarshal(data); err != nil { // If bad data is encountered,
+		sig := new(transactions.ED25519Sig) // And unmarshal a signature
+		data, err = sig.Unmarshal(data)
+		if err != nil { // If bad data is encountered,
 			return err //                              complain
 		} //
 		t.Signature = append(t.Signature, sig) //           Add each signature to list, and repeat until all done

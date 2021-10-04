@@ -160,7 +160,7 @@ func (s *Bytes) UnmarshalBinary(data []byte) (err error) {
 			err = fmt.Errorf("error unmarshaling byte array %v", err) //
 		} //
 	}()
-	slen, l := binary.Varint(data)
+	slen, l := binary.Uvarint(data)
 	if l == 0 {
 		return nil
 	}
@@ -174,13 +174,23 @@ func (s *Bytes) UnmarshalBinary(data []byte) (err error) {
 	return err
 }
 
+func (s *Bytes) AsBytes32() (ret Bytes32) {
+	copy(ret[:], *s)
+	return ret
+}
+
+func (s *Bytes) AsBytes64() (ret Bytes64) {
+	copy(ret[:], *s)
+	return ret
+}
+
 func (s *Bytes) Size(varintbuf *[8]byte) int {
 	buf := varintbuf
 	if buf == nil {
 		buf = &[8]byte{}
 	}
-	l := int64(len(*s))
-	i := binary.PutVarint(buf[:], l)
+	l := uint64(len(*s))
+	i := binary.PutUvarint(buf[:], l)
 
 	return i + int(l)
 }
@@ -364,5 +374,18 @@ func (a *Amount) UnmarshalBinary(data []byte) error {
 	}
 
 	a.Int.SetBytes(data[1 : amtLen+1])
+	return nil
+}
+
+// MarshalJSON serializes ByteArray to hex
+func (s *Amount) MarshalJSON() ([]byte, error) {
+	b, err := json.Marshal(s.String())
+	return b, err
+}
+
+// UnmarshalJSON serializes ByteArray to hex
+func (s *Amount) UnmarshalJSON(data []byte) error {
+	str := strings.Trim(string(data), `"`)
+	s.SetString(str, 10)
 	return nil
 }

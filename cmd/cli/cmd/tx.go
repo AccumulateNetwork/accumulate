@@ -76,19 +76,15 @@ func GetTX(account string, hash string) {
 
 	params.Hash = hashbytes
 
-	log.Println("checkpoint 1")
 	data, err := json.Marshal(params)
 	jsondata := json.RawMessage(data)
-	log.Println(jsondata)
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Println("checkpoint 3")
 
 	if err := Client.Request(context.Background(), "token-tx", jsondata, &res); err != nil {
 		log.Fatal(err)
 	}
-	log.Println("checkpoint 4")
 
 	str, err = json.Marshal(res)
 	if err != nil {
