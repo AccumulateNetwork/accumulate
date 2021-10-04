@@ -3,20 +3,18 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"testing"
-
-	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 func TestTokenTransaction(t *testing.T) {
 	tt := NewTokenTx("WileECoyote/MyACMETokens")
 
-	toAmt := types.Amount{}
-	toAmt.SetInt64(6500)
-	tt.AddToAccount("AcmeCorporation/ACMETokens", &toAmt)
+	toAmt := uint64(6500)
+	tt.AddToAccount("AcmeCorporation/ACMETokens", toAmt)
 
-	toAmt.SetInt64(2500)
-	tt.AddToAccount("RoadRunner/beep/beep", &toAmt)
+	toAmt = 2500
+	tt.AddToAccount("RoadRunner/beep/beep", toAmt)
 
 	data, err := json.Marshal(&tt)
 	if err != nil {
@@ -48,11 +46,25 @@ func TestTokenTransaction(t *testing.T) {
 		t.Fatalf("to length doesn't match")
 	}
 	for i, v := range tt.To {
-		if v.URL != tt2.To[i].URL {
-			t.Fatalf("to url doesn't match for %d", i)
+		if !v.Equal(tt2.To[i]) {
+			t.Fatalf("outputs do not match")
 		}
-		if bytes.Compare(v.Amount.Bytes(), tt2.To[i].Amount.Bytes()) != 0 {
-			t.Fatalf("amount doesn't match for %d", i)
-		}
+	}
+
+	ts := transactions.TokenSend{}
+	ts.AccountURL = "WileECoyote/MyACMETokens"
+	out := &transactions.Output{}
+	out.Amount = 6500
+	out.Dest = "AcmeCorporation/ACMETokens"
+	ts.Outputs = append(ts.Outputs, out)
+	out = &transactions.Output{}
+	out.Amount = 2500
+	out.Dest = "RoadRunner/beep/beep"
+	toAmt = 2500
+	ts.Outputs = append(ts.Outputs, out)
+
+	data2 := ts.Marshal()
+	if !bytes.Equal(data2, data) {
+		t.Fatal("binary incompat")
 	}
 }

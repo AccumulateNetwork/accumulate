@@ -12,7 +12,7 @@ import (
 
 type TokenTransactionDeposit struct {
 	Header
-	DepositAmount big.Int          `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
+	DepositAmount types.Amount     `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
 	TokenUrl      types.String     `json:"tokenURL" form:"tokenURL" query:"tokenURL" validate:"required,uri"`
 	Metadata      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }

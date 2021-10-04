@@ -39,7 +39,7 @@ func (ic *ADI) SetKeyHash(hash *types.Bytes32) {
 
 func (ic *ADI) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
-	buffer.Write(common.Int64Bytes(int64(types.TxTypeIdentityCreate)))
+	buffer.Write(common.Uint64Bytes(types.TxTypeIdentityCreate.AsUint64()))
 
 	idn, err := ic.URL.MarshalBinary()
 	if err != nil {
@@ -58,8 +58,8 @@ func (ic *ADI) UnmarshalBinary(data []byte) (err error) {
 			err = fmt.Errorf("insufficent data to unmarshal MultiSigTx %v", err)
 		}
 	}()
-	txType, data := common.BytesInt64(data)
-	if txType != int64(types.TxTypeIdentityCreate) {
+	txType, data := common.BytesUint64(data)
+	if txType != uint64(types.TxTypeIdentityCreate) {
 		return fmt.Errorf("unable to unmarshal ADI, expecting identity type")
 	}
 	err = ic.URL.UnmarshalBinary(data)

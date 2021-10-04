@@ -111,7 +111,7 @@ func (e *ED25519Sig) Marshal() (data []byte, err error) { //
 // further unmarshalling can be done with the returned data
 func (e *ED25519Sig) Unmarshal(data []byte) (nextData []byte, err error) {
 	defer func() {
-		if err := recover(); err != nil {
+		if rErr := recover(); rErr != nil {
 			err = fmt.Errorf("error unmarshaling ED25519Sig %v", err)
 		}
 	}()
