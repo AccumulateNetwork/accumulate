@@ -9,17 +9,12 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
-type token struct {
+// Token implement the Entry interfaces for a token
+type Token struct {
 	Chain
 	Symbol    types.String     `json:"symbol" form:"symbol" query:"symbol" validate:"required,alphanum"`
 	Precision types.Byte       `json:"precision" form:"precision" query:"precision" validate:"required,min=0,max=18"`
 	Meta      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"optional"`
-}
-
-// Token implement the Entry interfaces for a token
-type Token struct {
-	Entry
-	token
 }
 
 func NewToken(tokenUrl string) *Token {
