@@ -7,13 +7,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
-type Entry interface {
-	MarshalBinary() ([]byte, error)
-	UnmarshalBinary(data []byte) error
-	GetType() uint64 //return the Chain Type for the entry.
-	GetChainUrl() string
-}
-
 //maybe we should have Chain header then entry, rather than entry containing all the Headers
 type Object struct {
 	ChainHeader Chain       `json:"chainHeader"`

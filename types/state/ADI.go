@@ -20,17 +20,12 @@ const (
 	KeyTypeChain
 )
 
-type adiState struct {
+type AdiState struct {
 	Chain
 
 	KeyType KeyType     `json:"keyType"`
 	KeyData types.Bytes `json:"keyData"`
 	Nonce   uint64      `json:"nonce"`
-}
-
-type AdiState struct {
-	Entry
-	adiState
 }
 
 // NewIdentityState this will eventually be the key groups and potentially just a multi-map of types to chain paths controlled by the identity
@@ -174,14 +169,6 @@ func (is *AdiState) UnmarshalBinary(data []byte) error {
 	}
 
 	return nil
-}
-
-func (is *AdiState) MarshalJSON() ([]byte, error) {
-	return json.Marshal(&is.adiState)
-}
-
-func (is *AdiState) UnmarshalJSON(data []byte) error {
-	return json.Unmarshal(data, &is.adiState)
 }
 
 func (k *KeyType) UnmarshalJSON(b []byte) error {
