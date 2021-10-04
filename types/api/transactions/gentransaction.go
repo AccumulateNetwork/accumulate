@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding"
+	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -70,17 +71,12 @@ func (t *GenTransaction) TransactionHash() []byte {
 // UnMarshal
 // Create the binary representation of the GenTransaction
 func (t *GenTransaction) Marshal() (data []byte, err error) {
-	defer func() { //                                                     If any sort of error occurs,
-		if r := recover(); r != nil { //                               then marshalling fails, and report
-			err = fmt.Errorf("error marshaling GenTransaction %v", r) //  the error.
-		} //
-	}() //
 	if err := t.SetRoutingChainID(); err != nil { //                        Make sure routing and chainID are set
 		return nil, err //                                                   Not clear if this is necessary
 	} //
 	sLen := uint64(len(t.Signature)) //                                     Marshal the signatures, where
 	if sLen < 1 || sLen > 100 {      //                                     we must have at least one of them.
-		panic("must have 1 to 100 signatures") //                            Otherwise we don't have a nonce to
+		return nil, fmt.Errorf("must have 1 to 100 signatures") //          Otherwise we don't have a nonce to
 	} //                                                                    make the translation unique
 	data = common.Uint64Bytes(sLen) //                                      marshal the length, then each
 	for _, v := range t.Signature { //                                      signature struct.
@@ -104,15 +100,10 @@ func (t *GenTransaction) Marshal() (data []byte, err error) {
 // Take a bunch of bytes in data a []byte and pull out all the values for
 // the GenTransaction
 func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
-	defer func() { //
-		if r := recover(); r != nil { //
-			err = fmt.Errorf("error unmarshaling GenTransaction: %v", r) //
-		} //
-	}() //
-	var sLen uint64                       //                Get how many signatures we have
-	sLen, data = common.BytesUint64(data) //                Of course, need it in an int of some sort
-	if sLen < 1 || sLen > 100 {           //                If the count isn't reasonable, die
-		panic("signature length out of range") //           With a panic
+	var sLen uint64                       //                       Get how many signatures we have
+	sLen, data = common.BytesUint64(data) //                       Of course, need it in an int of some sort
+	if sLen < 1 || sLen > 100 {           //                       If the count isn't reasonable, die
+		return nil, fmt.Errorf("signature length out of range") //
 	} //
 	for i := uint64(0); i < sLen; i++ { //                  Okay, now cycle for every signature
 		sig := new(ED25519Sig)                           // And unmarshal a signature
@@ -140,6 +131,9 @@ func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
 func (t *GenTransaction) SetRoutingChainID() error { //
 	if t.Routing > 0 && t.ChainID != nil { //                               Check if there is anything to do
 		return nil //                                                       If routing and chainID are set, good
+	}
+	if t.SigInfo == nil {
+		return errors.New("missing signature info")
 	}
 	adi, chainPath, err := types.ParseIdentityChainPath(&t.SigInfo.URL) //  Parse the URL.  Hope it is good.
 	if err != nil {                                                     //  If hope is squashed, return err
