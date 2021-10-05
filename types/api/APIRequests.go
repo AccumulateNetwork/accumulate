@@ -11,7 +11,7 @@ import (
 
 // Signer holds the ADI and public key to use to verify the transaction
 type Signer struct {
-	URL       types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	URL       types.String  `json:"url" form:"url" query:"url" validate:"required"`
 	PublicKey types.Bytes32 `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
 }
 
