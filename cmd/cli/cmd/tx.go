@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -9,8 +10,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
 )
@@ -120,6 +123,7 @@ func CreateTX(sender string, receiver string, amount string) {
 		r.Amount, err = strconv.ParseUint(amount, 10, 64)
 		r.URL = types.UrlChain{types.String(receiver)}
 		to = append(to, r)
+		tokentx.To = to
 
 		data, err := json.Marshal(tokentx)
 		if err != nil {
@@ -131,9 +135,23 @@ func CreateTX(sender string, receiver string, amount string) {
 		params.Tx.Timestamp = time.Now().Unix()
 		params.Tx.Signer = &acmeapi.Signer{}
 		params.Tx.Signer.URL = types.String(sender)
-		params.Tx.Signer.PublicKey = types.Bytes32{}
 
 		params.Sig = types.Bytes64{}
+
+		gtx := new(transactions.GenTransaction)
+		gtx.SigInfo = new(transactions.SignatureInfo)
+		gtx.Transaction = datajson
+		gtx.SigInfo.URL = receiver
+		gtx.ChainID = types.GetChainIdFromChainPath(&receiver)[:]
+		gtx.Routing = types.GetAddressFromIdentity(&receiver)
+
+		ed := new(transactions.ED25519Sig)
+		err = ed.Sign(uint64(time.Now().UnixNano()), pk, gtx.TransactionHash())
+		if err != nil {
+			return api.NewSubmissionError(err)
+		}
+		params.Sig.FromBytes(ed.GetSignature())
+		params.Tx.Signer.PublicKey = sha256.Sum256(ed.GetPublicKey())
 
 		if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
 			log.Fatal(err)
