@@ -287,7 +287,7 @@ func (m *Manager) EndBatch() {
 	if err := m.DB.EndBatch(m.TXCache); err != nil {
 		panic("batch failed to persist to the database")
 	}
-	m.TXCache = make(map[[storage.KeyLength]byte][]byte, 100) // Reset the List to allow it to be reused
+	m.BeginBatch()
 }
 
 // BeginBatch
