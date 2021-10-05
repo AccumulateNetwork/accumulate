@@ -77,11 +77,25 @@ func (h *Chain) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func UnmarshalChain(data []byte) (*Chain, error) {
-	ch := new(Chain)
-	err := ch.UnmarshalBinary(data)
+// LoadChain retrieves and unmarshals the specified chain.
+func (db *StateDB) LoadChain(chainId []byte) (*Object, *Chain, error) {
+	state, err := db.GetCurrentEntry(chainId)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return ch, nil
+
+	chain := new(Chain)
+	err = state.As(chain)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to unmarshal chain: %v", err)
+	}
+
+	return state, chain, nil
+}
+
+// LoadChainADI retrieves and unmarshals the ADI of the chain.
+func (db *StateDB) LoadChainADI(chain *Chain) (*types.Bytes32, *Object, *Chain, error) {
+	adiChain := types.GetIdentityChainFromIdentity(chain.ChainUrl.AsString())
+	adiState, adiHeader, err := db.LoadChain(adiChain.Bytes())
+	return adiChain, adiState, adiHeader, err
 }
