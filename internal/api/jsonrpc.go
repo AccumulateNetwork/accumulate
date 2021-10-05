@@ -1,4 +1,4 @@
-package router
+package api
 
 import (
 	"context"
@@ -11,7 +11,6 @@ import (
 	"os"
 
 	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
@@ -23,21 +22,19 @@ import (
 )
 
 type API struct {
-	config    *config.Router
-	validate  *validator.Validate
-	query     *Query
-	txBouncer *relay.Relay
+	config   *config.API
+	validate *validator.Validate
+	query    *Query
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(config *config.Router, q *Query, txBouncer *relay.Relay) *API {
+func StartAPI(config *config.API, q *Query) *API {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
 	api := &API{}
 	api.validate = validator.New()
 	api.query = q
-	api.txBouncer = txBouncer
 
 	methods := jsonrpc2.MethodMap{
 		// URL
@@ -66,23 +63,29 @@ func StartAPI(config *config.Router, q *Query, txBouncer *relay.Relay) *API {
 	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
 
 	// start JSON RPC API
-	go listenAndServe(config.JSONListenAddress, apiRouter)
+	go listenAndServe("JSONRPC API", config.JSONListenAddress, apiRouter)
 
 	// start REST proxy for JSON RPC API
-	go listenAndServe(config.RESTListenAddress, proxyRouter)
+	go listenAndServe("REST API", config.RESTListenAddress, proxyRouter)
 
 	return api
 
 }
 
-func listenAndServe(address string, handler http.Handler) {
+func listenAndServe(label, address string, handler http.Handler) {
+	if address == "" {
+		log.Fatalf("Address for %s is empty", label)
+	}
+
 	u, err := url.Parse(address)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	if u.Scheme == "" {
+		log.Fatalf("Address for %s is missing a scheme: %q", label, address)
+	}
 	if u.Scheme != "tcp" {
-		log.Fatalf("http.ListenAndServe does not support %q", u.Scheme)
+		log.Fatalf("Failed to start HTTP server for %s: unsupported scheme %q", label, address)
 	}
 
 	err = http.ListenAndServe(u.Host, handler)
@@ -279,12 +282,13 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 		ret.Data = &msg
 		return ret
 	}
-	resp, err := api.txBouncer.SendTx(genTx)
+	resp, err := api.query.BroadcastTx(genTx)
 	if err != nil {
 		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
 		ret.Data = &msg
 		return ret
 	}
+	api.query.BatchSend()
 
 	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", genTx.TransactionHash(), resp.Log))
 	ret.Data = &msg
@@ -446,11 +450,11 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	resp, err := api.txBouncer.SendTx(gtx)
-
+	resp, err := api.query.BroadcastTx(gtx)
 	if err != nil {
 		return NewAccumulateError(err)
 	}
+	api.query.BatchSend()
 
 	ret := acmeapi.APIDataResponse{}
 	ret.Type = "faucet"

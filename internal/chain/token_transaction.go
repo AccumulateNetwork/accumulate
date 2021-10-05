@@ -20,7 +20,7 @@ func (TokenTx) instruction() types.TxType  { return types.TxTypeTokenTx }
 func (TokenTx) BeginBlock() {}
 
 func (TokenTx) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	if st.IdentityState == nil {
+	if st.AdiState == nil {
 		return fmt.Errorf("identity state does not exist for anonymous transaction")
 	}
 
@@ -48,13 +48,13 @@ func (TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) 
 	}
 
 	ids := &state.AdiState{}
-	err = ids.UnmarshalBinary(st.IdentityState.Entry)
+	err = ids.UnmarshalBinary(st.AdiState.Entry)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling adi")
 	}
 
 	tas := &state.TokenAccount{}
-	err = tas.UnmarshalBinary(st.IdentityState.Entry)
+	err = tas.UnmarshalBinary(st.AdiState.Entry)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling token account")
 	}
@@ -151,7 +151,7 @@ func canSendTokens(st *state.StateEntry, tas *state.TokenAccount, withdrawal *tr
 		return fmt.Errorf("no account exists for the chain")
 	}
 
-	if st.IdentityState == nil {
+	if st.AdiState == nil {
 		return fmt.Errorf("no identity exists for the chain")
 	}
 

@@ -3,6 +3,8 @@ package transactions
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding"
+	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -69,17 +71,12 @@ func (t *GenTransaction) TransactionHash() []byte {
 // UnMarshal
 // Create the binary representation of the GenTransaction
 func (t *GenTransaction) Marshal() (data []byte, err error) {
-	defer func() { //                                                     If any sort of error occurs,
-		if err := recover(); err != nil { //                               then marshalling fails, and report
-			err = fmt.Errorf("error marshaling GenTransaction %v", err) //  the error.
-		} //
-	}() //
 	if err := t.SetRoutingChainID(); err != nil { //                        Make sure routing and chainID are set
 		return nil, err //                                                   Not clear if this is necessary
 	} //
 	sLen := uint64(len(t.Signature)) //                                     Marshal the signatures, where
 	if sLen < 1 || sLen > 100 {      //                                     we must have at least one of them.
-		panic("must have 1 to 100 signatures") //                            Otherwise we don't have a nonce to
+		return nil, fmt.Errorf("must have 1 to 100 signatures") //          Otherwise we don't have a nonce to
 	} //                                                                    make the translation unique
 	data = common.Uint64Bytes(sLen) //                                      marshal the length, then each
 	for _, v := range t.Signature { //                                      signature struct.
@@ -103,15 +100,10 @@ func (t *GenTransaction) Marshal() (data []byte, err error) {
 // Take a bunch of bytes in data a []byte and pull out all the values for
 // the GenTransaction
 func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
-	defer func() { //
-		if err := recover(); err != nil { //
-			err = fmt.Errorf("error unmarshaling GenTransaction %v", err) //
-		} //
-	}() //
-	var sLen uint64                       //                Get how many signatures we have
-	sLen, data = common.BytesUint64(data) //                Of course, need it in an int of some sort
-	if sLen < 1 || sLen > 100 {           //                If the count isn't reasonable, die
-		panic("signature length out of range") //           With a panic
+	var sLen uint64                       //                       Get how many signatures we have
+	sLen, data = common.BytesUint64(data) //                       Of course, need it in an int of some sort
+	if sLen < 1 || sLen > 100 {           //                       If the count isn't reasonable, die
+		return nil, fmt.Errorf("signature length out of range") //
 	} //
 	for i := uint64(0); i < sLen; i++ { //                  Okay, now cycle for every signature
 		sig := new(ED25519Sig)                           // And unmarshal a signature
@@ -139,6 +131,9 @@ func (t *GenTransaction) UnMarshal(data []byte) (nextData []byte, err error) {
 func (t *GenTransaction) SetRoutingChainID() error { //
 	if t.Routing > 0 && t.ChainID != nil { //                               Check if there is anything to do
 		return nil //                                                       If routing and chainID are set, good
+	}
+	if t.SigInfo == nil {
+		return errors.New("missing signature info")
 	}
 	adi, chainPath, err := types.ParseIdentityChainPath(&t.SigInfo.URL) //  Parse the URL.  Hope it is good.
 	if err != nil {                                                     //  If hope is squashed, return err
@@ -170,4 +165,31 @@ func (t *GenTransaction) ValidateSig() bool { // Validate the signatures on the 
 func (t *GenTransaction) TransactionType() (transType uint64) {
 	transType, _ = common.BytesUint64(t.Transaction)
 	return transType
+}
+
+// As unmarshals the transaction payload as the given sub transaction type.
+func (t *GenTransaction) As(subTx encoding.BinaryUnmarshaler) error {
+	return subTx.UnmarshalBinary(t.Transaction)
+}
+
+func New(wallet *WalletEntry, subTx encoding.BinaryMarshaler) (*GenTransaction, error) {
+	payload, err := subTx.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	tx := new(GenTransaction)
+	tx.SigInfo = new(SignatureInfo)
+	tx.SigInfo.URL = wallet.Addr
+	tx.Signature = make([]*ED25519Sig, 1)
+	tx.Transaction = payload
+
+	err = tx.SetRoutingChainID()
+	if err != nil {
+		return nil, err
+	}
+
+	hash := tx.TransactionHash()
+	tx.Signature[0] = wallet.Sign(hash)
+	return tx, nil
 }

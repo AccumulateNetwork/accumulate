@@ -7,16 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api"
-
-	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
+	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 const chainWGSize = 4
@@ -25,7 +22,7 @@ type Manager struct {
 	db    *state.StateDB
 	chain Chain
 	key   ed25519.PrivateKey
-	relay *relay.Relay
+	query *accapi.Query
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -36,22 +33,16 @@ type Manager struct {
 
 var _ abci.Chain = (*Manager)(nil)
 
-func NewManager(config *config.Config, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
+func NewManager(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
 	m := new(Manager)
 	m.db = db
 	m.chain = chain
 	m.key = key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
+	m.query = query
 
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
-
-	rpcClient, err := rpchttp.New(config.RPC.ListenAddress)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create RPC client: %v", err)
-	}
-	m.relay = relay.New(rpcClient)
-
 	return m, nil
 }
 
@@ -67,7 +58,7 @@ func (m *Manager) Query(q *api.Query) ([]byte, error) {
 		return nil, fmt.Errorf("failed to locate chain entry: %v", err)
 	}
 
-	_, err = state.UnmarshalChain(chainState.Entry)
+	err = chainState.As(new(state.Chain))
 	if err != nil {
 		return nil, fmt.Errorf("unable to extract chain header: %v", err)
 	}
@@ -90,10 +81,12 @@ func (m *Manager) CheckTx(tx *transactions.GenTransaction) error {
 		return err
 	}
 
-	// TODO differentiate between real errors and not-found
 	m.mu.Lock()
-	st, _ := m.getState(tx.ChainID)
+	st, err := m.db.LoadChainAndADI(tx.ChainID)
 	m.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("failed to get state: %v", err)
+	}
 
 	err = m.isSane(st, tx)
 	if err != nil {
@@ -131,8 +124,10 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	defer group.Done()
 	m.mu.Unlock()
 
-	// TODO differentiate between real errors and not-found
-	st, _ := m.getState(tx.ChainID)
+	st, err := m.db.LoadChainAndADI(tx.ChainID)
+	if err != nil {
+		return fmt.Errorf("failed to get state: %v", err)
+	}
 
 	// //placeholder for special validation rules for synthetic transactions.
 	// if tx.TransactionType()&0xF0 > 0 {
@@ -142,7 +137,7 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	// 	//sender is legit.
 	// }
 
-	err := m.isSane(st, tx)
+	err = m.isSane(st, tx)
 	if err != nil {
 		return err
 	}
@@ -153,6 +148,9 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	// Validate
 	// TODO txValidated should return a list of chainId's the transaction touched.
 	txValidated, err := m.chain.DeliverTx(st, tx)
+	if err != nil {
+		return fmt.Errorf("rejected by chain: %v", err)
+	}
 
 	// Check if the transaction was accepted
 	var txAccepted *state.Transaction
@@ -218,41 +216,11 @@ func (m *Manager) Commit() ([]byte, error) {
 		//m.processValidatedSubmissionRequest(&dbvc)
 	}
 
-	m.relay.BatchSend()
+	m.query.BatchSend()
 
 	fmt.Printf("DB time %f\n", m.db.TimeBucket)
 	m.db.TimeBucket = 0
 	return mdRoot, nil
-}
-
-func (m *Manager) getState(id []byte) (*state.StateEntry, error) {
-	st := new(state.StateEntry)
-	st.DB = m.db
-
-	// TODO check error
-	st.ChainState, _ = m.db.GetCurrentEntry(id)
-	if st.ChainState == nil {
-		return st, nil
-	}
-
-	var err error
-	st.ChainHeader, err = state.UnmarshalChain(st.ChainState.Entry)
-	if err != nil {
-		return st, fmt.Errorf("failed to unmarshal chain header: %v", err)
-	}
-
-	st.AdiChain = types.GetIdentityChainFromIdentity(st.ChainHeader.ChainUrl.AsString())
-	st.IdentityState, _ = m.db.GetCurrentEntry(st.AdiChain.Bytes())
-	if st.IdentityState == nil {
-		return st, nil
-	}
-
-	st.AdiHeader, err = state.UnmarshalChain(st.IdentityState.Entry)
-	if err != nil {
-		return st, fmt.Errorf("failed to unmarshal ADI header: %v", err)
-	}
-
-	return st, nil
 }
 
 // isSane will check the nonce (if applicable), check the public key for the transaction,
@@ -301,7 +269,7 @@ func (m *Manager) submitSyntheticTx(vtx *DeliverTxResult) error {
 		}
 
 		tx.Signature = append(tx.Signature, ed)
-		_, err = m.relay.BatchTx(tx)
+		_, err = m.query.BroadcastTx(tx)
 		if err != nil {
 			return err
 		}

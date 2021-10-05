@@ -1,4 +1,4 @@
-package router
+package api_test
 
 import (
 	"crypto/sha256"

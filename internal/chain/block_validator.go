@@ -41,42 +41,33 @@ func (v *BlockValidator) CheckTx(st *state.StateEntry, tx *transactions.GenTrans
 func (v *BlockValidator) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
 	txType := types.TxType(tx.TransactionType())
 
-	var err error
 	if err := tx.SetRoutingChainID(); err != nil {
 		return nil, err
 	}
 
-	//If adiState doesn't exist, we will process by transaction instruction type
-	if st.IdentityState == nil {
-		//so the current state isn't defined, so we need to see if we need to create a token or anon chain.
-
-		val := v.byInstr[txType]
-		if val == nil {
-			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", txType)
+	var operation operation
+	if st.AdiState == nil || st.ChainHeader == nil {
+		operation = v.byInstr[txType]
+		if operation == nil {
+			return nil, fmt.Errorf("invalid TX type: %d", txType)
 		}
+	}
 
+	// Chain state exists, but the chain's identity does not
+	if st.AdiState == nil {
 		//valid actions for identity are to create an adi or create an account for anonymous address from synth transactions
 		switch txType {
 		case types.TxTypeSyntheticIdentityCreate: //a sponsor will generate the synth identity creation msg
 			fallthrough
 		case types.TxTypeSyntheticTokenDeposit: // for synth deposits, only anon addresses will be accepted
-			return val.DeliverTx(st, tx)
+			return operation.DeliverTx(st, tx)
 		default:
 			return nil, fmt.Errorf("invalid instruction issued for identity transaction, %d", txType)
 		}
 	}
 
-	//since we have a valid adiState, we now need to look up the chain
-	st.ChainState, _ = st.DB.GetCurrentEntry(tx.ChainID) //need the identity chain
-
-	//If chain state doesn't exist, we will process by transaction instruction type
-	if st.ChainState == nil {
-		//we have no chain state, so we need to process by transaction type.
-		val := v.byInstr[txType]
-		if val == nil {
-			return nil, fmt.Errorf("unable to process identity with invalid instruction, %d", txType)
-		}
-
+	// No chain state exists for tx.ChainID
+	if st.ChainHeader == nil {
 		//valid instruction actions are to create account, token, identity, scratch chain, or data chain
 		switch txType {
 		case types.TxTypeIdentityCreate:
@@ -88,27 +79,18 @@ func (v *BlockValidator) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 		case types.TxTypeTokenCreate:
 			fallthrough
 		case types.TxTypeTokenAccountCreate:
-			return val.DeliverTx(st, tx)
+			return operation.DeliverTx(st, tx)
 		default:
 			return nil, fmt.Errorf("invalid instruction issued for chain transaction, %d", txType)
 		}
 	}
 
-	//if we get here, we have a valid chain state, so we need to pass it into the chain validator
-	chain := state.Chain{}
-	err = chain.UnmarshalBinary(st.ChainState.Entry)
-	if err != nil {
-		return nil, fmt.Errorf("unable to marshal chain header for BlockValidator, %v", err)
+	operation = v.byType[st.ChainHeader.Type]
+	if operation == nil {
+		return nil, fmt.Errorf("invalid chain type: %d", st.ChainHeader.Type)
 	}
 
-	//retrieve the validator based upon chain type
-	val := v.byType[chain.Type]
-	if val == nil {
-		return nil, fmt.Errorf("cannot find validator for BlockValidationChain %s (err %v)", chain.ChainUrl, err)
-	}
-
-	//run the chain validator...
-	return val.DeliverTx(st, tx)
+	return operation.DeliverTx(st, tx)
 }
 
 func (*BlockValidator) Commit() {}

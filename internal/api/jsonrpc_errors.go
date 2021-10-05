@@ -1,4 +1,4 @@
-package router
+package api
 
 import "github.com/AccumulateNetwork/jsonrpc2/v15"
 
