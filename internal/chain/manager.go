@@ -20,7 +20,7 @@ const chainWGSize = 4
 
 type Manager struct {
 	db    *state.StateDB
-	chain Chain
+	chain Validator
 	key   ed25519.PrivateKey
 	query *accapi.Query
 
@@ -31,9 +31,23 @@ type Manager struct {
 	height  int64
 }
 
+type Validator interface {
+	// BeginBlock marks the beginning of a block.
+	BeginBlock()
+
+	// CheckTx partially validates the transaction.
+	CheckTx(*state.StateEntry, *transactions.GenTransaction) error
+
+	// DeliverTx fully validates the transaction.
+	DeliverTx(*state.StateEntry, *transactions.GenTransaction) (*DeliverTxResult, error)
+
+	// Commit commits the block.
+	Commit()
+}
+
 var _ abci.Chain = (*Manager)(nil)
 
-func NewManager(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, chain Chain) (*Manager, error) {
+func NewManager(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, chain Validator) (*Manager, error) {
 	m := new(Manager)
 	m.db = db
 	m.chain = chain
