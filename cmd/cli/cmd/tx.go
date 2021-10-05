@@ -2,12 +2,16 @@ package cmd
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"strconv"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
 )
 
@@ -26,8 +30,8 @@ var txCmd = &cobra.Command{
 					PrintTXGet()
 				}
 			case "create":
-				if len(args) > 4 {
-					CreateTX(args[1], args[2], args[3], args[4])
+				if len(args) > 3 {
+					CreateTX(args[1], args[2], args[3])
 				} else {
 					fmt.Println("Usage:")
 					PrintTXCreate()
@@ -95,6 +99,56 @@ func GetTX(account string, hash string) {
 
 }
 
-func CreateTX(sender string, receiver string, amount string, signer string) {
-	fmt.Println("Creating new token tx")
+func CreateTX(sender string, receiver string, amount string) {
+
+	var res interface{}
+	var str []byte
+	var err error
+
+	err = Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("anon"))
+		pk := b.Get([]byte(sender))
+		fmt.Println(hex.EncodeToString(pk))
+		params := &acmeapi.APIRequestRaw{}
+		params.Tx = &acmeapi.APIRequestRawTx{}
+
+		tokentx := new(acmeapi.TokenTx)
+		tokentx.From = types.UrlChain{types.String(sender)}
+
+		to := []*acmeapi.TokenTxOutput{}
+		r := &acmeapi.TokenTxOutput{}
+		r.Amount, err = strconv.ParseUint(amount, 10, 64)
+		r.URL = types.UrlChain{types.String(receiver)}
+		to = append(to, r)
+
+		data, err := json.Marshal(tokentx)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		datajson := json.RawMessage(data)
+		params.Tx.Data = &datajson
+		params.Tx.Timestamp = time.Now().Unix()
+		params.Tx.Signer = &acmeapi.Signer{}
+		params.Tx.Signer.URL = types.String(sender)
+		params.Tx.Signer.PublicKey = types.Bytes32{}
+
+		params.Sig = types.Bytes64{}
+
+		if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
+			log.Fatal(err)
+		}
+
+		str, err = json.Marshal(res)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(string(str))
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
 }
