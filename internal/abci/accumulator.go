@@ -3,18 +3,19 @@ package abci
 import (
 	"bytes"
 	_ "crypto/sha256"
+	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	statetypes "github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/version"
 )
 
@@ -24,7 +25,7 @@ type Accumulator struct {
 	abci.BaseApplication
 
 	chainId [32]byte
-	db      *statetypes.StateDB
+	state   State
 	address crypto.Address
 	txct    int64
 	timer   time.Time
@@ -32,16 +33,16 @@ type Accumulator struct {
 }
 
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db *statetypes.StateDB, privval *privval.FilePV, chain Chain) (*Accumulator, error) {
+func NewAccumulator(db State, address crypto.Address, chain Chain) (*Accumulator, error) {
 	app := &Accumulator{
-		db:    db,
+		state: db,
 		chain: chain,
 	}
 
-	address := privval.Key.PubKey.Address()
 	app.address = make([]byte, len(address))
 	copy(app.address, address)
 
+	fmt.Printf("Accumulate %s, ABCI %v\n", accumulated.Version, Version)
 	return app, nil
 }
 
@@ -55,17 +56,29 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		panic("Chain Validator Node not set!")
 	}
 
+	// We have two different versions: that of the ABCI application, and that of
+	// the executable. The ABCI application version may affect Tendermint. The
+	// executable version tells us what commit to look at when debugging a crash
+	// log.
+
+	data, _ := json.Marshal(struct {
+		Version string
+	}{
+		Version: accumulated.Version,
+	})
+
 	return abci.ResponseInfo{
+		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
-		LastBlockHeight:  app.db.BlockIndex(),
-		LastBlockAppHash: app.db.EnsureRootHash(),
+		LastBlockHeight:  app.state.BlockIndex(),
+		LastBlockAppHash: app.state.EnsureRootHash(),
 	}
 }
 
 // Query implements github.com/tendermint/tendermint/abci/types.Application.
 //
-// Exposed as Tendermint RCP /abci_query.
+// Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
 	query := new(api.Query)

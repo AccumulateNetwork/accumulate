@@ -1,63 +1,74 @@
 package networks
 
-type RouterNode struct {
-	Name string
-	Port int
-	Ip   []string
+import (
+	. "github.com/AccumulateNetwork/accumulated/config"
+)
+
+type Network struct {
+	Name  string
+	Type  NetworkType
+	Port  int
+	Nodes []Node
 }
 
-var Networks []RouterNode
-
-func init() {
-	Networks = []RouterNode{
-		{
-			Name: "Arches",
-			Port: 33000,
-			Ip: []string{
-				"13.51.10.110",
-				"13.232.230.216",
-			},
-		},
-		{
-			Name: "AmericanSamoa",
-			Port: 33000,
-			Ip: []string{
-				"18.221.39.36",
-				"44.236.45.58",
-			},
-		},
-		{
-			Name: "Badlands",
-			Port: 35550,
-			Ip: []string{
-				"127.0.0.1",
-			},
-		},
-		{
-			Name: "EastXeons",
-			Port: 33000,
-			Ip: []string{
-				"18.119.26.7",
-				"18.119.149.208",
-			},
-		},
-		{
-			Name: "Localhost",
-			Port: 26656,
-			Ip: []string{
-				"127.0.1.1",
-				"127.0.1.2",
-				"127.0.1.3",
-			},
-		},
-	}
+type Node struct {
+	IP   string
+	Type NodeType
 }
 
-func IndexOf(name string) int {
-	for i, net := range Networks {
-		if net.Name == name {
-			return i
-		}
-	}
-	return -1
+var Networks = map[string]*Network{
+	"Arches": {
+		Name: "Arches",
+		Type: BVC,
+		Port: 33000,
+		Nodes: []Node{
+			{"13.51.10.110", Validator},
+			{"13.232.230.216", Validator},
+		},
+	},
+	"AmericanSamoa": {
+		Name: "AmericanSamoa",
+		Type: BVC,
+		Port: 33000,
+		Nodes: []Node{
+			{"18.221.39.36", Validator},
+			{"44.236.45.58", Validator},
+		},
+	},
+	"Badlands": {
+		Name: "Badlands",
+		Type: BVC,
+		Port: 35550,
+		Nodes: []Node{
+			{"127.0.0.1", Validator},
+		},
+	},
+	"EastXeons": {
+		Name: "EastXeons",
+		Type: BVC,
+		Port: 33000,
+		Nodes: []Node{
+			{"18.119.26.7", Validator},
+			{"18.119.149.208", Validator},
+		},
+	},
+	"EastXeons-DC": {
+		Name: "EastXeons-DC",
+		Type: DC,
+		Port: 33100,
+		Nodes: []Node{
+			{"18.119.26.7", Validator},
+			{"18.119.149.208", Validator},
+		},
+	},
+	"Localhost": {
+		Name: "Localhost",
+		Type: BVC,
+		Port: 26656,
+		Nodes: []Node{
+			{"127.0.1.1", Validator},
+			{"127.0.1.2", Validator},
+			{"127.0.1.3", Validator},
+		},
+	},
 }

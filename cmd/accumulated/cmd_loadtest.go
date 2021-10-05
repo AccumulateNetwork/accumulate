@@ -8,10 +8,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/internal/api"
+	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/networks"
-	"github.com/AccumulateNetwork/accumulated/router"
 	"github.com/spf13/cobra"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -22,7 +23,7 @@ var cmdLoadTest = &cobra.Command{
 }
 
 var flagLoadTest struct {
-	Networks         []int
+	Networks         []string
 	Remotes          []string
 	WalletCount      int
 	TransactionCount int
@@ -33,7 +34,7 @@ var flagLoadTest struct {
 func init() {
 	cmdMain.AddCommand(cmdLoadTest)
 
-	cmdLoadTest.Flags().IntSliceVarP(&flagLoadTest.Networks, "network", "n", nil, "Network to load test")
+	cmdLoadTest.Flags().StringSliceVarP(&flagLoadTest.Networks, "network", "n", nil, "Network to load test (name or number)")
 	cmdLoadTest.Flags().StringSliceVarP(&flagLoadTest.Remotes, "remote", "r", nil, "Node to load test, e.g. tcp://1.2.3.4:5678")
 	cmdLoadTest.Flags().IntVar(&flagLoadTest.WalletCount, "wallets", 100, "Number of generated recipient wallets")
 	cmdLoadTest.Flags().IntVar(&flagLoadTest.TransactionCount, "transactions", 1000, "Number of generated transactions")
@@ -53,12 +54,17 @@ func loadTest(cmd *cobra.Command, args []string) {
 	}
 
 	// Create clients for networks
-	for _, n := range flagLoadTest.Networks {
-		net := networks.Networks[n]
-		lAddr := fmt.Sprintf("tcp://%s:%d", net.Ip[0], net.Port+1)
+	for _, name := range flagLoadTest.Networks {
+		net := networks.Networks[name]
+		if net == nil {
+			fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
+			os.Exit(1)
+		}
+
+		lAddr := fmt.Sprintf("tcp://%s:%d", net.Nodes[0].IP, net.Port+node.TmRpcPortOffset)
 		client, err := rpc.New(lAddr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for network %d: %v\n", n, err)
+			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for network %q: %v\n", name, err)
 			os.Exit(1)
 		}
 
@@ -94,10 +100,11 @@ func loadTest(cmd *cobra.Command, args []string) {
 	}
 
 	relay := relay.New(clients...)
+	query := api.NewQuery(relay)
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	addrList, err := acctesting.RunLoadTest(relay, &privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.WalletCount*flagLoadTest.TransactionCount)
+	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.TransactionCount)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -105,7 +112,6 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	time.Sleep(10000 * time.Millisecond)
 
-	query := router.NewQuery(relay)
 	for _, v := range addrList[1:] {
 		resp, err := query.GetChainState(&v, nil)
 		if err != nil {

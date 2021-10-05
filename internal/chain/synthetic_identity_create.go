@@ -25,7 +25,7 @@ func (SynIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTrans
 		return fmt.Errorf("current state not defined")
 	}
 
-	if st.IdentityState != nil {
+	if st.AdiState != nil {
 		return fmt.Errorf("identity already exists")
 	}
 
@@ -44,7 +44,7 @@ func (SynIdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 		return nil, fmt.Errorf("current state not defined")
 	}
 
-	if st.IdentityState != nil {
+	if st.AdiState != nil {
 		return nil, fmt.Errorf("identity already exists")
 	}
 
