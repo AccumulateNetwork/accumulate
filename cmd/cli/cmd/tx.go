@@ -67,7 +67,7 @@ func GetTX(account string, hash string) {
 	var str []byte
 	var hashbytes types.Bytes32
 
-	params := new(acmeapi.TokenTx)
+	params := new(acmeapi.TokenTxRequest)
 	params.From = types.UrlChain{types.String(account)}
 	err := hashbytes.FromString(hash)
 	if err != nil {
