@@ -22,11 +22,9 @@ type tokenAccountTx struct {
 	txHash  []*types.Bytes32
 }
 
-func (*AnonToken) chainType() types.ChainType { return types.ChainTypeAnonTokenAccount }
+func (*AnonToken) createIdentity() types.TxType { return types.TxTypeSyntheticTokenDeposit }
 
-func (*AnonToken) instruction() types.TxType {
-	return types.TxTypeSyntheticTokenDeposit
-}
+func (*AnonToken) updateChain() types.ChainType { return types.ChainTypeAnonTokenAccount }
 
 func (c *AnonToken) BeginBlock() {
 	c.currentBalanceState = map[types.Bytes32]*tokenAccountTx{}
