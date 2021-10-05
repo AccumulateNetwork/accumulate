@@ -380,7 +380,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 	}
 
 	// validate request data
-	if err = api.validate.Struct(data); err != nil {
+	if err = api.validate.StructPartial(data, "From", "To"); err != nil {
 		return NewValidatorError(err)
 	}
 
