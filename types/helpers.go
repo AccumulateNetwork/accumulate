@@ -270,6 +270,15 @@ func (s *Bytes64) FromString(str string) error {
 	return nil
 }
 
+// FromBytes sets the byte array.
+func (s *Bytes64) FromBytes(b []byte) error {
+	if len(b) != 64 {
+		return fmt.Errorf("expected 64 bytes string, received %s", len(b))
+	}
+	copy(s[:], b)
+	return nil
+}
+
 // ToString will convert the 32 byte array into a hex string that is 64 hex characters in length
 func (s *Bytes64) ToString() String {
 	return String(hex.EncodeToString(s[:]))
