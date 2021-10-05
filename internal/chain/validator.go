@@ -23,17 +23,11 @@ func NewBlockValidator() *validator {
 }
 
 type validator struct {
-	identityCreate map[types.TxType]Chain
-	chainCreate    map[types.TxType]Chain
-	chainUpdate    map[types.ChainType]Chain
+	chainCreate map[types.TxType]Chain
+	chainUpdate map[types.ChainType]Chain
 }
 
 var _ Validator = (*validator)(nil)
-
-type createIdentity interface {
-	createIdentity() types.TxType
-	Chain
-}
 
 type createChain interface {
 	createChain() types.TxType
@@ -46,22 +40,14 @@ type updateChain interface {
 }
 
 func (v *validator) add(chain Chain) {
-	if v.identityCreate == nil {
-		v.identityCreate = map[types.TxType]Chain{}
+	if v.chainCreate == nil {
 		v.chainCreate = map[types.TxType]Chain{}
 		v.chainUpdate = map[types.ChainType]Chain{}
 	}
 
 	var used bool
-	if chain, ok := chain.(createIdentity); ok {
-		if _, ok := v.identityCreate[chain.createIdentity()]; ok {
-			panic(fmt.Errorf("duplicate identity create chain for %d", chain.createIdentity()))
-		}
-		v.identityCreate[chain.createIdentity()], used = chain, true
-	}
-
 	if chain, ok := chain.(createChain); ok {
-		if _, ok := v.identityCreate[chain.createChain()]; ok {
+		if _, ok := v.chainCreate[chain.createChain()]; ok {
 			panic(fmt.Errorf("duplicate  create chain for %d", chain.createChain()))
 		}
 		v.chainCreate[chain.createChain()], used = chain, true
@@ -81,9 +67,6 @@ func (v *validator) add(chain Chain) {
 
 // BeginBlock will set block parameters
 func (v *validator) BeginBlock() {
-	for _, c := range v.identityCreate {
-		c.BeginBlock()
-	}
 	for _, c := range v.chainCreate {
 		c.BeginBlock()
 	}
@@ -102,15 +85,6 @@ func (v *validator) DeliverTx(st *state.StateEntry, tx *transactions.GenTransact
 
 	if err := tx.SetRoutingChainID(); err != nil {
 		return nil, err
-	}
-
-	// Chain state exists but its ADI does not
-	if st.AdiState == nil {
-		chain := v.identityCreate[txType]
-		if chain == nil {
-			return nil, fmt.Errorf("cannot create identity: unsupported TX type: %d", txType)
-		}
-		return chain.DeliverTx(st, tx)
 	}
 
 	// No chain state exists for tx.ChainID
