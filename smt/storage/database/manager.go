@@ -98,6 +98,7 @@ func (m *Manager) init() {
 	m.AddBucket("BPT")          //                       Binary Patricia Tree Byte Blocks (blocks of BPT nodes)
 	m.AddLabel("Root")          //                       The Root node of the BPT
 
+	m.TXCache = make(map[[storage.KeyLength]byte][]byte, 100) // Preallocate 100 slots
 }
 
 // Init
@@ -106,7 +107,6 @@ func (m *Manager) init() {
 // the database is persisted (ignored by memory).PendingChain
 func (m *Manager) Init(databaseTag, filename string) error {
 	m.init()
-	m.TXCache = make(map[[storage.KeyLength]byte][]byte)
 	switch databaseTag { //                              match with a supported databaseTag
 	case "badger": //                                    Badger database indicated
 		m.DB = new(badger.DB)                         // Create a badger struct
@@ -287,11 +287,21 @@ func (m *Manager) EndBatch() {
 	if err := m.DB.EndBatch(m.TXCache); err != nil {
 		panic("batch failed to persist to the database")
 	}
-	m.BeginBatch()
+
+	m.resetCache()
 }
 
 // BeginBatch
 // initializes the batch list to empty.  Note that we really only support one level of batch processing.
 func (m *Manager) BeginBatch() {
-	m.TXCache = make(map[[storage.KeyLength]byte][]byte, 100) // Reset the List to allow it to be reused
+	m.resetCache()
+}
+
+func (m *Manager) resetCache() {
+	// The compiler optimizes away the loop. This is demonstrably faster and
+	// less memory intensive than re-making the map. The savings in GC presure
+	// scale proportionally with the batch size.
+	for k := range m.TXCache {
+		delete(m.TXCache, k)
+	}
 }
