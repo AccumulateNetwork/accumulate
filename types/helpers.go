@@ -215,6 +215,15 @@ func (s *Bytes32) Bytes() []byte {
 	return s[:]
 }
 
+// FromBytes sets the byte array.
+func (s *Bytes32) FromBytes(b []byte) error {
+	if len(b) != 32 {
+		return fmt.Errorf("expected 32 bytes string, received %s", len(b))
+	}
+	copy(s[:], b)
+	return nil
+}
+
 // FromString takes a hex encoded string and sets the byte array.
 // The input parameter, str, must be 64 hex characters in length
 func (s *Bytes32) FromString(str string) error {
