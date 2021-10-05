@@ -115,7 +115,7 @@ func GetAccount(url string) {
 
 func GenerateAccount() {
 	rand.Seed(time.Now().UnixNano())
-	token := make([]byte, 256)
+	token := make([]byte, 32)
 	rand.Read(token)
 
 	address := anonaddress.GenerateAcmeAddress(token)
