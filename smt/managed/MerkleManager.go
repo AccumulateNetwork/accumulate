@@ -114,7 +114,6 @@ func (m *MerkleManager) init(DBManager *database.Manager, appID []byte, markPowe
 	m.MainChain.Manager = DBManager.Copy(appID)                           // Save the database
 	m.PendingChain.Manager = DBManager.Copy(Add2AppID(appID, PendingOff)) //
 	m.BlkIdxChain.Manager = DBManager.Copy(Add2AppID(appID, BlkIdxOff))   //
-	m.MainChain.Manager.BeginBatch()                                      // Start our batch mode
 	m.MarkPower = markPower                                               // # levels in Merkle Tree to be indexed
 	m.MarkFreq = int64(math.Pow(2, float64(markPower)))                   // The number of elements between indexes
 	m.MarkMask = m.MarkFreq - 1                                           // Mask to index of next mark (0 if at a mark)
