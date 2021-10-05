@@ -84,7 +84,7 @@ func checkSynTxDeposit(st *state.StateEntry, data []byte) (*state.AdiState, *sta
 	}
 
 	ids := state.AdiState{}
-	err = ids.UnmarshalBinary(st.IdentityState.Entry)
+	err = ids.UnmarshalBinary(st.AdiState.Entry)
 	if err != nil {
 		return nil, nil, nil, err
 	}
