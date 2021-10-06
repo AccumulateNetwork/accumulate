@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
@@ -39,7 +40,7 @@ func (ic *ADI) SetKeyHash(hash *types.Bytes32) {
 
 func (ic *ADI) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
-	buffer.Write(common.Uint64Bytes(types.TxTypeIdentityCreate.AsUint64()))
+	buffer.Write(common.Uint64Bytes(uint64(types.TxTypeIdentityCreate)))
 
 	idn, err := ic.URL.MarshalBinary()
 	if err != nil {
@@ -59,7 +60,7 @@ func (ic *ADI) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 	txType, data := common.BytesUint64(data)
-	if txType != uint64(types.TxTypeIdentityCreate) {
+	if txType != types.TxTypeIdentityCreate.AsUint64() {
 		return fmt.Errorf("unable to unmarshal ADI, expecting identity type")
 	}
 	err = ic.URL.UnmarshalBinary(data)

@@ -27,7 +27,7 @@ func (TokenChainCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransa
 		return fmt.Errorf("current state not defined")
 	}
 
-	if st.IdentityState == nil {
+	if st.AdiState == nil {
 		return fmt.Errorf("identity not defined")
 	}
 
@@ -48,7 +48,7 @@ func (TokenChainCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTran
 		return nil, fmt.Errorf("current state not defined")
 	}
 
-	if st.IdentityState == nil {
+	if st.AdiState == nil {
 		return nil, fmt.Errorf("identity not defined")
 	}
 

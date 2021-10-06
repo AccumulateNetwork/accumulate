@@ -3,9 +3,11 @@ package abci
 import (
 	"bytes"
 	_ "crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
@@ -40,6 +42,7 @@ func NewAccumulator(db State, address crypto.Address, chain Chain) (*Accumulator
 	app.address = make([]byte, len(address))
 	copy(app.address, address)
 
+	fmt.Printf("Accumulate %s, ABCI %v\n", accumulated.Version, Version)
 	return app, nil
 }
 
@@ -53,7 +56,19 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		panic("Chain Validator Node not set!")
 	}
 
+	// We have two different versions: that of the ABCI application, and that of
+	// the executable. The ABCI application version may affect Tendermint. The
+	// executable version tells us what commit to look at when debugging a crash
+	// log.
+
+	data, _ := json.Marshal(struct {
+		Version string
+	}{
+		Version: accumulated.Version,
+	})
+
 	return abci.ResponseInfo{
+		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  app.state.BlockIndex(),

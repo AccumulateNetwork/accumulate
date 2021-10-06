@@ -31,7 +31,7 @@ func (TokenIssuance) DeliverTx(st *state.StateEntry, tx *transactions.GenTransac
 		return nil, fmt.Errorf("current State not defined")
 	}
 
-	if st.IdentityState == nil {
+	if st.AdiState == nil {
 		return nil, fmt.Errorf("identity not defined, unable to issue token")
 	}
 
@@ -40,7 +40,7 @@ func (TokenIssuance) DeliverTx(st *state.StateEntry, tx *transactions.GenTransac
 	}
 
 	id := &state.AdiState{}
-	err := id.UnmarshalBinary(st.IdentityState.Entry)
+	err := id.UnmarshalBinary(st.AdiState.Entry)
 	if err != nil {
 		return nil, err
 	}
