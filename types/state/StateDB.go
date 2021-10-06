@@ -190,6 +190,7 @@ func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes,
 
 //GetPersistentEntry will pull the data from the database for the StateEntries bucket.
 func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, error) {
+	_ = verify
 	sdb.Sync()
 
 	if sdb.db == nil {
