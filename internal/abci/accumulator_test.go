@@ -1,12 +1,13 @@
 package abci_test
 
 import (
+	"crypto/ed25519"
 	"errors"
+	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	mock_abci "github.com/AccumulateNetwork/accumulated/internal/mock/abci"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	tmabci "github.com/tendermint/tendermint/abci/types"
@@ -53,11 +54,14 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 	})
 
 	s.Run("Passes valid TX to chain", func() {
-		tx := &transactions.GenTransaction{
-			Routing:   1,
-			ChainID:   []byte{2},
-			Signature: []*transactions.ED25519Sig{nil},
-		}
+		//build a valid transaction
+		_, origin, _ := ed25519.GenerateKey(nil)
+		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(&origin)
+		_ = destAddress
+		_ = destPrivKey
+
+		s.Require().NoError(err)
+
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
@@ -67,12 +71,19 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 		s.Require().Zero(resp.Code)
 	})
 
-	s.Run("Rejects TX if chain returns an error", func() {
-		tx := &transactions.GenTransaction{
-			Routing:   1,
-			ChainID:   []byte{2},
-			Signature: []*transactions.ED25519Sig{nil},
-		}
+	s.Run("Rejects TX if CheckTx chain returns an error", func() {
+		//build a valid gen transaction with an invalid tx payload
+		_, origin, _ := ed25519.GenerateKey(nil)
+		//make a fake destination
+		destAddr := "acme-wyleecoyote"
+		//make an unreasonable amount sure
+		amount := uint64(1000000000)
+		tx, err := testing2.BuildTestTokenTxGenTx(&origin, destAddr, amount)
+		//now corrupt the validation for the signature
+		tx.Signature[0].Nonce = 9999999
+
+		s.Require().NoError(err)
+
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
@@ -92,11 +103,14 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 	})
 
 	s.Run("Passes valid TX to chain", func() {
-		tx := &transactions.GenTransaction{
-			Routing:   1,
-			ChainID:   []byte{2},
-			Signature: []*transactions.ED25519Sig{nil},
-		}
+		//build a valid transaction
+		_, origin, _ := ed25519.GenerateKey(nil)
+		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(&origin)
+		_ = destAddress
+		_ = destPrivKey
+
+		s.Require().NoError(err)
+
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
@@ -106,12 +120,15 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		s.Require().Zero(resp.Code)
 	})
 
-	s.Run("Rejects TX if chain returns an error", func() {
-		tx := &transactions.GenTransaction{
-			Routing:   1,
-			ChainID:   []byte{2},
-			Signature: []*transactions.ED25519Sig{nil},
-		}
+	s.Run("Rejects TX if DeliverTx chain returns an error", func() {
+		//build a valid gen transaction with an invalid tx payload
+		_, origin, _ := ed25519.GenerateKey(nil)
+		//make a fake destination
+		destAddr := "acme-wyleecoyote"
+		//make an unreasonable amount sure
+		amount := uint64(1000000000)
+		tx, err := testing2.BuildTestTokenTxGenTx(&origin, destAddr, amount)
+
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
