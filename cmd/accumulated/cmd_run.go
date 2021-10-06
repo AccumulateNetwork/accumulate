@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
@@ -25,13 +26,16 @@ var cmdRun = &cobra.Command{
 }
 
 var flagRun struct {
-	Node int
+	Node        int
+	CiStopAfter time.Duration
 }
 
 func init() {
 	cmdMain.AddCommand(cmdRun)
 
 	cmdRun.Flags().IntVarP(&flagRun.Node, "node", "n", -1, "Which node are we? [0, n)")
+	cmdRun.Flags().DurationVar(&flagRun.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
+	cmdRun.Flag("ci-stop-after").Hidden = true
 }
 
 func runNode(cmd *cobra.Command, args []string) {
@@ -115,6 +119,13 @@ func runNode(cmd *cobra.Command, args []string) {
 
 	api.StartAPI(&config.Accumulate.API, query)
 
-	// Block forever
-	select {}
+	if flagRun.CiStopAfter == 0 {
+		// Block forever
+		select {}
+	}
+
+	time.Sleep(flagRun.CiStopAfter)
+
+	// TODO I tried stopping the node, but node.Stop() won't return for a
+	// follower node until it's caught up (I think).
 }
