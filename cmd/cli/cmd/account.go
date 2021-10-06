@@ -2,18 +2,16 @@ package cmd
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
-	"math/rand"
-	"time"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 	anonaddress "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
+	"log"
 )
 
 var accountCmd = &cobra.Command{
@@ -114,15 +112,17 @@ func GetAccount(url string) {
 }
 
 func GenerateAccount() {
-	rand.Seed(time.Now().UnixNano())
-	token := make([]byte, 64)
-	rand.Read(token)
 
-	address := anonaddress.GenerateAcmeAddress(token)
+	pubKey, privKey, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	err := Db.Update(func(tx *bolt.Tx) error {
+	address := anonaddress.GenerateAcmeAddress(pubKey)
+
+	err = Db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("anon"))
-		err := b.Put([]byte(address), token)
+		err := b.Put([]byte(address), privKey)
 		return err
 	})
 	if err != nil {
