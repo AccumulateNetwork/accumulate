@@ -42,6 +42,7 @@ func TestStateDBConsistency(t *testing.T) {
 	db := new(badger.DB)
 	err := db.InitDB(filepath.Join(dir, "valacc.db"))
 	require.NoError(t, err)
+	defer db.Close()
 
 	bvcId := sha256.Sum256([]byte("FooBar"))
 	sdb := new(state.StateDB)
