@@ -272,7 +272,7 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 }
 
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
-	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, req.Tx.Timestamp, payload)
+	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, uint64(req.Tx.Timestamp), payload)
 
 	ret := &acmeapi.APIDataResponse{}
 	var msg json.RawMessage
@@ -288,6 +288,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 		ret.Data = &msg
 		return ret
 	}
+
 	api.query.BatchSend()
 
 	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", genTx.TransactionHash(), resp.Log))
