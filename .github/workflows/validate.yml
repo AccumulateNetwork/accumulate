@@ -44,13 +44,13 @@ jobs:
       - name: Init main
         run: ./accumulated init -w .nodes -n EastXeons -r EastXeons
 
-      - name: Init follower
-        run: |
-          rm -rf .nodes
-          ./accumulated init follower -w .nodes -n EastXeons -l tcp://127.0.2.1:3000
+      #      - name: Init follower
+      #        run: |
+      #          rm -rf .nodes
+      #          ./accumulated init follower -w .nodes -n EastXeons -l tcp://127.0.2.1:3000
 
-      - name: Run follower
-        run: ./accumulated run -w .nodes/Node0 --ci-stop-after 5s
+      #      - name: Run follower
+      #        run: ./accumulated run -w .nodes/Node0 --ci-stop-after 5s
 
       - name: Init localhost
         run: |
