@@ -158,7 +158,6 @@ func CreateTX(sender string, receiver string, amount string) {
 		gtx.SigInfo.PriorityIdx = 0
 
 		ed := new(transactions.ED25519Sig)
-		fmt.Printf("transaction hash ========== %x ==== %x\n", gtx.TransactionHash(), pk[32:])
 		err = ed.Sign(gtx.SigInfo.Nonce, pk, gtx.TransactionHash())
 		if err != nil {
 			return api.NewSubmissionError(err)
