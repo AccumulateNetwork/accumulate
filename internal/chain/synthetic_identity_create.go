@@ -11,9 +11,7 @@ import (
 
 type SynIdentityCreate struct{}
 
-func (SynIdentityCreate) chainType() types.ChainType { return types.ChainTypeUnknown }
-
-func (SynIdentityCreate) instruction() types.TxType {
+func (SynIdentityCreate) createChain() types.TxType {
 	return types.TxTypeSyntheticIdentityCreate
 }
 
