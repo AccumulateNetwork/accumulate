@@ -6,12 +6,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	anonaddress "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
-	"log"
 )
 
 var accountCmd = &cobra.Command{
@@ -134,12 +135,15 @@ func GenerateAccount() {
 
 func ImportAccount(pkhex string) {
 
+	var pk ed25519.PrivateKey
+
 	token, err := hex.DecodeString(pkhex)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	address := anonaddress.GenerateAcmeAddress(token)
+	pk = token
+	address := anonaddress.GenerateAcmeAddress(pk.Public().(ed25519.PublicKey))
 
 	err = Db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("anon"))
