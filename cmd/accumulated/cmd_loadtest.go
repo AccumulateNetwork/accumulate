@@ -14,6 +14,7 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/spf13/cobra"
+	"github.com/tendermint/tendermint/rpc/client"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
@@ -43,7 +44,7 @@ func init() {
 }
 
 func loadTest(cmd *cobra.Command, args []string) {
-	var clients []*rpc.HTTP
+	var clients []client.ABCIClient
 
 	if flagLoadTest.BatchSize < 1 {
 		if flagLoadTest.TransactionCount > 5 {
