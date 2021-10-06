@@ -12,9 +12,7 @@ import (
 
 type ADI struct{}
 
-func (ADI) chainType() types.ChainType { return types.ChainTypeAdi }
-
-func (ADI) instruction() types.TxType { return types.TxTypeIdentityCreate }
+func (ADI) createChain() types.TxType { return types.TxTypeIdentityCreate }
 
 func (ADI) BeginBlock() {}
 
