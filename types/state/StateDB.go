@@ -402,11 +402,6 @@ func (sdb *StateDB) BlockIndex() int64 {
 	return sdb.mm.BlockIndex()
 }
 
-func (sdb *StateDB) SyntheticNonce() int64 {
-	return sdb.mm.GetElementCount()
-
-}
-
 // WriteStates will push the data to the database and update the patricia trie
 func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//build a list of keys from the map
