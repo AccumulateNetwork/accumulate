@@ -11,9 +11,7 @@ import (
 
 type SynTxDeposit struct{}
 
-func (SynTxDeposit) chainType() types.ChainType { return types.ChainTypeUnknown }
-
-func (SynTxDeposit) instruction() types.TxType {
+func (SynTxDeposit) createChain() types.TxType {
 	return types.TxTypeSyntheticTokenDeposit
 }
 
