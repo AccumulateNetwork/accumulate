@@ -9,7 +9,8 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/tendermint/tendermint/libs/bytes"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	"github.com/tendermint/tendermint/rpc/client"
+	"github.com/tendermint/tendermint/rpc/client/http"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
@@ -18,31 +19,35 @@ import (
 // or they can be sent directly.  They only know about GenTransactions and are routed according to the number of networks
 // in the system
 type Relay struct {
-	rpcClient   []*rpchttp.HTTP
-	batches     []*rpchttp.BatchHTTP
+	client      []client.ABCIClient
+	batches     []Batch
 	numNetworks int
 }
 
 // New Create the new bouncer and initialize it with a client connection to each of the nodes
-func New(clients ...*rpchttp.HTTP) *Relay {
-	bouncer := &Relay{}
-	bouncer.initialize(clients)
-	return bouncer
-}
+func New(clients ...client.ABCIClient) *Relay {
+	for i, c := range clients {
+		if c, ok := c.(*http.HTTP); ok {
+			clients[i] = rpcClient{c}
+		}
+	}
 
-// initialize will set the initial clients and create a new batch for each client
-func (r *Relay) initialize(clients []*rpchttp.HTTP) {
-	r.rpcClient = clients
+	r := &Relay{}
 	r.numNetworks = len(clients)
+	r.client = clients
 	r.resetBatches()
+
+	return r
 }
 
 // resetBatches gets called after each call to BatchSend().  It will thread off the batch of transactions it has, then
 // create a new batch by calling this function
 func (r *Relay) resetBatches() {
-	r.batches = make([]*rpchttp.BatchHTTP, r.numNetworks)
-	for i := range r.batches {
-		r.batches[i] = r.rpcClient[i].NewBatch()
+	r.batches = make([]Batch, r.numNetworks)
+	for i, c := range r.client {
+		if c, ok := c.(Batchable); ok {
+			r.batches[i] = c.NewBatch()
+		}
 	}
 }
 
@@ -51,14 +56,18 @@ func (r *Relay) BatchTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.batches[int(gtx.Routing)%r.numNetworks].BroadcastTxAsync(context.Background(), tx)
+	i := int(gtx.Routing) % r.numNetworks
+	if r.batches[i] == nil {
+		return r.client[i].BroadcastTxAsync(context.Background(), tx)
+	}
+	return r.batches[i].BroadcastTxAsync(context.Background(), tx)
 }
 
 // BatchSend
 // This will dispatch all the transactions that have been put into batches. The calling function does not have to
 // wait for batch to be sent.  This is a fire and forget operation
 func (r *Relay) BatchSend() {
-	sendBatches := make([]*rpchttp.BatchHTTP, r.numNetworks)
+	sendBatches := make([]Batch, r.numNetworks)
 	for i, batch := range r.batches {
 		sendBatches[i] = batch
 	}
@@ -68,8 +77,12 @@ func (r *Relay) BatchSend() {
 
 // dispatch
 // This function is executed as a go routine to send out all the batches
-func dispatch(batches []*rpchttp.BatchHTTP) {
+func dispatch(batches []Batch) {
 	for i := range batches {
+		if batches[i] == nil {
+			continue
+		}
+
 		if batches[i].Count() > 0 {
 			_, err := batches[i].Send(context.Background())
 			if err != nil {
@@ -87,7 +100,7 @@ func (r *Relay) SendTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.rpcClient[int(gtx.Routing)%r.numNetworks].BroadcastTxSync(context.Background(), tx)
+	return r.client[int(gtx.Routing)%r.numNetworks].BroadcastTxSync(context.Background(), tx)
 }
 
 // Query
@@ -97,7 +110,7 @@ func (r *Relay) Query(data bytes.HexBytes) (ret *ctypes.ResultABCIQuery, err err
 	if err != nil {
 		return nil, err
 	}
-	return r.rpcClient[addr%uint64(r.numNetworks)].ABCIQuery(context.Background(), "/abci_query", data)
+	return r.client[addr%uint64(r.numNetworks)].ABCIQuery(context.Background(), "/abci_query", data)
 }
 
 func decodeTX(tx tmtypes.Tx) (*transactions.GenTransaction, error) {
