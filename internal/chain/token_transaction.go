@@ -14,8 +14,7 @@ import (
 
 type TokenTx struct{}
 
-func (TokenTx) chainType() types.ChainType { return types.ChainTypeToken }
-func (TokenTx) instruction() types.TxType  { return types.TxTypeTokenTx }
+func (TokenTx) updateChain() types.ChainType { return types.ChainTypeToken }
 
 func (TokenTx) BeginBlock() {}
 
