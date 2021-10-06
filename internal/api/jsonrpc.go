@@ -350,9 +350,13 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	}
 
 	// Tendermint's integration here
-	resp, err := api.query.GetTokenTx(req.From.AsString(), req.Hash[:])
+	resp, err := api.query.GetTransaction(*req.From.AsString(), req.Hash[:])
 	if err != nil {
 		return NewValidatorError(err)
+	}
+
+	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
+		return NewValidatorError(fmt.Errorf("Transaction type is %s and not a token transaction", resp.Type))
 	}
 
 	return resp
