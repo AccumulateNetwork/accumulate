@@ -12,12 +12,12 @@ import (
 )
 
 func TestTokenTransactionDeposit(t *testing.T) {
-	amt := types.Amount{}
-	amt.SetInt64(1000)
+
+	amt := uint64(1000)
 	fromAccount := types.String("MyIdentity/MyAcmeAccount")
 	toAccount := types.String("YourIdentity/MyAcmeAccount")
 	tx := api.NewTokenTx(fromAccount)
-	tx.AddToAccount(toAccount, &amt)
+	tx.AddToAccount(toAccount, amt)
 
 	data, err := json.Marshal(&tx)
 
@@ -32,7 +32,9 @@ func TestTokenTransactionDeposit(t *testing.T) {
 
 	txid := sha256.Sum256(ledger)
 	dep := NewTokenTransactionDeposit(txid[:], &fromAccount, &toAccount)
-	err = dep.SetDeposit(&idCoinbase, amt.AsBigInt())
+	depAmt := types.Amount{}
+	depAmt.SetInt64(int64(amt))
+	err = dep.SetDeposit(&idCoinbase, depAmt.AsBigInt())
 
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +56,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if dep2.DepositAmount.Cmp(&dep.DepositAmount) != 0 {
+	if dep2.DepositAmount.AsBigInt().Cmp(dep.DepositAmount.AsBigInt()) != 0 {
 		t.Fatalf("Error marshalling deposit amount")
 	}
 
