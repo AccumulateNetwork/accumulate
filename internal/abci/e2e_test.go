@@ -31,43 +31,14 @@ var fakeTxid = sha256.Sum256([]byte("fake txid"))
 type Tx = transactions.GenTransaction
 
 func TestE2E_Accumulator_AnonToken(t *testing.T) {
-	app, client := createApp(t)
+	app, client := createAppWithMemDB(t)
+	originAddr := anonTokenTest(t, app, client, 10)
 
-	_, sponsor, _ := ed25519.GenerateKey(rand)
-	_, recipient, _ := ed25519.GenerateKey(rand)
-
-	client.Batch(func(send func(*Tx)) {
-		send(createFakeSyntheticDeposit(t, sponsor, recipient))
-	}, onErr(t))
-
-	origin := transactions.NewWalletEntry()
-	origin.Nonce = 1
-	origin.PrivateKey = recipient
-	origin.Addr = anon.GenerateAcmeAddress(recipient.Public().(ed25519.PublicKey))
-
-	recipients := make([]*transactions.WalletEntry, 10)
-	for i := range recipients {
-		recipients[i] = transactions.NewWalletEntry()
-	}
-
-	client.Batch(func(send func(*Tx)) {
-		for i := 0; i < 10; i++ {
-			recipient := recipients[rand.Intn(len(recipients))]
-			output := transactions.Output{Dest: recipient.Addr, Amount: 1000}
-			exch := transactions.NewTokenSend(origin.Addr, output)
-			tx, err := transactions.New(origin, exch)
-			require.NoError(t, err)
-			send(tx)
-		}
-	}, onErr(t))
-
-	client.Wait()
-
-	t.Log(mustJSON(t, appGetChainState(t, app, origin.Addr+"/dc/ACME")))
+	t.Log(mustJSON(t, appGetChainState(t, app, originAddr+"/dc/ACME")))
 }
 
 func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {
-	_, client := createApp(b)
+	_, client := createAppWithMemDB(b)
 
 	_, sponsor, _ := ed25519.GenerateKey(rand)
 	_, recipient, _ := ed25519.GenerateKey(rand)
@@ -95,13 +66,17 @@ func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {
 	}, onErr(b))
 }
 
-func createApp(t testing.TB) (abcitypes.Application, *acctesting.ABCIApplicationClient) {
-	_, bvcKey, _ := ed25519.GenerateKey(rand)
-
+func createAppWithMemDB(t testing.TB) (abcitypes.Application, *acctesting.ABCIApplicationClient) {
 	appId := sha256.Sum256([]byte("foo bar"))
 	db := new(state.StateDB)
 	err := db.Open("valacc.db", appId[:], true, true)
 	require.NoError(t, err)
+
+	return createApp(t, db)
+}
+
+func createApp(t testing.TB, db *state.StateDB) (abcitypes.Application, *acctesting.ABCIApplicationClient) {
+	_, bvcKey, _ := ed25519.GenerateKey(rand)
 
 	appChan := make(chan abcitypes.Application)
 	appClient := acctesting.NewABCIApplicationClient(appChan, nextHeight)
@@ -191,4 +166,38 @@ func onErr(t testing.TB) func(error) {
 		t.Helper()
 		require.NoError(t, err)
 	}
+}
+
+func anonTokenTest(t testing.TB, app abcitypes.Application, client *acctesting.ABCIApplicationClient, count int) string {
+	_, sponsor, _ := ed25519.GenerateKey(rand)
+	_, recipient, _ := ed25519.GenerateKey(rand)
+
+	client.Batch(func(send func(*Tx)) {
+		send(createFakeSyntheticDeposit(t, sponsor, recipient))
+	}, onErr(t))
+
+	origin := transactions.NewWalletEntry()
+	origin.Nonce = 1
+	origin.PrivateKey = recipient
+	origin.Addr = anon.GenerateAcmeAddress(recipient.Public().(ed25519.PublicKey))
+
+	recipients := make([]*transactions.WalletEntry, 10)
+	for i := range recipients {
+		recipients[i] = transactions.NewWalletEntry()
+	}
+
+	client.Batch(func(send func(*Tx)) {
+		for i := 0; i < count; i++ {
+			recipient := recipients[rand.Intn(len(recipients))]
+			output := transactions.Output{Dest: recipient.Addr, Amount: 1000}
+			exch := transactions.NewTokenSend(origin.Addr, output)
+			tx, err := transactions.New(origin, exch)
+			require.NoError(t, err)
+			send(tx)
+		}
+	}, onErr(t))
+
+	client.Wait()
+
+	return origin.Addr
 }
