@@ -13,6 +13,8 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+const debugTX = false
+
 type ABCIApplicationClient struct {
 	appWg      *sync.WaitGroup
 	blockMu    *sync.Mutex
@@ -118,9 +120,23 @@ func (c *ABCIApplicationClient) sendTx(ctx context.Context, tx types.Tx) (<-chan
 	checkChan := make(chan abci.ResponseCheckTx, 1)
 	deliverChan := make(chan abci.ResponseDeliverTx, 1)
 
+	gtx := new(transactions.GenTransaction)
+	if debugTX {
+		_, err := gtx.UnMarshal(tx)
+		if err != nil {
+			// This should never be enabled outside of debugging, so panicking
+			// is borderline acceptable
+			panic(err)
+		}
+		fmt.Printf("Got TX %X\n", gtx.TransactionHash())
+	}
+
 	go func() {
 		defer close(checkChan)
 		defer close(deliverChan)
+		if debugTX {
+			defer fmt.Printf("Finished TX %X\n", gtx.TxHash)
+		}
 
 		// TODO Roll up multiple TXs into one block?
 		c.enterBlock()
