@@ -50,11 +50,7 @@ jobs:
           ./accumulated init follower -w .nodes -n EastXeons -l tcp://127.0.2.1:3000
 
       - name: Run follower
-        run: |
-          ./accumulated run -w .nodes/Node0 &
-          PID=$!
-          ( sleep 5; kill -9 $PID; touch .nodes/did-kill ) &
-          wait $PID || [ -e .nodes/did-kill ]
+        run: ./accumulated run -w .nodes/Node0 --ci-stop-after 5s
 
       - name: Init localhost
         run: |
