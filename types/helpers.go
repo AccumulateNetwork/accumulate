@@ -67,7 +67,7 @@ func ParseIdentityChainPath(adiChainPath *string) (adi string, chainPath string,
 	s := *adiChainPath
 
 	if !utf8.ValidString(s) {
-		return "", "", fmt.Errorf("URL is has invalid UTF8 encoding")
+		return "", "", fmt.Errorf("URL is has invalid UTF8 encoding, received %s", *adiChainPath)
 	}
 
 	if !strings.HasPrefix(s, "acc://") {
