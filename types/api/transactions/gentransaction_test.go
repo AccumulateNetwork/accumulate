@@ -1,12 +1,16 @@
-package transactions
+package transactions_test
 
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding"
 	"fmt"
 	"sort"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
+	. "github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,4 +149,25 @@ func TestGenTransaction_UnMarshal(t *testing.T) {
 		_, err := tx.UnMarshal([]byte{})
 		require.Error(t, err)
 	})
+}
+
+func TestGenTransaction_TransactionType(t *testing.T) {
+	cases := map[string]struct {
+		Data encoding.BinaryMarshaler
+		Type types.TxType
+	}{
+		"ADI": {new(api.ADI), types.TxTypeIdentityCreate},
+		// TODO Add all payload types
+	}
+
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			b, err := c.Data.MarshalBinary()
+			require.NoError(t, err)
+
+			tx := new(GenTransaction)
+			tx.Transaction = b
+			require.Equal(t, c.Type.AsUint64(), tx.TransactionType())
+		})
+	}
 }

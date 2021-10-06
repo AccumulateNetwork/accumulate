@@ -9,13 +9,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
-// transactionHeader is the structure that stores the basic information needed
-type txPendingState struct {
-	Signature        []*transactions.ED25519Sig
-	TransactionState *txState
-	Status           string `json:"status" form:"status" query:"status" validate:"required"`
-}
-
 //transaction object will either be on main chain or combined with the header and placed on pending chain.  If this is
 // part of the transactionPending, the Transaction can be nil which means the transaction contents are on the main chain
 type txState struct {
@@ -54,15 +47,15 @@ func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransact
 // i.e. transaction header (signature, rcd, transactionid, chainid)
 // the body of the transaction can also be stored for pending transactions.
 type Transaction struct {
-	Entry
 	Chain
 	txState
 }
 
 type PendingTransaction struct {
-	Entry
 	Chain
-	txPendingState
+	Signature        []*transactions.ED25519Sig
+	TransactionState *txState
+	Status           string `json:"status" form:"status" query:"status" validate:"required"`
 }
 
 func (is *Transaction) TransactionHash() *types.Bytes32 {

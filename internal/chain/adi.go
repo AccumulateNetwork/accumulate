@@ -29,7 +29,7 @@ func (ADI) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*De
 	if st == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
-	if st.IdentityState == nil {
+	if st.AdiChain == nil {
 		return nil, fmt.Errorf("missing sponsor identity")
 	}
 	if tx.Signature == nil {
@@ -37,7 +37,7 @@ func (ADI) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*De
 	}
 
 	adiState := state.AdiState{}
-	err := adiState.UnmarshalBinary(st.IdentityState.Entry)
+	err := adiState.UnmarshalBinary(st.AdiState.Entry)
 	if err != nil {
 		return nil, fmt.Errorf("unable to unmarshal adi state entry, %v", err)
 	}

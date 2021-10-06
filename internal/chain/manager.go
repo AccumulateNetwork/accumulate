@@ -62,7 +62,7 @@ func (m *Manager) Query(q *api.Query) ([]byte, error) {
 		return nil, fmt.Errorf("failed to locate chain entry: %v", err)
 	}
 
-	_, err = state.UnmarshalChain(chainState.Entry)
+	err = chainState.As(new(state.Chain))
 	if err != nil {
 		return nil, fmt.Errorf("unable to extract chain header: %v", err)
 	}
@@ -85,10 +85,12 @@ func (m *Manager) CheckTx(tx *transactions.GenTransaction) error {
 		return err
 	}
 
-	// TODO differentiate between real errors and not-found
 	m.mu.Lock()
-	st, _ := m.getState(tx.ChainID)
+	st, err := m.db.LoadChainAndADI(tx.ChainID)
 	m.mu.Unlock()
+	if err != nil {
+		return fmt.Errorf("failed to get state: %v", err)
+	}
 
 	err = m.isSane(st, tx)
 	if err != nil {
@@ -132,8 +134,7 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	defer group.Done()
 	m.mu.Unlock()
 
-	// TODO differentiate between real errors and not-found
-	st, err := m.getState(tx.ChainID)
+	st, err := m.db.LoadChainAndADI(tx.ChainID)
 	if err != nil {
 		return fmt.Errorf("failed to get state: %v", err)
 	}
@@ -159,6 +160,9 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 	// Validate
 	// TODO txValidated should return a list of chainId's the transaction touched.
 	txValidated, err := m.chain.DeliverTx(st, tx)
+	if err != nil {
+		return fmt.Errorf("rejected by chain: %v", err)
+	}
 
 	// Check if the transaction was accepted
 	var txAcceptedObject *state.Object
@@ -240,38 +244,6 @@ func (m *Manager) Commit() ([]byte, error) {
 	fmt.Printf("DB time %f\n", m.db.TimeBucket)
 	m.db.TimeBucket = 0
 	return mdRoot, nil
-}
-
-func (m *Manager) getState(id []byte) (*state.StateEntry, error) {
-	st := new(state.StateEntry)
-	st.DB = m.db
-
-	// TODO check error
-	var err error
-	st.ChainState, err = m.db.GetCurrentEntry(id)
-	if errors.Is(err, state.ErrNotFound) {
-		return st, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	st.ChainHeader, err = state.UnmarshalChain(st.ChainState.Entry)
-	if err != nil {
-		return st, fmt.Errorf("failed to unmarshal chain header: %v", err)
-	}
-
-	st.AdiChain = types.GetIdentityChainFromIdentity(st.ChainHeader.ChainUrl.AsString())
-	st.IdentityState, _ = m.db.GetCurrentEntry(st.AdiChain.Bytes())
-	if st.IdentityState == nil {
-		return st, nil
-	}
-
-	st.AdiHeader, err = state.UnmarshalChain(st.IdentityState.Entry)
-	if err != nil {
-		return st, fmt.Errorf("failed to unmarshal ADI header: %v", err)
-	}
-
-	return st, nil
 }
 
 // isSane will check the nonce (if applicable), check the public key for the transaction,
