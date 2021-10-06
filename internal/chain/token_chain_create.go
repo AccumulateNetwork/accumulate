@@ -12,13 +12,7 @@ import (
 
 type TokenChainCreate struct{}
 
-func (TokenChainCreate) chainType() types.ChainType {
-	return types.ChainTypeUnknown
-}
-
-func (TokenChainCreate) instruction() types.TxType {
-	return types.TxTypeTokenAccountCreate
-}
+func (TokenChainCreate) createChain() types.TxType { return types.TxTypeTokenAccountCreate }
 
 func (TokenChainCreate) BeginBlock() {}
 
