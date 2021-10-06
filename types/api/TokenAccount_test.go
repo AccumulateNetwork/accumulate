@@ -31,6 +31,6 @@ func TestTokenAccount(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Printf("%s", string(data))
+	fmt.Printf("%s\n", string(data))
 
 }
