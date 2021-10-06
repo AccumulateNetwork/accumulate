@@ -7,17 +7,9 @@ import (
 )
 
 type Chain interface {
-	// BeginBlock marks the beginning of a block.
 	BeginBlock()
-
-	// CheckTx partially validates the transaction.
 	CheckTx(*state.StateEntry, *transactions.GenTransaction) error
-
-	// DeliverTx fully validates the transaction.
 	DeliverTx(*state.StateEntry, *transactions.GenTransaction) (*DeliverTxResult, error)
-
-	// Commit commits the block.
-	Commit()
 }
 
 type DeliverTxResult struct {
