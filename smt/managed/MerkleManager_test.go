@@ -26,7 +26,7 @@ func TestAddAppID(t *testing.T) {
 }
 
 func TestIndexing(t *testing.T) {
-	t.Skip("Test Broken") // ToDo: Broken Test
+
 	const testlen = 1024
 	const blocklen = 10
 

@@ -75,14 +75,15 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 
 	//now check if the anonymous chain already exists.
 	//adiStateData := currentState.IdentityState
-	chainState := state.Chain{}
 
 	var txHash types.Bytes32
 	copy(txHash[:], tx.TransactionHash())
 	adiChainId := types.GetChainIdFromChainPath(&adi)
 
 	// if the identity state is nil, then it means we do not have any anon accts setup yet.
-	if st.IdentityState == nil {
+	if st.AdiState == nil {
+		chainState := state.Chain{}
+
 		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
 		chainState.SetHeader(types.String(adi), types.ChainTypeAnonTokenAccount)
 		//need to flag this as an anonymous account
@@ -96,11 +97,7 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 		st.DB.AddStateEntry(adiChainId, &txHash, data)
 
 	} else {
-		err := chainState.UnmarshalBinary(st.IdentityState.Entry)
-		if err != nil {
-			return nil, err
-		}
-		if chainState.Type != types.ChainTypeAnonTokenAccount {
+		if st.AdiHeader.Type != types.ChainTypeAnonTokenAccount {
 			return nil, fmt.Errorf("adi for an anoymous chain is not an anonymous account")
 		}
 	}
@@ -178,7 +175,7 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
 	res := new(DeliverTxResult)
 
-	if st.IdentityState == nil {
+	if st.AdiState == nil {
 		return nil, fmt.Errorf("identity state does not exist for anonymous account")
 	}
 
