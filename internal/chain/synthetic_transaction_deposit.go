@@ -11,7 +11,7 @@ import (
 
 type SynTxDeposit struct{}
 
-func (SynTxDeposit) createIdentity() types.TxType {
+func (SynTxDeposit) createChain() types.TxType {
 	return types.TxTypeSyntheticTokenDeposit
 }
 
