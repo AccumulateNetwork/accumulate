@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -138,20 +137,37 @@ func CreateTX(sender string, receiver string, amount string) {
 
 		params.Sig = types.Bytes64{}
 
+		dataBinary, err := tokentx.MarshalBinary()
+		if err != nil {
+			log.Fatal(err)
+		}
 		gtx := new(transactions.GenTransaction)
-		gtx.SigInfo = new(transactions.SignatureInfo)
-		gtx.Transaction = datajson
-		gtx.SigInfo.URL = receiver
+		gtx.Transaction = dataBinary //The transaction needs to be marshaled as binary for proper tx hash
 		gtx.ChainID = types.GetChainIdFromChainPath(&receiver)[:]
 		gtx.Routing = types.GetAddressFromIdentity(&receiver)
 
+		gtx.SigInfo = new(transactions.SignatureInfo)
+		//the siginfo URL is the URL of the signer
+		gtx.SigInfo.URL = sender
+		//Provide a nonce, typically this will be queried from identity sig spec and incremented.
+		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
+		gtx.SigInfo.Nonce = uint64(params.Tx.Timestamp)
+		//The following will be defined in the SigSpec Group for which key to use
+		gtx.SigInfo.SigSpecHt = 0
+		gtx.SigInfo.Priority = 0
+		gtx.SigInfo.PriorityIdx = 0
+
 		ed := new(transactions.ED25519Sig)
-		err = ed.Sign(uint64(time.Now().UnixNano()), pk, gtx.TransactionHash())
+		fmt.Printf("transaction hash ========== %x ==== %x\n", gtx.TransactionHash(), pk[32:])
+		err = ed.Sign(gtx.SigInfo.Nonce, pk, gtx.TransactionHash())
 		if err != nil {
 			return api.NewSubmissionError(err)
 		}
 		params.Sig.FromBytes(ed.GetSignature())
-		params.Tx.Signer.PublicKey = sha256.Sum256(ed.GetPublicKey())
+		//The public key needs to be used to verify the signature, however,
+		//to pass verification, the validator will hash the key and check the
+		//sig spec group to make sure this key belongs to the identity.
+		params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
 
 		if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
 			log.Fatal(err)
