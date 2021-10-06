@@ -22,7 +22,7 @@ type tokenAccountTx struct {
 	txHash  []*types.Bytes32
 }
 
-func (*AnonToken) createIdentity() types.TxType { return types.TxTypeSyntheticTokenDeposit }
+func (*AnonToken) createChain() types.TxType { return types.TxTypeSyntheticTokenDeposit }
 
 func (*AnonToken) updateChain() types.ChainType { return types.ChainTypeAnonTokenAccount }
 
