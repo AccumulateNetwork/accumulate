@@ -34,8 +34,9 @@ var cmdInitFollower = &cobra.Command{
 }
 
 var flagInit struct {
-	Net   string
-	Relay []string
+	Net           string
+	Relay         []string
+	NoEmptyBlocks bool
 }
 
 var flagInitFollower struct {
@@ -49,6 +50,7 @@ func init() {
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().StringSliceVarP(&flagInit.Relay, "relay-to", "r", nil, "Other networks that should be relayed to")
+	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
@@ -96,6 +98,9 @@ func initNode(cmd *cobra.Command, args []string) {
 		default:
 			fmt.Fprintf(os.Stderr, "Error: hard-coded network has invalid node type: %q\n", net.Type)
 			os.Exit(1)
+		}
+		if flagTestNet.NoEmptyBlocks {
+			config[i].Consensus.CreateEmptyBlocks = false
 		}
 	}
 
