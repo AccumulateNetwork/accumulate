@@ -90,6 +90,16 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeApi.APIDataResponse,
 	return unmarshalTokenAccount(r.Response)
 }
 
+// GetTransactionReference get the transaction id for a given transaction number
+func (q *Query) GetTransactionReference(adiChainPath *string) (*acmeApi.APIDataResponse, error) {
+	r, err := q.Query(*adiChainPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("transaction id reference chain query returned error, %v", err)
+	}
+
+	return unmarshalTxReference(r.Response)
+}
+
 // GetTokenTx
 
 // GetTransaction

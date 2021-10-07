@@ -43,8 +43,7 @@ func TestLoadOnRemote(t *testing.T) {
 
 	time.Sleep(10000 * time.Millisecond)
 
-	tokenUrl := "dc/ACME"
-	queryTokenUrl := addrList[1] + "/" + tokenUrl
+	queryTokenUrl := addrList[1]
 
 	resp, err := query.GetChainState(&queryTokenUrl, nil)
 	if err != nil {
@@ -121,8 +120,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//wait 3 seconds for the transaction to process for the block to complete.
 	time.Sleep(10 * time.Second)
 
-	tokenUrl := "dc/ACME"
-	queryTokenUrl := addrList[1] + "/" + tokenUrl
+	queryTokenUrl := addrList[1]
 	resp, err := query.GetTokenAccount(&queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)

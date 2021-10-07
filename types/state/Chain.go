@@ -13,8 +13,8 @@ import (
 //that will consist of the chain type enumerator
 type Chain struct {
 	Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
-	SigSpecId types.Bytes32   `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
 	ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	SigSpecId types.Bytes32   `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
 }
 
 func NewChain(chainUrl types.String, chainType types.ChainType) *Chain {
@@ -33,7 +33,9 @@ func (h *Chain) SetHeader(chainUrl types.String, chainType types.ChainType) {
 func (h *Chain) GetHeaderSize() int {
 	var buf [8]byte
 	i := binary.PutUvarint(buf[:], h.Type.AsUint64())
-	return i + h.ChainUrl.Size(nil)
+	i += binary.PutUvarint(buf[:], uint64(len(h.ChainUrl)))
+	i += binary.PutUvarint(buf[:], uint64(len(h.SigSpecId)))
+	return i + len(h.ChainUrl) + len(h.SigSpecId)
 }
 
 //GetType will return the chain type
@@ -51,28 +53,28 @@ func (h *Chain) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(common.Uint64Bytes(h.Type.AsUint64()))
-
-	urlData, err := h.ChainUrl.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
-	buffer.Write(urlData)
+	buffer.Write(common.SliceBytes([]byte(h.ChainUrl)))
+	buffer.Write(common.SliceBytes(h.SigSpecId[:]))
 
 	return buffer.Bytes(), nil
 }
 
 //UnmarshalBinary deserializes the data array into the header object
-func (h *Chain) UnmarshalBinary(data []byte) error {
-	if len(data[:]) < 8 {
-		return fmt.Errorf("state header buffer too short for unmarshal")
-	}
+func (h *Chain) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if rerr := recover(); rerr != nil {
+			err = fmt.Errorf("error unmarshaling chain state header ref state %v", rerr)
+		}
+	}()
+
 	chainType, data := common.BytesUint64(data)
 	h.Type = types.ChainType(chainType)
-	err := h.ChainUrl.UnmarshalBinary(data)
-	if err != nil {
-		return err
-	}
+
+	url, data := common.BytesSlice(data)
+	h.ChainUrl = types.String(url)
+
+	spec, data := common.BytesSlice(data)
+	h.SigSpecId.FromBytes(spec)
 
 	return nil
 }

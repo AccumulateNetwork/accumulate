@@ -67,8 +67,17 @@ func unmarshalTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error
 		sAccount := new(state.TokenAccount)
 		err := sAccount.UnmarshalBinary(b)
 		ta := api.NewTokenAccount(sAccount.ChainUrl, sAccount.TokenUrl.String)
-		rAccount := response.NewTokenAccount(ta, sAccount.GetBalance())
+		rAccount := response.NewTokenAccount(ta, sAccount.GetBalance(), sAccount.TxCount)
 		return rAccount, err
+	})
+}
+
+func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, "txReference", func(b []byte) (interface{}, error) {
+		txRef := new(state.TxReference)
+		err := txRef.UnmarshalBinary(b)
+		txRefResp := response.TxReference{TxId: txRef.TxId}
+		return txRefResp, err
 	})
 }
 
@@ -188,7 +197,6 @@ func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataRespon
 
 	case types.ChainTypeAnonTokenAccount:
 		adi, _, _ := types.ParseIdentityChainPath(sChain.ChainUrl.AsString())
-		adi += "/dc/ACME"
 		return q.GetTokenAccount(&adi)
 	}
 
