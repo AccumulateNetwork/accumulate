@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"math/big"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -151,14 +152,14 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 	}
 
 	var err error
-	withdrawal := transactions.TokenSend{}
-	_, err = withdrawal.Unmarshal(tx.Transaction)
+	withdrawal := api.TokenTx{}
+	err = withdrawal.UnmarshalBinary(tx.Transaction)
 	if err != nil {
 		return nil, fmt.Errorf("error with send token, %v", err)
 	}
 
 	//need to derive chain id for coin type account.
-	adi, chain, _ := types.ParseIdentityChainPath(&withdrawal.AccountURL)
+	adi, chain, _ := types.ParseIdentityChainPath(withdrawal.From.AsString())
 	if adi != chain {
 		return nil, fmt.Errorf("cannot specify sub accounts for anonymous token chains")
 	}
@@ -166,10 +167,10 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 	acmeTokenUrl := types.String("dc/ACME")
 
 	//this is the actual account url the acme tokens are being sent from
-	withdrawal.AccountURL = adi
+	withdrawal.From = types.UrlChain{types.String(adi)}
 
 	//get the ChainId of the acme account for the anon address.
-	accountChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
+	accountChainId := types.GetChainIdFromChainPath(withdrawal.From.AsString())
 
 	var tokenAccountState *state.TokenAccount
 	var taTx *tokenAccountTx
@@ -201,7 +202,7 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 	//now check to see if the account is good to send tokens from
 	amt := types.Amount{}
 	txAmt := big.NewInt(0)
-	for _, val := range withdrawal.Outputs {
+	for _, val := range withdrawal.To {
 		amt.Add(amt.AsBigInt(), txAmt.SetUint64(val.Amount))
 	}
 
@@ -220,10 +221,10 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 
 	//now build the synthetic transactions.
 	txid := types.Bytes(tx.TransactionHash())
-	for _, val := range withdrawal.Outputs {
+	for _, val := range withdrawal.To {
 		txAmt.SetUint64(val.Amount)
 		//extract the target identity and chain from the url
-		destAdi, destChainPath, err := types.ParseIdentityChainPath(&val.Dest)
+		destAdi, destChainPath, err := types.ParseIdentityChainPath(val.URL.AsString())
 		if err != nil {
 			return nil, err
 		}
