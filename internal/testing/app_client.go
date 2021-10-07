@@ -21,16 +21,18 @@ type ABCIApplicationClient struct {
 	blockWg    *sync.WaitGroup
 	app        abci.Application
 	nextHeight func() int64
+	onError    func(err error)
 }
 
 var _ rpc.ABCIClient = (*ABCIApplicationClient)(nil)
 
-func NewABCIApplicationClient(app <-chan abci.Application, nextHeight func() int64) *ABCIApplicationClient {
+func NewABCIApplicationClient(app <-chan abci.Application, nextHeight func() int64, onError func(err error)) *ABCIApplicationClient {
 	c := new(ABCIApplicationClient)
 	c.appWg = new(sync.WaitGroup)
 	c.blockMu = new(sync.Mutex)
 	c.blockWg = new(sync.WaitGroup)
 	c.nextHeight = nextHeight
+	c.onError = onError
 
 	c.appWg.Add(1)
 	go func() {
@@ -97,7 +99,6 @@ func (c *ABCIApplicationClient) BroadcastTxCommit(ctx context.Context, tx types.
 
 func (c *ABCIApplicationClient) enterBlock() {
 	app := c.App()
-	c.blockWg.Add(1)
 	c.blockMu.Lock()
 	begin := abci.RequestBeginBlock{}
 	begin.Header.Height = c.nextHeight()
@@ -111,7 +112,6 @@ func (c *ABCIApplicationClient) exitBlock() {
 	// Should commit always happen? Or only on success?
 	app.Commit()
 
-	c.blockWg.Done()
 	c.blockMu.Unlock()
 }
 
@@ -131,7 +131,10 @@ func (c *ABCIApplicationClient) sendTx(ctx context.Context, tx types.Tx) (<-chan
 		fmt.Printf("Got TX %X\n", gtx.TransactionHash())
 	}
 
+	c.blockWg.Add(1)
 	go func() {
+		defer c.blockWg.Done()
+
 		defer close(checkChan)
 		defer close(deliverChan)
 		if debugTX {
@@ -145,14 +148,14 @@ func (c *ABCIApplicationClient) sendTx(ctx context.Context, tx types.Tx) (<-chan
 		rc := app.CheckTx(abci.RequestCheckTx{Tx: tx})
 		checkChan <- rc
 		if rc.Code != 0 {
-			fmt.Printf("CheckTx failed: %v\n", rc.Info)
+			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Info))
 			return
 		}
 
 		rd := app.DeliverTx(abci.RequestDeliverTx{Tx: tx})
 		deliverChan <- rd
 		if rd.Code != 0 {
-			fmt.Printf("DeliverTx failed: %v\n", rc.Info)
+			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Info))
 			return
 		}
 	}()
@@ -160,8 +163,11 @@ func (c *ABCIApplicationClient) sendTx(ctx context.Context, tx types.Tx) (<-chan
 	return checkChan, deliverChan
 }
 
-func (c *ABCIApplicationClient) Batch(inBlock func(func(*transactions.GenTransaction)), onErr func(error)) {
+func (c *ABCIApplicationClient) Batch(inBlock func(func(*transactions.GenTransaction))) {
 	app := c.App()
+
+	c.blockWg.Add(1)
+	defer c.blockWg.Done()
 
 	c.enterBlock()
 	defer c.exitBlock()
@@ -169,19 +175,19 @@ func (c *ABCIApplicationClient) Batch(inBlock func(func(*transactions.GenTransac
 	inBlock(func(gtx *transactions.GenTransaction) {
 		tx, err := gtx.Marshal()
 		if err != nil {
-			onErr(err)
+			c.onError(err)
 			return
 		}
 
 		rc := app.CheckTx(abci.RequestCheckTx{Tx: tx})
 		if rc.Code != 0 {
-			fmt.Printf("CheckTx failed: %v\n", rc.Info)
+			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Info))
 			return
 		}
 
 		rd := app.DeliverTx(abci.RequestDeliverTx{Tx: tx})
 		if rd.Code != 0 {
-			fmt.Printf("DeliverTx failed: %v\n", rc.Info)
+			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Info))
 			return
 		}
 	})
