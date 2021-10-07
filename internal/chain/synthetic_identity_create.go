@@ -9,15 +9,15 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
-type SynIdentityCreate struct{}
+type SynthIdentityCreate struct{}
 
-func (SynIdentityCreate) createChain() types.TxType {
+func (SynthIdentityCreate) createChain() types.TxType {
 	return types.TxTypeSyntheticIdentityCreate
 }
 
-func (SynIdentityCreate) BeginBlock() {}
+func (SynthIdentityCreate) BeginBlock() {}
 
-func (SynIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (SynthIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	if st == nil {
 		//but this is to be expected...
 		return fmt.Errorf("current state not defined")
@@ -36,7 +36,7 @@ func (SynIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTrans
 	return nil
 }
 
-func (SynIdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (SynthIdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
 	if st == nil {
 		//but this is to be expected...
 		return nil, fmt.Errorf("current state not defined")
