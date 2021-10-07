@@ -29,9 +29,9 @@ type AdiState struct {
 }
 
 // NewIdentityState this will eventually be the key groups and potentially just a multi-map of types to chain paths controlled by the identity
-func NewIdentityState(adi string) *AdiState {
+func NewIdentityState(adi types.String) *AdiState {
 	r := &AdiState{}
-	r.SetHeader(types.String(adi), types.ChainTypeAdi)
+	r.SetHeader(adi, types.ChainTypeAdi)
 	return r
 }
 
