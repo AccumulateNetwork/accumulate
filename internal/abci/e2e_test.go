@@ -34,7 +34,7 @@ func TestE2E_Accumulator_AnonToken(t *testing.T) {
 	app, client := createAppWithMemDB(t)
 	originAddr := anonTokenTest(t, app, client, 10)
 
-	t.Log(mustJSON(t, appGetChainState(t, app, originAddr+"/dc/ACME")))
+	t.Log(mustJSON(t, appGetChainState(t, app, originAddr)))
 }
 
 func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {

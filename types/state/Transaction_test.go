@@ -4,13 +4,16 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
 func TestTransactionState(t *testing.T) {
-	nts1 := transactions.NewTokenSend("RedWagon/myAccount", transactions.Output{100 * 100000000, "BlueWagon"})
+	nts1 := api.TokenTx{}
+	nts1.From = types.UrlChain{"RedWagon/myAccount"}
+	nts1.AddToAccount("BlueWagon/account", uint64(100*100000000))
 
 	var nonce uint64 = 1
 
@@ -23,7 +26,11 @@ func TestTransactionState(t *testing.T) {
 		t.Fatal("could not create the Routing value")
 	}
 
-	trans.Transaction = nts1.Marshal()
+	var err error
+	trans.Transaction, err = nts1.MarshalBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	eSig := new(transactions.ED25519Sig)
 	transHash := trans.TransactionHash()
@@ -35,12 +42,14 @@ func TestTransactionState(t *testing.T) {
 	trans.Signature = append(trans.Signature, eSig)
 
 	txPendingState := NewPendingTransaction(trans)
+	txPendingState.Chain.SetHeader(types.String("RedWagon/myAccount"), types.ChainTypePendingTransaction)
 	data, err := txPendingState.MarshalBinary()
 	if err != nil {
 		t.Fatalf("error marshaling pending tx state %v", err)
 	}
 
 	txPendingState2 := PendingTransaction{}
+
 	err = txPendingState2.UnmarshalBinary(data)
 	if err != nil {
 		t.Fatalf("error unmarshaling pending transaction, %v", err)
@@ -114,9 +123,8 @@ func TestTransactionState(t *testing.T) {
 
 	txPendingStateObject := Object{}
 	mdRoot := sha256.Sum256([]byte("some mdroot"))
-	txPendingStateObject.MDRoot = mdRoot[:]
+	txPendingStateObject.MDRoot = mdRoot
 	txPendingStateObject.Entry = data
-	txPendingStateObject.ChainHeader.SetHeader(types.String("RedWagon/myAccount"), types.ChainTypePendingTransaction)
 	pendingStateData, err := txPendingStateObject.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
