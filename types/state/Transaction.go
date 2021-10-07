@@ -20,7 +20,7 @@ type txState struct {
 // NewPendingTransaction will create a new pending transaction from a general transaction
 func NewPendingTransaction(gtx *transactions.GenTransaction) *PendingTransaction {
 	ret := &PendingTransaction{}
-	ret.Chain.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypeTransaction)
+	ret.Chain.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypePendingTransaction)
 	ret.Signature = gtx.Signature
 	ret.TransactionState = &txState{}
 	ret.TransactionState.SigInfo = gtx.SigInfo
@@ -36,6 +36,8 @@ func NewPendingTransaction(gtx *transactions.GenTransaction) *PendingTransaction
 // transaction state and a new transaction state.  This is used for promtion of a transaction to the main chain
 func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransaction) {
 	txState := &Transaction{}
+	txState.ChainUrl = pending.ChainUrl
+	txState.Type = types.ChainTypeTransaction
 	txState.Transaction = pending.TransactionState.Transaction
 	txState.SigInfo = pending.TransactionState.SigInfo
 	txState.transactionHash = pending.TransactionState.transactionHash
@@ -81,13 +83,11 @@ func (is *Transaction) MarshalBinary() (data []byte, err error) {
 			err = fmt.Errorf("error marshaling transaction state %v", err)
 		}
 	}()
-	//
-	//headerData, err := is.Chain.MarshalBinary()
-	//if err != nil {
-	//	return nil, fmt.Errorf("unable to marshal chain header for transaction, %v", err)
-	//}
-	//
-	//data = append(data, headerData...)
+
+	data, err = is.Chain.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
+	}
 
 	if is.SigInfo == nil {
 		panic("no SigInfo for state, shouldn't get here")
@@ -109,19 +109,14 @@ func (is *Transaction) UnmarshalBinary(data []byte) (err error) {
 			err = fmt.Errorf("error unmarshaling transaction state %v", err)
 		}
 	}()
-	i := 0
 
-	//err = is.Chain.UnmarshalBinary(data)
-	//if err != nil {
-	//	return fmt.Errorf("unable to unmarshal data for transaction, %v", err)
-	//}
-	//
-	//i += is.Chain.GetHeaderSize()
-	//
-	//if len(data) < i {
-	//	return fmt.Errorf("unable to unmarshal raw transaction data")
-	//}
-	//
+	i := 0
+	err = is.Chain.UnmarshalBinary(data)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
+	}
+	i += is.Chain.GetHeaderSize()
+
 	is.SigInfo = new(transactions.SignatureInfo) //                Get a SignatureInfo struct
 	data, err = is.SigInfo.UnMarshal(data[i:])   //                And unmarshal it.
 	if err != nil {                              //                Get an error? Complain to caller!
@@ -143,12 +138,12 @@ func (t *PendingTransaction) MarshalBinary() (data []byte, err error) {
 		}
 	}()
 
-	//headerData, err := t.Chain.MarshalBinary()
-	//if err != nil {
-	//	return nil, fmt.Errorf("unable to marshal chain header for transaction, %v", err)
-	//}
-	//
-	//data = append(data, headerData...)
+	headerData, err := t.Chain.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("unable to marshal chain header for transaction, %v", err)
+	}
+
+	data = append(data, headerData...)
 
 	sLen := uint64(len(t.Signature))
 	if sLen < 1 || sLen > api.MaxTokenTxOutputs {
@@ -185,13 +180,13 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 			err = fmt.Errorf("error unmarshaling GenTransaction %v", err) //
 		} //
 	}() //
-	//
-	//err = t.Chain.UnmarshalBinary(data)
-	//if err != nil {
-	//	return fmt.Errorf("cannot unmarshal chain header for transaction state,%v", err)
-	//}
-	//
-	//data = data[t.Chain.GetHeaderSize():]
+
+	err = t.Chain.UnmarshalBinary(data)
+	if err != nil {
+		return fmt.Errorf("cannot unmarshal chain header for transaction state,%v", err)
+	}
+
+	data = data[t.Chain.GetHeaderSize():]
 	var sLen uint64                               //                Get how many signatures we have
 	sLen, data = common.BytesUint64(data)         //                Of course, need it in an int of some sort
 	if sLen < 1 || sLen > api.MaxTokenTxOutputs { //                If the count isn't reasonable, die

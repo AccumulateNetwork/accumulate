@@ -2,6 +2,7 @@ package state
 
 import (
 	"crypto/sha256"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"sync"
@@ -168,18 +169,20 @@ func (sdb *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, sy
 func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes,
 	txPending *Object, txValidated *Object) error {
 	_ = chainId
-	if txPending.ChainHeader.Type != types.ChainTypePendingTransaction {
+	chainType, _ := binary.Uvarint(txPending.Entry)
+	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
 		return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
-			types.ChainTypePendingTransaction.Name(), txPending.ChainHeader.Type.Name())
+			types.ChainTypePendingTransaction.Name(), types.TxType(chainType).Name())
 	}
 	//append the list of pending Tx's, txId's, and validated Tx's.
 	sdb.mutex.Lock()
 	tsi := transactionStateInfo{txPending, chainId.Bytes(), txId}
 	sdb.transactions.pendingTx = append(sdb.transactions.pendingTx, &tsi)
 	if txValidated != nil {
-		if txValidated.ChainHeader.Type != types.ChainTypeTransaction {
+		chainType, _ := binary.Uvarint(txValidated.Entry)
+		if types.ChainType(chainType) != types.ChainTypeTransaction {
 			return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
-				types.ChainTypeTransaction.Name(), txPending.ChainHeader.Type.Name())
+				types.ChainTypeTransaction.Name(), types.ChainType(chainType).Name())
 		}
 		tsi := transactionStateInfo{txValidated, chainId.Bytes(), txId}
 		sdb.transactions.validatedTx = append(sdb.transactions.validatedTx, &tsi)
@@ -253,9 +256,9 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // the transaction is against touches another chain. One example would be an account type chain
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
-func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, entry []byte) error {
+func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) error {
 	if debugStateDBWrites {
-		fmt.Printf("AddStateEntry chainId=%X txHash=%X entry=%X\n", *chainId, *txHash, entry)
+		fmt.Printf("AddStateEntry chainId=%X txHash=%X entry=%X\n", *chainId, *txHash, object.Entry)
 	}
 	begin := time.Now()
 
@@ -269,12 +272,9 @@ func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32,
 		updates = new(blockUpdates)
 		sdb.updates[*chainId] = updates
 	}
-	if updates.stateData == nil {
-		updates.stateData = new(Object)
-	}
 
 	updates.txId = append(updates.txId, txHash)
-	updates.stateData.Entry = entry
+	updates.stateData = object
 
 	return nil
 }
@@ -367,7 +367,7 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 		}
 
 		//store the state of the main chain in the state object
-		currentState.stateData.MDRoot = mdRoot[:]
+		currentState.stateData.MDRoot = types.Bytes32(*mdRoot)
 
 		//now store the state object
 		chainStateObject, err := currentState.stateData.MarshalBinary()

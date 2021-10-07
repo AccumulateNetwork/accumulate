@@ -168,8 +168,6 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 
 	// First configure the pending state which is the basis for the transaction
 	txPending := state.NewPendingTransaction(tx)
-	txPendingObject := new(state.Object)
-	txPendingObject.ChainHeader.SetHeader(types.String(txPending.TransactionState.SigInfo.URL), types.ChainTypePendingTransaction)
 
 	// Validate
 	// TODO txValidated should return a list of chainId's the transaction touched.
@@ -190,13 +188,13 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 		var txAccepted *state.Transaction
 		txAccepted, txPending = state.NewTransaction(txPending)
 		txAcceptedObject = new(state.Object)
-		txAcceptedObject.ChainHeader.SetHeader(types.String(txAccepted.SigInfo.URL), types.ChainTypeTransaction)
 		txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 		if err != nil {
 			return err
 		}
 	}
 
+	txPendingObject := new(state.Object)
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
 		return err
@@ -316,9 +314,11 @@ func (m *Manager) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResult
 		// Create the state object to store the unsigned pending transaction
 		txSynthetic := state.NewPendingTransaction(tx)
 		txSyntheticObject := new(state.Object)
-		txSyntheticObject.ChainHeader.SetHeader(types.String(txSynthetic.TransactionState.SigInfo.URL),
-			types.ChainTypePendingTransaction)
-
+		synthTxData, err := txSynthetic.MarshalBinary()
+		if err != nil {
+			return err
+		}
+		txSyntheticObject.Entry = synthTxData
 		m.db.AddSynthTx(parentTxId, tx.TransactionHash(), txSyntheticObject)
 	}
 

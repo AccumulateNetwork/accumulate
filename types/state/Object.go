@@ -5,30 +5,21 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 //maybe we should have Chain header then entry, rather than entry containing all the Headers
 type Object struct {
-	ChainHeader Chain       `json:"chainHeader"`
-	MDRoot      types.Bytes `json:"pendingMDRoot"`
-	Entry       types.Bytes `json:"stateEntry"` //this is the state data that stores the current state of the chain
+	MDRoot types.Bytes32 `json:"pendingMDRoot"`
+	Entry  types.Bytes   `json:"stateEntry"` //this is the state data that stores the current state of the chain
 }
 
 func (app *Object) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	data, err := app.ChainHeader.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	buffer.Write(data)
+	buffer.Write(app.MDRoot.Bytes())
 
-	buffer.Write(common.SliceBytes(app.MDRoot.Bytes()))
-
-	data, err = app.Entry.MarshalBinary()
+	data, err := app.Entry.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -49,15 +40,9 @@ func (app *Object) UnmarshalBinary(data []byte) (err error) {
 		return fmt.Errorf("insufficicient data associated with state entry")
 	}
 
-	err = app.ChainHeader.UnmarshalBinary(data)
-	if err != nil {
-		return fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
-	}
-	i := app.ChainHeader.GetHeaderSize()
+	app.MDRoot.FromBytes(data)
 
-	app.MDRoot, data = common.BytesSlice(data[i:])
-
-	err = app.Entry.UnmarshalBinary(data)
+	err = app.Entry.UnmarshalBinary(data[32:])
 	if err != nil {
 		return fmt.Errorf("no state object associated with state entry, %v", err)
 	}

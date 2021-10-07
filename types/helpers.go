@@ -174,13 +174,13 @@ func (s *Bytes) UnmarshalBinary(data []byte) (err error) {
 	return err
 }
 
-func (s *Bytes) AsBytes32() (ret Bytes32) {
-	copy(ret[:], *s)
+func (s Bytes) AsBytes32() (ret Bytes32) {
+	copy(ret[:], s)
 	return ret
 }
 
-func (s *Bytes) AsBytes64() (ret Bytes64) {
-	copy(ret[:], *s)
+func (s Bytes) AsBytes64() (ret Bytes64) {
+	copy(ret[:], s)
 	return ret
 }
 
