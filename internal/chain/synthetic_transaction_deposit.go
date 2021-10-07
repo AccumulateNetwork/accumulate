@@ -41,7 +41,7 @@ func (SynTxDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTransact
 	}
 
 	//Modify the state object -> add the deposit amount to the balance
-	err = tas.AddBalance(&ttd.DepositAmount)
+	err = tas.AddBalance(ttd.DepositAmount.AsBigInt())
 	if err != nil {
 		rts, err2 := returnToSenderTx(ttd, tx)
 		if err2 != nil {
@@ -118,7 +118,7 @@ func returnToSenderTx(ttd *synthetic.TokenTransactionDeposit, submission *transa
 	if err != nil {
 		return nil, err
 	}
-	retdep.DepositAmount.Set(&ttd.DepositAmount)
+	retdep.DepositAmount.Set(ttd.DepositAmount.AsBigInt())
 	retdepdata, err := retdep.MarshalBinary()
 	if err != nil {
 		//shouldn't get here.
