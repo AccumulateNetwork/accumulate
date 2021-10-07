@@ -4,40 +4,46 @@ type ChainType uint64
 
 //ChainType enumeration order matters, do not change order or insert new enums.
 const (
-	ChainTypeUnknown          = ChainType(iota)
-	ChainTypeDC               // Directory Chain
-	ChainTypeBVC              // Block Validator Chain
-	ChainTypeAdi              // Accumulate Digital/Distributed Identity/Identifier/Domain
-	ChainTypeToken            // Token Issue
-	ChainTypeTokenAccount     // Token Account
-	ChainTypeAnonTokenAccount // Anonymous Token Account
-	ChainTypeTransaction      // Pending Chain
-	ChainTypeSignatureGroup   // Signature Group chain
+	ChainTypeUnknown              = ChainType(iota)
+	ChainTypeDC                   // Directory Chain
+	ChainTypeBVC                  // Block Validator Chain
+	ChainTypeAdi                  // Accumulate Digital/Distributed Identity/Identifier/Domain
+	ChainTypeToken                // Token Issue
+	ChainTypeTokenAccount         // Token Account
+	ChainTypeAnonTokenAccount     // Anonymous Token Account
+	ChainTypeTransactionReference // Transaction Reference Chain
+	ChainTypeTransaction          // Transaction Chain
+	ChainTypePendingTransaction   // Pending Chain
+	ChainTypeSignatureGroup       // Signature Group chain
 )
 
 // Enum value maps for ChainType.
 var (
 	ChainTypeName = map[ChainType]string{
-		ChainTypeUnknown:          "ChainTypeUnknown",
-		ChainTypeDC:               "ChainTypeDC",
-		ChainTypeBVC:              "ChainTypeBVC",
-		ChainTypeAdi:              "ChainTypeAdi",
-		ChainTypeToken:            "ChainTypeToken",
-		ChainTypeTokenAccount:     "ChainTypeTokenAccount",
-		ChainTypeAnonTokenAccount: "ChainTypeAnonTokenAccount",
-		ChainTypeTransaction:      "ChainTypeTransaction",
-		ChainTypeSignatureGroup:   "ChainTypeSignatureGroup",
+		ChainTypeUnknown:              "ChainTypeUnknown",
+		ChainTypeDC:                   "ChainTypeDC",
+		ChainTypeBVC:                  "ChainTypeBVC",
+		ChainTypeAdi:                  "ChainTypeAdi",
+		ChainTypeToken:                "ChainTypeToken",
+		ChainTypeTokenAccount:         "ChainTypeTokenAccount",
+		ChainTypeAnonTokenAccount:     "ChainTypeAnonTokenAccount",
+		ChainTypeTransactionReference: "ChainTypeTransactionReference",
+		ChainTypeTransaction:          "ChainTypeTransaction",
+		ChainTypePendingTransaction:   "ChainTypePendingTransaction",
+		ChainTypeSignatureGroup:       "ChainTypeSignatureGroup",
 	}
 	ChainTypeValue = map[string]ChainType{
-		"ChainTypeUnknown":          ChainTypeUnknown,
-		"ChainTypeDC":               ChainTypeDC,
-		"ChainTypeBVC":              ChainTypeBVC,
-		"ChainTypeAdi":              ChainTypeAdi,
-		"ChainTypeToken":            ChainTypeToken,
-		"ChainTypeTokenAccount":     ChainTypeTokenAccount,
-		"ChainTypeAnonTokenAccount": ChainTypeAnonTokenAccount,
-		"ChainTypeTransaction":      ChainTypeTransaction,
-		"ChainTypeSignatureGroup":   ChainTypeSignatureGroup,
+		"ChainTypeUnknown":              ChainTypeUnknown,
+		"ChainTypeDC":                   ChainTypeDC,
+		"ChainTypeBVC":                  ChainTypeBVC,
+		"ChainTypeAdi":                  ChainTypeAdi,
+		"ChainTypeToken":                ChainTypeToken,
+		"ChainTypeTokenAccount":         ChainTypeTokenAccount,
+		"ChainTypeAnonTokenAccount":     ChainTypeAnonTokenAccount,
+		"ChainTypeTransactionReference": ChainTypeTransactionReference,
+		"ChainTypeTransaction":          ChainTypeTransaction,
+		"ChainTypePendingTransaction":   ChainTypePendingTransaction,
+		"ChainTypeSignatureGroup":       ChainTypeSignatureGroup,
 	}
 )
 

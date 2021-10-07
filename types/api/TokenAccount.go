@@ -21,7 +21,7 @@ func NewTokenAccount(accountURL types.String, issuingTokenURL types.String) *Tok
 func (t *TokenAccount) MarshalBinary() (data []byte, err error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(common.Int64Bytes(int64(types.TxTypeTokenAccountCreate)))
+	buffer.Write(common.Uint64Bytes(types.TxTypeTokenAccountCreate.AsUint64()))
 
 	data, err = t.URL.MarshalBinary()
 	if err != nil {
@@ -40,14 +40,14 @@ func (t *TokenAccount) MarshalBinary() (data []byte, err error) {
 
 func (t *TokenAccount) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
-		if recover() != nil {
-			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		if r := recover(); r != nil {
+			err = fmt.Errorf("error marshaling Token Account State %v", r)
 		}
 	}()
 
-	txType, data := common.BytesInt64(data)
+	txType, data := common.BytesUint64(data)
 
-	if txType != int64(types.TxTypeTokenAccountCreate) {
+	if txType != types.TxTypeTokenAccountCreate.AsUint64() {
 		return fmt.Errorf("invalid transaction type, expecting TokenAccount")
 	}
 
