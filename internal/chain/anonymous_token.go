@@ -2,8 +2,9 @@ package chain
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"math/big"
+
+	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	types2 "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -90,6 +91,7 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 			return nil, fmt.Errorf("adi for an anoymous chain is not an anonymous account")
 		}
 		//now can unmarshal the account
+		account = new(state.TokenAccount)
 		err := account.UnmarshalBinary(st.AdiState.Entry)
 		if err != nil {
 			return nil, fmt.Errorf("error unmarshaling anon state account object, %v", err)

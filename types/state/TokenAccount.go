@@ -3,9 +3,9 @@ package state
 import (
 	"bytes"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"math/big"
 
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 

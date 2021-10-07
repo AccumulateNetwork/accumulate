@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
@@ -19,7 +20,7 @@ func TestIdentityState(t *testing.T) {
 
 	key := ed25519.GenPrivKeyFromSecret(seed[:])
 
-	ids := NewIdentityState(testidentity)
+	ids := NewIdentityState(types.String(testidentity))
 	err = ids.SetKeyData(KeyTypePublic, key.PubKey().Bytes())
 	if err != nil {
 		t.Fatal(err)

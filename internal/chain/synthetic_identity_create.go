@@ -4,9 +4,9 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
 type SynIdentityCreate struct{}
@@ -27,8 +27,8 @@ func (SynIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTrans
 		return fmt.Errorf("identity already exists")
 	}
 
-	is := api.ADI{}
-	err := is.UnmarshalBinary(tx.Transaction)
+	isc := new(synthetic.AdiStateCreate)
+	err := tx.As(isc)
 	if err != nil {
 		return fmt.Errorf("data payload of submission is not a valid identity state create message")
 	}
@@ -46,18 +46,23 @@ func (SynIdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 		return nil, fmt.Errorf("identity already exists")
 	}
 
-	is := api.ADI{}
-	err := is.UnmarshalBinary(tx.Transaction)
+	isc := new(synthetic.AdiStateCreate)
+	err := tx.As(isc)
 	if err != nil {
-		return nil, fmt.Errorf("data payload of submission is not a valid identity state create message")
+		return nil, fmt.Errorf("data payload of submission is not a valid identity state create message: %v", err)
 	}
 
-	statedata, err := is.MarshalBinary()
+	idState := state.NewIdentityState(isc.ToUrl)
+	idState.KeyType = state.KeyTypeSha256
+	idState.KeyData = isc.PublicKeyHash[:]
+	stateObj := new(state.Object)
+	stateObj.Entry, err = idState.MarshalBinary()
 	if err != nil {
-		return nil, fmt.Errorf("cannot marshal state object for identity state create")
+		return nil, fmt.Errorf("error marshalling identity state: %v", err)
 	}
 
-	res := new(DeliverTxResult)
-	res.AddStateData(types.GetIdentityChainFromIdentity(is.URL.AsString()), statedata)
-	return res, nil
+	chainId := types.GetIdentityChainFromIdentity(isc.ToUrl.AsString())
+	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
+	st.DB.AddStateEntry(chainId, &txHash, stateObj)
+	return new(DeliverTxResult), nil
 }

@@ -52,7 +52,7 @@ func (a *AdiStateCreate) UnmarshalBinary(data []byte) (err error) {
 	if err != nil {
 		return fmt.Errorf("insufficient data to unmarshal Adi State Create message header, %v", err)
 	}
-	i := 1 + a.Header.Size()
+	i := a.Header.Size()
 	if len(data) < i+32 {
 		return fmt.Errorf("insufficient data to unmarshal Adi State Create message key hash")
 	}

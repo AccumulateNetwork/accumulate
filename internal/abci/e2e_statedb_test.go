@@ -9,6 +9,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/crypto"
 )
 
 func TestStateDBConsistency(t *testing.T) {
@@ -22,8 +23,8 @@ func TestStateDBConsistency(t *testing.T) {
 	sdb := new(state.StateDB)
 	sdb.Load(db, bvcId[:], true)
 
-	app, client := createApp(t, sdb)
-	anonTokenTest(t, app, client, 10)
+	n := createApp(t, sdb, crypto.Address{})
+	n.anonTokenTest(10)
 
 	height := sdb.BlockIndex()
 	rootHash := sdb.RootHash()
