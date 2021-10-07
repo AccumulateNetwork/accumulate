@@ -24,7 +24,7 @@ type AppFactory func(*privval.FilePV) (abci.Application, error)
 // Node wraps a Tendermint node.
 type Node struct {
 	service.Service
-	config      *config.Config
+	Config      *config.Config
 	APIClient   coregrpc.BroadcastAPIClient
 	LocalClient *local.Local
 }
@@ -32,7 +32,7 @@ type Node struct {
 // New initializes a Tendermint node for the given ABCI application.
 func New(config *config.Config, app abci.Application) (*Node, error) {
 	node := new(Node)
-	node.config = config
+	node.Config = config
 
 	// create logger
 	var err error
@@ -72,7 +72,7 @@ func (n *Node) Start() error {
 }
 
 func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
-	client := coregrpc.StartGRPCClient(n.config.RPC.GRPCListenAddress)
+	client := coregrpc.StartGRPCClient(n.Config.RPC.GRPCListenAddress)
 	for {
 		_, err := client.Ping(context.Background(), &coregrpc.RequestPing{})
 		if err == nil {
@@ -82,7 +82,7 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 }
 
 func (n *Node) waitForRPC() error {
-	client, err := rpcclient.New(n.config.RPC.ListenAddress)
+	client, err := rpcclient.New(n.Config.RPC.ListenAddress)
 	if err != nil {
 		return err
 	}
