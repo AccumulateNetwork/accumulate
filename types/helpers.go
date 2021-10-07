@@ -218,7 +218,7 @@ func (s *Bytes32) Bytes() []byte {
 // FromBytes sets the byte array.
 func (s *Bytes32) FromBytes(b []byte) error {
 	if len(b) != 32 {
-		return fmt.Errorf("expected 32 bytes string, received %s", len(b))
+		return fmt.Errorf("expected 32 bytes string, received %d", len(b))
 	}
 	copy(s[:], b)
 	return nil
@@ -282,7 +282,7 @@ func (s *Bytes64) FromString(str string) error {
 // FromBytes sets the byte array.
 func (s *Bytes64) FromBytes(b []byte) error {
 	if len(b) != 64 {
-		return fmt.Errorf("expected 64 bytes string, received %s", len(b))
+		return fmt.Errorf("expected 64 bytes string, received %d", len(b))
 	}
 	copy(s[:], b)
 	return nil
