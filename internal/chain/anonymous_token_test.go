@@ -1,15 +1,17 @@
-package chain
+package chain_test
 
 import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	"testing"
+
+	. "github.com/AccumulateNetwork/accumulated/internal/chain"
 	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	"testing"
 )
 
 func CreateFakeAnonTokenState(adiChainPath string, key ed25519.PrivateKey) (*state.Object, []byte) {
