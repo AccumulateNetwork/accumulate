@@ -131,9 +131,9 @@ func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount u
 	gtx := new(transactions.GenTransaction)
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.Transaction = txData
-	gtx.SigInfo.URL = destAddr
-	gtx.ChainID = types.GetChainIdFromChainPath(&destAddr)[:]
-	gtx.Routing = types.GetAddressFromIdentity(&destAddr)
+	gtx.SigInfo.URL = string(from)
+	gtx.ChainID = types.GetChainIdFromChainPath(from.AsString())[:]
+	gtx.Routing = types.GetAddressFromIdentity(from.AsString())
 
 	ed := new(transactions.ED25519Sig)
 	gtx.SigInfo.Nonce = 1
