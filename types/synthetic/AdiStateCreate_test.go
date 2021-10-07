@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewAdiStateCreate(t *testing.T) {
@@ -15,17 +16,25 @@ func TestNewAdiStateCreate(t *testing.T) {
 	toAdi := types.String("redwagon")
 
 	txId := types.Bytes32(sha256.Sum256([]byte("sometxid")))
-	adiStateCreate := NewAdiStateCreate(txId[:], &fromAdi, &toAdi, &pubKeyHash)
+	original := NewAdiStateCreate(txId[:], &fromAdi, &toAdi, &pubKeyHash)
 
-	data, err := json.Marshal(adiStateCreate)
-	if err != nil {
-		t.Fatalf("error marshalling adiStateCreate %v", err)
-	}
+	t.Run("JSON", func(t *testing.T) {
+		data, err := json.Marshal(original)
+		require.NoError(t, err, "Marshalling")
 
-	adiStateCreate2 := AdiStateCreate{}
-	err = json.Unmarshal(data, &adiStateCreate2)
-	if err != nil {
-		t.Fatalf("error unmarshalling adiStateCreate %v", err)
-	}
+		unmarshalled := new(AdiStateCreate)
+		err = json.Unmarshal(data, &unmarshalled)
+		require.NoError(t, err, "Unmarshalling")
+		require.Equal(t, original, unmarshalled)
+	})
 
+	t.Run("Binary", func(t *testing.T) {
+		data, err := original.MarshalBinary()
+		require.NoError(t, err, "Marshalling")
+
+		unmarshalled := new(AdiStateCreate)
+		err = unmarshalled.UnmarshalBinary(data)
+		require.NoError(t, err, "Unmarshalling")
+		require.Equal(t, original, unmarshalled)
+	})
 }
