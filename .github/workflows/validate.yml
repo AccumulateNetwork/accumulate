@@ -62,5 +62,5 @@ jobs:
           ./accumulated run -w .nodes/Node0 &
           PID=$!
           sleep 5
-          ./accumulated loadtest -r tcp://127.0.1.1:26657
+          ./accumulated loadtest -r tcp://127.0.1.1:26657 --wallets 10 --transactions 10
           kill -9 $PID
