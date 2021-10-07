@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	api2 "github.com/AccumulateNetwork/accumulated/types/api"
 	"math/rand"
 	"time"
 
@@ -70,7 +71,7 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 	return addrList, nil
 }
 
-func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
+func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25519.PrivateKey, *transactions.GenTransaction, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	adiSponsor := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
 
@@ -90,7 +91,7 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 
 	depData, err := deposit.MarshalBinary()
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal deposit: %v", err)
+		return "", nil, nil, fmt.Errorf("failed to marshal deposit: %v", err)
 	}
 
 	gtx := new(transactions.GenTransaction)
@@ -105,10 +106,55 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 	ed.PublicKey = privateKey[32:]
 	err = ed.Sign(gtx.SigInfo.Nonce, privateKey, gtx.TransactionHash())
 	if err != nil {
+		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
+	}
+
+	gtx.Signature = append(gtx.Signature, ed)
+
+	return destAddress, &privateKey, gtx, nil
+}
+
+func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
+	from := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
+
+	tokenTx := api2.TokenTx{}
+
+	tokenTx.From = types.UrlChain{from}
+	tokenTx.AddToAccount(types.String(destAddr), amount)
+
+	txData, err := tokenTx.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal token tx: %v", err)
+	}
+
+	gtx := new(transactions.GenTransaction)
+	gtx.SigInfo = new(transactions.SignatureInfo)
+	gtx.Transaction = txData
+	gtx.SigInfo.URL = destAddr
+	gtx.ChainID = types.GetChainIdFromChainPath(&destAddr)[:]
+	gtx.Routing = types.GetAddressFromIdentity(&destAddr)
+
+	ed := new(transactions.ED25519Sig)
+	gtx.SigInfo.Nonce = 1
+	ed.PublicKey = (*origin)[32:]
+	err = ed.Sign(gtx.SigInfo.Nonce, *origin, gtx.TransactionHash())
+	if err != nil {
 		return nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
 
 	gtx.Signature = append(gtx.Signature, ed)
+
+	return gtx, nil
+}
+
+func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
+	destAddress, privateKey, gtx, err := BuildTestSynthDepositGenTx(origin)
+	if err != nil {
+		return nil, err
+	}
+
+	adiSponsor := gtx.SigInfo.URL
 
 	_, err = query.BroadcastTx(gtx)
 	if err != nil {
@@ -116,12 +162,12 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 	}
 	query.BatchSend()
 
-	addresses, err := Load(query, privateKey, walletCount, txCount)
+	addresses, err := Load(query, *privateKey, walletCount, txCount)
 	if err != nil {
 		return nil, err
 	}
 
-	addrList = append(addrList, *adiSponsor.AsString())
+	addrList = append(addrList, adiSponsor)
 	addrList = append(addrList, *destAddress.AsString())
 	addrList = append(addrList, addresses...)
 	return addrList, nil

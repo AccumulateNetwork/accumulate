@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 )
@@ -25,6 +26,8 @@ func (app *Object) MarshalBinary() ([]byte, error) {
 	}
 	buffer.Write(data)
 
+	buffer.Write(common.SliceBytes(app.MDRoot.Bytes()))
+
 	data, err = app.Entry.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -34,19 +37,27 @@ func (app *Object) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (app *Object) UnmarshalBinary(data []byte) error {
+func (app *Object) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if rErr := recover(); rErr != nil {
+			err = fmt.Errorf("error unmarshaling Chain State Object, %v", rErr)
+		}
+	}()
+
 	//minimum length of a chain header is 33 bytes
 	if len(data) < 33 {
 		return fmt.Errorf("insufficicient data associated with state entry")
 	}
 
-	err := app.ChainHeader.UnmarshalBinary(data)
+	err = app.ChainHeader.UnmarshalBinary(data)
 	if err != nil {
 		return fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
 	}
 	i := app.ChainHeader.GetHeaderSize()
 
-	err = app.Entry.UnmarshalBinary(data[i:])
+	app.MDRoot, data = common.BytesSlice(data[i:])
+
+	err = app.Entry.UnmarshalBinary(data)
 	if err != nil {
 		return fmt.Errorf("no state object associated with state entry, %v", err)
 	}
