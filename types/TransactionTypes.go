@@ -20,7 +20,7 @@ const (
 
 	//The Following are only valid for DC & BVC use: any other source of this message will be rejected
 	TxTypeSyntheticIdentityCreate = TxType(iota + 0x20)
-	TxTypeSyntheticTokenTx
+	TxTypeSyntheticTokenAccountCreate
 	TxTypeSyntheticTokenDeposit
 	TxTypeSyntheticTxResponse
 	TxTypeBvcSubmission
@@ -32,48 +32,48 @@ const (
 // Enum value maps for TxType.
 var (
 	TxTypeName = map[TxType]string{
-		TxTypeUnknown:                 "Unknown",
-		TxTypeIdentityCreate:          "identityCreate",
-		TxTypeTokenAccountCreate:      "tokenAccountCreate",
-		TxTypeTokenTx:                 "tokenTx",
-		TxTypeDataChainCreate:         "dataChainCreate",
-		TxTypeDataEntry:               "dataEntry",
-		TxTypeScratchChainCreate:      "scratchChainCreate",
-		TxTypeScratchEntry:            "scratchEntry",
-		TxTypeTokenCreate:             "tokenCreate", //Token Issuance
-		TxTypeKeyUpdate:               "keyUpdate",
-		TxTypeStateQuery:              "stateQuery",
-		TxTypeDataStore:               "dataStore",
-		TxTypeStateStore:              "stateStore",
-		TxTypeAdminVote:               "adminVote",
-		TxTypeMultisigTx:              "multisigTx",
-		TxTypeSyntheticIdentityCreate: "syntheticIdentityCreate",
-		TxTypeSyntheticTokenTx:        "syntheticTokenTx",
-		TxTypeSyntheticTokenDeposit:   "syntheticTokenDeposit",
-		TxTypeSyntheticTxResponse:     "syntheticTxResponse",
-		TxTypeBvcSubmission:           "bvcSubmission",
+		TxTypeUnknown:                     "Unknown",
+		TxTypeIdentityCreate:              "identityCreate",
+		TxTypeTokenAccountCreate:          "tokenAccountCreate",
+		TxTypeTokenTx:                     "tokenTx",
+		TxTypeDataChainCreate:             "dataChainCreate",
+		TxTypeDataEntry:                   "dataEntry",
+		TxTypeScratchChainCreate:          "scratchChainCreate",
+		TxTypeScratchEntry:                "scratchEntry",
+		TxTypeTokenCreate:                 "tokenCreate", //Token Issuance
+		TxTypeKeyUpdate:                   "keyUpdate",
+		TxTypeStateQuery:                  "stateQuery",
+		TxTypeDataStore:                   "dataStore",
+		TxTypeStateStore:                  "stateStore",
+		TxTypeAdminVote:                   "adminVote",
+		TxTypeMultisigTx:                  "multisigTx",
+		TxTypeSyntheticIdentityCreate:     "syntheticIdentityCreate",
+		TxTypeSyntheticTokenAccountCreate: "syntheticTokenAccountCreate",
+		TxTypeSyntheticTokenDeposit:       "syntheticTokenDeposit",
+		TxTypeSyntheticTxResponse:         "syntheticTxResponse",
+		TxTypeBvcSubmission:               "bvcSubmission",
 	}
 	TxTypeValue = map[string]TxType{
-		"Unknown":                 TxTypeUnknown,
-		"identityCreate":          TxTypeIdentityCreate,
-		"TokenAccountCreate":      TxTypeTokenAccountCreate,
-		"TokenTx":                 TxTypeTokenTx,
-		"dataChainCreate":         TxTypeDataChainCreate,
-		"dataEntry":               TxTypeDataEntry,
-		"scratchChainCreate":      TxTypeScratchChainCreate,
-		"scratchEntry":            TxTypeScratchEntry,
-		"tokenCreate":             TxTypeTokenCreate,
-		"keyUpdate":               TxTypeKeyUpdate,
-		"stateQuery":              TxTypeStateQuery,
-		"dataStore":               TxTypeDataStore,
-		"stateStore":              TxTypeStateStore,
-		"adminVote":               TxTypeAdminVote,
-		"multisigTx":              TxTypeMultisigTx,
-		"syntheticIdentityCreate": TxTypeSyntheticIdentityCreate,
-		"syntheticTokenTx":        TxTypeSyntheticTokenTx,
-		"syntheticTokenDeposit":   TxTypeSyntheticTokenDeposit,
-		"syntheticTxResponse":     TxTypeSyntheticTxResponse,
-		"bvcSubmission":           TxTypeBvcSubmission,
+		"Unknown":                    TxTypeUnknown,
+		"identityCreate":             TxTypeIdentityCreate,
+		"TokenAccountCreate":         TxTypeTokenAccountCreate,
+		"TokenTx":                    TxTypeTokenTx,
+		"dataChainCreate":            TxTypeDataChainCreate,
+		"dataEntry":                  TxTypeDataEntry,
+		"scratchChainCreate":         TxTypeScratchChainCreate,
+		"scratchEntry":               TxTypeScratchEntry,
+		"tokenCreate":                TxTypeTokenCreate,
+		"keyUpdate":                  TxTypeKeyUpdate,
+		"stateQuery":                 TxTypeStateQuery,
+		"dataStore":                  TxTypeDataStore,
+		"stateStore":                 TxTypeStateStore,
+		"adminVote":                  TxTypeAdminVote,
+		"multisigTx":                 TxTypeMultisigTx,
+		"syntheticIdentityCreate":    TxTypeSyntheticIdentityCreate,
+		"syntheticTokenAcountCreate": TxTypeSyntheticTokenAccountCreate,
+		"syntheticTokenDeposit":      TxTypeSyntheticTokenDeposit,
+		"syntheticTxResponse":        TxTypeSyntheticTxResponse,
+		"bvcSubmission":              TxTypeBvcSubmission,
 	}
 )
 
@@ -94,3 +94,5 @@ func (t *TxType) SetType(s string) {
 func (t TxType) AsUint64() uint64 {
 	return uint64(t)
 }
+
+func (t TxType) String() string { return t.Name() }

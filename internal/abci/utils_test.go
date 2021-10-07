@@ -108,6 +108,13 @@ func generateKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(key)
 }
 
+func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transactions.ED25519Sig, error) {
+	return func(hash []byte) (*transactions.ED25519Sig, error) {
+		sig := new(transactions.ED25519Sig)
+		return sig, sig.Sign(1, key, hash)
+	}
+}
+
 func (n *fakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
 	r, err := n.query.Query(url, nil)
 	require.NoError(n.t, err)
