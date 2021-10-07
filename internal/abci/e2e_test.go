@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -20,89 +21,12 @@ type Tx = transactions.GenTransaction
 func TestE2E_Accumulator_AnonToken(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{})
 	originAddr := n.anonTokenTest(11)
-
-	t.Log(mustJSON(t, n.GetChainState(originAddr, nil)))
-}
-
-func TestE2E_Accumulator_ADI(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
-
-	anonSponsor := generateKey()
-	anonAccount := generateKey()
-	newAdi := generateKey()
-
-	n.Batch(func(send func(*Tx)) {
-		tx, err := acctesting.CreateFakeSyntheticDeposit(anonSponsor, anonAccount)
-		require.NoError(n.t, err)
-		send(tx)
-	})
-
-	wallet := new(transactions.WalletEntry)
-	wallet.Nonce = 1
-	wallet.PrivateKey = anonAccount.Bytes()
-	wallet.Addr = anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
-
-	n.Batch(func(send func(*Tx)) {
-		adi := new(api.ADI)
-		adi.URL = "RoadRunner"
-		adi.PublicKeyHash = sha256.Sum256(newAdi.PubKey().Address())
-
-		sponsorUrl := anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
-		tx, err := transactions.New(sponsorUrl, func(hash []byte) (*transactions.ED25519Sig, error) {
-			return wallet.Sign(hash), nil
-		}, adi)
-		require.NoError(t, err)
-
-		send(tx)
-	})
-
-	n.client.Wait()
-
-	t.Log(mustJSON(t, n.GetChainState("RoadRunner", nil)))
-}
-
-func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {
-	n := createAppWithMemDB(b, crypto.Address{})
-
-	sponsor := generateKey()
-	recipient := generateKey()
-
-	n.Batch(func(send func(*Tx)) {
-		tx, err := acctesting.CreateFakeSyntheticDeposit(sponsor, recipient)
-		require.NoError(b, err)
-		send(tx)
-	})
-
-	origin := transactions.NewWalletEntry()
-	origin.Nonce = 1
-	origin.PrivateKey = recipient.Bytes()
-	origin.Addr = anon.GenerateAcmeAddress(recipient.PubKey().Address())
-
-	rwallet := transactions.NewWalletEntry()
-
-	b.ResetTimer()
-	n.Batch(func(send func(*Tx)) {
-		for i := 0; i < b.N; i++ {
-			output := transactions.Output{Dest: rwallet.Addr, Amount: 1000}
-			exch := transactions.NewTokenSend(origin.Addr, output)
-			tx, err := transactions.New(origin.Addr, func(hash []byte) (*transactions.ED25519Sig, error) {
-				return origin.Sign(hash), nil
-			}, exch)
-			require.NoError(b, err)
-			send(tx)
-		}
-	})
+	require.Equal(t, int64(5e4*acctesting.TokenMx-11000), n.GetTokenAccount(originAddr).Balance.Int64())
 }
 
 func (n *fakeNode) anonTokenTest(count int) string {
-	sponsor := generateKey()
 	recipient := generateKey()
-
-	n.Batch(func(send func(*Tx)) {
-		tx, err := acctesting.CreateFakeSyntheticDeposit(sponsor, recipient)
-		require.NoError(n.t, err)
-		send(tx)
-	})
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, recipient, 5e4))
 
 	origin := transactions.NewWalletEntry()
 	origin.Nonce = 1
@@ -130,4 +54,104 @@ func (n *fakeNode) anonTokenTest(count int) string {
 	n.client.Wait()
 
 	return origin.Addr
+}
+
+func TestE2E_Accumulator_ADI(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{})
+
+	anonAccount := generateKey()
+	newAdi := generateKey()
+	keyHash := sha256.Sum256(newAdi.PubKey().Address())
+
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, anonAccount, 5e4))
+
+	wallet := new(transactions.WalletEntry)
+	wallet.Nonce = 1
+	wallet.PrivateKey = anonAccount.Bytes()
+	wallet.Addr = anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
+
+	n.Batch(func(send func(*Tx)) {
+		adi := new(api.ADI)
+		adi.URL = "RoadRunner"
+		adi.PublicKeyHash = keyHash
+
+		sponsorUrl := anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
+		tx, err := transactions.New(sponsorUrl, func(hash []byte) (*transactions.ED25519Sig, error) {
+			return wallet.Sign(hash), nil
+		}, adi)
+		require.NoError(t, err)
+
+		send(tx)
+	})
+
+	n.client.Wait()
+
+	r := n.GetADI("RoadRunner")
+	require.Equal(t, types.String("RoadRunner"), r.ChainUrl)
+	require.Equal(t, types.Bytes(keyHash[:]), r.KeyData)
+}
+
+func TestE2E_Accumulator_TokenTx_Anon(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{})
+	alice, bob, charlie := generateKey(), generateKey(), generateKey()
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, alice, 5e4))
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, bob, 0))
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, charlie, 0))
+
+	aliceUrl := anon.GenerateAcmeAddress(alice.PubKey().Bytes())
+	bobUrl := anon.GenerateAcmeAddress(bob.PubKey().Bytes())
+	charlieUrl := anon.GenerateAcmeAddress(charlie.PubKey().Bytes())
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		tokenTx := transactions.NewTokenSend(aliceUrl,
+			transactions.Output{Dest: bobUrl, Amount: 1000},
+			transactions.Output{Dest: charlieUrl, Amount: 2000},
+		)
+
+		tx, err := transactions.New(aliceUrl, func(hash []byte) (*transactions.ED25519Sig, error) {
+			sig := new(transactions.ED25519Sig)
+			return sig, sig.Sign(1, alice, hash)
+		}, tokenTx)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	n.client.Wait()
+
+	require.Equal(t, int64(5e4*acctesting.TokenMx-3000), n.GetTokenAccount(aliceUrl).Balance.Int64())
+	require.Equal(t, int64(1000), n.GetTokenAccount(bobUrl).Balance.Int64())
+	require.Equal(t, int64(2000), n.GetTokenAccount(charlieUrl).Balance.Int64())
+}
+
+func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {
+	n := createAppWithMemDB(b, crypto.Address{})
+
+	sponsor := generateKey()
+	recipient := generateKey()
+
+	n.Batch(func(send func(*Tx)) {
+		tx, err := acctesting.CreateFakeSyntheticDepositTx(sponsor, recipient)
+		require.NoError(b, err)
+		send(tx)
+	})
+
+	origin := transactions.NewWalletEntry()
+	origin.Nonce = 1
+	origin.PrivateKey = recipient.Bytes()
+	origin.Addr = anon.GenerateAcmeAddress(recipient.PubKey().Address())
+
+	rwallet := transactions.NewWalletEntry()
+
+	b.ResetTimer()
+	n.Batch(func(send func(*Tx)) {
+		for i := 0; i < b.N; i++ {
+			output := transactions.Output{Dest: rwallet.Addr, Amount: 1000}
+			exch := transactions.NewTokenSend(origin.Addr, output)
+			tx, err := transactions.New(origin.Addr, func(hash []byte) (*transactions.ED25519Sig, error) {
+				return origin.Sign(hash), nil
+			}, exch)
+			require.NoError(b, err)
+			send(tx)
+		}
+	})
 }
