@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"testing"
 	"time"
@@ -17,6 +16,8 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/rpc/client/http"
 )
 
 var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
@@ -56,7 +57,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	jsonapi := NewTest(query)
+	jsonapi := NewTest(t, query)
 	_ = jsonapi
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
@@ -97,20 +98,13 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 
 	//make a client, and also spin up the router grpc
-	dir, err := ioutil.TempDir("", "AccRouterTest-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(dir)
-
-	_, pv, node := startBVC(t, dir)
+	dir := t.TempDir()
+	node, pv := startBVC(t, dir)
 	defer node.Stop()
 
-	txBouncer, err := relay.NewWith("Badlands")
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	rpcClient, err := http.New(node.Config.RPC.ListenAddress)
+	require.NoError(t, err)
+	txBouncer := relay.New(rpcClient)
 	query := NewQuery(txBouncer)
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
@@ -150,7 +144,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	fmt.Println(string(output))
 
 	// now use the JSON rpc api's to get the data
-	jsonapi := NewTest(query)
+	jsonapi := NewTest(t, query)
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
@@ -213,11 +207,6 @@ func TestJsonRpcAnonToken(t *testing.T) {
 func TestJsonRpcAdi(t *testing.T) {
 	t.Skip("Test Broken") // ToDo: Broken Test
 
-	txBouncer, err := relay.NewWith(*testnet)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	//"wileecoyote/ACME"
 	adiSponsor := "wileecoyote"
 
@@ -226,17 +215,16 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, pv, node := startBVC(t, dir)
+	node, pv := startBVC(t, dir)
 	defer node.Stop()
-
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	//kpSponsor := types.CreateKeyPair()
 
+	rpcClient, err := http.New(node.Config.RPC.ListenAddress)
+	require.NoError(t, err)
+	txBouncer := relay.New(rpcClient)
 	query := NewQuery(txBouncer)
-	jsonapi := NewTest(query)
+	jsonapi := NewTest(t, query)
 
 	//StartAPI(randomRouterPorts(), client)
 

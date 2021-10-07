@@ -4,21 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"testing"
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/go-playground/validator/v10"
+	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 )
 
-func NewTest(q *Query) *API {
-	return &API{randomRouterPorts(), validator.New(), q}
+func GetFreePort(t *testing.T) int {
+	t.Helper()
+	port, err := tmnet.GetFreePort()
+	require.NoError(t, err)
+	return port
 }
 
-func randomRouterPorts() *cfg.API {
-	port, err := tmnet.GetFreePort()
-	if err != nil {
-		panic(err)
-	}
+func NewTest(t *testing.T, q *Query) *API {
+	t.Helper()
+	return &API{randomRouterPorts(t), validator.New(), q}
+}
+
+func randomRouterPorts(t *testing.T) *cfg.API {
+	t.Helper()
+	port := GetFreePort(t)
 	return &cfg.API{
 		JSONListenAddress: fmt.Sprintf("localhost:%d", port),
 		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
