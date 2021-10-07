@@ -272,7 +272,7 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 }
 
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
-	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, req.Tx.Timestamp, payload)
+	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, uint64(req.Tx.Timestamp), payload)
 
 	ret := &acmeapi.APIDataResponse{}
 	var msg json.RawMessage
@@ -288,6 +288,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 		ret.Data = &msg
 		return ret
 	}
+
 	api.query.BatchSend()
 
 	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", genTx.TransactionHash(), resp.Log))
@@ -337,7 +338,7 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
-	req := &acmeapi.TokenTx{}
+	req := &acmeapi.TokenTxRequest{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return NewValidatorError(err)
@@ -349,9 +350,13 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	}
 
 	// Tendermint's integration here
-	resp, err := api.query.GetTokenTx(req.From.AsString(), req.Hash[:])
+	resp, err := api.query.GetTransaction(*req.From.AsString(), req.Hash[:])
 	if err != nil {
 		return NewValidatorError(err)
+	}
+
+	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
+		return NewValidatorError(fmt.Errorf("Transaction type is %s and not a token transaction", resp.Type))
 	}
 
 	return resp
@@ -380,7 +385,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 	}
 
 	// validate request data
-	if err = api.validate.Struct(data); err != nil {
+	if err = api.validate.StructPartial(data, "From", "To"); err != nil {
 		return NewValidatorError(err)
 	}
 

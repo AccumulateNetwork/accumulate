@@ -11,7 +11,7 @@ import (
 
 // Signer holds the ADI and public key to use to verify the transaction
 type Signer struct {
-	URL       types.String  `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	URL       types.String  `json:"url" form:"url" query:"url" validate:"required"`
 	PublicKey types.Bytes32 `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
 }
 
@@ -38,20 +38,27 @@ type APIRequestURL struct {
 
 // APIDataResponse is used in "get" API method response
 type APIDataResponse struct {
-	Type types.String     `json:"url" form:"url" query:"url" validate:"oneof:adi,token,tokenAccount,tokenTx"`
+	Type types.String     `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx"`
 	Data *json.RawMessage `json:"data" form:"data" query:"data"`
 }
 
 // NewAPIRequest will convert create general transaction which is used inside of Accumulate and wraps a transaction type
-func NewAPIRequest(sig *types.Bytes64, signer *Signer, timestamp int64, data []byte) (*transactions.GenTransaction, error) {
+func NewAPIRequest(sig *types.Bytes64, signer *Signer, nonce uint64, data []byte) (*transactions.GenTransaction, error) {
 
 	gtx := new(transactions.GenTransaction)
 	gtx.Routing = types.GetAddressFromIdentity(signer.URL.AsString())
 	gtx.ChainID = types.GetChainIdFromChainPath(signer.URL.AsString())[:]
 	gtx.Transaction = data
 
+	gtx.SigInfo = new(transactions.SignatureInfo)
+	gtx.SigInfo.Nonce = nonce
+	gtx.SigInfo.URL = *signer.URL.AsString()
+	gtx.SigInfo.SigSpecHt = 0
+	gtx.SigInfo.Priority = 0
+	gtx.SigInfo.PriorityIdx = 0
+
 	ed := new(transactions.ED25519Sig)
-	ed.Nonce = uint64(timestamp)
+	ed.Nonce = gtx.SigInfo.Nonce
 	ed.PublicKey = signer.PublicKey[:]
 	ed.Signature = sig.Bytes()
 

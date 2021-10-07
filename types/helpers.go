@@ -67,7 +67,7 @@ func ParseIdentityChainPath(adiChainPath *string) (adi string, chainPath string,
 	s := *adiChainPath
 
 	if !utf8.ValidString(s) {
-		return "", "", fmt.Errorf("URL is has invalid UTF8 encoding")
+		return "", "", fmt.Errorf("URL is has invalid UTF8 encoding, received %s", *adiChainPath)
 	}
 
 	if !strings.HasPrefix(s, "acc://") {
@@ -160,7 +160,7 @@ func (s *Bytes) UnmarshalBinary(data []byte) (err error) {
 			err = fmt.Errorf("error unmarshaling byte array %v", err) //
 		} //
 	}()
-	slen, l := binary.Varint(data)
+	slen, l := binary.Uvarint(data)
 	if l == 0 {
 		return nil
 	}
@@ -174,13 +174,23 @@ func (s *Bytes) UnmarshalBinary(data []byte) (err error) {
 	return err
 }
 
+func (s *Bytes) AsBytes32() (ret Bytes32) {
+	copy(ret[:], *s)
+	return ret
+}
+
+func (s *Bytes) AsBytes64() (ret Bytes64) {
+	copy(ret[:], *s)
+	return ret
+}
+
 func (s *Bytes) Size(varintbuf *[8]byte) int {
 	buf := varintbuf
 	if buf == nil {
 		buf = &[8]byte{}
 	}
-	l := int64(len(*s))
-	i := binary.PutVarint(buf[:], l)
+	l := uint64(len(*s))
+	i := binary.PutUvarint(buf[:], l)
 
 	return i + int(l)
 }
@@ -203,6 +213,15 @@ func (s *Bytes32) UnmarshalJSON(data []byte) error {
 // Bytes returns the bite slice of the 32 byte array
 func (s *Bytes32) Bytes() []byte {
 	return s[:]
+}
+
+// FromBytes sets the byte array.
+func (s *Bytes32) FromBytes(b []byte) error {
+	if len(b) != 32 {
+		return fmt.Errorf("expected 32 bytes string, received %d", len(b))
+	}
+	copy(s[:], b)
+	return nil
 }
 
 // FromString takes a hex encoded string and sets the byte array.
@@ -260,6 +279,15 @@ func (s *Bytes64) FromString(str string) error {
 	return nil
 }
 
+// FromBytes sets the byte array.
+func (s *Bytes64) FromBytes(b []byte) error {
+	if len(b) != 64 {
+		return fmt.Errorf("expected 64 bytes string, received %d", len(b))
+	}
+	copy(s[:], b)
+	return nil
+}
+
 // ToString will convert the 32 byte array into a hex string that is 64 hex characters in length
 func (s *Bytes64) ToString() String {
 	return String(hex.EncodeToString(s[:]))
@@ -288,6 +316,17 @@ func (s *String) Size(varintbuf *[8]byte) int {
 
 func (s *String) AsString() *string {
 	return (*string)(s)
+}
+
+func (s *String) MarshalJSON() ([]byte, error) {
+	str := string(*s)
+	b, err := json.Marshal(&str)
+	return b, err
+}
+
+func (s *String) UnmarshalJSON(data []byte) error {
+	*s = String(strings.Trim(string(data), `"`))
+	return nil
 }
 
 type Byte byte
@@ -323,13 +362,40 @@ type UrlChain struct {
 	String
 }
 
-func (s *UrlChain) IsValid() bool {
+func (s *UrlChain) IsValid() error {
 	adi, chainPath, err := s.Parse()
-	return !(adi == "" || chainPath == "" || err != nil)
+	if err != nil {
+		return fmt.Errorf("invalid URL (%s), %v", s.String, err)
+	} else if adi == "" || chainPath == "" {
+		return fmt.Errorf("adi and chainPath cannot be empty, %s (adi), %s (chain)", adi, chainPath)
+	}
+	return nil
 }
 
 func (s *UrlChain) Parse() (string, string, error) {
 	return ParseIdentityChainPath(s.AsString())
+}
+
+func (s *UrlChain) MarshalJSON() ([]byte, error) {
+	err := s.IsValid()
+	if err != nil {
+		return nil, fmt.Errorf("invalid UrlChain when marshaling json, %v", err)
+	}
+	b, err := json.Marshal(s.String)
+	return b, err
+}
+
+// UnmarshalJSON serializes ByteArray to hex
+func (s *UrlChain) UnmarshalJSON(data []byte) error {
+	err := json.Unmarshal(data, &s.String)
+	if err != nil {
+		return fmt.Errorf("error unmarshaling json UrlChain, %v", err)
+	}
+	err = s.IsValid()
+	if err != nil {
+		return fmt.Errorf("invalid UrlChain when unmarshaling json, %v", err)
+	}
+	return nil
 }
 
 type Amount struct {
@@ -364,5 +430,18 @@ func (a *Amount) UnmarshalBinary(data []byte) error {
 	}
 
 	a.Int.SetBytes(data[1 : amtLen+1])
+	return nil
+}
+
+// MarshalJSON serializes ByteArray to hex
+func (s *Amount) MarshalJSON() ([]byte, error) {
+	b, err := json.Marshal(s.String())
+	return b, err
+}
+
+// UnmarshalJSON serializes ByteArray to hex
+func (s *Amount) UnmarshalJSON(data []byte) error {
+	str := strings.Trim(string(data), `"`)
+	s.SetString(str, 10)
 	return nil
 }

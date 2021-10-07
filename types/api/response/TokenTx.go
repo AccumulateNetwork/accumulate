@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 )
 
 const (
@@ -17,52 +18,53 @@ const (
 )
 
 type TokenTx struct {
-	TxId      types.Bytes32          `json:"txid"`
-	FromUrl   types.String           `json:"accountUrl"`
-	ToAccount []TokenTxAccountStatus `json:"to"`
+	TxId      types.Bytes           `json:"txid"`
+	From      types.String          `json:"from"`
+	ToAccount []TokenTxOutputStatus `json:"to"`
 }
 
-type TokenTxAccountStatus struct {
-	AccountUrl types.String `json:"accountUrl"`
-	Status     types.String `json:"status"`
+type TokenTxOutputStatus struct {
+	SyntheticTxId types.Bytes `json:"txid"`
+	api.TokenTxOutput
 }
 
-func (t *TokenTxAccountStatus) MarshalBinary() ([]byte, error) {
+func (t *TokenTxOutputStatus) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
-	data, err := t.AccountUrl.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-
-	buffer.Write(data)
-
-	data, err = t.Status.MarshalBinary()
+	data, err := t.SyntheticTxId.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 	buffer.Write(data)
+
+	data, err = t.TokenTxOutput.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(data)
+
 	return buffer.Bytes(), nil
 }
 
-func (t *TokenTxAccountStatus) UnmarshalBinary(data []byte) error {
+func (t *TokenTxOutputStatus) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if rErr := recover(); rErr != nil {
+			err = fmt.Errorf("insufficent data to unmarshal MultiSigTx %v", rErr)
+		}
+	}()
+
 	dLen := len(data)
 	if dLen < 1 {
 		return fmt.Errorf("insufficient data to unmarshal AccountUrl for TokenTxAccountStatus")
 	}
+	err = t.SyntheticTxId.UnmarshalBinary(data)
+	if err != nil {
+		return fmt.Errorf("unable to unmarshal SyntheticTxId from TokenTxAccountStatus, %v", err)
+	}
+	i := t.SyntheticTxId.Size(nil)
 
-	err := t.AccountUrl.UnmarshalBinary(data)
+	err = t.TokenTxOutput.UnmarshalBinary(data[i:])
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal AccountUrl from TokenTxAccountStatus, %v", err)
 	}
-	i := t.AccountUrl.Size(nil)
-	if dLen < i {
-		return fmt.Errorf("insufficient data to unmarshal Status for TokenTxAccountStatus")
-	}
-
-	err = t.Status.UnmarshalBinary(data[i:])
-	if err != nil {
-		return fmt.Errorf("unable to unmarshal Status from TokenTxAccountStatus, %v", err)
-	}
-
 	return nil
 }

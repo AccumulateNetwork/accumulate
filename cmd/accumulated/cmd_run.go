@@ -25,10 +25,13 @@ var cmdRun = &cobra.Command{
 	Run:   runNode,
 }
 
-var flagRun struct {
+var flagRun = struct {
 	Node        int
 	CiStopAfter time.Duration
-}
+}{}
+
+//note: making FlagRunStruct an anonymous struct will cause go fmt to fail on Windows
+//var flagRun flagRunStruct
 
 func init() {
 	cmdMain.AddCommand(cmdRun)

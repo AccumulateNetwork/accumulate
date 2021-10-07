@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -11,25 +12,31 @@ import (
 const MaxTokenTxOutputs = 100
 
 type TokenTx struct {
-	Hash types.Bytes32    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"` //,hexadecimal"`
+	Hash types.Bytes32    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
 	From types.UrlChain   `json:"from" form:"from" query:"from" validate:"required"`
 	To   []*TokenTxOutput `json:"to" form:"to" query:"to" validate:"required"`
 	Meta json.RawMessage  `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
+type TokenTxRequest struct {
+	Hash types.Bytes32  `json:"hash" form:"hash" query:"hash" validate:"required"`
+	From types.UrlChain `json:"from" form:"from" query:"from" validate:"required"`
+}
+
+//TokenTxOutput is the structure for the output.  Only handles 64 bit amounts at this time.
 type TokenTxOutput struct {
 	URL    types.UrlChain `json:"url" form:"url" query:"url" validate:"required"`
-	Amount types.Amount   `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
+	Amount uint64         `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
 }
 
 func NewTokenTx(from types.String) *TokenTx {
 	tx := &TokenTx{}
-	tx.From = types.UrlChain{String: from}
+	tx.From = types.UrlChain{from}
 	return tx
 }
 
-func (t *TokenTx) AddToAccount(toUrl types.String, amt *types.Amount) {
-	txOut := TokenTxOutput{types.UrlChain{String: toUrl}, *amt}
+func (t *TokenTx) AddToAccount(toUrl types.String, amt uint64) {
+	txOut := TokenTxOutput{types.UrlChain{String: toUrl}, amt}
 	t.To = append(t.To, &txOut)
 }
 
@@ -41,11 +48,32 @@ func (t *TokenTx) SetMetadata(md *json.RawMessage) error {
 	return nil
 }
 
+// Equal
+// returns true if t == t2, otherwise return false.  Comparing t with t2, if
+// any runtime error occurs we return false
+func (t *TokenTx) Equal(t2 *TokenTx) (ret bool) {
+	defer func() { //                      ret will default to false, so if any error occurs
+	}() //                                 we will return false as long as we catch any errors
+	if t.From != t2.From { //  Make sure accountURLs are the same
+		return false
+	}
+	tLen := len(t.To)                                               // Get our len
+	if tLen != len(t2.To) || tLen < 1 || tLen > MaxTokenTxOutputs { // Make sure len is in range and same as t2
+		return false //                                       If anything is different, function is false.
+	}
+	for i := range t.To {
+		if !t.To[i].Equal(t2.To[i]) {
+			return false
+		}
+	}
+	return true //                                           Only at the very end after all is done we return true
+}
+
 // MarshalBinary serialize the token transaction
 func (t *TokenTx) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(common.Int64Bytes(int64(types.TxTypeSyntheticTokenTx)))
+	buffer.Write(common.Uint64Bytes(types.TxTypeTokenTx.AsUint64()))
 
 	data, err := t.From.MarshalBinary()
 	if err != nil {
@@ -53,14 +81,14 @@ func (t *TokenTx) MarshalBinary() ([]byte, error) {
 	}
 	buffer.Write(data)
 
-	numOutputs := int64(len(t.To))
+	numOutputs := uint64(len(t.To))
 	if numOutputs > MaxTokenTxOutputs {
 		return nil, fmt.Errorf("too many outputs for token transaction, please specify between 1 and %d outputs", MaxTokenTxOutputs)
 	}
 	if numOutputs < 1 {
 		return nil, fmt.Errorf("insufficient token transaction outputs, please specify between 1 and %d outputs", MaxTokenTxOutputs)
 	}
-	buffer.Write(common.Int64Bytes(numOutputs))
+	buffer.Write(common.Uint64Bytes(numOutputs))
 	for i, v := range t.To {
 		data, err = v.MarshalBinary()
 		if err != nil {
@@ -84,14 +112,14 @@ func (t *TokenTx) MarshalBinary() ([]byte, error) {
 // UnmarshalBinary deserialize the token transaction
 func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
-		if recover() != nil {
-			err = fmt.Errorf("error marshaling TokenTx State %v", err)
+		if r := recover(); r != nil {
+			err = fmt.Errorf("error marshaling TokenTx State %v", r)
 		}
 	}()
 
-	txType, data := common.BytesInt64(data) // get the type
+	txType, data := common.BytesUint64(data) // get the type
 
-	if txType != int64(types.TxTypeSyntheticTokenTx) {
+	if txType != types.TxTypeTokenTx.AsUint64() {
 		return fmt.Errorf("invalid transaction type, expecting TokenTx")
 	}
 
@@ -101,14 +129,14 @@ func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
 	}
 
 	//get the length of the outputs
-	toLen, data := common.BytesInt64(data[t.From.Size(nil):])
+	toLen, data := common.BytesUint64(data[t.From.Size(nil):])
 
-	if toLen > 100 || toLen < 1 {
+	if toLen > MaxTokenTxOutputs || toLen < 1 {
 		return fmt.Errorf("invalid number of outputs for transaction")
 	}
 	t.To = make([]*TokenTxOutput, toLen)
 	i := 0
-	for j := int64(0); j < toLen; j++ {
+	for j := uint64(0); j < toLen; j++ {
 		txOut := &TokenTxOutput{}
 		err := txOut.UnmarshalBinary(data[i:])
 		if err != nil {
@@ -133,7 +161,24 @@ func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
 
 // Size return the size of the Token Tx output
 func (t *TokenTxOutput) Size() int {
-	return t.URL.Size(nil) + t.Amount.Size()
+	var buf [16]byte
+	count := binary.PutUvarint(buf[:], t.Amount)
+	return t.URL.Size(nil) + count
+}
+
+// Equal returns true if t = t2
+func (t *TokenTxOutput) Equal(t2 *TokenTxOutput) bool {
+	defer func() { //                      ret will default to false, so if any error occurs
+	}() //                                 we will return false as long as we catch any errors
+
+	if t.Amount != t2.Amount {
+		return false
+	}
+	if t.URL != t2.URL {
+		return false
+	}
+
+	return true
 }
 
 // MarshalBinary serialize the token tx output
@@ -146,18 +191,21 @@ func (t *TokenTxOutput) MarshalBinary() ([]byte, error) {
 	}
 	buffer.Write(data)
 
-	data, err = t.Amount.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
+	data = common.Uint64Bytes(t.Amount)
+
 	buffer.Write(data)
 	return buffer.Bytes(), nil
 }
 
 // UnmarshalBinary deserialize the token tx output
-func (t *TokenTxOutput) UnmarshalBinary(data []byte) error {
+func (t *TokenTxOutput) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if rErr := recover(); rErr != nil {
+			err = fmt.Errorf("error unmarshaling token tx output %v", rErr)
+		}
+	}()
 
-	err := t.URL.UnmarshalBinary(data)
+	err = t.URL.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
@@ -165,5 +213,6 @@ func (t *TokenTxOutput) UnmarshalBinary(data []byte) error {
 	if l > len(data) {
 		return fmt.Errorf("insufficient data to unmarshal amount")
 	}
-	return t.Amount.UnmarshalBinary(data[l:])
+	t.Amount, _ = common.BytesUint64(data[l:])
+	return nil
 }

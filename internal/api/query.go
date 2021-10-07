@@ -2,13 +2,13 @@ package api
 
 import (
 	"fmt"
-
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	acmeApi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
@@ -91,48 +91,52 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeApi.APIDataResponse,
 }
 
 // GetTokenTx
-// get the token tx from the primary adi, then query all the output accounts to get the status
-func (q *Query) GetTokenTx(tokenAccountUrl *string, txId []byte) (resp interface{}, err error) {
-	// need to know the ADI and ChainID, deriving adi and chain id from TokenTx.From
 
-	// TODO Why does this return a response.TokenTx instead of api.APIDataResponse?
+// GetTransaction
+// get the tx from the primary url, if the transaction spawned synthetic tx's then return the synth txid's
+func (q *Query) GetTransaction(url string, txId []byte) (resp *acmeApi.APIDataResponse, err error) {
 
-	r, err := q.Query(*tokenAccountUrl, txId)
+	aResp, err := q.Query(url, txId)
 	if err != nil {
 		return nil, fmt.Errorf("bvc token tx query returned error, %v", err)
 	}
 
-	tx, err := unmarshalTokenTx(r.Response)
+	qResp := aResp.Response
+	if qResp.Value == nil {
+		return nil, fmt.Errorf("no data available for txid %x", txId)
+	}
+
+	txData, txPendingRaw := common.BytesSlice(qResp.Value)
+	if txPendingRaw == nil {
+		return nil, fmt.Errorf("unable to obtain data from value")
+	}
+
+	txPendingData, txSynthTxIdsRaw := common.BytesSlice(txPendingRaw)
+	_ = txPendingData
+
+	if txSynthTxIdsRaw == nil {
+		return nil, fmt.Errorf("unable to obtain synth txids")
+	}
+
+	txSynthTxIds, _ := common.BytesSlice(txSynthTxIdsRaw)
+
+	if len(txSynthTxIds)%32 != 0 {
+		return nil, fmt.Errorf("invalid synth txids")
+	}
+
+	txObject := state.Object{}
+	err = txObject.UnmarshalBinary(txData)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid transaction object for query, %v", err)
 	}
 
-	rTx := new(response.TokenTx)
-	rTx.FromUrl = types.String(*tokenAccountUrl)
-	copy(rTx.TxId[:], txId)
-
-	//should receive tx,unmarshal to output accounts
-	for _, v := range tx.Outputs {
-		// TODO What is the purpose of this? It's executing the same query, repeatedly.
-		aResp, err := q.Query(*tokenAccountUrl, txId)
-
-		txStatus := response.TokenTxAccountStatus{}
-		if err != nil {
-			txStatus.Status = types.String(fmt.Sprintf("transaction not found for %s, %v", v.Dest, err))
-			txStatus.AccountUrl = types.String(v.Dest)
-		} else {
-			qResp := aResp.Response
-			err = txStatus.UnmarshalBinary(qResp.Value)
-			if err != nil {
-				txStatus.Status = types.String(fmt.Sprintf("%v", err))
-				txStatus.AccountUrl = types.String(v.Dest)
-			}
-		}
-
-		rTx.ToAccount = append(rTx.ToAccount, txStatus)
+	txState := state.Transaction{}
+	err = txState.UnmarshalBinary(txObject.Entry)
+	if err != nil {
+		return resp, NewAccumulateError(err)
 	}
 
-	return rTx, err
+	return unmarshalTransaction(url, txState.Transaction.Bytes(), txId, txSynthTxIds)
 }
 
 // GetChainState
@@ -142,8 +146,8 @@ func (q *Query) GetChainState(adiChainPath *string, txId []byte) (*api.APIDataRe
 	//this QuerySync call is only temporary until we get router setup.
 	r, err := q.Query(*adiChainPath, txId)
 	if err != nil {
-		return nil, fmt.Errorf("bvc token chain query returned error, %v", err)
+		return nil, fmt.Errorf("chain query returned error, %v", err)
 	}
 
-	return q.unmarshalByType(r.Response)
+	return q.unmarshalChainState(r.Response)
 }

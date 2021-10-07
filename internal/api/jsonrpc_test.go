@@ -20,8 +20,8 @@ import (
 )
 
 var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
-var loadWalletCount = flag.Int("loadtest-wallet-count", 100, "Number of wallets")
-var loadTxCount = flag.Int("loadtest-tx-count", 1000, "Number of transactions")
+var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
+var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 
 func TestLoadOnRemote(t *testing.T) {
 	if os.Getenv("CI") == "true" {
