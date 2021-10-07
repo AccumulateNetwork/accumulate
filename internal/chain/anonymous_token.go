@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 	"math/big"
 
@@ -47,7 +46,6 @@ func (c *AnonToken) DeliverTx(st *state.StateEntry, tx *transactions.GenTransact
 }
 
 func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-
 	//unmarshal the synthetic transaction based upon submission
 	deposit := synthetic.TokenTransactionDeposit{}
 	err := deposit.UnmarshalBinary(tx.Transaction)
@@ -72,55 +70,28 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 	}
 
 	//now check if the anonymous chain already exists.
-	//adiStateData := currentState.IdentityState
+	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
 
-	var txHash types.Bytes32
-	copy(txHash[:], tx.TransactionHash())
 	adiChainId := types.GetChainIdFromChainPath(&adi)
+
+	var account *state.TokenAccount
 
 	// if the identity state is nil, then it means we do not have any anon accts setup yet.
 	if st.AdiState == nil {
-		chainState := state.Chain{}
-
-		//we'll just create an adi state and set the initial values, and lock it so it cannot be updated.
-		chainState.SetHeader(types.String(adi), types.ChainTypeAnonTokenAccount)
-		//need to flag this as an anonymous account
-		data, err := chainState.MarshalBinary()
-		if err != nil {
-			// TODO either this is a bug or it needs a comment
-			return nil, nil
-		}
-		c.currentChainState[*types.GetChainIdFromChainPath(&adi)] = &chainState
-
-		st.DB.AddStateEntry(adiChainId, &txHash, data)
-
+		//setup an anon token account
+		object := new(state.Object)
+		st.AdiState = object
+		account = state.NewTokenAccount(adi, *deposit.TokenUrl.AsString())
+		account.Type = types.ChainTypeAnonTokenAccount
 	} else {
+		//check to see if we have an anon account
 		if st.AdiHeader.Type != types.ChainTypeAnonTokenAccount {
 			return nil, fmt.Errorf("adi for an anoymous chain is not an anonymous account")
 		}
-	}
-
-	//Next GetOrCreateTokenAccount
-	//the ADI is the Address, so now form the chain from the token type
-	url := fmt.Sprintf("%s/%s", adi, deposit.TokenUrl)
-	tokenChain := types.GetChainIdFromChainPath(&url)
-
-	//so now look up the token chain from the account
-	//The token state *CAN* be nil, if so we need to create it...
-	tokenState, err := st.DB.GetCurrentEntry(tokenChain[:])
-	if err != nil && !errors.Is(err, state.ErrNotFound) {
-		return nil, fmt.Errorf("unable to retrieve token chain for %s: %w", url, err)
-	}
-
-	//Unmarshal or create the token account
-	account := &state.TokenAccount{}
-	if tokenState == nil {
-		//we need to create a new state object.
-		account = state.NewTokenAccount(url, *deposit.TokenUrl.AsString())
-	} else {
-		err = account.UnmarshalBinary(tokenState.Entry)
+		//now can unmarshal the account
+		err := account.UnmarshalBinary(st.AdiState.Entry)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error unmarshaling anon state account object, %v", err)
 		}
 	}
 
@@ -130,42 +101,39 @@ func (c *AnonToken) deposit(st *state.StateEntry, tx *transactions.GenTransactio
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
 
-	//data, err := account.MarshalBinary()
-
-	//add the token account state to the chain.
-	//resp.AddStateData(tokenChain, data)
-
+	//now store the token account reference for quick access within the same block
 	taTx := &tokenAccountTx{}
 	taTx.account = account
 	taTx.txHash = append(taTx.txHash, &txHash)
-	c.currentBalanceState[*tokenChain] = taTx
+	c.currentBalanceState[*adiChainId] = taTx
 
-	//this will be optimized later.  really only need to record the tx's as a function of chain id then at end block record Tx
-	//want to pass back just an interface rather than marshaled data.
+	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
+	//This will reference the txid to keep the history
+	refUrl := fmt.Sprintf("%s/%d", adi, account.TxCount)
+	txr := state.NewTxReference(refUrl, txHash[:])
+	txrData, err := txr.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("unable to process transaction reference chain %v", err)
+	}
 
-	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.  This will reference the txid to keep the history
+	//now create the chain state object.
+	txRefChain := new(state.Object)
+	txRefChain.Entry = txrData
+	txRefChainId := types.GetChainIdFromChainPath(&refUrl)
 
 	//increment the token transaction count
 	account.TxCount++
 
 	data, err := account.MarshalBinary()
 	if err != nil {
-		// TODO why is this a panic?
-		panic("anon token end block, error marshaling account state.")
+		return nil, fmt.Errorf("unable to process anon transaction account %v", err)
 	}
-	st.DB.AddStateEntry(tokenChain, &txHash, data)
 
-	//if we get here it is successful. Store tx body on main chain, and verification data on pending
-	//txPendingState := state.NewPendingTransaction(submission)
-	//txState, txPendingState := state.NewTransaction(txPendingState)
-	//
-	//data, err = txState.MarshalBinary()
-	//resp.AddMainChainData(tokenChain, data)
+	st.AdiState.Entry = data
 
-	// since we have a successful transaction, we only need to store the transaction
-	// header that we can use to verify what is on the main chain. need to store reason...
-	//data, _ = txPendingState.MarshalBinary()
-	//resp.AddPendingData(&deposit.Txid, data)
+	//if we get here with no errors store the states
+	st.DB.AddStateEntry(adiChainId, &txHash, st.AdiState)
+	st.DB.AddStateEntry(txRefChainId, &txHash, txRefChain)
 
 	return new(DeliverTxResult), nil
 }
@@ -198,7 +166,7 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 	acmeTokenUrl := types.String("dc/ACME")
 
 	//this is the actual account url the acme tokens are being sent from
-	withdrawal.AccountURL = fmt.Sprintf("%s/%s", adi, acmeTokenUrl)
+	withdrawal.AccountURL = adi
 
 	//get the ChainId of the acme account for the anon address.
 	accountChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
@@ -206,7 +174,6 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 	var tokenAccountState *state.TokenAccount
 	var taTx *tokenAccountTx
 	if taTx = v.currentBalanceState[*accountChainId]; taTx == nil {
-
 		//because we use a different chain for the anonymous account, we need to fetch it.
 		st.ChainId = accountChainId
 		st.ChainState, err = st.DB.GetCurrentEntry(accountChainId[:])
@@ -252,7 +219,7 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 	}
 
 	//now build the synthetic transactions.
-	txid := tx.TransactionHash()
+	txid := types.Bytes(tx.TransactionHash())
 	for _, val := range withdrawal.Outputs {
 		txAmt.SetUint64(val.Amount)
 		//extract the target identity and chain from the url
@@ -289,33 +256,36 @@ func (v *AnonToken) sendToken(st *state.StateEntry, tx *transactions.GenTransact
 	if err != nil {
 		return nil, fmt.Errorf("error subtracting balance from account acc://%s, %v", st.AdiHeader.ChainUrl, err)
 	}
-	var txHash types.Bytes32
-	copy(txHash[:], txid)
 
-	//taTx := &tokenAccountTx{}
-	//taTx.account = tokenAccountState
-	//taTx.txHash = &txHash
-	//v.currentBalanceState[*accountChainId] = taTx
-	//this will be optimized later.  really only need to record the tx's as a function of chain id then at end block record Tx
-	//want to pass back just an interface rather than marshaled data.
+	txHash := txid.AsBytes32()
+	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
+	//This will reference the txid to keep the history
+	refUrl := fmt.Sprintf("%s/%d", adi, tokenAccountState.TxCount)
+	txr := state.NewTxReference(refUrl, txHash[:])
+	txrData, err := txr.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("unable to process transaction reference chain %v", err)
+	}
+
+	//now create the chain state object.
+	txRefChain := new(state.Object)
+	txRefChain.Entry = txrData
+	txRefChainId := types.GetChainIdFromChainPath(&refUrl)
+
+	//increment the token transaction count
+	tokenAccountState.TxCount++
+
+	//want to pass back just an interface rather than marshaled data, for now just
+	//do marshaled data
 	data, err := tokenAccountState.MarshalBinary()
 	if err != nil {
 		panic("anon token end block, error marshaling account state.")
 	}
-	st.DB.AddStateEntry(accountChainId, &txHash, data)
-	//if we get here we were successful so we can put the signature on the pending chain and transaction on the main chain
+	st.AdiState.Entry = data
 
-	//if we get here it is successful. Store tx body on main chain, and verification data on pending
-	//txPendingState := state.NewPendingTransaction(submission)
-	//txState, txPendingState := state.NewTransaction(txPendingState)
-	//data, _ := txState.MarshalBinary()
-	//resp.AddMainChainData(accountChainId, data)
-
-	// since we have a successful transaction, we only need to store the transaction
-	// header that we can use to verify what is on the main chain. need to store reason...
-	// need to redo this based upon updated transactions.SigInfo struct.  Need to store marshaled SigInfo + ED25519
-	//data, _ = txPendingState.MarshalBinary()
-	//resp.AddPendingData(&txHash, data)
+	//now update the state
+	st.DB.AddStateEntry(accountChainId, &txHash, st.AdiState)
+	st.DB.AddStateEntry(txRefChainId, &txHash, txRefChain)
 
 	return res, nil
 }
