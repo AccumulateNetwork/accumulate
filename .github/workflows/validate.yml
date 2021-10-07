@@ -44,13 +44,13 @@ jobs:
       - name: Init main
         run: ./accumulated init -w .nodes -n EastXeons -r EastXeons
 
-      #      - name: Init follower
-      #        run: |
-      #          rm -rf .nodes
-      #          ./accumulated init follower -w .nodes -n EastXeons -l tcp://127.0.2.1:3000
+      - name: Init follower
+        run: |
+          rm -rf .nodes
+          ./accumulated init follower -w .nodes -n EastXeons -l tcp://127.0.2.1:3000
 
-      #      - name: Run follower
-      #        run: ./accumulated run -w .nodes/Node0 --ci-stop-after 5s
+      # - name: Run follower
+      #   run: ./accumulated run -w .nodes/Node0 --ci-stop-after 5s
 
       - name: Init localhost
         run: |
@@ -64,3 +64,43 @@ jobs:
           sleep 5
           ./accumulated loadtest -r tcp://127.0.1.1:26657 --wallets 10 --transactions 10
           kill -9 $PID
+
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.15
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v ./...
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+
+      - name: Set up Go 1.x
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.15
+        id: go
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+
+      - name: Build
+        run: go build -v ./...
+
+      - name: Test
+        run: go test -v ./...
