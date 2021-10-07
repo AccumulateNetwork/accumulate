@@ -255,6 +255,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	adiJson := json.RawMessage(data)
 	req.Tx.Data = &adiJson
 
+	// TODO Why does this sign a ledger? This will fail in GenTransaction.
 	ledger := types.MarshalBinaryLedgerAdiChainPath(*adi.URL.AsString(), *req.Tx.Data, req.Tx.Timestamp)
 	sig, err := kpSponsor.Sign(ledger)
 	if err != nil {

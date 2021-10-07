@@ -172,7 +172,7 @@ func (t *GenTransaction) As(subTx encoding.BinaryUnmarshaler) error {
 	return subTx.UnmarshalBinary(t.Transaction)
 }
 
-func New(wallet *WalletEntry, subTx encoding.BinaryMarshaler) (*GenTransaction, error) {
+func New(url string, signer func(hash []byte) (*ED25519Sig, error), subTx encoding.BinaryMarshaler) (*GenTransaction, error) {
 	payload, err := subTx.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -180,7 +180,7 @@ func New(wallet *WalletEntry, subTx encoding.BinaryMarshaler) (*GenTransaction, 
 
 	tx := new(GenTransaction)
 	tx.SigInfo = new(SignatureInfo)
-	tx.SigInfo.URL = wallet.Addr
+	tx.SigInfo.URL = url
 	tx.Signature = make([]*ED25519Sig, 1)
 	tx.Transaction = payload
 
@@ -190,6 +190,9 @@ func New(wallet *WalletEntry, subTx encoding.BinaryMarshaler) (*GenTransaction, 
 	}
 
 	hash := tx.TransactionHash()
-	tx.Signature[0] = wallet.Sign(hash)
+	tx.Signature[0], err = signer(hash)
+	if err != nil {
+		return nil, err
+	}
 	return tx, nil
 }
