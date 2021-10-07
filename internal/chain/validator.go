@@ -87,19 +87,14 @@ func (v *validator) DeliverTx(st *state.StateEntry, tx *transactions.GenTransact
 		return nil, err
 	}
 
-	// No chain state exists for tx.ChainID
-	if st.ChainHeader == nil {
-		chain := v.chainCreate[txType]
-		if chain == nil {
-			return nil, fmt.Errorf("cannot create identity: unsupported TX type: %d", txType)
-		}
-		return chain.DeliverTx(st, tx)
+	// TODO Remove this hack
+	if st.ChainHeader != nil && st.ChainHeader.Type == types.ChainTypeAnonTokenAccount && txType == types.TxTypeTokenTx {
+		return v.chainUpdate[types.ChainTypeAnonTokenAccount].DeliverTx(st, tx)
 	}
 
-	// Chain and its ADI both exist
-	chain := v.chainUpdate[st.ChainHeader.Type]
+	chain := v.chainCreate[txType]
 	if chain == nil {
-		return nil, fmt.Errorf("cannot update chain: unsupported chain type: %d", st.ChainHeader.Type)
+		return nil, fmt.Errorf("cannot create identity: unsupported TX type: %d", txType)
 	}
 	return chain.DeliverTx(st, tx)
 }

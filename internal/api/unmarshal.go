@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -43,9 +44,12 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 
 func unmarshalADI(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 	return unmarshalAs(rQuery, "adi", func(b []byte) (interface{}, error) {
-		adi := new(response.ADI)
-		err := adi.ADI.UnmarshalBinary(b)
-		return adi, err
+		sAdi := new(state.AdiState)
+		err := sAdi.UnmarshalBinary(b)
+		rAdi := new(response.ADI)
+		rAdi.URL = sAdi.ChainUrl
+		rAdi.PublicKeyHash = sAdi.KeyData.AsBytes32()
+		return rAdi, err
 	})
 }
 
