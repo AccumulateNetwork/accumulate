@@ -10,8 +10,6 @@ import (
 )
 
 func NewBlockValidator() *validator {
-	// We will be moving towards the account chain validator for token
-	// transactions and eventually data tx
 	b := new(validator)
 	b.add(IdentityCreate{})
 	b.add(new(AnonToken))
@@ -20,6 +18,7 @@ func NewBlockValidator() *validator {
 	b.add(TokenAccountCreate{})
 	b.add(TokenTx{})
 	b.add(SynthTokenAccountCreate{})
+	b.add(SynthTokenDeposit{})
 	return b
 }
 
@@ -86,11 +85,6 @@ func (v *validator) DeliverTx(st *state.StateEntry, tx *transactions.GenTransact
 
 	if err := tx.SetRoutingChainID(); err != nil {
 		return nil, err
-	}
-
-	// TODO Remove this hack
-	if st.ChainHeader != nil && st.ChainHeader.Type == types.ChainTypeAnonTokenAccount && txType == types.TxTypeTokenTx {
-		return v.chainUpdate[types.ChainTypeAnonTokenAccount].DeliverTx(st, tx)
 	}
 
 	chain := v.chainCreate[txType]
