@@ -13,12 +13,13 @@ func NewBlockValidator() *validator {
 	// We will be moving towards the account chain validator for token
 	// transactions and eventually data tx
 	b := new(validator)
-	b.add(ADI{})
+	b.add(IdentityCreate{})
 	b.add(new(AnonToken))
-	b.add(SynIdentityCreate{})
+	b.add(SynthIdentityCreate{})
 	b.add(TokenIssuance{})
-	b.add(TokenChainCreate{})
+	b.add(TokenAccountCreate{})
 	b.add(TokenTx{})
+	b.add(SynthTokenAccountCreate{})
 	return b
 }
 

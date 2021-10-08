@@ -50,9 +50,9 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	return tx, nil
 }
 
-func CreateAnonTokenAccount(db *state.StateDB, accountKey ed25519.PrivKey, tokens float64) error {
-	accountUrl := types.String(anon.GenerateAcmeAddress(accountKey.PubKey().Bytes()))
-	adi, _, err := types.ParseIdentityChainPath(accountUrl.AsString())
+func CreateAnonTokenAccount(db *state.StateDB, key ed25519.PrivKey, tokens float64) error {
+	url := types.String(anon.GenerateAcmeAddress(key.PubKey().Bytes()))
+	adi, _, err := types.ParseIdentityChainPath(url.AsString())
 	if err != nil {
 		return err
 	}
@@ -70,4 +70,21 @@ func CreateAnonTokenAccount(db *state.StateDB, accountKey ed25519.PrivKey, token
 	}
 
 	return db.AddStateEntry(acctChainId, &types.Bytes32{}, acctObj)
+}
+
+func CreateADI(db *state.StateDB, key ed25519.PrivKey, url types.String) error {
+	keyHash := sha256.Sum256(key.PubKey().Bytes())
+
+	var err error
+	idState := state.NewIdentityState(url)
+	idState.KeyType = state.KeyTypeSha256
+	idState.KeyData = keyHash[:]
+	stateObj := new(state.Object)
+	stateObj.Entry, err = idState.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	chainId := types.GetIdentityChainFromIdentity(url.AsString())
+	return db.AddStateEntry(chainId, &types.Bytes32{}, stateObj)
 }

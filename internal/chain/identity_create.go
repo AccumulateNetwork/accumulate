@@ -10,20 +10,20 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
-type ADI struct{}
+type IdentityCreate struct{}
 
-func (ADI) createChain() types.TxType { return types.TxTypeIdentityCreate }
+func (IdentityCreate) createChain() types.TxType { return types.TxTypeIdentityCreate }
 
-func (ADI) BeginBlock() {}
+func (IdentityCreate) BeginBlock() {}
 
-func (ADI) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (IdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	if st == nil {
 		return fmt.Errorf("current state not defined")
 	}
 	return nil
 }
 
-func (ADI) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
 	if st == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
