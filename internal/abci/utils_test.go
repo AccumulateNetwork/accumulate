@@ -3,6 +3,7 @@ package abci_test
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -36,6 +37,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address) *fakeNode {
 
 	n := new(fakeNode)
 	n.t = t
+	n.db = db
 
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
@@ -65,6 +67,7 @@ func mustJSON(t testing.TB, v interface{}) string {
 
 type fakeNode struct {
 	t      testing.TB
+	db     *state.StateDB
 	app    abcitypes.Application
 	client *acctesting.ABCIApplicationClient
 	query  *accapi.Query
@@ -103,4 +106,27 @@ func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
 func generateKey() tmed25519.PrivKey {
 	_, key, _ := ed25519.GenerateKey(rand)
 	return tmed25519.PrivKey(key)
+}
+
+func (n *fakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
+	r, err := n.query.Query(url, nil)
+	require.NoError(n.t, err)
+
+	if r.Response.Code != 0 {
+		n.t.Fatalf("query failed with code %d: %s", r.Response.Code, r.Response.Info)
+	}
+
+	require.NoError(n.t, obj.UnmarshalBinary(r.Response.Value))
+}
+
+func (n *fakeNode) GetTokenAccount(url string) *state.TokenAccount {
+	acct := new(state.TokenAccount)
+	n.GetChainAs(url, acct)
+	return acct
+}
+
+func (n *fakeNode) GetADI(url string) *state.AdiState {
+	adi := new(state.AdiState)
+	n.GetChainAs(url, adi)
+	return adi
 }
