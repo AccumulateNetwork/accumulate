@@ -54,7 +54,7 @@ func NodeInitOptsForNetwork(name string) (node.InitOptions, error) {
 	}, nil
 }
 
-func NewBVCNode(dir string) (*node.Node, *privval.FilePV, error) {
+func NewBVCNode(dir string, cleanup func(func())) (*node.Node, *privval.FilePV, error) {
 	cfg, err := cfg.Load(dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load config: %v", err)
@@ -67,6 +67,9 @@ func NewBVCNode(dir string) (*node.Node, *privval.FilePV, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
+	cleanup(func() {
+		sdb.GetDB().Close()
+	})
 
 	// read private validator
 	pv, err := privval.LoadFilePV(
@@ -97,12 +100,10 @@ func NewBVCNode(dir string) (*node.Node, *privval.FilePV, error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create node: %v", err)
 	}
-
-	// Clean up, otherwise Windows complains
-	go func() {
-		<-node.Quit()
-		sdb.GetDB().Close()
-	}()
+	cleanup(func() {
+		node.Stop()
+		node.Wait()
+	})
 
 	return node, pv, nil
 }
