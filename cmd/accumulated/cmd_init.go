@@ -99,7 +99,7 @@ func initNode(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error: hard-coded network has invalid node type: %q\n", net.Type)
 			os.Exit(1)
 		}
-		if flagTestNet.NoEmptyBlocks {
+		if flagInit.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
 		}
 	}
