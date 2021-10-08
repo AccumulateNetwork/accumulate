@@ -41,8 +41,8 @@ func (n *fakeNode) anonTokenTest(count int) string {
 	n.Batch(func(send func(*Tx)) {
 		for i := 0; i < count; i++ {
 			recipient := recipients[rand.Intn(len(recipients))]
-			output := transactions.Output{Dest: recipient.Addr, Amount: 1000}
-			exch := transactions.NewTokenSend(origin.Addr, output)
+			exch := api.NewTokenTx(types.String(origin.Addr))
+			exch.AddToAccount(types.String(recipient.Addr), 1000)
 			tx, err := transactions.New(origin.Addr, func(hash []byte) (*transactions.ED25519Sig, error) {
 				return origin.Sign(hash), nil
 			}, exch)
@@ -103,10 +103,9 @@ func TestE2E_Accumulator_TokenTx_Anon(t *testing.T) {
 	charlieUrl := anon.GenerateAcmeAddress(charlie.PubKey().Bytes())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		tokenTx := transactions.NewTokenSend(aliceUrl,
-			transactions.Output{Dest: bobUrl, Amount: 1000},
-			transactions.Output{Dest: charlieUrl, Amount: 2000},
-		)
+		tokenTx := api.NewTokenTx(types.String(aliceUrl))
+		tokenTx.AddToAccount(types.String(bobUrl), 1000)
+		tokenTx.AddToAccount(types.String(charlieUrl), 2000)
 
 		tx, err := transactions.New(aliceUrl, edSigner(alice, 1), tokenTx)
 		require.NoError(t, err)
@@ -130,9 +129,8 @@ func TestE2E_Accumulator_TokenTx_ADI(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(n.db, "bar/tokens", "dc/ACME", 0, false))
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		tokenTx := transactions.NewTokenSend("foo/tokens",
-			transactions.Output{Dest: "bar/tokens", Amount: 68},
-		)
+		tokenTx := api.NewTokenTx("foo/tokens")
+		tokenTx.AddToAccount("bar/tokens", 68)
 
 		tx, err := transactions.New("foo/tokens", edSigner(fooKey, 1), tokenTx)
 		require.NoError(t, err)
@@ -187,8 +185,8 @@ func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {
 	b.ResetTimer()
 	n.Batch(func(send func(*Tx)) {
 		for i := 0; i < b.N; i++ {
-			output := transactions.Output{Dest: rwallet.Addr, Amount: 1000}
-			exch := transactions.NewTokenSend(origin.Addr, output)
+			exch := api.NewTokenTx(types.String(origin.Addr))
+			exch.AddToAccount(types.String(rwallet.Addr), 1000)
 			tx, err := transactions.New(origin.Addr, func(hash []byte) (*transactions.ED25519Sig, error) {
 				return origin.Sign(hash), nil
 			}, exch)
