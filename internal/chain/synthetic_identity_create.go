@@ -15,8 +15,6 @@ func (SynthIdentityCreate) Type() types.TxType {
 	return types.TxTypeSyntheticIdentityCreate
 }
 
-func (SynthIdentityCreate) BeginBlock() {}
-
 func (SynthIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	if st == nil {
 		//but this is to be expected...

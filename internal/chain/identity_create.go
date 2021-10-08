@@ -14,8 +14,6 @@ type IdentityCreate struct{}
 
 func (IdentityCreate) Type() types.TxType { return types.TxTypeIdentityCreate }
 
-func (IdentityCreate) BeginBlock() {}
-
 func (IdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	if st == nil {
 		return fmt.Errorf("current state not defined")
