@@ -12,7 +12,7 @@ import (
 
 type SynthTokenDeposit struct{}
 
-func (SynthTokenDeposit) createChain() types.TxType {
+func (SynthTokenDeposit) Type() types.TxType {
 	return types.TxTypeSyntheticTokenDeposit
 }
 
