@@ -19,20 +19,23 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
+	"github.com/ybbus/jsonrpc/v2"
 )
 
 type API struct {
 	config   *config.API
 	validate *validator.Validate
 	query    *Query
+	jsonrpc  jsonrpc.RPCClient
 }
 
 // StartAPI starts new JSON-RPC server
-func StartAPI(config *config.API, q *Query) *API {
+func StartAPI(config *config.API, q *Query) (*API, error) {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
 	api := &API{}
+	api.config = config
 	api.validate = validator.New()
 	api.query = q
 
@@ -60,7 +63,15 @@ func StartAPI(config *config.API, q *Query) *API {
 	apiRouter.HandleFunc("/v1", apiHandler)
 
 	proxyRouter := mux.NewRouter().StrictSlash(true)
-	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, proxyHandler)
+	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, api.proxyHandler)
+
+	rpcUrl, err := url.Parse(config.JSONListenAddress)
+	if err != nil {
+		return nil, err
+	}
+	rpcUrl.Scheme = "http"
+	rpcUrl.Path = "/v1"
+	api.jsonrpc = jsonrpc.NewClient(rpcUrl.String())
 
 	// start JSON RPC API
 	go listenAndServe("JSONRPC API", config.JSONListenAddress, apiRouter)
@@ -68,8 +79,29 @@ func StartAPI(config *config.API, q *Query) *API {
 	// start REST proxy for JSON RPC API
 	go listenAndServe("REST API", config.RESTListenAddress, proxyRouter)
 
-	return api
+	return api, nil
+}
 
+// proxyHandler makes JSON-RPC API request
+func (api *API) proxyHandler(w http.ResponseWriter, r *http.Request) {
+
+	w.Header().Add("Content-Type", "application/json")
+
+	// make "get" request to JSON RPC API
+	fmt.Printf("=============== proxyHandler Is going to send : %s ===========\n\n\n", r.URL)
+	params := &acmeapi.APIRequestURL{URL: types.String(r.URL.String()[1:])}
+
+	result, err := api.jsonrpc.Call("get", params)
+	if err != nil {
+		fmt.Fprintf(w, "%s", err)
+	}
+
+	response, err := json.Marshal(result)
+	if err != nil {
+		fmt.Fprintf(w, "%s", err)
+	}
+
+	fmt.Fprintf(w, "%s", response)
 }
 
 func listenAndServe(label, address string, handler http.Handler) {
