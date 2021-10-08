@@ -108,10 +108,7 @@ func TestE2E_Accumulator_TokenTx_Anon(t *testing.T) {
 			transactions.Output{Dest: charlieUrl, Amount: 2000},
 		)
 
-		tx, err := transactions.New(aliceUrl, func(hash []byte) (*transactions.ED25519Sig, error) {
-			sig := new(transactions.ED25519Sig)
-			return sig, sig.Sign(1, alice, hash)
-		}, tokenTx)
+		tx, err := transactions.New(aliceUrl, edSigner(alice, 1), tokenTx)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -121,6 +118,25 @@ func TestE2E_Accumulator_TokenTx_Anon(t *testing.T) {
 	require.Equal(t, int64(5e4*acctesting.TokenMx-3000), n.GetTokenAccount(aliceUrl).Balance.Int64())
 	require.Equal(t, int64(1000), n.GetTokenAccount(bobUrl).Balance.Int64())
 	require.Equal(t, int64(2000), n.GetTokenAccount(charlieUrl).Balance.Int64())
+}
+
+func TestE2E_Accumulator_TokenAccount_ADI(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{})
+	adiKey := generateKey()
+	require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		acctTx := api.NewTokenAccount("FooBar/Baz", "dc/ACME")
+		tx, err := transactions.New("FooBar", edSigner(adiKey, 1), acctTx)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	n.client.Wait()
+
+	r := n.GetTokenAccount("FooBar/Baz")
+	require.Equal(t, types.String("foobar/Baz"), r.ChainUrl)
+	require.Equal(t, types.String("dc/ACME"), r.TokenUrl.String)
 }
 
 func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {
