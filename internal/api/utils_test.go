@@ -19,24 +19,12 @@ func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV) {
 	opts.WorkDir = dir
 	opts.Port = GetFreePort(t)
 
-	for _, config := range opts.Config {
-		//[mempool]
-		//	broadcast = true
-		//	cache_size = 100000
-		//	max_batch_bytes = 10485760
-		//	max_tx_bytes = 1048576
-		//	max_txs_bytes = 1073741824
-		//	recheck = true
-		//	size = 50000
-		//	wal_dir = ""
-		//
+	opts.Config[0].Mempool.MaxBatchBytes = 1048576
+	opts.Config[0].Mempool.CacheSize = 1048576
+	opts.Config[0].Mempool.Size = 50000
 
-		// config.Mempool.KeepInvalidTxsInCache = false
-		// config.Mempool.MaxTxsBytes = 1073741824
-		config.Mempool.MaxBatchBytes = 1048576
-		config.Mempool.CacheSize = 1048576
-		config.Mempool.Size = 50000
-	}
+	// https://github.com/tendermint/tendermint/issues/7076
+	opts.Config[0].Instrumentation.Prometheus = false
 
 	require.NoError(t, node.Init(opts))                        // Configure
 	nodeDir := filepath.Join(dir, "Node0")                     //
