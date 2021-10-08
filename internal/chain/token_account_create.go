@@ -15,8 +15,6 @@ type TokenAccountCreate struct{}
 
 func (TokenAccountCreate) Type() types.TxType { return types.TxTypeTokenAccountCreate }
 
-func (TokenAccountCreate) BeginBlock() {}
-
 func (TokenAccountCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	if st == nil {
 		return fmt.Errorf("current state not defined")

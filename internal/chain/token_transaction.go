@@ -17,8 +17,6 @@ type TokenTx struct{}
 
 func (TokenTx) Type() types.TxType { return types.TxTypeTokenTx }
 
-func (c TokenTx) BeginBlock() {}
-
 func (c TokenTx) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	return nil
 }

@@ -16,8 +16,6 @@ func (SynthTokenDeposit) Type() types.TxType {
 	return types.TxTypeSyntheticTokenDeposit
 }
 
-func (SynthTokenDeposit) BeginBlock() {}
-
 func (SynthTokenDeposit) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	return nil
 }

@@ -15,8 +15,6 @@ func (SynthTokenAccountCreate) Type() types.TxType {
 	return types.TxTypeSyntheticTokenAccountCreate
 }
 
-func (SynthTokenAccountCreate) BeginBlock() {}
-
 func (SynthTokenAccountCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	return nil
 }
