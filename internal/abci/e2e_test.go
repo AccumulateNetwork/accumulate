@@ -120,7 +120,6 @@ func TestE2E_Accumulator_TokenTx_Anon(t *testing.T) {
 }
 
 func TestE2E_Accumulator_TokenTx_ADI(t *testing.T) {
-	t.Skip()
 	n := createAppWithMemDB(t, crypto.Address{})
 	fooKey, barKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))

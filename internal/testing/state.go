@@ -73,11 +73,11 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, url types.String) error {
 }
 
 func CreateTokenAccount(db *state.StateDB, url, tokenUrl string, tokens float64, anon bool) error {
-	adi, _, err := types.ParseIdentityChainPath(&url)
+	adi, chainPath, err := types.ParseIdentityChainPath(&url)
 	if err != nil {
 		return err
 	}
-	acctChainId := types.GetChainIdFromChainPath(&adi)
+	acctChainId := types.GetChainIdFromChainPath(&chainPath)
 
 	acctState := state.NewTokenAccount(adi, "dc/ACME")
 	if anon {
