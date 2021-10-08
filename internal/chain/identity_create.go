@@ -12,7 +12,7 @@ import (
 
 type IdentityCreate struct{}
 
-func (IdentityCreate) createChain() types.TxType { return types.TxTypeIdentityCreate }
+func (IdentityCreate) Type() types.TxType { return types.TxTypeIdentityCreate }
 
 func (IdentityCreate) BeginBlock() {}
 

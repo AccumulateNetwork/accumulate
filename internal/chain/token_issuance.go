@@ -12,7 +12,7 @@ import (
 
 type TokenIssuance struct{}
 
-func (TokenIssuance) createChain() types.TxType { return types.TxTypeTokenCreate }
+func (TokenIssuance) Type() types.TxType { return types.TxTypeTokenCreate }
 
 func (TokenIssuance) BeginBlock() {}
 

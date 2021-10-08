@@ -13,18 +13,17 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
-type AnonToken struct {
-}
+type AnonToken struct{}
 
-func (*AnonToken) createChain() types.TxType { return types.TxTypeTokenTx }
+func (AnonToken) Type() types.TxType { return types.TxTypeTokenTx }
 
-func (c *AnonToken) BeginBlock() {}
+func (c AnonToken) BeginBlock() {}
 
-func (c *AnonToken) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (c AnonToken) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	return nil
 }
 
-func (c *AnonToken) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (c AnonToken) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
 	res := new(DeliverTxResult)
 
 	if st.AdiState == nil {
