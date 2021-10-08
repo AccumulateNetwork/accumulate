@@ -14,11 +14,28 @@ import (
 type KeyType byte
 
 const (
-	KeyTypeSha256 KeyType = iota
+	KeyTypeUnknown KeyType = iota
+	KeyTypeSha256
 	KeyTypePublic
 	KeyTypeSha256d
 	KeyTypeChain
 )
+
+func (kt KeyType) String() string {
+	switch kt {
+	case KeyTypeUnknown:
+		return "Unknown"
+	case KeyTypeSha256:
+		return "SHA-256"
+	case KeyTypePublic:
+		return "Public"
+	case KeyTypeSha256d:
+		return "Double-SHA-256"
+	case KeyTypeChain:
+		return "Chain"
+	}
+	return fmt.Sprintf("KeyType:%d", kt)
+}
 
 type AdiState struct {
 	Chain
@@ -54,7 +71,7 @@ func (is *AdiState) GetType() uint64 {
 func (is *AdiState) VerifyKey(key []byte) bool {
 	//check if key is a valid public key for identity
 	if key[0] == is.KeyData[0] {
-		if bytes.Equal(key, is.KeyData) {
+		if bytes.Equal(is.KeyData, key) {
 			return true
 		}
 	}
@@ -62,7 +79,7 @@ func (is *AdiState) VerifyKey(key []byte) bool {
 	//check if key is a valid sha256(key) for identity
 	kh := sha256.Sum256(key)
 	if kh[0] == is.KeyData[0] {
-		if bytes.Equal(key, kh[:]) {
+		if bytes.Equal(is.KeyData, kh[:]) {
 			return true
 		}
 	}
@@ -70,7 +87,7 @@ func (is *AdiState) VerifyKey(key []byte) bool {
 	//check if key is a valid sha256d(key) for identity
 	kh = sha256.Sum256(kh[:])
 	if kh[0] == is.KeyData[0] {
-		if bytes.Equal(key, kh[:]) {
+		if bytes.Equal(is.KeyData, kh[:]) {
 			return true
 		}
 	}

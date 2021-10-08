@@ -1,11 +1,14 @@
 package state
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
@@ -87,4 +90,39 @@ func TestIdentityState(t *testing.T) {
 		t.Fatalf("Cannot marshal json")
 	}
 
+}
+
+func TestADI_VerifyKey(t *testing.T) {
+	var seed [32]byte
+
+	_, err := hex.Decode(seed[:], []byte("36422e9560f56e0ead53a83b33aec9571d379291b5e292b88dec641a98ef05d8"))
+	require.NoError(t, err)
+	key := ed25519.GenPrivKeyFromSecret(seed[:])
+	pubKey := key.PubKey().Bytes()
+	keyHash := sha256.Sum256(pubKey)
+	keyHash2 := sha256.Sum256(keyHash[:])
+
+	cases := []struct {
+		Type KeyType
+		Data []byte
+	}{
+		{KeyTypePublic, pubKey},
+		{KeyTypeSha256, keyHash[:]},
+		{KeyTypeSha256d, keyHash2[:]},
+	}
+
+	for _, a := range cases {
+		for _, b := range cases {
+			t.Run(fmt.Sprintf("%v x %v", a.Type, b.Type), func(t *testing.T) {
+				if b.Type != KeyTypePublic {
+					t.Skip("Not supported")
+				}
+
+				id := new(AdiState)
+				id.KeyType = a.Type
+				id.KeyData = a.Data
+				require.True(t, id.VerifyKey(b.Data), "Verification failed")
+			})
+		}
+	}
 }
