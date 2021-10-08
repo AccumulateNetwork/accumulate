@@ -10,6 +10,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
+	"github.com/ybbus/jsonrpc/v2"
 )
 
 func GetFreePort(t *testing.T) int {
@@ -21,16 +22,13 @@ func GetFreePort(t *testing.T) int {
 
 func NewTest(t *testing.T, q *Query) *API {
 	t.Helper()
-	return &API{randomRouterPorts(t), validator.New(), q}
-}
-
-func randomRouterPorts(t *testing.T) *cfg.API {
-	t.Helper()
 	port := GetFreePort(t)
-	return &cfg.API{
+	config := &cfg.API{
 		JSONListenAddress: fmt.Sprintf("localhost:%d", port),
 		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
 	}
+	jsonrpc := jsonrpc.NewClient(fmt.Sprintf("http://localhost:%d/v1", port))
+	return &API{config, validator.New(), q, jsonrpc}
 }
 
 func (api *API) GetData(ctx context.Context, params json.RawMessage) interface{} {
