@@ -9,8 +9,8 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
-func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Manager, error) {
-	return NewManager(query, db, key,
+func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
+	return NewExecutor(query, db, key,
 		IdentityCreate{},
 		AnonToken{},
 		SynthIdentityCreate{},
