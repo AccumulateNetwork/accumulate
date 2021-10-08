@@ -2,10 +2,15 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	stdlog "log"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
+	web "github.com/AccumulateNetwork/accumulated/internal/web/static"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
@@ -55,6 +60,29 @@ func (n *Node) Start() error {
 	err := n.Service.Start()
 	if err != nil {
 		return err
+	}
+
+	if n.Config.Accumulate.WebsiteEnabled {
+		u, err := url.Parse(n.Config.Accumulate.WebsiteListenAddress)
+		if err != nil {
+			return fmt.Errorf("invalid website listen address: %v", err)
+		}
+		if u.Scheme != "tcp" {
+			return fmt.Errorf("invalid website listen address: expected scheme tcp, got %q", u.Scheme)
+		}
+
+		website := http.Server{Addr: u.Host, Handler: http.FileServer(http.FS(web.FS))}
+		go func() {
+			<-n.Quit()
+			website.Shutdown(context.Background())
+		}()
+		go func() {
+			stdlog.Printf("Starting website on %s", u.Host)
+			err := website.ListenAndServe()
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				stdlog.Fatalf("Failed to start website: %v", err)
+			}
+		}()
 	}
 
 	localns, ok := n.Service.(local.NodeService)
