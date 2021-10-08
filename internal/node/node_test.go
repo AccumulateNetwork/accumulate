@@ -22,13 +22,13 @@ func TestNodeSetup(t *testing.T) {
 	opts.WorkDir = t.TempDir()
 	opts.Port = getFreePort(t)
 
-	require.NoError(t, node.Init(opts))             // Configure
-	nodeDir := filepath.Join(opts.WorkDir, "Node0") //
-	node, _, err := acctesting.NewBVCNode(nodeDir)  // Initialize
-	require.NoError(t, err)                         //
-	require.NoError(t, node.Start())                // Start
-	require.NoError(t, node.Stop())                 // Stop
-	node.Wait()                                     //
+	require.NoError(t, node.Init(opts))                       // Configure
+	nodeDir := filepath.Join(opts.WorkDir, "Node0")           //
+	node, _, err := acctesting.NewBVCNode(nodeDir, t.Cleanup) // Initialize
+	require.NoError(t, err)                                   //
+	require.NoError(t, node.Start())                          // Start
+	require.NoError(t, node.Stop())                           // Stop
+	node.Wait()                                               //
 }
 
 func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
@@ -43,13 +43,13 @@ func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
 			opts.Port = getFreePort(t)
 			opts.Config[0].Instrumentation.Prometheus = true
 
-			require.NoError(t, node.Init(opts))             // Configure
-			nodeDir := filepath.Join(opts.WorkDir, "Node0") //
-			node, _, err := acctesting.NewBVCNode(nodeDir)  // Initialize
-			require.NoError(t, err)                         //
-			require.NoError(t, node.Start())                // Start
-			require.NoError(t, node.Stop())                 // Stop
-			node.Wait()                                     //
+			require.NoError(t, node.Init(opts))                       // Configure
+			nodeDir := filepath.Join(opts.WorkDir, "Node0")           //
+			node, _, err := acctesting.NewBVCNode(nodeDir, t.Cleanup) // Initialize
+			require.NoError(t, err)                                   //
+			require.NoError(t, node.Start())                          // Start
+			require.NoError(t, node.Stop())                           // Stop
+			node.Wait()                                               //
 		})
 	}
 }
