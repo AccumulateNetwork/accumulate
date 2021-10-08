@@ -13,7 +13,7 @@ import (
 
 type TokenAccountCreate struct{}
 
-func (TokenAccountCreate) createChain() types.TxType { return types.TxTypeTokenAccountCreate }
+func (TokenAccountCreate) Type() types.TxType { return types.TxTypeTokenAccountCreate }
 
 func (TokenAccountCreate) BeginBlock() {}
 

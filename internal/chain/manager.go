@@ -18,10 +18,10 @@ import (
 const chainWGSize = 4
 
 type Manager struct {
-	db    *state.StateDB
-	chain Validator
-	key   ed25519.PrivateKey
-	query *accapi.Query
+	db        *state.StateDB
+	key       ed25519.PrivateKey
+	query     *accapi.Query
+	executors map[types.TxType]TxExecutor
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -31,30 +31,23 @@ type Manager struct {
 	nonce   uint64 //global nonce for synth tx's, needs to be managed in bvc/symnthsigstate.
 }
 
-type Validator interface {
-	// BeginBlock marks the beginning of a block.
-	BeginBlock()
-
-	// CheckTx partially validates the transaction.
-	CheckTx(*state.StateEntry, *transactions.GenTransaction) error
-
-	// DeliverTx fully validates the transaction.
-	DeliverTx(*state.StateEntry, *transactions.GenTransaction) (*DeliverTxResult, error)
-
-	// Commit commits the block.
-	Commit()
-}
-
 var _ abci.Chain = (*Manager)(nil)
 
-func NewManager(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, chain Validator) (*Manager, error) {
+func NewManager(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, executors ...TxExecutor) (*Manager, error) {
 	m := new(Manager)
 	m.db = db
-	m.chain = chain
+	m.executors = map[types.TxType]TxExecutor{}
 	m.key = key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
 	m.query = query
+
+	for _, x := range executors {
+		if _, ok := m.executors[x.Type()]; ok {
+			panic(fmt.Errorf("duplicate executor for %d", x.Type()))
+		}
+		m.executors[x.Type()] = x
+	}
 
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
 	return m, nil
@@ -89,7 +82,6 @@ func (m *Manager) BeginBlock(req abci.BeginBlockRequest) {
 	m.leader = req.IsLeader
 	m.height = req.Height
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
-	m.chain.BeginBlock()
 }
 
 // CheckTx implements ./abci.Chain
@@ -111,7 +103,8 @@ func (m *Manager) CheckTx(tx *transactions.GenTransaction) error {
 		return err
 	}
 
-	return m.chain.CheckTx(st, tx)
+	// TODO Forward to executor
+	return nil
 }
 
 // DeliverTx implements ./abci.Chain
@@ -132,6 +125,11 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 
 	if tx.Transaction == nil || tx.SigInfo == nil || len(tx.ChainID) != 32 {
 		return fmt.Errorf("malformed transaction")
+	}
+
+	executor, ok := m.executors[types.TxType(tx.TransactionType())]
+	if !ok {
+		return fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))
 	}
 
 	tx.TransactionHash()
@@ -171,7 +169,7 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 
 	// Validate
 	// TODO txValidated should return a list of chainId's the transaction touched.
-	txValidated, err := m.chain.DeliverTx(st, tx)
+	txValidated, err := executor.DeliverTx(st, tx)
 	if err != nil {
 		return fmt.Errorf("rejected by chain: %v", err)
 	}
@@ -227,7 +225,6 @@ func (m *Manager) EndBlock(req abci.EndBlockRequest) {}
 // Commit implements ./abci.Chain
 func (m *Manager) Commit() ([]byte, error) {
 	m.wg.Wait()
-	m.chain.Commit()
 
 	mdRoot, numStateChanges, err := m.db.WriteStates(m.height)
 	if err != nil {

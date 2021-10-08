@@ -11,7 +11,7 @@ import (
 
 type SynthTokenAccountCreate struct{}
 
-func (SynthTokenAccountCreate) createChain() types.TxType {
+func (SynthTokenAccountCreate) Type() types.TxType {
 	return types.TxTypeSyntheticTokenAccountCreate
 }
 
