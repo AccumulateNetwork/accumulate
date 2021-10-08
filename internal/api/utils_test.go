@@ -38,10 +38,10 @@ func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV) {
 		config.Mempool.Size = 50000
 	}
 
-	require.NoError(t, node.Init(opts))             // Configure
-	nodeDir := filepath.Join(dir, "Node0")          //
-	node, pv, err := acctesting.NewBVCNode(nodeDir) // Initialize
-	require.NoError(t, err)                         //
-	require.NoError(t, node.Start())                // Launch
+	require.NoError(t, node.Init(opts))                        // Configure
+	nodeDir := filepath.Join(dir, "Node0")                     //
+	node, pv, err := acctesting.NewBVCNode(nodeDir, t.Cleanup) // Initialize
+	require.NoError(t, err)                                    //
+	require.NoError(t, node.Start())                           // Launch
 	return node, pv
 }
