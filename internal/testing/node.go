@@ -85,8 +85,7 @@ func NewBVCNode(dir string, cleanup func(func())) (*node.Node, *privval.FilePV, 
 		return nil, nil, fmt.Errorf("failed to reate RPC client: %v", err)
 	}
 
-	bvc := chain.NewBlockValidator()
-	mgr, err := chain.NewManager(api.NewQuery(relay.New(rpcClient)), sdb, pv.Key.PrivKey.Bytes(), bvc)
+	mgr, err := chain.NewBlockValidator(api.NewQuery(relay.New(rpcClient)), sdb, pv.Key.PrivKey.Bytes())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
 	}

@@ -1,9 +1,7 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"testing"
 )
 
@@ -49,22 +47,5 @@ func TestTokenTransaction(t *testing.T) {
 		if !v.Equal(tt2.To[i]) {
 			t.Fatalf("outputs do not match")
 		}
-	}
-
-	ts := transactions.TokenSend{}
-	ts.AccountURL = "WileECoyote/MyACMETokens"
-	out := &transactions.Output{}
-	out.Amount = 6500
-	out.Dest = "AcmeCorporation/ACMETokens"
-	ts.Outputs = append(ts.Outputs, out)
-	out = &transactions.Output{}
-	out.Amount = 2500
-	out.Dest = "RoadRunner/beep/beep"
-	toAmt = 2500
-	ts.Outputs = append(ts.Outputs, out)
-
-	data2 := ts.Marshal()
-	if !bytes.Equal(data2, data) {
-		t.Fatal("binary incompat")
 	}
 }

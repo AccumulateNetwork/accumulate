@@ -84,8 +84,7 @@ func runNode(cmd *cobra.Command, args []string) {
 	}
 
 	query := api.NewQuery(relay.New(rpcClient))
-	bvc := chain.NewBlockValidator()
-	mgr, err := chain.NewManager(query, db, pv.Key.PrivKey.Bytes(), bvc)
+	mgr, err := chain.NewBlockValidator(query, db, pv.Key.PrivKey.Bytes())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize chain manager: %v", err)
 		os.Exit(1)
