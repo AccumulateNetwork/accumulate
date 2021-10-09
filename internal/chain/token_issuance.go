@@ -12,9 +12,7 @@ import (
 
 type TokenIssuance struct{}
 
-func (TokenIssuance) createChain() types.TxType { return types.TxTypeTokenCreate }
-
-func (TokenIssuance) BeginBlock() {}
+func (TokenIssuance) Type() types.TxType { return types.TxTypeTokenCreate }
 
 func (TokenIssuance) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	return nil

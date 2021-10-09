@@ -4,13 +4,13 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
-	api2 "github.com/AccumulateNetwork/accumulated/types/api"
 	"math/rand"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
+	apitypes "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
@@ -37,15 +37,18 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 			time.Sleep(200 * time.Millisecond)
 		}
 		const origin = 0
-		randDest := rand.Int()%(len(wallet)-1) + 1                            // pick a destination address
-		out := transactions.Output{Dest: wallet[randDest].Addr, Amount: 1000} // create the transaction output
-		addrCountMap[wallet[randDest].Addr]++                                 // count the number of deposits to output
-		send := transactions.NewTokenSend(wallet[origin].Addr, out)           // Create a send token transaction
-		gtx := new(transactions.GenTransaction)                               // wrap in a GenTransaction
-		gtx.SigInfo = new(transactions.SignatureInfo)                         // Get a Signature Info block
-		gtx.Transaction = send.Marshal()                                      // add  send transaction
-		gtx.SigInfo.URL = wallet[origin].Addr                                 // URL of source
-		if err := gtx.SetRoutingChainID(); err != nil {                       // Routing ChainID is the tx source
+		randDest := rand.Int()%(len(wallet)-1) + 1                     // pick a destination address
+		addrCountMap[wallet[randDest].Addr]++                          // count the number of deposits to output
+		send := apitypes.NewTokenTx(types.String(wallet[origin].Addr)) // Create a send token transaction
+		send.AddToAccount(types.String(wallet[randDest].Addr), 1000)   // create the transaction output
+		gtx := new(transactions.GenTransaction)                        // wrap in a GenTransaction
+		gtx.SigInfo = new(transactions.SignatureInfo)                  // Get a Signature Info block
+		gtx.Transaction, err = send.MarshalBinary()                    // add  send transaction
+		if err != nil {
+			return nil, err
+		}
+		gtx.SigInfo.URL = wallet[origin].Addr           // URL of source
+		if err := gtx.SetRoutingChainID(); err != nil { // Routing ChainID is the tx source
 			return nil, fmt.Errorf("failed to set routing chain ID: %v", err)
 		}
 
@@ -118,7 +121,7 @@ func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount u
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	from := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
 
-	tokenTx := api2.TokenTx{}
+	tokenTx := apitypes.TokenTx{}
 
 	tokenTx.From = types.UrlChain{from}
 	tokenTx.AddToAccount(types.String(destAddr), amount)

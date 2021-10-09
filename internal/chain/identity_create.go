@@ -12,9 +12,7 @@ import (
 
 type IdentityCreate struct{}
 
-func (IdentityCreate) createChain() types.TxType { return types.TxTypeIdentityCreate }
-
-func (IdentityCreate) BeginBlock() {}
+func (IdentityCreate) Type() types.TxType { return types.TxTypeIdentityCreate }
 
 func (IdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	if st == nil {

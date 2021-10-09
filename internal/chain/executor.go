@@ -17,11 +17,11 @@ import (
 
 const chainWGSize = 4
 
-type Manager struct {
-	db    *state.StateDB
-	chain Validator
-	key   ed25519.PrivateKey
-	query *accapi.Query
+type Executor struct {
+	db        *state.StateDB
+	key       ed25519.PrivateKey
+	query     *accapi.Query
+	executors map[types.TxType]TxExecutor
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -31,36 +31,29 @@ type Manager struct {
 	nonce   uint64 //global nonce for synth tx's, needs to be managed in bvc/symnthsigstate.
 }
 
-type Validator interface {
-	// BeginBlock marks the beginning of a block.
-	BeginBlock()
+var _ abci.Chain = (*Executor)(nil)
 
-	// CheckTx partially validates the transaction.
-	CheckTx(*state.StateEntry, *transactions.GenTransaction) error
-
-	// DeliverTx fully validates the transaction.
-	DeliverTx(*state.StateEntry, *transactions.GenTransaction) (*DeliverTxResult, error)
-
-	// Commit commits the block.
-	Commit()
-}
-
-var _ abci.Chain = (*Manager)(nil)
-
-func NewManager(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, chain Validator) (*Manager, error) {
-	m := new(Manager)
+func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, executors ...TxExecutor) (*Executor, error) {
+	m := new(Executor)
 	m.db = db
-	m.chain = chain
+	m.executors = map[types.TxType]TxExecutor{}
 	m.key = key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
 	m.query = query
 
+	for _, x := range executors {
+		if _, ok := m.executors[x.Type()]; ok {
+			panic(fmt.Errorf("duplicate executor for %d", x.Type()))
+		}
+		m.executors[x.Type()] = x
+	}
+
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
 	return m, nil
 }
 
-func (m *Manager) Query(q *api.Query) ([]byte, error) {
+func (m *Executor) Query(q *api.Query) ([]byte, error) {
 	if q.Content != nil {
 		tx, pendingTx, synthTxIds, err := m.db.GetTx(q.Content)
 		if err != nil {
@@ -85,15 +78,14 @@ func (m *Manager) Query(q *api.Query) ([]byte, error) {
 }
 
 // BeginBlock implements ./abci.Chain
-func (m *Manager) BeginBlock(req abci.BeginBlockRequest) {
+func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 	m.leader = req.IsLeader
 	m.height = req.Height
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
-	m.chain.BeginBlock()
 }
 
 // CheckTx implements ./abci.Chain
-func (m *Manager) CheckTx(tx *transactions.GenTransaction) error {
+func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 	err := tx.SetRoutingChainID()
 	if err != nil {
 		return err
@@ -111,11 +103,12 @@ func (m *Manager) CheckTx(tx *transactions.GenTransaction) error {
 		return err
 	}
 
-	return m.chain.CheckTx(st, tx)
+	// TODO Forward to executor
+	return nil
 }
 
 // DeliverTx implements ./abci.Chain
-func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
+func (m *Executor) DeliverTx(tx *transactions.GenTransaction) error {
 	m.wg.Add(1)
 
 	// If this is done async (`go m.deliverTxAsync(tx)`), how would an error
@@ -132,6 +125,11 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 
 	if tx.Transaction == nil || tx.SigInfo == nil || len(tx.ChainID) != 32 {
 		return fmt.Errorf("malformed transaction")
+	}
+
+	executor, ok := m.executors[types.TxType(tx.TransactionType())]
+	if !ok {
+		return fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))
 	}
 
 	tx.TransactionHash()
@@ -171,7 +169,7 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 
 	// Validate
 	// TODO txValidated should return a list of chainId's the transaction touched.
-	txValidated, err := m.chain.DeliverTx(st, tx)
+	txValidated, err := executor.DeliverTx(st, tx)
 	if err != nil {
 		return fmt.Errorf("rejected by chain: %v", err)
 	}
@@ -222,12 +220,11 @@ func (m *Manager) DeliverTx(tx *transactions.GenTransaction) error {
 }
 
 // EndBlock implements ./abci.Chain
-func (m *Manager) EndBlock(req abci.EndBlockRequest) {}
+func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
 
 // Commit implements ./abci.Chain
-func (m *Manager) Commit() ([]byte, error) {
+func (m *Executor) Commit() ([]byte, error) {
 	m.wg.Wait()
-	m.chain.Commit()
 
 	mdRoot, numStateChanges, err := m.db.WriteStates(m.height)
 	if err != nil {
@@ -260,7 +257,7 @@ func (m *Manager) Commit() ([]byte, error) {
 
 // isSane will check the nonce (if applicable), check the public key for the transaction,
 // and verify the signature of the transaction.
-func (m *Manager) isSane(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (m *Executor) isSane(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	// if st.IsValid(state.MaskChainState | state.MaskAdiState) {
 	// 	//1. verify nonce
 	// 	//2. verify public key against state
@@ -272,7 +269,7 @@ func (m *Manager) isSane(st *state.StateEntry, tx *transactions.GenTransaction) 
 	return nil
 }
 
-func (m *Manager) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResult) (err error) {
+func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResult) (err error) {
 	// Need to pass this to a threaded batcher / dispatcher to do both signing
 	// and sending of synth tx. No need to spend valuable time here doing that.
 	for _, tx := range vtx.Submissions {

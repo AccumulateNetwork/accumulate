@@ -1,14 +1,35 @@
 package chain
 
 import (
+	"crypto/ed25519"
+
+	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
-type Chain interface {
-	BeginBlock()
+func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
+	return NewExecutor(query, db, key,
+		IdentityCreate{},
+		TokenTx{},
+		SynthIdentityCreate{},
+		TokenIssuance{},
+		TokenAccountCreate{},
+		SynthTokenAccountCreate{},
+		SynthTokenDeposit{},
+	)
+}
+
+// TxExecutor executes a specific type of transaction.
+type TxExecutor interface {
+	// Type is the transaction type the executor can execute.
+	Type() types.TxType
+
+	// CheckTx partially validates the transaction.
 	CheckTx(*state.StateEntry, *transactions.GenTransaction) error
+
+	// DeliverTx fully validates and executes the transaction.
 	DeliverTx(*state.StateEntry, *transactions.GenTransaction) (*DeliverTxResult, error)
 }
 

@@ -11,11 +11,9 @@ import (
 
 type SynthIdentityCreate struct{}
 
-func (SynthIdentityCreate) createChain() types.TxType {
+func (SynthIdentityCreate) Type() types.TxType {
 	return types.TxTypeSyntheticIdentityCreate
 }
-
-func (SynthIdentityCreate) BeginBlock() {}
 
 func (SynthIdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	if st == nil {

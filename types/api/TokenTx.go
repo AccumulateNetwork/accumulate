@@ -30,10 +30,18 @@ type TokenTxOutput struct {
 	Amount uint64         `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
 }
 
-func NewTokenTx(from types.String) *TokenTx {
+func NewTokenTx(from types.String, to ...*TokenTxOutput) *TokenTx {
 	tx := &TokenTx{}
 	tx.From = types.UrlChain{from}
+	tx.To = to
 	return tx
+}
+
+func NewTokenTxOutput(url types.String, amount uint64) *TokenTxOutput {
+	txo := new(TokenTxOutput)
+	txo.URL = types.UrlChain{url}
+	txo.Amount = amount
+	return txo
 }
 
 func (t *TokenTx) AddToAccount(toUrl types.String, amt uint64) {

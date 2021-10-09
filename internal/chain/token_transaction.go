@@ -1,12 +1,13 @@
 package chain
 
 import (
-	"bytes"
-	"crypto/sha256"
 	"fmt"
 	"math/big"
 
+	"github.com/AccumulateNetwork/accumulated/types/api"
+
 	"github.com/AccumulateNetwork/accumulated/types"
+	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -14,169 +15,143 @@ import (
 
 type TokenTx struct{}
 
-func (TokenTx) updateChain() types.ChainType { return types.ChainTypeToken }
+func (TokenTx) Type() types.TxType { return types.TxTypeTokenTx }
 
-func (TokenTx) BeginBlock() {}
-
-func (TokenTx) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	if st.AdiState == nil {
-		return fmt.Errorf("identity state does not exist for anonymous transaction")
-	}
-
-	withdrawal := transactions.TokenSend{} //api.TokenTx{}
-	_, err := withdrawal.Unmarshal(tx.Transaction)
-	if err != nil {
-		return fmt.Errorf("error with send token in TokenTransactionValidator.CheckTx, %v", err)
-	}
-
-	tas := &state.TokenAccount{}
-	err = tas.UnmarshalBinary(st.ChainState.Entry)
-	if err != nil {
-		return fmt.Errorf("cannot unmarshal token account, %v", err)
-	}
-	err = canSendTokens(st, tas, &withdrawal)
-	return err
+func (c TokenTx) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+	return nil
 }
 
-func (TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	//need to do everything done in "check" and also create a synthetic transaction to add tokens.
-	withdrawal := transactions.TokenSend{} //api.TokenTx{}
-	_, err := withdrawal.Unmarshal(tx.Transaction)
-	if err != nil {
-		return nil, fmt.Errorf("error with send token in TokenTransactionValidator.DeliverTx, %v", err)
-	}
-
-	ids := &state.AdiState{}
-	err = ids.UnmarshalBinary(st.AdiState.Entry)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling adi")
-	}
-
-	tas := &state.TokenAccount{}
-	err = tas.UnmarshalBinary(st.AdiState.Entry)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling token account")
-	}
-
-	err = canSendTokens(st, tas, &withdrawal)
-
-	if ids == nil {
-		return nil, fmt.Errorf("invalid identity state retrieved for token transaction")
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	keyHash := sha256.Sum256(tx.Signature[0].PublicKey)
-	if !ids.VerifyKey(keyHash[:]) {
-		return nil, fmt.Errorf("key not authorized for signing transaction")
-	}
-
-	//need to do a nonce check.
-	if tx.SigInfo.Nonce <= ids.Nonce {
-		return nil, fmt.Errorf("invalid nonce in transaction, cannot proceed")
-	}
-
-	txid := tx.TransactionHash()
-
+func (c TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
 	res := new(DeliverTxResult)
-	res.Submissions = make([]*transactions.GenTransaction, 0, len(withdrawal.Outputs))
 
-	txAmt := big.NewInt(0)
-	var amt big.Int
-	for _, val := range withdrawal.Outputs {
-		amt.SetUint64(val.Amount)
-
-		//accumulate the total amount of the transaction
-		txAmt.Add(txAmt, &amt)
-
-		//extract the target identity and chain from the url
-		adi, chainPath, err := types.ParseIdentityChainPath(&val.Dest)
-		if err != nil {
-			return nil, err
-		}
-		destUrl := types.String(chainPath)
-
-		//get the identity id from the adi
-		idChain := types.GetIdentityChainFromIdentity(&adi)
-		if idChain == nil {
-			return nil, fmt.Errorf("Invalid identity chain for %s", adi)
-		}
-
-		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
-		sub := new(transactions.GenTransaction)
-		res.AddSyntheticTransaction(sub)
-
-		//set the identity chain for the destination
-		sub.Routing = types.GetAddressFromIdentity(&adi)
-
-		//set the chain id for the destination
-		sub.ChainID = types.GetChainIdFromChainPath(&chainPath).Bytes()
-
-		//set the transaction instruction type to a synthetic token deposit
-		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &tas.ChainUrl, &destUrl)
-		err = depositTx.SetDeposit(&tas.TokenUrl.String, &amt)
-		if err != nil {
-			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction")
-		}
-
-		sub.Transaction, err = depositTx.MarshalBinary()
-		if err != nil {
-			return nil, fmt.Errorf("unable to set sender info for synthetic token deposit transaction")
-		}
+	if st.ChainHeader == nil {
+		return nil, fmt.Errorf("cannot find state for %q", tx.SigInfo.URL)
 	}
-
-	//subtract the transfer amount from the balance
-	err = tas.SubBalance(txAmt)
-	if err != nil {
-		return nil, err
-	}
-
-	//issue a state change...
-	tasso, err := tas.MarshalBinary()
-
-	if err != nil {
-		return nil, err
-	}
-
-	//return a transaction state object
-	res.AddStateData(st.ChainId, tasso)
-	return res, nil
-}
-
-func canSendTokens(st *state.StateEntry, tas *state.TokenAccount, withdrawal *transactions.TokenSend) error {
-	if st.ChainState == nil {
-		return fmt.Errorf("no account exists for the chain")
-	}
-
 	if st.AdiState == nil {
-		return fmt.Errorf("no identity exists for the chain")
+		return nil, fmt.Errorf("cannot find identity for %q", tx.SigInfo.URL)
 	}
 
-	if withdrawal == nil {
-		//defensive check / shouldn't get where.
-		return fmt.Errorf("withdrawl account doesn't exist")
+	var adi *state.AdiState
+	var err error
+	if st.AdiHeader.Type == types.ChainTypeAdi {
+		adi = new(state.AdiState)
+		err = st.AdiState.As(adi)
+		if err != nil {
+			return nil, fmt.Errorf("failed to unmarshal identity: %v", err)
+		}
 	}
 
-	//verify the tx.from is from the same chain
-	fromChainId := types.GetChainIdFromChainPath(&withdrawal.AccountURL)
-	if bytes.Equal(st.ChainId[:], fromChainId[:]) {
-		return fmt.Errorf("from state object transaction account doesn't match transaction")
+	withdrawal := api.TokenTx{}
+	err = withdrawal.UnmarshalBinary(tx.Transaction)
+	if err != nil {
+		return nil, fmt.Errorf("error with send token, %v", err)
+	}
+
+	if withdrawal.From.String != types.String(tx.SigInfo.URL) {
+		return nil, fmt.Errorf("withdraw address and transaction sponsor do not match")
+	}
+
+	acctState := new(state.TokenAccount)
+	err = st.ChainState.As(acctState)
+	if err != nil {
+		return nil, err
 	}
 
 	//now check to see if we can transact
 	//really only need to provide one input...
+	//now check to see if the account is good to send tokens from
 	amt := types.Amount{}
-	var outAmt big.Int
-	for _, val := range withdrawal.Outputs {
-		amt.Add(amt.AsBigInt(), outAmt.SetUint64(val.Amount))
+	txAmt := big.NewInt(0)
+	for _, val := range withdrawal.To {
+		amt.Add(amt.AsBigInt(), txAmt.SetUint64(val.Amount))
 	}
 
-	//make sure the user has enough in the account to perform the transaction
-	if tas.GetBalance().Cmp(amt.AsBigInt()) < 0 {
-		///insufficient balance
-		return fmt.Errorf("insufficient balance")
+	if !acctState.CanTransact(amt.AsBigInt()) {
+		return nil, fmt.Errorf("insufficient balance")
 	}
-	return nil
+
+	switch st.AdiHeader.Type {
+	case types.ChainTypeAnonTokenAccount:
+		address := anon.GenerateAcmeAddress(tx.Signature[0].PublicKey)
+		if address != tx.SigInfo.URL {
+			return nil, fmt.Errorf("TX signature key does not match the sponsor's key")
+		}
+
+	case types.ChainTypeAdi:
+		if !adi.VerifyKey(tx.Signature[0].PublicKey) {
+			return nil, fmt.Errorf("TX signature key does not match the sponsor's key")
+		}
+	}
+
+	//now build the synthetic transactions.
+	txid := types.Bytes(tx.TransactionHash())
+	for _, val := range withdrawal.To {
+		txAmt.SetUint64(val.Amount)
+		//extract the target identity and chain from the url
+		destAdi, destChainPath, err := types.ParseIdentityChainPath(val.URL.AsString())
+		if err != nil {
+			return nil, err
+		}
+		destUrl := types.String(destChainPath)
+
+		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
+		gtx := new(transactions.GenTransaction)
+
+		//set the identity chain for the destination
+		gtx.Routing = types.GetAddressFromIdentity(&destAdi)
+		gtx.ChainID = types.GetChainIdFromChainPath(destUrl.AsString()).Bytes()
+		gtx.SigInfo = new(transactions.SignatureInfo)
+		gtx.SigInfo.URL = destChainPath
+
+		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &st.ChainHeader.ChainUrl, &destUrl)
+		err = depositTx.SetDeposit(&acctState.TokenUrl.String, txAmt)
+		if err != nil {
+			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction, %v", err)
+		}
+
+		gtx.Transaction, err = depositTx.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("unable to marshal synthetic token transaction deposit, %v", err)
+		}
+
+		res.AddSyntheticTransaction(gtx)
+	}
+
+	err = acctState.SubBalance(amt.AsBigInt())
+	if err != nil {
+		return nil, fmt.Errorf("error subtracting balance from account acc://%s, %v", st.AdiHeader.ChainUrl, err)
+	}
+
+	txHash := txid.AsBytes32()
+	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
+	//This will reference the txid to keep the history
+	_, chainPath, _ := types.ParseIdentityChainPath(withdrawal.From.AsString())
+	refUrl := fmt.Sprintf("%s/%d", chainPath, acctState.TxCount)
+	txr := state.NewTxReference(refUrl, txHash[:])
+	txrData, err := txr.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("unable to process transaction reference chain %v", err)
+	}
+
+	//now create the chain state object.
+	txRefChain := new(state.Object)
+	txRefChain.Entry = txrData
+	txRefChainId := types.GetChainIdFromChainPath(&refUrl)
+
+	//increment the token transaction count
+	acctState.TxCount++
+
+	//want to pass back just an interface rather than marshaled data, for now just
+	//do marshaled data
+	data, err := acctState.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal account state: %v", err)
+	}
+	st.AdiState.Entry = data
+
+	//now update the state
+	st.DB.AddStateEntry(st.ChainId, &txHash, st.AdiState)
+	st.DB.AddStateEntry(txRefChainId, &txHash, txRefChain)
+
+	return res, nil
 }
