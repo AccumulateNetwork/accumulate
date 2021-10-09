@@ -1,0 +1,11 @@
+dashboard: 'Main'
+
+panel_groups:
+  - group: 'Memory'
+    panels:
+      - title: Prometheus
+        type: single-stat
+        metrics:
+            - query: 'go_memstats_alloc_bytes / 1024 /1024'
+              unit: 'MB'
+              label: "Allocated"
