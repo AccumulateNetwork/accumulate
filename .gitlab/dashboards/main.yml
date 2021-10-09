@@ -11,6 +11,6 @@ panel_groups:
           precision: 0
         metrics:
           - id: my_metric_id
-            query_range: 'go_memstats_alloc_bytes / 1024 / 1024'
-            label: 'Instance: {{instance}}, method: {{method}}'
+            query_range: 'go_memstats_alloc_bytes{job!="prometheus"} / 1024 / 1024'
+            label: 'Instance: {{instance}}, Network: {{job}}'
             unit: 'MB'
