@@ -58,16 +58,16 @@ func Init(opts InitOptions) (err error) {
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
-//		config.Instrumentation.Namespace = opts.ShardName
+		config.Accumulate.WebsiteEnabled = true
+		config.Accumulate.WebsiteListenAddress = fmt.Sprintf("%s:8080", opts.ListenIP[i])
 
-		// config.ProxyApp = fmt.Sprintf("%s:%d", IPs[i], opts.Port)
 		config.ProxyApp = ""
 		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmP2pPortOffset)
 		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+TmRpcPortOffset)
 		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmRpcGrpcPortOffset)
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+tmPrometheusPortOffset)
 		config.Instrumentation.Prometheus = true
-		
+
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
 			return fmt.Errorf("failed to create config dir: %v", err)
