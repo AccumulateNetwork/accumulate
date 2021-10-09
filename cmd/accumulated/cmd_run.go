@@ -1,12 +1,18 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	"github.com/AccumulateNetwork/accumulated/internal/api"
@@ -14,6 +20,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
@@ -56,6 +63,24 @@ func runNode(cmd *cobra.Command, args []string) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: reading config file: %v\n", err)
 		os.Exit(1)
+	}
+
+	if config.Accumulate.SentryDSN != "" {
+		opts := sentry.ClientOptions{
+			Dsn:           config.Accumulate.SentryDSN,
+			Environment:   "Accumulate",
+			HTTPTransport: sentryHack{},
+			Debug:         true,
+		}
+		if accumulated.IsVersionKnown() {
+			opts.Release = accumulated.Commit
+		}
+		err = sentry.Init(opts)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: configuring sentry: %v\n", err)
+			os.Exit(1)
+		}
+		defer sentry.Flush(2 * time.Second)
 	}
 
 	dbPath := filepath.Join(config.RootDir, "valacc.db")
@@ -130,4 +155,48 @@ func runNode(cmd *cobra.Command, args []string) {
 
 	// TODO I tried stopping the node, but node.Stop() won't return for a
 	// follower node until it's caught up (I think).
+}
+
+type sentryHack struct{}
+
+func (sentryHack) RoundTrip(req *http.Request) (*http.Response, error) {
+	if req.URL.Host != "gitlab.com" {
+		return http.DefaultTransport.RoundTrip(req)
+	}
+
+	defer func() {
+		r := recover()
+		if r != nil {
+			log.Printf("Failed to send event to sentry: %v", r)
+		}
+	}()
+
+	defer req.Body.Close()
+	b, err := io.ReadAll(req.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var v map[string]interface{}
+	err = json.Unmarshal(b, &v)
+	if err != nil {
+		return nil, err
+	}
+
+	ex := v["exception"]
+
+	// GitLab expects the event to have a different shape
+	v["exception"] = map[string]interface{}{
+		"values": ex,
+	}
+
+	b, err = json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+
+	req.ContentLength = int64(len(b))
+	req.Body = io.NopCloser(bytes.NewReader(b))
+	resp, err := http.DefaultTransport.RoundTrip(req)
+	return resp, err
 }

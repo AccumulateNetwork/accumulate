@@ -5,10 +5,12 @@ import (
 	_ "crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/getsentry/sentry-go"
 
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -61,11 +63,15 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	// executable version tells us what commit to look at when debugging a crash
 	// log.
 
-	data, _ := json.Marshal(struct {
-		Version string
+	data, err := json.Marshal(struct {
+		Version, Commit string
 	}{
 		Version: accumulated.Version,
+		Commit:  accumulated.Commit,
 	})
+	if err != nil {
+		sentry.CaptureException(err)
+	}
 
 	return abci.ResponseInfo{
 		Data:             string(data),
@@ -84,14 +90,16 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	query := new(api.Query)
 	err := query.UnmarshalBinary(reqQuery.Data)
 	if err != nil {
-		resQuery.Info = "requst is not an Accumulate Query\n"
+		sentry.CaptureException(err)
+		resQuery.Info = "request is not an Accumulate Query"
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
 
 	ret, err := app.chain.Query(query)
 	if err != nil {
-		resQuery.Info = fmt.Sprintf("%v", err)
+		sentry.CaptureException(err)
+		resQuery.Info = err.Error()
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
@@ -180,6 +188,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	//check to see if there was an error decoding the submission
 	if len(rem) != 0 || err != nil {
+		sentry.CaptureException(err)
 		//reject it
 		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: "Unable to decode transaction"}
@@ -188,6 +197,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	err = app.chain.CheckTx(sub)
 
 	if err != nil {
+		sentry.CaptureException(err)
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
@@ -211,6 +221,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	//how do i detect errors?  This causes segfaults if not tightly checked.
 	_, err := sub.UnMarshal(req.Tx)
 	if err != nil {
+		sentry.CaptureException(err)
 		return abci.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: "Unable to decode transaction"}
 	}
@@ -219,6 +230,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	err = app.chain.DeliverTx(sub)
 
 	if err != nil {
+		sentry.CaptureException(err)
 		ret.Code = code.CodeTypeUnauthorized
 		//ret.GasWanted = 0
 		//ret.GasUsed = 0
@@ -267,8 +279,9 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 	resp.Data = mdRoot
 
 	if err != nil {
-		//should never get here.
-		panic(err)
+		sentry.CaptureException(err)
+		log.Println(err)
+		return
 	}
 
 	//this will truncate what tendermint stores since we only care about current state
