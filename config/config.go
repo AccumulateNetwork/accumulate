@@ -49,6 +49,7 @@ type Accumulate struct {
 
 	WebsiteEnabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
 	WebsiteListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
+	SentryDSN            string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 }
 
 type RPC struct {

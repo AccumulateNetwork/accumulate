@@ -38,4 +38,5 @@ func showVersion(*cobra.Command, []string) {
 	}
 
 	fmt.Printf("%s %s\n", cmdMain.Short, accumulated.Version)
+	fmt.Println(accumulated.Commit)
 }

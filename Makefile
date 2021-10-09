@@ -3,8 +3,14 @@ all: build
 # Go handles build caching, so Go targets should always be marked phony.
 .PHONY: all build
 
+VERSION = github.com/AccumulateNetwork/accumulated.Version=$(shell git describe --dirty)
+COMMIT = github.com/AccumulateNetwork/accumulated.Commit=$(shell git rev-parse HEAD)
+LDFLAGS = '-X "$(VERSION)" -X "$(COMMIT)"'
+
 build:
-	go build -ldflags "-X 'github.com/AccumulateNetwork/accumulated.Version=$(shell git describe --dirty)'" ./cmd/accumulated
+	git fetch --tags
+	go build -ldflags $(LDFLAGS) ./cmd/accumulated
 
 install:
-	go install -ldflags "-X 'github.com/AccumulateNetwork/accumulated.Version=$(shell git describe --dirty)'" ./cmd/accumulated
+	git fetch --tags
+	go install -ldflags $(LDFLAGS) ./cmd/accumulated
