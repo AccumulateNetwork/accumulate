@@ -1,6 +1,6 @@
 module github.com/AccumulateNetwork/accumulated
 
-go 1.15
+go 1.16
 
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106
