@@ -55,6 +55,7 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 		binaryGtx := gtx.TransactionHash() // Must sign the GenTransaction
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
+		gtx.Signature[0].Signature[0] -= 1
 
 		if resp, err := query.BroadcastTx(gtx); err != nil {
 			return nil, fmt.Errorf("failed to send TX: %v", err)
