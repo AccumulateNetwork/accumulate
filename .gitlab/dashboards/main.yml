@@ -3,9 +3,14 @@ dashboard: 'Main'
 panel_groups:
   - group: 'Memory'
     panels:
-      - title: Prometheus
-        type: single-stat
+      - type: area-chart
+        title: Allocated
+        y_label: Memory
+        y_axis:
+          format: number
+          precision: 0
         metrics:
-            - query: 'go_memstats_alloc_bytes / 1024 /1024'
-              unit: 'MB'
-              label: "Allocated"
+          - id: my_metric_id
+            query_range: 'go_memstats_alloc_bytes / 1024 / 1024'
+            label: 'Instance: {{instance}}, method: {{method}}'
+            unit: 'MB'
