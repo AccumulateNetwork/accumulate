@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"errors"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -71,10 +72,12 @@ type StateEntry struct {
 // LoadChainAndADI retrieves the specified chain and unmarshals it, and
 // retrieves its ADI and unmarshals it.
 func (db *StateDB) LoadChainAndADI(chainId []byte) (*StateEntry, error) {
+	chain32 := types.Bytes(chainId).AsBytes32()
 	chainState, chainHeader, err := db.LoadChain(chainId)
 	if errors.Is(err, ErrNotFound) {
 		return &StateEntry{
-			DB: db,
+			DB:      db,
+			ChainId: &chain32,
 		}, nil
 	} else if err != nil {
 		return nil, err
@@ -84,6 +87,7 @@ func (db *StateDB) LoadChainAndADI(chainId []byte) (*StateEntry, error) {
 	if errors.Is(err, ErrNotFound) {
 		return &StateEntry{
 			DB:          db,
+			ChainId:     &chain32,
 			ChainState:  chainState,
 			ChainHeader: chainHeader,
 			AdiChain:    adiChain,
@@ -94,6 +98,7 @@ func (db *StateDB) LoadChainAndADI(chainId []byte) (*StateEntry, error) {
 
 	return &StateEntry{
 		DB:          db,
+		ChainId:     &chain32,
 		ChainState:  chainState,
 		ChainHeader: chainHeader,
 		AdiChain:    adiChain,
