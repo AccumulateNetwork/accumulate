@@ -46,6 +46,9 @@ type Accumulate struct {
 	Type     NetworkType `toml:"type" mapstructure:"type"`
 	Networks []string    `toml:"networks" mapstructure:"networks"`
 	API      API         `toml:"api" mapstructure:"api"`
+
+	WebsiteEnabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
+	WebsiteListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
 }
 
 type RPC struct {
