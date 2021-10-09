@@ -15,6 +15,7 @@ require (
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.13.0
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
+	github.com/getsentry/sentry-go v0.11.0
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/golang/mock v1.5.0
 	github.com/google/go-cmp v0.5.6 // indirect
