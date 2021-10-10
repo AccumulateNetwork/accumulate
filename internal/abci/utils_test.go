@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"testing"
@@ -135,4 +136,10 @@ func (n *fakeNode) GetADI(url string) *state.AdiState {
 	adi := new(state.AdiState)
 	n.GetChainAs(url, adi)
 	return adi
+}
+
+func unhex(t *testing.T, s string) []byte {
+	b, err := hex.DecodeString(s)
+	require.NoError(t, err)
+	return b
 }
