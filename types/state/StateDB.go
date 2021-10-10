@@ -153,6 +153,9 @@ func (sdb *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTx
 
 //AddSynthTx add the synthetic transaction which is mapped to the parent transaction
 func (sdb *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synthTxObject *Object) {
+	if debugStateDBWrites {
+		fmt.Printf("AddSynthTx %X\n", synthTxObject.Entry)
+	}
 	var val *[]transactionStateInfo
 	var ok bool
 
@@ -200,9 +203,6 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	if debugStateDBWrites {
-		fmt.Printf("Get StateEntries chain=%X\n", chainId)
-	}
 	data := sdb.db.Get("StateEntries", "", chainId)
 
 	if data == nil {
@@ -465,7 +465,8 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 }
 
 func (sdb *StateDB) RootHash() []byte {
-	return sdb.bpt.Bpt.Root.Hash[:]
+	h := sdb.bpt.Bpt.Root.Hash // Make a copy
+	return h[:]                // Return a reference to the copy
 }
 
 func (sdb *StateDB) EnsureRootHash() []byte {
