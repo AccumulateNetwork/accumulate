@@ -7,8 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 // GenTransaction
@@ -135,17 +135,17 @@ func (t *GenTransaction) SetRoutingChainID() error { //
 	if t.SigInfo == nil {
 		return errors.New("missing signature info")
 	}
-	adi, chainPath, err := types.ParseIdentityChainPath(&t.SigInfo.URL) //  Parse the URL.  Hope it is good.
-	if err != nil {                                                     //  If hope is squashed, return err
-		return err //
-	} //
-	h := sha256.Sum256([]byte(adi))                                      // Hash the identity
+	u, err := url.Parse(t.SigInfo.URL)
+	if err != nil {
+		return fmt.Errorf("invalid sponsor: %w", err)
+	}
+	// TODO this should use u.Routing()
+	h := u.IdentityChain()                                               // Hash the identity
 	t.Routing = uint64(h[0])<<56 | uint64(h[1])<<48 | uint64(h[2])<<40 | // Get the routing out of it
-		uint64(h[3])<<32 | uint64(h[4])<<24 | uint64(h[5])<<16 | //           Note Big Endian, 8 bytes
-		uint64(h[6])<<8 | uint64(h[7])
-	h = sha256.Sum256([]byte(chainPath)) //                                 Compute the chainID from the URL
-	t.ChainID = h[:]                     //                                 Assign the ChainID
-	return nil                           //                                 Return nil (all is well!)
+		uint64(h[3])<<32 | uint64(h[4])<<24 | uint64(h[5])<<16 | //         Note Big Endian, 8 bytes
+		uint64(h[6])<<8 | uint64(h[7]) //
+	t.ChainID = u.ResourceChain() //                                        Compute and assign the ChainID
+	return nil                    //                                        Return nil (all is well!)
 } //
 
 // ValidateSig
