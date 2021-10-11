@@ -60,10 +60,31 @@ build:
     paths:
     - accumulated-*
 
+configure:
+  stage: build
+  tags:
+  - docker
+  - linux
+  image: golang:1.17
+  script:
+  - |
+    function init {
+      rm -rf .nodes
+      ./accumulated init -w .nodes --no-empty-blocks -r Arches,AmericanSamoa,EastXeons -n $1
+      tar czf config-$1.tar.gz -C .nodes .
+    }
+  - go build ./cmd/accumulated
+  - init Arches
+  - init AmericanSamoa
+  - init EastXeons
+  artifacts:
+    paths:
+    - config-*.tar.gz
+
 .deploy:
   stage: deploy
   only:
-  - ${CI_DEFAULT_BRANCH} # only run on the main branch
+  - develop # only run on the main branch
   tags:
   - docker
   - linux
@@ -73,36 +94,50 @@ build:
   - cp ${SSH_PRIV_KEY} ~/.ssh/id_rsa
   - cp ${SSH_PUB_KEY} ~/.ssh/id_rsa.pub
   - chmod -R 600 ~/.ssh
-  - scp ${BIN} ec2-user@${HOST}:.local/bin/accumulated
+  - scp ${BIN} ec2-user@${HOST}:accumulated-latest
+  - scp config-${NETWORK}.tar.gz ec2-user@${HOST}:config.tar.gz
+  - ssh ec2-user@${HOST} '~/accumulated-latest version'
+  - varname=DEPLOY_${NETWORK}_${NODE}
+  - echo ${varname}=${!varname}
   - |
-    ssh ec2-user@${HOST} '
-      screen -ls
-      go version
-      export PATH="$PATH:$HOME/.local/bin"
-      which accumulated
-      accumulated version
-    '
+    if [ "${!varname}" = "yes" ]; then ssh ec2-user@${HOST} "
+      set -ex
+      export PATH="'"$PATH:$HOME/.local/bin"'"
+      screen -ls | grep '\baccumulated\b' && screen -S accumulated -X stuff ^C
+      rm -f ~/.local/bin/accumulated
+      mv accumulated-latest ~/.local/bin/accumulated
+      rm -rf ~/.accumulate
+      mkdir ~/.accumulate
+      tar xf config.tar.gz -C ~/.accumulate
+      screen -d -m -S accumulated accumulated run -n ${NODE}
+    "; fi
 
 deploy 13.51.10.110:
   extends: .deploy
-  variables: { BIN: accumulated-linux-arm64, HOST: 13.51.10.110 }
+  variables:   { HOST: 13.51.10.110,                NETWORK: Arches,          NODE: 0, BIN: accumulated-linux-arm64 }
+  environment: { url: 'http://13.51.10.110:8080',   name: Arches/Node0 }
 
 deploy 13.232.230.216:
   extends: .deploy
-  variables: { BIN: accumulated-linux-arm64, HOST: 13.232.230.216 }
+  variables:   { HOST: 13.232.230.216,              NETWORK: Arches,          NODE: 1, BIN: accumulated-linux-arm64 }
+  environment: { url: 'http://13.232.230.216:8080', name: Arches/Node1 }
 
 deploy 18.221.39.36:
   extends: .deploy
-  variables: { BIN: accumulated-linux-arm64, HOST: 18.221.39.36 }
+  variables:   { HOST: 18.221.39.36,                NETWORK: AmericanSamoa,   NODE: 0, BIN: accumulated-linux-arm64 }
+  environment: { url: 'http://18.221.39.36:8080',   name: AmericanSamoa/Node0 }
 
 deploy 44.236.45.58:
   extends: .deploy
-  variables: { BIN: accumulated-linux-arm64, HOST: 44.236.45.58 }
+  variables:   { HOST: 44.236.45.58,                NETWORK: AmericanSamoa,   NODE: 1, BIN: accumulated-linux-arm64 }
+  environment: { url: 'http://44.236.45.58:8080',   name: AmericanSamoa/Node1 }
 
 deploy 18.119.26.7:
   extends: .deploy
-  variables: { BIN: accumulated-linux-amd64, HOST: 18.119.26.7 }
+  variables:   { HOST: 18.119.26.7,                 NETWORK: EastXeons,       NODE: 0, BIN: accumulated-linux-amd64 }
+  environment: { url: 'http://18.119.26.7:8080',    name: EastXeons/Node0 }
 
 deploy 18.119.149.208:
   extends: .deploy
-  variables: { BIN: accumulated-linux-amd64, HOST: 18.119.149.208 }
+  variables:   { HOST: 18.119.149.208,              NETWORK: EastXeons,       NODE: 1, BIN: accumulated-linux-amd64 }
+  environment: { url: 'http://18.119.149.208:8080', name: EastXeons/Node1 }
