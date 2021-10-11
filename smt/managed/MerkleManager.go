@@ -150,13 +150,13 @@ func (m *MerkleManager) BlockIndex() int64 {
 func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
 	m.BlockIndex()                         //                            Ensure blkidx is loaded
 	if m.blkidx.BlockIndex >= blockIndex { //                            Block Index must increment
-		panic("should not have block indexes that go backwards or stay constant")
+		panic(fmt.Errorf("should not have block indexes that go backwards or stay constant; got %d, have %d", blockIndex, m.blkidx.BlockIndex))
 	}
 	if m.blkidx.MainIndex > m.MainChain.MS.Count-1 { //                  Must move MainChain or stay same
-		panic("should not have main indexes that go backwards")
+		panic(fmt.Errorf("should not have main indexes that go backwards; got %d, have %d", m.MainChain.MS.Count, m.blkidx.MainIndex))
 	}
 	if m.blkidx.PendingIndex > m.PendingChain.MS.Count-1 { //            Must move Pending chain or stay same
-		panic("should not have pending indexes that go backwards")
+		panic(fmt.Errorf("should not have pending indexes that go backwards; got %d, have %d", m.PendingChain.MS.Count, m.blkidx.PendingIndex))
 	}
 	m.blkidx.BlockIndex = blockIndex                    //               Save blockIndex
 	m.blkidx.MainIndex = m.MainChain.MS.Count - 1       //               Update MainIndex (count is index+1)
