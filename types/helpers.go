@@ -8,10 +8,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"net/url"
 	"strings"
-	"unicode/utf8"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
@@ -26,7 +25,7 @@ func MarshalBinaryLedgerAdiChainPath(adiChainPath string, payload []byte, timest
 	msg = append(msg, tsbytes[:]...)
 
 	//The chain path is either the identity name or the full chain path [identityname]/[chainpath]
-	chainid := sha256.Sum256([]byte(adiChainPath))
+	chainid := sha256.Sum256([]byte(strings.ToLower(adiChainPath)))
 	msg = append(msg, chainid[:]...)
 
 	msg = append(msg, payload...)
@@ -60,25 +59,18 @@ func CreateKeyPairFromSeed(seed ed25519.PrivKey) (ret ed25519.PrivKey) {
 	return ret
 }
 
-// ParseIdentityChainPath helpful parser to extract the identity name and chainpath
-//for example RedWagon/MyAccAddress becomes identity=redwagon and chainpath=redwagon/MyAccAddress
+// ParseIdentityChainPath helpful parser to extract the identity name and
+// chainpath. For example RedWagon/MyAccAddress becomes identity=redwagon and
+// chainpath=redwagon/MyAccAddress.
+//
+// Deprecated: use ./internal/url.Parse
 func ParseIdentityChainPath(adiChainPath *string) (adi string, chainPath string, err error) {
-
-	s := *adiChainPath
-
-	if !utf8.ValidString(s) {
-		return "", "", fmt.Errorf("URL is has invalid UTF8 encoding, received %s", *adiChainPath)
-	}
-
-	if !strings.HasPrefix(s, "acc://") {
-		s = "acc://" + s
-	}
-
-	u, err := url.Parse(s)
+	u, err := url.Parse(*adiChainPath)
 	if err != nil {
-		return "", "", err
+		return "", "", nil
 	}
-	adi = strings.ToLower(u.Hostname())
+
+	adi = u.Hostname()
 	chainPath = adi
 	if len(u.Path) != 0 {
 		chainPath += u.Path
@@ -86,35 +78,46 @@ func ParseIdentityChainPath(adiChainPath *string) (adi string, chainPath string,
 	return adi, chainPath, nil
 }
 
-// GetChainIdFromChainPath this expects an identity chain path to produce the chainid.  RedWagon/Acc/Chain/Path
+// GetChainIdFromChainPath expects an identity chain path to produce the
+// chainid, e.g. "RedWagon/Acc/Chain/Path".
+//
+// Deprecated: use ./internal/url.URL.ResourceChain()
 func GetChainIdFromChainPath(adiChainPath *string) *Bytes32 {
 	_, chainPathFormatted, err := ParseIdentityChainPath(adiChainPath)
 	if err != nil {
 		return nil
 	}
 
-	h := Bytes32(sha256.Sum256([]byte(chainPathFormatted)))
+	h := Bytes32(sha256.Sum256([]byte(strings.ToLower(chainPathFormatted))))
 	return &h
 }
 
-// GetIdentityChainFromIdentity Helper function to generate an identity chain from adi. can return nil, if the adi is malformed
+// GetIdentityChainFromIdentity generates an identity chain from ADI. Returns
+// nil if the ADI is malformed.
+//
+// Deprecated: use ./internal/url.URL.IdentityChain()
 func GetIdentityChainFromIdentity(adi *string) *Bytes32 {
 	namelower, _, err := ParseIdentityChainPath(adi)
 	if err != nil {
 		return nil
 	}
 
-	h := Bytes32(sha256.Sum256([]byte(namelower)))
+	h := Bytes32(sha256.Sum256([]byte(strings.ToLower(namelower))))
 	return &h
 }
 
-//GetAddressFromIdentityChain get the 8-bit address from the identity chain.  this is used for bvc routing
+// GetAddressFromIdentityChain gets the 8-bit address from the identity chain.
+// Used for bvc routing.
+//
+// Deprecated: use ./internal/url.URL.Routing()
 func GetAddressFromIdentityChain(identitychain []byte) uint64 {
 	addr := binary.BigEndian.Uint64(identitychain)
 	return addr
 }
 
-//GetAddressFromIdentity given a string, return the address used for bvc routing
+// GetAddressFromIdentity return the address used for bvc routing.
+//
+// Deprecated: use ./internal/url.URL.Routing()
 func GetAddressFromIdentity(name *string) uint64 {
 	b := GetIdentityChainFromIdentity(name)
 	return GetAddressFromIdentityChain(b[:])
