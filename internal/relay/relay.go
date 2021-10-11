@@ -66,41 +66,52 @@ func (r *Relay) BatchTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 // BatchSend
 // This will dispatch all the transactions that have been put into batches. The calling function does not have to
 // wait for batch to be sent.  This is a fire and forget operation
-func (r *Relay) BatchSend() {
+func (r *Relay) BatchSend() chan BatchedStatus {
 	sendBatches := make([]Batch, r.numNetworks)
 	for i, batch := range r.batches {
 		sendBatches[i] = batch
 	}
-	go dispatch(sendBatches)
+	stat := make(chan BatchedStatus)
+	go dispatch(sendBatches, stat)
 	r.resetBatches()
+	return stat
+}
+
+type DispatchStatus struct {
+	Returns []interface{}
+	Err     error
+}
+
+type BatchedStatus struct {
+	Status []DispatchStatus
 }
 
 // dispatch
 // This function is executed as a go routine to send out all the batches
-func dispatch(batches []Batch) {
+func dispatch(batches []Batch, stat chan BatchedStatus) {
+	bs := BatchedStatus{}
+	bs.Status = make([]DispatchStatus, len(batches))
 	for i := range batches {
 		if batches[i] == nil {
 			continue
 		}
 
 		if batches[i].Count() > 0 {
-			_, err := batches[i].Send(context.Background())
-			if err != nil {
-				//	fmt.Println("error sending batch, %v", err)
-			}
+			bs.Status[i].Returns, bs.Status[i].Err = batches[i].Send(context.Background())
 		}
 	}
+	stat <- bs
 }
 
 // SendTx
 // This function will send an individual transaction and return the result.  However, this is a broadcast asynchronous
-// call to tendermint, so it won't provide tendermint results from CheckTx or DeliverTx
+// call to tendermint, so it won't provide tendermint results from DeliverTx
 func (r *Relay) SendTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 	gtx, err := decodeTX(tx)
 	if err != nil {
 		return nil, err
 	}
-	return r.client[int(gtx.Routing)%r.numNetworks].BroadcastTxSync(context.Background(), tx)
+	return r.client[int(gtx.Routing)%r.numNetworks].BroadcastTxAsync(context.Background(), tx)
 }
 
 // Query
