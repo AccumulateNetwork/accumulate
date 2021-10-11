@@ -158,7 +158,7 @@ func TestE2E_Accumulator_TokenAccount_ADI(t *testing.T) {
 
 	r := n.GetTokenAccount("FooBar/Baz")
 	require.Equal(t, types.ChainTypeTokenAccount, r.Type)
-	require.Equal(t, types.String("foobar/Baz"), r.ChainUrl)
+	require.Equal(t, types.String("FooBar/Baz"), r.ChainUrl)
 	require.Equal(t, types.String("dc/ACME"), r.TokenUrl.String)
 }
 
