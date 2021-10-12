@@ -177,8 +177,6 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 //
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
-	//create a default response
-	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1}
 
 	//the submission is the format of the Tx input
 	sub := new(transactions.GenTransaction)
@@ -193,6 +191,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: "Unable to decode transaction"}
 	}
+
+	//create a default response
+	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
 
 	err = app.chain.CheckTx(sub)
 
