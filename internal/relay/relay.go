@@ -3,10 +3,12 @@ package relay
 import (
 	"context"
 	"fmt"
+	"sync"
+
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 
 	"github.com/AccumulateNetwork/accumulated/types/api"
 
-	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/rpc/client"
@@ -18,11 +20,37 @@ import (
 // Relay is the structure used to relay messages to the correct BVC.  Transactions can either be batched and dispatched
 // or they can be sent directly.  They only know about GenTransactions and are routed according to the number of networks
 // in the system
+
+type txBatch struct {
+	networkId int
+	tx        [][]byte
+}
+
 type Relay struct {
 	client      []client.ABCIClient
 	batches     []Batch
+	txQueue     []txBatch
 	numNetworks int
 }
+
+type DispatchStatus struct {
+	NetworkId int
+	Returns   []interface{}
+	Err       error
+}
+
+type BatchedStatus struct {
+	Status []DispatchStatus
+}
+
+//func (d *DispatchStatus) MakeRequests {
+//	reqs := make([]types.RPCRequest, 0, len(requests))
+//	results := make([]interface{}, 0, len(requests))
+//	for _, req := range requests {
+//		reqs = append(reqs, req.request)
+//		results = append(results, req.result)
+//	}
+//}
 
 // New Create the new bouncer and initialize it with a client connection to each of the nodes
 func New(clients ...client.ABCIClient) *Relay {
@@ -57,50 +85,84 @@ func (r *Relay) BatchTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 		return nil, err
 	}
 	i := int(gtx.Routing) % r.numNetworks
-	if r.batches[i] == nil {
-		return r.client[i].BroadcastTxAsync(context.Background(), tx)
-	}
-	return r.batches[i].BroadcastTxAsync(context.Background(), tx)
+	r.txQueue[i].tx = append(r.txQueue[i].tx, tx)
+	return nil, nil
+	//if r.batches[i] == nil {
+	//	return r.client[i].BroadcastTxSync(context.Background(), tx)
+	//}
+	//return r.batches[i].BroadcastTxSync(context.Background(), tx)
 }
 
 // BatchSend
 // This will dispatch all the transactions that have been put into batches. The calling function does not have to
 // wait for batch to be sent.  This is a fire and forget operation
 func (r *Relay) BatchSend() chan BatchedStatus {
-	sendBatches := make([]Batch, r.numNetworks)
-	for i, batch := range r.batches {
-		sendBatches[i] = batch
+	var sendTxsAsBatch []txBatch
+	var sendTxsAsSingle []txBatch
+	for i, c := range r.client {
+		l := len(r.txQueue[i].tx)
+		if _, ok := c.(Batchable); l > 1 && ok {
+			sendTxsAsBatch = append(sendTxsAsBatch, r.txQueue[i])
+		} else {
+			sendTxsAsSingle = append(sendTxsAsSingle, r.txQueue[i])
+		}
+		//reset the queue here.
+		r.txQueue[i] = txBatch{}
 	}
 	stat := make(chan BatchedStatus)
-	go dispatch(sendBatches, stat)
+	go dispatch(r.client, sendTxsAsBatch, sendTxsAsSingle, stat)
 	r.resetBatches()
 	return stat
 }
 
-type DispatchStatus struct {
-	Returns []interface{}
-	Err     error
-}
-
-type BatchedStatus struct {
-	Status []DispatchStatus
-}
-
 // dispatch
 // This function is executed as a go routine to send out all the batches
-func dispatch(batches []Batch, stat chan BatchedStatus) {
-	bs := BatchedStatus{}
-	bs.Status = make([]DispatchStatus, len(batches))
-	for i := range batches {
-		if batches[i] == nil {
-			continue
-		}
+func dispatch(client []client.ABCIClient, sendAsBatch []txBatch, sendAsSingle []txBatch, stat chan BatchedStatus) {
+	var batches []Batch
 
-		if batches[i].Count() > 0 {
-			bs.Status[i].Returns, bs.Status[i].Err = batches[i].Send(context.Background())
+	for i, txb := range sendAsBatch {
+		batches = append(batches, client[txb.networkId].(Batchable).NewBatch())
+		for _, tx := range sendAsBatch[i].tx {
+			batches[i].BroadcastTxSync(context.Background(), tx)
 		}
 	}
+
+	bs := BatchedStatus{}
+
+	bstatus := make([]DispatchStatus, len(sendAsBatch))
+	//now send out the batches
+	batchGroup := sync.WaitGroup{}
+	batchGroup.Add(1)
+	go disapatchBatch(client, sendAsBatch, &bstatus, &batchGroup)
+
+	singlesGroup := sync.WaitGroup{}
+	singlesGroup.Add(1)
+	sstatus := make([]DispatchStatus, len(sendAsSingle))
+	go dispachSingle(client, sendAsSingle, &sstatus, &singlesGroup)
+
+	batchGroup.Wait()
+	bs.Status = append(bstatus, sstatus)
 	stat <- bs
+}
+
+func disapatchBatch(client []client.ABCIClient, sendBatches []txBatch, status *[]DispatchStatus, group *sync.WaitGroup) {
+	var batches []Batch
+	for i, txb := range sendBatches {
+		batches = append(batches, client[txb.networkId].(Batchable).NewBatch())
+		for _, tx := range sendBatches[i].tx {
+			batches[i].BroadcastTxSync(context.Background(), tx)
+		}
+	}
+
+	//now send out the batches
+	for i := range batches {
+		status[i].Returns, status[i].Err = batches[i].Send(context.Background())
+	}
+	group.Done()
+}
+
+func dispachSingle(client []client.ABCIClient, sendSingles []txBatch, status *[]DispatchStatus, group *sync.WaitGroup) {
+
 }
 
 // SendTx
@@ -142,6 +204,11 @@ func decodeQuery(data bytes.HexBytes) (*api.Query, uint64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	addr := types.GetAddressFromIdentity(&query.Url)
-	return query, addr, nil
+
+	u, err := url.Parse(query.Url)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return query, u.Routing(), nil
 }

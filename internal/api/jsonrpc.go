@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 
+	//"github.com/AccumulateNetwork/accumulated/internal/relay"
+
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -491,10 +493,27 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	if err != nil {
 		return NewAccumulateError(err)
 	}
-	api.query.BatchSend()
+
+	stat := api.query.BatchSend()
+
+	res := <-stat
+	close(stat)
 
 	ret := acmeapi.APIDataResponse{}
 	ret.Type = "faucet"
+
+	for i, _ := range res.Status {
+		for _, v := range res.Status[i].Returns {
+			jsonData, err := json.Marshal(v)
+			if err != nil {
+				msg := json.RawMessage(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TransactionHash(), resp.Log))
+				ret.Data = &msg
+				return ret
+			}
+			fmt.Println(string(jsonData))
+		}
+	}
+
 	msg := json.RawMessage(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TransactionHash(), resp.Log))
 	ret.Data = &msg
 	return &ret

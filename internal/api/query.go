@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -49,8 +50,8 @@ func (q *Query) Query(url string, txid []byte) (*ctypes.ResultABCIQuery, error) 
 }
 
 // BatchSend calls the underlying client's BatchSend method, if it has one
-func (q *Query) BatchSend() {
-	q.txBouncer.BatchSend()
+func (q *Query) BatchSend() chan relay.BatchedStatus {
+	return q.txBouncer.BatchSend()
 }
 
 //"GetADI()"

@@ -38,3 +38,7 @@ func (api *API) GetData(ctx context.Context, params json.RawMessage) interface{}
 func (api *API) CreateADI(ctx context.Context, params json.RawMessage) interface{} {
 	return api.createADI(ctx, params)
 }
+
+func (api *API) Faucet(ctx context.Context, params json.RawMessage) interface{} {
+	return api.faucet(ctx, params)
+}
