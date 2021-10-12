@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/stretchr/testify/require"
@@ -22,8 +23,17 @@ func TestNodeSetup(t *testing.T) {
 	opts.WorkDir = t.TempDir()
 	opts.Port = getFreePort(t)
 
-	require.NoError(t, node.Init(opts))                       // Configure
-	nodeDir := filepath.Join(opts.WorkDir, "Node0")           //
+	require.NoError(t, node.Init(opts)) // Configure
+
+	nodeDir := filepath.Join(opts.WorkDir, "Node0") //
+	//disable web site
+	c, err := cfg.Load(nodeDir)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	c.Accumulate.WebsiteEnabled = false
+	cfg.Store(c)
+
 	node, _, err := acctesting.NewBVCNode(nodeDir, t.Cleanup) // Initialize
 	require.NoError(t, err)                                   //
 	require.NoError(t, node.Start())                          // Start
