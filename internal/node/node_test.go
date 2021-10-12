@@ -38,7 +38,8 @@ func TestNodeSetup(t *testing.T) {
 	require.NoError(t, err)                                   //
 	require.NoError(t, node.Start())                          // Start
 	require.NoError(t, node.Stop())                           // Stop
-	node.Wait()                                               //
+	node.Quit()
+	node.Wait() //
 }
 
 func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
