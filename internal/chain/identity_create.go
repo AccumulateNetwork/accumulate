@@ -25,7 +25,7 @@ func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransa
 	if st == nil {
 		return nil, fmt.Errorf("current state not defined")
 	}
-	if st.AdiChain == nil {
+	if st.AdiHeader == nil {
 		return nil, fmt.Errorf("missing sponsor identity")
 	}
 	if tx.Signature == nil {

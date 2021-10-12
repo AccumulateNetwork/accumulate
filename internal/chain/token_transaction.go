@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -39,6 +40,11 @@ func (c TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal identity: %v", err)
 		}
+	}
+
+	fromUrl, err := url.Parse(tx.SigInfo.URL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid sponsor URL: %v", err)
 	}
 
 	withdrawal := api.TokenTx{}
@@ -125,9 +131,8 @@ func (c TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction
 	txHash := txid.AsBytes32()
 	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
 	//This will reference the txid to keep the history
-	_, chainPath, _ := types.ParseIdentityChainPath(withdrawal.From.AsString())
-	refUrl := fmt.Sprintf("%s/%d", chainPath, acctState.TxCount)
-	txr := state.NewTxReference(refUrl, txHash[:])
+	refUrl := fromUrl.JoinPath(fmt.Sprint(acctState.TxCount))
+	txr := state.NewTxReference(refUrl.String(), txHash[:])
 	txrData, err := txr.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("unable to process transaction reference chain %v", err)
@@ -136,7 +141,7 @@ func (c TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction
 	//now create the chain state object.
 	txRefChain := new(state.Object)
 	txRefChain.Entry = txrData
-	txRefChainId := types.GetChainIdFromChainPath(&refUrl)
+	txRefChainId := types.Bytes(refUrl.ResourceChain()).AsBytes32()
 
 	//increment the token transaction count
 	acctState.TxCount++
@@ -151,7 +156,7 @@ func (c TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction
 
 	//now update the state
 	st.DB.AddStateEntry(st.ChainId, &txHash, st.AdiState)
-	st.DB.AddStateEntry(txRefChainId, &txHash, txRefChain)
+	st.DB.AddStateEntry(&txRefChainId, &txHash, txRefChain)
 
 	return res, nil
 }
