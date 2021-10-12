@@ -11,6 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/response"
+
+	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
+
 	. "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
@@ -202,6 +206,73 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//wait 30 seconds before shutting down is useful when debugging the tendermint core callbacks
 	time.Sleep(1000 * time.Millisecond)
 
+}
+
+func TestFaucet(t *testing.T) {
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	node, pv := startBVC(t, dir)
+	_ = pv
+	defer node.Stop()
+	rpcAddr := node.Config.RPC.ListenAddress
+
+	rpcClient, err := http.New(rpcAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.NoError(t, err)
+	txBouncer := relay.New(rpcClient)
+	query := NewQuery(txBouncer)
+
+	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	_, kpSponsor, _ := ed25519.GenerateKey(nil)
+
+	req := &api.APIRequestURL{}
+	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+
+	params, err := json.Marshal(&req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jsonapi := NewTest(t, query)
+
+	res := jsonapi.Faucet(context.Background(), params)
+	data, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(data))
+
+	//allow the transaction to settle.
+	time.Sleep(3 * time.Second)
+
+	//readback the result.
+	resp, err := query.GetChainState(req.URL.AsString(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ta := response.TokenAccount{}
+	if resp.Data == nil {
+		t.Fatalf("token account not found in query after faucet transaction")
+	}
+
+	err = json.Unmarshal(*resp.Data, &ta)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ta.Balance.String() != "1000000000" {
+		t.Fatalf("incorrect balance after faucet transaction")
+	}
+
+	//just dump out the response as the api user would see it
+	output, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("%s\n", string(output))
 }
 
 func TestJsonRpcAdi(t *testing.T) {
