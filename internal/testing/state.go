@@ -69,7 +69,8 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, url types.String) error {
 	}
 
 	chainId := types.GetIdentityChainFromIdentity(url.AsString())
-	return db.AddStateEntry(chainId, &types.Bytes32{}, stateObj)
+	db.AddStateEntry(chainId, &types.Bytes32{}, stateObj)
+	return nil
 }
 
 func CreateTokenAccount(db *state.StateDB, url, tokenUrl string, tokens float64, anon bool) error {
@@ -92,5 +93,6 @@ func CreateTokenAccount(db *state.StateDB, url, tokenUrl string, tokens float64,
 		return err
 	}
 
-	return db.AddStateEntry(acctChainId, &types.Bytes32{}, acctObj)
+	db.AddStateEntry(acctChainId, &types.Bytes32{}, acctObj)
+	return nil
 }
