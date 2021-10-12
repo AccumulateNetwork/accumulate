@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"net/url"
+	"path"
 	"strings"
 )
 
@@ -156,4 +157,11 @@ func (u *URL) Routing() uint64 {
 // are equal under Unicode case-folding.
 func (u *URL) Equal(v *URL) bool {
 	return strings.EqualFold(u.String(), v.String())
+}
+
+// JoinPath returns a copy of U with additional path elements.
+func (u *URL) JoinPath(s ...string) *URL {
+	v := *u
+	v.Path = path.Join(append([]string{u.Path}, s...)...)
+	return &v
 }

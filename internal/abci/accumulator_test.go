@@ -3,8 +3,9 @@ package abci_test
 import (
 	"crypto/ed25519"
 	"errors"
-	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"testing"
+
+	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	mock_abci "github.com/AccumulateNetwork/accumulated/internal/mock/abci"
@@ -75,7 +76,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 		//build a valid gen transaction with an invalid tx payload
 		_, origin, _ := ed25519.GenerateKey(nil)
 		//make a fake destination
-		destAddr := "acme-wyleecoyote"
+		destAddr := "wyleecoyote/acme"
 		//make an unreasonable amount sure
 		amount := uint64(1000000000)
 		tx, err := testing2.BuildTestTokenTxGenTx(&origin, destAddr, amount)
@@ -124,7 +125,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		//build a valid gen transaction with an invalid tx payload
 		_, origin, _ := ed25519.GenerateKey(nil)
 		//make a fake destination
-		destAddr := "acme-wyleecoyote"
+		destAddr := "wyleecoyote/acme"
 		//make an unreasonable amount sure
 		amount := uint64(1000000000)
 		tx, err := testing2.BuildTestTokenTxGenTx(&origin, destAddr, amount)

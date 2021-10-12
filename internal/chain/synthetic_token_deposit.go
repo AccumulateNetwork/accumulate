@@ -3,8 +3,9 @@ package chain
 import (
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
-	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -27,8 +28,11 @@ func (SynthTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 		return nil, fmt.Errorf("failed to unmarshal deposit: %v", err)
 	}
 
-	// TODO check if the TokenUrl matches the anonymous account URL
-	if deposit.TokenUrl != "dc/ACME" {
+	tokenUrl, err := url.Parse(*deposit.TokenUrl.AsString())
+	if err != nil {
+		return nil, fmt.Errorf("invalid token URL: %v", err)
+	} else if !protocol.AcmeUrl().Equal(tokenUrl) {
+		// TODO support non-acme tokens
 		return nil, fmt.Errorf("depositing non-ACME tokens has not been implemented")
 	}
 
@@ -36,7 +40,11 @@ func (SynthTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 		return nil, fmt.Errorf("deposit destination does not match TX sponsor")
 	}
 
-	_, chainPath, _ := types.ParseIdentityChainPath(deposit.ToUrl.AsString())
+	toUrl, err := url.Parse(*deposit.ToUrl.AsString())
+	if err != nil {
+		return nil, fmt.Errorf("invalid sponsor URL: %v", err)
+	}
+
 	acctObj := st.ChainState
 	account := new(state.TokenAccount)
 	if st.ChainHeader != nil {
@@ -51,13 +59,17 @@ func (SynthTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal token account: %v", err)
 		}
-	} else if anon.IsAcmeAddress(tx.SigInfo.URL) == nil {
+	} else if keyHash, tok, err := protocol.ParseAnonymousAddress(toUrl); err != nil {
+		return nil, fmt.Errorf("invalid anonymous token account URL: %v", err)
+	} else if keyHash == nil {
+		return nil, fmt.Errorf("could not find token account")
+	} else if !tokenUrl.Equal(tok) {
+		return nil, fmt.Errorf("token URL does not match anonymous token account URL")
+	} else {
 		// Address is anonymous and the account doesn't exist, so create one
-		account = state.NewTokenAccount(chainPath, *deposit.TokenUrl.AsString())
+		account = state.NewTokenAccount(toUrl.String(), tokenUrl.String())
 		account.Type = types.ChainTypeAnonTokenAccount
 		acctObj = new(state.Object)
-	} else {
-		return nil, fmt.Errorf("could not find token account")
 	}
 
 	//all is good, so subtract the balance
@@ -69,8 +81,8 @@ func (SynthTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
 	//This will reference the txid to keep the history
 	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
-	refUrl := fmt.Sprintf("%s/%d", chainPath, account.TxCount)
-	txr := state.NewTxReference(refUrl, txHash[:])
+	refUrl := toUrl.JoinPath(fmt.Sprint(account.TxCount))
+	txr := state.NewTxReference(refUrl.String(), txHash[:])
 	txrData, err := txr.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("unable to process transaction reference chain %v", err)
@@ -79,19 +91,20 @@ func (SynthTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 	//now create the chain state object.
 	txRefChain := new(state.Object)
 	txRefChain.Entry = txrData
-	txRefChainId := types.GetChainIdFromChainPath(&refUrl)
+	txRefChainId := types.Bytes(refUrl.ResourceChain()).AsBytes32()
 
 	//increment the token transaction count
 	account.TxCount++
 
+	acctChainId := types.Bytes(toUrl.ResourceChain()).AsBytes32()
 	acctObj.Entry, err = account.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("unable to process anon transaction account %v", err)
 	}
 
 	//if we get here with no errors store the states
-	st.DB.AddStateEntry(st.ChainId, &txHash, acctObj)
-	st.DB.AddStateEntry(txRefChainId, &txHash, txRefChain)
+	st.DB.AddStateEntry(&acctChainId, &txHash, acctObj)
+	st.DB.AddStateEntry(&txRefChainId, &txHash, txRefChain)
 
 	return new(DeliverTxResult), nil
 }

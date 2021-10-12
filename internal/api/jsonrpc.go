@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,8 +12,9 @@ import (
 	"os"
 
 	"github.com/AccumulateNetwork/accumulated/config"
+	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
-	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -447,12 +449,20 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 		return NewValidatorError(err)
 	}
 
-	adi, _, _ := types.ParseIdentityChainPath(req.URL.AsString())
-
-	if err = anon.IsAcmeAddress(adi); err != nil {
-		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", adi), err)
+	u, err := accurl.Parse(*req.URL.AsString())
+	if err != nil {
+		return NewValidatorError(err)
 	}
-	destAccount := types.String(adi)
+
+	destAccount := types.String(u.String())
+	addr, tok, err := protocol.ParseAnonymousAddress(u)
+	if err != nil {
+		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", destAccount), err)
+	} else if addr == nil {
+		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", destAccount), errors.New("not an anonymous account URL"))
+	} else if !protocol.AcmeUrl().Equal(tok) {
+		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", destAccount), errors.New("wrong token URL"))
+	}
 
 	wallet := transactions.NewWalletEntry()
 	fromAccount := types.String(wallet.Addr)
@@ -460,7 +470,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	txid := sha256.Sum256([]byte("faucet"))
 
-	tokenUrl := types.String("dc/ACME")
+	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	//create a fake synthetic deposit for faucet.
 	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &fromAccount, &destAccount)
@@ -475,7 +485,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	gtx.SigInfo.Nonce = wallet.Nonce
 	gtx.Transaction = depData
 	if err := gtx.SetRoutingChainID(); err != nil {
-		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", adi), err)
+		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", destAccount), err)
 	}
 	dataToSign := gtx.TransactionHash()
 
