@@ -56,8 +56,6 @@ func (SynthTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 		account = state.NewTokenAccount(chainPath, *deposit.TokenUrl.AsString())
 		account.Type = types.ChainTypeAnonTokenAccount
 		acctObj = new(state.Object)
-		//assign the chain id for the state...
-		st.ChainId = types.GetChainIdFromChainPath(&chainPath)
 	} else {
 		return nil, fmt.Errorf("could not find token account")
 	}
