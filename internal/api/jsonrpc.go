@@ -473,7 +473,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	depData, err := deposit.MarshalBinary()
 	gtx := new(transactions.GenTransaction)
 	gtx.SigInfo = new(transactions.SignatureInfo)
-	gtx.SigInfo.URL = wallet.Addr
+	gtx.SigInfo.URL = *destAccount.AsString()
 	gtx.SigInfo.Nonce = wallet.Nonce
 	gtx.Transaction = depData
 	if err := gtx.SetRoutingChainID(); err != nil {

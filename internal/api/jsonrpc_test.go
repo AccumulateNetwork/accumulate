@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -28,7 +29,7 @@ var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
 var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
 var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 
-func _TestLoadOnRemote(t *testing.T) {
+func TestLoadOnRemote(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is not appropriate for CI")
 	}
@@ -96,7 +97,7 @@ func _TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func _TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcAnonToken(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is flaky in CI")
 	}
@@ -207,13 +208,20 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 	time.Sleep(1000 * time.Millisecond)
 
 }
-func TestFaucet(t *testing.T) {
 
+func TestFaucet(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	}
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	node, pv := startBVC(t, dir)
 	_ = pv
-	defer node.Stop()
+	defer func() {
+		node.Stop()
+		<-node.Quit()
+	}()
+
 	rpcAddr := node.Config.RPC.ListenAddress
 	//ctx, cancel := context.WithCancel(context.Background())
 	//defer cancel()
@@ -241,7 +249,7 @@ func TestFaucet(t *testing.T) {
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
-	req := &acmeapi.APIRequestURL{}
+	req := &api.APIRequestURL{}
 	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	params, err := json.Marshal(&req)
@@ -249,6 +257,7 @@ func TestFaucet(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	//experimental tests
 	c := rpcClient
 
 	// Create a new batch
@@ -264,9 +273,6 @@ func TestFaucet(t *testing.T) {
 	tx2 := append(k2, append([]byte("="), v2...)...)
 
 	txs := [][]byte{tx1, tx2}
-	// Queue up our transactions
-	//tx := params
-
 	for _, tx := range txs {
 		// Broadcast the transaction and wait for it to commit (rather use
 		// c.BroadcastTxSync though in production).
@@ -275,7 +281,7 @@ func TestFaucet(t *testing.T) {
 		}
 	}
 
-	batch.Tx()
+	//batch.Tx()
 
 	// Send the batch of 2 transactions
 	res1, err := batch.Send(context.Background())
@@ -298,8 +304,38 @@ func TestFaucet(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Println(string(data))
+
+	//allow the transaction to settle.
+	time.Sleep(3 * time.Second)
+
+	//readback the result.
+	resp, err := query.GetChainState(req.URL.AsString(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ta := response.TokenAccount{}
+	if resp.Data == nil {
+		t.Fatalf("token account not found in query after faucet transaction")
+	}
+
+	err = json.Unmarshal(*resp.Data, &ta)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ta.Balance.String() != "1000000000" {
+		t.Fatalf("incorrect balance after faucet transaction")
+	}
+
+	//just dump out the response as the api user would see it
+	output, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("%s\n", string(output))
 }
-func _TestJsonRpcAdi(t *testing.T) {
+
+func TestJsonRpcAdi(t *testing.T) {
 	t.Skip("Test Broken") // ToDo: Broken Test
 
 	//"wileecoyote/ACME"
