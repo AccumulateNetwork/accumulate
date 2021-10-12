@@ -9,6 +9,7 @@ import (
 	. "github.com/AccumulateNetwork/accumulated/internal/chain"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -18,7 +19,7 @@ import (
 
 func TestAnonTokenTransactions(t *testing.T) {
 	appId := sha256.Sum256([]byte("anon"))
-	tokenUrl := types.String("dc/ACME")
+	tokenUrl := types.String(protocol.AcmeUrl().String())
 	db := &state.StateDB{}
 	err := db.Open("mem", appId[:], true, true)
 	require.NoError(t, err)

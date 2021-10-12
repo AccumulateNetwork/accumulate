@@ -98,6 +98,10 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 		return fmt.Errorf("failed to get state: %v", err)
 	}
 
+	if st.AdiHeader == nil && st.ChainHeader != nil && st.ChainHeader.Type == types.ChainTypeAnonTokenAccount {
+		st.AdiChain, st.AdiState, st.AdiHeader = st.ChainId, st.ChainState, st.ChainHeader
+	}
+
 	err = m.isSane(st, tx)
 	if err != nil {
 		return err
@@ -149,6 +153,9 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) error {
 	st, err := m.db.LoadChainAndADI(tx.ChainID)
 	if err != nil {
 		return fmt.Errorf("failed to get state: %v", err)
+	}
+	if st.AdiHeader == nil && st.ChainHeader != nil && st.ChainHeader.Type == types.ChainTypeAnonTokenAccount {
+		st.AdiChain, st.AdiState, st.AdiHeader = st.ChainId, st.ChainState, st.ChainHeader
 	}
 
 	// //placeholder for special validation rules for synthetic transactions.

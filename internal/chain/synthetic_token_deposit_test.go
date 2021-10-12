@@ -8,6 +8,7 @@ import (
 
 	. "github.com/AccumulateNetwork/accumulated/internal/chain"
 	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,7 @@ import (
 
 func TestSynthTokenDeposit_Anon(t *testing.T) {
 	appId := sha256.Sum256([]byte("anon"))
-	tokenUrl := types.String("dc/ACME")
+	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
 
