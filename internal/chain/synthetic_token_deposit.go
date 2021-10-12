@@ -36,7 +36,7 @@ func (SynthTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTra
 		return nil, fmt.Errorf("deposit destination does not match TX sponsor")
 	}
 
-	_, chainPath, _ := types.ParseIdentityChainPath(&tx.SigInfo.URL)
+	_, chainPath, _ := types.ParseIdentityChainPath(deposit.ToUrl.AsString())
 	acctObj := st.ChainState
 	account := new(state.TokenAccount)
 	if st.ChainHeader != nil {
