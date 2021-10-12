@@ -214,7 +214,11 @@ func TestFaucet(t *testing.T) {
 	dir := t.TempDir()
 	node, pv := startBVC(t, dir)
 	_ = pv
-	defer node.Stop()
+	defer func() {
+		node.Stop()
+		<-node.Quit()
+	}()
+
 	rpcAddr := node.Config.RPC.ListenAddress
 
 	rpcClient, err := http.New(rpcAddr)
