@@ -109,7 +109,7 @@ func marshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArg
 	switch field.Type {
 	case "bytes", "string", "chainSet", "uvarint":
 		expr, canErr = field.Type+"MarshalBinary(%s)", false
-	case "bigint":
+	case "bigint", "chain":
 		expr, canErr = field.Type+"MarshalBinary(&%s)", false
 	case "slice":
 		expr, canErr = "uvarintMarshalBinary(uint64(len(%s)))", false
@@ -134,6 +134,7 @@ func marshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArg
 	}
 
 	fmt.Fprintf(w, "\tfor i, v := range %s {\n", varName)
+	fmt.Fprintf(w, "\t\t_ = i\n")
 	marshalValue(w, field.Slice, "v", errName+"[%d]", "i")
 	fmt.Fprintf(w, "\t}\n\n")
 }
@@ -143,7 +144,7 @@ func binarySize(w *bytes.Buffer, field *Field, varName string) {
 	switch field.Type {
 	case "bytes", "string", "chainSet", "uvarint":
 		expr = field.Type + "BinarySize(%s)"
-	case "bigint":
+	case "bigint", "chain":
 		expr = field.Type + "BinarySize(&%s)"
 	case "slice":
 		expr = "uvarintBinarySize(uint64(len(%s)))"
@@ -173,7 +174,7 @@ func unmarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errA
 	switch field.Type {
 	case "bytes", "string", "chainSet", "uvarint":
 		expr, size, inPlace = field.Type+"UnmarshalBinary(data)", field.Type+"BinarySize(%s)", false
-	case "bigint":
+	case "bigint", "chain":
 		expr, size, inPlace = field.Type+"UnmarshalBinary(data)", field.Type+"BinarySize(&%s)", false
 	case "slice":
 		sliceName, varName = varName, "len"+field.Name
@@ -232,7 +233,7 @@ func run(cmd *cobra.Command, args []string) {
 	for _, typ := range types {
 		fmt.Fprintf(w, "type %s struct {\n", typ.name)
 		if typ.Kind == "chain" {
-			fmt.Fprintf(w, "\nstate.Chain\n")
+			fmt.Fprintf(w, "\nstate.ChainHeader\n")
 		}
 		for _, field := range typ.Fields {
 			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
@@ -253,6 +254,13 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	for _, typ := range types {
+		if typ.Kind != "tx" {
+			continue
+		}
+		fmt.Fprintf(w, "func (*%s) GetType() types.TxType { return types.TxType%[1]s }\n\n", typ.name)
+	}
+
+	for _, typ := range types {
 		fmt.Fprintf(w, "func (v *%s) BinarySize() int {\n", typ.name)
 		fmt.Fprintf(w, "\tvar n int\n\n")
 
@@ -261,7 +269,7 @@ func run(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\nn += uvarintBinarySize(uint64(types.TxType%s))\n\n", typ.name)
 		case "chain":
 			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n", typ.name)
-			fmt.Fprintf(w, "\nn += v.Chain.GetHeaderSize()\n\n")
+			fmt.Fprintf(w, "\nn += v.ChainHeader.GetHeaderSize()\n\n")
 		}
 
 		for _, field := range typ.Fields {
@@ -281,7 +289,7 @@ func run(cmd *cobra.Command, args []string) {
 		case "chain":
 			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n\n", typ.name)
 			err := fieldError("encoding", "header")
-			fmt.Fprintf(w, "\tif b, err := v.Chain.MarshalBinary(); err != nil { return nil, %s } else { buffer.Write(b) }\n", err)
+			fmt.Fprintf(w, "\tif b, err := v.ChainHeader.MarshalBinary(); err != nil { return nil, %s } else { buffer.Write(b) }\n", err)
 		}
 
 		for _, field := range typ.Fields {
@@ -304,7 +312,7 @@ func run(cmd *cobra.Command, args []string) {
 		case "chain":
 			err := fieldError("decoding", "header")
 			fmt.Fprintf(w, "\ttyp := uint64(types.ChainType%s)\n", typ.name)
-			fmt.Fprintf(w, "\tif err := v.Chain.UnmarshalBinary(data); err != nil { return %s } else if uint64(v.Type) != typ { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, v) }\n", err)
+			fmt.Fprintf(w, "\tif err := v.ChainHeader.UnmarshalBinary(data); err != nil { return %s } else if uint64(v.Type) != typ { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, v) }\n", err)
 			fmt.Fprintf(w, "\tdata = data[v.GetHeaderSize():]\n\n")
 		}
 
