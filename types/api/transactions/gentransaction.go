@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/types"
+
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
@@ -162,9 +164,9 @@ func (t *GenTransaction) ValidateSig() bool { // Validate the signatures on the 
 
 // TransactionType
 // Return the type of the Transaction (the first VarInt)
-func (t *GenTransaction) TransactionType() (transType uint64) {
-	transType, _ = common.BytesUint64(t.Transaction)
-	return transType
+func (t *GenTransaction) TransactionType() types.TxType {
+	transType, _ := common.BytesUint64(t.Transaction)
+	return types.TxType(transType)
 }
 
 // As unmarshals the transaction payload as the given sub transaction type.
