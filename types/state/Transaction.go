@@ -2,6 +2,7 @@ package state
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types/api"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -20,7 +21,7 @@ type txState struct {
 // NewPendingTransaction will create a new pending transaction from a general transaction
 func NewPendingTransaction(gtx *transactions.GenTransaction) *PendingTransaction {
 	ret := &PendingTransaction{}
-	ret.Chain.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypePendingTransaction)
+	ret.ChainHeader.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypePendingTransaction)
 	ret.Signature = gtx.Signature
 	ret.TransactionState = &txState{}
 	ret.TransactionState.SigInfo = gtx.SigInfo
@@ -49,12 +50,12 @@ func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransact
 // i.e. transaction header (signature, rcd, transactionid, chainid)
 // the body of the transaction can also be stored for pending transactions.
 type Transaction struct {
-	Chain
+	ChainHeader
 	txState
 }
 
 type PendingTransaction struct {
-	Chain
+	ChainHeader
 	Signature        []*transactions.ED25519Sig
 	TransactionState *txState
 	Status           string `json:"status" form:"status" query:"status" validate:"required"`
@@ -69,14 +70,6 @@ func (is *Transaction) TransactionHash() *types.Bytes32 {
 	return &txHash
 }
 
-func (is *Transaction) GetChainUrl() string {
-	return is.Chain.GetChainUrl()
-}
-
-func (is *Transaction) GetType() uint64 {
-	return is.Chain.GetType()
-}
-
 func (is *Transaction) MarshalBinary() (data []byte, err error) {
 	defer func() {
 		if rerr := recover(); rerr != nil {
@@ -84,7 +77,7 @@ func (is *Transaction) MarshalBinary() (data []byte, err error) {
 		}
 	}()
 
-	data, err = is.Chain.MarshalBinary()
+	data, err = is.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
 	}
@@ -111,11 +104,11 @@ func (is *Transaction) UnmarshalBinary(data []byte) (err error) {
 	}()
 
 	i := 0
-	err = is.Chain.UnmarshalBinary(data)
+	err = is.ChainHeader.UnmarshalBinary(data)
 	if err != nil {
 		return fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
 	}
-	i += is.Chain.GetHeaderSize()
+	i += is.ChainHeader.GetHeaderSize()
 
 	is.SigInfo = new(transactions.SignatureInfo) //                Get a SignatureInfo struct
 	data, err = is.SigInfo.UnMarshal(data[i:])   //                And unmarshal it.
@@ -138,7 +131,7 @@ func (t *PendingTransaction) MarshalBinary() (data []byte, err error) {
 		}
 	}()
 
-	headerData, err := t.Chain.MarshalBinary()
+	headerData, err := t.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("unable to marshal chain header for transaction, %v", err)
 	}
@@ -181,12 +174,12 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 		} //
 	}() //
 
-	err = t.Chain.UnmarshalBinary(data)
+	err = t.ChainHeader.UnmarshalBinary(data)
 	if err != nil {
 		return fmt.Errorf("cannot unmarshal chain header for transaction state,%v", err)
 	}
 
-	data = data[t.Chain.GetHeaderSize():]
+	data = data[t.ChainHeader.GetHeaderSize():]
 	var sLen uint64                               //                Get how many signatures we have
 	sLen, data = common.BytesUint64(data)         //                Of course, need it in an int of some sort
 	if sLen < 1 || sLen > api.MaxTokenTxOutputs { //                If the count isn't reasonable, die
@@ -213,12 +206,4 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 	}
 
 	return nil
-}
-
-func (t *PendingTransaction) GetChainUrl() string {
-	return t.Chain.GetChainUrl()
-}
-
-func (t *PendingTransaction) GetType() uint64 {
-	return t.Chain.GetType()
 }
