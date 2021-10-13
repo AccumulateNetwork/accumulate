@@ -22,13 +22,13 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 
 	var wallet []*transactions.WalletEntry
 
-	wallet = append(wallet, transactions.NewWalletEntry()) // wallet[0] is where we put 5000 ACME tokens
+	wallet = append(wallet, api.NewWalletEntry())          // wallet[0] is where we put 5000 ACME tokens
 	wallet[0].Nonce = 1                                    // start the nonce at 1
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
 	for i := 0; i < walletCount; i++ { //                            create a 1000 addresses for anonymous token chains
-		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
+		wallet = append(wallet, api.NewWalletEntry()) // create a new wallet entry
 	}
 
 	addrCountMap := make(map[string]int)
