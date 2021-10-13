@@ -8,6 +8,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
+// Deprecated: Use protocol.SyntheticCreateChain
 type TokenAccountCreate struct {
 	Header
 	TokenURL types.String `json:"tokenURL" form:"tokenURL" query:"tokenURL" validate:"required,uri"`
