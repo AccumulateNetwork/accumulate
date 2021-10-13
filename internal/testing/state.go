@@ -3,6 +3,8 @@ package testing
 import (
 	"crypto/sha256"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -24,7 +26,7 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	deposit := synthetic.NewTokenTransactionDeposit(fakeTxid[:], &sponsorAdi, &recipientAdi)
 	amtToDeposit := int64(50000)                           //deposit 50k tokens
 	deposit.DepositAmount.SetInt64(amtToDeposit * TokenMx) // assume 8 decimal places
-	deposit.TokenUrl = types.String("dc/ACME")
+	deposit.TokenUrl = types.String(protocol.AcmeUrl().String())
 
 	depData, err := deposit.MarshalBinary()
 	if err != nil {
@@ -52,7 +54,7 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 
 func CreateAnonTokenAccount(db *state.StateDB, key ed25519.PrivKey, tokens float64) error {
 	url := types.String(anon.GenerateAcmeAddress(key.PubKey().Bytes()))
-	return CreateTokenAccount(db, string(url), "dc/ACME", tokens, true)
+	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
 func CreateADI(db *state.StateDB, key ed25519.PrivKey, url types.String) error {
@@ -73,14 +75,14 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, url types.String) error {
 	return nil
 }
 
-func CreateTokenAccount(db *state.StateDB, url, tokenUrl string, tokens float64, anon bool) error {
-	adi, chainPath, err := types.ParseIdentityChainPath(&url)
+func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float64, anon bool) error {
+	u, err := url.Parse(accUrl)
 	if err != nil {
 		return err
 	}
-	acctChainId := types.GetChainIdFromChainPath(&chainPath)
+	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
-	acctState := state.NewTokenAccount(adi, "dc/ACME")
+	acctState := state.NewTokenAccount(u.String(), tokenUrl)
 	if anon {
 		acctState.Type = types.ChainTypeAnonTokenAccount
 	}
@@ -93,6 +95,6 @@ func CreateTokenAccount(db *state.StateDB, url, tokenUrl string, tokens float64,
 		return err
 	}
 
-	db.AddStateEntry(acctChainId, &types.Bytes32{}, acctObj)
+	db.AddStateEntry(&acctChainId, &types.Bytes32{}, acctObj)
 	return nil
 }
