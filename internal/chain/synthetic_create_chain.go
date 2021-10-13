@@ -57,7 +57,7 @@ func (SyntheticCreateChain) check(st *state.StateEntry, tx *transactions.GenTran
 		// claims to be. It should be OK to skip this, since synthetic
 		// transactions should already be validated.
 
-		u, err := url.Parse(chain.GetChainUrl())
+		u, err := chain.ParseUrl()
 		if err != nil {
 			return nil, fmt.Errorf("invalid chain URL: %v", err)
 		}
