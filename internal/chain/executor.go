@@ -69,7 +69,7 @@ func (m *Executor) Query(q *api.Query) ([]byte, error) {
 		return nil, fmt.Errorf("failed to locate chain entry: %v", err)
 	}
 
-	err = chainState.As(new(state.Chain))
+	err = chainState.As(new(state.ChainHeader))
 	if err != nil {
 		return nil, fmt.Errorf("unable to extract chain header: %v", err)
 	}

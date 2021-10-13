@@ -31,7 +31,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	se.ChainId = &chainId
 	se.DB = db
 
-	_, err = SynthTokenDeposit{}.DeliverTx(se, gtx)
+	_, err = SyntheticTokenDeposit{}.DeliverTx(se, gtx)
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account
@@ -42,7 +42,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	err = tas.UnmarshalBinary(anonChain.Entry)
 	require.NoError(t, err)
 	require.Equal(t, types.String(gtx.SigInfo.URL), tas.ChainUrl, "invalid chain header")
-	require.Equalf(t, types.ChainTypeAnonTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.Chain.Type.Name())
+	require.Equalf(t, types.ChainTypeAnonTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.ChainHeader.Type.Name())
 	require.Equal(t, tokenUrl, tas.TokenUrl.String, "token url of state doesn't match expected")
 	require.Equal(t, uint64(1), tas.TxCount)
 

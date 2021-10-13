@@ -233,7 +233,7 @@ func run(cmd *cobra.Command, args []string) {
 	for _, typ := range types {
 		fmt.Fprintf(w, "type %s struct {\n", typ.name)
 		if typ.Kind == "chain" {
-			fmt.Fprintf(w, "\nstate.Chain\n")
+			fmt.Fprintf(w, "\nstate.ChainHeader\n")
 		}
 		for _, field := range typ.Fields {
 			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
@@ -269,7 +269,7 @@ func run(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\nn += uvarintBinarySize(uint64(types.TxType%s))\n\n", typ.name)
 		case "chain":
 			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n", typ.name)
-			fmt.Fprintf(w, "\nn += v.Chain.GetHeaderSize()\n\n")
+			fmt.Fprintf(w, "\nn += v.ChainHeader.GetHeaderSize()\n\n")
 		}
 
 		for _, field := range typ.Fields {
@@ -289,7 +289,7 @@ func run(cmd *cobra.Command, args []string) {
 		case "chain":
 			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n\n", typ.name)
 			err := fieldError("encoding", "header")
-			fmt.Fprintf(w, "\tif b, err := v.Chain.MarshalBinary(); err != nil { return nil, %s } else { buffer.Write(b) }\n", err)
+			fmt.Fprintf(w, "\tif b, err := v.ChainHeader.MarshalBinary(); err != nil { return nil, %s } else { buffer.Write(b) }\n", err)
 		}
 
 		for _, field := range typ.Fields {
@@ -312,7 +312,7 @@ func run(cmd *cobra.Command, args []string) {
 		case "chain":
 			err := fieldError("decoding", "header")
 			fmt.Fprintf(w, "\ttyp := uint64(types.ChainType%s)\n", typ.name)
-			fmt.Fprintf(w, "\tif err := v.Chain.UnmarshalBinary(data); err != nil { return %s } else if uint64(v.Type) != typ { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, v) }\n", err)
+			fmt.Fprintf(w, "\tif err := v.ChainHeader.UnmarshalBinary(data); err != nil { return %s } else if uint64(v.Type) != typ { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, v) }\n", err)
 			fmt.Fprintf(w, "\tdata = data[v.GetHeaderSize():]\n\n")
 		}
 

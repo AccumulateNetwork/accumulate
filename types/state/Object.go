@@ -63,8 +63,8 @@ type StateEntry struct {
 	ChainId  *types.Bytes32
 	AdiChain *types.Bytes32
 
-	ChainHeader *Chain
-	AdiHeader   *Chain
+	ChainHeader *ChainHeader
+	AdiHeader   *ChainHeader
 
 	DB *StateDB
 }
