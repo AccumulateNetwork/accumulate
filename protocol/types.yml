@@ -1,0 +1,111 @@
+# Naming
+#
+# Type names that represent persistent objects should be nouns, such as Account,
+# Token.
+#
+# Type names that represent actions (transactions) should be verbs, such as
+# CreateAccount, SendTokens.
+#
+# Type names for fields of a transaction should be suffixed with 'Params', such
+# as TokenOutputParams.
+
+SyntheticCreateChain:
+  kind: tx
+  fields:
+  - name: Cause
+    type: chain
+  - name: Chains
+    type: slice
+    slice:
+      type: bytes
+
+ChainParams:
+  fields:
+  - name: Url
+    type: string
+  - name: Data
+    type: bytes
+
+AddCredits:
+  kind: tx
+  fields:
+  - name: Recipient
+    type: string
+  - name: Amount
+    type: uvarint
+
+SyntheticDepositCredits:
+  kind: tx
+  fields:
+  - name: Cause
+    type: chain
+  - name: Amount
+    type: uvarint
+
+SigSpec:
+  fields:
+  - name: KeyAlgorithm
+    type: KeyAlgorithm
+    marshal-as: self
+  - name: HashAlgorithm
+    type: HashAlgorithm
+    marshal-as: self
+  - name: PublicKey
+    type: bytes
+  - name: Nonce
+    type: uvarint
+
+SigSpecParams:
+  fields:
+  - name: KeyAlgorithm
+    type: KeyAlgorithm
+    marshal-as: self
+  - name: HashAlgorithm
+    type: HashAlgorithm
+    marshal-as: self
+  - name: PublicKey
+    type: bytes
+
+MultiSigSpec:
+  kind: chain
+  fields:
+  - name: CreditBalance
+    type: bigint
+  - name: SigSpecs
+    type: slice
+    slice:
+      type: SigSpec
+      pointer: true
+      marshal-as: self
+
+CreateMultiSigSpec:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+  - name: SigSpecs
+    type: slice
+    slice:
+      type: SigSpecParams
+      pointer: true
+      marshal-as: self
+
+SigSpecGroup:
+  kind: chain
+  fields:
+  - name: MultiSigSpecs
+    type: chainSet
+
+CreateSigSpecGroup:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+  - name: MultiSigSpecs
+    type: chainSet
+
+AssignSigSpecGroup:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
