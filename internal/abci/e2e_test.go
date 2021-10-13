@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -123,9 +124,9 @@ func TestE2E_Accumulator_TokenTx_ADI(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{})
 	fooKey, barKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateTokenAccount(n.db, "foo/tokens", "dc/ACME", 1, false))
+	require.NoError(t, acctesting.CreateTokenAccount(n.db, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
 	require.NoError(t, acctesting.CreateADI(n.db, barKey, "bar"))
-	require.NoError(t, acctesting.CreateTokenAccount(n.db, "bar/tokens", "dc/ACME", 0, false))
+	require.NoError(t, acctesting.CreateTokenAccount(n.db, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		tokenTx := api.NewTokenTx("foo/tokens")
@@ -148,7 +149,7 @@ func TestE2E_Accumulator_TokenAccount_ADI(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		acctTx := api.NewTokenAccount("FooBar/Baz", "dc/ACME")
+		acctTx := api.NewTokenAccount("FooBar/Baz", types.String(protocol.AcmeUrl().String()))
 		tx, err := transactions.New("FooBar", edSigner(adiKey, 1), acctTx)
 		require.NoError(t, err)
 		send(tx)
@@ -158,8 +159,8 @@ func TestE2E_Accumulator_TokenAccount_ADI(t *testing.T) {
 
 	r := n.GetTokenAccount("FooBar/Baz")
 	require.Equal(t, types.ChainTypeTokenAccount, r.Type)
-	require.Equal(t, types.String("FooBar/Baz"), r.ChainUrl)
-	require.Equal(t, types.String("dc/ACME"), r.TokenUrl.String)
+	require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
+	require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
 }
 
 func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {
