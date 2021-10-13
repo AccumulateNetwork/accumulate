@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -30,28 +31,21 @@ func (SynthTokenAccountCreate) DeliverTx(st *state.StateEntry, tx *transactions.
 		return nil, fmt.Errorf("data payload of submission is not a valid token chain create message")
 	}
 
-	adi, chainPath, err := types.ParseIdentityChainPath(tac.ToUrl.AsString())
+	acctUrl, err := url.Parse(tx.SigInfo.URL)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid sponsor URL: %v", err)
 	}
 
-	issuingidentityhash := types.GetIdentityChainFromIdentity(&adi)
-	issuingchainid := types.GetChainIdFromChainPath(&chainPath)
-
-	if issuingidentityhash == nil {
-		return nil, fmt.Errorf("issuing identity adi is invalid")
-	}
-
-	if issuingchainid == nil {
-		return nil, fmt.Errorf("issuing identity chain id is invalid")
-	}
-
-	_, chainPathToken, err := types.ParseIdentityChainPath(tac.TokenURL.AsString())
+	tokenUrl, err := url.Parse(*tac.TokenURL.AsString())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("invalid token URL: %v", err)
 	}
 
-	tas := state.NewTokenAccount(chainPath, chainPathToken)
+	if tac.ToUrl != types.String(tx.SigInfo.URL) {
+		return nil, fmt.Errorf("account create URL does not match TX sponsor")
+	}
+
+	tas := state.NewTokenAccount(acctUrl.String(), tokenUrl.String())
 	//tas.AdiChainPath = submission.? //todo: need to obtain the adi chain path from the submission request
 	stateObj := new(state.Object)
 	stateObj.Entry, err = tas.MarshalBinary()
@@ -59,7 +53,8 @@ func (SynthTokenAccountCreate) DeliverTx(st *state.StateEntry, tx *transactions.
 		return nil, fmt.Errorf("error marshalling identity state: %v", err)
 	}
 
+	chainId := types.Bytes(acctUrl.ResourceChain()).AsBytes32()
 	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
-	st.DB.AddStateEntry(issuingchainid, &txHash, stateObj)
+	st.DB.AddStateEntry(&chainId, &txHash, stateObj)
 	return new(DeliverTxResult), nil
 }
