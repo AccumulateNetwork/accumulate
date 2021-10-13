@@ -91,6 +91,13 @@ func TestE2E_Accumulator_ADI(t *testing.T) {
 	r := n.GetADI("RoadRunner")
 	require.Equal(t, types.String("RoadRunner"), r.ChainUrl)
 	require.Equal(t, types.Bytes(keyHash[:]), r.KeyData)
+
+	kg := n.GetKeyGroup("RoadRunner/keygroup0")
+	require.Len(t, kg.MultiSigSpecs, 1)
+
+	ks := n.GetKeySet("RoadRunner/keyset0")
+	require.Len(t, ks.SigSpecs, 1)
+	require.Equal(t, keyHash[:], ks.SigSpecs[0].PublicKey)
 }
 
 func TestE2E_Accumulator_TokenTx_Anon(t *testing.T) {
