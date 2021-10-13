@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -29,7 +28,7 @@ var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
 var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
 var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 
-func TestLoadOnRemote(t *testing.T) {
+func _TestLoadOnRemote(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is not appropriate for CI")
 	}
@@ -97,7 +96,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func _TestJsonRpcAnonToken(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is flaky in CI")
 	}
@@ -210,9 +209,9 @@ func TestJsonRpcAnonToken(t *testing.T) {
 }
 
 func TestFaucet(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
+	//if runtime.GOOS == "windows" {
+	//	t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	//}
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	node, pv := startBVC(t, dir)
@@ -333,6 +332,11 @@ func TestFaucet(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Printf("%s\n", string(output))
+	node.Stop()
+
+	<-node.Quit()
+	node.Wait()
+
 }
 
 func TestJsonRpcAdi(t *testing.T) {
