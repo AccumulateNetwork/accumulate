@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
+	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -29,14 +30,14 @@ func (n *fakeNode) anonTokenTest(count int) string {
 	recipient := generateKey()
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, recipient, 5e4))
 
-	origin := transactions.NewWalletEntry()
+	origin := accapi.NewWalletEntry()
 	origin.Nonce = 1
 	origin.PrivateKey = recipient.Bytes()
 	origin.Addr = anon.GenerateAcmeAddress(recipient.PubKey().Bytes())
 
 	recipients := make([]*transactions.WalletEntry, 10)
 	for i := range recipients {
-		recipients[i] = transactions.NewWalletEntry()
+		recipients[i] = accapi.NewWalletEntry()
 	}
 
 	n.Batch(func(send func(*Tx)) {
@@ -175,12 +176,12 @@ func BenchmarkE2E_Accumulator_AnonToken(b *testing.B) {
 		send(tx)
 	})
 
-	origin := transactions.NewWalletEntry()
+	origin := accapi.NewWalletEntry()
 	origin.Nonce = 1
 	origin.PrivateKey = recipient.Bytes()
 	origin.Addr = anon.GenerateAcmeAddress(recipient.PubKey().Address())
 
-	rwallet := transactions.NewWalletEntry()
+	rwallet := accapi.NewWalletEntry()
 
 	b.ResetTimer()
 	n.Batch(func(send func(*Tx)) {
