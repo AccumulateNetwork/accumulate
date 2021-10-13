@@ -36,7 +36,7 @@ type CreateSigSpecGroup struct {
 }
 
 type MultiSigSpec struct {
-	state.Chain
+	state.ChainHeader
 	CreditBalance big.Int    `json:"creditBalance" form:"creditBalance" query:"creditBalance" validate:"required"`
 	SigSpecs      []*SigSpec `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
 }
@@ -49,7 +49,7 @@ type SigSpec struct {
 }
 
 type SigSpecGroup struct {
-	state.Chain
+	state.ChainHeader
 	MultiSigSpecs [][32]byte `json:"multiSigSpecs" form:"multiSigSpecs" query:"multiSigSpecs" validate:"required"`
 }
 
@@ -160,7 +160,7 @@ func (v *MultiSigSpec) BinarySize() int {
 	// Enforce sanity
 	v.Type = types.ChainTypeMultiSigSpec
 
-	n += v.Chain.GetHeaderSize()
+	n += v.ChainHeader.GetHeaderSize()
 
 	n += bigintBinarySize(&v.CreditBalance)
 
@@ -194,7 +194,7 @@ func (v *SigSpecGroup) BinarySize() int {
 	// Enforce sanity
 	v.Type = types.ChainTypeSigSpecGroup
 
-	n += v.Chain.GetHeaderSize()
+	n += v.ChainHeader.GetHeaderSize()
 
 	n += chainSetBinarySize(v.MultiSigSpecs)
 
@@ -313,7 +313,7 @@ func (v *MultiSigSpec) MarshalBinary() ([]byte, error) {
 	// Enforce sanity
 	v.Type = types.ChainTypeMultiSigSpec
 
-	if b, err := v.Chain.MarshalBinary(); err != nil {
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
 	} else {
 		buffer.Write(b)
@@ -362,7 +362,7 @@ func (v *SigSpecGroup) MarshalBinary() ([]byte, error) {
 	// Enforce sanity
 	v.Type = types.ChainTypeSigSpecGroup
 
-	if b, err := v.Chain.MarshalBinary(); err != nil {
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
 	} else {
 		buffer.Write(b)
@@ -550,7 +550,7 @@ func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 
 func (v *MultiSigSpec) UnmarshalBinary(data []byte) error {
 	typ := uint64(types.ChainTypeMultiSigSpec)
-	if err := v.Chain.UnmarshalBinary(data); err != nil {
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if uint64(v.Type) != typ {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
@@ -616,7 +616,7 @@ func (v *SigSpec) UnmarshalBinary(data []byte) error {
 
 func (v *SigSpecGroup) UnmarshalBinary(data []byte) error {
 	typ := uint64(types.ChainTypeSigSpecGroup)
-	if err := v.Chain.UnmarshalBinary(data); err != nil {
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if uint64(v.Type) != typ {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
