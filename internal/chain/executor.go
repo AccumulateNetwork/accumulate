@@ -95,7 +95,7 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 	st, err := m.db.LoadChainAndADI(tx.ChainID)
 	m.mu.Unlock()
 	if err != nil {
-		return fmt.Errorf("failed to get state: %v", err)
+		return fmt.Errorf("failed to get state for : %v", err)
 	}
 
 	err = m.isSane(st, tx)
@@ -264,7 +264,7 @@ func (m *Executor) isSane(st *state.StateEntry, tx *transactions.GenTransaction)
 	// }
 
 	if !tx.ValidateSig() {
-		return fmt.Errorf("transaction %d has an invalid signature", tx.TransactionType())
+		return fmt.Errorf("invalid signature")
 	}
 	return nil
 }

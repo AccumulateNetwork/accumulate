@@ -24,13 +24,13 @@ func NewQuery(txBouncer *relay.Relay) *Query {
 	return &q
 }
 
-func (q *Query) BroadcastTx(gtx *transactions.GenTransaction) ([]byte, int, error) { //(*ctypes.ResultBroadcastTx, error) {
+func (q *Query) BroadcastTx(gtx *transactions.GenTransaction) (ti relay.TransactionInfo, err error) {
 	payload, err := gtx.Marshal()
 	if err != nil {
-		return nil, -1, err
+		return ti, err
 	}
-	txRef, index := q.txBouncer.BatchTx(gtx.Routing, payload)
-	return txRef, index, nil
+	ti = q.txBouncer.BatchTx(gtx.Routing, payload)
+	return ti, nil
 }
 
 func (q *Query) Query(url string, txid []byte) (*ctypes.ResultABCIQuery, error) {

@@ -316,16 +316,29 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 		ret.Data = &msg
 		return ret
 	}
-	resp, err := api.query.BroadcastTx(genTx)
+	txInfo, err := api.query.BroadcastTx(genTx)
 	if err != nil {
 		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
 		ret.Data = &msg
 		return ret
 	}
 
-	api.query.BatchSend()
+	stat := api.query.BatchSend()
+	resp := <-stat
+	close(stat)
 
-	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", genTx.TransactionHash(), resp.Log))
+	resolved, err := resp.ResolveTransactionResponse(txInfo)
+	if err != nil {
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", genTx.TransactionHash(), err))
+		ret.Data = &msg
+		return ret
+	}
+
+	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", genTx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
+	} else {
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", genTx.TransactionHash(), resolved.Hash, resolved.Codespace))
+	}
 	ret.Data = &msg
 	return ret
 }
@@ -489,7 +502,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	resp, err := api.query.BroadcastTx(gtx)
+	txInfo, err := api.query.BroadcastTx(gtx)
 	if err != nil {
 		return NewAccumulateError(err)
 	}
@@ -502,19 +515,19 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	ret := acmeapi.APIDataResponse{}
 	ret.Type = "faucet"
 
-	for i, _ := range res.Status {
-		for _, v := range res.Status[i].Returns {
-			jsonData, err := json.Marshal(v)
-			if err != nil {
-				msg := json.RawMessage(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TransactionHash(), resp.Log))
-				ret.Data = &msg
-				return ret
-			}
-			fmt.Println(string(jsonData))
-		}
+	var msg json.RawMessage
+	resolved, err := res.ResolveTransactionResponse(txInfo)
+	if err != nil {
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", gtx.TransactionHash(), err))
+		ret.Data = &msg
+		return ret
 	}
 
-	msg := json.RawMessage(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\"}", gtx.TransactionHash(), resp.Log))
+	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", gtx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
+	} else {
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", gtx.TransactionHash(), resolved.Hash, resolved.Codespace))
+	}
 	ret.Data = &msg
 	return &ret
 }

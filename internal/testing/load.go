@@ -5,7 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
-	"time"
+
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -33,8 +34,20 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 	addrCountMap := make(map[string]int)
 	for i := 0; i < txCount; i++ { // Make a bunch of transactions
 		if i%200 == 0 {
-			query.BatchSend()
-			time.Sleep(200 * time.Millisecond)
+			stat := query.BatchSend()
+			bs := <-stat
+			for _, s := range bs.Status {
+				if s.Err != nil {
+					fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
+				}
+				for j, t := range s.Returns {
+					if resp, ok := t.(coregrpc.ResponseBroadcastTx); ok {
+						if len(resp.CheckTx.Log) > 0 {
+							fmt.Printf("<%d>%v<<\n", j, resp.CheckTx.Log)
+						}
+					}
+				}
+			}
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                     // pick a destination address
@@ -56,15 +69,24 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
 
-		if resp, err := query.BroadcastTx(gtx); err != nil {
+		if _, err := query.BroadcastTx(gtx); err != nil {
 			return nil, fmt.Errorf("failed to send TX: %v", err)
-		} else {
-			if len(resp.Log) > 0 {
-				fmt.Printf("<%d>%v<<\n", i, resp.Log)
+		}
+	}
+	stat := query.BatchSend()
+	bs := <-stat
+	for i, s := range bs.Status {
+		for _, t := range s.Returns {
+			if s.Err != nil {
+				fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
+			}
+			if resp, ok := t.(coregrpc.ResponseBroadcastTx); ok {
+				if len(resp.CheckTx.Log) > 0 {
+					fmt.Printf("<%d>%v<<\n", i, resp.CheckTx.Log)
+				}
 			}
 		}
 	}
-	query.BatchSend()
 	for addr, ct := range addrCountMap {
 		addrList = append(addrList, addr)
 		_ = ct

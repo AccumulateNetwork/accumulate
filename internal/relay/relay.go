@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"sync"
+
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -30,16 +32,7 @@ type Relay struct {
 	batches     []Batch
 	txQueue     []txBatch
 	numNetworks uint64
-}
-
-type DispatchStatus struct {
-	NetworkId int
-	Returns   []interface{}
-	Err       error
-}
-
-type BatchedStatus struct {
-	Status []DispatchStatus
+	mutex       sync.Mutex
 }
 
 // New Create the new bouncer and initialize it with a client connection to each of the nodes
@@ -62,12 +55,6 @@ func New(clients ...client.ABCIClient) *Relay {
 // create a new batch by calling this function
 func (r *Relay) resetBatches() {
 	r.txQueue = make([]txBatch, r.numNetworks)
-	//r.batches = make([]Batch, r.numNetworks)
-	//for i, c := range r.client {
-	//	if c, ok := c.(Batchable); ok {
-	//		r.batches[i] = c.NewBatch()
-	//	}
-	//}
 }
 
 func (r *Relay) GetNetworkId(routing uint64) int {
@@ -76,14 +63,19 @@ func (r *Relay) GetNetworkId(routing uint64) int {
 
 //BatchTx
 //appends the transaction to the transaction queue and returns the tx hash used to track
-//in tendermint, and the index within the queue
-func (r *Relay) BatchTx(routing uint64, tx tmtypes.Tx) ([]byte, int) {
+//in tendermint, the index within the queue, and the network the transaction will be submitted on
+func (r *Relay) BatchTx(routing uint64, tx tmtypes.Tx) (ti TransactionInfo) {
 	i := r.GetNetworkId(routing)
+	r.mutex.Lock()
 	r.txQueue[i].tx = append(r.txQueue[i].tx, tx)
 	r.txQueue[i].networkId = i
+	r.mutex.Unlock()
 	index := len(r.txQueue[i].tx) - 1
 	txReference := sha256.Sum256(tx)
-	return txReference[:], index
+	ti.ReferenceId = txReference[:]
+	ti.NetworkId = i
+	ti.QueueIndex = index
+	return ti
 }
 
 // BatchSend
@@ -93,6 +85,8 @@ func (r *Relay) BatchSend() chan BatchedStatus {
 	var sendTxsAsBatch []txBatch
 	var sendTxsAsSingle []txBatch
 	//sort out the requests
+	r.mutex.Lock()
+
 	for i, c := range r.client {
 		l := len(r.txQueue[i].tx)
 		if _, ok := c.(Batchable); l > 1 && ok {
@@ -106,6 +100,8 @@ func (r *Relay) BatchSend() chan BatchedStatus {
 	stat := make(chan BatchedStatus)
 	go dispatch(r.client, sendTxsAsBatch, sendTxsAsSingle, stat)
 	r.resetBatches()
+
+	r.mutex.Unlock()
 	return stat
 }
 
