@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	apitypes "github.com/AccumulateNetwork/accumulated/types/api"
@@ -84,7 +85,7 @@ func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25
 
 	txid := sha256.Sum256([]byte("fake txid"))
 
-	tokenUrl := types.String("dc/ACME")
+	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	//create a fake synthetic deposit for faucet.
 	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
