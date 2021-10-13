@@ -15,8 +15,10 @@ func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.Priva
 		TokenTx{},
 		TokenIssuance{},
 		TokenAccountCreate{},
+		AddCredits{},
 		SyntheticCreateChain{},
 		SyntheticTokenDeposit{},
+		SyntheticDepositCredits{},
 	)
 }
 
