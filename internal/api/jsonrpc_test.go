@@ -8,11 +8,10 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api/response"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 
@@ -21,6 +20,7 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -29,7 +29,7 @@ var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
 var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
 var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 
-func TestLoadOnRemote(t *testing.T) {
+func _TestLoadOnRemote(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is not appropriate for CI")
 	}
@@ -97,7 +97,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func _TestJsonRpcAnonToken(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is flaky in CI")
 	}
@@ -210,9 +210,9 @@ func TestJsonRpcAnonToken(t *testing.T) {
 }
 
 func TestFaucet(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
+	//if runtime.GOOS == "windows" {
+	//	t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	//}
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	node, pv := startBVC(t, dir)
@@ -223,7 +223,21 @@ func TestFaucet(t *testing.T) {
 	}()
 
 	rpcAddr := node.Config.RPC.ListenAddress
+	//ctx, cancel := context.WithCancel(context.Background())
+	//defer cancel()
 
+	// Start a tendermint node (and kvstore) in the background to test against
+	//app := kvstore.NewApplication()
+	//conf := rpctest.CreateConfig("ExampleHTTP_batching")
+	//
+	//rpcAddr := conf.RPC.ListenAddress
+	//
+	//_, closer, err := rpctest.StartTendermint(ctx, conf, app, rpctest.SuppressStdout)
+	//if err != nil {
+	//	t.Fatal(err) //nolint:gocritic
+	//}
+	//defer func() { _ = closer(ctx) }()
+	//
 	rpcClient, err := http.New(rpcAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -242,6 +256,62 @@ func TestFaucet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	//experimental tests
+	//c := rpcClient
+
+	// Create a new batch
+	//batch := c.NewBatch()
+
+	// Create our two transactions
+	k1 := []byte("firstName")
+	v1 := []byte("satoshi")
+	tx1 := append(k1, append([]byte("="), v1...)...)
+
+	k2 := []byte("lastName")
+	v2 := []byte("nakamoto")
+	tx2 := append(k2, append([]byte("="), v2...)...)
+
+	gtx := transactions.GenTransaction{}
+	gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{})
+	gtx.SigInfo = &transactions.SignatureInfo{}
+	gtx.SigInfo.URL = "fakeUrl"
+	gtx.Transaction = tx1
+	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
+	//changing the nonce will invalidate the signature.
+	gtx.SigInfo.Nonce = 1234
+
+	//intentionally send in a bogus transaction
+	ti1, _ := query.BroadcastTx(&gtx)
+	gtx.Transaction = tx2
+	ti2, _ := query.BroadcastTx(&gtx)
+
+	stat := query.BatchSend()
+	bs := <-stat
+	res1, err := bs.ResolveTransactionResponse(ti1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res1.Code == 0 {
+		t.Fatalf("expecting error code that is non zero")
+	}
+
+	errorData, err := json.Marshal(res1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(errorData))
+
+	res2, err := bs.ResolveTransactionResponse(ti2)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Code == 0 {
+		t.Fatalf("expecting error code that is non zero")
+	}
+
+	//batch.Tx()
 
 	jsonapi := NewTest(t, query)
 
@@ -280,6 +350,11 @@ func TestFaucet(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Printf("%s\n", string(output))
+	node.Stop()
+
+	<-node.Quit()
+	node.Wait()
+
 }
 
 func TestJsonRpcAdi(t *testing.T) {
