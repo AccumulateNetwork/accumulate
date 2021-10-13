@@ -7,10 +7,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 
@@ -257,10 +258,10 @@ func TestFaucet(t *testing.T) {
 	}
 
 	//experimental tests
-	c := rpcClient
+	//c := rpcClient
 
 	// Create a new batch
-	batch := c.NewBatch()
+	//batch := c.NewBatch()
 
 	// Create our two transactions
 	k1 := []byte("firstName")
@@ -271,29 +272,46 @@ func TestFaucet(t *testing.T) {
 	v2 := []byte("nakamoto")
 	tx2 := append(k2, append([]byte("="), v2...)...)
 
-	txs := [][]byte{tx1, tx2}
-	for _, tx := range txs {
-		// Broadcast the transaction and wait for it to commit (rather use
-		// c.BroadcastTxSync though in production).
-		if _, err := batch.BroadcastTxCommit(context.Background(), tx); err != nil {
-			log.Fatal(err)
-		}
+	gtx := transactions.GenTransaction{}
+	gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{})
+	gtx.SigInfo = &transactions.SignatureInfo{}
+	gtx.SigInfo.URL = "fakeUrl"
+	gtx.Transaction = tx1
+	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
+	//changing the nonce will invalidate the signature.
+	gtx.SigInfo.Nonce = 1234
+
+	//intentionally send in a bogus transaction
+	ti1, _ := query.BroadcastTx(&gtx)
+	gtx.Transaction = tx2
+	ti2, _ := query.BroadcastTx(&gtx)
+
+	stat := query.BatchSend()
+	bs := <-stat
+	res1, err := bs.ResolveTransactionResponse(ti1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res1.Code == 0 {
+		t.Fatalf("expecting error code that is non zero")
+	}
+
+	errorData, err := json.Marshal(res1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(errorData))
+
+	res2, err := bs.ResolveTransactionResponse(ti2)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Code == 0 {
+		t.Fatalf("expecting error code that is non zero")
 	}
 
 	//batch.Tx()
-
-	// Send the batch of 2 transactions
-	res1, err := batch.Send(context.Background())
-	if err != nil {
-		log.Fatal(err)
-	}
-	for i := range res1 {
-		resJson, err := json.Marshal(res1[i])
-		if err != nil {
-			t.Fatal(err)
-		}
-		fmt.Println(string(resJson))
-	}
 
 	jsonapi := NewTest(t, query)
 

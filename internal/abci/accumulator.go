@@ -8,6 +8,8 @@ import (
 	"log"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
+
 	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/getsentry/sentry-go"
@@ -198,11 +200,16 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	err = app.chain.CheckTx(sub)
 
 	if err != nil {
+		u2 := sub.SigInfo.URL
+		u, e2 := url.Parse(sub.SigInfo.URL)
+		if e2 == nil {
+			u2 = u.String()
+		}
 		sentry.CaptureException(err)
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Info = fmt.Sprintf("entry check failed %v for url %x, %v \n", sub.TransactionType(), sub.ChainID, err)
+		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
 		return ret
 	}
 
@@ -231,12 +238,15 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	err = app.chain.DeliverTx(sub)
 
 	if err != nil {
+		u2 := sub.SigInfo.URL
+		u, e2 := url.Parse(sub.SigInfo.URL)
+		if e2 == nil {
+			u2 = u.String()
+		}
 		sentry.CaptureException(err)
 		ret.Code = code.CodeTypeUnauthorized
-		//ret.GasWanted = 0
-		//ret.GasUsed = 0
-		//we don't care about failure as far as tendermint is concerned.
-		ret.Info = fmt.Sprintf("entry check failed %v on validator %v \n", sub.TransactionType(), err)
+		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
+		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
 		return ret
 	}
 
