@@ -17,9 +17,13 @@ const (
 	TxTypeKeyUpdate //update keys on the keychain the identity
 	TxTypeMultisigTx
 	TxTypeStateQuery //sends a query to a chain and returns its state information
+	TxTypeCreateSigSpec
+	TxTypeCreateMultiSigSpec
+	TxTypeCreateSigSpecGroup
 
 	//The Following are only valid for DC & BVC use: any other source of this message will be rejected
 	TxTypeSyntheticIdentityCreate = TxType(iota + 0x20)
+	TxTypeSyntheticCreateChain
 	TxTypeSyntheticTokenAccountCreate
 	TxTypeSyntheticTokenDeposit
 	TxTypeSyntheticTxResponse
@@ -48,6 +52,7 @@ var (
 		TxTypeAdminVote:                   "adminVote",
 		TxTypeMultisigTx:                  "multisigTx",
 		TxTypeSyntheticIdentityCreate:     "syntheticIdentityCreate",
+		TxTypeSyntheticCreateChain:        "syntheticCreateChain",
 		TxTypeSyntheticTokenAccountCreate: "syntheticTokenAccountCreate",
 		TxTypeSyntheticTokenDeposit:       "syntheticTokenDeposit",
 		TxTypeSyntheticTxResponse:         "syntheticTxResponse",
@@ -70,6 +75,7 @@ var (
 		"adminVote":                  TxTypeAdminVote,
 		"multisigTx":                 TxTypeMultisigTx,
 		"syntheticIdentityCreate":    TxTypeSyntheticIdentityCreate,
+		"syntheticCreateChain":       TxTypeSyntheticCreateChain,
 		"syntheticTokenAcountCreate": TxTypeSyntheticTokenAccountCreate,
 		"syntheticTokenDeposit":      TxTypeSyntheticTokenDeposit,
 		"syntheticTxResponse":        TxTypeSyntheticTxResponse,
