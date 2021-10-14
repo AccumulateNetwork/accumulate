@@ -194,9 +194,7 @@ func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataRespon
 	case types.ChainTypeToken:
 		return unmarshalToken(rQuery)
 
-	case types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount, types.ChainTypeSignatureGroup:
-		// TODO Is it really OK to unmarshal a sig group as an account? That's
-		// what the orginal `ChainStates` did...
+	case types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount:
 		return unmarshalTokenAccount(rQuery)
 	}
 
