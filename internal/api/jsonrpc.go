@@ -11,8 +11,6 @@ import (
 	"net/url"
 	"os"
 
-	//"github.com/AccumulateNetwork/accumulated/internal/relay"
-
 	"github.com/AccumulateNetwork/accumulated/config"
 	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
