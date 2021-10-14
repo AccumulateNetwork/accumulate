@@ -327,7 +327,6 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 
 	stat := api.query.BatchSend()
 	resp := <-stat
-	close(stat)
 
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
@@ -520,7 +519,6 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	stat := api.query.BatchSend()
 
 	res := <-stat
-	close(stat)
 
 	ret := acmeapi.APIDataResponse{}
 	ret.Type = "faucet"
