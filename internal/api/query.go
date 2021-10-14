@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -23,12 +24,13 @@ func NewQuery(txBouncer *relay.Relay) *Query {
 	return &q
 }
 
-func (q *Query) BroadcastTx(gtx *transactions.GenTransaction) (*ctypes.ResultBroadcastTx, error) {
+func (q *Query) BroadcastTx(gtx *transactions.GenTransaction) (ti relay.TransactionInfo, err error) {
 	payload, err := gtx.Marshal()
 	if err != nil {
-		return nil, err
+		return ti, err
 	}
-	return q.txBouncer.BatchTx(payload)
+	ti = q.txBouncer.BatchTx(gtx.Routing, payload)
+	return ti, nil
 }
 
 func (q *Query) Query(url string, txid []byte) (*ctypes.ResultABCIQuery, error) {
@@ -49,8 +51,8 @@ func (q *Query) Query(url string, txid []byte) (*ctypes.ResultABCIQuery, error) 
 }
 
 // BatchSend calls the underlying client's BatchSend method, if it has one
-func (q *Query) BatchSend() {
-	q.txBouncer.BatchSend()
+func (q *Query) BatchSend() chan relay.BatchedStatus {
+	return q.txBouncer.BatchSend()
 }
 
 //"GetADI()"

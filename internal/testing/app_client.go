@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -112,6 +113,8 @@ func (c *ABCIApplicationClient) exitBlock() {
 	// Should commit always happen? Or only on success?
 	app.Commit()
 
+	//need to add artificial sleep to allow for synth tx's to go through
+	time.Sleep(100 * time.Millisecond)
 	c.blockMu.Unlock()
 }
 
