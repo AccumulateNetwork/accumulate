@@ -305,14 +305,14 @@ func run(cmd *cobra.Command, args []string) {
 		switch typ.Kind {
 		case "tx":
 			err := fieldError("decoding", "TX type")
-			fmt.Fprintf(w, "\ttyp := uint64(types.TxType%s)\n", typ.name)
-			fmt.Fprintf(w, "\tif v, err := uvarintUnmarshalBinary(data); err != nil { return %s } else if v != typ { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, v) }\n", err)
-			fmt.Fprintf(w, "\tdata = data[uvarintBinarySize(typ):]\n\n")
+			fmt.Fprintf(w, "\ttyp := types.TxType%s\n", typ.name)
+			fmt.Fprintf(w, "\tif v, err := uvarintUnmarshalBinary(data); err != nil { return %s } else if v != uint64(typ) { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, types.TxType(v)) }\n", err)
+			fmt.Fprintf(w, "\tdata = data[uvarintBinarySize(uint64(typ)):]\n\n")
 
 		case "chain":
 			err := fieldError("decoding", "header")
-			fmt.Fprintf(w, "\ttyp := uint64(types.ChainType%s)\n", typ.name)
-			fmt.Fprintf(w, "\tif err := v.ChainHeader.UnmarshalBinary(data); err != nil { return %s } else if uint64(v.Type) != typ { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, v) }\n", err)
+			fmt.Fprintf(w, "\ttyp := types.ChainType%s\n", typ.name)
+			fmt.Fprintf(w, "\tif err := v.ChainHeader.UnmarshalBinary(data); err != nil { return %s } else if v.Type != typ { return fmt.Errorf(\"invalid chain type: want %%v, got %%v\", typ, v.Type) }\n", err)
 			fmt.Fprintf(w, "\tdata = data[v.GetHeaderSize():]\n\n")
 		}
 

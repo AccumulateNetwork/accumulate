@@ -111,20 +111,27 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 	}
 	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
-	acctState := state.NewTokenAccount(u.String(), tokenUrl)
+	var chain state.Chain
 	if anon {
-		acctState.Type = types.ChainTypeAnonTokenAccount
+		account := new(protocol.AnonTokenAccount)
+		account.ChainUrl = types.String(u.String())
+		account.TokenUrl = tokenUrl
+		account.Balance.SetInt64(int64(tokens * TokenMx))
+		account.TxCount++
+		chain = account
+	} else {
+		account := state.NewTokenAccount(u.String(), tokenUrl)
+		account.Balance.SetInt64(int64(tokens * TokenMx))
+		account.TxCount++
+		chain = account
 	}
-	acctState.Balance.SetInt64(int64(tokens * TokenMx))
 
-	acctState.TxCount++
-	acctObj := new(state.Object)
-	acctObj.Entry, err = acctState.MarshalBinary()
+	data, err := chain.MarshalBinary()
 	if err != nil {
 		return err
 	}
 
-	db.AddStateEntry(&acctChainId, &types.Bytes32{}, acctObj)
+	db.AddStateEntry(&acctChainId, &types.Bytes32{}, &state.Object{Entry: data})
 	return nil
 }
 

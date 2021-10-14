@@ -50,7 +50,7 @@ func checkAssignSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransacti
 	switch st.ChainHeader.Type {
 	case types.ChainTypeAdi:
 		chain = new(state.AdiState)
-	case types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount:
+	case types.ChainTypeTokenAccount:
 		chain = new(state.TokenAccount)
 	default:
 		return nil, nil, fmt.Errorf("cannot assign key group to %v", st.ChainHeader.Type)

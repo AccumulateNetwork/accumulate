@@ -151,14 +151,14 @@ func (c *ABCIApplicationClient) sendTx(ctx context.Context, tx types.Tx) (<-chan
 		rc := app.CheckTx(abci.RequestCheckTx{Tx: tx})
 		checkChan <- rc
 		if rc.Code != 0 {
-			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Info))
+			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Log))
 			return
 		}
 
 		rd := app.DeliverTx(abci.RequestDeliverTx{Tx: tx})
 		deliverChan <- rd
 		if rd.Code != 0 {
-			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Info))
+			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Log))
 			return
 		}
 	}()
@@ -184,13 +184,13 @@ func (c *ABCIApplicationClient) Batch(inBlock func(func(*transactions.GenTransac
 
 		rc := app.CheckTx(abci.RequestCheckTx{Tx: tx})
 		if rc.Code != 0 {
-			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Info))
+			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Log))
 			return
 		}
 
 		rd := app.DeliverTx(abci.RequestDeliverTx{Tx: tx})
 		if rd.Code != 0 {
-			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Info))
+			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Log))
 			return
 		}
 	})
