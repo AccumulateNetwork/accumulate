@@ -8,11 +8,13 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
+// Deprecated: Use protocol.SyntheticCreateChain
 type AdiStateCreate struct {
 	Header
 	PublicKeyHash types.Bytes32 `json:"publicKeyHash" form:"publicKeyHash" query:"publicKeyHash" validate:"required"`
 }
 
+// Deprecated: Use protocol.SyntheticCreateChain
 func NewAdiStateCreate(txId types.Bytes, from *types.String, to *types.String, keyHash *types.Bytes32) *AdiStateCreate {
 	ctas := &AdiStateCreate{}
 	ctas.SetHeader(txId, from, to)
