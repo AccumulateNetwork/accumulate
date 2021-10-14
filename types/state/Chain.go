@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
@@ -23,6 +24,9 @@ type ChainHeader struct {
 	Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
 	ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	SigSpecId types.Bytes32   `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
+
+	// transient
+	url *url.URL
 }
 
 //SetHeader sets the data for a chain header
@@ -48,6 +52,21 @@ func (h *ChainHeader) GetType() types.ChainType {
 //GetAdiChainPath returns the url to the chain of this object
 func (h *ChainHeader) GetChainUrl() string {
 	return *h.ChainUrl.AsString()
+}
+
+// ParseUrl returns the parsed chain URL
+func (h *ChainHeader) ParseUrl() (*url.URL, error) {
+	if h.url != nil {
+		return h.url, nil
+	}
+
+	u, err := url.Parse(h.GetChainUrl())
+	if err != nil {
+		return nil, err
+	}
+
+	h.url = u
+	return u, nil
 }
 
 //MarshalBinary serializes the header
@@ -81,20 +100,25 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	return nil
 }
 
-// LoadChain retrieves and unmarshals the specified chain.
-func (db *StateDB) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
+func (db *StateDB) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
 	state, err := db.GetCurrentEntry(chainId)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	chain := new(ChainHeader)
 	err = state.As(chain)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to unmarshal chain: %v", err)
+		return nil, fmt.Errorf("failed to unmarshal chain: %v", err)
 	}
 
-	return state, chain, nil
+	return state, nil
+}
+
+// LoadChain retrieves and unmarshals the specified chain.
+func (db *StateDB) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
+	chain := new(ChainHeader)
+	obj, err := db.LoadChainAs(chainId, chain)
+	return obj, chain, err
 }
 
 // LoadChainADI retrieves and unmarshals the ADI of the chain.
