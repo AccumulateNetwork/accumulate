@@ -405,6 +405,20 @@ type Amount struct {
 	big.Int
 }
 
+func NewAmount(v int64) *Amount {
+	a := new(Amount)
+	a.SetInt64(v)
+	return a
+}
+
+func (a *Amount) Mul(v int64) {
+	a.Int.Mul(&a.Int, big.NewInt(v))
+}
+
+func (a *Amount) Div(v int64) {
+	a.Int.Div(&a.Int, big.NewInt(v))
+}
+
 func (a *Amount) AsBigInt() *big.Int {
 	return &a.Int
 }
