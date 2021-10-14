@@ -2,6 +2,7 @@ package state
 
 import (
 	"bytes"
+	"encoding"
 	"encoding/binary"
 	"fmt"
 
@@ -9,28 +10,29 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
-//Chain information for the state object.  Each state object will contain a header
+type Chain interface {
+	encoding.BinaryMarshaler
+	encoding.BinaryUnmarshaler
+	GetType() types.ChainType
+	GetChainUrl() string
+}
+
+//ChainHeader information for the state object.  Each state object will contain a header
 //that will consist of the chain type enumerator
-type Chain struct {
+type ChainHeader struct {
 	Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
 	ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	SigSpecId types.Bytes32   `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
 }
 
-func NewChain(chainUrl types.String, chainType types.ChainType) *Chain {
-	chain := &Chain{}
-	chain.SetHeader(chainUrl, chainType)
-	return chain
-}
-
 //SetHeader sets the data for a chain header
-func (h *Chain) SetHeader(chainUrl types.String, chainType types.ChainType) {
+func (h *ChainHeader) SetHeader(chainUrl types.String, chainType types.ChainType) {
 	h.ChainUrl = chainUrl
 	h.Type = chainType
 }
 
 //GetHeaderSize will return the marshalled binary size of the header.
-func (h *Chain) GetHeaderSize() int {
+func (h *ChainHeader) GetHeaderSize() int {
 	var buf [8]byte
 	i := binary.PutUvarint(buf[:], h.Type.AsUint64())
 	i += binary.PutUvarint(buf[:], uint64(len(h.ChainUrl)))
@@ -39,17 +41,17 @@ func (h *Chain) GetHeaderSize() int {
 }
 
 //GetType will return the chain type
-func (h *Chain) GetType() uint64 {
-	return h.Type.AsUint64()
+func (h *ChainHeader) GetType() types.ChainType {
+	return h.Type
 }
 
 //GetAdiChainPath returns the url to the chain of this object
-func (h *Chain) GetChainUrl() string {
+func (h *ChainHeader) GetChainUrl() string {
 	return *h.ChainUrl.AsString()
 }
 
 //MarshalBinary serializes the header
-func (h *Chain) MarshalBinary() ([]byte, error) {
+func (h *ChainHeader) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(common.Uint64Bytes(h.Type.AsUint64()))
@@ -60,7 +62,7 @@ func (h *Chain) MarshalBinary() ([]byte, error) {
 }
 
 //UnmarshalBinary deserializes the data array into the header object
-func (h *Chain) UnmarshalBinary(data []byte) (err error) {
+func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
 		if rerr := recover(); rerr != nil {
 			err = fmt.Errorf("error unmarshaling chain state header ref state %v", rerr)
@@ -73,20 +75,20 @@ func (h *Chain) UnmarshalBinary(data []byte) (err error) {
 	url, data := common.BytesSlice(data)
 	h.ChainUrl = types.String(url)
 
-	spec, data := common.BytesSlice(data)
+	spec, _ := common.BytesSlice(data)
 	h.SigSpecId.FromBytes(spec)
 
 	return nil
 }
 
 // LoadChain retrieves and unmarshals the specified chain.
-func (db *StateDB) LoadChain(chainId []byte) (*Object, *Chain, error) {
+func (db *StateDB) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
 	state, err := db.GetCurrentEntry(chainId)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	chain := new(Chain)
+	chain := new(ChainHeader)
 	err = state.As(chain)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to unmarshal chain: %v", err)
@@ -96,7 +98,7 @@ func (db *StateDB) LoadChain(chainId []byte) (*Object, *Chain, error) {
 }
 
 // LoadChainADI retrieves and unmarshals the ADI of the chain.
-func (db *StateDB) LoadChainADI(chain *Chain) (*types.Bytes32, *Object, *Chain, error) {
+func (db *StateDB) LoadChainADI(chain *ChainHeader) (*types.Bytes32, *Object, *ChainHeader, error) {
 	adiChain := types.GetIdentityChainFromIdentity(chain.ChainUrl.AsString())
 	adiState, adiHeader, err := db.LoadChain(adiChain.Bytes())
 	return adiChain, adiState, adiHeader, err
