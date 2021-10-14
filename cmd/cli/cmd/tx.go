@@ -25,8 +25,8 @@ var txCmd = &cobra.Command{
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
 			case "get":
-				if len(args) > 2 {
-					GetTX(args[1], args[2])
+				if len(args) > 1 {
+					GetTX(args[1])
 				} else {
 					fmt.Println("Usage:")
 					PrintTXGet()
@@ -55,7 +55,7 @@ func init() {
 }
 
 func PrintTXGet() {
-	fmt.Println("  accumulate tx get [token account] [txid]			Get token tx by token account and txid")
+	fmt.Println("  accumulate tx get [txid]			Get token transaction by txid")
 }
 
 func PrintTXCreate() {
@@ -67,14 +67,14 @@ func PrintTX() {
 	PrintTXCreate()
 }
 
-func GetTX(account string, hash string) {
+func GetTX(hash string) {
 
 	var res interface{}
 	var str []byte
 	var hashbytes types.Bytes32
 
 	params := new(acmeapi.TokenTxRequest)
-	params.From = types.UrlChain{types.String(account)}
+	params.From = types.UrlChain{types.String("queryUrl")}
 	err := hashbytes.FromString(hash)
 	if err != nil {
 		log.Fatal(err)
