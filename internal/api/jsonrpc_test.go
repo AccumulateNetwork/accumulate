@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
 
@@ -29,7 +30,7 @@ var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
 var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
 var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 
-func _TestLoadOnRemote(t *testing.T) {
+func TestLoadOnRemote(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is not appropriate for CI")
 	}
@@ -97,7 +98,7 @@ func _TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func _TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcAnonToken(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is flaky in CI")
 	}
@@ -210,9 +211,9 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 }
 
 func TestFaucet(t *testing.T) {
-	//if runtime.GOOS == "windows" {
-	//	t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	//}
+	if runtime.GOOS == "windows" {
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	}
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	node, pv := startBVC(t, dir)
@@ -223,21 +224,6 @@ func TestFaucet(t *testing.T) {
 	}()
 
 	rpcAddr := node.Config.RPC.ListenAddress
-	//ctx, cancel := context.WithCancel(context.Background())
-	//defer cancel()
-
-	// Start a tendermint node (and kvstore) in the background to test against
-	//app := kvstore.NewApplication()
-	//conf := rpctest.CreateConfig("ExampleHTTP_batching")
-	//
-	//rpcAddr := conf.RPC.ListenAddress
-	//
-	//_, closer, err := rpctest.StartTendermint(ctx, conf, app, rpctest.SuppressStdout)
-	//if err != nil {
-	//	t.Fatal(err) //nolint:gocritic
-	//}
-	//defer func() { _ = closer(ctx) }()
-	//
 	rpcClient, err := http.New(rpcAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -256,12 +242,6 @@ func TestFaucet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	//experimental tests
-	//c := rpcClient
-
-	// Create a new batch
-	//batch := c.NewBatch()
 
 	// Create our two transactions
 	k1 := []byte("firstName")
@@ -310,8 +290,6 @@ func TestFaucet(t *testing.T) {
 	if res2.Code == 0 {
 		t.Fatalf("expecting error code that is non zero")
 	}
-
-	//batch.Tx()
 
 	jsonapi := NewTest(t, query)
 
