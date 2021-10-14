@@ -14,7 +14,8 @@ const (
 	ChainTypeTransactionReference // Transaction Reference Chain
 	ChainTypeTransaction          // Transaction Chain
 	ChainTypePendingTransaction   // Pending Chain
-	ChainTypeSignatureGroup       // Signature Group chain
+	ChainTypeMultiSigSpec         // Multiple Signature Specification chain
+	ChainTypeSigSpecGroup         // Signature Specification Group chain
 )
 
 // Enum value maps for ChainType.
@@ -30,7 +31,7 @@ var (
 		ChainTypeTransactionReference: "ChainTypeTransactionReference",
 		ChainTypeTransaction:          "ChainTypeTransaction",
 		ChainTypePendingTransaction:   "ChainTypePendingTransaction",
-		ChainTypeSignatureGroup:       "ChainTypeSignatureGroup",
+		ChainTypeSigSpecGroup:         "ChainTypeSigSpecGroup",
 	}
 	ChainTypeValue = map[string]ChainType{
 		"ChainTypeUnknown":              ChainTypeUnknown,
@@ -43,7 +44,7 @@ var (
 		"ChainTypeTransactionReference": ChainTypeTransactionReference,
 		"ChainTypeTransaction":          ChainTypeTransaction,
 		"ChainTypePendingTransaction":   ChainTypePendingTransaction,
-		"ChainTypeSignatureGroup":       ChainTypeSignatureGroup,
+		"ChainTypeSigSpecGroup":         ChainTypeSigSpecGroup,
 	}
 )
 
