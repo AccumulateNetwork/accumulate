@@ -39,10 +39,10 @@ type SignatureInfo struct {
 	// the main chain.  But the only thing that varies from one transaction
 	// to another is the transaction itself.
 	URL         string // URL for the transaction
-	SigSpecHt   uint64 // Height of the SigSpec Chain
-	Priority    uint64 // Priority for the signature in the SigSpec
+	MSHeight    uint64 // Height of the multi sig spec
 	PriorityIdx uint64 // Index within the Priority of the signature used
-	Nonce       uint64 // Nonce for the signature to prevent replays
+	Unused1     uint64 // This field is not used
+	Unused2     uint64 // This field is not used
 }
 
 // Equal
@@ -51,9 +51,9 @@ type SignatureInfo struct {
 // and test that the information in the SignatureInfo is preserved
 func (t *SignatureInfo) Equal(t2 *SignatureInfo) bool {
 	return t.URL == t2.URL && //               URL equal?
-		t.Nonce == t2.Nonce && //              Nonce equal?
-		t.SigSpecHt == t2.SigSpecHt && //      SigSpecHt equal?
-		t.Priority == t2.Priority && //        Priority equal?
+		t.Unused2 == t2.Unused2 && //              Nonce equal?
+		t.MSHeight == t2.MSHeight && //      SigSpecHt equal?
+		t.Unused1 == t2.Unused1 && //        Priority equal?
 		t.PriorityIdx == t2.PriorityIdx //     PriorityIdx equal?  If any fails, this returns false
 }
 
@@ -67,9 +67,9 @@ func (t *SignatureInfo) Marshal() (data []byte, err error) { //            Seria
 	}()
 
 	data = common.SliceBytes([]byte(t.URL))                   //           URL =>
-	data = append(data, common.Uint64Bytes(t.Nonce)...)       //           Nonce =>
-	data = append(data, common.Uint64Bytes(t.SigSpecHt)...)   //           SigSpecHt =>
-	data = append(data, common.Uint64Bytes(t.Priority)...)    //           Priority =>
+	data = append(data, common.Uint64Bytes(t.Unused2)...)     //           Nonce =>
+	data = append(data, common.Uint64Bytes(t.MSHeight)...)    //           SigSpecHt =>
+	data = append(data, common.Uint64Bytes(t.Unused1)...)     //           Priority =>
 	data = append(data, common.Uint64Bytes(t.PriorityIdx)...) //           PriorityIdx =>
 	return data, nil                                          //           All good, return data and nil error
 }
@@ -86,9 +86,9 @@ func (t *SignatureInfo) UnMarshal(data []byte) (nextData []byte, err error) { //
 
 	URL, data := common.BytesSlice(data)           //                      => URL
 	t.URL = string(URL)                            //                       (url must be a string)
-	t.Nonce, data = common.BytesUint64(data)       //                      => Nonce
-	t.SigSpecHt, data = common.BytesUint64(data)   //                      => SigSpecHt
-	t.Priority, data = common.BytesUint64(data)    //                      => Priority
+	t.Unused2, data = common.BytesUint64(data)     //                      => Nonce
+	t.MSHeight, data = common.BytesUint64(data)    //                      => SigSpecHt
+	t.Unused1, data = common.BytesUint64(data)     //                      => Priority
 	t.PriorityIdx, data = common.BytesUint64(data) //                      => PriorityIdx
 	return data, nil                               //
 } //

@@ -1,7 +1,9 @@
 package chain
 
 import (
+	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sync"
@@ -85,6 +87,128 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
 }
 
+func (m *Executor) check(st *state.StateEntry, tx *transactions.GenTransaction) error {
+	if len(tx.Signature) == 0 {
+		return fmt.Errorf("transaction is not signed")
+	}
+
+	txt := tx.TransactionType()
+	if txt.IsSynthetic() {
+		return m.checkSynthetic(st, tx)
+	}
+
+	if st.ChainHeader == nil {
+		return fmt.Errorf("sponsor not found")
+	}
+
+	if !tx.ValidateSig() {
+		return fmt.Errorf("invalid signature")
+	}
+
+	ssg := new(protocol.SigSpecGroup)
+	switch st.ChainHeader.Type {
+	case types.ChainTypeAnonTokenAccount:
+		return m.checkAnonymous(st, tx)
+
+	case types.ChainTypeAdi, types.ChainTypeTokenAccount, types.ChainTypeSigSpec:
+		_, err := m.db.LoadChainAs(st.ChainHeader.SigSpecId[:], ssg)
+		if err != nil {
+			return fmt.Errorf("failed to load sig spec group: %v", err)
+		}
+
+	case types.ChainTypeSigSpecGroup:
+		err := tx.As(ssg)
+		if err != nil {
+			return fmt.Errorf("failed to decode sponsor: %v", err)
+		}
+
+	default:
+		// The TX sponsor cannot be a transaction
+		// Token issue chains are not implemented
+		return fmt.Errorf("%v cannot sponsor transactions", st.ChainHeader.Type)
+	}
+
+	if tx.SigInfo.PriorityIdx >= uint64(len(ssg.SigSpecs)) {
+		return fmt.Errorf("invalid sig spec index")
+	}
+
+	ss := new(protocol.SigSpec)
+	_, err := m.db.LoadChainAs(ssg.SigSpecs[tx.SigInfo.PriorityIdx][:], ss)
+	if err != nil {
+		return fmt.Errorf("failed to load sig spec: %v", err)
+	}
+
+	// TODO check height
+
+	for i, sig := range tx.Signature {
+		ks, err := ss.FindKey(sig.PublicKey, protocol.ED25519)
+		if err != nil {
+			return fmt.Errorf("failed to verify signature %d: %v", i, err)
+		}
+
+		if ks == nil {
+			return fmt.Errorf("no key spec matches signature %d", i)
+		}
+
+		if ks.Nonce >= sig.Nonce {
+			return fmt.Errorf("invalid nonce")
+		}
+		// TODO add pending update for the nonce
+	}
+
+	return nil
+}
+
+func (m *Executor) checkSynthetic(st *state.StateEntry, tx *transactions.GenTransaction) error {
+	//placeholder for special validation rules for synthetic transactions.
+	//need to verify the sender is a legit bvc validator also need the dbvc receipt
+	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
+	//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
+	//sender is legit.
+
+	if !tx.ValidateSig() {
+		return fmt.Errorf("invalid signature")
+	}
+	return nil
+}
+
+func (m *Executor) checkAnonymous(st *state.StateEntry, tx *transactions.GenTransaction) error {
+	account := new(protocol.AnonTokenAccount)
+	err := st.ChainState.As(account)
+	if err != nil {
+		return fmt.Errorf("failed to decode sponsor: %v", err)
+	}
+
+	u, err := st.ChainHeader.ParseUrl()
+	if err != nil {
+		// This shouldn't happen because invalid URLs should never make it
+		// into the database.
+		return fmt.Errorf("invalid sponsor URL: %v", err)
+	}
+
+	urlKH, _, err := protocol.ParseAnonymousAddress(u)
+	if err != nil {
+		// This shouldn't happen because invalid URLs should never make it
+		// into the database.
+		return fmt.Errorf("invalid anonymous token URL: %v", err)
+	}
+
+	for i, sig := range tx.Signature {
+		sigKH := sha256.Sum256(sig.PublicKey)
+		if !bytes.Equal(urlKH, sigKH[:20]) {
+			return fmt.Errorf("signature %d's public key does not match the sponsor", i)
+		}
+
+		if account.Nonce >= sig.Nonce {
+			return fmt.Errorf("invalid nonce")
+		}
+	}
+
+	// TODO add pending update for the nonce
+
+	return nil
+}
+
 // CheckTx implements ./abci.Chain
 func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 	err := tx.SetRoutingChainID()
@@ -99,7 +223,7 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 		return fmt.Errorf("failed to get state for : %v", err)
 	}
 
-	err = m.isSane(st, tx)
+	err = m.check(st, tx)
 	if err != nil {
 		return err
 	}
@@ -156,15 +280,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		return nil, fmt.Errorf("failed to get state: %v", err)
 	}
 
-	// //placeholder for special validation rules for synthetic transactions.
-	// if tx.TransactionType()&0xF0 > 0 {
-	// 	//need to verify the sender is a legit bvc validator also need the dbvc receipt
-	// 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
-	// 	//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
-	// 	//sender is legit.
-	// }
-
-	err = m.isSane(st, tx)
+	err = m.check(st, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -262,20 +378,6 @@ func (m *Executor) Commit() ([]byte, error) {
 	return mdRoot, nil
 }
 
-// isSane will check the nonce (if applicable), check the public key for the transaction,
-// and verify the signature of the transaction.
-func (m *Executor) isSane(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	// if st.IsValid(state.MaskChainState | state.MaskAdiState) {
-	// 	//1. verify nonce
-	// 	//2. verify public key against state
-	// }
-
-	if !tx.ValidateSig() {
-		return fmt.Errorf("invalid signature")
-	}
-	return nil
-}
-
 func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResult) (tmRef []*protocol.TxSynthRef, err error) {
 	if m.leader {
 		tmRef = make([]*protocol.TxSynthRef, len(vtx.Submissions))
@@ -297,7 +399,7 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResul
 			return nil, fmt.Errorf("synthetic transaction is missing its signature info")
 		}
 
-		tx.SigInfo.Nonce = m.nonce
+		tx.SigInfo.Unused2 = m.nonce
 		m.nonce++ //TODO: make the nonce managed via the BVC admin state for synth tx rather than this way
 
 		// Create the state object to store the unsigned pending transaction
@@ -323,7 +425,7 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResul
 			//in future releases this will be submitted to this BVC to the next block for validation
 			//of the synthetic tx by all the bvc nodes before being dispatched, along with DC receipt
 			ed.PublicKey = m.key[32:]
-			err := ed.Sign(tx.SigInfo.Nonce, m.key, tx.TransactionHash())
+			err := ed.Sign(tx.SigInfo.Unused2, m.key, tx.TransactionHash())
 			if err != nil {
 				return nil, fmt.Errorf("error signing sythetic transaction, %v", err)
 			}

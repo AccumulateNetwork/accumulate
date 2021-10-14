@@ -6,12 +6,14 @@ import (
 
 	. "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
+	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/privval"
+	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV) {
+func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV, *Query) {
 	t.Helper()
 
 	opts, err := acctesting.NodeInitOptsForNetwork("Badlands")
@@ -31,5 +33,16 @@ func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV) {
 	node, pv, err := acctesting.NewBVCNode(nodeDir, t.Cleanup) // Initialize
 	require.NoError(t, err)                                    //
 	require.NoError(t, node.Start())                           // Launch
-	return node, pv
+
+	t.Cleanup(func() { require.NoError(t, node.Stop()) })
+
+	rpc, err := rpc.New(node.Config.RPC.ListenAddress)
+	require.NoError(t, err)
+
+	relay := relay.New(rpc)
+	require.NoError(t, relay.Start())
+	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+
+	query := NewQuery(relay)
+	return node, pv, query
 }
