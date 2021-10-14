@@ -127,3 +127,44 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 	db.AddStateEntry(&acctChainId, &types.Bytes32{}, acctObj)
 	return nil
 }
+
+func CreateKeySet(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKey) error {
+	u, err := url.Parse(*urlStr.AsString())
+	if err != nil {
+		return err
+	}
+
+	mss := protocol.NewMultiSigSpec()
+	mss.ChainUrl = types.String(u.String())
+	mss.SigSpecs = make([]*protocol.SigSpec, len(keys))
+	for i, key := range keys {
+		mss.SigSpecs[i] = &protocol.SigSpec{
+			HashAlgorithm: protocol.Unhashed,
+			KeyAlgorithm:  protocol.ED25519,
+			PublicKey:     key,
+		}
+	}
+
+	return WriteStates(db, mss)
+}
+
+func CreateKeyGroup(db *state.StateDB, urlStr types.String, keySetUrls ...string) error {
+	u, err := url.Parse(*urlStr.AsString())
+	if err != nil {
+		return err
+	}
+
+	ssg := protocol.NewSigSpecGroup()
+	ssg.ChainUrl = types.String(u.String())
+	ssg.MultiSigSpecs = make([][32]byte, len(keySetUrls))
+	for i, s := range keySetUrls {
+		u, err := url.Parse(s)
+		if err != nil {
+			return err
+		}
+		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
+		ssg.MultiSigSpecs[i] = chainId
+	}
+
+	return WriteStates(db, ssg)
+}
