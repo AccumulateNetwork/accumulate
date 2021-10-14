@@ -46,8 +46,8 @@ func TestAnonTokenTransactions(t *testing.T) {
 	se.AdiChain = &chainId
 	se.ChainState = anonChain
 	se.AdiState = anonChain
-	se.AdiHeader = &anonAcct.Chain
-	se.ChainHeader = &anonAcct.Chain
+	se.AdiHeader = &anonAcct.ChainHeader
+	se.ChainHeader = &anonAcct.ChainHeader
 	_, err = TokenTx{}.DeliverTx(se, gtx)
 	require.NoError(t, err)
 

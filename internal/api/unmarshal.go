@@ -181,7 +181,7 @@ func unmarshalTransaction(url string, txPayload []byte, txId []byte, txSynthTxId
 }
 
 func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	sChain := new(state.Chain)
+	sChain := new(state.ChainHeader)
 	err := sChain.UnmarshalBinary(rQuery.Value)
 	if err != nil {
 		return nil, fmt.Errorf("invalid state object: %v", err)

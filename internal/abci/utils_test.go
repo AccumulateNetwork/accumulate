@@ -86,7 +86,7 @@ func (n *fakeNode) Query(q *api.Query) *api.APIDataResponse {
 	require.Zero(n.t, resp.Code, "Query failed: %s", resp.Info)
 
 	var msg json.RawMessage = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", resp.Value))
-	chain := new(state.Chain)
+	chain := new(state.ChainHeader)
 	require.NoError(n.t, chain.UnmarshalBinary(resp.Value))
 	return &api.APIDataResponse{Type: types.String(chain.Type.Name()), Data: &msg}
 }
