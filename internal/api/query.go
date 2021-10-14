@@ -89,7 +89,7 @@ func (q *Query) GetTokenAccount(adiChainPath *string) (*acmeApi.APIDataResponse,
 		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
 	}
 
-	return unmarshalTokenAccount(r.Response)
+	return unmarshalChainState(r.Response)
 }
 
 // GetTransactionReference get the transaction id for a given transaction number
@@ -161,5 +161,5 @@ func (q *Query) GetChainState(adiChainPath *string, txId []byte) (*api.APIDataRe
 		return nil, fmt.Errorf("chain query returned error, %v", err)
 	}
 
-	return q.unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response)
 }
