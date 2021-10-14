@@ -11,12 +11,22 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 )
 
+//go:generate go run ../internal/cmd/gentypes types.yml
+
 const ACME = "ACME"
 
 // AcmeUrl returns `acc://ACME`
 func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}
 }
+
+// AcmePrecision is the precision of ACME token amounts.
+const AcmePrecision = 1e8
+
+// CreditsPerDollar is the conversion rate from 1 unit of fiat currency to
+// credits. We call this 'dollars' because it's easier to write, and we are most
+// likely going to use USD idefinitely.
+const CreditsPerDollar = 1e2
 
 // AnonymousAddress returns an anonymous address for the given public key and
 // token URL as `acc://<key-hash-and-checksum>/<token-url>`.
