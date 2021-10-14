@@ -38,7 +38,7 @@ func (kt KeyType) String() string {
 }
 
 type AdiState struct {
-	Chain
+	ChainHeader
 
 	KeyType KeyType     `json:"keyType"`
 	KeyData types.Bytes `json:"keyData"`
@@ -52,20 +52,20 @@ func NewIdentityState(adi types.String) *AdiState {
 	return r
 }
 
+func NewADI(url types.String, keyType KeyType, keyData []byte) *AdiState {
+	r := new(AdiState)
+	r.SetHeader(url, types.ChainTypeAdi)
+	r.KeyType = keyType
+	r.KeyData = keyData
+	return r
+}
+
 func (is *AdiState) VerifyAndUpdateNonce(nonce uint64) bool {
 	if is.Nonce < nonce {
 		is.Nonce = nonce
 	}
 	is.Nonce = nonce
 	return true
-}
-
-func (is *AdiState) GetChainUrl() string {
-	return is.Chain.GetChainUrl()
-}
-
-func (is *AdiState) GetType() uint64 {
-	return is.Chain.GetType()
 }
 
 func (is *AdiState) VerifyKey(key []byte) bool {
@@ -126,7 +126,7 @@ func (is *AdiState) GetIdentityChainId() types.Bytes {
 
 func (is *AdiState) MarshalBinary() ([]byte, error) {
 
-	headerData, err := is.Chain.MarshalBinary()
+	headerData, err := is.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("unable to marshal chain header for AdiState, %v", err)
 	}
@@ -156,12 +156,12 @@ func (is *AdiState) UnmarshalBinary(data []byte) error {
 	}
 	i := 0
 
-	err := is.Chain.UnmarshalBinary(data)
+	err := is.ChainHeader.UnmarshalBinary(data)
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal data for AdiState, %v", err)
 	}
 
-	i += is.Chain.GetHeaderSize()
+	i += is.ChainHeader.GetHeaderSize()
 
 	is.KeyType = KeyType(data[i])
 	i++
