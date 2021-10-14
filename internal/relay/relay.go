@@ -61,6 +61,10 @@ func (r *Relay) GetNetworkId(routing uint64) int {
 	return int(routing % r.numNetworks)
 }
 
+func (r *Relay) GetNetworkCount() uint64 {
+	return r.numNetworks
+}
+
 //BatchTx
 //appends the transaction to the transaction queue and returns the tx hash used to track
 //in tendermint, the index within the queue, and the network the transaction will be submitted on
@@ -173,12 +177,8 @@ func (r *Relay) SendTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 
 // Query
 // This function will return the state object from the accumulate network for a given URL.
-func (r *Relay) Query(data bytes.HexBytes) (ret *ctypes.ResultABCIQuery, err error) {
-	_, addr, err := decodeQuery(data)
-	if err != nil {
-		return nil, err
-	}
-	return r.client[r.GetNetworkId(addr)].ABCIQuery(context.Background(), "/abci_query", data)
+func (r *Relay) Query(routing uint64, data bytes.HexBytes) (ret *ctypes.ResultABCIQuery, err error) {
+	return r.client[r.GetNetworkId(routing)].ABCIQuery(context.Background(), "/abci_query", data)
 }
 
 func decodeTX(tx tmtypes.Tx) (*transactions.GenTransaction, error) {
