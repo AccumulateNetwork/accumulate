@@ -13,6 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -135,4 +136,16 @@ func (n *fakeNode) GetADI(url string) *state.AdiState {
 	adi := new(state.AdiState)
 	n.GetChainAs(url, adi)
 	return adi
+}
+
+func (n *fakeNode) GetKeyGroup(url string) *protocol.SigSpecGroup {
+	ssg := new(protocol.SigSpecGroup)
+	n.GetChainAs(url, ssg)
+	return ssg
+}
+
+func (n *fakeNode) GetKeySet(url string) *protocol.MultiSigSpec {
+	mss := new(protocol.MultiSigSpec)
+	n.GetChainAs(url, mss)
+	return mss
 }
