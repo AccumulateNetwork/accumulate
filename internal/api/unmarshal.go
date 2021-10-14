@@ -85,7 +85,7 @@ func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error)
 	})
 }
 
-func unmarshalTokenTx(url string, txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
+func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
 	tx := api.TokenTx{}
 	err := tx.UnmarshalBinary(txPayload)
 	if err != nil {
@@ -94,12 +94,6 @@ func unmarshalTokenTx(url string, txPayload []byte, txId types.Bytes, txSynthTxI
 	txResp := response.TokenTx{}
 	txResp.From = tx.From.String
 	txResp.TxId = txId
-
-	_, queryPath, err := types.ParseIdentityChainPath(&url)
-	_, txPath, err := types.ParseIdentityChainPath(tx.From.AsString())
-	if queryPath != txPath {
-		return nil, fmt.Errorf("url doesn't match transaction query, expecting %s but received %s", txPath, queryPath)
-	}
 
 	if len(txSynthTxIds)/32 != len(tx.To) {
 		return nil, fmt.Errorf("number of synthetic tx, does not match number of outputs")
@@ -129,7 +123,7 @@ func unmarshalTokenTx(url string, txPayload []byte, txId types.Bytes, txSynthTxI
 }
 
 //unmarshalSynthTokenDeposit will unpack the synthetic token deposit and pack it into the response
-func unmarshalSynthTokenDeposit(url string, txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
+func unmarshalSynthTokenDeposit(txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
 	_ = txId
 	tx := synthetic.TokenTransactionDeposit{}
 	err := tx.UnmarshalBinary(txPayload)
@@ -139,18 +133,6 @@ func unmarshalSynthTokenDeposit(url string, txPayload []byte, txId types.Bytes, 
 
 	if len(txSynthTxIds) != 0 {
 		return nil, fmt.Errorf("there should be no synthetic transaction associated with this transaction")
-	}
-
-	_, queryPath, err := types.ParseIdentityChainPath(&url)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing query url path, %v", err)
-	}
-	_, txPath, err := types.ParseIdentityChainPath(tx.ToUrl.AsString())
-	if err != nil {
-		return nil, fmt.Errorf("error parsing url path associated with transaction, %v", err)
-	}
-	if queryPath != txPath {
-		return nil, fmt.Errorf("url doesn't match transaction query, expecting %s but received %s", txPath, queryPath)
 	}
 
 	data, err := json.Marshal(&tx)
@@ -165,14 +147,14 @@ func unmarshalSynthTokenDeposit(url string, txPayload []byte, txId types.Bytes, 
 }
 
 //unmarshalTransaction will unpack the transaction stored on-chain and marshal it into a response
-func unmarshalTransaction(url string, txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
+func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
 
 	txType, _ := common.BytesUint64(txPayload)
 	switch types.TxType(txType) {
 	case types.TxTypeTokenTx:
-		resp, err = unmarshalTokenTx(url, txPayload, txId, txSynthTxIds)
+		resp, err = unmarshalTokenTx(txPayload, txId, txSynthTxIds)
 	case types.TxTypeSyntheticTokenDeposit:
-		resp, err = unmarshalSynthTokenDeposit(url, txPayload, txId, txSynthTxIds)
+		resp, err = unmarshalSynthTokenDeposit(txPayload, txId, txSynthTxIds)
 	default:
 		err = fmt.Errorf("unable to extract transaction info for type %s : %x", types.TxType(txType).Name(), txPayload)
 	}
