@@ -144,7 +144,7 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	// Tendermint integration here
-	resp, err := api.query.GetChainState(req.URL.AsString(), nil)
+	resp, err := api.query.GetChainStateByUrl(string(req.URL))
 
 	if err != nil {
 		return NewAccumulateError(err)
@@ -169,7 +169,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	// Tendermint integration here
-	resp, err := api.query.GetAdi(req.URL.AsString())
+	resp, err := api.query.GetAdi(*req.URL.AsString())
 
 	if err != nil {
 		return NewAccumulateError(err)
@@ -232,7 +232,7 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 	}
 
 	//query tendermint
-	resp, err := api.query.GetToken(req.URL.AsString())
+	resp, err := api.query.GetToken(*req.URL.AsString())
 
 	if err != nil {
 		return NewAccumulateError(err)
@@ -296,13 +296,12 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 	}
 
 	// Tendermint integration here
-	taResp, err := api.query.GetTokenAccount(req.URL.AsString())
+	taResp, err := api.query.GetTokenAccount(*req.URL.AsString())
 	if err != nil {
 		return NewValidatorError(err)
 	}
 
 	return taResp
-
 }
 
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
@@ -391,18 +390,18 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	}
 
 	// validate only TokenTx.Hash (Assuming the hash is the txid)
-	if err = api.validate.StructPartial(req, "Hash", "From"); err != nil {
+	if err = api.validate.StructPartial(req, "Hash"); err != nil {
 		return NewValidatorError(err)
 	}
 
 	// Tendermint's integration here
-	resp, err := api.query.GetTransaction(*req.From.AsString(), req.Hash[:])
+	resp, err := api.query.GetTransaction(req.Hash[:])
 	if err != nil {
 		return NewValidatorError(err)
 	}
 
 	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
-		return NewValidatorError(fmt.Errorf("Transaction type is %s and not a token transaction", resp.Type))
+		return NewValidatorError(fmt.Errorf("transaction type is %s and not a token transaction", resp.Type))
 	}
 
 	return resp

@@ -92,8 +92,20 @@ func (n *fakeNode) Query(q *api.Query) *api.APIDataResponse {
 	return &api.APIDataResponse{Type: types.String(chain.Type.Name()), Data: &msg}
 }
 
-func (n *fakeNode) GetChainState(url string, txid []byte) *api.APIDataResponse {
-	r, err := n.query.GetChainState(&url, txid)
+func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
+	r, err := n.query.GetChainStateByUrl(url)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainStateByTxId(txid []byte) *api.APIDataResponse {
+	r, err := n.query.GetChainStateByTxId(txid)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
+	r, err := n.query.GetChainStateByChainId(txid)
 	require.NoError(n.t, err)
 	return r
 }
@@ -116,7 +128,7 @@ func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transacti
 }
 
 func (n *fakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
-	r, err := n.query.Query(url, nil)
+	r, err := n.query.QueryByUrl(url)
 	require.NoError(n.t, err)
 
 	if r.Response.Code != 0 {
