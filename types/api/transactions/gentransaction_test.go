@@ -32,7 +32,7 @@ func TestTokenTransaction(t *testing.T) {
 	trans := new(GenTransaction)
 	trans.SigInfo = new(SignatureInfo)
 	trans.SigInfo.URL = testurl
-	trans.SigInfo.Nonce = nonce
+	trans.SigInfo.Unused2 = nonce
 	if err := trans.SetRoutingChainID(); err != nil {
 		t.Fatal("could not create the Routing value")
 	}
