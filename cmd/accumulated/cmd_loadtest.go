@@ -114,7 +114,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 	time.Sleep(10000 * time.Millisecond)
 
 	for _, v := range addrList[1:] {
-		resp, err := query.GetChainState(&v, nil)
+		resp, err := query.GetChainStateByUrl(v)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
