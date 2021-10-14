@@ -57,22 +57,51 @@ func CreateAnonTokenAccount(db *state.StateDB, key ed25519.PrivKey, tokens float
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
-func CreateADI(db *state.StateDB, key ed25519.PrivKey, url types.String) error {
-	keyHash := sha256.Sum256(key.PubKey().Bytes())
+func WriteStates(db *state.StateDB, chains ...state.Chain) error {
+	for _, chain := range chains {
+		b, err := chain.MarshalBinary()
+		if err != nil {
+			return err
+		}
 
-	var err error
-	idState := state.NewIdentityState(url)
-	idState.KeyType = state.KeyTypeSha256
-	idState.KeyData = keyHash[:]
-	stateObj := new(state.Object)
-	stateObj.Entry, err = idState.MarshalBinary()
+		u, err := url.Parse(chain.GetChainUrl())
+		if err != nil {
+			return err
+		}
+
+		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
+		db.AddStateEntry(&chainId, &types.Bytes32{}, &state.Object{Entry: b})
+	}
+	return nil
+}
+
+func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) error {
+	keyHash := sha256.Sum256(key.PubKey().Bytes())
+	identityUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	chainId := types.GetIdentityChainFromIdentity(url.AsString())
-	db.AddStateEntry(chainId, &types.Bytes32{}, stateObj)
-	return nil
+	keySetUrl := identityUrl.JoinPath("keyset0")
+	keyGroupUrl := identityUrl.JoinPath("keygroup0")
+
+	ss := new(protocol.SigSpec)
+	ss.HashAlgorithm = protocol.SHA256
+	ss.KeyAlgorithm = protocol.ED25519
+	ss.PublicKey = keyHash[:]
+
+	mss := protocol.NewMultiSigSpec()
+	mss.ChainUrl = types.String(keySetUrl.String())
+	mss.SigSpecs = append(mss.SigSpecs, ss)
+
+	ssg := protocol.NewSigSpecGroup()
+	ssg.ChainUrl = types.String(keyGroupUrl.String()) // TODO Allow override
+	ssg.MultiSigSpecs = append(ssg.MultiSigSpecs, types.Bytes(keySetUrl.ResourceChain()).AsBytes32())
+
+	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
+	adi.SigSpecId = types.Bytes(keyGroupUrl.ResourceChain()).AsBytes32()
+
+	return WriteStates(db, adi, ssg, mss)
 }
 
 func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float64, anon bool) error {
