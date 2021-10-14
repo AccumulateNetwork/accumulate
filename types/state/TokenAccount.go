@@ -10,7 +10,7 @@ import (
 )
 
 type TokenAccount struct {
-	Chain
+	ChainHeader
 	TokenUrl types.UrlChain `json:"tokenUrl"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
 	Balance  big.Int        `json:"balance"`  //store the balance as a big int.
 	TxCount  uint64         `json:"txCount"`  //the number of transactions associated with this account (this is used to derive the txurl)
@@ -35,16 +35,6 @@ func (app *TokenAccount) Set(accountState *TokenAccount) {
 	app.ChainUrl = accountState.ChainUrl
 	app.TokenUrl = accountState.TokenUrl
 	app.Type = accountState.Type
-}
-
-// GetType is an implemented interface that returns the chain type of the object
-func (app *TokenAccount) GetType() uint64 {
-	return app.Type.AsUint64()
-}
-
-// GetChainUrl returns the chain path for the object in the chain.
-func (app *TokenAccount) GetChainUrl() string {
-	return app.Chain.GetChainUrl()
 }
 
 // CanTransact returns true/false if there is a sufficient balance
@@ -92,7 +82,7 @@ func (app *TokenAccount) AddBalance(amt *big.Int) error {
 func (app *TokenAccount) MarshalBinary() (ret []byte, err error) {
 	var buffer bytes.Buffer
 
-	header, err := app.Chain.MarshalBinary()
+	header, err := app.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +108,7 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 
-	err = app.Chain.UnmarshalBinary(data)
+	err = app.ChainHeader.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}

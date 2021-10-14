@@ -11,17 +11,17 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
-type SynthTokenDeposit struct{}
+type SyntheticTokenDeposit struct{}
 
-func (SynthTokenDeposit) Type() types.TxType {
+func (SyntheticTokenDeposit) Type() types.TxType {
 	return types.TxTypeSyntheticTokenDeposit
 }
 
-func (SynthTokenDeposit) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (SyntheticTokenDeposit) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
 	return nil
 }
 
-func (SynthTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (SyntheticTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
 	deposit := new(synthetic.TokenTransactionDeposit)
 	err := tx.As(deposit)
 	if err != nil {

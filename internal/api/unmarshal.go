@@ -181,7 +181,7 @@ func unmarshalTransaction(url string, txPayload []byte, txId []byte, txSynthTxId
 }
 
 func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	sChain := new(state.Chain)
+	sChain := new(state.ChainHeader)
 	err := sChain.UnmarshalBinary(rQuery.Value)
 	if err != nil {
 		return nil, fmt.Errorf("invalid state object: %v", err)
@@ -194,9 +194,7 @@ func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataRespon
 	case types.ChainTypeToken:
 		return unmarshalToken(rQuery)
 
-	case types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount, types.ChainTypeSignatureGroup:
-		// TODO Is it really OK to unmarshal a sig group as an account? That's
-		// what the orginal `ChainStates` did...
+	case types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount:
 		return unmarshalTokenAccount(rQuery)
 	}
 

@@ -2,12 +2,14 @@ package chain
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
 type IdentityCreate struct{}
@@ -66,19 +68,50 @@ func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransa
 		return nil, fmt.Errorf("transaction is not a valid identity create message")
 	}
 
-	fromUrl := types.String(tx.SigInfo.URL)
-	isc := synthetic.NewAdiStateCreate(tx.TransactionHash(), &fromUrl, &ic.URL, &ic.PublicKeyHash)
-	iscData, err := isc.MarshalBinary()
+	identityUrl, err := url.Parse(*ic.URL.AsString())
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal synthetic transaction")
+		return nil, fmt.Errorf("invalid URL: %v", err)
+	}
+	if identityUrl.Path != "" {
+		return nil, fmt.Errorf("creating sub-ADIs is not supported")
+	}
+	if strings.ContainsRune(identityUrl.Hostname(), '.') {
+		return nil, fmt.Errorf("ADI URLs cannot contain dots")
+	}
+
+	keySetUrl := identityUrl.JoinPath("keyset0")
+	keyGroupUrl := identityUrl.JoinPath("keygroup0")
+
+	ss := new(protocol.SigSpec)
+	ss.HashAlgorithm = protocol.SHA256
+	ss.KeyAlgorithm = protocol.ED25519
+	ss.PublicKey = ic.PublicKeyHash[:]
+
+	mss := protocol.NewMultiSigSpec()
+	mss.ChainUrl = types.String(keySetUrl.String()) // TODO Allow override
+	mss.SigSpecs = append(mss.SigSpecs, ss)
+
+	ssg := protocol.NewSigSpecGroup()
+	ssg.ChainUrl = types.String(keyGroupUrl.String()) // TODO Allow override
+	ssg.MultiSigSpecs = append(ssg.MultiSigSpecs, types.Bytes(keySetUrl.ResourceChain()).AsBytes32())
+
+	adi := state.NewADI(ic.URL, state.KeyTypeSha256, ic.PublicKeyHash[:])
+	adi.SigSpecId = types.Bytes(keyGroupUrl.ResourceChain()).AsBytes32()
+
+	scc := new(protocol.SyntheticCreateChain)
+	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	err = scc.Add(adi, ssg, mss)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal synthetic TX: %v", err)
 	}
 
 	syn := new(transactions.GenTransaction)
-	syn.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
-	syn.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
 	syn.SigInfo = &transactions.SignatureInfo{}
-	syn.SigInfo.URL = *isc.ToUrl.AsString()
-	syn.Transaction = iscData
+	syn.SigInfo.URL = *ic.URL.AsString()
+	syn.Transaction, err = scc.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal synthetic TX: %v", err)
+	}
 
 	res := new(DeliverTxResult)
 	res.AddSyntheticTransaction(syn)
