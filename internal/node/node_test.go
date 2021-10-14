@@ -18,6 +18,10 @@ func TestNodeSetup(t *testing.T) {
 		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
 	}
 
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
 	opts, err := acctesting.NodeInitOptsForNetwork("Badlands")
 	require.NoError(t, err)
 	opts.WorkDir = t.TempDir()
