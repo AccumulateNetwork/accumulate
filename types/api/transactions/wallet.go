@@ -2,8 +2,6 @@ package transactions
 
 import (
 	"crypto/ed25519"
-
-	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 )
 
 type WalletEntry struct {
@@ -24,14 +22,4 @@ func (we *WalletEntry) Sign(message []byte) *ED25519Sig { // sign a message
 
 func (we *WalletEntry) Public() []byte {
 	return we.PrivateKey[32:]
-}
-
-func NewWalletEntry() *WalletEntry {
-	wallet := new(WalletEntry)
-
-	wallet.Nonce = 1 // Put the private key for the origin
-	_, wallet.PrivateKey, _ = ed25519.GenerateKey(nil)
-	wallet.Addr = anon.GenerateAcmeAddress(wallet.PrivateKey[32:]) // Generate the origin address
-
-	return wallet
 }

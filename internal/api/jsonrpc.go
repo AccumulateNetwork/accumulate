@@ -479,7 +479,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", destAccount), errors.New("wrong token URL"))
 	}
 
-	wallet := transactions.NewWalletEntry()
+	wallet := NewWalletEntry()
 	fromAccount := types.String(wallet.Addr)
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
