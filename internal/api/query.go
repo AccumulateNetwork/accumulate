@@ -71,7 +71,7 @@ func (q *Query) QueryByChainId(chainId []byte) (ret *ctypes.ResultABCIQuery, err
 // queryAll
 // Will search all networks for the information.  Once found, it will return the results.
 func (q *Query) queryAll(apiQuery *api.Query) (ret *ctypes.ResultABCIQuery, err error) {
-	//TODO: when we get the data servers become a thing, we will query that instead to get the information we need
+	//TODO: when the data servers become a thing, we will query that instead to get the information we need
 	//in the mean time, we will need to ping all the bvc's for the needed info.  not ideal by any means, but it works.
 	var results []chan queryData
 	for i := uint64(0); i < q.txRelay.GetNetworkCount(); i++ {

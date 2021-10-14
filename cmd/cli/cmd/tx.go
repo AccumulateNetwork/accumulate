@@ -74,7 +74,6 @@ func GetTX(hash string) {
 	var hashbytes types.Bytes32
 
 	params := new(acmeapi.TokenTxRequest)
-	params.From = types.UrlChain{types.String("queryUrl")}
 	err := hashbytes.FromString(hash)
 	if err != nil {
 		log.Fatal(err)

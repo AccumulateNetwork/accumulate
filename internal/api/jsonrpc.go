@@ -390,7 +390,7 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	}
 
 	// validate only TokenTx.Hash (Assuming the hash is the txid)
-	if err = api.validate.StructPartial(req, "Hash", "From"); err != nil {
+	if err = api.validate.StructPartial(req, "Hash"); err != nil {
 		return NewValidatorError(err)
 	}
 
@@ -401,7 +401,7 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	}
 
 	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
-		return NewValidatorError(fmt.Errorf("Transaction type is %s and not a token transaction", resp.Type))
+		return NewValidatorError(fmt.Errorf("transaction type is %s and not a token transaction", resp.Type))
 	}
 
 	return resp
