@@ -167,7 +167,7 @@ func TestGenTransaction_TransactionType(t *testing.T) {
 
 			tx := new(GenTransaction)
 			tx.Transaction = b
-			require.Equal(t, c.Type.AsUint64(), tx.TransactionType())
+			require.Equal(t, c.Type.AsUint64(), tx.TransactionType().AsUint64())
 		})
 	}
 }
