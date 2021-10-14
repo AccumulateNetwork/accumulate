@@ -17,13 +17,10 @@ func TestTransactionState(t *testing.T) {
 	nts1.From = types.UrlChain{"RedWagon/myAccount"}
 	nts1.AddToAccount("BlueWagon/account", uint64(100*100000000))
 
-	var nonce uint64 = 1
-
 	we := accapi.NewWalletEntry()
 	trans := new(transactions.GenTransaction)
 	trans.SigInfo = new(transactions.SignatureInfo)
 	trans.SigInfo.URL = we.Addr
-	trans.SigInfo.Nonce = nonce
 	if err := trans.SetRoutingChainID(); err != nil {
 		t.Fatal("could not create the Routing value")
 	}

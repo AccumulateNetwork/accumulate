@@ -75,8 +75,8 @@ func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransa
 			return nil, fmt.Errorf("key is not supported by current ADI state")
 		}
 
-		if !adi.VerifyAndUpdateNonce(tx.SigInfo.Nonce) {
-			return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adi.Nonce, tx.SigInfo.Nonce)
+		if !adi.VerifyAndUpdateNonce(tx.SigInfo.Unused2) {
+			return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adi.Nonce, tx.SigInfo.Unused2)
 		}
 	}
 

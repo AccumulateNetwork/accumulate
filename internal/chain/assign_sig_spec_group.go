@@ -43,7 +43,7 @@ func checkAssignSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransacti
 	ssg := new(protocol.SigSpecGroup)
 	_, err = st.DB.LoadChainAs(ssgUrl.ResourceChain(), ssg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load key group: %v", err)
+		return nil, nil, fmt.Errorf("failed to load sig spec group: %v", err)
 	}
 
 	var chain state.Chain
@@ -53,7 +53,7 @@ func checkAssignSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransacti
 	case types.ChainTypeTokenAccount:
 		chain = new(state.TokenAccount)
 	default:
-		return nil, nil, fmt.Errorf("cannot assign key group to %v", st.ChainHeader.Type)
+		return nil, nil, fmt.Errorf("cannot assign sig spec group to %v", st.ChainHeader.Type)
 	}
 
 	err = st.ChainState.As(chain)
