@@ -11,7 +11,7 @@ import (
 
 // Token implement the Entry interfaces for a token
 type Token struct {
-	Chain
+	ChainHeader
 	Symbol    types.String     `json:"symbol" form:"symbol" query:"symbol" validate:"required,alphanum"`
 	Precision types.Byte       `json:"precision" form:"precision" query:"precision" validate:"required,min=0,max=18"`
 	Meta      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"optional"`
@@ -23,18 +23,10 @@ func NewToken(tokenUrl string) *Token {
 	return token
 }
 
-func (t *Token) GetChainUrl() string {
-	return t.Chain.GetChainUrl()
-}
-
-func (t *Token) GetType() uint64 {
-	return t.Chain.GetType()
-}
-
 func (t *Token) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	d, err := t.Chain.MarshalBinary()
+	d, err := t.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +57,7 @@ func (t *Token) MarshalBinary() ([]byte, error) {
 
 func (t *Token) UnmarshalBinary(data []byte) error {
 
-	err := t.Chain.UnmarshalBinary(data)
+	err := t.ChainHeader.UnmarshalBinary(data)
 	if err != nil {
 		return err
 	}
