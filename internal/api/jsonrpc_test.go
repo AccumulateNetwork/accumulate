@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types/api/response"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 
@@ -21,6 +21,7 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -223,7 +224,6 @@ func TestFaucet(t *testing.T) {
 	}()
 
 	rpcAddr := node.Config.RPC.ListenAddress
-
 	rpcClient, err := http.New(rpcAddr)
 	if err != nil {
 		t.Fatal(err)
@@ -241,6 +241,54 @@ func TestFaucet(t *testing.T) {
 	params, err := json.Marshal(&req)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	// Create our two transactions
+	k1 := []byte("firstName")
+	v1 := []byte("satoshi")
+	tx1 := append(k1, append([]byte("="), v1...)...)
+
+	k2 := []byte("lastName")
+	v2 := []byte("nakamoto")
+	tx2 := append(k2, append([]byte("="), v2...)...)
+
+	gtx := transactions.GenTransaction{}
+	gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{})
+	gtx.SigInfo = &transactions.SignatureInfo{}
+	gtx.SigInfo.URL = "fakeUrl"
+	gtx.Transaction = tx1
+	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
+	//changing the nonce will invalidate the signature.
+	gtx.SigInfo.Nonce = 1234
+
+	//intentionally send in a bogus transaction
+	ti1, _ := query.BroadcastTx(&gtx)
+	gtx.Transaction = tx2
+	ti2, _ := query.BroadcastTx(&gtx)
+
+	stat := query.BatchSend()
+	bs := <-stat
+	res1, err := bs.ResolveTransactionResponse(ti1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res1.Code == 0 {
+		t.Fatalf("expecting error code that is non zero")
+	}
+
+	errorData, err := json.Marshal(res1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(errorData))
+
+	res2, err := bs.ResolveTransactionResponse(ti2)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Code == 0 {
+		t.Fatalf("expecting error code that is non zero")
 	}
 
 	jsonapi := NewTest(t, query)
@@ -280,6 +328,11 @@ func TestFaucet(t *testing.T) {
 		t.Fatal(err)
 	}
 	fmt.Printf("%s\n", string(output))
+	node.Stop()
+
+	<-node.Quit()
+	node.Wait()
+
 }
 
 func TestJsonRpcAdi(t *testing.T) {
