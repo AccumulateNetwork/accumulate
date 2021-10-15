@@ -18,7 +18,7 @@ func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.Priva
 		TokenIssuance{},
 		TokenAccountCreate{},
 		AddCredits{},
-		CreateMultiSigSpec{},
+		CreateSigSpec{},
 		CreateSigSpecGroup{},
 		AssignSigSpecGroup{},
 		SyntheticCreateChain{},
