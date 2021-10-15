@@ -20,7 +20,6 @@ const (
 	TxTypeMultisigTx
 	TxTypeStateQuery //sends a query to a chain and returns its state information
 	TxTypeCreateSigSpec
-	TxTypeCreateMultiSigSpec
 	TxTypeCreateSigSpecGroup
 	TxTypeAddCredits
 	TxTypeAssignSigSpecGroup
@@ -56,7 +55,7 @@ func init() {
 		TxTypeMultisigTx,
 		TxTypeStateQuery,
 		TxTypeCreateSigSpec,
-		TxTypeCreateMultiSigSpec,
+		TxTypeCreateSigSpec,
 		TxTypeCreateSigSpecGroup,
 		TxTypeAddCredits,
 		TxTypeAssignSigSpecGroup,
@@ -106,8 +105,6 @@ func (t TxType) Name() string {
 		return "stateQuery"
 	case TxTypeCreateSigSpec:
 		return "createSigSpec"
-	case TxTypeCreateMultiSigSpec:
-		return "createMultiSigSpec"
 	case TxTypeCreateSigSpecGroup:
 		return "createSigSpecGroup"
 	case TxTypeAddCredits:

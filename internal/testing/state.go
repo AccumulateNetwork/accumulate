@@ -82,24 +82,24 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) erro
 		return err
 	}
 
-	keySetUrl := identityUrl.JoinPath("keyset0")
-	keyGroupUrl := identityUrl.JoinPath("keygroup0")
+	sigSpecUrl := identityUrl.JoinPath("sigspec0")
+	ssgUrl := identityUrl.JoinPath("ssg0")
 
-	ss := new(protocol.SigSpec)
+	ss := new(protocol.KeySpec)
 	ss.HashAlgorithm = protocol.SHA256
 	ss.KeyAlgorithm = protocol.ED25519
 	ss.PublicKey = keyHash[:]
 
-	mss := protocol.NewMultiSigSpec()
-	mss.ChainUrl = types.String(keySetUrl.String())
-	mss.SigSpecs = append(mss.SigSpecs, ss)
+	mss := protocol.NewSigSpec()
+	mss.ChainUrl = types.String(sigSpecUrl.String())
+	mss.Keys = append(mss.Keys, ss)
 
 	ssg := protocol.NewSigSpecGroup()
-	ssg.ChainUrl = types.String(keyGroupUrl.String()) // TODO Allow override
-	ssg.MultiSigSpecs = append(ssg.MultiSigSpecs, types.Bytes(keySetUrl.ResourceChain()).AsBytes32())
+	ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
+	ssg.SigSpecs = append(ssg.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
 
 	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
-	adi.SigSpecId = types.Bytes(keyGroupUrl.ResourceChain()).AsBytes32()
+	adi.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
 
 	return WriteStates(db, adi, ssg, mss)
 }
@@ -135,17 +135,17 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 	return nil
 }
 
-func CreateKeySet(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKey) error {
+func CreateSigSpec(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKey) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	mss := protocol.NewMultiSigSpec()
+	mss := protocol.NewSigSpec()
 	mss.ChainUrl = types.String(u.String())
-	mss.SigSpecs = make([]*protocol.SigSpec, len(keys))
+	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
-		mss.SigSpecs[i] = &protocol.SigSpec{
+		mss.Keys[i] = &protocol.KeySpec{
 			HashAlgorithm: protocol.Unhashed,
 			KeyAlgorithm:  protocol.ED25519,
 			PublicKey:     key,
@@ -155,7 +155,7 @@ func CreateKeySet(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKey
 	return WriteStates(db, mss)
 }
 
-func CreateKeyGroup(db *state.StateDB, urlStr types.String, keySetUrls ...string) error {
+func CreateSigSpecGroup(db *state.StateDB, urlStr types.String, sigSpecUrls ...string) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -163,14 +163,14 @@ func CreateKeyGroup(db *state.StateDB, urlStr types.String, keySetUrls ...string
 
 	ssg := protocol.NewSigSpecGroup()
 	ssg.ChainUrl = types.String(u.String())
-	ssg.MultiSigSpecs = make([][32]byte, len(keySetUrls))
-	for i, s := range keySetUrls {
+	ssg.SigSpecs = make([][32]byte, len(sigSpecUrls))
+	for i, s := range sigSpecUrls {
 		u, err := url.Parse(s)
 		if err != nil {
 			return err
 		}
 		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		ssg.MultiSigSpecs[i] = chainId
+		ssg.SigSpecs[i] = chainId
 	}
 
 	return WriteStates(db, ssg)

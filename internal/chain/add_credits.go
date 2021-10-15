@@ -49,10 +49,10 @@ func checkAddCredits(st *state.StateEntry, tx *transactions.GenTransaction) (bod
 		// recipient. Most credit transfers will be within the same ADI, so this
 		// should catch most mistakes early.
 		switch recvChain.Type {
-		case types.ChainTypeAnonTokenAccount, types.ChainTypeMultiSigSpec:
+		case types.ChainTypeAnonTokenAccount, types.ChainTypeSigSpec:
 			// OK
 		default:
-			return nil, nil, nil, nil, fmt.Errorf("invalid recipient: wrong chain type: want %v or %v, got %v", types.ChainTypeAnonTokenAccount, types.ChainTypeMultiSigSpec, recvChain.Type)
+			return nil, nil, nil, nil, fmt.Errorf("invalid recipient: wrong chain type: want %v or %v, got %v", types.ChainTypeAnonTokenAccount, types.ChainTypeSigSpec, recvChain.Type)
 		}
 	} else if errors.Is(err, state.ErrNotFound) {
 		if recvUrl.Routing() == tx.Routing {

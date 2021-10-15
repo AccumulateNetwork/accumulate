@@ -79,24 +79,24 @@ func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransa
 		return nil, fmt.Errorf("ADI URLs cannot contain dots")
 	}
 
-	keySetUrl := identityUrl.JoinPath("keyset0")
-	keyGroupUrl := identityUrl.JoinPath("keygroup0")
+	sigSpecUrl := identityUrl.JoinPath("sigspec0")
+	ssgUrl := identityUrl.JoinPath("ssg0")
 
-	ss := new(protocol.SigSpec)
+	ss := new(protocol.KeySpec)
 	ss.HashAlgorithm = protocol.SHA256
 	ss.KeyAlgorithm = protocol.ED25519
 	ss.PublicKey = ic.PublicKeyHash[:]
 
-	mss := protocol.NewMultiSigSpec()
-	mss.ChainUrl = types.String(keySetUrl.String()) // TODO Allow override
-	mss.SigSpecs = append(mss.SigSpecs, ss)
+	mss := protocol.NewSigSpec()
+	mss.ChainUrl = types.String(sigSpecUrl.String()) // TODO Allow override
+	mss.Keys = append(mss.Keys, ss)
 
 	ssg := protocol.NewSigSpecGroup()
-	ssg.ChainUrl = types.String(keyGroupUrl.String()) // TODO Allow override
-	ssg.MultiSigSpecs = append(ssg.MultiSigSpecs, types.Bytes(keySetUrl.ResourceChain()).AsBytes32())
+	ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
+	ssg.SigSpecs = append(ssg.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
 
 	adi := state.NewADI(ic.URL, state.KeyTypeSha256, ic.PublicKeyHash[:])
-	adi.SigSpecId = types.Bytes(keyGroupUrl.ResourceChain()).AsBytes32()
+	adi.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
 
 	scc := new(protocol.SyntheticCreateChain)
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
