@@ -34,38 +34,38 @@ type ChainParams struct {
 	Data []byte `json:"data" form:"data" query:"data" validate:"required"`
 }
 
-type CreateMultiSigSpec struct {
-	Url      string           `json:"url" form:"url" query:"url" validate:"required"`
-	SigSpecs []*SigSpecParams `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
+type CreateSigSpec struct {
+	Url  string           `json:"url" form:"url" query:"url" validate:"required"`
+	Keys []*KeySpecParams `json:"keys" form:"keys" query:"keys" validate:"required"`
 }
 
 type CreateSigSpecGroup struct {
-	Url           string     `json:"url" form:"url" query:"url" validate:"required"`
-	MultiSigSpecs [][32]byte `json:"multiSigSpecs" form:"multiSigSpecs" query:"multiSigSpecs" validate:"required"`
+	Url      string     `json:"url" form:"url" query:"url" validate:"required"`
+	SigSpecs [][32]byte `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
 }
 
-type MultiSigSpec struct {
-	state.ChainHeader
-	CreditBalance big.Int    `json:"creditBalance" form:"creditBalance" query:"creditBalance" validate:"required"`
-	SigSpecs      []*SigSpec `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
-}
-
-type SigSpec struct {
+type KeySpec struct {
 	KeyAlgorithm  KeyAlgorithm  `json:"keyAlgorithm" form:"keyAlgorithm" query:"keyAlgorithm" validate:"required"`
 	HashAlgorithm HashAlgorithm `json:"hashAlgorithm" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
 	PublicKey     []byte        `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
 	Nonce         uint64        `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
 }
 
-type SigSpecGroup struct {
-	state.ChainHeader
-	MultiSigSpecs [][32]byte `json:"multiSigSpecs" form:"multiSigSpecs" query:"multiSigSpecs" validate:"required"`
-}
-
-type SigSpecParams struct {
+type KeySpecParams struct {
 	KeyAlgorithm  KeyAlgorithm  `json:"keyAlgorithm" form:"keyAlgorithm" query:"keyAlgorithm" validate:"required"`
 	HashAlgorithm HashAlgorithm `json:"hashAlgorithm" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
 	PublicKey     []byte        `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
+}
+
+type SigSpec struct {
+	state.ChainHeader
+	CreditBalance big.Int    `json:"creditBalance" form:"creditBalance" query:"creditBalance" validate:"required"`
+	Keys          []*KeySpec `json:"keys" form:"keys" query:"keys" validate:"required"`
+}
+
+type SigSpecGroup struct {
+	state.ChainHeader
+	SigSpecs [][32]byte `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
 }
 
 type SyntheticCreateChain struct {
@@ -84,9 +84,9 @@ func NewAnonTokenAccount() *AnonTokenAccount {
 	return v
 }
 
-func NewMultiSigSpec() *MultiSigSpec {
-	v := new(MultiSigSpec)
-	v.Type = types.ChainTypeMultiSigSpec
+func NewSigSpec() *SigSpec {
+	v := new(SigSpec)
+	v.Type = types.ChainTypeSigSpec
 	return v
 }
 
@@ -100,7 +100,7 @@ func (*AddCredits) GetType() types.TxType { return types.TxTypeAddCredits }
 
 func (*AssignSigSpecGroup) GetType() types.TxType { return types.TxTypeAssignSigSpecGroup }
 
-func (*CreateMultiSigSpec) GetType() types.TxType { return types.TxTypeCreateMultiSigSpec }
+func (*CreateSigSpec) GetType() types.TxType { return types.TxTypeCreateSigSpec }
 
 func (*CreateSigSpecGroup) GetType() types.TxType { return types.TxTypeCreateSigSpecGroup }
 
@@ -161,16 +161,16 @@ func (v *ChainParams) BinarySize() int {
 	return n
 }
 
-func (v *CreateMultiSigSpec) BinarySize() int {
+func (v *CreateSigSpec) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeCreateMultiSigSpec))
+	n += uvarintBinarySize(uint64(types.TxTypeCreateSigSpec))
 
 	n += stringBinarySize(v.Url)
 
-	n += uvarintBinarySize(uint64(len(v.SigSpecs)))
+	n += uvarintBinarySize(uint64(len(v.Keys)))
 
-	for _, v := range v.SigSpecs {
+	for _, v := range v.Keys {
 		n += v.BinarySize()
 
 	}
@@ -185,32 +185,12 @@ func (v *CreateSigSpecGroup) BinarySize() int {
 
 	n += stringBinarySize(v.Url)
 
-	n += chainSetBinarySize(v.MultiSigSpecs)
+	n += chainSetBinarySize(v.SigSpecs)
 
 	return n
 }
 
-func (v *MultiSigSpec) BinarySize() int {
-	var n int
-
-	// Enforce sanity
-	v.Type = types.ChainTypeMultiSigSpec
-
-	n += v.ChainHeader.GetHeaderSize()
-
-	n += bigintBinarySize(&v.CreditBalance)
-
-	n += uvarintBinarySize(uint64(len(v.SigSpecs)))
-
-	for _, v := range v.SigSpecs {
-		n += v.BinarySize()
-
-	}
-
-	return n
-}
-
-func (v *SigSpec) BinarySize() int {
+func (v *KeySpec) BinarySize() int {
 	var n int
 
 	n += v.KeyAlgorithm.BinarySize()
@@ -224,6 +204,38 @@ func (v *SigSpec) BinarySize() int {
 	return n
 }
 
+func (v *KeySpecParams) BinarySize() int {
+	var n int
+
+	n += v.KeyAlgorithm.BinarySize()
+
+	n += v.HashAlgorithm.BinarySize()
+
+	n += bytesBinarySize(v.PublicKey)
+
+	return n
+}
+
+func (v *SigSpec) BinarySize() int {
+	var n int
+
+	// Enforce sanity
+	v.Type = types.ChainTypeSigSpec
+
+	n += v.ChainHeader.GetHeaderSize()
+
+	n += bigintBinarySize(&v.CreditBalance)
+
+	n += uvarintBinarySize(uint64(len(v.Keys)))
+
+	for _, v := range v.Keys {
+		n += v.BinarySize()
+
+	}
+
+	return n
+}
+
 func (v *SigSpecGroup) BinarySize() int {
 	var n int
 
@@ -232,19 +244,7 @@ func (v *SigSpecGroup) BinarySize() int {
 
 	n += v.ChainHeader.GetHeaderSize()
 
-	n += chainSetBinarySize(v.MultiSigSpecs)
-
-	return n
-}
-
-func (v *SigSpecParams) BinarySize() int {
-	var n int
-
-	n += v.KeyAlgorithm.BinarySize()
-
-	n += v.HashAlgorithm.BinarySize()
-
-	n += bytesBinarySize(v.PublicKey)
+	n += chainSetBinarySize(v.SigSpecs)
 
 	return n
 }
@@ -334,18 +334,18 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *CreateMultiSigSpec) MarshalBinary() ([]byte, error) {
+func (v *CreateSigSpec) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeCreateMultiSigSpec)))
+	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeCreateSigSpec)))
 
 	buffer.Write(stringMarshalBinary(v.Url))
 
-	buffer.Write(uvarintMarshalBinary(uint64(len(v.SigSpecs))))
-	for i, v := range v.SigSpecs {
+	buffer.Write(uvarintMarshalBinary(uint64(len(v.Keys))))
+	for i, v := range v.Keys {
 		_ = i
 		if b, err := v.MarshalBinary(); err != nil {
-			return nil, fmt.Errorf("error encoding SigSpecs[%d]: %w", i, err)
+			return nil, fmt.Errorf("error encoding Keys[%d]: %w", i, err)
 		} else {
 			buffer.Write(b)
 		}
@@ -362,39 +362,12 @@ func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(stringMarshalBinary(v.Url))
 
-	buffer.Write(chainSetMarshalBinary(v.MultiSigSpecs))
+	buffer.Write(chainSetMarshalBinary(v.SigSpecs))
 
 	return buffer.Bytes(), nil
 }
 
-func (v *MultiSigSpec) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
-
-	// Enforce sanity
-	v.Type = types.ChainTypeMultiSigSpec
-
-	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding header: %w", err)
-	} else {
-		buffer.Write(b)
-	}
-	buffer.Write(bigintMarshalBinary(&v.CreditBalance))
-
-	buffer.Write(uvarintMarshalBinary(uint64(len(v.SigSpecs))))
-	for i, v := range v.SigSpecs {
-		_ = i
-		if b, err := v.MarshalBinary(); err != nil {
-			return nil, fmt.Errorf("error encoding SigSpecs[%d]: %w", i, err)
-		} else {
-			buffer.Write(b)
-		}
-
-	}
-
-	return buffer.Bytes(), nil
-}
-
-func (v *SigSpec) MarshalBinary() ([]byte, error) {
+func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	if b, err := v.KeyAlgorithm.MarshalBinary(); err != nil {
@@ -416,23 +389,7 @@ func (v *SigSpec) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *SigSpecGroup) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
-
-	// Enforce sanity
-	v.Type = types.ChainTypeSigSpecGroup
-
-	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding header: %w", err)
-	} else {
-		buffer.Write(b)
-	}
-	buffer.Write(chainSetMarshalBinary(v.MultiSigSpecs))
-
-	return buffer.Bytes(), nil
-}
-
-func (v *SigSpecParams) MarshalBinary() ([]byte, error) {
+func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	if b, err := v.KeyAlgorithm.MarshalBinary(); err != nil {
@@ -448,6 +405,49 @@ func (v *SigSpecParams) MarshalBinary() ([]byte, error) {
 	}
 
 	buffer.Write(bytesMarshalBinary(v.PublicKey))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SigSpec) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	// Enforce sanity
+	v.Type = types.ChainTypeSigSpec
+
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+	buffer.Write(bigintMarshalBinary(&v.CreditBalance))
+
+	buffer.Write(uvarintMarshalBinary(uint64(len(v.Keys))))
+	for i, v := range v.Keys {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding Keys[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
+
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SigSpecGroup) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	// Enforce sanity
+	v.Type = types.ChainTypeSigSpecGroup
+
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+	buffer.Write(chainSetMarshalBinary(v.SigSpecs))
 
 	return buffer.Bytes(), nil
 }
@@ -591,8 +591,8 @@ func (v *ChainParams) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (v *CreateMultiSigSpec) UnmarshalBinary(data []byte) error {
-	typ := types.TxTypeCreateMultiSigSpec
+func (v *CreateSigSpec) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeCreateSigSpec
 	if v, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
@@ -607,23 +607,23 @@ func (v *CreateMultiSigSpec) UnmarshalBinary(data []byte) error {
 	}
 	data = data[stringBinarySize(v.Url):]
 
-	var lenSigSpecs uint64
+	var lenKeys uint64
 	if x, err := uvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding SigSpecs: %w", err)
+		return fmt.Errorf("error decoding Keys: %w", err)
 	} else {
-		lenSigSpecs = x
+		lenKeys = x
 	}
-	data = data[uvarintBinarySize(lenSigSpecs):]
+	data = data[uvarintBinarySize(lenKeys):]
 
-	v.SigSpecs = make([]*SigSpecParams, lenSigSpecs)
-	for i := range v.SigSpecs {
-		x := new(SigSpecParams)
+	v.Keys = make([]*KeySpecParams, lenKeys)
+	for i := range v.Keys {
+		x := new(KeySpecParams)
 		if err := x.UnmarshalBinary(data); err != nil {
-			return fmt.Errorf("error decoding SigSpecs[%d]: %w", i, err)
+			return fmt.Errorf("error decoding Keys[%d]: %w", i, err)
 		}
 		data = data[x.BinarySize():]
 
-		v.SigSpecs[i] = x
+		v.Keys[i] = x
 	}
 
 	return nil
@@ -646,54 +646,16 @@ func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 	data = data[stringBinarySize(v.Url):]
 
 	if x, err := chainSetUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding MultiSigSpecs: %w", err)
-	} else {
-		v.MultiSigSpecs = x
-	}
-	data = data[chainSetBinarySize(v.MultiSigSpecs):]
-
-	return nil
-}
-
-func (v *MultiSigSpec) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeMultiSigSpec
-	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding header: %w", err)
-	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
-	}
-	data = data[v.GetHeaderSize():]
-
-	if x, err := bigintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding CreditBalance: %w", err)
-	} else {
-		v.CreditBalance.Set(x)
-	}
-	data = data[bigintBinarySize(&v.CreditBalance):]
-
-	var lenSigSpecs uint64
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding SigSpecs: %w", err)
 	} else {
-		lenSigSpecs = x
+		v.SigSpecs = x
 	}
-	data = data[uvarintBinarySize(lenSigSpecs):]
-
-	v.SigSpecs = make([]*SigSpec, lenSigSpecs)
-	for i := range v.SigSpecs {
-		x := new(SigSpec)
-		if err := x.UnmarshalBinary(data); err != nil {
-			return fmt.Errorf("error decoding SigSpecs[%d]: %w", i, err)
-		}
-		data = data[x.BinarySize():]
-
-		v.SigSpecs[i] = x
-	}
+	data = data[chainSetBinarySize(v.SigSpecs):]
 
 	return nil
 }
 
-func (v *SigSpec) UnmarshalBinary(data []byte) error {
+func (v *KeySpec) UnmarshalBinary(data []byte) error {
 	if err := v.KeyAlgorithm.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding KeyAlgorithm: %w", err)
 	}
@@ -721,26 +683,7 @@ func (v *SigSpec) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (v *SigSpecGroup) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeSigSpecGroup
-	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding header: %w", err)
-	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
-	}
-	data = data[v.GetHeaderSize():]
-
-	if x, err := chainSetUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding MultiSigSpecs: %w", err)
-	} else {
-		v.MultiSigSpecs = x
-	}
-	data = data[chainSetBinarySize(v.MultiSigSpecs):]
-
-	return nil
-}
-
-func (v *SigSpecParams) UnmarshalBinary(data []byte) error {
+func (v *KeySpecParams) UnmarshalBinary(data []byte) error {
 	if err := v.KeyAlgorithm.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding KeyAlgorithm: %w", err)
 	}
@@ -757,6 +700,63 @@ func (v *SigSpecParams) UnmarshalBinary(data []byte) error {
 		v.PublicKey = x
 	}
 	data = data[bytesBinarySize(v.PublicKey):]
+
+	return nil
+}
+
+func (v *SigSpec) UnmarshalBinary(data []byte) error {
+	typ := types.ChainTypeSigSpec
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding header: %w", err)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+	}
+	data = data[v.GetHeaderSize():]
+
+	if x, err := bigintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding CreditBalance: %w", err)
+	} else {
+		v.CreditBalance.Set(x)
+	}
+	data = data[bigintBinarySize(&v.CreditBalance):]
+
+	var lenKeys uint64
+	if x, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Keys: %w", err)
+	} else {
+		lenKeys = x
+	}
+	data = data[uvarintBinarySize(lenKeys):]
+
+	v.Keys = make([]*KeySpec, lenKeys)
+	for i := range v.Keys {
+		x := new(KeySpec)
+		if err := x.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Keys[%d]: %w", i, err)
+		}
+		data = data[x.BinarySize():]
+
+		v.Keys[i] = x
+	}
+
+	return nil
+}
+
+func (v *SigSpecGroup) UnmarshalBinary(data []byte) error {
+	typ := types.ChainTypeSigSpecGroup
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding header: %w", err)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+	}
+	data = data[v.GetHeaderSize():]
+
+	if x, err := chainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding SigSpecs: %w", err)
+	} else {
+		v.SigSpecs = x
+	}
+	data = data[chainSetBinarySize(v.SigSpecs):]
 
 	return nil
 }
