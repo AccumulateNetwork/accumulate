@@ -31,7 +31,7 @@ func TestAnonTokenTransactions(t *testing.T) {
 	sponsorAddr := anon.GenerateAcmeAddress(privKey[32:])
 	anonChain, err := db.GetCurrentEntry(types.GetChainIdFromChainPath(&sponsorAddr).Bytes())
 	require.NoError(t, err)
-	anonAcct := new(state.TokenAccount)
+	anonAcct := new(protocol.AnonTokenAccount)
 	require.NoError(t, anonChain.As(anonAcct))
 
 	se := &state.StateEntry{}
@@ -55,10 +55,10 @@ func TestAnonTokenTransactions(t *testing.T) {
 	anonChain, err = db.GetCurrentEntry(chainId[:])
 	require.NoError(t, err)
 
-	tas := state.TokenAccount{}
+	tas := new(protocol.AnonTokenAccount)
 	err = tas.UnmarshalBinary(anonChain.Entry)
 	require.NoError(t, err)
-	require.Equal(t, tokenUrl, tas.TokenUrl.String, "token url of state doesn't match expected")
+	require.Equal(t, tokenUrl, types.String(tas.TokenUrl), "token url of state doesn't match expected")
 	require.Equal(t, uint64(2), tas.TxCount, "expected a token transaction count of 2")
 
 	refUrl := fmt.Sprintf("%s/%d", gtx.SigInfo.URL, tas.TxCount-1)

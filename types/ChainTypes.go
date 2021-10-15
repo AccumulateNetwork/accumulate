@@ -65,3 +65,5 @@ func (t *ChainType) SetType(s string) {
 func (t ChainType) AsUint64() uint64 {
 	return uint64(t)
 }
+
+func (t ChainType) String() string { return t.Name() }

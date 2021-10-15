@@ -36,7 +36,7 @@ func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransa
 
 	switch st.AdiHeader.Type {
 	case types.ChainTypeAnonTokenAccount:
-		account := new(state.TokenAccount)
+		account := new(protocol.AnonTokenAccount)
 		err := st.AdiState.As(account)
 		if err != nil {
 			return nil, fmt.Errorf("error unmarshaling anon state account object, %v", err)
