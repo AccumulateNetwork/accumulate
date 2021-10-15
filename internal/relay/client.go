@@ -38,7 +38,7 @@ type TransactionInfo struct {
 
 type DispatchStatus struct {
 	NetworkId int
-	Returns   []interface{}
+	Returns   []*ctypes.ResultBroadcastTxCommit
 	Err       error
 }
 
@@ -46,16 +46,13 @@ type BatchedStatus struct {
 	Status []DispatchStatus
 }
 
-func (bs *BatchedStatus) ResolveTransactionResponse(ti TransactionInfo) (*ctypes.ResultBroadcastTx, error) {
+func (bs *BatchedStatus) ResolveTransactionResponse(ti TransactionInfo) (*ctypes.ResultBroadcastTxCommit, error) {
 	for _, s := range bs.Status {
 		if ti.NetworkId == s.NetworkId {
 			if len(s.Returns) < ti.QueueIndex {
 				return nil, fmt.Errorf("invalid queue length for batch dispatch response, unable to find transaction")
 			}
-			r, ok := s.Returns[ti.QueueIndex].(*ctypes.ResultBroadcastTx)
-			if !ok {
-				return nil, fmt.Errorf("unable to resolve return interface as ctypes.ResultBroadcastTx")
-			}
+			r := s.Returns[ti.QueueIndex]
 			return r, s.Err
 		}
 	}

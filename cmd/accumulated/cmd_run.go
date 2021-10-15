@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,6 +21,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/getsentry/sentry-go"
 	"github.com/spf13/cobra"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -115,14 +115,20 @@ func runNode(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	app, err := abci.NewAccumulator(db, pv.Key.PubKey.Address(), mgr)
+	logger, err := log.NewDefaultLogger(config.LogFormat, config.LogLevel, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
+		os.Exit(1)
+	}
+
+	app, err := abci.NewAccumulator(db, pv.Key.PubKey.Address(), mgr, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize ACBI app: %v", err)
 		os.Exit(1)
 	}
 
 	// Create node
-	node, err := node.New(config, app)
+	node, err := node.New(config, app, logger)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize node: %v\n", err)
 		os.Exit(1)
@@ -167,7 +173,7 @@ func (sentryHack) RoundTrip(req *http.Request) (*http.Response, error) {
 	defer func() {
 		r := recover()
 		if r != nil {
-			log.Printf("Failed to send event to sentry: %v", r)
+			fmt.Printf("Failed to send event to sentry: %v", r)
 		}
 	}()
 

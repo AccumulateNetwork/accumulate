@@ -29,7 +29,6 @@ type txBatch struct {
 
 type Relay struct {
 	client      []client.ABCIClient
-	batches     []Batch
 	txQueue     []txBatch
 	numNetworks uint64
 	mutex       sync.Mutex
@@ -85,7 +84,7 @@ func (r *Relay) BatchTx(routing uint64, tx tmtypes.Tx) (ti TransactionInfo) {
 // BatchSend
 // This will dispatch all the transactions that have been put into batches. The calling function does not have to
 // wait for batch to be sent.  This is a fire and forget operation
-func (r *Relay) BatchSend() chan BatchedStatus {
+func (r *Relay) BatchSend() <-chan BatchedStatus {
 	var sendTxsAsBatch []txBatch
 	var sendTxsAsSingle []txBatch
 	//sort out the requests
@@ -111,7 +110,8 @@ func (r *Relay) BatchSend() chan BatchedStatus {
 
 // dispatch
 // This function is executed as a go routine to send out all the batches
-func dispatch(client []client.ABCIClient, sendAsBatch []txBatch, sendAsSingle []txBatch, stat chan BatchedStatus) {
+func dispatch(client []client.ABCIClient, sendAsBatch []txBatch, sendAsSingle []txBatch, stat chan<- BatchedStatus) {
+	defer close(stat)
 
 	batchedStatus := make(chan BatchedStatus)
 	singlesStatus := make(chan BatchedStatus)
@@ -128,7 +128,8 @@ func dispatch(client []client.ABCIClient, sendAsBatch []txBatch, sendAsSingle []
 	stat <- bs
 }
 
-func dispatchBatch(client []client.ABCIClient, sendBatches []txBatch, status chan BatchedStatus) {
+func dispatchBatch(client []client.ABCIClient, sendBatches []txBatch, status chan<- BatchedStatus) {
+	defer close(status)
 
 	bs := BatchedStatus{}
 	bs.Status = make([]DispatchStatus, len(sendBatches))
@@ -137,27 +138,41 @@ func dispatchBatch(client []client.ABCIClient, sendBatches []txBatch, status cha
 	for i, txb := range sendBatches {
 		batches = append(batches, client[txb.networkId].(Batchable).NewBatch())
 		for _, tx := range sendBatches[i].tx {
-			batches[i].BroadcastTxSync(context.Background(), tx)
+			batches[i].BroadcastTxCommit(context.Background(), tx)
 		}
 	}
 
 	//now send out the batches
 	for i := range batches {
-		bs.Status[i].Returns, bs.Status[i].Err = batches[i].Send(context.Background())
+		r, err := batches[i].Send(context.Background())
+		if err != nil {
+			bs.Status[i].Err = err
+			continue
+		}
+
+		bs.Status[i].Returns = make([]*ctypes.ResultBroadcastTxCommit, len(r))
+		for j, r := range r {
+			r, ok := r.(*ctypes.ResultBroadcastTxCommit)
+			if !ok {
+				bs.Status[i].Err = fmt.Errorf("internal error: want %T, got %T", new(ctypes.ResultBroadcastTxCommit), r)
+			}
+			bs.Status[i].Returns[j] = r
+		}
 	}
 
 	status <- bs
 }
 
-func dispatchSingles(client []client.ABCIClient, sendSingles []txBatch, status chan BatchedStatus) {
+func dispatchSingles(client []client.ABCIClient, sendSingles []txBatch, status chan<- BatchedStatus) {
+	defer close(status)
 
 	bs := BatchedStatus{}
 	bs.Status = make([]DispatchStatus, len(sendSingles))
 
 	for i, single := range sendSingles {
-		bs.Status[i].Returns = make([]interface{}, len(single.tx))
+		bs.Status[i].Returns = make([]*ctypes.ResultBroadcastTxCommit, len(single.tx))
 		for j := range single.tx {
-			bs.Status[i].Returns[j], bs.Status[i].Err = client[single.networkId].BroadcastTxSync(context.Background(), single.tx[j])
+			bs.Status[i].Returns[j], bs.Status[i].Err = client[single.networkId].BroadcastTxCommit(context.Background(), single.tx[j])
 		}
 	}
 

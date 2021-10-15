@@ -105,7 +105,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.TransactionCount)
+	addrList, err := acctesting.RunLoadTest(query, privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.TransactionCount)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)

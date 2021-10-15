@@ -305,39 +305,64 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 }
 
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
-	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, uint64(req.Tx.Timestamp), payload)
-
 	ret := &acmeapi.APIDataResponse{}
-	var msg json.RawMessage
+	var msg interface{}
+	defer func() {
+		b, err := json.Marshal(msg)
+		if err != nil {
+			b = []byte(fmt.Sprintf(`{"error":"%v"}`, err.Error()))
+		}
+		ret.Data = (*json.RawMessage)(&b)
+	}()
 
+	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, uint64(req.Tx.Timestamp), payload)
 	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
-		ret.Data = &msg
+		msg = map[string]string{"error": err.Error()}
 		return ret
 	}
 	txInfo, err := api.query.BroadcastTx(genTx)
 	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
-		ret.Data = &msg
+		msg = map[string]string{"error": err.Error()}
 		return ret
 	}
 
-	stat := api.query.BatchSend()
-	resp := <-stat
+	resp := <-api.query.BatchSend()
 
+	txHash := genTx.TransactionHash()
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", genTx.TransactionHash(), err))
-		ret.Data = &msg
+		msg = map[string]string{
+			"txid":  fmt.Sprintf("%x", txHash),
+			"error": err.Error(),
+		}
 		return ret
 	}
 
-	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", genTx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
+	if resolved.CheckTx.Code != 0 || len(resolved.CheckTx.MempoolError) != 0 {
+		msg = map[string]interface{}{
+			"txid":      fmt.Sprintf("%x", txHash),
+			"log":       resolved.CheckTx.Log,
+			"hash":      fmt.Sprintf("%x", resolved.Hash),
+			"code":      resolved.CheckTx.Code,
+			"mempool":   resolved.CheckTx.MempoolError,
+			"codespace": resolved.CheckTx.Codespace,
+		}
+	} else if resolved.DeliverTx.Code != 0 {
+		msg = map[string]interface{}{
+			"txid":      fmt.Sprintf("%x", txHash),
+			"log":       resolved.DeliverTx.Log,
+			"hash":      fmt.Sprintf("%x", resolved.Hash),
+			"code":      resolved.DeliverTx.Code,
+			"codespace": resolved.DeliverTx.Codespace,
+		}
 	} else {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", genTx.TransactionHash(), resolved.Hash, resolved.Codespace))
+		msg = map[string]interface{}{
+			"txid":      fmt.Sprintf("%x", txHash),
+			"hash":      fmt.Sprintf("%x", resolved.Hash),
+			"codespace": resolved.DeliverTx.Codespace,
+		}
 	}
-	ret.Data = &msg
+
 	return ret
 }
 
@@ -447,7 +472,6 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 
 // createTokenTx creates Token Tx
 func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
-
 	var err error
 	req := &acmeapi.APIRequestURL{}
 
@@ -513,26 +537,52 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 		return NewAccumulateError(err)
 	}
 
-	stat := api.query.BatchSend()
+	res := <-api.query.BatchSend()
 
-	res := <-stat
-
-	ret := acmeapi.APIDataResponse{}
+	ret := &acmeapi.APIDataResponse{}
 	ret.Type = "faucet"
+	var msg interface{}
+	defer func() {
+		b, err := json.Marshal(msg)
+		if err != nil {
+			b = []byte(fmt.Sprintf(`{"error":"%v"}`, err.Error()))
+		}
+		ret.Data = (*json.RawMessage)(&b)
+	}()
 
-	var msg json.RawMessage
+	txHash := gtx.TransactionHash()
 	resolved, err := res.ResolveTransactionResponse(txInfo)
 	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", gtx.TransactionHash(), err))
-		ret.Data = &msg
+		msg = map[string]string{
+			"txid":  fmt.Sprintf("%x", txHash),
+			"error": err.Error(),
+		}
 		return ret
 	}
-
-	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", gtx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
+	if resolved.CheckTx.Code != 0 || len(resolved.CheckTx.MempoolError) != 0 {
+		msg = map[string]interface{}{
+			"txid":      fmt.Sprintf("%x", txHash),
+			"log":       resolved.CheckTx.Log,
+			"hash":      fmt.Sprintf("%x", resolved.Hash),
+			"code":      resolved.CheckTx.Code,
+			"mempool":   resolved.CheckTx.MempoolError,
+			"codespace": resolved.CheckTx.Codespace,
+		}
+	} else if resolved.DeliverTx.Code != 0 {
+		msg = map[string]interface{}{
+			"txid":      fmt.Sprintf("%x", txHash),
+			"log":       resolved.DeliverTx.Log,
+			"hash":      fmt.Sprintf("%x", resolved.Hash),
+			"code":      resolved.DeliverTx.Code,
+			"codespace": resolved.DeliverTx.Codespace,
+		}
 	} else {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", gtx.TransactionHash(), resolved.Hash, resolved.Codespace))
+		msg = map[string]interface{}{
+			"txid":      fmt.Sprintf("%x", txHash),
+			"hash":      fmt.Sprintf("%x", resolved.Hash),
+			"codespace": resolved.DeliverTx.Codespace,
+		}
 	}
-	ret.Data = &msg
+
 	return &ret
 }

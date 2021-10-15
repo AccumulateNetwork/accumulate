@@ -5,21 +5,19 @@ import (
 	_ "crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/internal/url"
-
 	"github.com/AccumulateNetwork/accumulated"
-	"github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/getsentry/sentry-go"
-
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/getsentry/sentry-go"
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/version"
 )
 
@@ -34,13 +32,15 @@ type Accumulator struct {
 	txct    int64
 	timer   time.Time
 	chain   Chain
+	logger  log.Logger
 }
 
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db State, address crypto.Address, chain Chain) (*Accumulator, error) {
+func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Logger) (*Accumulator, error) {
 	app := &Accumulator{
-		state: db,
-		chain: chain,
+		state:  db,
+		chain:  chain,
+		logger: logger,
 	}
 
 	app.address = make([]byte, len(address))
@@ -93,6 +93,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	err := query.UnmarshalBinary(reqQuery.Data)
 	if err != nil {
 		sentry.CaptureException(err)
+		app.logger.Error(err.Error(), "module", "abci", "operation", "query")
 		resQuery.Info = "request is not an Accumulate Query"
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
@@ -101,6 +102,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	ret, err := app.chain.Query(query)
 	if err != nil {
 		sentry.CaptureException(err)
+		app.logger.Error(err.Error(), "module", "abci", "operation", "query")
 		resQuery.Info = err.Error()
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
@@ -189,6 +191,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	//check to see if there was an error decoding the submission
 	if len(rem) != 0 || err != nil {
 		sentry.CaptureException(err)
+		app.logger.Error(err.Error(), "module", "abci", "operation", "checkTx")
 		//reject it
 		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: "Unable to decode transaction"}
@@ -207,6 +210,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 		sentry.CaptureException(err)
 		ret.Code = 2
+		app.logger.Error(err.Error(), "module", "abci", "operation", "checkTx")
 		ret.GasWanted = 0
 		ret.GasUsed = 0
 		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
@@ -230,6 +234,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	_, err := sub.UnMarshal(req.Tx)
 	if err != nil {
 		sentry.CaptureException(err)
+		app.logger.Error(err.Error(), "module", "abci", "operation", "deliverTx")
 		return abci.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: "Unable to decode transaction"}
 	}
@@ -244,6 +249,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 			u2 = u.String()
 		}
 		sentry.CaptureException(err)
+		app.logger.Error(err.Error(), "module", "abci", "operation", "deliverTx")
 		ret.Code = code.CodeTypeUnauthorized
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
 		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
@@ -291,7 +297,7 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Println(err)
+		app.logger.Error(err.Error(), "module", "abci", "operation", "commit")
 		return
 	}
 

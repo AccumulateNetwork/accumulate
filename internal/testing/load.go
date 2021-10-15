@@ -3,10 +3,9 @@ package testing
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"math/rand"
-
-	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -42,10 +41,8 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 					fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
 				}
 				for j, t := range s.Returns {
-					if resp, ok := t.(coregrpc.ResponseBroadcastTx); ok {
-						if len(resp.CheckTx.Log) > 0 {
-							fmt.Printf("<%d>%v<<\n", j, resp.CheckTx.Log)
-						}
+					if len(t.CheckTx.Log) > 0 {
+						fmt.Printf("<%d>%v<<\n", j, t.CheckTx.Log)
 					}
 				}
 			}
@@ -74,17 +71,14 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 			return nil, fmt.Errorf("failed to send TX: %v", err)
 		}
 	}
-	stat := query.BatchSend()
-	bs := <-stat
+	bs := <-query.BatchSend()
 	for i, s := range bs.Status {
 		for _, t := range s.Returns {
 			if s.Err != nil {
 				fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
 			}
-			if resp, ok := t.(coregrpc.ResponseBroadcastTx); ok {
-				if len(resp.CheckTx.Log) > 0 {
-					fmt.Printf("<%d>%v<<\n", i, resp.CheckTx.Log)
-				}
+			if len(t.CheckTx.Log) > 0 {
+				fmt.Printf("<%d>%v<<\n", i, t.CheckTx.Log)
 			}
 		}
 	}
@@ -97,7 +91,7 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 	return addrList, nil
 }
 
-func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25519.PrivateKey, *transactions.GenTransaction, error) {
+func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed25519.PrivateKey, *transactions.GenTransaction, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	adiSponsor := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
 
@@ -137,7 +131,7 @@ func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	return destAddress, &privateKey, gtx, nil
+	return destAddress, privateKey, gtx, nil
 }
 
 func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
@@ -174,7 +168,7 @@ func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount u
 	return gtx, nil
 }
 
-func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
+func RunLoadTest(query *api.Query, origin ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
 	destAddress, privateKey, gtx, err := BuildTestSynthDepositGenTx(origin)
 	if err != nil {
 		return nil, err
@@ -182,13 +176,12 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 
 	adiSponsor := gtx.SigInfo.URL
 
-	_, err = query.BroadcastTx(gtx)
+	err = SendTxSync(query, gtx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send TX: %v", err)
+		return nil, err
 	}
-	query.BatchSend()
 
-	addresses, err := Load(query, *privateKey, walletCount, txCount)
+	addresses, err := Load(query, privateKey, walletCount, txCount)
 	if err != nil {
 		return nil, err
 	}
@@ -197,4 +190,25 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 	addrList = append(addrList, *destAddress.AsString())
 	addrList = append(addrList, addresses...)
 	return addrList, nil
+}
+
+func SendTxSync(query *api.Query, tx *transactions.GenTransaction) error {
+	ti, err := query.BroadcastTx(tx)
+	if err != nil {
+		return fmt.Errorf("failed to send TX: %v", err)
+	}
+	resp := <-query.BatchSend()
+
+	resolved, err := resp.ResolveTransactionResponse(ti)
+	if err != nil {
+		return err
+	}
+	if resolved.CheckTx.Code != 0 {
+		return errors.New(resolved.CheckTx.Log)
+	}
+	if resolved.DeliverTx.Code != 0 {
+		return errors.New(resolved.DeliverTx.Log)
+	}
+
+	return nil
 }

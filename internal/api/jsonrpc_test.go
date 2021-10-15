@@ -47,7 +47,7 @@ func TestLoadOnRemote(t *testing.T) {
 	query := NewQuery(txBouncer)
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, privateKeySponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
 	kpSponsor := ed25519.NewKeyFromSeed(pv.Key.PrivKey.Bytes()[:32])
 
-	addrList, err := acctesting.RunLoadTest(query, &kpSponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, kpSponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestFaucet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res1.Code == 0 {
+	if res1.CheckTx.Code == 0 && res1.DeliverTx.Code == 0 {
 		t.Fatalf("expecting error code that is non zero")
 	}
 
@@ -300,7 +300,7 @@ func TestFaucet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res2.Code == 0 {
+	if res2.CheckTx.Code == 0 && res2.DeliverTx.Code == 0 {
 		t.Fatalf("expecting error code that is non zero")
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	tmabci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 func TestAccumulator(t *testing.T) {
@@ -57,7 +58,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 	s.Run("Passes valid TX to chain", func() {
 		//build a valid transaction
 		_, origin, _ := ed25519.GenerateKey(nil)
-		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(&origin)
+		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(origin)
 		_ = destAddress
 		_ = destPrivKey
 
@@ -106,7 +107,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 	s.Run("Passes valid TX to chain", func() {
 		//build a valid transaction
 		_, origin, _ := ed25519.GenerateKey(nil)
-		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(&origin)
+		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(origin)
 		_ = destAddress
 		_ = destPrivKey
 
@@ -193,7 +194,7 @@ func (s *AccumulatorTestSuite) App(addr crypto.Address) *abci.Accumulator {
 		addr = crypto.Address{}
 	}
 
-	app, err := abci.NewAccumulator(s.State(), addr, s.Chain())
+	app, err := abci.NewAccumulator(s.State(), addr, s.Chain(), log.MustNewDefaultLogger("plain", "error", false))
 	s.Require().NoError(err)
 	return app
 }
