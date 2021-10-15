@@ -220,7 +220,7 @@ func (q *Query) GetChainStateByUrl(adiChainPath string) (*api.APIDataResponse, e
 		return nil, fmt.Errorf("chain query returned error, %v", err)
 	}
 
-	return q.unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response)
 }
 
 // GetChainStateByTxId
@@ -233,7 +233,7 @@ func (q *Query) GetChainStateByTxId(txId []byte) (*api.APIDataResponse, error) {
 		return nil, fmt.Errorf("chain query returned error, %v", err)
 	}
 
-	return q.unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response)
 }
 
 // GetChainStateByChainId
