@@ -16,6 +16,15 @@ type AddCredits struct {
 	Amount    uint64 `json:"amount" form:"amount" query:"amount" validate:"required"`
 }
 
+type AnonTokenAccount struct {
+	state.ChainHeader
+	TokenUrl      string  `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	Balance       big.Int `json:"balance" form:"balance" query:"balance" validate:"required"`
+	TxCount       uint64  `json:"txCount" form:"txCount" query:"txCount" validate:"required"`
+	Nonce         uint64  `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
+	CreditBalance big.Int `json:"creditBalance" form:"creditBalance" query:"creditBalance" validate:"required"`
+}
+
 type AssignSigSpecGroup struct {
 	Url string `json:"url" form:"url" query:"url" validate:"required"`
 }
@@ -69,6 +78,12 @@ type SyntheticDepositCredits struct {
 	Amount uint64   `json:"amount" form:"amount" query:"amount" validate:"required"`
 }
 
+func NewAnonTokenAccount() *AnonTokenAccount {
+	v := new(AnonTokenAccount)
+	v.Type = types.ChainTypeAnonTokenAccount
+	return v
+}
+
 func NewMultiSigSpec() *MultiSigSpec {
 	v := new(MultiSigSpec)
 	v.Type = types.ChainTypeMultiSigSpec
@@ -101,6 +116,27 @@ func (v *AddCredits) BinarySize() int {
 	n += stringBinarySize(v.Recipient)
 
 	n += uvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *AnonTokenAccount) BinarySize() int {
+	var n int
+
+	// Enforce sanity
+	v.Type = types.ChainTypeAnonTokenAccount
+
+	n += v.ChainHeader.GetHeaderSize()
+
+	n += stringBinarySize(v.TokenUrl)
+
+	n += bigintBinarySize(&v.Balance)
+
+	n += uvarintBinarySize(v.TxCount)
+
+	n += uvarintBinarySize(v.Nonce)
+
+	n += bigintBinarySize(&v.CreditBalance)
 
 	return n
 }
@@ -250,6 +286,30 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	buffer.Write(stringMarshalBinary(v.Recipient))
 
 	buffer.Write(uvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *AnonTokenAccount) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	// Enforce sanity
+	v.Type = types.ChainTypeAnonTokenAccount
+
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+	buffer.Write(stringMarshalBinary(v.TokenUrl))
+
+	buffer.Write(bigintMarshalBinary(&v.Balance))
+
+	buffer.Write(uvarintMarshalBinary(v.TxCount))
+
+	buffer.Write(uvarintMarshalBinary(v.Nonce))
+
+	buffer.Write(bigintMarshalBinary(&v.CreditBalance))
 
 	return buffer.Bytes(), nil
 }
@@ -422,13 +482,13 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 }
 
 func (v *AddCredits) UnmarshalBinary(data []byte) error {
-	typ := uint64(types.TxTypeAddCredits)
+	typ := types.TxTypeAddCredits
 	if v, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
-	} else if v != typ {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(typ):]
+	data = data[uvarintBinarySize(uint64(typ)):]
 
 	if x, err := stringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Recipient: %w", err)
@@ -447,14 +507,61 @@ func (v *AddCredits) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *AnonTokenAccount) UnmarshalBinary(data []byte) error {
+	typ := types.ChainTypeAnonTokenAccount
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding header: %w", err)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+	}
+	data = data[v.GetHeaderSize():]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TokenUrl: %w", err)
+	} else {
+		v.TokenUrl = x
+	}
+	data = data[stringBinarySize(v.TokenUrl):]
+
+	if x, err := bigintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Balance: %w", err)
+	} else {
+		v.Balance.Set(x)
+	}
+	data = data[bigintBinarySize(&v.Balance):]
+
+	if x, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TxCount: %w", err)
+	} else {
+		v.TxCount = x
+	}
+	data = data[uvarintBinarySize(v.TxCount):]
+
+	if x, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Nonce: %w", err)
+	} else {
+		v.Nonce = x
+	}
+	data = data[uvarintBinarySize(v.Nonce):]
+
+	if x, err := bigintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding CreditBalance: %w", err)
+	} else {
+		v.CreditBalance.Set(x)
+	}
+	data = data[bigintBinarySize(&v.CreditBalance):]
+
+	return nil
+}
+
 func (v *AssignSigSpecGroup) UnmarshalBinary(data []byte) error {
-	typ := uint64(types.TxTypeAssignSigSpecGroup)
+	typ := types.TxTypeAssignSigSpecGroup
 	if v, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
-	} else if v != typ {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(typ):]
+	data = data[uvarintBinarySize(uint64(typ)):]
 
 	if x, err := stringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Url: %w", err)
@@ -485,13 +592,13 @@ func (v *ChainParams) UnmarshalBinary(data []byte) error {
 }
 
 func (v *CreateMultiSigSpec) UnmarshalBinary(data []byte) error {
-	typ := uint64(types.TxTypeCreateMultiSigSpec)
+	typ := types.TxTypeCreateMultiSigSpec
 	if v, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
-	} else if v != typ {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(typ):]
+	data = data[uvarintBinarySize(uint64(typ)):]
 
 	if x, err := stringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Url: %w", err)
@@ -523,13 +630,13 @@ func (v *CreateMultiSigSpec) UnmarshalBinary(data []byte) error {
 }
 
 func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
-	typ := uint64(types.TxTypeCreateSigSpecGroup)
+	typ := types.TxTypeCreateSigSpecGroup
 	if v, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
-	} else if v != typ {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(typ):]
+	data = data[uvarintBinarySize(uint64(typ)):]
 
 	if x, err := stringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Url: %w", err)
@@ -549,11 +656,11 @@ func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 }
 
 func (v *MultiSigSpec) UnmarshalBinary(data []byte) error {
-	typ := uint64(types.ChainTypeMultiSigSpec)
+	typ := types.ChainTypeMultiSigSpec
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
-	} else if uint64(v.Type) != typ {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -615,11 +722,11 @@ func (v *SigSpec) UnmarshalBinary(data []byte) error {
 }
 
 func (v *SigSpecGroup) UnmarshalBinary(data []byte) error {
-	typ := uint64(types.ChainTypeSigSpecGroup)
+	typ := types.ChainTypeSigSpecGroup
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
-	} else if uint64(v.Type) != typ {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -655,13 +762,13 @@ func (v *SigSpecParams) UnmarshalBinary(data []byte) error {
 }
 
 func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
-	typ := uint64(types.TxTypeSyntheticCreateChain)
+	typ := types.TxTypeSyntheticCreateChain
 	if v, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
-	} else if v != typ {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(typ):]
+	data = data[uvarintBinarySize(uint64(typ)):]
 
 	if x, err := chainUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)
@@ -693,13 +800,13 @@ func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
 }
 
 func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
-	typ := uint64(types.TxTypeSyntheticDepositCredits)
+	typ := types.TxTypeSyntheticDepositCredits
 	if v, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
-	} else if v != typ {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, v)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(typ):]
+	data = data[uvarintBinarySize(uint64(typ)):]
 
 	if x, err := chainUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)

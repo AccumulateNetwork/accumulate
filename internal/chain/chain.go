@@ -2,8 +2,10 @@ package chain
 
 import (
 	"crypto/ed25519"
+	"math/big"
 
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -35,6 +37,21 @@ type TxExecutor interface {
 
 	// DeliverTx fully validates and executes the transaction.
 	DeliverTx(*state.StateEntry, *transactions.GenTransaction) (*DeliverTxResult, error)
+}
+
+type creditChain interface {
+	state.Chain
+	CreditCredits(amount uint64)
+	DebitCredits(amount uint64) bool
+}
+
+type tokenChain interface {
+	state.Chain
+	NextTx() uint64
+	ParseTokenUrl() (*url.URL, error)
+	CreditTokens(amount *big.Int) bool
+	CanDebitTokens(amount *big.Int) bool
+	DebitTokens(amount *big.Int) bool
 }
 
 type DeliverTxResult struct {

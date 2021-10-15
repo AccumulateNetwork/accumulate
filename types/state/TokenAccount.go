@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
@@ -113,6 +114,10 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) (err error) {
 		return err
 	}
 
+	if app.Type != types.ChainTypeTokenAccount {
+		return fmt.Errorf("invalid chain type: want %v, got %v", types.ChainTypeTokenAccount, app.Type)
+	}
+
 	i := app.GetHeaderSize()
 
 	err = app.TokenUrl.UnmarshalBinary(data[i:])
@@ -128,4 +133,36 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) (err error) {
 	app.TxCount, _ = common.BytesUint64(data)
 
 	return nil
+}
+
+func (acct *TokenAccount) CreditTokens(amount *big.Int) bool {
+	if amount == nil || amount.Sign() < 0 {
+		return false
+	}
+
+	acct.Balance.Add(&acct.Balance, amount)
+	return true
+}
+
+func (acct *TokenAccount) CanDebitTokens(amount *big.Int) bool {
+	return amount != nil && acct.Balance.Cmp(amount) >= 0
+}
+
+func (acct *TokenAccount) DebitTokens(amount *big.Int) bool {
+	if !acct.CanDebitTokens(amount) {
+		return false
+	}
+
+	acct.Balance.Sub(&acct.Balance, amount)
+	return true
+}
+
+func (acct *TokenAccount) NextTx() uint64 {
+	c := acct.TxCount
+	acct.TxCount++
+	return c
+}
+
+func (acct *TokenAccount) ParseTokenUrl() (*url.URL, error) {
+	return url.Parse(*acct.TokenUrl.AsString())
 }

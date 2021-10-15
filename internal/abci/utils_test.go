@@ -144,6 +144,12 @@ func (n *fakeNode) GetTokenAccount(url string) *state.TokenAccount {
 	return acct
 }
 
+func (n *fakeNode) GetAnonTokenAccount(url string) *protocol.AnonTokenAccount {
+	acct := new(protocol.AnonTokenAccount)
+	n.GetChainAs(url, acct)
+	return acct
+}
+
 func (n *fakeNode) GetADI(url string) *state.AdiState {
 	adi := new(state.AdiState)
 	n.GetChainAs(url, adi)
