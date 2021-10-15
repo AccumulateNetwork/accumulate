@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
@@ -88,6 +89,22 @@ func unmarshalAnonTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, e
 		rAccount.TxCount = sAccount.TxCount
 		rAccount.Nonce = sAccount.Nonce
 		return rAccount, err
+	})
+}
+
+func unmarshalSigSpec(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, "sigSpec", func(b []byte) (interface{}, error) {
+		r := new(protocol.SigSpec)
+		err := r.UnmarshalBinary(b)
+		return r, err
+	})
+}
+
+func unmarshalSigSpecGroup(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, "sigSpecGroup", func(b []byte) (interface{}, error) {
+		r := new(protocol.SigSpecGroup)
+		err := r.UnmarshalBinary(b)
+		return r, err
 	})
 }
 
@@ -177,11 +194,17 @@ func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (r
 	return resp, err
 }
 
-func unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*api.APIDataResponse, error) {
 	sChain := new(state.ChainHeader)
 	err := sChain.UnmarshalBinary(rQuery.Value)
 	if err != nil {
 		return nil, fmt.Errorf("invalid state object: %v", err)
+	}
+
+	if len(expect) > 0 {
+		if err := isExpected(expect, sChain.Type); err != nil {
+			return nil, err
+		}
 	}
 
 	switch sChain.Type {
@@ -196,6 +219,12 @@ func unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) 
 
 	case types.ChainTypeAnonTokenAccount:
 		return unmarshalAnonTokenAccount(rQuery)
+
+	case types.ChainTypeSigSpec:
+		return unmarshalSigSpec(rQuery)
+
+	case types.ChainTypeSigSpecGroup:
+		return unmarshalSigSpecGroup(rQuery)
 	}
 
 	rAPI := new(api.APIDataResponse)
@@ -203,4 +232,22 @@ func unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) 
 	msg := []byte(fmt.Sprintf("{\"entry\":\"%x\"}", rQuery.Value))
 	rAPI.Data = (*json.RawMessage)(&msg)
 	return rAPI, nil
+}
+
+func isExpected(expect []types.ChainType, typ types.ChainType) error {
+	for _, e := range expect {
+		if e == typ {
+			return nil
+		}
+	}
+
+	if len(expect) == 1 {
+		return fmt.Errorf("want %v, got %v", expect[0], typ)
+	}
+
+	s := make([]string, len(expect))
+	for i, e := range expect {
+		s[i] = e.String()
+	}
+	return fmt.Errorf("want one of %s; got %v", strings.Join(s, ", "), typ)
 }
