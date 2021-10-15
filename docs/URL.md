@@ -56,12 +56,11 @@ The steps to construct the URL of an anonymous token account are as follows:
 
 1. Calculate the SHA-256 hash of the public key and hex encode the first 20 bytes.
    - For example, `C3AB8FF13720E8AD9047DD39466B3C8974E592C2`
-2. Create an `acc` URL by appending the token URL to the shortened key hash.
-   - `acc://C3AB8FF13720E8AD9047DD39466B3C8974E592C2/bobs/tokens`
-3. Calculate the SHA-256 hash of the previous result and hex encode the last 4 bytes.
-   - `A7BE9574`
+2. Create a checksum by hashing the previous value (lower case) and hex encode
+   the last 4 bytes.
+   - `26E2A324`
 4. Append the previous result to the key hash, as a checksum.
-   - `acc://C3AB8FF13720E8AD9047DD39466B3C8974E592C2A7BE9574/bobs/tokens`
+   - `acc://C3AB8FF13720E8AD9047DD39466B3C8974E592C226E2A324/bobs/tokens`
 
 The ADI URL corresponding to the public key hash of an anonymous token account
 is reserved as soon as any anonymous token account is created for that key. For
