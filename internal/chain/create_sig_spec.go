@@ -11,11 +11,11 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
-type CreateMultiSigSpec struct{}
+type CreateSigSpec struct{}
 
-func (CreateMultiSigSpec) Type() types.TxType { return types.TxTypeCreateMultiSigSpec }
+func (CreateSigSpec) Type() types.TxType { return types.TxTypeCreateSigSpec }
 
-func checkCreateMultiSigSpec(st *state.StateEntry, tx *transactions.GenTransaction) (*protocol.CreateMultiSigSpec, *url.URL, error) {
+func checkCreateSigSpec(st *state.StateEntry, tx *transactions.GenTransaction) (*protocol.CreateSigSpec, *url.URL, error) {
 	adiUrl, err := url.Parse(tx.SigInfo.URL)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid sponsor URL: %v", err)
@@ -29,14 +29,14 @@ func checkCreateMultiSigSpec(st *state.StateEntry, tx *transactions.GenTransacti
 		return nil, nil, fmt.Errorf("%q is not an ADI", tx.SigInfo.URL)
 	}
 
-	body := new(protocol.CreateMultiSigSpec)
+	body := new(protocol.CreateSigSpec)
 	err = tx.As(body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
-	if len(body.SigSpecs) == 0 {
-		return nil, nil, fmt.Errorf("cannot create empty key set")
+	if len(body.Keys) == 0 {
+		return nil, nil, fmt.Errorf("cannot create empty sig spec")
 	}
 
 	msUrl, err := url.Parse(body.Url)
@@ -51,26 +51,26 @@ func checkCreateMultiSigSpec(st *state.StateEntry, tx *transactions.GenTransacti
 	return body, msUrl, nil
 }
 
-func (CreateMultiSigSpec) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	_, _, err := checkCreateMultiSigSpec(st, tx)
+func (CreateSigSpec) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+	_, _, err := checkCreateSigSpec(st, tx)
 	return err
 }
 
-func (CreateMultiSigSpec) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	body, url, err := checkCreateMultiSigSpec(st, tx)
+func (CreateSigSpec) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+	body, url, err := checkCreateSigSpec(st, tx)
 	if err != nil {
 		return nil, err
 	}
 
-	mss := protocol.NewMultiSigSpec()
+	mss := protocol.NewSigSpec()
 	mss.ChainUrl = types.String(url.String())
 
-	for _, sig := range body.SigSpecs {
-		ss := new(protocol.SigSpec)
+	for _, sig := range body.Keys {
+		ss := new(protocol.KeySpec)
 		ss.HashAlgorithm = sig.HashAlgorithm
 		ss.KeyAlgorithm = sig.KeyAlgorithm
 		ss.PublicKey = sig.PublicKey
-		mss.SigSpecs = append(mss.SigSpecs, ss)
+		mss.Keys = append(mss.Keys, ss)
 	}
 
 	data, err := mss.MarshalBinary()

@@ -6,13 +6,13 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 )
 
-func (ms *MultiSigSpec) CreditCredits(amount uint64) {
+func (ms *SigSpec) CreditCredits(amount uint64) {
 	amt := new(big.Int)
 	amt.SetUint64(amount)
 	ms.CreditBalance.Add(&ms.CreditBalance, amt)
 }
 
-func (ms *MultiSigSpec) DebitCredits(amount uint64) bool {
+func (ms *SigSpec) DebitCredits(amount uint64) bool {
 	amt := new(big.Int)
 	amt.SetUint64(amount)
 	if amt.Cmp(&ms.CreditBalance) > 0 {
