@@ -14,7 +14,7 @@ const (
 	ChainTypeTransactionReference // Transaction Reference Chain
 	ChainTypeTransaction          // Transaction Chain
 	ChainTypePendingTransaction   // Pending Chain
-	ChainTypeMultiSigSpec         // Multiple Signature Specification chain
+	ChainTypeSigSpec              // Signature Specification chain
 	ChainTypeSigSpecGroup         // Signature Specification Group chain
 )
 
@@ -31,6 +31,7 @@ var (
 		ChainTypeTransactionReference: "ChainTypeTransactionReference",
 		ChainTypeTransaction:          "ChainTypeTransaction",
 		ChainTypePendingTransaction:   "ChainTypePendingTransaction",
+		ChainTypeSigSpec:              "ChainTypeSigSpec",
 		ChainTypeSigSpecGroup:         "ChainTypeSigSpecGroup",
 	}
 	ChainTypeValue = map[string]ChainType{
@@ -44,6 +45,7 @@ var (
 		"ChainTypeTransactionReference": ChainTypeTransactionReference,
 		"ChainTypeTransaction":          ChainTypeTransaction,
 		"ChainTypePendingTransaction":   ChainTypePendingTransaction,
+		"ChainTypeSigSpec":              ChainTypeSigSpec,
 		"ChainTypeSigSpecGroup":         ChainTypeSigSpecGroup,
 	}
 )

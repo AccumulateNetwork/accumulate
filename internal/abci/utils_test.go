@@ -156,14 +156,14 @@ func (n *fakeNode) GetADI(url string) *state.AdiState {
 	return adi
 }
 
-func (n *fakeNode) GetKeyGroup(url string) *protocol.SigSpecGroup {
+func (n *fakeNode) GetSigSpecGroup(url string) *protocol.SigSpecGroup {
 	ssg := new(protocol.SigSpecGroup)
 	n.GetChainAs(url, ssg)
 	return ssg
 }
 
-func (n *fakeNode) GetKeySet(url string) *protocol.MultiSigSpec {
-	mss := new(protocol.MultiSigSpec)
+func (n *fakeNode) GetSigSpec(url string) *protocol.SigSpec {
+	mss := new(protocol.SigSpec)
 	n.GetChainAs(url, mss)
 	return mss
 }

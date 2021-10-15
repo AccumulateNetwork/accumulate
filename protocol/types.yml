@@ -56,7 +56,7 @@ SyntheticDepositCredits:
   - name: Amount
     type: uvarint
 
-SigSpec:
+KeySpec:
   fields:
   - name: KeyAlgorithm
     type: KeyAlgorithm
@@ -69,7 +69,7 @@ SigSpec:
   - name: Nonce
     type: uvarint
 
-SigSpecParams:
+KeySpecParams:
   fields:
   - name: KeyAlgorithm
     type: KeyAlgorithm
@@ -80,34 +80,34 @@ SigSpecParams:
   - name: PublicKey
     type: bytes
 
-MultiSigSpec:
+SigSpec:
   kind: chain
   fields:
   - name: CreditBalance
     type: bigint
-  - name: SigSpecs
+  - name: Keys
     type: slice
     slice:
-      type: SigSpec
+      type: KeySpec
       pointer: true
       marshal-as: self
 
-CreateMultiSigSpec:
+CreateSigSpec:
   kind: tx
   fields:
   - name: Url
     type: string
-  - name: SigSpecs
+  - name: Keys
     type: slice
     slice:
-      type: SigSpecParams
+      type: KeySpecParams
       pointer: true
       marshal-as: self
 
 SigSpecGroup:
   kind: chain
   fields:
-  - name: MultiSigSpecs
+  - name: SigSpecs
     type: chainSet
 
 CreateSigSpecGroup:
@@ -115,7 +115,7 @@ CreateSigSpecGroup:
   fields:
   - name: Url
     type: string
-  - name: MultiSigSpecs
+  - name: SigSpecs
     type: chainSet
 
 AssignSigSpecGroup:

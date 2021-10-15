@@ -15,7 +15,7 @@ type CreateSigSpecGroup struct{}
 
 func (CreateSigSpecGroup) Type() types.TxType { return types.TxTypeCreateSigSpecGroup }
 
-func checkCreateSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransaction) ([]*protocol.MultiSigSpec, *url.URL, error) {
+func checkCreateSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransaction) ([]*protocol.SigSpec, *url.URL, error) {
 	adiUrl, err := url.Parse(tx.SigInfo.URL)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid sponsor URL: %v", err)
@@ -35,7 +35,7 @@ func checkCreateSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransacti
 		return nil, nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
-	if len(body.MultiSigSpecs) == 0 {
+	if len(body.SigSpecs) == 0 {
 		return nil, nil, fmt.Errorf("cannot create empty key group")
 	}
 
@@ -48,18 +48,18 @@ func checkCreateSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransacti
 		return nil, nil, fmt.Errorf("%q does not belong to %q", sgUrl, adiUrl)
 	}
 
-	entries := make([]*protocol.MultiSigSpec, len(body.MultiSigSpecs))
-	for i, chainId := range body.MultiSigSpecs {
-		entry := new(protocol.MultiSigSpec)
+	entries := make([]*protocol.SigSpec, len(body.SigSpecs))
+	for i, chainId := range body.SigSpecs {
+		entry := new(protocol.SigSpec)
 		_, err := st.DB.LoadChainAs(chainId[:], entry)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch key set: %v", err)
+			return nil, nil, fmt.Errorf("failed to fetch sig spec: %v", err)
 		}
 
 		u, err := entry.ParseUrl()
 		if err != nil {
 			// This should not happen. Only valid URLs should be stored.
-			return nil, nil, fmt.Errorf("invalid key set state: bad URL: %v", err)
+			return nil, nil, fmt.Errorf("invalid sig spec state: bad URL: %v", err)
 		}
 
 		if !bytes.Equal(adiUrl.IdentityChain(), u.IdentityChain()) {
@@ -90,11 +90,11 @@ func (CreateSigSpecGroup) DeliverTx(st *state.StateEntry, tx *transactions.GenTr
 		u, err := mss.ParseUrl()
 		if err != nil {
 			// We already did this, so this should never fail here.
-			return nil, fmt.Errorf("invalid key set state: bad URL: %v", err)
+			return nil, fmt.Errorf("invalid sig spec state: bad URL: %v", err)
 		}
 
 		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		ssg.MultiSigSpecs = append(ssg.MultiSigSpecs, chainId)
+		ssg.SigSpecs = append(ssg.SigSpecs, chainId)
 	}
 
 	data, err := ssg.MarshalBinary()

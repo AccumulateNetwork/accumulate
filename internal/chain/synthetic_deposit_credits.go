@@ -29,8 +29,8 @@ func checkSyntheticDepositCredits(st *state.StateEntry, tx *transactions.GenTran
 	case types.ChainTypeAnonTokenAccount:
 		account = new(protocol.AnonTokenAccount)
 
-	case types.ChainTypeMultiSigSpec:
-		account = new(protocol.MultiSigSpec)
+	case types.ChainTypeSigSpec:
+		account = new(protocol.SigSpec)
 
 	default:
 		return nil, nil, fmt.Errorf("cannot deposit tokens into a %v", st.ChainHeader.Type)

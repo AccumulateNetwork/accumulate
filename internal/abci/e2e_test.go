@@ -126,12 +126,12 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, types.String("RoadRunner"), r.ChainUrl)
 	require.Equal(t, types.Bytes(keyHash[:]), r.KeyData)
 
-	kg := n.GetKeyGroup("RoadRunner/keygroup0")
-	require.Len(t, kg.MultiSigSpecs, 1)
+	kg := n.GetSigSpecGroup("RoadRunner/ssg0")
+	require.Len(t, kg.SigSpecs, 1)
 
-	ks := n.GetKeySet("RoadRunner/keyset0")
-	require.Len(t, ks.SigSpecs, 1)
-	require.Equal(t, keyHash[:], ks.SigSpecs[0].PublicKey)
+	ks := n.GetSigSpec("RoadRunner/sigspec0")
+	require.Len(t, ks.Keys, 1)
+	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
 }
 
 func TestCreateAdiTokenAccount(t *testing.T) {
@@ -214,7 +214,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = 55
-		ac.Recipient = "foo/keyset0"
+		ac.Recipient = "foo/sigspec0"
 
 		tx, err := transactions.New("foo/tokens", edSigner(fooKey, 1), ac)
 		require.NoError(t, err)
@@ -223,21 +223,21 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 
 	n.client.Wait()
 
-	ks := n.GetKeySet("foo/keyset0")
+	ks := n.GetSigSpec("foo/sigspec0")
 	acct := n.GetTokenAccount("foo/tokens")
 	require.Equal(t, int64(55), ks.CreditBalance.Int64())
 	require.Equal(t, int64(protocol.AcmePrecision*1e2-protocol.AcmePrecision/protocol.CreditsPerDollar*55), acct.Balance.Int64())
 }
 
-func TestCreateKeySet(t *testing.T) {
+func TestCreateSigSpec(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{})
 	fooKey, testKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		cms := new(protocol.CreateMultiSigSpec)
+		cms := new(protocol.CreateSigSpec)
 		cms.Url = "foo/keyset1"
-		cms.SigSpecs = append(cms.SigSpecs, &protocol.SigSpecParams{
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			HashAlgorithm: protocol.Unhashed,
 			KeyAlgorithm:  protocol.ED25519,
 			PublicKey:     testKey.PubKey().Bytes(),
@@ -249,20 +249,20 @@ func TestCreateKeySet(t *testing.T) {
 	})
 
 	n.client.Wait()
-	ks := n.GetKeySet("foo/keyset1")
-	require.Len(t, ks.SigSpecs, 1)
-	ss := ks.SigSpecs[0]
+	ks := n.GetSigSpec("foo/keyset1")
+	require.Len(t, ks.Keys, 1)
+	ss := ks.Keys[0]
 	require.Equal(t, uint64(0), ss.Nonce)
 	require.Equal(t, protocol.Unhashed, ss.HashAlgorithm)
 	require.Equal(t, protocol.ED25519, ss.KeyAlgorithm)
 	require.Equal(t, testKey.PubKey().Bytes(), ss.PublicKey)
 }
 
-func TestCreateKeyGroup(t *testing.T) {
+func TestCreateSigSpecGroup(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{})
 	fooKey, testKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeySet(n.db, "foo/keyset1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/keyset1", testKey.PubKey().Bytes()))
 
 	u, err := url.Parse("foo/keyset1")
 	require.NoError(t, err)
@@ -271,7 +271,7 @@ func TestCreateKeyGroup(t *testing.T) {
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		csg := new(protocol.CreateSigSpecGroup)
 		csg.Url = "foo/keygroup1"
-		csg.MultiSigSpecs = append(csg.MultiSigSpecs, keySetChainId)
+		csg.SigSpecs = append(csg.SigSpecs, keySetChainId)
 
 		tx, err := transactions.New("foo", edSigner(fooKey, 1), csg)
 		require.NoError(t, err)
@@ -279,13 +279,13 @@ func TestCreateKeyGroup(t *testing.T) {
 	})
 
 	n.client.Wait()
-	kg := n.GetKeyGroup("foo/keygroup1")
-	require.Len(t, kg.MultiSigSpecs, 1)
-	ks := kg.MultiSigSpecs[0]
+	kg := n.GetSigSpecGroup("foo/keygroup1")
+	require.Len(t, kg.SigSpecs, 1)
+	ks := kg.SigSpecs[0]
 	require.Equal(t, keySetChainId, types.Bytes32(ks))
 }
 
-func TestAssignKeyGroup(t *testing.T) {
+func TestAssignSigSpecGroup(t *testing.T) {
 	u, err := url.Parse("foo/keygroup1")
 	require.NoError(t, err)
 	keyGroupChainId := types.Bytes(u.ResourceChain()).AsBytes32()
@@ -293,8 +293,8 @@ func TestAssignKeyGroup(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{})
 	fooKey, testKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeySet(n.db, "foo/keyset1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyGroup(n.db, "foo/keygroup1", "foo/keyset1"))
+	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/keyset1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/keygroup1", "foo/keyset1"))
 	require.NoError(t, acctesting.CreateTokenAccount(n.db, "foo/tokens", protocol.AcmeUrl().String(), 1e2, false))
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
