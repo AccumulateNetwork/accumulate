@@ -9,6 +9,20 @@
 # Type names for fields of a transaction should be suffixed with 'Params', such
 # as TokenOutputParams.
 
+AnonTokenAccount:
+  kind: chain
+  fields:
+  - name: TokenUrl
+    type: string
+  - name: Balance
+    type: bigint
+  - name: TxCount
+    type: uvarint
+  - name: Nonce
+    type: uvarint
+  - name: CreditBalance
+    type: bigint
+
 SyntheticCreateChain:
   kind: tx
   fields:

@@ -57,7 +57,7 @@ func BenchmarkFaucetAndAnonTx(b *testing.B) {
 func TestCreateAnonAccount(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{})
 	originAddr := n.testAnonTx(11)
-	require.Equal(t, int64(5e4*acctesting.TokenMx-11000), n.GetTokenAccount(originAddr).Balance.Int64())
+	require.Equal(t, int64(5e4*acctesting.TokenMx-11000), n.GetAnonTokenAccount(originAddr).Balance.Int64())
 }
 
 func (n *fakeNode) testAnonTx(count int) string {
@@ -177,9 +177,9 @@ func TestAnonAccountTx(t *testing.T) {
 
 	n.client.Wait()
 
-	require.Equal(t, int64(5e4*acctesting.TokenMx-3000), n.GetTokenAccount(aliceUrl).Balance.Int64())
-	require.Equal(t, int64(1000), n.GetTokenAccount(bobUrl).Balance.Int64())
-	require.Equal(t, int64(2000), n.GetTokenAccount(charlieUrl).Balance.Int64())
+	require.Equal(t, int64(5e4*acctesting.TokenMx-3000), n.GetAnonTokenAccount(aliceUrl).Balance.Int64())
+	require.Equal(t, int64(1000), n.GetAnonTokenAccount(bobUrl).Balance.Int64())
+	require.Equal(t, int64(2000), n.GetAnonTokenAccount(charlieUrl).Balance.Int64())
 }
 
 func TestAdiAccountTx(t *testing.T) {

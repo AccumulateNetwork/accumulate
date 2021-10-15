@@ -16,7 +16,7 @@ import (
 
 func TestSynthTokenDeposit_Anon(t *testing.T) {
 	appId := sha256.Sum256([]byte("anon"))
-	tokenUrl := types.String(protocol.AcmeUrl().String())
+	tokenUrl := protocol.AcmeUrl().String()
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
 
@@ -38,12 +38,12 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	anonChain, err := db.GetCurrentEntry(chainId[:])
 	require.NoError(t, err)
 
-	tas := state.TokenAccount{}
+	tas := new(protocol.AnonTokenAccount)
 	err = tas.UnmarshalBinary(anonChain.Entry)
 	require.NoError(t, err)
 	require.Equal(t, types.String(gtx.SigInfo.URL), tas.ChainUrl, "invalid chain header")
 	require.Equalf(t, types.ChainTypeAnonTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.ChainHeader.Type.Name())
-	require.Equal(t, tokenUrl, tas.TokenUrl.String, "token url of state doesn't match expected")
+	require.Equal(t, tokenUrl, tas.TokenUrl, "token url of state doesn't match expected")
 	require.Equal(t, uint64(1), tas.TxCount)
 
 	//now query the tx reference

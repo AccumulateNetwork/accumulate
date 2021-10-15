@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -72,6 +73,20 @@ func unmarshalTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error
 		err := sAccount.UnmarshalBinary(b)
 		ta := api.NewTokenAccount(sAccount.ChainUrl, sAccount.TokenUrl.String)
 		rAccount := response.NewTokenAccount(ta, sAccount.GetBalance(), sAccount.TxCount)
+		return rAccount, err
+	})
+}
+
+func unmarshalAnonTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, "anonTokenAccount", func(b []byte) (interface{}, error) {
+		sAccount := new(protocol.AnonTokenAccount)
+		err := sAccount.UnmarshalBinary(b)
+		rAccount := new(response.AnonTokenAccount)
+		rAccount.TokenAccount = api.NewTokenAccount(sAccount.ChainUrl, types.String(sAccount.TokenUrl))
+		rAccount.Balance = types.Amount{Int: sAccount.Balance}
+		rAccount.CreditBalance = types.Amount{Int: sAccount.CreditBalance}
+		rAccount.TxCount = sAccount.TxCount
+		rAccount.Nonce = sAccount.Nonce
 		return rAccount, err
 	})
 }
@@ -162,7 +177,7 @@ func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (r
 	return resp, err
 }
 
-func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+func unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 	sChain := new(state.ChainHeader)
 	err := sChain.UnmarshalBinary(rQuery.Value)
 	if err != nil {
@@ -176,8 +191,11 @@ func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataRespon
 	case types.ChainTypeToken:
 		return unmarshalToken(rQuery)
 
-	case types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount:
+	case types.ChainTypeTokenAccount:
 		return unmarshalTokenAccount(rQuery)
+
+	case types.ChainTypeAnonTokenAccount:
+		return unmarshalAnonTokenAccount(rQuery)
 	}
 
 	rAPI := new(api.APIDataResponse)

@@ -35,6 +35,10 @@ func TestLoadOnRemote(t *testing.T) {
 		t.Skip("This test is not appropriate for CI")
 	}
 
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
 	txBouncer, err := relay.NewWith(*testnet)
 	if err != nil {
 		t.Fatal(err)
@@ -101,6 +105,10 @@ func TestLoadOnRemote(t *testing.T) {
 func TestJsonRpcAnonToken(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is flaky in CI")
+	}
+
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -214,6 +222,11 @@ func TestFaucet(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
 	}
+
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	node, pv := startBVC(t, dir)

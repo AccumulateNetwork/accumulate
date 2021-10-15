@@ -46,11 +46,13 @@ func (SyntheticTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.Ge
 	}
 
 	acctObj := st.ChainState
-	account := new(state.TokenAccount)
+	var account tokenChain
 	if st.ChainHeader != nil {
 		switch st.ChainHeader.Type {
-		case types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount:
-			// ok
+		case types.ChainTypeAnonTokenAccount:
+			account = new(protocol.AnonTokenAccount)
+		case types.ChainTypeTokenAccount:
+			account = new(state.TokenAccount)
 		default:
 			return nil, fmt.Errorf("sponsor is not an account")
 		}
@@ -67,21 +69,22 @@ func (SyntheticTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.Ge
 		return nil, fmt.Errorf("token URL does not match anonymous token account URL")
 	} else {
 		// Address is anonymous and the account doesn't exist, so create one
-		account = state.NewTokenAccount(toUrl.String(), tokenUrl.String())
-		account.Type = types.ChainTypeAnonTokenAccount
+		anon := protocol.NewAnonTokenAccount()
+		anon.ChainUrl = types.String(toUrl.String())
+		anon.TokenUrl = tokenUrl.String()
+		account = anon
 		acctObj = new(state.Object)
 	}
 
-	//all is good, so subtract the balance
-	err = account.AddBalance(deposit.DepositAmount.AsBigInt())
-	if err != nil {
+	//all is good, so add the balance
+	if !account.CreditTokens(deposit.DepositAmount.AsBigInt()) {
 		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
 
 	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
 	//This will reference the txid to keep the history
 	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
-	refUrl := toUrl.JoinPath(fmt.Sprint(account.TxCount))
+	refUrl := toUrl.JoinPath(fmt.Sprint(account.NextTx()))
 	txr := state.NewTxReference(refUrl.String(), txHash[:])
 	txrData, err := txr.MarshalBinary()
 	if err != nil {
@@ -92,9 +95,6 @@ func (SyntheticTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.Ge
 	txRefChain := new(state.Object)
 	txRefChain.Entry = txrData
 	txRefChainId := types.Bytes(refUrl.ResourceChain()).AsBytes32()
-
-	//increment the token transaction count
-	account.TxCount++
 
 	acctChainId := types.Bytes(toUrl.ResourceChain()).AsBytes32()
 	acctObj.Entry, err = account.MarshalBinary()
