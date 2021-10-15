@@ -15,7 +15,7 @@ type AddCredits struct{}
 
 func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
-func checkAddCredits(st *state.StateEntry, tx *transactions.GenTransaction) (body *protocol.AddCredits, account *state.TokenAccount, amount *types.Amount, recipient *url.URL, err error) {
+func checkAddCredits(st *state.StateEntry, tx *transactions.GenTransaction) (body *protocol.AddCredits, account tokenChain, amount *types.Amount, recipient *url.URL, err error) {
 	if st.ChainHeader == nil {
 		return nil, nil, nil, nil, fmt.Errorf("sponsor not found")
 	}
@@ -66,32 +66,34 @@ func checkAddCredits(st *state.StateEntry, tx *transactions.GenTransaction) (bod
 	}
 
 	switch st.ChainHeader.Type {
-	case types.ChainTypeAnonTokenAccount, types.ChainTypeTokenAccount:
-		acct := new(state.TokenAccount)
-		err := st.ChainState.As(acct)
-		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("invalid token account: %v", err)
-		}
-
-		tokenUrl, err := url.Parse(*acct.TokenUrl.AsString())
-		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("invalid token account: %v", err)
-		}
-
-		// Only ACME tokens can be converted into credits
-		if !protocol.AcmeUrl().Equal(tokenUrl) {
-			return nil, nil, nil, nil, fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
-		}
-
-		if !acct.CanTransact(&amount.Int) {
-			return nil, nil, nil, nil, fmt.Errorf("insufficient balance")
-		}
-
-		return body, acct, amount, recvUrl, nil
-
+	case types.ChainTypeAnonTokenAccount:
+		account = new(protocol.AnonTokenAccount)
+	case types.ChainTypeTokenAccount:
+		account = new(state.TokenAccount)
 	default:
 		return nil, nil, nil, nil, fmt.Errorf("not an account: %q", tx.SigInfo.URL)
 	}
+
+	err = st.ChainState.As(account)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("invalid token account: %v", err)
+	}
+
+	tokenUrl, err := account.ParseTokenUrl()
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("invalid token account: %v", err)
+	}
+
+	// Only ACME tokens can be converted into credits
+	if !protocol.AcmeUrl().Equal(tokenUrl) {
+		return nil, nil, nil, nil, fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
+	}
+
+	if !account.CanDebitTokens(&amount.Int) {
+		return nil, nil, nil, nil, fmt.Errorf("insufficient balance")
+	}
+
+	return body, account, amount, recvUrl, nil
 }
 
 func (AddCredits) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
@@ -105,9 +107,7 @@ func (AddCredits) DeliverTx(st *state.StateEntry, tx *transactions.GenTransactio
 		return nil, err
 	}
 
-	// Debit the account
-	err = account.SubBalance(&amount.Int)
-	if err != nil {
+	if !account.DebitTokens(&amount.Int) {
 		return nil, fmt.Errorf("failed to debit %v", tx.SigInfo.URL)
 	}
 
