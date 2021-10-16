@@ -14,6 +14,7 @@ package abci
 import (
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
@@ -36,7 +37,7 @@ type Chain interface {
 
 	BeginBlock(BeginBlockRequest)
 	CheckTx(*transactions.GenTransaction) error
-	DeliverTx(*transactions.GenTransaction) error
+	DeliverTx(*transactions.GenTransaction) (*protocol.TxResult, error)
 	EndBlock(EndBlockRequest)
 	Commit() ([]byte, error)
 }
