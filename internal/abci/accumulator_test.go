@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	mock_abci "github.com/AccumulateNetwork/accumulated/internal/mock/abci"
@@ -115,7 +116,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
-		s.Chain().EXPECT().DeliverTx(gomock.Any())
+		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(new(protocol.TxResult), nil)
 
 		resp := s.App(nil).DeliverTx(tmabci.RequestDeliverTx{Tx: data})
 		s.Require().Zero(resp.Code)
@@ -133,7 +134,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
-		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(errors.New("error"))
+		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(nil, errors.New("error"))
 
 		resp := s.App(nil).DeliverTx(tmabci.RequestDeliverTx{Tx: data})
 		s.Require().NotZero(resp.Code)

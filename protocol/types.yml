@@ -9,6 +9,26 @@
 # Type names for fields of a transaction should be suffixed with 'Params', such
 # as TokenOutputParams.
 
+TxResult:
+  fields:
+  - name: SyntheticTxs
+    type: slice
+    slice:
+      type: TxSynthRef
+      pointer: true
+      marshal-as: self
+
+TxSynthRef:
+  fields:
+  - name: Type
+    type: uvarint
+  - name: Hash
+    type: chain
+  - name: Url
+    type: string
+  - name: TxRef # The hash of the transaction blob submitted to Tendermint. Use to look up the transaction status.
+    type: chain
+
 AnonTokenAccount:
   kind: chain
   fields:
