@@ -35,7 +35,7 @@ func willCreateChain(ccs []createChain, id []byte) bool {
 	return false
 }
 
-func (SyntheticCreateChain) check(st *state.StateEntry, tx *transactions.GenTransaction) ([]createChain, error) {
+func checkSyntheticCreateChain(st *state.StateEntry, tx *transactions.GenTransaction) ([]createChain, error) {
 	scc := new(protocol.SyntheticCreateChain)
 	err := tx.As(scc)
 	if err != nil {
@@ -98,12 +98,12 @@ func (SyntheticCreateChain) check(st *state.StateEntry, tx *transactions.GenTran
 }
 
 func (SyntheticCreateChain) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	_, err := SyntheticCreateChain{}.check(st, tx)
+	_, err := checkSyntheticCreateChain(st, tx)
 	return err
 }
 
 func (SyntheticCreateChain) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	ccs, err := SyntheticCreateChain{}.check(st, tx)
+	ccs, err := checkSyntheticCreateChain(st, tx)
 	if err != nil {
 		return nil, err
 	}
