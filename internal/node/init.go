@@ -58,6 +58,7 @@ func Init(opts InitOptions) (err error) {
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
+		config.LogLevel = "error"
 		config.ProxyApp = ""
 		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmP2pPortOffset)
 		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+TmRpcPortOffset)
