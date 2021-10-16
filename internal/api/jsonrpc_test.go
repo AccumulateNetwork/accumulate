@@ -275,9 +275,9 @@ func TestFaucet(t *testing.T) {
 	gtx.SigInfo.Nonce = 1234
 
 	//intentionally send in a bogus transaction
-	ti1, _ := query.BroadcastTx(&gtx)
+	ti1, _ := query.BroadcastTx(&gtx, nil)
 	gtx.Transaction = tx2
-	ti2, _ := query.BroadcastTx(&gtx)
+	ti2, _ := query.BroadcastTx(&gtx, nil)
 
 	stat := query.BatchSend()
 	bs := <-stat
