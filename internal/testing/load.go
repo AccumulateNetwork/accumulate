@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
+	"sync"
+	"time"
 
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 
@@ -15,6 +17,7 @@ import (
 	apitypes "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	abci "github.com/tendermint/tendermint/abci/types"
 )
 
 // Load
@@ -32,11 +35,29 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 		wallet = append(wallet, api.NewWalletEntry()) // create a new wallet entry
 	}
 
+	resultWg := new(sync.WaitGroup)
+	resultWg.Add(txCount)
+	ch := make(chan abci.TxResult)
+	defer close(ch)
+
+	ok := true
+	go func() {
+		for txr := range ch {
+			if txr.Result.Code != 0 {
+				fmt.Printf("%v<<\n", txr.Result.Log)
+				ok = false
+			} else {
+				fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
+			}
+
+			resultWg.Done()
+		}
+	}()
+
 	addrCountMap := make(map[string]int)
 	for i := 0; i < txCount; i++ { // Make a bunch of transactions
 		if i%200 == 0 {
-			stat := query.BatchSend()
-			bs := <-stat
+			bs := <-query.BatchSend()
 			for _, s := range bs.Status {
 				if s.Err != nil {
 					fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
@@ -70,30 +91,38 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
 
-		if _, err := query.BroadcastTx(gtx); err != nil {
+		if _, err := query.BroadcastTx(gtx, ch); err != nil {
 			return nil, fmt.Errorf("failed to send TX: %v", err)
 		}
 	}
-	stat := query.BatchSend()
-	bs := <-stat
+
+	bs := <-query.BatchSend()
 	for i, s := range bs.Status {
 		for _, t := range s.Returns {
 			if s.Err != nil {
+				ok = false
 				fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
 			}
 			if resp, ok := t.(coregrpc.ResponseBroadcastTx); ok {
-				if len(resp.CheckTx.Log) > 0 {
+				if resp.CheckTx.Code > 0 && len(resp.CheckTx.Log) > 0 {
+					ok = false
 					fmt.Printf("<%d>%v<<\n", i, resp.CheckTx.Log)
 				}
 			}
 		}
 	}
+
 	for addr, ct := range addrCountMap {
 		addrList = append(addrList, addr)
 		_ = ct
 		fmt.Printf("%s : %d\n", addr, ct*1000)
 	}
 
+	resultWg.Wait()
+
+	if !ok {
+		return addrList, fmt.Errorf("one or more transactions failed")
+	}
 	return addrList, nil
 }
 
@@ -182,11 +211,23 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 
 	adiSponsor := gtx.SigInfo.URL
 
-	_, err = query.BroadcastTx(gtx)
+	done := make(chan abci.TxResult)
+	_, err = query.BroadcastTx(gtx, done)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send TX: %v", err)
 	}
-	query.BatchSend()
+	<-query.BatchSend()
+
+	select {
+	case txr := <-done:
+		if txr.Result.Code != 0 {
+			return nil, fmt.Errorf(txr.Result.Log)
+		} else {
+			fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
+		}
+	case <-time.After(1 * time.Minute):
+		return nil, fmt.Errorf("timeout while waiting for TX response")
+	}
 
 	addresses, err := Load(query, *privateKey, walletCount, txCount)
 	if err != nil {
