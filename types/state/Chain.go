@@ -120,10 +120,3 @@ func (db *StateDB) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
 	obj, err := db.LoadChainAs(chainId, chain)
 	return obj, chain, err
 }
-
-// LoadChainADI retrieves and unmarshals the ADI of the chain.
-func (db *StateDB) LoadChainADI(chain *ChainHeader) (*types.Bytes32, *Object, *ChainHeader, error) {
-	adiChain := types.GetIdentityChainFromIdentity(chain.ChainUrl.AsString())
-	adiState, adiHeader, err := db.LoadChain(adiChain.Bytes())
-	return adiChain, adiState, adiHeader, err
-}

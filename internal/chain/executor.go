@@ -92,14 +92,10 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 	}
 
 	m.mu.Lock()
-	st, err := m.db.LoadChainAndADI(tx.ChainID)
+	st, err := m.db.LoadChainState(tx.ChainID)
 	m.mu.Unlock()
 	if err != nil {
 		return fmt.Errorf("failed to get state for : %v", err)
-	}
-
-	if st.AdiHeader == nil && st.ChainHeader != nil && st.ChainHeader.Type == types.ChainTypeAnonTokenAccount {
-		st.AdiChain, st.AdiState, st.AdiHeader = st.ChainId, st.ChainState, st.ChainHeader
 	}
 
 	err = m.isSane(st, tx)
@@ -107,8 +103,12 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 		return err
 	}
 
-	// TODO Forward to executor
-	return nil
+	executor, ok := m.executors[types.TxType(tx.TransactionType())]
+	if !ok {
+		return fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))
+	}
+
+	return executor.CheckTx(st, tx)
 }
 
 // DeliverTx implements ./abci.Chain
@@ -150,12 +150,9 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) error {
 	defer group.Done()
 	m.mu.Unlock()
 
-	st, err := m.db.LoadChainAndADI(tx.ChainID)
+	st, err := m.db.LoadChainState(tx.ChainID)
 	if err != nil {
 		return fmt.Errorf("failed to get state: %v", err)
-	}
-	if st.AdiHeader == nil && st.ChainHeader != nil && st.ChainHeader.Type == types.ChainTypeAnonTokenAccount {
-		st.AdiChain, st.AdiState, st.AdiHeader = st.ChainId, st.ChainState, st.ChainHeader
 	}
 
 	// //placeholder for special validation rules for synthetic transactions.
