@@ -2,7 +2,6 @@ package chain
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
@@ -17,71 +16,61 @@ type TokenAccountCreate struct{}
 
 func (TokenAccountCreate) Type() types.TxType { return types.TxTypeTokenAccountCreate }
 
-func (TokenAccountCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	if st == nil {
-		return fmt.Errorf("current state not defined")
-	}
-
-	if st.AdiState == nil {
-		return fmt.Errorf("identity not defined")
-	}
-
-	if st.ChainState != nil {
-		return fmt.Errorf("chain already defined")
-	}
-	tcc := api.TokenAccount{}
-	err := json.Unmarshal(tx.Transaction, &tcc)
-	if err != nil {
-		return fmt.Errorf("data payload of submission is not a valid token chain create message")
-	}
-
-	return nil
-}
-
-func (TokenAccountCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	if st == nil {
-		return nil, fmt.Errorf("current state not defined")
-	}
+func checkTokenAccountCreate(st *state.StateEntry, tx *transactions.GenTransaction) (accountUrl, tokenUrl *url.URL, err error) {
 	if st.ChainHeader == nil {
-		return nil, fmt.Errorf("sponsor does not exist")
-	}
-
-	tcc := new(api.TokenAccount)
-	err := tx.As(tcc)
-	if err != nil {
-		return nil, fmt.Errorf("data payload of submission is not a valid token chain create message")
+		return nil, nil, fmt.Errorf("sponsor not found")
 	}
 
 	sponsorUrl, err := url.Parse(tx.SigInfo.URL)
 	if err != nil {
-		return nil, fmt.Errorf("invalid sponsor URL: %v", err)
+		return nil, nil, fmt.Errorf("invalid sponsor URL: %v", err)
 	}
 
-	acctUrl, err := url.Parse(*tcc.URL.AsString())
+	body := new(api.TokenAccount)
+	err = tx.As(body)
 	if err != nil {
-		return nil, fmt.Errorf("invalid account URL: %v", err)
+		return nil, nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
-	tokenUrl, err := url.Parse(*tcc.TokenURL.AsString())
+	accountUrl, err = url.Parse(*body.URL.AsString())
 	if err != nil {
-		return nil, fmt.Errorf("invalid token URL: %v", err)
+		return nil, nil, fmt.Errorf("invalid account URL: %v", err)
+	}
+
+	tokenUrl, err = url.Parse(*body.TokenURL.AsString())
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid token URL: %v", err)
 	}
 	// TODO Make sure tokenUrl is a real kind of token
 
-	if !bytes.Equal(acctUrl.IdentityChain(), sponsorUrl.IdentityChain()) {
-		return nil, fmt.Errorf("%q cannot sponsor %q", sponsorUrl.String(), acctUrl.String())
+	if !bytes.Equal(accountUrl.IdentityChain(), sponsorUrl.IdentityChain()) {
+		return nil, nil, fmt.Errorf("%q cannot sponsor %q", sponsorUrl.String(), accountUrl.String())
+	}
+
+	return accountUrl, tokenUrl, nil
+}
+
+func (TokenAccountCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+	_, _, err := checkTokenAccountCreate(st, tx)
+	return err
+}
+
+func (TokenAccountCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+	accountUrl, tokenUrl, err := checkTokenAccountCreate(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
-	err = scc.Add(state.NewTokenAccount(acctUrl.String(), tokenUrl.String()))
+	err = scc.Add(state.NewTokenAccount(accountUrl.String(), tokenUrl.String()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal synthetic TX: %v", err)
 	}
 
 	syn := new(transactions.GenTransaction)
 	syn.SigInfo = new(transactions.SignatureInfo)
-	syn.SigInfo.URL = *tcc.URL.AsString()
+	syn.SigInfo.URL = accountUrl.String()
 	syn.Transaction, err = scc.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal synthetic transaction")
