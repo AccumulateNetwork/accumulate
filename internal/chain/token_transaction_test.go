@@ -43,10 +43,7 @@ func TestAnonTokenTransactions(t *testing.T) {
 
 	chainId := types.Bytes(gtx.ChainID).AsBytes32()
 	se.ChainId = &chainId
-	se.AdiChain = &chainId
 	se.ChainState = anonChain
-	se.AdiState = anonChain
-	se.AdiHeader = &anonAcct.ChainHeader
 	se.ChainHeader = &anonAcct.ChainHeader
 	_, err = TokenTx{}.DeliverTx(se, gtx)
 	require.NoError(t, err)

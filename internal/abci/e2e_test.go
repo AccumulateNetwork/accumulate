@@ -123,7 +123,7 @@ func TestCreateADI(t *testing.T) {
 	n.client.Wait()
 
 	r := n.GetADI("RoadRunner")
-	require.Equal(t, types.String("RoadRunner"), r.ChainUrl)
+	require.Equal(t, types.String("acc://RoadRunner"), r.ChainUrl)
 	require.Equal(t, types.Bytes(keyHash[:]), r.KeyData)
 
 	kg := n.GetSigSpecGroup("RoadRunner/ssg0")
