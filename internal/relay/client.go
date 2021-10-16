@@ -4,14 +4,23 @@ import (
 	"context"
 	"fmt"
 
-	ctypes "github.com/tendermint/tendermint/rpc/core/types"
-
+	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/http"
+	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
-type Batchable interface {
+type Client interface {
+	service.Service
 	client.ABCIClient
+	client.EventsClient
+
+	// From client.SignClient
+	Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.ResultTx, error)
+}
+
+type Batchable interface {
+	Client
 	NewBatch() Batch
 }
 
