@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
@@ -22,6 +23,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/ybbus/jsonrpc/v2"
 )
 
@@ -369,30 +371,63 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 		ret.Data = &msg
 		return ret
 	}
-	txInfo, err := api.query.BroadcastTx(genTx)
+
+	return api.broadcastTx(req.Wait, genTx)
+}
+
+func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
+	ret := &acmeapi.APIDataResponse{}
+	var msg json.RawMessage
+
+	var done chan abci.TxResult
+	if wait {
+		done = make(chan abci.TxResult, 1)
+	}
+
+	txInfo, err := api.query.BroadcastTx(tx, done)
 	if err != nil {
 		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
 		ret.Data = &msg
 		return ret
 	}
 
-	stat := api.query.BatchSend()
-	resp := <-stat
+	resp := <-api.query.BatchSend()
 
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", genTx.TransactionHash(), err))
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", tx.TransactionHash(), err))
 		ret.Data = &msg
 		return ret
 	}
 
 	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", genTx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
-	} else {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", genTx.TransactionHash(), resolved.Hash, resolved.Codespace))
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
+		ret.Data = &msg
+		return ret
 	}
+
+	if wait {
+		timer := time.NewTimer(5 * time.Second)
+		defer timer.Stop()
+
+		select {
+		case txr := <-done:
+			resolved := txr.Result
+			hash := sha256.Sum256(txr.Tx)
+			if txr.Result.Code != 0 {
+				msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, hash, resolved.Code, resolved.Codespace))
+				ret.Data = &msg
+				return ret
+			}
+
+		case <-timer.C:
+		}
+	}
+
+	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Hash, resolved.Codespace))
 	ret.Data = &msg
 	return ret
+
 }
 
 // createTokenAccount creates Token Account
@@ -512,31 +547,6 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	txInfo, err := api.query.BroadcastTx(gtx)
-	if err != nil {
-		return NewAccumulateError(err)
-	}
-
-	stat := api.query.BatchSend()
-
-	res := <-stat
-
-	ret := acmeapi.APIDataResponse{}
-	ret.Type = "faucet"
-
-	var msg json.RawMessage
-	resolved, err := res.ResolveTransactionResponse(txInfo)
-	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", gtx.TransactionHash(), err))
-		ret.Data = &msg
-		return ret
-	}
-
-	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", gtx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
-	} else {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", gtx.TransactionHash(), resolved.Hash, resolved.Codespace))
-	}
-	ret.Data = &msg
+	ret := api.broadcastTx(req.Wait, gtx)
 	return &ret
 }

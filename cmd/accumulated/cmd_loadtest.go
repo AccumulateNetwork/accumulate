@@ -15,7 +15,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/rpc/client"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
@@ -47,7 +46,7 @@ func init() {
 }
 
 func loadTest(cmd *cobra.Command, args []string) {
-	var clients []client.ABCIClient
+	var clients []relay.Client
 
 	if flagLoadTest.BatchSize < 1 {
 		if flagLoadTest.TransactionCount > 5 {
@@ -122,6 +121,13 @@ func loadTest(cmd *cobra.Command, args []string) {
 	relay := relay.New(clients...)
 	query := api.NewQuery(relay)
 
+	err = relay.Start()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+	defer relay.Stop()
+
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
 	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.TransactionCount)
@@ -129,6 +135,9 @@ func loadTest(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Wait for synthetic transactions to go through
+	time.Sleep(5 * time.Second)
 
 	for _, v := range addrList[1:] {
 		resp, err := query.GetChainStateByUrl(v)
