@@ -12,6 +12,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
+	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/getsentry/sentry-go"
@@ -251,7 +252,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	//run through the validation node
-	err = app.chain.DeliverTx(sub)
+	r, err := app.chain.DeliverTx(sub)
 
 	if err != nil {
 		u2 := sub.SigInfo.URL
@@ -267,6 +268,18 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
 		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
 		return ret
+	}
+
+	for _, syn := range r.SyntheticTxs {
+		ret.Events = append(ret.Events, abci.Event{
+			Type: "accSyn",
+			Attributes: []abci.EventAttribute{
+				{Key: "type", Value: types.TxType(syn.Type).String()},
+				{Key: "hash", Value: fmt.Sprintf("%X", syn.Hash)},
+				{Key: "url", Value: syn.Url},
+				{Key: "txRef", Value: fmt.Sprintf("%X", syn.TxRef)},
+			},
+		})
 	}
 
 	//now we need to store the data returned by the validator and feed into accumulator

@@ -78,6 +78,17 @@ type SyntheticDepositCredits struct {
 	Amount uint64   `json:"amount" form:"amount" query:"amount" validate:"required"`
 }
 
+type TxResult struct {
+	SyntheticTxs []*TxSynthRef `json:"syntheticTxs" form:"syntheticTxs" query:"syntheticTxs" validate:"required"`
+}
+
+type TxSynthRef struct {
+	Type  uint64   `json:"type" form:"type" query:"type" validate:"required"`
+	Hash  [32]byte `json:"hash" form:"hash" query:"hash" validate:"required"`
+	Url   string   `json:"url" form:"url" query:"url" validate:"required"`
+	TxRef [32]byte `json:"txRef" form:"txRef" query:"txRef" validate:"required"`
+}
+
 func NewAnonTokenAccount() *AnonTokenAccount {
 	v := new(AnonTokenAccount)
 	v.Type = types.ChainTypeAnonTokenAccount
@@ -274,6 +285,33 @@ func (v *SyntheticDepositCredits) BinarySize() int {
 	n += chainBinarySize(&v.Cause)
 
 	n += uvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *TxResult) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(uint64(len(v.SyntheticTxs)))
+
+	for _, v := range v.SyntheticTxs {
+		n += v.BinarySize()
+
+	}
+
+	return n
+}
+
+func (v *TxSynthRef) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(v.Type)
+
+	n += chainBinarySize(&v.Hash)
+
+	n += stringBinarySize(v.Url)
+
+	n += chainBinarySize(&v.TxRef)
 
 	return n
 }
@@ -477,6 +515,37 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	buffer.Write(chainMarshalBinary(&v.Cause))
 
 	buffer.Write(uvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TxResult) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(uint64(len(v.SyntheticTxs))))
+	for i, v := range v.SyntheticTxs {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding SyntheticTxs[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
+
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TxSynthRef) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(v.Type))
+
+	buffer.Write(chainMarshalBinary(&v.Hash))
+
+	buffer.Write(stringMarshalBinary(v.Url))
+
+	buffer.Write(chainMarshalBinary(&v.TxRef))
 
 	return buffer.Bytes(), nil
 }
@@ -821,6 +890,61 @@ func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
 		v.Amount = x
 	}
 	data = data[uvarintBinarySize(v.Amount):]
+
+	return nil
+}
+
+func (v *TxResult) UnmarshalBinary(data []byte) error {
+	var lenSyntheticTxs uint64
+	if x, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding SyntheticTxs: %w", err)
+	} else {
+		lenSyntheticTxs = x
+	}
+	data = data[uvarintBinarySize(lenSyntheticTxs):]
+
+	v.SyntheticTxs = make([]*TxSynthRef, lenSyntheticTxs)
+	for i := range v.SyntheticTxs {
+		x := new(TxSynthRef)
+		if err := x.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding SyntheticTxs[%d]: %w", i, err)
+		}
+		data = data[x.BinarySize():]
+
+		v.SyntheticTxs[i] = x
+	}
+
+	return nil
+}
+
+func (v *TxSynthRef) UnmarshalBinary(data []byte) error {
+	if x, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Type: %w", err)
+	} else {
+		v.Type = x
+	}
+	data = data[uvarintBinarySize(v.Type):]
+
+	if x, err := chainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	data = data[chainBinarySize(&v.Hash):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[stringBinarySize(v.Url):]
+
+	if x, err := chainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TxRef: %w", err)
+	} else {
+		v.TxRef = x
+	}
+	data = data[chainBinarySize(&v.TxRef):]
 
 	return nil
 }
