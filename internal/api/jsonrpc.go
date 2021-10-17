@@ -532,7 +532,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	gtx := new(transactions.GenTransaction)
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = *destAccount.AsString()
-	gtx.SigInfo.Nonce = wallet.Nonce
+	gtx.SigInfo.Unused2 = wallet.Nonce
 	gtx.Transaction = depData
 	if err := gtx.SetRoutingChainID(); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", destAccount), err)
