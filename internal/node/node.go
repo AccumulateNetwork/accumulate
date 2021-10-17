@@ -35,18 +35,12 @@ type Node struct {
 }
 
 // New initializes a Tendermint node for the given ABCI application.
-func New(config *config.Config, app abci.Application) (*Node, error) {
+func New(config *config.Config, app abci.Application, logger log.Logger) (*Node, error) {
 	node := new(Node)
 	node.Config = config
 
-	// create logger
-	var err error
-	logger, err := log.NewDefaultLogger(config.LogFormat, config.LogLevel, false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse log level: %w", err)
-	}
-
 	// create node
+	var err error
 	node.Service, err = nm.New(&config.Config, logger, proxy.NewLocalClientCreator(app), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create new Tendermint node: %w", err)

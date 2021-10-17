@@ -140,10 +140,8 @@ func (m *Manager) GetCount() int64 {
 
 // Close
 // Do any cleanup required to close the manager
-func (m *Manager) Close() {
-	if err := m.DB.Close(); err != nil {
-		panic(err)
-	}
+func (m *Manager) Close() error {
+	return m.DB.Close()
 }
 
 // AddBucket

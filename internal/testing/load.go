@@ -8,8 +8,6 @@ import (
 	"sync"
 	"time"
 
-	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
-
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -18,6 +16,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	abci "github.com/tendermint/tendermint/abci/types"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 )
 
 // Load
@@ -126,7 +125,7 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 	return addrList, nil
 }
 
-func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25519.PrivateKey, *transactions.GenTransaction, error) {
+func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed25519.PrivateKey, *transactions.GenTransaction, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	adiSponsor := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
 
@@ -166,7 +165,7 @@ func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	return destAddress, &privateKey, gtx, nil
+	return destAddress, privateKey, gtx, nil
 }
 
 func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
@@ -203,7 +202,7 @@ func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount u
 	return gtx, nil
 }
 
-func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
+func RunLoadTest(query *api.Query, origin ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
 	destAddress, privateKey, gtx, err := BuildTestSynthDepositGenTx(origin)
 	if err != nil {
 		return nil, err
@@ -229,7 +228,7 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 		return nil, fmt.Errorf("timeout while waiting for TX response")
 	}
 
-	addresses, err := Load(query, *privateKey, walletCount, txCount)
+	addresses, err := Load(query, privateKey, walletCount, txCount)
 	if err != nil {
 		return nil, err
 	}
