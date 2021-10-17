@@ -139,14 +139,13 @@ func (sdb *StateDB) Open(dbFilename string, appId []byte, useMemDB bool, debug b
 		return err
 	}
 
-	sdb.init(appId, debug)
-	return nil
+	return sdb.init(appId, debug)
 }
 
-func (sdb *StateDB) Load(db storage.KeyValueDB, appId []byte, debug bool) {
+func (sdb *StateDB) Load(db storage.KeyValueDB, appId []byte, debug bool) error {
 	sdb.db = new(smtDB.Manager)
 	sdb.db.InitWithDB(db)
-	sdb.init(appId, debug)
+	return sdb.init(appId, debug)
 }
 
 func (sdb *StateDB) GetDB() *smtDB.Manager {
