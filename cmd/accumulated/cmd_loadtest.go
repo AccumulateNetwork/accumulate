@@ -14,6 +14,7 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/spf13/cobra"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/rpc/client"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -30,6 +31,7 @@ var flagLoadTest struct {
 	TransactionCount int
 	BatchSize        int
 	BatchDelay       time.Duration
+	LogLevel         string
 }
 
 func init() {
@@ -39,6 +41,7 @@ func init() {
 	cmdLoadTest.Flags().StringSliceVarP(&flagLoadTest.Remotes, "remote", "r", nil, "Node to load test, e.g. tcp://1.2.3.4:5678")
 	cmdLoadTest.Flags().IntVar(&flagLoadTest.WalletCount, "wallets", 100, "Number of generated recipient wallets")
 	cmdLoadTest.Flags().IntVar(&flagLoadTest.TransactionCount, "transactions", 1000, "Number of generated transactions")
+	cmdLoadTest.Flags().StringVar(&flagLoadTest.LogLevel, "log-level", "disabled", "Log level")
 	// cmdLoadTest.Flags().IntVar(&flagLoadTest.BatchSize, "batches", 0, "Transaction batch size; defaults to 1/5 of the transaction count")
 	// cmdLoadTest.Flags().DurationVarP(&flagLoadTest.BatchDelay, "batch-delay", "d", time.Second/5, "Delay after each batch")
 }
@@ -51,6 +54,16 @@ func loadTest(cmd *cobra.Command, args []string) {
 			flagLoadTest.BatchSize = flagLoadTest.TransactionCount / 5
 		} else {
 			flagLoadTest.BatchSize = 1
+		}
+	}
+
+	var logger log.Logger
+	var err error
+	if flagLoadTest.LogLevel != "disabled" {
+		logger, err = log.NewDefaultLogger("plain", "info", false)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: failed to create logger: %v\n", err)
+			os.Exit(1)
 		}
 	}
 
@@ -69,6 +82,9 @@ func loadTest(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 
+		if logger != nil {
+			client.SetLogger(logger)
+		}
 		clients = append(clients, client)
 	}
 
@@ -91,6 +107,9 @@ func loadTest(cmd *cobra.Command, args []string) {
 			os.Exit(1)
 		}
 
+		if logger != nil {
+			client.SetLogger(logger)
+		}
 		clients = append(clients, client)
 	}
 
@@ -110,8 +129,6 @@ func loadTest(cmd *cobra.Command, args []string) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-
-	time.Sleep(10000 * time.Millisecond)
 
 	for _, v := range addrList[1:] {
 		resp, err := query.GetChainStateByUrl(v)
