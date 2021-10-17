@@ -8,14 +8,14 @@ import (
 
 func TestStateHeader(t *testing.T) {
 
-	header := Chain{ChainUrl: "acme/chain/path", Type: types.ChainTypeAnonTokenAccount}
+	header := ChainHeader{ChainUrl: "acme/chain/path", Type: types.ChainTypeAnonTokenAccount}
 
 	data, err := header.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	header2 := Chain{}
+	header2 := ChainHeader{}
 
 	err = header2.UnmarshalBinary(data)
 	if err != nil {

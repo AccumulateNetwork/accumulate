@@ -1,0 +1,145 @@
+# Naming
+#
+# Type names that represent persistent objects should be nouns, such as Account,
+# Token.
+#
+# Type names that represent actions (transactions) should be verbs, such as
+# CreateAccount, SendTokens.
+#
+# Type names for fields of a transaction should be suffixed with 'Params', such
+# as TokenOutputParams.
+
+TxResult:
+  fields:
+  - name: SyntheticTxs
+    type: slice
+    slice:
+      type: TxSynthRef
+      pointer: true
+      marshal-as: self
+
+TxSynthRef:
+  fields:
+  - name: Type
+    type: uvarint
+  - name: Hash
+    type: chain
+  - name: Url
+    type: string
+  - name: TxRef # The hash of the transaction blob submitted to Tendermint. Use to look up the transaction status.
+    type: chain
+
+AnonTokenAccount:
+  kind: chain
+  fields:
+  - name: TokenUrl
+    type: string
+  - name: Balance
+    type: bigint
+  - name: TxCount
+    type: uvarint
+  - name: Nonce
+    type: uvarint
+  - name: CreditBalance
+    type: bigint
+
+SyntheticCreateChain:
+  kind: tx
+  fields:
+  - name: Cause
+    type: chain
+  - name: Chains
+    type: slice
+    slice:
+      type: bytes
+
+ChainParams:
+  fields:
+  - name: Url
+    type: string
+  - name: Data
+    type: bytes
+
+AddCredits:
+  kind: tx
+  fields:
+  - name: Recipient
+    type: string
+  - name: Amount
+    type: uvarint
+
+SyntheticDepositCredits:
+  kind: tx
+  fields:
+  - name: Cause
+    type: chain
+  - name: Amount
+    type: uvarint
+
+KeySpec:
+  fields:
+  - name: KeyAlgorithm
+    type: KeyAlgorithm
+    marshal-as: self
+  - name: HashAlgorithm
+    type: HashAlgorithm
+    marshal-as: self
+  - name: PublicKey
+    type: bytes
+  - name: Nonce
+    type: uvarint
+
+KeySpecParams:
+  fields:
+  - name: KeyAlgorithm
+    type: KeyAlgorithm
+    marshal-as: self
+  - name: HashAlgorithm
+    type: HashAlgorithm
+    marshal-as: self
+  - name: PublicKey
+    type: bytes
+
+SigSpec:
+  kind: chain
+  fields:
+  - name: CreditBalance
+    type: bigint
+  - name: Keys
+    type: slice
+    slice:
+      type: KeySpec
+      pointer: true
+      marshal-as: self
+
+CreateSigSpec:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+  - name: Keys
+    type: slice
+    slice:
+      type: KeySpecParams
+      pointer: true
+      marshal-as: self
+
+SigSpecGroup:
+  kind: chain
+  fields:
+  - name: SigSpecs
+    type: chainSet
+
+CreateSigSpecGroup:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+  - name: SigSpecs
+    type: chainSet
+
+AssignSigSpecGroup:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
