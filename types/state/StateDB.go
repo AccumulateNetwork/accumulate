@@ -75,9 +75,13 @@ type StateDB struct {
 	//     .
 	//     On the other side, allows a ChainState to be unmarshaled for updates
 	//     and access.
-	bpt   *pmt.Manager           //pbt is the global patricia trie for the application
-	mm    *managed.MerkleManager //mm is the merkle manager for the application.  The salt is set by the appId
-	appId []byte
+	bpt        *pmt.Manager           //pbt is the global patricia trie for the application
+	blockIndex int64                  //Index of the current block
+	rmm        *managed.MerkleManager //rmm is the merkle manager for root values (unique and shared over all chains)
+	mm         *managed.MerkleManager //mm is the merkle manager for a Main Chain.  The salt is set by the appId
+	pmm        *managed.MerkleManager //pmm is  merkle manaager for Pending Chain, and its salt is created from appId
+	bmm        *managed.MerkleManager //bmm is  merkle manaager for block index Chain, and its salt is created from appId
+	appId      []byte                 // appId of a Main Chain
 
 	TimeBucket   float64
 	mutex        sync.Mutex
@@ -86,7 +90,7 @@ type StateDB struct {
 	sync         sync.WaitGroup
 }
 
-func (sdb *StateDB) init(appId []byte, debug bool) {
+func (sdb *StateDB) init(appId []byte, debug bool) (err error) {
 	markPower := int64(8)
 
 	sdb.db.AddBucket(bucketEntry.AsString())
@@ -104,8 +108,22 @@ func (sdb *StateDB) init(appId []byte, debug bool) {
 	sdb.transactions.reset()
 
 	sdb.bpt = pmt.NewBPTManager(sdb.db)
-	sdb.mm = managed.NewMerkleManager(sdb.db, appId, markPower)
+
+	pAppId := managed.Add2AppID(appId, managed.PendingOff)
+	bAppId := managed.Add2AppID(appId, managed.BlkIdxOff)
+
+	if sdb.mm, err = managed.NewMerkleManager(sdb.db, appId, markPower); err != nil {
+		return err
+	}
+	if sdb.pmm, err = managed.NewMerkleManager(sdb.db, pAppId, markPower); err != nil {
+		return err
+	}
+	if sdb.bmm, err = managed.NewMerkleManager(sdb.db, bAppId, markPower); err != nil {
+		return err
+	}
+	sdb.rmm = sdb.mm.Copy(nil)
 	sdb.appId = appId
+	return nil
 }
 
 // Open database to manage the smt and chain states
@@ -291,26 +309,26 @@ func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 				synthData = append(synthData, synthTxInfo.TxId...)
 				synthTxData, err := synthTxInfo.Object.MarshalBinary()
 				if err != nil {
-
+					return err
 				}
-				sdb.mm.RootDBManager.PutBatch(bucketStagedSynthTx.AsString(), "",
+				sdb.rmm.Manager.PutBatch(bucketStagedSynthTx.AsString(), "",
 					synthTxInfo.TxId, synthTxData)
 				//store the hash of th synthObject in the bpt, will be removed after synth tx is processed
 				sdb.bpt.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
 			}
 			//store a list of txid to list of synth txid's
-			sdb.mm.RootDBManager.PutBatch(bucketTxToSynthTx.AsString(), "", tx.TxId, synthData)
+			sdb.rmm.Manager.PutBatch(bucketTxToSynthTx.AsString(), "", tx.TxId, synthData)
 		}
 
 		mutex.Lock()
 		//store the transaction in the transaction bucket by txid
-		sdb.mm.RootDBManager.PutBatch(bucketTx.AsString(), "", tx.TxId, data)
+		sdb.rmm.Manager.PutBatch(bucketTx.AsString(), "", tx.TxId, data)
 		//insert the hash of the tx object in the BPT
 		sdb.bpt.Bpt.Insert(txHash, sha256.Sum256(data))
 		mutex.Unlock()
 	}
 
-	//record pending transactions
+	// record pending transactions
 	for _, tx := range sdb.transactions.pendingTx {
 		//marshal the pending transaction state
 		data, _ := tx.Object.MarshalBinary()
@@ -318,14 +336,13 @@ func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 		pendingHash := sha256.Sum256(data)
 
 		mutex.Lock()
-		//Store the mapping of the Transaction hash to the pending transaction hash which can be used for validation so we can find
-		//the pending transaction
-		sdb.mm.RootDBManager.PutBatch("MainToPending", "", tx.TxId, pendingHash[:])
+		//Store the mapping of the Transaction hash to the pending transaction hash which can be used for
+		// validation so we can find the pending transaction
+		sdb.rmm.Manager.PutBatch("MainToPending", "", tx.TxId, pendingHash[:])
 
 		sdb.mm.Copy(tx.ChainId)
-		sdb.mm.AddPendingHash(pendingHash)
 		//store the pending transaction by the pending tx hash
-		sdb.mm.RootDBManager.PutBatch(bucketPendingTx.AsString(), "", pendingHash[:], data)
+		sdb.rmm.Manager.PutBatch(bucketPendingTx.AsString(), "", pendingHash[:], data)
 		mutex.Unlock()
 	}
 
@@ -339,7 +356,6 @@ func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *managed.MerkleManager, chainId types.Bytes32) {
 	defer group.Done()
 
-	v := mm
 	// We get ChainState objects here, instead. And THAT will hold
 	//       the MerkleStateManager for the chain.
 	//mutex.Lock()
@@ -353,12 +369,12 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 	//add all the transaction states that occurred during this block for this chain (in order of appearance)
 	for _, tx := range currentState.txId {
 		//store the txHash for the chains, they will be mapped back to the above recorded tx's
-		v.AddHash(managed.Hash(*tx))
+		mm.AddHash(managed.Hash(*tx))
 	}
 
 	if currentState.stateData != nil {
 		//store the MD root for the state
-		mdRoot := v.MainChain.MS.GetMDRoot()
+		mdRoot := mm.MS.GetMDRoot()
 		if mdRoot == nil {
 			//shouldn't get here, but will reject if I do
 			panic(fmt.Sprintf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId))
@@ -393,12 +409,12 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 
 func (sdb *StateDB) writeBatches() {
 	defer sdb.sync.Done()
-	sdb.mm.RootDBManager.EndBatch()
+	sdb.rmm.Manager.EndBatch()
 	sdb.bpt.DBManager.EndBatch()
 }
 
 func (sdb *StateDB) BlockIndex() int64 {
-	return sdb.mm.BlockIndex()
+	return sdb.blockIndex
 }
 
 // WriteStates will push the data to the database and update the patricia trie
@@ -410,7 +426,7 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 		return sdb.bpt.Bpt.Root.Hash[:], 0, nil
 	}
 
-	sdb.mm.SetBlockIndex(blockHeight)
+	sdb.blockIndex = blockHeight
 
 	group := new(sync.WaitGroup)
 	group.Add(1)

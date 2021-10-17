@@ -1,6 +1,7 @@
 package database
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"fmt"
 	"math"
@@ -12,6 +13,9 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/storage/memory"
 )
 
+// Manager
+// The Manager as implemented cannot be accessed concurrently over go routines
+// ToDo: Add Mutex to make conccurency safe
 type Manager struct {
 	DB      storage.KeyValueDB                 // Underlying database implementation
 	AppID   []byte                             // Allows apps to share a database
@@ -20,13 +24,53 @@ type Manager struct {
 	TXCache map[[storage.KeyLength]byte][]byte // TX Cache:  Holds pending tx for the db
 }
 
-// Copy
-// Create a copy of the manager that uses the given AppID.  the AppID allows
+// Equal
+// Return true if the values in the manager are equal to the given manager
+// mostly a testing function
+func (m *Manager) Equal(m2 *Manager) bool {
+	if !bytes.Equal(m.AppID, m2.AppID) {
+		return false
+	}
+	if len(m.Buckets) != len(m2.Buckets) {
+		return false
+	}
+	if len(m.Labels) != len(m2.Labels) {
+		return false
+	}
+	if len(m.TXCache) != len(m2.TXCache) {
+		return false
+	}
+	for k, v := range m.Buckets {
+		if m2.Buckets[k] != v {
+			return false
+		}
+	}
+	for k, v := range m.Labels {
+		if m2.Labels[k] != v {
+			return false
+		}
+	}
+	for k, v := range m.TXCache {
+		if !bytes.Equal(v, m2.TXCache[k]) {
+			return false
+		}
+	}
+	return true
+}
+
+// ClearCache
+// Clear all the pending key values from the cache in the Databasae Manager
+func (m *Manager) ClearCache() {
+	for k := range m.TXCache { // Clear all elements from the cache
+		delete(m.TXCache, k) //    golang optimizer will make loop good
+	}
+}
+
+// ManageAppID
+// Create a manager to manage the given AppID.  The AppID salt allows
 // multiple Merkle Trees to be managed within the same database.  All keys
 // for a particular merkle tree are salted with their particular AppID.
-// Note that maps are pointers, so Buckets and Labels are shared over
-// copies of the Manager.
-func (m Manager) Copy(AppID []byte) *Manager {
+func (m Manager) ManageAppID(AppID []byte) *Manager {
 	m.SetAppID(AppID) // Set the AppID
 	return &m         // Return a pointer
 }
@@ -42,8 +86,11 @@ var AppIDMutex sync.Mutex // Creating new AppIDs has to be atomic
 // First the AppID must be cleared to access the AppID tracking key/values,
 // i.e. the AppID bucket and its labels.  Then the AppID can be set so the
 // appropriate buckets can be accessed under the AppID
-func (m Manager) SetAppID(appID []byte) {
-
+func (m *Manager) SetAppID(appID []byte) {
+	if appID == nil { // If the appID is nil, then this manager is going
+		m.AppID = nil //  to be used to write to the root level.  No need to
+		return        //  register it.
+	}
 	m.AppID = m.AppID[:0]                                 // clear the appID to get AppID data
 	appIDIdx := m.GetInt64("AppID", "AppID2Index", appID) // Sort index for existing AppID
 	if appIDIdx < 0 {                                     // A index < 0 => AppID does not exist
@@ -87,14 +134,13 @@ func (m *Manager) init() {
 	m.Buckets = make(map[string]byte) // Buckets hold sets of key value pairs
 	m.Labels = make(map[string]byte)  // Labels hold subsets of key value pairs within a bucket
 
-	m.AddBucket("AppID")      //                         Maintains the maximum index count   /count
-	m.AddLabel("Index2AppID") //                         Given a appID index returns a appID   index/appID
-	m.AddLabel("AppID2Index") //                         Given a appID, provides an index     appID/index
+	m.AddBucket("AppID")      //                        Maintains the maximum index count   /count
+	m.AddLabel("Index2AppID") //                        Given a appID index returns a appID   index/appID
+	m.AddLabel("AppID2Index") //                        Given a appID, provides an index     appID/index
 
 	m.AddBucket("ElementIndex") //                       element hash / element index
 	m.AddBucket("States")       //                       element index / merkle state
 	m.AddBucket("NextElement")  //                       element index / next element to be added to merkle tree
-	m.AddBucket("Element")      //                       count of elements in the merkle tree
 	m.AddBucket("BPT")          //                       Binary Patricia Tree Byte Blocks (blocks of BPT nodes)
 	m.AddLabel("Root")          //                       The Root node of the BPT
 
@@ -123,19 +169,6 @@ func (m *Manager) Init(databaseTag, filename string) error {
 func (m *Manager) InitWithDB(db storage.KeyValueDB) {
 	m.init()
 	m.DB = db
-}
-
-// GetCount
-// The number of elements as recorded in the Database.  As a side effect, the
-// any pending transactions in the batch process will be flushed to the database
-func (m *Manager) GetCount() int64 {
-	m.EndBatch()                                               // Flush any pending transactions to the database.
-	data := m.DB.Get(m.GetKey("Element", "", []byte("Count"))) // Look and see if there is any element count recorded
-	if data == nil {                                           // If not, nothing is there
-		return 0 //                                                 return zero
-	}
-	v, _ := common.BytesInt64(data) //                           Return the recorded count
-	return v
 }
 
 // Close
@@ -194,10 +227,10 @@ func (m *Manager) GetKey(Bucket, Label string, key []byte) (DBKey [storage.KeyLe
 	}
 	DBKey = sha256.Sum256(append(key, m.AppID...)) // To get a fixed length key, hash the key and appID together
 	//                                                  A hash is very secure so losing two bytes won't hurt anything
-	DBKey[30] = m.Buckets[Bucket] //                    Replace the first byte with the bucket index
+	DBKey[30] = m.Buckets[Bucket] //                    Replace second to last byte with Bucket index
 	DBKey[31] = 0                 //                    Assume no label (0 -- means no label
 	if len(Label) > 0 {           //                    But if a label is specified, (zero labels not allowed) then
-		DBKey[31] = m.Labels[Label] //                   set the label's byte value.
+		DBKey[31] = m.Labels[Label] //                   set the label's byte value to label index
 	}
 
 	return DBKey
@@ -229,13 +262,24 @@ func (m *Manager) PutInt64(Bucket, Label string, key []byte, value int64) error 
 }
 
 // Get
-// Get a []byte value from the underlying database.  Returns a nil if not found,
-// or on an error
+// Get a []byte value from the underlying database. Note that this Get will
+// first check the cache before it checks the DB.
+// Returns a nil if not found, or on an error
 func (m *Manager) Get(Bucket, Label string, key []byte) (value []byte) {
 	Key := m.GetKey(Bucket, Label, key)
 	if v, ok := m.TXCache[Key]; ok { // If the value is in the cache, return it
 		return v
 	}
+	return m.DB.Get(Key) // Otherwise return what we have in the database
+}
+
+// GetRaw
+// GetRaw a []byte value from the underlying database.  GetRaw ignores the
+// cache
+//
+// Returns a nil if not found, or on an error
+func (m *Manager) GetRaw(Bucket, Label string, key []byte) (value []byte) {
+	Key := m.GetKey(Bucket, Label, key)
 	return m.DB.Get(Key) // Otherwise return what we have in the database
 }
 

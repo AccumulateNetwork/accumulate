@@ -1,7 +1,6 @@
 package managed
 
 import (
-	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -15,14 +14,94 @@ const PendingOff = byte(1) // Offset to the chain holding pending transactions f
 const BlkIdxOff = byte(2)  // Offset to the chain holding the block indexes for the chain and the pending chain
 
 type MerkleManager struct {
-	RootDBManager *database.Manager // AppID-less Manager for writing to the general DBState
-	MainChain     ChainManager      // The used to hold entries to be kept forever
-	PendingChain  ChainManager      // Managed pend entries unsigned by validators in this Scratch chain to be signed
-	BlkIdxChain   ChainManager      // Tracks the indexes of the minor blocks
-	MarkPower     int64             // log2 of the MarkFreq
-	MarkFreq      int64             // The count between Marks
-	MarkMask      int64             // The binary mask to detect Mark boundaries
-	blkidx        *BlockIndex       // The Last BlockIndex seen
+	Manager   *database.Manager // AppID based Manager
+	MS        *MerkleState      // MerkleState managed by MerkleManager
+	MarkPower int64             // log2 of the MarkFreq
+	MarkFreq  int64             // The count between Marks
+	MarkMask  int64             // The binary mask to detect Mark boundaries
+}
+
+// AddHash
+// Add a Hash to the Chain controlled by the ChainManager
+func (m *MerkleManager) AddHash(hash Hash) {
+	// Keep the index of every element added to the Merkle Tree, but only of the first instance
+	if m.Manager.GetIndex(hash[:]) < 0 { // So only if the hash is not yet added to the Merkle Tree
+		m.Manager.PutBatch("ElementIndex", "", hash[:], common.Int64Bytes(m.MS.Count)) // Keep its index
+	}
+
+	switch m.MS.Count & m.MarkMask { // Mask to the bits counting up to a mark.
+	case m.MarkMask: // This is the case just before rolling into a Mark (all bits set. +1 more will be zero)
+
+		MSCount := common.Int64Bytes(m.MS.Count) // Get the current index as a varInt
+		MSState, err := m.MS.Marshal()           // Get the current state
+		if err != nil {                          // Panic if we cannot, because that should never happen.
+			panic(fmt.Sprintf("could not marshal MerkleState: %v", err)) //
+		}
+
+		m.Manager.PutBatch("States", "", MSCount, MSState)      //     Save Merkle State at n*MarkFreq-1
+		m.Manager.PutBatch("NextElement", "", MSCount, hash[:]) //     Save Hash added at n*MarkFreq-1
+
+		m.MS.AddToMerkleTree(hash) //                                  Add the hash to the Merkle Tree
+
+		state, err := m.MS.Marshal()                     // Create the marshaled Merkle State
+		m.Manager.PutBatch("States", "", MSCount, state) // Save Merkle State at n*MarkFreq
+		m.MS.HashList = m.MS.HashList[:0]                // We need to clear the HashList first
+
+	default: // This is the case of not rolling into a mark; Just add the hash to the Merkle Tree
+		m.MS.AddToMerkleTree(hash) //                                      Always add to the merkle tree
+	}
+
+	if err := m.WriteChainHead(); err != nil {
+		panic(fmt.Sprintf("could not marshal MerkleState: %v", err))
+	}
+}
+
+// WriteChainHead
+// Save the current MerkleState as the head of the chain.  This does not flush
+// the database, because all chains in an application need have their head of
+// chain updated as one atomic transaction to prevent messing up the database
+func (m *MerkleManager) WriteChainHead() error {
+	state, err := m.MS.Marshal()
+	if err != nil {
+		return err
+	}
+	m.Manager.PutBatch("States", "", []byte("Head"), state)
+	return nil
+}
+
+// ReadChainHead
+// Retrieve the current MerkleState from the given database, and set
+// that state as the MerkleState of this MerkleManager.  Note that the cache
+// will be cleared.
+func (m *MerkleManager) ReadChainHead() {
+	state := m.Manager.Get("States", "", []byte("Head")) // Get the state for the Merkle Tree
+	if state != nil {                                    // If the State exists
+		if err := m.MS.UnMarshal(state); err != nil { //     Set that as our state
+			panic(fmt.Sprintf("database is corrupt. AppID: %x", m.Manager.AppID)) // Blow up of the database is bad
+		}
+	}
+}
+
+// Equal
+// Compares the MerkleManager to the given MerkleManager and returns false if
+// the fields in the MerkleManager are different from m2
+func (m *MerkleManager) Equal(m2 *MerkleManager) bool {
+	if !m.Manager.Equal(m2.Manager) {
+		return false
+	}
+	if !m.MS.Equal(m2.MS) {
+		return false
+	}
+	if m.MarkPower != m2.MarkPower {
+		return false
+	}
+	if m.MarkFreq != m2.MarkFreq {
+		return false
+	}
+	if m.MarkMask != m2.MarkMask {
+		return false
+	}
+	return true
 }
 
 // Add2AppID
@@ -57,15 +136,18 @@ func Add2AppID(AppID []byte, offset byte) (appID []byte) {
 func NewMerkleManager(
 	DBManager *database.Manager, //      database that can be shared with other MerkleManager instances
 	appID []byte, //                     AppID identifying an application space in the DBManager
-	markPower int64) *MerkleManager { // log 2 of the frequency of creating marks in the Merkle Tree
+	markPower int64) (*MerkleManager, error) { // log 2 of the frequency of creating marks in the Merkle Tree
 
 	if len(appID) != 32 { // Panic: appID is bad
-		panic(fmt.Sprintf("appID must be 32 bytes long. got %x", appID))
+		return nil, fmt.Errorf("appID must be 32 bytes long. got %x", appID)
 	}
 
 	mm := new(MerkleManager)
-	mm.init(DBManager, appID, markPower)
-	return mm
+	if err := mm.init(DBManager, appID, markPower); err != nil {
+		return nil, err
+	}
+
+	return mm, nil
 }
 
 // Copy
@@ -81,24 +163,16 @@ func NewMerkleManager(
 // chain and its shadow chains (chains that track information about the
 // main chain, i.e. the pending chain and the block index chain)
 func (m MerkleManager) Copy(appID []byte) *MerkleManager {
-	bAppID := Add2AppID(appID, BlkIdxOff)                              // appID for block Index shadow chain
-	pAppID := Add2AppID(appID, PendingOff)                             // appID for pending shadow chain
-	m.MainChain.Manager = m.MainChain.Manager.Copy(appID)              // MainChain.Manager uses appID
-	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount())       // Get Main Merkle State from the database
-	m.MainChain.MS.InitSha256()                                        // Use Sha256
-	m.BlkIdxChain.Manager = m.BlkIdxChain.Manager.Copy(bAppID)         // BlkIdxChain.Manager uses bAppID
-	m.BlkIdxChain.MS = *m.GetState(m.BlkIdxChain.Manager.GetCount())   // Get block Merkle State from the database
-	m.BlkIdxChain.MS.InitSha256()                                      // Use Sha256
-	m.PendingChain.Manager = m.PendingChain.Manager.Copy(pAppID)       // PendingChain uses pAppID
-	m.PendingChain.MS = *m.GetState(m.PendingChain.Manager.GetCount()) // Get Pending Merkle State from the database
-	m.PendingChain.MS.InitSha256()                                     // Use Sha256
+	m.Manager = m.Manager.ManageAppID(appID) // MainChain.Manager uses appID
+	m.MS = m.MS.Copy()                       // Make a copy of the Merkle State
+	m.MS.InitSha256()                        // Use Sha256
 	return &m
 }
 
-// getElementCount()
+// GetElementCount
 // Return number of elements in the Merkle Tree managed by this MerkleManager
 func (m *MerkleManager) GetElementCount() (elementCount int64) {
-	return m.MainChain.MS.Count
+	return m.MS.Count
 }
 
 // init
@@ -107,67 +181,24 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 //
 // This is an internal routine; calling init outside of constructing the first
 // reference to the MerkleManager doesn't make much sense.
-func (m *MerkleManager) init(DBManager *database.Manager, appID []byte, markPower int64) {
-	m.RootDBManager = DBManager.Copy(nil) // Add a Database manager without a appID
-	_ = DBManager.AddBucket("BlockIndex") // Add a bucket to track block indexes
-	_ = DBManager.AddBucket("Transactions")
-	m.MainChain.Manager = DBManager.Copy(appID)                           // Save the database
-	m.PendingChain.Manager = DBManager.Copy(Add2AppID(appID, PendingOff)) //
-	m.BlkIdxChain.Manager = DBManager.Copy(Add2AppID(appID, BlkIdxOff))   //
-	m.MarkPower = markPower                                               // # levels in Merkle Tree to be indexed
-	m.MarkFreq = int64(math.Pow(2, float64(markPower)))                   // The number of elements between indexes
-	m.MarkMask = m.MarkFreq - 1                                           // Mask to index of next mark (0 if at a mark)
-	m.MainChain.MS = *m.GetState(m.MainChain.Manager.GetCount())          // Get the main Merkle State from the database
-	m.MainChain.MS.InitSha256()                                           // Use Sha256
-	m.BlkIdxChain.MS = *m.GetState(m.BlkIdxChain.Manager.GetCount())      // Get block Merkle State from the database
-	m.BlkIdxChain.MS.InitSha256()                                         // Use Sha256
-	m.PendingChain.MS = *m.GetState(m.PendingChain.Manager.GetCount())    // Get pending Merkle State from the database
-	m.PendingChain.MS.InitSha256()                                        // Use Sha256
+func (m *MerkleManager) init(DBManager *database.Manager, appID []byte, markPower int64) error {
 
-}
-
-func (m *MerkleManager) BlockIndex() int64 {
-	if m.blkidx == nil { //                                              Load cache if first use
-		m.blkidx = new(BlockIndex)                                    // Create blockIndex to store
-		data := m.BlkIdxChain.Manager.Get("BlockIndex", "", []byte{}) // Look see the current bbi
-		if data == nil {                                              // Then this is a new merkle tree
-			m.blkidx.MainIndex = -1    //                                and no indexes exist
-			m.blkidx.PendingIndex = -1 //                                so set them all to -1
-			m.blkidx.BlockIndex = -1   //
-		} else { //                                                      Otherwise,
-			m.blkidx.UnMarshal(data) //                                  get all the values from the database
-		}
+	if markPower >= 20 { // 2^20 is 1,048,576 and is too big for the collection of elements in memory
+		return fmt.Errorf("A power %d is greater than 2^29, and is unreasonable", markPower)
 	}
 
-	if m.blkidx.BlockIndex < 0 {
-		return 0
+	if m.MS == nil { //                                    Allocate a MS if we don't have one
+		m.MS = new(MerkleState) //
+		m.MS.InitSha256()       //
 	}
-	return m.blkidx.BlockIndex
-}
+	m.Manager = DBManager.ManageAppID(appID) //               Manager for writing the Merkle states
+	m.ReadChainHead()                        //               Set the MerkleState
 
-// SetBlockIndex
-// Keep track of where the blocks are in the Merkle Tree.
-func (m *MerkleManager) SetBlockIndex(blockIndex int64) {
-	m.BlockIndex()                         //                            Ensure blkidx is loaded
-	if m.blkidx.BlockIndex >= blockIndex { //                            Block Index must increment
-		panic(fmt.Errorf("should not have block indexes that go backwards or stay constant; got %d, have %d", blockIndex, m.blkidx.BlockIndex))
-	}
-	if m.blkidx.MainIndex > m.MainChain.MS.Count-1 { //                  Must move MainChain or stay same
-		panic(fmt.Errorf("should not have main indexes that go backwards; got %d, have %d", m.MainChain.MS.Count, m.blkidx.MainIndex))
-	}
-	if m.blkidx.PendingIndex > m.PendingChain.MS.Count-1 { //            Must move Pending chain or stay same
-		panic(fmt.Errorf("should not have pending indexes that go backwards; got %d, have %d", m.PendingChain.MS.Count, m.blkidx.PendingIndex))
-	}
-	m.blkidx.BlockIndex = blockIndex                    //               Save blockIndex
-	m.blkidx.MainIndex = m.MainChain.MS.Count - 1       //               Update MainIndex (count is index+1)
-	m.blkidx.PendingIndex = m.PendingChain.MS.Count - 1 //               Update PendingIndex
-	bbi := m.blkidx.Marshal()                           //               Marshal the Block Index record
-	biHash := sha256.Sum256(bbi)                        //               Get the Hash of the bi
-	m.BlkIdxChain.MS.AddToMerkleTree(biHash)            //               Add the bi hash to the BlkIdxChain
-	blkIdx := m.BlkIdxChain.MS.Count - 1                //               Use a variable to make tidy
-	_ = m.BlkIdxChain.Manager.Put(                      //
-		"BlockIndex", "", common.Int64Bytes(blkIdx), bbi) //            blkIdx -> bbi struct
-	_ = m.BlkIdxChain.Manager.Put("BlockIndex", "", []byte{}, bbi) //    Mark as highest block
+	m.MarkPower = markPower                             // # levels in Merkle Tree to be indexed
+	m.MarkFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
+	m.MarkMask = m.MarkFreq - 1                         // Mask to index of next mark (0 if at a mark)
+
+	return nil
 }
 
 // GetState
@@ -180,19 +211,22 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	if element == 0 {
 		return new(MerkleState)
 	}
-	data := m.MainChain.Manager.Get("States", "", common.Int64Bytes(element)) // Get the data at this height
-	if data == nil {                                                          //         If nil, there is no state saved
-		return nil //                                                             return nil, as no state exists
+
+	data := m.Manager.Get("States", "", common.Int64Bytes(element)) // Get the data at this height
+	if data == nil {                                                // If nil, there is no state saved
+		return nil //                                                   return nil, as no state exists
 	}
-	ms := new(MerkleState) //                                                     Get a fresh new MerkleState
-	ms.UnMarshal(data)     //                                                     set it up
-	return ms              //                                                     return it
+	ms := new(MerkleState)                     //                                 Get a fresh new MerkleState
+	if err := ms.UnMarshal(data); err != nil { //                                 set it the MerkleState
+		panic(fmt.Sprintf("corrupted database; invalid state. error: %v", err)) // panic if the database is corrupted.
+	}
+	return ms // return it
 }
 
 // GetNext
 // Get the next hash to be added to a state at this height
 func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
-	data := m.MainChain.Manager.Get("NextElement", "", common.Int64Bytes(element))
+	data := m.Manager.Get("NextElement", "", common.Int64Bytes(element))
 	if data == nil || len(data) != storage.KeyLength {
 		return nil
 	}
@@ -204,19 +238,7 @@ func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
 // GetIndex
 // Get the index of a given element
 func (m *MerkleManager) GetIndex(element []byte) (index int64) {
-	return m.MainChain.Manager.GetIndex(element)
-}
-
-// AddHash
-// Add a Hash to the MainChain
-func (m *MerkleManager) AddHash(hash Hash) {
-	m.MainChain.AddHash(m.MarkMask, hash)
-}
-
-// AddPendingHash
-// Pending transactions for managed chains or suggested transactions go into the Pending Chain
-func (m *MerkleManager) AddPendingHash(hash Hash) {
-	m.PendingChain.AddHash(m.MarkMask, hash)
+	return m.Manager.GetIndex(element)
 }
 
 // AddHashString
