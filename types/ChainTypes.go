@@ -14,7 +14,8 @@ const (
 	ChainTypeTransactionReference // Transaction Reference Chain
 	ChainTypeTransaction          // Transaction Chain
 	ChainTypePendingTransaction   // Pending Chain
-	ChainTypeSignatureGroup       // Signature Group chain
+	ChainTypeSigSpec              // Signature Specification chain
+	ChainTypeSigSpecGroup         // Signature Specification Group chain
 )
 
 // Enum value maps for ChainType.
@@ -30,7 +31,8 @@ var (
 		ChainTypeTransactionReference: "ChainTypeTransactionReference",
 		ChainTypeTransaction:          "ChainTypeTransaction",
 		ChainTypePendingTransaction:   "ChainTypePendingTransaction",
-		ChainTypeSignatureGroup:       "ChainTypeSignatureGroup",
+		ChainTypeSigSpec:              "ChainTypeSigSpec",
+		ChainTypeSigSpecGroup:         "ChainTypeSigSpecGroup",
 	}
 	ChainTypeValue = map[string]ChainType{
 		"ChainTypeUnknown":              ChainTypeUnknown,
@@ -43,7 +45,8 @@ var (
 		"ChainTypeTransactionReference": ChainTypeTransactionReference,
 		"ChainTypeTransaction":          ChainTypeTransaction,
 		"ChainTypePendingTransaction":   ChainTypePendingTransaction,
-		"ChainTypeSignatureGroup":       ChainTypeSignatureGroup,
+		"ChainTypeSigSpec":              ChainTypeSigSpec,
+		"ChainTypeSigSpecGroup":         ChainTypeSigSpecGroup,
 	}
 )
 
@@ -64,3 +67,5 @@ func (t *ChainType) SetType(s string) {
 func (t ChainType) AsUint64() uint64 {
 	return uint64(t)
 }
+
+func (t ChainType) String() string { return t.Name() }

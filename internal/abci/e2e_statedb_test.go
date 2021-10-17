@@ -24,7 +24,7 @@ func TestStateDBConsistency(t *testing.T) {
 	sdb.Load(db, bvcId[:], true)
 
 	n := createApp(t, sdb, crypto.Address{})
-	n.anonTokenTest(10)
+	n.testAnonTx(10)
 
 	height := sdb.BlockIndex()
 	rootHash := sdb.RootHash()

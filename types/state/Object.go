@@ -56,22 +56,16 @@ func (o *Object) As(entry encoding.BinaryUnmarshaler) error {
 }
 
 type StateEntry struct {
-	AdiState   *Object
-	ChainState *Object
-
-	//useful cached info
-	ChainId  *types.Bytes32
-	AdiChain *types.Bytes32
-
-	ChainHeader *Chain
-	AdiHeader   *Chain
+	ChainState  *Object
+	ChainId     *types.Bytes32
+	ChainHeader *ChainHeader
 
 	DB *StateDB
 }
 
-// LoadChainAndADI retrieves the specified chain and unmarshals it, and
+// LoadChainState retrieves the specified chain and unmarshals it, and
 // retrieves its ADI and unmarshals it.
-func (db *StateDB) LoadChainAndADI(chainId []byte) (*StateEntry, error) {
+func (db *StateDB) LoadChainState(chainId []byte) (*StateEntry, error) {
 	chain32 := types.Bytes(chainId).AsBytes32()
 	chainState, chainHeader, err := db.LoadChain(chainId)
 	if errors.Is(err, ErrNotFound) {
@@ -83,26 +77,10 @@ func (db *StateDB) LoadChainAndADI(chainId []byte) (*StateEntry, error) {
 		return nil, err
 	}
 
-	adiChain, adiState, adiHeader, err := db.LoadChainADI(chainHeader)
-	if errors.Is(err, ErrNotFound) {
-		return &StateEntry{
-			DB:          db,
-			ChainId:     &chain32,
-			ChainState:  chainState,
-			ChainHeader: chainHeader,
-			AdiChain:    adiChain,
-		}, nil
-	} else if err != nil {
-		return nil, err
-	}
-
 	return &StateEntry{
 		DB:          db,
 		ChainId:     &chain32,
 		ChainState:  chainState,
 		ChainHeader: chainHeader,
-		AdiChain:    adiChain,
-		AdiState:    adiState,
-		AdiHeader:   adiHeader,
 	}, nil
 }
