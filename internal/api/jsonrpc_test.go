@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/stretchr/testify/require"
 
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 
@@ -42,10 +43,14 @@ func TestLoadOnRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	err = txBouncer.Start()
+	require.NoError(t, err)
+	defer func() { require.NoError(t, txBouncer.Stop()) }()
+
 	query := NewQuery(txBouncer)
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, privateKeySponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +121,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
 	kpSponsor := ed25519.NewKeyFromSeed(pv.Key.PrivKey.Bytes()[:32])
 
-	addrList, err := acctesting.RunLoadTest(query, &kpSponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, kpSponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}

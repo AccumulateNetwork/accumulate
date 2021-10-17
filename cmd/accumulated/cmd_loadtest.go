@@ -70,16 +70,12 @@ func loadTest(cmd *cobra.Command, args []string) {
 	for _, name := range flagLoadTest.Networks {
 		net := networks.Networks[name]
 		if net == nil {
-			fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
-			os.Exit(1)
+			fatalf("unknown network %q", flagInit.Net)
 		}
 
 		lAddr := fmt.Sprintf("tcp://%s:%d", net.Nodes[0].IP, net.Port+node.TmRpcPortOffset)
 		client, err := rpc.New(lAddr)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for network %q: %v\n", name, err)
-			os.Exit(1)
-		}
+		checkf(err, "failed to create RPC client for network %q", name)
 
 		if logger != nil {
 			client.SetLogger(logger)
@@ -90,21 +86,14 @@ func loadTest(cmd *cobra.Command, args []string) {
 	// Create clients for remotes
 	for _, r := range flagLoadTest.Remotes {
 		u, err := url.Parse(r)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: not a valid URL: %s: %v\n", r, err)
-			os.Exit(1)
-		}
+		checkf(err, "not a valid URL: %s", r)
 
 		if u.Path != "" && u.Path != "/" {
-			fmt.Fprintf(os.Stderr, "Error: remote URL must not contain a path: %s\n", r)
-			os.Exit(1)
+			fatalf("remote URL must not contain a path: %s", r)
 		}
 
 		client, err := rpc.New(r)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to create RPC client for remote %s: %v\n", r, err)
-			os.Exit(1)
-		}
+		checkf(err, "failed to create RPC client for remote %s", r)
 
 		if logger != nil {
 			client.SetLogger(logger)
@@ -114,8 +103,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	if len(clients) == 0 {
 		fmt.Fprintf(os.Stderr, "Error: at least one --network or --remote is required\n")
-		cmd.Usage()
-		os.Exit(1)
+		printUsageAndExit1(cmd, args)
 	}
 
 	relay := relay.New(clients...)
@@ -130,26 +118,17 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.TransactionCount)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	addrList, err := acctesting.RunLoadTest(query, privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.TransactionCount)
+	check(err)
 
 	// Wait for synthetic transactions to go through
 	time.Sleep(5 * time.Second)
 
 	for _, v := range addrList[1:] {
 		resp, err := query.GetChainStateByUrl(v)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+		check(err)
 		output, err := json.Marshal(resp)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+		check(err)
 		fmt.Printf("%s : %s\n", v, string(output))
 	}
 }
