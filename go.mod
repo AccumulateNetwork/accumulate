@@ -20,10 +20,12 @@ require (
 	github.com/golang/mock v1.5.0
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/gorilla/mux v1.8.0
+	github.com/kardianos/service v1.2.0
 	github.com/mitchellh/mapstructure v1.4.2
 	github.com/pelletier/go-toml v1.9.4
 	github.com/prometheus/common v0.30.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
+	github.com/rs/zerolog v1.24.0
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/viper v1.8.1
@@ -35,7 +37,7 @@ require (
 	golang.org/x/exp v0.0.0-20200331195152-e8c3332aa8e5
 	golang.org/x/net v0.0.0-20210805182204-aaa1db679c0d // indirect
 	golang.org/x/sys v0.0.0-20210917161153-d61c044b1678 // indirect
-	golang.org/x/term v0.0.0-20201126162022-7de9c90e9dd1
+	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	golang.org/x/text v0.3.7 // indirect
 	gopkg.in/ini.v1 v1.63.2 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
