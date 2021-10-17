@@ -322,7 +322,7 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResul
 			}
 
 			tx.Signature = append(tx.Signature, ed)
-			_, err = m.query.BroadcastTx(tx)
+			_, err = m.query.BroadcastTx(tx, nil)
 			if err != nil {
 				return err
 			}
