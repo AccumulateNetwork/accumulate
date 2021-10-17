@@ -171,9 +171,6 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) error {
 		return err
 	}
 
-	// First configure the pending state which is the basis for the transaction
-	txPending := state.NewPendingTransaction(tx)
-
 	// Validate
 	// TODO txValidated should return a list of chainId's the transaction touched.
 	txValidated, err := executor.DeliverTx(st, tx)

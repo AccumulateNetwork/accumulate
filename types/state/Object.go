@@ -11,7 +11,7 @@ import (
 
 //maybe we should have Chain header then entry, rather than entry containing all the Headers
 type Object struct {
-	MDRoot types.Bytes32 `json:"pendingMDRoot"`
+	MDRoot types.Bytes32 `json:"merkleRoot"`
 	Entry  types.Bytes   `json:"stateEntry"` //this is the state data that stores the current state of the chain
 }
 
