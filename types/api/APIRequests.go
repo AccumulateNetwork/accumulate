@@ -17,8 +17,9 @@ type Signer struct {
 
 // APIRequestRaw will leave the data payload intact which is required for signature verification
 type APIRequestRaw struct {
-	Tx  *APIRequestRawTx `json:"tx" form:"tx" query:"tx" validate:"required"`
-	Sig types.Bytes64    `json:"sig" form:"sig" query:"sig" validate:"required"`
+	Tx   *APIRequestRawTx `json:"tx" form:"tx" query:"tx" validate:"required"`
+	Sig  types.Bytes64    `json:"sig" form:"sig" query:"sig" validate:"required"`
+	Wait bool             `json:"wait" form:"wait" query:"wait"`
 }
 
 // APIRequestRawTx is used to maintain the integrety of the Data field when it is read in
@@ -33,7 +34,8 @@ type APIRequestRawTx struct {
 
 // APIRequestURL is used to unmarshal URL param into API methods, that retrieves data by URL
 type APIRequestURL struct {
-	URL types.String `json:"url" form:"url" query:"url" validate:"required"`
+	URL  types.String `json:"url" form:"url" query:"url" validate:"required"`
+	Wait bool         `json:"wait" form:"wait" query:"wait"`
 }
 
 // APIDataResponse is used in "get" API method response
