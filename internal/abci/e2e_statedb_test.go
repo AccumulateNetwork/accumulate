@@ -21,7 +21,7 @@ func TestStateDBConsistency(t *testing.T) {
 
 	bvcId := sha256.Sum256([]byte("foo bar"))
 	sdb := new(state.StateDB)
-	sdb.Load(db, bvcId[:], true)
+	require.NoError(t, sdb.Load(db, bvcId[:], true))
 
 	n := createApp(t, sdb, crypto.Address{})
 	n.testAnonTx(10)
@@ -31,7 +31,7 @@ func TestStateDBConsistency(t *testing.T) {
 
 	// Reopen the database
 	sdb = new(state.StateDB)
-	sdb.Load(db, bvcId[:], true)
+	require.NoError(t, sdb.Load(db, bvcId[:], true))
 
 	// Block 6 does not make changes so is not saved
 	require.Equal(t, height, sdb.BlockIndex(), "Block index does not match after load from disk")
