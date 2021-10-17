@@ -1,6 +1,7 @@
 package abci_test
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"testing"
 
@@ -61,13 +62,18 @@ func TestCreateAnonAccount(t *testing.T) {
 }
 
 func (n *fakeNode) testAnonTx(count int) string {
-	recipient := generateKey()
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, recipient, 5e4))
+	sponsor := generateKey()
+	_, recipient, gtx, err := acctesting.BuildTestSynthDepositGenTx(sponsor.Bytes())
+	require.NoError(n.t, err)
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		send(gtx)
+	})
 
 	origin := accapi.NewWalletEntry()
 	origin.Nonce = 1
-	origin.PrivateKey = recipient.Bytes()
-	origin.Addr = anon.GenerateAcmeAddress(recipient.PubKey().Bytes())
+	origin.PrivateKey = recipient
+	origin.Addr = anon.GenerateAcmeAddress(recipient.Public().(ed25519.PublicKey))
 
 	recipients := make([]*transactions.WalletEntry, 10)
 	for i := range recipients {

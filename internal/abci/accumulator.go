@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"crypto/sha256"
 	_ "crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated"
@@ -20,6 +20,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/version"
 )
 
@@ -36,19 +37,21 @@ type Accumulator struct {
 	txct    int64
 	timer   time.Time
 	chain   Chain
+	logger  log.Logger
 }
 
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db State, address crypto.Address, chain Chain) (*Accumulator, error) {
+func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Logger) (*Accumulator, error) {
 	app := &Accumulator{
-		state: db,
-		chain: chain,
+		state:  db,
+		chain:  chain,
+		logger: logger,
 	}
 
 	app.address = make([]byte, len(address))
 	copy(app.address, address)
 
-	fmt.Printf("Accumulate %s, ABCI %v\n", accumulated.Version, Version)
+	logger.Info("Starting ABCI application", "accumulate", accumulated.Version, "abci", Version)
 	return app, nil
 }
 
@@ -96,7 +99,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	if err != nil {
 		sentry.CaptureException(err)
 		if debugTx {
-			fmt.Printf("Query failed for %v\n", err)
+			app.logger.Info("Query failed", "error", err)
 		}
 		resQuery.Info = "request is not an Accumulate Query"
 		resQuery.Code = code.CodeTypeUnauthorized
@@ -107,7 +110,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	if err != nil {
 		sentry.CaptureException(err)
 		if debugTx {
-			fmt.Printf("Query failed for %s: %v\n", query.Url, err)
+			app.logger.Info("Query failed", "url", query.Url, "error", err)
 		}
 		resQuery.Info = err.Error()
 		resQuery.Code = code.CodeTypeUnauthorized
@@ -185,6 +188,9 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 //
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
+	h := sha256.Sum256(req.Tx)
+	txHash := hex.EncodeToString(h[:])
+
 	//the submission is the format of the Tx input
 	sub := new(transactions.GenTransaction)
 
@@ -195,7 +201,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	if len(rem) != 0 || err != nil {
 		sentry.CaptureException(err)
 		if debugTx {
-			fmt.Printf("Check failed for TX %X: %v\n", sha256.Sum256(req.Tx), err)
+			app.logger.Info("Check failed", "tx", txHash, "error", err)
 		}
 		//reject it
 		return abci.ResponseCheckTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
@@ -215,9 +221,10 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 		sentry.CaptureException(err)
 		if debugTx {
-			fmt.Printf("Check failed for %v TX %X: %v\n", sub.TransactionType(), sha256.Sum256(req.Tx), err)
+			app.logger.Info("Check failed", "type", sub.TransactionType(), "tx", txHash, "error", err)
 		}
 		ret.Code = 2
+		app.logger.Error(err.Error(), "module", "abci", "operation", "checkTx")
 		ret.GasWanted = 0
 		ret.GasUsed = 0
 		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
@@ -226,7 +233,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
 	if debugTx {
-		fmt.Printf("Checked %v TX %X\n", sub.TransactionType(), sha256.Sum256(req.Tx))
+		app.logger.Info("Check succeeded", "type", sub.TransactionType(), "tx", txHash)
 	}
 	return ret
 }
@@ -235,6 +242,8 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 //
 // Verifies the transaction is valid.
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
+	h := sha256.Sum256(req.Tx)
+	txHash := hex.EncodeToString(h[:])
 	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: code.CodeTypeOK}
 
 	sub := &transactions.GenTransaction{}
@@ -245,7 +254,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	if err != nil {
 		sentry.CaptureException(err)
 		if debugTx {
-			fmt.Printf("Deliver failed for TX %X: %v\n", sha256.Sum256(req.Tx), err)
+			app.logger.Info("Deliver failed", "tx", txHash, "error", err)
 		}
 		return abci.ResponseDeliverTx{Code: code.CodeTypeEncodingError, GasWanted: 0,
 			Log: "Unable to decode transaction"}
@@ -262,7 +271,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 		sentry.CaptureException(err)
 		if debugTx {
-			fmt.Printf("Deliver failed for %v TX %X: %v\n", sub.TransactionType(), sha256.Sum256(req.Tx), err)
+			app.logger.Info("Deliver failed", "type", sub.TransactionType(), "tx", txHash, "error", err)
 		}
 		ret.Code = code.CodeTypeUnauthorized
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
@@ -286,7 +295,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	app.txct++
 
 	if debugTx {
-		fmt.Printf("Delivered %v TX %X\n", sub.TransactionType(), sha256.Sum256(req.Tx))
+		app.logger.Info("Deliver succeeded", "type", sub.TransactionType(), "tx", txHash)
 	}
 	return ret
 }
@@ -326,7 +335,7 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 
 	if err != nil {
 		sentry.CaptureException(err)
-		log.Println(err)
+		app.logger.Error(err.Error(), "module", "abci", "operation", "commit")
 		return
 	}
 
@@ -337,7 +346,7 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 	// }
 
 	duration := time.Since(app.timer)
-	fmt.Printf("%d transactions in %f seconds for a TPS of %f\n", app.txct, duration.Seconds(), float64(app.txct)/duration.Seconds())
+	app.logger.Info("Committed", "transactions", app.txct, "duration", duration.String(), "tps", float64(app.txct)/duration.Seconds())
 
 	return resp
 }
@@ -376,8 +385,7 @@ func (app *Accumulator) ApplySnapshotChunk(
 //updateValidator add, update, or remove a validator
 func (app *Accumulator) updateValidator(v abci.ValidatorUpdate) {
 	pubkey, _ := encoding.PubKeyFromProto(v.PubKey)
-
-	fmt.Printf("Val Pub Key 0x%X\n", pubkey.Address())
+	app.logger.Info("Val Pub Key", "address", pubkey.Address())
 	/*
 	   	if err != nil {
 	   		panic(fmt.Errorf("can't decode public key: %w", err))

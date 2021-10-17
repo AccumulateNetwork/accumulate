@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"os/user"
@@ -38,6 +39,37 @@ func main() {
 }
 
 func printUsageAndExit1(cmd *cobra.Command, args []string) {
-	cmd.Usage()
+	_ = cmd.Usage()
 	os.Exit(1)
+}
+
+func fatalf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	os.Exit(1)
+}
+
+func check(err error) {
+	if err != nil {
+		fatalf("%v", err)
+	}
+}
+
+func checkf(err error, format string, otherArgs ...interface{}) {
+	if err != nil {
+		fatalf(format+": %v", append(otherArgs, err)...)
+	}
+}
+
+func composeArgs(fn cobra.PositionalArgs, fns ...cobra.PositionalArgs) cobra.PositionalArgs {
+	if len(fns) == 0 {
+		return fn
+	}
+
+	rest := composeArgs(fns[0], fns[1:]...)
+	return func(cmd *cobra.Command, args []string) error {
+		if err := fn(cmd, args); err != nil {
+			return err
+		}
+		return rest(cmd, args)
+	}
 }
