@@ -39,18 +39,18 @@ func GetElementState(
 	// currentState is the state we are going to modify until it is the state we want
 	currentIndex := elementIndex & (manager.MarkMask ^ -1) // Find the mark previous to element (current if at mark)
 	currentState = manager.GetState(currentIndex)          // Get that state
-	currentState.InitSha256()                              // We are using sha256
-	nextMarkIndex = currentIndex + manager.MarkFreq        // The next mark has the list of elements to add including ours
-	nextMark = manager.GetState(nextMarkIndex)             // Get that NextMark state. Now that we bracket element, search
+	currentState.InitSha256()                              // Use sha256
+	nextMarkIndex = currentIndex + manager.MarkFreq        // Next mark has the list of elements to add
+	nextMark = manager.GetState(nextMarkIndex)             // Get that NextMark state. Now bracket element, search
 	if nextMark == nil {                                   // If there is no state at the next mark,
-		nextMark = manager.MainChain.MS.CopyAndPoint() // then just use the last state of the Merkle Tree
+		nextMark = manager.MS.Copy() //                        then just use the last state of the Merkle Tree
 	}
-	for i, v1 := range nextMark.HashList { // Go through the pending elements
-		nextMarkIndex = int64(i) //                      Return where we are in this HashList for next step
-		if v1 == element {       //                      If we have found the element
-			return currentState, nextMark, height, int64(i) // Return where we are so following code can reuse it
+	for i, v1 := range nextMark.HashList { //                Go through the pending elements
+		nextMarkIndex = int64(i) //                           Return location in this HashList for next step
+		if v1 == element {       //                           If the element is found
+			return currentState, nextMark, height, int64(i) // Return location so following code can reuse it
 		}
-		currentState.AddToMerkleTree(v1) // Otherwise just add the value to the merkle tree and keep looking
+		currentState.AddToMerkleTree(v1) //                   Otherwise, just add value to merkle tree and keep looking
 	}
 	panic("the element must be a member of the NextMark.HashList")
 }
@@ -74,14 +74,14 @@ func (r *Receipt) AdvanceToMark(
 	// Add all the hashes that remain in the HashList of the next Mark to the current state.
 	// The result will be a current state that is at the next mark.
 	for i, v := range nextMark.HashList[markIndex:] {
-		if currentState.Count == anchorState.Count { // Sort to see if we reached the anchor state
-			return true, height //                      If at the anchor, signal currentState is at the anchor
+		if currentState.Count == anchorState.Count { //           Sort to see if reached the anchor state
+			return true, height //                                 If at the anchor, signal currentState is at the anchor
 		}
-		if i == 0 && //                 If we are adding the first hash of the hash list
-			currentState.Count&1 == 1 { //    And we are at an odd number of elements in the Merkle Tree
+		if i == 0 && //                                           If adding the first hash of the hash list
+			currentState.Count&1 == 1 { //                         And at an odd number of elements in the Merkle Tree
 			height = r.AddAHash(currentState, height, false, v) // In that case, the hash will come from the left
 		} else { //                                                    Otherwise
-			height = r.AddAHash(currentState, height, true, v) // the hash will come from the right
+			height = r.AddAHash(currentState, height, true, v) //  the hash will come from the right
 		}
 	}
 	// If reaching the next mark doesn't reach the anchor state, signal that the search continues
@@ -102,7 +102,7 @@ func (r *Receipt) AdvanceMarkToMark(manager *MerkleManager, anchorState, current
 	// entries in the AnchorState will contribute to the receipt, so we can build our proof from the
 	// anchorStep directly.
 	if currentState.Count+markStep > anchorState.Count {
-		currentState = anchorState.CopyAndPoint()
+		currentState = anchorState.Copy()
 		return true, height
 	}
 	// Set the currentState to the state just before the next mark.  None of the intermediate elements
@@ -226,7 +226,6 @@ func (r *Receipt) String() string {
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
 // after the element, or even the element itself.
 func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
-	manager.MainChain.Manager.EndBatch()         // Make sure all batched writes are flushed to disk
 	elementIndex := manager.GetIndex(element[:]) // Get the index of the element in the Merkle Tree; -1 if not found
 	anchorIndex := manager.GetIndex(anchor[:])   // Get the index of the anchor in the Merkle Tree; -1 if not found
 	if elementIndex == -1 || anchorIndex == -1 { // Both the element and the anchor must be in the Merkle Tree
