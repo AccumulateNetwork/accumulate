@@ -39,5 +39,5 @@ func TestStateDBConsistency(t *testing.T) {
 
 	// Recreate the app and try to do more transactions
 	n = createApp(t, sdb, crypto.Address{})
-	n.anonTokenTest(10)
+	n.testAnonTx(10)
 }
