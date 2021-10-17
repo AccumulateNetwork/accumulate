@@ -36,7 +36,7 @@ func checkCreateSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransacti
 	}
 
 	if len(body.SigSpecs) == 0 {
-		return nil, nil, fmt.Errorf("cannot create empty key group")
+		return nil, nil, fmt.Errorf("cannot create empty sig spec group")
 	}
 
 	sgUrl, err := url.Parse(body.Url)
