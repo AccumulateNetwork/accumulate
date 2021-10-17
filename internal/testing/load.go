@@ -5,14 +5,19 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
+	"sync"
 	"time"
 
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
+
 	"github.com/AccumulateNetwork/accumulated/internal/api"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	apitypes "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	abci "github.com/tendermint/tendermint/abci/types"
 )
 
 // Load
@@ -21,20 +26,50 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 
 	var wallet []*transactions.WalletEntry
 
-	wallet = append(wallet, transactions.NewWalletEntry()) // wallet[0] is where we put 5000 ACME tokens
+	wallet = append(wallet, api.NewWalletEntry())          // wallet[0] is where we put 5000 ACME tokens
 	wallet[0].Nonce = 1                                    // start the nonce at 1
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
 	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
 	for i := 0; i < walletCount; i++ { //                            create a 1000 addresses for anonymous token chains
-		wallet = append(wallet, transactions.NewWalletEntry()) // create a new wallet entry
+		wallet = append(wallet, api.NewWalletEntry()) // create a new wallet entry
 	}
+
+	resultWg := new(sync.WaitGroup)
+	resultWg.Add(txCount)
+	ch := make(chan abci.TxResult)
+	defer close(ch)
+
+	ok := true
+	go func() {
+		for txr := range ch {
+			if txr.Result.Code != 0 {
+				fmt.Printf("%v<<\n", txr.Result.Log)
+				ok = false
+			} else {
+				fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
+			}
+
+			resultWg.Done()
+		}
+	}()
 
 	addrCountMap := make(map[string]int)
 	for i := 0; i < txCount; i++ { // Make a bunch of transactions
 		if i%200 == 0 {
-			query.BatchSend()
-			time.Sleep(200 * time.Millisecond)
+			bs := <-query.BatchSend()
+			for _, s := range bs.Status {
+				if s.Err != nil {
+					fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
+				}
+				for j, t := range s.Returns {
+					if resp, ok := t.(coregrpc.ResponseBroadcastTx); ok {
+						if len(resp.CheckTx.Log) > 0 {
+							fmt.Printf("<%d>%v<<\n", j, resp.CheckTx.Log)
+						}
+					}
+				}
+			}
 		}
 		const origin = 0
 		randDest := rand.Int()%(len(wallet)-1) + 1                     // pick a destination address
@@ -56,21 +91,38 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
 
-		if resp, err := query.BroadcastTx(gtx); err != nil {
+		if _, err := query.BroadcastTx(gtx, ch); err != nil {
 			return nil, fmt.Errorf("failed to send TX: %v", err)
-		} else {
-			if len(resp.Log) > 0 {
-				fmt.Printf("<%d>%v<<\n", i, resp.Log)
+		}
+	}
+
+	bs := <-query.BatchSend()
+	for i, s := range bs.Status {
+		for _, t := range s.Returns {
+			if s.Err != nil {
+				ok = false
+				fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
+			}
+			if resp, ok := t.(coregrpc.ResponseBroadcastTx); ok {
+				if resp.CheckTx.Code > 0 && len(resp.CheckTx.Log) > 0 {
+					ok = false
+					fmt.Printf("<%d>%v<<\n", i, resp.CheckTx.Log)
+				}
 			}
 		}
 	}
-	query.BatchSend()
+
 	for addr, ct := range addrCountMap {
 		addrList = append(addrList, addr)
 		_ = ct
 		fmt.Printf("%s : %d\n", addr, ct*1000)
 	}
 
+	resultWg.Wait()
+
+	if !ok {
+		return addrList, fmt.Errorf("one or more transactions failed")
+	}
 	return addrList, nil
 }
 
@@ -84,7 +136,7 @@ func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25
 
 	txid := sha256.Sum256([]byte("fake txid"))
 
-	tokenUrl := types.String("dc/ACME")
+	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	//create a fake synthetic deposit for faucet.
 	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
@@ -159,11 +211,23 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 
 	adiSponsor := gtx.SigInfo.URL
 
-	_, err = query.BroadcastTx(gtx)
+	done := make(chan abci.TxResult)
+	_, err = query.BroadcastTx(gtx, done)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send TX: %v", err)
 	}
-	query.BatchSend()
+	<-query.BatchSend()
+
+	select {
+	case txr := <-done:
+		if txr.Result.Code != 0 {
+			return nil, fmt.Errorf(txr.Result.Log)
+		} else {
+			fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
+		}
+	case <-time.After(1 * time.Minute):
+		return nil, fmt.Errorf("timeout while waiting for TX response")
+	}
 
 	addresses, err := Load(query, *privateKey, walletCount, txCount)
 	if err != nil {

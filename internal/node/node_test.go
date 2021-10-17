@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"testing"
 
+	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/stretchr/testify/require"
@@ -17,18 +18,32 @@ func TestNodeSetup(t *testing.T) {
 		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
 	}
 
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
 	opts, err := acctesting.NodeInitOptsForNetwork("Badlands")
 	require.NoError(t, err)
 	opts.WorkDir = t.TempDir()
 	opts.Port = getFreePort(t)
 
-	require.NoError(t, node.Init(opts))                       // Configure
-	nodeDir := filepath.Join(opts.WorkDir, "Node0")           //
+	require.NoError(t, node.Init(opts)) // Configure
+
+	nodeDir := filepath.Join(opts.WorkDir, "Node0") //
+	//disable web site
+	c, err := cfg.Load(nodeDir)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	c.Accumulate.WebsiteEnabled = false
+	cfg.Store(c)
+
 	node, _, err := acctesting.NewBVCNode(nodeDir, t.Cleanup) // Initialize
 	require.NoError(t, err)                                   //
 	require.NoError(t, node.Start())                          // Start
 	require.NoError(t, node.Stop())                           // Stop
-	node.Wait()                                               //
+	node.Quit()
+	node.Wait() //
 }
 
 func TestNodeSetupTwiceWithPrometheus(t *testing.T) {

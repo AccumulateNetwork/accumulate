@@ -2,83 +2,117 @@ package chain
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
-	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 )
 
 type IdentityCreate struct{}
 
 func (IdentityCreate) Type() types.TxType { return types.TxTypeIdentityCreate }
 
-func (IdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	if st == nil {
-		return fmt.Errorf("current state not defined")
+func checkIdentityCreate(st *state.StateEntry, tx *transactions.GenTransaction) (*api.ADI, *url.URL, state.Chain, error) {
+	if st.ChainHeader == nil {
+		return nil, nil, nil, fmt.Errorf("sponsor not found")
 	}
-	return nil
+
+	body := new(api.ADI)
+	err := tx.As(body)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid payload: %v", err)
+	}
+
+	identityUrl, err := url.Parse(*body.URL.AsString())
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid URL: %v", err)
+	}
+	if identityUrl.Path != "" {
+		return nil, nil, nil, fmt.Errorf("creating sub-ADIs is not supported")
+	}
+	if strings.ContainsRune(identityUrl.Hostname(), '.') {
+		return nil, nil, nil, fmt.Errorf("ADI URLs cannot contain dots")
+	}
+
+	var sponsor state.Chain
+	switch st.ChainHeader.Type {
+	case types.ChainTypeAnonTokenAccount:
+		sponsor = new(protocol.AnonTokenAccount)
+
+	case types.ChainTypeAdi:
+		sponsor = new(state.AdiState)
+
+	default:
+		return nil, nil, nil, fmt.Errorf("chain type %d cannot sponsor ADIs", st.ChainHeader.Type)
+	}
+
+	err = st.ChainState.As(sponsor)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to decode sponsor: %v", err)
+	}
+
+	return body, identityUrl, sponsor, nil
+}
+
+func (IdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+	_, _, _, err := checkIdentityCreate(st, tx)
+	return err
 }
 
 func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	if st == nil {
-		return nil, fmt.Errorf("current state not defined")
-	}
-	if st.AdiChain == nil {
-		return nil, fmt.Errorf("missing sponsor identity")
-	}
-	if tx.Signature == nil {
-		return nil, fmt.Errorf("no signatures available")
+	body, identityUrl, sponsor, err := checkIdentityCreate(st, tx)
+	if err != nil {
+		return nil, err
 	}
 
-	switch st.AdiHeader.Type {
-	case types.ChainTypeAnonTokenAccount:
-		account := new(state.TokenAccount)
-		err := st.AdiState.As(account)
-		if err != nil {
-			return nil, fmt.Errorf("error unmarshaling anon state account object, %v", err)
-		}
-
-	case types.ChainTypeAdi:
-		adiState := state.AdiState{}
-		err := adiState.UnmarshalBinary(st.AdiState.Entry)
-		if err != nil {
-			return nil, fmt.Errorf("unable to unmarshal adi state entry, %v", err)
-		}
-
+	if adi, ok := sponsor.(*state.AdiState); ok {
 		//this should be done at a higher level...
-		if !adiState.VerifyKey(tx.Signature[0].PublicKey) {
+		if !adi.VerifyKey(tx.Signature[0].PublicKey) {
 			return nil, fmt.Errorf("key is not supported by current ADI state")
 		}
 
-		if !adiState.VerifyAndUpdateNonce(tx.SigInfo.Nonce) {
-			return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adiState.Nonce, tx.SigInfo.Nonce)
+		if !adi.VerifyAndUpdateNonce(tx.SigInfo.Nonce) {
+			return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adi.Nonce, tx.SigInfo.Nonce)
 		}
-
-	default:
-		return nil, fmt.Errorf("chain type %d cannot sponsor ADIs", st.AdiHeader.Type)
 	}
 
-	ic := api.ADI{}
-	err := ic.UnmarshalBinary(tx.Transaction)
-	if err != nil {
-		return nil, fmt.Errorf("transaction is not a valid identity create message")
-	}
+	sigSpecUrl := identityUrl.JoinPath("sigspec0")
+	ssgUrl := identityUrl.JoinPath("ssg0")
 
-	fromUrl := types.String(tx.SigInfo.URL)
-	isc := synthetic.NewAdiStateCreate(tx.TransactionHash(), &fromUrl, &ic.URL, &ic.PublicKeyHash)
-	iscData, err := isc.MarshalBinary()
+	ss := new(protocol.KeySpec)
+	ss.HashAlgorithm = protocol.SHA256
+	ss.KeyAlgorithm = protocol.ED25519
+	ss.PublicKey = body.PublicKeyHash[:]
+
+	mss := protocol.NewSigSpec()
+	mss.ChainUrl = types.String(sigSpecUrl.String()) // TODO Allow override
+	mss.Keys = append(mss.Keys, ss)
+
+	ssg := protocol.NewSigSpecGroup()
+	ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
+	ssg.SigSpecs = append(ssg.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
+
+	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, body.PublicKeyHash[:])
+	adi.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
+
+	scc := new(protocol.SyntheticCreateChain)
+	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	err = scc.Add(adi, ssg, mss)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal synthetic transaction")
+		return nil, fmt.Errorf("failed to marshal synthetic TX: %v", err)
 	}
 
 	syn := new(transactions.GenTransaction)
-	syn.Routing = types.GetAddressFromIdentity(isc.ToUrl.AsString())
-	syn.ChainID = types.GetChainIdFromChainPath(isc.ToUrl.AsString()).Bytes()
 	syn.SigInfo = &transactions.SignatureInfo{}
-	syn.SigInfo.URL = *isc.ToUrl.AsString()
-	syn.Transaction = iscData
+	syn.SigInfo.URL = identityUrl.String()
+	syn.Transaction, err = scc.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal synthetic TX: %v", err)
+	}
 
 	res := new(DeliverTxResult)
 	res.AddSyntheticTransaction(syn)

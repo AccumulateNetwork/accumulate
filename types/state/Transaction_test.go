@@ -1,13 +1,15 @@
-package state
+package state_test
 
 import (
 	"bytes"
 	"crypto/sha256"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"testing"
 
+	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	. "github.com/AccumulateNetwork/accumulated/types/state"
 )
 
 func TestTransactionState(t *testing.T) {
@@ -17,7 +19,7 @@ func TestTransactionState(t *testing.T) {
 
 	var nonce uint64 = 1
 
-	we := transactions.NewWalletEntry()
+	we := accapi.NewWalletEntry()
 	trans := new(transactions.GenTransaction)
 	trans.SigInfo = new(transactions.SignatureInfo)
 	trans.SigInfo.URL = we.Addr
@@ -42,7 +44,7 @@ func TestTransactionState(t *testing.T) {
 	trans.Signature = append(trans.Signature, eSig)
 
 	txPendingState := NewPendingTransaction(trans)
-	txPendingState.Chain.SetHeader(types.String("RedWagon/myAccount"), types.ChainTypePendingTransaction)
+	txPendingState.ChainHeader.SetHeader(types.String("RedWagon/myAccount"), types.ChainTypePendingTransaction)
 	data, err := txPendingState.MarshalBinary()
 	if err != nil {
 		t.Fatalf("error marshaling pending tx state %v", err)

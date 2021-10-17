@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -76,6 +78,36 @@ func unmarshalTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error
 	})
 }
 
+func unmarshalAnonTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, "anonTokenAccount", func(b []byte) (interface{}, error) {
+		sAccount := new(protocol.AnonTokenAccount)
+		err := sAccount.UnmarshalBinary(b)
+		rAccount := new(response.AnonTokenAccount)
+		rAccount.TokenAccount = api.NewTokenAccount(sAccount.ChainUrl, types.String(sAccount.TokenUrl))
+		rAccount.Balance = types.Amount{Int: sAccount.Balance}
+		rAccount.CreditBalance = types.Amount{Int: sAccount.CreditBalance}
+		rAccount.TxCount = sAccount.TxCount
+		rAccount.Nonce = sAccount.Nonce
+		return rAccount, err
+	})
+}
+
+func unmarshalSigSpec(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, "sigSpec", func(b []byte) (interface{}, error) {
+		r := new(protocol.SigSpec)
+		err := r.UnmarshalBinary(b)
+		return r, err
+	})
+}
+
+func unmarshalSigSpecGroup(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, "sigSpecGroup", func(b []byte) (interface{}, error) {
+		r := new(protocol.SigSpecGroup)
+		err := r.UnmarshalBinary(b)
+		return r, err
+	})
+}
+
 func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 	return unmarshalAs(rQuery, "txReference", func(b []byte) (interface{}, error) {
 		txRef := new(state.TxReference)
@@ -85,7 +117,7 @@ func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error)
 	})
 }
 
-func unmarshalTokenTx(url string, txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
+func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
 	tx := api.TokenTx{}
 	err := tx.UnmarshalBinary(txPayload)
 	if err != nil {
@@ -94,12 +126,6 @@ func unmarshalTokenTx(url string, txPayload []byte, txId types.Bytes, txSynthTxI
 	txResp := response.TokenTx{}
 	txResp.From = tx.From.String
 	txResp.TxId = txId
-
-	_, queryPath, err := types.ParseIdentityChainPath(&url)
-	_, txPath, err := types.ParseIdentityChainPath(tx.From.AsString())
-	if queryPath != txPath {
-		return nil, fmt.Errorf("url doesn't match transaction query, expecting %s but received %s", txPath, queryPath)
-	}
 
 	if len(txSynthTxIds)/32 != len(tx.To) {
 		return nil, fmt.Errorf("number of synthetic tx, does not match number of outputs")
@@ -129,7 +155,7 @@ func unmarshalTokenTx(url string, txPayload []byte, txId types.Bytes, txSynthTxI
 }
 
 //unmarshalSynthTokenDeposit will unpack the synthetic token deposit and pack it into the response
-func unmarshalSynthTokenDeposit(url string, txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
+func unmarshalSynthTokenDeposit(txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
 	_ = txId
 	tx := synthetic.TokenTransactionDeposit{}
 	err := tx.UnmarshalBinary(txPayload)
@@ -139,18 +165,6 @@ func unmarshalSynthTokenDeposit(url string, txPayload []byte, txId types.Bytes, 
 
 	if len(txSynthTxIds) != 0 {
 		return nil, fmt.Errorf("there should be no synthetic transaction associated with this transaction")
-	}
-
-	_, queryPath, err := types.ParseIdentityChainPath(&url)
-	if err != nil {
-		return nil, fmt.Errorf("error parsing query url path, %v", err)
-	}
-	_, txPath, err := types.ParseIdentityChainPath(tx.ToUrl.AsString())
-	if err != nil {
-		return nil, fmt.Errorf("error parsing url path associated with transaction, %v", err)
-	}
-	if queryPath != txPath {
-		return nil, fmt.Errorf("url doesn't match transaction query, expecting %s but received %s", txPath, queryPath)
 	}
 
 	data, err := json.Marshal(&tx)
@@ -165,14 +179,14 @@ func unmarshalSynthTokenDeposit(url string, txPayload []byte, txId types.Bytes, 
 }
 
 //unmarshalTransaction will unpack the transaction stored on-chain and marshal it into a response
-func unmarshalTransaction(url string, txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
+func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
 
 	txType, _ := common.BytesUint64(txPayload)
 	switch types.TxType(txType) {
 	case types.TxTypeTokenTx:
-		resp, err = unmarshalTokenTx(url, txPayload, txId, txSynthTxIds)
+		resp, err = unmarshalTokenTx(txPayload, txId, txSynthTxIds)
 	case types.TxTypeSyntheticTokenDeposit:
-		resp, err = unmarshalSynthTokenDeposit(url, txPayload, txId, txSynthTxIds)
+		resp, err = unmarshalSynthTokenDeposit(txPayload, txId, txSynthTxIds)
 	default:
 		err = fmt.Errorf("unable to extract transaction info for type %s : %x", types.TxType(txType).Name(), txPayload)
 	}
@@ -180,11 +194,17 @@ func unmarshalTransaction(url string, txPayload []byte, txId []byte, txSynthTxId
 	return resp, err
 }
 
-func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	sChain := new(state.Chain)
+func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*api.APIDataResponse, error) {
+	sChain := new(state.ChainHeader)
 	err := sChain.UnmarshalBinary(rQuery.Value)
 	if err != nil {
 		return nil, fmt.Errorf("invalid state object: %v", err)
+	}
+
+	if len(expect) > 0 {
+		if err := isExpected(expect, sChain.Type); err != nil {
+			return nil, err
+		}
 	}
 
 	switch sChain.Type {
@@ -194,14 +214,17 @@ func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataRespon
 	case types.ChainTypeToken:
 		return unmarshalToken(rQuery)
 
-	case types.ChainTypeTokenAccount, types.ChainTypeSignatureGroup:
-		// TODO Is it really OK to unmarshal a sig group as an account? That's
-		// what the orginal `ChainStates` did...
+	case types.ChainTypeTokenAccount:
 		return unmarshalTokenAccount(rQuery)
 
 	case types.ChainTypeAnonTokenAccount:
-		adi, _, _ := types.ParseIdentityChainPath(sChain.ChainUrl.AsString())
-		return q.GetTokenAccount(&adi)
+		return unmarshalAnonTokenAccount(rQuery)
+
+	case types.ChainTypeSigSpec:
+		return unmarshalSigSpec(rQuery)
+
+	case types.ChainTypeSigSpecGroup:
+		return unmarshalSigSpecGroup(rQuery)
 	}
 
 	rAPI := new(api.APIDataResponse)
@@ -209,4 +232,22 @@ func (q *Query) unmarshalChainState(rQuery tm.ResponseQuery) (*api.APIDataRespon
 	msg := []byte(fmt.Sprintf("{\"entry\":\"%x\"}", rQuery.Value))
 	rAPI.Data = (*json.RawMessage)(&msg)
 	return rAPI, nil
+}
+
+func isExpected(expect []types.ChainType, typ types.ChainType) error {
+	for _, e := range expect {
+		if e == typ {
+			return nil
+		}
+	}
+
+	if len(expect) == 1 {
+		return fmt.Errorf("want %v, got %v", expect[0], typ)
+	}
+
+	s := make([]string, len(expect))
+	for i, e := range expect {
+		s[i] = e.String()
+	}
+	return fmt.Errorf("want one of %s; got %v", strings.Join(s, ", "), typ)
 }

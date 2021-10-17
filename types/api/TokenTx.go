@@ -20,8 +20,7 @@ type TokenTx struct {
 }
 
 type TokenTxRequest struct {
-	Hash types.Bytes32  `json:"hash" form:"hash" query:"hash" validate:"required"`
-	From types.UrlChain `json:"from" form:"from" query:"from" validate:"required"`
+	Hash types.Bytes32 `json:"hash" form:"hash" query:"hash" validate:"required"`
 }
 
 //TokenTxOutput is the structure for the output.  Only handles 64 bit amounts at this time.

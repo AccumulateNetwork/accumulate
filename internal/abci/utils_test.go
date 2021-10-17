@@ -13,6 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -86,13 +87,25 @@ func (n *fakeNode) Query(q *api.Query) *api.APIDataResponse {
 	require.Zero(n.t, resp.Code, "Query failed: %s", resp.Info)
 
 	var msg json.RawMessage = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", resp.Value))
-	chain := new(state.Chain)
+	chain := new(state.ChainHeader)
 	require.NoError(n.t, chain.UnmarshalBinary(resp.Value))
 	return &api.APIDataResponse{Type: types.String(chain.Type.Name()), Data: &msg}
 }
 
-func (n *fakeNode) GetChainState(url string, txid []byte) *api.APIDataResponse {
-	r, err := n.query.GetChainState(&url, txid)
+func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
+	r, err := n.query.GetChainStateByUrl(url)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainStateByTxId(txid []byte) *api.APIDataResponse {
+	r, err := n.query.GetChainStateByTxId(txid)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
+	r, err := n.query.GetChainStateByChainId(txid)
 	require.NoError(n.t, err)
 	return r
 }
@@ -115,7 +128,7 @@ func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transacti
 }
 
 func (n *fakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
-	r, err := n.query.Query(url, nil)
+	r, err := n.query.QueryByUrl(url)
 	require.NoError(n.t, err)
 
 	if r.Response.Code != 0 {
@@ -131,8 +144,26 @@ func (n *fakeNode) GetTokenAccount(url string) *state.TokenAccount {
 	return acct
 }
 
+func (n *fakeNode) GetAnonTokenAccount(url string) *protocol.AnonTokenAccount {
+	acct := new(protocol.AnonTokenAccount)
+	n.GetChainAs(url, acct)
+	return acct
+}
+
 func (n *fakeNode) GetADI(url string) *state.AdiState {
 	adi := new(state.AdiState)
 	n.GetChainAs(url, adi)
 	return adi
+}
+
+func (n *fakeNode) GetSigSpecGroup(url string) *protocol.SigSpecGroup {
+	ssg := new(protocol.SigSpecGroup)
+	n.GetChainAs(url, ssg)
+	return ssg
+}
+
+func (n *fakeNode) GetSigSpec(url string) *protocol.SigSpec {
+	mss := new(protocol.SigSpec)
+	n.GetChainAs(url, mss)
+	return mss
 }

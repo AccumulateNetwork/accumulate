@@ -8,6 +8,7 @@ import (
 
 	. "github.com/AccumulateNetwork/accumulated/internal/chain"
 	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/stretchr/testify/require"
@@ -15,7 +16,7 @@ import (
 
 func TestSynthTokenDeposit_Anon(t *testing.T) {
 	appId := sha256.Sum256([]byte("anon"))
-	tokenUrl := types.String("dc/ACME")
+	tokenUrl := protocol.AcmeUrl().String()
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
 
@@ -30,19 +31,19 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	se.ChainId = &chainId
 	se.DB = db
 
-	_, err = SynthTokenDeposit{}.DeliverTx(se, gtx)
+	_, err = SyntheticTokenDeposit{}.DeliverTx(se, gtx)
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account
 	anonChain, err := db.GetCurrentEntry(chainId[:])
 	require.NoError(t, err)
 
-	tas := state.TokenAccount{}
+	tas := new(protocol.AnonTokenAccount)
 	err = tas.UnmarshalBinary(anonChain.Entry)
 	require.NoError(t, err)
 	require.Equal(t, types.String(gtx.SigInfo.URL), tas.ChainUrl, "invalid chain header")
-	require.Equalf(t, types.ChainTypeAnonTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.Chain.Type.Name())
-	require.Equal(t, tokenUrl, tas.TokenUrl.String, "token url of state doesn't match expected")
+	require.Equalf(t, types.ChainTypeAnonTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.ChainHeader.Type.Name())
+	require.Equal(t, tokenUrl, tas.TokenUrl, "token url of state doesn't match expected")
 	require.Equal(t, uint64(1), tas.TxCount)
 
 	//now query the tx reference
