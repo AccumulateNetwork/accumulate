@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
 type TokenAccount struct {
-	Chain
+	ChainHeader
 	TokenUrl types.UrlChain `json:"tokenUrl"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
 	Balance  big.Int        `json:"balance"`  //store the balance as a big int.
 	TxCount  uint64         `json:"txCount"`  //the number of transactions associated with this account (this is used to derive the txurl)
@@ -35,16 +36,6 @@ func (app *TokenAccount) Set(accountState *TokenAccount) {
 	app.ChainUrl = accountState.ChainUrl
 	app.TokenUrl = accountState.TokenUrl
 	app.Type = accountState.Type
-}
-
-// GetType is an implemented interface that returns the chain type of the object
-func (app *TokenAccount) GetType() uint64 {
-	return app.Type.AsUint64()
-}
-
-// GetChainUrl returns the chain path for the object in the chain.
-func (app *TokenAccount) GetChainUrl() string {
-	return app.Chain.GetChainUrl()
 }
 
 // CanTransact returns true/false if there is a sufficient balance
@@ -92,7 +83,7 @@ func (app *TokenAccount) AddBalance(amt *big.Int) error {
 func (app *TokenAccount) MarshalBinary() (ret []byte, err error) {
 	var buffer bytes.Buffer
 
-	header, err := app.Chain.MarshalBinary()
+	header, err := app.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -118,9 +109,13 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 
-	err = app.Chain.UnmarshalBinary(data)
+	err = app.ChainHeader.UnmarshalBinary(data)
 	if err != nil {
 		return err
+	}
+
+	if app.Type != types.ChainTypeTokenAccount {
+		return fmt.Errorf("invalid chain type: want %v, got %v", types.ChainTypeTokenAccount, app.Type)
 	}
 
 	i := app.GetHeaderSize()
@@ -138,4 +133,36 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) (err error) {
 	app.TxCount, _ = common.BytesUint64(data)
 
 	return nil
+}
+
+func (acct *TokenAccount) CreditTokens(amount *big.Int) bool {
+	if amount == nil || amount.Sign() < 0 {
+		return false
+	}
+
+	acct.Balance.Add(&acct.Balance, amount)
+	return true
+}
+
+func (acct *TokenAccount) CanDebitTokens(amount *big.Int) bool {
+	return amount != nil && acct.Balance.Cmp(amount) >= 0
+}
+
+func (acct *TokenAccount) DebitTokens(amount *big.Int) bool {
+	if !acct.CanDebitTokens(amount) {
+		return false
+	}
+
+	acct.Balance.Sub(&acct.Balance, amount)
+	return true
+}
+
+func (acct *TokenAccount) NextTx() uint64 {
+	c := acct.TxCount
+	acct.TxCount++
+	return c
+}
+
+func (acct *TokenAccount) ParseTokenUrl() (*url.URL, error) {
+	return url.Parse(*acct.TokenUrl.AsString())
 }

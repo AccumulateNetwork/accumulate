@@ -8,14 +8,20 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"testing"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+
+	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 
 	. "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -27,6 +33,10 @@ var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 func TestLoadOnRemote(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is not appropriate for CI")
+	}
+
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
 	}
 
 	txBouncer, err := relay.NewWith(*testnet)
@@ -46,7 +56,7 @@ func TestLoadOnRemote(t *testing.T) {
 
 	queryTokenUrl := addrList[1]
 
-	resp, err := query.GetChainState(&queryTokenUrl, nil)
+	resp, err := query.GetChainStateByUrl(queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +79,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	println(string(theJsonData))
 
-	resp, err = query.GetChainState(&queryTokenUrl, nil)
+	resp, err = query.GetChainStateByUrl(queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +90,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 	fmt.Println(string(output))
 	for _, v := range addrList[1:] {
-		resp, err := query.GetChainState(&v, nil)
+		resp, err := query.GetChainStateByUrl(v)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -95,6 +105,10 @@ func TestLoadOnRemote(t *testing.T) {
 func TestJsonRpcAnonToken(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is flaky in CI")
+	}
+
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -119,7 +133,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	queryTokenUrl := addrList[1]
-	resp, err := query.GetTokenAccount(&queryTokenUrl)
+	resp, err := query.GetTokenAccount(queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +145,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 	fmt.Println(string(output))
 
-	resp2, err := query.GetChainState(&queryTokenUrl, nil)
+	resp2, err := query.GetChainStateByUrl(queryTokenUrl)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,7 +170,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	fmt.Println(theJsonData) //ret.Response.Value)
 	for _, v := range addrList[1:] {
-		resp, err := query.GetChainState(&v, nil)
+		resp, err := query.GetChainStateByUrl(v)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -202,6 +216,131 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	//wait 30 seconds before shutting down is useful when debugging the tendermint core callbacks
 	time.Sleep(1000 * time.Millisecond)
 
+}
+
+func TestFaucet(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	}
+
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	node, pv := startBVC(t, dir)
+	_ = pv
+	defer func() {
+		node.Stop()
+		<-node.Quit()
+	}()
+
+	rpcAddr := node.Config.RPC.ListenAddress
+	rpcClient, err := http.New(rpcAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.NoError(t, err)
+	txBouncer := relay.New(rpcClient)
+	query := NewQuery(txBouncer)
+
+	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	_, kpSponsor, _ := ed25519.GenerateKey(nil)
+
+	req := &api.APIRequestURL{}
+	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+
+	params, err := json.Marshal(&req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create our two transactions
+	k1 := []byte("firstName")
+	v1 := []byte("satoshi")
+	tx1 := append(k1, append([]byte("="), v1...)...)
+
+	k2 := []byte("lastName")
+	v2 := []byte("nakamoto")
+	tx2 := append(k2, append([]byte("="), v2...)...)
+
+	gtx := transactions.GenTransaction{}
+	gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{})
+	gtx.SigInfo = &transactions.SignatureInfo{}
+	gtx.SigInfo.URL = "fakeUrl"
+	gtx.Transaction = tx1
+	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
+	//changing the nonce will invalidate the signature.
+	gtx.SigInfo.Nonce = 1234
+
+	//intentionally send in a bogus transaction
+	ti1, _ := query.BroadcastTx(&gtx, nil)
+	gtx.Transaction = tx2
+	ti2, _ := query.BroadcastTx(&gtx, nil)
+
+	stat := query.BatchSend()
+	bs := <-stat
+	res1, err := bs.ResolveTransactionResponse(ti1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res1.Code == 0 {
+		t.Fatalf("expecting error code that is non zero")
+	}
+
+	errorData, err := json.Marshal(res1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(errorData))
+
+	res2, err := bs.ResolveTransactionResponse(ti2)
+
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res2.Code == 0 {
+		t.Fatalf("expecting error code that is non zero")
+	}
+
+	jsonapi := NewTest(t, query)
+
+	res := jsonapi.Faucet(context.Background(), params)
+	data, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(data))
+
+	//allow the transaction to settle.
+	time.Sleep(3 * time.Second)
+
+	//readback the result.
+	resp, err := query.GetChainStateByUrl(string(req.URL))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ta := response.TokenAccount{}
+	if resp.Data == nil {
+		t.Fatalf("token account not found in query after faucet transaction")
+	}
+
+	err = json.Unmarshal(*resp.Data, &ta)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if ta.Balance.String() != "1000000000" {
+		t.Fatalf("incorrect balance after faucet transaction")
+	}
+
+	//just dump out the response as the api user would see it
+	output, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("%s\n", string(output))
 }
 
 func TestJsonRpcAdi(t *testing.T) {

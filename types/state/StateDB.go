@@ -274,7 +274,7 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // the transaction is against touches another chain. One example would be an account type chain
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
-func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) error {
+func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
 	if debugStateDBWrites {
 		fmt.Printf("AddStateEntry chainId=%X txHash=%X entry=%X\n", *chainId, *txHash, object.Entry)
 	}
@@ -293,8 +293,6 @@ func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32,
 
 	updates.txId = append(updates.txId, txHash)
 	updates.stateData = object
-
-	return nil
 }
 
 func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {

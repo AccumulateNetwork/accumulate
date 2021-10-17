@@ -18,7 +18,8 @@
 # Special build files
 engine/overrideversion.go
 # Executable
-/accumulated
+cmd/accumulated/accumulated
+cmd/cli/cli
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
 *.a
