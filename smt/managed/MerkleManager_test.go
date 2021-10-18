@@ -6,7 +6,6 @@ import (
 	"math"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 )
 
@@ -74,7 +73,7 @@ func TestIndexing(t *testing.T) {
 	for i := int64(0); i < testlen; i++ {
 		if (i+1)%blocklen == 0 {
 			bi := new(BlockIndex)
-			data := MM1.Manager.Get("BlockIndex", "", common.Int64Bytes(i/blocklen))
+			data := MM1.Manager.Key("BlockIndex", "", i/blocklen).Get()
 			bi.UnMarshal(data)
 			if bi.MainIndex != i {
 				t.Fatalf("the MainIndex doesn't match v %d i %d",
