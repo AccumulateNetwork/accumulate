@@ -254,6 +254,7 @@ func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedSt
 			if debugTxSend {
 				fmt.Printf("Send TX %X\n", sha256.Sum256(tx))
 			}
+			bs.Status[i].NetworkId = txb.networkId
 			batches[i].BroadcastTxSync(context.Background(), tx)
 		}
 	}
@@ -273,6 +274,7 @@ func dispatchSingles(client []Client, sendSingles []txBatch, status chan Batched
 	bs.Status = make([]DispatchStatus, len(sendSingles))
 
 	for i, single := range sendSingles {
+		bs.Status[i].NetworkId = single.networkId
 		bs.Status[i].Returns = make([]interface{}, len(single.tx))
 		for j := range single.tx {
 			if debugTxSend {
