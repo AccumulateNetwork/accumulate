@@ -22,6 +22,7 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address) *fakeNode {
@@ -52,7 +53,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address) *fakeNode {
 	mgr, err := chain.NewBlockValidator(n.query, db, bvcKey)
 	require.NoError(t, err)
 
-	n.app, err = abci.NewAccumulator(db, addr, mgr)
+	n.app, err = abci.NewAccumulator(db, addr, mgr, log.MustNewDefaultLogger("plain", "error", false))
 	require.NoError(t, err)
 	appChan <- n.app
 

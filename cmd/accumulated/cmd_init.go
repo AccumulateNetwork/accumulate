@@ -61,21 +61,16 @@ func init() {
 func initNode(cmd *cobra.Command, args []string) {
 	network := networks.Networks[flagInit.Net]
 	if network == nil {
-		fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
-		os.Exit(1)
+		fatalf("unknown network %q", flagInit.Net)
 	}
 
 	if !stringSliceContains(flagInit.Relay, flagInit.Net) {
 		fmt.Fprintf(os.Stderr, "Error: the node's own network, %q, must be included in --relay-to\n", flagInit.Net)
-		cmd.Usage()
-		os.Exit(1)
+		printUsageAndExit1(cmd, args)
 	}
 
 	_, err := relay.NewWith(flagInit.Relay...)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: --relay-to: %v\n", err)
-		os.Exit(1)
-	}
+	checkf(err, "--relay-to", err)
 
 	fmt.Printf("Building config for %s\n", network.Name)
 
@@ -96,15 +91,14 @@ func initNode(cmd *cobra.Command, args []string) {
 		case cfg.Follower:
 			config[i].Config = *tmcfg.DefaultValidatorConfig()
 		default:
-			fmt.Fprintf(os.Stderr, "Error: hard-coded network has invalid node type: %q\n", net.Type)
-			os.Exit(1)
+			fatalf("hard-coded network has invalid node type: %q", net.Type)
 		}
 		if flagInit.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
 		}
 	}
 
-	err = node.Init(node.InitOptions{
+	check(node.Init(node.InitOptions{
 		WorkDir:   flagMain.WorkDir,
 		ShardName: "accumulate.",
 		ChainID:   network.Name,
@@ -112,26 +106,18 @@ func initNode(cmd *cobra.Command, args []string) {
 		Config:    config,
 		RemoteIP:  remoteIP,
 		ListenIP:  listenIP,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	}))
 }
 
 func initFollower(cmd *cobra.Command, args []string) {
 	u, err := url.Parse(flagInitFollower.ListenIP)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: invalid --listen %q: %v\n", flagInitFollower.ListenIP, err)
-		os.Exit(1)
-	}
+	checkf(err, "invalid --listen %q", flagInitFollower.ListenIP)
 
 	port := 26656
 	if u.Port() != "" {
 		p, err := strconv.ParseInt(u.Port(), 10, 16)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: invalid port number %q\n", u.Port())
-			os.Exit(1)
+			fatalf("invalid port number %q", u.Port())
 		}
 		port = int(p)
 		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
@@ -139,26 +125,19 @@ func initFollower(cmd *cobra.Command, args []string) {
 
 	network := networks.Networks[flagInit.Net]
 	if network == nil {
-		fmt.Fprintf(os.Stderr, "Error: unknown network %q\n", flagInit.Net)
-		os.Exit(1)
+		fatalf("unknown network %q", flagInit.Net)
 	}
 
 	var genDoc *types.GenesisDoc
 	if cmd.Flag("genesis-doc").Changed {
 		genDoc, err = types.GenesisDocFromFile(flagInitFollower.GenesisDoc)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to load genesis doc %q: %v\n", flagInitFollower.GenesisDoc, err)
-			os.Exit(1)
-		}
+		checkf(err, "failed to load genesis doc %q", flagInitFollower.GenesisDoc)
 	}
 
 	peers := make([]string, len(network.Nodes))
 	for i, n := range network.Nodes {
 		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", n.IP, network.Port+node.TmRpcPortOffset))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to connect to %s: %v\n", n.IP, err)
-			os.Exit(1)
-		}
+		checkf(err, "failed to connect to %s", n.IP)
 
 		if genDoc == nil {
 			msg := "WARNING!!! You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!\n"
@@ -168,18 +147,12 @@ func initFollower(cmd *cobra.Command, args []string) {
 				fmt.Fprintf(os.Stderr, msg, n.IP)
 			}
 			rgen, err := client.Genesis(context.Background())
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: failed to get genesis of %s: %v\n", n.IP, err)
-				os.Exit(1)
-			}
+			checkf(err, "failed to get genesis of %s", n.IP)
 			genDoc = rgen.Genesis
 		}
 
 		status, err := client.Status(context.Background())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: failed to get status of %s: %v\n", n, err)
-			os.Exit(1)
-		}
+		checkf(err, "failed to get status of %s", n)
 
 		peers[i] = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, n.IP, network.Port)
 	}
@@ -187,7 +160,7 @@ func initFollower(cmd *cobra.Command, args []string) {
 	config := config.Default()
 	config.P2P.PersistentPeers = strings.Join(peers, ",")
 
-	err = node.Init(node.InitOptions{
+	check(node.Init(node.InitOptions{
 		WorkDir:    flagMain.WorkDir,
 		ShardName:  "accumulate.",
 		ChainID:    network.Name,
@@ -196,11 +169,7 @@ func initFollower(cmd *cobra.Command, args []string) {
 		Config:     []*cfg.Config{config},
 		RemoteIP:   []string{""},
 		ListenIP:   []string{u.String()},
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	}))
 }
 
 func stringSliceContains(s []string, t string) bool {

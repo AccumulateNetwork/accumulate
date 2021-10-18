@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -27,10 +26,7 @@ func init() {
 
 func setSentryDsn(cmd *cobra.Command, args []string) {
 	entries, err := os.ReadDir(flagMain.WorkDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: reading %q: %v\n", flagMain.WorkDir, err)
-		os.Exit(1)
-	}
+	checkf(err, "reading %q", flagMain.WorkDir)
 
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -38,16 +34,10 @@ func setSentryDsn(cmd *cobra.Command, args []string) {
 		}
 
 		cfg, err := config.Load(filepath.Join(flagMain.WorkDir, e.Name()))
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: loading config for %q: %v\n", e.Name(), err)
-			os.Exit(1)
-		}
+		checkf(err, "loading config for %q", e.Name())
 
 		cfg.Accumulate.SentryDSN = args[0]
 		err = config.Store(cfg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: saving config for %q: %v\n", e.Name(), err)
-			os.Exit(1)
-		}
+		checkf(err, "saving config for %q", e.Name())
 	}
 }

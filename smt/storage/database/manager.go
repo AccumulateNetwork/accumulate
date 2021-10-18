@@ -173,10 +173,8 @@ func (m *Manager) InitWithDB(db storage.KeyValueDB) {
 
 // Close
 // Do any cleanup required to close the manager
-func (m *Manager) Close() {
-	if err := m.DB.Close(); err != nil {
-		panic(err)
-	}
+func (m *Manager) Close() error {
+	return m.DB.Close()
 }
 
 // AddBucket

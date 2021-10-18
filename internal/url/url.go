@@ -129,6 +129,13 @@ func ensurePath(s string) string {
 	return "/" + s
 }
 
+// Identity returns a copy of the URL with an empty path.
+func (u *URL) Identity() *URL {
+	v := *u
+	v.Path = ""
+	return &v
+}
+
 // IdentityChain constructs a chain identifier from the lower case hostname. The
 // port is not included.
 //
