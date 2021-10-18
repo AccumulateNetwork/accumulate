@@ -127,7 +127,7 @@ func (q *Query) query(i uint64, payload bytes.HexBytes, r chan queryData) {
 }
 
 // BatchSend calls the underlying client's BatchSend method, if it has one
-func (q *Query) BatchSend() chan relay.BatchedStatus {
+func (q *Query) BatchSend() <-chan relay.BatchedStatus {
 	return q.txRelay.BatchSend()
 }
 

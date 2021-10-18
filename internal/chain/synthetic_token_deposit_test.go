@@ -20,7 +20,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
 
-	_, _, gtx, err := testing2.BuildTestSynthDepositGenTx(&privKey)
+	_, _, gtx, err := testing2.BuildTestSynthDepositGenTx(privKey)
 	require.NoError(t, err)
 
 	db := new(state.StateDB)

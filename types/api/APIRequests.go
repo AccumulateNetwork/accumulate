@@ -53,14 +53,13 @@ func NewAPIRequest(sig *types.Bytes64, signer *Signer, nonce uint64, data []byte
 	gtx.Transaction = data
 
 	gtx.SigInfo = new(transactions.SignatureInfo)
-	gtx.SigInfo.Nonce = nonce
+	gtx.SigInfo.Unused2 = nonce
 	gtx.SigInfo.URL = *signer.URL.AsString()
-	gtx.SigInfo.SigSpecHt = 0
-	gtx.SigInfo.Priority = 0
+	gtx.SigInfo.MSHeight = 0
 	gtx.SigInfo.PriorityIdx = 0
 
 	ed := new(transactions.ED25519Sig)
-	ed.Nonce = gtx.SigInfo.Nonce
+	ed.Nonce = gtx.SigInfo.Unused2
 	ed.PublicKey = signer.PublicKey[:]
 	ed.Signature = sig.Bytes()
 

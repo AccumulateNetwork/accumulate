@@ -150,14 +150,13 @@ func CreateTX(sender string, receiver string, amount string) {
 		gtx.SigInfo.URL = sender
 		//Provide a nonce, typically this will be queried from identity sig spec and incremented.
 		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
-		gtx.SigInfo.Nonce = uint64(params.Tx.Timestamp)
+		gtx.SigInfo.Unused2 = uint64(params.Tx.Timestamp)
 		//The following will be defined in the SigSpec Group for which key to use
-		gtx.SigInfo.SigSpecHt = 0
-		gtx.SigInfo.Priority = 0
+		gtx.SigInfo.MSHeight = 0
 		gtx.SigInfo.PriorityIdx = 0
 
 		ed := new(transactions.ED25519Sig)
-		err = ed.Sign(gtx.SigInfo.Nonce, pk, gtx.TransactionHash())
+		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
 		if err != nil {
 			return api.NewSubmissionError(err)
 		}

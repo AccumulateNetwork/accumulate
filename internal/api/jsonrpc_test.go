@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/stretchr/testify/require"
 
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 
@@ -22,8 +23,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
-	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/rpc/client/http"
 )
 
 var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
@@ -44,10 +43,14 @@ func TestLoadOnRemote(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	err = txBouncer.Start()
+	require.NoError(t, err)
+	defer func() { require.NoError(t, txBouncer.Stop()) }()
+
 	query := NewQuery(txBouncer)
 	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
 
-	addrList, err := acctesting.RunLoadTest(query, &privateKeySponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, privateKeySponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,18 +116,12 @@ func TestJsonRpcAnonToken(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	node, pv := startBVC(t, dir)
-	defer node.Stop()
-
-	rpcClient, err := http.New(node.Config.RPC.ListenAddress)
-	require.NoError(t, err)
-	txBouncer := relay.New(rpcClient)
-	query := NewQuery(txBouncer)
+	_, pv, query := startBVC(t, dir)
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
 	kpSponsor := ed25519.NewKeyFromSeed(pv.Key.PrivKey.Bytes()[:32])
 
-	addrList, err := acctesting.RunLoadTest(query, &kpSponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, kpSponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,21 +226,7 @@ func TestFaucet(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	node, pv := startBVC(t, dir)
-	_ = pv
-	defer func() {
-		node.Stop()
-		<-node.Quit()
-	}()
-
-	rpcAddr := node.Config.RPC.ListenAddress
-	rpcClient, err := http.New(rpcAddr)
-	if err != nil {
-		t.Fatal(err)
-	}
-	require.NoError(t, err)
-	txBouncer := relay.New(rpcClient)
-	query := NewQuery(txBouncer)
+	_, _, query := startBVC(t, dir)
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
@@ -272,7 +255,7 @@ func TestFaucet(t *testing.T) {
 	gtx.Transaction = tx1
 	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
 	//changing the nonce will invalidate the signature.
-	gtx.SigInfo.Nonce = 1234
+	gtx.SigInfo.Unused2 = 1234
 
 	//intentionally send in a bogus transaction
 	ti1, _ := query.BroadcastTx(&gtx, nil)
@@ -354,15 +337,10 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	node, pv := startBVC(t, dir)
-	defer node.Stop()
+	_, pv, query := startBVC(t, dir)
 
 	//kpSponsor := types.CreateKeyPair()
 
-	rpcClient, err := http.New(node.Config.RPC.ListenAddress)
-	require.NoError(t, err)
-	txBouncer := relay.New(rpcClient)
-	query := NewQuery(txBouncer)
 	jsonapi := NewTest(t, query)
 
 	//StartAPI(randomRouterPorts(), client)

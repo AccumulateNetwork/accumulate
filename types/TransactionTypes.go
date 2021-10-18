@@ -35,6 +35,8 @@ const (
 	TxTypeStateStore //
 	TxTypeDataStore  //Data Store can only be sent and thus authorized by an authority node
 	TxTypeAdminVote
+
+	txTypeSyntheticBase = TxTypeSyntheticIdentityCreate
 )
 
 // Enum value map for TxType.
@@ -147,3 +149,5 @@ func (t TxType) AsUint64() uint64 {
 }
 
 func (t TxType) String() string { return t.Name() }
+
+func (t TxType) IsSynthetic() bool { return t >= txTypeSyntheticBase }

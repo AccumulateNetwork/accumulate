@@ -2,6 +2,7 @@ package testing
 
 import (
 	"crypto/sha256"
+	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -41,9 +42,9 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	tx.Routing = types.GetAddressFromIdentity(recipientAdi.AsString())
 
 	ed := new(transactions.ED25519Sig)
-	tx.SigInfo.Nonce = 1
+	tx.SigInfo.Unused2 = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.SigInfo.Nonce, recipient, tx.TransactionHash())
+	err = ed.Sign(tx.SigInfo.Unused2, recipient, tx.TransactionHash())
 	if err != nil {
 		return nil, err
 	}
@@ -84,6 +85,7 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) erro
 
 	sigSpecUrl := identityUrl.JoinPath("sigspec0")
 	ssgUrl := identityUrl.JoinPath("ssg0")
+	fmt.Printf("SSG = %X\n", ssgUrl.ResourceChain())
 
 	ss := new(protocol.KeySpec)
 	ss.HashAlgorithm = protocol.SHA256
@@ -110,6 +112,7 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 		return err
 	}
 	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
+	sigSpecId := u.Identity().JoinPath("ssg0").ResourceChain() // assume the sig spec is adi/ssg0
 
 	var chain state.Chain
 	if anon {
@@ -121,6 +124,7 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 		chain = account
 	} else {
 		account := state.NewTokenAccount(u.String(), tokenUrl)
+		account.SigSpecId = types.Bytes(sigSpecId).AsBytes32()
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		account.TxCount++
 		chain = account
