@@ -22,7 +22,6 @@ const (
 	TxTypeCreateSigSpec
 	TxTypeCreateSigSpecGroup
 	TxTypeAddCredits
-	TxTypeAssignSigSpecGroup
 
 	//The Following are only valid for DC & BVC use: any other source of this message will be rejected
 	TxTypeSyntheticIdentityCreate = TxType(iota + 0x20)
@@ -60,7 +59,6 @@ func init() {
 		TxTypeCreateSigSpec,
 		TxTypeCreateSigSpecGroup,
 		TxTypeAddCredits,
-		TxTypeAssignSigSpecGroup,
 
 		TxTypeSyntheticIdentityCreate,
 		TxTypeSyntheticCreateChain,
@@ -111,8 +109,6 @@ func (t TxType) Name() string {
 		return "createSigSpecGroup"
 	case TxTypeAddCredits:
 		return "addCredits"
-	case TxTypeAssignSigSpecGroup:
-		return "assignSigSpecGroup"
 	case TxTypeSyntheticIdentityCreate:
 		return "syntheticIdentityCreate"
 	case TxTypeSyntheticCreateChain:

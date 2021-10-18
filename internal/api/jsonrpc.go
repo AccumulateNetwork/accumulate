@@ -57,7 +57,6 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"create-sig-spec":       api.createSigSpec,
 		"sig-spec-group":        api.getSigSpecGroup,
 		"create-sig-spec-group": api.createSigSpecGroup,
-		"assign-sig-spec-group": api.assignSigSpecGroup,
 
 		// token
 		"token":                api.getToken,
@@ -203,18 +202,6 @@ func (api *API) createSigSpecGroup(_ context.Context, params json.RawMessage) in
 
 	ret := api.sendTx(req, payload)
 	ret.Type = "sigSpecGroup"
-	return ret
-}
-
-func (api *API) assignSigSpecGroup(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.AssignSigSpecGroup{}
-	req, payload, err := api.prepareCreate(params, data)
-	if err != nil {
-		return NewValidatorError(err)
-	}
-
-	ret := api.sendTx(req, payload)
-	ret.Type = "assignSigSpecGroup"
 	return ret
 }
 
