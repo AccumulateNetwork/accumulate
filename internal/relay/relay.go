@@ -197,7 +197,7 @@ func (r *Relay) BatchTx(routing uint64, tx tmtypes.Tx) (ti TransactionInfo) {
 // BatchSend
 // This will dispatch all the transactions that have been put into batches. The calling function does not have to
 // wait for batch to be sent.  This is a fire and forget operation
-func (r *Relay) BatchSend() chan BatchedStatus {
+func (r *Relay) BatchSend() <-chan BatchedStatus {
 	var sendTxsAsBatch []txBatch
 	var sendTxsAsSingle []txBatch
 	//sort out the requests
@@ -224,6 +224,7 @@ func (r *Relay) BatchSend() chan BatchedStatus {
 // dispatch
 // This function is executed as a go routine to send out all the batches
 func dispatch(client []Client, sendAsBatch []txBatch, sendAsSingle []txBatch, stat chan BatchedStatus) {
+	defer close(stat)
 
 	batchedStatus := make(chan BatchedStatus)
 	singlesStatus := make(chan BatchedStatus)
@@ -241,6 +242,7 @@ func dispatch(client []Client, sendAsBatch []txBatch, sendAsSingle []txBatch, st
 }
 
 func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedStatus) {
+	defer close(status)
 
 	bs := BatchedStatus{}
 	bs.Status = make([]DispatchStatus, len(sendBatches))
@@ -265,6 +267,7 @@ func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedSt
 }
 
 func dispatchSingles(client []Client, sendSingles []txBatch, status chan BatchedStatus) {
+	defer close(status)
 
 	bs := BatchedStatus{}
 	bs.Status = make([]DispatchStatus, len(sendSingles))
