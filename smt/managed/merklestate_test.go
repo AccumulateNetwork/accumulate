@@ -8,7 +8,7 @@ import (
 )
 
 func TestCopy(t *testing.T) {
-	ms1 := *new(MerkleState)
+	ms1 := new(MerkleState)
 	ms1.InitSha256()
 	for i := 0; i < 15; i++ {
 		hash := Hash(sha256.Sum256([]byte(fmt.Sprintf("%x", i*i*i*i))))
@@ -39,19 +39,34 @@ func TestMarshal(t *testing.T) {
 	MS2 := new(MerkleState)
 	MS2.InitSha256()
 
-	data1 := MS1.Marshal()
+	data1, err := MS1.Marshal()
+	if err != nil {
+		t.Fatal("marshal should not fail")
+	}
 	MS2.UnMarshal(data1)
-	data2 := MS2.Marshal()
+	data2, err2 := MS2.Marshal()
+	if err2 != nil {
+		t.Fatal("marshal should not fail")
+	}
+
 	if !bytes.Equal(data1, data2) {
 		t.Error("Should be the same")
 	}
 
 	MS1.AddToMerkleTree(MS1.HashFunction([]byte{1, 2, 3, 4, 5}))
 
-	data1 = MS1.Marshal()
+	data1, err = MS1.Marshal()
+	if err != nil {
+		t.Fatal("marshal should not fail")
+	}
+
 	MS2.UnMarshal(data1)
-	data2 = MS2.Marshal()
-	if !MS1.Equal(*MS2) {
+	data2, err = MS2.Marshal()
+	if err != nil {
+		t.Fatal("marshal should not fail")
+	}
+
+	if !MS1.Equal(MS2) {
 		t.Error("Should be the same")
 	}
 	if !bytes.Equal(data1, data2) {
@@ -61,9 +76,15 @@ func TestMarshal(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		MS1.AddToMerkleTree(MS1.HashFunction([]byte(fmt.Sprintf("%8d", i))))
 
-		data1 = MS1.Marshal()
+		data1, err = MS1.Marshal()
+		if err != nil {
+			t.Fatal("marshal should not fail")
+		}
 		MS2.UnMarshal(data1)
-		data2 = MS2.Marshal()
+		data2, err = MS2.Marshal()
+		if err != nil {
+			t.Fatal("marshal should not fail")
+		}
 		if !bytes.Equal(data1, data2) {
 			t.Error("Should be the same")
 		}
