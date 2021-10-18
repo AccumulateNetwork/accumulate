@@ -290,28 +290,3 @@ func TestCreateSigSpecGroup(t *testing.T) {
 	ks := kg.SigSpecs[0]
 	require.Equal(t, keySetChainId, types.Bytes32(ks))
 }
-
-func TestAssignSigSpecGroup(t *testing.T) {
-	u, err := url.Parse("foo/keygroup1")
-	require.NoError(t, err)
-	keyGroupChainId := types.Bytes(u.ResourceChain()).AsBytes32()
-
-	n := createAppWithMemDB(t, crypto.Address{})
-	fooKey, testKey := generateKey(), generateKey()
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/keyset1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/keygroup1", "foo/keyset1"))
-	require.NoError(t, acctesting.CreateTokenAccount(n.db, "foo/tokens", protocol.AcmeUrl().String(), 1e2, false))
-
-	n.Batch(func(send func(*transactions.GenTransaction)) {
-		asg := new(protocol.AssignSigSpecGroup)
-		asg.Url = "foo/keygroup1"
-
-		tx, err := transactions.New("foo/tokens", edSigner(fooKey, 1), asg)
-		require.NoError(t, err)
-		send(tx)
-	})
-
-	acct := n.GetTokenAccount("foo/tokens")
-	require.Equal(t, keyGroupChainId, acct.SigSpecId)
-}
