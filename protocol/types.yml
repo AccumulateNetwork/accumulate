@@ -137,9 +137,3 @@ CreateSigSpecGroup:
     type: string
   - name: SigSpecs
     type: chainSet
-
-AssignSigSpecGroup:
-  kind: tx
-  fields:
-  - name: Url
-    type: string
