@@ -25,10 +25,6 @@ type AnonTokenAccount struct {
 	CreditBalance big.Int `json:"creditBalance" form:"creditBalance" query:"creditBalance" validate:"required"`
 }
 
-type AssignSigSpecGroup struct {
-	Url string `json:"url" form:"url" query:"url" validate:"required"`
-}
-
 type ChainParams struct {
 	Url  string `json:"url" form:"url" query:"url" validate:"required"`
 	Data []byte `json:"data" form:"data" query:"data" validate:"required"`
@@ -109,8 +105,6 @@ func NewSigSpecGroup() *SigSpecGroup {
 
 func (*AddCredits) GetType() types.TxType { return types.TxTypeAddCredits }
 
-func (*AssignSigSpecGroup) GetType() types.TxType { return types.TxTypeAssignSigSpecGroup }
-
 func (*CreateSigSpec) GetType() types.TxType { return types.TxTypeCreateSigSpec }
 
 func (*CreateSigSpecGroup) GetType() types.TxType { return types.TxTypeCreateSigSpecGroup }
@@ -148,16 +142,6 @@ func (v *AnonTokenAccount) BinarySize() int {
 	n += uvarintBinarySize(v.Nonce)
 
 	n += bigintBinarySize(&v.CreditBalance)
-
-	return n
-}
-
-func (v *AssignSigSpecGroup) BinarySize() int {
-	var n int
-
-	n += uvarintBinarySize(uint64(types.TxTypeAssignSigSpecGroup))
-
-	n += stringBinarySize(v.Url)
 
 	return n
 }
@@ -348,16 +332,6 @@ func (v *AnonTokenAccount) MarshalBinary() ([]byte, error) {
 	buffer.Write(uvarintMarshalBinary(v.Nonce))
 
 	buffer.Write(bigintMarshalBinary(&v.CreditBalance))
-
-	return buffer.Bytes(), nil
-}
-
-func (v *AssignSigSpecGroup) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
-
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeAssignSigSpecGroup)))
-
-	buffer.Write(stringMarshalBinary(v.Url))
 
 	return buffer.Bytes(), nil
 }
@@ -619,25 +593,6 @@ func (v *AnonTokenAccount) UnmarshalBinary(data []byte) error {
 		v.CreditBalance.Set(x)
 	}
 	data = data[bigintBinarySize(&v.CreditBalance):]
-
-	return nil
-}
-
-func (v *AssignSigSpecGroup) UnmarshalBinary(data []byte) error {
-	typ := types.TxTypeAssignSigSpecGroup
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding TX type: %w", err)
-	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
-	}
-	data = data[uvarintBinarySize(uint64(typ)):]
-
-	if x, err := stringUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Url: %w", err)
-	} else {
-		v.Url = x
-	}
-	data = data[stringBinarySize(v.Url):]
 
 	return nil
 }
