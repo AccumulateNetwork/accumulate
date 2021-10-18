@@ -91,7 +91,8 @@ func (m *Manager) SetAppID(appID []byte) {
 		m.AppID = nil //  to be used to write to the root level.  No need to
 		return        //  register it.
 	}
-	m.AppID = m.AppID[:0]                                 // clear the appID to get AppID data
+
+	m.AppID = nil                                         // clear the appID to get AppID data
 	appIDIdx := m.GetInt64("AppID", "AppID2Index", appID) // Sort index for existing AppID
 	if appIDIdx < 0 {                                     // A index < 0 => AppID does not exist
 		AppIDMutex.Lock()                          //       Lock AppID creation so creation is atomic
@@ -106,7 +107,8 @@ func (m *Manager) SetAppID(appID []byte) {
 		_ = m.PutInt64("AppID", "", []byte{}, count+1)                     // increment the count in the database.
 		AppIDMutex.Unlock()
 	}
-	m.AppID = append(m.AppID[:0], appID...) // copy the given appID over the current AppID
+	m.AppID = make([]byte, len(appID))
+	copy(m.AppID, appID) // copy the given appID over the current AppID
 }
 
 // CurrentAppID
