@@ -126,7 +126,7 @@ func chainSetMarshalBinary(v [][32]byte) []byte {
 
 func chainSetUnmarshalBinary(b []byte) ([][32]byte, error) {
 	l, err := uvarintUnmarshalBinary(b)
-	if len(b) < 32 {
+	if err != nil {
 		return nil, fmt.Errorf("error decoding length: %w", err)
 	}
 
