@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/config"
 	. "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
@@ -20,16 +21,18 @@ func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV, *Query) {
 	require.NoError(t, err)
 	opts.WorkDir = dir
 	opts.Port = GetFreePort(t)
-
-	opts.Config[0].Mempool.MaxBatchBytes = 1048576
-	opts.Config[0].Mempool.CacheSize = 1048576
-	opts.Config[0].Mempool.Size = 50000
-
-	// https://github.com/tendermint/tendermint/issues/7076
-	opts.Config[0].Instrumentation.Prometheus = false
+	cfg := opts.Config[0]
+	cfg.Mempool.MaxBatchBytes = 1048576
+	cfg.Mempool.CacheSize = 1048576
+	cfg.Mempool.Size = 50000
 
 	require.NoError(t, node.Init(opts))                        // Configure
 	nodeDir := filepath.Join(dir, "Node0")                     //
+	cfg, err = config.Load(nodeDir)                            // Modify configuration
+	require.NoError(t, err)                                    //
+	cfg.Accumulate.WebsiteEnabled = false                      // Disable the website
+	cfg.Instrumentation.Prometheus = false                     // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+	require.NoError(t, config.Store(cfg))                      //
 	node, pv, err := acctesting.NewBVCNode(nodeDir, t.Cleanup) // Initialize
 	require.NoError(t, err)                                    //
 	require.NoError(t, node.Start())                           // Launch
