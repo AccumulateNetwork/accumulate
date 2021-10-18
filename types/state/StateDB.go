@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/smt/managed"
 	"github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
@@ -16,6 +17,8 @@ import (
 )
 
 const debugStateDBWrites = false
+
+var blockIndexKey = sha256.Sum256([]byte("BlockIndex"))
 
 var ErrNotFound = errors.New("not found")
 
@@ -123,6 +126,14 @@ func (sdb *StateDB) init(appId []byte, debug bool) (err error) {
 	}
 	sdb.rmm = sdb.mm.Copy(nil)
 	sdb.appId = appId
+
+	ent, err := sdb.GetPersistentEntry(blockIndexKey[:], false)
+	if err == nil {
+		sdb.blockIndex, _ = common.BytesInt64(ent.Entry)
+	} else if !errors.Is(err, ErrNotFound) {
+		return err
+	}
+
 	return nil
 }
 
@@ -426,6 +437,8 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	}
 
 	sdb.blockIndex = blockHeight
+	// TODO MainIndex and PendingIndex?
+	sdb.AddStateEntry((*types.Bytes32)(&blockIndexKey), new(types.Bytes32), &Object{Entry: common.Int64Bytes(blockHeight)})
 
 	group := new(sync.WaitGroup)
 	group.Add(1)
