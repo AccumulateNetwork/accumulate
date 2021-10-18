@@ -66,6 +66,10 @@ func checkCreateSigSpecGroup(st *state.StateEntry, tx *transactions.GenTransacti
 			return nil, nil, fmt.Errorf("%q does not belong to %q", u, adiUrl)
 		}
 
+		if (entry.SigSpecId != types.Bytes32{}) {
+			return nil, nil, fmt.Errorf("%q has already been assigned to an SSG", u)
+		}
+
 		entries[i] = entry
 	}
 
@@ -85,25 +89,22 @@ func (CreateSigSpecGroup) DeliverTx(st *state.StateEntry, tx *transactions.GenTr
 
 	ssg := protocol.NewSigSpecGroup()
 	ssg.ChainUrl = types.String(url.String())
+	res := new(DeliverTxResult)
+	res.AddChain(ssg)
 
-	for _, mss := range entries {
-		u, err := mss.ParseUrl()
+	groupChainId := types.Bytes(url.ResourceChain()).AsBytes32()
+	for _, spec := range entries {
+		u, err := spec.ParseUrl()
 		if err != nil {
 			// We already did this, so this should never fail here.
 			return nil, fmt.Errorf("invalid sig spec state: bad URL: %v", err)
 		}
 
-		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		ssg.SigSpecs = append(ssg.SigSpecs, chainId)
+		specChainId := types.Bytes(u.ResourceChain()).AsBytes32()
+		ssg.SigSpecs = append(ssg.SigSpecs, specChainId)
+		spec.SigSpecId = groupChainId
+		res.AddChain(spec)
 	}
 
-	data, err := ssg.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state: %v", err)
-	}
-
-	chainId := types.Bytes(url.ResourceChain()).AsBytes32()
-	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
-	st.DB.AddStateEntry(&chainId, &txHash, &state.Object{Entry: data})
-	return new(DeliverTxResult), nil
+	return res, nil
 }

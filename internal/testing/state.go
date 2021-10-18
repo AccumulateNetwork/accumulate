@@ -85,7 +85,6 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) erro
 
 	sigSpecUrl := identityUrl.JoinPath("sigspec0")
 	ssgUrl := identityUrl.JoinPath("ssg0")
-	fmt.Printf("SSG = %X\n", ssgUrl.ResourceChain())
 
 	ss := new(protocol.KeySpec)
 	ss.HashAlgorithm = protocol.SHA256
@@ -160,22 +159,38 @@ func CreateSigSpec(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKe
 }
 
 func CreateSigSpecGroup(db *state.StateDB, urlStr types.String, sigSpecUrls ...string) error {
-	u, err := url.Parse(*urlStr.AsString())
+	groupUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	ssg := protocol.NewSigSpecGroup()
-	ssg.ChainUrl = types.String(u.String())
-	ssg.SigSpecs = make([][32]byte, len(sigSpecUrls))
+	group := protocol.NewSigSpecGroup()
+	group.ChainUrl = types.String(groupUrl.String())
+	group.SigSpecs = make([][32]byte, len(sigSpecUrls))
+	states := []state.Chain{group}
+
 	for i, s := range sigSpecUrls {
-		u, err := url.Parse(s)
+		specUrl, err := url.Parse(s)
 		if err != nil {
 			return err
 		}
-		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		ssg.SigSpecs[i] = chainId
+
+		chainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
+		group.SigSpecs[i] = chainId
+
+		spec := new(protocol.SigSpec)
+		_, err = db.LoadChainAs(chainId[:], spec)
+		if err != nil {
+			return err
+		}
+
+		if (spec.SigSpecId != types.Bytes32{}) {
+			return fmt.Errorf("%q is already attached to an SSG", s)
+		}
+
+		spec.SigSpecId = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+		states = append(states, spec)
 	}
 
-	return WriteStates(db, ssg)
+	return WriteStates(db, states...)
 }
