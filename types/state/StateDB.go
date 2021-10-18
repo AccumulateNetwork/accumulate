@@ -96,17 +96,7 @@ type StateDB struct {
 func (sdb *StateDB) init(appId []byte, debug bool) (err error) {
 	markPower := int64(8)
 
-	sdb.db.AddBucket(bucketEntry.AsString())
-	sdb.db.AddBucket(bucketMainToPending.AsString())
-	sdb.db.AddBucket(bucketPendingTx.AsString())
-	sdb.db.AddBucket(bucketTx.AsString())
-	sdb.db.AddBucket(bucketTxToSynthTx.AsString())
-	sdb.db.AddBucket(bucketStagedSynthTx.AsString())
 	sdb.debug = debug
-	if debug {
-		sdb.db.AddBucket("Entries-Debug") //items will bet pushed into this bucket as the state entries change
-	}
-
 	sdb.updates = make(map[types.Bytes32]*blockUpdates)
 	sdb.transactions.reset()
 
@@ -169,12 +159,12 @@ func (sdb *StateDB) Sync() {
 
 //GetTx get the transaction by transaction ID
 func (sdb *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxIds []byte, err error) {
-	tx = sdb.db.Get(bucketTx.AsString(), "", txId)
+	tx = sdb.db.Key(bucketTx.AsString(), txId).Get()
 
-	pendingTxId := sdb.db.Get(bucketMainToPending.AsString(), "", txId)
-	pendingTx = sdb.db.Get(bucketPendingTx.AsString(), "", pendingTxId)
+	pendingTxId := sdb.db.Key(bucketMainToPending.AsString(), txId).Get()
+	pendingTx = sdb.db.Key(bucketPendingTx.AsString(), pendingTxId).Get()
 
-	syntheticTxIds = sdb.db.Get(bucketTxToSynthTx.AsString(), "", txId)
+	syntheticTxIds = sdb.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
 
 	return tx, pendingTx, syntheticTxIds, nil
 }
@@ -231,7 +221,7 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data := sdb.db.Get("StateEntries", "", chainId)
+	data := sdb.db.Key("StateEntries", chainId).Get()
 
 	if data == nil {
 		return nil, fmt.Errorf("%w: no state defined for %X", ErrNotFound, chainId)
@@ -321,18 +311,17 @@ func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 				if err != nil {
 					return err
 				}
-				sdb.rmm.Manager.PutBatch(bucketStagedSynthTx.AsString(), "",
-					synthTxInfo.TxId, synthTxData)
+				sdb.rmm.Manager.Key(bucketStagedSynthTx.AsString(), "", synthTxInfo.TxId).PutBatch(synthTxData)
 				//store the hash of th synthObject in the bpt, will be removed after synth tx is processed
 				sdb.bpt.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
 			}
 			//store a list of txid to list of synth txid's
-			sdb.rmm.Manager.PutBatch(bucketTxToSynthTx.AsString(), "", tx.TxId, synthData)
+			sdb.rmm.Manager.Key(bucketTxToSynthTx.AsString(), tx.TxId).PutBatch(synthData)
 		}
 
 		mutex.Lock()
 		//store the transaction in the transaction bucket by txid
-		sdb.rmm.Manager.PutBatch(bucketTx.AsString(), "", tx.TxId, data)
+		sdb.rmm.Manager.Key(bucketTx.AsString(), tx.TxId).PutBatch(data)
 		//insert the hash of the tx object in the BPT
 		sdb.bpt.Bpt.Insert(txHash, sha256.Sum256(data))
 		mutex.Unlock()
@@ -348,11 +337,11 @@ func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 		mutex.Lock()
 		//Store the mapping of the Transaction hash to the pending transaction hash which can be used for
 		// validation so we can find the pending transaction
-		sdb.rmm.Manager.PutBatch("MainToPending", "", tx.TxId, pendingHash[:])
+		sdb.rmm.Manager.Key("MainToPending", tx.TxId).PutBatch(pendingHash[:])
 
 		sdb.mm.Copy(tx.ChainId)
 		//store the pending transaction by the pending tx hash
-		sdb.rmm.Manager.PutBatch(bucketPendingTx.AsString(), "", pendingHash[:], data)
+		sdb.rmm.Manager.Key(bucketPendingTx.AsString(), pendingHash[:]).PutBatch(data)
 		mutex.Unlock()
 	}
 
@@ -400,7 +389,7 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 		}
 
 		mutex.Lock()
-		sdb.GetDB().PutBatch(bucketEntry.AsString(), "", chainId.Bytes(), chainStateObject)
+		sdb.GetDB().Key(bucketEntry.AsString(), chainId.Bytes()).PutBatch(chainStateObject)
 		// The bpt stores the hash of the ChainState object hash.
 		sdb.bpt.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
 		mutex.Unlock()
