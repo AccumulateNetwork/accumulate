@@ -36,9 +36,9 @@ func (v *Value) Marshal() []byte {
 // UnMarshal
 // Load the Value with the state marshalled to the given data slice
 func (v *Value) UnMarshal(data []byte) []byte {
-	copy(v.Key[:], data[:32])  // Copy the Key
+	copy(v.Key[:], data[:32])  // ManageAppID the Key
 	data = data[32:]           // move the data slice
-	copy(v.Hash[:], data[:32]) // Copy the Hash
+	copy(v.Hash[:], data[:32]) // ManageAppID the Hash
 	data = data[32:]           // Move the data slice
 	return data                // Return the updated data slice
 }
