@@ -1,3 +1,9 @@
+# Executable (mac, linux)
+accumulated
+cli
+# unignore directories
+!*/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -17,9 +23,7 @@
 
 # Special build files
 engine/overrideversion.go
-# Executable
-cmd/accumulated/accumulated
-cmd/cli/cli
+
 # Compiled Object files, Static and Dynamic libs (Shared Objects)
 *.o
 *.a
