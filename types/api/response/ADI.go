@@ -1,9 +1,7 @@
 package response
 
-import (
-	"github.com/AccumulateNetwork/accumulated/types/api"
-)
+import "github.com/AccumulateNetwork/accumulated/protocol"
 
 type ADI struct {
-	api.ADI `json:"token"`
+	protocol.IdentityCreate `json:"token"`
 }
