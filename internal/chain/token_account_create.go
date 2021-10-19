@@ -51,9 +51,14 @@ func (TokenAccountCreate) DeliverTx(st *StateManager, tx *transactions.GenTransa
 		return err
 	}
 
+	account := state.NewTokenAccount(accountUrl.String(), tokenUrl.String())
+
+	// TODO Allow the token account to be overridden
+	account.SigSpecId = st.Sponsor.Header().SigSpecId
+
 	scc := new(protocol.SyntheticCreateChain)
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
-	err = scc.Add(state.NewTokenAccount(accountUrl.String(), tokenUrl.String()))
+	err = scc.Add(account)
 	if err != nil {
 		return fmt.Errorf("failed to marshal synthetic TX: %v", err)
 	}

@@ -67,23 +67,24 @@ func (IdentityCreate) DeliverTx(st *StateManager, tx *transactions.GenTransactio
 		ssgUrl = identityUrl.JoinPath(body.KeyBookName)
 	}
 
-	ss := new(protocol.KeySpec)
-	ss.PublicKey = body.PublicKey
+	keySpec := new(protocol.KeySpec)
+	keySpec.PublicKey = body.PublicKey
 
-	mss := protocol.NewSigSpec()
-	mss.ChainUrl = types.String(sigSpecUrl.String())
-	mss.Keys = append(mss.Keys, ss)
+	sigSpec := protocol.NewSigSpec()
+	sigSpec.ChainUrl = types.String(sigSpecUrl.String()) // TODO Allow override
+	sigSpec.Keys = append(sigSpec.Keys, keySpec)
+	sigSpec.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
 
-	ssg := protocol.NewSigSpecGroup()
-	ssg.ChainUrl = types.String(ssgUrl.String())
-	ssg.SigSpecs = append(ssg.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
+	group := protocol.NewSigSpecGroup()
+	group.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
+	group.SigSpecs = append(group.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
 
-	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeUnknown, body.PublicKey)
-	adi.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
+	identity := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, body.PublicKey)
+	identity.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
 
 	scc := new(protocol.SyntheticCreateChain)
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
-	err = scc.Add(adi, ssg, mss)
+	err = scc.Add(identity, group, sigSpec)
 	if err != nil {
 		return fmt.Errorf("failed to marshal synthetic TX: %v", err)
 	}
