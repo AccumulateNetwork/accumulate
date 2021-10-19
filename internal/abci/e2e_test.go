@@ -255,29 +255,34 @@ func TestCreateSigSpec(t *testing.T) {
 	})
 
 	n.client.Wait()
-	ks := n.GetSigSpec("foo/keyset1")
-	require.Len(t, ks.Keys, 1)
-	ss := ks.Keys[0]
-	require.Equal(t, uint64(0), ss.Nonce)
-	require.Equal(t, protocol.Unhashed, ss.HashAlgorithm)
-	require.Equal(t, protocol.ED25519, ss.KeyAlgorithm)
-	require.Equal(t, testKey.PubKey().Bytes(), ss.PublicKey)
+	spec := n.GetSigSpec("foo/keyset1")
+	require.Len(t, spec.Keys, 1)
+	key := spec.Keys[0]
+	require.Equal(t, types.Bytes32{}, spec.SigSpecId)
+	require.Equal(t, uint64(0), key.Nonce)
+	require.Equal(t, protocol.Unhashed, key.HashAlgorithm)
+	require.Equal(t, protocol.ED25519, key.KeyAlgorithm)
+	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
 
 func TestCreateSigSpecGroup(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{})
 	fooKey, testKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/keyset1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey.PubKey().Bytes()))
 
-	u, err := url.Parse("foo/keyset1")
+	specUrl, err := url.Parse("foo/sigspec1")
 	require.NoError(t, err)
-	keySetChainId := types.Bytes(u.ResourceChain()).AsBytes32()
+	specChainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
+
+	groupUrl, err := url.Parse("foo/ssg1")
+	require.NoError(t, err)
+	groupChainId := types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		csg := new(protocol.CreateSigSpecGroup)
-		csg.Url = "foo/keygroup1"
-		csg.SigSpecs = append(csg.SigSpecs, keySetChainId)
+		csg.Url = "foo/ssg1"
+		csg.SigSpecs = append(csg.SigSpecs, specChainId)
 
 		tx, err := transactions.New("foo", edSigner(fooKey, 1), csg)
 		require.NoError(t, err)
@@ -285,8 +290,50 @@ func TestCreateSigSpecGroup(t *testing.T) {
 	})
 
 	n.client.Wait()
-	kg := n.GetSigSpecGroup("foo/keygroup1")
-	require.Len(t, kg.SigSpecs, 1)
-	ks := kg.SigSpecs[0]
-	require.Equal(t, keySetChainId, types.Bytes32(ks))
+	group := n.GetSigSpecGroup("foo/ssg1")
+	require.Len(t, group.SigSpecs, 1)
+	require.Equal(t, specChainId, types.Bytes32(group.SigSpecs[0]))
+
+	spec := n.GetSigSpec("foo/sigspec1")
+	require.Equal(t, spec.SigSpecId, groupChainId)
+}
+
+func TestAddSigSpec(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{})
+	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
+
+	u, err := url.Parse("foo/ssg1")
+	require.NoError(t, err)
+	groupChainId := types.Bytes(u.ResourceChain()).AsBytes32()
+
+	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey1.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/ssg1", "foo/sigspec1"))
+
+	// Sanity check
+	require.Equal(t, groupChainId, n.GetSigSpec("foo/sigspec1").SigSpecId)
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		cms := new(protocol.CreateSigSpec)
+		cms.Url = "foo/sigspec2"
+		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+			HashAlgorithm: protocol.Unhashed,
+			KeyAlgorithm:  protocol.ED25519,
+			PublicKey:     testKey2.PubKey().Bytes(),
+		})
+
+		tx, err := transactions.New("foo/ssg1", edSigner(testKey1, 1), cms)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	n.client.Wait()
+	spec := n.GetSigSpec("foo/sigspec2")
+	require.Len(t, spec.Keys, 1)
+	key := spec.Keys[0]
+	require.Equal(t, groupChainId, spec.SigSpecId)
+	require.Equal(t, uint64(0), key.Nonce)
+	require.Equal(t, protocol.Unhashed, key.HashAlgorithm)
+	require.Equal(t, protocol.ED25519, key.KeyAlgorithm)
+	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }
