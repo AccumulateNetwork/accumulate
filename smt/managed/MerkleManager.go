@@ -104,69 +104,20 @@ func (m *MerkleManager) Equal(m2 *MerkleManager) bool {
 	return true
 }
 
-// Add2AppID
-// Compute the AppID for a shadow chain for a Merkle Tree. Note that bumping
-// the index of the AppID allows shadow chains to exist within a different
-// application space, and allows the underlying Patricia Tree to maintain
-// its balanced nature.
-//
-// The reason for shadow chains is to track information about the construction
-// and validation of entries in a main chain that we do not wish to persist
-// forever.  We track two shadow chains at present.  The PendingOff implements
-// managed chains where the rules for entries must be evaluated by the Identity
-// before they are added to the chain. So other identities can write to
-// the chain, but those entries get redirected to the PendingOff shadow
-// chain until they are authorized by the Identity.
-//
-// The BlkIdxOff collects the block indexes to track where the minor
-// blocks end so that entries can be recognized as timestamped at this finer
-// resolution even after the minor blocks are rewritten into major blocks.
-// Parties interested in this finer resolution can preserve these timestamps
-// by simply getting a receipt and preserving it off chain or on chain.
-func Add2AppID(AppID []byte, offset byte) (appID []byte) {
-	appID = append(appID, AppID...) // Make a copy of the appID
-	appID[0] += offset              // Add offset to the first byte -> new appID
-	return appID                    // and return new appID
-}
-
 // NewMerkleManager
 // Create a new MerkleManager given a MainChain.Manager and markPower.
 // The MainChain.Manager handles the persistence for the Merkle Tree under management
 // The markPower is the log 2 frequency used to collect states in the Merkle Tree
 func NewMerkleManager(
 	DBManager *database.Manager, //      database that can be shared with other MerkleManager instances
-	appID []byte, //                     AppID identifying an application space in the DBManager
 	markPower int64) (*MerkleManager, error) { // log 2 of the frequency of creating marks in the Merkle Tree
 
-	if len(appID) != 32 { // Panic: appID is bad
-		return nil, fmt.Errorf("appID must be 32 bytes long. got %x", appID)
-	}
-
 	mm := new(MerkleManager)
-	if err := mm.init(DBManager, appID, markPower); err != nil {
+	if err := mm.init(DBManager, markPower); err != nil {
 		return nil, err
 	}
 
 	return mm, nil
-}
-
-// Copy
-// Create a copy of the MerkleManager.  The MerkleManager can be pointed to
-// particular merkle trees by setting the AppID. While the AppID is generally
-// the management of a particular merkle tree, it can be used to define any
-// application context within the database.
-//
-// Copy creates a MerkleManager that points it to a particular ChainID (use
-// the chainID as the appID)
-//
-// Copy creates a brand new MerkleManager pointed towards a particular
-// chain and its shadow chains (chains that track information about the
-// main chain, i.e. the pending chain and the block index chain)
-func (m MerkleManager) Copy(appID []byte) *MerkleManager {
-	m.Manager = m.Manager.ManageAppID(appID) // MainChain.Manager uses appID
-	m.MS = m.MS.Copy()                       // Make a copy of the Merkle State
-	m.MS.InitSha256()                        // Use Sha256
-	return &m
 }
 
 // GetElementCount
@@ -181,7 +132,7 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 //
 // This is an internal routine; calling init outside of constructing the first
 // reference to the MerkleManager doesn't make much sense.
-func (m *MerkleManager) init(DBManager *database.Manager, appID []byte, markPower int64) error {
+func (m *MerkleManager) init(DBManager *database.Manager, markPower int64) error {
 
 	if markPower >= 20 { // 2^20 is 1,048,576 and is too big for the collection of elements in memory
 		return fmt.Errorf("A power %d is greater than 2^29, and is unreasonable", markPower)
@@ -191,8 +142,8 @@ func (m *MerkleManager) init(DBManager *database.Manager, appID []byte, markPowe
 		m.MS = new(MerkleState) //
 		m.MS.InitSha256()       //
 	}
-	m.Manager = DBManager.ManageAppID(appID) //               Manager for writing the Merkle states
-	m.ReadChainHead()                        //               Set the MerkleState
+	m.Manager = DBManager //                               Manager for writing the Merkle states
+	m.ReadChainHead()     //                               Set the MerkleState
 
 	m.MarkPower = markPower                             // # levels in Merkle Tree to be indexed
 	m.MarkFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
