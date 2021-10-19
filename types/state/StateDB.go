@@ -111,6 +111,11 @@ func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool) (err error)
 		return err
 	}
 
+	s.mm, err = managed.NewMerkleManager(s.db, markPower)
+	if err != nil {
+		return err
+	}
+
 	return s.init(debug)
 }
 
