@@ -77,8 +77,6 @@ func (CreateSigSpec) DeliverTx(st *StateManager, tx *transactions.GenTransaction
 
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
-		ss.HashAlgorithm = sig.HashAlgorithm
-		ss.KeyAlgorithm = sig.KeyAlgorithm
 		ss.PublicKey = sig.PublicKey
 		spec.Keys = append(spec.Keys, ss)
 	}
