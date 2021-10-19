@@ -18,30 +18,47 @@ type TokenTx struct{}
 
 func (TokenTx) Type() types.TxType { return types.TxTypeTokenTx }
 
-func checkTokenTx(st *state.StateEntry, tx *transactions.GenTransaction) (*api.TokenTx, tokenChain, *big.Int, error) {
-	if st.ChainHeader == nil {
-		return nil, nil, nil, fmt.Errorf("sponsor not found")
-	}
+type tokenSend struct {
+	url    *url.URL
+	amount *big.Int
+}
 
+func checkTokenTx(st *StateManager, tx *transactions.GenTransaction) ([]*tokenSend, tokenChain, *url.URL, *big.Int, error) {
 	body := new(api.TokenTx)
 	err := tx.As(body)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid payload: %v", err)
+		return nil, nil, nil, nil, fmt.Errorf("invalid payload: %v", err)
+	}
+
+	if body.From.String != types.String(tx.SigInfo.URL) {
+		return nil, nil, nil, nil, fmt.Errorf("withdraw address and transaction sponsor do not match")
+	}
+
+	sends := make([]*tokenSend, len(body.To))
+	for i, to := range body.To {
+		u, err := url.Parse(*to.URL.AsString())
+		if err != nil {
+			return nil, nil, nil, nil, fmt.Errorf("invalid destination URL: %v", err)
+		}
+
+		amount := new(big.Int)
+		amount.SetUint64(to.Amount)
+		sends[i] = &tokenSend{u, amount}
 	}
 
 	var account tokenChain
-	switch st.ChainHeader.Type {
-	case types.ChainTypeTokenAccount:
-		account = new(state.TokenAccount)
-	case types.ChainTypeAnonTokenAccount:
-		account = new(protocol.AnonTokenAccount)
+	switch sponsor := st.Sponsor.(type) {
+	case *state.TokenAccount:
+		account = sponsor
+	case *protocol.AnonTokenAccount:
+		account = sponsor
 	default:
-		return nil, nil, nil, fmt.Errorf("%v cannot sponsor token transactions", st.ChainHeader.Type)
+		return nil, nil, nil, nil, fmt.Errorf("%v cannot sponsor token transactions", st.Sponsor.Header().Type)
 	}
 
-	err = st.ChainState.As(account)
+	tokenUrl, err := account.ParseTokenUrl()
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to decode sponsor: %v", err)
+		return nil, nil, nil, nil, fmt.Errorf("invalid token URL: %v", err)
 	}
 
 	//now check to see if we can transact
@@ -54,103 +71,48 @@ func checkTokenTx(st *state.StateEntry, tx *transactions.GenTransaction) (*api.T
 	}
 
 	if !account.CanDebitTokens(&amt.Int) {
-		return nil, nil, nil, fmt.Errorf("insufficient balance")
+		return nil, nil, nil, nil, fmt.Errorf("insufficient balance")
 	}
 
-	return body, account, &amt.Int, nil
+	return sends, account, tokenUrl, &amt.Int, nil
 }
 
-func (c TokenTx) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	_, _, _, err := checkTokenTx(st, tx)
+func (c TokenTx) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+	_, _, _, _, err := checkTokenTx(st, tx)
 	return err
 }
 
-func (c TokenTx) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	body, account, debit, err := checkTokenTx(st, tx)
+func (c TokenTx) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+	body, account, tokenUrl, debit, err := checkTokenTx(st, tx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	fromUrl, err := url.Parse(tx.SigInfo.URL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid sponsor URL: %v", err)
-	}
-
-	tokenUrl, err := account.ParseTokenUrl()
-	if err != nil {
-		return nil, fmt.Errorf("invalid token URL: %v", err)
-	}
-	tokStr := types.String(tokenUrl.String())
-
-	if body.From.String != types.String(tx.SigInfo.URL) {
-		return nil, fmt.Errorf("withdraw address and transaction sponsor do not match")
-	}
-
-	//now build the synthetic transactions.
+	token := types.String(tokenUrl.String())
 	txid := types.Bytes(tx.TransactionHash())
-	res := new(DeliverTxResult)
-	for _, val := range body.To {
-		txAmt := new(big.Int)
-		txAmt.SetUint64(val.Amount)
-		//extract the target identity and chain from the url
-		destAdi, destChainPath, err := types.ParseIdentityChainPath(val.URL.AsString())
+	for _, send := range body {
+		from := types.String(st.SponsorUrl.String())
+		to := types.String(send.url.String())
+		deposit := synthetic.NewTokenTransactionDeposit(txid[:], from, to)
+		err = deposit.SetDeposit(token, send.amount)
 		if err != nil {
-			return nil, err
-		}
-		destUrl := types.String(destChainPath)
-
-		//populate the synthetic transaction, each submission will be signed by BVC leader and dispatched
-		gtx := new(transactions.GenTransaction)
-
-		//set the identity chain for the destination
-		gtx.Routing = types.GetAddressFromIdentity(&destAdi)
-		gtx.ChainID = types.GetChainIdFromChainPath(destUrl.AsString()).Bytes()
-		gtx.SigInfo = new(transactions.SignatureInfo)
-		gtx.SigInfo.URL = destChainPath
-
-		depositTx := synthetic.NewTokenTransactionDeposit(txid[:], &st.ChainHeader.ChainUrl, &destUrl)
-		err = depositTx.SetDeposit(&tokStr, txAmt)
-		if err != nil {
-			return nil, fmt.Errorf("unable to set deposit for synthetic token deposit transaction, %v", err)
+			return fmt.Errorf("invalid deposit: %v", err)
 		}
 
-		gtx.Transaction, err = depositTx.MarshalBinary()
-		if err != nil {
-			return nil, fmt.Errorf("unable to marshal synthetic token transaction deposit, %v", err)
-		}
-
-		res.AddSyntheticTransaction(gtx)
+		st.Submit(send.url, deposit)
 	}
 
 	if !account.DebitTokens(debit) {
-		return nil, fmt.Errorf("%q balance is insufficient", fromUrl)
+		return fmt.Errorf("%q balance is insufficient", st.SponsorUrl)
 	}
+	st.Store(account)
 
 	txHash := txid.AsBytes32()
 	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
 	//This will reference the txid to keep the history
-	refUrl := fromUrl.JoinPath(fmt.Sprint(account.NextTx()))
+	refUrl := st.SponsorUrl.JoinPath(fmt.Sprint(account.NextTx()))
 	txr := state.NewTxReference(refUrl.String(), txHash[:])
-	txrData, err := txr.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("unable to process transaction reference chain %v", err)
-	}
+	st.Store(txr)
 
-	//now create the chain state object.
-	txRefChain := new(state.Object)
-	txRefChain.Entry = txrData
-	txRefChainId := types.Bytes(refUrl.ResourceChain()).AsBytes32()
-
-	//want to pass back just an interface rather than marshaled data, for now just
-	//do marshaled data
-	data, err := account.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal account state: %v", err)
-	}
-
-	//now update the state
-	st.DB.AddStateEntry(st.ChainId, &txHash, &state.Object{Entry: data})
-	st.DB.AddStateEntry(&txRefChainId, &txHash, txRefChain)
-
-	return res, nil
+	return nil
 }

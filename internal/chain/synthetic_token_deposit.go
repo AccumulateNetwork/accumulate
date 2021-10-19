@@ -18,7 +18,7 @@ func (SyntheticTokenDeposit) Type() types.TxType {
 	return types.TxTypeSyntheticTokenDeposit
 }
 
-func checkSyntheticTokenDeposit(st *state.StateEntry, tx *transactions.GenTransaction) (*big.Int, tokenChain, *url.URL, error) {
+func checkSyntheticTokenDeposit(st *StateManager, tx *transactions.GenTransaction) (*big.Int, tokenChain, *url.URL, error) {
 	body := new(synthetic.TokenTransactionDeposit)
 	err := tx.As(body)
 	if err != nil {
@@ -40,19 +40,14 @@ func checkSyntheticTokenDeposit(st *state.StateEntry, tx *transactions.GenTransa
 	}
 
 	var account tokenChain
-	if st.ChainHeader != nil {
-		switch st.ChainHeader.Type {
-		case types.ChainTypeAnonTokenAccount:
-			account = new(protocol.AnonTokenAccount)
-		case types.ChainTypeTokenAccount:
-			account = new(state.TokenAccount)
+	if st.Sponsor != nil {
+		switch sponsor := st.Sponsor.(type) {
+		case *protocol.AnonTokenAccount:
+			account = sponsor
+		case *state.TokenAccount:
+			account = sponsor
 		default:
-			return nil, nil, nil, fmt.Errorf("cannot deposit tokens to %v", st.ChainHeader.Type)
-		}
-
-		err = st.ChainState.As(account)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to decode recipient: %v", err)
+			return nil, nil, nil, fmt.Errorf("cannot deposit tokens to %v", sponsor.Header().Type)
 		}
 	} else if keyHash, tok, err := protocol.ParseAnonymousAddress(accountUrl); err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid anonymous token account URL: %v", err)
@@ -71,46 +66,28 @@ func checkSyntheticTokenDeposit(st *state.StateEntry, tx *transactions.GenTransa
 	return &body.DepositAmount.Int, account, accountUrl, nil
 }
 
-func (SyntheticTokenDeposit) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (SyntheticTokenDeposit) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
 	_, _, _, err := checkSyntheticTokenDeposit(st, tx)
 	return err
 }
 
-func (SyntheticTokenDeposit) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (SyntheticTokenDeposit) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
 	amount, account, accountUrl, err := checkSyntheticTokenDeposit(st, tx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	//all is good, so add the balance
 	if !account.CreditTokens(amount) {
-		return nil, fmt.Errorf("unable to add deposit balance to account")
+		return fmt.Errorf("unable to add deposit balance to account")
 	}
+	st.Store(account)
 
 	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
 	//This will reference the txid to keep the history
 	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
 	refUrl := accountUrl.JoinPath(fmt.Sprint(account.NextTx()))
 	txr := state.NewTxReference(refUrl.String(), txHash[:])
-	txrData, err := txr.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("unable to process transaction reference chain %v", err)
-	}
+	st.Store(txr)
 
-	//now create the chain state object.
-	txRefChain := new(state.Object)
-	txRefChain.Entry = txrData
-	txRefChainId := types.Bytes(refUrl.ResourceChain()).AsBytes32()
-
-	acctChainId := types.Bytes(accountUrl.ResourceChain()).AsBytes32()
-	data, err := account.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("unable to process anon transaction account %v", err)
-	}
-
-	//if we get here with no errors store the states
-	st.DB.AddStateEntry(&acctChainId, &txHash, &state.Object{Entry: data})
-	st.DB.AddStateEntry(&txRefChainId, &txHash, txRefChain)
-
-	return new(DeliverTxResult), nil
+	return nil
 }
