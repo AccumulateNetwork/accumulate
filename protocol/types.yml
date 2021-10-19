@@ -78,12 +78,6 @@ SyntheticDepositCredits:
 
 KeySpec:
   fields:
-  - name: KeyAlgorithm
-    type: KeyAlgorithm
-    marshal-as: self
-  - name: HashAlgorithm
-    type: HashAlgorithm
-    marshal-as: self
   - name: PublicKey
     type: bytes
   - name: Nonce
@@ -91,12 +85,6 @@ KeySpec:
 
 KeySpecParams:
   fields:
-  - name: KeyAlgorithm
-    type: KeyAlgorithm
-    marshal-as: self
-  - name: HashAlgorithm
-    type: HashAlgorithm
-    marshal-as: self
   - name: PublicKey
     type: bytes
 
