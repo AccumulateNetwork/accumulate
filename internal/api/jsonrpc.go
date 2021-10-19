@@ -510,7 +510,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &fromAccount, &destAccount)
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], fromAccount, destAccount)
 	amtToDeposit := int64(10)                                //deposit 50k tokens
 	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
 	deposit.TokenUrl = tokenUrl
