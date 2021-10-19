@@ -49,8 +49,8 @@ func unmarshalADI(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 		sAdi := new(state.AdiState)
 		err := sAdi.UnmarshalBinary(b)
 		rAdi := new(response.ADI)
-		rAdi.URL = sAdi.ChainUrl
-		rAdi.PublicKeyHash = sAdi.KeyData.AsBytes32()
+		rAdi.Url = *sAdi.ChainUrl.AsString()
+		rAdi.PublicKey = sAdi.KeyData
 		return rAdi, err
 	})
 }
