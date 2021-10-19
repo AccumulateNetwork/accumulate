@@ -41,16 +41,12 @@ type CreateSigSpecGroup struct {
 }
 
 type KeySpec struct {
-	KeyAlgorithm  KeyAlgorithm  `json:"keyAlgorithm" form:"keyAlgorithm" query:"keyAlgorithm" validate:"required"`
-	HashAlgorithm HashAlgorithm `json:"hashAlgorithm" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
-	PublicKey     []byte        `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce         uint64        `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
+	PublicKey []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
+	Nonce     uint64 `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
 }
 
 type KeySpecParams struct {
-	KeyAlgorithm  KeyAlgorithm  `json:"keyAlgorithm" form:"keyAlgorithm" query:"keyAlgorithm" validate:"required"`
-	HashAlgorithm HashAlgorithm `json:"hashAlgorithm" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
-	PublicKey     []byte        `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
+	PublicKey []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
 }
 
 type SigSpec struct {
@@ -188,10 +184,6 @@ func (v *CreateSigSpecGroup) BinarySize() int {
 func (v *KeySpec) BinarySize() int {
 	var n int
 
-	n += v.KeyAlgorithm.BinarySize()
-
-	n += v.HashAlgorithm.BinarySize()
-
 	n += bytesBinarySize(v.PublicKey)
 
 	n += uvarintBinarySize(v.Nonce)
@@ -201,10 +193,6 @@ func (v *KeySpec) BinarySize() int {
 
 func (v *KeySpecParams) BinarySize() int {
 	var n int
-
-	n += v.KeyAlgorithm.BinarySize()
-
-	n += v.HashAlgorithm.BinarySize()
 
 	n += bytesBinarySize(v.PublicKey)
 
@@ -382,18 +370,6 @@ func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	if b, err := v.KeyAlgorithm.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding KeyAlgorithm: %w", err)
-	} else {
-		buffer.Write(b)
-	}
-
-	if b, err := v.HashAlgorithm.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding HashAlgorithm: %w", err)
-	} else {
-		buffer.Write(b)
-	}
-
 	buffer.Write(bytesMarshalBinary(v.PublicKey))
 
 	buffer.Write(uvarintMarshalBinary(v.Nonce))
@@ -403,18 +379,6 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 
 func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
-
-	if b, err := v.KeyAlgorithm.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding KeyAlgorithm: %w", err)
-	} else {
-		buffer.Write(b)
-	}
-
-	if b, err := v.HashAlgorithm.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding HashAlgorithm: %w", err)
-	} else {
-		buffer.Write(b)
-	}
 
 	buffer.Write(bytesMarshalBinary(v.PublicKey))
 
@@ -680,16 +644,6 @@ func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 }
 
 func (v *KeySpec) UnmarshalBinary(data []byte) error {
-	if err := v.KeyAlgorithm.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding KeyAlgorithm: %w", err)
-	}
-	data = data[v.KeyAlgorithm.BinarySize():]
-
-	if err := v.HashAlgorithm.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding HashAlgorithm: %w", err)
-	}
-	data = data[v.HashAlgorithm.BinarySize():]
-
 	if x, err := bytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
@@ -708,16 +662,6 @@ func (v *KeySpec) UnmarshalBinary(data []byte) error {
 }
 
 func (v *KeySpecParams) UnmarshalBinary(data []byte) error {
-	if err := v.KeyAlgorithm.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding KeyAlgorithm: %w", err)
-	}
-	data = data[v.KeyAlgorithm.BinarySize():]
-
-	if err := v.HashAlgorithm.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding HashAlgorithm: %w", err)
-	}
-	data = data[v.HashAlgorithm.BinarySize():]
-
 	if x, err := bytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
