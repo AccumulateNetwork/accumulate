@@ -113,9 +113,11 @@ func TestCreateADI(t *testing.T) {
 	wallet.Addr = anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
 
 	n.Batch(func(send func(*Tx)) {
-		adi := new(api.ADI)
-		adi.URL = "RoadRunner"
-		adi.PublicKeyHash = keyHash
+		adi := new(protocol.IdentityCreate)
+		adi.Url = "RoadRunner"
+		adi.PublicKey = keyHash[:]
+		adi.KeyBookName = "foo-book"
+		adi.KeyPageName = "bar-page"
 
 		sponsorUrl := anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
 		tx, err := transactions.New(sponsorUrl, func(hash []byte) (*transactions.ED25519Sig, error) {
@@ -132,10 +134,10 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, types.String("acc://RoadRunner"), r.ChainUrl)
 	require.Equal(t, types.Bytes(keyHash[:]), r.KeyData)
 
-	kg := n.GetSigSpecGroup("RoadRunner/ssg0")
+	kg := n.GetSigSpecGroup("RoadRunner/foo-book")
 	require.Len(t, kg.SigSpecs, 1)
 
-	ks := n.GetSigSpec("RoadRunner/sigspec0")
+	ks := n.GetSigSpec("RoadRunner/bar-page")
 	require.Len(t, ks.Keys, 1)
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
 }

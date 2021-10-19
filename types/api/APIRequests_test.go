@@ -1,4 +1,4 @@
-package api
+package api_test
 
 import (
 	"crypto/sha256"
@@ -7,18 +7,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/go-playground/validator/v10"
+	. "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/mitchellh/mapstructure"
+	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 func createAdiTx(adiUrl string, pubkey []byte) (string, error) {
-	data := &ADI{}
+	data := &protocol.IdentityCreate{}
 
-	data.URL = types.String(adiUrl)
+	data.Url = adiUrl
 	keyhash := sha256.Sum256(pubkey)
-	copy(data.PublicKeyHash[:], keyhash[:])
+	data.PublicKey = keyhash[:]
 
 	ret, err := json.Marshal(data)
 	if err != nil {
@@ -101,7 +103,8 @@ func TestAPIRequest_Adi(t *testing.T) {
 	}
 	params := createRequest(t, adiUrl, &kp, message)
 
-	validate := validator.New()
+	validate, err := protocol.NewValidator()
+	require.NoError(t, err)
 
 	req := &APIRequestRaw{}
 	// unmarshal req
@@ -114,7 +117,7 @@ func TestAPIRequest_Adi(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := &ADI{}
+	data := &protocol.IdentityCreate{}
 
 	// parse req.tx.data
 	err = mapstructure.Decode(req.Tx.Data, data)
@@ -153,7 +156,8 @@ func TestAPIRequest_Token(t *testing.T) {
 	}
 	params := createRequest(t, adiUrl, &kp, message)
 
-	validate := validator.New()
+	validate, err := protocol.NewValidator()
+	require.NoError(t, err)
 
 	req := &APIRequestRaw{}
 	// unmarshal req
@@ -204,7 +208,8 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 	}
 	params := createRequest(t, adiUrl, &kp, message)
 
-	validate := validator.New()
+	validate, err := protocol.NewValidator()
+	require.NoError(t, err)
 
 	req := &APIRequestRaw{}
 	// unmarshal req

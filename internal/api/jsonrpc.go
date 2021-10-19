@@ -39,9 +39,14 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
+	v, err := protocol.NewValidator()
+	if err != nil {
+		return nil, err
+	}
+
 	api := &API{}
 	api.config = config
-	api.validate = validator.New()
+	api.validate = v
 	api.query = q
 
 	methods := jsonrpc2.MethodMap{
@@ -292,7 +297,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 // createADI creates ADI
 func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
-	data := &acmeapi.ADI{}
+	data := &protocol.IdentityCreate{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return NewValidatorError(err)
