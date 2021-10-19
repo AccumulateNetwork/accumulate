@@ -31,10 +31,10 @@ func TestTokenTransactionDeposit(t *testing.T) {
 	idCoinbase := types.String("fakecoinbaseid/fakecoinbasetoken")
 
 	txid := sha256.Sum256(ledger)
-	dep := NewTokenTransactionDeposit(txid[:], &fromAccount, &toAccount)
+	dep := NewTokenTransactionDeposit(txid[:], fromAccount, toAccount)
 	depAmt := types.Amount{}
 	depAmt.SetInt64(int64(amt))
-	err = dep.SetDeposit(&idCoinbase, depAmt.AsBigInt())
+	err = dep.SetDeposit(idCoinbase, depAmt.AsBigInt())
 
 	if err != nil {
 		t.Fatal(err)

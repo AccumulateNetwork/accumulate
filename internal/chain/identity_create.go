@@ -16,11 +16,7 @@ type IdentityCreate struct{}
 
 func (IdentityCreate) Type() types.TxType { return types.TxTypeIdentityCreate }
 
-func checkIdentityCreate(st *state.StateEntry, tx *transactions.GenTransaction) (*api.ADI, *url.URL, state.Chain, error) {
-	if st.ChainHeader == nil {
-		return nil, nil, nil, fmt.Errorf("sponsor not found")
-	}
-
+func checkIdentityCreate(st *StateManager, tx *transactions.GenTransaction) (*api.ADI, *url.URL, state.Chain, error) {
 	body := new(api.ADI)
 	err := tx.As(body)
 	if err != nil {
@@ -39,45 +35,25 @@ func checkIdentityCreate(st *state.StateEntry, tx *transactions.GenTransaction) 
 	}
 
 	var sponsor state.Chain
-	switch st.ChainHeader.Type {
-	case types.ChainTypeAnonTokenAccount:
-		sponsor = new(protocol.AnonTokenAccount)
-
-	case types.ChainTypeAdi:
-		sponsor = new(state.AdiState)
-
+	switch st.Sponsor.(type) {
+	case *protocol.AnonTokenAccount, *state.AdiState:
+		// OK
 	default:
-		return nil, nil, nil, fmt.Errorf("chain type %d cannot sponsor ADIs", st.ChainHeader.Type)
-	}
-
-	err = st.ChainState.As(sponsor)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to decode sponsor: %v", err)
+		return nil, nil, nil, fmt.Errorf("chain type %d cannot sponsor ADIs", st.Sponsor.Header().Type)
 	}
 
 	return body, identityUrl, sponsor, nil
 }
 
-func (IdentityCreate) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (IdentityCreate) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
 	_, _, _, err := checkIdentityCreate(st, tx)
 	return err
 }
 
-func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	body, identityUrl, sponsor, err := checkIdentityCreate(st, tx)
+func (IdentityCreate) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+	body, identityUrl, _, err := checkIdentityCreate(st, tx)
 	if err != nil {
-		return nil, err
-	}
-
-	if adi, ok := sponsor.(*state.AdiState); ok {
-		//this should be done at a higher level...
-		if !adi.VerifyKey(tx.Signature[0].PublicKey) {
-			return nil, fmt.Errorf("key is not supported by current ADI state")
-		}
-
-		if !adi.VerifyAndUpdateNonce(tx.SigInfo.Unused2) {
-			return nil, fmt.Errorf("invalid nonce, adi state %d but provided %d", adi.Nonce, tx.SigInfo.Unused2)
-		}
+		return err
 	}
 
 	sigSpecUrl := identityUrl.JoinPath("sigspec0")
@@ -103,18 +79,9 @@ func (IdentityCreate) DeliverTx(st *state.StateEntry, tx *transactions.GenTransa
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
 	err = scc.Add(adi, ssg, mss)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal synthetic TX: %v", err)
+		return fmt.Errorf("failed to marshal synthetic TX: %v", err)
 	}
 
-	syn := new(transactions.GenTransaction)
-	syn.SigInfo = &transactions.SignatureInfo{}
-	syn.SigInfo.URL = identityUrl.String()
-	syn.Transaction, err = scc.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal synthetic TX: %v", err)
-	}
-
-	res := new(DeliverTxResult)
-	res.AddSyntheticTransaction(syn)
-	return res, nil
+	st.Submit(identityUrl, scc)
+	return nil
 }
