@@ -145,3 +145,13 @@ IdentityCreate:
   - name: KeyPageName
     type: string
     optional: true
+
+TokenAccountCreate:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+    is-url: true
+  - name: TokenUrl
+    type: string
+    is-url: true

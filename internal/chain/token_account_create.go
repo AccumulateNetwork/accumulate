@@ -6,7 +6,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
@@ -16,18 +15,18 @@ type TokenAccountCreate struct{}
 func (TokenAccountCreate) Type() types.TxType { return types.TxTypeTokenAccountCreate }
 
 func checkTokenAccountCreate(st *StateManager, tx *transactions.GenTransaction) (accountUrl, tokenUrl *url.URL, err error) {
-	body := new(api.TokenAccount)
+	body := new(protocol.TokenAccountCreate)
 	err = tx.As(body)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
-	accountUrl, err = url.Parse(*body.URL.AsString())
+	accountUrl, err = url.Parse(body.Url)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid account URL: %v", err)
 	}
 
-	tokenUrl, err = url.Parse(*body.TokenURL.AsString())
+	tokenUrl, err = url.Parse(body.TokenUrl)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid token URL: %v", err)
 	}
