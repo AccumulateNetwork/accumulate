@@ -78,8 +78,9 @@ type SyntheticDepositCredits struct {
 }
 
 type TokenAccountCreate struct {
-	Url      string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
-	TokenUrl string `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
+	Url        string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
+	TokenUrl   string `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
+	KeyBookUrl string `json:"keyBookUrl" form:"keyBookUrl" query:"keyBookUrl" validate:"required,acc-url"`
 }
 
 type TxResult struct {
@@ -301,6 +302,8 @@ func (v *TokenAccountCreate) BinarySize() int {
 	n += stringBinarySize(v.Url)
 
 	n += stringBinarySize(v.TokenUrl)
+
+	n += stringBinarySize(v.KeyBookUrl)
 
 	return n
 }
@@ -525,6 +528,8 @@ func (v *TokenAccountCreate) MarshalBinary() ([]byte, error) {
 	buffer.Write(stringMarshalBinary(v.Url))
 
 	buffer.Write(stringMarshalBinary(v.TokenUrl))
+
+	buffer.Write(stringMarshalBinary(v.KeyBookUrl))
 
 	return buffer.Bytes(), nil
 }
@@ -927,6 +932,13 @@ func (v *TokenAccountCreate) UnmarshalBinary(data []byte) error {
 		v.TokenUrl = x
 	}
 	data = data[stringBinarySize(v.TokenUrl):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyBookUrl: %w", err)
+	} else {
+		v.KeyBookUrl = x
+	}
+	data = data[stringBinarySize(v.KeyBookUrl):]
 
 	return nil
 }
