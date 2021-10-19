@@ -2,6 +2,7 @@ package chain
 
 import (
 	"crypto/ed25519"
+	"fmt"
 	"math/big"
 
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
@@ -53,34 +54,24 @@ type tokenChain interface {
 }
 
 type DeliverTxResult struct {
-	StateData     map[types.Bytes32]types.Bytes  //acctypes.StateObject
-	MainChainData map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
-	PendingData   map[types.Bytes32]types.Bytes  //stuff to store on pending chain.
-	EventData     []byte                         //this should be events that need to get published
-	Submissions   []*transactions.GenTransaction //this is a list of synthetic transactions
-}
-
-func (r *DeliverTxResult) AddMainChainData(chainid *types.Bytes32, data []byte) {
-	if r.MainChainData == nil {
-		r.MainChainData = make(map[types.Bytes32]types.Bytes)
-	}
-	r.MainChainData[*chainid] = data
-}
-
-func (r *DeliverTxResult) AddStateData(chainid *types.Bytes32, data []byte) {
-	if r.StateData == nil {
-		r.StateData = make(map[types.Bytes32]types.Bytes)
-	}
-	r.StateData[*chainid] = data
-}
-
-func (r *DeliverTxResult) AddPendingData(txId *types.Bytes32, data []byte) {
-	if r.PendingData == nil {
-		r.PendingData = make(map[types.Bytes32]types.Bytes)
-	}
-	r.PendingData[*txId] = data
+	SyntheticTransactions []*transactions.GenTransaction //this is a list of synthetic transactions
+	Chains                map[[32]byte]state.Chain
 }
 
 func (r *DeliverTxResult) AddSyntheticTransaction(tx *transactions.GenTransaction) {
-	r.Submissions = append(r.Submissions, tx)
+	r.SyntheticTransactions = append(r.SyntheticTransactions, tx)
+}
+
+func (r *DeliverTxResult) AddChain(ch state.Chain) {
+	u, err := url.Parse(ch.GetChainUrl())
+	if err != nil {
+		// The caller must ensure the chain URL is correct
+		panic(fmt.Errorf("attempted to add an invalid chain: %v", err))
+	}
+	if r.Chains == nil {
+		r.Chains = map[[32]byte]state.Chain{}
+	}
+	var chainId [32]byte
+	copy(chainId[:], u.ResourceChain())
+	r.Chains[chainId] = ch
 }
