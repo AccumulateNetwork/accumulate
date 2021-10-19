@@ -130,11 +130,11 @@ func CreateTX(sender string, receiver string, amount string) {
 
 		datajson := json.RawMessage(data)
 		params.Tx.Data = &datajson
-		params.Tx.Timestamp = time.Now().Unix()
+		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
 		params.Tx.Signer = &acmeapi.Signer{}
-		params.Tx.Signer.URL = types.String(sender)
+		params.Tx.Sponsor = types.String(sender)
 
-		params.Sig = types.Bytes64{}
+		params.Tx.Sig = types.Bytes64{}
 
 		dataBinary, err := tokentx.MarshalBinary()
 		if err != nil {
@@ -150,7 +150,7 @@ func CreateTX(sender string, receiver string, amount string) {
 		gtx.SigInfo.URL = sender
 		//Provide a nonce, typically this will be queried from identity sig spec and incremented.
 		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
-		gtx.SigInfo.Unused2 = uint64(params.Tx.Timestamp)
+		gtx.SigInfo.Unused2 = params.Tx.Signer.Nonce
 		//The following will be defined in the SigSpec Group for which key to use
 		gtx.SigInfo.MSHeight = 0
 		gtx.SigInfo.PriorityIdx = 0
@@ -160,7 +160,7 @@ func CreateTX(sender string, receiver string, amount string) {
 		if err != nil {
 			return api.NewSubmissionError(err)
 		}
-		params.Sig.FromBytes(ed.GetSignature())
+		params.Tx.Sig.FromBytes(ed.GetSignature())
 		//The public key needs to be used to verify the signature, however,
 		//to pass verification, the validator will hash the key and check the
 		//sig spec group to make sure this key belongs to the identity.

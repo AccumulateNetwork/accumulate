@@ -348,18 +348,23 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 }
 
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
-	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, uint64(req.Tx.Timestamp), payload)
+	tx := new(transactions.GenTransaction)
+	tx.Transaction = payload
 
-	ret := &acmeapi.APIDataResponse{}
-	var msg json.RawMessage
+	tx.SigInfo = new(transactions.SignatureInfo)
+	tx.SigInfo.URL = string(req.Tx.Sponsor)
+	tx.SigInfo.Unused2 = req.Tx.Signer.Nonce
+	tx.SigInfo.MSHeight = req.Tx.KeyPage.Height
+	tx.SigInfo.PriorityIdx = req.Tx.KeyPage.Index
 
-	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
-		ret.Data = &msg
-		return ret
-	}
+	ed := new(transactions.ED25519Sig)
+	ed.Nonce = req.Tx.Signer.Nonce
+	ed.PublicKey = req.Tx.Signer.PublicKey[:]
+	ed.Signature = req.Tx.Sig.Bytes()
 
-	return api.broadcastTx(req.Wait, genTx)
+	tx.Signature = append(tx.Signature, ed)
+
+	return api.broadcastTx(req.Wait, tx)
 }
 
 func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
