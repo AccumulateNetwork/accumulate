@@ -429,7 +429,7 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi
 
 // createTokenAccount creates Token Account
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
-	data := &acmeapi.TokenAccount{}
+	data := &protocol.TokenAccountCreate{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return NewValidatorError(err)

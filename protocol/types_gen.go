@@ -77,6 +77,11 @@ type SyntheticDepositCredits struct {
 	Amount uint64   `json:"amount" form:"amount" query:"amount" validate:"required"`
 }
 
+type TokenAccountCreate struct {
+	Url      string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
+	TokenUrl string `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
+}
+
 type TxResult struct {
 	SyntheticTxs []*TxSynthRef `json:"syntheticTxs" form:"syntheticTxs" query:"syntheticTxs" validate:"required"`
 }
@@ -117,6 +122,8 @@ func (*IdentityCreate) GetType() types.TxType { return types.TxTypeIdentityCreat
 func (*SyntheticCreateChain) GetType() types.TxType { return types.TxTypeSyntheticCreateChain }
 
 func (*SyntheticDepositCredits) GetType() types.TxType { return types.TxTypeSyntheticDepositCredits }
+
+func (*TokenAccountCreate) GetType() types.TxType { return types.TxTypeTokenAccountCreate }
 
 func (v *AddCredits) BinarySize() int {
 	var n int
@@ -282,6 +289,18 @@ func (v *SyntheticDepositCredits) BinarySize() int {
 	n += chainBinarySize(&v.Cause)
 
 	n += uvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *TokenAccountCreate) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(uint64(types.TxTypeTokenAccountCreate))
+
+	n += stringBinarySize(v.Url)
+
+	n += stringBinarySize(v.TokenUrl)
 
 	return n
 }
@@ -494,6 +513,18 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	buffer.Write(chainMarshalBinary(&v.Cause))
 
 	buffer.Write(uvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TokenAccountCreate) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeTokenAccountCreate)))
+
+	buffer.Write(stringMarshalBinary(v.Url))
+
+	buffer.Write(stringMarshalBinary(v.TokenUrl))
 
 	return buffer.Bytes(), nil
 }
@@ -870,6 +901,32 @@ func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
 		v.Amount = x
 	}
 	data = data[uvarintBinarySize(v.Amount):]
+
+	return nil
+}
+
+func (v *TokenAccountCreate) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeTokenAccountCreate
+	if v, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+	}
+	data = data[uvarintBinarySize(uint64(typ)):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[stringBinarySize(v.Url):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TokenUrl: %w", err)
+	} else {
+		v.TokenUrl = x
+	}
+	data = data[stringBinarySize(v.TokenUrl):]
 
 	return nil
 }
