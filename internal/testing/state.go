@@ -88,8 +88,6 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) erro
 	ssgUrl := identityUrl.JoinPath("ssg0")
 
 	ss := new(protocol.KeySpec)
-	ss.HashAlgorithm = protocol.SHA256
-	ss.KeyAlgorithm = protocol.ED25519
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewSigSpec()
@@ -150,9 +148,7 @@ func CreateSigSpec(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKe
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
 		mss.Keys[i] = &protocol.KeySpec{
-			HashAlgorithm: protocol.Unhashed,
-			KeyAlgorithm:  protocol.ED25519,
-			PublicKey:     key,
+			PublicKey: key,
 		}
 	}
 
