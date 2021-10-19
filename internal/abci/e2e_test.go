@@ -244,9 +244,7 @@ func TestCreateSigSpec(t *testing.T) {
 		cms := new(protocol.CreateSigSpec)
 		cms.Url = "foo/keyset1"
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
-			HashAlgorithm: protocol.Unhashed,
-			KeyAlgorithm:  protocol.ED25519,
-			PublicKey:     testKey.PubKey().Bytes(),
+			PublicKey: testKey.PubKey().Bytes(),
 		})
 
 		tx, err := transactions.New("foo", edSigner(fooKey, 1), cms)
@@ -260,8 +258,6 @@ func TestCreateSigSpec(t *testing.T) {
 	key := spec.Keys[0]
 	require.Equal(t, types.Bytes32{}, spec.SigSpecId)
 	require.Equal(t, uint64(0), key.Nonce)
-	require.Equal(t, protocol.Unhashed, key.HashAlgorithm)
-	require.Equal(t, protocol.ED25519, key.KeyAlgorithm)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
 
@@ -317,9 +313,7 @@ func TestAddSigSpec(t *testing.T) {
 		cms := new(protocol.CreateSigSpec)
 		cms.Url = "foo/sigspec2"
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
-			HashAlgorithm: protocol.Unhashed,
-			KeyAlgorithm:  protocol.ED25519,
-			PublicKey:     testKey2.PubKey().Bytes(),
+			PublicKey: testKey2.PubKey().Bytes(),
 		})
 
 		tx, err := transactions.New("foo/ssg1", edSigner(testKey1, 1), cms)
@@ -333,7 +327,5 @@ func TestAddSigSpec(t *testing.T) {
 	key := spec.Keys[0]
 	require.Equal(t, groupChainId, spec.SigSpecId)
 	require.Equal(t, uint64(0), key.Nonce)
-	require.Equal(t, protocol.Unhashed, key.HashAlgorithm)
-	require.Equal(t, protocol.ED25519, key.KeyAlgorithm)
 	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }

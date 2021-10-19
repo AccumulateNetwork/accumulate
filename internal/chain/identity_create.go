@@ -60,8 +60,6 @@ func (IdentityCreate) DeliverTx(st *StateManager, tx *transactions.GenTransactio
 	ssgUrl := identityUrl.JoinPath("ssg0")
 
 	ss := new(protocol.KeySpec)
-	ss.HashAlgorithm = protocol.SHA256
-	ss.KeyAlgorithm = protocol.ED25519
 	ss.PublicKey = body.PublicKeyHash[:]
 
 	mss := protocol.NewSigSpec()

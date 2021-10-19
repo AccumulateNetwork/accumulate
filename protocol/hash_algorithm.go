@@ -56,6 +56,14 @@ func (ha HashAlgorithm) Apply(b []byte) ([]byte, error) {
 	}
 }
 
+func (ha HashAlgorithm) MustApply(b []byte) []byte {
+	b, err := ha.Apply(b)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
 func (ha HashAlgorithm) BinarySize() int {
 	return 1
 }
