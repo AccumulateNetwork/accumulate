@@ -18,7 +18,7 @@ type AddCredits struct {
 
 type AnonTokenAccount struct {
 	state.ChainHeader
-	TokenUrl      string  `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	TokenUrl      string  `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	Balance       big.Int `json:"balance" form:"balance" query:"balance" validate:"required"`
 	TxCount       uint64  `json:"txCount" form:"txCount" query:"txCount" validate:"required"`
 	Nonce         uint64  `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
@@ -26,18 +26,25 @@ type AnonTokenAccount struct {
 }
 
 type ChainParams struct {
-	Url  string `json:"url" form:"url" query:"url" validate:"required"`
+	Url  string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	Data []byte `json:"data" form:"data" query:"data" validate:"required"`
 }
 
 type CreateSigSpec struct {
-	Url  string           `json:"url" form:"url" query:"url" validate:"required"`
+	Url  string           `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	Keys []*KeySpecParams `json:"keys" form:"keys" query:"keys" validate:"required"`
 }
 
 type CreateSigSpecGroup struct {
-	Url      string     `json:"url" form:"url" query:"url" validate:"required"`
+	Url      string     `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	SigSpecs [][32]byte `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
+}
+
+type IdentityCreate struct {
+	Url         string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
+	PublicKey   []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
+	KeyBookName string `json:"keyBookName" form:"keyBookName" query:"keyBookName"`
+	KeyPageName string `json:"keyPageName" form:"keyPageName" query:"keyPageName"`
 }
 
 type KeySpec struct {
@@ -77,7 +84,7 @@ type TxResult struct {
 type TxSynthRef struct {
 	Type  uint64   `json:"type" form:"type" query:"type" validate:"required"`
 	Hash  [32]byte `json:"hash" form:"hash" query:"hash" validate:"required"`
-	Url   string   `json:"url" form:"url" query:"url" validate:"required"`
+	Url   string   `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	TxRef [32]byte `json:"txRef" form:"txRef" query:"txRef" validate:"required"`
 }
 
@@ -104,6 +111,8 @@ func (*AddCredits) GetType() types.TxType { return types.TxTypeAddCredits }
 func (*CreateSigSpec) GetType() types.TxType { return types.TxTypeCreateSigSpec }
 
 func (*CreateSigSpecGroup) GetType() types.TxType { return types.TxTypeCreateSigSpecGroup }
+
+func (*IdentityCreate) GetType() types.TxType { return types.TxTypeIdentityCreate }
 
 func (*SyntheticCreateChain) GetType() types.TxType { return types.TxTypeSyntheticCreateChain }
 
@@ -177,6 +186,22 @@ func (v *CreateSigSpecGroup) BinarySize() int {
 	n += stringBinarySize(v.Url)
 
 	n += chainSetBinarySize(v.SigSpecs)
+
+	return n
+}
+
+func (v *IdentityCreate) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(uint64(types.TxTypeIdentityCreate))
+
+	n += stringBinarySize(v.Url)
+
+	n += bytesBinarySize(v.PublicKey)
+
+	n += stringBinarySize(v.KeyBookName)
+
+	n += stringBinarySize(v.KeyPageName)
 
 	return n
 }
@@ -363,6 +388,22 @@ func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 	buffer.Write(stringMarshalBinary(v.Url))
 
 	buffer.Write(chainSetMarshalBinary(v.SigSpecs))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *IdentityCreate) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeIdentityCreate)))
+
+	buffer.Write(stringMarshalBinary(v.Url))
+
+	buffer.Write(bytesMarshalBinary(v.PublicKey))
+
+	buffer.Write(stringMarshalBinary(v.KeyBookName))
+
+	buffer.Write(stringMarshalBinary(v.KeyPageName))
 
 	return buffer.Bytes(), nil
 }
@@ -639,6 +680,46 @@ func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 		v.SigSpecs = x
 	}
 	data = data[chainSetBinarySize(v.SigSpecs):]
+
+	return nil
+}
+
+func (v *IdentityCreate) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeIdentityCreate
+	if v, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+	}
+	data = data[uvarintBinarySize(uint64(typ)):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[stringBinarySize(v.Url):]
+
+	if x, err := bytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	data = data[bytesBinarySize(v.PublicKey):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyBookName: %w", err)
+	} else {
+		v.KeyBookName = x
+	}
+	data = data[stringBinarySize(v.KeyBookName):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyPageName: %w", err)
+	} else {
+		v.KeyPageName = x
+	}
+	data = data[stringBinarySize(v.KeyPageName):]
 
 	return nil
 }
