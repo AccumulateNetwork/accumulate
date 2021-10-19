@@ -2,7 +2,6 @@ package abci_test
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding"
 	"encoding/json"
 	"fmt"
@@ -26,9 +25,8 @@ import (
 )
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address) *fakeNode {
-	appId := sha256.Sum256([]byte("foo bar"))
 	db := new(state.StateDB)
-	err := db.Open("valacc.db", appId[:], true, true)
+	err := db.Open("valacc.db", true, true)
 	require.NoError(t, err)
 
 	return createApp(t, db, addr)
