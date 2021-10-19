@@ -358,19 +358,19 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	req.Tx = &api.APIRequestRawTx{}
 	req.Tx.Signer = &api.Signer{}
-	req.Tx.Signer.URL = types.String(adiSponsor)
+	req.Tx.Sponsor = types.String(adiSponsor)
 	copy(req.Tx.Signer.PublicKey[:], kpSponsor.PubKey().Bytes())
-	req.Tx.Timestamp = time.Now().Unix()
+	req.Tx.Signer.Nonce = uint64(time.Now().Unix())
 	adiJson := json.RawMessage(data)
 	req.Tx.Data = &adiJson
 
 	// TODO Why does this sign a ledger? This will fail in GenTransaction.
-	ledger := types.MarshalBinaryLedgerAdiChainPath(*adi.URL.AsString(), *req.Tx.Data, req.Tx.Timestamp)
+	ledger := types.MarshalBinaryLedgerAdiChainPath(*adi.URL.AsString(), *req.Tx.Data, int64(req.Tx.Signer.Nonce))
 	sig, err := kpSponsor.Sign(ledger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	copy(req.Sig[:], sig)
+	copy(req.Tx.Sig[:], sig)
 
 	jsonReq, err := json.Marshal(&req)
 	if err != nil {
