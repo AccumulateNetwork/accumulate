@@ -26,7 +26,7 @@ import (
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address) *fakeNode {
 	db := new(state.StateDB)
-	err := db.Open("valacc.db", true, true)
+	err := db.Open("memory", true, true)
 	require.NoError(t, err)
 
 	return createApp(t, db, addr)
