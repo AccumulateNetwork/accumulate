@@ -148,8 +148,10 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		acctTx := api.NewTokenAccount("FooBar/Baz", types.String(protocol.AcmeUrl().String()))
-		tx, err := transactions.New("FooBar", edSigner(adiKey, 1), acctTx)
+		tac := new(protocol.TokenAccountCreate)
+		tac.Url = "FooBar/Baz"
+		tac.TokenUrl = protocol.AcmeUrl().String()
+		tx, err := transactions.New("FooBar", edSigner(adiKey, 1), tac)
 		require.NoError(t, err)
 		send(tx)
 	})
