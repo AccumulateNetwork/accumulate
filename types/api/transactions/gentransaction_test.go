@@ -8,8 +8,8 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	. "github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/stretchr/testify/require"
 )
@@ -156,7 +156,7 @@ func TestGenTransaction_TransactionType(t *testing.T) {
 		Data encoding.BinaryMarshaler
 		Type types.TxType
 	}{
-		"ADI": {new(api.ADI), types.TxTypeIdentityCreate},
+		"ADI": {new(protocol.IdentityCreate), types.TxTypeIdentityCreate},
 		// TODO Add all payload types
 	}
 
