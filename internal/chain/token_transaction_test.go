@@ -2,7 +2,6 @@ package chain_test
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
 	"fmt"
 	"testing"
 
@@ -18,10 +17,9 @@ import (
 )
 
 func TestAnonTokenTransactions(t *testing.T) {
-	appId := sha256.Sum256([]byte("anon"))
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 	db := &state.StateDB{}
-	err := db.Open("mem", appId[:], true, true)
+	err := db.Open("mem", true, true)
 	require.NoError(t, err)
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
