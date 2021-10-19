@@ -155,3 +155,6 @@ TokenAccountCreate:
   - name: TokenUrl
     type: string
     is-url: true
+  - name: KeyBookUrl
+    type: string
+    is-url: true
