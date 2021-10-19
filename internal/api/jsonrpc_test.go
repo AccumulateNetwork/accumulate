@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/stretchr/testify/require"
 
@@ -348,9 +349,10 @@ func TestJsonRpcAdi(t *testing.T) {
 	kpSponsor := types.CreateKeyPairFromSeed(pv.Key.PrivKey.Bytes())
 
 	req := api.APIRequestRaw{}
-	adi := &api.ADI{}
-	adi.URL = "RoadRunner"
-	adi.PublicKeyHash = sha256.Sum256(kpNewAdi.PubKey().Bytes())
+	adi := &protocol.IdentityCreate{}
+	adi.Url = "RoadRunner"
+	kh := sha256.Sum256(kpNewAdi.PubKey().Bytes())
+	adi.PublicKey = kh[:]
 	data, err := json.Marshal(adi)
 	if err != nil {
 		t.Fatal(err)
@@ -365,7 +367,7 @@ func TestJsonRpcAdi(t *testing.T) {
 	req.Tx.Data = &adiJson
 
 	// TODO Why does this sign a ledger? This will fail in GenTransaction.
-	ledger := types.MarshalBinaryLedgerAdiChainPath(*adi.URL.AsString(), *req.Tx.Data, int64(req.Tx.Signer.Nonce))
+	ledger := types.MarshalBinaryLedgerAdiChainPath(adi.Url, *req.Tx.Data, int64(req.Tx.Signer.Nonce))
 	sig, err := kpSponsor.Sign(ledger)
 	if err != nil {
 		t.Fatal(err)

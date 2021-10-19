@@ -26,6 +26,8 @@ type Field struct {
 	MarshalAs string `yaml:"marshal-as"`
 	Slice     *Field
 	Pointer   bool
+	Optional  bool
+	IsUrl     bool `yaml:"is-url"`
 }
 
 var flags struct {
@@ -237,7 +239,21 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		for _, field := range typ.Fields {
 			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
-			fmt.Fprintf(w, "\t%s %s `json:\"%[3]s\" form:\"%[3]s\" query:\"%[3]s\" validate:\"required\"`\n", field.Name, resolveType(field, false), lcName)
+			fmt.Fprintf(w, "\t%s %s `", field.Name, resolveType(field, false))
+			fmt.Fprintf(w, `json:"%[1]s" form:"%[1]s" query:"%[1]s"`, lcName)
+
+			var validate []string
+			if !field.Optional {
+				validate = append(validate, "required")
+			}
+			if field.IsUrl {
+				validate = append(validate, "acc-url")
+			}
+			if len(validate) > 0 {
+				fmt.Fprintf(w, ` validate:"%s"`, strings.Join(validate, ","))
+			}
+
+			fmt.Fprint(w, "`\n")
 		}
 		fmt.Fprintf(w, "}\n\n")
 	}
