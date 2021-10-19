@@ -14,11 +14,11 @@ type TokenIssuance struct{}
 
 func (TokenIssuance) Type() types.TxType { return types.TxTypeTokenCreate }
 
-func (TokenIssuance) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (TokenIssuance) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
 	return nil
 }
 
-func (TokenIssuance) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (TokenIssuance) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
 	if err := tx.SetRoutingChainID(); err != nil {
 		return nil, err
 	}

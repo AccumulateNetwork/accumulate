@@ -138,7 +138,7 @@ func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed2551
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
 	amtToDeposit := int64(50000)                             //deposit 50k tokens
 	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
 	deposit.TokenUrl = tokenUrl
@@ -168,9 +168,9 @@ func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed2551
 	return destAddress, privateKey, gtx, nil
 }
 
-func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
+func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	from := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
+	from := types.String(anon.GenerateAcmeAddress(sponsor.Public().(ed25519.PublicKey)))
 
 	tokenTx := apitypes.TokenTx{}
 
@@ -191,8 +191,8 @@ func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount u
 
 	ed := new(transactions.ED25519Sig)
 	gtx.SigInfo.Unused2 = 1
-	ed.PublicKey = (*origin)[32:]
-	err = ed.Sign(gtx.SigInfo.Unused2, *origin, gtx.TransactionHash())
+	ed.PublicKey = sponsor[32:]
+	err = ed.Sign(gtx.SigInfo.Unused2, sponsor, gtx.TransactionHash())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TX: %v", err)
 	}

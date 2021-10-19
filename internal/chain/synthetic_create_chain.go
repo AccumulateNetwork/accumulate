@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -18,24 +17,23 @@ func (SyntheticCreateChain) Type() types.TxType {
 	return types.TxTypeSyntheticCreateChain
 }
 
-type createChain struct {
-	Url  *url.URL
-	Data []byte
-}
-
-func willCreateChain(ccs []createChain, id []byte) bool {
+func willCreateChain(ccs []state.Chain, id []byte) bool {
 	for _, cc := range ccs {
-		if cc.Url == nil {
+		if cc == nil {
 			continue
 		}
-		if bytes.Equal(cc.Url.ResourceChain(), id) {
+		u, err := cc.Header().ParseUrl()
+		if err != nil {
+			continue
+		}
+		if bytes.Equal(u.ResourceChain(), id) {
 			return true
 		}
 	}
 	return false
 }
 
-func checkSyntheticCreateChain(st *state.StateEntry, tx *transactions.GenTransaction) ([]createChain, error) {
+func checkSyntheticCreateChain(st *StateManager, tx *transactions.GenTransaction) ([]state.Chain, error) {
 	scc := new(protocol.SyntheticCreateChain)
 	err := tx.As(scc)
 	if err != nil {
@@ -46,45 +44,40 @@ func checkSyntheticCreateChain(st *state.StateEntry, tx *transactions.GenTransac
 		return nil, fmt.Errorf("cause is missing")
 	}
 
-	ccs := make([]createChain, len(scc.Chains))
+	ccs := make([]state.Chain, len(scc.Chains))
 	for i, cc := range scc.Chains {
-		chain := new(state.ChainHeader)
-		err := chain.UnmarshalBinary(cc)
+		record, err := unmarshalRecord(&state.Object{Entry: cc})
 		if err != nil {
 			return nil, fmt.Errorf("invalid chain payload: %v", err)
 		}
-		// TODO Check that the chain can be unmarshalled into whatever type it
-		// claims to be. It should be OK to skip this, since synthetic
-		// transactions should already be validated.
 
-		u, err := chain.ParseUrl()
+		ccs[i] = record
+
+		u, err := record.Header().ParseUrl()
 		if err != nil {
 			return nil, fmt.Errorf("invalid chain URL: %v", err)
 		}
-		ccs[i].Url = u
-		ccs[i].Data = cc
 
-		if _, err := st.DB.GetCurrentEntry(u.ResourceChain()); err == nil {
+		if _, err := st.LoadUrl(u); err == nil {
 			return nil, fmt.Errorf("chain %q already exists", u.String())
 		} else if !errors.Is(err, state.ErrNotFound) {
 			return nil, fmt.Errorf("error fetching %q: %v", u.String(), err)
 		}
 
-		var adi [32]byte
-		copy(adi[:], u.IdentityChain())
-
-		if bytes.Equal(u.ResourceChain(), adi[:]) {
-			if chain.Type != types.ChainTypeAdi {
-				return nil, fmt.Errorf("%v cannot be its own identity", chain.Type)
+		if u.Identity().Equal(u) {
+			if record.Header().Type != types.ChainTypeAdi {
+				return nil, fmt.Errorf("%v cannot be its own identity", record.Header().Type)
 			}
 			continue
 		}
 
+		var adi [32]byte
+		copy(adi[:], u.IdentityChain())
 		if willCreateChain(ccs, adi[:]) {
 			continue // Found identity
 		}
 
-		_, err = st.DB.GetCurrentEntry(adi[:])
+		_, err = st.Load(adi)
 		if err == nil {
 			continue // Found identity
 		}
@@ -97,21 +90,19 @@ func checkSyntheticCreateChain(st *state.StateEntry, tx *transactions.GenTransac
 	return ccs, nil
 }
 
-func (SyntheticCreateChain) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (SyntheticCreateChain) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
 	_, err := checkSyntheticCreateChain(st, tx)
 	return err
 }
 
-func (SyntheticCreateChain) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (SyntheticCreateChain) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
 	ccs, err := checkSyntheticCreateChain(st, tx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
 	for _, cc := range ccs {
-		chainId := types.Bytes(cc.Url.ResourceChain()).AsBytes32()
-		st.DB.AddStateEntry(&chainId, &txHash, &state.Object{Entry: cc.Data})
+		st.Store(cc)
 	}
-	return new(DeliverTxResult), nil
+	return nil
 }
