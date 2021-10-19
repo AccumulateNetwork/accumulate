@@ -3,7 +3,6 @@ package state
 import (
 	"bytes"
 	"encoding"
-	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -53,34 +52,4 @@ func (app *Object) UnmarshalBinary(data []byte) (err error) {
 
 func (o *Object) As(entry encoding.BinaryUnmarshaler) error {
 	return entry.UnmarshalBinary(o.Entry)
-}
-
-type StateEntry struct {
-	ChainState  *Object
-	ChainId     *types.Bytes32
-	ChainHeader *ChainHeader
-
-	DB *StateDB
-}
-
-// LoadChainState retrieves the specified chain and unmarshals it, and
-// retrieves its ADI and unmarshals it.
-func (s *StateDB) LoadChainState(chainId []byte) (*StateEntry, error) {
-	chain32 := types.Bytes(chainId).AsBytes32()
-	chainState, chainHeader, err := s.LoadChain(chainId)
-	if errors.Is(err, ErrNotFound) {
-		return &StateEntry{
-			DB:      s,
-			ChainId: &chain32,
-		}, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	return &StateEntry{
-		DB:          s,
-		ChainId:     &chain32,
-		ChainState:  chainState,
-		ChainHeader: chainHeader,
-	}, nil
 }
