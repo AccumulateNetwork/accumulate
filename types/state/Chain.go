@@ -14,8 +14,7 @@ import (
 type Chain interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
-	GetType() types.ChainType
-	GetChainUrl() string
+	Header() *ChainHeader
 }
 
 //ChainHeader information for the state object.  Each state object will contain a header
@@ -28,6 +27,8 @@ type ChainHeader struct {
 	// transient
 	url *url.URL
 }
+
+func (h *ChainHeader) Header() *ChainHeader { return h }
 
 //SetHeader sets the data for a chain header
 func (h *ChainHeader) SetHeader(chainUrl types.String, chainType types.ChainType) {
