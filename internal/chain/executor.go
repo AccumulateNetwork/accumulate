@@ -150,11 +150,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	// TODO check height
 
 	for i, sig := range tx.Signature {
-		ks, err := sigSpec.FindKey(sig.PublicKey, protocol.ED25519)
-		if err != nil {
-			return nil, fmt.Errorf("failed to verify signature %d: %v", i, err)
-		}
-
+		ks := sigSpec.FindKey(sig.PublicKey)
 		if ks == nil {
 			return nil, fmt.Errorf("no key spec matches signature %d", i)
 		}
