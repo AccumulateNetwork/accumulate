@@ -2,7 +2,6 @@ package chain_test
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
 	"fmt"
 	"testing"
 
@@ -15,7 +14,6 @@ import (
 )
 
 func TestSynthTokenDeposit_Anon(t *testing.T) {
-	appId := sha256.Sum256([]byte("anon"))
 	tokenUrl := protocol.AcmeUrl().String()
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
@@ -24,7 +22,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	require.NoError(t, err)
 
 	db := new(state.StateDB)
-	require.NoError(t, db.Open("mem", appId[:], true, true))
+	require.NoError(t, db.Open("mem", true, true))
 
 	chainId := types.Bytes(gtx.ChainID).AsBytes32()
 	se := &state.StateEntry{}

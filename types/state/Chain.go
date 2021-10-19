@@ -100,8 +100,8 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	return nil
 }
 
-func (db *StateDB) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
-	state, err := db.GetCurrentEntry(chainId)
+func (s *StateDB) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
+	state, err := s.GetCurrentEntry(chainId)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +115,8 @@ func (db *StateDB) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
 }
 
 // LoadChain retrieves and unmarshals the specified chain.
-func (db *StateDB) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
+func (s *StateDB) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
 	chain := new(ChainHeader)
-	obj, err := db.LoadChainAs(chainId, chain)
+	obj, err := s.LoadChainAs(chainId, chain)
 	return obj, chain, err
 }
