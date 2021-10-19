@@ -65,12 +65,12 @@ type StateEntry struct {
 
 // LoadChainState retrieves the specified chain and unmarshals it, and
 // retrieves its ADI and unmarshals it.
-func (db *StateDB) LoadChainState(chainId []byte) (*StateEntry, error) {
+func (s *StateDB) LoadChainState(chainId []byte) (*StateEntry, error) {
 	chain32 := types.Bytes(chainId).AsBytes32()
-	chainState, chainHeader, err := db.LoadChain(chainId)
+	chainState, chainHeader, err := s.LoadChain(chainId)
 	if errors.Is(err, ErrNotFound) {
 		return &StateEntry{
-			DB:      db,
+			DB:      s,
 			ChainId: &chain32,
 		}, nil
 	} else if err != nil {
@@ -78,7 +78,7 @@ func (db *StateDB) LoadChainState(chainId []byte) (*StateEntry, error) {
 	}
 
 	return &StateEntry{
-		DB:          db,
+		DB:          s,
 		ChainId:     &chain32,
 		ChainState:  chainState,
 		ChainHeader: chainHeader,

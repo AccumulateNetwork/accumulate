@@ -26,8 +26,7 @@ func TestReceipt(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	// Create a MerkleManager for the memory database
-	AppID := sha256.Sum256([]byte("test"))
-	manager, err := NewMerkleManager(dbManager, AppID[:], 4)
+	manager, err := NewMerkleManager(dbManager, 4)
 	if err != nil {
 		fmt.Errorf("did not create a merkle manager: %v", err)
 	}
@@ -82,8 +81,7 @@ func TestReceiptAll(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "")
 	// Create a MerkleManager for the memory database
-	appID := sha256.Sum256([]byte("test"))
-	manager, err := NewMerkleManager(dbManager, appID[:], 4)
+	manager, err := NewMerkleManager(dbManager, 4)
 	if err != nil {
 		fmt.Errorf("did not create a merkle manager: %v", err)
 	}
@@ -139,9 +137,8 @@ func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (ma
 	}
 
 	// Create a MerkleManager for the memory database
-	appID := sha256.Sum256([]byte("test"))
 	var err error
-	manager, err = NewMerkleManager(dbManager, appID[:], 2)
+	manager, err = NewMerkleManager(dbManager, 2)
 	if err != nil {
 		fmt.Errorf("did not create a merkle manager: %v", err)
 	}
