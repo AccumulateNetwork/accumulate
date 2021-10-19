@@ -1,7 +1,6 @@
 package managed
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"math"
 	"testing"
@@ -9,35 +8,24 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 )
 
-func TestAddAppID(t *testing.T) {
-	AppID := sha256.Sum256([]byte{1})
-	AppID2 := Add2AppID(AppID[:], 1) // update the AppID to create AppID2
-	if bytes.Equal(AppID[:], AppID2) {
-		t.Errorf("These should not be equal \n%x \n%x", AppID, AppID2)
-	}
-	AppID2 = Add2AppID(AppID2[:], 0xFF) // Back out our update (0xFF is the unsigned 2's complement of 1)
-	if !bytes.Equal(AppID[:], AppID2) {
-		t.Errorf("These should be equal \n%x \n%x", AppID, AppID2)
-	}
-
-}
-
 func TestMerkleManager_ReadChainHead(t *testing.T) {
 	dbManager := new(database.Manager)
 	if err := dbManager.Init("memory", ""); err != nil {
 		t.Fatal(err)
 	}
-	appID := sha256.Sum256([]byte("root"))
-	MM1, err := NewMerkleManager(dbManager, appID[:], 2)
+	MM1, err := NewMerkleManager(dbManager, 2)
 	if err != nil {
 		t.Fatal("didn't create a Merkle Manager")
 	}
 
 	for i := 0; i < 100; i++ {
 		MM1.AddHash(sha256.Sum256([]byte{byte(i), byte(i >> 8), byte(i >> 16), byte(i >> 24)}))
-		MM1.WriteChainHead()
+		err1 := MM1.WriteChainHead()
+		if err1 != nil {
+			t.Fatalf("didn't write chain head")
+		}
 		MM1.Manager.EndBatch()
-		MM2, err := NewMerkleManager(dbManager, appID[:], 2)
+		MM2, err := NewMerkleManager(dbManager, 2)
 		if err != nil {
 			t.Fatalf("didn't create another Merkle Manager")
 		}
@@ -57,8 +45,7 @@ func TestIndexing(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	appID := sha256.Sum256([]byte("root"))
-	MM1, err := NewMerkleManager(dbManager, appID[:], 2)
+	MM1, err := NewMerkleManager(dbManager, 2)
 	if err != nil {
 		t.Fatal("didn't create a Merkle Manager")
 	}
@@ -94,7 +81,7 @@ func TestIndexing(t *testing.T) {
 		hash = sha256.Sum256(hash[:])
 	}
 
-	MM2, err := NewMerkleManager(dbManager, appID[:], 2)
+	MM2, err := NewMerkleManager(dbManager, 2)
 	if err != nil {
 		t.Fatal("Did not create a Merkle Manager")
 	}
@@ -129,8 +116,7 @@ func TestMerkleManager(t *testing.T) {
 	MarkMask := MarkFreq - 1
 
 	// Set up a MM1 that uses a MarkPower of 2
-	appID := sha256.Sum256([]byte("root"))
-	MM1, err := NewMerkleManager(dbManager, appID[:], MarkPower)
+	MM1, err := NewMerkleManager(dbManager, MarkPower)
 	if err != nil {
 		t.Fatal("did not create a merkle manager")
 	}
