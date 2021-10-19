@@ -1,7 +1,6 @@
 package testing
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -63,9 +62,9 @@ func NewBVCNode(dir string, cleanup func(func())) (*node.Node, *privval.FilePV, 
 	}
 
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
-	bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
+	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
 	sdb := new(state.StateDB)
-	err = sdb.Open(dbPath, bvcId[:], false, true)
+	err = sdb.Open(dbPath, false, true)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}

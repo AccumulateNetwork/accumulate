@@ -12,7 +12,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/managed"
 	"github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
-	smtDB "github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -50,6 +50,8 @@ const (
 	bucketPendingTx     = bucket("PendingTx")     //Store pending transaction
 	bucketStagedSynthTx = bucket("StagedSynthTx") //store the staged synthetic transactions
 	bucketTxToSynthTx   = bucket("TxToSynthTx")   //TXID to synthetic TXID
+
+	markPower = int64(8)
 )
 
 //bucket SynthTx stores a list of synth tx's derived from a tx
@@ -66,26 +68,11 @@ type blockUpdates struct {
 
 // StateDB the state DB will only retrieve information out of the database.  To store stuff use PersistentStateDB instead
 type StateDB struct {
-	db    *smtDB.Manager
-	debug bool
-	// TODO:  Need a couple of things:
-	//     ChainState interface
-	//     Lets you marshal a ChainState to disk, and lets you unmarshal them
-	//     later.  Holds the type of the chain, and all the state about the
-	//     chain needed to validate transactions on the chain. (accounts for
-	//     example Balance, SigSpecGroup (hash), URL)  All ChainState
-	//     instances hold the MerkleManagerState for the chain. MDRoot
-	//     .
-	//     On the other side, allows a ChainState to be unmarshaled for updates
-	//     and access.
-	bpt        *pmt.Manager           //pbt is the global patricia trie for the application
-	blockIndex int64                  //Index of the current block
-	rmm        *managed.MerkleManager //rmm is the merkle manager for root values (unique and shared over all chains)
-	mm         *managed.MerkleManager //mm is the merkle manager for a Main Chain.  The salt is set by the appId
-	pmm        *managed.MerkleManager //pmm is  merkle manaager for Pending Chain, and its salt is created from appId
-	bmm        *managed.MerkleManager //bmm is  merkle manaager for block index Chain, and its salt is created from appId
-	appId      []byte                 // appId of a Main Chain
-
+	db           *database.Manager
+	mm           *managed.MerkleManager
+	debug        bool
+	bpt          *pmt.Manager //pbt is the global patricia trie for the application
+	blockIndex   int64        //Index of the current block
 	TimeBucket   float64
 	mutex        sync.Mutex
 	updates      map[types.Bytes32]*blockUpdates
@@ -93,33 +80,18 @@ type StateDB struct {
 	sync         sync.WaitGroup
 }
 
-func (sdb *StateDB) init(appId []byte, debug bool) (err error) {
-	markPower := int64(8)
+func (s *StateDB) init(debug bool) (err error) {
 
-	sdb.debug = debug
-	sdb.updates = make(map[types.Bytes32]*blockUpdates)
-	sdb.transactions.reset()
+	s.debug = debug
+	s.updates = make(map[types.Bytes32]*blockUpdates)
+	s.transactions.reset()
 
-	sdb.bpt = pmt.NewBPTManager(sdb.db)
+	s.bpt = pmt.NewBPTManager(s.db)
+	managed.NewMerkleManager(s.db, markPower)
 
-	pAppId := managed.Add2AppID(appId, managed.PendingOff)
-	bAppId := managed.Add2AppID(appId, managed.BlkIdxOff)
-
-	if sdb.mm, err = managed.NewMerkleManager(sdb.db, appId, markPower); err != nil {
-		return err
-	}
-	if sdb.pmm, err = managed.NewMerkleManager(sdb.db, pAppId, markPower); err != nil {
-		return err
-	}
-	if sdb.bmm, err = managed.NewMerkleManager(sdb.db, bAppId, markPower); err != nil {
-		return err
-	}
-	sdb.rmm = sdb.mm.Copy(nil)
-	sdb.appId = appId
-
-	ent, err := sdb.GetPersistentEntry(blockIndexKey[:], false)
+	ent, err := s.GetPersistentEntry(blockIndexKey[:], false)
 	if err == nil {
-		sdb.blockIndex, _ = common.BytesInt64(ent.Entry)
+		s.blockIndex, _ = common.BytesInt64(ent.Entry)
 	} else if !errors.Is(err, ErrNotFound) {
 		return err
 	}
@@ -128,49 +100,57 @@ func (sdb *StateDB) init(appId []byte, debug bool) (err error) {
 }
 
 // Open database to manage the smt and chain states
-func (sdb *StateDB) Open(dbFilename string, appId []byte, useMemDB bool, debug bool) error {
+func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool) (err error) {
 	dbType := "badger"
 	if useMemDB {
 		dbType = "memory"
 	}
 
-	sdb.db = &smtDB.Manager{}
-	err := sdb.db.Init(dbType, dbFilename)
+	s.db, err = database.NewDBManager(dbType, dbFilename)
 	if err != nil {
 		return err
 	}
 
-	return sdb.init(appId, debug)
+	s.mm, err = managed.NewMerkleManager(s.db, markPower)
+	if err != nil {
+		return err
+	}
+
+	return s.init(debug)
 }
 
-func (sdb *StateDB) Load(db storage.KeyValueDB, appId []byte, debug bool) error {
-	sdb.db = new(smtDB.Manager)
-	sdb.db.InitWithDB(db)
-	return sdb.init(appId, debug)
+func (s *StateDB) Load(db storage.KeyValueDB, debug bool) (err error) {
+	s.db = new(database.Manager)
+	s.db.InitWithDB(db)
+	s.mm, err = managed.NewMerkleManager(s.db, markPower)
+	if err != nil {
+		return err
+	}
+	return s.init(debug)
 }
 
-func (sdb *StateDB) GetDB() *smtDB.Manager {
-	return sdb.db
+func (s *StateDB) GetDB() *database.Manager {
+	return s.db
 }
 
-func (sdb *StateDB) Sync() {
-	sdb.sync.Wait()
+func (s *StateDB) Sync() {
+	s.sync.Wait()
 }
 
 //GetTx get the transaction by transaction ID
-func (sdb *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxIds []byte, err error) {
-	tx = sdb.db.Key(bucketTx.AsString(), txId).Get()
+func (s *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxIds []byte, err error) {
+	tx = s.db.Key(bucketTx.AsString(), txId).Get()
 
-	pendingTxId := sdb.db.Key(bucketMainToPending.AsString(), txId).Get()
-	pendingTx = sdb.db.Key(bucketPendingTx.AsString(), pendingTxId).Get()
+	pendingTxId := s.db.Key(bucketMainToPending.AsString(), txId).Get()
+	pendingTx = s.db.Key(bucketPendingTx.AsString(), pendingTxId).Get()
 
-	syntheticTxIds = sdb.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
+	syntheticTxIds = s.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
 
 	return tx, pendingTx, syntheticTxIds, nil
 }
 
 //AddSynthTx add the synthetic transaction which is mapped to the parent transaction
-func (sdb *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synthTxObject *Object) {
+func (s *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synthTxObject *Object) {
 	if debugStateDBWrites {
 		fmt.Printf("AddSynthTx %X\n", synthTxObject.Entry)
 	}
@@ -178,16 +158,16 @@ func (sdb *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, sy
 	var ok bool
 
 	parentHash := parentTxId.AsBytes32()
-	if val, ok = sdb.transactions.synthTxMap[parentHash]; !ok {
+	if val, ok = s.transactions.synthTxMap[parentHash]; !ok {
 		val = new([]transactionStateInfo)
-		sdb.transactions.synthTxMap[parentHash] = val
+		s.transactions.synthTxMap[parentHash] = val
 	}
 	*val = append(*val, transactionStateInfo{synthTxObject, nil, synthTxId})
 }
 
 //AddPendingTx adds the pending tx raw data and signature of that data to tx,
 //signature needs to be a signed hash of the tx.
-func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes,
+func (s *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes,
 	txPending *Object, txValidated *Object) error {
 	_ = chainId
 	chainType, _ := binary.Uvarint(txPending.Entry)
@@ -196,9 +176,9 @@ func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes,
 			types.ChainTypePendingTransaction.Name(), types.TxType(chainType).Name())
 	}
 	//append the list of pending Tx's, txId's, and validated Tx's.
-	sdb.mutex.Lock()
+	s.mutex.Lock()
 	tsi := transactionStateInfo{txPending, chainId.Bytes(), txId}
-	sdb.transactions.pendingTx = append(sdb.transactions.pendingTx, &tsi)
+	s.transactions.pendingTx = append(s.transactions.pendingTx, &tsi)
 	if txValidated != nil {
 		chainType, _ := binary.Uvarint(txValidated.Entry)
 		if types.ChainType(chainType) != types.ChainTypeTransaction {
@@ -206,22 +186,22 @@ func (sdb *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes,
 				types.ChainTypeTransaction.Name(), types.ChainType(chainType).Name())
 		}
 		tsi := transactionStateInfo{txValidated, chainId.Bytes(), txId}
-		sdb.transactions.validatedTx = append(sdb.transactions.validatedTx, &tsi)
+		s.transactions.validatedTx = append(s.transactions.validatedTx, &tsi)
 	}
-	sdb.mutex.Unlock()
+	s.mutex.Unlock()
 	return nil
 }
 
 //GetPersistentEntry will pull the data from the database for the StateEntries bucket.
-func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, error) {
+func (s *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, error) {
 	_ = verify
-	sdb.Sync()
+	s.Sync()
 
-	if sdb.db == nil {
+	if s.db == nil {
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data := sdb.db.Key("StateEntries", chainId).Get()
+	data := s.db.Key("StateEntries", chainId).Get()
 
 	if data == nil {
 		return nil, fmt.Errorf("%w: no state defined for %X", ErrNotFound, chainId)
@@ -240,7 +220,7 @@ func (sdb *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, er
 
 // GetCurrentEntry retrieves the current state object from the database based upon chainId.  Current state either comes
 // from a previously saves state for the current block, or it is from the database
-func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
+func (s *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 	if chainId == nil {
 		return nil, fmt.Errorf("chain id is invalid, thus unable to retrieve current entry")
 	}
@@ -250,16 +230,16 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 
 	copy(key[:32], chainId[:32])
 
-	sdb.mutex.Lock()
-	currentState := sdb.updates[key]
-	sdb.mutex.Unlock()
+	s.mutex.Lock()
+	currentState := s.updates[key]
+	s.mutex.Unlock()
 	if currentState != nil {
 		ret = currentState.stateData
 	} else {
 		currentState := blockUpdates{}
 		currentState.bucket = bucketEntry
 		//pull current state entry from the database.
-		currentState.stateData, err = sdb.GetPersistentEntry(chainId, false)
+		currentState.stateData, err = s.GetPersistentEntry(chainId, false)
 		if err != nil {
 			return nil, err
 		}
@@ -274,36 +254,36 @@ func (sdb *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // the transaction is against touches another chain. One example would be an account type chain
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
-func (sdb *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
+func (s *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
 	if debugStateDBWrites {
 		fmt.Printf("AddStateEntry chainId=%X txHash=%X entry=%X\n", *chainId, *txHash, object.Entry)
 	}
 	begin := time.Now()
 
-	sdb.TimeBucket = sdb.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
+	s.TimeBucket = s.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
 
-	sdb.mutex.Lock()
-	updates := sdb.updates[*chainId]
-	sdb.mutex.Unlock()
+	s.mutex.Lock()
+	updates := s.updates[*chainId]
+	s.mutex.Unlock()
 
 	if updates == nil {
 		updates = new(blockUpdates)
-		sdb.updates[*chainId] = updates
+		s.updates[*chainId] = updates
 	}
 
 	updates.txId = append(updates.txId, txHash)
 	updates.stateData = object
 }
 
-func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
+func (s *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 	defer group.Done()
 	//record transactions
-	for _, tx := range sdb.transactions.validatedTx {
+	for _, tx := range s.transactions.validatedTx {
 		data, _ := tx.Object.MarshalBinary()
 		//store the transaction
 
 		txHash := tx.TxId.AsBytes32()
-		if val, ok := sdb.transactions.synthTxMap[txHash]; ok {
+		if val, ok := s.transactions.synthTxMap[txHash]; ok {
 			var synthData []byte
 			for _, synthTxInfo := range *val {
 				synthData = append(synthData, synthTxInfo.TxId...)
@@ -311,24 +291,26 @@ func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 				if err != nil {
 					return err
 				}
-				sdb.rmm.Manager.Key(bucketStagedSynthTx.AsString(), "", synthTxInfo.TxId).PutBatch(synthTxData)
+
+				s.db.Key(bucketStagedSynthTx.AsString(), "", synthTxInfo.TxId).PutBatch(synthTxData)
+
 				//store the hash of th synthObject in the bpt, will be removed after synth tx is processed
-				sdb.bpt.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
+				s.bpt.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
 			}
 			//store a list of txid to list of synth txid's
-			sdb.rmm.Manager.Key(bucketTxToSynthTx.AsString(), tx.TxId).PutBatch(synthData)
+			s.db.Key(bucketTxToSynthTx.AsString(), tx.TxId).PutBatch(synthData)
 		}
 
 		mutex.Lock()
 		//store the transaction in the transaction bucket by txid
-		sdb.rmm.Manager.Key(bucketTx.AsString(), tx.TxId).PutBatch(data)
+		s.db.Key(bucketTx.AsString(), tx.TxId).PutBatch(data)
 		//insert the hash of the tx object in the BPT
-		sdb.bpt.Bpt.Insert(txHash, sha256.Sum256(data))
+		s.bpt.Bpt.Insert(txHash, sha256.Sum256(data))
 		mutex.Unlock()
 	}
 
 	// record pending transactions
-	for _, tx := range sdb.transactions.pendingTx {
+	for _, tx := range s.transactions.pendingTx {
 		//marshal the pending transaction state
 		data, _ := tx.Object.MarshalBinary()
 		//hash it and add to the merkle state for the pending chain
@@ -337,28 +319,27 @@ func (sdb *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 		mutex.Lock()
 		//Store the mapping of the Transaction hash to the pending transaction hash which can be used for
 		// validation so we can find the pending transaction
-		sdb.rmm.Manager.Key("MainToPending", tx.TxId).PutBatch(pendingHash[:])
+		s.db.Key("MainToPending", tx.TxId).PutBatch(pendingHash[:])
 
-		sdb.mm.Copy(tx.ChainId)
 		//store the pending transaction by the pending tx hash
-		sdb.rmm.Manager.Key(bucketPendingTx.AsString(), pendingHash[:]).PutBatch(data)
+		s.db.Key(bucketPendingTx.AsString(), pendingHash[:]).PutBatch(data)
 		mutex.Unlock()
 	}
 
 	//clear out the transactions after they have been processed
-	sdb.transactions.validatedTx = nil
-	sdb.transactions.pendingTx = nil
-	sdb.transactions.synthTxMap = make(map[types.Bytes32]*[]transactionStateInfo)
+	s.transactions.validatedTx = nil
+	s.transactions.pendingTx = nil
+	s.transactions.synthTxMap = make(map[types.Bytes32]*[]transactionStateInfo)
 	return nil
 }
 
-func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *managed.MerkleManager, chainId types.Bytes32) {
+func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *managed.MerkleManager, chainId types.Bytes32) {
 	defer group.Done()
 
 	// We get ChainState objects here, instead. And THAT will hold
 	//       the MerkleStateManager for the chain.
 	//mutex.Lock()
-	currentState := sdb.updates[chainId]
+	currentState := s.updates[chainId]
 	//mutex.Unlock()
 
 	if currentState == nil {
@@ -389,9 +370,9 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 		}
 
 		mutex.Lock()
-		sdb.GetDB().Key(bucketEntry.AsString(), chainId.Bytes()).PutBatch(chainStateObject)
+		s.GetDB().Key(bucketEntry.AsString(), chainId.Bytes()).PutBatch(chainStateObject)
 		// The bpt stores the hash of the ChainState object hash.
-		sdb.bpt.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
+		s.bpt.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
 		mutex.Unlock()
 	}
 	//TODO: figure out how to do this with new way state is derived
@@ -402,53 +383,54 @@ func (sdb *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm
 	//		panic(fmt.Sprintf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId))
 	//	}
 	//	//todo:  Determine how we purge pending tx's after 2 weeks.
-	//	sdb.bpt.Bpt.Insert(chainId, *mdRoot)
+	//	s.bpt.Bpt.Insert(chainId, *mdRoot)
 	//}
 }
 
-func (sdb *StateDB) writeBatches() {
-	defer sdb.sync.Done()
-	sdb.rmm.Manager.EndBatch()
-	sdb.bpt.DBManager.EndBatch()
+func (s *StateDB) writeBatches() {
+	defer s.sync.Done()
+	s.db.EndBatch()
+	s.bpt.DBManager.EndBatch()
 }
 
-func (sdb *StateDB) BlockIndex() int64 {
-	return sdb.blockIndex
+func (s *StateDB) BlockIndex() int64 {
+	return s.blockIndex
 }
 
 // WriteStates will push the data to the database and update the patricia trie
-func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
+func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//build a list of keys from the map
-	currentStateCount := len(sdb.updates)
+	currentStateCount := len(s.updates)
 	if currentStateCount == 0 {
 		//only attempt to record the block if we have any data.
-		return sdb.bpt.Bpt.Root.Hash[:], 0, nil
+		return s.bpt.Bpt.Root.Hash[:], 0, nil
 	}
 
-	sdb.blockIndex = blockHeight
+	s.blockIndex = blockHeight
 	// TODO MainIndex and PendingIndex?
-	sdb.AddStateEntry((*types.Bytes32)(&blockIndexKey), new(types.Bytes32), &Object{Entry: common.Int64Bytes(blockHeight)})
+	s.AddStateEntry((*types.Bytes32)(&blockIndexKey), new(types.Bytes32), &Object{Entry: common.Int64Bytes(blockHeight)})
 
 	group := new(sync.WaitGroup)
 	group.Add(1)
-	group.Add(len(sdb.updates))
+	group.Add(len(s.updates))
 
 	mutex := new(sync.Mutex)
 	//to try the multi-threading add "go" in front of the next line
-	err := sdb.writeTxs(mutex, group)
+	err := s.writeTxs(mutex, group)
 	if err != nil {
-		return sdb.bpt.Bpt.Root.Hash[:], 0, nil
+		return s.bpt.Bpt.Root.Hash[:], 0, nil
 	}
 
 	//then run through the list and record them
 	//loop through everything and write out states to the database.
 	merkleMgrMap := make(map[types.Bytes32]*managed.MerkleManager)
-	for chainId := range sdb.updates {
-		merkleMgrMap[chainId] = sdb.mm.Copy(chainId[:])
+	for chainId := range s.updates {
+
+		merkleMgrMap[chainId] = s.mm
 	}
-	for chainId := range sdb.updates {
+	for chainId := range s.updates {
 		//to enable multi-threading put "go" in front
-		sdb.writeChainState(group, mutex, merkleMgrMap[chainId], chainId)
+		s.writeChainState(group, mutex, merkleMgrMap[chainId], chainId)
 
 		//TODO: figure out how to do this with new way state is derived
 		//if len(currentState.pendingTx) != 0 {
@@ -458,33 +440,33 @@ func (sdb *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 		//		panic(fmt.Sprintf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId))
 		//	}
 		//	//todo:  Determine how we purge pending tx's after 2 weeks.
-		//	sdb.bpt.Bpt.Insert(chainId, *mdRoot)
+		//	s.bpt.Bpt.Insert(chainId, *mdRoot)
 		//}
 	}
 	group.Wait()
 
-	sdb.bpt.Bpt.Update()
+	s.bpt.Bpt.Update()
 
 	//reset out block update buffer to get ready for the next round
-	sdb.sync.Add(1)
+	s.sync.Add(1)
 	//to enable threaded batch writes, put go in front of next line.
-	sdb.writeBatches()
+	s.writeBatches()
 
-	sdb.updates = make(map[types.Bytes32]*blockUpdates)
+	s.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
 	if debugStateDBWrites {
-		fmt.Printf("WriteStates height=%d hash=%X\n", blockHeight, sdb.RootHash())
+		fmt.Printf("WriteStates height=%d hash=%X\n", blockHeight, s.RootHash())
 	}
-	return sdb.RootHash(), currentStateCount, nil
+	return s.RootHash(), currentStateCount, nil
 }
 
-func (sdb *StateDB) RootHash() []byte {
-	h := sdb.bpt.Bpt.Root.Hash // Make a copy
-	return h[:]                // Return a reference to the copy
+func (s *StateDB) RootHash() []byte {
+	h := s.bpt.Bpt.Root.Hash // Make a copy
+	return h[:]              // Return a reference to the copy
 }
 
-func (sdb *StateDB) EnsureRootHash() []byte {
-	sdb.bpt.Bpt.EnsureRootHash()
-	return sdb.RootHash()
+func (s *StateDB) EnsureRootHash() []byte {
+	s.bpt.Bpt.EnsureRootHash()
+	return s.RootHash()
 }

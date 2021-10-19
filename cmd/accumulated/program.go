@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -91,9 +90,9 @@ func (p *Program) Start(s service.Service) error {
 	}
 
 	dbPath := filepath.Join(config.RootDir, "valacc.db")
-	bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
+	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
 	p.db = new(state.StateDB)
-	err = p.db.Open(dbPath, bvcId[:], false, true)
+	err = p.db.Open(dbPath, false, true)
 	if err != nil {
 		return fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
