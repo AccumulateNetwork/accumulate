@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
+	"github.com/AccumulateNetwork/accumulated/internal/logging"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 )
@@ -38,10 +40,14 @@ func TestNodeSetup(t *testing.T) {
 	c.Accumulate.WebsiteEnabled = false
 	cfg.Store(c)
 
-	node, _, err := acctesting.NewBVCNode(nodeDir, false, t.Cleanup) // Initialize
-	require.NoError(t, err)                                          //
-	require.NoError(t, node.Start())                                 // Start
-	require.NoError(t, node.Stop())                                  // Stop
+	newLogger := func(s string) zerolog.Logger {
+		return logging.NewTestZeroLogger(t, s)
+	}
+
+	node, _, err := acctesting.NewBVCNode(nodeDir, false, newLogger, t.Cleanup) // Initialize
+	require.NoError(t, err)                                                     //
+	require.NoError(t, node.Start())                                            // Start
+	require.NoError(t, node.Stop())                                             // Stop
 	node.Quit()
 	node.Wait() //
 }
@@ -58,13 +64,17 @@ func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
 			opts.Port = getFreePort(t)
 			opts.Config[0].Instrumentation.Prometheus = true
 
-			require.NoError(t, node.Init(opts))                              // Configure
-			nodeDir := filepath.Join(opts.WorkDir, "Node0")                  //
-			node, _, err := acctesting.NewBVCNode(nodeDir, false, t.Cleanup) // Initialize
-			require.NoError(t, err)                                          //
-			require.NoError(t, node.Start())                                 // Start
-			require.NoError(t, node.Stop())                                  // Stop
-			node.Wait()                                                      //
+			newLogger := func(s string) zerolog.Logger {
+				return logging.NewTestZeroLogger(t, s)
+			}
+
+			require.NoError(t, node.Init(opts))                                         // Configure
+			nodeDir := filepath.Join(opts.WorkDir, "Node0")                             //
+			node, _, err := acctesting.NewBVCNode(nodeDir, false, newLogger, t.Cleanup) // Initialize
+			require.NoError(t, err)                                                     //
+			require.NoError(t, node.Start())                                            // Start
+			require.NoError(t, node.Stop())                                             // Stop
+			node.Wait()                                                                 //
 		})
 	}
 }

@@ -9,9 +9,11 @@ import (
 	"github.com/AccumulateNetwork/accumulated/config"
 	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/api"
+	"github.com/AccumulateNetwork/accumulated/internal/logging"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -58,7 +60,11 @@ func initNodes(t *testing.T, baseIP net.IP, basePort int, count int, logLevel st
 
 		require.NoError(t, cfg.Store(c))
 
-		nodes[i], _, err = acctesting.NewBVCNode(nodeDir, false, t.Cleanup)
+		nodes[i], _, err = acctesting.NewBVCNode(nodeDir, false, func(s string) zerolog.Logger {
+			zl := logging.NewTestZeroLogger(t, s)
+			zl = zl.With().Int("node", i).Logger()
+			return zl
+		}, t.Cleanup)
 		require.NoError(t, err)
 	}
 
