@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
@@ -46,7 +47,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address) *fakeNode {
 	n.client = acctesting.NewABCIApplicationClient(appChan, n.NextHeight, func(err error) {
 		t.Helper()
 		require.NoError(t, err)
-	})
+	}, 100*time.Millisecond)
 	relay := relay.New(n.client)
 	require.NoError(t, relay.Start())
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
@@ -55,7 +56,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address) *fakeNode {
 	mgr, err := chain.NewBlockValidator(n.query, db, bvcKey)
 	require.NoError(t, err)
 
-	n.app, err = abci.NewAccumulator(db, addr, mgr, log.MustNewDefaultLogger("plain", "info", false))
+	n.app, err = abci.NewAccumulator(db, addr, mgr, log.MustNewDefaultLogger("plain", "error", false))
 	require.NoError(t, err)
 	appChan <- n.app
 
@@ -127,6 +128,9 @@ func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
 	for _, ch := range chans {
 		<-ch
 	}
+
+	// Force queued synthetic transactions to go through
+	<-n.query.BatchSend()
 }
 
 func generateKey() tmed25519.PrivKey {

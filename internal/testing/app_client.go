@@ -44,7 +44,7 @@ type submittedTx struct {
 
 var _ relay.Client = (*ABCIApplicationClient)(nil)
 
-func NewABCIApplicationClient(app <-chan abci.Application, nextHeight func() int64, onError func(err error)) *ABCIApplicationClient {
+func NewABCIApplicationClient(app <-chan abci.Application, nextHeight func() int64, onError func(err error), interval time.Duration) *ABCIApplicationClient {
 	c := new(ABCIApplicationClient)
 	c.appWg = new(sync.WaitGroup)
 	c.txWg = new(sync.WaitGroup)
@@ -61,7 +61,7 @@ func NewABCIApplicationClient(app <-chan abci.Application, nextHeight func() int
 		c.app = <-app
 	}()
 
-	go c.blockify()
+	go c.blockify(interval)
 	return c
 }
 
@@ -140,9 +140,9 @@ func (c *ABCIApplicationClient) BroadcastTxCommit(ctx context.Context, tx types.
 }
 
 // blockify accepts incoming transactions and queues them up for the next block
-func (c *ABCIApplicationClient) blockify() {
+func (c *ABCIApplicationClient) blockify(interval time.Duration) {
 	var queue []submittedTx
-	tick := time.NewTicker(time.Second)
+	tick := time.NewTicker(interval)
 
 	defer func() {
 		for _, sub := range queue {
@@ -179,6 +179,9 @@ func (c *ABCIApplicationClient) blockify() {
 		default:
 			// Done
 		}
+
+		// Callers shouldn't return until the block is over
+		c.txWg.Add(1)
 
 		begin := abci.RequestBeginBlock{}
 		begin.Header.Height = c.nextHeight()
@@ -223,6 +226,8 @@ func (c *ABCIApplicationClient) blockify() {
 
 		c.app.EndBlock(abci.RequestEndBlock{})
 		c.app.Commit()
+
+		c.txWg.Done()
 	}
 }
 
@@ -245,15 +250,13 @@ func (c *ABCIApplicationClient) SubmitTx(ctx context.Context, tx types.Tx) (<-ch
 	c.txWg.Add(1)
 	go func() {
 		defer close(checkChan)
-		if debugTX {
-			defer fmt.Printf("Finished TX %X\n", gtx.TxHash)
-		}
 
 		rc := app.CheckTx(abci.RequestCheckTx{Tx: tx})
 		checkChan <- rc
 		if rc.Code != 0 {
 			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Log))
 			close(deliverChan)
+			c.txWg.Done()
 			return
 		}
 

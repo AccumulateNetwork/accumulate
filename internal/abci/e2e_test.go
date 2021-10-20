@@ -76,10 +76,6 @@ func (n *fakeNode) testAnonTx(count int) string {
 	_, recipient, gtx, err := acctesting.BuildTestSynthDepositGenTx(sponsor.Bytes())
 	require.NoError(n.t, err)
 
-	n.Batch(func(send func(*transactions.GenTransaction)) {
-		send(gtx)
-	})
-
 	origin := accapi.NewWalletEntry()
 	origin.Nonce = 1
 	origin.PrivateKey = recipient
@@ -89,6 +85,10 @@ func (n *fakeNode) testAnonTx(count int) string {
 	for i := range recipients {
 		recipients[i] = accapi.NewWalletEntry()
 	}
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		send(gtx)
+	})
 
 	n.Batch(func(send func(*Tx)) {
 		for i := 0; i < count; i++ {
