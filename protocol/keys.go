@@ -2,24 +2,18 @@ package protocol
 
 import (
 	"bytes"
-	"fmt"
 )
 
-func (ks *SigSpec) FindKey(pubKey []byte, ka KeyAlgorithm) (*KeySpec, error) {
-	for _, key := range ks.Keys {
-		if key.KeyAlgorithm != ka {
-			continue
-		}
-
-		sigKH, err := key.HashAlgorithm.Apply(pubKey)
-		if err != nil {
-			return nil, fmt.Errorf("key spec: %v", err)
-		}
-
-		if bytes.Equal(key.PublicKey, sigKH) {
-			return key, nil
+func (ks *SigSpec) FindKey(pubKey []byte) *KeySpec {
+	// Check each key
+	for _, candidate := range ks.Keys {
+		// Try with each supported hash algorithm
+		for _, ha := range []HashAlgorithm{Unhashed, SHA256, SHA256D} {
+			if bytes.Equal(ha.MustApply(pubKey), candidate.PublicKey) {
+				return candidate
+			}
 		}
 	}
 
-	return nil, nil
+	return nil
 }
