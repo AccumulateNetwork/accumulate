@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
-	"github.com/go-playground/validator/v10"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/ybbus/jsonrpc/v2"
@@ -28,7 +28,9 @@ func NewTest(t *testing.T, q *Query) *API {
 		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
 	}
 	jsonrpc := jsonrpc.NewClient(fmt.Sprintf("http://localhost:%d/v1", port))
-	return &API{config, validator.New(), q, jsonrpc}
+	v, err := protocol.NewValidator()
+	require.NoError(t, err)
+	return &API{config, v, q, jsonrpc}
 }
 
 func (api *API) GetData(ctx context.Context, params json.RawMessage) interface{} {

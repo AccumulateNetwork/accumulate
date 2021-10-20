@@ -11,8 +11,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 )
 
-//go:generate go run ../internal/cmd/gentypes types.yml
-
 const ACME = "ACME"
 
 // AcmeUrl returns `acc://ACME`

@@ -1,12 +1,12 @@
 package response
 
 import (
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 )
 
 type AnonTokenAccount struct {
-	*api.TokenAccount
+	*protocol.TokenAccountCreate
 	Balance       types.Amount `json:"balance" form:"balance" query:"balance"`
 	TxCount       uint64       `json:"txCount" form:"txCount" query:"txCount"`
 	Nonce         uint64       `json:"nonce" form:"nonce" query:"nonce"`

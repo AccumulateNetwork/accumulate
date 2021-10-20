@@ -81,7 +81,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 		destAddr := "wyleecoyote/acme"
 		//make an unreasonable amount sure
 		amount := uint64(1000000000)
-		tx, err := testing2.BuildTestTokenTxGenTx(&origin, destAddr, amount)
+		tx, err := testing2.BuildTestTokenTxGenTx(origin, destAddr, amount)
 		//now corrupt the validation for the signature
 		tx.Signature[0].Nonce = 9999999
 
@@ -130,7 +130,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		destAddr := "wyleecoyote/acme"
 		//make an unreasonable amount sure
 		amount := uint64(1000000000)
-		tx, err := testing2.BuildTestTokenTxGenTx(&origin, destAddr, amount)
+		tx, err := testing2.BuildTestTokenTxGenTx(origin, destAddr, amount)
 
 		data, err := tx.Marshal()
 		s.Require().NoError(err)

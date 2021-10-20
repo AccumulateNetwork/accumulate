@@ -18,7 +18,7 @@ type AddCredits struct {
 
 type AnonTokenAccount struct {
 	state.ChainHeader
-	TokenUrl      string  `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required"`
+	TokenUrl      string  `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	Balance       big.Int `json:"balance" form:"balance" query:"balance" validate:"required"`
 	TxCount       uint64  `json:"txCount" form:"txCount" query:"txCount" validate:"required"`
 	Nonce         uint64  `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
@@ -26,31 +26,34 @@ type AnonTokenAccount struct {
 }
 
 type ChainParams struct {
-	Url  string `json:"url" form:"url" query:"url" validate:"required"`
+	Url  string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	Data []byte `json:"data" form:"data" query:"data" validate:"required"`
 }
 
 type CreateSigSpec struct {
-	Url  string           `json:"url" form:"url" query:"url" validate:"required"`
+	Url  string           `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	Keys []*KeySpecParams `json:"keys" form:"keys" query:"keys" validate:"required"`
 }
 
 type CreateSigSpecGroup struct {
-	Url      string     `json:"url" form:"url" query:"url" validate:"required"`
+	Url      string     `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	SigSpecs [][32]byte `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
 }
 
+type IdentityCreate struct {
+	Url         string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
+	PublicKey   []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
+	KeyBookName string `json:"keyBookName" form:"keyBookName" query:"keyBookName"`
+	KeyPageName string `json:"keyPageName" form:"keyPageName" query:"keyPageName"`
+}
+
 type KeySpec struct {
-	KeyAlgorithm  KeyAlgorithm  `json:"keyAlgorithm" form:"keyAlgorithm" query:"keyAlgorithm" validate:"required"`
-	HashAlgorithm HashAlgorithm `json:"hashAlgorithm" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
-	PublicKey     []byte        `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce         uint64        `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
+	PublicKey []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
+	Nonce     uint64 `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
 }
 
 type KeySpecParams struct {
-	KeyAlgorithm  KeyAlgorithm  `json:"keyAlgorithm" form:"keyAlgorithm" query:"keyAlgorithm" validate:"required"`
-	HashAlgorithm HashAlgorithm `json:"hashAlgorithm" form:"hashAlgorithm" query:"hashAlgorithm" validate:"required"`
-	PublicKey     []byte        `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
+	PublicKey []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
 }
 
 type SigSpec struct {
@@ -74,6 +77,12 @@ type SyntheticDepositCredits struct {
 	Amount uint64   `json:"amount" form:"amount" query:"amount" validate:"required"`
 }
 
+type TokenAccountCreate struct {
+	Url        string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
+	TokenUrl   string `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
+	KeyBookUrl string `json:"keyBookUrl" form:"keyBookUrl" query:"keyBookUrl" validate:"required,acc-url"`
+}
+
 type TxResult struct {
 	SyntheticTxs []*TxSynthRef `json:"syntheticTxs" form:"syntheticTxs" query:"syntheticTxs" validate:"required"`
 }
@@ -81,7 +90,7 @@ type TxResult struct {
 type TxSynthRef struct {
 	Type  uint64   `json:"type" form:"type" query:"type" validate:"required"`
 	Hash  [32]byte `json:"hash" form:"hash" query:"hash" validate:"required"`
-	Url   string   `json:"url" form:"url" query:"url" validate:"required"`
+	Url   string   `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	TxRef [32]byte `json:"txRef" form:"txRef" query:"txRef" validate:"required"`
 }
 
@@ -109,9 +118,13 @@ func (*CreateSigSpec) GetType() types.TxType { return types.TxTypeCreateSigSpec 
 
 func (*CreateSigSpecGroup) GetType() types.TxType { return types.TxTypeCreateSigSpecGroup }
 
+func (*IdentityCreate) GetType() types.TxType { return types.TxTypeIdentityCreate }
+
 func (*SyntheticCreateChain) GetType() types.TxType { return types.TxTypeSyntheticCreateChain }
 
 func (*SyntheticDepositCredits) GetType() types.TxType { return types.TxTypeSyntheticDepositCredits }
+
+func (*TokenAccountCreate) GetType() types.TxType { return types.TxTypeTokenAccountCreate }
 
 func (v *AddCredits) BinarySize() int {
 	var n int
@@ -185,12 +198,24 @@ func (v *CreateSigSpecGroup) BinarySize() int {
 	return n
 }
 
-func (v *KeySpec) BinarySize() int {
+func (v *IdentityCreate) BinarySize() int {
 	var n int
 
-	n += v.KeyAlgorithm.BinarySize()
+	n += uvarintBinarySize(uint64(types.TxTypeIdentityCreate))
 
-	n += v.HashAlgorithm.BinarySize()
+	n += stringBinarySize(v.Url)
+
+	n += bytesBinarySize(v.PublicKey)
+
+	n += stringBinarySize(v.KeyBookName)
+
+	n += stringBinarySize(v.KeyPageName)
+
+	return n
+}
+
+func (v *KeySpec) BinarySize() int {
+	var n int
 
 	n += bytesBinarySize(v.PublicKey)
 
@@ -201,10 +226,6 @@ func (v *KeySpec) BinarySize() int {
 
 func (v *KeySpecParams) BinarySize() int {
 	var n int
-
-	n += v.KeyAlgorithm.BinarySize()
-
-	n += v.HashAlgorithm.BinarySize()
 
 	n += bytesBinarySize(v.PublicKey)
 
@@ -269,6 +290,20 @@ func (v *SyntheticDepositCredits) BinarySize() int {
 	n += chainBinarySize(&v.Cause)
 
 	n += uvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *TokenAccountCreate) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(uint64(types.TxTypeTokenAccountCreate))
+
+	n += stringBinarySize(v.Url)
+
+	n += stringBinarySize(v.TokenUrl)
+
+	n += stringBinarySize(v.KeyBookUrl)
 
 	return n
 }
@@ -379,20 +414,24 @@ func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *KeySpec) MarshalBinary() ([]byte, error) {
+func (v *IdentityCreate) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	if b, err := v.KeyAlgorithm.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding KeyAlgorithm: %w", err)
-	} else {
-		buffer.Write(b)
-	}
+	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeIdentityCreate)))
 
-	if b, err := v.HashAlgorithm.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding HashAlgorithm: %w", err)
-	} else {
-		buffer.Write(b)
-	}
+	buffer.Write(stringMarshalBinary(v.Url))
+
+	buffer.Write(bytesMarshalBinary(v.PublicKey))
+
+	buffer.Write(stringMarshalBinary(v.KeyBookName))
+
+	buffer.Write(stringMarshalBinary(v.KeyPageName))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *KeySpec) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
 
 	buffer.Write(bytesMarshalBinary(v.PublicKey))
 
@@ -403,18 +442,6 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 
 func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
-
-	if b, err := v.KeyAlgorithm.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding KeyAlgorithm: %w", err)
-	} else {
-		buffer.Write(b)
-	}
-
-	if b, err := v.HashAlgorithm.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding HashAlgorithm: %w", err)
-	} else {
-		buffer.Write(b)
-	}
 
 	buffer.Write(bytesMarshalBinary(v.PublicKey))
 
@@ -489,6 +516,20 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	buffer.Write(chainMarshalBinary(&v.Cause))
 
 	buffer.Write(uvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TokenAccountCreate) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeTokenAccountCreate)))
+
+	buffer.Write(stringMarshalBinary(v.Url))
+
+	buffer.Write(stringMarshalBinary(v.TokenUrl))
+
+	buffer.Write(stringMarshalBinary(v.KeyBookUrl))
 
 	return buffer.Bytes(), nil
 }
@@ -679,17 +720,47 @@ func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *IdentityCreate) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeIdentityCreate
+	if v, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+	}
+	data = data[uvarintBinarySize(uint64(typ)):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[stringBinarySize(v.Url):]
+
+	if x, err := bytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	data = data[bytesBinarySize(v.PublicKey):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyBookName: %w", err)
+	} else {
+		v.KeyBookName = x
+	}
+	data = data[stringBinarySize(v.KeyBookName):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyPageName: %w", err)
+	} else {
+		v.KeyPageName = x
+	}
+	data = data[stringBinarySize(v.KeyPageName):]
+
+	return nil
+}
+
 func (v *KeySpec) UnmarshalBinary(data []byte) error {
-	if err := v.KeyAlgorithm.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding KeyAlgorithm: %w", err)
-	}
-	data = data[v.KeyAlgorithm.BinarySize():]
-
-	if err := v.HashAlgorithm.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding HashAlgorithm: %w", err)
-	}
-	data = data[v.HashAlgorithm.BinarySize():]
-
 	if x, err := bytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
@@ -708,16 +779,6 @@ func (v *KeySpec) UnmarshalBinary(data []byte) error {
 }
 
 func (v *KeySpecParams) UnmarshalBinary(data []byte) error {
-	if err := v.KeyAlgorithm.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding KeyAlgorithm: %w", err)
-	}
-	data = data[v.KeyAlgorithm.BinarySize():]
-
-	if err := v.HashAlgorithm.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding HashAlgorithm: %w", err)
-	}
-	data = data[v.HashAlgorithm.BinarySize():]
-
 	if x, err := bytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
@@ -845,6 +906,39 @@ func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
 		v.Amount = x
 	}
 	data = data[uvarintBinarySize(v.Amount):]
+
+	return nil
+}
+
+func (v *TokenAccountCreate) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeTokenAccountCreate
+	if v, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+	}
+	data = data[uvarintBinarySize(uint64(typ)):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[stringBinarySize(v.Url):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TokenUrl: %w", err)
+	} else {
+		v.TokenUrl = x
+	}
+	data = data[stringBinarySize(v.TokenUrl):]
+
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyBookUrl: %w", err)
+	} else {
+		v.KeyBookUrl = x
+	}
+	data = data[stringBinarySize(v.KeyBookUrl):]
 
 	return nil
 }

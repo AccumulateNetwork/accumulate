@@ -87,99 +87,94 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
 }
 
-func (m *Executor) check(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error) {
 	if len(tx.Signature) == 0 {
-		return fmt.Errorf("transaction is not signed")
-	}
-
-	txt := tx.TransactionType()
-	if txt.IsSynthetic() {
-		return m.checkSynthetic(st, tx)
-	}
-
-	if st.ChainHeader == nil {
-		return fmt.Errorf("sponsor not found")
+		return nil, fmt.Errorf("transaction is not signed")
 	}
 
 	if !tx.ValidateSig() {
-		return fmt.Errorf("invalid signature")
+		return nil, fmt.Errorf("invalid signature")
 	}
 
-	ssg := new(protocol.SigSpecGroup)
-	switch st.ChainHeader.Type {
-	case types.ChainTypeAnonTokenAccount:
-		return m.checkAnonymous(st, tx)
+	txt := tx.TransactionType()
 
-	case types.ChainTypeAdi, types.ChainTypeTokenAccount, types.ChainTypeSigSpec:
-		_, err := m.db.LoadChainAs(st.ChainHeader.SigSpecId[:], ssg)
+	st, err := NewStateManager(m.db, tx)
+	if errors.Is(err, state.ErrNotFound) {
+		switch txt {
+		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticTokenDeposit:
+			// TX does not require a sponsor - it may create the sponsor
+		default:
+			return nil, fmt.Errorf("sponsor not found: %v", err)
+		}
+	} else if err != nil {
+		return nil, err
+	}
+
+	if txt.IsSynthetic() {
+		return st, m.checkSynthetic(st, tx)
+	}
+
+	sigGroup := new(protocol.SigSpecGroup)
+	switch sponsor := st.Sponsor.(type) {
+	case *protocol.AnonTokenAccount:
+		return st, m.checkAnonymous(st, tx, sponsor)
+
+	case *state.AdiState, *state.TokenAccount, *protocol.SigSpec:
+		if (sponsor.Header().SigSpecId == types.Bytes32{}) {
+			return nil, fmt.Errorf("sponsor has not been assigned to an SSG")
+		}
+		err := st.LoadAs(sponsor.Header().SigSpecId, sigGroup)
 		if err != nil {
-			return fmt.Errorf("failed to load sig spec group: %v", err)
+			return nil, fmt.Errorf("invalid SigSpecId: %v", err)
 		}
 
-	case types.ChainTypeSigSpecGroup:
-		err := st.ChainState.As(ssg)
-		if err != nil {
-			return fmt.Errorf("failed to decode sponsor: %v", err)
-		}
+	case *protocol.SigSpecGroup:
+		sigGroup = sponsor
 
 	default:
 		// The TX sponsor cannot be a transaction
 		// Token issue chains are not implemented
-		return fmt.Errorf("%v cannot sponsor transactions", st.ChainHeader.Type)
+		return nil, fmt.Errorf("%v cannot sponsor transactions", sponsor.Header().Type)
 	}
 
-	if tx.SigInfo.PriorityIdx >= uint64(len(ssg.SigSpecs)) {
-		return fmt.Errorf("invalid sig spec index")
+	if tx.SigInfo.PriorityIdx >= uint64(len(sigGroup.SigSpecs)) {
+		return nil, fmt.Errorf("invalid sig spec index")
 	}
 
-	ss := new(protocol.SigSpec)
-	_, err := m.db.LoadChainAs(ssg.SigSpecs[tx.SigInfo.PriorityIdx][:], ss)
+	sigSpec := new(protocol.SigSpec)
+	err = st.LoadAs(sigGroup.SigSpecs[tx.SigInfo.PriorityIdx], sigSpec)
 	if err != nil {
-		return fmt.Errorf("failed to load sig spec: %v", err)
+		return nil, fmt.Errorf("invalid sig spec: %v", err)
 	}
 
 	// TODO check height
 
 	for i, sig := range tx.Signature {
-		ks, err := ss.FindKey(sig.PublicKey, protocol.ED25519)
-		if err != nil {
-			return fmt.Errorf("failed to verify signature %d: %v", i, err)
-		}
-
+		ks := sigSpec.FindKey(sig.PublicKey)
 		if ks == nil {
-			return fmt.Errorf("no key spec matches signature %d", i)
+			return nil, fmt.Errorf("no key spec matches signature %d", i)
 		}
 
 		if ks.Nonce >= sig.Nonce {
-			return fmt.Errorf("invalid nonce")
+			return nil, fmt.Errorf("invalid nonce")
 		}
 		// TODO add pending update for the nonce
 	}
 
-	return nil
+	return st, nil
 }
 
-func (m *Executor) checkSynthetic(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (m *Executor) checkSynthetic(st *StateManager, tx *transactions.GenTransaction) error {
 	//placeholder for special validation rules for synthetic transactions.
 	//need to verify the sender is a legit bvc validator also need the dbvc receipt
 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
 	//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
 	//sender is legit.
-
-	if !tx.ValidateSig() {
-		return fmt.Errorf("invalid signature")
-	}
 	return nil
 }
 
-func (m *Executor) checkAnonymous(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	account := new(protocol.AnonTokenAccount)
-	err := st.ChainState.As(account)
-	if err != nil {
-		return fmt.Errorf("failed to decode sponsor: %v", err)
-	}
-
-	u, err := st.ChainHeader.ParseUrl()
+func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransaction, account *protocol.AnonTokenAccount) error {
+	u, err := account.ParseUrl()
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
 		// into the database.
@@ -216,14 +211,7 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 		return err
 	}
 
-	m.mu.Lock()
-	st, err := m.db.LoadChainState(tx.ChainID)
-	m.mu.Unlock()
-	if err != nil {
-		return fmt.Errorf("failed to get state for : %v", err)
-	}
-
-	err = m.check(st, tx)
+	st, err := m.check(tx)
 	if err != nil {
 		return err
 	}
@@ -275,12 +263,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	defer group.Done()
 	m.mu.Unlock()
 
-	st, err := m.db.LoadChainState(tx.ChainID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get state: %v", err)
-	}
-
-	err = m.check(st, tx)
+	st, err := m.check(tx)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +273,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
-	result, err := executor.DeliverTx(st, tx)
+	err = executor.DeliverTx(st, tx)
 	if err != nil {
 		return nil, fmt.Errorf("rejected by chain: %v", err)
 	}
@@ -321,8 +304,11 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 
 	// Store pending state changes
 	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
-	for id, chain := range result.Chains {
-		data, err := chain.MarshalBinary()
+	for id, entry := range st.chains {
+		if !entry.dirty {
+			continue
+		}
+		data, err := entry.record.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal state: %v", err)
 		}
@@ -337,12 +323,8 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		return nil, err
 	}
 
-	if result == nil {
-		return nil, errors.New("no chain validation")
-	}
-
 	// Process synthetic transactions generated by the validator
-	refs, err := m.submitSyntheticTx(tx.TransactionHash(), result)
+	refs, err := m.submitSyntheticTx(tx.TransactionHash(), st)
 	if err != nil {
 		return nil, err
 	}
@@ -365,21 +347,22 @@ func (m *Executor) Commit() ([]byte, error) {
 		panic(fmt.Errorf("fatal error, block not set, %v", err))
 	}
 
-	// If we have no transactions this block then don't publish anything
-	if m.leader && numStateChanges > 0 {
-		// Now we create a synthetic transaction and publish to the directory
-		// block validator
-		dbvc := DeliverTxResult{}
-		dbvc.SyntheticTransactions = make([]*transactions.GenTransaction, 1)
-		dbvc.SyntheticTransactions[0] = &transactions.GenTransaction{}
-		dcAdi := "dc"
-		dbvc.SyntheticTransactions[0].ChainID = types.GetChainIdFromChainPath(&dcAdi).Bytes()
-		dbvc.SyntheticTransactions[0].Routing = types.GetAddressFromIdentity(&dcAdi)
-		//dbvc.Submissions[0].Transaction = ...
+	_ = numStateChanges
+	// // If we have no transactions this block then don't publish anything
+	// if m.leader && numStateChanges > 0 {
+	// 	// Now we create a synthetic transaction and publish to the directory
+	// 	// block validator
+	// 	dbvc := DeliverTxResult{}
+	// 	dbvc.SyntheticTransactions = make([]*transactions.GenTransaction, 1)
+	// 	dbvc.SyntheticTransactions[0] = &transactions.GenTransaction{}
+	// 	dcAdi := "dc"
+	// 	dbvc.SyntheticTransactions[0].ChainID = types.GetChainIdFromChainPath(&dcAdi).Bytes()
+	// 	dbvc.SyntheticTransactions[0].Routing = types.GetAddressFromIdentity(&dcAdi)
+	// 	//dbvc.Submissions[0].Transaction = ...
 
-		//broadcast the root
-		//m.processValidatedSubmissionRequest(&dbvc)
-	}
+	// 	//broadcast the root
+	// 	//m.processValidatedSubmissionRequest(&dbvc)
+	// }
 
 	m.query.BatchSend()
 
@@ -388,26 +371,28 @@ func (m *Executor) Commit() ([]byte, error) {
 	return mdRoot, nil
 }
 
-func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, vtx *DeliverTxResult) (tmRef []*protocol.TxSynthRef, err error) {
+func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (tmRef []*protocol.TxSynthRef, err error) {
 	if m.leader {
-		tmRef = make([]*protocol.TxSynthRef, len(vtx.SyntheticTransactions))
+		tmRef = make([]*protocol.TxSynthRef, len(st.submissions))
 	}
 
 	// Need to pass this to a threaded batcher / dispatcher to do both signing
 	// and sending of synth tx. No need to spend valuable time here doing that.
-	for i, tx := range vtx.SyntheticTransactions {
+	for i, sub := range st.submissions {
 		// Generate a synthetic tx and send to the router. Need to track txid to
 		// make sure they get processed.
 
-		if tx.Transaction == nil {
-			// This should never happen
-			return nil, fmt.Errorf("submission is missing its synthetic transaction")
+		body, err := sub.body.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal synthetic transaction payload: %v", err)
 		}
 
-		if tx.SigInfo == nil {
-			// This should never happen
-			return nil, fmt.Errorf("synthetic transaction is missing its signature info")
-		}
+		tx := new(transactions.GenTransaction)
+		tx.SigInfo = new(transactions.SignatureInfo)
+		tx.SigInfo.URL = sub.url.String()
+		tx.SigInfo.MSHeight = 1
+		tx.SigInfo.PriorityIdx = 0
+		tx.Transaction = body
 
 		tx.SigInfo.Unused2 = m.nonce
 		m.nonce++ //TODO: make the nonce managed via the BVC admin state for synth tx rather than this way
