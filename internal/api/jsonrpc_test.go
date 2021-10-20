@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/stretchr/testify/require"
 
@@ -348,9 +349,10 @@ func TestJsonRpcAdi(t *testing.T) {
 	kpSponsor := types.CreateKeyPairFromSeed(pv.Key.PrivKey.Bytes())
 
 	req := api.APIRequestRaw{}
-	adi := &api.ADI{}
-	adi.URL = "RoadRunner"
-	adi.PublicKeyHash = sha256.Sum256(kpNewAdi.PubKey().Bytes())
+	adi := &protocol.IdentityCreate{}
+	adi.Url = "RoadRunner"
+	kh := sha256.Sum256(kpNewAdi.PubKey().Bytes())
+	adi.PublicKey = kh[:]
 	data, err := json.Marshal(adi)
 	if err != nil {
 		t.Fatal(err)
@@ -358,19 +360,19 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	req.Tx = &api.APIRequestRawTx{}
 	req.Tx.Signer = &api.Signer{}
-	req.Tx.Signer.URL = types.String(adiSponsor)
+	req.Tx.Sponsor = types.String(adiSponsor)
 	copy(req.Tx.Signer.PublicKey[:], kpSponsor.PubKey().Bytes())
-	req.Tx.Timestamp = time.Now().Unix()
+	req.Tx.Signer.Nonce = uint64(time.Now().Unix())
 	adiJson := json.RawMessage(data)
 	req.Tx.Data = &adiJson
 
 	// TODO Why does this sign a ledger? This will fail in GenTransaction.
-	ledger := types.MarshalBinaryLedgerAdiChainPath(*adi.URL.AsString(), *req.Tx.Data, req.Tx.Timestamp)
+	ledger := types.MarshalBinaryLedgerAdiChainPath(adi.Url, *req.Tx.Data, int64(req.Tx.Signer.Nonce))
 	sig, err := kpSponsor.Sign(ledger)
 	if err != nil {
 		t.Fatal(err)
 	}
-	copy(req.Sig[:], sig)
+	copy(req.Tx.Sig[:], sig)
 
 	jsonReq, err := json.Marshal(&req)
 	if err != nil {

@@ -26,6 +26,7 @@ TxSynthRef:
     type: chain
   - name: Url
     type: string
+    is-url: true
   - name: TxRef # The hash of the transaction blob submitted to Tendermint. Use to look up the transaction status.
     type: chain
 
@@ -34,6 +35,7 @@ AnonTokenAccount:
   fields:
   - name: TokenUrl
     type: string
+    is-url: true
   - name: Balance
     type: bigint
   - name: TxCount
@@ -57,6 +59,7 @@ ChainParams:
   fields:
   - name: Url
     type: string
+    is-url: true
   - name: Data
     type: bytes
 
@@ -78,12 +81,6 @@ SyntheticDepositCredits:
 
 KeySpec:
   fields:
-  - name: KeyAlgorithm
-    type: KeyAlgorithm
-    marshal-as: self
-  - name: HashAlgorithm
-    type: HashAlgorithm
-    marshal-as: self
   - name: PublicKey
     type: bytes
   - name: Nonce
@@ -91,12 +88,6 @@ KeySpec:
 
 KeySpecParams:
   fields:
-  - name: KeyAlgorithm
-    type: KeyAlgorithm
-    marshal-as: self
-  - name: HashAlgorithm
-    type: HashAlgorithm
-    marshal-as: self
   - name: PublicKey
     type: bytes
 
@@ -117,6 +108,7 @@ CreateSigSpec:
   fields:
   - name: Url
     type: string
+    is-url: true
   - name: Keys
     type: slice
     slice:
@@ -135,5 +127,34 @@ CreateSigSpecGroup:
   fields:
   - name: Url
     type: string
+    is-url: true
   - name: SigSpecs
     type: chainSet
+
+IdentityCreate:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+    is-url: true
+  - name: PublicKey
+    type: bytes
+  - name: KeyBookName
+    type: string
+    optional: true
+  - name: KeyPageName
+    type: string
+    optional: true
+
+TokenAccountCreate:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+    is-url: true
+  - name: TokenUrl
+    type: string
+    is-url: true
+  - name: KeyBookUrl
+    type: string
+    is-url: true

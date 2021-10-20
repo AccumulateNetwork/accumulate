@@ -39,9 +39,14 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
+	v, err := protocol.NewValidator()
+	if err != nil {
+		return nil, err
+	}
+
 	api := &API{}
 	api.config = config
-	api.validate = validator.New()
+	api.validate = v
 	api.query = q
 
 	methods := jsonrpc2.MethodMap{
@@ -292,7 +297,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 // createADI creates ADI
 func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
-	data := &acmeapi.ADI{}
+	data := &protocol.IdentityCreate{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return NewValidatorError(err)
@@ -348,18 +353,23 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 }
 
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
-	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, uint64(req.Tx.Timestamp), payload)
+	tx := new(transactions.GenTransaction)
+	tx.Transaction = payload
 
-	ret := &acmeapi.APIDataResponse{}
-	var msg json.RawMessage
+	tx.SigInfo = new(transactions.SignatureInfo)
+	tx.SigInfo.URL = string(req.Tx.Sponsor)
+	tx.SigInfo.Unused2 = req.Tx.Signer.Nonce
+	tx.SigInfo.MSHeight = req.Tx.KeyPage.Height
+	tx.SigInfo.PriorityIdx = req.Tx.KeyPage.Index
 
-	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
-		ret.Data = &msg
-		return ret
-	}
+	ed := new(transactions.ED25519Sig)
+	ed.Nonce = req.Tx.Signer.Nonce
+	ed.PublicKey = req.Tx.Signer.PublicKey[:]
+	ed.Signature = req.Tx.Sig.Bytes()
 
-	return api.broadcastTx(req.Wait, genTx)
+	tx.Signature = append(tx.Signature, ed)
+
+	return api.broadcastTx(req.Wait, tx)
 }
 
 func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
@@ -419,7 +429,7 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi
 
 // createTokenAccount creates Token Account
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
-	data := &acmeapi.TokenAccount{}
+	data := &protocol.TokenAccountCreate{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return NewValidatorError(err)
@@ -510,7 +520,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &fromAccount, &destAccount)
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], fromAccount, destAccount)
 	amtToDeposit := int64(10)                                //deposit 50k tokens
 	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
 	deposit.TokenUrl = tokenUrl

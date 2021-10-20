@@ -24,7 +24,7 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	//create a fake synthetic deposit for faucet.
 	fakeTxid := sha256.Sum256([]byte("fake txid"))
 	// NewTokenTransactionDeposit(txId types.Bytes, from *types.String, to *types.String)
-	deposit := synthetic.NewTokenTransactionDeposit(fakeTxid[:], &sponsorAdi, &recipientAdi)
+	deposit := synthetic.NewTokenTransactionDeposit(fakeTxid[:], sponsorAdi, recipientAdi)
 	amtToDeposit := int64(50000)                           //deposit 50k tokens
 	deposit.DepositAmount.SetInt64(amtToDeposit * TokenMx) // assume 8 decimal places
 	deposit.TokenUrl = types.String(protocol.AcmeUrl().String())
@@ -55,6 +55,7 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 
 func CreateAnonTokenAccount(db *state.StateDB, key ed25519.PrivKey, tokens float64) error {
 	url := types.String(anon.GenerateAcmeAddress(key.PubKey().Bytes()))
+	fmt.Println(url)
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
@@ -65,7 +66,7 @@ func WriteStates(db *state.StateDB, chains ...state.Chain) error {
 			return err
 		}
 
-		u, err := url.Parse(chain.GetChainUrl())
+		u, err := chain.Header().ParseUrl()
 		if err != nil {
 			return err
 		}
@@ -87,8 +88,6 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) erro
 	ssgUrl := identityUrl.JoinPath("ssg0")
 
 	ss := new(protocol.KeySpec)
-	ss.HashAlgorithm = protocol.SHA256
-	ss.KeyAlgorithm = protocol.ED25519
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewSigSpec()
@@ -149,9 +148,7 @@ func CreateSigSpec(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKe
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
 		mss.Keys[i] = &protocol.KeySpec{
-			HashAlgorithm: protocol.Unhashed,
-			KeyAlgorithm:  protocol.ED25519,
-			PublicKey:     key,
+			PublicKey: key,
 		}
 	}
 
