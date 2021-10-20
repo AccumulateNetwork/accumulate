@@ -58,8 +58,10 @@ func (m *MerkleManager) AddHash(hash Hash) {
 // adds the chainID to the MerkleManager for storing some chain specific key
 // value pairs where the key is an index.  Before any hash is added to a
 // MerkleState, the ChainID should be set
-func (m *MerkleManager) SetChainID(chainID []byte) {
+func (m *MerkleManager) SetChainID(chainID []byte) (err error) {
 	m.cid = chainID
+	m.MS, err = m.ReadChainHead(chainID)
+	return err
 }
 
 // WriteChainHead
@@ -79,15 +81,17 @@ func (m *MerkleManager) WriteChainHead(chainID []byte) error {
 // Retrieve the current MerkleState from the given database, and set
 // that state as the MerkleState of this MerkleManager.  Note that the cache
 // will be cleared.
-func (m *MerkleManager) ReadChainHead(chainID []byte) (ms *MerkleState) {
+func (m *MerkleManager) ReadChainHead(chainID []byte) (ms *MerkleState, err error) {
 	ms = new(MerkleState)
+	ms.HashFunction = m.MS.HashFunction
 	state := m.Manager.Key(chainID, "Head").Get() //   Get the state for the Merkle Tree
 	if state != nil {                             //   If the State exists
 		if err := ms.UnMarshal(state); err != nil { //     Set that as our state
-			panic(fmt.Sprintf("database is corrupt")) // Blow up of the database is bad
+			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %x",
+				chainID) // Blow up of the database is bad
 		}
 	}
-	return ms
+	return ms, nil
 }
 
 // Equal
@@ -140,19 +144,20 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 //
 // This is an internal routine; calling init outside of constructing the first
 // reference to the MerkleManager doesn't make much sense.
-func (m *MerkleManager) init(DBManager *database.Manager, markPower int64) error {
+func (m *MerkleManager) init(DBManager *database.Manager, markPower int64) (err error) {
 
 	if markPower >= 20 { // 2^20 is 1,048,576 and is too big for the collection of elements in memory
 		return fmt.Errorf("A power %d is greater than 2^29, and is unreasonable", markPower)
 	}
-
-	if m.MS == nil { //                                    Allocate an MS if we don't have one
+	m.Manager = DBManager // Manager for writing the Merkle states
+	if m.MS == nil {      //                                    Allocate an MS if we don't have one
 		m.MS = new(MerkleState) //
 		m.MS.InitSha256()       //
 	}
-	m.Manager = DBManager         //                       Manager for writing the Merkle states
-	m.MS = m.ReadChainHead(m.cid) //                       Set the MerkleState
-
+	m.MS, err = m.ReadChainHead(m.cid) //                  Set the MerkleState
+	if err != nil {
+		return err
+	}
 	m.MarkPower = markPower                             // # levels in Merkle Tree to be indexed
 	m.MarkFreq = int64(math.Pow(2, float64(markPower))) // The number of elements between indexes
 	m.MarkMask = m.MarkFreq - 1                         // Mask to index of next mark (0 if at a mark)
