@@ -27,6 +27,7 @@ func TestMerkleManager_ReadChainHead(t *testing.T) {
 		}
 		MM1.Manager.EndBatch()
 		MM2, err := NewMerkleManager(dbManager, 2)
+		MM2.SetChainID([]byte{1})
 		if err != nil {
 			t.Fatalf("didn't create another Merkle Manager")
 		}
