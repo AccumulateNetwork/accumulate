@@ -46,12 +46,15 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address) *fakeNode {
 		t.Helper()
 		require.NoError(t, err)
 	})
-	n.query = accapi.NewQuery(relay.New(n.client))
+	relay := relay.New(n.client)
+	require.NoError(t, relay.Start())
+	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+	n.query = accapi.NewQuery(relay)
 
 	mgr, err := chain.NewBlockValidator(n.query, db, bvcKey)
 	require.NoError(t, err)
 
-	n.app, err = abci.NewAccumulator(db, addr, mgr, log.MustNewDefaultLogger("plain", "error", false))
+	n.app, err = abci.NewAccumulator(db, addr, mgr, log.MustNewDefaultLogger("plain", "info", false))
 	require.NoError(t, err)
 	appChan <- n.app
 
