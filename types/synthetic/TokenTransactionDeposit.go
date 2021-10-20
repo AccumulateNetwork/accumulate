@@ -17,7 +17,7 @@ type TokenTransactionDeposit struct {
 	Metadata      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
-func (tx *TokenTransactionDeposit) SetDeposit(tokenUrl *types.String, amt *big.Int) error {
+func (tx *TokenTransactionDeposit) SetDeposit(tokenUrl types.String, amt *big.Int) error {
 
 	if amt == nil {
 		return fmt.Errorf("no deposito amount specified")
@@ -27,15 +27,15 @@ func (tx *TokenTransactionDeposit) SetDeposit(tokenUrl *types.String, amt *big.I
 		return fmt.Errorf("deposit amount must be greater than 0")
 	}
 
-	tx.TokenUrl = *tokenUrl
+	tx.TokenUrl = tokenUrl
 	tx.DepositAmount.Set(amt)
 
 	return nil
 }
 
-func NewTokenTransactionDeposit(txId types.Bytes, from *types.String, to *types.String) *TokenTransactionDeposit {
+func NewTokenTransactionDeposit(txId types.Bytes, from types.String, to types.String) *TokenTransactionDeposit {
 	tx := TokenTransactionDeposit{}
-	tx.SetHeader(txId, from, to)
+	tx.SetHeader(txId, &from, &to)
 	return &tx
 }
 
