@@ -7,6 +7,7 @@ import (
 
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -14,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"github.com/tendermint/tendermint/crypto"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -21,6 +23,15 @@ import (
 var rand = randpkg.New(randpkg.NewSource(0))
 
 type Tx = transactions.GenTransaction
+
+func TestEndToEndSuite(t *testing.T) {
+	t.Skip("TODO Fix")
+	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *accapi.Query {
+		// Recreate the app for each test
+		n := createAppWithMemDB(s.T(), crypto.Address{})
+		return n.query
+	}))
+}
 
 func BenchmarkFaucetAndAnonTx(b *testing.B) {
 	n := createAppWithMemDB(b, crypto.Address{})
