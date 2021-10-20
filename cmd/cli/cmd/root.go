@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"os"
 	"os/user"
 	"path/filepath"
 	"time"
@@ -56,6 +57,7 @@ func init() {
 }
 
 func initDB() *bolt.DB {
+	os.MkdirAll(defaultWorkDir, 0600)
 	db, err := bolt.Open(defaultWorkDir+"/wallet.db", 0600, nil)
 	if err != nil {
 		log.Fatal(err)
