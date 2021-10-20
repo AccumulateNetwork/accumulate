@@ -421,16 +421,22 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 		return s.bpt.Bpt.Root.Hash[:], 0, nil
 	}
 
-	//then run through the list and record them
-	//loop through everything and write out states to the database.
-	merkleMgrMap := make(map[types.Bytes32]*managed.MerkleManager)
-	for chainId := range s.updates {
-
-		merkleMgrMap[chainId] = s.mm
+	// Create an ordered list of chain IDs that need updating. The iteration
+	// order of maps in Go is random. Randomly ordering database writes is bad,
+	// because that leads to consensus errors between nodes, since each node
+	// will have a different random order. So we need updates to have some
+	// consistent order, regardless of what it is.
+	updateOrder := make([]types.Bytes32, 0, len(s.updates))
+	for id := range s.updates {
+		updateOrder = append(updateOrder, id)
 	}
-	for chainId := range s.updates {
+	sort.Slice(updateOrder, func(i, j int) bool {
+		return bytes.Compare(updateOrder[i][:], updateOrder[j][:]) < 0
+	})
+
+	for _, chainId := range updateOrder {
 		//to enable multi-threading put "go" in front
-		s.writeChainState(group, mutex, merkleMgrMap[chainId], chainId)
+		s.writeChainState(group, mutex, s.mm, chainId)
 
 		//TODO: figure out how to do this with new way state is derived
 		//if len(currentState.pendingTx) != 0 {
