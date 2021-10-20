@@ -154,12 +154,19 @@ func (s *Suite) waitForSynth() {
 
 func (s *Suite) TestCreateAnonAccount() {
 	sponsor, sender := s.generateTmKey(), s.generateTmKey()
+
+	senderUrl, err := protocol.AnonymousAddress(sender.PubKey().Bytes(), protocol.ACME)
+	s.Require().NoError(err)
+
 	tx, err := acctesting.CreateFakeSyntheticDepositTx(sponsor, sender)
 	s.Require().NoError(err)
 	s.sendTxAsync(tx)(<-s.query.BatchSend())
 
-	senderUrl, err := protocol.AnonymousAddress(sender.PubKey().Bytes(), protocol.ACME)
-	s.Require().NoError(err)
+	s.waitForSynth()
+
+	account := new(protocol.AnonTokenAccount)
+	s.getChainAs(senderUrl.String(), account)
+	s.Require().Equal(int64(5e4*acctesting.TokenMx), account.Balance.Int64())
 
 	recipients := make([]*url.URL, 10)
 	for i := range recipients {
@@ -198,7 +205,7 @@ func (s *Suite) TestCreateAnonAccount() {
 
 	s.waitForSynth()
 
-	account := new(protocol.AnonTokenAccount)
+	account = new(protocol.AnonTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx-total), account.Balance.Int64())
 }

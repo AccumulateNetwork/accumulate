@@ -10,7 +10,7 @@ import (
 )
 
 func TestEndToEnd(t *testing.T) {
-	nodes := initNodes(t, net.ParseIP("127.0.25.1"), 3000, 1, "info")
+	nodes := initNodes(t, net.ParseIP("127.0.25.1"), 3000, 3, "error")
 	query := startNodes(t, nodes)
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *api.Query {
