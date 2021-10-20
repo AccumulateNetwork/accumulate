@@ -143,23 +143,57 @@ func TestCreateADI(t *testing.T) {
 }
 
 func TestCreateAdiTokenAccount(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
-	adiKey := generateKey()
-	require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
+	t.Run("Default Key Book", func(t *testing.T) {
+		n := createAppWithMemDB(t, crypto.Address{})
+		adiKey := generateKey()
+		require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
 
-	n.Batch(func(send func(*transactions.GenTransaction)) {
-		acctTx := api.NewTokenAccount("FooBar/Baz", types.String(protocol.AcmeUrl().String()))
-		tx, err := transactions.New("FooBar", edSigner(adiKey, 1), acctTx)
-		require.NoError(t, err)
-		send(tx)
+		n.Batch(func(send func(*transactions.GenTransaction)) {
+			tac := new(protocol.TokenAccountCreate)
+			tac.Url = "FooBar/Baz"
+			tac.TokenUrl = protocol.AcmeUrl().String()
+			tx, err := transactions.New("FooBar", edSigner(adiKey, 1), tac)
+			require.NoError(t, err)
+			send(tx)
+		})
+
+		n.client.Wait()
+
+		r := n.GetTokenAccount("FooBar/Baz")
+		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
+		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
+		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
 	})
 
-	n.client.Wait()
+	t.Run("Custom Key Book", func(t *testing.T) {
+		n := createAppWithMemDB(t, crypto.Address{})
+		adiKey, pageKey := generateKey(), generateKey()
+		require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/page1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/book1", "foo/page1"))
 
-	r := n.GetTokenAccount("FooBar/Baz")
-	require.Equal(t, types.ChainTypeTokenAccount, r.Type)
-	require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
-	require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
+		n.Batch(func(send func(*transactions.GenTransaction)) {
+			tac := new(protocol.TokenAccountCreate)
+			tac.Url = "FooBar/Baz"
+			tac.TokenUrl = protocol.AcmeUrl().String()
+			tac.KeyBookUrl = "foo/book1"
+			tx, err := transactions.New("FooBar", edSigner(adiKey, 1), tac)
+			require.NoError(t, err)
+			send(tx)
+		})
+
+		n.client.Wait()
+
+		u, err := url.Parse("foo/book1")
+		require.NoError(t, err)
+		bookChainId := types.Bytes(u.ResourceChain()).AsBytes32()
+
+		r := n.GetTokenAccount("FooBar/Baz")
+		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
+		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
+		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
+		require.Equal(t, bookChainId, r.SigSpecId)
+	})
 }
 
 func TestAnonAccountTx(t *testing.T) {
