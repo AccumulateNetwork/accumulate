@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"log"
 	"strconv"
 	"time"
@@ -130,9 +131,12 @@ func CreateTX(sender string, receiver string, amount string) {
 
 		datajson := json.RawMessage(data)
 		params.Tx.Data = &datajson
-		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
 		params.Tx.Signer = &acmeapi.Signer{}
+		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
 		params.Tx.Sponsor = types.String(sender)
+		params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
+		params.Tx.KeyPage.Height = 1
+		params.Tx.KeyPage.Index = 0
 
 		params.Tx.Sig = types.Bytes64{}
 
@@ -142,8 +146,12 @@ func CreateTX(sender string, receiver string, amount string) {
 		}
 		gtx := new(transactions.GenTransaction)
 		gtx.Transaction = dataBinary //The transaction needs to be marshaled as binary for proper tx hash
-		gtx.ChainID = types.GetChainIdFromChainPath(&receiver)[:]
-		gtx.Routing = types.GetAddressFromIdentity(&receiver)
+		u, err := url.Parse(receiver)
+		if err != nil {
+			log.Fatal(err)
+		}
+		gtx.ChainID = u.ResourceChain()
+		gtx.Routing = u.Routing()
 
 		gtx.SigInfo = new(transactions.SignatureInfo)
 		//the siginfo URL is the URL of the signer
@@ -152,8 +160,8 @@ func CreateTX(sender string, receiver string, amount string) {
 		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
 		gtx.SigInfo.Unused2 = params.Tx.Signer.Nonce
 		//The following will be defined in the SigSpec Group for which key to use
-		gtx.SigInfo.MSHeight = 0
-		gtx.SigInfo.PriorityIdx = 0
+		gtx.SigInfo.MSHeight = params.Tx.KeyPage.Height
+		gtx.SigInfo.PriorityIdx = params.Tx.KeyPage.Index
 
 		ed := new(transactions.ED25519Sig)
 		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
