@@ -194,6 +194,17 @@ func (c *ABCIApplicationClient) sendTx(ctx context.Context, tx types.Tx) (<-chan
 		c.txResults[hash] = txr
 		c.txMu.Unlock()
 
+		err := c.PublishEventTx(types.EventDataTx{
+			TxResult: abci.TxResult{
+				// TODO Height, Index
+				Tx:     tx,
+				Result: rd,
+			},
+		})
+		if err != nil {
+			c.onError(err)
+		}
+
 		deliverChan <- rd
 		if rd.Code != 0 {
 			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Log))
@@ -237,6 +248,17 @@ func (c *ABCIApplicationClient) Batch(inBlock func(func(*transactions.GenTransac
 		c.txMu.Lock()
 		c.txResults[hash] = txr
 		c.txMu.Unlock()
+
+		err = c.PublishEventTx(types.EventDataTx{
+			TxResult: abci.TxResult{
+				// TODO Height, Index
+				Tx:     tx,
+				Result: rd,
+			},
+		})
+		if err != nil {
+			c.onError(err)
+		}
 
 		if rd.Code != 0 {
 			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Log))
