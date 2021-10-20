@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"log"
 	"strconv"
 	"time"
@@ -133,6 +134,9 @@ func CreateTX(sender string, receiver string, amount string) {
 		params.Tx.Signer = &acmeapi.Signer{}
 		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
 		params.Tx.Sponsor = types.String(sender)
+		params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
+		params.Tx.KeyPage.Height = 1
+		params.Tx.KeyPage.Index = 0
 
 		params.Tx.Sig = types.Bytes64{}
 
@@ -142,8 +146,12 @@ func CreateTX(sender string, receiver string, amount string) {
 		}
 		gtx := new(transactions.GenTransaction)
 		gtx.Transaction = dataBinary //The transaction needs to be marshaled as binary for proper tx hash
-		gtx.ChainID = types.GetChainIdFromChainPath(&receiver)[:]
-		gtx.Routing = types.GetAddressFromIdentity(&receiver)
+		u, err := url.Parse(receiver)
+		if err != nil {
+			log.Fatal(err)
+		}
+		gtx.ChainID = u.ResourceChain()
+		gtx.Routing = u.Routing()
 
 		gtx.SigInfo = new(transactions.SignatureInfo)
 		//the siginfo URL is the URL of the signer
