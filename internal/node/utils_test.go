@@ -1,9 +1,11 @@
 package node_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/config"
@@ -63,6 +65,7 @@ func initNodes(t *testing.T, baseIP net.IP, basePort int, count int, logLevel st
 		nodes[i], _, err = acctesting.NewBVCNode(nodeDir, false, func(s string) zerolog.Logger {
 			zl := logging.NewTestZeroLogger(t, s)
 			zl = zl.With().Int("node", i).Logger()
+			zl = zl.Hook(zerolog.HookFunc(zerologEventFilter))
 			return zl
 		}, t.Cleanup)
 		require.NoError(t, err)
@@ -86,4 +89,39 @@ func startNodes(t *testing.T, nodes []*node.Node) *api.Query {
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 
 	return api.NewQuery(relay)
+}
+
+func zerologEventFilter(e *zerolog.Event, level zerolog.Level, message string) {
+	// if level > zerolog.InfoLevel {
+	// 	return
+	// }
+
+	switch message {
+	case "starting service", "stopping service":
+		e.Discard()
+		return
+	}
+
+	// This is the hackiest of hacks, but I want the buffer
+	rv := reflect.ValueOf(e)
+	buf := rv.Elem().FieldByName("buf").Bytes()
+	buf = append(buf, '}')
+
+	var v map[string]interface{}
+	err := json.Unmarshal(buf, &v)
+	if err != nil {
+		return
+	}
+
+	module, ok := v["module"].(string)
+	if !ok {
+		return
+	}
+
+	switch module {
+	case "rpc-server", "p2p", "rpc", "statesync":
+		e.Discard()
+	default:
+		// OK
+	}
 }

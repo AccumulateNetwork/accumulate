@@ -13,15 +13,14 @@ type TestLogger struct {
 	Test testing.TB
 }
 
-var _ zerolog.LevelWriter = (*TestLogger)(nil)
+var _ io.Writer = (*TestLogger)(nil)
 
 func (l *TestLogger) Write(b []byte) (int, error) {
-	l.Test.Log(string(b))
-	return len(b), nil
-}
-
-func (l *TestLogger) WriteLevel(_ zerolog.Level, b []byte) (int, error) {
-	l.Test.Log(string(b))
+	s := string(b)
+	if strings.HasSuffix(s, "\n") {
+		s = s[:len(s)-1]
+	}
+	l.Test.Log(s)
 	return len(b), nil
 }
 
