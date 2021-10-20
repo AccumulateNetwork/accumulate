@@ -17,10 +17,11 @@ func TestMerkleManager_ReadChainHead(t *testing.T) {
 	if err != nil {
 		t.Fatal("didn't create a Merkle Manager")
 	}
+	MM1.SetChainID([]byte{1})
 
 	for i := 0; i < 100; i++ {
 		MM1.AddHash(sha256.Sum256([]byte{byte(i), byte(i >> 8), byte(i >> 16), byte(i >> 24)}))
-		err1 := MM1.WriteChainHead()
+		err1 := MM1.WriteChainHead([]byte{1})
 		if err1 != nil {
 			t.Fatalf("didn't write chain head")
 		}
