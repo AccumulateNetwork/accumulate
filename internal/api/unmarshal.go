@@ -72,7 +72,9 @@ func unmarshalTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error
 	return unmarshalAs(rQuery, "tokenAccount", func(b []byte) (interface{}, error) {
 		sAccount := new(state.TokenAccount)
 		err := sAccount.UnmarshalBinary(b)
-		ta := api.NewTokenAccount(sAccount.ChainUrl, sAccount.TokenUrl.String)
+		ta := new(protocol.TokenAccountCreate)
+		ta.Url = string(sAccount.ChainUrl)
+		ta.TokenUrl = string(sAccount.TokenUrl.String)
 		rAccount := response.NewTokenAccount(ta, sAccount.GetBalance(), sAccount.TxCount)
 		return rAccount, err
 	})
@@ -83,7 +85,9 @@ func unmarshalAnonTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, e
 		sAccount := new(protocol.AnonTokenAccount)
 		err := sAccount.UnmarshalBinary(b)
 		rAccount := new(response.AnonTokenAccount)
-		rAccount.TokenAccount = api.NewTokenAccount(sAccount.ChainUrl, types.String(sAccount.TokenUrl))
+		rAccount.TokenAccountCreate = new(protocol.TokenAccountCreate)
+		rAccount.Url = string(sAccount.ChainUrl)
+		rAccount.TokenUrl = string(sAccount.TokenUrl)
 		rAccount.Balance = types.Amount{Int: sAccount.Balance}
 		rAccount.CreditBalance = types.Amount{Int: sAccount.CreditBalance}
 		rAccount.TxCount = sAccount.TxCount
