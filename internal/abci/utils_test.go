@@ -1,6 +1,7 @@
 package abci_test
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding"
 	"encoding/json"
@@ -112,9 +113,20 @@ func (n *fakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
 	return r
 }
 
+// Deprecated: ABCI app client now handles batching by itself
 func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
 	n.t.Helper()
-	n.client.Batch(inBlock)
+	var chans []<-chan abcitypes.ResponseDeliverTx
+	inBlock(func(tx *transactions.GenTransaction) {
+		b, err := tx.Marshal()
+		require.NoError(n.t, err)
+		_, ch := n.client.SubmitTx(context.Background(), b)
+		chans = append(chans, ch)
+	})
+
+	for _, ch := range chans {
+		<-ch
+	}
 }
 
 func generateKey() tmed25519.PrivKey {

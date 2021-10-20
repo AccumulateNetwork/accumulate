@@ -25,7 +25,6 @@ var rand = randpkg.New(randpkg.NewSource(0))
 type Tx = transactions.GenTransaction
 
 func TestEndToEndSuite(t *testing.T) {
-	t.Skip("TODO Fix")
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *accapi.Query {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{})
