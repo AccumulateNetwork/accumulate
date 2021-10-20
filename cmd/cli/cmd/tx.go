@@ -174,9 +174,6 @@ func CreateTX(sender string, receiver string, amount string) {
 		//sig spec group to make sure this key belongs to the identity.
 		params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
 
-		if !ed.Verify(gtx.TransactionHash()) {
-			log.Fatalf("cannot validate signature")
-		}
 		if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
 			log.Fatal(err)
 		}
