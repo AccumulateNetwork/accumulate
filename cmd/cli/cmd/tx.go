@@ -160,8 +160,8 @@ func CreateTX(sender string, receiver string, amount string) {
 		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
 		gtx.SigInfo.Unused2 = params.Tx.Signer.Nonce
 		//The following will be defined in the SigSpec Group for which key to use
-		gtx.SigInfo.MSHeight = 0
-		gtx.SigInfo.PriorityIdx = 0
+		gtx.SigInfo.MSHeight = params.Tx.KeyPage.Height
+		gtx.SigInfo.PriorityIdx = params.Tx.KeyPage.Index
 
 		ed := new(transactions.ED25519Sig)
 		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
@@ -174,6 +174,9 @@ func CreateTX(sender string, receiver string, amount string) {
 		//sig spec group to make sure this key belongs to the identity.
 		params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
 
+		if !ed.Verify(gtx.TransactionHash()) {
+			log.Fatalf("cannot validate signature")
+		}
 		if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
 			log.Fatal(err)
 		}
