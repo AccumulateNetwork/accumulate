@@ -304,11 +304,12 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 
 	// Store pending state changes
 	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
-	for id, entry := range st.chains {
-		if !entry.dirty {
-			continue
+	for _, id := range st.dirty {
+		record := st.chains[id]
+		if record == nil {
+			panic(fmt.Errorf("%X is marked dirty but has no record!", id))
 		}
-		data, err := entry.record.MarshalBinary()
+		data, err := record.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal state: %v", err)
 		}
@@ -366,7 +367,6 @@ func (m *Executor) Commit() ([]byte, error) {
 
 	m.query.BatchSend()
 
-	fmt.Printf("DB time %f\n", m.db.TimeBucket)
 	m.db.TimeBucket = 0
 	return mdRoot, nil
 }

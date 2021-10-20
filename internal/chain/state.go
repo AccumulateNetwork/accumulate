@@ -15,7 +15,8 @@ import (
 
 type StateManager struct {
 	db          *state.StateDB
-	chains      map[[32]byte]*stateEntry
+	dirty       [][32]byte
+	chains      map[[32]byte]state.Chain
 	submissions []*submittedTx
 
 	Sponsor        state.Chain
@@ -43,11 +44,6 @@ func NewStateManager(db *state.StateDB, tx *transactions.GenTransaction) (*State
 		return st, fmt.Errorf("sponsor %q %w", st.SponsorUrl, err)
 	}
 	return nil, err
-}
-
-type stateEntry struct {
-	record state.Chain
-	dirty  bool
 }
 
 type submittedTx struct {
@@ -87,9 +83,9 @@ func (m *StateManager) LoadUrlAs(u *url.URL, v interface{}) error {
 
 // Load loads the given chain and unmarshals it
 func (m *StateManager) Load(chainId [32]byte) (state.Chain, error) {
-	entry, ok := m.chains[chainId]
+	record, ok := m.chains[chainId]
 	if ok {
-		return entry.record, nil
+		return record, nil
 	}
 
 	obj, err := m.db.GetCurrentEntry(chainId[:])
@@ -97,18 +93,15 @@ func (m *StateManager) Load(chainId [32]byte) (state.Chain, error) {
 		return nil, err
 	}
 
-	record, err := unmarshalRecord(obj)
+	record, err = unmarshalRecord(obj)
 	if err != nil {
 		return nil, err
 	}
 
-	entry = new(stateEntry)
-	entry.record = record
-
 	if m.chains == nil {
-		m.chains = map[[32]byte]*stateEntry{}
+		m.chains = map[[32]byte]state.Chain{}
 	}
-	m.chains[chainId] = entry
+	m.chains[chainId] = record
 	return record, nil
 }
 
@@ -142,19 +135,14 @@ func (m *StateManager) Store(record state.Chain) {
 		panic(fmt.Errorf("attempted to add an invalid chain: %v", err))
 	}
 
-	var chainId [32]byte
-	copy(chainId[:], u.ResourceChain())
-	entry, ok := m.chains[chainId]
-	if !ok {
-		if m.chains == nil {
-			m.chains = map[[32]byte]*stateEntry{}
-		}
-		entry = new(stateEntry)
-		m.chains[chainId] = entry
+	if m.chains == nil {
+		m.chains = map[[32]byte]state.Chain{}
 	}
 
-	entry.dirty = true
-	entry.record = record
+	var chainId [32]byte
+	copy(chainId[:], u.ResourceChain())
+	m.chains[chainId] = record
+	m.dirty = append(m.dirty, chainId)
 }
 
 // Submit queues a synthetic transaction for submission
