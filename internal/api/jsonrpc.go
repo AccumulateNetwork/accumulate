@@ -62,6 +62,8 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"create-sig-spec":       api.createSigSpec,
 		"sig-spec-group":        api.getSigSpecGroup,
 		"create-sig-spec-group": api.createSigSpecGroup,
+		"update-key-page":       api.updateKeyPage,
+		"update-sig-spec":       api.updateKeyPage,
 
 		// token
 		"token":                api.getToken,
@@ -187,6 +189,19 @@ func (api *API) prepareCreate(params json.RawMessage, data encoding.BinaryMarsha
 // createSigSpec creates a signature specification
 func (api *API) createSigSpec(_ context.Context, params json.RawMessage) interface{} {
 	data := &protocol.CreateSigSpec{}
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
+		return NewValidatorError(err)
+	}
+
+	ret := api.sendTx(req, payload)
+	ret.Type = "sigSpec"
+	return ret
+}
+
+// updateKeyPage adds, removes, or updates key in a key page
+func (api *API) updateKeyPage(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.UpdateKeyPage{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return NewValidatorError(err)
