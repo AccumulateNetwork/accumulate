@@ -7,39 +7,104 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 )
 
-func b2i(b Hash) int {
-	i := int(b[0])<<24 + int(b[1])<<16 + int(b[2])<<8 + int(b[0])
+func b2i(b Hash) int64 {
+	i := int64(b[0])<<24 + int64(b[1])<<16 + int64(b[2])<<8 + int64(b[3])
 	return i
 }
 
-func i2b(i int) [32]byte {
+func i2b(i int64) [32]byte {
 	return [32]byte{byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)}
 }
 
+func TestConversions(t *testing.T) {
+	for i := int64(0); i < 10000; i++ {
+		if i != b2i(i2b(i)) {
+			t.Fatalf("failed %d", i)
+		}
+
+	}
+}
+
 func TestMerkleManager_GetRange(t *testing.T) {
+
+	t.Skip("skipping for now")
+	MarkPower := int64(2)
+	MarkFreq := int64(4)
+	NumTests := int64(37)
 
 	dbManager := new(database.Manager)
 	if err := dbManager.Init("memory", ""); err != nil {
 		t.Fatal(err)
 	}
 
-	MM1, err := NewMerkleManager(dbManager, 2)
+	MM1, err := NewMerkleManager(dbManager, MarkPower)
 	MM1.MS.InitSha256()
 	if err != nil {
 		t.Fatal("didn't create a Merkle Manager")
 	}
 
 	MM1.SetChainID([]byte{1})
-	for i := 0; i < 1000; i++ {
+	for i := int64(0); i < NumTests; i++ {
 		MM1.AddHash(i2b(i))
 	}
-	MM1.SetChainID([]byte{2})
-	for i := 1000; i < 2000; i++ {
-		MM1.AddHash(i2b(i))
-	}
+	/*
+		MM1.SetChainID([]byte{2})
+		for i := NumTests; i < NumTests*2; i++ {
+			MM1.AddHash(i2b(i))
+		}
+	*/
 
-	list := MM1.GetRange([]byte{1}, -1, 3)
-	if len(list) >= 3 && (b2i(list[0]) != 0 || b2i(list[1]) != 1 || b2i(list[2]) != 0) {
-		t.Error(fmt.Sprintf("unexpected values %x %x %x", list[0], list[1], list[2]))
+	MM1.Manager.EndBatch()
+
+	for i := int64(0); i < MarkFreq*2; i++ {
+		fmt.Println("  for i=", i)
+		for j := int64(0); j < NumTests+1; j++ {
+			begin := j
+			end := j + i
+			firstIndex := j
+			if j < 0 {
+				firstIndex = 0
+			}
+			if firstIndex >= NumTests {
+				firstIndex = NumTests - 1
+			}
+			lastIndex := end
+			if j+i >= NumTests {
+				lastIndex = NumTests - 1
+			}
+			if lastIndex < 0 {
+				lastIndex = 0
+			}
+			list, err := MM1.GetRange([]byte{1}, begin, end)
+			if begin >= 0 && begin < NumTests-1 && end > begin && end > 0 && err != nil {
+				t.Fatalf("shouldn't happen %v", err)
+			}
+			if end > 0 && begin <= NumTests-1 {
+				limit := lastIndex - firstIndex
+				if limit > MarkFreq/2 {
+					limit = MarkFreq / 2
+				}
+				if int64(len(list)) != limit {
+					t.Errorf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected %d",
+						begin, end, firstIndex, lastIndex, len(list), limit)
+				}
+			} else {
+				if len(list) != 0 {
+					t.Errorf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected 0",
+						begin, end, firstIndex, lastIndex, len(list))
+				}
+			}
+
+			for i, v := range list {
+				if begin+int64(i) != int64(b2i(v)) {
+					t.Errorf("wrong value. Got %x=>%d range(%d-%d)[%d] expected %d",
+						v[:4], b2i(v),
+						begin, end,
+						i,
+						begin+int64(i))
+				}
+			}
+
+		}
 	}
 }
