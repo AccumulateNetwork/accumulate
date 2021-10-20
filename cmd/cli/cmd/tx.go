@@ -130,8 +130,8 @@ func CreateTX(sender string, receiver string, amount string) {
 
 		datajson := json.RawMessage(data)
 		params.Tx.Data = &datajson
-		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
 		params.Tx.Signer = &acmeapi.Signer{}
+		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
 		params.Tx.Sponsor = types.String(sender)
 
 		params.Tx.Sig = types.Bytes64{}
