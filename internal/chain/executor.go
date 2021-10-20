@@ -390,6 +390,8 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 		tx := new(transactions.GenTransaction)
 		tx.SigInfo = new(transactions.SignatureInfo)
 		tx.SigInfo.URL = sub.url.String()
+		tx.SigInfo.MSHeight = 1
+		tx.SigInfo.PriorityIdx = 0
 		tx.Transaction = body
 
 		tx.SigInfo.Unused2 = m.nonce
