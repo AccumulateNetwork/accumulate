@@ -50,13 +50,19 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"adi-create": api.createADI,
 
 		// token
-		"token":                api.getToken,
-		"token-create":         api.createToken,
-		"token-account":        api.getTokenAccount,
-		"token-account-create": api.createTokenAccount,
-		"token-tx":             api.getTokenTx,
-		"token-tx-create":      api.createTokenTx,
-		"faucet":               api.faucet,
+		"token":                 api.getToken,
+		"token-create":          api.createToken,
+		"token-account":         api.getTokenAccount,
+		"token-account-create":  api.createTokenAccount,
+		"token-account-history": api.getTokenAccountHistory,
+		"token-tx":              api.getTokenTx,
+		"token-tx-create":       api.createTokenTx,
+
+		// metrics
+		"metrics": api.metrics,
+
+		// faucet
+		"faucet": api.faucet,
 	}
 
 	apiHandler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
@@ -304,6 +310,37 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 	return taResp
 }
 
+// getTokenAccountHistory returns tx history for Token Account
+func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage) interface{} {
+
+	var err error
+	req := &acmeapi.APIRequestURLPagination{}
+
+	if err = json.Unmarshal(params, &req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// validate URL
+	if err = api.validate.Struct(req); err != nil {
+		return NewValidatorError(err)
+	}
+
+	// Tendermint integration here
+	ret := acmeapi.APIDataResponsePagination{}
+	ret.Type = "tokenAccountHistory"
+
+	res := []*acmeapi.TokenTx{}
+	data, _ := json.Marshal(res)
+	raw := json.RawMessage(data)
+
+	ret.Data = &raw
+	*ret.Limit = int64(0)
+	*ret.Start = int64(0)
+	*ret.Total = int64(0)
+
+	return ret
+}
+
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
 	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, uint64(req.Tx.Timestamp), payload)
 
@@ -445,7 +482,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 	return ret
 }
 
-// createTokenTx creates Token Tx
+// faucet API call (testnet only)
 func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
@@ -535,4 +572,20 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	}
 	ret.Data = &msg
 	return &ret
+}
+
+// metrics returns metrics for explorer (tps, etc.)
+func (api *API) metrics(_ context.Context, params json.RawMessage) interface{} {
+
+	res := &acmeapi.MetricsResponse{}
+	res.TPS = 1
+
+	ret := acmeapi.APIDataResponse{}
+	ret.Type = "metrics"
+
+	data, _ := json.Marshal(res)
+	raw := json.RawMessage(data)
+	ret.Data = &raw
+
+	return ret
 }
