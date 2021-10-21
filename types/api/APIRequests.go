@@ -36,10 +36,30 @@ type APIRequestURL struct {
 	URL types.String `json:"url" form:"url" query:"url" validate:"required"`
 }
 
+// APIRequestURLPagination is APIRequestURL with pagination params
+type APIRequestURLPagination struct {
+	*APIRequestURL
+	Start *int64 `json:"start"`
+	Limit *int64 `json:"limit"`
+}
+
 // APIDataResponse is used in "get" API method response
 type APIDataResponse struct {
 	Type types.String     `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx"`
 	Data *json.RawMessage `json:"data" form:"data" query:"data"`
+}
+
+// APIDataResponsePagination is APIDataResponse with pagination data
+type APIDataResponsePagination struct {
+	*APIDataResponse
+	Start *int64 `json:"start"`
+	Limit *int64 `json:"limit"`
+	Total *int64 `json:"total"`
+}
+
+// Metrics is used in "metrics" API method response
+type MetricsResponse struct {
+	TPS int64 `json:"tps" form:"tps" query:"tps"`
 }
 
 // NewAPIRequest will convert create general transaction which is used inside of Accumulate and wraps a transaction type
