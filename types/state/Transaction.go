@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -58,7 +59,7 @@ type PendingTransaction struct {
 	ChainHeader
 	Signature        []*transactions.ED25519Sig
 	TransactionState *txState
-	Status           string `json:"status" form:"status" query:"status" validate:"required"`
+	Status           json.RawMessage `json:"status" form:"status" query:"status" validate:"required"`
 }
 
 func (is *Transaction) TransactionHash() *types.Bytes32 {
@@ -203,8 +204,7 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 		return err //
 	} //
 
-	stat, data := common.BytesSlice(data)
-	t.Status = string(stat)
+	t.Status, data = common.BytesSlice(data)
 
 	if len(data) != 0 {
 		t.TransactionState.Transaction = &types.Bytes{}

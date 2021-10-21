@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -245,8 +246,19 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	}
 
 	executor, ok := m.executors[types.TxType(tx.TransactionType())]
+	txPending := state.NewPendingTransaction(tx)
 	if !ok {
-		return nil, fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))
+		err := fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())
+		txPending.Status = json.RawMessage(fmt.Sprintf("\"error\":\"%v\"", err))
+		chainId := types.Bytes(tx.ChainID).AsBytes32()
+		txPendingObject := new(state.Object)
+		txPendingObject.Entry, err = txPending.MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		err1 := m.db.AddPendingTx(&chainId, tx.TransactionHash(), txPendingObject, nil)
+		fmt.Errorf("error adding pending tx (%v) on error %v", err, err1)
+		return nil, err
 	}
 
 	tx.TransactionHash()
