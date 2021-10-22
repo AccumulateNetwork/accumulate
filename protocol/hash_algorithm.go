@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -28,50 +29,74 @@ func HashAlgorithmByName(s string) HashAlgorithm {
 	}
 }
 
-func (ka HashAlgorithm) String() string {
-	switch ka {
+func (ha HashAlgorithm) String() string {
+	switch ha {
 	case SHA256:
 		return "SHA256"
 	case SHA256D:
 		return "SHA256D"
 	default:
-		return fmt.Sprintf("HashAlgorithm:%d", ka)
+		return fmt.Sprintf("HashAlgorithm:%d", ha)
 	}
 }
 
-func (ka HashAlgorithm) BinarySize() int {
+func (ha HashAlgorithm) Apply(b []byte) ([]byte, error) {
+	switch ha {
+	case Unhashed:
+		return b, nil
+	case SHA256:
+		kh := sha256.Sum256(b)
+		return kh[:], nil
+	case SHA256D:
+		kh := sha256.Sum256(b)
+		kh = sha256.Sum256(kh[:])
+		return kh[:], nil
+	default:
+		return nil, fmt.Errorf("invalid hash algorithm")
+	}
+}
+
+func (ha HashAlgorithm) MustApply(b []byte) []byte {
+	b, err := ha.Apply(b)
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func (ha HashAlgorithm) BinarySize() int {
 	return 1
 }
 
-func (ka HashAlgorithm) MarshalBinary() ([]byte, error) {
-	return []byte{byte(ka)}, nil
+func (ha HashAlgorithm) MarshalBinary() ([]byte, error) {
+	return []byte{byte(ha)}, nil
 }
 
-func (ka *HashAlgorithm) UnmarshalBinary(b []byte) error {
+func (ha *HashAlgorithm) UnmarshalBinary(b []byte) error {
 	if len(b) == 0 {
 		return ErrNotEnoughData
 	}
-	*ka = HashAlgorithm(b[0])
+	*ha = HashAlgorithm(b[0])
 	return nil
 }
 
-func (ka HashAlgorithm) MarshalJSON() ([]byte, error) {
-	return json.Marshal(ka.String())
+func (ha HashAlgorithm) MarshalJSON() ([]byte, error) {
+	return json.Marshal(ha.String())
 }
 
-func (ka *HashAlgorithm) UnmarshalJSON(b []byte) error {
+func (ha *HashAlgorithm) UnmarshalJSON(b []byte) error {
 	var s *string
 	err := json.Unmarshal(b, &s)
 	if err != nil {
 		return nil
 	}
 	if s == nil {
-		*ka = Unhashed
+		*ha = Unhashed
 		return nil
 	}
 
-	*ka = HashAlgorithmByName(*s)
-	if *ka == UnknownHashAlgorithm {
+	*ha = HashAlgorithmByName(*s)
+	if *ha == UnknownHashAlgorithm {
 		return fmt.Errorf("invalid Hash algorithm: %q", *s)
 	}
 	return nil

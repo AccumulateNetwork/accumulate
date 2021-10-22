@@ -44,10 +44,10 @@ jobs:
       - name: Init main
         run: ./accumulated init -w .nodes -n EastXeons -r EastXeons
 
-      - name: Init follower
-        run: |
-          rm -rf .nodes
-          ./accumulated init follower -w .nodes -n EastXeons -l tcp://127.0.2.1:3000
+      # - name: Init follower
+      #   run: |
+      #     rm -rf .nodes
+      #     ./accumulated init follower -w .nodes -n EastXeons -l tcp://127.0.2.1:3000
 
       # - name: Run follower
       #   run: ./accumulated run -w .nodes/Node0 --ci-stop-after 5s
@@ -57,13 +57,13 @@ jobs:
           rm -rf .nodes
           ./accumulated testnet -w .nodes -v 1 -f 0 --no-empty-blocks
 
-      - name: Run and load test localhost
-        run: |
-          ./accumulated run -w .nodes/Node0 &
-          PID=$!
-          sleep 5
-          ./accumulated loadtest -r tcp://127.0.1.1:26657 --wallets 10 --transactions 10
-          kill -9 $PID
+      # - name: Run and load test localhost
+      #   run: |
+      #     ./accumulated run -w .nodes/Node0 &
+      #     PID=$!
+      #     sleep 5
+      #     ./accumulated loadtest -r tcp://127.0.1.1:26657 --wallets 10 --transactions 10
+      #     kill -9 $PID
 
   build-windows:
     name: Build Windows

@@ -12,6 +12,21 @@ type BlockIndex struct {
 	PendingIndex int64 // index of the last element in the Pending chain
 }
 
+// Equal
+// Compares two BlockIndex instances
+func (b *BlockIndex) Equal(b2 *BlockIndex) bool {
+	if b.BlockIndex != b2.BlockIndex {
+		return false
+	}
+	if b.MainIndex != b2.MainIndex {
+		return false
+	}
+	if b.PendingIndex != b2.PendingIndex {
+		return false
+	}
+	return true
+}
+
 // Marshal
 // serialize a BlockIndex into a slice of data
 func (b *BlockIndex) Marshal() (data []byte) {

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"encoding"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
@@ -21,6 +23,7 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/ybbus/jsonrpc/v2"
 )
 
@@ -36,9 +39,14 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 
 	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
 
+	v, err := protocol.NewValidator()
+	if err != nil {
+		return nil, err
+	}
+
 	api := &API{}
 	api.config = config
-	api.validate = validator.New()
+	api.validate = v
 	api.query = q
 
 	methods := jsonrpc2.MethodMap{
@@ -48,6 +56,14 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		// ADI
 		"adi":        api.getADI,
 		"adi-create": api.createADI,
+
+		// Key management
+		"sig-spec":              api.getSigSpec,
+		"create-sig-spec":       api.createSigSpec,
+		"sig-spec-group":        api.getSigSpecGroup,
+		"create-sig-spec-group": api.createSigSpecGroup,
+		"update-key-page":       api.updateKeyPage,
+		"update-sig-spec":       api.updateKeyPage,
 
 		// token
 		"token":                 api.getToken,
@@ -63,6 +79,9 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 
 		// faucet
 		"faucet": api.faucet,
+
+		// credits
+		"add-credits": api.addCredits,
 	}
 
 	apiHandler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
@@ -134,24 +153,124 @@ func listenAndServe(label, address string, handler http.Handler) {
 	}
 }
 
-// getData returns Accumulate Object by URL
-func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
+func (api *API) prepareCreate(params json.RawMessage, data encoding.BinaryMarshaler, fields ...string) (*acmeapi.APIRequestRaw, []byte, error) {
+	var err error
+	req := &acmeapi.APIRequestRaw{}
 
+	// unmarshal req
+	if err = json.Unmarshal(params, &req); err != nil {
+		return nil, nil, err
+	}
+
+	// validate request
+	if err = api.validate.Struct(req); err != nil {
+		return nil, nil, err
+	}
+
+	// parse req.tx.data
+	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
+		return nil, nil, err
+	}
+
+	// validate request data
+	if len(fields) == 0 {
+		if err = api.validate.Struct(data); err != nil {
+			return nil, nil, err
+		}
+	} else {
+		if err = api.validate.StructPartial(data, fields...); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	// Tendermint integration here
+	var payload []byte
+	if payload, err = data.MarshalBinary(); err != nil {
+		return nil, nil, err
+	}
+
+	return req, payload, nil
+}
+
+// createSigSpec creates a signature specification
+func (api *API) createSigSpec(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.CreateSigSpec{}
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
+		return NewValidatorError(err)
+	}
+
+	ret := api.sendTx(req, payload)
+	ret.Type = "sigSpec"
+	return ret
+}
+
+// updateKeyPage adds, removes, or updates key in a key page
+func (api *API) updateKeyPage(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.UpdateKeyPage{}
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
+		return NewValidatorError(err)
+	}
+
+	ret := api.sendTx(req, payload)
+	ret.Type = "sigSpec"
+	return ret
+}
+
+// createSigSpecGroup creates a signature specification group
+func (api *API) createSigSpecGroup(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.CreateSigSpecGroup{}
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
+		return NewValidatorError(err)
+	}
+
+	ret := api.sendTx(req, payload)
+	ret.Type = "sigSpecGroup"
+	return ret
+}
+
+func (api *API) addCredits(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.AddCredits{}
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
+		return NewValidatorError(err)
+	}
+
+	ret := api.sendTx(req, payload)
+	ret.Type = "addCredits"
+	return ret
+}
+
+func (api *API) prepareGet(params json.RawMessage) (*acmeapi.APIRequestURL, error) {
 	var err error
 	req := &acmeapi.APIRequestURL{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
+		return nil, err
 	}
 
 	// validate URL
 	if err = api.validate.Struct(req); err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+func (api *API) get(params json.RawMessage, expect ...types.ChainType) interface{} {
+	req, err := api.prepareGet(params)
+	if err != nil {
 		return NewValidatorError(err)
 	}
 
-	// Tendermint integration here
-	resp, err := api.query.GetChainStateByUrl(string(req.URL))
+	r, err := api.query.QueryByUrl(string(req.URL))
+	if err != nil {
+		return NewAccumulateError(err)
+	}
 
+	resp, err := unmarshalChainState(r.Response, expect...)
 	if err != nil {
 		return NewAccumulateError(err)
 	}
@@ -159,24 +278,37 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 	return resp
 }
 
+// getData returns Accumulate Object by URL
+func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
+	req, err := api.prepareGet(params)
+	if err != nil {
+		return NewValidatorError(err)
+	}
+
+	resp, err := api.query.GetChainStateByUrl(string(req.URL))
+	if err != nil {
+		return NewAccumulateError(err)
+	}
+
+	return resp
+}
+
+func (api *API) getSigSpec(_ context.Context, params json.RawMessage) interface{} {
+	return api.get(params, types.ChainTypeSigSpec)
+}
+
+func (api *API) getSigSpecGroup(_ context.Context, params json.RawMessage) interface{} {
+	return api.get(params, types.ChainTypeSigSpecGroup)
+}
+
 // getADI returns ADI info
 func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
-
-	var err error
-	req := &acmeapi.APIRequestURL{}
-
-	if err = json.Unmarshal(params, &req); err != nil {
+	req, err := api.prepareGet(params)
+	if err != nil {
 		return NewValidatorError(err)
 	}
 
-	// validate URL
-	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// Tendermint integration here
 	resp, err := api.query.GetAdi(*req.URL.AsString())
-
 	if err != nil {
 		return NewAccumulateError(err)
 	}
@@ -186,34 +318,9 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 // createADI creates ADI
 func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
-
-	var err error
-	req := &acmeapi.APIRequestRaw{}
-	data := &acmeapi.ADI{}
-
-	// unmarshal req
-	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate request
-	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// parse req.tx.data
-	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate request data
-	if err = api.validate.Struct(data); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// Tendermint integration here
-	var payload types.Bytes
-	if payload, err = data.MarshalBinary(); err != nil {
+	data := &protocol.IdentityCreate{}
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
 		return NewValidatorError(err)
 	}
 
@@ -224,22 +331,12 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 
 // getToken returns Token info
 func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} {
-
-	var err error
-	req := &acmeapi.APIRequestURL{}
-
-	if err = json.Unmarshal(params, &req); err != nil {
+	req, err := api.prepareGet(params)
+	if err != nil {
 		return NewValidatorError(err)
 	}
 
-	// validate URL
-	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	//query tendermint
 	resp, err := api.query.GetToken(*req.URL.AsString())
-
 	if err != nil {
 		return NewAccumulateError(err)
 	}
@@ -250,34 +347,9 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 
 // createToken creates Token
 func (api *API) createToken(_ context.Context, params json.RawMessage) interface{} {
-
-	var err error
-	req := &acmeapi.APIRequestRaw{}
 	data := &acmeapi.Token{}
-
-	// unmarshal req
-	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate request
-	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// parse req.tx.data
-	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate request data
-	if err = api.validate.Struct(data); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// Tendermint integration here
-	var payload types.Bytes
-	if payload, err = data.MarshalBinary(); err != nil {
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
 		return NewValidatorError(err)
 	}
 
@@ -288,26 +360,17 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 
 // getTokenAccount returns Token Account info
 func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) interface{} {
-
-	var err error
-	req := &acmeapi.APIRequestURL{}
-
-	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate URL
-	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// Tendermint integration here
-	taResp, err := api.query.GetTokenAccount(*req.URL.AsString())
+	req, err := api.prepareGet(params)
 	if err != nil {
 		return NewValidatorError(err)
 	}
 
-	return taResp
+	resp, err := api.query.GetTokenAccount(*req.URL.AsString())
+	if err != nil {
+		return NewValidatorError(err)
+	}
+
+	return resp
 }
 
 // getTokenAccountHistory returns tx history for Token Account
@@ -342,72 +405,85 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 }
 
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
-	genTx, err := acmeapi.NewAPIRequest(&req.Sig, req.Tx.Signer, uint64(req.Tx.Timestamp), payload)
+	tx := new(transactions.GenTransaction)
+	tx.Transaction = payload
 
+	tx.SigInfo = new(transactions.SignatureInfo)
+	tx.SigInfo.URL = string(req.Tx.Sponsor)
+	tx.SigInfo.Unused2 = req.Tx.Signer.Nonce
+	tx.SigInfo.MSHeight = req.Tx.KeyPage.Height
+	tx.SigInfo.PriorityIdx = req.Tx.KeyPage.Index
+
+	ed := new(transactions.ED25519Sig)
+	ed.Nonce = req.Tx.Signer.Nonce
+	ed.PublicKey = req.Tx.Signer.PublicKey[:]
+	ed.Signature = req.Tx.Sig.Bytes()
+
+	tx.Signature = append(tx.Signature, ed)
+
+	return api.broadcastTx(req.Wait, tx)
+}
+
+func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
 	ret := &acmeapi.APIDataResponse{}
 	var msg json.RawMessage
 
-	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
-		ret.Data = &msg
-		return ret
+	var done chan abci.TxResult
+	if wait {
+		done = make(chan abci.TxResult, 1)
 	}
-	txInfo, err := api.query.BroadcastTx(genTx)
+
+	txInfo, err := api.query.BroadcastTx(tx, done)
 	if err != nil {
 		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
 		ret.Data = &msg
 		return ret
 	}
 
-	stat := api.query.BatchSend()
-	resp := <-stat
+	resp := <-api.query.BatchSend()
 
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", genTx.TransactionHash(), err))
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", tx.TransactionHash(), err))
 		ret.Data = &msg
 		return ret
 	}
 
 	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", genTx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
-	} else {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", genTx.TransactionHash(), resolved.Hash, resolved.Codespace))
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
+		ret.Data = &msg
+		return ret
 	}
+
+	if wait {
+		timer := time.NewTimer(5 * time.Second)
+		defer timer.Stop()
+
+		select {
+		case txr := <-done:
+			resolved := txr.Result
+			hash := sha256.Sum256(txr.Tx)
+			if txr.Result.Code != 0 {
+				msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, hash, resolved.Code, resolved.Codespace))
+				ret.Data = &msg
+				return ret
+			}
+
+		case <-timer.C:
+		}
+	}
+
+	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Hash, resolved.Codespace))
 	ret.Data = &msg
 	return ret
+
 }
 
 // createTokenAccount creates Token Account
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
-
-	var err error
-	req := &acmeapi.APIRequestRaw{}
-	data := &acmeapi.TokenAccount{}
-
-	// unmarshal req
-	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate request
-	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// parse req.tx.data
-	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate request data
-	if err = api.validate.Struct(data); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// Tendermint integration here
-	var payload types.Bytes
-	if payload, err = data.MarshalBinary(); err != nil {
+	data := &protocol.TokenAccountCreate{}
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
 		return NewValidatorError(err)
 	}
 
@@ -446,34 +522,9 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 
 // createTokenTx creates Token Tx
 func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interface{} {
-
-	var err error
-	req := &acmeapi.APIRequestRaw{}
 	data := &acmeapi.TokenTx{}
-
-	// unmarshal req
-	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate request
-	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// parse req.tx.data
-	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// validate request data
-	if err = api.validate.StructPartial(data, "From", "To"); err != nil {
-		return NewValidatorError(err)
-	}
-
-	// Tendermint integration here
-	var payload types.Bytes
-	if payload, err = data.MarshalBinary(); err != nil {
+	req, payload, err := api.prepareCreate(params, data, "From", "To")
+	if err != nil {
 		return NewValidatorError(err)
 	}
 
@@ -516,12 +567,12 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	fromAccount := types.String(wallet.Addr)
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	txid := sha256.Sum256([]byte("faucet"))
+	txid := types.Bytes32{}
 
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &fromAccount, &destAccount)
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], fromAccount, destAccount)
 	amtToDeposit := int64(10)                                //deposit 50k tokens
 	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
 	deposit.TokenUrl = tokenUrl
@@ -530,7 +581,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	gtx := new(transactions.GenTransaction)
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = *destAccount.AsString()
-	gtx.SigInfo.Nonce = wallet.Nonce
+	gtx.SigInfo.Unused2 = wallet.Nonce
 	gtx.Transaction = depData
 	if err := gtx.SetRoutingChainID(); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", destAccount), err)
@@ -545,32 +596,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	txInfo, err := api.query.BroadcastTx(gtx)
-	if err != nil {
-		return NewAccumulateError(err)
-	}
-
-	stat := api.query.BatchSend()
-
-	res := <-stat
-
-	ret := acmeapi.APIDataResponse{}
-	ret.Type = "faucet"
-
-	var msg json.RawMessage
-	resolved, err := res.ResolveTransactionResponse(txInfo)
-	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", gtx.TransactionHash(), err))
-		ret.Data = &msg
-		return ret
-	}
-
-	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", gtx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
-	} else {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", gtx.TransactionHash(), resolved.Hash, resolved.Codespace))
-	}
-	ret.Data = &msg
+	ret := api.broadcastTx(req.Wait, gtx)
 	return &ret
 }
 
