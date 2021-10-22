@@ -3,6 +3,7 @@ package genesis
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -10,7 +11,7 @@ import (
 )
 
 var FaucetWallet transactions.WalletEntry
-var FaucetChainId types.Bytes32
+var FaucetUrl *url.URL
 
 func init() {
 	FaucetWallet.Nonce = 1
@@ -20,9 +21,8 @@ func init() {
 	pubKey := privKey.Public().(ed25519.PublicKey)
 
 	FaucetWallet.PrivateKey = privKey
-	u, _ := protocol.AnonymousAddress(pubKey, protocol.AcmeUrl().String())
-	FaucetWallet.Addr = u.String()
-	FaucetChainId.FromBytes(u.ResourceChain())
+	FaucetUrl, _ = protocol.AnonymousAddress(pubKey, protocol.AcmeUrl().String())
+	FaucetWallet.Addr = FaucetUrl.String()
 }
 
 func createFaucet() (*types.Bytes32, *state.Object) {
@@ -37,5 +37,6 @@ func createFaucet() (*types.Bytes32, *state.Object) {
 		return nil, nil
 	}
 	o.Entry = acct
-	return &FaucetChainId, o
+	chainId := types.Bytes(FaucetUrl.ResourceChain()).AsBytes32()
+	return &chainId, o
 }
