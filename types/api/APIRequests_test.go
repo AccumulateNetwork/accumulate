@@ -1,4 +1,4 @@
-package api
+package api_test
 
 import (
 	"crypto/sha256"
@@ -7,18 +7,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/go-playground/validator/v10"
+	. "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/mitchellh/mapstructure"
+	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 func createAdiTx(adiUrl string, pubkey []byte) (string, error) {
-	data := &ADI{}
+	data := &protocol.IdentityCreate{}
 
-	data.URL = types.String(adiUrl)
+	data.Url = adiUrl
 	keyhash := sha256.Sum256(pubkey)
-	copy(data.PublicKeyHash[:], keyhash[:])
+	data.PublicKey = keyhash[:]
 
 	ret, err := json.Marshal(data)
 	if err != nil {
@@ -64,19 +66,21 @@ func createRequest(t *testing.T, adiUrl string, kp *ed25519.PrivKey, message str
 	//Set the message data. Making it a json.RawMessage will prevent go from unmarshalling it which
 	//allows us to verify the signature against it.
 	req.Tx.Data = &raw
-	req.Tx.Timestamp = time.Now().Unix()
 	req.Tx.Signer = &Signer{}
-	req.Tx.Signer.URL = types.String(adiUrl)
+	req.Tx.Signer.Nonce = uint64(time.Now().Unix())
+	req.Tx.Sponsor = types.String(adiUrl)
+	req.Tx.KeyPage = &APIRequestKeyPage{}
+	req.Tx.KeyPage.Height = 1
 	copy(req.Tx.Signer.PublicKey[:], kp.PubKey().Bytes())
 
 	//form the ledger for signing
-	ledger := types.MarshalBinaryLedgerAdiChainPath(adiUrl, []byte(message), req.Tx.Timestamp)
+	ledger := types.MarshalBinaryLedgerAdiChainPath(adiUrl, []byte(message), int64(req.Tx.Signer.Nonce))
 
 	//sign it...
 	sig, err := kp.Sign(ledger)
 
 	//store the signature
-	copy(req.Sig[:], sig)
+	copy(req.Tx.Sig[:], sig)
 
 	//make the json for submission to the jsonrpc
 	params, err := json.Marshal(&req)
@@ -99,7 +103,8 @@ func TestAPIRequest_Adi(t *testing.T) {
 	}
 	params := createRequest(t, adiUrl, &kp, message)
 
-	validate := validator.New()
+	validate, err := protocol.NewValidator()
+	require.NoError(t, err)
 
 	req := &APIRequestRaw{}
 	// unmarshal req
@@ -112,7 +117,7 @@ func TestAPIRequest_Adi(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := &ADI{}
+	data := &protocol.IdentityCreate{}
 
 	// parse req.tx.data
 	err = mapstructure.Decode(req.Tx.Data, data)
@@ -151,7 +156,8 @@ func TestAPIRequest_Token(t *testing.T) {
 	}
 	params := createRequest(t, adiUrl, &kp, message)
 
-	validate := validator.New()
+	validate, err := protocol.NewValidator()
+	require.NoError(t, err)
 
 	req := &APIRequestRaw{}
 	// unmarshal req
@@ -202,7 +208,8 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 	}
 	params := createRequest(t, adiUrl, &kp, message)
 
-	validate := validator.New()
+	validate, err := protocol.NewValidator()
+	require.NoError(t, err)
 
 	req := &APIRequestRaw{}
 	// unmarshal req

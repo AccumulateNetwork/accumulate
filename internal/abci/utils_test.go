@@ -2,7 +2,6 @@ package abci_test
 
 import (
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding"
 	"encoding/json"
 	"fmt"
@@ -22,12 +21,12 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address) *fakeNode {
-	appId := sha256.Sum256([]byte("foo bar"))
 	db := new(state.StateDB)
-	err := db.Open("valacc.db", appId[:], true, true)
+	err := db.Open("memory", true, true)
 	require.NoError(t, err)
 
 	return createApp(t, db, addr)
@@ -52,7 +51,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address) *fakeNode {
 	mgr, err := chain.NewBlockValidator(n.query, db, bvcKey)
 	require.NoError(t, err)
 
-	n.app, err = abci.NewAccumulator(db, addr, mgr)
+	n.app, err = abci.NewAccumulator(db, addr, mgr, log.MustNewDefaultLogger("plain", "error", false))
 	require.NoError(t, err)
 	appChan <- n.app
 
@@ -156,14 +155,14 @@ func (n *fakeNode) GetADI(url string) *state.AdiState {
 	return adi
 }
 
-func (n *fakeNode) GetKeyGroup(url string) *protocol.SigSpecGroup {
+func (n *fakeNode) GetSigSpecGroup(url string) *protocol.SigSpecGroup {
 	ssg := new(protocol.SigSpecGroup)
 	n.GetChainAs(url, ssg)
 	return ssg
 }
 
-func (n *fakeNode) GetKeySet(url string) *protocol.MultiSigSpec {
-	mss := new(protocol.MultiSigSpec)
+func (n *fakeNode) GetSigSpec(url string) *protocol.SigSpec {
+	mss := new(protocol.SigSpec)
 	n.GetChainAs(url, mss)
 	return mss
 }

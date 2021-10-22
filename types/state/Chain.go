@@ -14,8 +14,7 @@ import (
 type Chain interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
-	GetType() types.ChainType
-	GetChainUrl() string
+	Header() *ChainHeader
 }
 
 //ChainHeader information for the state object.  Each state object will contain a header
@@ -28,6 +27,8 @@ type ChainHeader struct {
 	// transient
 	url *url.URL
 }
+
+func (h *ChainHeader) Header() *ChainHeader { return h }
 
 //SetHeader sets the data for a chain header
 func (h *ChainHeader) SetHeader(chainUrl types.String, chainType types.ChainType) {
@@ -100,8 +101,8 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	return nil
 }
 
-func (db *StateDB) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
-	state, err := db.GetCurrentEntry(chainId)
+func (s *StateDB) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
+	state, err := s.GetCurrentEntry(chainId)
 	if err != nil {
 		return nil, err
 	}
@@ -115,15 +116,8 @@ func (db *StateDB) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
 }
 
 // LoadChain retrieves and unmarshals the specified chain.
-func (db *StateDB) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
+func (s *StateDB) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
 	chain := new(ChainHeader)
-	obj, err := db.LoadChainAs(chainId, chain)
+	obj, err := s.LoadChainAs(chainId, chain)
 	return obj, chain, err
-}
-
-// LoadChainADI retrieves and unmarshals the ADI of the chain.
-func (db *StateDB) LoadChainADI(chain *ChainHeader) (*types.Bytes32, *Object, *ChainHeader, error) {
-	adiChain := types.GetIdentityChainFromIdentity(chain.ChainUrl.AsString())
-	adiState, adiHeader, err := db.LoadChain(adiChain.Bytes())
-	return adiChain, adiState, adiHeader, err
 }

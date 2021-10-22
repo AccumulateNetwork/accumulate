@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	mock_abci "github.com/AccumulateNetwork/accumulated/internal/mock/abci"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	tmabci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 func TestAccumulator(t *testing.T) {
@@ -57,7 +59,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 	s.Run("Passes valid TX to chain", func() {
 		//build a valid transaction
 		_, origin, _ := ed25519.GenerateKey(nil)
-		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(&origin)
+		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(origin)
 		_ = destAddress
 		_ = destPrivKey
 
@@ -79,7 +81,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 		destAddr := "wyleecoyote/acme"
 		//make an unreasonable amount sure
 		amount := uint64(1000000000)
-		tx, err := testing2.BuildTestTokenTxGenTx(&origin, destAddr, amount)
+		tx, err := testing2.BuildTestTokenTxGenTx(origin, destAddr, amount)
 		//now corrupt the validation for the signature
 		tx.Signature[0].Nonce = 9999999
 
@@ -106,7 +108,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 	s.Run("Passes valid TX to chain", func() {
 		//build a valid transaction
 		_, origin, _ := ed25519.GenerateKey(nil)
-		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(&origin)
+		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(origin)
 		_ = destAddress
 		_ = destPrivKey
 
@@ -115,7 +117,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
-		s.Chain().EXPECT().DeliverTx(gomock.Any())
+		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(new(protocol.TxResult), nil)
 
 		resp := s.App(nil).DeliverTx(tmabci.RequestDeliverTx{Tx: data})
 		s.Require().Zero(resp.Code)
@@ -128,12 +130,12 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		destAddr := "wyleecoyote/acme"
 		//make an unreasonable amount sure
 		amount := uint64(1000000000)
-		tx, err := testing2.BuildTestTokenTxGenTx(&origin, destAddr, amount)
+		tx, err := testing2.BuildTestTokenTxGenTx(origin, destAddr, amount)
 
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
-		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(errors.New("error"))
+		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(nil, errors.New("error"))
 
 		resp := s.App(nil).DeliverTx(tmabci.RequestDeliverTx{Tx: data})
 		s.Require().NotZero(resp.Code)
@@ -193,7 +195,7 @@ func (s *AccumulatorTestSuite) App(addr crypto.Address) *abci.Accumulator {
 		addr = crypto.Address{}
 	}
 
-	app, err := abci.NewAccumulator(s.State(), addr, s.Chain())
+	app, err := abci.NewAccumulator(s.State(), addr, s.Chain(), log.MustNewDefaultLogger("plain", "error", false))
 	s.Require().NoError(err)
 	return app
 }

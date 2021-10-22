@@ -15,11 +15,7 @@ type AddCredits struct{}
 
 func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
-func checkAddCredits(st *state.StateEntry, tx *transactions.GenTransaction) (body *protocol.AddCredits, account tokenChain, amount *types.Amount, recipient *url.URL, err error) {
-	if st.ChainHeader == nil {
-		return nil, nil, nil, nil, fmt.Errorf("sponsor not found")
-	}
-
+func checkAddCredits(st *StateManager, tx *transactions.GenTransaction) (body *protocol.AddCredits, account tokenChain, amount *types.Amount, recipient *url.URL, err error) {
 	body = new(protocol.AddCredits)
 	err = tx.As(body)
 	if err != nil {
@@ -43,16 +39,16 @@ func checkAddCredits(st *state.StateEntry, tx *transactions.GenTransaction) (bod
 		return nil, nil, nil, nil, fmt.Errorf("invalid recipient")
 	}
 
-	_, recvChain, err := st.DB.LoadChain(recvUrl.ResourceChain())
+	recv, err := st.LoadUrl(recvUrl)
 	if err == nil {
 		// If the recipient happens to be on the same BVC, ensure it is a valid
 		// recipient. Most credit transfers will be within the same ADI, so this
 		// should catch most mistakes early.
-		switch recvChain.Type {
-		case types.ChainTypeAnonTokenAccount, types.ChainTypeMultiSigSpec:
+		switch recv := recv.(type) {
+		case *protocol.AnonTokenAccount, *protocol.SigSpec:
 			// OK
 		default:
-			return nil, nil, nil, nil, fmt.Errorf("invalid recipient: wrong chain type: want %v or %v, got %v", types.ChainTypeAnonTokenAccount, types.ChainTypeMultiSigSpec, recvChain.Type)
+			return nil, nil, nil, nil, fmt.Errorf("invalid recipient: wrong chain type: want %v or %v, got %v", types.ChainTypeAnonTokenAccount, types.ChainTypeSigSpec, recv.Header().Type)
 		}
 	} else if errors.Is(err, state.ErrNotFound) {
 		if recvUrl.Routing() == tx.Routing {
@@ -65,18 +61,13 @@ func checkAddCredits(st *state.StateEntry, tx *transactions.GenTransaction) (bod
 		return nil, nil, nil, nil, fmt.Errorf("failed to load recipient: %v", err)
 	}
 
-	switch st.ChainHeader.Type {
-	case types.ChainTypeAnonTokenAccount:
-		account = new(protocol.AnonTokenAccount)
-	case types.ChainTypeTokenAccount:
-		account = new(state.TokenAccount)
+	switch sponsor := st.Sponsor.(type) {
+	case *protocol.AnonTokenAccount:
+		account = sponsor
+	case *state.TokenAccount:
+		account = sponsor
 	default:
 		return nil, nil, nil, nil, fmt.Errorf("not an account: %q", tx.SigInfo.URL)
-	}
-
-	err = st.ChainState.As(account)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("invalid token account: %v", err)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
@@ -96,44 +87,27 @@ func checkAddCredits(st *state.StateEntry, tx *transactions.GenTransaction) (bod
 	return body, account, amount, recvUrl, nil
 }
 
-func (AddCredits) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
+func (AddCredits) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
 	_, _, _, _, err := checkAddCredits(st, tx)
 	return err
 }
 
-func (AddCredits) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
+func (AddCredits) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
 	body, account, amount, recipient, err := checkAddCredits(st, tx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if !account.DebitTokens(&amount.Int) {
-		return nil, fmt.Errorf("failed to debit %v", tx.SigInfo.URL)
+		return fmt.Errorf("failed to debit %v", tx.SigInfo.URL)
 	}
-
-	st.ChainState.Entry, err = account.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state: %v", err)
-	}
+	st.Store(account)
 
 	// Create the synthetic transaction
-	txid := types.Bytes(tx.TransactionHash()).AsBytes32()
 	sdc := new(protocol.SyntheticDepositCredits)
-	sdc.Cause = txid
+	sdc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
 	sdc.Amount = body.Amount
+	st.Submit(recipient, sdc)
 
-	syn := new(transactions.GenTransaction)
-	syn.SigInfo = &transactions.SignatureInfo{}
-	syn.SigInfo.URL = recipient.String()
-	syn.Transaction, err = sdc.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal synthetic TX: %v", err)
-	}
-
-	// Update the account state
-	st.DB.AddStateEntry(st.ChainId, &txid, st.ChainState)
-
-	res := new(DeliverTxResult)
-	res.AddSyntheticTransaction(syn)
-	return res, nil
+	return nil
 }

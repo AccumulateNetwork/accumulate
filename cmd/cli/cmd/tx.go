@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"log"
 	"strconv"
 	"time"
@@ -130,11 +131,14 @@ func CreateTX(sender string, receiver string, amount string) {
 
 		datajson := json.RawMessage(data)
 		params.Tx.Data = &datajson
-		params.Tx.Timestamp = time.Now().Unix()
 		params.Tx.Signer = &acmeapi.Signer{}
-		params.Tx.Signer.URL = types.String(sender)
+		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
+		params.Tx.Sponsor = types.String(sender)
+		params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
+		params.Tx.KeyPage.Height = 1
+		params.Tx.KeyPage.Index = 0
 
-		params.Sig = types.Bytes64{}
+		params.Tx.Sig = types.Bytes64{}
 
 		dataBinary, err := tokentx.MarshalBinary()
 		if err != nil {
@@ -142,26 +146,29 @@ func CreateTX(sender string, receiver string, amount string) {
 		}
 		gtx := new(transactions.GenTransaction)
 		gtx.Transaction = dataBinary //The transaction needs to be marshaled as binary for proper tx hash
-		gtx.ChainID = types.GetChainIdFromChainPath(&receiver)[:]
-		gtx.Routing = types.GetAddressFromIdentity(&receiver)
+		u, err := url.Parse(receiver)
+		if err != nil {
+			log.Fatal(err)
+		}
+		gtx.ChainID = u.ResourceChain()
+		gtx.Routing = u.Routing()
 
 		gtx.SigInfo = new(transactions.SignatureInfo)
 		//the siginfo URL is the URL of the signer
 		gtx.SigInfo.URL = sender
 		//Provide a nonce, typically this will be queried from identity sig spec and incremented.
 		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
-		gtx.SigInfo.Nonce = uint64(params.Tx.Timestamp)
+		gtx.SigInfo.Unused2 = params.Tx.Signer.Nonce
 		//The following will be defined in the SigSpec Group for which key to use
-		gtx.SigInfo.SigSpecHt = 0
-		gtx.SigInfo.Priority = 0
-		gtx.SigInfo.PriorityIdx = 0
+		gtx.SigInfo.MSHeight = params.Tx.KeyPage.Height
+		gtx.SigInfo.PriorityIdx = params.Tx.KeyPage.Index
 
 		ed := new(transactions.ED25519Sig)
-		err = ed.Sign(gtx.SigInfo.Nonce, pk, gtx.TransactionHash())
+		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
 		if err != nil {
 			return api.NewSubmissionError(err)
 		}
-		params.Sig.FromBytes(ed.GetSignature())
+		params.Tx.Sig.FromBytes(ed.GetSignature())
 		//The public key needs to be used to verify the signature, however,
 		//to pass verification, the validator will hash the key and check the
 		//sig spec group to make sure this key belongs to the identity.

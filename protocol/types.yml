@@ -9,19 +9,41 @@
 # Type names for fields of a transaction should be suffixed with 'Params', such
 # as TokenOutputParams.
 
+TxResult:
+  fields:
+    - name: SyntheticTxs
+      type: slice
+      slice:
+        type: TxSynthRef
+        pointer: true
+        marshal-as: self
+
+TxSynthRef:
+  fields:
+    - name: Type
+      type: uvarint
+    - name: Hash
+      type: chain
+    - name: Url
+      type: string
+      is-url: true
+    - name: TxRef # The hash of the transaction blob submitted to Tendermint. Use to look up the transaction status.
+      type: chain
+
 AnonTokenAccount:
   kind: chain
   fields:
-  - name: TokenUrl
-    type: string
-  - name: Balance
-    type: bigint
-  - name: TxCount
+    - name: TokenUrl
+      type: string
+      is-url: true
+    - name: Balance
+      type: bigint
+    - name: TxCount
     type: uvarint
-  - name: Nonce
-    type: uvarint
-  - name: CreditBalance
-    type: bigint
+      - name: Nonce
+        type: uvarint
+      - name: CreditBalance
+        type: bigint
 
 SyntheticCreateChain:
   kind: tx
@@ -37,6 +59,7 @@ ChainParams:
   fields:
   - name: Url
     type: string
+    is-url: true
   - name: Data
     type: bytes
 
@@ -56,70 +79,93 @@ SyntheticDepositCredits:
   - name: Amount
     type: uvarint
 
+KeySpec:
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Nonce
+      type: uvarint
+
+KeySpecParams:
+  fields:
+    - name: PublicKey
+      type: bytes
+
 SigSpec:
-  fields:
-  - name: KeyAlgorithm
-    type: KeyAlgorithm
-    marshal-as: self
-  - name: HashAlgorithm
-    type: HashAlgorithm
-    marshal-as: self
-  - name: PublicKey
-    type: bytes
-  - name: Nonce
-    type: uvarint
-
-SigSpecParams:
-  fields:
-  - name: KeyAlgorithm
-    type: KeyAlgorithm
-    marshal-as: self
-  - name: HashAlgorithm
-    type: HashAlgorithm
-    marshal-as: self
-  - name: PublicKey
-    type: bytes
-
-MultiSigSpec:
   kind: chain
   fields:
-  - name: CreditBalance
-    type: bigint
-  - name: SigSpecs
-    type: slice
-    slice:
-      type: SigSpec
-      pointer: true
-      marshal-as: self
+    - name: CreditBalance
+      type: bigint
+    - name: Keys
+      type: slice
+      slice:
+        type: KeySpec
+        pointer: true
+        marshal-as: self
 
-CreateMultiSigSpec:
+CreateSigSpec:
   kind: tx
   fields:
-  - name: Url
-    type: string
-  - name: SigSpecs
-    type: slice
-    slice:
-      type: SigSpecParams
-      pointer: true
-      marshal-as: self
+    - name: Url
+      type: string
+      is-url: true
+    - name: Keys
+      type: slice
+      slice:
+        type: KeySpecParams
+        pointer: true
+        marshal-as: self
 
 SigSpecGroup:
   kind: chain
   fields:
-  - name: MultiSigSpecs
-    type: chainSet
+    - name: SigSpecs
+      type: chainSet
 
 CreateSigSpecGroup:
   kind: tx
   fields:
-  - name: Url
-    type: string
-  - name: MultiSigSpecs
-    type: chainSet
+    - name: Url
+      type: string
+      is-url: true
+    - name: SigSpecs
+      type: chainSet
 
-AssignSigSpecGroup:
+IdentityCreate:
   kind: tx
   fields:
-  - name: Url
-    type: string
+    - name: Url
+      type: string
+      is-url: true
+    - name: PublicKey
+      type: bytes
+    - name: KeyBookName
+      type: string
+      optional: true
+    - name: KeyPageName
+      type: string
+      optional: true
+
+TokenAccountCreate:
+  kind: tx
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: TokenUrl
+      type: string
+      is-url: true
+    - name: KeyBookUrl
+      type: string
+      is-url: true
+
+UpdateKeyPage:
+  kind: tx
+  fields:
+    - name: Operation
+      type: KeyPageOperation
+      marshal-as: self
+    - name: Key
+      type: bytes
+    - name: NewKey
+      type: bytes

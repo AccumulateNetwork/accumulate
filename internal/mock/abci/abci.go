@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	abci "github.com/AccumulateNetwork/accumulated/internal/abci"
+	protocol "github.com/AccumulateNetwork/accumulated/protocol"
 	api "github.com/AccumulateNetwork/accumulated/types/api"
 	transactions "github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	gomock "github.com/golang/mock/gomock"
@@ -78,11 +79,12 @@ func (mr *MockChainMockRecorder) Commit() *gomock.Call {
 }
 
 // DeliverTx mocks base method.
-func (m *MockChain) DeliverTx(arg0 *transactions.GenTransaction) error {
+func (m *MockChain) DeliverTx(arg0 *transactions.GenTransaction) (*protocol.TxResult, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeliverTx", arg0)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*protocol.TxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // DeliverTx indicates an expected call of DeliverTx.

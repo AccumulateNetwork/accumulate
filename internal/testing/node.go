@@ -1,8 +1,8 @@
 package testing
 
 import (
-	"crypto/sha256"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	tmcfg "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -61,14 +62,14 @@ func NewBVCNode(dir string, cleanup func(func())) (*node.Node, *privval.FilePV, 
 	}
 
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
-	bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
+	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
 	sdb := new(state.StateDB)
-	err = sdb.Open(dbPath, bvcId[:], false, true)
+	err = sdb.Open(dbPath, false, true)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
 	cleanup(func() {
-		sdb.GetDB().Close()
+		_ = sdb.GetDB().Close()
 	})
 
 	// read private validator
@@ -90,17 +91,23 @@ func NewBVCNode(dir string, cleanup func(func())) (*node.Node, *privval.FilePV, 
 		return nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
 	}
 
-	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr)
+	logger, err := log.NewDefaultLogger(cfg.LogFormat, cfg.LogLevel, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
+		os.Exit(1)
+	}
+
+	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create ABCI app: %v", err)
 	}
 
-	node, err := node.New(cfg, app)
+	node, err := node.New(cfg, app, logger)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create node: %v", err)
 	}
 	cleanup(func() {
-		node.Stop()
+		_ = node.Stop()
 		node.Wait()
 	})
 

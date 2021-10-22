@@ -1,7 +1,6 @@
 package abci_test
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -19,9 +18,8 @@ func TestStateDBConsistency(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	bvcId := sha256.Sum256([]byte("foo bar"))
 	sdb := new(state.StateDB)
-	sdb.Load(db, bvcId[:], true)
+	require.NoError(t, sdb.Load(db, true))
 
 	n := createApp(t, sdb, crypto.Address{})
 	n.testAnonTx(10)
@@ -31,9 +29,13 @@ func TestStateDBConsistency(t *testing.T) {
 
 	// Reopen the database
 	sdb = new(state.StateDB)
-	sdb.Load(db, bvcId[:], true)
+	require.NoError(t, sdb.Load(db, true))
 
 	// Block 6 does not make changes so is not saved
 	require.Equal(t, height, sdb.BlockIndex(), "Block index does not match after load from disk")
 	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", sdb.RootHash()), "Hash does not match after load from disk")
+
+	// Recreate the app and try to do more transactions
+	n = createApp(t, sdb, crypto.Address{})
+	n.testAnonTx(10)
 }

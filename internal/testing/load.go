@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"math/rand"
-
-	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
+	"sync"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -15,6 +15,8 @@ import (
 	apitypes "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	abci "github.com/tendermint/tendermint/abci/types"
+	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 )
 
 // Load
@@ -32,11 +34,29 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 		wallet = append(wallet, api.NewWalletEntry()) // create a new wallet entry
 	}
 
+	resultWg := new(sync.WaitGroup)
+	resultWg.Add(txCount)
+	ch := make(chan abci.TxResult)
+	defer close(ch)
+
+	ok := true
+	go func() {
+		for txr := range ch {
+			if txr.Result.Code != 0 {
+				fmt.Printf("%v<<\n", txr.Result.Log)
+				ok = false
+			} else {
+				fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
+			}
+
+			resultWg.Done()
+		}
+	}()
+
 	addrCountMap := make(map[string]int)
 	for i := 0; i < txCount; i++ { // Make a bunch of transactions
 		if i%200 == 0 {
-			stat := query.BatchSend()
-			bs := <-stat
+			bs := <-query.BatchSend()
 			for _, s := range bs.Status {
 				if s.Err != nil {
 					fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
@@ -70,34 +90,42 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 
 		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
 
-		if _, err := query.BroadcastTx(gtx); err != nil {
+		if _, err := query.BroadcastTx(gtx, ch); err != nil {
 			return nil, fmt.Errorf("failed to send TX: %v", err)
 		}
 	}
-	stat := query.BatchSend()
-	bs := <-stat
+
+	bs := <-query.BatchSend()
 	for i, s := range bs.Status {
 		for _, t := range s.Returns {
 			if s.Err != nil {
+				ok = false
 				fmt.Printf("error received from batch dispatch on network %d, %v\n", s.NetworkId, s.Err)
 			}
 			if resp, ok := t.(coregrpc.ResponseBroadcastTx); ok {
-				if len(resp.CheckTx.Log) > 0 {
+				if resp.CheckTx.Code > 0 && len(resp.CheckTx.Log) > 0 {
+					ok = false
 					fmt.Printf("<%d>%v<<\n", i, resp.CheckTx.Log)
 				}
 			}
 		}
 	}
+
 	for addr, ct := range addrCountMap {
 		addrList = append(addrList, addr)
 		_ = ct
 		fmt.Printf("%s : %d\n", addr, ct*1000)
 	}
 
+	resultWg.Wait()
+
+	if !ok {
+		return addrList, fmt.Errorf("one or more transactions failed")
+	}
 	return addrList, nil
 }
 
-func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25519.PrivateKey, *transactions.GenTransaction, error) {
+func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed25519.PrivateKey, *transactions.GenTransaction, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	adiSponsor := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
 
@@ -110,7 +138,7 @@ func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 
 	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], &adiSponsor, &destAddress)
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
 	amtToDeposit := int64(50000)                             //deposit 50k tokens
 	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
 	deposit.TokenUrl = tokenUrl
@@ -128,21 +156,21 @@ func BuildTestSynthDepositGenTx(origin *ed25519.PrivateKey) (types.String, *ed25
 	gtx.Routing = types.GetAddressFromIdentity(destAddress.AsString())
 
 	ed := new(transactions.ED25519Sig)
-	gtx.SigInfo.Nonce = 1
+	gtx.SigInfo.Unused2 = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.SigInfo.Nonce, privateKey, gtx.TransactionHash())
+	err = ed.Sign(gtx.SigInfo.Unused2, privateKey, gtx.TransactionHash())
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	return destAddress, &privateKey, gtx, nil
+	return destAddress, privateKey, gtx, nil
 }
 
-func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
+func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	from := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
+	from := types.String(anon.GenerateAcmeAddress(sponsor.Public().(ed25519.PublicKey)))
 
 	tokenTx := apitypes.TokenTx{}
 
@@ -162,9 +190,9 @@ func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount u
 	gtx.Routing = types.GetAddressFromIdentity(from.AsString())
 
 	ed := new(transactions.ED25519Sig)
-	gtx.SigInfo.Nonce = 1
-	ed.PublicKey = (*origin)[32:]
-	err = ed.Sign(gtx.SigInfo.Nonce, *origin, gtx.TransactionHash())
+	gtx.SigInfo.Unused2 = 1
+	ed.PublicKey = sponsor[32:]
+	err = ed.Sign(gtx.SigInfo.Unused2, sponsor, gtx.TransactionHash())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
@@ -174,7 +202,7 @@ func BuildTestTokenTxGenTx(origin *ed25519.PrivateKey, destAddr string, amount u
 	return gtx, nil
 }
 
-func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
+func RunLoadTest(query *api.Query, origin ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
 	destAddress, privateKey, gtx, err := BuildTestSynthDepositGenTx(origin)
 	if err != nil {
 		return nil, err
@@ -182,13 +210,25 @@ func RunLoadTest(query *api.Query, origin *ed25519.PrivateKey, walletCount, txCo
 
 	adiSponsor := gtx.SigInfo.URL
 
-	_, err = query.BroadcastTx(gtx)
+	done := make(chan abci.TxResult)
+	_, err = query.BroadcastTx(gtx, done)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send TX: %v", err)
 	}
-	query.BatchSend()
+	<-query.BatchSend()
 
-	addresses, err := Load(query, *privateKey, walletCount, txCount)
+	select {
+	case txr := <-done:
+		if txr.Result.Code != 0 {
+			return nil, fmt.Errorf(txr.Result.Log)
+		} else {
+			fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
+		}
+	case <-time.After(1 * time.Minute):
+		return nil, fmt.Errorf("timeout while waiting for TX response")
+	}
+
+	addresses, err := Load(query, privateKey, walletCount, txCount)
 	if err != nil {
 		return nil, err
 	}
