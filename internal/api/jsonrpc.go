@@ -534,6 +534,8 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	genesis.FaucetWallet.Nonce++
 	gtx := new(transactions.GenTransaction)
+	gtx.Routing = genesis.FaucetUrl.Routing()
+	gtx.ChainID = genesis.FaucetUrl.ResourceChain()
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = *destAccount.AsString()
 	gtx.SigInfo.Unused2 = genesis.FaucetWallet.Nonce
