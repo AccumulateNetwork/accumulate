@@ -7,12 +7,11 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/networks"
-	"github.com/tendermint/tendermint/rpc/client"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 func NewWith(targetList ...string) (*Relay, error) {
-	clients := []client.ABCIClient{}
+	clients := []Client{}
 	for _, nameOrIP := range targetList {
 		net := networks.Networks[nameOrIP]
 		ip, err := url.Parse(nameOrIP)

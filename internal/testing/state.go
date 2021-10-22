@@ -2,6 +2,7 @@ package testing
 
 import (
 	"crypto/sha256"
+	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -10,7 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
-	ed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 // Token multiplier
@@ -23,7 +24,7 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	//create a fake synthetic deposit for faucet.
 	fakeTxid := sha256.Sum256([]byte("fake txid"))
 	// NewTokenTransactionDeposit(txId types.Bytes, from *types.String, to *types.String)
-	deposit := synthetic.NewTokenTransactionDeposit(fakeTxid[:], &sponsorAdi, &recipientAdi)
+	deposit := synthetic.NewTokenTransactionDeposit(fakeTxid[:], sponsorAdi, recipientAdi)
 	amtToDeposit := int64(50000)                           //deposit 50k tokens
 	deposit.DepositAmount.SetInt64(amtToDeposit * TokenMx) // assume 8 decimal places
 	deposit.TokenUrl = types.String(protocol.AcmeUrl().String())
@@ -41,9 +42,9 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	tx.Routing = types.GetAddressFromIdentity(recipientAdi.AsString())
 
 	ed := new(transactions.ED25519Sig)
-	tx.SigInfo.Nonce = 1
+	tx.SigInfo.Unused2 = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.SigInfo.Nonce, recipient, tx.TransactionHash())
+	err = ed.Sign(tx.SigInfo.Unused2, recipient, tx.TransactionHash())
 	if err != nil {
 		return nil, err
 	}
@@ -54,6 +55,7 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 
 func CreateAnonTokenAccount(db *state.StateDB, key ed25519.PrivKey, tokens float64) error {
 	url := types.String(anon.GenerateAcmeAddress(key.PubKey().Bytes()))
+	fmt.Println(url)
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
@@ -64,7 +66,7 @@ func WriteStates(db *state.StateDB, chains ...state.Chain) error {
 			return err
 		}
 
-		u, err := url.Parse(chain.GetChainUrl())
+		u, err := chain.Header().ParseUrl()
 		if err != nil {
 			return err
 		}
@@ -82,24 +84,22 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) erro
 		return err
 	}
 
-	keySetUrl := identityUrl.JoinPath("keyset0")
-	keyGroupUrl := identityUrl.JoinPath("keygroup0")
+	sigSpecUrl := identityUrl.JoinPath("sigspec0")
+	ssgUrl := identityUrl.JoinPath("ssg0")
 
-	ss := new(protocol.SigSpec)
-	ss.HashAlgorithm = protocol.SHA256
-	ss.KeyAlgorithm = protocol.ED25519
+	ss := new(protocol.KeySpec)
 	ss.PublicKey = keyHash[:]
 
-	mss := protocol.NewMultiSigSpec()
-	mss.ChainUrl = types.String(keySetUrl.String())
-	mss.SigSpecs = append(mss.SigSpecs, ss)
+	mss := protocol.NewSigSpec()
+	mss.ChainUrl = types.String(sigSpecUrl.String())
+	mss.Keys = append(mss.Keys, ss)
 
 	ssg := protocol.NewSigSpecGroup()
-	ssg.ChainUrl = types.String(keyGroupUrl.String()) // TODO Allow override
-	ssg.MultiSigSpecs = append(ssg.MultiSigSpecs, types.Bytes(keySetUrl.ResourceChain()).AsBytes32())
+	ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
+	ssg.SigSpecs = append(ssg.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
 
 	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
-	adi.SigSpecId = types.Bytes(keyGroupUrl.ResourceChain()).AsBytes32()
+	adi.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
 
 	return WriteStates(db, adi, ssg, mss)
 }
@@ -110,6 +110,7 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 		return err
 	}
 	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
+	sigSpecId := u.Identity().JoinPath("ssg0").ResourceChain() // assume the sig spec is adi/ssg0
 
 	var chain state.Chain
 	if anon {
@@ -121,6 +122,7 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 		chain = account
 	} else {
 		account := state.NewTokenAccount(u.String(), tokenUrl)
+		account.SigSpecId = types.Bytes(sigSpecId).AsBytes32()
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		account.TxCount++
 		chain = account
@@ -135,43 +137,57 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 	return nil
 }
 
-func CreateKeySet(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKey) error {
+func CreateSigSpec(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKey) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	mss := protocol.NewMultiSigSpec()
+	mss := protocol.NewSigSpec()
 	mss.ChainUrl = types.String(u.String())
-	mss.SigSpecs = make([]*protocol.SigSpec, len(keys))
+	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
-		mss.SigSpecs[i] = &protocol.SigSpec{
-			HashAlgorithm: protocol.Unhashed,
-			KeyAlgorithm:  protocol.ED25519,
-			PublicKey:     key,
+		mss.Keys[i] = &protocol.KeySpec{
+			PublicKey: key,
 		}
 	}
 
 	return WriteStates(db, mss)
 }
 
-func CreateKeyGroup(db *state.StateDB, urlStr types.String, keySetUrls ...string) error {
-	u, err := url.Parse(*urlStr.AsString())
+func CreateSigSpecGroup(db *state.StateDB, urlStr types.String, sigSpecUrls ...string) error {
+	groupUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	ssg := protocol.NewSigSpecGroup()
-	ssg.ChainUrl = types.String(u.String())
-	ssg.MultiSigSpecs = make([][32]byte, len(keySetUrls))
-	for i, s := range keySetUrls {
-		u, err := url.Parse(s)
+	group := protocol.NewSigSpecGroup()
+	group.ChainUrl = types.String(groupUrl.String())
+	group.SigSpecs = make([][32]byte, len(sigSpecUrls))
+	states := []state.Chain{group}
+
+	for i, s := range sigSpecUrls {
+		specUrl, err := url.Parse(s)
 		if err != nil {
 			return err
 		}
-		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		ssg.MultiSigSpecs[i] = chainId
+
+		chainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
+		group.SigSpecs[i] = chainId
+
+		spec := new(protocol.SigSpec)
+		_, err = db.LoadChainAs(chainId[:], spec)
+		if err != nil {
+			return err
+		}
+
+		if (spec.SigSpecId != types.Bytes32{}) {
+			return fmt.Errorf("%q is already attached to an SSG", s)
+		}
+
+		spec.SigSpecId = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+		states = append(states, spec)
 	}
 
-	return WriteStates(db, ssg)
+	return WriteStates(db, states...)
 }

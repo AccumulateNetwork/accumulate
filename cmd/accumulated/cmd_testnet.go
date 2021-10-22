@@ -38,19 +38,16 @@ func initTestNet(cmd *cobra.Command, args []string) {
 	baseIP := net.ParseIP(flagTestNet.BaseIP)
 	if baseIP == nil {
 		fmt.Fprintf(os.Stderr, "Error: %q is not a valid IP address\n", flagTestNet.BaseIP)
-		cmd.Usage()
-		os.Exit(1)
+		printUsageAndExit1(cmd, args)
 	}
 	if baseIP[15] == 0 {
 		fmt.Fprintf(os.Stderr, "Error: base IP address must not end with .0\n")
-		cmd.Usage()
-		os.Exit(1)
+		printUsageAndExit1(cmd, args)
 	}
 
 	if !cmd.Flag("work-dir").Changed {
 		fmt.Fprint(os.Stderr, "Error: --work-dir is required\n")
-		_ = cmd.Usage()
-		os.Exit(1)
+		printUsageAndExit1(cmd, args)
 	}
 
 	n := flagTestNet.NumValidators + flagTestNet.NumFollowers
@@ -76,7 +73,7 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	err := node.Init(node.InitOptions{
+	check(node.Init(node.InitOptions{
 		WorkDir:   flagMain.WorkDir,
 		ShardName: "LocalhostTestNet",
 		ChainID:   "LocalhostTestNet",
@@ -84,9 +81,5 @@ func initTestNet(cmd *cobra.Command, args []string) {
 		Config:    config,
 		RemoteIP:  IPs,
 		ListenIP:  IPs,
-	})
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
-	}
+	}))
 }

@@ -20,10 +20,9 @@ const (
 	TxTypeMultisigTx
 	TxTypeStateQuery //sends a query to a chain and returns its state information
 	TxTypeCreateSigSpec
-	TxTypeCreateMultiSigSpec
 	TxTypeCreateSigSpecGroup
 	TxTypeAddCredits
-	TxTypeAssignSigSpecGroup
+	TxTypeUpdateKeyPage
 
 	//The Following are only valid for DC & BVC use: any other source of this message will be rejected
 	TxTypeSyntheticIdentityCreate = TxType(iota + 0x20)
@@ -36,6 +35,8 @@ const (
 	TxTypeStateStore //
 	TxTypeDataStore  //Data Store can only be sent and thus authorized by an authority node
 	TxTypeAdminVote
+
+	txTypeSyntheticBase = TxTypeSyntheticIdentityCreate
 )
 
 // Enum value map for TxType.
@@ -56,10 +57,10 @@ func init() {
 		TxTypeMultisigTx,
 		TxTypeStateQuery,
 		TxTypeCreateSigSpec,
-		TxTypeCreateMultiSigSpec,
+		TxTypeCreateSigSpec,
 		TxTypeCreateSigSpecGroup,
 		TxTypeAddCredits,
-		TxTypeAssignSigSpecGroup,
+		TxTypeUpdateKeyPage,
 
 		TxTypeSyntheticIdentityCreate,
 		TxTypeSyntheticCreateChain,
@@ -106,14 +107,12 @@ func (t TxType) Name() string {
 		return "stateQuery"
 	case TxTypeCreateSigSpec:
 		return "createSigSpec"
-	case TxTypeCreateMultiSigSpec:
-		return "createMultiSigSpec"
 	case TxTypeCreateSigSpecGroup:
 		return "createSigSpecGroup"
 	case TxTypeAddCredits:
 		return "addCredits"
-	case TxTypeAssignSigSpecGroup:
-		return "assignSigSpecGroup"
+	case TxTypeUpdateKeyPage:
+		return "updateKeyPage"
 	case TxTypeSyntheticIdentityCreate:
 		return "syntheticIdentityCreate"
 	case TxTypeSyntheticCreateChain:
@@ -150,3 +149,5 @@ func (t TxType) AsUint64() uint64 {
 }
 
 func (t TxType) String() string { return t.Name() }
+
+func (t TxType) IsSynthetic() bool { return t >= txTypeSyntheticBase }
