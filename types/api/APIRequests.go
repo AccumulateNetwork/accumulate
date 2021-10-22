@@ -39,13 +39,13 @@ type APIRequestURL struct {
 // APIRequestURLPagination is APIRequestURL with pagination params
 type APIRequestURLPagination struct {
 	APIRequestURL
-	Start int64 `json:"start"`
-	Limit int64 `json:"limit"`
+	Start int64 `json:"start" validate:"number,gte=0"`
+	Limit int64 `json:"limit" validate:"number,gte=0"`
 }
 
 // APIDataResponse is used in "get" API method response
 type APIDataResponse struct {
-	Type types.String     `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx"`
+	Type types.String     `json:"type" form:"type" query:"type"`
 	Data *json.RawMessage `json:"data" form:"data" query:"data"`
 }
 
