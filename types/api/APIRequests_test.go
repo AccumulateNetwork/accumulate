@@ -36,9 +36,6 @@ func createToken(tokenUrl string) (string, error) {
 	data.URL = types.String(tokenUrl)
 	data.Precision = 8
 	data.Symbol = "ACME"
-	meta := json.RawMessage(fmt.Sprintf("{\"%s\":\"%s\"}", "test", "token"))
-	data.Meta = &meta
-
 	ret, err := json.Marshal(data)
 	if err != nil {
 		return "", err
