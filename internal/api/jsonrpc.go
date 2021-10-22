@@ -530,7 +530,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	fromAccount := types.String(wallet.Addr)
 
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	txid := sha256.Sum256([]byte("faucet"))
+	txid := types.Bytes32{}
 
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 
