@@ -11,8 +11,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 )
 
-//go:generate go run ../internal/cmd/gentypes types.yml
-
 const ACME = "ACME"
 
 // AcmeUrl returns `acc://ACME`
@@ -31,19 +29,19 @@ const CreditsPerDollar = 1e2
 // AnonymousAddress returns an anonymous address for the given public key and
 // token URL as `acc://<key-hash-and-checksum>/<token-url>`.
 //
-// Only the first 20 bytes of the public key hash is used. The checksum is
-// equivalent to last four bytes of the resource chain ID. For an ACME anonymous
+// Only the first 20 bytes of the public key hash is used. The checksum is the
+// last four bytes of the hexadecimal partial key hash. For an ACME anonymous
 // token account URL for a key with a public key hash of
 //
 //   "aec070645fe53ee3b3763059376134f058cc337247c978add178b6ccdfb0019f"
 //
 // The checksum is calculated as
 //
-//   sha256("aec070645fe53ee3b3763059376134f058cc3372/acme")[28:] == "3c63cf54"
+//   sha256("aec070645fe53ee3b3763059376134f058cc3372")[28:] == "26e2a324"
 //
 // The resulting URL is
 //
-//   "acc://aec070645fe53ee3b3763059376134f058cc33723c63cf54/ACME"
+//   "acc://aec070645fe53ee3b3763059376134f058cc337226e2a324/ACME"
 func AnonymousAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	tokenUrl, err := url.Parse(tokenUrlStr)
 	if err != nil {
@@ -65,11 +63,11 @@ func AnonymousAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 
 	anonUrl := new(url.URL)
 	keyHash := sha256.Sum256(pubKey)
-	anonUrl.Authority = fmt.Sprintf("%x", keyHash[:20])
+	keyStr := fmt.Sprintf("%x", keyHash[:20])
+	checkSum := sha256.Sum256([]byte(keyStr))
+	checkStr := fmt.Sprintf("%x", checkSum[28:])
+	anonUrl.Authority = keyStr + checkStr
 	anonUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
-
-	checkSum := anonUrl.ResourceChain()[28:]
-	anonUrl.Authority += fmt.Sprintf("%x", checkSum)
 	return anonUrl, nil
 }
 
@@ -90,7 +88,8 @@ func ParseAnonymousAddress(u *url.URL) ([]byte, *url.URL, error) {
 
 	v := *u
 	v.Authority = u.Authority[:40]
-	if !bytes.Equal(b[20:], v.ResourceChain()[28:]) {
+	checkSum := sha256.Sum256([]byte(v.Authority))
+	if !bytes.Equal(b[20:], checkSum[28:]) {
 		return nil, nil, errors.New("invalid checksum")
 	}
 

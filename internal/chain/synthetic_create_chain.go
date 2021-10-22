@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 
@@ -18,100 +17,103 @@ func (SyntheticCreateChain) Type() types.TxType {
 	return types.TxTypeSyntheticCreateChain
 }
 
-type createChain struct {
-	Url  *url.URL
-	Data []byte
-}
-
-func willCreateChain(ccs []createChain, id []byte) bool {
-	for _, cc := range ccs {
-		if cc.Url == nil {
-			continue
-		}
-		if bytes.Equal(cc.Url.ResourceChain(), id) {
-			return true
-		}
-	}
-	return false
-}
-
-func (SyntheticCreateChain) check(st *state.StateEntry, tx *transactions.GenTransaction) ([]createChain, error) {
-	scc := new(protocol.SyntheticCreateChain)
-	err := tx.As(scc)
+func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+	body := new(protocol.SyntheticCreateChain)
+	err := tx.As(body)
 	if err != nil {
-		return nil, fmt.Errorf("invalid payload: %v", err)
+		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	if scc.Cause == [32]byte{} {
-		return nil, fmt.Errorf("cause is missing")
+	if body.Cause == [32]byte{} {
+		return fmt.Errorf("cause is missing")
 	}
 
-	ccs := make([]createChain, len(scc.Chains))
-	for i, cc := range scc.Chains {
-		chain := new(state.ChainHeader)
-		err := chain.UnmarshalBinary(cc)
+	// Do basic validation and add everything to the state manager
+	urls := make([]*url.URL, len(body.Chains))
+	for i, cc := range body.Chains {
+		record, err := unmarshalRecord(&state.Object{Entry: cc})
 		if err != nil {
-			return nil, fmt.Errorf("invalid chain payload: %v", err)
+			return fmt.Errorf("invalid chain payload: %v", err)
 		}
-		// TODO Check that the chain can be unmarshalled into whatever type it
-		// claims to be. It should be OK to skip this, since synthetic
-		// transactions should already be validated.
 
-		u, err := chain.ParseUrl()
+		u, err := record.Header().ParseUrl()
 		if err != nil {
-			return nil, fmt.Errorf("invalid chain URL: %v", err)
+			return fmt.Errorf("invalid chain URL: %v", err)
 		}
-		ccs[i].Url = u
-		ccs[i].Data = cc
 
-		if _, err := st.DB.GetCurrentEntry(u.ResourceChain()); err == nil {
-			return nil, fmt.Errorf("chain %q already exists", u.String())
+		if _, err := st.LoadUrl(u); err == nil {
+			return fmt.Errorf("chain %q already exists", u.String())
 		} else if !errors.Is(err, state.ErrNotFound) {
-			return nil, fmt.Errorf("error fetching %q: %v", u.String(), err)
+			return fmt.Errorf("error fetching %q: %v", u.String(), err)
 		}
 
-		var adi [32]byte
-		copy(adi[:], u.IdentityChain())
+		urls[i] = u
+		st.Store(record)
+	}
 
-		if bytes.Equal(u.ResourceChain(), adi[:]) {
-			if chain.Type != types.ChainTypeAdi {
-				return nil, fmt.Errorf("%v cannot be its own identity", chain.Type)
+	// Verify everything is sane
+	for _, u := range urls {
+		record, err := st.LoadUrl(u)
+		if err != nil {
+			// This really shouldn't happen, but don't panic
+			return fmt.Errorf("internal error: failed to fetch pending record")
+		}
+
+		// Check the identity
+		switch record.Header().Type {
+		case types.ChainTypeAdi:
+			// An ADI must be its own identity
+			if !u.Identity().Equal(u) {
+				return fmt.Errorf("ADI is not its own identity")
 			}
-			continue
+		default:
+			// Anything else must be a sub-path
+			if u.Identity().Equal(u) {
+				return fmt.Errorf("%v cannot be its own identity", record.Header().Type)
+			}
+
+			// Make sure the ADI actually exists
+			_, err = st.LoadUrl(u.Identity())
+			if errors.Is(err, state.ErrNotFound) {
+				return fmt.Errorf("missing identity for %s", u.String())
+			} else if err != nil {
+				return fmt.Errorf("error fetching %q: %v", u.String(), err)
+			}
 		}
 
-		if willCreateChain(ccs, adi[:]) {
-			continue // Found identity
+		// Check the key book
+		switch record.Header().Type {
+		case types.ChainTypeSigSpecGroup:
+			// A key book does not itself have a key book
+			if record.Header().SigSpecId != (types.Bytes32{}) {
+				return errors.New("invalid key book: SigSpecId is not empty")
+			}
+
+		default:
+			// Anything else must have a key book
+			if record.Header().SigSpecId == (types.Bytes32{}) {
+				return fmt.Errorf("%q does not specify a key book", u)
+			}
+
+			// Make sure the key book actually exists
+			ssg := new(protocol.SigSpecGroup)
+			err = st.LoadAs(record.Header().SigSpecId, ssg)
+			if err != nil {
+				return fmt.Errorf("invalid key book for %q: %v", u, err)
+			}
 		}
 
-		_, err = st.DB.GetCurrentEntry(adi[:])
-		if err == nil {
-			continue // Found identity
-		}
-		if errors.Is(err, state.ErrNotFound) {
-			return nil, fmt.Errorf("missing identity for %s", u.String())
-		}
-		return nil, fmt.Errorf("error fetching %q: %v", u.String(), err)
+		// Store the record (pending)
+		st.Store(record)
 	}
 
-	return ccs, nil
+	return nil
 }
 
-func (SyntheticCreateChain) CheckTx(st *state.StateEntry, tx *transactions.GenTransaction) error {
-	_, err := SyntheticCreateChain{}.check(st, tx)
-	return err
+func (SyntheticCreateChain) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+	return SyntheticCreateChain{}.Validate(st, tx)
 }
 
-func (SyntheticCreateChain) DeliverTx(st *state.StateEntry, tx *transactions.GenTransaction) (*DeliverTxResult, error) {
-	ccs, err := SyntheticCreateChain{}.check(st, tx)
-	if err != nil {
-		return nil, err
-	}
-
-	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
-	for _, cc := range ccs {
-		chainId := types.Bytes(cc.Url.ResourceChain()).AsBytes32()
-		st.DB.AddStateEntry(&chainId, &txHash, &state.Object{Entry: cc.Data})
-	}
-	return new(DeliverTxResult), nil
+func (SyntheticCreateChain) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+	return SyntheticCreateChain{}.Validate(st, tx)
 }

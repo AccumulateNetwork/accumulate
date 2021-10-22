@@ -1,9 +1,8 @@
 package api
 
 import (
+	"crypto/sha256"
 	"fmt"
-
-	"github.com/tendermint/tendermint/libs/bytes"
 
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -12,6 +11,8 @@ import (
 	acmeApi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
+	abci "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/libs/bytes"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
@@ -30,13 +31,29 @@ func NewQuery(txRelay *relay.Relay) *Query {
 	return &q
 }
 
-func (q *Query) BroadcastTx(gtx *transactions.GenTransaction) (ti relay.TransactionInfo, err error) {
+func (q *Query) BroadcastTx(gtx *transactions.GenTransaction, done chan abci.TxResult) (ti relay.TransactionInfo, err error) {
 	payload, err := gtx.Marshal()
 	if err != nil {
 		return ti, err
 	}
+
+	if done != nil {
+		err = q.txRelay.SubscribeTx(sha256.Sum256(payload), done)
+		if err != nil {
+			return ti, err
+		}
+	}
+
 	ti = q.txRelay.BatchTx(gtx.Routing, payload)
 	return ti, nil
+}
+
+func (q *Query) SubscribeTx(txRef [32]byte, done chan abci.TxResult) error {
+	return q.txRelay.SubscribeTx(txRef, done)
+}
+
+func (q *Query) GetTx(routing uint64, txRef [32]byte) (*ctypes.ResultTx, error) {
+	return q.txRelay.GetTx(routing, txRef[:])
 }
 
 func (q *Query) QueryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
@@ -110,7 +127,7 @@ func (q *Query) query(i uint64, payload bytes.HexBytes, r chan queryData) {
 }
 
 // BatchSend calls the underlying client's BatchSend method, if it has one
-func (q *Query) BatchSend() chan relay.BatchedStatus {
+func (q *Query) BatchSend() <-chan relay.BatchedStatus {
 	return q.txRelay.BatchSend()
 }
 
