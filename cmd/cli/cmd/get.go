@@ -41,6 +41,13 @@ func Get(url string) {
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
+	str1, err1 := json.Marshal(&params)
+	if err1 != nil {
+		log.Fatal(err1)
+	}
+
+	fmt.Println(string(str1))
+
 	if err := Client.Request(context.Background(), "get", params, &res); err != nil {
 		log.Fatal(err)
 	}
