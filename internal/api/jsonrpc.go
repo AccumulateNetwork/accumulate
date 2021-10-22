@@ -334,8 +334,8 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 	raw := json.RawMessage(data)
 
 	ret.Data = &raw
-	ret.Limit = int64(0)
-	ret.Start = int64(0)
+	ret.Limit = req.Limit
+	ret.Start = req.Start
 	ret.Total = int64(0)
 
 	return ret
