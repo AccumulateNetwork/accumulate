@@ -63,7 +63,7 @@ func unmarshalToken(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 		rToken.Precision = sToken.Precision
 		rToken.URL = sToken.ChainUrl
 		rToken.Symbol = sToken.Symbol
-		rToken.Meta = sToken.Meta
+		rToken.PropertiesUrl = sToken.PropertiesUrl
 		return rToken, err
 	})
 }
@@ -155,6 +155,7 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 	resp.Type = types.String(types.TxTypeTokenTx.Name())
 	resp.Data = new(json.RawMessage)
 	*resp.Data = data
+	resp.Sponsor = tx.From.String
 	return &resp, err
 }
 
@@ -179,6 +180,7 @@ func unmarshalSynthTokenDeposit(txPayload []byte, txId types.Bytes, txSynthTxIds
 	resp.Type = types.String(types.TxTypeSyntheticTokenDeposit.Name())
 	resp.Data = new(json.RawMessage)
 	*resp.Data = data
+	resp.Sponsor = tx.FromUrl
 	return &resp, err
 }
 
