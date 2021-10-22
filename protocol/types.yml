@@ -149,12 +149,23 @@ IdentityCreate:
 TokenAccountCreate:
   kind: tx
   fields:
-  - name: Url
-    type: string
-    is-url: true
-  - name: TokenUrl
-    type: string
-    is-url: true
-  - name: KeyBookUrl
-    type: string
-    is-url: true
+    - name: Url
+      type: string
+      is-url: true
+    - name: TokenUrl
+      type: string
+      is-url: true
+    - name: KeyBookUrl
+      type: string
+      is-url: true
+
+UpdateKeyPage:
+  kind: tx
+  fields:
+    - name: Operation
+      type: KeyPageOperation
+      marshal-as: self
+    - name: Key
+      type: bytes
+    - name: NewKey
+      type: bytes

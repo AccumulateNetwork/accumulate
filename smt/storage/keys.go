@@ -47,7 +47,7 @@ func ComputeKey(keys ...interface{}) Key {
 		case uint32:
 			bkeys[i] = common.Uint64Bytes(uint64(key))
 		case uint64:
-			bkeys[i] = common.Uint64Bytes(uint64(key))
+			bkeys[i] = common.Uint64Bytes(key)
 		case int:
 			bkeys[i] = common.Int64Bytes(int64(key))
 		case int8:
@@ -57,7 +57,7 @@ func ComputeKey(keys ...interface{}) Key {
 		case int32:
 			bkeys[i] = common.Int64Bytes(int64(key))
 		case int64:
-			bkeys[i] = common.Int64Bytes(int64(key))
+			bkeys[i] = common.Int64Bytes(key)
 		default:
 			panic(fmt.Errorf("cannot use %T as a key", key))
 		}

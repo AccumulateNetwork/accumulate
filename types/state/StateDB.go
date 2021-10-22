@@ -1,10 +1,12 @@
 package state
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -14,9 +16,8 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/tendermint/tendermint/libs/log"
 )
-
-const debugStateDBWrites = false
 
 var blockIndexKey = sha256.Sum256([]byte("BlockIndex"))
 
@@ -78,6 +79,20 @@ type StateDB struct {
 	updates      map[types.Bytes32]*blockUpdates
 	transactions transactionLists
 	sync         sync.WaitGroup
+	logger       log.Logger
+}
+
+func (s *StateDB) SetLogger(logger log.Logger) {
+	if logger != nil {
+		logger = logger.With("module", "db")
+	}
+	s.logger = logger
+}
+
+func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
+	if s.logger != nil {
+		s.logger.Info(msg, keyVals...)
+	}
 }
 
 func (s *StateDB) init(debug bool) (err error) {
@@ -151,9 +166,7 @@ func (s *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxId
 
 //AddSynthTx add the synthetic transaction which is mapped to the parent transaction
 func (s *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synthTxObject *Object) {
-	if debugStateDBWrites {
-		fmt.Printf("AddSynthTx %X\n", synthTxObject.Entry)
-	}
+	s.logInfo("AddSynthTx", "txid", synthTxId.AsBytes32(), "entry", synthTxObject.Entry)
 	var val *[]transactionStateInfo
 	var ok bool
 
@@ -167,8 +180,8 @@ func (s *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synt
 
 //AddPendingTx adds the pending tx raw data and signature of that data to tx,
 //signature needs to be a signed hash of the tx.
-func (s *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes,
-	txPending *Object, txValidated *Object) error {
+func (s *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes, txPending *Object, txValidated *Object) error {
+	s.logInfo("AddPendingTx", "chainId", chainId, "txid", txId.AsBytes32(), "entry", txPending.Entry, "validated", txValidated.Entry)
 	_ = chainId
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
@@ -255,9 +268,7 @@ func (s *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (s *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
-	if debugStateDBWrites {
-		fmt.Printf("AddStateEntry chainId=%X txHash=%X entry=%X\n", *chainId, *txHash, object.Entry)
-	}
+	s.logInfo("AddStateEntry", "chainId", chainId, "txHash", txHash, "entry", object.Entry)
 	begin := time.Now()
 
 	s.TimeBucket = s.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
@@ -421,16 +432,22 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 		return s.bpt.Bpt.Root.Hash[:], 0, nil
 	}
 
-	//then run through the list and record them
-	//loop through everything and write out states to the database.
-	merkleMgrMap := make(map[types.Bytes32]*managed.MerkleManager)
-	for chainId := range s.updates {
-
-		merkleMgrMap[chainId] = s.mm
+	// Create an ordered list of chain IDs that need updating. The iteration
+	// order of maps in Go is random. Randomly ordering database writes is bad,
+	// because that leads to consensus errors between nodes, since each node
+	// will have a different random order. So we need updates to have some
+	// consistent order, regardless of what it is.
+	updateOrder := make([]types.Bytes32, 0, len(s.updates))
+	for id := range s.updates {
+		updateOrder = append(updateOrder, id)
 	}
-	for chainId := range s.updates {
+	sort.Slice(updateOrder, func(i, j int) bool {
+		return bytes.Compare(updateOrder[i][:], updateOrder[j][:]) < 0
+	})
+
+	for _, chainId := range updateOrder {
 		//to enable multi-threading put "go" in front
-		s.writeChainState(group, mutex, merkleMgrMap[chainId], chainId)
+		s.writeChainState(group, mutex, s.mm, chainId)
 
 		//TODO: figure out how to do this with new way state is derived
 		//if len(currentState.pendingTx) != 0 {
@@ -455,9 +472,8 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	s.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
-	if debugStateDBWrites {
-		fmt.Printf("WriteStates height=%d hash=%X\n", blockHeight, s.RootHash())
-	}
+	rh := types.Bytes(s.RootHash()).AsBytes32()
+	s.logInfo("WriteStates", "height", blockHeight, "hash", &rh)
 	return s.RootHash(), currentStateCount, nil
 }
 

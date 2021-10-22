@@ -94,6 +94,12 @@ type TxSynthRef struct {
 	TxRef [32]byte `json:"txRef" form:"txRef" query:"txRef" validate:"required"`
 }
 
+type UpdateKeyPage struct {
+	Operation KeyPageOperation `json:"operation" form:"operation" query:"operation" validate:"required"`
+	Key       []byte           `json:"key" form:"key" query:"key" validate:"required"`
+	NewKey    []byte           `json:"newKey" form:"newKey" query:"newKey" validate:"required"`
+}
+
 func NewAnonTokenAccount() *AnonTokenAccount {
 	v := new(AnonTokenAccount)
 	v.Type = types.ChainTypeAnonTokenAccount
@@ -125,6 +131,8 @@ func (*SyntheticCreateChain) GetType() types.TxType { return types.TxTypeSynthet
 func (*SyntheticDepositCredits) GetType() types.TxType { return types.TxTypeSyntheticDepositCredits }
 
 func (*TokenAccountCreate) GetType() types.TxType { return types.TxTypeTokenAccountCreate }
+
+func (*UpdateKeyPage) GetType() types.TxType { return types.TxTypeUpdateKeyPage }
 
 func (v *AddCredits) BinarySize() int {
 	var n int
@@ -331,6 +339,20 @@ func (v *TxSynthRef) BinarySize() int {
 	n += stringBinarySize(v.Url)
 
 	n += chainBinarySize(&v.TxRef)
+
+	return n
+}
+
+func (v *UpdateKeyPage) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(uint64(types.TxTypeUpdateKeyPage))
+
+	n += v.Operation.BinarySize()
+
+	n += bytesBinarySize(v.Key)
+
+	n += bytesBinarySize(v.NewKey)
 
 	return n
 }
@@ -561,6 +583,24 @@ func (v *TxSynthRef) MarshalBinary() ([]byte, error) {
 	buffer.Write(stringMarshalBinary(v.Url))
 
 	buffer.Write(chainMarshalBinary(&v.TxRef))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeUpdateKeyPage)))
+
+	if b, err := v.Operation.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Operation: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	buffer.Write(bytesMarshalBinary(v.Key))
+
+	buffer.Write(bytesMarshalBinary(v.NewKey))
 
 	return buffer.Bytes(), nil
 }
@@ -994,6 +1034,37 @@ func (v *TxSynthRef) UnmarshalBinary(data []byte) error {
 		v.TxRef = x
 	}
 	data = data[chainBinarySize(&v.TxRef):]
+
+	return nil
+}
+
+func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeUpdateKeyPage
+	if v, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+	}
+	data = data[uvarintBinarySize(uint64(typ)):]
+
+	if err := v.Operation.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Operation: %w", err)
+	}
+	data = data[v.Operation.BinarySize():]
+
+	if x, err := bytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Key: %w", err)
+	} else {
+		v.Key = x
+	}
+	data = data[bytesBinarySize(v.Key):]
+
+	if x, err := bytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding NewKey: %w", err)
+	} else {
+		v.NewKey = x
+	}
+	data = data[bytesBinarySize(v.NewKey):]
 
 	return nil
 }

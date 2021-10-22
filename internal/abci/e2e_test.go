@@ -365,3 +365,81 @@ func TestAddSigSpec(t *testing.T) {
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }
+
+func TestAddKey(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{})
+	fooKey, testKey := generateKey(), generateKey()
+
+	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/ssg1", "foo/sigspec1"))
+
+	newKey := generateKey()
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.AddKey
+		body.NewKey = newKey.PubKey().Bytes()
+
+		tx, err := transactions.New("foo/sigspec1", edSigner(testKey, 1), body)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	n.client.Wait()
+
+	spec := n.GetSigSpec("foo/sigspec1")
+	require.Len(t, spec.Keys, 2)
+	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[1].PublicKey)
+}
+
+func TestUpdateKey(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{})
+	fooKey, testKey := generateKey(), generateKey()
+
+	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/ssg1", "foo/sigspec1"))
+
+	newKey := generateKey()
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.UpdateKey
+		body.Key = testKey.PubKey().Bytes()
+		body.NewKey = newKey.PubKey().Bytes()
+
+		tx, err := transactions.New("foo/sigspec1", edSigner(testKey, 1), body)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	n.client.Wait()
+
+	spec := n.GetSigSpec("foo/sigspec1")
+	require.Len(t, spec.Keys, 1)
+	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[0].PublicKey)
+}
+
+func TestRemoveKey(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{})
+	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
+
+	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/ssg1", "foo/sigspec1"))
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		body := new(protocol.UpdateKeyPage)
+		body.Operation = protocol.RemoveKey
+		body.Key = testKey1.PubKey().Bytes()
+
+		tx, err := transactions.New("foo/sigspec1", edSigner(testKey2, 1), body)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	n.client.Wait()
+
+	spec := n.GetSigSpec("foo/sigspec1")
+	require.Len(t, spec.Keys, 1)
+	require.Equal(t, testKey2.PubKey().Bytes(), spec.Keys[0].PublicKey)
+}
