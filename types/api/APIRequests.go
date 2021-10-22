@@ -38,9 +38,9 @@ type APIRequestURL struct {
 
 // APIRequestURLPagination is APIRequestURL with pagination params
 type APIRequestURLPagination struct {
-	*APIRequestURL
-	Start *int64 `json:"start"`
-	Limit *int64 `json:"limit"`
+	APIRequestURL
+	Start int64 `json:"start"`
+	Limit int64 `json:"limit"`
 }
 
 // APIDataResponse is used in "get" API method response
@@ -51,10 +51,10 @@ type APIDataResponse struct {
 
 // APIDataResponsePagination is APIDataResponse with pagination data
 type APIDataResponsePagination struct {
-	*APIDataResponse
-	Start *int64 `json:"start"`
-	Limit *int64 `json:"limit"`
-	Total *int64 `json:"total"`
+	APIDataResponse
+	Start int64 `json:"start"`
+	Limit int64 `json:"limit"`
+	Total int64 `json:"total"`
 }
 
 // Metrics is used in "metrics" API method response
