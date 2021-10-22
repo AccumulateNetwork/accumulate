@@ -12,6 +12,8 @@
 package abci
 
 import (
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -48,6 +50,9 @@ type State interface {
 
 	// RootHash returns the root hash of the chain
 	RootHash() []byte
+
+	// AddStateEntry only used for genesis
+	AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object)
 
 	// TODO I think this can be removed
 	EnsureRootHash() []byte
