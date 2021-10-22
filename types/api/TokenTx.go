@@ -20,7 +20,7 @@ type TokenTx struct {
 }
 
 type TokenTxRequest struct {
-	Hash types.Bytes32 `json:"hash" form:"hash" query:"hash" validate:"required"`
+	TxId types.Bytes32 `json:"txid" form:"txid" query:"txid" validate:"required"`
 }
 
 //TokenTxOutput is the structure for the output.  Only handles 64 bit amounts at this time.

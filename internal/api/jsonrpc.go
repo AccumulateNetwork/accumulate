@@ -450,13 +450,13 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 		return NewValidatorError(err)
 	}
 
-	// validate only TokenTx.Hash (Assuming the hash is the txid)
-	if err = api.validate.StructPartial(req, "Hash"); err != nil {
+	// validate only TokenTx.TxId (Assuming the hash is the txid)
+	if err = api.validate.StructPartial(req, "txid"); err != nil {
 		return NewValidatorError(err)
 	}
 
 	// Tendermint's integration here
-	resp, err := api.query.GetTransaction(req.Hash[:])
+	resp, err := api.query.GetTransaction(req.TxId[:])
 	if err != nil {
 		return NewValidatorError(err)
 	}

@@ -225,6 +225,22 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 	return executor.CheckTx(st, tx)
 }
 
+func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, err error) error {
+	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"1\", \"error\":\"%v\"}", err))
+	txPendingObject := new(state.Object)
+	e, err1 := txPending.MarshalBinary()
+	txPendingObject.Entry = e
+	if err1 != nil {
+		err = fmt.Errorf("failed marshaling pending tx (%v) on error: %v", err1, err)
+		return err
+	}
+	err1 = m.db.AddPendingTx(chainId, txid, txPendingObject, nil)
+	if err1 != nil {
+		err = fmt.Errorf("error adding pending tx (%v) on error %v", err1, err)
+	}
+	return err
+}
+
 // DeliverTx implements ./abci.Chain
 func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResult, error) {
 	m.wg.Add(1)
@@ -247,18 +263,10 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 
 	executor, ok := m.executors[types.TxType(tx.TransactionType())]
 	txPending := state.NewPendingTransaction(tx)
+	chainId := types.Bytes(tx.ChainID).AsBytes32()
 	if !ok {
 		err := fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())
-		txPending.Status = json.RawMessage(fmt.Sprintf("\"error\":\"%v\"", err))
-		chainId := types.Bytes(tx.ChainID).AsBytes32()
-		txPendingObject := new(state.Object)
-		txPendingObject.Entry, err = txPending.MarshalBinary()
-		if err != nil {
-			return nil, err
-		}
-		err1 := m.db.AddPendingTx(&chainId, tx.TransactionHash(), txPendingObject, nil)
-		fmt.Errorf("error adding pending tx (%v) on error %v", err, err1)
-		return nil, err
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	tx.TransactionHash()
@@ -277,14 +285,16 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 
 	st, err := m.check(tx)
 	if err != nil {
-		return nil, err
+		err = fmt.Errorf("failed check: %v", err)
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
 	err = executor.DeliverTx(st, tx)
 	if err != nil {
-		return nil, fmt.Errorf("rejected by chain: %v", err)
+		err = fmt.Errorf("rejected by chain: %v", err)
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	// Check if the transaction was accepted
@@ -301,14 +311,15 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		txAcceptedObject = new(state.Object)
 		txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 		if err != nil {
-			return nil, err
+			return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 		}
 	}
 
 	txPendingObject := new(state.Object)
+	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
-		return nil, err
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	// Store pending state changes
@@ -319,14 +330,13 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		}
 		data, err := entry.record.MarshalBinary()
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal state: %v", err)
+			err = fmt.Errorf("failed to marshal state: %v", err)
+			return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 		}
 		m.db.AddStateEntry((*types.Bytes32)(&id), &txHash, &state.Object{Entry: data})
 	}
 
 	// Store the tx state
-	var chainId types.Bytes32
-	copy(chainId[:], tx.ChainID)
 	err = m.db.AddPendingTx(&chainId, tx.TransactionHash(), txPendingObject, txAcceptedObject)
 	if err != nil {
 		return nil, err
@@ -416,11 +426,17 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 		txSyntheticObject.Entry = synthTxData
 		m.db.AddSynthTx(parentTxId, tx.TransactionHash(), txSyntheticObject)
 
-		// TODO In order for other BVCs to be able to validate the syntetic
-		// transaction, the signed version must be saved into the SMT. However,
-		// this causes consensus to fail because the leader's state diverges
-		// from non-leader nodes. So for now, the following block has been moved
-		// to after the synthetic transaction is saved.
+		// TODO In order for other BVCs to be able to validate the synthetic
+		// transaction, a wrapped signed version must be resubmitted to this BVC network
+		// and the UNSIGNED version of the transaction along with the Leader address will
+		// be stored in a SynthChain in the SMT on this BVC.  The BVC's will validate
+		// the synth transaction against the receipt and EVERYONE will then send out the wrapped
+		// TX along with the proof from the directory chain. If by end block there are still
+		// unprocessed synthetic TX's the current leader takes over, invalidates the previous
+		// leader's signed tx, signs the unprocessed synth tx, and tries again with the
+		// new leader.  By EVERYONE submitting the leader signed synth tx to the designated
+		// BVC network it takes advantage of the flood-fill gossip network tendermint will
+		// provide and ensure the synth transaction will be picked up.
 
 		// Batch synthetic transactions generated by the validator
 		if m.leader {
