@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated"
@@ -140,6 +141,17 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	//register a list of the validators.
 	for _, v := range req.Validators {
 		app.updateValidator(v)
+	}
+
+	m, err := genesis.BootstrapStates()
+	if err != nil {
+		panic(err)
+	}
+
+	//TODO: this needs to be moved to Directory Chain
+	genesisTxId := types.Bytes32{}
+	for c, o := range m {
+		app.state.AddStateEntry(&c, &genesisTxId, o)
 	}
 
 	return abci.ResponseInitChain{AppHash: app.chainId[:]}

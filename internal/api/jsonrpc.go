@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,7 +20,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
@@ -526,33 +526,27 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", destAccount), errors.New("wrong token URL"))
 	}
 
-	wallet := NewWalletEntry()
-	fromAccount := types.String(wallet.Addr)
+	tx := acmeapi.TokenTx{}
+	tx.From.String = types.String(genesis.FaucetWallet.Addr)
+	tx.AddToAccount(destAccount, 1000000000)
 
-	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	txid := types.Bytes32{}
+	txData, err := tx.MarshalBinary()
 
-	tokenUrl := types.String(protocol.AcmeUrl().String())
-
-	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], fromAccount, destAccount)
-	amtToDeposit := int64(10)                                //deposit 50k tokens
-	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
-	deposit.TokenUrl = tokenUrl
-
-	depData, err := deposit.MarshalBinary()
+	genesis.FaucetWallet.Nonce++
 	gtx := new(transactions.GenTransaction)
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = *destAccount.AsString()
-	gtx.SigInfo.Unused2 = wallet.Nonce
-	gtx.Transaction = depData
+	gtx.SigInfo.Unused2 = genesis.FaucetWallet.Nonce
+	gtx.SigInfo.MSHeight = 1
+	gtx.SigInfo.PriorityIdx = 0
+	gtx.Transaction = txData
 	if err := gtx.SetRoutingChainID(); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", destAccount), err)
 	}
 	dataToSign := gtx.TransactionHash()
 
 	ed := new(transactions.ED25519Sig)
-	err = ed.Sign(wallet.Nonce, wallet.PrivateKey, dataToSign)
+	err = ed.Sign(genesis.FaucetWallet.Nonce, genesis.FaucetWallet.PrivateKey, dataToSign)
 	if err != nil {
 		return NewSubmissionError(err)
 	}

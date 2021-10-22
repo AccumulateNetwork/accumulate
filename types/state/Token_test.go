@@ -1,8 +1,6 @@
 package state
 
 import (
-	"bytes"
-	"encoding/json"
 	"testing"
 )
 
@@ -14,10 +12,8 @@ func TestTokenCoinbase(t *testing.T) {
 
 	//accountUrl := "MyADI/MyTokens"
 	account := NewToken(tokenUrl)
-
-	var jm json.RawMessage
-	jm = []byte("{\"test\":\"me\"}")
-	account.Meta = &jm
+	account.Precision = 12
+	account.PropertiesUrl = "acc://MyADI/MyTokenProperties"
 	actData, err := account.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
@@ -47,10 +43,7 @@ func TestTokenCoinbase(t *testing.T) {
 		t.Fatalf("precision doesn't match")
 	}
 
-	if account2.Meta == nil {
-		t.Fatalf("meta is nil")
-	}
-	if !bytes.Equal(*account2.Meta, jm) {
-		t.Fatalf("meta data doesn't match")
+	if account.PropertiesUrl != account2.PropertiesUrl {
+		t.Fatalf("PropertiesUrl data doesn't match")
 	}
 }
