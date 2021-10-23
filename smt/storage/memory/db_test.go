@@ -21,11 +21,7 @@ func TestDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if i%1000 == 0 {
-			println(i)
-		}
 	}
-	fmt.Println("Reads")
 	for i := 0; i < 10000; i++ {
 		var val []byte
 		val = db.Get(GetKey([]byte(fmt.Sprintf("answer %d", i))))

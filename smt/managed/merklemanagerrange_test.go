@@ -1,7 +1,6 @@
 package managed
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
@@ -27,7 +26,6 @@ func TestConversions(t *testing.T) {
 
 func TestMerkleManager_GetRange(t *testing.T) {
 
-	t.Skip("skipping for now")
 	MarkPower := int64(2)
 	MarkFreq := int64(4)
 	NumTests := int64(37)
@@ -57,7 +55,6 @@ func TestMerkleManager_GetRange(t *testing.T) {
 	MM1.Manager.EndBatch()
 
 	for i := int64(0); i < MarkFreq*2; i++ {
-		fmt.Println("  for i=", i)
 		for j := int64(0); j < NumTests+1; j++ {
 			begin := j
 			end := j + i
@@ -85,19 +82,19 @@ func TestMerkleManager_GetRange(t *testing.T) {
 					limit = MarkFreq / 2
 				}
 				if int64(len(list)) != limit {
-					t.Errorf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected %d",
+					t.Fatalf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected %d",
 						begin, end, firstIndex, lastIndex, len(list), limit)
 				}
 			} else {
 				if len(list) != 0 {
-					t.Errorf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected 0",
+					t.Fatalf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected 0",
 						begin, end, firstIndex, lastIndex, len(list))
 				}
 			}
 
 			for i, v := range list {
 				if begin+int64(i) != int64(b2i(v)) {
-					t.Errorf("wrong value. Got %x=>%d range(%d-%d)[%d] expected %d",
+					t.Fatalf("wrong value. Got %x=>%d range(%d-%d)[%d] expected %d",
 						v[:4], b2i(v),
 						begin, end,
 						i,

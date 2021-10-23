@@ -25,6 +25,7 @@ func (m *MerkleManager) AddHash(hash Hash) {
 	// Keep the index of every element added to the Merkle Tree, but only of the first instance
 	if m.Manager.GetIndex(hash[:]) < 0 { // So only if the hash is not yet added to the Merkle Tree
 		m.Manager.Key("ElementIndex", hash[:]).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
+		m.Manager.Key(m.cid, "Element", m.MS.Count).PutBatch(hash[:])
 	}
 
 	switch m.MS.Count & m.MarkMask { // Mask to the bits counting up to a mark.
