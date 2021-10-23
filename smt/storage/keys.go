@@ -30,6 +30,8 @@ func ComputeKey(keys ...interface{}) Key {
 			bkeys[i] = []byte{}
 		case []byte:
 			bkeys[i] = key
+		case [32]uint8:
+			bkeys[i] = key[:]
 		case types.Bytes:
 			bkeys[i] = key
 		case types.Bytes32:
