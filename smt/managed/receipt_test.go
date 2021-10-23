@@ -218,7 +218,7 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 }
 
 func TestBadgerReceipts(t *testing.T) {
-	t.Skip("ignore")
+
 	t.SkipNow()
 	manager, dir := GetManager(2, true, "", t)
 	defer func() {

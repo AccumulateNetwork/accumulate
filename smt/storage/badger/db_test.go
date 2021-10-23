@@ -32,10 +32,10 @@ func TestDatabase(t *testing.T) {
 			t.Fatal(err)
 		}
 		if i%1000 == 0 {
-			println(i)
+			//	println(i)
 		}
 	}
-	fmt.Println("Reads")
+	//fmt.Println("Reads")
 	for i := 0; i < 10000; i++ {
 		var val []byte
 		err = db.View(func(txn *badger.Txn) error {
@@ -76,13 +76,13 @@ func TestDatabase2(t *testing.T) {
 			t.Fatal(err)
 		}
 		if i%1000 == 0 {
-			println(i)
+			//	println(i)
 		}
 	}
 	if err := txn.Commit(); err != nil {
 		t.Fatal(err)
 	}
-	fmt.Println("Reads")
+	//fmt.Println("Reads")
 	for i := 0; i < 10000; i++ {
 		var val []byte
 		err = db.View(func(txn *badger.Txn) error {
