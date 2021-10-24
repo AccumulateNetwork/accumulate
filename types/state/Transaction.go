@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulated/types/api"
@@ -58,7 +59,7 @@ type PendingTransaction struct {
 	ChainHeader
 	Signature        []*transactions.ED25519Sig
 	TransactionState *txState
-	Status           string `json:"status" form:"status" query:"status" validate:"required"`
+	Status           json.RawMessage `json:"status" form:"status" query:"status" validate:"required"`
 }
 
 func (is *Transaction) TransactionHash() *types.Bytes32 {
@@ -160,6 +161,9 @@ func (t *PendingTransaction) MarshalBinary() (data []byte, err error) {
 		return nil, err //
 	}
 	data = append(data, si...) // Add the SigInfo
+	//add the status
+	data = append(data, common.SliceBytes([]byte(t.Status))...)
+	//if transactions exist, add that
 	if t.TransactionState.Transaction != nil {
 		data = append(data, common.SliceBytes(t.TransactionState.Transaction.Bytes())...) // Add the transaction
 	}
@@ -169,8 +173,8 @@ func (t *PendingTransaction) MarshalBinary() (data []byte, err error) {
 
 func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 	defer func() { //
-		if recover() != nil { //
-			err = fmt.Errorf("error unmarshaling GenTransaction %v", err) //
+		if rErr := recover(); rErr != nil { //
+			err = fmt.Errorf("error unmarshaling GenTransaction %v", rErr) //
 		} //
 	}() //
 
@@ -199,6 +203,8 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 	if err != nil {                                              //                Get an error? Complain to caller!
 		return err //
 	} //
+
+	t.Status, data = common.BytesSlice(data)
 
 	if len(data) != 0 {
 		t.TransactionState.Transaction = &types.Bytes{}
