@@ -65,7 +65,7 @@ func TestIndexing2(t *testing.T) {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
 		MM1.AddHash(dataHash)
-		dataI, e := MM1.Manager.Key("ElementIndex", dataHash).Get()
+		dataI, e := MM1.Manager.Key(Chain, "ElementIndex", dataHash).Get()
 		if e != nil {
 			t.Fatalf("error")
 		}
