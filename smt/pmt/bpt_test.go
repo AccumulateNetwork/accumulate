@@ -125,13 +125,14 @@ func TestBPT_MarshalAllByteBlocks(t *testing.T) {
 	}
 	data3 := bpt.Marshal()
 	cnt, data3 = MarshalThem(bpt, bpt.Root, data3)
-	fmt.Println("len(data) = ", len(data3), " nodes ", cnt, " avg ", len(data3)/cnt)
+	_ = cnt
+	//fmt.Println("len(data) = ", len(data3), " nodes ", cnt, " avg ", len(data3)/cnt)
 
 	bpt3 := new(BPT)
 	bpt3.Root = new(Node)
 	data = bpt3.UnMarshal(data3)
 	cnt, data = unMarshalThem(bpt3, bpt3.Root, data)
-	fmt.Println("len(data) = ", len(data), " nodes ", cnt, " avg ", len(data)/cnt)
+	//fmt.Println("len(data) = ", len(data), " nodes ", cnt, " avg ", len(data)/cnt)
 }
 
 // TestInsert
@@ -150,13 +151,14 @@ func TestInsert(t *testing.T) {
 			b.Insert(key, val)           //   Insert the key value pair
 			key, val = val, key          //   And reuse the new key by just swapping.
 		}
-		fmt.Printf("elements Added: %d nodes to update: %d\n", numElements, len(b.DirtyMap)) // Print some results
-		fmt.Println("Max Height: ", b.MaxHeight, "node ID", b.MaxNodeID)                     // Get the Max Height
-		b.Update()                                                                           // Now update all the hashes
-		fmt.Printf("Root %x\n", b.Root.Hash)                                                 // Print the summary hash (intermediate)
-		t := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000                    // Calculate the seconds, with decimal places
-		start = time.Now()                                                                   // And print how long it took
-		fmt.Printf("seconds: %8.6f\n", t)                                                    // And ... well print it.
+		//fmt.Printf("elements Added: %d nodes to update: %d\n", numElements, len(b.DirtyMap)) // Print some results
+		//fmt.Println("Max Height: ", b.MaxHeight, "node ID", b.MaxNodeID)                     // Get the Max Height
+		b.Update() // Now update all the hashes
+		//fmt.Printf("Root %x\n", b.Root.Hash)                                                 // Print the summary hash (intermediate)
+		t := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Calculate the seconds, with decimal places
+		_ = t
+		start = time.Now() // And print how long it took
+		//fmt.Printf("seconds: %8.6f\n", t)                                                    // And ... well print it.
 	}
 }
 
@@ -184,31 +186,31 @@ func TestInsertOrder(t *testing.T) {
 		valSeed = sha256.Sum256(valSeed[:]) //   move the value
 	} // loop and continue
 
-	b := NewBPT()            //        Get a BPT
-	start := time.Now()      //        Set the clock
+	b := NewBPT() //        Get a BPT
+	//start := time.Now()      //        Set the clock
 	for _, v := range pair { //        for every pair in the slice, insert them
 		b.Insert(v.key, v.value) //    into the PBT
 	}
-	b.Update()                                                         // update the BPT to get the correct summary hash
-	one := b.Root.Hash                                                 //
-	tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
-	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
-	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
+	b.Update()         // update the BPT to get the correct summary hash
+	one := b.Root.Hash //
+	//tm := float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Get my time in seconds in a float64
+	//	fmt.Printf("seconds: %8.6f\n", tm)                                 // Print my time.
+	//	fmt.Printf("First pass: %x\n", one)                                // Print the summary hash from pass one
 
 	sort.Slice(pair, func(i, j int) bool { //                             Now shuffle the pairs.  Completely different order
 		return rand.Int()&1 == 1 //                                       Randimize using the low order bit of the random number generator
 	})
 
-	b = NewBPT()             //                                         Get a fresh BPT
-	start = time.Now()       //                                         Reset the clock
+	b = NewBPT() //                                         Get a fresh BPT
+	//start = time.Now()       //                                         Reset the clock
 	for _, v := range pair { //                                         Insert the scrambled pairs
 		b.Insert(v.key, v.value) //                                     into the BPT
 	} //
-	b.Update()                                                        // Update the summary hash
-	two := b.Root.Hash                                                //
-	tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
-	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
-	fmt.Printf("First pass: %x\n", two)                               // Print the summary hash (should be the same)
+	b.Update()         // Update the summary hash
+	two := b.Root.Hash //
+	//tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
+	//	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
+	//	fmt.Printf("First pass: %x\n", two)                               // Print the summary hash (should be the same)
 
 	first := pair[0]
 	sort.Slice(pair, func(i, j int) bool { //                             Now shuffle the pairs.  Completely different order
@@ -220,8 +222,8 @@ func TestInsertOrder(t *testing.T) {
 
 	var last, now [32]byte
 	_ = last
-	b = NewBPT()             //                                         Get a fresh BPT
-	start = time.Now()       //                                         Reset the clock
+	b = NewBPT() //                                         Get a fresh BPT
+	//start = time.Now()       //                                         Reset the clock
 	for _, v := range pair { //                                         Insert the scrambled pairs
 		b.Insert(v.key, v.value) //                                     into the BPT
 		b.Update()
@@ -232,9 +234,9 @@ func TestInsertOrder(t *testing.T) {
 	}
 	b.Update()
 	three := b.Root.Hash
-	tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
-	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
-	fmt.Printf("First pass: %x\n", two)                               // Print the summary hash (should be the same)
+	//tm = float64(time.Now().UnixNano()-start.UnixNano()) / 1000000000 // Compute the execution time
+	//	fmt.Printf("seconds: %8.6f\n", tm)                                // Print the time
+	//	fmt.Printf("First pass: %x\n", two)                               // Print the summary hash (should be the same)
 
 	if !bytes.Equal(one[:], two[:]) || !bytes.Equal(one[:], three[:]) { // Use the actual go test infrastructure to report possible errors
 		t.Fatalf("\n1: %x\n2: %x\n3: %x\n3: %x", one, two, now, three) //                see 'em if they are there
@@ -369,6 +371,7 @@ var blockCnt []int
 var total int64
 var highest int
 
+// Find a given node in the Merkle Tree
 func walk(bpt *BPT, node *Node) {
 	if node.Height >= highest {
 		highest = node.Height
@@ -400,8 +403,8 @@ func walk(bpt *BPT, node *Node) {
 }
 
 func TestBPTByteSizes(t *testing.T) {
-	//t.Skip("Just gives data about distributions in the BPT.")
-	println("build BFT")
+	t.Skip("Just gives data about distributions in the BPT.")
+
 	bpt := LoadBptCnt(37, 100000)
 	println("walking")
 	walk(bpt, bpt.Root)

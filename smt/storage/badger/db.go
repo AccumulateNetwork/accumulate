@@ -43,8 +43,8 @@ func (d *DB) InitDB(filepath string) error {
 // Get
 // Look in the given bucket, and return the key found.  Returns nil if no value
 // is found for the given key
-func (d *DB) Get(key [storage.KeyLength]byte) (value []byte) {
-	err := d.badgerDB.View(func(txn *badger.Txn) error {
+func (d *DB) Get(key [storage.KeyLength]byte) (value []byte, err error) {
+	err = d.badgerDB.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key[:])
 		if err != nil {
 			return err
@@ -57,10 +57,10 @@ func (d *DB) Get(key [storage.KeyLength]byte) (value []byte) {
 	})
 	// If anything goes wrong, return nil
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	// If we didn't find the value, we will return a nil here.
-	return value
+	return value, nil
 }
 
 // Put
