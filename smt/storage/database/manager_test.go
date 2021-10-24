@@ -82,7 +82,8 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 
 	dbManager.EndBatch()
 	for i, pair := range submissions {
-		DBValue := dbManager.DB.Get(pair.Key.K)
+		DBValue, e := dbManager.DB.Get(pair.Key.K)
+		require.Nil(t, e, "Get Failed")
 		require.NotNil(t, DBValue, "Entry %d missing", i)
 		require.Equal(t, pair.Value[:], DBValue, "Entry %d has wrong value", i)
 	}
@@ -96,9 +97,12 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 	_ = dbManager.Key("a", "", "horse").Put(d1)
 	_ = dbManager.Key("b", "", "horse").Put(d2)
 	_ = dbManager.Key("c", "", "horse").Put(d3)
-	v1 := dbManager.Key("a", "", "horse").Get()
-	v2 := dbManager.Key("b", "", "horse").Get()
-	v3 := dbManager.Key("c", "", "horse").Get()
+	v1, e1 := dbManager.Key("a", "", "horse").Get()
+	require.Nil(t, e1, "could not retrieve value")
+	v2, e2 := dbManager.Key("b", "", "horse").Get()
+	require.Nil(t, e2, "could not retrieve value")
+	v3, e3 := dbManager.Key("c", "", "horse").Get()
+	require.Nil(t, e3, "could not retrieve value")
 
 	if !bytes.Equal(d1, v1) || !bytes.Equal(d2, v2) || !bytes.Equal(d3, v3) {
 		t.Error("All values should be equal")
@@ -112,7 +116,8 @@ func writeAndRead(t *testing.T, dbManager *database.Manager) {
 
 	// Sort that I can read all thousand entries
 	for i := 0; i < 10; i++ {
-		value := dbManager.Key("a", "", common.Int64Bytes(int64(i))).Get()
+		value, e := dbManager.Key("a", "", common.Int64Bytes(int64(i))).Get()
+		require.Nil(t, e, "could not retrieve value")
 		eValue := []byte(fmt.Sprint(i))
 
 		if !bytes.Equal(value, eValue) {

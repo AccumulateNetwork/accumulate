@@ -23,8 +23,10 @@ type MerkleManager struct {
 // Add a Hash to the Chain controlled by the ChainManager
 func (m *MerkleManager) AddHash(hash Hash) {
 	// Keep the index of every element added to the Merkle Tree, but only of the first instance
-	if m.Manager.GetIndex(hash[:]) < 0 { // So only if the hash is not yet added to the Merkle Tree
-		m.Manager.Key("ElementIndex", hash[:]).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
+	i, err := m.GetElementIndex(hash[:])
+	_ = i
+	if err == nil { // So only if the hash is not yet added to the Merkle Tree
+		m.Manager.Key(m.cid, "ElementIndex", hash[:]).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
 		m.Manager.Key(m.cid, "Element", m.MS.Count).PutBatch(hash[:])
 	}
 
@@ -53,6 +55,20 @@ func (m *MerkleManager) AddHash(hash Hash) {
 	if err := m.WriteChainHead(m.cid); err != nil {
 		panic(fmt.Sprintf("could not marshal MerkleState: %v", err))
 	}
+}
+
+// GetElementIndex
+// Get an Element of a Merkle Tree from the database
+func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
+	if len(hash) != 32 {
+		return 0, fmt.Errorf("invalid length %d for hash (should be 32)", len(hash))
+	}
+	data, e := m.Manager.Key(m.cid, "ElementIndex", hash).Get()
+	if e != nil {
+		return 0, err
+	}
+	i, _ = common.BytesInt64(data)
+	return i, nil
 }
 
 // SetChainID
@@ -85,8 +101,8 @@ func (m *MerkleManager) WriteChainHead(chainID []byte) error {
 func (m *MerkleManager) ReadChainHead(chainID []byte) (ms *MerkleState, err error) {
 	ms = new(MerkleState)
 	ms.HashFunction = m.MS.HashFunction
-	state := m.Manager.Key(chainID, "Head").Get() //   Get the state for the Merkle Tree
-	if state != nil {                             //   If the State exists
+	state, e := m.Manager.Key(chainID, "Head").Get() //   Get the state for the Merkle Tree
+	if e == nil {                                    //   If the State exists
 		if err := ms.UnMarshal(state); err != nil { //     Set that as our state
 			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %x",
 				chainID) // Blow up of the database is bad
@@ -177,8 +193,8 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 		return new(MerkleState)
 	}
 
-	data := m.Manager.Key(m.cid, "States", element).Get() // Get the data at this height
-	if data == nil {                                      // If nil, there is no state saved
+	data, e := m.Manager.Key(m.cid, "States", element).Get() // Get the data at this height
+	if e != nil {                                            // If nil, there is no state saved
 		return nil //                                                   return nil, as no state exists
 	}
 	ms := new(MerkleState)                     //                                 Get a fresh new MerkleState
@@ -191,19 +207,13 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 // GetNext
 // Get the next hash to be added to a state at this height
 func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
-	data := m.Manager.Key(m.cid, "NextElement", element).Get()
-	if data == nil || len(data) != storage.KeyLength {
+	data, err := m.Manager.Key(m.cid, "NextElement", element).Get()
+	if err != nil || len(data) != storage.KeyLength {
 		return nil
 	}
 	hash = new(Hash)
 	copy(hash[:], data)
 	return hash
-}
-
-// GetIndex
-// Get the index of a given element
-func (m *MerkleManager) GetIndex(element []byte) (index int64) {
-	return m.Manager.GetIndex(element)
 }
 
 // AddHashString
