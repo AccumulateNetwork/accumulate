@@ -60,9 +60,9 @@ type APIDataResponse struct {
 	Sponsor types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
 	KeyPage *APIRequestKeyPage `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
 	//the following are optional available only if pending chain has not been purged
-	Signer *Signer          `json:"signer,omitempty" form:"signer" query:"signer" validate:"optional"`
-	Sig    *types.Bytes64   `json:"sig,omitempty" form:"sig" query:"sig" validate:"optional"`
-	Status *json.RawMessage `json:"status,omitempty" form:"status" query:"status" validate:"optional"`
+	Signer *Signer          `json:"signer,omitempty" form:"signer" query:"signer"`
+	Sig    *types.Bytes64   `json:"sig,omitempty" form:"sig" query:"sig"`
+	Status *json.RawMessage `json:"status,omitempty" form:"status" query:"status"`
 }
 
 // APIDataResponsePagination is APIDataResponse with pagination data
