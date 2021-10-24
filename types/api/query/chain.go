@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
 type RequestByUrl struct {
@@ -10,7 +11,7 @@ type RequestByUrl struct {
 }
 
 type ResponseByUrl struct {
-	Data types.Bytes
+	StateObject state.Object
 }
 
 func (r *RequestByUrl) MarshalBinary() ([]byte, error) {
@@ -27,7 +28,7 @@ func (r *RequestByUrl) UnmarshalBinary(data []byte) (err error) {
 }
 
 func (r *ResponseByUrl) MarshalBinary() ([]byte, error) {
-	return r.Data.MarshalBinary()
+	return r.StateObject.MarshalBinary()
 }
 
 func (r *ResponseByUrl) UnmarshalBinary(data []byte) (err error) {
@@ -37,5 +38,5 @@ func (r *ResponseByUrl) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 
-	return r.Data.UnmarshalBinary(data)
+	return r.StateObject.UnmarshalBinary(data)
 }

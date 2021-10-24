@@ -152,6 +152,20 @@ func (s *StateDB) Sync() {
 	s.sync.Wait()
 }
 
+//GetTxRange get the transaction id's in a given range
+func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, err error) {
+	s.mutex.Lock()
+	h, err := s.mm.GetRange(chainId[:], start, end)
+	s.mutex.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	for i := range h {
+		hashes = append(hashes, types.Bytes32(h[i]))
+	}
+	return hashes, nil
+}
+
 //GetTx get the transaction by transaction ID
 func (s *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxIds []byte, err error) {
 	tx, err = s.db.Key(bucketTx.AsString(), txId).Get()
@@ -456,7 +470,7 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	})
 
 	for _, chainId := range updateOrder {
-		//to enable multi-threading put "go" in front
+		s.mm.SetChainID(chainId[:])
 		s.writeChainState(group, mutex, s.mm, chainId)
 
 		//TODO: figure out how to do this with new way state is derived

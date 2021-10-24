@@ -98,11 +98,20 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 			return nil, err
 		}
 
-		// do whatever
-
 		thr := query.ResponseTxHistory{}
-		thr.Start = txh.Start
-		thr.Limit = txh.Limit
+		txids, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Limit)
+		if err != nil {
+			return nil, fmt.Errorf("error obtaining txid range %v", err)
+		}
+
+		for i := range txids {
+			qr := query.ResponseByTxId{}
+			qr.TxState, qr.TxPendingState, qr.TxSynthTxIds, err = m.db.GetTx(txids[i][:])
+			if err != nil {
+				return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+			}
+			thr.Transactions = append(thr.Transactions, qr)
+		}
 
 		ret, err = thr.MarshalBinary()
 		if err != nil {
@@ -119,15 +128,9 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid URL in query %s", chr.Url)
 		}
-		rd, err := m.queryByChainId(u.ResourceChain())
+		ret, err = m.queryByChainId(u.ResourceChain())
 		if err != nil {
 			return nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
-		}
-		res := query.ResponseByChainId{}
-		res.Data = rd //chainState.Entry
-		ret, err = res.MarshalBinary()
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal response payload for query by url %x", u.String())
 		}
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
@@ -135,15 +138,9 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 		if err != nil {
 			return nil, err
 		}
-		rd, err := m.queryByChainId(chr.ChainId[:])
+		ret, err = m.queryByChainId(chr.ChainId[:])
 		if err != nil {
 			return nil, err
-		}
-		res := query.ResponseByChainId{}
-		res.Data = rd //chainState.Entry
-		ret, err = res.MarshalBinary()
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal response payload for query by chain id %x", chr.ChainId[:])
 		}
 	default:
 		return nil, fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())
