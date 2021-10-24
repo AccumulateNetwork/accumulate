@@ -8,8 +8,7 @@ import (
 )
 
 type ResponseTxHistory struct {
-	Start int64
-	Limit int64
+	Transactions []ResponseByTxId `json:"txs"`
 }
 
 type RequestTxHistory struct {
@@ -21,11 +20,16 @@ type RequestTxHistory struct {
 func (t *ResponseTxHistory) MarshalBinary() (data []byte, err error) {
 	var buff bytes.Buffer
 	var d [8]byte
-	binary.LittleEndian.PutUint64(d[:], uint64(t.Start))
+	binary.LittleEndian.PutUint64(d[:], uint64(len(t.Transactions)))
 	buff.Write(d[:])
 
-	binary.LittleEndian.PutUint64(d[:], uint64(t.Limit))
-	buff.Write(d[:])
+	for i := range t.Transactions {
+		d, err := t.Transactions[i].MarshalBinary()
+		if err != nil {
+			return nil, err
+		}
+		buff.Write(d)
+	}
 
 	return buff.Bytes(), nil
 }
@@ -37,9 +41,21 @@ func (t *ResponseTxHistory) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 
-	t.Start = int64(binary.LittleEndian.Uint64(data[:]))
-	t.Limit = int64(binary.LittleEndian.Uint64(data[:]))
+	l := int(binary.LittleEndian.Uint64(data[:]))
+	data = data[8:]
+	if l < len(data) {
+		return fmt.Errorf("insufficient txid data for given range")
+	}
 
+	t.Transactions = make([]ResponseByTxId, l)
+	j := 0
+	for i := 0; i < l; i++ {
+		err = t.Transactions[i].UnmarshalBinary(data[j:])
+		if err != nil {
+			return err
+		}
+		j += t.Transactions[i].Size()
+	}
 	return nil
 }
 
