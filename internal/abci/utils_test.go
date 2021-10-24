@@ -5,6 +5,7 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types/api/query"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
@@ -78,7 +79,7 @@ func (n *fakeNode) NextHeight() int64 {
 	return n.height
 }
 
-func (n *fakeNode) Query(q *api.Query) *api.APIDataResponse {
+func (n *fakeNode) Query(q *query.Query) *api.APIDataResponse {
 	payload, err := q.MarshalBinary()
 	require.NoError(n.t, err)
 
