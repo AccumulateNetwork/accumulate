@@ -23,9 +23,9 @@ func TestDatabase(t *testing.T) {
 		}
 	}
 	for i := 0; i < 10000; i++ {
-		var val []byte
-		val = db.Get(GetKey([]byte(fmt.Sprintf("answer %d", i))))
-		if val == nil {
+
+		val, e := db.Get(GetKey([]byte(fmt.Sprintf("answer %d", i))))
+		if e != nil {
 			t.Fatalf("no value found for %d", i)
 		}
 

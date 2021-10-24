@@ -32,8 +32,8 @@ func GetElementState(
 	height int,
 	nextMarkIndex int64) {
 
-	elementIndex := manager.GetIndex(element[:])
-	if elementIndex == -1 {
+	elementIndex, err := manager.GetElementIndex(element[:])
+	if err != nil {
 		return nil, nil, -1, -1
 	}
 	// currentState is the state we are going to modify until it is the state we want
@@ -226,9 +226,9 @@ func (r *Receipt) String() string {
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
 // after the element, or even the element itself.
 func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
-	elementIndex := manager.GetIndex(element[:]) // Get the index of the element in the Merkle Tree; -1 if not found
-	anchorIndex := manager.GetIndex(anchor[:])   // Get the index of the anchor in the Merkle Tree; -1 if not found
-	if elementIndex == -1 || anchorIndex == -1 { // Both the element and the anchor must be in the Merkle Tree
+	elementIndex, e1 := manager.GetElementIndex(element[:]) // Get the index of the element in the Merkle Tree; -1 if not found
+	anchorIndex, e2 := manager.GetElementIndex(anchor[:])   // Get the index of the anchor in the Merkle Tree; -1 if not found
+	if e1 != nil || e2 != nil {                             // Both the element and the anchor must be in the Merkle Tree
 		return nil
 	}
 	if elementIndex > anchorIndex { // The element must be at the anchorIndex or before
