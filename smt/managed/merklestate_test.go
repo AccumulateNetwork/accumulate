@@ -29,8 +29,8 @@ func TestCopy(t *testing.T) {
 	if ms1.Equal(ms2) {
 		t.Error("ms1 should not equal ms2")
 	}
-	fmt.Println(ms1.String())
-	fmt.Println(ms2.String())
+	//fmt.Println(ms1.String())
+	//fmt.Println(ms2.String())
 }
 
 func TestMarshal(t *testing.T) {
