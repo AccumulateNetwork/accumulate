@@ -63,7 +63,7 @@ func unmarshalToken(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 		rToken.Precision = sToken.Precision
 		rToken.URL = sToken.ChainUrl
 		rToken.Symbol = sToken.Symbol
-		rToken.Meta = sToken.Meta
+		rToken.PropertiesUrl = sToken.PropertiesUrl
 		return rToken, err
 	})
 }
