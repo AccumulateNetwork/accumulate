@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/types/api/query"
@@ -67,6 +68,7 @@ func (q *Query) QueryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
 	qu.RouteId = u.Routing()
 	qu.Type = types.QueryTypeUrl
 	ru := query.RequestByUrl{}
+	ru.Url = types.String(u.String())
 	qu.Content, err = ru.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -298,6 +300,53 @@ func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err 
 		resp.Sig = &sig
 	}
 	return resp, err
+}
+
+func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*api.APIDataResponsePagination, error) {
+
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeTxHistory
+	ru := query.RequestTxHistory{}
+	ru.Start = start
+	ru.Limit = limit
+	ru.ChainId.FromBytes(u.ResourceChain())
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := q.txRelay.Query(qu.RouteId, qd)
+	if err != nil {
+		return nil, err
+	}
+	thr := query.ResponseTxHistory{}
+	err = thr.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, err
+	}
+	//res.Response.Value
+	ret := acmeApi.APIDataResponsePagination{}
+	ret.Start = start
+	ret.Limit = limit
+	ret.Total = int64(len(thr.Transactions))
+	dj, err := json.Marshal(&thr.Transactions)
+	if err != nil {
+		return nil, err
+	}
+	ret.Data = &json.RawMessage{}
+	*ret.Data = dj
+	return &ret, nil
 }
 
 // GetChainStateByUrl

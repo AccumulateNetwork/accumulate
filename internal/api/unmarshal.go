@@ -30,7 +30,13 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 		return rAPI, nil
 	}
 
-	v, err := as(rQuery.Value)
+	obj := state.Object{}
+	err := obj.UnmarshalBinary(rQuery.Value)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling state objct %v", err)
+	}
+
+	v, err := as(obj.Entry)
 	if err != nil {
 		return nil, err
 	}
@@ -40,6 +46,7 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 		return nil, err
 	}
 
+	rAPI.MDRoot = obj.MDRoot[:]
 	rAPI.Data = (*json.RawMessage)(&data)
 	return rAPI, nil
 }
@@ -114,8 +121,14 @@ func unmarshalSigSpecGroup(rQuery tm.ResponseQuery) (*api.APIDataResponse, error
 
 func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 	return unmarshalAs(rQuery, "txReference", func(b []byte) (interface{}, error) {
+		obj := state.Object{}
+		err := obj.UnmarshalBinary(b)
+		if err != nil {
+			return nil, fmt.Errorf("error unmarshaling Token state objct %v", err)
+		}
+
 		txRef := new(state.TxReference)
-		err := txRef.UnmarshalBinary(b)
+		err = txRef.UnmarshalBinary(obj.Entry)
 		txRefResp := response.TxReference{TxId: txRef.TxId}
 		return txRefResp, err
 	})
@@ -201,8 +214,14 @@ func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (r
 }
 
 func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*api.APIDataResponse, error) {
+	obj := state.Object{}
+	err := obj.UnmarshalBinary(rQuery.Value)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshaling chain state objct %v", err)
+	}
+
 	sChain := new(state.ChainHeader)
-	err := sChain.UnmarshalBinary(rQuery.Value)
+	err = sChain.UnmarshalBinary(obj.Entry)
 	if err != nil {
 		return nil, fmt.Errorf("invalid state object: %v", err)
 	}
@@ -235,7 +254,9 @@ func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*a
 
 	rAPI := new(api.APIDataResponse)
 	rAPI.Type = types.String(sChain.Type.Name())
-	msg := []byte(fmt.Sprintf("{\"entry\":\"%x\"}", rQuery.Value))
+
+	msg := []byte(fmt.Sprintf("{\"state\":\"%x\"}", obj.Entry))
+	rAPI.MDRoot = obj.MDRoot[:]
 	rAPI.Data = (*json.RawMessage)(&msg)
 	return rAPI, nil
 }

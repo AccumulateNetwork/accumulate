@@ -2,6 +2,7 @@ package query
 
 import (
 	"bytes"
+	"encoding/binary"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -15,6 +16,18 @@ type ResponseByTxId struct {
 
 type RequestByTxId struct {
 	TxId types.Bytes32
+}
+
+func (t *ResponseByTxId) Size() int {
+	var d [8]byte
+	l1 := len(t.TxState)
+	l2 := len(t.TxPendingState)
+	l3 := len(t.TxSynthTxIds)
+
+	n1 := binary.PutUvarint(d[:], uint64(l1))
+	n2 := binary.PutUvarint(d[:], uint64(l2))
+	n3 := binary.PutUvarint(d[:], uint64(l3))
+	return l1 + l2 + l3 + n1 + n2 + n3
 }
 
 func (t *ResponseByTxId) MarshalBinary() ([]byte, error) {
