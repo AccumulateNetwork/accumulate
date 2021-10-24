@@ -21,11 +21,11 @@ func (m *MerkleManager) GetRange(ChainID []byte, begin, end int64) (hashes []Has
 		return nil, fmt.Errorf("impossible range provided %d,%d", begin, end) // Return zero begin and/or end are impossible
 	}
 	if end >= m.MS.Count { // If end is past the length of MS then truncate the range to count-1
-		end = m.MS.Count - 1 // Remember that end is zero based, count is 1 based
+		end = m.MS.Count // End isn't included, so it can be equal to the Count
 	}
 	markPoint := m.MarkFreq - 1 // markPoint has the list of hashes just prior to the first mark.
 	if begin > m.MarkFreq-1 {   // If begin is past the first mark, calculate it
-		markPoint = (begin+1)&(^m.MarkMask) - 1
+		markPoint = (begin)&(^m.MarkMask) - 1
 		markPoint += m.MarkFreq
 	}
 	s := m.GetState(markPoint) // Get the state of the mark right after the begin index
@@ -49,10 +49,12 @@ func (m *MerkleManager) GetRange(ChainID []byte, begin, end int64) (hashes []Has
 			hl = append(hl, head.HashList...)
 		}
 	}
-	if len(hl) > 0 && begin != end {
-		first := (begin + 1) & m.MarkMask
-		last := first + end - begin
-		hashes = append(hashes, hl[first:last]...) // Cut out the hashes requested
+
+	if len(hl) > 0 && begin != end { // Just check if we are to return anything
+		first := (begin) & m.MarkMask // Calculate the offset to the beginning of the range
+		last := first + end - begin   // and to the end of the range
+		return hl[first:last], nil    // Return this slice.
 	}
-	return hashes, nil
+
+	return nil, fmt.Errorf("no elements in the range provided")
 }
