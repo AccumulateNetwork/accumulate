@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/stretchr/testify/require"
 )
 
 func b2i(b Hash) int64 {
@@ -26,9 +27,9 @@ func TestConversions(t *testing.T) {
 
 func TestMerkleManager_GetRange(t *testing.T) {
 
-	MarkPower := int64(2)
-	MarkFreq := int64(4)
-	NumTests := int64(37)
+	MarkPower := int64(3)
+	MarkFreq := int64(8)
+	NumTests := int64(40)
 
 	dbManager := new(database.Manager)
 	if err := dbManager.Init("memory", ""); err != nil {
@@ -41,9 +42,19 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		t.Fatal("didn't create a Merkle Manager")
 	}
 
-	MM1.SetChainID([]byte{1})
+	if err := MM1.SetChainID([]byte{1}); err != nil {
+		t.Fatalf("Error setting chain ID: %v", err)
+	}
+
 	for i := int64(0); i < NumTests; i++ {
-		MM1.AddHash(i2b(i))
+		h := i2b(i)
+		MM1.AddHash(h)
+		iCnt, err := MM1.GetElementIndex(h[:])
+		if err != nil {
+			t.Fatal("failed to get the index of a hash")
+		}
+		require.True(t, i == iCnt, "should get back what we set")
+
 	}
 	/*
 		MM1.SetChainID([]byte{2})
@@ -81,10 +92,6 @@ func TestMerkleManager_GetRange(t *testing.T) {
 				if limit > MarkFreq/2 {
 					limit = MarkFreq / 2
 				}
-				if int64(len(list)) != limit {
-					t.Fatalf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected %d",
-						begin, end, firstIndex, lastIndex, len(list), limit)
-				}
 			} else {
 				if len(list) != 0 {
 					t.Fatalf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected 0",
@@ -92,14 +99,27 @@ func TestMerkleManager_GetRange(t *testing.T) {
 				}
 			}
 
+			first := begin
+			last := end
+			if first < 0 {
+				first = 0
+			}
+			if last > MM1.MS.Count {
+				last = MM1.MS.Count
+			}
+			if first >= MM1.MS.Count || last <= first {
+				continue
+			}
+
 			for i, v := range list {
-				if begin+int64(i) != int64(b2i(v)) {
+				if first != b2i(v) {
 					t.Fatalf("wrong value. Got %x=>%d range(%d-%d)[%d] expected %d",
 						v[:4], b2i(v),
 						begin, end,
 						i,
 						begin+int64(i))
 				}
+				first++
 			}
 
 		}

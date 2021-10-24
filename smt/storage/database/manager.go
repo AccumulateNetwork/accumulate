@@ -43,13 +43,13 @@ func (m *Manager) ClearCache() {
 
 var AppIDMutex sync.Mutex // Creating new AppIDs has to be atomic
 
-func (m *Manager) getInt64(keys ...interface{}) int64 {
-	b := m.Key(keys...).Get()
-	if b == nil {
-		return 0
+func (m *Manager) getInt64(keys ...interface{}) (int64, error) {
+	b, err := m.Key(keys...).Get()
+	if err != nil {
+		return 0, err
 	}
 	v, _ := common.BytesInt64(b)
-	return v
+	return v, nil
 }
 
 // NewDBManager
@@ -115,26 +115,20 @@ func (k KeyRef) Put(value []byte) error {
 // Retrieve []byte value from the underlying database. Note that this Get will
 // first check the cache before it checks the DB.
 // Returns a nil if not found, or on an error
-func (k KeyRef) Get() []byte {
+func (k KeyRef) Get() ([]byte, error) {
 	if v, ok := k.M.TXCache[k.K]; ok {
-		return v
+		return v, nil
 	}
-	return k.M.DB.Get(k.K)
+	if v, e := k.M.DB.Get(k.K); e != nil {
+		return nil, e
+	} else {
+		return v, nil
+	}
+
 }
 
 func (k KeyRef) PutBatch(value []byte) {
 	k.M.TXCache[k.K] = value
-}
-
-// GetIndex
-// Return the int64 value tied to the element hash in the ElementIndex bucket
-func (m *Manager) GetIndex(element []byte) int64 {
-	data := m.Key("ElementIndex", element).Get() // Look for the first index of a hash that might exist
-	if data == nil {                             // in the merkle tree.  Note that nil means it does not yet exist
-		return -1 //                              in which case, return an invalid index (-1)
-	}
-	v, _ := common.BytesInt64(data) //           Convert the index to an int64
-	return v
 }
 
 // EndBatch

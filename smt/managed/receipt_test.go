@@ -83,7 +83,7 @@ func TestReceiptAll(t *testing.T) {
 	// Create a MerkleManager for the memory database
 	manager, err := NewMerkleManager(dbManager, 4)
 	if err != nil {
-		fmt.Errorf("did not create a merkle manager: %v", err)
+		t.Fatalf("did not create a merkle manager: %v", err)
 	}
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
