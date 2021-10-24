@@ -154,12 +154,23 @@ func (s *StateDB) Sync() {
 
 //GetTx get the transaction by transaction ID
 func (s *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxIds []byte, err error) {
-	tx = s.db.Key(bucketTx.AsString(), txId).Get()
+	tx, err = s.db.Key(bucketTx.AsString(), txId).Get()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	pendingTxId, e := s.db.Key(bucketMainToPending.AsString(), txId).Get()
+	if e != nil {
+		return nil, nil, nil, err
+	}
+	pendingTx, err = s.db.Key(bucketPendingTx.AsString(), pendingTxId).Get()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
-	pendingTxId := s.db.Key(bucketMainToPending.AsString(), txId).Get()
-	pendingTx = s.db.Key(bucketPendingTx.AsString(), pendingTxId).Get()
-
-	syntheticTxIds = s.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
+	syntheticTxIds, err = s.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	return tx, pendingTx, syntheticTxIds, nil
 }
@@ -214,9 +225,8 @@ func (s *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, erro
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data := s.db.Key("StateEntries", chainId).Get()
-
-	if data == nil {
+	data, e := s.db.Key("StateEntries", chainId).Get()
+	if e != nil {
 		return nil, fmt.Errorf("%w: no state defined for %X", ErrNotFound, chainId)
 	}
 

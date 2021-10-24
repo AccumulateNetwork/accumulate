@@ -65,12 +65,16 @@ func TestIndexing2(t *testing.T) {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
 		MM1.AddHash(dataHash)
-		di, _ := common.BytesInt64(MM1.Manager.Key("ElementIndex", dataHash).Get())
+		dataI, e := MM1.Manager.Key("ElementIndex", dataHash).Get()
+		if e != nil {
+			t.Fatalf("error")
+		}
+		di, _ := common.BytesInt64(dataI)
 		if di != int64(i) {
 			t.Fatalf("didn't get the right index. got %d expected %d", di, i)
 		}
-		d := MM1.Manager.Key(Chain, "Element", i).Get()
-		if !bytes.Equal(d, dataHash[:]) {
+		d, e2 := MM1.Manager.Key(Chain, "Element", i).Get()
+		if e2 != nil || !bytes.Equal(d, dataHash[:]) {
 			t.Fatalf("didn't get the data back. got %d expected %d", d, data)
 		}
 	}
