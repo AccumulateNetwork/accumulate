@@ -7,14 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/types/api/query"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
@@ -57,28 +57,98 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 	return m, nil
 }
 
-func (m *Executor) Query(q *api.Query) ([]byte, error) {
-	if q.Content != nil {
-		tx, pendingTx, synthTxIds, err := m.db.GetTx(q.Content)
-		if err != nil {
-			return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-		}
-		ret := append(common.SliceBytes(tx), common.SliceBytes(pendingTx)...)
-		ret = append(ret, common.SliceBytes(synthTxIds)...)
-		return ret, nil
-	}
+func (m *Executor) queryByChainId(chainId []byte) ([]byte, error) {
 
-	chainState, err := m.db.GetCurrentEntry(q.ChainId)
+	chainState, err := m.db.GetCurrentEntry(chainId)
 	if err != nil {
-		return nil, fmt.Errorf("failed to locate chain entry: %v", err)
+		return nil, fmt.Errorf("failed to locate chain entry for chain id %x: %v", chainId, err)
 	}
 
 	err = chainState.As(new(state.ChainHeader))
 	if err != nil {
-		return nil, fmt.Errorf("unable to extract chain header: %v", err)
+		return nil, fmt.Errorf("unable to extract chain header for chain id %x: %v", chainId, err)
 	}
 
-	return chainState.Entry, nil
+	rd, err := chainState.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("unable to re-marshal chain state object for id %x: %v", chainId, err)
+	}
+
+	return rd, nil
+}
+
+func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
+	switch q.Type {
+	case types.QueryTypeTxId:
+		txr := query.RequestByTxId{}
+		err := txr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, err
+		}
+		qr := query.ResponseByTxId{}
+		qr.TxState, qr.TxPendingState, qr.TxSynthTxIds, err = m.db.GetTx(q.Content)
+		if err != nil {
+			return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+		}
+		ret, err = qr.MarshalBinary()
+	case types.QueryTypeTxHistory:
+		txh := query.RequestTxHistory{}
+		err := txh.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, err
+		}
+
+		// do whatever
+
+		thr := query.ResponseTxHistory{}
+		thr.Start = txh.Start
+		thr.Limit = txh.Limit
+
+		ret, err = thr.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("error marshalling payload for transaction history")
+		}
+
+	case types.QueryTypeUrl:
+		chr := query.RequestByUrl{}
+		err := chr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, err
+		}
+		u, err := url.Parse(*chr.Url.AsString())
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL in query %s", chr.Url)
+		}
+		rd, err := m.queryByChainId(u.ResourceChain())
+		if err != nil {
+			return nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
+		}
+		res := query.ResponseByChainId{}
+		res.Data = rd //chainState.Entry
+		ret, err = res.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal response payload for query by url %x", u.String())
+		}
+	case types.QueryTypeChainId:
+		chr := query.RequestByChainId{}
+		err := chr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, err
+		}
+		rd, err := m.queryByChainId(chr.ChainId[:])
+		if err != nil {
+			return nil, err
+		}
+		res := query.ResponseByChainId{}
+		res.Data = rd //chainState.Entry
+		ret, err = res.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal response payload for query by chain id %x", chr.ChainId[:])
+		}
+	default:
+		return nil, fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())
+	}
+	return ret, err
 }
 
 // BeginBlock implements ./abci.Chain
