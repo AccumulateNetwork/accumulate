@@ -46,6 +46,13 @@ type APIRequestURL struct {
 	Wait bool         `json:"wait" form:"wait" query:"wait"`
 }
 
+// APIRequestURLPagination is APIRequestURL with pagination params
+type APIRequestURLPagination struct {
+	APIRequestURL
+	Start int64 `json:"start" validate:"number,gte=0"`
+	Limit int64 `json:"limit" validate:"number,gte=0"`
+}
+
 // APIDataResponse is used in "get" API method response
 type APIDataResponse struct {
 	Type    types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,sigSpec,sigSpecGroup,assignSigSpec,addCredits"`
@@ -56,4 +63,17 @@ type APIDataResponse struct {
 	Signer *Signer          `json:"signer,omitempty" form:"signer" query:"signer" validate:"optional"`
 	Sig    *types.Bytes64   `json:"sig,omitempty" form:"sig" query:"sig" validate:"optional"`
 	Status *json.RawMessage `json:"status,omitempty" form:"status" query:"status" validate:"optional"`
+}
+
+// APIDataResponsePagination is APIDataResponse with pagination data
+type APIDataResponsePagination struct {
+	APIDataResponse
+	Start int64 `json:"start"`
+	Limit int64 `json:"limit"`
+	Total int64 `json:"total"`
+}
+
+// Metrics is used in "metrics" API method response
+type MetricsResponse struct {
+	TPS int64 `json:"tps" form:"tps" query:"tps"`
 }
