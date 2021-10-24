@@ -5,6 +5,8 @@
 package mock_abci
 
 import (
+	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	reflect "reflect"
 
 	abci "github.com/AccumulateNetwork/accumulated/internal/abci"
@@ -155,6 +157,13 @@ func (m *MockState) BlockIndex() int64 {
 func (mr *MockStateMockRecorder) BlockIndex() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockIndex", reflect.TypeOf((*MockState)(nil).BlockIndex))
+}
+
+// AddStateEntry used for genesis
+func (m *MockState) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object) {
+	_ = chainId
+	_ = txHash
+	_ = object
 }
 
 // EnsureRootHash mocks base method.

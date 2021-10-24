@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/sha256"
 	"fmt"
+	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
@@ -57,19 +58,22 @@ func (q *Query) GetTx(routing uint64, txRef [32]byte) (*ctypes.ResultTx, error) 
 }
 
 func (q *Query) QueryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
-	addr := types.GetAddressFromIdentity(&url)
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
 
 	query := api.Query{}
-	query.Url = url
-	query.RouteId = addr
-	query.ChainId = types.GetChainIdFromChainPath(&url).Bytes()
+	query.Url = u.String()
+	query.RouteId = u.Routing()
+	query.ChainId = u.ResourceChain()
 
 	payload, err := query.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	return q.txRelay.Query(addr, payload)
+	return q.txRelay.Query(query.RouteId, payload)
 }
 
 func (q *Query) QueryByTxId(txId []byte) (*ctypes.ResultABCIQuery, error) {

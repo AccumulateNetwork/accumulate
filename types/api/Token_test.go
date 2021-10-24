@@ -1,14 +1,12 @@
 package api
 
 import (
-	"encoding/json"
-	"fmt"
 	"testing"
 )
 
 func TestToken(t *testing.T) {
 
-	token := NewToken("ACME", "RoadRunner/ACME", 8)
+	token := NewToken("RoadRunner/ACME", "ACME", 8, "acc://RoadRunner/properties")
 
 	data, err := token.MarshalBinary()
 	if err != nil {
@@ -22,25 +20,16 @@ func TestToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-}
-
-func TestTokenWithMetadata(t *testing.T) {
-
-	token := NewToken("ACME", "RoadRunner/ACME", 8)
-
-	metadata := json.RawMessage(fmt.Sprintf("{\"%s\":\"%s\"}", "hello", "there"))
-	token.Meta = &metadata
-
-	data, err := token.MarshalBinary()
-	if err != nil {
-		t.Fatal(err)
+	if ti2.URL != token.URL {
+		t.Fatal("URL doesn't match")
 	}
-
-	ti2 := Token{}
-
-	err = ti2.UnmarshalBinary(data)
-	if err != nil {
-		t.Fatal(err)
+	if ti2.Precision != token.Precision {
+		t.Fatal("Precision doesn't match")
 	}
-
+	if ti2.Symbol != token.Symbol {
+		t.Fatal("Symbol doesn't match")
+	}
+	if ti2.PropertiesUrl != token.PropertiesUrl {
+		t.Fatal("propertiesUrl doesn't match")
+	}
 }
