@@ -1,5 +1,7 @@
 package accumulated
 
+//go:generate go run ./internal/cmd/yaml2json -input=openrpc.yml -output=openrpc.json
+
 const unknownVersion = "version unknown"
 
 var Version = unknownVersion
