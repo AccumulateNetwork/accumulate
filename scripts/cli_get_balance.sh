@@ -29,7 +29,7 @@ fi
 
 # issue the account get command for the specified ID to the specified server
 
-bal=`cli account get $id1 -s "http://$2/v1"`
+bal=`$cli account get $id1 -s "http://$2/v1"`
 
 # return the balance information
 
