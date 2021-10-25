@@ -29,7 +29,7 @@ fi
 
 # issue the faucet command for the specified ID to the specified server
 
-Status=`cli tx get $id1 -s "http://$2/v1"`
+Status=`$cli tx get $id1 -s "http://$2/v1"`
 
 # return the status information
 

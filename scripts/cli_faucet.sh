@@ -35,7 +35,7 @@ fi
 
 # issue the faucet command for the specified ID to the specified server
 
-ID=`cli faucet $id1 -s "http://$2/v1"`
+ID=`$cli faucet $id1 -s "http://$2/v1"`
 
 # return the transaction ID 
 

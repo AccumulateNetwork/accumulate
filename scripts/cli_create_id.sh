@@ -11,7 +11,7 @@ fi
 
 # issue the account generate command to the specified server
 
-ID=`cli account generate -s "http://$1/v1"`
+ID=`$cli account generate -s "http://$1/v1"`
 
 # return the generated ID 
 
