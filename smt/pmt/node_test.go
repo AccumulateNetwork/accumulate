@@ -2,7 +2,6 @@ package pmt
 
 import (
 	"crypto/sha256"
-	"fmt"
 	"math/rand"
 	"testing"
 )
@@ -43,7 +42,7 @@ func TestBPT_Equal(t *testing.T) {
 
 	bpt1 := LoadBpt() // Get a bunch of nodes
 	bpt2 := LoadBpt() // Get a bunch of nodes
-	fmt.Printf("Max Height %d Max ID %d\n", bpt1.MaxHeight, bpt1.MaxNodeID)
+	//fmt.Printf("Max Height %d Max ID %d\n", bpt1.MaxHeight, bpt1.MaxNodeID)
 
 	unique := make(map[uint64]int64)
 
@@ -111,8 +110,8 @@ func TestBPT_Equal(t *testing.T) {
 		}
 	}
 
-	fmt.Println("unique nodes tested ", len(unique))
-	fmt.Println("equal nodes ", equalCnt, " unequal nodes ", unequalCnt)
+	//fmt.Println("unique nodes tested ", len(unique))
+	//fmt.Println("equal nodes ", equalCnt, " unequal nodes ", unequalCnt)
 }
 
 func TestNode_Marshal(t *testing.T) {
