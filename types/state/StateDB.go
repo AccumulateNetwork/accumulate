@@ -189,30 +189,36 @@ func (s *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synt
 	*val = append(*val, transactionStateInfo{synthTxObject, nil, synthTxId})
 }
 
-//AddPendingTx adds the pending tx raw data and signature of that data to tx,
-//signature needs to be a signed hash of the tx.
-func (s *StateDB) AddPendingTx(chainId *types.Bytes32, txId types.Bytes, txPending *Object, txValidated *Object) error {
-	s.logInfo("AddPendingTx", "chainId", chainId, "txid", txId.AsBytes32(), "entry", txPending.Entry, "validated", txValidated.Entry)
-	_ = chainId
+// AddTransaction queues (pending) transaction signatures and (optionally) an
+// accepted transaction for storage to their respective chains.
+func (s *StateDB) AddTransaction(chainId *types.Bytes32, txId types.Bytes, txPending, txAccepted *Object) error {
+	s.logInfo("AddTransaction", "chainId", chainId, "txid", txId.AsBytes32(), "pending", txPending.Entry, "accepted", txAccepted.Entry)
+
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
 		return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
 			types.ChainTypePendingTransaction.Name(), types.TxType(chainType).Name())
 	}
-	//append the list of pending Tx's, txId's, and validated Tx's.
-	s.mutex.Lock()
-	tsi := transactionStateInfo{txPending, chainId.Bytes(), txId}
-	s.transactions.pendingTx = append(s.transactions.pendingTx, &tsi)
-	if txValidated != nil {
-		chainType, _ := binary.Uvarint(txValidated.Entry)
+
+	if txAccepted != nil {
+		chainType, _ = binary.Uvarint(txAccepted.Entry)
 		if types.ChainType(chainType) != types.ChainTypeTransaction {
 			return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
 				types.ChainTypeTransaction.Name(), types.ChainType(chainType).Name())
 		}
-		tsi := transactionStateInfo{txValidated, chainId.Bytes(), txId}
+	}
+
+	//append the list of pending Tx's, txId's, and validated Tx's.
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	tsi := transactionStateInfo{txPending, chainId.Bytes(), txId}
+	s.transactions.pendingTx = append(s.transactions.pendingTx, &tsi)
+
+	if txAccepted != nil {
+		tsi := transactionStateInfo{txAccepted, chainId.Bytes(), txId}
 		s.transactions.validatedTx = append(s.transactions.validatedTx, &tsi)
 	}
-	s.mutex.Unlock()
 	return nil
 }
 
@@ -325,9 +331,9 @@ func (s *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 		//store the transaction
 
 		txHash := tx.TxId.AsBytes32()
-		if val, ok := s.transactions.synthTxMap[txHash]; ok {
+		if synthTxInfos, ok := s.transactions.synthTxMap[txHash]; ok {
 			var synthData []byte
-			for _, synthTxInfo := range *val {
+			for _, synthTxInfo := range *synthTxInfos {
 				synthData = append(synthData, synthTxInfo.TxId...)
 				synthTxData, err := synthTxInfo.Object.MarshalBinary()
 				if err != nil {
