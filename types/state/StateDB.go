@@ -183,7 +183,9 @@ func (s *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxId
 
 	syntheticTxIds, err = s.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
 	if err != nil {
-		return nil, nil, nil, err
+		//this is not a significant error. Synthetic transactions don't usually have other synth tx's.
+		//TODO: Fixme, this isn't an error
+		//return pendingTxId, nil, nil, err
 	}
 
 	return tx, pendingTx, syntheticTxIds, nil
