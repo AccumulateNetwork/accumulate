@@ -68,17 +68,27 @@ func (m *Executor) Query(q *api.Query) ([]byte, error) {
 		return ret, nil
 	}
 
-	chainState, err := m.db.GetCurrentEntry(q.ChainId)
+	// Look for a state entry
+	obj, err := m.db.GetCurrentEntry(q.ChainId)
+	// Or a transaction
+	if errors.Is(err, state.ErrNotFound) {
+		obj, err = m.db.GetTransaction(q.ChainId)
+	}
+	// Not a state entry or a transaction
+	if errors.Is(err, state.ErrNotFound) {
+		return nil, fmt.Errorf("%w: no chain or transaction found for %X", state.ErrNotFound, q.ChainId)
+	}
+	// Some other error
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate chain entry: %v", err)
 	}
 
-	err = chainState.As(new(state.ChainHeader))
+	err = obj.As(new(state.ChainHeader))
 	if err != nil {
 		return nil, fmt.Errorf("unable to extract chain header: %v", err)
 	}
 
-	return chainState.Entry, nil
+	return obj.Entry, nil
 }
 
 // BeginBlock implements ./abci.Chain
