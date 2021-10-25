@@ -5,7 +5,17 @@
 # generate 100 lite accounts
 # server IP:Port needed
 #
+# set cli command and see if it exists
+#
+export cli=../cmd/cli/cli
+
+if [ ! -f $cli ]; then
+	echo "cli command not found in ../cmd/cli, cd to ../cmd/cli and run go build"
+	exit 0
+fi
+
 # check for command line parameters
+#
 if [ -z $1 ]; then
 	echo "You must pass IP:Port for the server to use"
 	exit 0
