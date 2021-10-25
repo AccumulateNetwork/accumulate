@@ -55,7 +55,7 @@ type APIRequestURLPagination struct {
 
 // APIDataResponse is used in "get" API method response
 type APIDataResponse struct {
-	Type    types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,sigSpec,sigSpecGroup,assignSigSpec,addCredits"`
+	Type    types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,tx,sigSpec,sigSpecGroup,assignSigSpec,addCredits"`
 	Data    *json.RawMessage   `json:"data" form:"data" query:"data"`
 	Sponsor types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
 	KeyPage *APIRequestKeyPage `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
