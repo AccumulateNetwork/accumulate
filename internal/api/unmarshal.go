@@ -185,7 +185,16 @@ func unmarshalSynthTokenDeposit(txPayload []byte, txId types.Bytes, txSynthTxIds
 		return nil, fmt.Errorf("there should be no synthetic transaction associated with this transaction")
 	}
 
-	data, err := json.Marshal(&tx)
+	baseTx := response.TokenTx{} //api.TokenTx{}
+	baseTx.From = tx.FromUrl
+	baseTx.TxId = tx.Txid.Bytes()
+	txo := response.TokenTxOutputStatus{}
+	txo.Amount = tx.DepositAmount.Uint64()
+	btx := types.Bytes32{}
+	txo.SyntheticTxId = btx.Bytes()
+	txo.URL.String = tx.ToUrl
+	baseTx.ToAccount = append(baseTx.ToAccount, txo)
+	data, err := json.Marshal(&txo)
 	if err != nil {
 		return nil, err
 	}
