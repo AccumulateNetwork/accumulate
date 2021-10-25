@@ -233,11 +233,32 @@ func (s *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, erro
 	ret := &Object{}
 	err := ret.UnmarshalBinary(data)
 	if err != nil {
-		return nil, fmt.Errorf("entry in database is not found for %x", chainId)
+		return nil, fmt.Errorf("failed to unmarshal state for %x", chainId)
 	}
 	//if verify {
 	//todo: generate and verify data to make sure the state matches what is in the patricia trie
 	//}
+	return ret, nil
+}
+
+func (s *StateDB) GetTransaction(txid []byte) (*Object, error) {
+	s.Sync()
+
+	if s.db == nil {
+		return nil, fmt.Errorf("database has not been initialized")
+	}
+
+	data := s.db.Key(bucketTx.AsString(), txid).Get()
+	if data == nil {
+		return nil, fmt.Errorf("%w: no transaction defined for %X", ErrNotFound, txid)
+	}
+
+	ret := &Object{}
+	err := ret.UnmarshalBinary(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal state for %x", txid)
+	}
+
 	return ret, nil
 }
 
