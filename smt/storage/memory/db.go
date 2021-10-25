@@ -1,7 +1,6 @@
 package memory
 
 import (
-	"errors"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
@@ -99,7 +98,7 @@ func (m *DB) Get(key [storage.KeyLength]byte) (value []byte, err error) {
 	defer m.mutex.Unlock()
 	v, ok := m.Entries[key]
 	if !ok {
-		return nil, errors.New("key not found")
+		return nil, storage.ErrNotFound
 	}
 	return v, nil
 }

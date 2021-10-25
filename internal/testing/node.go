@@ -9,12 +9,13 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
+	"github.com/AccumulateNetwork/accumulated/internal/logging"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/rs/zerolog"
 	tmcfg "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -55,7 +56,7 @@ func NodeInitOptsForNetwork(name string) (node.InitOptions, error) {
 	}, nil
 }
 
-func NewBVCNode(dir string, cleanup func(func())) (*node.Node, *privval.FilePV, error) {
+func NewBVCNode(dir string, memDB bool, newZL func(string) zerolog.Logger, cleanup func(func())) (*node.Node, *privval.FilePV, error) {
 	cfg, err := cfg.Load(dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load config: %v", err)
@@ -64,7 +65,7 @@ func NewBVCNode(dir string, cleanup func(func())) (*node.Node, *privval.FilePV, 
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
 	sdb := new(state.StateDB)
-	err = sdb.Open(dbPath, false, true)
+	err = sdb.Open(dbPath, memDB, true)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
@@ -91,11 +92,24 @@ func NewBVCNode(dir string, cleanup func(func())) (*node.Node, *privval.FilePV, 
 		return nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
 	}
 
-	logger, err := log.NewDefaultLogger(cfg.LogFormat, cfg.LogLevel, false)
+	var zl zerolog.Logger
+	if newZL == nil {
+		w, err := logging.NewConsoleWriter(cfg.LogFormat)
+		if err != nil {
+			return nil, nil, err
+		}
+		zl = zerolog.New(w)
+	} else {
+		zl = newZL(cfg.LogFormat)
+	}
+
+	logger, err := logging.NewTendermintLogger(zl, cfg.LogLevel, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
 		os.Exit(1)
 	}
+
+	sdb.SetLogger(logger)
 
 	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr, logger)
 	if err != nil {

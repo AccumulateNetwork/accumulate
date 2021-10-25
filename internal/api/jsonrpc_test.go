@@ -31,13 +31,7 @@ var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
 var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 
 func TestLoadOnRemote(t *testing.T) {
-	if os.Getenv("CI") == "true" {
-		t.Skip("This test is not appropriate for CI")
-	}
-
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
+	t.Skip("Deprecated, use `accumulated loadtest`")
 
 	txBouncer, err := relay.NewWith(*testnet)
 	if err != nil {

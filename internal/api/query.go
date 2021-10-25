@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 
@@ -107,17 +108,22 @@ func (q *Query) queryAll(apiQuery *api.Query) (ret *ctypes.ResultABCIQuery, err 
 
 	for i := range results {
 		res := <-results[i]
-		if res.err == nil && res.ret != nil {
-			if res.ret.Response.Code == 0 {
-				ret = res.ret
-				err = res.err
-				//we found a match
-				break
-			}
+		switch {
+		case res.err != nil:
+			err = res.err
+		case res.ret == nil:
+			err = errors.New("invalid response")
+		case res.ret.Response.Code == 0:
+			ret = res.ret
+		default:
+			err = errors.New(res.ret.Response.Info)
 		}
 	}
 
-	return ret, err
+	if ret != nil {
+		return ret, nil
+	}
+	return nil, err
 }
 
 //query
