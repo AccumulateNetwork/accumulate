@@ -23,7 +23,7 @@
 					"summary": "Accumulate ADI URL",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/adiURL"
+						"$ref": "#/components/schemas/url"
 					}
 				}
 			],
@@ -45,6 +45,126 @@
 			]
 		},
 		{
+			"name": "token-account",
+			"summary": "Get Token Account info",
+			"tags": [
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "url",
+					"summary": "Accumulate Token Account URL",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/url"
+					}
+				}
+			],
+			"result": {
+				"name": "Token Account",
+				"schema": {
+					"$ref": "#/components/schemas/tokenAccount"
+				}
+			},
+			"errors": [
+				{
+					"code": -34001,
+					"message": "invalid token account url"
+				},
+				{
+					"code": -34002,
+					"message": "token account does not exist"
+				}
+			]
+		},
+		{
+			"name": "token-tx",
+			"summary": "Get Token Transaction info",
+			"tags": [
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "hash",
+					"summary": "Transaction Hash",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/hex"
+					}
+				}
+			],
+			"result": {
+				"name": "Token Transaction",
+				"schema": {
+					"$ref": "#/components/schemas/tokenTx"
+				}
+			},
+			"errors": [
+				{
+					"code": -34002,
+					"message": "invalid transaction hash"
+				},
+				{
+					"code": -34003,
+					"message": "transaction does not exist"
+				}
+			]
+		},
+		{
+			"name": "sig-spec",
+			"summary": "Get Key Page/Signature Specification info",
+			"tags": [
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "url",
+					"summary": "Accumulate Key Page URL",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/url"
+					}
+				}
+			],
+			"result": {
+				"name": "Key Page",
+				"schema": {
+					"$ref": "#/components/schemas/keyPage"
+				}
+			}
+		},
+		{
+			"name": "sig-spec-group",
+			"summary": "Get Key Book/Signature Specification Group info",
+			"tags": [
+				{
+					"name": "token"
+				}
+			],
+			"params": [
+				{
+					"name": "url",
+					"summary": "Accumulate Key Group URL",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/url"
+					}
+				}
+			],
+			"result": {
+				"name": "Key Group",
+				"schema": {
+					"$ref": "#/components/schemas/keyBook"
+				}
+			}
+		},
+		{
 			"name": "adi-create",
 			"summary": "Create ADI (Accumulate Digital Identity)",
 			"tags": [
@@ -54,29 +174,52 @@
 			],
 			"params": [
 				{
-					"name": "tx",
-					"summary": "ADI create data",
-					"required": true,
+					"name": "wait",
+					"summary": "Wait for the transaction to complete",
 					"schema": {
-						"properties": {
-							"data": {
-								"$ref": "#/components/schemas/adi"
-							},
-							"signer": {
-								"$ref": "#/components/schemas/signer"
-							},
-							"timestamp": {
-								"$ref": "#/components/schemas/timestamp"
-							}
-						}
+						"type": "boolean"
 					}
 				},
 				{
-					"name": "sig",
-					"summary": "Signature",
+					"name": "tx",
+					"summary": "Transaction",
 					"required": true,
 					"schema": {
-						"$ref": "#/components/schemas/hex"
+						"properties": {
+							"sponsor": {
+								"$ref": "#/components/schemas/url"
+							},
+							"sig": {
+								"$ref": "#/components/schemas/hex"
+							},
+							"keyPage": {
+								"$ref": "#/components/schemas/txKeyPage"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/txSigner"
+							},
+							"data": {
+								"type": "object",
+								"properties": {
+									"url": {
+										"description": "Requested ADI URL",
+										"$ref": "#/components/schemas/url"
+									},
+									"publicKey": {
+										"description": "Public key of the ADI (base64 encoded)",
+										"type": "string"
+									},
+									"keyBookName": {
+										"description": "Override the default key book name",
+										"type": "string"
+									},
+									"keyPageName": {
+										"description": "Override the default key page name",
+										"type": "string"
+									}
+								}
+							}
+						}
 					}
 				}
 			],
@@ -106,137 +249,6 @@
 			]
 		},
 		{
-			"name": "token",
-			"summary": "Get Token info",
-			"tags": [
-				{
-					"name": "token"
-				}
-			],
-			"params": [
-				{
-					"name": "url",
-					"summary": "Accumulate Token URL",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/fullURL"
-					}
-				}
-			],
-			"result": {
-				"name": "Token",
-				"schema": {
-					"$ref": "#/components/schemas/token"
-				}
-			},
-			"errors": [
-				{
-					"code": -33001,
-					"message": "invalid token url"
-				},
-				{
-					"code": -33002,
-					"message": "token does not exist"
-				}
-			]
-		},
-		{
-			"name": "token-create",
-			"summary": "Create Token",
-			"tags": [
-				{
-					"name": "token"
-				}
-			],
-			"params": [
-				{
-					"name": "tx",
-					"summary": "Token create data",
-					"required": true,
-					"schema": {
-						"properties": {
-							"data": {
-								"$ref": "#/components/schemas/token"
-							},
-							"signer": {
-								"$ref": "#/components/schemas/signer"
-							},
-							"timestamp": {
-								"$ref": "#/components/schemas/timestamp"
-							}
-						}
-					}
-				},
-				{
-					"name": "sig",
-					"summary": "Signature",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/hex"
-					}
-				}
-			],
-			"result": {
-				"name": "Token",
-				"schema": {
-					"$ref": "#/components/schemas/token"
-				}
-			},
-			"errors": [
-				{
-					"code": -33001,
-					"message": "invalid token url"
-				},
-				{
-					"code": -32801,
-					"message": "invalid signer adi"
-				},
-				{
-					"code": -32802,
-					"message": "invalid signature"
-				},
-				{
-					"code": -32803,
-					"message": "invalid timestamp"
-				}
-			]
-		},
-		{
-			"name": "token-account",
-			"summary": "Get Token Account info",
-			"tags": [
-				{
-					"name": "token"
-				}
-			],
-			"params": [
-				{
-					"name": "url",
-					"summary": "Accumulate Token Account URL",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/fullURL"
-					}
-				}
-			],
-			"result": {
-				"name": "Token Account with Balance",
-				"schema": {
-					"$ref": "#/components/schemas/tokenAccountWithBalance"
-				}
-			},
-			"errors": [
-				{
-					"code": -34001,
-					"message": "invalid token account url"
-				},
-				{
-					"code": -34002,
-					"message": "token account does not exist"
-				}
-			]
-		},
-		{
 			"name": "token-account-create",
 			"summary": "Create Token Account",
 			"tags": [
@@ -247,28 +259,40 @@
 			"params": [
 				{
 					"name": "tx",
-					"summary": "Token account create data",
+					"summary": "Transaction",
 					"required": true,
 					"schema": {
 						"properties": {
-							"data": {
-								"$ref": "#/components/schemas/tokenAccount"
+							"sponsor": {
+								"$ref": "#/components/schemas/url"
+							},
+							"sig": {
+								"$ref": "#/components/schemas/hex"
+							},
+							"keyPage": {
+								"$ref": "#/components/schemas/txKeyPage"
 							},
 							"signer": {
-								"$ref": "#/components/schemas/signer"
+								"$ref": "#/components/schemas/txSigner"
 							},
-							"timestamp": {
-								"$ref": "#/components/schemas/timestamp"
+							"data": {
+								"type": "object",
+								"properties": {
+									"url": {
+										"description": "Requested token account URL",
+										"$ref": "#/components/schemas/url"
+									},
+									"tokenUrl": {
+										"description": "Token issuer URL",
+										"$ref": "#/components/schemas/url"
+									},
+									"keyBookUrl": {
+										"description": "Override the default key book assignment",
+										"$ref": "#/components/schemas/url"
+									}
+								}
 							}
 						}
-					}
-				},
-				{
-					"name": "sig",
-					"summary": "Signature",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/hex"
 					}
 				}
 			],
@@ -302,41 +326,6 @@
 			]
 		},
 		{
-			"name": "token-tx",
-			"summary": "Get Token Transaction info",
-			"tags": [
-				{
-					"name": "token"
-				}
-			],
-			"params": [
-				{
-					"name": "hash",
-					"summary": "Transaction Hash",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/sha256"
-					}
-				}
-			],
-			"result": {
-				"name": "Token Transaction",
-				"schema": {
-					"$ref": "#/components/schemas/tokenTxWithHash"
-				}
-			},
-			"errors": [
-				{
-					"code": -34002,
-					"message": "invalid transaction hash"
-				},
-				{
-					"code": -34003,
-					"message": "transaction does not exist"
-				}
-			]
-		},
-		{
 			"name": "token-tx-create",
 			"summary": "Create Token Transaction",
 			"tags": [
@@ -347,35 +336,33 @@
 			"params": [
 				{
 					"name": "tx",
-					"summary": "Token tx create data",
+					"summary": "Transaction",
 					"required": true,
 					"schema": {
 						"properties": {
-							"data": {
-								"$ref": "#/components/schemas/tokenTx"
+							"sponsor": {
+								"$ref": "#/components/schemas/url"
+							},
+							"sig": {
+								"$ref": "#/components/schemas/hex"
+							},
+							"keyPage": {
+								"$ref": "#/components/schemas/txKeyPage"
 							},
 							"signer": {
-								"$ref": "#/components/schemas/signer"
+								"$ref": "#/components/schemas/txSigner"
 							},
-							"timestamp": {
-								"$ref": "#/components/schemas/timestamp"
+							"data": {
+								"$ref": "#/components/schemas/tokenTx"
 							}
 						}
-					}
-				},
-				{
-					"name": "sig",
-					"summary": "Signature",
-					"required": true,
-					"schema": {
-						"$ref": "#/components/schemas/hex"
 					}
 				}
 			],
 			"result": {
 				"name": "Token Tx",
 				"schema": {
-					"$ref": "#/components/schemas/tokenTxWithHash"
+					"$ref": "#/components/schemas/tokenTx"
 				}
 			},
 			"errors": [
@@ -396,33 +383,265 @@
 					"message": "invalid timestamp"
 				}
 			]
+		},
+		{
+			"name": "create-sig-spec-group",
+			"summary": "Create Key Book (previously Signature Specification Group)",
+			"params": [
+				{
+					"name": "wait",
+					"summary": "Wait for the transaction to complete",
+					"schema": {
+						"type": "boolean"
+					}
+				},
+				{
+					"name": "tx",
+					"summary": "Transaction",
+					"required": true,
+					"schema": {
+						"properties": {
+							"sponsor": {
+								"$ref": "#/components/schemas/url"
+							},
+							"sig": {
+								"$ref": "#/components/schemas/hex"
+							},
+							"keyPage": {
+								"$ref": "#/components/schemas/txKeyPage"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/txSigner"
+							},
+							"data": {
+								"type": "object",
+								"properties": {
+									"url": {
+										"description": "Requested key book URL",
+										"$ref": "#/components/schemas/url"
+									},
+									"sigSpecs": {
+										"title": "Key page IDs",
+										"description": "Chain IDs of unbound key pages to bind to the book",
+										"type": "array",
+										"items": {
+											"$ref": "#/components/schemas/hex"
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			],
+			"result": {
+				"name": "Key Book",
+				"schema": {
+					"$ref": "#/components/schemas/keyBook"
+				}
+			}
+		},
+		{
+			"name": "create-sig-spec",
+			"summary": "Create Key Page (previously Signature Specification)",
+			"params": [
+				{
+					"name": "wait",
+					"summary": "Wait for the transaction to complete",
+					"schema": {
+						"type": "boolean"
+					}
+				},
+				{
+					"name": "tx",
+					"summary": "Transaction",
+					"required": true,
+					"schema": {
+						"properties": {
+							"sponsor": {
+								"$ref": "#/components/schemas/url"
+							},
+							"sig": {
+								"$ref": "#/components/schemas/hex"
+							},
+							"keyPage": {
+								"$ref": "#/components/schemas/txKeyPage"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/txSigner"
+							},
+							"data": {
+								"type": "object",
+								"properties": {
+									"url": {
+										"description": "Requested key page URL",
+										"$ref": "#/components/schemas/url"
+									},
+									"keys": {
+										"title": "Keys",
+										"description": "Keys to add to the page",
+										"type": "array",
+										"items": {
+											"title": "Key specification",
+											"description": "A public key or public key hash",
+											"type": "object",
+											"properties": {
+												"publicKey": {
+													"title": "Public key or hash",
+													"description": "Base64 encoded public key or public key hash",
+													"type": "string"
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			],
+			"result": {
+				"name": "Key Page",
+				"schema": {
+					"$ref": "#/components/schemas/keyPage"
+				}
+			}
+		},
+		{
+			"name": "add-credits",
+			"summary": "Add credits to a lite account or key page",
+			"params": [
+				{
+					"name": "wait",
+					"summary": "Wait for the transaction to complete",
+					"schema": {
+						"type": "boolean"
+					}
+				},
+				{
+					"name": "tx",
+					"summary": "Transaction",
+					"required": true,
+					"schema": {
+						"properties": {
+							"sponsor": {
+								"$ref": "#/components/schemas/url"
+							},
+							"sig": {
+								"$ref": "#/components/schemas/hex"
+							},
+							"keyPage": {
+								"$ref": "#/components/schemas/txKeyPage"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/txSigner"
+							},
+							"data": {
+								"type": "object",
+								"properties": {
+									"recipient": {
+										"description": "Recipient of the credits",
+										"$ref": "#/components/schemas/url"
+									},
+									"amount": {
+										"description": "Amount of credits to add",
+										"type": "integer"
+									}
+								}
+							}
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "update-key-page",
+			"summary": "Update a key page's keys",
+			"params": [
+				{
+					"name": "wait",
+					"summary": "Wait for the transaction to complete",
+					"schema": {
+						"type": "boolean"
+					}
+				},
+				{
+					"name": "tx",
+					"summary": "Transaction",
+					"required": true,
+					"schema": {
+						"properties": {
+							"sponsor": {
+								"$ref": "#/components/schemas/url"
+							},
+							"sig": {
+								"$ref": "#/components/schemas/hex"
+							},
+							"keyPage": {
+								"$ref": "#/components/schemas/txKeyPage"
+							},
+							"signer": {
+								"$ref": "#/components/schemas/txSigner"
+							},
+							"data": {
+								"type": "object",
+								"properties": {
+									"operation": {
+										"description": "Operation to execute",
+										"type": "string",
+										"enum": [
+											"update",
+											"add",
+											"remove"
+										]
+									},
+									"key": {
+										"description": "Existing key, for update or remove, base64 encoded",
+										"type": "string"
+									},
+									"newKey": {
+										"description": "New key, for update or add, base64 encoded",
+										"type": "string"
+									}
+								}
+							}
+						}
+					}
+				}
+			]
 		}
 	],
 	"components": {
 		"schemas": {
-			"sha256": {
-				"type": "string",
-				"pattern": "^[0-9a-f]+$"
-			},
 			"hex": {
 				"type": "string",
 				"pattern": "^[0-9a-f]+$"
 			},
-			"adiURL": {
+			"url": {
 				"type": "string",
-				"pattern": "^[0-9a-z]+$"
+				"pattern": "^(acc://)?[\\w-]+(/[\\w-.]+)*$"
 			},
-			"chainURL": {
-				"type": "string",
-				"pattern": "^[0-9a-zA-Z._-]+$"
+			"txKeyPage": {
+				"type": "object",
+				"properties": {
+					"height": {
+						"type": "integer"
+					},
+					"index": {
+						"type": "integer"
+					}
+				}
 			},
-			"fullURL": {
-				"type": "string",
-				"pattern": "^[0-9a-zA-Z._-/]+$"
-			},
-			"timestamp": {
-				"title": "Unix timestamp",
-				"type": "integer"
+			"txSigner": {
+				"type": "object",
+				"properties": {
+					"publicKey": {
+						"$ref": "#/components/schemas/hex"
+					},
+					"nonce": {
+						"type": "integer"
+					}
+				}
 			},
 			"adi": {
 				"title": "ADI (Accumulate Digital Identity)",
@@ -433,49 +652,10 @@
 						"description": "Accumulate ADI URL",
 						"$ref": "#/components/schemas/adiURL"
 					},
-					"publicKeyHash": {
-						"title": "ADI Public Key Hash",
-						"description": "SHA-256 hash of ADI Public Key",
-						"$ref": "#/components/schemas/sha256"
-					}
-				}
-			},
-			"signer": {
-				"title": "Signer",
-				"type": "object",
-				"properties": {
-					"url": {
-						"title": "ADI URL",
-						"description": "Accumulate ADI URL",
-						"$ref": "#/components/schemas/adiURL"
-					},
 					"publicKey": {
 						"title": "ADI Public Key",
-						"description": "ADI Public Key in hex format",
+						"description": "ADI Public Key",
 						"$ref": "#/components/schemas/hex"
-					}
-				}
-			},
-			"token": {
-				"title": "Token",
-				"type": "object",
-				"properties": {
-					"url": {
-						"title": "Token URL",
-						"description": "Token URL",
-						"$ref": "#/components/schemas/fullURL"
-					},
-					"symbol": {
-						"title": "Token symbol",
-						"description": "Token ticker",
-						"type": "string"
-					},
-					"precision": {
-						"title": "Token precision",
-						"description": "All transactions will need to specify input/output amounts in integer units × 10^precision",
-						"type": "integer",
-						"maximum": 18,
-						"minimum": 0
 					}
 				}
 			},
@@ -484,36 +664,29 @@
 				"type": "object",
 				"properties": {
 					"url": {
-						"title": "Token Account URL",
+						"title": "URL",
 						"description": "Token Account URL",
-						"$ref": "#/components/schemas/fullURL"
+						"$ref": "#/components/schemas/url"
 					},
 					"tokenURL": {
 						"title": "Token URL",
-						"description": "Token URL",
+						"description": "Token Issuer URL",
 						"type": "string",
-						"$ref": "#/components/schemas/fullURL"
-					}
-				}
-			},
-			"tokenAccountWithBalance": {
-				"title": "Token Account with Balance",
-				"type": "object",
-				"properties": {
-					"url": {
-						"title": "Token Account URL",
-						"description": "Token Account URL",
-						"$ref": "#/components/schemas/fullURL"
-					},
-					"tokenURL": {
-						"title": "Token URL",
-						"description": "Token URL",
-						"type": "string",
-						"$ref": "#/components/schemas/fullURL"
+						"$ref": "#/components/schemas/url"
 					},
 					"balance": {
 						"title": "Balance",
 						"description": "Token Account balance",
+						"type": "integer"
+					},
+					"nonce": {
+						"title": "Nonce",
+						"description": "Key nonce, for lite accounts",
+						"type": "integer"
+					},
+					"creditBalance": {
+						"title": "Credit balance",
+						"description": "Credit balance, for lite accounts",
 						"type": "integer"
 					}
 				}
@@ -522,10 +695,15 @@
 				"title": "Token Tx",
 				"type": "object",
 				"properties": {
+					"hash": {
+						"title": "Hash",
+						"description": "Transaction Hash",
+						"$ref": "#/components/schemas/hex"
+					},
 					"from": {
 						"title": "Sender Token Account",
 						"description": "Token Account URL",
-						"$ref": "#/components/schemas/fullURL"
+						"$ref": "#/components/schemas/url"
 					},
 					"to": {
 						"title": "Receiver(s) Token Account(s)",
@@ -539,7 +717,7 @@
 								"url": {
 									"title": "Token Account URL",
 									"description": "Token Account URL",
-									"$ref": "#/components/schemas/fullURL"
+									"$ref": "#/components/schemas/url"
 								},
 								"amount": {
 									"title": "Amount",
@@ -556,46 +734,67 @@
 					}
 				}
 			},
-			"tokenTxWithHash": {
-				"title": "Token Tx",
+			"keyBook": {
+				"title": "Key Book",
+				"description": "Previously called Signature Specification Group",
 				"type": "object",
 				"properties": {
-					"hash": {
-						"title": "Hash",
-						"description": "Transaction Hash",
-						"$ref": "#/components/schemas/sha256"
+					"chainUrl": {
+						"title": "URL",
+						"description": "URL",
+						"$ref": "#/components/schemas/url"
 					},
-					"from": {
-						"title": "Sender Token Account",
-						"description": "Token Account URL",
-						"$ref": "#/components/schemas/fullURL"
-					},
-					"to": {
-						"title": "Receiver(s) Token Account(s)",
-						"description": "Token Account URL",
+					"sigSpecs": {
+						"title": "Key page IDs",
+						"description": "Chain IDs of pages in the book",
 						"type": "array",
 						"items": {
-							"title": "Receiver Token Account",
-							"description": "Token Account URL and amount",
+							"$ref": "#/components/schemas/hex"
+						}
+					}
+				}
+			},
+			"keyPage": {
+				"title": "Key Page",
+				"description": "Previously called Signature Specification",
+				"type": "object",
+				"properties": {
+					"chainUrl": {
+						"title": "URL",
+						"description": "URL",
+						"$ref": "#/components/schemas/url"
+					},
+					"sigSpecId": {
+						"title": "Key book ID",
+						"description": "Chain ID of the book the page belongs to",
+						"$ref": "#/components/schemas/hex"
+					},
+					"creditBalance": {
+						"title": "Credit balance",
+						"description": "Credit balance",
+						"type": "integer"
+					},
+					"keys": {
+						"title": "Keys",
+						"description": "Keys specifications",
+						"type": "array",
+						"items": {
+							"title": "Key specification",
+							"description": "A public key or public key hash",
 							"type": "object",
 							"properties": {
-								"url": {
-									"title": "Token Account URL",
-									"description": "Token Account URL",
-									"$ref": "#/components/schemas/fullURL"
+								"publicKey": {
+									"title": "Public key or hash",
+									"description": "Base64 encoded public key or public key hash",
+									"type": "string"
 								},
-								"amount": {
-									"title": "Amount",
-									"description": "Number of tokens",
+								"nonce": {
+									"title": "Nonce",
+									"description": "Key nonce",
 									"type": "integer"
 								}
 							}
 						}
-					},
-					"meta": {
-						"title": "Metadata",
-						"description": "Transaction Metadata",
-						"type": "string"
 					}
 				}
 			}
