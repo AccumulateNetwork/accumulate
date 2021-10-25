@@ -9,6 +9,9 @@
 # Type names for fields of a transaction should be suffixed with 'Params', such
 # as TokenOutputParams.
 
+# Duration is marshalled as two uvarints: seconds and nanoseconds. A duration of
+# 1 hour and 1 ns is marshalled as (3600, 1).
+
 TxResult:
   fields:
     - name: SyntheticTxs
@@ -169,3 +172,16 @@ UpdateKeyPage:
       type: bytes
     - name: NewKey
       type: bytes
+
+MetricsRequest:
+  fields:
+    - name: Metric
+      type: string
+    - name: Duration
+      type: duration
+
+MetricsResponse:
+  non-binary: true
+  fields:
+    - name: Value
+      type: any
