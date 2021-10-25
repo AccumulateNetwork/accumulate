@@ -1,7 +1,16 @@
 package cmd
 
 import (
+	"context"
+	"crypto/ed25519"
+	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/internal/api"
+	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/types"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"log"
 
 	"github.com/spf13/cobra"
 )
@@ -82,27 +91,22 @@ func PrintADI() {
 
 func GetADI(url string) {
 
-	/*
-		var res interface{}
-		var str []byte
+	var res interface{}
+	var str []byte
 
-		params := acmeapi.APIRequestURL{}
-		params.URL = types.String(url)
+	params := acmeapi.APIRequestURL{}
+	params.URL = types.String(url)
 
-		if err := Client.Request(context.Background(), "adi", params, &res); err != nil {
-			log.Fatal(err)
-		}
+	if err := Client.Request(context.Background(), "adi", params, &res); err != nil {
+		log.Fatal(err)
+	}
 
-		str, err := json.Marshal(res)
-		if err != nil {
-			log.Fatal(err)
-		}
+	str, err := json.Marshal(res)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		fmt.Println(string(str))
-	*/
-
-	fmt.Println("ADI functionality is not available on Testnet")
-
+	fmt.Println(string(str))
 }
 
 func PublicADI(url string) {
@@ -111,7 +115,29 @@ func PublicADI(url string) {
 
 }
 
-func NewADI(url string) {
+func NewADI(url string, book string, page string, pubKey []byte) {
+
+	u, err := url2.Parse(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if len(pubKey) != 32 && len(pubKey) != 0 {
+		log.Fatalf("invalid public key")
+	}
+
+	data := &protocol.IdentityCreate{}
+	data.Url = u.Authority
+	data.PublicKey = pubKey
+	data.KeyBookName = book
+	data.KeyPageName = page
+
+	var privKey ed25519.PrivateKey
+
+	if len(data.PublicKey) == 0 {
+		data.P
+	}
+	req, payload, err := api.prepareCreate(params, data)
 
 	fmt.Println("ADI functionality is not available on Testnet")
 
