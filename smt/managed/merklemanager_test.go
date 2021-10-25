@@ -1,10 +1,13 @@
 package managed
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"fmt"
 	"math"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 )
 
@@ -37,75 +40,49 @@ func TestMerkleManager_ReadChainHead(t *testing.T) {
 	}
 }
 
-func TestIndexing(t *testing.T) {
-	t.Skip("ignore")
+func TestIndexing2(t *testing.T) {
 	const testlen = 1024
-	const blocklen = 10
 
 	dbManager := new(database.Manager)
 	if err := dbManager.Init("memory", ""); err != nil {
 		t.Fatal(err)
 	}
 
+	Chain := sha256.Sum256([]byte("RedWagon/ACME_tokens"))
+	BlkIdx := Chain
+	BlkIdx[30] += 2
+
 	MM1, err := NewMerkleManager(dbManager, 2)
 	if err != nil {
 		t.Fatal("didn't create a Merkle Manager")
 	}
-	// Fill the Merkle Tree with a few hashes
-	hash := sha256.Sum256([]byte("start"))
+
+	if err := MM1.SetChainID(Chain[:]); err != nil {
+		t.Fatal(err)
+	}
+
 	for i := 0; i < testlen; i++ {
-		MM1.AddHash(hash)
-		hash = sha256.Sum256(hash[:])
+		data := []byte(fmt.Sprintf("data %d", i))
+		dataHash := sha256.Sum256(data)
+		MM1.AddHash(dataHash)
+		dataI, e := MM1.Manager.Key(Chain, "ElementIndex", dataHash).Get()
+		if e != nil {
+			t.Fatalf("error")
+		}
+		di, _ := common.BytesInt64(dataI)
+		if di != int64(i) {
+			t.Fatalf("didn't get the right index. got %d expected %d", di, i)
+		}
+		d, e2 := MM1.Manager.Key(Chain, "Element", i).Get()
+		if e2 != nil || !bytes.Equal(d, dataHash[:]) {
+			t.Fatalf("didn't get the data back. got %d expected %d", d, data)
+		}
 	}
 
-	hash = sha256.Sum256([]byte("start"))
-	for i := int64(0); i < testlen; i++ {
-		if (i+1)%blocklen == 0 {
-			bi := new(BlockIndex)
-			data := MM1.Manager.Key("BlockIndex", "", i/blocklen).Get()
-			bi.UnMarshal(data)
-			if bi.MainIndex != i {
-				t.Fatalf("the MainIndex doesn't match v %d i %d",
-					bi.MainIndex, i)
-			}
-			if bi.BlockIndex != i/blocklen {
-				t.Fatalf("the BlockIndex doesn't match v %d i/blocklen %d",
-					bi.BlockIndex, i/blocklen)
-			}
-		}
-		if v := MM1.GetIndex(hash[:]); v < 0 {
-			t.Fatalf("failed to index hash %d", i)
-		} else {
-			if v != i {
-				t.Fatalf("failed to get the right index.  i %d v %d", i, v)
-			}
-		}
-		hash = sha256.Sum256(hash[:])
-	}
-
-	MM2, err := NewMerkleManager(dbManager, 2)
-	if err != nil {
-		t.Fatal("Did not create a Merkle Manager")
-	}
-	if MM1.MS.Count != MM2.MS.Count {
-		t.Fatal("failed to properly load from a database")
-	}
-
-	hash = sha256.Sum256([]byte("start"))
-	for i := 0; i < testlen; i++ {
-		if v := MM2.GetIndex(hash[:]); v < 0 {
-			t.Fatalf("failed to index hash %d", i)
-		} else {
-			if int(v) != i {
-				t.Fatalf("failed to get the right index.  i %d v %d", i, v)
-			}
-		}
-		hash = sha256.Sum256(hash[:])
-	}
 }
 
 func TestMerkleManager(t *testing.T) {
-	t.Skip("ignore")
+
 	const testLen = 1024
 
 	dbManager := new(database.Manager)
@@ -153,8 +130,8 @@ func TestMerkleManager(t *testing.T) {
 				t.Fatal("should have a next element at Mark point - 1 at ", i)
 			}
 		} else if i&MarkMask == 0 {
-			if ms == nil {
-				t.Fatal("should have a state at Mark point at ", i)
+			if ms != nil && i != 0 {
+				t.Fatal("should not have a state at Mark point at ", i)
 			}
 			if m != nil {
 				t.Fatal("should not have a next element at Mark point at ", i)
