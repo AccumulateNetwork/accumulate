@@ -5,6 +5,14 @@
 # xfer funds between lite accounts
 # ids, amount and server IP:Port needed
 #
+# set cli command and see if it exists
+#
+export cli=../cmd/cli/cli
+
+if [ ! -f $cli ]; then
+	echo "cli command not found in ../cmd/cli, cd to ../cmd/cli and run go build"
+	exit 0
+fi
 # check for command line parameters
 #
 

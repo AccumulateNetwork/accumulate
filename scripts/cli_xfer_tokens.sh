@@ -49,7 +49,7 @@ fi
 
 # is there enough of a balance in $1 to xfer to $2?
 
-bal=`./cli_get_balance.sh $id1 $4`
+bal=`./$cli_get_balance.sh $id1 $4`
 
 # remove the "s
 
@@ -62,7 +62,7 @@ fi
 
 # issue the account get command for the specified ID to the specified server
 
-txid=`cli tx create $id1 $id2 $3 -s "http://$4/v1"`
+txid=`$cli tx create $id1 $id2 $3 -s "http://$4/v1"`
 
 # did we get a valid txid?
 
@@ -71,7 +71,7 @@ if [ -z "$txid" ]; then
 	exit 0
 fi
 
-bal=`./cli_get_balance.sh $id2 $4`
+bal=`./$cli_get_balance.sh $id2 $4`
 
 # return the balance in id2
 
