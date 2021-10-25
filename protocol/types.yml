@@ -39,45 +39,45 @@ AnonTokenAccount:
     - name: Balance
       type: bigint
     - name: TxCount
-    type: uvarint
-      - name: Nonce
-        type: uvarint
-      - name: CreditBalance
-        type: bigint
+      type: uvarint
+    - name: Nonce
+      type: uvarint
+    - name: CreditBalance
+      type: bigint
 
 SyntheticCreateChain:
   kind: tx
   fields:
-  - name: Cause
-    type: chain
-  - name: Chains
-    type: slice
-    slice:
-      type: bytes
+    - name: Cause
+      type: chain
+    - name: Chains
+      type: slice
+      slice:
+        type: bytes
 
 ChainParams:
   fields:
-  - name: Url
-    type: string
-    is-url: true
-  - name: Data
-    type: bytes
+    - name: Url
+      type: string
+      is-url: true
+    - name: Data
+      type: bytes
 
 AddCredits:
   kind: tx
   fields:
-  - name: Recipient
-    type: string
-  - name: Amount
-    type: uvarint
+    - name: Recipient
+      type: string
+    - name: Amount
+      type: uvarint
 
 SyntheticDepositCredits:
   kind: tx
   fields:
-  - name: Cause
-    type: chain
-  - name: Amount
-    type: uvarint
+    - name: Cause
+      type: chain
+    - name: Amount
+      type: uvarint
 
 KeySpec:
   fields:
