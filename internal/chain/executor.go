@@ -13,6 +13,7 @@ import (
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -71,12 +72,12 @@ func (m *Executor) Query(q *api.Query) ([]byte, error) {
 	// Look for a state entry
 	obj, err := m.db.GetCurrentEntry(q.ChainId)
 	// Or a transaction
-	if errors.Is(err, state.ErrNotFound) {
+	if errors.Is(err, storage.ErrNotFound) {
 		obj, err = m.db.GetTransaction(q.ChainId)
 	}
 	// Not a state entry or a transaction
-	if errors.Is(err, state.ErrNotFound) {
-		return nil, fmt.Errorf("%w: no chain or transaction found for %X", state.ErrNotFound, q.ChainId)
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, fmt.Errorf("%w: no chain or transaction found for %X", storage.ErrNotFound, q.ChainId)
 	}
 	// Some other error
 	if err != nil {
@@ -110,7 +111,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	txt := tx.TransactionType()
 
 	st, err := NewStateManager(m.db, tx)
-	if errors.Is(err, state.ErrNotFound) {
+	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
 		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticTokenDeposit:
 			// TX does not require a sponsor - it may create the sponsor
@@ -244,7 +245,7 @@ func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, c
 		err = fmt.Errorf("failed marshaling pending tx (%v) on error: %v", err1, err)
 		return err
 	}
-	err1 = m.db.AddPendingTx(chainId, txid, txPendingObject, nil)
+	err1 = m.db.AddTransaction(chainId, txid, txPendingObject, nil)
 	if err1 != nil {
 		err = fmt.Errorf("error adding pending tx (%v) on error %v", err1, err)
 	}

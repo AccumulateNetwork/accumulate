@@ -8,6 +8,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -39,7 +40,7 @@ func NewStateManager(db *state.StateDB, tx *transactions.GenTransaction) (*State
 		return st, nil
 	}
 
-	if errors.Is(err, state.ErrNotFound) {
+	if errors.Is(err, storage.ErrNotFound) {
 		return st, fmt.Errorf("sponsor %q %w", st.SponsorUrl, err)
 	}
 	return nil, err
