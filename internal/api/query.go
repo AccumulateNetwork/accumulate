@@ -165,7 +165,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalADI(r.Response)
+	return unmarshalChainState(r.Response) //unmarshalADI(r.Response)
 }
 
 // GetToken
@@ -176,7 +176,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalToken(r.Response)
+	return unmarshalChainState(r.Response) //unmarshalToken(r.Response)
 }
 
 // GetTokenAccount get the token balance for a given url
@@ -220,18 +220,6 @@ func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err 
 	txData := rid.TxState
 	txPendingData := rid.TxPendingState
 	txSynthTxIds := rid.TxSynthTxIds
-	//txData, txPendingRaw := common.BytesSlice(qResp.Value)
-	//if txPendingRaw == nil {
-	//	return nil, fmt.Errorf("unable to obtain data from value")
-	//}
-	//
-	//txPendingData, txSynthTxIdsRaw := common.BytesSlice(txPendingRaw)
-	//
-	//if txSynthTxIdsRaw == nil {
-	//	return nil, fmt.Errorf("unable to obtain synth txids")
-	//}
-	//
-	//txSynthTxIds, _ := common.BytesSlice(txSynthTxIdsRaw)
 
 	if len(txSynthTxIds)%32 != 0 {
 		return nil, fmt.Errorf("invalid synth txids")
