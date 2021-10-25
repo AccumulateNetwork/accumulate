@@ -15,13 +15,13 @@ type Manager struct {
 // Get a new BPTManager which keeps the BPT on disk.  If the BPT is on
 // disk, then it can be reloaded as needed.
 func NewBPTManager(dbManager *database.Manager) *Manager { // Return a new BPTManager
-	manager := new(Manager)                     //            Allocate the struct
-	manager.DBManager = dbManager               //            populate with pointer to the database manager
-	manager.Bpt = NewBPT()                      //            Allocate a new BPT
-	manager.Bpt.manager = manager               //            Allow the Bpt to call back to the manager for db access
-	manager.LoadedBB = make(map[[32]byte]*Node) //            Allocate an initial map
-	data := dbManager.Key("BPT", "Root").Get()  //            Get the BPT settings from disk
-	if data != nil {                            //            If nothing is found, well this is a fresh instance
+	manager := new(Manager)                       //            Allocate the struct
+	manager.DBManager = dbManager                 //            populate with pointer to the database manager
+	manager.Bpt = NewBPT()                        //            Allocate a new BPT
+	manager.Bpt.manager = manager                 //            Allow the Bpt to call back to the manager for db access
+	manager.LoadedBB = make(map[[32]byte]*Node)   //            Allocate an initial map
+	data, e := dbManager.Key("BPT", "Root").Get() //            Get the BPT settings from disk
+	if e == nil {                                 //            If nothing is found, well this is a fresh instance
 		manager.Bpt.UnMarshal(data)        //                 But if data is found, then unmarshal
 		manager.LoadNode(manager.Bpt.Root) //                 and load up the root data for the BPT
 	} //
@@ -44,9 +44,12 @@ func (m *Manager) LoadNode(node *Node) *Node {
 		panic("load should not be called on a node that is not a border node") // panic -- should not occur
 	}
 	if n := m.LoadedBB[node.BBKey]; n == nil { //                                 If the Byte Block isn't loaded
-		data := m.DBManager.Key("BPT", node.BBKey[:]).Get() //                      Get the Byte Block
-		m.Bpt.UnMarshalByteBlock(node, data)                //                      unpack it
-		m.LoadedBB[node.BBKey] = node                       //                      Save the root node of Byte Block
+		data, e := m.DBManager.Key("BPT", node.BBKey[:]).Get() //                      Get the Byte Block
+		if e != nil {
+			return nil
+		}
+		m.Bpt.UnMarshalByteBlock(node, data) //                      unpack it
+		m.LoadedBB[node.BBKey] = node        //                      Save the root node of Byte Block
 		return node
 	} else {
 		return n
