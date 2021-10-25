@@ -21,8 +21,6 @@ import (
 
 var blockIndexKey = sha256.Sum256([]byte("BlockIndex"))
 
-var ErrNotFound = errors.New("not found")
-
 type transactionStateInfo struct {
 	Object  *Object
 	ChainId types.Bytes
@@ -107,7 +105,7 @@ func (s *StateDB) init(debug bool) (err error) {
 	ent, err := s.GetPersistentEntry(blockIndexKey[:], false)
 	if err == nil {
 		s.blockIndex, _ = common.BytesInt64(ent.Entry)
-	} else if !errors.Is(err, ErrNotFound) {
+	} else if !errors.Is(err, storage.ErrNotFound) {
 		return err
 	}
 
@@ -231,13 +229,16 @@ func (s *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, erro
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data, e := s.db.Key("StateEntries", chainId).Get()
-	if e != nil {
-		return nil, fmt.Errorf("%w: no state defined for %X", ErrNotFound, chainId)
+	data, err := s.db.Key("StateEntries", chainId).Get()
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, fmt.Errorf("%w: no state defined for %X", storage.ErrNotFound, chainId)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get state entry %X: %v", chainId, err)
 	}
 
 	ret := &Object{}
-	err := ret.UnmarshalBinary(data)
+	err = ret.UnmarshalBinary(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal state for %x", chainId)
 	}
@@ -247,6 +248,7 @@ func (s *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, erro
 	return ret, nil
 }
 
+// GetTransaction loads the state of the given transaction.
 func (s *StateDB) GetTransaction(txid []byte) (*Object, error) {
 	s.Sync()
 
@@ -254,13 +256,16 @@ func (s *StateDB) GetTransaction(txid []byte) (*Object, error) {
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data := s.db.Key(bucketTx.AsString(), txid).Get()
-	if data == nil {
-		return nil, fmt.Errorf("%w: no transaction defined for %X", ErrNotFound, txid)
+	data, err := s.db.Key(bucketTx.AsString(), txid).Get()
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, fmt.Errorf("%w: no transaction defined for %X", storage.ErrNotFound, txid)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction %X: %v", txid, err)
 	}
 
 	ret := &Object{}
-	err := ret.UnmarshalBinary(data)
+	err = ret.UnmarshalBinary(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal state for %x", txid)
 	}
