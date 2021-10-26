@@ -402,16 +402,6 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 	}
 
 	ret.Type = "tokenAccountHistory"
-
-	//res := []*acmeapi.TokenTx{}
-	//data, _ := json.Marshal(res)
-	//raw := json.RawMessage(data)
-	//
-	//ret.Data = &raw
-	//ret.Limit = req.Limit
-	//ret.Start = req.Start
-	//ret.Total = int64(0)
-
 	return ret
 }
 
