@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
 	"strconv"
@@ -22,15 +23,24 @@ import (
 )
 
 var cmdInit = &cobra.Command{
-	Use:   "init [follower]",
+	Use:   "init",
 	Short: "Initialize node",
 	Run:   initNode,
+	Args:  cobra.NoArgs,
 }
 
 var cmdInitFollower = &cobra.Command{
 	Use:   "follower",
 	Short: "Initialize follower node",
 	Run:   initFollower,
+	Args:  cobra.NoArgs,
+}
+
+var cmdInitDevnet = &cobra.Command{
+	Use:   "devnet",
+	Short: "Initialize a DevNet",
+	Run:   initDevNet,
+	Args:  cobra.NoArgs,
 }
 
 var flagInit struct {
@@ -44,18 +54,34 @@ var flagInitFollower struct {
 	ListenIP   string
 }
 
+var flagInitDevnet struct {
+	Name          string
+	NumValidators int
+	NumFollowers  int
+	BasePort      int
+	BaseIP        string
+}
+
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitFollower)
+	cmdInit.AddCommand(cmdInitFollower, cmdInitDevnet)
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().StringSliceVarP(&flagInit.Relay, "relay-to", "r", nil, "Other networks that should be relayed to")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 	cmdInit.MarkFlagRequired("network")
+	cmdInit.MarkFlagRequired("relay-to")
 
 	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitFollower.Flags().StringVarP(&flagInitFollower.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
+	cmdInitFollower.MarkFlagRequired("network")
 	cmdInitFollower.MarkFlagRequired("listen")
+
+	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes to configure")
+	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
+	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
 }
 
 func initNode(cmd *cobra.Command, args []string) {
@@ -109,7 +135,7 @@ func initNode(cmd *cobra.Command, args []string) {
 	}))
 }
 
-func initFollower(cmd *cobra.Command, args []string) {
+func initFollower(cmd *cobra.Command, _ []string) {
 	u, err := url.Parse(flagInitFollower.ListenIP)
 	checkf(err, "invalid --listen %q", flagInitFollower.ListenIP)
 
@@ -172,11 +198,53 @@ func initFollower(cmd *cobra.Command, args []string) {
 	}))
 }
 
-func stringSliceContains(s []string, t string) bool {
-	for _, s := range s {
-		if s == t {
-			return true
+func initDevNet(cmd *cobra.Command, args []string) {
+	if cmd.Flag("network").Changed {
+		fatalf("--network is not applicable to devnet")
+	}
+	if cmd.Flag("relay-to").Changed {
+		fatalf("--relay-to is not applicable to devnet")
+	}
+
+	baseIP := net.ParseIP(flagInitDevnet.BaseIP)
+	if baseIP == nil {
+		fmt.Fprintf(os.Stderr, "Error: %q is not a valid IP address\n", flagInitDevnet.BaseIP)
+		printUsageAndExit1(cmd, args)
+	}
+	if baseIP[15] == 0 {
+		fmt.Fprintf(os.Stderr, "Error: base IP address must not end with .0\n")
+		printUsageAndExit1(cmd, args)
+	}
+
+	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
+	IPs := make([]string, count)
+	config := make([]*cfg.Config, count)
+	for i := range IPs {
+		ip := make(net.IP, len(baseIP))
+		copy(ip, baseIP)
+		ip[15] += byte(i)
+		IPs[i] = fmt.Sprintf("tcp://%v", ip)
+	}
+
+	for i := range config {
+		if i < flagInitDevnet.NumValidators {
+			config[i] = cfg.DefaultValidator()
+		} else {
+			config[i] = cfg.Default()
+		}
+		config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], flagInitDevnet.BasePort+node.TmRpcPortOffset)}
+		if flagInit.NoEmptyBlocks {
+			config[i].Consensus.CreateEmptyBlocks = false
 		}
 	}
-	return false
+
+	check(node.Init(node.InitOptions{
+		WorkDir:   flagMain.WorkDir,
+		ShardName: flagInitDevnet.Name,
+		ChainID:   flagInitDevnet.Name,
+		Port:      flagInitDevnet.BasePort,
+		Config:    config,
+		RemoteIP:  IPs,
+		ListenIP:  IPs,
+	}))
 }
