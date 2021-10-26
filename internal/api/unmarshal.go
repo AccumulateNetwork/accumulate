@@ -259,6 +259,13 @@ func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*a
 
 	case types.ChainTypeSigSpecGroup:
 		return unmarshalSigSpecGroup(rQuery)
+
+	case types.ChainTypeTransaction:
+		return unmarshalAs(rQuery, "tx", func(b []byte) (interface{}, error) {
+			r := new(state.Transaction)
+			err := r.UnmarshalBinary(b)
+			return r, err
+		})
 	}
 
 	rAPI := new(api.APIDataResponse)
