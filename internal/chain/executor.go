@@ -131,12 +131,16 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 				return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 			}
 			qr.TxPendingState, err = m.db.GetPendingTx(txids[i][:])
+			if !errors.Is(err, storage.ErrNotFound) {
+				//this is only an error if the pending states have not yet been purged or some other database error occurred
+				return nil, fmt.Errorf("%w: error in query for pending chain on txid %X", storage.ErrNotFound, txids[i][:])
+			}
 			if err != nil {
-				//this is only an error if the pending states have not yet been purged
 			}
 			qr.TxSynthTxIds, err = m.db.GetSyntheticTxIds(txids[i][:])
-			if err != nil {
-				//this is ONLY and error if the transaction spawned synth tx's.
+			if !errors.Is(err, storage.ErrNotFound) {
+				//this is only an error if the transactions produced synth tx's or some other database error occurred
+				return nil, fmt.Errorf("%w: error in query for synthetic txid txid %X", storage.ErrNotFound, txids[i][:])
 			}
 
 			thr.Transactions = append(thr.Transactions, qr)
