@@ -8,6 +8,7 @@ import (
 	. "github.com/AccumulateNetwork/accumulated/internal/chain"
 	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/stretchr/testify/require"
@@ -25,7 +26,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	require.NoError(t, db.Open("mem", true, true))
 
 	st, err := NewStateManager(db, gtx)
-	require.ErrorIs(t, err, state.ErrNotFound)
+	require.ErrorIs(t, err, storage.ErrNotFound)
 
 	err = SyntheticTokenDeposit{}.DeliverTx(st, gtx)
 	require.NoError(t, err)

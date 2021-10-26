@@ -7,14 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/types/api/query"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
@@ -57,95 +58,38 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 	return m, nil
 }
 
-func (m *Executor) queryByChainId(chainId []byte) ([]byte, error) {
-
-	chainState, err := m.db.GetCurrentEntry(chainId)
-	if err != nil {
-		return nil, fmt.Errorf("failed to locate chain entry for chain id %x: %v", chainId, err)
-	}
-
-	err = chainState.As(new(state.ChainHeader))
-	if err != nil {
-		return nil, fmt.Errorf("unable to extract chain header for chain id %x: %v", chainId, err)
-	}
-
-	rd, err := chainState.MarshalBinary()
-	if err != nil {
-		return nil, fmt.Errorf("unable to re-marshal chain state object for id %x: %v", chainId, err)
-	}
-
-	return rd, nil
-}
-
-func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
-	switch q.Type {
-	case types.QueryTypeTxId:
-		txr := query.RequestByTxId{}
-		err := txr.UnmarshalBinary(q.Content)
-		if err != nil {
-			return nil, err
-		}
-		qr := query.ResponseByTxId{}
-		qr.TxState, qr.TxPendingState, qr.TxSynthTxIds, err = m.db.GetTx(q.Content)
+func (m *Executor) Query(q *api.Query) ([]byte, error) {
+	if q.Content != nil {
+		tx, pendingTx, synthTxIds, err := m.db.GetTx(q.Content)
 		if err != nil {
 			return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 		}
-		ret, err = qr.MarshalBinary()
-	case types.QueryTypeTxHistory:
-		txh := query.RequestTxHistory{}
-		err := txh.UnmarshalBinary(q.Content)
-		if err != nil {
-			return nil, err
-		}
-
-		thr := query.ResponseTxHistory{}
-		txids, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Limit)
-		if err != nil {
-			return nil, fmt.Errorf("error obtaining txid range %v", err)
-		}
-
-		for i := range txids {
-			qr := query.ResponseByTxId{}
-			qr.TxState, qr.TxPendingState, qr.TxSynthTxIds, err = m.db.GetTx(txids[i][:])
-			if err != nil {
-				return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
-			}
-			thr.Transactions = append(thr.Transactions, qr)
-		}
-
-		ret, err = thr.MarshalBinary()
-		if err != nil {
-			return nil, fmt.Errorf("error marshalling payload for transaction history")
-		}
-
-	case types.QueryTypeUrl:
-		chr := query.RequestByUrl{}
-		err := chr.UnmarshalBinary(q.Content)
-		if err != nil {
-			return nil, err
-		}
-		u, err := url.Parse(*chr.Url.AsString())
-		if err != nil {
-			return nil, fmt.Errorf("invalid URL in query %s", chr.Url)
-		}
-		ret, err = m.queryByChainId(u.ResourceChain())
-		if err != nil {
-			return nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
-		}
-	case types.QueryTypeChainId:
-		chr := query.RequestByChainId{}
-		err := chr.UnmarshalBinary(q.Content)
-		if err != nil {
-			return nil, err
-		}
-		ret, err = m.queryByChainId(chr.ChainId[:])
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())
+		ret := append(common.SliceBytes(tx), common.SliceBytes(pendingTx)...)
+		ret = append(ret, common.SliceBytes(synthTxIds)...)
+		return ret, nil
 	}
-	return ret, err
+
+	// Look for a state entry
+	obj, err := m.db.GetCurrentEntry(q.ChainId)
+	// Or a transaction
+	if errors.Is(err, storage.ErrNotFound) {
+		obj, err = m.db.GetTransaction(q.ChainId)
+	}
+	// Not a state entry or a transaction
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, fmt.Errorf("%w: no chain or transaction found for %X", storage.ErrNotFound, q.ChainId)
+	}
+	// Some other error
+	if err != nil {
+		return nil, fmt.Errorf("failed to locate chain entry: %v", err)
+	}
+
+	err = obj.As(new(state.ChainHeader))
+	if err != nil {
+		return nil, fmt.Errorf("unable to extract chain header: %v", err)
+	}
+
+	return obj.Entry, nil
 }
 
 // BeginBlock implements ./abci.Chain
@@ -167,7 +111,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	txt := tx.TransactionType()
 
 	st, err := NewStateManager(m.db, tx)
-	if errors.Is(err, state.ErrNotFound) {
+	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
 		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticTokenDeposit:
 			// TX does not require a sponsor - it may create the sponsor
@@ -301,7 +245,7 @@ func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, c
 		err = fmt.Errorf("failed marshaling pending tx (%v) on error: %v", err1, err)
 		return err
 	}
-	err1 = m.db.AddPendingTx(chainId, txid, txPendingObject, nil)
+	err1 = m.db.AddTransaction(chainId, txid, txPendingObject, nil)
 	if err1 != nil {
 		err = fmt.Errorf("error adding pending tx (%v) on error %v", err1, err)
 	}
@@ -364,22 +308,16 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
-	// Check if the transaction was accepted
-	var txAcceptedObject *state.Object
-
-	if err == nil {
-		// If we get here, we were successful in validating.  So, we need to
-		// split the transaction in 2, the body (i.e. TxAccepted), and the
-		// validation material (i.e. TxPending).  The body of the transaction
-		// gets put on the main chain, and the validation material gets put on
-		// the pending chain which is purged after about 2 weeks
-		var txAccepted *state.Transaction
-		txAccepted, txPending = state.NewTransaction(txPending)
-		txAcceptedObject = new(state.Object)
-		txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
-		if err != nil {
-			return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
-		}
+	// If we get here, we were successful in validating.  So, we need to
+	// split the transaction in 2, the body (i.e. TxAccepted), and the
+	// validation material (i.e. TxPending).  The body of the transaction
+	// gets put on the main chain, and the validation material gets put on
+	// the pending chain which is purged after about 2 weeks
+	txAccepted, txPending := state.NewTransaction(txPending)
+	txAcceptedObject := new(state.Object)
+	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
+	if err != nil {
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	txPendingObject := new(state.Object)
@@ -387,6 +325,12 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
+	}
+
+	// Store the tx state
+	err = m.db.AddTransaction(&chainId, tx.TransactionHash(), txPendingObject, txAcceptedObject)
+	if err != nil {
+		return nil, err
 	}
 
 	// Store pending state changes
@@ -401,12 +345,6 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 			return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 		}
 		m.db.AddStateEntry((*types.Bytes32)(&id), &txHash, &state.Object{Entry: data})
-	}
-
-	// Store the tx state
-	err = m.db.AddPendingTx(&chainId, tx.TransactionHash(), txPendingObject, txAcceptedObject)
-	if err != nil {
-		return nil, err
 	}
 
 	// Process synthetic transactions generated by the validator
