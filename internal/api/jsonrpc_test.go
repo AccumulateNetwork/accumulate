@@ -30,7 +30,7 @@ var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
 var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
 var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 
-func _TestLoadOnRemote(t *testing.T) {
+func TestLoadOnRemote(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is not appropriate for CI")
 	}
@@ -106,7 +106,7 @@ func _TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func _TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcAnonToken(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test is flaky in CI")
 	}
@@ -216,7 +216,7 @@ func _TestJsonRpcAnonToken(t *testing.T) {
 
 }
 
-func _TestFaucet(t *testing.T) {
+func TestFaucet(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
 	}
@@ -328,9 +328,9 @@ func _TestFaucet(t *testing.T) {
 }
 
 func TestTransactionHistory(t *testing.T) {
-	//if runtime.GOOS == "windows" {
-	//	t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	//}
+	if runtime.GOOS == "windows" {
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	}
 
 	if testing.Short() {
 		t.Skip("Skipping test in short mode")
@@ -390,18 +390,14 @@ func TestTransactionHistory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ta := response.TokenTx{}
-	if resp.Data == nil {
-		t.Fatalf("token account not found in query after faucet transaction")
-	}
+	//ta := response.TokenTx{}
+	//if resp.Data == nil {
+	//	t.Fatalf("token account not found in query after faucet transaction")
+	//}
 
-	err = json.Unmarshal(*resp.Data, &ta)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	//if ta..Balance.String() != "1000000000" {
-	//	t.Fatalf("incorrect balance after faucet transaction")
+	//err = json.Unmarshal(*resp.Data, &ta)
+	//if err != nil {
+	//	t.Fatal(err)
 	//}
 
 	//just dump out the response as the api user would see it
