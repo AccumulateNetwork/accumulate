@@ -2,12 +2,13 @@ package api
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/types/api/query"
 
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	acmeApi "github.com/AccumulateNetwork/accumulated/types/api"
@@ -64,35 +65,51 @@ func (q *Query) QueryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
 		return nil, err
 	}
 
-	query := api.Query{}
-	query.Url = u.String()
-	query.RouteId = u.Routing()
-	query.ChainId = u.ResourceChain()
-
-	payload, err := query.MarshalBinary()
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeUrl
+	ru := query.RequestByUrl{}
+	ru.Url = types.String(u.String())
+	qu.Content, err = ru.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	return q.txRelay.Query(query.RouteId, payload)
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	return q.txRelay.Query(qu.RouteId, qd)
 }
 
-func (q *Query) QueryByTxId(txId []byte) (*ctypes.ResultABCIQuery, error) {
-	query := api.Query{}
-	query.Content = txId
-	return q.queryAll(&query)
+func (q *Query) QueryByTxId(txId []byte) (resp *ctypes.ResultABCIQuery, err error) {
+	qu := query.Query{}
+	qu.Type = types.QueryTypeTxId
+	txq := query.RequestByTxId{}
+	txq.TxId.FromBytes(txId)
+	qu.Content, err = txq.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	return q.queryAll(&qu)
 }
 
 func (q *Query) QueryByChainId(chainId []byte) (ret *ctypes.ResultABCIQuery, err error) {
-	query := api.Query{}
-	query.ChainId = chainId
-	ret, err = q.queryAll(&query)
+	qu := query.Query{}
+	qc := query.RequestByChainId{}
+	qc.ChainId.FromBytes(chainId)
+	qu.Content, err = qc.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	ret, err = q.queryAll(&qu)
 	return ret, err
 }
 
 // queryAll
 // Will search all networks for the information.  Once found, it will return the results.
-func (q *Query) queryAll(apiQuery *api.Query) (ret *ctypes.ResultABCIQuery, err error) {
+func (q *Query) queryAll(apiQuery *query.Query) (ret *ctypes.ResultABCIQuery, err error) {
 	//TODO: when the data servers become a thing, we will query that instead to get the information we need
 	//in the mean time, we will need to ping all the bvc's for the needed info.  not ideal by any means, but it works.
 	var results []chan queryData
@@ -154,7 +171,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalADI(r.Response)
+	return unmarshalChainState(r.Response)
 }
 
 // GetToken
@@ -165,7 +182,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalToken(r.Response)
+	return unmarshalChainState(r.Response)
 }
 
 // GetTokenAccount get the token balance for a given url
@@ -204,18 +221,11 @@ func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err 
 		return nil, fmt.Errorf("no data available for txid %x", txId)
 	}
 
-	txData, txPendingRaw := common.BytesSlice(qResp.Value)
-	if txPendingRaw == nil {
-		return nil, fmt.Errorf("unable to obtain data from value")
-	}
-
-	txPendingData, txSynthTxIdsRaw := common.BytesSlice(txPendingRaw)
-
-	if txSynthTxIdsRaw == nil {
-		return nil, fmt.Errorf("unable to obtain synth txids")
-	}
-
-	txSynthTxIds, _ := common.BytesSlice(txSynthTxIdsRaw)
+	rid := query.ResponseByTxId{}
+	err = rid.UnmarshalBinary(qResp.Value)
+	txData := rid.TxState
+	txPendingData := rid.TxPendingState
+	txSynthTxIds := rid.TxSynthTxIds
 
 	if len(txSynthTxIds)%32 != 0 {
 		return nil, fmt.Errorf("invalid synth txids")
@@ -284,6 +294,53 @@ func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err 
 		resp.Sig = &sig
 	}
 	return resp, err
+}
+
+func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*api.APIDataResponsePagination, error) {
+
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeTxHistory
+	ru := query.RequestTxHistory{}
+	ru.Start = start
+	ru.Limit = limit
+	ru.ChainId.FromBytes(u.ResourceChain())
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := q.txRelay.Query(qu.RouteId, qd)
+	if err != nil {
+		return nil, err
+	}
+	thr := query.ResponseTxHistory{}
+	err = thr.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, err
+	}
+	//res.Response.Value
+	ret := acmeApi.APIDataResponsePagination{}
+	ret.Start = start
+	ret.Limit = limit
+	ret.Total = int64(len(thr.Transactions))
+	dj, err := json.Marshal(&thr.Transactions)
+	if err != nil {
+		return nil, err
+	}
+	ret.Data = &json.RawMessage{}
+	*ret.Data = dj
+	return &ret, nil
 }
 
 // GetChainStateByUrl
