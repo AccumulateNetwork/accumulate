@@ -11,7 +11,7 @@ type RequestByUrl struct {
 }
 
 type ResponseByUrl struct {
-	StateObject state.Object
+	state.Object
 }
 
 func (r *RequestByUrl) MarshalBinary() ([]byte, error) {
@@ -28,7 +28,7 @@ func (r *RequestByUrl) UnmarshalBinary(data []byte) (err error) {
 }
 
 func (r *ResponseByUrl) MarshalBinary() ([]byte, error) {
-	return r.StateObject.MarshalBinary()
+	return r.Object.MarshalBinary()
 }
 
 func (r *ResponseByUrl) UnmarshalBinary(data []byte) (err error) {
@@ -38,5 +38,5 @@ func (r *ResponseByUrl) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 
-	return r.StateObject.UnmarshalBinary(data)
+	return r.Object.UnmarshalBinary(data)
 }

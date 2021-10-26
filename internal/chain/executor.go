@@ -86,10 +86,20 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 			return nil, err
 		}
 		qr := query.ResponseByTxId{}
-		qr.TxState, qr.TxPendingState, qr.TxSynthTxIds, err = m.db.GetTx(q.Content)
+		qr.TxState, err = m.db.GetTx(txr.TxId[:])
 		if err != nil {
 			return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 		}
+		qr.TxPendingState, err = m.db.GetPendingTx(txr.TxId[:])
+		if err != nil {
+			//this is only an error if the pending states have not yet been purged
+		}
+
+		qr.TxSynthTxIds, err = m.db.GetSyntheticTxIds(txr.TxId[:])
+		if err != nil {
+			//this is ONLY and error if the transaction spawned synth tx's.
+		}
+
 		ret, err = qr.MarshalBinary()
 	case types.QueryTypeTxHistory:
 		txh := query.RequestTxHistory{}
@@ -106,10 +116,19 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 
 		for i := range txids {
 			qr := query.ResponseByTxId{}
-			qr.TxState, qr.TxPendingState, qr.TxSynthTxIds, err = m.db.GetTx(txids[i][:])
+			qr.TxState, err = m.db.GetTx(txids[i][:])
 			if err != nil {
 				return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 			}
+			qr.TxPendingState, err = m.db.GetPendingTx(txids[i][:])
+			if err != nil {
+				//this is only an error if the pending states have not yet been purged
+			}
+			qr.TxSynthTxIds, err = m.db.GetSyntheticTxIds(txids[i][:])
+			if err != nil {
+				//this is ONLY and error if the transaction spawned synth tx's.
+			}
+
 			thr.Transactions = append(thr.Transactions, qr)
 		}
 
