@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated"
@@ -16,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
+	"github.com/AccumulateNetwork/accumulated/internal/logging"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -23,7 +23,6 @@ import (
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
-	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -117,12 +116,18 @@ func (p *Program) Start(s service.Service) error {
 		return fmt.Errorf("failed to initialize chain manager: %v", err)
 	}
 
-	var logger log.Logger
+	var logWriter io.Writer
 	if service.Interactive() {
-		logger, err = log.NewDefaultLogger(config.LogFormat, config.LogLevel, false)
+		logWriter, err = logging.NewConsoleWriter(config.LogFormat)
 	} else {
-		logger, err = newDefaultLogger(s, config.LogFormat, config.LogLevel, false)
+		logWriter, err = logging.NewServiceLogger(s, config.LogFormat)
 	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to initialize logger: %v", err)
+		os.Exit(1)
+	}
+
+	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), config.LogLevel, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize logger: %v", err)
 		os.Exit(1)
@@ -216,51 +221,4 @@ func (sentryHack) RoundTrip(req *http.Request) (*http.Response, error) {
 	req.Body = io.NopCloser(bytes.NewReader(b))
 	resp, err := http.DefaultTransport.RoundTrip(req)
 	return resp, err
-}
-
-type serviceLogger struct {
-	service.Logger
-	w   *zerolog.ConsoleWriter
-	buf *bytes.Buffer
-	mu  *sync.Mutex
-}
-
-func newServiceLogger(sl service.Logger, cw *zerolog.ConsoleWriter) *serviceLogger {
-	l := new(serviceLogger)
-	l.Logger = sl
-	if cw != nil {
-		l.w = cw
-		l.buf = new(bytes.Buffer)
-		l.w.Out = l.buf
-		l.mu = new(sync.Mutex)
-	}
-	return l
-}
-
-var _ zerolog.LevelWriter = (*serviceLogger)(nil)
-
-func (l *serviceLogger) Write(b []byte) (int, error) {
-	return l.WriteLevel(zerolog.NoLevel, b)
-}
-
-func (l *serviceLogger) WriteLevel(level zerolog.Level, b []byte) (int, error) {
-	// Use zerolog's console writer to format the log message
-	if l.w != nil {
-		l.mu.Lock()
-		l.buf.Reset()
-		_, _ = l.w.Write(b)
-		b = make([]byte, l.buf.Len())
-		copy(b, l.buf.Bytes())
-		l.mu.Unlock()
-	}
-
-	switch level {
-	case zerolog.PanicLevel, zerolog.FatalLevel, zerolog.ErrorLevel:
-		_ = l.Error(string(b))
-	case zerolog.WarnLevel:
-		_ = l.Warning(string(b))
-	default:
-		_ = l.Info(string(b))
-	}
-	return len(b), nil
 }
