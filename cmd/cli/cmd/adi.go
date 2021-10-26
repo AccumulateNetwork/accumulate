@@ -123,12 +123,16 @@ func PublicADI(url string) {
 // NewADI create a new ADI from a sponsored account.
 func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page string) {
 	var pubKey []byte
+	pubKey = make([]byte, 32)
 
 	u, err := url2.Parse(adiUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	if len(pubKeyHex) != 64 && len(pubKeyHex) != 0 {
+		log.Fatalf("invalid public key")
+	}
 	i, err := hex.Decode(pubKey, []byte(pubKeyHex))
 
 	if i != 64 && i != 0 {

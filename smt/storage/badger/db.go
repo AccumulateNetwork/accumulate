@@ -55,11 +55,17 @@ func (d *DB) Get(key [storage.KeyLength]byte) (value []byte, err error) {
 		})
 		return err
 	})
+
+	// If we didn't find the value, return ErrNotFound
+	if errors.Is(err, badger.ErrKeyNotFound) {
+		return nil, storage.ErrNotFound
+	}
+
 	// If anything goes wrong, return nil
 	if err != nil {
 		return nil, err
 	}
-	// If we didn't find the value, we will return a nil here.
+
 	return value, nil
 }
 

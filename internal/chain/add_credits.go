@@ -6,6 +6,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -50,7 +51,7 @@ func checkAddCredits(st *StateManager, tx *transactions.GenTransaction) (body *p
 		default:
 			return nil, nil, nil, nil, fmt.Errorf("invalid recipient: wrong chain type: want %v or %v, got %v", types.ChainTypeAnonTokenAccount, types.ChainTypeSigSpec, recv.Header().Type)
 		}
-	} else if errors.Is(err, state.ErrNotFound) {
+	} else if errors.Is(err, storage.ErrNotFound) {
 		if recvUrl.Routing() == tx.Routing {
 			// If the recipient and the sponsor have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to

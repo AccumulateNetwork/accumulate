@@ -6,6 +6,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -43,7 +44,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 		if _, err := st.LoadUrl(u); err == nil {
 			return fmt.Errorf("chain %q already exists", u.String())
-		} else if !errors.Is(err, state.ErrNotFound) {
+		} else if !errors.Is(err, storage.ErrNotFound) {
 			return fmt.Errorf("error fetching %q: %v", u.String(), err)
 		}
 
@@ -74,7 +75,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 			// Make sure the ADI actually exists
 			_, err = st.LoadUrl(u.Identity())
-			if errors.Is(err, state.ErrNotFound) {
+			if errors.Is(err, storage.ErrNotFound) {
 				return fmt.Errorf("missing identity for %s", u.String())
 			} else if err != nil {
 				return fmt.Errorf("error fetching %q: %v", u.String(), err)
