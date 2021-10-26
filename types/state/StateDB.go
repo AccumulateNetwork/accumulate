@@ -167,28 +167,41 @@ func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (ha
 }
 
 //GetTx get the transaction by transaction ID
-func (s *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxIds []byte, err error) {
+func (s *StateDB) GetTx(txId []byte) (tx []byte, err error) {
 	tx, err = s.db.Key(bucketTx.AsString(), txId).Get()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
+
+	return tx, nil
+}
+
+//GetPendingTx get the pending transactions by primary transaction ID
+func (s *StateDB) GetPendingTx(txId []byte) (pendingTx []byte, err error) {
+
 	pendingTxId, e := s.db.Key(bucketMainToPending.AsString(), txId).Get()
 	if e != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	pendingTx, err = s.db.Key(bucketPendingTx.AsString(), pendingTxId).Get()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
+
+	return pendingTx, nil
+}
+
+// GetSyntheticTxIds get the transaction id list by the transaction ID that spawned the synthetic transactions
+func (s *StateDB) GetSyntheticTxIds(txId []byte) (syntheticTxIds []byte, err error) {
 
 	syntheticTxIds, err = s.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
 	if err != nil {
 		//this is not a significant error. Synthetic transactions don't usually have other synth tx's.
 		//TODO: Fixme, this isn't an error
-		//return pendingTxId, nil, nil, err
+		return nil, err
 	}
 
-	return tx, pendingTx, syntheticTxIds, nil
+	return syntheticTxIds, nil
 }
 
 //AddSynthTx add the synthetic transaction which is mapped to the parent transaction
