@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
@@ -71,6 +72,34 @@ func stringUnmarshalBinary(b []byte) (string, error) {
 		return "", ErrNotEnoughData
 	}
 	return string(b[:l]), nil
+}
+
+func splitDuration(d time.Duration) (sec, ns uint64) {
+	sec = uint64(d.Seconds())
+	ns = uint64((d - d.Round(time.Second)).Nanoseconds())
+	return sec, ns
+}
+
+func durationBinarySize(d time.Duration) int {
+	sec, ns := splitDuration(d)
+	return uvarintBinarySize(sec) + uvarintBinarySize(ns)
+}
+
+func durationMarshalBinary(d time.Duration) []byte {
+	sec, ns := splitDuration(d)
+	return append(uvarintMarshalBinary(sec), uvarintMarshalBinary(ns)...)
+}
+
+func durationUnmarshalBinary(b []byte) (time.Duration, error) {
+	sec, err := uvarintUnmarshalBinary(b)
+	if err != nil {
+		return 0, fmt.Errorf("error decoding seconds: %w", err)
+	}
+	ns, err := uvarintUnmarshalBinary(b)
+	if err != nil {
+		return 0, fmt.Errorf("error decoding nanoseconds: %w", err)
+	}
+	return time.Duration(sec)*time.Second + time.Duration(ns), nil
 }
 
 func bigintBinarySize(v *big.Int) int {
