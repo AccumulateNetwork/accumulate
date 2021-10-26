@@ -17,12 +17,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
-      - name: Go mod tidy
-        run: go mod tidy
-
       - name: Verify go.mod is tidy
         run: |
+          go mod tidy
           if ! git diff --quiet go.mod go.sum ; then
             echo -e "\033[1;31mGo mod files are not tidy. Please run \`go mod tidy\`.\033[0m"
+            false
+          fi
+
+      - name: Verify generated types are up to date
+        run: |
+          go generate ./protocol
+          if ! git diff --quiet protocol ; then
+            echo -e "\033[1;31mGenerated types are not up to date. Please run \`go generate ./protocol\`.\033[0m"
             false
           fi

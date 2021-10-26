@@ -12,18 +12,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/stretchr/testify/require"
-
-	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
-
 	. "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
+	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/stretchr/testify/require"
 )
 
 var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
@@ -378,4 +376,25 @@ func TestJsonRpcAdi(t *testing.T) {
 
 	t.Fatal(ret)
 
+}
+
+func TestMetrics(t *testing.T) {
+	if os.Getenv("CI") == "true" {
+		t.Skip("This test is flaky in CI")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+	japi := NewTest(t, query)
+
+	req, err := json.Marshal(protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
+	require.NoError(t, err)
+
+	resp := japi.Metrics(context.Background(), req)
+	require.IsType(t, api.APIDataResponse{}, resp)
+	dr := resp.(api.APIDataResponse)
+	mresp := new(protocol.MetricsResponse)
+	require.NoError(t, json.Unmarshal(*dr.Data, mresp))
+	t.Log(mresp.Value)
 }

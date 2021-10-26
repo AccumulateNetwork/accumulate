@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"log"
 	"net/http"
 	"net/url"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
+	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -23,6 +23,9 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/gorilla/mux"
+	promapi "github.com/prometheus/client_golang/api"
+	prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/common/model"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/ybbus/jsonrpc/v2"
 )
@@ -75,7 +78,7 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"token-tx-create":       api.createTokenTx,
 
 		// metrics
-		"metrics": api.metrics,
+		"metrics": api.Metrics,
 
 		// faucet
 		"faucet": api.faucet,
@@ -243,20 +246,24 @@ func (api *API) addCredits(_ context.Context, params json.RawMessage) interface{
 	return ret
 }
 
-func (api *API) prepareGet(params json.RawMessage) (*acmeapi.APIRequestURL, error) {
-	var err error
-	req := &acmeapi.APIRequestURL{}
-
-	if err = json.Unmarshal(params, &req); err != nil {
-		return nil, err
+func (api *API) unmarshalRequest(params json.RawMessage, data interface{}) error {
+	err := json.Unmarshal(params, data)
+	if err != nil {
+		return err
 	}
 
 	// validate URL
-	if err = api.validate.Struct(req); err != nil {
-		return nil, err
+	err = api.validate.Struct(data)
+	if err != nil {
+		return err
 	}
 
-	return req, nil
+	return nil
+}
+
+func (api *API) prepareGet(params json.RawMessage) (*acmeapi.APIRequestURL, error) {
+	req := &acmeapi.APIRequestURL{}
+	return req, api.unmarshalRequest(params, req)
 }
 
 func (api *API) get(params json.RawMessage, expect ...types.ChainType) interface{} {
@@ -596,11 +603,43 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	return &ret
 }
 
-// metrics returns metrics for explorer (tps, etc.)
-func (api *API) metrics(_ context.Context, params json.RawMessage) interface{} {
+// Metrics returns Metrics for explorer (tps, etc.)
+func (api *API) Metrics(_ context.Context, params json.RawMessage) interface{} {
+	req := new(protocol.MetricsRequest)
+	err := api.unmarshalRequest(params, req)
+	if err != nil {
+		return NewValidatorError(err)
+	}
 
-	res := &acmeapi.MetricsResponse{}
-	res.TPS = 1
+	c, err := promapi.NewClient(promapi.Config{
+		// TODO Change this to an AWS Prometheus instance
+		Address: "http://18.119.26.7:9090",
+	})
+	if err != nil {
+		return internalError(err)
+	}
+	papi := prometheus.NewAPI(c)
+
+	if req.Duration == 0 {
+		req.Duration = time.Hour
+	}
+
+	res := new(protocol.MetricsResponse)
+	switch req.Metric {
+	case "tps":
+		query := fmt.Sprintf(metricTPS, req.Duration)
+		v, _, err := papi.Query(context.Background(), query, time.Now())
+		if err != nil {
+			return internalError(err)
+		}
+		vec, ok := v.(model.Vector)
+		if !ok {
+			return internalError(errors.New("TPS is not a vector"))
+		}
+		res.Value = vec[0].Value / model.SampleValue(req.Duration.Seconds())
+	default:
+		return NewValidatorError(fmt.Errorf("%q is not a valid metric", req.Metric))
+	}
 
 	ret := acmeapi.APIDataResponse{}
 	ret.Type = "metrics"
