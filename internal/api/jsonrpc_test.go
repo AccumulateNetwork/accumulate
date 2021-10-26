@@ -377,23 +377,19 @@ func TestTransactionHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Println(d2.Data)
+	//fmt.Println(d2.Data)
+	output, err := json.Marshal(d2.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("%s\n", string(output))
 	resp, err := query.GetTransactionHistory(*req.URL.AsString(), 0, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	//ta := response.TokenTx{}
-	//if resp.Data == nil {
-	//	t.Fatalf("token account not found in query after faucet transaction")
-	//}
-
-	//err = json.Unmarshal(*resp.Data, &ta)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
 
 	//just dump out the response as the api user would see it
-	output, err := json.Marshal(resp)
+	output, err = json.Marshal(resp.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
