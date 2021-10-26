@@ -107,9 +107,9 @@ methods:
         schema:
           properties:
             sponsor: { $ref: '#/components/schemas/url' }
-            sig:     { $ref: '#/components/schemas/hex' }
+            sig: { $ref: '#/components/schemas/hex' }
             keyPage: { $ref: '#/components/schemas/txKeyPage' }
-            signer:  { $ref: '#/components/schemas/txSigner' }
+            signer: { $ref: '#/components/schemas/txSigner' }
             data:
               type: object
               properties:
@@ -149,9 +149,9 @@ methods:
         schema:
           properties:
             sponsor: { $ref: '#/components/schemas/url' }
-            sig:     { $ref: '#/components/schemas/hex' }
+            sig: { $ref: '#/components/schemas/hex' }
             keyPage: { $ref: '#/components/schemas/txKeyPage' }
-            signer:  { $ref: '#/components/schemas/txSigner' }
+            signer: { $ref: '#/components/schemas/txSigner' }
             data:
               type: object
               properties:
@@ -190,9 +190,9 @@ methods:
         schema:
           properties:
             sponsor: { $ref: '#/components/schemas/url' }
-            sig:     { $ref: '#/components/schemas/hex' }
+            sig: { $ref: '#/components/schemas/hex' }
             keyPage: { $ref: '#/components/schemas/txKeyPage' }
-            signer:  { $ref: '#/components/schemas/txSigner' }
+            signer: { $ref: '#/components/schemas/txSigner' }
             data:
               $ref: '#/components/schemas/tokenTx'
     result:
@@ -222,9 +222,9 @@ methods:
         schema:
           properties:
             sponsor: { $ref: '#/components/schemas/url' }
-            sig:     { $ref: '#/components/schemas/hex' }
+            sig: { $ref: '#/components/schemas/hex' }
             keyPage: { $ref: '#/components/schemas/txKeyPage' }
-            signer:  { $ref: '#/components/schemas/txSigner' }
+            signer: { $ref: '#/components/schemas/txSigner' }
             data:
               type: object
               properties:
@@ -254,9 +254,9 @@ methods:
         schema:
           properties:
             sponsor: { $ref: '#/components/schemas/url' }
-            sig:     { $ref: '#/components/schemas/hex' }
+            sig: { $ref: '#/components/schemas/hex' }
             keyPage: { $ref: '#/components/schemas/txKeyPage' }
-            signer:  { $ref: '#/components/schemas/txSigner' }
+            signer: { $ref: '#/components/schemas/txSigner' }
             data:
               type: object
               properties:
@@ -293,9 +293,9 @@ methods:
         schema:
           properties:
             sponsor: { $ref: '#/components/schemas/url' }
-            sig:     { $ref: '#/components/schemas/hex' }
+            sig: { $ref: '#/components/schemas/hex' }
             keyPage: { $ref: '#/components/schemas/txKeyPage' }
-            signer:  { $ref: '#/components/schemas/txSigner' }
+            signer: { $ref: '#/components/schemas/txSigner' }
             data:
               type: object
               properties:
@@ -318,16 +318,16 @@ methods:
         schema:
           properties:
             sponsor: { $ref: '#/components/schemas/url' }
-            sig:     { $ref: '#/components/schemas/hex' }
+            sig: { $ref: '#/components/schemas/hex' }
             keyPage: { $ref: '#/components/schemas/txKeyPage' }
-            signer:  { $ref: '#/components/schemas/txSigner' }
+            signer: { $ref: '#/components/schemas/txSigner' }
             data:
               type: object
               properties:
                 operation:
                   description: Operation to execute
                   type: string
-                  enum: [update, add, remove]
+                  enum: [ update, add, remove ]
                 key:
                   description: Existing key, for update or remove, base64 encoded
                   type: string

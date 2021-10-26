@@ -396,18 +396,12 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 	}
 
 	// Tendermint integration here
-	ret := acmeapi.APIDataResponsePagination{}
+	ret, err := api.query.GetTransactionHistory(*req.URL.AsString(), req.Start, req.Limit)
+	if err != nil {
+		return NewValidatorError(err)
+	}
+
 	ret.Type = "tokenAccountHistory"
-
-	res := []*acmeapi.TokenTx{}
-	data, _ := json.Marshal(res)
-	raw := json.RawMessage(data)
-
-	ret.Data = &raw
-	ret.Limit = req.Limit
-	ret.Start = req.Start
-	ret.Total = int64(0)
-
 	return ret
 }
 
