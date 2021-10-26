@@ -23,7 +23,8 @@ require (
 	github.com/kardianos/service v1.2.0
 	github.com/mitchellh/mapstructure v1.4.2
 	github.com/pelletier/go-toml v1.9.4
-	github.com/prometheus/common v0.30.0 // indirect
+	github.com/prometheus/client_golang v1.11.0
+	github.com/prometheus/common v0.30.0
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/rs/zerolog v1.24.0
 	github.com/spf13/cast v1.4.1 // indirect
