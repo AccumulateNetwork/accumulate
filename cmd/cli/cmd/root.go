@@ -68,6 +68,10 @@ func initDB() *bolt.DB {
 		if err != nil {
 			return fmt.Errorf("DB: %s", err)
 		}
+		_, err = tx.CreateBucket([]byte("adi"))
+		if err != nil {
+			return fmt.Errorf("DB: %s", err)
+		}
 		return nil
 	})
 

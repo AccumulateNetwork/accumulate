@@ -247,6 +247,10 @@ func (s *Bytes32) ToString() String {
 	return String(hex.EncodeToString(s[:]))
 }
 
+func (s *Bytes32) AsByteArray() [32]byte {
+	return *s
+}
+
 // Bytes64 is a fixed array of 32 bytes
 type Bytes64 [64]byte
 
