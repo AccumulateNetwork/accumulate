@@ -13,11 +13,11 @@ package abci
 
 import (
 	"github.com/AccumulateNetwork/accumulated/types"
+	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 )
 
@@ -35,7 +35,7 @@ type BeginBlockRequest struct {
 type EndBlockRequest struct{}
 
 type Chain interface {
-	Query(*api.Query) ([]byte, error)
+	Query(*apiQuery.Query) ([]byte, error)
 
 	BeginBlock(BeginBlockRequest)
 	CheckTx(*transactions.GenTransaction) error

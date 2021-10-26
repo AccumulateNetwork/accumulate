@@ -150,27 +150,56 @@ func (s *StateDB) Sync() {
 	s.sync.Wait()
 }
 
+//GetTxRange get the transaction id's in a given range
+func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, err error) {
+	s.mutex.Lock()
+	h, err := s.mm.GetRange(chainId[:], start, end)
+	s.mutex.Unlock()
+	if err != nil {
+		return nil, err
+	}
+	for i := range h {
+		hashes = append(hashes, types.Bytes32(h[i]))
+	}
+	return hashes, nil
+}
+
 //GetTx get the transaction by transaction ID
-func (s *StateDB) GetTx(txId []byte) (tx []byte, pendingTx []byte, syntheticTxIds []byte, err error) {
+func (s *StateDB) GetTx(txId []byte) (tx []byte, err error) {
 	tx, err = s.db.Key(bucketTx.AsString(), txId).Get()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
+
+	return tx, nil
+}
+
+//GetPendingTx get the pending transactions by primary transaction ID
+func (s *StateDB) GetPendingTx(txId []byte) (pendingTx []byte, err error) {
+
 	pendingTxId, e := s.db.Key(bucketMainToPending.AsString(), txId).Get()
 	if e != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 	pendingTx, err = s.db.Key(bucketPendingTx.AsString(), pendingTxId).Get()
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
+
+	return pendingTx, nil
+}
+
+// GetSyntheticTxIds get the transaction id list by the transaction ID that spawned the synthetic transactions
+func (s *StateDB) GetSyntheticTxIds(txId []byte) (syntheticTxIds []byte, err error) {
 
 	syntheticTxIds, err = s.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
 	if err != nil {
-		return nil, nil, nil, err
+		//this is not a significant error. Synthetic transactions don't usually have other synth tx's.
+		//TODO: Fixme, this isn't an error
+		return nil, err
 	}
 
-	return tx, pendingTx, syntheticTxIds, nil
+	return syntheticTxIds, nil
 }
 
 //AddSynthTx add the synthetic transaction which is mapped to the parent transaction
@@ -488,7 +517,7 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	})
 
 	for _, chainId := range updateOrder {
-		//to enable multi-threading put "go" in front
+		s.mm.SetChainID(chainId[:])
 		s.writeChainState(group, mutex, s.mm, chainId)
 
 		//TODO: figure out how to do this with new way state is derived
