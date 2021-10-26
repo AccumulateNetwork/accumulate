@@ -58,7 +58,8 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 	return m, nil
 }
 
-func (m *Executor) queryByChainId(chainId []byte) ([]byte, error) {
+func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, error) {
+	qr := query.ResponseByChainId{}
 
 	obj, err := m.db.GetCurrentEntry(chainId)
 	// Or a transaction
@@ -79,12 +80,30 @@ func (m *Executor) queryByChainId(chainId []byte) ([]byte, error) {
 		return nil, fmt.Errorf("unable to extract chain header for chain id %x: %v", chainId, err)
 	}
 
-	rd, err := obj.MarshalBinary()
+	qr.Object = *obj
+	return &qr, nil
+}
+
+func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
+	var err error
+
+	qr := query.ResponseByTxId{}
+	qr.TxState, err = m.db.GetTx(txid)
 	if err != nil {
-		return nil, fmt.Errorf("unable to re-marshal chain state object for id %x: %v", chainId, err)
+		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+	}
+	qr.TxPendingState, err = m.db.GetPendingTx(txid)
+	if !errors.Is(err, storage.ErrNotFound) && err != nil {
+		//this is only an error if the pending states have not yet been purged or some other database error occurred
+		return nil, fmt.Errorf("%w: error in query for pending chain on txid %X", storage.ErrNotFound, txid)
 	}
 
-	return rd, nil
+	qr.TxSynthTxIds, err = m.db.GetSyntheticTxIds(txid)
+	if !errors.Is(err, storage.ErrNotFound) && err != nil {
+		//this is only an error if the transactions produced synth tx's or some other database error occurred
+		return nil, fmt.Errorf("%w: error in query for synthetic txid txid %X", storage.ErrNotFound, txid)
+	}
+	return &qr, nil
 }
 
 func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
@@ -95,22 +114,14 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 		if err != nil {
 			return nil, err
 		}
-		qr := query.ResponseByTxId{}
-		qr.TxState, err = m.db.GetTx(txr.TxId[:])
+		qr, err := m.queryByTxId(txr.TxId[:])
 		if err != nil {
-			return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+			return nil, err
 		}
-		qr.TxPendingState, err = m.db.GetPendingTx(txr.TxId[:])
-		if err != nil {
-			//this is only an error if the pending states have not yet been purged
-		}
-
-		qr.TxSynthTxIds, err = m.db.GetSyntheticTxIds(txr.TxId[:])
-		if err != nil {
-			//this is ONLY and error if the transaction spawned synth tx's.
-		}
-
 		ret, err = qr.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("%v, on Chain %x", err, txr.TxId[:])
+		}
 	case types.QueryTypeTxHistory:
 		txh := query.RequestTxHistory{}
 		err := txh.UnmarshalBinary(q.Content)
@@ -123,34 +134,17 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("error obtaining txid range %v", err)
 		}
-
 		for i := range txids {
-			qr := query.ResponseByTxId{}
-			qr.TxState, err = m.db.GetTx(txids[i][:])
+			qr, err := m.queryByTxId(txids[i][:])
 			if err != nil {
-				return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+				return nil, err
 			}
-			qr.TxPendingState, err = m.db.GetPendingTx(txids[i][:])
-			if !errors.Is(err, storage.ErrNotFound) {
-				//this is only an error if the pending states have not yet been purged or some other database error occurred
-				return nil, fmt.Errorf("%w: error in query for pending chain on txid %X", storage.ErrNotFound, txids[i][:])
-			}
-			if err != nil {
-			}
-			qr.TxSynthTxIds, err = m.db.GetSyntheticTxIds(txids[i][:])
-			if !errors.Is(err, storage.ErrNotFound) {
-				//this is only an error if the transactions produced synth tx's or some other database error occurred
-				return nil, fmt.Errorf("%w: error in query for synthetic txid txid %X", storage.ErrNotFound, txids[i][:])
-			}
-
-			thr.Transactions = append(thr.Transactions, qr)
+			thr.Transactions = append(thr.Transactions, *qr)
 		}
-
 		ret, err = thr.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("error marshalling payload for transaction history")
 		}
-
 	case types.QueryTypeUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
@@ -161,19 +155,27 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid URL in query %s", chr.Url)
 		}
-		ret, err = m.queryByChainId(u.ResourceChain())
+		obj, err := m.queryByChainId(u.ResourceChain())
+		if err != nil {
+			return nil, err
+		}
+		ret, err = obj.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
 		}
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
-		err := chr.UnmarshalBinary(q.Content)
+		err := chr.UnmarshalBinary(chr.ChainId[:])
 		if err != nil {
 			return nil, err
 		}
-		ret, err = m.queryByChainId(chr.ChainId[:])
+		obj, err := m.queryByChainId(chr.ChainId[:])
 		if err != nil {
 			return nil, err
+		}
+		ret, err = obj.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("%v, on Chain %x", err, chr.ChainId)
 		}
 	default:
 		return nil, fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())
