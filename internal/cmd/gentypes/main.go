@@ -105,45 +105,24 @@ func resolveType(field *Field, forNew bool) string {
 	return typ
 }
 
+func jsonType(field *Field) string {
+	switch field.Type {
+	case "bytes", "chain":
+		return "string"
+	case "chainSet":
+		return "[]string"
+	case "slice":
+		jt := jsonType(field.Slice)
+		if jt != "" {
+			return "[]" + jt
+		}
+	}
+	return ""
+}
+
 func fieldError(op, name string, args ...string) string {
 	args = append(args, "err")
 	return fmt.Sprintf("fmt.Errorf(\"error %s %s: %%w\", %s)", op, name, strings.Join(args, ","))
-}
-
-func marshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) {
-	var expr string
-	var canErr bool
-	switch field.Type {
-	case "bytes", "string", "chainSet", "uvarint", "duration":
-		expr, canErr = field.Type+"MarshalBinary(%s)", false
-	case "bigint", "chain":
-		expr, canErr = field.Type+"MarshalBinary(&%s)", false
-	case "slice":
-		expr, canErr = "uvarintMarshalBinary(uint64(len(%s)))", false
-	default:
-		if field.MarshalAs != "self" {
-			panic(fmt.Errorf("cannot determine how to marshal %s", resolveType(field, false)))
-		}
-		expr, canErr = "%s.MarshalBinary()", true
-	}
-
-	expr = fmt.Sprintf(expr, varName)
-	if canErr {
-		err := fieldError("encoding", errName, errArgs...)
-		fmt.Fprintf(w, "\tif b, err := %s; err != nil { return nil, %s } else { buffer.Write(b) }\n", expr, err)
-	} else {
-		fmt.Fprintf(w, "\tbuffer.Write(%s)\n", expr)
-	}
-
-	if field.Type != "slice" {
-		fmt.Fprintf(w, "\n")
-		return
-	}
-
-	fmt.Fprintf(w, "\tfor i, v := range %s {\n", varName)
-	fmt.Fprintf(w, "\t\t_ = i\n")
-	marshalValue(w, field.Slice, "v", errName+"[%d]", "i")
-	fmt.Fprintf(w, "\t}\n\n")
 }
 
 func binarySize(w *bytes.Buffer, field *Field, varName string) {
@@ -175,7 +154,43 @@ func binarySize(w *bytes.Buffer, field *Field, varName string) {
 	fmt.Fprintf(w, "\t}\n\n")
 }
 
-func unmarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) {
+func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) {
+	var expr string
+	var canErr bool
+	switch field.Type {
+	case "bytes", "string", "chainSet", "uvarint", "duration":
+		expr, canErr = field.Type+"MarshalBinary(%s)", false
+	case "bigint", "chain":
+		expr, canErr = field.Type+"MarshalBinary(&%s)", false
+	case "slice":
+		expr, canErr = "uvarintMarshalBinary(uint64(len(%s)))", false
+	default:
+		if field.MarshalAs != "self" {
+			panic(fmt.Errorf("cannot determine how to marshal %s", resolveType(field, false)))
+		}
+		expr, canErr = "%s.MarshalBinary()", true
+	}
+
+	expr = fmt.Sprintf(expr, varName)
+	if canErr {
+		err := fieldError("encoding", errName, errArgs...)
+		fmt.Fprintf(w, "\tif b, err := %s; err != nil { return nil, %s } else { buffer.Write(b) }\n", expr, err)
+	} else {
+		fmt.Fprintf(w, "\tbuffer.Write(%s)\n", expr)
+	}
+
+	if field.Type != "slice" {
+		fmt.Fprintf(w, "\n")
+		return
+	}
+
+	fmt.Fprintf(w, "\tfor i, v := range %s {\n", varName)
+	fmt.Fprintf(w, "\t\t_ = i\n")
+	binaryMarshalValue(w, field.Slice, "v", errName+"[%d]", "i")
+	fmt.Fprintf(w, "\t}\n\n")
+}
+
+func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) {
 	var expr, size, sliceName string
 	var inPlace bool
 	switch field.Type {
@@ -214,20 +229,75 @@ func unmarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errA
 	fmt.Fprintf(w, "\tfor i := range %s {\n", sliceName)
 	if field.Slice.Pointer {
 		fmt.Fprintf(w, "\t\tx := new(%s)\n", resolveType(field.Slice, true))
-		unmarshalValue(w, field.Slice, "x", errName+"[%d]", "i")
+		binaryUnmarshalValue(w, field.Slice, "x", errName+"[%d]", "i")
 		fmt.Fprintf(w, "\t\t%s[i] = x", sliceName)
 	} else {
-		unmarshalValue(w, field.Slice, sliceName+"[i]", errName+"[%d]", "i")
+		binaryUnmarshalValue(w, field.Slice, sliceName+"[i]", errName+"[%d]", "i")
 	}
 	fmt.Fprintf(w, "\t}\n\n")
 }
 
-func run(cmd *cobra.Command, args []string) {
+func valueToJson(w *bytes.Buffer, field *Field, tgtName, srcName string) {
+	switch field.Type {
+	case "bytes", "chain", "chainSet":
+		fmt.Fprintf(w, "\t%s = %sToJSON(%s)\n", tgtName, field.Type, srcName)
+		return
+
+	case "slice":
+		if jsonType(field.Slice) == "" {
+			break
+		}
+
+		fmt.Fprintf(w, "\t%s = make([]%s, len(%s))\n", tgtName, jsonType(field.Slice), srcName)
+		fmt.Fprintf(w, "\tfor i, x := range %s {\n", srcName)
+		valueToJson(w, field.Slice, tgtName+"[i]", "x")
+		fmt.Fprintf(w, "\t}\n")
+		return
+	}
+
+	// default:
+	fmt.Fprintf(w, "\t%s = %s\n", tgtName, srcName)
+}
+
+func valueFromJson(w *bytes.Buffer, field *Field, tgtName, srcName, errName string, errArgs ...string) {
+	err := fieldError("decoding", errName, errArgs...)
+	switch field.Type {
+	case "bytes", "chain", "chainSet":
+		fmt.Fprintf(w, "\tif x, err := %sFromJSON(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = x\n\t}\n", field.Type, srcName, err, tgtName)
+		return
+
+	case "slice":
+		if jsonType(field.Slice) == "" {
+			break
+		}
+
+		fmt.Fprintf(w, "\t%s = make([]%s, len(%s))\n", tgtName, resolveType(field.Slice, false), srcName)
+		fmt.Fprintf(w, "\tfor i, x := range %s {\n", srcName)
+		valueFromJson(w, field.Slice, tgtName+"[i]", "x", errName+"[%d]", "i")
+		fmt.Fprintf(w, "\t}\n")
+		return
+	}
+
+	// default:
+	fmt.Fprintf(w, "\t%s = %s\n", tgtName, srcName)
+}
+
+func needsCustomJSON(typ *Record) bool {
+	for _, f := range typ.Fields {
+		if jsonType(f) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func run(_ *cobra.Command, args []string) {
 	w := new(bytes.Buffer)
 	fmt.Fprintf(w, "package %s\n\n", flags.Package)
 	fmt.Fprintf(w, "// GENERATED BY go run ./internal/cmd/genmarshal. DO NOT EDIT.\n\n")
 	fmt.Fprintf(w, `import (
 		"bytes"
+		"encoding/json"
 		"fmt"
 		"math/big"
 		"time"
@@ -323,7 +393,7 @@ func run(cmd *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			marshalValue(w, field, "v."+field.Name, field.Name)
+			binaryMarshalValue(w, field, "v."+field.Name, field.Name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn buffer.Bytes(), nil\n}\n\n")
@@ -351,10 +421,69 @@ func run(cmd *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			unmarshalValue(w, field, "v."+field.Name, field.Name)
+			binaryUnmarshalValue(w, field, "v."+field.Name, field.Name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn nil\n}\n\n")
+	}
+
+	for _, typ := range types {
+		if !needsCustomJSON(typ) {
+			continue
+		}
+
+		fmt.Fprintf(w, "func (v *%s) MarshalJSON() ([]byte, error) {\n", typ.name)
+		fmt.Fprintf(w, "\tvar u struct{\n")
+		if typ.Kind == "chain" {
+			fmt.Fprintf(w, "\t\tstate.ChainHeader\n")
+		}
+		for _, f := range typ.Fields {
+			typ := jsonType(f)
+			if typ == "" {
+				typ = resolveType(f, false)
+			}
+			fmt.Fprintf(w, "\t\t%s %s\n", f.Name, typ)
+		}
+		fmt.Fprintf(w, "\t}\n")
+		if typ.Kind == "chain" {
+			fmt.Fprintf(w, "\tu.ChainHeader = v.ChainHeader\n")
+		}
+		for _, f := range typ.Fields {
+			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
+		}
+		fmt.Fprintf(w, "\treturn json.Marshal(u)\t")
+		fmt.Fprintf(w, "}\n\n")
+	}
+
+	for _, typ := range types {
+		if !needsCustomJSON(typ) {
+			continue
+		}
+
+		fmt.Fprintf(w, "func (v *%s) UnmarshalJSON(data []byte) error {\t", typ.name)
+		fmt.Fprintf(w, "\tvar u struct{\n")
+		if typ.Kind == "chain" {
+			fmt.Fprintf(w, "\t\tstate.ChainHeader\n")
+		}
+		for _, f := range typ.Fields {
+			typ := jsonType(f)
+			if typ == "" {
+				typ = resolveType(f, false)
+			}
+			fmt.Fprintf(w, "\t\t%s %s\n", f.Name, typ)
+		}
+		fmt.Fprintf(w, "\t}\n")
+
+		fmt.Fprintf(w, "\tif err := json.Unmarshal(data, &u); err != nil {\n\t\treturn err\n\t}\n")
+
+		if typ.Kind == "chain" {
+			fmt.Fprintf(w, "\tv.ChainHeader = u.ChainHeader\n")
+		}
+		for _, f := range typ.Fields {
+			valueFromJson(w, f, "v."+f.Name, "u."+f.Name, f.Name)
+		}
+		fmt.Fprintf(w, "\treturn nil\t")
+		fmt.Fprintf(w, "}\n\n")
 	}
 
 	f, err := os.Create(flags.Out)
