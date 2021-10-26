@@ -114,17 +114,13 @@ func (k KeyRef) Put(value []byte) error {
 // Get
 // Retrieve []byte value from the underlying database. Note that this Get will
 // first check the cache before it checks the DB.
-// Returns a nil if not found, or on an error
+// Returns storage.ErrNotFound if not found.
 func (k KeyRef) Get() ([]byte, error) {
 	if v, ok := k.M.TXCache[k.K]; ok {
 		return v, nil
 	}
-	if v, e := k.M.DB.Get(k.K); e != nil {
-		return nil, e
-	} else {
-		return v, nil
-	}
-
+	// Assume the DB implementation correctly implements the interface
+	return k.M.DB.Get(k.K)
 }
 
 func (k KeyRef) PutBatch(value []byte) {

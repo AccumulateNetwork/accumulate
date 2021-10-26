@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/types/api/query"
@@ -124,17 +125,22 @@ func (q *Query) queryAll(apiQuery *query.Query) (ret *ctypes.ResultABCIQuery, er
 
 	for i := range results {
 		res := <-results[i]
-		if res.err == nil && res.ret != nil {
-			if res.ret.Response.Code == 0 {
-				ret = res.ret
-				err = res.err
-				//we found a match
-				break
-			}
+		switch {
+		case res.err != nil:
+			err = res.err
+		case res.ret == nil:
+			err = errors.New("invalid response")
+		case res.ret.Response.Code == 0:
+			ret = res.ret
+		default:
+			err = errors.New(res.ret.Response.Info)
 		}
 	}
 
-	return ret, err
+	if ret != nil {
+		return ret, nil
+	}
+	return nil, err
 }
 
 //query
@@ -165,7 +171,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response) //unmarshalADI(r.Response)
+	return unmarshalChainState(r.Response)
 }
 
 // GetToken
@@ -176,7 +182,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response) //unmarshalToken(r.Response)
+	return unmarshalChainState(r.Response)
 }
 
 // GetTokenAccount get the token balance for a given url
