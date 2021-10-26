@@ -6,7 +6,10 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 )
@@ -103,4 +106,63 @@ func ParseAnonymousAddress(u *url.URL) ([]byte, *url.URL, error) {
 		v.Path = u.Path[i:]
 	}
 	return b[:20], &v, nil
+}
+
+var reDigits10 = regexp.MustCompile("^[0-9]+$")
+var reDigits16 = regexp.MustCompile("^[0-9a-fA-F]+$")
+
+func IsValidAdiUrl(u *url.URL) error {
+	var errs []string
+
+	if !utf8.ValidString(u.RawString()) {
+		errs = append(errs, "not valid UTF-8")
+	}
+	if u.Port() != "" {
+		errs = append(errs, "identity has a port number")
+	}
+	if u.Authority == "" {
+		errs = append(errs, "identity is empty")
+	}
+	if strings.ContainsRune(u.Authority, '.') {
+		errs = append(errs, "identity contains dot(s)")
+	}
+	if reDigits10.MatchString(u.Authority) {
+		errs = append(errs, "identity is a number")
+	}
+	if reDigits16.MatchString(u.Authority) && len(u.Authority) == 48 {
+		errs = append(errs, "identity could be a lite account key")
+	}
+	if u.Path != "" {
+		errs = append(errs, "path is not empty")
+	}
+	if u.Query != "" {
+		errs = append(errs, "query is not empty")
+	}
+	if u.Fragment != "" {
+		errs = append(errs, "fragment is not empty")
+	}
+
+	for _, r := range u.Hostname() {
+		if unicode.In(r, unicode.Letter, unicode.Number) {
+			continue
+		}
+
+		if len(errs) > 0 && (r == '.' || r == 65533) {
+			// Do not report "invalid character '.'" in addition to "identity contains dot(s)"
+			// Do not report "invalid character '�'" in addition to "not valid UTF-8"
+			continue
+		}
+
+		switch r {
+		case '-':
+			// OK
+		default:
+			errs = append(errs, fmt.Sprintf("illegal character %q", r))
+		}
+	}
+
+	if len(errs) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(errs, ", "))
 }
