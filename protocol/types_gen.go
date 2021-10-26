@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
@@ -54,6 +55,15 @@ type KeySpec struct {
 
 type KeySpecParams struct {
 	PublicKey []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
+}
+
+type MetricsRequest struct {
+	Metric   string        `json:"metric" form:"metric" query:"metric" validate:"required"`
+	Duration time.Duration `json:"duration" form:"duration" query:"duration" validate:"required"`
+}
+
+type MetricsResponse struct {
+	Value interface{} `json:"value" form:"value" query:"value" validate:"required"`
 }
 
 type SigSpec struct {
@@ -236,6 +246,16 @@ func (v *KeySpecParams) BinarySize() int {
 	var n int
 
 	n += bytesBinarySize(v.PublicKey)
+
+	return n
+}
+
+func (v *MetricsRequest) BinarySize() int {
+	var n int
+
+	n += stringBinarySize(v.Metric)
+
+	n += durationBinarySize(v.Duration)
 
 	return n
 }
@@ -466,6 +486,16 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(bytesMarshalBinary(v.PublicKey))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(stringMarshalBinary(v.Metric))
+
+	buffer.Write(durationMarshalBinary(v.Duration))
 
 	return buffer.Bytes(), nil
 }
@@ -825,6 +855,24 @@ func (v *KeySpecParams) UnmarshalBinary(data []byte) error {
 		v.PublicKey = x
 	}
 	data = data[bytesBinarySize(v.PublicKey):]
+
+	return nil
+}
+
+func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
+	if x, err := stringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Metric: %w", err)
+	} else {
+		v.Metric = x
+	}
+	data = data[stringBinarySize(v.Metric):]
+
+	if x, err := durationUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Duration: %w", err)
+	} else {
+		v.Duration = x
+	}
+	data = data[durationBinarySize(v.Duration):]
 
 	return nil
 }

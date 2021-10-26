@@ -15,9 +15,10 @@ import (
 )
 
 type Record struct {
-	name   string
-	Kind   string
-	Fields []*Field
+	name      string
+	Kind      string
+	NonBinary bool `yaml:"non-binary"`
+	Fields    []*Field
 }
 
 type Field struct {
@@ -89,6 +90,10 @@ func resolveType(field *Field, forNew bool) string {
 		return "[32]byte"
 	case "chainSet":
 		return "[][32]byte"
+	case "duration":
+		return "time.Duration"
+	case "any":
+		return "interface{}"
 	case "slice":
 		return "[]" + resolveType(field.Slice, false)
 	}
@@ -109,7 +114,7 @@ func marshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArg
 	var expr string
 	var canErr bool
 	switch field.Type {
-	case "bytes", "string", "chainSet", "uvarint":
+	case "bytes", "string", "chainSet", "uvarint", "duration":
 		expr, canErr = field.Type+"MarshalBinary(%s)", false
 	case "bigint", "chain":
 		expr, canErr = field.Type+"MarshalBinary(&%s)", false
@@ -144,7 +149,7 @@ func marshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArg
 func binarySize(w *bytes.Buffer, field *Field, varName string) {
 	var expr string
 	switch field.Type {
-	case "bytes", "string", "chainSet", "uvarint":
+	case "bytes", "string", "chainSet", "uvarint", "duration":
 		expr = field.Type + "BinarySize(%s)"
 	case "bigint", "chain":
 		expr = field.Type + "BinarySize(&%s)"
@@ -174,7 +179,7 @@ func unmarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errA
 	var expr, size, sliceName string
 	var inPlace bool
 	switch field.Type {
-	case "bytes", "string", "chainSet", "uvarint":
+	case "bytes", "string", "chainSet", "uvarint", "duration":
 		expr, size, inPlace = field.Type+"UnmarshalBinary(data)", field.Type+"BinarySize(%s)", false
 	case "bigint", "chain":
 		expr, size, inPlace = field.Type+"UnmarshalBinary(data)", field.Type+"BinarySize(&%s)", false
@@ -225,6 +230,7 @@ func run(cmd *cobra.Command, args []string) {
 		"bytes"
 		"fmt"
 		"math/big"
+		"time"
 
 		"github.com/AccumulateNetwork/accumulated/types"
 		"github.com/AccumulateNetwork/accumulated/types/state"
@@ -277,6 +283,10 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	for _, typ := range types {
+		if typ.NonBinary {
+			continue
+		}
+
 		fmt.Fprintf(w, "func (v *%s) BinarySize() int {\n", typ.name)
 		fmt.Fprintf(w, "\tvar n int\n\n")
 
@@ -296,6 +306,10 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	for _, typ := range types {
+		if typ.NonBinary {
+			continue
+		}
+
 		fmt.Fprintf(w, "func (v *%s) MarshalBinary() ([]byte, error) {\n", typ.name)
 		fmt.Fprintf(w, "\tvar buffer bytes.Buffer\n\n")
 
@@ -316,6 +330,10 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	for _, typ := range types {
+		if typ.NonBinary {
+			continue
+		}
+
 		fmt.Fprintf(w, "func (v *%s) UnmarshalBinary(data []byte) error {\n", typ.name)
 
 		switch typ.Kind {
