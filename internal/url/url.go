@@ -92,6 +92,23 @@ func (u *URL) String() string {
 	return u.URL().String()
 }
 
+// RawString concatenates all of the URL parts. Does not percent-encode
+// anything. Primarily used for validation.
+func (u *URL) RawString() string {
+	s := "acc://"
+	if u.UserInfo != "" {
+		s += u.UserInfo + "@"
+	}
+	s += u.Authority + u.Path
+	if u.Query != "" {
+		s += "?" + u.Query
+	}
+	if u.Fragment != "" {
+		s += "#" + u.Fragment
+	}
+	return s
+}
+
 // Hostname returns the hostname from the authority component.
 func (u *URL) Hostname() string {
 	s, _ := splitColon(u.Authority)
