@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"time"
@@ -168,6 +169,50 @@ func chainSetUnmarshalBinary(b []byte) ([][32]byte, error) {
 	for i := range v {
 		copy(v[i][:], b)
 		b = b[32:]
+	}
+	return v, nil
+}
+
+func bytesToJSON(v []byte) string {
+	return hex.EncodeToString(v)
+}
+
+func chainToJSON(v [32]byte) string {
+	return hex.EncodeToString(v[:])
+}
+
+func chainSetToJSON(v [][32]byte) []string {
+	s := make([]string, len(v))
+	for i, v := range v {
+		s[i] = chainToJSON(v)
+	}
+	return s
+}
+
+func bytesFromJSON(s string) ([]byte, error) {
+	return hex.DecodeString(s)
+}
+
+func chainFromJSON(s string) ([32]byte, error) {
+	var v [32]byte
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return v, err
+	}
+	if copy(v[:], b) < 32 {
+		return v, ErrNotEnoughData
+	}
+	return v, nil
+}
+
+func chainSetFromJSON(s []string) ([][32]byte, error) {
+	var err error
+	v := make([][32]byte, len(s))
+	for i, s := range s {
+		v[i], err = chainFromJSON(s)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return v, nil
 }
