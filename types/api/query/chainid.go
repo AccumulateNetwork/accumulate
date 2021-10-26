@@ -3,6 +3,7 @@ package query
 import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
 type RequestByChainId struct {
@@ -10,7 +11,7 @@ type RequestByChainId struct {
 }
 
 type ResponseByChainId struct {
-	Data types.Bytes
+	state.Object
 }
 
 func (r *RequestByChainId) MarshalBinary() ([]byte, error) {
@@ -33,7 +34,7 @@ func (r *RequestByChainId) UnmarshalBinary(data []byte) (err error) {
 }
 
 func (r *ResponseByChainId) MarshalBinary() ([]byte, error) {
-	return r.Data.MarshalBinary()
+	return r.Object.MarshalBinary()
 }
 
 func (r *ResponseByChainId) UnmarshalBinary(data []byte) (err error) {
@@ -42,5 +43,5 @@ func (r *ResponseByChainId) UnmarshalBinary(data []byte) (err error) {
 			err = fmt.Errorf("error unmarshaling ResponseByChainId data %v", r)
 		}
 	}()
-	return r.Data.UnmarshalBinary(data)
+	return r.Object.UnmarshalBinary(data)
 }

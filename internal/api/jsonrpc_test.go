@@ -319,6 +319,83 @@ func TestFaucet(t *testing.T) {
 	fmt.Printf("%s\n", string(output))
 }
 
+func TestTransactionHistory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	}
+
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+
+	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	_, kpSponsor, _ := ed25519.GenerateKey(nil)
+
+	req := &api.APIRequestURL{}
+	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+
+	params, err := json.Marshal(&req)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	jsonapi := NewTest(t, query)
+
+	res := jsonapi.Faucet(context.Background(), params)
+	data, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Println(string(data))
+
+	//allow the transaction to settle.
+	time.Sleep(3 * time.Second)
+
+	jd, err := json.Marshal(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2 := api.APIDataResponse{}
+	err = json.Unmarshal(jd, &r2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	txr := response.TokenTx{}
+	err = json.Unmarshal(*r2.Data, &txr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//readback the result.
+
+	d2, err := query.GetTransaction(txr.TxId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//fmt.Println(d2.Data)
+	output, err := json.Marshal(d2.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("%s\n", string(output))
+	resp, err := query.GetTransactionHistory(*req.URL.AsString(), 0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//just dump out the response as the api user would see it
+	output, err = json.Marshal(resp.Data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fmt.Printf("%s\n", string(output))
+}
+
 func TestJsonRpcAdi(t *testing.T) {
 	t.Skip("Test Broken") // ToDo: Broken Test
 

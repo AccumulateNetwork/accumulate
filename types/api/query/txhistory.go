@@ -43,7 +43,7 @@ func (t *ResponseTxHistory) UnmarshalBinary(data []byte) (err error) {
 
 	l := int(binary.LittleEndian.Uint64(data[:]))
 	data = data[8:]
-	if l < len(data) {
+	if len(data) < l {
 		return fmt.Errorf("insufficient txid data for given range")
 	}
 
