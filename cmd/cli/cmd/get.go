@@ -33,7 +33,7 @@ func PrintGet() {
 	fmt.Println("  accumulate get [url] 		Get data by Accumulate URL")
 }
 
-func Get(url string) {
+func Get(url string) string {
 
 	var res interface{}
 	var str []byte
@@ -58,5 +58,5 @@ func Get(url string) {
 	}
 
 	fmt.Println(string(str))
-
+	return string(str)
 }
