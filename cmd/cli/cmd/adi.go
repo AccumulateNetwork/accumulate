@@ -173,33 +173,33 @@ func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page st
 
 	//Store the new adi in case things go bad
 	if len(privKey) != 0 {
-		as := AdiStore{}
+		//as := AdiStore{}
 
-		var asData []byte
-		err = Db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte("adi"))
-			asData = b.Get([]byte(u.Authority))
-			return err
-		})
-
-		if asData != nil {
-			err = json.Unmarshal(asData, &as)
-			log.Fatal(err)
-		}
-		as.KeyBooks = make(map[string]KeyBookStore)
-		if b, ok := as.KeyBooks[book]; !ok {
-			if b.KeyPages == nil {
-				b.KeyPages = make(map[string]KeyPageStore)
-			}
-			as.KeyBooks[page] = b
-			if p, ok := b.KeyPages[page]; !ok {
-				p.PrivKeys = append(p.PrivKeys, types.Bytes(privKey))
-				b.KeyPages[page] = p
-			}
-		}
+		//var asData []byte
+		//err = Db.View(func(tx *bolt.Tx) error {
+		//	b := tx.Bucket([]byte("adi"))
+		//	asData = b.Get([]byte(u.Authority))
+		//	return err
+		//})
+		//
+		//if asData != nil {
+		//	err = json.Unmarshal(asData, &as)
+		//	log.Fatal(err)
+		//}
+		//as.KeyBooks = make(map[string]KeyBookStore)
+		//if b, ok := as.KeyBooks[book]; !ok {
+		//	if b.KeyPages == nil {
+		//		b.KeyPages = make(map[string]KeyPageStore)
+		//	}
+		//	as.KeyBooks[page] = b
+		//	if p, ok := b.KeyPages[page]; !ok {
+		//		p.PrivKeys = append(p.PrivKeys, types.Bytes(privKey))
+		//		b.KeyPages[page] = p
+		//	}
+		//}
 
 		err = Db.Update(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte("adi"))
+			b := tx.Bucket([]byte("anon"))
 			err := b.Put([]byte(adiUrl), privKey)
 			return err
 		})
