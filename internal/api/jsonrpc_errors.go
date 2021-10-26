@@ -1,6 +1,9 @@
 package api
 
-import "github.com/AccumulateNetwork/jsonrpc2/v15"
+import (
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/getsentry/sentry-go"
+)
 
 var (
 	// 32800-32899 — API request struct validation
@@ -34,4 +37,10 @@ func NewSubmissionError(err error) jsonrpc2.Error {
 
 func NewAccumulateError(err error) jsonrpc2.Error {
 	return jsonrpc2.NewError(-32804, "Accumulate Error", err)
+}
+
+func internalError(err error) jsonrpc2.Error {
+	// Capture internal errors but do not forward them to the user
+	sentry.CaptureException(err)
+	return jsonrpc2.NewError(-31000, "Internal Error", nil)
 }

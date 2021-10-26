@@ -2,8 +2,10 @@ package protocol
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
@@ -73,6 +75,34 @@ func stringUnmarshalBinary(b []byte) (string, error) {
 	return string(b[:l]), nil
 }
 
+func splitDuration(d time.Duration) (sec, ns uint64) {
+	sec = uint64(d.Seconds())
+	ns = uint64((d - d.Round(time.Second)).Nanoseconds())
+	return sec, ns
+}
+
+func durationBinarySize(d time.Duration) int {
+	sec, ns := splitDuration(d)
+	return uvarintBinarySize(sec) + uvarintBinarySize(ns)
+}
+
+func durationMarshalBinary(d time.Duration) []byte {
+	sec, ns := splitDuration(d)
+	return append(uvarintMarshalBinary(sec), uvarintMarshalBinary(ns)...)
+}
+
+func durationUnmarshalBinary(b []byte) (time.Duration, error) {
+	sec, err := uvarintUnmarshalBinary(b)
+	if err != nil {
+		return 0, fmt.Errorf("error decoding seconds: %w", err)
+	}
+	ns, err := uvarintUnmarshalBinary(b)
+	if err != nil {
+		return 0, fmt.Errorf("error decoding nanoseconds: %w", err)
+	}
+	return time.Duration(sec)*time.Second + time.Duration(ns), nil
+}
+
 func bigintBinarySize(v *big.Int) int {
 	return bytesBinarySize(v.Bytes())
 }
@@ -139,6 +169,50 @@ func chainSetUnmarshalBinary(b []byte) ([][32]byte, error) {
 	for i := range v {
 		copy(v[i][:], b)
 		b = b[32:]
+	}
+	return v, nil
+}
+
+func bytesToJSON(v []byte) string {
+	return hex.EncodeToString(v)
+}
+
+func chainToJSON(v [32]byte) string {
+	return hex.EncodeToString(v[:])
+}
+
+func chainSetToJSON(v [][32]byte) []string {
+	s := make([]string, len(v))
+	for i, v := range v {
+		s[i] = chainToJSON(v)
+	}
+	return s
+}
+
+func bytesFromJSON(s string) ([]byte, error) {
+	return hex.DecodeString(s)
+}
+
+func chainFromJSON(s string) ([32]byte, error) {
+	var v [32]byte
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return v, err
+	}
+	if copy(v[:], b) < 32 {
+		return v, ErrNotEnoughData
+	}
+	return v, nil
+}
+
+func chainSetFromJSON(s []string) ([][32]byte, error) {
+	var err error
+	v := make([][32]byte, len(s))
+	for i, s := range s {
+		v[i], err = chainFromJSON(s)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return v, nil
 }
