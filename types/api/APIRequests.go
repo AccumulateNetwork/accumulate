@@ -73,8 +73,3 @@ type APIDataResponsePagination struct {
 	Limit int64 `json:"limit"`
 	Total int64 `json:"total"`
 }
-
-// Metrics is used in "metrics" API method response
-type MetricsResponse struct {
-	TPS int64 `json:"tps" form:"tps" query:"tps"`
-}
