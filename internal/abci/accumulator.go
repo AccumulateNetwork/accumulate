@@ -8,13 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/internal/genesis"
+	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/getsentry/sentry-go"
 	"github.com/tendermint/tendermint/abci/example/code"
@@ -94,8 +94,8 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
 	resQuery.Key = reqQuery.Data
-	query := new(api.Query)
-	err := query.UnmarshalBinary(reqQuery.Data)
+	qu := new(apiQuery.Query)
+	err := qu.UnmarshalBinary(reqQuery.Data)
 	if err != nil {
 		sentry.CaptureException(err)
 		app.logger.Info("Query failed", "error", err)
@@ -104,10 +104,10 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	ret, err := app.chain.Query(query)
+	ret, err := app.chain.Query(qu)
 	if err != nil {
 		sentry.CaptureException(err)
-		app.logger.Info("Query failed", "url", query.Url, "error", err)
+		app.logger.Info("Query failed", "type", qu.Type.Name(), "error", err)
 		resQuery.Info = err.Error()
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery

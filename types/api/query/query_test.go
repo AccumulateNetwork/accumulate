@@ -1,18 +1,15 @@
-package api
+package query
 
 import (
 	"bytes"
 	"crypto/sha256"
-	"github.com/AccumulateNetwork/accumulated/types"
 	"testing"
 )
 
 func TestQuery(t *testing.T) {
 	q := Query{}
 
-	q.Url = "test/url"
-	q.ChainId = types.GetChainIdFromChainPath(&q.Url).Bytes()
-	q.RouteId = types.GetAddressFromIdentity(&q.Url)
+	q.RouteId = 0
 	h := sha256.Sum256([]byte("test txid"))
 	q.Content = h[:]
 
@@ -27,10 +24,6 @@ func TestQuery(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if q.Url != q2.Url {
-		t.Fatal("invalid url")
-	}
-
 	if q.RouteId != q2.RouteId {
 		t.Fatal("invalid route id")
 	}
@@ -39,7 +32,4 @@ func TestQuery(t *testing.T) {
 		t.Fatal("content not equal")
 	}
 
-	if !bytes.Equal(q.ChainId, q2.ChainId) {
-		t.Fatal("chain id not equal")
-	}
 }

@@ -6,12 +6,12 @@ package mock_abci
 
 import (
 	"github.com/AccumulateNetwork/accumulated/types"
+	api "github.com/AccumulateNetwork/accumulated/types/api/query"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	reflect "reflect"
 
 	abci "github.com/AccumulateNetwork/accumulated/internal/abci"
 	protocol "github.com/AccumulateNetwork/accumulated/protocol"
-	api "github.com/AccumulateNetwork/accumulated/types/api"
 	transactions "github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	gomock "github.com/golang/mock/gomock"
 )
