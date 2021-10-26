@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/state"
+
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
@@ -67,9 +69,12 @@ func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, bod
 
 func (s *Suite) getChainAs(url string, obj encoding.BinaryUnmarshaler) {
 	r, err := s.query.QueryByUrl(url)
+
 	s.Require().NoError(err)
 	s.Require().Zero(r.Response.Code, "Query failed: %v", r.Response.Info)
-	s.Require().NoError(obj.UnmarshalBinary(r.Response.Value))
+	so := state.Object{}
+	s.Require().NoError(so.UnmarshalBinary(r.Response.Value))
+	s.Require().NoError(obj.UnmarshalBinary(so.Entry))
 }
 
 func (s *Suite) sendTxAsync(tx *transactions.GenTransaction) func(relay.BatchedStatus) {
