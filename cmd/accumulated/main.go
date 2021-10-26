@@ -38,7 +38,7 @@ func main() {
 	cmdMain.Execute()
 }
 
-func printUsageAndExit1(cmd *cobra.Command, args []string) {
+func printUsageAndExit1(cmd *cobra.Command, _ []string) {
 	_ = cmd.Usage()
 	os.Exit(1)
 }
@@ -72,4 +72,13 @@ func composeArgs(fn cobra.PositionalArgs, fns ...cobra.PositionalArgs) cobra.Pos
 		}
 		return rest(cmd, args)
 	}
+}
+
+func stringSliceContains(s []string, t string) bool {
+	for _, s := range s {
+		if s == t {
+			return true
+		}
+	}
+	return false
 }
