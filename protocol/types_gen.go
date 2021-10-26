@@ -4,6 +4,7 @@ package protocol
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -1114,5 +1115,309 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 	}
 	data = data[bytesBinarySize(v.NewKey):]
 
+	return nil
+}
+
+func (v *ChainParams) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Url  string
+		Data string
+	}
+	u.Url = v.Url
+	u.Data = bytesToJSON(v.Data)
+	return json.Marshal(u)
+}
+
+func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Url      string
+		SigSpecs []string
+	}
+	u.Url = v.Url
+	u.SigSpecs = chainSetToJSON(v.SigSpecs)
+	return json.Marshal(u)
+}
+
+func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Url         string
+		PublicKey   string
+		KeyBookName string
+		KeyPageName string
+	}
+	u.Url = v.Url
+	u.PublicKey = bytesToJSON(v.PublicKey)
+	u.KeyBookName = v.KeyBookName
+	u.KeyPageName = v.KeyPageName
+	return json.Marshal(u)
+}
+
+func (v *KeySpec) MarshalJSON() ([]byte, error) {
+	var u struct {
+		PublicKey string
+		Nonce     uint64
+	}
+	u.PublicKey = bytesToJSON(v.PublicKey)
+	u.Nonce = v.Nonce
+	return json.Marshal(u)
+}
+
+func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
+	var u struct {
+		PublicKey string
+	}
+	u.PublicKey = bytesToJSON(v.PublicKey)
+	return json.Marshal(u)
+}
+
+func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
+	var u struct {
+		state.ChainHeader
+		SigSpecs []string
+	}
+	u.ChainHeader = v.ChainHeader
+	u.SigSpecs = chainSetToJSON(v.SigSpecs)
+	return json.Marshal(u)
+}
+
+func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Cause  string
+		Chains []string
+	}
+	u.Cause = chainToJSON(v.Cause)
+	u.Chains = make([]string, len(v.Chains))
+	for i, x := range v.Chains {
+		u.Chains[i] = bytesToJSON(x)
+	}
+	return json.Marshal(u)
+}
+
+func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Cause  string
+		Amount uint64
+	}
+	u.Cause = chainToJSON(v.Cause)
+	u.Amount = v.Amount
+	return json.Marshal(u)
+}
+
+func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Type  uint64
+		Hash  string
+		Url   string
+		TxRef string
+	}
+	u.Type = v.Type
+	u.Hash = chainToJSON(v.Hash)
+	u.Url = v.Url
+	u.TxRef = chainToJSON(v.TxRef)
+	return json.Marshal(u)
+}
+
+func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Operation KeyPageOperation
+		Key       string
+		NewKey    string
+	}
+	u.Operation = v.Operation
+	u.Key = bytesToJSON(v.Key)
+	u.NewKey = bytesToJSON(v.NewKey)
+	return json.Marshal(u)
+}
+
+func (v *ChainParams) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Url  string
+		Data string
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	if x, err := bytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
+	return nil
+}
+
+func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Url      string
+		SigSpecs []string
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	if x, err := chainSetFromJSON(u.SigSpecs); err != nil {
+		return fmt.Errorf("error decoding SigSpecs: %w", err)
+	} else {
+		v.SigSpecs = x
+	}
+	return nil
+}
+
+func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Url         string
+		PublicKey   string
+		KeyBookName string
+		KeyPageName string
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	if x, err := bytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	v.KeyBookName = u.KeyBookName
+	v.KeyPageName = u.KeyPageName
+	return nil
+}
+
+func (v *KeySpec) UnmarshalJSON(data []byte) error {
+	var u struct {
+		PublicKey string
+		Nonce     uint64
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := bytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	v.Nonce = u.Nonce
+	return nil
+}
+
+func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
+	var u struct {
+		PublicKey string
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := bytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	return nil
+}
+
+func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
+	var u struct {
+		state.ChainHeader
+		SigSpecs []string
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	if x, err := chainSetFromJSON(u.SigSpecs); err != nil {
+		return fmt.Errorf("error decoding SigSpecs: %w", err)
+	} else {
+		v.SigSpecs = x
+	}
+	return nil
+}
+
+func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Cause  string
+		Chains []string
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := chainFromJSON(u.Cause); err != nil {
+		return fmt.Errorf("error decoding Cause: %w", err)
+	} else {
+		v.Cause = x
+	}
+	v.Chains = make([][]byte, len(u.Chains))
+	for i, x := range u.Chains {
+		if x, err := bytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Chains[%d]: %w", i, err)
+		} else {
+			v.Chains[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Cause  string
+		Amount uint64
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := chainFromJSON(u.Cause); err != nil {
+		return fmt.Errorf("error decoding Cause: %w", err)
+	} else {
+		v.Cause = x
+	}
+	v.Amount = u.Amount
+	return nil
+}
+
+func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Type  uint64
+		Hash  string
+		Url   string
+		TxRef string
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Type = u.Type
+	if x, err := chainFromJSON(u.Hash); err != nil {
+		return fmt.Errorf("error decoding Hash: %w", err)
+	} else {
+		v.Hash = x
+	}
+	v.Url = u.Url
+	if x, err := chainFromJSON(u.TxRef); err != nil {
+		return fmt.Errorf("error decoding TxRef: %w", err)
+	} else {
+		v.TxRef = x
+	}
+	return nil
+}
+
+func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Operation KeyPageOperation
+		Key       string
+		NewKey    string
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Operation = u.Operation
+	if x, err := bytesFromJSON(u.Key); err != nil {
+		return fmt.Errorf("error decoding Key: %w", err)
+	} else {
+		v.Key = x
+	}
+	if x, err := bytesFromJSON(u.NewKey); err != nil {
+		return fmt.Errorf("error decoding NewKey: %w", err)
+	} else {
+		v.NewKey = x
+	}
 	return nil
 }
