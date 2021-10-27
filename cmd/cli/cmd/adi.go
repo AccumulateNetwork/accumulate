@@ -112,6 +112,7 @@ func GetADI(url string) {
 	}
 
 	fmt.Println(string(str))
+
 }
 
 func PublicADI(url string) {
@@ -147,11 +148,11 @@ func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page st
 
 	if book == "" {
 		book = "ssg0"
-		u.JoinPath(book)
+		book = u.JoinPath(book).String()
 	}
 	if page == "" {
 		page = "sigspec0"
-		u.JoinPath(page)
+		page = u.JoinPath(page).String()
 	}
 
 	idc := &protocol.IdentityCreate{}
@@ -170,54 +171,70 @@ func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page st
 		log.Fatal(err)
 	}
 
-	params, err := prepareGenTx(data, dataBinary, sender)
+	params, err := prepareGenTx(data, dataBinary, sender, sender, "adi")
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	//Store the new adi in case things go bad
+	haveData := false
+	var asData []byte
 	if len(privKey) != 0 {
-		//as := AdiStore{}
+		as := AdiStore{}
 
-		//var asData []byte
-		//err = Db.View(func(tx *bolt.Tx) error {
-		//	b := tx.Bucket([]byte("adi"))
-		//	asData = b.Get([]byte(u.Authority))
-		//	return err
-		//})
-		//
-		//if asData != nil {
-		//	err = json.Unmarshal(asData, &as)
-		//	log.Fatal(err)
-		//}
-		//as.KeyBooks = make(map[string]KeyBookStore)
-		//if b, ok := as.KeyBooks[book]; !ok {
-		//	if b.KeyPages == nil {
-		//		b.KeyPages = make(map[string]KeyPageStore)
-		//	}
-		//	as.KeyBooks[page] = b
-		//	if p, ok := b.KeyPages[page]; !ok {
-		//		p.PrivKeys = append(p.PrivKeys, types.Bytes(privKey))
-		//		b.KeyPages[page] = p
-		//	}
-		//}
-
-		err = Db.Update(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte("anon"))
-			err := b.Put([]byte(adiUrl), privKey)
+		err = Db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("adi"))
+			asData = b.Get([]byte(u.Authority))
 			return err
 		})
+
+		if asData != nil {
+			haveData = true
+			err = json.Unmarshal(asData, &as)
+			log.Fatal(err)
+		}
+		as.KeyBooks = make(map[string]KeyBookStore)
+		if b, ok := as.KeyBooks[book]; !ok {
+			if b.KeyPages == nil {
+				b.KeyPages = make(map[string]KeyPageStore)
+			}
+			as.KeyBooks[page] = b
+			if p, ok := b.KeyPages[page]; !ok {
+				p.PrivKeys = append(p.PrivKeys, types.Bytes(privKey))
+				b.KeyPages[page] = p
+			}
+		}
+
+		asData, err = json.Marshal(&as)
+		if err != nil {
+			log.Fatal(err)
+		}
 
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
+
 	var res interface{}
 	var str []byte
 	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
 		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
+		if !haveData {
+			err = Db.Update(func(tx *bolt.Tx) error {
+				b := tx.Bucket([]byte("adi"))
+				err := b.Delete([]byte(adiUrl))
+				return err
+			})
+		}
+
 		log.Fatal(err)
 	}
+
+	err = Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("adi"))
+		err := b.Put([]byte(adiUrl), asData)
+		return err
+	})
 
 	str, err = json.Marshal(res)
 	if err != nil {

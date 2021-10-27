@@ -154,7 +154,7 @@ func CreateAccount(url string, tokenUrl string, keyBookUrl string) {
 		log.Fatal(err)
 	}
 
-	params, err := prepareGenTx(jsonData, binaryData, u.Authority)
+	params, err := prepareGenTx(jsonData, binaryData, u.Authority, u.Authority, "adi")
 	if err != nil {
 		log.Fatal(err)
 	}
