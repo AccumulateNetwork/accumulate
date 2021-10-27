@@ -219,7 +219,11 @@ func (s *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synt
 // AddTransaction queues (pending) transaction signatures and (optionally) an
 // accepted transaction for storage to their respective chains.
 func (s *StateDB) AddTransaction(chainId *types.Bytes32, txId types.Bytes, txPending, txAccepted *Object) error {
-	s.logInfo("AddTransaction", "chainId", chainId, "txid", txId.AsBytes32(), "pending", txPending.Entry, "accepted", txAccepted.Entry)
+	var txAcceptedEntry []byte
+	if txAccepted != nil {
+		txAcceptedEntry = txAccepted.Entry
+	}
+	s.logInfo("AddTransaction", "chainId", chainId, "txid", txId.AsBytes32(), "pending", txPending.Entry, "accepted", txAcceptedEntry)
 
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
