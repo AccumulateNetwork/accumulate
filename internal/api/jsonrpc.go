@@ -13,6 +13,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/types/api/response"
+
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
@@ -534,6 +536,32 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 	return ret
 }
 
+func (api *API) resolveCurrentNonce(chainUrl *accurl.URL) (uint64, error) {
+	//todo: determine what type of url this is, i.e. KeyBook, KeyPage, or other Chain. Currently assumes just an anon acct.
+
+	resp, err := api.query.GetChainStateByUrl(chainUrl.String())
+	if err != nil {
+		return 0, fmt.Errorf("unable to resolve nonce for %s: %v", chainUrl.String(), err)
+	}
+
+	switch resp.Type {
+	case "anonTokenAccount":
+		anonAcct := response.AnonTokenAccount{}
+		err := json.Unmarshal(*resp.Data, &anonAcct)
+		if err != nil {
+			return 0, fmt.Errorf("unable to convert to AnonTokenAccount for %s: %v", chainUrl.String(), err)
+		}
+		return anonAcct.Nonce, nil
+	default:
+		return 0, fmt.Errorf("nonce resolution for type %s not currently supported for chain %s", resp.Type, chainUrl.String())
+	}
+	//u := chainUrl.JoinPath("ssg0")
+	//u.String()
+	//ta, err := api.query.GetChainStateByUrl(u.String())
+	//ta.(protocol.)
+	return 0, nil
+}
+
 // faucet API call (testnet only)
 func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
@@ -570,6 +598,12 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	txData, err := tx.MarshalBinary()
 
+	//get the current nonce
+	genesis.FaucetWallet.Nonce, err = api.resolveCurrentNonce(genesis.FaucetUrl)
+	if err != nil {
+		return jsonrpc2.NewError(-32802, fmt.Sprintf("faucet nonce error %v", err), errors.New("cannot retrieve nonce"))
+	}
+	//increment the nonce
 	genesis.FaucetWallet.Nonce++
 	gtx := new(transactions.GenTransaction)
 	gtx.Routing = genesis.FaucetUrl.Routing()
@@ -583,6 +617,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	if err := gtx.SetRoutingChainID(); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", destAccount), err)
 	}
+	time.Sleep(500 * time.Microsecond)
 	dataToSign := gtx.TransactionHash()
 
 	ed := new(transactions.ED25519Sig)
