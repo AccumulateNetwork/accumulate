@@ -2,7 +2,6 @@ package chain
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -26,11 +25,10 @@ func checkIdentityCreate(st *StateManager, tx *transactions.GenTransaction) (*pr
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid URL: %v", err)
 	}
-	if identityUrl.Path != "" {
-		return nil, nil, nil, fmt.Errorf("creating sub-ADIs is not supported")
-	}
-	if strings.ContainsRune(identityUrl.Hostname(), '.') {
-		return nil, nil, nil, fmt.Errorf("ADI URLs cannot contain dots")
+
+	err = protocol.IsValidAdiUrl(identityUrl)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid URL: %v", err)
 	}
 
 	var sponsor state.Chain
