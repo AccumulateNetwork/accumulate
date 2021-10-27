@@ -2,7 +2,6 @@ package api
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
@@ -205,6 +204,78 @@ func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataRe
 	return unmarshalTxReference(r.Response)
 }
 
+// packTransactionQuery
+func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSynthTxIds []byte) (resp *acmeApi.APIDataResponse, err error) {
+
+	if len(txSynthTxIds)%32 != 0 {
+		return nil, fmt.Errorf("invalid synth txids")
+	}
+
+	txObject := state.Object{}
+	txPendingObject := state.Object{}
+	pendErr := txPendingObject.UnmarshalBinary(txPendingData)
+	//not having pending is ok since pending status can be purged.  This is only an error if there
+	//is no transaction object either
+	txErr := txObject.UnmarshalBinary(txData)
+	if txErr != nil && pendErr != nil {
+		return nil, fmt.Errorf("invalid transaction object for query, %v", txErr)
+	}
+
+	var txStateData *types.Bytes
+	var txSigInfo *transactions.SignatureInfo
+	if txErr == nil {
+		txState := state.Transaction{}
+		err = txState.UnmarshalBinary(txObject.Entry)
+		if err != nil {
+			return resp, NewAccumulateError(err)
+		}
+		txStateData = txState.Transaction
+		txSigInfo = txState.SigInfo
+	}
+
+	var txPendingState *state.PendingTransaction
+	if pendErr == nil {
+		txPendingState = &state.PendingTransaction{}
+		pendErr = txPendingState.UnmarshalBinary(txPendingObject.Entry)
+		if pendErr != nil {
+			return nil, NewAccumulateError(fmt.Errorf("invalid pending object entry %v", pendErr))
+		}
+
+		if txStateData == nil {
+			if txPendingState.TransactionState == nil {
+				return nil, NewAccumulateError(fmt.Errorf("no transaction state for transaction on pending or main chains"))
+			}
+			txStateData = txPendingState.TransactionState.Transaction
+			txSigInfo = txPendingState.TransactionState.SigInfo
+		}
+	}
+
+	resp, err = unmarshalTransaction(txStateData.Bytes(), txId, txSynthTxIds)
+	if err != nil {
+		return nil, NewAccumulateError(err)
+	}
+
+	//populate the rest of the resp
+	resp.KeyPage = &acmeApi.APIRequestKeyPage{}
+	resp.KeyPage.Height = txSigInfo.MSHeight
+	resp.KeyPage.Index = txSigInfo.PriorityIdx
+
+	//if we have pending data (i.e. signature stuff, populate that too.)
+	if txPendingState != nil {
+		//if the pending state still exists
+		resp.Status = &txPendingState.Status
+		resp.Signer = &acmeApi.Signer{}
+		resp.Signer.PublicKey.FromBytes(txPendingState.Signature[0].PublicKey)
+		if len(txPendingState.Signature) == 0 {
+			return nil, NewAccumulateError(fmt.Errorf("malformed transaction, no signatures"))
+		}
+		resp.Signer.Nonce = txPendingState.Signature[0].Nonce
+		sig := types.Bytes(txPendingState.Signature[0].Signature).AsBytes64()
+		resp.Sig = &sig
+	}
+	return resp, err
+}
+
 // GetTokenTx
 
 // GetTransaction
@@ -226,6 +297,8 @@ func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err 
 	txData := rid.TxState
 	txPendingData := rid.TxPendingState
 	txSynthTxIds := rid.TxSynthTxIds
+	return q.packTransactionQuery(txId, txData, txPendingData, txSynthTxIds)
+	////////////////////////////////////////////////
 
 	if len(txSynthTxIds)%32 != 0 {
 		return nil, fmt.Errorf("invalid synth txids")
@@ -334,12 +407,25 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 	ret.Start = start
 	ret.Limit = limit
 	ret.Total = int64(len(thr.Transactions))
-	dj, err := json.Marshal(&thr.Transactions)
-	if err != nil {
-		return nil, err
+	for i := range thr.Transactions {
+		txs := thr.Transactions[i]
+
+		txData := txs.TxState
+		txPendingData := txs.TxPendingState
+		txSynthTxIds := txs.TxSynthTxIds
+		d, err := q.packTransactionQuery(txs.TxId[:], txData, txPendingData, txSynthTxIds)
+		if err != nil {
+			return nil, err
+		}
+		ret.Responses = append(ret.Responses, d)
 	}
-	ret.Data = &json.RawMessage{}
-	*ret.Data = dj
+
+	//dj, err := json.Marshal(&thr.Transactions)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//ret.Data = &json.RawMessage{}
+	//*ret.Data = dj
 	return &ret, nil
 }
 
