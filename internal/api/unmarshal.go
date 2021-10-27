@@ -138,7 +138,7 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 	tx := api.TokenTx{}
 	err := tx.UnmarshalBinary(txPayload)
 	if err != nil {
-		return nil, NewAccumulateError(err)
+		return nil, accumulateError(err)
 	}
 	txResp := response.TokenTx{}
 	txResp.From = tx.From.String
@@ -178,7 +178,7 @@ func unmarshalSynthTokenDeposit(txPayload []byte, txId types.Bytes, txSynthTxIds
 	tx := synthetic.TokenTransactionDeposit{}
 	err := tx.UnmarshalBinary(txPayload)
 	if err != nil {
-		return nil, NewAccumulateError(err)
+		return nil, accumulateError(err)
 	}
 
 	if len(txSynthTxIds) != 0 {
