@@ -111,6 +111,8 @@ func jsonType(field *Field) string {
 		return "string"
 	case "chainSet":
 		return "[]string"
+	case "duration":
+		return "interface{}"
 	case "slice":
 		jt := jsonType(field.Slice)
 		if jt != "" {
@@ -237,9 +239,25 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string
 	fmt.Fprintf(w, "\t}\n\n")
 }
 
+func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
+	fmt.Fprintf(w, "\tvar %s struct{\n", varName)
+	if typ.Kind == "chain" {
+		fmt.Fprintf(w, "\t\tstate.ChainHeader\n")
+	}
+	for _, f := range typ.Fields {
+		lcName := strings.ToLower(f.Name[:1]) + f.Name[1:]
+		typ := jsonType(f)
+		if typ == "" {
+			typ = resolveType(f, false)
+		}
+		fmt.Fprintf(w, "\t\t%s %s `json:\"%s\"`\n", f.Name, typ, lcName)
+	}
+	fmt.Fprintf(w, "\t}\n")
+}
+
 func valueToJson(w *bytes.Buffer, field *Field, tgtName, srcName string) {
 	switch field.Type {
-	case "bytes", "chain", "chainSet":
+	case "bytes", "chain", "chainSet", "duration":
 		fmt.Fprintf(w, "\t%s = %sToJSON(%s)\n", tgtName, field.Type, srcName)
 		return
 
@@ -262,7 +280,7 @@ func valueToJson(w *bytes.Buffer, field *Field, tgtName, srcName string) {
 func valueFromJson(w *bytes.Buffer, field *Field, tgtName, srcName, errName string, errArgs ...string) {
 	err := fieldError("decoding", errName, errArgs...)
 	switch field.Type {
-	case "bytes", "chain", "chainSet":
+	case "bytes", "chain", "chainSet", "duration":
 		fmt.Fprintf(w, "\tif x, err := %sFromJSON(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = x\n\t}\n", field.Type, srcName, err, tgtName)
 		return
 
@@ -433,24 +451,15 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		fmt.Fprintf(w, "func (v *%s) MarshalJSON() ([]byte, error) {\n", typ.name)
-		fmt.Fprintf(w, "\tvar u struct{\n")
-		if typ.Kind == "chain" {
-			fmt.Fprintf(w, "\t\tstate.ChainHeader\n")
-		}
-		for _, f := range typ.Fields {
-			typ := jsonType(f)
-			if typ == "" {
-				typ = resolveType(f, false)
-			}
-			fmt.Fprintf(w, "\t\t%s %s\n", f.Name, typ)
-		}
-		fmt.Fprintf(w, "\t}\n")
+		jsonVar(w, typ, "u")
+
 		if typ.Kind == "chain" {
 			fmt.Fprintf(w, "\tu.ChainHeader = v.ChainHeader\n")
 		}
 		for _, f := range typ.Fields {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
 		}
+
 		fmt.Fprintf(w, "\treturn json.Marshal(u)\t")
 		fmt.Fprintf(w, "}\n\n")
 	}
@@ -461,19 +470,7 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		fmt.Fprintf(w, "func (v *%s) UnmarshalJSON(data []byte) error {\t", typ.name)
-		fmt.Fprintf(w, "\tvar u struct{\n")
-		if typ.Kind == "chain" {
-			fmt.Fprintf(w, "\t\tstate.ChainHeader\n")
-		}
-		for _, f := range typ.Fields {
-			typ := jsonType(f)
-			if typ == "" {
-				typ = resolveType(f, false)
-			}
-			fmt.Fprintf(w, "\t\t%s %s\n", f.Name, typ)
-		}
-		fmt.Fprintf(w, "\t}\n")
-
+		jsonVar(w, typ, "u")
 		fmt.Fprintf(w, "\tif err := json.Unmarshal(data, &u); err != nil {\n\t\treturn err\n\t}\n")
 
 		if typ.Kind == "chain" {
@@ -482,6 +479,7 @@ func run(_ *cobra.Command, args []string) {
 		for _, f := range typ.Fields {
 			valueFromJson(w, f, "v."+f.Name, "u."+f.Name, f.Name)
 		}
+
 		fmt.Fprintf(w, "\treturn nil\t")
 		fmt.Fprintf(w, "}\n\n")
 	}
