@@ -88,6 +88,9 @@ type SyntheticDepositCredits struct {
 	Amount uint64   `json:"amount" form:"amount" query:"amount" validate:"required"`
 }
 
+type SyntheticGenesis struct {
+}
+
 type TokenAccountCreate struct {
 	Url        string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	TokenUrl   string `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
@@ -140,6 +143,8 @@ func (*IdentityCreate) GetType() types.TxType { return types.TxTypeIdentityCreat
 func (*SyntheticCreateChain) GetType() types.TxType { return types.TxTypeSyntheticCreateChain }
 
 func (*SyntheticDepositCredits) GetType() types.TxType { return types.TxTypeSyntheticDepositCredits }
+
+func (*SyntheticGenesis) GetType() types.TxType { return types.TxTypeSyntheticGenesis }
 
 func (*TokenAccountCreate) GetType() types.TxType { return types.TxTypeTokenAccountCreate }
 
@@ -319,6 +324,14 @@ func (v *SyntheticDepositCredits) BinarySize() int {
 	n += chainBinarySize(&v.Cause)
 
 	n += uvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *SyntheticGenesis) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(uint64(types.TxTypeSyntheticGenesis))
 
 	return n
 }
@@ -569,6 +582,14 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	buffer.Write(chainMarshalBinary(&v.Cause))
 
 	buffer.Write(uvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SyntheticGenesis) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeSyntheticGenesis)))
 
 	return buffer.Bytes(), nil
 }
@@ -995,6 +1016,18 @@ func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
 		v.Amount = x
 	}
 	data = data[uvarintBinarySize(v.Amount):]
+
+	return nil
+}
+
+func (v *SyntheticGenesis) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeSyntheticGenesis
+	if v, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+	}
+	data = data[uvarintBinarySize(uint64(typ)):]
 
 	return nil
 }

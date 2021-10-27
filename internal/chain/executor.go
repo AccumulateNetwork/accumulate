@@ -7,15 +7,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/types/api/query"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulated/types/api/query"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
@@ -61,7 +61,9 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, error) {
 	qr := query.ResponseByChainId{}
 
-	obj, err := m.db.GetCurrentEntry(chainId)
+	// This intentionally uses GetPersistentEntry instead of GetCurrentEntry.
+	// Callers should never see uncommitted values.
+	obj, err := m.db.GetPersistentEntry(chainId, false)
 	// Or a transaction
 	if errors.Is(err, storage.ErrNotFound) {
 		obj, err = m.db.GetTransaction(chainId)
@@ -191,6 +193,10 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 }
 
 func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error) {
+	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
+		return NewStateManager(m.db, tx)
+	}
+
 	if len(tx.Signature) == 0 {
 		return nil, fmt.Errorf("transaction is not signed")
 	}
@@ -397,6 +403,11 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	if err != nil {
 		err = fmt.Errorf("rejected by chain: %v", err)
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
+	}
+
+	// Ensure the genesis transaction can only be processed once
+	if executor.Type() == types.TxTypeSyntheticGenesis {
+		delete(m.executors, types.TxTypeSyntheticGenesis)
 	}
 
 	// If we get here, we were successful in validating.  So, we need to
