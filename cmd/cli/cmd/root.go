@@ -68,6 +68,10 @@ func initDB() *bolt.DB {
 		if err != nil {
 			return fmt.Errorf("DB: %s", err)
 		}
+		return nil
+	})
+
+	err = db.Update(func(tx *bolt.Tx) error {
 		_, err = tx.CreateBucket([]byte("adi"))
 		if err != nil {
 			return fmt.Errorf("DB: %s", err)
@@ -75,5 +79,12 @@ func initDB() *bolt.DB {
 		return nil
 	})
 
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err = tx.CreateBucket([]byte("keys"))
+		if err != nil {
+			return fmt.Errorf("DB: %s", err)
+		}
+		return nil
+	})
 	return db
 }

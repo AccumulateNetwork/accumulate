@@ -12,14 +12,14 @@ import (
 	"time"
 )
 
-func prepareGenTx(jsonPayload []byte, binaryPayload []byte, sender string) (*acmeapi.APIRequestRaw, error) {
+func prepareGenTx(jsonPayload []byte, binaryPayload []byte, sender string, label string, bucket string) (*acmeapi.APIRequestRaw, error) {
 
 	params := &acmeapi.APIRequestRaw{}
 	params.Tx = &acmeapi.APIRequestRawTx{}
 
 	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
-		pk := b.Get([]byte(sender))
+		b := tx.Bucket([]byte("bucket"))
+		pk := b.Get([]byte(label))
 		fmt.Println(hex.EncodeToString(pk))
 
 		params.Tx.Data = &json.RawMessage{}

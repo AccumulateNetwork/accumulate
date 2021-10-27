@@ -14,7 +14,7 @@ func createAcmeToken() (*types.Bytes32, *state.Object) {
 	token.Precision = 8
 	token.Symbol = "ACME"
 	//desc := json.RawMessage("{\"propertiesUrl\":\"acc://acme/properties"}")
-	//token.Meta = &desc
+	//propertiesUrl would contain attributes associated with the token that can be updated.
 	t, err := token.MarshalBinary()
 	if err != nil {
 		return nil, nil

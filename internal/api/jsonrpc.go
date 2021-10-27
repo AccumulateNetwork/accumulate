@@ -68,6 +68,13 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"update-key-page":       api.updateKeyPage,
 		"update-sig-spec":       api.updateKeyPage,
 
+		// Updated Key Management
+		"key-page-create": api.createSigSpec,
+		"key-page-update": api.updateKeyPage,
+		"key-page":        api.getSigSpec,
+		"key-book-create": api.createSigSpec,
+		"key-book":        api.getSigSpecGroup,
+
 		// token
 		"token":                 api.getToken,
 		"token-create":          api.createToken,
