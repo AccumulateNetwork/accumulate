@@ -33,7 +33,7 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 	obj := state.Object{}
 	err := obj.UnmarshalBinary(rQuery.Value)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling state objct %v", err)
+		return nil, fmt.Errorf("error unmarshaling state object %v", err)
 	}
 
 	v, err := as(obj.Entry)
