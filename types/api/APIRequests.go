@@ -68,9 +68,9 @@ type APIDataResponse struct {
 
 // APIDataResponsePagination is APIDataResponse with pagination data
 type APIDataResponsePagination struct {
-	Responses []*APIDataResponse `json:"responses"`
-	Type      types.String       `json:"type"`
-	Start     int64              `json:"start"`
-	Limit     int64              `json:"limit"`
-	Total     int64              `json:"total"`
+	Data  []*APIDataResponse `json:"data"`
+	Type  types.String       `json:"type"`
+	Start int64              `json:"start"`
+	Limit int64              `json:"limit"`
+	Total int64              `json:"total"`
 }
