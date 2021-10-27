@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
@@ -27,6 +28,12 @@ type StateManager struct {
 func NewStateManager(db *state.StateDB, tx *transactions.GenTransaction) (*StateManager, error) {
 	st := new(StateManager)
 	st.db = db
+
+	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
+		st.SponsorUrl = protocol.AcmeUrl()
+		st.Sponsor = genesis.ACME
+		return st, nil
+	}
 
 	var err error
 	st.SponsorUrl, err = url.Parse(tx.SigInfo.URL)
