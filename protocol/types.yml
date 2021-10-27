@@ -185,3 +185,6 @@ MetricsResponse:
   fields:
     - name: Value
       type: any
+
+SyntheticGenesis:
+  kind: tx
