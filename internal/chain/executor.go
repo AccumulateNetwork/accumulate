@@ -103,6 +103,9 @@ func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
 		//this is only an error if the transactions produced synth tx's or some other database error occurred
 		return nil, fmt.Errorf("%w: error in query for synthetic txid txid %X", storage.ErrNotFound, txid)
 	}
+
+	qr.TxId.FromBytes(txid)
+
 	return &qr, nil
 }
 
