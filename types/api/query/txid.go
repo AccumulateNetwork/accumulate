@@ -49,7 +49,7 @@ func (t *ResponseByTxId) UnmarshalBinary(data []byte) (err error) {
 	}()
 
 	t.TxId.FromBytes(data[:32])
-	t.TxState, data = common.BytesSlice(data)
+	t.TxState, data = common.BytesSlice(data[32:])
 	t.TxPendingState, data = common.BytesSlice(data)
 	t.TxSynthTxIds, _ = common.BytesSlice(data)
 
