@@ -5,7 +5,6 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/types/api/query"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
@@ -16,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/query"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/stretchr/testify/require"
@@ -80,6 +80,11 @@ type fakeNode struct {
 func (n *fakeNode) NextHeight() int64 {
 	n.height++
 	return n.height
+}
+
+func (n *fakeNode) WriteStates() {
+	_, _, err := n.db.WriteStates(n.NextHeight())
+	require.NoError(n.t, err)
 }
 
 func (n *fakeNode) Query(q *query.Query) *api.APIDataResponse {

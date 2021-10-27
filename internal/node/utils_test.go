@@ -79,6 +79,10 @@ func startNodes(t *testing.T, nodes []*node.Node) *api.Query {
 
 	for _, n := range nodes {
 		require.NoError(t, n.Start())
+		t.Cleanup(func() {
+			n.Stop()
+			n.Wait()
+		})
 	}
 
 	rpc, err := rpc.New(nodes[0].Config.RPC.ListenAddress)
