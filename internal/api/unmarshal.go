@@ -33,7 +33,7 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 	obj := state.Object{}
 	err := obj.UnmarshalBinary(rQuery.Value)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling state objct %v", err)
+		return nil, fmt.Errorf("error unmarshaling state object %v", err)
 	}
 
 	v, err := as(obj.Entry)
@@ -124,7 +124,7 @@ func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error)
 		obj := state.Object{}
 		err := obj.UnmarshalBinary(b)
 		if err != nil {
-			return nil, fmt.Errorf("error unmarshaling Token state objct %v", err)
+			return nil, fmt.Errorf("error unmarshaling Token state object %v", err)
 		}
 
 		txRef := new(state.TxReference)
@@ -217,7 +217,7 @@ func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*a
 	obj := state.Object{}
 	err := obj.UnmarshalBinary(rQuery.Value)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling chain state objct %v", err)
+		return nil, fmt.Errorf("error unmarshaling chain state object %v", err)
 	}
 
 	sChain := new(state.ChainHeader)

@@ -43,13 +43,13 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 		}
 
 		if _, err := st.LoadUrl(u); err == nil {
-			return fmt.Errorf("chain %q already exists", u.String())
+			// The record already exists, but that's ok
 		} else if !errors.Is(err, storage.ErrNotFound) {
 			return fmt.Errorf("error fetching %q: %v", u.String(), err)
 		}
 
 		urls[i] = u
-		st.Store(record)
+		st.Update(record)
 	}
 
 	// Verify everything is sane
@@ -90,22 +90,24 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 				return errors.New("invalid key book: SigSpecId is not empty")
 			}
 
+		case types.ChainTypeSigSpec:
+			// A key page can be unbound
+
 		default:
 			// Anything else must have a key book
 			if record.Header().SigSpecId == (types.Bytes32{}) {
 				return fmt.Errorf("%q does not specify a key book", u)
 			}
+		}
 
-			// Make sure the key book actually exists
+		// Make sure the key book actually exists
+		if record.Header().SigSpecId != (types.Bytes32{}) {
 			ssg := new(protocol.SigSpecGroup)
 			err = st.LoadAs(record.Header().SigSpecId, ssg)
 			if err != nil {
 				return fmt.Errorf("invalid key book for %q: %v", u, err)
 			}
 		}
-
-		// Store the record (pending)
-		st.Store(record)
 	}
 
 	return nil
