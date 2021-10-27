@@ -32,6 +32,13 @@ var txCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintTXGet()
 				}
+			case "history":
+				if len(args) > 3 {
+					GetTXHistory(args[1], args[2], args[3])
+				} else {
+					fmt.Println("Usage:")
+					PrintAccountGet()
+				}
 			case "create":
 				if len(args) > 3 {
 					CreateTX(args[1], args[2], args[3])
@@ -63,8 +70,13 @@ func PrintTXCreate() {
 	fmt.Println("  accumulate tx create [from] [to] [amount]	Create new token tx")
 }
 
+func PrintTXHistoryGet() {
+	fmt.Println("  accumulate tx history [url] [start] [end]	Get token account history by URL given transaction start and end indices")
+}
+
 func PrintTX() {
 	PrintTXGet()
+	PrintTXHistoryGet()
 	PrintTXCreate()
 }
 
@@ -89,6 +101,49 @@ func GetTX(hash string) {
 	}
 
 	if err := Client.Request(context.Background(), "token-tx", jsondata, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	str, err = json.Marshal(res)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(str))
+
+}
+
+func GetTXHistory(accountUrl string, s string, e string) {
+
+	start, err := strconv.Atoi(s)
+	if err != nil {
+		log.Fatal(err)
+	}
+	end, err := strconv.Atoi(e)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	u, err := url.Parse(accountUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var res interface{}
+	var str []byte
+
+	params := new(acmeapi.APIRequestURLPagination)
+	params.URL = types.String(u.String())
+	params.Start = int64(start)
+	params.Limit = int64(end)
+
+	data, err := json.Marshal(params)
+	jsondata := json.RawMessage(data)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if err := Client.Request(context.Background(), "token-account-history", jsondata, &res); err != nil {
 		log.Fatal(err)
 	}
 
