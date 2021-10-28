@@ -37,8 +37,13 @@ var rootCmd = func() *cobra.Command {
 		Short: "CLI for Accumulate Network",
 	}
 
+	defaultServer := os.Getenv("ACC_API")
+	if defaultServer == "" {
+		defaultServer = "http://localhost:35554/v1"
+	}
+
 	flags := cmd.PersistentFlags()
-	flags.StringVarP(&Client.Server, "server", "s", "http://localhost:35554/v1", "Accumulated server")
+	flags.StringVarP(&Client.Server, "server", "s", defaultServer, "Accumulated server")
 	flags.DurationVarP(&Client.Timeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
 	flags.BoolVarP(&Client.DebugRequest, "debug", "d", false, "Print accumulated API calls")
 
