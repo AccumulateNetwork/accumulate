@@ -279,9 +279,9 @@ func TestInvalidTransactions(t *testing.T) {
 
 }
 func TestFaucet(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
+	//if runtime.GOOS == "windows" {
+	//	t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	//}
 
 	if testing.Short() {
 		t.Skip("Skipping test in short mode")
@@ -307,14 +307,6 @@ func TestFaucet(t *testing.T) {
 
 	res := jsonapi.Faucet(context.Background(), params)
 	data, err := json.Marshal(res)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(data))
-
-	//run the faucet again
-	res = jsonapi.Faucet(context.Background(), params)
-	data, err = json.Marshal(res)
 	if err != nil {
 		t.Fatal(err)
 	}
