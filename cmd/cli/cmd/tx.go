@@ -10,9 +10,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
-
-	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -73,13 +70,13 @@ func PrintTXCreate() {
 }
 
 func PrintTXHistoryGet() {
-	fmt.Println("  accumulate tx history [url] [start] [end]	Get token account history by URL given transaction start and end indices")
+	fmt.Println("  accumulate tx history [url] [starting transaction number] [ending transaction number]	Get transaction history")
 }
 
 func PrintTX() {
 	PrintTXGet()
-	PrintTXHistoryGet()
 	PrintTXCreate()
+	PrintTXHistoryGet()
 }
 
 func GetTX(hash string) {
@@ -225,7 +222,7 @@ func CreateTX(sender string, receiver string, amount string) {
 		ed := new(transactions.ED25519Sig)
 		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
 		if err != nil {
-			return jsonrpc2.NewError(api.ErrCodeSubmission, "Submission Entry Error", err)
+			log.Fatal(err)
 		}
 		params.Tx.Sig.FromBytes(ed.GetSignature())
 		//The public key needs to be used to verify the signature, however,
