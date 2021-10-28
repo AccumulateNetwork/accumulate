@@ -225,6 +225,7 @@ func TestFaucet(t *testing.T) {
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
+	req.Wait = true
 	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	params, err := json.Marshal(&req)
@@ -465,7 +466,7 @@ func TestMetrics(t *testing.T) {
 	_, _, query := startBVC(t, dir)
 	japi := NewTest(t, query)
 
-	req, err := json.Marshal(protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
+	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Millisecond})
 	require.NoError(t, err)
 
 	resp := japi.Metrics(context.Background(), req)

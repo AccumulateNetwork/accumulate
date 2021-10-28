@@ -60,7 +60,7 @@ func (CreateSigSpec) DeliverTx(st *StateManager, tx *transactions.GenTransaction
 
 	spec := protocol.NewSigSpec()
 	spec.ChainUrl = types.String(url.String())
-	st.Store(spec)
+	st.Create(spec)
 
 	if group != nil {
 		groupUrl, err := group.ParseUrl()
@@ -70,7 +70,7 @@ func (CreateSigSpec) DeliverTx(st *StateManager, tx *transactions.GenTransaction
 			return fmt.Errorf("invalid sponsor URL: %v", err)
 		}
 
-		st.Store(group)
+		st.Create(group)
 		group.SigSpecs = append(group.SigSpecs, types.Bytes(url.ResourceChain()).AsBytes32())
 		spec.SigSpecId = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 	}

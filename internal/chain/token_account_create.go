@@ -71,13 +71,6 @@ func (TokenAccountCreate) DeliverTx(st *StateManager, tx *transactions.GenTransa
 		copy(account.SigSpecId[:], keyBookUrl.ResourceChain())
 	}
 
-	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
-	err = scc.Add(account)
-	if err != nil {
-		return fmt.Errorf("failed to marshal synthetic TX: %v", err)
-	}
-
-	st.Submit(accountUrl, scc)
+	st.Create(account)
 	return nil
 }
