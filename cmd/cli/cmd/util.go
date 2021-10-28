@@ -9,6 +9,7 @@ import (
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/boltdb/bolt"
+	"log"
 	"time"
 )
 
@@ -18,8 +19,11 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, sender string, label
 	params.Tx = &acmeapi.APIRequestRawTx{}
 
 	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("bucket"))
+		b := tx.Bucket([]byte(bucket))
 		pk := b.Get([]byte(label))
+		if pk == nil {
+			log.Fatalf("cannot find private key associated with %s in %s:%s", sender, label, bucket)
+		}
 		fmt.Println(hex.EncodeToString(pk))
 
 		params.Tx.Data = &json.RawMessage{}
