@@ -22,7 +22,7 @@ func (SyntheticGenesis) Validate(st *StateManager, tx *transactions.GenTransacti
 	}
 
 	for _, record := range genesis.BootstrapStates() {
-		st.Store(record)
+		st.Update(record)
 	}
 	return nil
 }
