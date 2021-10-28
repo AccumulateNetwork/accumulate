@@ -1152,7 +1152,7 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 }
 
 func (v *ChainParams) MarshalJSON() ([]byte, error) {
-	var ustruct {
+	var u struct {
 		Url  string `json:"url"`
 		Data string `json:"data"`
 	}
@@ -1162,7 +1162,7 @@ func (v *ChainParams) MarshalJSON() ([]byte, error) {
 }
 
 func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
-	var ustruct {
+	var u struct {
 		Url      string   `json:"url"`
 		SigSpecs []string `json:"sigSpecs"`
 	}
@@ -1172,7 +1172,7 @@ func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
 }
 
 func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
-	var ustruct {
+	var u struct {
 		Url         string `json:"url"`
 		PublicKey   string `json:"publicKey"`
 		KeyBookName string `json:"keyBookName"`
@@ -1186,7 +1186,7 @@ func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
 }
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
-	var ustruct {
+	var u struct {
 		PublicKey string `json:"publicKey"`
 		Nonce     uint64 `json:"nonce"`
 	}
@@ -1224,7 +1224,7 @@ func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
 }
 
 func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
-	var ustruct {
+	var u struct {
 		Cause  string   `json:"cause"`
 		Chains []string `json:"chains"`
 	}
@@ -1237,7 +1237,7 @@ func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
 }
 
 func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
-	var ustruct {
+	var u struct {
 		Cause  string `json:"cause"`
 		Amount uint64 `json:"amount"`
 	}
@@ -1247,7 +1247,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 }
 
 func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
-	var ustruct {
+	var u struct {
 		Type  uint64 `json:"type"`
 		Hash  string `json:"hash"`
 		Url   string `json:"url"`
@@ -1261,7 +1261,7 @@ func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
 }
 
 func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
-	var ustruct {
+	var u struct {
 		Operation KeyPageOperation `json:"operation"`
 		Key       string           `json:"key"`
 		NewKey    string           `json:"newKey"`
@@ -1273,7 +1273,7 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 }
 
 func (v *ChainParams) UnmarshalJSON(data []byte) error {
-	var ustruct {
+	var u struct {
 		Url  string `json:"url"`
 		Data string `json:"data"`
 	}
@@ -1290,7 +1290,7 @@ func (v *ChainParams) UnmarshalJSON(data []byte) error {
 }
 
 func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
-	var ustruct {
+	var u struct {
 		Url      string   `json:"url"`
 		SigSpecs []string `json:"sigSpecs"`
 	}
@@ -1307,7 +1307,7 @@ func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
 }
 
 func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
-	var ustruct {
+	var u struct {
 		Url         string `json:"url"`
 		PublicKey   string `json:"publicKey"`
 		KeyBookName string `json:"keyBookName"`
@@ -1328,7 +1328,7 @@ func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
 }
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
-	var ustruct {
+	var u struct {
 		PublicKey string `json:"publicKey"`
 		Nonce     uint64 `json:"nonce"`
 	}
@@ -1394,7 +1394,7 @@ func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
 }
 
 func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
-	var ustruct {
+	var u struct {
 		Cause  string   `json:"cause"`
 		Chains []string `json:"chains"`
 	}
@@ -1418,7 +1418,7 @@ func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 }
 
 func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
-	var ustruct {
+	var u struct {
 		Cause  string `json:"cause"`
 		Amount uint64 `json:"amount"`
 	}
@@ -1435,7 +1435,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 }
 
 func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
-	var ustruct {
+	var u struct {
 		Type  uint64 `json:"type"`
 		Hash  string `json:"hash"`
 		Url   string `json:"url"`
@@ -1460,7 +1460,7 @@ func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
 }
 
 func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
-	var ustruct {
+	var u struct {
 		Operation KeyPageOperation `json:"operation"`
 		Key       string           `json:"key"`
 		NewKey    string           `json:"newKey"`
