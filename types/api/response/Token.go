@@ -5,5 +5,5 @@ import (
 )
 
 type Token struct {
-	api.Token `json:"token"`
+	api.Token
 }
