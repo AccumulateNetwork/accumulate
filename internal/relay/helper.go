@@ -10,7 +10,7 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func NewWith(targetList ...string) (*Relay, error) {
+func NewClients(targetList ...string) ([]Client, error) {
 	clients := []Client{}
 	for _, nameOrIP := range targetList {
 		net := networks.Networks[nameOrIP]
@@ -31,6 +31,15 @@ func NewWith(targetList ...string) (*Relay, error) {
 		}
 		clients = append(clients, client)
 	}
+	return clients, nil
+}
+
+func NewWith(targetList ...string) (*Relay, error) {
+	clients, err := NewClients(targetList...)
+	if err != nil {
+		return nil, err
+	}
+
 	txBouncer := New(clients...)
 	return txBouncer, nil
 }
