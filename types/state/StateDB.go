@@ -151,17 +151,20 @@ func (s *StateDB) Sync() {
 }
 
 //GetTxRange get the transaction id's in a given range
-func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, err error) {
+func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
 	s.mutex.Lock()
 	h, err := s.mm.GetRange(chainId[:], start, end)
+	s.mm.SetChainID(chainId[:])
+	maxAvailable = s.mm.GetElementCount()
 	s.mutex.Unlock()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for i := range h {
 		hashes = append(hashes, types.Bytes32(h[i]))
 	}
-	return hashes, nil
+
+	return hashes, maxAvailable, nil
 }
 
 //GetTx get the transaction by transaction ID
