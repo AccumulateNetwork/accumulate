@@ -16,6 +16,9 @@ cli
 
 /.nodes
 
+debug
+!debug/
+
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
@@ -33,7 +36,6 @@ engine/overrideversion.go
 *.kate-swp
 *.orig
 *.bak
-debug
 *.txt
 *.log
 .vscode/
