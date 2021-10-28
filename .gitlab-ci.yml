@@ -3,22 +3,22 @@ stages:
 - build
 - deploy
 
-.test:
-  stage: test
-  tags:
-  - docker
-  - linux
-  script:
-  - go build ./...
-  - go test ./...
+# .test:
+#   stage: test
+#   tags:
+#   - docker
+#   - linux
+#   script:
+#   - go build ./...
+#   - go test ./...
 
-test go1.16:
-  extends: .test
-  image: golang:1.16
+# test go1.16:
+#   extends: .test
+#   image: golang:1.16
 
-test go1.17:
-  extends: .test
-  image: golang:1.17
+# test go1.17:
+#   extends: .test
+#   image: golang:1.17
 
 git describe:
   stage: test
@@ -51,11 +51,11 @@ build:
     }
   script:
   - build linux amd64
-  - build linux arm64
-  - build windows amd64
-  - build windows arm64
-  - build darwin amd64
-  - build darwin arm64
+  # - build linux arm64
+  # - build windows amd64
+  # - build windows arm64
+  # - build darwin amd64
+  # - build darwin arm64
   artifacts:
     paths:
     - accumulated-*
@@ -70,13 +70,14 @@ configure:
   - |
     function init {
       rm -rf .nodes
-      ./accumulated init -w .nodes --no-empty-blocks -r Arches,AmericanSamoa,EastXeons -n $1
+      ./accumulated init -w .nodes --no-empty-blocks -r Arches,AmericanSamoa,EastXeons,Canyonlands -n $1
       tar czf config-$1.tar.gz -C .nodes .
     }
   - go build ./cmd/accumulated
   - init Arches
   - init AmericanSamoa
   - init EastXeons
+  - init Canyonlands
   artifacts:
     paths:
     - config-*.tar.gz
@@ -142,3 +143,10 @@ deploy 18.119.149.208:
   extends: .deploy
   variables:   { HOST: 18.119.149.208,              NETWORK: EastXeons,       NODE: 1, BIN: accumulated-linux-amd64 }
   environment: { url: 'http://18.119.149.208:8080', name: EastXeons/Node1 }
+
+deploy 3.140.120.192:
+  extends: .deploy
+  only:
+  - AC-463 # DELETEME
+  variables:   { HOST: 3.140.120.192,               NETWORK: Canyonlands,     NODE: 0, BIN: accumulated-linux-amd64 }
+  environment: { url: 'http://3.140.120.192:8080',  name: Canyonlands/Node0 }

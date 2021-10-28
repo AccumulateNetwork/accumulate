@@ -35,14 +35,6 @@ var Networks = map[string]*Network{
 			{"44.236.45.58", Validator},
 		},
 	},
-	"Badlands": {
-		Name: "Badlands",
-		Type: BVC,
-		Port: 35550,
-		Nodes: []Node{
-			{"127.0.0.1", Validator},
-		},
-	},
 	"EastXeons": {
 		Name: "EastXeons",
 		Type: BVC,
@@ -59,6 +51,23 @@ var Networks = map[string]*Network{
 		Nodes: []Node{
 			{"18.119.26.7", Validator},
 			{"18.119.149.208", Validator},
+		},
+	},
+	"Canyonlands": {
+		Name: "Canyonlands",
+		Type: BVC,
+		Port: 33000,
+		Nodes: []Node{
+			{"3.140.120.192", Validator},
+		},
+	},
+
+	"Badlands": {
+		Name: "Badlands",
+		Type: BVC,
+		Port: 35550,
+		Nodes: []Node{
+			{"127.0.0.1", Validator},
 		},
 	},
 	"Localhost": {
