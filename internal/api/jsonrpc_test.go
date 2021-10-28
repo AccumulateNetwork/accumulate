@@ -465,7 +465,7 @@ func TestMetrics(t *testing.T) {
 	_, _, query := startBVC(t, dir)
 	japi := NewTest(t, query)
 
-	req, err := json.Marshal(protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
+	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Millisecond})
 	require.NoError(t, err)
 
 	resp := japi.Metrics(context.Background(), req)
