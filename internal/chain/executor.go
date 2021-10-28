@@ -135,10 +135,11 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 		}
 
 		thr := query.ResponseTxHistory{}
-		txids, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Limit)
+		txids, maxAmt, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Limit)
 		if err != nil {
 			return nil, fmt.Errorf("error obtaining txid range %v", err)
 		}
+		thr.Total = maxAmt
 		for i := range txids {
 			qr, err := m.queryByTxId(txids[i][:])
 			if err != nil {
