@@ -131,6 +131,9 @@ func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page st
 		log.Fatal(err)
 	}
 
+	_, _, err = protocol.ParseAnonymousAddress(u)
+	isSponsoredByLiteAccount := err == nil
+
 	if len(pubKeyHex) != 64 && len(pubKeyHex) != 0 {
 		log.Fatalf("invalid public key")
 	}
@@ -171,7 +174,12 @@ func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page st
 		log.Fatal(err)
 	}
 
-	params, err := prepareGenTx(data, dataBinary, sender, sender, "adi")
+	bucket := "adi"
+	if isSponsoredByLiteAccount {
+		bucket = "anon"
+	}
+
+	params, err := prepareGenTx(data, dataBinary, sender, sender, bucket)
 	if err != nil {
 		log.Fatal(err)
 	}
