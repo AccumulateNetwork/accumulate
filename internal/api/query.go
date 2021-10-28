@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/types/api/query"
 
@@ -170,7 +171,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeAdi)
 }
 
 // GetToken
@@ -181,7 +182,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeToken)
 }
 
 // GetTokenAccount get the token balance for a given url
@@ -191,7 +192,7 @@ func (q *Query) GetTokenAccount(adiChainPath string) (*acmeApi.APIDataResponse, 
 		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount)
 }
 
 // GetTransactionReference get the transaction id for a given transaction number
@@ -337,7 +338,7 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 	ret := acmeApi.APIDataResponsePagination{}
 	ret.Start = start
 	ret.Limit = limit
-	ret.Total = int64(len(thr.Transactions))
+	ret.Total = thr.Total
 	for i := range thr.Transactions {
 		txs := thr.Transactions[i]
 
