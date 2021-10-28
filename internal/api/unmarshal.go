@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,7 +17,26 @@ import (
 	tm "github.com/tendermint/tendermint/abci/types"
 )
 
+func responseIsError(rQuery tm.ResponseQuery) error {
+	if rQuery.Code == 0 {
+		return nil
+	}
+
+	switch {
+	case rQuery.Log != "":
+		return errors.New(rQuery.Log)
+	case rQuery.Info != "":
+		return errors.New(rQuery.Info)
+	default:
+		return fmt.Errorf("query failed with code %d", rQuery.Code)
+	}
+}
+
 func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface{}, error)) (*api.APIDataResponse, error) {
+	if err := responseIsError(rQuery); err != nil {
+		return nil, err
+	}
+
 	rAPI := new(api.APIDataResponse)
 	rAPI.Type = types.String(typ)
 
@@ -214,6 +234,10 @@ func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (r
 }
 
 func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*api.APIDataResponse, error) {
+	if err := responseIsError(rQuery); err != nil {
+		return nil, err
+	}
+
 	obj := state.Object{}
 	err := obj.UnmarshalBinary(rQuery.Value)
 	if err != nil {
