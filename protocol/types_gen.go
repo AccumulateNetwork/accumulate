@@ -88,6 +88,9 @@ type SyntheticDepositCredits struct {
 	Amount uint64   `json:"amount" form:"amount" query:"amount" validate:"required"`
 }
 
+type SyntheticGenesis struct {
+}
+
 type TokenAccountCreate struct {
 	Url        string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	TokenUrl   string `json:"tokenUrl" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
@@ -140,6 +143,8 @@ func (*IdentityCreate) GetType() types.TxType { return types.TxTypeIdentityCreat
 func (*SyntheticCreateChain) GetType() types.TxType { return types.TxTypeSyntheticCreateChain }
 
 func (*SyntheticDepositCredits) GetType() types.TxType { return types.TxTypeSyntheticDepositCredits }
+
+func (*SyntheticGenesis) GetType() types.TxType { return types.TxTypeSyntheticGenesis }
 
 func (*TokenAccountCreate) GetType() types.TxType { return types.TxTypeTokenAccountCreate }
 
@@ -319,6 +324,14 @@ func (v *SyntheticDepositCredits) BinarySize() int {
 	n += chainBinarySize(&v.Cause)
 
 	n += uvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *SyntheticGenesis) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(uint64(types.TxTypeSyntheticGenesis))
 
 	return n
 }
@@ -569,6 +582,14 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	buffer.Write(chainMarshalBinary(&v.Cause))
 
 	buffer.Write(uvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SyntheticGenesis) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeSyntheticGenesis)))
 
 	return buffer.Bytes(), nil
 }
@@ -999,6 +1020,18 @@ func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *SyntheticGenesis) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeSyntheticGenesis
+	if v, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+	}
+	data = data[uvarintBinarySize(uint64(typ)):]
+
+	return nil
+}
+
 func (v *TokenAccountCreate) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeTokenAccountCreate
 	if v, err := uvarintUnmarshalBinary(data); err != nil {
@@ -1119,9 +1152,9 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 }
 
 func (v *ChainParams) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Url  string
-		Data string
+	var ustruct {
+		Url  string `json:"url"`
+		Data string `json:"data"`
 	}
 	u.Url = v.Url
 	u.Data = bytesToJSON(v.Data)
@@ -1129,9 +1162,9 @@ func (v *ChainParams) MarshalJSON() ([]byte, error) {
 }
 
 func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Url      string
-		SigSpecs []string
+	var ustruct {
+		Url      string   `json:"url"`
+		SigSpecs []string `json:"sigSpecs"`
 	}
 	u.Url = v.Url
 	u.SigSpecs = chainSetToJSON(v.SigSpecs)
@@ -1139,11 +1172,11 @@ func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
 }
 
 func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Url         string
-		PublicKey   string
-		KeyBookName string
-		KeyPageName string
+	var ustruct {
+		Url         string `json:"url"`
+		PublicKey   string `json:"publicKey"`
+		KeyBookName string `json:"keyBookName"`
+		KeyPageName string `json:"keyPageName"`
 	}
 	u.Url = v.Url
 	u.PublicKey = bytesToJSON(v.PublicKey)
@@ -1153,9 +1186,9 @@ func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
 }
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
-	var u struct {
-		PublicKey string
-		Nonce     uint64
+	var ustruct {
+		PublicKey string `json:"publicKey"`
+		Nonce     uint64 `json:"nonce"`
 	}
 	u.PublicKey = bytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
@@ -1164,16 +1197,26 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 
 func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 	var u struct {
-		PublicKey string
+		PublicKey string `json:"publicKey"`
 	}
 	u.PublicKey = bytesToJSON(v.PublicKey)
+	return json.Marshal(u)
+}
+
+func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Metric   string      `json:"metric"`
+		Duration interface{} `json:"duration"`
+	}
+	u.Metric = v.Metric
+	u.Duration = durationToJSON(v.Duration)
 	return json.Marshal(u)
 }
 
 func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
 	var u struct {
 		state.ChainHeader
-		SigSpecs []string
+		SigSpecs []string `json:"sigSpecs"`
 	}
 	u.ChainHeader = v.ChainHeader
 	u.SigSpecs = chainSetToJSON(v.SigSpecs)
@@ -1181,9 +1224,9 @@ func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
 }
 
 func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Cause  string
-		Chains []string
+	var ustruct {
+		Cause  string   `json:"cause"`
+		Chains []string `json:"chains"`
 	}
 	u.Cause = chainToJSON(v.Cause)
 	u.Chains = make([]string, len(v.Chains))
@@ -1194,9 +1237,9 @@ func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
 }
 
 func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Cause  string
-		Amount uint64
+	var ustruct {
+		Cause  string `json:"cause"`
+		Amount uint64 `json:"amount"`
 	}
 	u.Cause = chainToJSON(v.Cause)
 	u.Amount = v.Amount
@@ -1204,11 +1247,11 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 }
 
 func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Type  uint64
-		Hash  string
-		Url   string
-		TxRef string
+	var ustruct {
+		Type  uint64 `json:"type"`
+		Hash  string `json:"hash"`
+		Url   string `json:"url"`
+		TxRef string `json:"txRef"`
 	}
 	u.Type = v.Type
 	u.Hash = chainToJSON(v.Hash)
@@ -1218,10 +1261,10 @@ func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
 }
 
 func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Operation KeyPageOperation
-		Key       string
-		NewKey    string
+	var ustruct {
+		Operation KeyPageOperation `json:"operation"`
+		Key       string           `json:"key"`
+		NewKey    string           `json:"newKey"`
 	}
 	u.Operation = v.Operation
 	u.Key = bytesToJSON(v.Key)
@@ -1230,9 +1273,9 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 }
 
 func (v *ChainParams) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Url  string
-		Data string
+	var ustruct {
+		Url  string `json:"url"`
+		Data string `json:"data"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1247,9 +1290,9 @@ func (v *ChainParams) UnmarshalJSON(data []byte) error {
 }
 
 func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Url      string
-		SigSpecs []string
+	var ustruct {
+		Url      string   `json:"url"`
+		SigSpecs []string `json:"sigSpecs"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1264,11 +1307,11 @@ func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
 }
 
 func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Url         string
-		PublicKey   string
-		KeyBookName string
-		KeyPageName string
+	var ustruct {
+		Url         string `json:"url"`
+		PublicKey   string `json:"publicKey"`
+		KeyBookName string `json:"keyBookName"`
+		KeyPageName string `json:"keyPageName"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1285,9 +1328,9 @@ func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
 }
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
-	var u struct {
-		PublicKey string
-		Nonce     uint64
+	var ustruct {
+		PublicKey string `json:"publicKey"`
+		Nonce     uint64 `json:"nonce"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1303,7 +1346,7 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 
 func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	var u struct {
-		PublicKey string
+		PublicKey string `json:"publicKey"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1316,10 +1359,27 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Metric   string      `json:"metric"`
+		Duration interface{} `json:"duration"`
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Metric = u.Metric
+	if x, err := durationFromJSON(u.Duration); err != nil {
+		return fmt.Errorf("error decoding Duration: %w", err)
+	} else {
+		v.Duration = x
+	}
+	return nil
+}
+
 func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
 	var u struct {
 		state.ChainHeader
-		SigSpecs []string
+		SigSpecs []string `json:"sigSpecs"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1334,9 +1394,9 @@ func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
 }
 
 func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Cause  string
-		Chains []string
+	var ustruct {
+		Cause  string   `json:"cause"`
+		Chains []string `json:"chains"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1358,9 +1418,9 @@ func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 }
 
 func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Cause  string
-		Amount uint64
+	var ustruct {
+		Cause  string `json:"cause"`
+		Amount uint64 `json:"amount"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1375,11 +1435,11 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 }
 
 func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Type  uint64
-		Hash  string
-		Url   string
-		TxRef string
+	var ustruct {
+		Type  uint64 `json:"type"`
+		Hash  string `json:"hash"`
+		Url   string `json:"url"`
+		TxRef string `json:"txRef"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1400,10 +1460,10 @@ func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
 }
 
 func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Operation KeyPageOperation
-		Key       string
-		NewKey    string
+	var ustruct {
+		Operation KeyPageOperation `json:"operation"`
+		Key       string           `json:"key"`
+		NewKey    string           `json:"newKey"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err

@@ -189,6 +189,10 @@ func chainSetToJSON(v [][32]byte) []string {
 	return s
 }
 
+func durationToJSON(v time.Duration) interface{} {
+	return v.String()
+}
+
 func bytesFromJSON(s string) ([]byte, error) {
 	return hex.DecodeString(s)
 }
@@ -215,4 +219,17 @@ func chainSetFromJSON(s []string) ([][32]byte, error) {
 		}
 	}
 	return v, nil
+}
+
+func durationFromJSON(v interface{}) (time.Duration, error) {
+	switch v := v.(type) {
+	case float64:
+		return time.Duration(v * float64(time.Second)), nil
+	case int:
+		return time.Second * time.Duration(v), nil
+	case string:
+		return time.ParseDuration(v)
+	default:
+		return 0, fmt.Errorf("cannot parse %T as a duration", v)
+	}
 }
