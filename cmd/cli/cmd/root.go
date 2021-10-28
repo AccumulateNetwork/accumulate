@@ -57,7 +57,10 @@ func init() {
 }
 
 func initDB() *bolt.DB {
-	os.MkdirAll(defaultWorkDir, 0600)
+	err := os.MkdirAll(defaultWorkDir, 0600)
+	if err != nil {
+		log.Fatal(err)
+	}
 	db, err := bolt.Open(defaultWorkDir+"/wallet.db", 0600, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -65,6 +68,10 @@ func initDB() *bolt.DB {
 
 	err = db.Update(func(tx *bolt.Tx) error {
 		_, err := tx.CreateBucket([]byte("anon"))
+		if err != nil {
+			return fmt.Errorf("DB: %s", err)
+		}
+		_, err = tx.CreateBucket([]byte("adi"))
 		if err != nil {
 			return fmt.Errorf("DB: %s", err)
 		}
