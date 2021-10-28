@@ -5,10 +5,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"log"
 	"strconv"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -223,7 +225,7 @@ func CreateTX(sender string, receiver string, amount string) {
 		ed := new(transactions.ED25519Sig)
 		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
 		if err != nil {
-			return api.NewSubmissionError(err)
+			return jsonrpc2.NewError(api.ErrCodeSubmission, "Submission Entry Error", err)
 		}
 		params.Tx.Sig.FromBytes(ed.GetSignature())
 		//The public key needs to be used to verify the signature, however,

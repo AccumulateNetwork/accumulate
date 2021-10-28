@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"sort"
+	"strings"
 
+	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
@@ -16,39 +19,55 @@ import (
 
 type StateManager struct {
 	db          *state.StateDB
-	chains      map[[32]byte]*stateEntry
+	stores      map[[32]byte]*storeState
+	chains      map[[32]byte]state.Chain
 	submissions []*submittedTx
+	storeCount  int
+	txHash      types.Bytes32
+	txType      types.TxType
 
 	Sponsor        state.Chain
 	SponsorUrl     *url.URL
 	SponsorChainId [32]byte
 }
 
+type storeState struct {
+	isCreate bool
+	order    int
+	chainId  *[32]byte
+	record   state.Chain
+}
+
 func NewStateManager(db *state.StateDB, tx *transactions.GenTransaction) (*StateManager, error) {
-	st := new(StateManager)
-	st.db = db
+	m := new(StateManager)
+	m.db = db
+	m.chains = map[[32]byte]state.Chain{}
+	m.stores = map[[32]byte]*storeState{}
+	m.txHash = types.Bytes(tx.TransactionHash()).AsBytes32()
+	m.txType = tx.TransactionType()
+
+	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
+		m.SponsorUrl = protocol.AcmeUrl()
+		m.Sponsor = genesis.ACME
+		return m, nil
+	}
 
 	var err error
-	st.SponsorUrl, err = url.Parse(tx.SigInfo.URL)
+	m.SponsorUrl, err = url.Parse(tx.SigInfo.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	copy(st.SponsorChainId[:], st.SponsorUrl.ResourceChain())
-	st.Sponsor, err = st.Load(st.SponsorChainId)
+	copy(m.SponsorChainId[:], m.SponsorUrl.ResourceChain())
+	m.Sponsor, err = m.Load(m.SponsorChainId)
 	if err == nil {
-		return st, nil
+		return m, nil
 	}
 
 	if errors.Is(err, storage.ErrNotFound) {
-		return st, fmt.Errorf("sponsor %q %w", st.SponsorUrl, err)
+		return m, fmt.Errorf("sponsor %q %w", m.SponsorUrl, err)
 	}
 	return nil, err
-}
-
-type stateEntry struct {
-	record state.Chain
-	dirty  bool
 }
 
 type submittedTx struct {
@@ -88,9 +107,9 @@ func (m *StateManager) LoadUrlAs(u *url.URL, v interface{}) error {
 
 // Load loads the given chain and unmarshals it
 func (m *StateManager) Load(chainId [32]byte) (state.Chain, error) {
-	entry, ok := m.chains[chainId]
+	record, ok := m.chains[chainId]
 	if ok {
-		return entry.record, nil
+		return record, nil
 	}
 
 	obj, err := m.db.GetCurrentEntry(chainId[:])
@@ -98,18 +117,15 @@ func (m *StateManager) Load(chainId [32]byte) (state.Chain, error) {
 		return nil, err
 	}
 
-	record, err := unmarshalRecord(obj)
+	record, err = unmarshalRecord(obj)
 	if err != nil {
 		return nil, err
 	}
 
-	entry = new(stateEntry)
-	entry.record = record
-
 	if m.chains == nil {
-		m.chains = map[[32]byte]*stateEntry{}
+		m.chains = map[[32]byte]state.Chain{}
 	}
-	m.chains[chainId] = entry
+	m.chains[chainId] = record
 	return record, nil
 }
 
@@ -135,8 +151,7 @@ func (m *StateManager) LoadAs(chainId [32]byte, v interface{}) (err error) {
 	return nil
 }
 
-// Store queues a record for storage in the database
-func (m *StateManager) Store(record state.Chain) {
+func (m *StateManager) store(record state.Chain, isCreate bool) {
 	u, err := record.Header().ParseUrl()
 	if err != nil {
 		// The caller must ensure the chain URL is correct
@@ -145,22 +160,100 @@ func (m *StateManager) Store(record state.Chain) {
 
 	var chainId [32]byte
 	copy(chainId[:], u.ResourceChain())
-	entry, ok := m.chains[chainId]
+	m.chains[chainId] = record
+
+	s, ok := m.stores[chainId]
 	if !ok {
-		if m.chains == nil {
-			m.chains = map[[32]byte]*stateEntry{}
-		}
-		entry = new(stateEntry)
-		m.chains[chainId] = entry
+		s = new(storeState)
+		m.stores[chainId] = s
 	}
 
-	entry.dirty = true
-	entry.record = record
+	s.chainId = &chainId
+	s.record = record
+	s.isCreate = isCreate
+	s.order = m.storeCount
+	m.storeCount++
+}
+
+// Update queues a record for storage in the database. The queued update will
+// fail if the record does not already exist, unless it is created by a
+// synthetic transaction, or the record is a transaction.
+func (m *StateManager) Update(record ...state.Chain) {
+	for _, r := range record {
+		m.store(r, false)
+	}
+}
+
+// Create queues a record for a synthetic chain create transaction. Will panic
+// if called by a synthetic transaction. Will panic if the record is a
+// transaction.
+func (m *StateManager) Create(record ...state.Chain) {
+	if m.txType.IsSynthetic() {
+		panic("Called StateManager.Create from a synthetic transaction!")
+	}
+	for _, r := range record {
+		if r.Header().Type.IsTransaction() {
+			panic("Called StateManager.Create with a transaction record!")
+		}
+		m.store(r, true)
+	}
 }
 
 // Submit queues a synthetic transaction for submission
 func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
 	m.submissions = append(m.submissions, &submittedTx{url, body})
+}
+
+func (m *StateManager) executeStores() error {
+	// Create an ordered list of state stores
+	stores := make([]*storeState, 0, len(m.stores))
+	for _, store := range m.stores {
+		stores = append(stores, store)
+	}
+	sort.Slice(stores, func(i, j int) bool { return stores[i].order < stores[j].order })
+
+	create := map[string]*protocol.SyntheticCreateChain{}
+	for _, store := range stores {
+		data, err := store.record.MarshalBinary()
+		if err != nil {
+			return fmt.Errorf("failed to marshal record: %v", err)
+		}
+
+		if !store.isCreate {
+			_, err = m.db.GetPersistentEntry((*store.chainId)[:], false)
+			if err == nil {
+				// If the record already exists, update it
+			} else if !errors.Is(err, storage.ErrNotFound) {
+				// Handle unexpected errors
+				return fmt.Errorf("failed to check for an existing record: %v", err)
+			} else if !(m.txType.IsSynthetic() || store.record.Header().Type.IsTransaction()) {
+				// Unless the TX is synthetic or the record is a TX, reject the update
+				return fmt.Errorf("cannot create a data record in a non-synthetic transaction")
+			}
+
+			m.db.AddStateEntry((*types.Bytes32)(store.chainId), &m.txHash, &state.Object{Entry: data})
+			continue
+		}
+
+		u, err := store.record.Header().ParseUrl()
+		if err != nil {
+			return fmt.Errorf("record has invalid URL: %v", err)
+		}
+
+		id := u.Identity()
+		idStr := strings.ToLower(id.String())
+		scc, ok := create[idStr]
+		if !ok {
+			scc = new(protocol.SyntheticCreateChain)
+			scc.Cause = m.txHash
+			m.Submit(id, scc)
+			create[idStr] = scc
+		}
+
+		scc.Chains = append(scc.Chains, data)
+	}
+
+	return nil
 }
 
 func unmarshalRecord(obj *state.Object) (state.Chain, error) {

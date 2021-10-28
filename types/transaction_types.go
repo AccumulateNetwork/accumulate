@@ -32,8 +32,8 @@ const (
 	TxTypeSyntheticTxResponse
 	TxTypeSyntheticDepositCredits
 	TxTypeBvcSubmission
-	TxTypeStateStore //
-	TxTypeDataStore  //Data Store can only be sent and thus authorized by an authority node
+	TxTypeSyntheticGenesis
+	TxTypeDataStore //Data Store can only be sent and thus authorized by an authority node
 	TxTypeAdminVote
 
 	txTypeSyntheticBase = TxTypeSyntheticIdentityCreate
@@ -69,7 +69,7 @@ func init() {
 		TxTypeSyntheticTxResponse,
 		TxTypeSyntheticDepositCredits,
 		TxTypeBvcSubmission,
-		TxTypeStateStore,
+		TxTypeSyntheticGenesis,
 		TxTypeDataStore,
 		TxTypeAdminVote,
 	}
@@ -127,8 +127,8 @@ func (t TxType) Name() string {
 		return "syntheticDepositCredits"
 	case TxTypeBvcSubmission:
 		return "bvcSubmission"
-	case TxTypeStateStore:
-		return "stateStore"
+	case TxTypeSyntheticGenesis:
+		return "syntheticGenesis"
 	case TxTypeDataStore:
 		return "dataStore"
 	case TxTypeAdminVote:

@@ -3,6 +3,7 @@ package node_test
 import (
 	"net"
 	"os"
+	"runtime"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
@@ -11,14 +12,18 @@ import (
 )
 
 func TestEndToEnd(t *testing.T) {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		t.Skip("This test does not work well on Windows or macOS")
+	}
+
 	if os.Getenv("CI") == "true" {
 		t.Skip("This test consistently fails in CI")
 	}
 
-	nodes := initNodes(t, net.ParseIP("127.0.25.1"), 3000, 3, "error")
-	query := startNodes(t, nodes)
-
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *api.Query {
+		// Restart the nodes for every test
+		nodes := initNodes(s.T(), net.ParseIP("127.0.25.1"), 3000, 3, "error")
+		query := startNodes(s.T(), nodes)
 		return query
 	}))
 }

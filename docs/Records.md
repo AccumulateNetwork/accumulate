@@ -8,6 +8,7 @@
 - **ADI**
   - Accumulate Digital Identity
   - Most other record types exist as subrecords of an ADI
+  - An ADI name may only include unicode letters and numbers, and dashes
 - **Token Issuer**
   - Defines a type of token and issues those tokens
   - Each token issuer, except those built in to the protocol, belongs to an ADI

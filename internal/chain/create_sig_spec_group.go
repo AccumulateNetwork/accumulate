@@ -79,7 +79,7 @@ func (CreateSigSpecGroup) DeliverTx(st *StateManager, tx *transactions.GenTransa
 
 	ssg := protocol.NewSigSpecGroup()
 	ssg.ChainUrl = types.String(url.String())
-	st.Store(ssg)
+	st.Create(ssg)
 
 	groupChainId := types.Bytes(url.ResourceChain()).AsBytes32()
 	for _, spec := range entries {
@@ -92,7 +92,7 @@ func (CreateSigSpecGroup) DeliverTx(st *StateManager, tx *transactions.GenTransa
 		specChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 		ssg.SigSpecs = append(ssg.SigSpecs, specChainId)
 		spec.SigSpecId = groupChainId
-		st.Store(spec)
+		st.Create(spec)
 	}
 
 	return nil

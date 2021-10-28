@@ -93,7 +93,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		return fmt.Errorf("invalid operation: %v", body.Operation)
 	}
 
-	st.Store(page)
+	st.Update(page)
 	return nil
 }
 
