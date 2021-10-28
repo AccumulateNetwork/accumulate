@@ -2,9 +2,9 @@ package api
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
+
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/types/api/query"
 
@@ -171,7 +171,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeAdi)
 }
 
 // GetToken
@@ -182,7 +182,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeToken)
 }
 
 // GetTokenAccount get the token balance for a given url
@@ -192,7 +192,7 @@ func (q *Query) GetTokenAccount(adiChainPath string) (*acmeApi.APIDataResponse, 
 		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount)
 }
 
 // GetTransactionReference get the transaction id for a given transaction number
@@ -205,27 +205,8 @@ func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataRe
 	return unmarshalTxReference(r.Response)
 }
 
-// GetTokenTx
-
-// GetTransaction
-// get the tx from the primary url, if the transaction spawned synthetic tx's then return the synth txid's
-func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err error) {
-
-	aResp, err := q.QueryByTxId(txId)
-	if err != nil {
-		return nil, fmt.Errorf("bvc token tx query returned error, %v", err)
-	}
-
-	qResp := aResp.Response
-	if qResp.Value == nil {
-		return nil, fmt.Errorf("no data available for txid %x", txId)
-	}
-
-	rid := query.ResponseByTxId{}
-	err = rid.UnmarshalBinary(qResp.Value)
-	txData := rid.TxState
-	txPendingData := rid.TxPendingState
-	txSynthTxIds := rid.TxSynthTxIds
+// packTransactionQuery
+func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSynthTxIds []byte) (resp *acmeApi.APIDataResponse, err error) {
 
 	if len(txSynthTxIds)%32 != 0 {
 		return nil, fmt.Errorf("invalid synth txids")
@@ -296,6 +277,30 @@ func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err 
 	return resp, err
 }
 
+// GetTokenTx
+
+// GetTransaction
+// get the tx from the primary url, if the transaction spawned synthetic tx's then return the synth txid's
+func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err error) {
+
+	aResp, err := q.QueryByTxId(txId)
+	if err != nil {
+		return nil, fmt.Errorf("bvc token tx query returned error, %v", err)
+	}
+
+	qResp := aResp.Response
+	if qResp.Value == nil {
+		return nil, fmt.Errorf("no data available for txid %x", txId)
+	}
+
+	rid := query.ResponseByTxId{}
+	err = rid.UnmarshalBinary(qResp.Value)
+	txData := rid.TxState
+	txPendingData := rid.TxPendingState
+	txSynthTxIds := rid.TxSynthTxIds
+	return q.packTransactionQuery(txId, txData, txPendingData, txSynthTxIds)
+}
+
 func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*api.APIDataResponsePagination, error) {
 
 	u, err := url2.Parse(url)
@@ -333,13 +338,26 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 	ret := acmeApi.APIDataResponsePagination{}
 	ret.Start = start
 	ret.Limit = limit
-	ret.Total = int64(len(thr.Transactions))
-	dj, err := json.Marshal(&thr.Transactions)
-	if err != nil {
-		return nil, err
+	ret.Total = thr.Total
+	for i := range thr.Transactions {
+		txs := thr.Transactions[i]
+
+		txData := txs.TxState
+		txPendingData := txs.TxPendingState
+		txSynthTxIds := txs.TxSynthTxIds
+		d, err := q.packTransactionQuery(txs.TxId[:], txData, txPendingData, txSynthTxIds)
+		if err != nil {
+			return nil, err
+		}
+		ret.Data = append(ret.Data, d)
 	}
-	ret.Data = &json.RawMessage{}
-	*ret.Data = dj
+
+	//dj, err := json.Marshal(&thr.Transactions)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//ret.Data = &json.RawMessage{}
+	//*ret.Data = dj
 	return &ret, nil
 }
 

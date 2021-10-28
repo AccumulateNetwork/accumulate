@@ -103,14 +103,14 @@ configure:
     if [ "${!varname}" = "yes" ]; then ssh ec2-user@${HOST} "
       set -ex
       export PATH="'"$PATH:$HOME/.local/bin"'"
-      screen -wipe
+      screen -wipe || true
       screen -ls | grep '\baccumulated\b' && screen -S accumulated -X stuff ^C
       rm -f ~/.local/bin/accumulated
       mv accumulated-latest ~/.local/bin/accumulated
       rm -rf ~/.accumulate
       mkdir ~/.accumulate
       tar xf config.tar.gz -C ~/.accumulate
-      screen -d -m -S accumulated accumulated run -n ${NODE}
+      screen -d -m -S accumulated bash -c 'accumulated run -n ${NODE} 2>&1 | tee ~/.accumulate/Node${NODE}/acc.log'
     "; fi
 
 deploy 13.51.10.110:

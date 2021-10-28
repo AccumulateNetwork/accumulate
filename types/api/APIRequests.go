@@ -6,6 +6,8 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
+const DefaultPaginationSize = 20
+
 // API Request Support Structure
 
 // Signer holds the ADI and public key to use to verify the transaction
@@ -50,7 +52,7 @@ type APIRequestURL struct {
 type APIRequestURLPagination struct {
 	APIRequestURL
 	Start int64 `json:"start" validate:"number,gte=0"`
-	Limit int64 `json:"limit" validate:"number,gte=0"`
+	Limit int64 `json:"limit" validate:"number,gt=0"`
 }
 
 // APIDataResponse is used in "get" API method response
@@ -68,8 +70,26 @@ type APIDataResponse struct {
 
 // APIDataResponsePagination is APIDataResponse with pagination data
 type APIDataResponsePagination struct {
-	APIDataResponse
-	Start int64 `json:"start"`
-	Limit int64 `json:"limit"`
-	Total int64 `json:"total"`
+	Data  []*APIDataResponse `json:"data"`
+	Type  types.String       `json:"type"`
+	Start int64              `json:"start"`
+	Limit int64              `json:"limit"`
+	Total int64              `json:"total"`
+}
+
+// UnmarshalJSON is custom Unmarshal for APIRequestURLPagination
+func (p *APIRequestURLPagination) UnmarshalJSON(data []byte) error {
+
+	type APIRequestURLPaginationAlias APIRequestURLPagination
+
+	test := &APIRequestURLPaginationAlias{
+		Limit: int64(DefaultPaginationSize),
+	}
+	err := json.Unmarshal(data, test)
+	if err != nil {
+		return err
+	}
+
+	*p = APIRequestURLPagination(*test)
+	return nil
 }

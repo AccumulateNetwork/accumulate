@@ -37,7 +37,7 @@ func (app *Object) UnmarshalBinary(data []byte) (err error) {
 
 	//minimum length of a chain header is 33 bytes
 	if len(data) < 33 {
-		return fmt.Errorf("insufficicient data associated with state entry")
+		return fmt.Errorf("insufficient data associated with state entry")
 	}
 
 	app.MDRoot.FromBytes(data)

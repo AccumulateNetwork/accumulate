@@ -151,17 +151,20 @@ func (s *StateDB) Sync() {
 }
 
 //GetTxRange get the transaction id's in a given range
-func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, err error) {
+func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
 	s.mutex.Lock()
 	h, err := s.mm.GetRange(chainId[:], start, end)
+	s.mm.SetChainID(chainId[:])
+	maxAvailable = s.mm.GetElementCount()
 	s.mutex.Unlock()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for i := range h {
 		hashes = append(hashes, types.Bytes32(h[i]))
 	}
-	return hashes, nil
+
+	return hashes, maxAvailable, nil
 }
 
 //GetTx get the transaction by transaction ID
@@ -219,7 +222,11 @@ func (s *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synt
 // AddTransaction queues (pending) transaction signatures and (optionally) an
 // accepted transaction for storage to their respective chains.
 func (s *StateDB) AddTransaction(chainId *types.Bytes32, txId types.Bytes, txPending, txAccepted *Object) error {
-	s.logInfo("AddTransaction", "chainId", chainId, "txid", txId.AsBytes32(), "pending", txPending.Entry, "accepted", txAccepted.Entry)
+	var txAcceptedEntry []byte
+	if txAccepted != nil {
+		txAcceptedEntry = txAccepted.Entry
+	}
+	s.logInfo("AddTransaction", "chainId", chainId, "txid", txId.AsBytes32(), "pending", txPending.Entry, "accepted", txAcceptedEntry)
 
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {

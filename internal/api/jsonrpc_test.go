@@ -21,6 +21,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
 )
 
@@ -225,6 +226,7 @@ func TestFaucet(t *testing.T) {
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
+	req.Wait = true
 	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	params, err := json.Marshal(&req)
@@ -457,7 +459,7 @@ func TestJsonRpcAdi(t *testing.T) {
 
 func TestMetrics(t *testing.T) {
 	if os.Getenv("CI") == "true" {
-		t.Skip("This test is flaky in CI")
+		t.Skip("Depends on an external resource, and thus is not appropriate for CI")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -465,13 +467,68 @@ func TestMetrics(t *testing.T) {
 	_, _, query := startBVC(t, dir)
 	japi := NewTest(t, query)
 
-	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Millisecond})
+	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
 	require.NoError(t, err)
 
 	resp := japi.Metrics(context.Background(), req)
-	require.IsType(t, api.APIDataResponse{}, resp)
-	dr := resp.(api.APIDataResponse)
-	mresp := new(protocol.MetricsResponse)
-	require.NoError(t, json.Unmarshal(*dr.Data, mresp))
-	t.Log(mresp.Value)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.NoError(t, r)
+	case api.APIDataResponse:
+		mresp := new(protocol.MetricsResponse)
+		require.NoError(t, json.Unmarshal(*r.Data, mresp))
+	default:
+		require.IsType(t, api.APIDataResponse{}, r)
+	}
+}
+
+func TestQueryNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Fails on windows (Tendermint cleanup issue)")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+	japi := NewTest(t, query)
+
+	req, err := json.Marshal(&api.APIRequestURL{URL: "acc://1cddf368ef9ba2a1ea914291e0201ebaf376130a6c05caf3/ACME"})
+	require.NoError(t, err)
+
+	resp := japi.GetTokenAccount(context.Background(), req)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.Contains(t, r.Data, "not found")
+	default:
+		t.Fatalf("Expected error, got %T", r)
+	}
+}
+
+func TestQueryWrongType(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Fails on windows (Tendermint cleanup issue)")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+	japi := NewTest(t, query)
+
+	_, origin, _ := ed25519.GenerateKey(nil)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	require.NoError(t, err)
+
+	err = acctesting.SendTxSync(query, tx)
+	require.NoError(t, err)
+
+	req, err := json.Marshal(&api.APIRequestURL{URL: destAddress})
+	require.NoError(t, err)
+
+	resp := japi.GetADI(context.Background(), req)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.Contains(t, r.Data, "want ChainTypeAdi, got ChainTypeAnonTokenAccount")
+	default:
+		t.Fatalf("Expected error, got %T", r)
+	}
 }

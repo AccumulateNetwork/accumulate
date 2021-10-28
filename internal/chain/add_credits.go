@@ -102,7 +102,7 @@ func (AddCredits) DeliverTx(st *StateManager, tx *transactions.GenTransaction) e
 	if !account.DebitTokens(&amount.Int) {
 		return fmt.Errorf("failed to debit %v", tx.SigInfo.URL)
 	}
-	st.Store(account)
+	st.Update(account)
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)

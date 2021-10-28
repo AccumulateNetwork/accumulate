@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -16,7 +17,26 @@ import (
 	tm "github.com/tendermint/tendermint/abci/types"
 )
 
+func responseIsError(rQuery tm.ResponseQuery) error {
+	if rQuery.Code == 0 {
+		return nil
+	}
+
+	switch {
+	case rQuery.Log != "":
+		return errors.New(rQuery.Log)
+	case rQuery.Info != "":
+		return errors.New(rQuery.Info)
+	default:
+		return fmt.Errorf("query failed with code %d", rQuery.Code)
+	}
+}
+
 func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface{}, error)) (*api.APIDataResponse, error) {
+	if err := responseIsError(rQuery); err != nil {
+		return nil, err
+	}
+
 	rAPI := new(api.APIDataResponse)
 	rAPI.Type = types.String(typ)
 
@@ -33,7 +53,7 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 	obj := state.Object{}
 	err := obj.UnmarshalBinary(rQuery.Value)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling state objct %v", err)
+		return nil, fmt.Errorf("error unmarshaling state object %v", err)
 	}
 
 	v, err := as(obj.Entry)
@@ -124,7 +144,7 @@ func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error)
 		obj := state.Object{}
 		err := obj.UnmarshalBinary(b)
 		if err != nil {
-			return nil, fmt.Errorf("error unmarshaling Token state objct %v", err)
+			return nil, fmt.Errorf("error unmarshaling Token state object %v", err)
 		}
 
 		txRef := new(state.TxReference)
@@ -214,10 +234,14 @@ func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (r
 }
 
 func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*api.APIDataResponse, error) {
+	if err := responseIsError(rQuery); err != nil {
+		return nil, err
+	}
+
 	obj := state.Object{}
 	err := obj.UnmarshalBinary(rQuery.Value)
 	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling chain state objct %v", err)
+		return nil, fmt.Errorf("error unmarshaling chain state object %v", err)
 	}
 
 	sChain := new(state.ChainHeader)
