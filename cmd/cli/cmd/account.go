@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"log"
 
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -28,15 +25,6 @@ var accountCmd = &cobra.Command{
 			case "get":
 				if len(args) > 1 {
 					GetAccount(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintAccountGet()
-				}
-			case "create":
-				if len(args) == 3 {
-					CreateAccount(args[1], args[2], "")
-				} else if len(args) > 3 {
-					CreateAccount(args[1], args[2], args[3])
 				} else {
 					fmt.Println("Usage:")
 					PrintAccountGet()
@@ -124,64 +112,8 @@ func GetAccount(url string) {
 
 }
 
-func CreateAccount(url string, tokenUrl string, keyBookUrl string) {
-
-	u, err := url2.Parse(url)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	//make sure this is a valid token account
-	tokenJson := Get(tokenUrl)
-	token := response.Token{}
-	err = json.Unmarshal([]byte(tokenJson), &token)
-	if err != nil {
-		log.Fatal(fmt.Errorf("invalid token type %v", err))
-	}
-
-	tac := &protocol.TokenAccountCreate{}
-	tac.Url = u.String()
-	tac.TokenUrl = tokenUrl
-	tac.KeyBookUrl = keyBookUrl
-
-	binaryData, err := tac.MarshalBinary()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	jsonData, err := json.Marshal(&tac)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	params, err := prepareGenTx(jsonData, binaryData, u.Authority)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var res interface{}
-	var str []byte
-	if err := Client.Request(context.Background(), "token-account-create", params, &res); err != nil {
-		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
-		log.Fatal(err)
-	}
-
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(str))
-
-	//todo store the account in a database or be able to query accounts associated with an adi
-	//err = Db.Update(func(tx *bolt.Tx) error {
-	//	b := tx.Bucket([]byte("anon"))
-	//	err := b.Put([]byte(address), privKey)
-	//	return err
-	//})
-}
-
 func GenerateAccount() {
+
 	pubKey, privKey, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		log.Fatal(err)
