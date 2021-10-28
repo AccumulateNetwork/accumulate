@@ -39,7 +39,7 @@ var txCmd = &cobra.Command{
 					GetTXHistory(args[1], args[2], args[3])
 				} else {
 					fmt.Println("Usage:")
-					PrintAccountGet()
+					PrintTXHistoryGet()
 				}
 			case "create":
 				if len(args) > 3 {
