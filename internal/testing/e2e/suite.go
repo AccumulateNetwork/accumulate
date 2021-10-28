@@ -7,19 +7,13 @@ import (
 	"os"
 	"strings"
 	"sync"
-	"testing"
 	"time"
-
-	"github.com/AccumulateNetwork/accumulated/types/state"
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	apitypes "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/stretchr/testify/suite"
 	abci "github.com/tendermint/tendermint/abci/types"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
@@ -35,6 +29,8 @@ type Suite struct {
 	synthMu *sync.Mutex
 	synthTx map[[32]byte]*url.URL
 }
+
+var _ suite.SetupTestSuite = (*Suite)(nil)
 
 func NewSuite(start func(*Suite) *api.Query) *Suite {
 	s := new(Suite)
@@ -164,62 +160,4 @@ func (s *Suite) waitForSynth() {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-}
-
-func (s *Suite) TestCreateAnonAccount() {
-	sponsor, sender := s.generateTmKey(), s.generateTmKey()
-
-	senderUrl, err := protocol.AnonymousAddress(sender.PubKey().Bytes(), protocol.ACME)
-	s.Require().NoError(err)
-
-	tx, err := acctesting.CreateFakeSyntheticDepositTx(sponsor, sender)
-	s.Require().NoError(err)
-	s.sendTxAsync(tx)(<-s.query.BatchSend())
-
-	s.waitForSynth()
-
-	account := new(protocol.AnonTokenAccount)
-	s.getChainAs(senderUrl.String(), account)
-	s.Require().Equal(int64(5e4*acctesting.TokenMx), account.Balance.Int64())
-
-	recipients := make([]*url.URL, 10)
-	for i := range recipients {
-		key := s.generateTmKey()
-		u, err := protocol.AnonymousAddress(key.PubKey().Bytes(), protocol.ACME)
-		s.Require().NoError(err)
-		recipients[i] = u
-	}
-
-	var fns []func(relay.BatchedStatus)
-	var total int64
-	for i := 0; i < 10; i++ {
-		if i > 2 && testing.Short() {
-			break
-		}
-
-		exch := apitypes.NewTokenTx(types.String(senderUrl.String()))
-		for i := 0; i < 10; i++ {
-			if i > 2 && testing.Short() {
-				break
-			}
-			recipient := recipients[s.rand.Intn(len(recipients))]
-			exch.AddToAccount(types.String(recipient.String()), 1000)
-			total += 1000
-		}
-
-		tx := s.newTx(senderUrl, sender, uint64(i+1), exch)
-		fn := s.sendTxAsync(tx)
-		fns = append(fns, fn)
-	}
-
-	bs := <-s.query.BatchSend()
-	for _, fn := range fns {
-		fn(bs)
-	}
-
-	s.waitForSynth()
-
-	account = new(protocol.AnonTokenAccount)
-	s.getChainAs(senderUrl.String(), account)
-	s.Require().Equal(int64(5e4*acctesting.TokenMx-total), account.Balance.Int64())
 }

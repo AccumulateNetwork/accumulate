@@ -46,6 +46,6 @@ func (SyntheticDepositCredits) DeliverTx(st *StateManager, tx *transactions.GenT
 	}
 
 	chain.CreditCredits(body.Amount)
-	st.Store(chain)
+	st.Update(chain)
 	return nil
 }

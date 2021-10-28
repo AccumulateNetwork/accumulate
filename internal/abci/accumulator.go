@@ -7,9 +7,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/internal/genesis"
-	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/protocol"
+	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
 
 	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
@@ -138,18 +139,38 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		app.updateValidator(v)
 	}
 
-	m, err := genesis.BootstrapStates()
+	var err error
+	tx := new(transactions.GenTransaction)
+	tx.SigInfo = new(transactions.SignatureInfo)
+	tx.SigInfo.URL = protocol.ACME
+	tx.Transaction, err = new(protocol.SyntheticGenesis).MarshalBinary()
 	if err != nil {
-		panic(err)
+		panic(fmt.Errorf("failed to marshal genesis TX: %v", err))
 	}
 
-	//TODO: this needs to be moved to Directory Chain
-	genesisTxId := types.Bytes32{}
-	for c, o := range m {
-		app.state.AddStateEntry(&c, &genesisTxId, o)
+	app.chain.BeginBlock(BeginBlockRequest{
+		IsLeader: false,
+		Height:   -1,
+	})
+
+	err = app.chain.CheckTx(tx)
+	if err != nil {
+		panic(fmt.Errorf("failed to validate genesis TX: %v", err))
 	}
 
-	return abci.ResponseInitChain{AppHash: app.chainId[:]}
+	_, err = app.chain.DeliverTx(tx)
+	if err != nil {
+		panic(fmt.Errorf("failed to execute genesis TX: %v", err))
+	}
+
+	app.chain.EndBlock(EndBlockRequest{})
+
+	mdRoot, err := app.chain.Commit()
+	if err != nil {
+		panic(fmt.Errorf("failed to commit genesis TX: %v", err))
+	}
+
+	return abci.ResponseInitChain{AppHash: mdRoot}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
