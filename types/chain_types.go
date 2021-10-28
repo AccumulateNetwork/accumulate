@@ -69,3 +69,12 @@ func (t ChainType) AsUint64() uint64 {
 }
 
 func (t ChainType) String() string { return t.Name() }
+
+func (t ChainType) IsTransaction() bool {
+	switch t {
+	case ChainTypeTransaction, ChainTypeTransactionReference, ChainTypePendingTransaction:
+		return true
+	default:
+		return false
+	}
+}
