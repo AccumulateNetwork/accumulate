@@ -103,7 +103,7 @@ configure:
     if [ "${!varname}" = "yes" ]; then ssh ec2-user@${HOST} "
       set -ex
       export PATH="'"$PATH:$HOME/.local/bin"'"
-      screen -wipe
+      screen -wipe || true
       screen -ls | grep '\baccumulated\b' && screen -S accumulated -X stuff ^C
       rm -f ~/.local/bin/accumulated
       mv accumulated-latest ~/.local/bin/accumulated
