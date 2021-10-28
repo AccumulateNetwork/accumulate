@@ -148,7 +148,9 @@ func CreateTX(sender string, receiver string, amount string) {
 		}
 		gtx := new(transactions.GenTransaction)
 		gtx.Transaction = dataBinary //The transaction needs to be marshaled as binary for proper tx hash
-		u, err := url.Parse(receiver)
+
+		//route to the sender's account for processing
+		u, err := url.Parse(sender)
 		if err != nil {
 			log.Fatal(err)
 		}

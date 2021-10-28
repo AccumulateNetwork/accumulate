@@ -5,5 +5,5 @@ import (
 )
 
 type ADI struct {
-	protocol.IdentityCreate `json:"token"`
+	protocol.IdentityCreate
 }
