@@ -337,7 +337,7 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 	ret := acmeApi.APIDataResponsePagination{}
 	ret.Start = start
 	ret.Limit = limit
-	ret.Total = int64(len(thr.Transactions))
+	ret.Total = thr.Total
 	for i := range thr.Transactions {
 		txs := thr.Transactions[i]
 
