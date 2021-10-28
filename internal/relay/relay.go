@@ -17,7 +17,7 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
-const debugTxSend = false
+const debugTxSend = true
 
 var ErrTimedOut = errors.New("timed out")
 
@@ -252,10 +252,13 @@ func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedSt
 		batches = append(batches, client[txb.networkId].(Batchable).NewBatch())
 		for _, tx := range sendBatches[i].tx {
 			if debugTxSend {
-				fmt.Printf("Send TX %X\n", sha256.Sum256(tx))
+				fmt.Printf("Send TX %X ...\n", sha256.Sum256(tx))
 			}
 			bs.Status[i].NetworkId = txb.networkId
 			batches[i].BroadcastTxSync(context.Background(), tx)
+			if debugTxSend {
+				fmt.Printf("Send TX %X Complete\n", sha256.Sum256(tx))
+			}
 		}
 	}
 
@@ -278,9 +281,15 @@ func dispatchSingles(client []Client, sendSingles []txBatch, status chan Batched
 		bs.Status[i].Returns = make([]interface{}, len(single.tx))
 		for j := range single.tx {
 			if debugTxSend {
-				fmt.Printf("Send TX %X\n", sha256.Sum256(single.tx[j]))
+				fmt.Printf("Send TX %X ...\n", sha256.Sum256(single.tx[j]))
 			}
+
 			bs.Status[i].Returns[j], bs.Status[i].Err = client[single.networkId].BroadcastTxSync(context.Background(), single.tx[j])
+
+			if debugTxSend {
+				fmt.Printf("Send TX %X Complete\n", sha256.Sum256(single.tx[j]))
+			}
+
 		}
 	}
 
@@ -301,6 +310,14 @@ func (r *Relay) SendTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 // Query
 // This function will return the state object from the accumulate network for a given URL.
 func (r *Relay) Query(routing uint64, data bytes.HexBytes) (ret *ctypes.ResultABCIQuery, err error) {
+	if debugTxSend {
+		fmt.Printf("Query TX %X Complete\n", sha256.Sum256(data))
+	}
+	defer func() {
+		if debugTxSend {
+			fmt.Printf("Query TX %X Complete\n", sha256.Sum256(data))
+		}
+	}()
 	return r.client[r.GetNetworkId(routing)].ABCIQuery(context.Background(), "/abci_query", data)
 }
 
