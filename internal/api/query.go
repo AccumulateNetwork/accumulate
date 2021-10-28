@@ -351,12 +351,6 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 		ret.Data = append(ret.Data, d)
 	}
 
-	//dj, err := json.Marshal(&thr.Transactions)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//ret.Data = &json.RawMessage{}
-	//*ret.Data = dj
 	return &ret, nil
 }
 
