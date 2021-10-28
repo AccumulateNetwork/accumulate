@@ -105,14 +105,14 @@ func (c TokenTx) DeliverTx(st *StateManager, tx *transactions.GenTransaction) er
 	if !account.DebitTokens(debit) {
 		return fmt.Errorf("%q balance is insufficient", st.SponsorUrl)
 	}
-	st.Store(account)
+	st.Update(account)
 
 	txHash := txid.AsBytes32()
 	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
 	//This will reference the txid to keep the history
 	refUrl := st.SponsorUrl.JoinPath(fmt.Sprint(account.NextTx()))
 	txr := state.NewTxReference(refUrl.String(), txHash[:])
-	st.Store(txr)
+	st.Update(txr)
 
 	return nil
 }

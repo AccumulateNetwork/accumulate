@@ -6,22 +6,13 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
-func createAcmeToken() (*types.Bytes32, *state.Object) {
-	token := state.Token{}
-	token.Type = types.ChainTypeToken
+var ACME = new(state.Token)
 
-	token.ChainUrl = types.String(protocol.AcmeUrl().String())
-	token.Precision = 8
-	token.Symbol = "ACME"
-	//desc := json.RawMessage("{\"propertiesUrl\":\"acc://acme/properties"}")
-	//token.Meta = &desc
-	t, err := token.MarshalBinary()
-	if err != nil {
-		return nil, nil
-	}
+func createAcmeToken() state.Chain {
+	ACME.Type = types.ChainTypeToken
 
-	o := &state.Object{}
-	o.Entry = t
-	chainId := types.Bytes(protocol.AcmeUrl().ResourceChain()).AsBytes32()
-	return &chainId, o
+	ACME.ChainUrl = types.String(protocol.AcmeUrl().String())
+	ACME.Precision = 8
+	ACME.Symbol = "ACME"
+	return ACME
 }
