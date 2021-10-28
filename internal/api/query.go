@@ -227,7 +227,7 @@ func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData [
 		txState := state.Transaction{}
 		err = txState.UnmarshalBinary(txObject.Entry)
 		if err != nil {
-			return resp, NewAccumulateError(err)
+			return resp, accumulateError(err)
 		}
 		txStateData = txState.Transaction
 		txSigInfo = txState.SigInfo
@@ -238,12 +238,12 @@ func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData [
 		txPendingState = &state.PendingTransaction{}
 		pendErr = txPendingState.UnmarshalBinary(txPendingObject.Entry)
 		if pendErr != nil {
-			return nil, NewAccumulateError(fmt.Errorf("invalid pending object entry %v", pendErr))
+			return nil, accumulateError(fmt.Errorf("invalid pending object entry %v", pendErr))
 		}
 
 		if txStateData == nil {
 			if txPendingState.TransactionState == nil {
-				return nil, NewAccumulateError(fmt.Errorf("no transaction state for transaction on pending or main chains"))
+				return nil, accumulateError(fmt.Errorf("no transaction state for transaction on pending or main chains"))
 			}
 			txStateData = txPendingState.TransactionState.Transaction
 			txSigInfo = txPendingState.TransactionState.SigInfo
@@ -252,7 +252,7 @@ func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData [
 
 	resp, err = unmarshalTransaction(txStateData.Bytes(), txId, txSynthTxIds)
 	if err != nil {
-		return nil, NewAccumulateError(err)
+		return nil, accumulateError(err)
 	}
 
 	//populate the rest of the resp
@@ -267,7 +267,7 @@ func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData [
 		resp.Signer = &acmeApi.Signer{}
 		resp.Signer.PublicKey.FromBytes(txPendingState.Signature[0].PublicKey)
 		if len(txPendingState.Signature) == 0 {
-			return nil, NewAccumulateError(fmt.Errorf("malformed transaction, no signatures"))
+			return nil, accumulateError(fmt.Errorf("malformed transaction, no signatures"))
 		}
 		resp.Signer.Nonce = txPendingState.Signature[0].Nonce
 		sig := types.Bytes(txPendingState.Signature[0].Signature).AsBytes64()

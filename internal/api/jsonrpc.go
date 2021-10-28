@@ -200,7 +200,7 @@ func (api *API) createSigSpec(_ context.Context, params json.RawMessage) interfa
 	data := &protocol.CreateSigSpec{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret := api.sendTx(req, payload)
@@ -213,7 +213,7 @@ func (api *API) updateKeyPage(_ context.Context, params json.RawMessage) interfa
 	data := &protocol.UpdateKeyPage{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret := api.sendTx(req, payload)
@@ -226,7 +226,7 @@ func (api *API) createSigSpecGroup(_ context.Context, params json.RawMessage) in
 	data := &protocol.CreateSigSpecGroup{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret := api.sendTx(req, payload)
@@ -238,7 +238,7 @@ func (api *API) addCredits(_ context.Context, params json.RawMessage) interface{
 	data := &protocol.AddCredits{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret := api.sendTx(req, payload)
@@ -269,17 +269,17 @@ func (api *API) prepareGet(params json.RawMessage) (*acmeapi.APIRequestURL, erro
 func (api *API) get(params json.RawMessage, expect ...types.ChainType) interface{} {
 	req, err := api.prepareGet(params)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	r, err := api.query.QueryByUrl(string(req.URL))
 	if err != nil {
-		return NewAccumulateError(err)
+		return accumulateError(err)
 	}
 
 	resp, err := unmarshalChainState(r.Response, expect...)
 	if err != nil {
-		return NewAccumulateError(err)
+		return accumulateError(err)
 	}
 
 	return resp
@@ -289,12 +289,12 @@ func (api *API) get(params json.RawMessage, expect ...types.ChainType) interface
 func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 	req, err := api.prepareGet(params)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	resp, err := api.query.GetChainStateByUrl(string(req.URL))
 	if err != nil {
-		return NewAccumulateError(err)
+		return accumulateError(err)
 	}
 
 	return resp
@@ -312,12 +312,12 @@ func (api *API) getSigSpecGroup(_ context.Context, params json.RawMessage) inter
 func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 	req, err := api.prepareGet(params)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	resp, err := api.query.GetAdi(*req.URL.AsString())
 	if err != nil {
-		return NewAccumulateError(err)
+		return accumulateError(err)
 	}
 
 	return resp
@@ -328,7 +328,7 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 	data := &protocol.IdentityCreate{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret := api.sendTx(req, payload)
@@ -340,12 +340,12 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} {
 	req, err := api.prepareGet(params)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	resp, err := api.query.GetToken(*req.URL.AsString())
 	if err != nil {
-		return NewAccumulateError(err)
+		return accumulateError(err)
 	}
 
 	return resp
@@ -357,7 +357,7 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 	data := &acmeapi.Token{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret := api.sendTx(req, payload)
@@ -369,12 +369,12 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) interface{} {
 	req, err := api.prepareGet(params)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	resp, err := api.query.GetTokenAccount(*req.URL.AsString())
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	return resp
@@ -387,18 +387,18 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 	req := &acmeapi.APIRequestURLPagination{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	// validate URL
 	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	// Tendermint integration here
 	ret, err := api.query.GetTransactionHistory(*req.URL.AsString(), req.Start, req.Limit)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret.Type = "tokenAccountHistory"
@@ -485,7 +485,7 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 	data := &protocol.TokenAccountCreate{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret := api.sendTx(req, payload)
@@ -500,22 +500,22 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	req := &acmeapi.TokenTxRequest{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	// validate only TokenTx.Hash (Assuming the hash is the txid)
 	if err = api.validate.StructPartial(req, "Hash"); err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	// Tendermint's integration here
 	resp, err := api.query.GetTransaction(req.Hash[:])
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
-		return NewValidatorError(fmt.Errorf("transaction type is %s and not a token transaction", resp.Type))
+		return validatorError(fmt.Errorf("transaction type is %s and not a token transaction", resp.Type))
 	}
 
 	return resp
@@ -526,7 +526,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 	data := &acmeapi.TokenTx{}
 	req, payload, err := api.prepareCreate(params, data, "From", "To")
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	ret := api.sendTx(req, payload)
@@ -541,17 +541,17 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	req := &acmeapi.APIRequestURL{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	// validate URL
 	if err = api.validate.Struct(req); err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	u, err := accurl.Parse(*req.URL.AsString())
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	destAccount := types.String(u.String())
@@ -588,7 +588,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 	ed := new(transactions.ED25519Sig)
 	err = ed.Sign(genesis.FaucetWallet.Nonce, genesis.FaucetWallet.PrivateKey, dataToSign)
 	if err != nil {
-		return NewSubmissionError(err)
+		return submissionError(err)
 	}
 
 	gtx.Signature = append(gtx.Signature, ed)
@@ -602,7 +602,7 @@ func (api *API) Metrics(_ context.Context, params json.RawMessage) interface{} {
 	req := new(protocol.MetricsRequest)
 	err := api.unmarshalRequest(params, req)
 	if err != nil {
-		return NewValidatorError(err)
+		return validatorError(err)
 	}
 
 	c, err := promapi.NewClient(promapi.Config{
@@ -624,15 +624,18 @@ func (api *API) Metrics(_ context.Context, params json.RawMessage) interface{} {
 		query := fmt.Sprintf(metricTPS, req.Duration)
 		v, _, err := papi.Query(context.Background(), query, time.Now())
 		if err != nil {
-			return internalError(err)
+			return metricsQueryError(fmt.Errorf("query failed: %w", err))
 		}
 		vec, ok := v.(model.Vector)
 		if !ok {
-			return internalError(errors.New("TPS is not a vector"))
+			return ErrMetricsNotAVector
+		}
+		if len(vec) == 0 {
+			return ErrMetricsVectorEmpty
 		}
 		res.Value = vec[0].Value / model.SampleValue(req.Duration.Seconds())
 	default:
-		return NewValidatorError(fmt.Errorf("%q is not a valid metric", req.Metric))
+		return validatorError(fmt.Errorf("%q is not a valid metric", req.Metric))
 	}
 
 	ret := acmeapi.APIDataResponse{}
