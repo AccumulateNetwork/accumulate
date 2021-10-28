@@ -80,13 +80,6 @@ func (IdentityCreate) DeliverTx(st *StateManager, tx *transactions.GenTransactio
 	identity := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, body.PublicKey)
 	identity.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
 
-	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
-	err = scc.Add(identity, group, sigSpec)
-	if err != nil {
-		return fmt.Errorf("failed to marshal synthetic TX: %v", err)
-	}
-
-	st.Submit(identityUrl, scc)
+	st.Create(identity, group, sigSpec)
 	return nil
 }
