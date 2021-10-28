@@ -44,3 +44,11 @@ func (api *API) CreateADI(ctx context.Context, params json.RawMessage) interface
 func (api *API) Faucet(ctx context.Context, params json.RawMessage) interface{} {
 	return api.faucet(ctx, params)
 }
+
+func (api *API) GetTokenAccount(ctx context.Context, params json.RawMessage) interface{} {
+	return api.getTokenAccount(ctx, params)
+}
+
+func (api *API) GetADI(ctx context.Context, params json.RawMessage) interface{} {
+	return api.getADI(ctx, params)
+}
