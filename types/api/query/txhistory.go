@@ -9,6 +9,7 @@ import (
 
 type ResponseTxHistory struct {
 	Transactions []ResponseByTxId `json:"txs"`
+	Total        int64            `json:"total"`
 }
 
 type RequestTxHistory struct {
@@ -20,6 +21,9 @@ type RequestTxHistory struct {
 func (t *ResponseTxHistory) MarshalBinary() (data []byte, err error) {
 	var buff bytes.Buffer
 	var d [8]byte
+	binary.LittleEndian.PutUint64(d[:], uint64(t.Total))
+	buff.Write(d[:])
+
 	binary.LittleEndian.PutUint64(d[:], uint64(len(t.Transactions)))
 	buff.Write(d[:])
 
@@ -41,8 +45,12 @@ func (t *ResponseTxHistory) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 
+	t.Total = int64(binary.LittleEndian.Uint64(data[:]))
+	data = data[8:]
+
 	l := int(binary.LittleEndian.Uint64(data[:]))
 	data = data[8:]
+
 	if len(data) < l {
 		return fmt.Errorf("insufficient txid data for given range")
 	}
