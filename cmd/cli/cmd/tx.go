@@ -163,6 +163,9 @@ func CreateTX(sender string, receiver string, amount string) {
 	err = Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("anon"))
 		pk := b.Get([]byte(sender))
+		if pk == nil {
+			log.Fatal(fmt.Errorf("the private key for lite account %s does not exist in the wallet", sender))
+		}
 		fmt.Println(hex.EncodeToString(pk))
 		params := &acmeapi.APIRequestRaw{}
 		params.Tx = &acmeapi.APIRequestRawTx{}
