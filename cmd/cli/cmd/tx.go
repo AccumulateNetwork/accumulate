@@ -156,7 +156,6 @@ func GetTXHistory(accountUrl string, s string, e string) {
 }
 
 func CreateTX(sender string, receiver string, amount string) {
-
 	var res interface{}
 	var str []byte
 	var err error
@@ -173,7 +172,8 @@ func CreateTX(sender string, receiver string, amount string) {
 
 		to := []*acmeapi.TokenTxOutput{}
 		r := &acmeapi.TokenTxOutput{}
-		r.Amount, err = strconv.ParseUint(amount, 10, 64)
+		amt, err := strconv.ParseFloat(amount, 64) //ParseUint(amount, 10, 64)
+		r.Amount = uint64(amt)
 		r.URL = types.UrlChain{types.String(receiver)}
 		to = append(to, r)
 		tokentx.To = to
