@@ -373,7 +373,8 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		return nil, fmt.Errorf("malformed transaction")
 	}
 
-	executor, ok := m.executors[types.TxType(tx.TransactionType())]
+	txt := types.TxType(tx.TransactionType())
+	executor, ok := m.executors[txt]
 	txPending := state.NewPendingTransaction(tx)
 	chainId := types.Bytes(tx.ChainID).AsBytes32()
 	if !ok {

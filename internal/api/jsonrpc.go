@@ -81,7 +81,7 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"metrics": api.Metrics,
 
 		// faucet
-		"faucet": api.faucet,
+		"faucet": api.Faucet,
 
 		// credits
 		"add-credits": api.addCredits,
@@ -535,7 +535,7 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 }
 
 // faucet API call (testnet only)
-func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
+func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	var err error
 	req := &acmeapi.APIRequestURL{}
@@ -593,8 +593,7 @@ func (api *API) faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	ret := api.broadcastTx(req.Wait, gtx)
-	return &ret
+	return api.broadcastTx(req.Wait, gtx)
 }
 
 // Metrics returns Metrics for explorer (tps, etc.)

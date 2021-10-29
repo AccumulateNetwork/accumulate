@@ -17,7 +17,6 @@ import (
 	nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
-	"github.com/tendermint/tendermint/rpc/client/local"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
 	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
@@ -29,9 +28,7 @@ type AppFactory func(*privval.FilePV) (abci.Application, error)
 // Node wraps a Tendermint node.
 type Node struct {
 	service.Service
-	Config      *config.Config
-	APIClient   coregrpc.BroadcastAPIClient
-	LocalClient *local.Local
+	Config *config.Config
 }
 
 // New initializes a Tendermint node for the given ABCI application.
@@ -79,17 +76,7 @@ func (n *Node) Start() error {
 		}()
 	}
 
-	localns, ok := n.Service.(local.NodeService)
-	if !ok {
-		return fmt.Errorf("node cannot be used as a local node service")
-	}
-
-	n.LocalClient, err = local.New(localns)
-	if err != nil {
-		return fmt.Errorf("failed to create local client: %w", err)
-	}
-
-	n.APIClient = n.waitForGRPC()
+	n.waitForGRPC()
 	return n.waitForRPC()
 }
 
@@ -104,18 +91,22 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 }
 
 func (n *Node) waitForRPC() error {
-	client, err := rpcclient.New(n.Config.RPC.ListenAddress)
-	if err != nil {
-		return err
-	}
-
-	result := new(ctypes.ResultStatus)
-	for {
-		_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
-		if err == nil {
-			return nil
+	for _, bvc := range n.Config.Accumulate.Networks {
+		_ = bvc
+		client, err := rpcclient.New(bvc)
+		if err != nil {
+			return err
 		}
 
-		time.Sleep(time.Millisecond)
+		result := new(ctypes.ResultStatus)
+		for {
+			_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
+			if err == nil {
+				break
+			}
+
+			time.Sleep(time.Millisecond)
+		}
 	}
+	return nil
 }

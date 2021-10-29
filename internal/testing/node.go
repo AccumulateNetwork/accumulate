@@ -17,7 +17,6 @@ import (
 	"github.com/rs/zerolog"
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/privval"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 func NodeInitOptsForNetwork(name string) (node.InitOptions, error) {
@@ -43,7 +42,7 @@ func NodeInitOptsForNetwork(name string) (node.InitOptions, error) {
 		config[i].LogLevel = "error"
 		config[i].Consensus.CreateEmptyBlocks = false
 		config[i].Accumulate.Type = network.Type
-		config[i].Accumulate.Networks = []string{remoteIP[0]}
+		config[i].Accumulate.Networks = []string{fmt.Sprintf("tcp://%s:%d", remoteIP[0], network.Port)}
 	}
 
 	return node.InitOptions{
@@ -56,7 +55,7 @@ func NodeInitOptsForNetwork(name string) (node.InitOptions, error) {
 	}, nil
 }
 
-func NewBVCNode(dir string, memDB bool, newZL func(string) zerolog.Logger, cleanup func(func())) (*node.Node, *privval.FilePV, error) {
+func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zerolog.Logger, cleanup func(func())) (*node.Node, *privval.FilePV, error) {
 	cfg, err := cfg.Load(dir)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to load config: %v", err)
@@ -82,12 +81,16 @@ func NewBVCNode(dir string, memDB bool, newZL func(string) zerolog.Logger, clean
 		return nil, nil, fmt.Errorf("failed to load file PV: %v", err)
 	}
 
-	rpcClient, err := rpchttp.New(cfg.RPC.ListenAddress)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to reate RPC client: %v", err)
+	if relayTo == nil {
+		relayTo = []string{cfg.RPC.ListenAddress}
 	}
 
-	mgr, err := chain.NewBlockValidator(api.NewQuery(relay.New(rpcClient)), sdb, pv.Key.PrivKey.Bytes())
+	relay, err := relay.NewWith(relayTo...)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create RPC relay: %v", err)
+	}
+
+	mgr, err := chain.NewBlockValidator(api.NewQuery(relay), sdb, pv.Key.PrivKey.Bytes())
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
 	}
