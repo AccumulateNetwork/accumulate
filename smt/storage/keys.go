@@ -19,9 +19,17 @@ const (
 // var NextElementKey = []byte("NextElement")
 // var StatesHeadKey = []byte("States.Head")
 
-type Key = [KeyLength]byte
+type Key [KeyLength]byte
 
 func ComputeKey(keys ...interface{}) Key {
+	// Allow pre-computed keys
+	if len(keys) == 1 {
+		k, ok := keys[0].(Key)
+		if ok {
+			return k
+		}
+	}
+
 	n := -1
 	bkeys := make([][]byte, len(keys))
 	for i, key := range keys {

@@ -441,7 +441,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
-	err = st.executeStores()
+	err = st.commit()
 	if err != nil {
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}

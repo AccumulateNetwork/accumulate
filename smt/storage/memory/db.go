@@ -12,7 +12,7 @@ import (
 // notes on InitDB for future improvements.
 type DB struct {
 	Filename string
-	Entries  map[[storage.KeyLength]byte][]byte
+	Entries  map[storage.Key][]byte
 	mutex    sync.Mutex
 }
 
@@ -20,7 +20,7 @@ type DB struct {
 // Takes all the key value pairs collected in a cache of mapped values and
 // adds them to the database.  The assumption here is that the order in which
 // the cache is applied to a key value store does not matter.
-func (m *DB) EndBatch(txCache map[[storage.KeyLength]byte][]byte) error {
+func (m *DB) EndBatch(txCache map[storage.Key][]byte) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	for k, v := range txCache {
@@ -50,7 +50,7 @@ func (m *DB) Copy() *DB {
 	defer m.mutex.Unlock()
 	db := new(DB)
 	db.Filename = m.Filename
-	db.Entries = make(map[[32]byte][]byte)
+	db.Entries = make(map[storage.Key][]byte)
 	for k, v := range m.Entries {
 		db.Entries[k] = v
 	}
@@ -82,7 +82,7 @@ func (m *DB) InitDB(filename string) error {
 
 	// Either allocate a new map, or clear an existing one.
 	if m.Entries == nil {
-		m.Entries = make(map[[storage.KeyLength]byte][]byte)
+		m.Entries = make(map[storage.Key][]byte)
 	} else {
 		for k := range m.Entries {
 			delete(m.Entries, k)
@@ -93,7 +93,7 @@ func (m *DB) InitDB(filename string) error {
 
 // Get
 // Returns the value for a key from the database
-func (m *DB) Get(key [storage.KeyLength]byte) (value []byte, err error) {
+func (m *DB) Get(key storage.Key) (value []byte, err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	v, ok := m.Entries[key]
@@ -105,7 +105,7 @@ func (m *DB) Get(key [storage.KeyLength]byte) (value []byte, err error) {
 
 // Put
 // Takes a key and a value, and puts the pair into the database
-func (m *DB) Put(key [storage.KeyLength]byte, value []byte) error {
+func (m *DB) Put(key storage.Key, value []byte) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.Entries[key] = value
