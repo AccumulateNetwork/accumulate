@@ -87,6 +87,10 @@ func PrintAccountList() {
 	fmt.Println("  accumulate account list			Display all anon token accounts")
 }
 
+func PrintAccountCreate() {
+	fmt.Println("  accumulate account create [adiUrl] [tokenUrl] [keyBook (optional)]	create a token account for an ADI")
+}
+
 func PrintAccountImport() {
 	fmt.Println("  accumulate account import [private-key]	Import anon token account from private key hex")
 }
@@ -99,6 +103,7 @@ func PrintAccount() {
 	PrintAccountGet()
 	PrintAccountGenerate()
 	PrintAccountList()
+	PrintAccountCreate()
 	PrintAccountImport()
 	PrintAccountExport()
 }

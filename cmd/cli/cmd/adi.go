@@ -30,13 +30,8 @@ var adiCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintADIGet()
 				}
-			case "public":
-				if len(args) > 1 {
-					PublicADI(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintADIPublic()
-				}
+			case "list":
+				ListADIs()
 			case "create":
 				if len(args) == 3 {
 					NewADI(args[1], args[2], "", "", "")
@@ -47,13 +42,6 @@ var adiCmd = &cobra.Command{
 				} else {
 					fmt.Println("Usage:")
 					PrintADICreate()
-				}
-			case "import":
-				if len(args) > 2 {
-					ImportADI(args[1], args[2])
-				} else {
-					fmt.Println("Usage:")
-					PrintADIImport()
 				}
 			default:
 				fmt.Println("Usage:")
@@ -75,12 +63,8 @@ func PrintADIGet() {
 	fmt.Println("  accumulate adi get [URL]			Get existing ADI by URL")
 }
 
-func PrintADIPublic() {
-	fmt.Println("  accumulate adi public [URL]			Print public keys hashes for chosen ADI")
-}
-
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [signer-url] [adi-url] [public-key (optional)] [key-book-name (optional)] [key-page-name (optional)] Create new ADI")
+	fmt.Println("  accumulate adi create [signer-url] [adi-url] [key-book-name (optional)] [key-page-name (optional)] [public-key (optional)] Create new ADI")
 }
 
 func PrintADIImport() {
@@ -89,7 +73,6 @@ func PrintADIImport() {
 
 func PrintADI() {
 	PrintADIGet()
-	PrintADIPublic()
 	PrintADICreate()
 	PrintADIImport()
 }
@@ -115,14 +98,17 @@ func GetADI(url string) {
 
 }
 
-func PublicADI(url string) {
+//
+//func PublicADI(url string) {
+//
+//	fmt.Println("ADI functionality is not available on Testnet")
+//
+//}
 
-	fmt.Println("ADI functionality is not available on Testnet")
-
-}
+//func NewADIFromADISponsor()
 
 // NewADI create a new ADI from a sponsored account.
-func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page string) {
+func NewADI(sender string, adiUrl string, book string, page string, pubKeyHex string) {
 	var pubKey []byte
 	pubKey = make([]byte, 32)
 
@@ -132,7 +118,7 @@ func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page st
 	}
 
 	_, _, err = protocol.ParseAnonymousAddress(u)
-	isSponsoredByLiteAccount := err == nil
+	isSponsoredByLiteAccount := IsLiteAccount(u.String())
 
 	if len(pubKeyHex) != 64 && len(pubKeyHex) != 0 {
 		log.Fatalf("invalid public key")
@@ -185,55 +171,55 @@ func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page st
 	}
 
 	//Store the new adi in case things go bad
-	haveData := false
+	//haveData := false
 	var asData []byte
 	if len(privKey) != 0 {
-		as := AdiStore{}
-
-		err = Db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte("adi"))
-			asData = b.Get([]byte(u.Authority))
-			return err
-		})
-
-		if asData != nil {
-			haveData = true
-			err = json.Unmarshal(asData, &as)
-			log.Fatal(err)
-		}
-		as.KeyBooks = make(map[string]KeyBookStore)
-		if b, ok := as.KeyBooks[book]; !ok {
-			if b.KeyPages == nil {
-				b.KeyPages = make(map[string]KeyPageStore)
-			}
-			as.KeyBooks[page] = b
-			if p, ok := b.KeyPages[page]; !ok {
-				p.PrivKeys = append(p.PrivKeys, types.Bytes(privKey))
-				b.KeyPages[page] = p
-			}
-		}
-
-		asData, err = json.Marshal(&as)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		if err != nil {
-			log.Fatal(err)
-		}
+		//as := AdiStore{}
+		//
+		//err = Db.View(func(tx *bolt.Tx) error {
+		//	b := tx.Bucket([]byte("adi"))
+		//	asData = b.Get([]byte(u.Authority))
+		//	return err
+		//})
+		//
+		//if asData != nil {
+		//	haveData = true
+		//	err = json.Unmarshal(asData, &as)
+		//	log.Fatal(err)
+		//}
+		//as.KeyBooks = make(map[string]KeyBookStore)
+		//if b, ok := as.KeyBooks[book]; !ok {
+		//	if b.KeyPages == nil {
+		//		b.KeyPages = make(map[string]KeyPageStore)
+		//	}
+		//	as.KeyBooks[page] = b
+		//	if p, ok := b.KeyPages[page]; !ok {
+		//		p.PrivKeys = append(p.PrivKeys, types.Bytes(privKey))
+		//		b.KeyPages[page] = p
+		//	}
+		//}
+		//
+		//asData, err = json.Marshal(&as)
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
+		//
+		//if err != nil {
+		//	log.Fatal(err)
+		//}
 	}
 
 	var res interface{}
 	var str []byte
 	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
 		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
-		if !haveData {
-			err = Db.Update(func(tx *bolt.Tx) error {
-				b := tx.Bucket([]byte("adi"))
-				err := b.Delete([]byte(adiUrl))
-				return err
-			})
-		}
+		//if !haveData {
+		//	err = Db.Update(func(tx *bolt.Tx) error {
+		//		b := tx.Bucket([]byte("adi"))
+		//		err := b.Delete([]byte(adiUrl))
+		//		return err
+		//	})
+		//}
 
 		log.Fatal(err)
 	}
@@ -253,8 +239,26 @@ func NewADI(sender string, adiUrl string, pubKeyHex string, book string, page st
 
 }
 
-func ImportADI(url string, pk string) {
+func ListADIs() {
 
-	fmt.Println("ADI functionality is not available on Testnet")
+	err := Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("adi"))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, _ = c.Next() {
+			//
+			//as := AdiStore{}
+			//err := json.Unmarshal(v, &as)
+			//if err != nil {
+			//	log.Fatal(err)
+			//}
+
+			fmt.Printf("%s : %s \n", k, string(v))
+
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 
 }
