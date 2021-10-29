@@ -10,7 +10,6 @@ import (
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
@@ -105,7 +104,7 @@ func Init(opts InitOptions) (err error) {
 	genDoc := opts.GenesisDoc
 	if genDoc == nil {
 		genDoc = &types.GenesisDoc{
-			ChainID:         "chain-" + tmrand.Str(6),
+			ChainID:         opts.ChainID,
 			GenesisTime:     tmtime.Now(),
 			InitialHeight:   0,
 			Validators:      genVals,

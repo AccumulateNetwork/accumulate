@@ -24,7 +24,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
 type Program struct {
@@ -105,13 +104,12 @@ func (p *Program) Start(s service.Service) error {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	rpcClient, err := rpchttp.New(config.RPC.ListenAddress)
+	p.relay, err = relay.NewWith(config.Accumulate.Networks...)
 	if err != nil {
-		return fmt.Errorf("failed to reate RPC client: %v", err)
+		return fmt.Errorf("failed to create RPC relay: %v", err)
 	}
 
-	query := api.NewQuery(relay.New(rpcClient))
-	mgr, err := chain.NewBlockValidator(query, p.db, pv.Key.PrivKey.Bytes())
+	mgr, err := chain.NewBlockValidator(api.NewQuery(p.relay), p.db, pv.Key.PrivKey.Bytes())
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain manager: %v", err)
 	}
@@ -151,13 +149,12 @@ func (p *Program) Start(s service.Service) error {
 		return fmt.Errorf("failed to start node: %v", err)
 	}
 
-	p.relay, err = relay.NewWith(config.Accumulate.Networks...)
+	err = p.relay.Start()
 	if err != nil {
-		return fmt.Errorf("failed to start relay: %v", err)
+		return fmt.Errorf("failed to start RPC relay: %v", err)
 	}
 
-	query = api.NewQuery(p.relay)
-	p.api, err = api.StartAPI(&config.Accumulate.API, query)
+	p.api, err = api.StartAPI(&config.Accumulate.API, api.NewQuery(p.relay))
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
 	}
@@ -167,7 +164,7 @@ func (p *Program) Start(s service.Service) error {
 func (p *Program) Stop(service.Service) error {
 	var errs []error
 	errs = append(errs, p.node.Stop())
-	// TODO stop relay
+	errs = append(errs, p.relay.Stop())
 	// TODO stop API
 	errs = append(errs, p.db.GetDB().Close())
 
