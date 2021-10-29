@@ -487,8 +487,8 @@ func TestQueryNotFound(t *testing.T) {
 		t.Skip("Fails on windows (Tendermint cleanup issue)")
 	}
 
-	if os.Getenv("CI") == "true" && !acctesting.IsGo1_17 {
-		t.Skip("Flaky in CI for Go 1.16")
+	if os.Getenv("CI") == "true" {
+		t.Skip("Flaky in CI")
 	}
 
 	//make a client, and also spin up the router grpc
