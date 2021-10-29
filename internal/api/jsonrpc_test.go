@@ -487,6 +487,10 @@ func TestQueryNotFound(t *testing.T) {
 		t.Skip("Fails on windows (Tendermint cleanup issue)")
 	}
 
+	if os.Getenv("CI") == "true" && !acctesting.IsGo1_17 {
+		t.Skip("Flaky in CI for Go 1.16")
+	}
+
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	_, _, query := startBVC(t, dir)

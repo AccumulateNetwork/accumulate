@@ -29,8 +29,6 @@ import (
 )
 
 func TestEndToEnd(t *testing.T) {
-	t.Skip("!!!FIXME!!!")
-
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
@@ -48,8 +46,6 @@ func TestEndToEnd(t *testing.T) {
 }
 
 func TestFaucetMultiNetwork(t *testing.T) {
-	t.Skip("!!!FIXME!!!")
-
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
