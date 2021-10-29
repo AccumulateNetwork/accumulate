@@ -20,7 +20,7 @@ import (
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func initNodes(t *testing.T, baseIP net.IP, basePort int, count int, logLevel string) []*node.Node {
+func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, logLevel string, relay []string) []*node.Node {
 	t.Helper()
 
 	IPs := make([]string, count)
@@ -35,15 +35,22 @@ func initNodes(t *testing.T, baseIP net.IP, basePort int, count int, logLevel st
 
 	for i := range config {
 		config[i] = cfg.DefaultValidator()
-		config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], basePort+node.TmRpcPortOffset)}
+		if relay != nil {
+			config[i].Accumulate.Networks = make([]string, len(relay))
+			for j, r := range relay {
+				config[i].Accumulate.Networks[j] = fmt.Sprintf("tcp://%s:%d", r, basePort+node.TmRpcPortOffset)
+			}
+		} else {
+			config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], basePort+node.TmRpcPortOffset)}
+		}
 		config[i].Consensus.CreateEmptyBlocks = false
 	}
 
 	workDir := t.TempDir()
 	require.NoError(t, node.Init(node.InitOptions{
 		WorkDir:   workDir,
-		ShardName: t.Name(),
-		ChainID:   t.Name(),
+		ShardName: name,
+		ChainID:   name,
 		Port:      basePort,
 		Config:    config,
 		RemoteIP:  IPs,
@@ -62,7 +69,7 @@ func initNodes(t *testing.T, baseIP net.IP, basePort int, count int, logLevel st
 
 		require.NoError(t, cfg.Store(c))
 
-		nodes[i], _, err = acctesting.NewBVCNode(nodeDir, false, func(s string) zerolog.Logger {
+		nodes[i], _, err = acctesting.NewBVCNode(nodeDir, false, c.Accumulate.Networks, func(s string) zerolog.Logger {
 			zl := logging.NewTestZeroLogger(t, s)
 			zl = zl.With().Int("node", i).Logger()
 			zl = zl.Hook(zerolog.HookFunc(zerologEventFilter))
@@ -126,6 +133,8 @@ func zerologEventFilter(e *zerolog.Event, level zerolog.Level, message string) {
 	case "rpc-server", "p2p", "rpc", "statesync":
 		e.Discard()
 	default:
+		e.Discard()
+	case "accumulate":
 		// OK
 	}
 }

@@ -21,7 +21,7 @@ func NewWith(targetList ...string) (*Relay, error) {
 			return nil, fmt.Errorf("%q is not a URL or a named network", nameOrIP)
 		} else if ip.Port() == "" {
 			return nil, fmt.Errorf("missing port number: %q", nameOrIP)
-		} else if _, err := strconv.ParseInt(ip.Port(), 10, 16); err != nil {
+		} else if _, err := strconv.ParseInt(ip.Port(), 10, 17); err != nil {
 			return nil, fmt.Errorf("invalid port number: %q", nameOrIP)
 		}
 
