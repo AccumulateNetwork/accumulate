@@ -67,7 +67,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 
 		require.NoError(t, cfg.Store(c))
 
-		nodes[i], _, err = acctesting.NewBVCNode(nodeDir, false, c.Accumulate.Networks, func(s string) zerolog.Logger {
+		nodes[i], _, _, err = acctesting.NewBVCNode(nodeDir, false, c.Accumulate.Networks, func(s string) zerolog.Logger {
 			zl := logging.NewTestZeroLogger(t, s)
 			zl = zl.With().Int("node", i).Logger()
 			zl = zl.Hook(logging.ExcludeMessages("starting service", "stopping service"))

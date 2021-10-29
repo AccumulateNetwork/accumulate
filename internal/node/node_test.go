@@ -47,10 +47,10 @@ func TestNodeSetup(t *testing.T) {
 		return logging.NewTestZeroLogger(t, s)
 	}
 
-	node, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
-	require.NoError(t, err)                                                          //
-	require.NoError(t, node.Start())                                                 // Start
-	require.NoError(t, node.Stop())                                                  // Stop
+	node, _, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
+	require.NoError(t, err)                                                             //
+	require.NoError(t, node.Start())                                                    // Start
+	require.NoError(t, node.Stop())                                                     // Stop
 	node.Quit()
 	node.Wait() //
 }
@@ -72,13 +72,13 @@ func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
 				return logging.NewTestZeroLogger(t, s)
 			}
 
-			require.NoError(t, node.Init(opts))                                              // Configure
-			nodeDir := filepath.Join(opts.WorkDir, "Node0")                                  //
-			node, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
-			require.NoError(t, err)                                                          //
-			require.NoError(t, node.Start())                                                 // Start
-			require.NoError(t, node.Stop())                                                  // Stop
-			node.Wait()                                                                      //
+			require.NoError(t, node.Init(opts))                                                 // Configure
+			nodeDir := filepath.Join(opts.WorkDir, "Node0")                                     //
+			node, _, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
+			require.NoError(t, err)                                                             //
+			require.NoError(t, node.Start())                                                    // Start
+			require.NoError(t, node.Stop())                                                     // Stop
+			node.Wait()                                                                         //
 		})
 	}
 }
