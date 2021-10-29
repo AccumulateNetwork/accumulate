@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -14,6 +15,8 @@ import (
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
+	//"github.com/tyler-smith/go-bip32"
+	//"github.com/tyler-smith/go-bip39"
 )
 
 var keyCmd = &cobra.Command{
@@ -50,6 +53,8 @@ var keyCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintKeyCreate()
 				}
+			case "import":
+				ImportMneumonic(args[1:])
 			case "update":
 				if len(args) > 3 {
 					UpdateKeyPage(args[1], args[2], args[3], args[4])
@@ -62,8 +67,9 @@ var keyCmd = &cobra.Command{
 			case "generate":
 				if len(args) > 1 {
 					GenerateKey(args[1])
+				} else {
+					PrintKeyGenerate()
 				}
-				PrintKeyGenerate()
 			default:
 				fmt.Println("Usage:")
 				PrintKey()
@@ -89,12 +95,12 @@ func PrintKeyGet() {
 }
 
 func PrintKeyCreate() {
-	fmt.Println("  accumulate key create [page] [URL] [public-key-hex-1] ... [public-key-hex-n] Create new key page with 1 to N public keys")
-	fmt.Println("  accumulate key create [book] [URL] [public-key-hex-1] ... [public-key-hex-n] Create new key page with 1 to N public keys")
+	fmt.Println("  accumulate key create [page] [URL] [key label 1] ... [key label n] Create new key page with 1 to N public keys within the wallet")
+	fmt.Println("  accumulate key create [book] [URL] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
 }
 
 func PrintKeyGenerate() {
-	fmt.Println("  accumulate key generate label Generate a new key and give it a label in the wallet")
+	fmt.Println("  accumulate key generate [label]     Generate a new key and give it a label in the wallet")
 }
 
 func PrintKey() {
@@ -104,7 +110,66 @@ func PrintKey() {
 	PrintKeyPublic()
 }
 
-func GetKey(url string, method string) {
+func GetKeyPage(book string, keyLabel string) (*protocol.SigSpec, int, error) {
+
+	b, err := url2.Parse(book)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	privKey, err := LookupByLabel(keyLabel)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	kb, err := GetKeyBook(b.String())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for i := range kb.SigSpecs {
+		v := kb.SigSpecs[i]
+		//we have a match so go fetch the ssg
+		s, err := GetByChainId(v[:])
+		if err != nil {
+			log.Fatal(err)
+		}
+		if *s.Type.AsString() != types.ChainTypeSigSpec.Name() {
+			log.Fatal(fmt.Errorf("expecting key page, received %s", s.Type))
+		}
+		ss := protocol.SigSpec{}
+		err = ss.UnmarshalBinary(*s.Data)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for j := range ss.Keys {
+			_, err := LookupByPubKey(ss.Keys[j].PublicKey)
+			if err == nil && bytes.Equal(privKey[32:], v[:]) {
+				return &ss, j, nil
+			}
+		}
+	}
+
+	return nil, 0, fmt.Errorf("key page not found in book %s for key label %s", book, keyLabel)
+}
+
+func GetKeyBook(url string) (*protocol.SigSpecGroup, error) {
+	s, err := GetKey(url, "sig-spec-group")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ssg := protocol.SigSpecGroup{}
+	err = json.Unmarshal([]byte(s), &ssg)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return &ssg, nil
+}
+
+func GetKey(url string, method string) ([]byte, error) {
 
 	var res interface{}
 	var str []byte
@@ -124,32 +189,30 @@ func GetKey(url string, method string) {
 
 	fmt.Println(string(str))
 
+	return str, nil
 }
 
 // CreateKeyPage create a new key page
-func CreateKeyPage(pageUrl string, pubKeyHex []string) {
-	//todo, might be nice to have the pubkeyhex be either a public key or a label of internal key
-	var pubKeys []types.Bytes32
-	pubKeys = make([]types.Bytes32, len(pubKeyHex))
-
+func CreateKeyPage(pageUrl string, keyLabels []string) {
+	//when creating a key page you need to have the keys already generated and labeled.
 	u, err := url2.Parse(pageUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	css := protocol.CreateSigSpec{}
-	ksp := make([]*protocol.KeySpecParams, len(pubKeyHex))
+	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
 	css.Url = u.String()
 	css.Keys = ksp
-	for i := range pubKeyHex {
+	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
 
-		j, err := hex.Decode(pubKeys[i][:], []byte(pubKeyHex[i]))
-
-		if j != 64 || err != nil {
-			log.Fatalf("invalid public key %s", pubKeyHex[i])
+		pk, err := LookupByLabel(keyLabels[i])
+		if err != nil {
+			log.Fatal(fmt.Errorf("key label %s, does not exist in wallet", keyLabels[i]))
 		}
 
-		ksp.PublicKey = pubKeys[i][:]
+		ksp.PublicKey = pk[32:]
 		css.Keys[i] = &ksp
 	}
 
@@ -294,8 +357,35 @@ func CreateKeyBook(bookUrl string, pageUrls []string) {
 
 }
 
+func LookupByLabel(label string) (asData []byte, err error) {
+	err = Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("label"))
+		asData = b.Get([]byte(label))
+		if len(asData) == 0 {
+			err = fmt.Errorf("valid key not found for %s", label)
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return LookupByPubKey(asData)
+}
+
+func LookupByPubKey(pubKey []byte) (asData []byte, err error) {
+	err = Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("keys"))
+		asData = b.Get(pubKey)
+		return err
+	})
+	return
+}
+
 func GenerateKey(label string) {
-	fmt.Println("Generation of key functionality is not currently available")
+	_, err := LookupByLabel(label)
+	if err == nil {
+		log.Fatal(fmt.Errorf("key already exists for label %s", label))
+	}
 	pubKey, privKey, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		log.Fatal(err)
@@ -303,23 +393,34 @@ func GenerateKey(label string) {
 
 	err = Db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("keys"))
-		err := b.Put([]byte(label), privKey)
+		err := b.Put(pubKey, privKey)
 		return err
 	})
+
+	err = Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("label"))
+		err := b.Put([]byte(label), pubKey)
+		return err
+	})
+
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Public Key %s : %s", label, pubKey)
+	fmt.Printf("Public Key %s : %x", label, pubKey)
 }
 
 func ListKeyPublic() {
 
 	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("keys"))
+		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
 		for k, v := c.First(); k != nil; k, _ = c.Next() {
-			fmt.Printf("%s %x\n", k, v[32:])
+			pk, err := LookupByPubKey(v)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Printf("%s %x\n", k, pk[32:])
 		}
 		return nil
 	})
@@ -365,4 +466,20 @@ func ExportKey(label string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func ImportMneumonic(mnemonic []string) {
+	//entropy, _ := bip39.NewEntropy(256)
+	//mnemonic, _ := bip39.NewMnemonic(entropy)
+	//
+	//// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
+	//seed := bip39.NewSeed(mnemonic, "Secret Passphrase")
+	//
+	//masterKey, _ := bip32.NewMasterKey(seed)
+	//publicKey := masterKey.PublicKey()
+	//
+	//// Display mnemonic and keys
+	//fmt.Println("Mnemonic: ", mnemonic)
+	//fmt.Println("Master private key: ", masterKey)
+	//fmt.Println("Master public key: ", publicKey)
 }
