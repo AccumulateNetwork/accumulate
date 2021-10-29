@@ -5,12 +5,16 @@ import (
 	"errors"
 	"fmt"
 	stdlog "log"
+	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"syscall"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
 	web "github.com/AccumulateNetwork/accumulated/internal/web/static"
+	"github.com/AccumulateNetwork/accumulated/networks"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
@@ -92,8 +96,12 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 
 func (n *Node) waitForRPC() error {
 	for _, bvc := range n.Config.Accumulate.Networks {
-		_ = bvc
-		client, err := rpcclient.New(bvc)
+		addr, err := networks.GetRpcAddr(bvc, TmRpcPortOffset)
+		if err != nil {
+			return err
+		}
+
+		client, err := rpcclient.New(addr)
 		if err != nil {
 			return err
 		}
@@ -104,9 +112,31 @@ func (n *Node) waitForRPC() error {
 			if err == nil {
 				break
 			}
+			if !errIsConnRefused(err) {
+				return err
+			}
 
 			time.Sleep(time.Millisecond)
 		}
 	}
 	return nil
+}
+
+func errIsConnRefused(err error) bool {
+	var err1 *url.Error
+	if !errors.As(err, &err1) {
+		return false
+	}
+
+	var err2 *net.OpError
+	if !errors.As(err1.Err, &err2) {
+		return false
+	}
+
+	var err3 *os.SyscallError
+	if !errors.As(err2.Err, &err3) {
+		return false
+	}
+
+	return errors.Is(err3.Err, syscall.ECONNREFUSED)
 }
