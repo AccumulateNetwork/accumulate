@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
@@ -21,7 +22,7 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, sender string, label
 	err := Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucket))
 		pk := b.Get([]byte(label))
-		if pk == nil {
+		if len(pk) == 0 {
 			log.Fatalf("cannot find private key associated with %s in %s:%s", sender, label, bucket)
 		}
 		fmt.Println(hex.EncodeToString(pk))
@@ -72,17 +73,28 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, sender string, label
 	return params, err
 }
 
+func IsLiteAccount(url string) bool {
+
+	u, err := url2.Parse(url)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	_, _, err = protocol.ParseAnonymousAddress(u)
+
+	return err == nil
+}
+
 type KeyPageStore struct {
 	PrivKeys []types.Bytes `json:"privKeys"`
 }
 
 type KeyBookStore struct {
-	KeyPages map[string]KeyPageStore `json:"privKey"`
+	KeyPageList []string `json:"keyPages"`
 }
 
-type AdiStore struct {
-	KeyBooks         map[string]KeyBookStore `json:"keyBooks"`
-	tokenAccountUrls []string                `json:"tokenAccountUrls"`
+type AccountKeyBookStore struct {
+	KeyBook KeyBookStore `json:"keyBook"`
 }
 
 //

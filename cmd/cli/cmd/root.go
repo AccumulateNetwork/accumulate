@@ -89,5 +89,13 @@ func initDB() *bolt.DB {
 		}
 		return nil
 	})
+
+	err = db.Update(func(tx *bolt.Tx) error {
+		_, err = tx.CreateBucket([]byte("label"))
+		if err != nil {
+			return fmt.Errorf("DB: %s", err)
+		}
+		return nil
+	})
 	return db
 }

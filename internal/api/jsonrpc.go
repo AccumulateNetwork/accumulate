@@ -268,6 +268,11 @@ func (api *API) unmarshalRequest(params json.RawMessage, data interface{}) error
 	return nil
 }
 
+func (api *API) prepareGetByChainId(params json.RawMessage) (*acmeapi.APIRequestChainId, error) {
+	req := &acmeapi.APIRequestChainId{}
+	return req, api.unmarshalRequest(params, req)
+}
+
 func (api *API) prepareGet(params json.RawMessage) (*acmeapi.APIRequestURL, error) {
 	req := &acmeapi.APIRequestURL{}
 	return req, api.unmarshalRequest(params, req)
@@ -296,6 +301,24 @@ func (api *API) get(params json.RawMessage, expect ...types.ChainType) interface
 func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 	req, err := api.prepareGet(params)
 	if err != nil {
+		chainReq := &acmeapi.APIRequestChainId{}
+		chainIdErr := api.unmarshalRequest(params, req)
+		if chainIdErr == nil {
+			resp, err := api.query.GetChainStateByChainId(chainReq.ChainId)
+			if err != nil {
+				return accumulateError(err)
+			}
+			return resp
+		}
+		txReq := &acmeapi.APIRequestTxId{}
+		txidErr := api.unmarshalRequest(params, req)
+		if txidErr == nil {
+			resp, err := api.query.GetChainStateByTxId(txReq.TxId)
+			if err != nil {
+				return accumulateError(err)
+			}
+			return resp
+		}
 		return validatorError(err)
 	}
 

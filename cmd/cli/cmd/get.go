@@ -33,6 +33,34 @@ func PrintGet() {
 	fmt.Println("  accumulate get [url] 		Get data by Accumulate URL")
 }
 
+func GetByChainId(chainId []byte) (*acmeapi.APIDataResponse, error) {
+	var res interface{}
+	//var str []byte
+
+	params := acmeapi.APIRequestChainId{}
+	params.ChainId = chainId
+
+	str1, err1 := json.Marshal(&params)
+	if err1 != nil {
+		return nil, err1
+	}
+
+	fmt.Println(string(str1))
+
+	if err := Client.Request(context.Background(), "get", params, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	resp := res.(acmeapi.APIDataResponse)
+	//str, err := json.Marshal()
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//fmt.Println(string(str))
+	return &resp, nil
+}
+
 func Get(url string) string {
 
 	var res interface{}
