@@ -48,6 +48,18 @@ type APIRequestURL struct {
 	Wait bool         `json:"wait" form:"wait" query:"wait"`
 }
 
+// APIRequestChainId is used to unmarshal URL param into API methods, that retrieves data by URL
+type APIRequestChainId struct {
+	ChainId types.Bytes `json:"chainId" form:"chainId" query:"chainId" validate:"required"`
+	Wait    bool        `json:"wait" form:"wait" query:"wait"`
+}
+
+// APIRequestTxId is used to unmarshal URL param into API methods, that retrieves data by URL
+type APIRequestTxId struct {
+	TxId types.Bytes `json:"txid" form:"txid" query:"txid" validate:"required"`
+	Wait bool        `json:"wait" form:"wait" query:"wait"`
+}
+
 // APIRequestURLPagination is APIRequestURL with pagination params
 type APIRequestURLPagination struct {
 	APIRequestURL
