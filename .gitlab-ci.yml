@@ -3,7 +3,26 @@ stages:
 - build
 - deploy
 
+health:
+  only: [schedules, web]
+  stage: test
+  tags: [docker, linux]
+  image: alpine
+  variables:
+    AUTH: 'Job-Token: ${CI_JOB_TOKEN}'
+    API: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}
+  script:
+  - apk add --no-cache jq curl
+  - |
+    for env_id in $(curl -s -H ${AUTH} ${API}/environments | jq '.[].id'); do
+      ip=$(curl -s -H ${AUTH} ${API}/environments/${env_id} | jq -r .external_url | cut -d: -f-2)
+      if ! curl -s ${ip}:33001/status | jq -re .result.node_info.network; then
+        curl -X POST -H ${AUTH} ${API}/environments/${env_id}/stop
+      fi
+    done
+
 .test:
+  except: [schedules]
   stage: test
   tags:
   - docker
@@ -21,6 +40,7 @@ test go1.17:
   image: golang:1.17
 
 git describe:
+  except: [schedules]
   stage: test
   tags:
   - docker
@@ -33,6 +53,7 @@ git describe:
       dotenv: git.env
 
 build:
+  except: [schedules]
   stage: build
   tags:
   - docker
@@ -61,6 +82,7 @@ build:
     - accumulated-*
 
 configure:
+  except: [schedules]
   stage: build
   tags:
   - docker
@@ -82,9 +104,9 @@ configure:
     - config-*.tar.gz
 
 .deploy:
+  # except: [schedules]
+  only: [develop] # only run on the main branch
   stage: deploy
-  only:
-  - develop # only run on the main branch
   tags:
   - docker
   - linux
