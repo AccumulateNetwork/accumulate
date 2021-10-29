@@ -172,7 +172,7 @@ func CreateTX(sender string, receiver string, amount string) {
 
 		to := []*acmeapi.TokenTxOutput{}
 		r := &acmeapi.TokenTxOutput{}
-		amt, err := strconv.ParseFloat(amount, 64) //ParseUint(amount, 10, 64)
+		amt, err := strconv.ParseUint(amount, 10, 64)
 		r.Amount = uint64(amt)
 		r.URL = types.UrlChain{types.String(receiver)}
 		to = append(to, r)
