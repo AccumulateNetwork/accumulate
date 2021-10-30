@@ -104,7 +104,6 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si 
 
 	ed := new(transactions.ED25519Sig)
 	err := ed.Sign(nonce, privKey, gtx.TransactionHash())
-	fmt.Printf("%x", gtx.TransactionHash())
 	if err != nil {
 		return nil, err
 	}
