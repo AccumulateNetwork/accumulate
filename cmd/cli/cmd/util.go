@@ -23,6 +23,7 @@ func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transacti
 func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
 	//adiActor labelOrPubKeyHex height index
 	var privKey []byte
+	var err error
 
 	ct := 0
 	if len(args) == 0 {
@@ -33,6 +34,15 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	ed.URL = actor.String()
 	ed.MSHeight = 1
 	ed.PriorityIdx = 0
+
+	if IsLiteAccount(actor.String()) == true {
+		privKey, err = LookupByAnon(actor.String())
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", actor.String(), err)
+		}
+		return args, &ed, privKey, nil
+	}
+
 	if len(args) > 1 {
 		b, err := pubKeyFromString(args[0])
 		if err != nil {
