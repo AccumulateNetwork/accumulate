@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
@@ -60,19 +61,23 @@ func CreateAnonTokenAccount(db *state.StateDB, key ed25519.PrivKey, tokens float
 }
 
 func WriteStates(db *state.StateDB, chains ...state.Chain) error {
-	for _, chain := range chains {
-		b, err := chain.MarshalBinary()
+	for _, c := range chains {
+		b, err := c.MarshalBinary()
 		if err != nil {
 			return err
 		}
 
-		u, err := chain.Header().ParseUrl()
+		u, err := c.Header().ParseUrl()
 		if err != nil {
 			return err
 		}
 
 		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
 		db.AddStateEntry(&chainId, &types.Bytes32{}, &state.Object{Entry: b})
+
+		if !u.Identity().Equal(u) {
+			chain.AddDirectoryEntry(db, u)
+		}
 	}
 	return nil
 }
