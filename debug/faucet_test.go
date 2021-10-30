@@ -16,6 +16,8 @@ func TestDebugFaucet(t *testing.T) {
 		t.Skip("This is a test made for debugging. It is not intended for use except for as a debugging tool.")
 	}
 
+	t.Skip("Skip this test unless you need it to debug something")
+
 	// Networks must be in the same order as they are passed to --relay-to in the node configuration
 	clients, err := relay.NewClients("Arches", "AmericanSamoa", "EastXeons")
 	require.NoError(t, err)
