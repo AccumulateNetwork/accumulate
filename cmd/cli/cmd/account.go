@@ -6,11 +6,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
+	"time"
+
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
-	"log"
-	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	anonaddress "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -34,7 +35,7 @@ var accountCmd = &cobra.Command{
 					PrintAccountGet()
 				}
 			case "create":
-				if len(args) > 2 {
+				if len(args) > 3 {
 					CreateAccount(args[1], args[2:])
 				} else {
 					fmt.Println("Usage:")
@@ -87,7 +88,7 @@ func PrintAccountList() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create [{actor adi}/{account to create}] [wallet key label] [key index (optional)] [key height (optional)] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create [{actor adi}] [wallet key label] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
 }
 
 func PrintAccountImport() {
@@ -131,12 +132,7 @@ func GetAccount(url string) {
 //account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
 func CreateAccount(url string, args []string) {
 
-	accountUrl, err := url2.Parse(url)
-	if err != nil {
-		log.Fatal("invalid token url")
-	}
-
-	actor, err := url2.Parse(accountUrl.Authority)
+	actor, err := url2.Parse(url)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -146,12 +142,19 @@ func CreateAccount(url string, args []string) {
 		log.Fatal("insufficient number of command line arguments")
 	}
 
-	tok, err := url2.Parse(args[0])
+	accountUrl, err := url2.Parse(args[0])
+	if err != nil {
+		log.Fatalf("invalid account url %s", args[0])
+	}
+	if actor.Authority != accountUrl.Authority {
+		log.Fatalf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, actor.Authority)
+	}
+	tok, err := url2.Parse(args[1])
 	if err != nil {
 		log.Fatal("invalid token url")
 	}
 
-	kbu, err := url2.Parse(args[1])
+	kbu, err := url2.Parse(args[2])
 	if err != nil {
 		log.Fatal("invalid key book url")
 	}

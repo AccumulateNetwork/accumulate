@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"time"
+
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/boltdb/bolt"
-	"log"
-	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -252,7 +253,7 @@ func NewADI(actor string, params []string) {
 		}
 		NewADIFromLiteAccount(u, params[0], params[1], book, page)
 	} else {
-	NewADIFromADISigner(u, params[:])
+		NewADIFromADISigner(u, params[:])
 	}
 }
 
