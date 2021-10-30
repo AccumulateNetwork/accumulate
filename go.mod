@@ -22,7 +22,6 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/kardianos/service v1.2.0
 	github.com/mitchellh/mapstructure v1.4.2
-	github.com/onsi/gomega v1.13.0 // indirect
 	github.com/pelletier/go-toml v1.9.4
 	github.com/prometheus/client_golang v1.11.0
 	github.com/prometheus/common v0.30.0
