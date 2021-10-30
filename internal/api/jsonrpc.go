@@ -60,6 +60,7 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		// ADI
 		"adi":        api.getADI,
 		"adi-create": api.createADI,
+		"directory":  api.createADI,
 
 		// Key management
 		"sig-spec":              api.getSigSpec,
