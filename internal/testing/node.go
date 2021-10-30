@@ -55,10 +55,10 @@ func NodeInitOptsForNetwork(name string) (node.InitOptions, error) {
 	}, nil
 }
 
-func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zerolog.Logger, cleanup func(func())) (*node.Node, *privval.FilePV, error) {
+func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zerolog.Logger, cleanup func(func())) (*node.Node, *state.StateDB, *privval.FilePV, error) {
 	cfg, err := cfg.Load(dir)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load config: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to load config: %v", err)
 	}
 
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
@@ -66,7 +66,7 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 	sdb := new(state.StateDB)
 	err = sdb.Open(dbPath, memDB, true)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
+		return nil, nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
 	cleanup(func() {
 		_ = sdb.GetDB().Close()
@@ -78,7 +78,7 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 		cfg.PrivValidator.StateFile(),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to load file PV: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to load file PV: %v", err)
 	}
 
 	if relayTo == nil {
@@ -87,19 +87,19 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 
 	relay, err := relay.NewWith(relayTo...)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create RPC relay: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to create RPC relay: %v", err)
 	}
 
 	mgr, err := chain.NewBlockValidator(api.NewQuery(relay), sdb, pv.Key.PrivKey.Bytes())
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
 	}
 
 	var zl zerolog.Logger
 	if newZL == nil {
 		w, err := logging.NewConsoleWriter(cfg.LogFormat)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 		zl = zerolog.New(w)
 	} else {
@@ -116,17 +116,17 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 
 	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create ABCI app: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to create ABCI app: %v", err)
 	}
 
 	node, err := node.New(cfg, app, logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create node: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to create node: %v", err)
 	}
 	cleanup(func() {
 		_ = node.Stop()
 		node.Wait()
 	})
 
-	return node, pv, nil
+	return node, sdb, pv, nil
 }

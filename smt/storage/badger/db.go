@@ -43,7 +43,7 @@ func (d *DB) InitDB(filepath string) error {
 // Get
 // Look in the given bucket, and return the key found.  Returns nil if no value
 // is found for the given key
-func (d *DB) Get(key [storage.KeyLength]byte) (value []byte, err error) {
+func (d *DB) Get(key storage.Key) (value []byte, err error) {
 	err = d.badgerDB.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key[:])
 		if err != nil {
@@ -72,7 +72,7 @@ func (d *DB) Get(key [storage.KeyLength]byte) (value []byte, err error) {
 // Put
 // Put a key/value in the database.  We return an error if there was a problem
 // writing the key/value pair to the database.
-func (d *DB) Put(key [storage.KeyLength]byte, value []byte) error {
+func (d *DB) Put(key storage.Key, value []byte) error {
 	// Update the key/value in the database
 	err := d.badgerDB.Update(func(txn *badger.Txn) error {
 		err := txn.Set(key[:], value)
@@ -84,7 +84,7 @@ func (d *DB) Put(key [storage.KeyLength]byte, value []byte) error {
 // PutBatch
 // Write all the transactions in a given batch of pending transactions.  The
 // batch is emptied, so it can be reused.
-func (d *DB) EndBatch(TXCache map[[32]byte][]byte) error {
+func (d *DB) EndBatch(TXCache map[storage.Key][]byte) error {
 	txn := d.badgerDB.NewTransaction(true)
 	defer txn.Discard()
 
