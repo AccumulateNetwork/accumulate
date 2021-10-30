@@ -93,7 +93,9 @@ func PrintKeyGet() {
 
 func PrintKeyCreate() {
 	fmt.Println("  accumulate key create page [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key page url] [public key label 1] ... [public key label n] Create new key page with 1 to N public keys within the wallet")
+	fmt.Println("\t\t example usage: accumulate key create page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate key create book [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key book url] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
+	fmt.Println("\t\t example usage: accumulate key create book acc://RedWagon redKey5 acc://RedWagon/RedBook acc://RedWagon/RedPage1")
 }
 
 func PrintKeyGenerate() {
@@ -217,7 +219,7 @@ func CreateKeyBookOrPage(createType string, pageUrl string, args []string) {
 func CreateKeyPage(pageUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, newUrl *url2.URL, keyLabels []string) {
 	//when creating a key page you need to have the keys already generated and labeled.
 	if newUrl.Authority != pageUrl.Authority {
-		log.Fatalf("page url to create (%s) doesn't match the adi (%s)", newUrl.Authority, pageUrl.Authority)
+		log.Fatalf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
 	}
 
 	css := protocol.CreateSigSpec{}
@@ -254,7 +256,7 @@ func CreateKeyPage(pageUrl *url2.URL, si *transactions.SignatureInfo, privKey []
 
 	var res interface{}
 	var str []byte
-	if err := Client.Request(context.Background(), "key-page-create", params, &res); err != nil {
+	if err := Client.Request(context.Background(), "create-sig-spec", params, &res); err != nil {
 		log.Fatal(err)
 	}
 
@@ -331,7 +333,13 @@ func UpdateKeyPage(pageUrl string, op string, keyHex string, newKeyHex string) {
 
 // CreateKeyBook create a new key page
 func CreateKeyBook(bookUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, newUrl *url2.URL, pageUrls []string) {
+
+	if newUrl.Authority != bookUrl.Authority {
+		log.Fatalf("book url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, bookUrl.Authority)
+	}
+
 	ssg := protocol.CreateSigSpecGroup{}
+
 	ssg.Url = newUrl.String()
 
 	var chainId types.Bytes32
@@ -344,7 +352,7 @@ func CreateKeyBook(bookUrl *url2.URL, si *transactions.SignatureInfo, privKey []
 		ssg.SigSpecs = append(ssg.SigSpecs, chainId)
 	}
 
-	data, err := json.Marshal(ssg)
+	data, err := json.Marshal(&ssg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -362,7 +370,7 @@ func CreateKeyBook(bookUrl *url2.URL, si *transactions.SignatureInfo, privKey []
 
 	var res interface{}
 	var str []byte
-	if err := Client.Request(context.Background(), "key-book-create", params, &res); err != nil {
+	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
 		log.Fatal(err)
 	}
 
