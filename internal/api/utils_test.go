@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -10,13 +11,14 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/privval"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV, *Query) {
+func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query) {
 	t.Helper()
 
 	opts, err := acctesting.NodeInitOptsForNetwork("Badlands")
@@ -27,21 +29,22 @@ func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV, *Query) {
 	cfg.Mempool.MaxBatchBytes = 1048576
 	cfg.Mempool.CacheSize = 1048576
 	cfg.Mempool.Size = 50000
+	cfg.Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
 
 	newLogger := func(s string) zerolog.Logger {
 		return logging.NewTestZeroLogger(t, s)
 	}
 
-	require.NoError(t, node.Init(opts))                                          // Configure
-	nodeDir := filepath.Join(dir, "Node0")                                       //
-	cfg, err = config.Load(nodeDir)                                              // Modify configuration
-	require.NoError(t, err)                                                      //
-	cfg.Accumulate.WebsiteEnabled = false                                        // Disable the website
-	cfg.Instrumentation.Prometheus = false                                       // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	require.NoError(t, config.Store(cfg))                                        //
-	node, pv, err := acctesting.NewBVCNode(nodeDir, false, newLogger, t.Cleanup) // Initialize
-	require.NoError(t, err)                                                      //
-	require.NoError(t, node.Start())                                             // Launch
+	require.NoError(t, node.Init(opts))                                                    // Configure
+	nodeDir := filepath.Join(dir, "Node0")                                                 //
+	cfg, err = config.Load(nodeDir)                                                        // Modify configuration
+	require.NoError(t, err)                                                                //
+	cfg.Accumulate.WebsiteEnabled = false                                                  // Disable the website
+	cfg.Instrumentation.Prometheus = false                                                 // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+	require.NoError(t, config.Store(cfg))                                                  //
+	node, sdb, pv, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
+	require.NoError(t, err)                                                                //
+	require.NoError(t, node.Start())                                                       // Launch
 
 	t.Cleanup(func() { require.NoError(t, node.Stop()) })
 
@@ -53,5 +56,5 @@ func startBVC(t *testing.T, dir string) (*node.Node, *privval.FilePV, *Query) {
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 
 	query := NewQuery(relay)
-	return node, pv, query
+	return sdb, pv, query
 }

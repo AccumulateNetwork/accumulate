@@ -188,3 +188,15 @@ MetricsResponse:
 
 SyntheticGenesis:
   kind: tx
+
+DirectoryIndexMetadata:
+  fields:
+  - name: Count
+    type: uvarint
+
+DirectoryQueryResult:
+  fields:
+  - name: Entries
+    type: slice
+    slice:
+      type: string

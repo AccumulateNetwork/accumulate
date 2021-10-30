@@ -3,14 +3,23 @@ stages:
 - build
 - deploy
 
+variables:
+  GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
+
+default:
+  cache:
+    key: go-mod-cache
+    paths:
+    - .go-mod-cache
+
 .test:
   stage: test
   tags:
   - docker
   - linux
   script:
-  - go build ./...
-  - go test ./...
+  - go build -v ./...
+  - go test -v -cpu=4 -count=1 ./...
 
 test go1.16:
   extends: .test
@@ -105,12 +114,13 @@ configure:
       export PATH="'"$PATH:$HOME/.local/bin"'"
       screen -wipe || true
       screen -ls | grep '\baccumulated\b' && screen -S accumulated -X stuff ^C
+      while screen -ls | grep -q '\baccumulated\b'; do sleep 1; done
       rm -f ~/.local/bin/accumulated
       mv accumulated-latest ~/.local/bin/accumulated
       rm -rf ~/.accumulate
       mkdir ~/.accumulate
       tar xf config.tar.gz -C ~/.accumulate
-      screen -d -m -S accumulated bash -c 'accumulated run -n ${NODE} 2>&1 | tee ~/.accumulate/Node${NODE}/acc.log'
+      screen -d -m -S accumulated bash -c 'accumulated run -n ${NODE} 2>&1 | tee ~/.accumulate/Node${NODE}/acc-$(date +%Y%m%d%H%M%S).log'
     "; fi
 
 deploy 13.51.10.110:
