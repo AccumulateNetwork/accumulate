@@ -28,6 +28,7 @@ func TestNodeSetup(t *testing.T) {
 	require.NoError(t, err)
 	opts.WorkDir = t.TempDir()
 	opts.Port = getFreePort(t)
+	opts.Config[0].Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
 
 	require.NoError(t, node.Init(opts)) // Configure
 
@@ -44,10 +45,10 @@ func TestNodeSetup(t *testing.T) {
 		return logging.NewTestZeroLogger(t, s)
 	}
 
-	node, _, err := acctesting.NewBVCNode(nodeDir, false, newLogger, t.Cleanup) // Initialize
-	require.NoError(t, err)                                                     //
-	require.NoError(t, node.Start())                                            // Start
-	require.NoError(t, node.Stop())                                             // Stop
+	node, _, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
+	require.NoError(t, err)                                                             //
+	require.NoError(t, node.Start())                                                    // Start
+	require.NoError(t, node.Stop())                                                     // Stop
 	node.Quit()
 	node.Wait() //
 }
@@ -63,18 +64,19 @@ func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
 			opts.WorkDir = t.TempDir()
 			opts.Port = getFreePort(t)
 			opts.Config[0].Instrumentation.Prometheus = true
+			opts.Config[0].Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
 
 			newLogger := func(s string) zerolog.Logger {
 				return logging.NewTestZeroLogger(t, s)
 			}
 
-			require.NoError(t, node.Init(opts))                                         // Configure
-			nodeDir := filepath.Join(opts.WorkDir, "Node0")                             //
-			node, _, err := acctesting.NewBVCNode(nodeDir, false, newLogger, t.Cleanup) // Initialize
-			require.NoError(t, err)                                                     //
-			require.NoError(t, node.Start())                                            // Start
-			require.NoError(t, node.Stop())                                             // Stop
-			node.Wait()                                                                 //
+			require.NoError(t, node.Init(opts))                                                 // Configure
+			nodeDir := filepath.Join(opts.WorkDir, "Node0")                                     //
+			node, _, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
+			require.NoError(t, err)                                                             //
+			require.NoError(t, node.Start())                                                    // Start
+			require.NoError(t, node.Stop())                                                     // Stop
+			node.Wait()                                                                         //
 		})
 	}
 }

@@ -30,7 +30,7 @@ import (
 type Accumulator struct {
 	abci.BaseApplication
 
-	chainId [32]byte
+	chainId string
 	state   State
 	address crypto.Address
 	txct    int64
@@ -130,9 +130,9 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	var networkid [32]byte
-	networkid[31] = 1
-	app.chainId = networkid
+	app.chainId = req.ChainId
+	app.logger = app.logger.With("chain", req.ChainId)
+	app.logger.Info("Initializing")
 
 	//register a list of the validators.
 	for _, v := range req.Validators {
@@ -246,7 +246,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			u2 = u.String()
 		}
 		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "type", sub.TransactionType(), "tx", txHash, "error", err)
+		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
 		ret.Code = 2
 		ret.GasWanted = 0
 		ret.GasUsed = 0
@@ -255,7 +255,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	}
 
 	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
-	app.logger.Info("Check succeeded", "type", sub.TransactionType(), "tx", txHash)
+	app.logger.Info("Check succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
 	return ret
 }
 
@@ -289,7 +289,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 			u2 = u.String()
 		}
 		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "type", sub.TransactionType(), "tx", txHash, "error", err)
+		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
 		ret.Code = code.CodeTypeUnauthorized
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
 		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
@@ -311,7 +311,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	//now we need to store the data returned by the validator and feed into accumulator
 	app.txct++
 
-	app.logger.Info("Deliver succeeded", "type", sub.TransactionType(), "tx", txHash)
+	app.logger.Info("Deliver succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
 	return ret
 }
 

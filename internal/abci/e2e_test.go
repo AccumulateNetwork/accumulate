@@ -7,7 +7,6 @@ import (
 
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -23,7 +22,7 @@ var rand = randpkg.New(randpkg.NewSource(0))
 type Tx = transactions.GenTransaction
 
 func BenchmarkFaucetAndAnonTx(b *testing.B) {
-	n := createAppWithMemDB(b, crypto.Address{})
+	n := createAppWithMemDB(b, crypto.Address{}, "error")
 
 	sponsor := generateKey()
 	recipient := generateKey()
@@ -56,7 +55,7 @@ func BenchmarkFaucetAndAnonTx(b *testing.B) {
 }
 
 func TestCreateAnonAccount(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	originAddr := n.testAnonTx(11)
 	require.Equal(t, int64(5e4*acctesting.TokenMx-11000), n.GetAnonTokenAccount(originAddr).Balance.Int64())
 }
@@ -99,7 +98,7 @@ func (n *fakeNode) testAnonTx(count int) string {
 }
 
 func TestCreateADI(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 
 	anonAccount := generateKey()
 	newAdi := generateKey()
@@ -145,7 +144,7 @@ func TestCreateADI(t *testing.T) {
 
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{})
+		n := createAppWithMemDB(t, crypto.Address{}, "info")
 		adiKey := generateKey()
 		require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
 		n.WriteStates()
@@ -165,10 +164,16 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
 		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
+
+		require.Equal(t, []string{
+			n.ParseUrl("FooBar/ssg0").String(),
+			n.ParseUrl("FooBar/sigspec0").String(),
+			n.ParseUrl("FooBar/Baz").String(),
+		}, n.GetDirectory("FooBar"))
 	})
 
 	t.Run("Custom Key Book", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{})
+		n := createAppWithMemDB(t, crypto.Address{}, "error")
 		adiKey, pageKey := generateKey(), generateKey()
 		require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
 		require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/page1", pageKey.PubKey().Bytes()))
@@ -187,8 +192,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 
 		n.client.Wait()
 
-		u, err := url.Parse("foo/book1")
-		require.NoError(t, err)
+		u := n.ParseUrl("foo/book1")
 		bookChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
 		r := n.GetTokenAccount("FooBar/Baz")
@@ -200,7 +204,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 }
 
 func TestAnonAccountTx(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, alice, 5e4))
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, bob, 0))
@@ -229,7 +233,7 @@ func TestAnonAccountTx(t *testing.T) {
 }
 
 func TestAdiAccountTx(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey, barKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(n.db, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
@@ -253,7 +257,7 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey := generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(n.db, "foo/tokens", protocol.AcmeUrl().String(), 1e2, false))
@@ -278,7 +282,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 }
 
 func TestCreateSigSpec(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey, testKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
 	n.WriteStates()
@@ -305,18 +309,16 @@ func TestCreateSigSpec(t *testing.T) {
 }
 
 func TestCreateSigSpecGroup(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey, testKey := generateKey(), generateKey()
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey.PubKey().Bytes()))
 	n.WriteStates()
 
-	specUrl, err := url.Parse("foo/sigspec1")
-	require.NoError(t, err)
+	specUrl := n.ParseUrl("foo/sigspec1")
 	specChainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
 
-	groupUrl, err := url.Parse("foo/ssg1")
-	require.NoError(t, err)
+	groupUrl := n.ParseUrl("foo/ssg1")
 	groupChainId := types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -339,11 +341,10 @@ func TestCreateSigSpecGroup(t *testing.T) {
 }
 
 func TestAddSigSpec(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
-	u, err := url.Parse("foo/ssg1")
-	require.NoError(t, err)
+	u := n.ParseUrl("foo/ssg1")
 	groupChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
@@ -376,7 +377,7 @@ func TestAddSigSpec(t *testing.T) {
 }
 
 func TestAddKey(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey, testKey := generateKey(), generateKey()
 
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
@@ -403,7 +404,7 @@ func TestAddKey(t *testing.T) {
 }
 
 func TestUpdateKey(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey, testKey := generateKey(), generateKey()
 
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
@@ -431,7 +432,7 @@ func TestUpdateKey(t *testing.T) {
 }
 
 func TestRemoveKey(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{})
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
 	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))

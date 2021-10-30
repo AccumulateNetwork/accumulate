@@ -75,6 +75,7 @@ type StateDB struct {
 	TimeBucket   float64
 	mutex        sync.Mutex
 	updates      map[types.Bytes32]*blockUpdates
+	writes       map[storage.Key][]byte
 	transactions transactionLists
 	sync         sync.WaitGroup
 	logger       log.Logger
@@ -97,6 +98,7 @@ func (s *StateDB) init(debug bool) (err error) {
 
 	s.debug = debug
 	s.updates = make(map[types.Bytes32]*blockUpdates)
+	s.writes = map[storage.Key][]byte{}
 	s.transactions.reset()
 
 	s.bpt = pmt.NewBPTManager(s.db)
@@ -151,17 +153,20 @@ func (s *StateDB) Sync() {
 }
 
 //GetTxRange get the transaction id's in a given range
-func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, err error) {
+func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
 	s.mutex.Lock()
 	h, err := s.mm.GetRange(chainId[:], start, end)
+	s.mm.SetChainID(chainId[:])
+	maxAvailable = s.mm.GetElementCount()
 	s.mutex.Unlock()
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	for i := range h {
 		hashes = append(hashes, types.Bytes32(h[i]))
 	}
-	return hashes, nil
+
+	return hashes, maxAvailable, nil
 }
 
 //GetTx get the transaction by transaction ID
@@ -535,6 +540,23 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 		//	s.bpt.Bpt.Insert(chainId, *mdRoot)
 		//}
 	}
+
+	// Process pending writes
+	writeOrder := make([]storage.Key, 0, len(s.writes))
+	for k := range s.writes {
+		writeOrder = append(writeOrder, k)
+	}
+	sort.Slice(writeOrder, func(i, j int) bool {
+		return bytes.Compare(writeOrder[i][:], writeOrder[j][:]) < 0
+	})
+	for _, k := range writeOrder {
+		s.GetDB().Key(k).PutBatch(s.writes[k])
+	}
+	// The compiler optimizes this into a constant-time operation
+	for k := range s.writes {
+		delete(s.writes, k)
+	}
+
 	group.Wait()
 
 	s.bpt.Bpt.Update()

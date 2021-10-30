@@ -210,22 +210,9 @@ func RunLoadTest(query *api.Query, origin ed25519.PrivateKey, walletCount, txCou
 
 	adiSponsor := gtx.SigInfo.URL
 
-	done := make(chan abci.TxResult)
-	_, err = query.BroadcastTx(gtx, done)
+	err = SendTxSync(query, gtx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send TX: %v", err)
-	}
-	<-query.BatchSend()
-
-	select {
-	case txr := <-done:
-		if txr.Result.Code != 0 {
-			return nil, fmt.Errorf(txr.Result.Log)
-		} else {
-			fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
-		}
-	case <-time.After(1 * time.Minute):
-		return nil, fmt.Errorf("timeout while waiting for TX response")
+		return nil, err
 	}
 
 	addresses, err := Load(query, privateKey, walletCount, txCount)
@@ -237,4 +224,26 @@ func RunLoadTest(query *api.Query, origin ed25519.PrivateKey, walletCount, txCou
 	addrList = append(addrList, *destAddress.AsString())
 	addrList = append(addrList, addresses...)
 	return addrList, nil
+}
+
+func SendTxSync(query *api.Query, tx *transactions.GenTransaction) error {
+	done := make(chan abci.TxResult)
+	_, err := query.BroadcastTx(tx, done)
+	if err != nil {
+		return fmt.Errorf("failed to send TX: %v", err)
+	}
+	<-query.BatchSend()
+
+	select {
+	case txr := <-done:
+		if txr.Result.Code != 0 {
+			return fmt.Errorf(txr.Result.Log)
+		}
+
+		fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
+		return nil
+
+	case <-time.After(1 * time.Minute):
+		return fmt.Errorf("timeout while waiting for TX response")
+	}
 }

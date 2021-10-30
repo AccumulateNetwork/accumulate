@@ -2,9 +2,12 @@ package api
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
+
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api/query"
 
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
@@ -67,6 +70,30 @@ func (q *Query) QueryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
 	qu := query.Query{}
 	qu.RouteId = u.Routing()
 	qu.Type = types.QueryTypeUrl
+	ru := query.RequestByUrl{}
+	ru.Url = types.String(u.String())
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	return q.txRelay.Query(qu.RouteId, qd)
+}
+
+func (q *Query) QueryDirectoryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeDirectoryUrl
 	ru := query.RequestByUrl{}
 	ru.Url = types.String(u.String())
 	qu.Content, err = ru.MarshalBinary()
@@ -170,7 +197,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeAdi)
 }
 
 // GetToken
@@ -181,7 +208,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeToken)
 }
 
 // GetTokenAccount get the token balance for a given url
@@ -191,7 +218,34 @@ func (q *Query) GetTokenAccount(adiChainPath string) (*acmeApi.APIDataResponse, 
 		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalChainState(r.Response, types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount)
+}
+
+// GetDirectory returns directory entries for a given url
+func (q *Query) GetDirectory(url string) (*acmeApi.APIDataResponse, error) {
+	r, err := q.QueryDirectoryByUrl(url)
+	if err != nil {
+		return nil, fmt.Errorf("bvc directory query returned error, %v", err)
+	}
+	if err := responseIsError(r.Response); err != nil {
+		return nil, err
+	}
+
+	dir := new(protocol.DirectoryQueryResult)
+	err = dir.UnmarshalBinary(r.Response.Value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+
+	data, err := json.Marshal(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	rAPI := new(api.APIDataResponse)
+	rAPI.Type = "directory"
+	rAPI.Data = (*json.RawMessage)(&data)
+	return rAPI, nil
 }
 
 // GetTransactionReference get the transaction id for a given transaction number
@@ -337,7 +391,7 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 	ret := acmeApi.APIDataResponsePagination{}
 	ret.Start = start
 	ret.Limit = limit
-	ret.Total = int64(len(thr.Transactions))
+	ret.Total = thr.Total
 	for i := range thr.Transactions {
 		txs := thr.Transactions[i]
 

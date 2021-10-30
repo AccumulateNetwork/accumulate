@@ -86,6 +86,30 @@ func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, err
 	return &qr, nil
 }
 
+func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQueryResult, error) {
+	b, err := m.db.GetIndex(state.DirectoryIndex, chainId, "Metadata")
+	if err != nil {
+		return nil, err
+	}
+
+	md := new(protocol.DirectoryIndexMetadata)
+	err = md.UnmarshalBinary(b)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := new(protocol.DirectoryQueryResult)
+	resp.Entries = make([]string, md.Count)
+	for i := range resp.Entries {
+		b, err := m.db.GetIndex(state.DirectoryIndex, chainId, uint64(i))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get entry %d", i)
+		}
+		resp.Entries[i] = string(b)
+	}
+	return resp, nil
+}
+
 func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
 	var err error
 
@@ -139,6 +163,7 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("error obtaining txid range %v", err)
 		}
+		thr.Total = maxAmt
 		for i := range txids {
 			qr, err := m.queryByTxId(txids[i][:])
 			if err != nil {
@@ -165,6 +190,24 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 			return nil, err
 		}
 		ret, err = obj.MarshalBinary()
+		if err != nil {
+			return nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
+		}
+	case types.QueryTypeDirectoryUrl:
+		chr := query.RequestByUrl{}
+		err := chr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, err
+		}
+		u, err := url.Parse(*chr.Url.AsString())
+		if err != nil {
+			return nil, fmt.Errorf("invalid URL in query %s", chr.Url)
+		}
+		dir, err := m.queryDirectoryByChainId(u.ResourceChain())
+		if err != nil {
+			return nil, err
+		}
+		ret, err = dir.MarshalBinary()
 		if err != nil {
 			return nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
 		}
@@ -372,7 +415,8 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		return nil, fmt.Errorf("malformed transaction")
 	}
 
-	executor, ok := m.executors[types.TxType(tx.TransactionType())]
+	txt := types.TxType(tx.TransactionType())
+	executor, ok := m.executors[txt]
 	txPending := state.NewPendingTransaction(tx)
 	chainId := types.Bytes(tx.ChainID).AsBytes32()
 	if !ok {
@@ -439,7 +483,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
-	err = st.executeStores()
+	err = st.commit()
 	if err != nil {
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}

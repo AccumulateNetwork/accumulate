@@ -14,8 +14,8 @@ import (
 // The Manager as implemented cannot be accessed concurrently over go routines
 // ToDo: Add Mutex to make conccurency safe
 type Manager struct {
-	DB      storage.KeyValueDB                 // Underlying database implementation
-	TXCache map[[storage.KeyLength]byte][]byte // TX Cache:  Holds pending tx for the db
+	DB      storage.KeyValueDB     // Underlying database implementation
+	TXCache map[storage.Key][]byte // TX Cache:  Holds pending tx for the db
 }
 
 // Equal
@@ -63,7 +63,7 @@ func NewDBManager(databaseTag, filename string) (*Manager, error) {
 }
 
 func (m *Manager) init() {
-	m.TXCache = make(map[[storage.KeyLength]byte][]byte, 100) // Preallocate 100 slots
+	m.TXCache = make(map[storage.Key][]byte, 100) // Preallocate 100 slots
 }
 
 // Init

@@ -42,6 +42,14 @@ type CreateSigSpecGroup struct {
 	SigSpecs [][32]byte `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
 }
 
+type DirectoryIndexMetadata struct {
+	Count uint64 `json:"count" form:"count" query:"count" validate:"required"`
+}
+
+type DirectoryQueryResult struct {
+	Entries []string `json:"entries" form:"entries" query:"entries" validate:"required"`
+}
+
 type IdentityCreate struct {
 	Url         string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	PublicKey   []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
@@ -218,6 +226,27 @@ func (v *CreateSigSpecGroup) BinarySize() int {
 	n += stringBinarySize(v.Url)
 
 	n += chainSetBinarySize(v.SigSpecs)
+
+	return n
+}
+
+func (v *DirectoryIndexMetadata) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(v.Count)
+
+	return n
+}
+
+func (v *DirectoryQueryResult) BinarySize() int {
+	var n int
+
+	n += uvarintBinarySize(uint64(len(v.Entries)))
+
+	for _, v := range v.Entries {
+		n += stringBinarySize(v)
+
+	}
 
 	return n
 }
@@ -466,6 +495,27 @@ func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 	buffer.Write(stringMarshalBinary(v.Url))
 
 	buffer.Write(chainSetMarshalBinary(v.SigSpecs))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(v.Count))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(uvarintMarshalBinary(uint64(len(v.Entries))))
+	for i, v := range v.Entries {
+		_ = i
+		buffer.Write(stringMarshalBinary(v))
+
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -808,6 +858,40 @@ func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 		v.SigSpecs = x
 	}
 	data = data[chainSetBinarySize(v.SigSpecs):]
+
+	return nil
+}
+
+func (v *DirectoryIndexMetadata) UnmarshalBinary(data []byte) error {
+	if x, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Count: %w", err)
+	} else {
+		v.Count = x
+	}
+	data = data[uvarintBinarySize(v.Count):]
+
+	return nil
+}
+
+func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
+	var lenEntries uint64
+	if x, err := uvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entries: %w", err)
+	} else {
+		lenEntries = x
+	}
+	data = data[uvarintBinarySize(lenEntries):]
+
+	v.Entries = make([]string, lenEntries)
+	for i := range v.Entries {
+		if x, err := stringUnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Entries[%d]: %w", i, err)
+		} else {
+			v.Entries[i] = x
+		}
+		data = data[stringBinarySize(v.Entries[i]):]
+
+	}
 
 	return nil
 }

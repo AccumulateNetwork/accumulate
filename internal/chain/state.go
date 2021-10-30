@@ -21,6 +21,7 @@ type StateManager struct {
 	db          *state.StateDB
 	stores      map[[32]byte]*storeState
 	chains      map[[32]byte]state.Chain
+	writes      map[storage.Key][]byte
 	submissions []*submittedTx
 	storeCount  int
 	txHash      types.Bytes32
@@ -43,6 +44,7 @@ func NewStateManager(db *state.StateDB, tx *transactions.GenTransaction) (*State
 	m.db = db
 	m.chains = map[[32]byte]state.Chain{}
 	m.stores = map[[32]byte]*storeState{}
+	m.writes = map[storage.Key][]byte{}
 	m.txHash = types.Bytes(tx.TransactionHash()).AsBytes32()
 	m.txType = tx.TransactionType()
 
@@ -204,7 +206,11 @@ func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
 	m.submissions = append(m.submissions, &submittedTx{url, body})
 }
 
-func (m *StateManager) executeStores() error {
+func (m *StateManager) commit() error {
+	for k, v := range m.writes {
+		m.db.Write(k, v)
+	}
+
 	// Create an ordered list of state stores
 	stores := make([]*storeState, 0, len(m.stores))
 	for _, store := range m.stores {
@@ -292,4 +298,48 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 	}
 
 	return record, nil
+}
+
+func (s *StateManager) WriteIndex(index state.Index, chain []byte, key interface{}, value []byte) {
+	k := storage.ComputeKey(string(index), chain, key)
+	s.writes[k] = value
+}
+
+func (s *StateManager) GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error) {
+	k := storage.ComputeKey(string(index), chain, key)
+	w, ok := s.writes[k]
+	if ok {
+		return w, nil
+	}
+	return s.db.GetIndex(index, chain, key)
+}
+
+func (m *StateManager) AddDirectoryEntry(u *url.URL) error {
+	return AddDirectoryEntry(m, u)
+}
+
+func AddDirectoryEntry(db interface {
+	WriteIndex(index state.Index, chain []byte, key interface{}, value []byte)
+	GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error)
+}, u *url.URL) error {
+	md := new(protocol.DirectoryIndexMetadata)
+	idc := u.IdentityChain()
+	b, err := db.GetIndex(state.DirectoryIndex, idc, "Metadata")
+	if err == nil {
+		err = md.UnmarshalBinary(b)
+	}
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return fmt.Errorf("failed to load metadata: %v", err)
+	}
+
+	c := md.Count
+	md.Count++
+	b, err = md.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %v", err)
+	}
+
+	db.WriteIndex(state.DirectoryIndex, idc, "Metadata", b)
+	db.WriteIndex(state.DirectoryIndex, idc, c, []byte(u.String()))
+	return nil
 }
