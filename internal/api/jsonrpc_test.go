@@ -3,7 +3,6 @@ package api_test
 import (
 	"context"
 	"crypto/ed25519"
-	"crypto/sha256"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -21,7 +20,9 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
@@ -397,68 +398,9 @@ func TestTransactionHistory(t *testing.T) {
 	fmt.Printf("%s\n", string(output))
 }
 
-func TestJsonRpcAdi(t *testing.T) {
-	t.Skip("Test Broken") // ToDo: Broken Test
-
-	//"wileecoyote/ACME"
-	adiSponsor := "wileecoyote"
-
-	kpNewAdi := types.CreateKeyPair()
-	//routerAddress := fmt.Sprintf("tcp://localhost:%d", randomRouterPorts())
-
-	//make a client, and also spin up the router grpc
-	dir := t.TempDir()
-	_, pv, query := startBVC(t, dir)
-
-	//kpSponsor := types.CreateKeyPair()
-
-	jsonapi := NewTest(t, query)
-
-	//StartAPI(randomRouterPorts(), client)
-
-	kpSponsor := types.CreateKeyPairFromSeed(pv.Key.PrivKey.Bytes())
-
-	req := api.APIRequestRaw{}
-	adi := &protocol.IdentityCreate{}
-	adi.Url = "RoadRunner"
-	kh := sha256.Sum256(kpNewAdi.PubKey().Bytes())
-	adi.PublicKey = kh[:]
-	data, err := json.Marshal(adi)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	req.Tx = &api.APIRequestRawTx{}
-	req.Tx.Signer = &api.Signer{}
-	req.Tx.Sponsor = types.String(adiSponsor)
-	copy(req.Tx.Signer.PublicKey[:], kpSponsor.PubKey().Bytes())
-	req.Tx.Signer.Nonce = uint64(time.Now().Unix())
-	adiJson := json.RawMessage(data)
-	req.Tx.Data = &adiJson
-
-	// TODO Why does this sign a ledger? This will fail in GenTransaction.
-	ledger := types.MarshalBinaryLedgerAdiChainPath(adi.Url, *req.Tx.Data, int64(req.Tx.Signer.Nonce))
-	sig, err := kpSponsor.Sign(ledger)
-	if err != nil {
-		t.Fatal(err)
-	}
-	copy(req.Tx.Sig[:], sig)
-
-	jsonReq, err := json.Marshal(&req)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	//now we can send in json rpc calls.
-	ret := jsonapi.CreateADI(context.Background(), jsonReq)
-
-	t.Fatal(ret)
-
-}
-
 func TestMetrics(t *testing.T) {
 	if os.Getenv("CI") == "true" {
-		t.Skip("This test is flaky in CI")
+		t.Skip("Depends on an external resource, and thus is not appropriate for CI")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -466,13 +408,103 @@ func TestMetrics(t *testing.T) {
 	_, _, query := startBVC(t, dir)
 	japi := NewTest(t, query)
 
-	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Millisecond})
+	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
 	require.NoError(t, err)
 
 	resp := japi.Metrics(context.Background(), req)
-	require.IsType(t, api.APIDataResponse{}, resp)
-	dr := resp.(api.APIDataResponse)
-	mresp := new(protocol.MetricsResponse)
-	require.NoError(t, json.Unmarshal(*dr.Data, mresp))
-	t.Log(mresp.Value)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.NoError(t, r)
+	case api.APIDataResponse:
+		mresp := new(protocol.MetricsResponse)
+		require.NoError(t, json.Unmarshal(*r.Data, mresp))
+	default:
+		require.IsType(t, api.APIDataResponse{}, r)
+	}
+}
+
+func TestQueryNotFound(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Fails on windows (Tendermint cleanup issue)")
+	}
+
+	if os.Getenv("CI") == "true" {
+		t.Skip("Flaky in CI")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+	japi := NewTest(t, query)
+
+	req, err := json.Marshal(&api.APIRequestURL{URL: "acc://1cddf368ef9ba2a1ea914291e0201ebaf376130a6c05caf3/ACME"})
+	require.NoError(t, err)
+
+	resp := japi.GetTokenAccount(context.Background(), req)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.Contains(t, r.Data, "not found")
+	default:
+		t.Fatalf("Expected error, got %T", r)
+	}
+}
+
+func TestQueryWrongType(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Fails on windows (Tendermint cleanup issue)")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+	japi := NewTest(t, query)
+
+	_, origin, _ := ed25519.GenerateKey(nil)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	require.NoError(t, err)
+
+	err = acctesting.SendTxSync(query, tx)
+	require.NoError(t, err)
+
+	req, err := json.Marshal(&api.APIRequestURL{URL: destAddress})
+	require.NoError(t, err)
+
+	resp := japi.GetADI(context.Background(), req)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.Contains(t, r.Data, "want ChainTypeAdi, got ChainTypeAnonTokenAccount")
+	default:
+		t.Fatalf("Expected error, got %T", r)
+	}
+}
+
+func TestDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Fails on windows (Tendermint cleanup issue)")
+	}
+
+	dir := t.TempDir()
+	db, _, query := startBVC(t, dir)
+	japi := NewTest(t, query)
+
+	_, adiKey, _ := ed25519.GenerateKey(nil)
+	require.NoError(t, acctesting.CreateADI(db, tmed25519.PrivKey(adiKey), "foo"))
+	require.NoError(t, acctesting.CreateTokenAccount(db, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
+	_, _, err := db.WriteStates(0)
+	require.NoError(t, err)
+
+	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})
+	require.NoError(t, err)
+
+	resp := japi.GetDirectory(context.Background(), req)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.NoError(t, r)
+	case *api.APIDataResponse:
+		dir := new(protocol.DirectoryQueryResult)
+		require.NoError(t, json.Unmarshal(*r.Data, dir))
+		t.Log(dir)
+	default:
+		require.IsType(t, (*api.APIDataResponse)(nil), r)
+	}
 }
