@@ -1304,7 +1304,7 @@ func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
 	}
 	u.ChainHeader = v.ChainHeader
 	u.SigSpecs = chainSetToJSON(v.SigSpecs)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
@@ -1463,7 +1463,7 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
 	var u struct {
 		state.ChainHeader
-		SigSpecs []string `json:"sigSpecs"`
+		SigSpecs []string `json:"keyPages"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
