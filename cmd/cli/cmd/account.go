@@ -10,6 +10,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"log"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	anonaddress "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -33,13 +34,11 @@ var accountCmd = &cobra.Command{
 					PrintAccountGet()
 				}
 			case "create":
-				if len(args) == 3 {
-					CreateAccount(args[1], args[2], "")
-				} else if len(args) > 3 {
-					CreateAccount(args[1], args[2], args[3])
+				if len(args) > 2 {
+					CreateAccount(args[1], args[2:])
 				} else {
 					fmt.Println("Usage:")
-					PrintAccountGet()
+					PrintAccountCreate()
 				}
 			case "generate":
 				GenerateAccount()
@@ -88,7 +87,7 @@ func PrintAccountList() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create [adiUrl] [tokenUrl] [keyBook (optional)]	create a token account for an ADI")
+	fmt.Println("  accumulate account create [{actor adi}/{account to create}] [wallet key label] [key index (optional)] [key height (optional)] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
 }
 
 func PrintAccountImport() {
@@ -129,15 +128,36 @@ func GetAccount(url string) {
 
 }
 
-func CreateAccount(url string, tokenUrl string, keyBookUrl string) {
+//account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
+func CreateAccount(url string, args []string) {
 
-	u, err := url2.Parse(url)
+	accountUrl, err := url2.Parse(url)
+	if err != nil {
+		log.Fatal("invalid token url")
+	}
+
+	actor, err := url2.Parse(accountUrl.Authority)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	args, si, privKey, err := prepareSigner(actor, args)
+	if len(args) < 2 {
+		log.Fatal("insufficient number of command line arguments")
+	}
+
+	tok, err := url2.Parse(args[0])
+	if err != nil {
+		log.Fatal("invalid token url")
+	}
+
+	kbu, err := url2.Parse(args[1])
+	if err != nil {
+		log.Fatal("invalid key book url")
+	}
+
 	//make sure this is a valid token account
-	tokenJson := Get(tokenUrl)
+	tokenJson := Get(tok.String())
 	token := response.Token{}
 	err = json.Unmarshal([]byte(tokenJson), &token)
 	if err != nil {
@@ -145,9 +165,9 @@ func CreateAccount(url string, tokenUrl string, keyBookUrl string) {
 	}
 
 	tac := &protocol.TokenAccountCreate{}
-	tac.Url = u.String()
-	tac.TokenUrl = tokenUrl
-	tac.KeyBookUrl = keyBookUrl
+	tac.Url = accountUrl.String()
+	tac.TokenUrl = tok.String()
+	tac.KeyBookUrl = kbu.String()
 
 	binaryData, err := tac.MarshalBinary()
 	if err != nil {
@@ -159,7 +179,9 @@ func CreateAccount(url string, tokenUrl string, keyBookUrl string) {
 		log.Fatal(err)
 	}
 
-	params, err := prepareGenTx(jsonData, binaryData, u.Authority, u.Authority, "adi")
+	nonce := uint64(time.Now().Unix())
+
+	params, err := prepareGenTx(jsonData, binaryData, actor, si, privKey, nonce)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -177,13 +199,6 @@ func CreateAccount(url string, tokenUrl string, keyBookUrl string) {
 	}
 
 	fmt.Println(string(str))
-
-	//todo store the account in a database or be able to query accounts associated with an adi
-	//err = Db.Update(func(tx *bolt.Tx) error {
-	//	b := tx.Bucket([]byte("anon"))
-	//	err := b.Put([]byte(address), privKey)
-	//	return err
-	//})
 }
 
 func GenerateAccount() {

@@ -7,7 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"log"
+	"strconv"
+	"strings"
+	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -15,8 +19,8 @@ import (
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
-	//"github.com/tyler-smith/go-bip32"
-	//"github.com/tyler-smith/go-bip39"
+	"github.com/tyler-smith/go-bip32"
+	"github.com/tyler-smith/go-bip39"
 )
 
 var keyCmd = &cobra.Command{
@@ -41,20 +45,13 @@ var keyCmd = &cobra.Command{
 				}
 			case "create":
 				if len(args) > 3 {
-					if args[1] == "page" {
-						CreateKeyPage(args[2], args[3:])
-					} else if args[1] == "book" {
-						CreateKeyBook(args[2], args[3:])
-					} else {
-						fmt.Println("Usage:")
-						PrintKeyCreate()
-					}
+					CreateKeyBookOrPage(args[1], args[2], args[3:])
 				} else {
 					fmt.Println("Usage:")
 					PrintKeyCreate()
 				}
 			case "import":
-				ImportMneumonic(args[1:])
+				ImportMneumonic("seed", args[1:])
 			case "update":
 				if len(args) > 3 {
 					UpdateKeyPage(args[1], args[2], args[3], args[4])
@@ -95,8 +92,8 @@ func PrintKeyGet() {
 }
 
 func PrintKeyCreate() {
-	fmt.Println("  accumulate key create [page] [URL] [key label 1] ... [key label n] Create new key page with 1 to N public keys within the wallet")
-	fmt.Println("  accumulate key create [book] [URL] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
+	fmt.Println("  accumulate key create [page] [adi url] [signing key label] [key index (optional)] [key height (optional)] [key label 1] ... [key label n] Create new key page with 1 to N public keys within the wallet")
+	fmt.Println("  accumulate key create [book] [adi url] [signing key label] [key index (optional)] [key height (optional)] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
 }
 
 func PrintKeyGenerate() {
@@ -192,17 +189,31 @@ func GetKey(url string, method string) ([]byte, error) {
 	return str, nil
 }
 
-// CreateKeyPage create a new key page
-func CreateKeyPage(pageUrl string, keyLabels []string) {
-	//when creating a key page you need to have the keys already generated and labeled.
+func CreateKeyBookOrPage(createType string, pageUrl string, args []string) {
 	u, err := url2.Parse(pageUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	args, si, privKey, err := prepareSigner(u, args[2:])
+	if err != nil {
+		log.Fatal(err)
+	}
+	switch createType {
+	case "page":
+		CreateKeyPage(u, si, privKey, args)
+	case "book":
+		CreateKeyBook(u, si, privKey, args)
+	}
+}
+
+// CreateKeyPage create a new key page
+func CreateKeyPage(pageUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, keyLabels []string) {
+	//when creating a key page you need to have the keys already generated and labeled.
+
 	css := protocol.CreateSigSpec{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
-	css.Url = u.String()
+	css.Url = pageUrl.String()
 	css.Keys = ksp
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
@@ -226,7 +237,8 @@ func CreateKeyPage(pageUrl string, keyLabels []string) {
 		log.Fatal(err)
 	}
 
-	params, err := prepareGenTx(data, dataBinary, css.Url, u.Authority, "adi")
+	nonce := uint64(time.Now().Unix())
+	params, err := prepareGenTx(data, dataBinary, pageUrl, si, privKey, nonce)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -247,75 +259,71 @@ func CreateKeyPage(pageUrl string, keyLabels []string) {
 }
 
 func UpdateKeyPage(pageUrl string, op string, keyHex string, newKeyHex string) {
-	key := types.Bytes32{}
-	newKey := types.Bytes32{}
-	operation := protocol.KeyPageOperationByName(op)
-
-	u, err := url2.Parse(pageUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	i, err := hex.Decode(key[:], []byte(keyHex))
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if i != 64 {
-		log.Fatal("invalid old key")
-	}
-
-	i, err = hex.Decode(newKey[:], []byte(newKeyHex))
-	if i != 64 {
-		log.Fatal("invalid new key")
-	}
-
-	ukp := protocol.UpdateKeyPage{}
-
-	ukp.Key = key[:]
-	ukp.NewKey = newKey[:]
-	ukp.Operation = operation
-
-	data, err := json.Marshal(ukp)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	dataBinary, err := ukp.MarshalBinary()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	params, err := prepareGenTx(data, dataBinary, u.String(), u.Authority, "adi")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	var res interface{}
-	var str []byte
-	if err := Client.Request(context.Background(), "key-page-update", params, &res); err != nil {
-		log.Fatal(err)
-	}
-
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(str))
-
+	println("UpdateKeyPage currently disabled")
+	//key := types.Bytes32{}
+	//newKey := types.Bytes32{}
+	//operation := protocol.KeyPageOperationByName(op)
+	//
+	//u, err := url2.Parse(pageUrl)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//i, err := hex.Decode(key[:], []byte(keyHex))
+	//
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//if i != 64 {
+	//	log.Fatal("invalid old key")
+	//}
+	//
+	//i, err = hex.Decode(newKey[:], []byte(newKeyHex))
+	//if i != 64 {
+	//	log.Fatal("invalid new key")
+	//}
+	//
+	//ukp := protocol.UpdateKeyPage{}
+	//
+	//ukp.Key = key[:]
+	//ukp.NewKey = newKey[:]
+	//ukp.Operation = operation
+	//
+	//data, err := json.Marshal(ukp)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//dataBinary, err := ukp.MarshalBinary()
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//params, err := prepareGenTx(data, dataBinary, u.String(), u.Authority, "adi")
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//var res interface{}
+	//var str []byte
+	//if err := Client.Request(context.Background(), "key-page-update", params, &res); err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//str, err = json.Marshal(res)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//fmt.Println(string(str))
+	//
 }
 
 // CreateKeyBook create a new key page
-func CreateKeyBook(bookUrl string, pageUrls []string) {
-	u, err := url2.Parse(bookUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func CreateKeyBook(bookUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, pageUrls []string) {
 	ssg := protocol.CreateSigSpecGroup{}
-	ssg.Url = u.String()
+	ssg.Url = bookUrl.String()
 
 	var chainId types.Bytes32
 	for i := range pageUrls {
@@ -337,7 +345,8 @@ func CreateKeyBook(bookUrl string, pageUrls []string) {
 		log.Fatal(err)
 	}
 
-	params, err := prepareGenTx(data, dataBinary, ssg.Url, u.Authority, "adi")
+	nonce := uint64(time.Now().Unix())
+	params, err := prepareGenTx(data, dataBinary, bookUrl, si, privKey, nonce)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -355,6 +364,56 @@ func CreateKeyBook(bookUrl string, pageUrls []string) {
 
 	fmt.Println(string(str))
 
+}
+
+func pubKeyFromString(s string) ([]byte, error) {
+	var pubKey types.Bytes32
+	if len(s) != 64 {
+		return nil, fmt.Errorf("invalid public key or wallet key label")
+	}
+	i, err := hex.Decode(pubKey[:], []byte(s))
+
+	if err != nil {
+		return nil, err
+	}
+
+	if i != 32 {
+		return nil, fmt.Errorf("invalid public key")
+	}
+
+	return pubKey[:], nil
+}
+
+func getPublicKey(s string) ([]byte, error) {
+	var pubKey types.Bytes32
+	privKey, err := LookupByLabel(s)
+
+	if err != nil {
+		b, err := pubKeyFromString(s)
+		if err != nil {
+			return nil, fmt.Errorf("unable to resolve public key %s,%v", s, err)
+		}
+		pubKey.FromBytes(b)
+	} else {
+		pubKey.FromBytes(privKey[32:])
+	}
+
+	return pubKey[:], nil
+}
+
+func LookupByAnon(anon string) (privKey []byte, err error) {
+	err = Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("anon"))
+		privKey = b.Get([]byte(anon))
+		if len(privKey) == 0 {
+			err = fmt.Errorf("valid key not found for %s", anon)
+		}
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return
 }
 
 func LookupByLabel(label string) (asData []byte, err error) {
@@ -382,6 +441,10 @@ func LookupByPubKey(pubKey []byte) (asData []byte, err error) {
 }
 
 func GenerateKey(label string) {
+
+	if _, err := strconv.ParseInt(label, 10, 64); err == nil {
+		log.Fatal("label cannot be a number")
+	}
 	_, err := LookupByLabel(label)
 	if err == nil {
 		log.Fatal(fmt.Errorf("key already exists for label %s", label))
@@ -415,12 +478,8 @@ func ListKeyPublic() {
 	err := Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, _ = c.Next() {
-			pk, err := LookupByPubKey(v)
-			if err != nil {
-				log.Fatal(err)
-			}
-			fmt.Printf("%s %x\n", k, pk[32:])
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			fmt.Printf("%s \t\t %x\n", k, v)
 		}
 		return nil
 	})
@@ -468,18 +527,86 @@ func ExportKey(label string) {
 	}
 }
 
-func ImportMneumonic(mnemonic []string) {
-	//entropy, _ := bip39.NewEntropy(256)
-	//mnemonic, _ := bip39.NewMnemonic(entropy)
-	//
-	//// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
-	//seed := bip39.NewSeed(mnemonic, "Secret Passphrase")
-	//
-	//masterKey, _ := bip32.NewMasterKey(seed)
-	//publicKey := masterKey.PublicKey()
-	//
-	//// Display mnemonic and keys
-	//fmt.Println("Mnemonic: ", mnemonic)
-	//fmt.Println("Master private key: ", masterKey)
-	//fmt.Println("Master public key: ", publicKey)
+func GeneratePrivateKey(label string) (privKey []byte, err error) {
+	seed, err := lookupSeed(label)
+
+	if err != nil {
+		//if private key seed doesn't exist, just create a key
+		_, privKey, err = ed25519.GenerateKey(nil)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		//if we do have a seed, then create a new key
+		masterKey, _ := bip32.NewMasterKey(seed)
+
+		newKey, err := masterKey.NewChildKey(uint32(getKeyCount()))
+		if err != nil {
+			return nil, err
+		}
+		privKey = ed25519.NewKeyFromSeed(newKey.Key)
+	}
+	return
+}
+
+func getKeyCount() (count int64) {
+	_ = Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("label"))
+		if b != nil {
+			count = b.Tx().Size()
+		}
+
+		return nil
+	})
+	return count
+}
+
+func lookupSeed(label string) (seed []byte, err error) {
+
+	err = Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("seed"))
+		seed = b.Get([]byte(label))
+		if len(seed) == 0 {
+			err = fmt.Errorf("seed for the label %s doesn't exist", label)
+		}
+		return err
+	})
+
+	return
+}
+
+func ImportMneumonic(label string, mnemonic []string) {
+	mns := strings.Join(mnemonic, " ")
+
+	if !bip39.IsMnemonicValid(mns) {
+		log.Fatal("invalid mnemonic provided")
+	}
+
+	// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
+	seed := bip39.NewSeed(mns, "")
+
+	var err error
+
+	err = Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("seed"))
+		seed := b.Get([]byte(label))
+		if len(seed) != 0 {
+			err = fmt.Errorf("seed for the label %s already exists", label)
+		}
+		return err
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	err = Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("seed"))
+		if b != nil {
+			b.Put([]byte(label), seed)
+		} else {
+			return fmt.Errorf("DB: %s", err)
+		}
+		return nil
+	})
+
 }

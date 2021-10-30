@@ -1,14 +1,7 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"log"
-	"strconv"
-
 	"github.com/spf13/cobra"
 )
 
@@ -35,60 +28,60 @@ func PrintCredits() {
 }
 
 func AddCredits(fromUrl string, toUrl string, amount string) {
-
-	u, err := url2.Parse(fromUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-	u2, err := url2.Parse(toUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	u.String()
-	u2.String()
-
-	var res interface{}
-	var str []byte
-
-	amt, err := strconv.Atoi(amount)
-	if err != nil {
-		log.Fatal(err)
-	}
-	credits := protocol.AddCredits{}
-	credits.Recipient = u2.String()
-	credits.Amount = uint64(amt)
-
-	data, err := json.Marshal(credits)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	dataBinary, err := credits.MarshalBinary()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, _, err = protocol.ParseAnonymousAddress(u)
-	bucket := "adi"
-	if err == nil {
-		bucket = "anon"
-	}
-
-	params, err := prepareGenTx(data, dataBinary, u.String(), u.String(), bucket)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if err := Client.Request(context.Background(), "add-credits", params, &res); err != nil {
-		log.Fatal(err)
-	}
-
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(str))
+	println("AddCredits is currently disabled")
+	//u, err := url2.Parse(fromUrl)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//u2, err := url2.Parse(toUrl)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//u.String()
+	//u2.String()
+	//
+	//var res interface{}
+	//var str []byte
+	//
+	//amt, err := strconv.Atoi(amount)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//credits := protocol.AddCredits{}
+	//credits.Recipient = u2.String()
+	//credits.Amount = uint64(amt)
+	//
+	//data, err := json.Marshal(credits)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//dataBinary, err := credits.MarshalBinary()
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//_, _, err = protocol.ParseAnonymousAddress(u)
+	//bucket := "adi"
+	//if err == nil {
+	//	bucket = "anon"
+	//}
+	//
+	//params, err := prepareGenTx(data, dataBinary, u.String(), u.String(), bucket)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//if err := Client.Request(context.Background(), "add-credits", params, &res); err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//str, err = json.Marshal(res)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//fmt.Println(string(str))
 
 }

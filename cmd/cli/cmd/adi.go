@@ -2,16 +2,16 @@ package cmd
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/boltdb/bolt"
 	"log"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -33,12 +33,8 @@ var adiCmd = &cobra.Command{
 			case "list":
 				ListADIs()
 			case "create":
-				if len(args) == 3 {
-					NewADI(args[1], args[2], "", "", "")
-				} else if len(args) == 4 {
-					NewADI(args[1], args[2], args[3], "", "")
-				} else if len(args) == 6 {
-					NewADI(args[1], args[2], args[3], args[4], args[5])
+				if len(args) > 3 {
+					NewADI(args[1], args[2:])
 				} else {
 					fmt.Println("Usage:")
 					PrintADICreate()
@@ -64,7 +60,8 @@ func PrintADIGet() {
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [signer-url] [adi-url] [key-book-name (optional)] [key-page-name (optional)] [public-key (optional)] Create new ADI")
+	fmt.Println("  accumulate adi create [actor-lite-account] [adi-url] [public-key] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
+	fmt.Println("  accumulate adi create [actor-adi-url] [actor public key or wallet label] [actor key index (optional)] [actor key height (optional)] [adi url to create] [public key] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
 func PrintADIImport() {
@@ -98,50 +95,47 @@ func GetADI(url string) {
 
 }
 
-//
-//func PublicADI(url string) {
-//
-//	fmt.Println("ADI functionality is not available on Testnet")
-//
-//}
+func NewADIFromADISigner(actor *url2.URL, args []string) {
+	var si *transactions.SignatureInfo
+	var privKey []byte
+	var err error
 
-//func NewADIFromADISponsor()
-
-// NewADI create a new ADI from a sponsored account.
-func NewADI(sender string, adiUrl string, book string, page string, pubKeyHex string) {
-	var pubKey []byte
-	pubKey = make([]byte, 32)
-
-	u, err := url2.Parse(adiUrl)
+	args, si, privKey, err = prepareSigner(actor, args)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, _, err = protocol.ParseAnonymousAddress(u)
-	isSponsoredByLiteAccount := IsLiteAccount(u.String())
+	var adiUrl string
+	var book string
+	var page string
 
-	if len(pubKeyHex) != 64 && len(pubKeyHex) != 0 {
-		log.Fatalf("invalid public key")
-	}
-	i, err := hex.Decode(pubKey, []byte(pubKeyHex))
-
-	if i != 64 && i != 0 {
-		log.Fatalf("invalid public key")
+	if len(args) == 0 {
+		log.Fatal("insufficient number of command line arguments")
 	}
 
-	var privKey ed25519.PrivateKey
-	if i == 0 {
-		pubKey, privKey, err = ed25519.GenerateKey(nil)
-		fmt.Printf("Created Initial Key %x\n", pubKey)
+	if len(args) > 1 {
+		adiUrl = args[0]
+	}
+	if len(args) < 2 {
+		log.Fatalf("invalid number of arguments")
 	}
 
-	if book == "" {
-		book = "ssg0"
-		book = u.JoinPath(book).String()
+	pubKey, err := getPublicKey(args[1])
+	if err != nil {
+		log.Fatal("invalid public key")
 	}
-	if page == "" {
-		page = "sigspec0"
-		page = u.JoinPath(page).String()
+
+	if len(args) > 3 {
+		book = args[3]
+	}
+
+	if len(args) > 4 {
+		page = args[4]
+	}
+
+	u, err := url2.Parse(adiUrl)
+	if err != nil {
+		log.Fatalf("invalid adi url %s, %v", adiUrl, err)
 	}
 
 	idc := &protocol.IdentityCreate{}
@@ -160,75 +154,17 @@ func NewADI(sender string, adiUrl string, book string, page string, pubKeyHex st
 		log.Fatal(err)
 	}
 
-	bucket := "adi"
-	if isSponsoredByLiteAccount {
-		bucket = "anon"
-	}
-
-	params, err := prepareGenTx(data, dataBinary, sender, sender, bucket)
+	nonce := uint64(time.Now().Unix())
+	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
 	if err != nil {
 		log.Fatal(err)
-	}
-
-	//Store the new adi in case things go bad
-	//haveData := false
-	var asData []byte
-	if len(privKey) != 0 {
-		//as := AdiStore{}
-		//
-		//err = Db.View(func(tx *bolt.Tx) error {
-		//	b := tx.Bucket([]byte("adi"))
-		//	asData = b.Get([]byte(u.Authority))
-		//	return err
-		//})
-		//
-		//if asData != nil {
-		//	haveData = true
-		//	err = json.Unmarshal(asData, &as)
-		//	log.Fatal(err)
-		//}
-		//as.KeyBooks = make(map[string]KeyBookStore)
-		//if b, ok := as.KeyBooks[book]; !ok {
-		//	if b.KeyPages == nil {
-		//		b.KeyPages = make(map[string]KeyPageStore)
-		//	}
-		//	as.KeyBooks[page] = b
-		//	if p, ok := b.KeyPages[page]; !ok {
-		//		p.PrivKeys = append(p.PrivKeys, types.Bytes(privKey))
-		//		b.KeyPages[page] = p
-		//	}
-		//}
-		//
-		//asData, err = json.Marshal(&as)
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
-		//
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
 	}
 
 	var res interface{}
 	var str []byte
 	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
-		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
-		//if !haveData {
-		//	err = Db.Update(func(tx *bolt.Tx) error {
-		//		b := tx.Bucket([]byte("adi"))
-		//		err := b.Delete([]byte(adiUrl))
-		//		return err
-		//	})
-		//}
-
 		log.Fatal(err)
 	}
-
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("adi"))
-		err := b.Put([]byte(adiUrl), asData)
-		return err
-	})
 
 	str, err = json.Marshal(res)
 	if err != nil {
@@ -237,6 +173,87 @@ func NewADI(sender string, adiUrl string, book string, page string, pubKeyHex st
 
 	fmt.Println(string(str))
 
+}
+
+func NewADIFromLiteAccount(actor *url2.URL, adiUrl string, pubKeyOrLabel string, book string, page string) {
+
+	pubKey, err := getPublicKey(pubKeyOrLabel)
+	if err != nil {
+		log.Fatal("invalid public key")
+	}
+
+	privKey, err := LookupByAnon(actor.String())
+	if err != nil {
+		log.Fatal("cannot resolve private key in wallet")
+	}
+
+	u, err := url2.Parse(adiUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	idc := &protocol.IdentityCreate{}
+	idc.Url = u.Authority
+	idc.PublicKey = pubKey[:]
+	idc.KeyBookName = book
+	idc.KeyPageName = page
+
+	data, err := json.Marshal(idc)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dataBinary, err := idc.MarshalBinary()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	si := transactions.SignatureInfo{}
+	si.URL = actor.String()
+	si.PriorityIdx = 0
+	si.MSHeight = 1
+	nonce := uint64(time.Now().Unix())
+
+	//the key book is under the anon account.
+	params, err := prepareGenTx(data, dataBinary, actor, &si, privKey, nonce)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var res interface{}
+	var str []byte
+	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	str, err = json.Marshal(res)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(str))
+}
+
+// NewADI create a new ADI from a sponsored account.
+func NewADI(actor string, params []string) {
+
+	u, err := url2.Parse(actor)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	if IsLiteAccount(u.String()) == true {
+		var book string
+		var page string
+		if len(params) > 2 {
+			book = params[2]
+		}
+		if len(params) > 3 {
+			page = params[3]
+		}
+		NewADIFromLiteAccount(u, params[0], params[1], book, page)
+	} else {
+		NewADIFromADISigner(u, params[:])
+	}
 }
 
 func ListADIs() {

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
@@ -9,80 +8,113 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/boltdb/bolt"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"log"
-	"time"
+	"strconv"
 )
 
-func prepareGenTx(jsonPayload []byte, binaryPayload []byte, sender string, label string, bucket string) (*acmeapi.APIRequestRaw, error) {
+func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transactions.ED25519Sig, error) {
+	return func(hash []byte) (*transactions.ED25519Sig, error) {
+		sig := new(transactions.ED25519Sig)
+		return sig, sig.Sign(nonce, key, hash)
+	}
+}
+
+func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
+	//adiActor labelOrPubKeyHex height index
+	var privKey []byte
+
+	ct := 0
+	if len(args) == 0 {
+		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
+	}
+
+	ed := transactions.SignatureInfo{}
+	ed.URL = actor.String()
+	ed.MSHeight = 1
+	ed.PriorityIdx = 0
+	if len(args) > 1 {
+		b, err := pubKeyFromString(args[0])
+		if err != nil {
+			privKey, err = LookupByLabel(args[0])
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("invalid public key or wallet label specified on command line")
+			}
+
+		} else {
+			privKey, err = LookupByPubKey(b)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("invalid public key, cannot resolve signing key")
+			}
+		}
+		ct++
+	}
+
+	if len(args) > 2 {
+		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
+			ct++
+			ed.PriorityIdx = uint64(v)
+			if len(args) > 3 {
+				if v, err := strconv.ParseInt(args[2], 10, 64); err == nil {
+					ct++
+					ed.MSHeight = uint64(v)
+				}
+			}
+		}
+	}
+
+	return args[ct:], &ed, privKey, nil
+}
+
+func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*acmeapi.APIRequestRaw, error) {
 
 	params := &acmeapi.APIRequestRaw{}
 	params.Tx = &acmeapi.APIRequestRawTx{}
 
-	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucket))
-		pk := b.Get([]byte(label))
-		if len(pk) == 0 {
-			log.Fatalf("cannot find private key associated with %s in %s:%s", sender, label, bucket)
-		}
-		fmt.Println(hex.EncodeToString(pk))
+	params.Tx.Data = &json.RawMessage{}
+	*params.Tx.Data = jsonPayload
+	params.Tx.Signer = &acmeapi.Signer{}
+	params.Tx.Signer.PublicKey.FromBytes(privKey[32:])
+	params.Tx.Signer.Nonce = nonce
+	params.Tx.Sponsor = types.String(actor.String())
+	params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
+	params.Tx.KeyPage.Height = si.MSHeight
+	params.Tx.KeyPage.Index = si.PriorityIdx
 
-		params.Tx.Data = &json.RawMessage{}
-		*params.Tx.Data = jsonPayload
-		params.Tx.Signer = &acmeapi.Signer{}
-		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
-		params.Tx.Sponsor = types.String(sender)
-		params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
-		params.Tx.KeyPage.Height = 1
-		params.Tx.KeyPage.Index = 0
+	params.Tx.Sig = types.Bytes64{}
 
-		params.Tx.Sig = types.Bytes64{}
+	gtx := new(transactions.GenTransaction)
+	gtx.Transaction = binaryPayload
 
-		gtx := new(transactions.GenTransaction)
-		gtx.Transaction = binaryPayload
-		u, err := url2.Parse(sender)
-		if err != nil {
-			return err
-		}
-		gtx.ChainID = u.ResourceChain()
-		gtx.Routing = u.Routing()
+	gtx.ChainID = actor.ResourceChain()
+	gtx.Routing = actor.Routing()
 
-		gtx.SigInfo = new(transactions.SignatureInfo)
-		//the siginfo URL is the URL of the signer
-		gtx.SigInfo.URL = sender
-		//Provide a nonce, typically this will be queried from identity sig spec and incremented.
-		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
-		gtx.SigInfo.Unused2 = params.Tx.Signer.Nonce
-		//The following will be defined in the SigSpec Group for which key to use
-		gtx.SigInfo.MSHeight = params.Tx.KeyPage.Height
-		gtx.SigInfo.PriorityIdx = params.Tx.KeyPage.Index
+	si.Unused2 = nonce
+	gtx.SigInfo = si
 
-		ed := new(transactions.ED25519Sig)
-		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
-		if err != nil {
-			return err
-		}
-		params.Tx.Sig.FromBytes(ed.GetSignature())
-		//The public key needs to be used to verify the signature, however,
-		//to pass verification, the validator will hash the key and check the
-		//sig spec group to make sure this key belongs to the identity.
-		params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
-		return nil
-	})
+	ed := new(transactions.ED25519Sig)
+	err := ed.Sign(nonce, privKey, gtx.TransactionHash())
+	fmt.Printf("%x", gtx.TransactionHash())
+	if err != nil {
+		return nil, err
+	}
+	params.Tx.Sig.FromBytes(ed.GetSignature())
+	//The public key needs to be used to verify the signature, however,
+	//to pass verification, the validator will hash the key and check the
+	//sig spec group to make sure this key belongs to the identity.
+	params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
+
+	gtx.Signature = append(gtx.Signature, ed)
 
 	return params, err
 }
 
 func IsLiteAccount(url string) bool {
-
 	u, err := url2.Parse(url)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	_, _, err = protocol.ParseAnonymousAddress(u)
-
-	return err == nil
+	return protocol.IsValidAdiUrl(u) != nil
 }
 
 type KeyPageStore struct {
