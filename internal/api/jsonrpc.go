@@ -571,7 +571,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	txData, err := tx.MarshalBinary()
 
-	genesis.FaucetWallet.Nonce++
+	genesis.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
 	gtx := new(transactions.GenTransaction)
 	gtx.Routing = genesis.FaucetUrl.Routing()
 	gtx.ChainID = genesis.FaucetUrl.ResourceChain()
