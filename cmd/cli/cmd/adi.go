@@ -241,19 +241,19 @@ func NewADI(actor string, params []string) {
 		log.Fatal(err)
 	}
 
-	//if IsLiteAccount(u.String()) == true {
-	//	var book string
-	//	var page string
-	//	if len(params) > 2 {
-	//		book = params[2]
-	//	}
-	//	if len(params) > 3 {
-	//		page = params[3]
-	//	}
-	//	NewADIFromLiteAccount(u, params[0], params[1], book, page)
-	//} else {
+	if IsLiteAccount(u.String()) == true {
+		var book string
+		var page string
+		if len(params) > 2 {
+			book = params[2]
+		}
+		if len(params) > 3 {
+			page = params[3]
+		}
+		NewADIFromLiteAccount(u, params[0], params[1], book, page)
+	} else {
 	NewADIFromADISigner(u, params[:])
-	//}
+	}
 }
 
 func ListADIs() {
