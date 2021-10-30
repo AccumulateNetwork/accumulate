@@ -16,12 +16,23 @@ var getCmd = &cobra.Command{
 	Use:   "get",
 	Short: "Get data by URL",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) > 0 {
-			Get(args[0])
-		} else {
-			fmt.Println("Usage:")
-			PrintGet()
+		switch args[0] {
+		case "chain":
+			if len(args) > 1 {
+				GetByChainId([]byte(args[1]))
+			} else {
+				fmt.Println("Usage:")
+				PrintGet()
+			}
+		default:
+			if len(args) > 0 {
+				Get(args[0])
+			} else {
+				fmt.Println("Usage:")
+				PrintGet()
+			}
 		}
+
 	},
 }
 

@@ -124,7 +124,11 @@ func IsLiteAccount(url string) bool {
 	if err != nil {
 		log.Fatal(err)
 	}
-	return protocol.IsValidAdiUrl(u) != nil
+	u2, err := url2.Parse(u.Authority)
+	if err != nil {
+		log.Fatal(err)
+	}
+	return protocol.IsValidAdiUrl(u2) != nil
 }
 
 type KeyPageStore struct {

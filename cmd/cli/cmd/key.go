@@ -92,8 +92,8 @@ func PrintKeyGet() {
 }
 
 func PrintKeyCreate() {
-	fmt.Println("  accumulate key create [page] [adi url] [signing key label] [key index (optional)] [key height (optional)] [key label 1] ... [key label n] Create new key page with 1 to N public keys within the wallet")
-	fmt.Println("  accumulate key create [book] [adi url] [signing key label] [key index (optional)] [key height (optional)] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
+	fmt.Println("  accumulate key create page [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key page url] [public key label 1] ... [public key label n] Create new key page with 1 to N public keys within the wallet")
+	fmt.Println("  accumulate key create book [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key book url] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
 }
 
 func PrintKeyGenerate() {
@@ -195,25 +195,34 @@ func CreateKeyBookOrPage(createType string, pageUrl string, args []string) {
 		log.Fatal(err)
 	}
 
-	args, si, privKey, err := prepareSigner(u, args[2:])
+	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
+		PrintKeyCreate()
 		log.Fatal(err)
 	}
+	if len(args) < 2 {
+		PrintKeyCreate()
+		log.Fatal(fmt.Errorf("invalid number of arguments"))
+	}
+	newUrl, err := url2.Parse(args[0])
 	switch createType {
 	case "page":
-		CreateKeyPage(u, si, privKey, args)
+		CreateKeyPage(u, si, privKey, newUrl, args[1:])
 	case "book":
-		CreateKeyBook(u, si, privKey, args)
+		CreateKeyBook(u, si, privKey, newUrl, args[1:])
 	}
 }
 
 // CreateKeyPage create a new key page
-func CreateKeyPage(pageUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, keyLabels []string) {
+func CreateKeyPage(pageUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, newUrl *url2.URL, keyLabels []string) {
 	//when creating a key page you need to have the keys already generated and labeled.
+	if newUrl.Authority != pageUrl.Authority {
+		log.Fatalf("page url to create (%s) doesn't match the adi (%s)", newUrl.Authority, pageUrl.Authority)
+	}
 
 	css := protocol.CreateSigSpec{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
-	css.Url = pageUrl.String()
+	css.Url = newUrl.String()
 	css.Keys = ksp
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
@@ -321,9 +330,9 @@ func UpdateKeyPage(pageUrl string, op string, keyHex string, newKeyHex string) {
 }
 
 // CreateKeyBook create a new key page
-func CreateKeyBook(bookUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, pageUrls []string) {
+func CreateKeyBook(bookUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, newUrl *url2.URL, pageUrls []string) {
 	ssg := protocol.CreateSigSpecGroup{}
-	ssg.Url = bookUrl.String()
+	ssg.Url = newUrl.String()
 
 	var chainId types.Bytes32
 	for i := range pageUrls {
