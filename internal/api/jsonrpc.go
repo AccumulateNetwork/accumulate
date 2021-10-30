@@ -56,11 +56,14 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		// URL
 		"get":           api.getData,
 		"get-directory": api.GetDirectory,
+		"directory":     api.GetDirectory,
+
+		// Chain
+		"chain": api.getDataByChainId,
 
 		// ADI
 		"adi":        api.getADI,
 		"adi-create": api.createADI,
-		"directory":  api.createADI,
 
 		// Key management
 		"sig-spec":              api.getSigSpec,
@@ -303,28 +306,26 @@ func (api *API) get(params json.RawMessage, expect ...types.ChainType) interface
 func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 	req, err := api.prepareGet(params)
 	if err != nil {
-		chainReq := &acmeapi.APIRequestChainId{}
-		chainIdErr := api.unmarshalRequest(params, req)
-		if chainIdErr == nil {
-			resp, err := api.query.GetChainStateByChainId(chainReq.ChainId)
-			if err != nil {
-				return accumulateError(err)
-			}
-			return resp
-		}
-		txReq := &acmeapi.APIRequestTxId{}
-		txidErr := api.unmarshalRequest(params, req)
-		if txidErr == nil {
-			resp, err := api.query.GetChainStateByTxId(txReq.TxId)
-			if err != nil {
-				return accumulateError(err)
-			}
-			return resp
-		}
 		return validatorError(err)
 	}
 
 	resp, err := api.query.GetChainStateByUrl(string(req.URL))
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return resp
+}
+
+// getData returns Accumulate Object by URL
+func (api *API) getDataByChainId(_ context.Context, params json.RawMessage) interface{} {
+	req := &acmeapi.APIRequestChainId{}
+	err := api.unmarshalRequest(params, req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	resp, err := api.query.GetChainStateByChainId(req.ChainId)
 	if err != nil {
 		return accumulateError(err)
 	}
