@@ -3,6 +3,15 @@ stages:
 - build
 - deploy
 
+variables:
+  GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
+
+default:
+  cache:
+    key: go-mod-cache
+    paths:
+    - .go-mod-cache
+
 .test:
   stage: test
   tags:
