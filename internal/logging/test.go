@@ -1,7 +1,9 @@
 package logging
 
 import (
+	"encoding/json"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -37,4 +39,34 @@ func NewTestZeroLogger(t testing.TB, format string) zerolog.Logger {
 	}
 
 	return zerolog.New(w)
+}
+
+func ExcludeMessages(messages ...string) zerolog.HookFunc {
+	return func(e *zerolog.Event, level zerolog.Level, message string) {
+		for _, m := range messages {
+			if m == message {
+				e.Discard()
+				return
+			}
+		}
+	}
+}
+
+// BodyHook is a HORRIBLE HACK, really the hackiest of hacks. It filters zerolog
+// messages based on the log body. DO NOT USE THIS except for tests.
+func BodyHook(hook func(e *zerolog.Event, level zerolog.Level, body map[string]interface{})) zerolog.HookFunc {
+	return func(e *zerolog.Event, level zerolog.Level, _ string) {
+		// This is the hackiest of hacks, but I want the buffer
+		rv := reflect.ValueOf(e)
+		buf := rv.Elem().FieldByName("buf").Bytes()
+		buf = append(buf, '}')
+
+		var v map[string]interface{}
+		err := json.Unmarshal(buf, &v)
+		if err != nil {
+			return
+		}
+
+		hook(e, level, v)
+	}
 }
