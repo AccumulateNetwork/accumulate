@@ -33,7 +33,7 @@ func PrintDirectory() {
 	fmt.Println("  accumulate credits [url] 		Get directory of sub-chains associate with a URL")
 }
 
-func GetDirectory(actor string) {
+func GetDirectory(actor string) *json.RawMessage {
 
 	u, err := url2.Parse(actor)
 	if err != nil {
@@ -58,4 +58,7 @@ func GetDirectory(actor string) {
 	}
 
 	fmt.Println(string(str))
+	ret := json.RawMessage{}
+	ret = str
+	return &ret
 }
