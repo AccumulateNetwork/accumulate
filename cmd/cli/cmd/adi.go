@@ -60,8 +60,8 @@ func PrintADIGet() {
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [actor-lite-account] [adi-url] [public-key] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
-	fmt.Println("  accumulate adi create [actor-adi-url] [actor public key or wallet label] [actor key index (optional)] [actor key height (optional)] [adi url to create] [public key] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
+	fmt.Println("  accumulate adi create [actor-lite-account] [adi url to create] [public-key or wallet key label] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
+	fmt.Println("  accumulate adi create [actor-adi-url] [wallet signing key label] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key label] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
 func PrintADIImport() {
@@ -241,19 +241,19 @@ func NewADI(actor string, params []string) {
 		log.Fatal(err)
 	}
 
-	if IsLiteAccount(u.String()) == true {
-		var book string
-		var page string
-		if len(params) > 2 {
-			book = params[2]
-		}
-		if len(params) > 3 {
-			page = params[3]
-		}
-		NewADIFromLiteAccount(u, params[0], params[1], book, page)
-	} else {
-		NewADIFromADISigner(u, params[:])
-	}
+	//if IsLiteAccount(u.String()) == true {
+	//	var book string
+	//	var page string
+	//	if len(params) > 2 {
+	//		book = params[2]
+	//	}
+	//	if len(params) > 3 {
+	//		page = params[3]
+	//	}
+	//	NewADIFromLiteAccount(u, params[0], params[1], book, page)
+	//} else {
+	NewADIFromADISigner(u, params[:])
+	//}
 }
 
 func ListADIs() {
@@ -262,15 +262,7 @@ func ListADIs() {
 		b := tx.Bucket([]byte("adi"))
 		c := b.Cursor()
 		for k, v := c.First(); k != nil; k, _ = c.Next() {
-			//
-			//as := AdiStore{}
-			//err := json.Unmarshal(v, &as)
-			//if err != nil {
-			//	log.Fatal(err)
-			//}
-
 			fmt.Printf("%s : %s \n", k, string(v))
-
 		}
 		return nil
 	})
