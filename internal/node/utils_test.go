@@ -1,11 +1,9 @@
 package node_test
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulated/config"
@@ -20,7 +18,7 @@ import (
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func initNodes(t *testing.T, baseIP net.IP, basePort int, count int, logLevel string) []*node.Node {
+func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, logLevel string, relay []string) []*node.Node {
 	t.Helper()
 
 	IPs := make([]string, count)
@@ -35,15 +33,22 @@ func initNodes(t *testing.T, baseIP net.IP, basePort int, count int, logLevel st
 
 	for i := range config {
 		config[i] = cfg.DefaultValidator()
-		config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], basePort+node.TmRpcPortOffset)}
+		if relay != nil {
+			config[i].Accumulate.Networks = make([]string, len(relay))
+			for j, r := range relay {
+				config[i].Accumulate.Networks[j] = fmt.Sprintf("tcp://%s:%d", r, basePort+node.TmRpcPortOffset)
+			}
+		} else {
+			config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], basePort+node.TmRpcPortOffset)}
+		}
 		config[i].Consensus.CreateEmptyBlocks = false
 	}
 
 	workDir := t.TempDir()
 	require.NoError(t, node.Init(node.InitOptions{
 		WorkDir:   workDir,
-		ShardName: t.Name(),
-		ChainID:   t.Name(),
+		ShardName: name,
+		ChainID:   name,
 		Port:      basePort,
 		Config:    config,
 		RemoteIP:  IPs,
@@ -62,10 +67,25 @@ func initNodes(t *testing.T, baseIP net.IP, basePort int, count int, logLevel st
 
 		require.NoError(t, cfg.Store(c))
 
-		nodes[i], _, err = acctesting.NewBVCNode(nodeDir, false, func(s string) zerolog.Logger {
+		nodes[i], _, _, err = acctesting.NewBVCNode(nodeDir, false, c.Accumulate.Networks, func(s string) zerolog.Logger {
 			zl := logging.NewTestZeroLogger(t, s)
 			zl = zl.With().Int("node", i).Logger()
-			zl = zl.Hook(zerolog.HookFunc(zerologEventFilter))
+			zl = zl.Hook(logging.ExcludeMessages("starting service", "stopping service"))
+			zl = zl.Hook(logging.BodyHook(func(e *zerolog.Event, _ zerolog.Level, body map[string]interface{}) {
+				module, ok := body["module"].(string)
+				if !ok {
+					return
+				}
+
+				switch module {
+				case "rpc-server", "p2p", "rpc", "statesync":
+					e.Discard()
+				default:
+					e.Discard()
+				case "accumulate":
+					// OK
+				}
+			}))
 			return zl
 		}, t.Cleanup)
 		require.NoError(t, err)
@@ -93,39 +113,4 @@ func startNodes(t *testing.T, nodes []*node.Node) *api.Query {
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 
 	return api.NewQuery(relay)
-}
-
-func zerologEventFilter(e *zerolog.Event, level zerolog.Level, message string) {
-	// if level > zerolog.InfoLevel {
-	// 	return
-	// }
-
-	switch message {
-	case "starting service", "stopping service":
-		e.Discard()
-		return
-	}
-
-	// This is the hackiest of hacks, but I want the buffer
-	rv := reflect.ValueOf(e)
-	buf := rv.Elem().FieldByName("buf").Bytes()
-	buf = append(buf, '}')
-
-	var v map[string]interface{}
-	err := json.Unmarshal(buf, &v)
-	if err != nil {
-		return
-	}
-
-	module, ok := v["module"].(string)
-	if !ok {
-		return
-	}
-
-	switch module {
-	case "rpc-server", "p2p", "rpc", "statesync":
-		e.Discard()
-	default:
-		// OK
-	}
 }
