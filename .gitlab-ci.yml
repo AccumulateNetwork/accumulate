@@ -94,7 +94,6 @@ configure:
   stage: deploy
   only:
   - develop # only run on the main branch
-  - test-dev # temporary, DELETE ME
   tags:
   - docker
   - linux
