@@ -123,7 +123,10 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 
 	pubKey, err := getPublicKey(args[1])
 	if err != nil {
-		log.Fatal("invalid public key")
+		pubKey, err = pubKeyFromString(args[1])
+		if err != nil {
+			log.Fatal(fmt.Errorf("key %s, does not exist in wallet, nor is it a valid public key", args[1]))
+		}
 	}
 
 	if len(args) > 3 {

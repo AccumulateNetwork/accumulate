@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"encoding"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -29,35 +30,72 @@ var keyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
-			case "get":
-				if len(args) > 2 {
-					if args[1] == "page" {
-						GetKey(args[2], "sig-spec")
-					} else if args[1] == "book" {
+			//case "get":
+			//	if len(args) > 2 {
+			//		if args[1] == "page" {
+			//			GetKey(args[2], "sig-spec")
+			//		} else if args[1] == "book" {
+			//			GetKey(args[2], "sig-spec-group")
+			//		} else {
+			//			fmt.Println("Usage:")
+			//			PrintKeyGet()
+			//		}
+			//	} else {
+			//		fmt.Println("Usage:")
+			//		PrintKeyGet()
+			//	}
+			//case "create":
+			//	if len(args) > 3 {
+			//		CreateKeyBookOrPage(args[1], args[2], args[3:])
+			//	} else {
+			//		fmt.Println("Usage:")
+			//		PrintKeyCreate()
+			//	}
+			case "import":
+				ImportMneumonic("seed", args[1:])
+			case "book":
+				if len(args) == 3 {
+					if args[1] == "get" {
 						GetKey(args[2], "sig-spec-group")
 					} else {
 						fmt.Println("Usage:")
-						PrintKeyGet()
+						PrintKeyBookGet()
+					}
+				} else if len(args) > 3 {
+					if args[1] == "create" {
+						CreateKeyBook(args[2], args[3:])
+					} else {
+						fmt.Println("Usage:")
+						PrintKeyBookCreate()
+					}
+				}
+			case "page":
+				if len(args) == 3 {
+					if args[1] == "get" {
+						GetKey(args[2], "sig-spec")
+					} else {
+						fmt.Println("Usage:")
+						PrintKeyPageGet()
+					}
+				} else if len(args) > 3 {
+					switch args[1] {
+					case "create":
+						CreateKeyPage(args[2], args[3:])
+					case "update":
+						KeyPageUpdate(args[2], protocol.UpdateKey, args[3:])
+					case "add":
+						KeyPageUpdate(args[2], protocol.AddKey, args[3:])
+					case "remove":
+						KeyPageUpdate(args[2], protocol.RemoveKey, args[3:])
+					default:
+						fmt.Println("Usage:")
+						PrintKeyPageCreate()
+						PrintKeyUpdate()
 					}
 				} else {
 					fmt.Println("Usage:")
-					PrintKeyGet()
-				}
-			case "create":
-				if len(args) > 3 {
-					CreateKeyBookOrPage(args[1], args[2], args[3:])
-				} else {
-					fmt.Println("Usage:")
-					PrintKeyCreate()
-				}
-			case "import":
-				ImportMneumonic("seed", args[1:])
-			case "update":
-				if len(args) > 3 {
-					UpdateKeyPage(args[1], args[2], args[3], args[4])
-				} else {
-					fmt.Println("Usage:")
-					PrintKeyCreate()
+					PrintKeyPageCreate()
+					PrintKeyUpdate()
 				}
 			case "list":
 				ListKeyPublic()
@@ -86,16 +124,30 @@ func init() {
 func PrintKeyPublic() {
 	fmt.Println("  accumulate key list			List generated keys associated with the wallet")
 }
-func PrintKeyGet() {
+func PrintKeyBookGet() {
 	fmt.Println("  accumulate key get book [URL]			Get existing Key Book by URL")
+}
+
+func PrintKeyPageGet() {
 	fmt.Println("  accumulate key get page [URL]			Get existing Key Page by URL")
 }
 
-func PrintKeyCreate() {
-	fmt.Println("  accumulate key create page [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key page url] [public key label 1] ... [public key label n] Create new key page with 1 to N public keys within the wallet")
-	fmt.Println("\t\t example usage: accumulate key create page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
-	fmt.Println("  accumulate key create book [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key book url] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
-	fmt.Println("\t\t example usage: accumulate key create book acc://RedWagon redKey5 acc://RedWagon/RedBook acc://RedWagon/RedPage1")
+func PrintKeyBookCreate() {
+	fmt.Println("  accumulate key book create [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key book url] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
+	fmt.Println("\t\t example usage: accumulate key book create acc://RedWagon redKey5 acc://RedWagon/RedBook acc://RedWagon/RedPage1")
+}
+func PrintKeyPageCreate() {
+	fmt.Println("  accumulate key page create [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key page url] [public key label 1] ... [public key label n] Create new key page with 1 to N public keys within the wallet")
+	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+}
+func PrintKeyUpdate() {
+	fmt.Println("  accumulate key page update [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] [new public key or label] Update key page with a new public key")
+	fmt.Println("\t\t example usage: accumulate key update page  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("  accumulate key page add [key page url] [signing key label] [key index (optional)] [key height (optional)] [new key label] Add key to key page")
+	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("  accumulate key page remove [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] Remove key in key page")
+	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+
 }
 
 func PrintKeyGenerate() {
@@ -103,8 +155,10 @@ func PrintKeyGenerate() {
 }
 
 func PrintKey() {
-	PrintKeyGet()
-	PrintKeyCreate()
+	PrintKeyBookGet()
+	PrintKeyPageGet()
+	PrintKeyBookCreate()
+	PrintKeyPageCreate()
 	PrintKeyGenerate()
 	PrintKeyPublic()
 }
@@ -191,34 +245,53 @@ func GetKey(url string, method string) ([]byte, error) {
 	return str, nil
 }
 
-func CreateKeyBookOrPage(createType string, pageUrl string, args []string) {
-	u, err := url2.Parse(pageUrl)
+//func CreateKeyBookOrPage(createType string, pageUrl string, args []string) {
+//	u, err := url2.Parse(pageUrl)
+//	if err != nil {
+//		log.Fatal(err)
+//	}
+//
+//	args, si, privKey, err := prepareSigner(u, args)
+//	if err != nil {
+//		PrintKeyBookCreate()
+//		log.Fatal(err)
+//	}
+//	if len(args) < 2 {
+//		PrintKeyCreate()
+//		log.Fatal(fmt.Errorf("invalid number of arguments"))
+//	}
+//	newUrl, err := url2.Parse(args[0])
+//	switch createType {
+//	case "page":
+//		CreateKeyPage(u, si, privKey, newUrl, args[1:])
+//	case "book":
+//		CreateKeyBook(u, si, privKey, newUrl, args[1:])
+//	}
+//}
+
+// CreateKeyPage create a new key page
+func CreateKeyPage(page string, args []string) {
+
+	pageUrl, err := url2.Parse(page)
 	if err != nil {
+		PrintKeyPageCreate()
 		log.Fatal(err)
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	args, si, privKey, err := prepareSigner(pageUrl, args)
 	if err != nil {
-		PrintKeyCreate()
+		PrintKeyBookCreate()
 		log.Fatal(err)
 	}
 	if len(args) < 2 {
-		PrintKeyCreate()
+		PrintKeyPageCreate()
 		log.Fatal(fmt.Errorf("invalid number of arguments"))
 	}
 	newUrl, err := url2.Parse(args[0])
-	switch createType {
-	case "page":
-		CreateKeyPage(u, si, privKey, newUrl, args[1:])
-	case "book":
-		CreateKeyBook(u, si, privKey, newUrl, args[1:])
-	}
-}
-
-// CreateKeyPage create a new key page
-func CreateKeyPage(pageUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, newUrl *url2.URL, keyLabels []string) {
+	keyLabels := args[1:]
 	//when creating a key page you need to have the keys already generated and labeled.
 	if newUrl.Authority != pageUrl.Authority {
+		PrintKeyPageCreate()
 		log.Fatalf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
 	}
 
@@ -231,15 +304,22 @@ func CreateKeyPage(pageUrl *url2.URL, si *transactions.SignatureInfo, privKey []
 
 		pk, err := LookupByLabel(keyLabels[i])
 		if err != nil {
-			log.Fatal(fmt.Errorf("key label %s, does not exist in wallet", keyLabels[i]))
+			//now check to see if it is a valid key hex, if so we can assume that is the public key.
+			ksp.PublicKey, err = pubKeyFromString(keyLabels[i])
+			if err != nil {
+				PrintKeyPageCreate()
+				log.Fatal(fmt.Errorf("key %s, does not exist in wallet, nor is it a valid public key", keyLabels[i]))
+			}
+		} else {
+			ksp.PublicKey = pk[32:]
 		}
 
-		ksp.PublicKey = pk[32:]
 		css.Keys[i] = &ksp
 	}
 
 	data, err := json.Marshal(css)
 	if err != nil {
+		PrintKeyPageCreate()
 		log.Fatal(err)
 	}
 
@@ -269,80 +349,162 @@ func CreateKeyPage(pageUrl *url2.URL, si *transactions.SignatureInfo, privKey []
 
 }
 
-func UpdateKeyPage(pageUrl string, op string, keyHex string, newKeyHex string) {
-	println("UpdateKeyPage currently disabled")
-	//key := types.Bytes32{}
-	//newKey := types.Bytes32{}
-	//operation := protocol.KeyPageOperationByName(op)
-	//
-	//u, err := url2.Parse(pageUrl)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//i, err := hex.Decode(key[:], []byte(keyHex))
-	//
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//if i != 64 {
-	//	log.Fatal("invalid old key")
-	//}
-	//
-	//i, err = hex.Decode(newKey[:], []byte(newKeyHex))
-	//if i != 64 {
-	//	log.Fatal("invalid new key")
-	//}
-	//
-	//ukp := protocol.UpdateKeyPage{}
-	//
-	//ukp.Key = key[:]
-	//ukp.NewKey = newKey[:]
-	//ukp.Operation = operation
-	//
-	//data, err := json.Marshal(ukp)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//dataBinary, err := ukp.MarshalBinary()
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//params, err := prepareGenTx(data, dataBinary, u.String(), u.Authority, "adi")
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//var res interface{}
-	//var str []byte
-	//if err := Client.Request(context.Background(), "key-page-update", params, &res); err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//str, err = json.Marshal(res)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//fmt.Println(string(str))
-	//
+func resolveKey(key string) ([]byte, error) {
+	ret, err := getPublicKey(key)
+	if err != nil {
+		ret, err = pubKeyFromString(key)
+		if err != nil {
+			PrintKeyUpdate()
+			return nil, fmt.Errorf("key %s, does not exist in wallet, nor is it a valid public key", key)
+		}
+	}
+	return ret, err
+}
+
+func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string) {
+
+	u, err := url2.Parse(actorUrl)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	args, si, privKey, err := prepareSigner(u, args)
+	if err != nil {
+		PrintKeyUpdate()
+		log.Fatal(err)
+	}
+
+	var newKey []byte
+	var oldKey []byte
+
+	ukp := protocol.UpdateKeyPage{}
+	ukp.Operation = op
+	switch op {
+	case protocol.UpdateKey:
+		if len(args) < 2 {
+			PrintKeyUpdate()
+			log.Fatal(fmt.Errorf("invalid number of arguments"))
+		}
+		oldKey, err = resolveKey(args[0])
+		if err != nil {
+			PrintKeyUpdate()
+			log.Fatal(err)
+		}
+		newKey, err = resolveKey(args[1])
+		if err != nil {
+			PrintKeyUpdate()
+			log.Fatal(err)
+		}
+	case protocol.AddKey:
+		if len(args) < 1 {
+			PrintKeyUpdate()
+			log.Fatal(fmt.Errorf("invalid number of arguments"))
+		}
+		newKey, err = resolveKey(args[0])
+		if err != nil {
+			PrintKeyUpdate()
+			log.Fatal(err)
+		}
+	case protocol.RemoveKey:
+		if len(args) < 1 {
+			PrintKeyUpdate()
+			log.Fatal(fmt.Errorf("invalid number of arguments"))
+		}
+		oldKey, err = resolveKey(args[0])
+		if err != nil {
+			PrintKeyUpdate()
+			log.Fatal(err)
+		}
+	}
+
+	ukp.Key = oldKey[:]
+	ukp.NewKey = newKey[:]
+	data, err := json.Marshal(&ukp)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dataBinary, err := ukp.MarshalBinary()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	nonce := uint64(time.Now().Unix())
+	params, err := prepareGenTx(data, dataBinary, u, si, privKey, nonce)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var res interface{}
+	var str []byte
+	if err := Client.Request(context.Background(), "key-page-update", params, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	str, err = json.Marshal(res)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(str))
+
+}
+func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte) (interface{}, error) {
+	json.Marshal(payload)
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dataBinary, err := payload.(encoding.BinaryMarshaler).MarshalBinary()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	nonce := uint64(time.Now().Unix())
+	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var res interface{}
+	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 // CreateKeyBook create a new key page
-func CreateKeyBook(bookUrl *url2.URL, si *transactions.SignatureInfo, privKey []byte, newUrl *url2.URL, pageUrls []string) {
+func CreateKeyBook(book string, args []string) {
+
+	bookUrl, err := url2.Parse(book)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	args, si, privKey, err := prepareSigner(bookUrl, args)
+	if err != nil {
+		PrintKeyBookCreate()
+		log.Fatal(err)
+	}
+	if len(args) < 2 {
+		PrintKeyBookCreate()
+		log.Fatal(fmt.Errorf("invalid number of arguments"))
+	}
+
+	newUrl, err := url2.Parse(args[0])
 
 	if newUrl.Authority != bookUrl.Authority {
 		log.Fatalf("book url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, bookUrl.Authority)
 	}
 
 	ssg := protocol.CreateSigSpecGroup{}
-
 	ssg.Url = newUrl.String()
 
 	var chainId types.Bytes32
+	pageUrls := args[1:]
 	for i := range pageUrls {
 		u2, err := url2.Parse(pageUrls[i])
 		if err != nil {
@@ -351,6 +513,15 @@ func CreateKeyBook(bookUrl *url2.URL, si *transactions.SignatureInfo, privKey []
 		chainId.FromBytes(u2.ResourceChain())
 		ssg.SigSpecs = append(ssg.SigSpecs, chainId)
 	}
+
+	//res, err := dispatchRequest("create-sig-spec-group", &ssg, bookUrl, si, privKey)
+	//if err != nil {
+	//	log.Fatalf("error dispatching request %v", err)
+	//}
+	//str, err := json.Marshal(res)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 
 	data, err := json.Marshal(&ssg)
 	if err != nil {
