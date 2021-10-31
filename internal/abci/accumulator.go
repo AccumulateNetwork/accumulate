@@ -98,8 +98,8 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	qu := new(apiQuery.Query)
 	err := qu.UnmarshalBinary(reqQuery.Data)
 	if err != nil {
-		sentry.CaptureException(err)
-		app.logger.Info("Query failed", "error", err)
+		// sentry.CaptureException(err)
+		app.logger.Debug("Query failed", "error", err)
 		resQuery.Info = "request is not an Accumulate Query"
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
@@ -107,8 +107,8 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 
 	ret, err := app.chain.Query(qu)
 	if err != nil {
-		sentry.CaptureException(err)
-		app.logger.Info("Query failed", "type", qu.Type.Name(), "error", err)
+		// sentry.CaptureException(err)
+		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
 		resQuery.Info = err.Error()
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
