@@ -134,16 +134,19 @@ func CreateAccount(url string, args []string) {
 
 	actor, err := url2.Parse(url)
 	if err != nil {
+		PrintAccountCreate()
 		log.Fatal(err)
 	}
 
 	args, si, privKey, err := prepareSigner(actor, args)
-	if len(args) < 2 {
+	if len(args) < 3 {
+		PrintAccountCreate()
 		log.Fatal("insufficient number of command line arguments")
 	}
 
 	accountUrl, err := url2.Parse(args[0])
 	if err != nil {
+		PrintAccountCreate()
 		log.Fatalf("invalid account url %s", args[0])
 	}
 	if actor.Authority != accountUrl.Authority {
@@ -164,6 +167,7 @@ func CreateAccount(url string, args []string) {
 	token := response.Token{}
 	err = json.Unmarshal([]byte(tokenJson), &token)
 	if err != nil {
+		PrintAccountCreate()
 		log.Fatal(fmt.Errorf("invalid token type %v", err))
 	}
 
