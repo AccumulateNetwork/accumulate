@@ -45,6 +45,8 @@ contrib.go.opencensus.io/exporter/stackdriver v0.13.4/go.mod h1:aXENhDJ1Y4lIg4EU
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106 h1:+PPbYmYZ02KDz3FJfxELkwsw/hq8N03E/K59+0c/WBg=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106/go.mod h1:IZ754L8YfDkLr74Dr8tGexsOq6n9hkfM3tvULzBTBn4=
+github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20211031030737-9db021eaebd8 h1:ULGdywox5m1HqAp6PmdPTdZIT1RGLwPHbDndyT20LEQ=
+github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20211031030737-9db021eaebd8/go.mod h1:dVI5qopRoH6vODLHE/g6iSBFCXCHxGcuxG4/aVTpvlY=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d h1:FWutTJGVqBnL4rLgeNaspUYnmnvkXcmDA3QO3rHBGgU=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d/go.mod h1:Nw3sh5L40Xs1wno7ndbD/dYWg+vARpBvpX9Zz1YSxbo=
 github.com/AdamSLevy/jsonrpc2/v14 v14.0.0 h1:ofSXSSa9Opft4KtEcIEshKbI2CAynwtKNZj2ASFDucc=
@@ -901,8 +903,6 @@ github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca/go.mod h1:u2MKk
 github.com/tdakkota/asciicheck v0.0.0-20200416200610-e657995f937b/go.mod h1:yHp0ai0Z9gUljN3o0xMhYJnH/IcvkdTBOX2fmJ93JEM=
 github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c h1:g+WoO5jjkqGAzHWCjJB1zZfXPIAaDpzXIEJ0eS6B5Ok=
 github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c/go.mod h1:ahpPrc7HpcfEWDQRZEmnXMzHY03mLDYMCxeDzy46i+8=
-github.com/tendermint/tendermint v0.35.0-rc1 h1:anPvnQTVNQsb8R1USDzQIhmzWQwVoeh1NUn9S6GZjzI=
-github.com/tendermint/tendermint v0.35.0-rc1/go.mod h1:dVI5qopRoH6vODLHE/g6iSBFCXCHxGcuxG4/aVTpvlY=
 github.com/tendermint/tm-db v0.6.4 h1:3N2jlnYQkXNQclQwd/eKV/NzlqPlfK21cpRRIx80XXQ=
 github.com/tendermint/tm-db v0.6.4/go.mod h1:dptYhIpJ2M5kUuenLr+Yyf3zQOv1SgBZcl8/BmWlMBw=
 github.com/tetafro/godot v1.4.9/go.mod h1:LR3CJpxDVGlYOWn3ZZg1PgNZdTUvzsZWu8xaEohUpn8=
