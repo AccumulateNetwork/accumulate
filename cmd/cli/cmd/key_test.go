@@ -1,13 +1,18 @@
 package cmd
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
 
 func TestImportMneumonic(t *testing.T) {
-	mneumonic := "yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow"
+	if os.Getenv("CI") == "true" {
+		t.Skip("Depends on an external resource, and thus is not appropriate for CI")
+	}
 
-	ImportMneumonic("seed", strings.Fields(mneumonic))
+	mnemonic := "yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow"
+
+	ImportMnemonic("seed", strings.Fields(mnemonic))
 
 }
