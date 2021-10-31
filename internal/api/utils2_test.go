@@ -8,6 +8,8 @@ import (
 
 	cfg "github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/ybbus/jsonrpc/v2"
@@ -47,4 +49,8 @@ func (api *API) GetTokenAccount(ctx context.Context, params json.RawMessage) int
 
 func (api *API) GetADI(ctx context.Context, params json.RawMessage) interface{} {
 	return api.getADI(ctx, params)
+}
+
+func (api *API) BroadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
+	return api.broadcastTx(wait, tx)
 }
