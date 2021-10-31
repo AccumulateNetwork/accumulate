@@ -51,8 +51,18 @@ var keyCmd = &cobra.Command{
 			//		fmt.Println("Usage:")
 			//		PrintKeyCreate()
 			//	}
+			case "mnemonic":
+				if len(args) > 12 {
+					ImportMnemonic("seed", args[1:])
+				} else {
+					PrintKeyMnemonic()
+				}
 			case "import":
-				ImportMneumonic("seed", args[1:])
+				if len(args) > 2 {
+					ImportKey(args[1], args[2])
+				} else {
+					PrintKeyImport()
+				}
 			case "book":
 				if len(args) == 3 {
 					if args[1] == "get" {
@@ -154,6 +164,14 @@ func PrintKeyGenerate() {
 	fmt.Println("  accumulate key generate [label]     Generate a new key and give it a label in the wallet")
 }
 
+func PrintKeyMnemonic() {
+	fmt.Println("  accumulate key mnemonic [mnemonic phrase...]     Generate a new key seed from a mnemonic, all keys will be derived from this seed going forward.")
+}
+
+func PrintKeyImport() {
+	fmt.Println("  accumulate key import [label] [private key hex]     Generate a new key seed from a mnemonic, all keys will be derived from this seed going forward.")
+}
+
 func PrintKey() {
 	PrintKeyBookGet()
 	PrintKeyPageGet()
@@ -161,6 +179,8 @@ func PrintKey() {
 	PrintKeyPageCreate()
 	PrintKeyGenerate()
 	PrintKeyPublic()
+	PrintKeyImport()
+	PrintKeyMnemonic()
 }
 
 func GetKeyPage(book string, keyLabel string) (*protocol.SigSpec, int, error) {
@@ -763,7 +783,7 @@ func lookupSeed(label string) (seed []byte, err error) {
 	return
 }
 
-func ImportMneumonic(label string, mnemonic []string) {
+func ImportMnemonic(label string, mnemonic []string) {
 	mns := strings.Join(mnemonic, " ")
 
 	if !bip39.IsMnemonicValid(mns) {

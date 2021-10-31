@@ -174,7 +174,15 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	err = Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("adi"))
+		if b != nil {
+			b.Put([]byte(u.Authority), pubKey)
+		} else {
+			return fmt.Errorf("DB: %s", err)
+		}
+		return nil
+	})
 	fmt.Println(string(str))
 
 }
@@ -233,7 +241,15 @@ func NewADIFromLiteAccount(actor *url2.URL, adiUrl string, pubKeyOrLabel string,
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	err = Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("adi"))
+		if b != nil {
+			b.Put([]byte(u.Authority), pubKey)
+		} else {
+			return fmt.Errorf("DB: %s", err)
+		}
+		return nil
+	})
 	fmt.Println(string(str))
 }
 
