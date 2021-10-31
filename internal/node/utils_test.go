@@ -42,6 +42,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 			config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], basePort+node.TmRpcPortOffset)}
 		}
 		config[i].Consensus.CreateEmptyBlocks = false
+		config[i].Accumulate.API.EnableSubscribeTX = true
 	}
 
 	workDir := t.TempDir()
@@ -109,8 +110,10 @@ func startNodes(t *testing.T, nodes []*node.Node) *api.Query {
 	require.NoError(t, err)
 
 	relay := relay.New(rpc)
-	require.NoError(t, relay.Start())
-	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+	if nodes[0].Config.Accumulate.API.EnableSubscribeTX {
+		require.NoError(t, relay.Start())
+		t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+	}
 
 	return api.NewQuery(relay)
 }

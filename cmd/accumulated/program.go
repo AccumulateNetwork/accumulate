@@ -149,9 +149,11 @@ func (p *Program) Start(s service.Service) error {
 		return fmt.Errorf("failed to start node: %v", err)
 	}
 
-	err = p.relay.Start()
-	if err != nil {
-		return fmt.Errorf("failed to start RPC relay: %v", err)
+	if config.Accumulate.API.EnableSubscribeTX {
+		err = p.relay.Start()
+		if err != nil {
+			return fmt.Errorf("failed to start RPC relay: %v", err)
+		}
 	}
 
 	p.api, err = api.StartAPI(&config.Accumulate.API, api.NewQuery(p.relay))
@@ -164,7 +166,9 @@ func (p *Program) Start(s service.Service) error {
 func (p *Program) Stop(service.Service) error {
 	var errs []error
 	errs = append(errs, p.node.Stop())
-	errs = append(errs, p.relay.Stop())
+	if p.node.Config.Accumulate.API.EnableSubscribeTX {
+		errs = append(errs, p.relay.Stop())
+	}
 	// TODO stop API
 	errs = append(errs, p.db.GetDB().Close())
 
