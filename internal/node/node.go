@@ -81,7 +81,11 @@ func (n *Node) Start() error {
 	}
 
 	n.waitForGRPC()
-	return n.waitForRPC()
+
+	if n.Config.Accumulate.API.EnableSubscribeTX {
+		return n.waitForRPC()
+	}
+	return nil
 }
 
 func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
