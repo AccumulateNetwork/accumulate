@@ -29,6 +29,7 @@ func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query
 	cfg.Mempool.MaxBatchBytes = 1048576
 	cfg.Mempool.CacheSize = 1048576
 	cfg.Mempool.Size = 50000
+	cfg.Accumulate.API.EnableSubscribeTX = true
 	cfg.Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
 
 	newLogger := func(s string) zerolog.Logger {
@@ -52,8 +53,10 @@ func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query
 	require.NoError(t, err)
 
 	relay := relay.New(rpc)
-	require.NoError(t, relay.Start())
-	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+	if cfg.Accumulate.API.EnableSubscribeTX {
+		require.NoError(t, relay.Start())
+		t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+	}
 
 	query := NewQuery(relay)
 	return sdb, pv, query
