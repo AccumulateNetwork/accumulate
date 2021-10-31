@@ -57,6 +57,7 @@ type RPC struct {
 }
 
 type API struct {
+	EnableSubscribeTX bool   `toml:"enable-subscribe-tx" mapstructure:"enable-subscribe-tx"`
 	JSONListenAddress string `toml:"json-listen-address" mapstructure:"json-listen-address"`
 	RESTListenAddress string `toml:"rest-listen-address" mapstructure:"rest-listen-address"`
 }
