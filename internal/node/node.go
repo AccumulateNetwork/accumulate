@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"syscall"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/config"
@@ -112,7 +111,7 @@ func (n *Node) waitForRPC() error {
 			if err == nil {
 				break
 			}
-			if !errIsConnRefused(err) {
+			if !isConnectionError(err) {
 				return err
 			}
 
@@ -122,21 +121,27 @@ func (n *Node) waitForRPC() error {
 	return nil
 }
 
-func errIsConnRefused(err error) bool {
-	var err1 *url.Error
-	if !errors.As(err, &err1) {
+func isConnectionError(err error) bool {
+	var urlErr *url.Error
+	if !errors.As(err, &urlErr) {
 		return false
 	}
 
-	var err2 *net.OpError
-	if !errors.As(err1.Err, &err2) {
+	var netOpErr *net.OpError
+	if !errors.As(urlErr.Err, &netOpErr) {
 		return false
 	}
 
-	var err3 *os.SyscallError
-	if !errors.As(err2.Err, &err3) {
-		return false
+	// Assume any syscall error is a connection error
+	var syscallErr *os.SyscallError
+	if errors.As(netOpErr.Err, &syscallErr) {
+		return true
 	}
 
-	return errors.Is(err3.Err, syscall.ECONNREFUSED)
+	var netErr net.Error
+	if errors.As(netOpErr.Err, &netErr) {
+		return netErr.Timeout() || netErr.Temporary()
+	}
+
+	return false
 }
