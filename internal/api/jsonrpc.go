@@ -427,6 +427,11 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 }
 
 func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
+	// Disable websocket based behavior if it is not enabled
+	if !api.config.EnableSubscribeTX {
+		wait = false
+	}
+
 	ret := &acmeapi.APIDataResponse{}
 	var msg json.RawMessage
 
