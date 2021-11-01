@@ -77,9 +77,12 @@ func (CreateSigSpecGroup) DeliverTx(st *StateManager, tx *transactions.GenTransa
 		return err
 	}
 
+	scc := new(protocol.SyntheticCreateChain)
+	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	st.Submit(st.SponsorUrl, scc)
+
 	ssg := protocol.NewSigSpecGroup()
 	ssg.ChainUrl = types.String(url.String())
-	st.Create(ssg)
 
 	groupChainId := types.Bytes(url.ResourceChain()).AsBytes32()
 	for _, spec := range entries {
@@ -92,7 +95,15 @@ func (CreateSigSpecGroup) DeliverTx(st *StateManager, tx *transactions.GenTransa
 		specChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 		ssg.SigSpecs = append(ssg.SigSpecs, specChainId)
 		spec.SigSpecId = groupChainId
-		st.Create(spec)
+		err = scc.Update(spec)
+		if err != nil {
+			return fmt.Errorf("failed to marshal state: %v", err)
+		}
+	}
+
+	err = scc.Create(ssg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %v", err)
 	}
 
 	return nil

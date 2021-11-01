@@ -256,7 +256,7 @@ func (m *StateManager) commit() error {
 			create[idStr] = scc
 		}
 
-		scc.Chains = append(scc.Chains, data)
+		scc.Chains = append(scc.Chains, protocol.ChainParams{Data: data})
 	}
 
 	return nil
