@@ -174,6 +174,8 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	//todo: turn around and query the ADI and store the results.
 	err = Db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("adi"))
 		if b != nil {
@@ -237,6 +239,7 @@ func NewADIFromLiteAccount(actor *url2.URL, adiUrl string, pubKeyOrLabel string,
 		log.Fatal(err)
 	}
 
+	fmt.Println(res)
 	str, err = json.Marshal(res)
 	if err != nil {
 		log.Fatal(err)
@@ -260,20 +263,20 @@ func NewADI(actor string, params []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	if IsLiteAccount(u.String()) == true {
-		var book string
-		var page string
-		if len(params) > 2 {
-			book = params[2]
-		}
-		if len(params) > 3 {
-			page = params[3]
-		}
-		NewADIFromLiteAccount(u, params[0], params[1], book, page)
-	} else {
-		NewADIFromADISigner(u, params[:])
-	}
+	//
+	//if IsLiteAccount(u.String()) == true {
+	//	var book string
+	//	var page string
+	//	if len(params) > 2 {
+	//		book = params[2]
+	//	}
+	//	if len(params) > 3 {
+	//		page = params[3]
+	//	}
+	//	NewADIFromLiteAccount(u, params[0], params[1], book, page)
+	//} else {
+	NewADIFromADISigner(u, params[:])
+	//}
 }
 
 func ListADIs() {

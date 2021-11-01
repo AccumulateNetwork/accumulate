@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,8 +11,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
 )
 
@@ -40,7 +37,7 @@ var txCmd = &cobra.Command{
 				}
 			case "create":
 				if len(args) > 3 {
-					CreateTX(args[1], args[2], args[3])
+					CreateTX(args[1], args[2:])
 				} else {
 					fmt.Println("Usage:")
 					PrintTXCreate()
@@ -155,96 +152,65 @@ func GetTXHistory(accountUrl string, s string, e string) {
 
 }
 
-func CreateTX(sender string, receiver string, amount string) {
+func CreateTX(sender string, args []string) {
+	//sender string, receiver string, amount string
 	var res interface{}
 	var str []byte
 	var err error
+	u, err := url.Parse(sender)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
-		pk := b.Get([]byte(sender))
-		if pk == nil {
-			log.Fatal(fmt.Errorf("the private key for lite account %s does not exist in the wallet", sender))
-		}
-		fmt.Println(hex.EncodeToString(pk))
-		params := &acmeapi.APIRequestRaw{}
-		params.Tx = &acmeapi.APIRequestRawTx{}
+	args, si, pk, err := prepareSigner(u, args)
 
-		tokentx := new(acmeapi.TokenTx)
-		tokentx.From = types.UrlChain{types.String(sender)}
+	if len(args) < 2 {
+		PrintTXCreate()
+		log.Fatal("invalid number of arguments for tx create")
+	}
 
-		to := []*acmeapi.TokenTxOutput{}
-		r := &acmeapi.TokenTxOutput{}
-		amt, err := strconv.ParseUint(amount, 10, 64)
-		r.Amount = uint64(amt)
-		r.URL = types.UrlChain{types.String(receiver)}
-		to = append(to, r)
-		tokentx.To = to
+	u2, err := url.Parse(args[0])
+	if err != nil {
+		log.Fatalf("invalid receiver url %s, %v", args[0], err)
+	}
+	amount := args[1]
 
-		data, err := json.Marshal(tokentx)
-		if err != nil {
-			log.Fatal(err)
-		}
+	//fmt.Println(hex.EncodeToString(pk))
+	tokentx := new(acmeapi.TokenTx)
+	tokentx.From = types.UrlChain{types.String(u.String())}
 
-		datajson := json.RawMessage(data)
-		params.Tx.Data = &datajson
-		params.Tx.Signer = &acmeapi.Signer{}
-		params.Tx.Signer.Nonce = uint64(time.Now().Unix())
-		params.Tx.Sponsor = types.String(sender)
-		params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
-		params.Tx.KeyPage.Height = 1
-		params.Tx.KeyPage.Index = 0
+	to := []*acmeapi.TokenTxOutput{}
+	r := &acmeapi.TokenTxOutput{}
+	amt, err := strconv.ParseUint(amount, 10, 64)
+	r.Amount = uint64(amt)
+	r.URL.String = types.String(u2.String())
+	to = append(to, r)
+	tokentx.To = to
 
-		params.Tx.Sig = types.Bytes64{}
+	data, err := json.Marshal(tokentx)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		dataBinary, err := tokentx.MarshalBinary()
-		if err != nil {
-			log.Fatal(err)
-		}
-		gtx := new(transactions.GenTransaction)
-		gtx.Transaction = dataBinary //The transaction needs to be marshaled as binary for proper tx hash
+	dataBinary, err := tokentx.MarshalBinary()
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		//route to the sender's account for processing
-		u, err := url.Parse(sender)
-		if err != nil {
-			log.Fatal(err)
-		}
-		gtx.ChainID = u.ResourceChain()
-		gtx.Routing = u.Routing()
+	nonce := uint64(time.Now().Unix())
+	params, err := prepareGenTx(data, dataBinary, u, si, pk, nonce)
 
-		gtx.SigInfo = new(transactions.SignatureInfo)
-		//the siginfo URL is the URL of the signer
-		gtx.SigInfo.URL = sender
-		//Provide a nonce, typically this will be queried from identity sig spec and incremented.
-		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
-		gtx.SigInfo.Unused2 = params.Tx.Signer.Nonce
-		//The following will be defined in the SigSpec Group for which key to use
-		gtx.SigInfo.MSHeight = params.Tx.KeyPage.Height
-		gtx.SigInfo.PriorityIdx = params.Tx.KeyPage.Index
+	if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
+		log.Fatal(err)
+	}
 
-		ed := new(transactions.ED25519Sig)
-		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
-		if err != nil {
-			log.Fatal(err)
-		}
-		params.Tx.Sig.FromBytes(ed.GetSignature())
-		//The public key needs to be used to verify the signature, however,
-		//to pass verification, the validator will hash the key and check the
-		//sig spec group to make sure this key belongs to the identity.
-		params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
+	str, err = json.Marshal(res)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-		if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
-			log.Fatal(err)
-		}
+	fmt.Println(string(str))
 
-		str, err = json.Marshal(res)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println(string(str))
-		return nil
-	})
 	if err != nil {
 		log.Fatal(err)
 	}
