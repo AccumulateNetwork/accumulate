@@ -33,6 +33,14 @@ var adiCmd = &cobra.Command{
 				}
 			case "list":
 				ListADIs()
+
+			case "directory":
+
+				if len(args) > 1 {
+					GetAdiDirectory(args[1])
+				} else {
+					PrintAdiDirectory()
+				}
 			case "create":
 				if len(args) > 3 {
 					NewADI(args[1], args[2:])
@@ -69,8 +77,43 @@ func PrintADIImport() {
 	fmt.Println("  accumulate adi import [adi-url] [private-key]	Import Existing ADI")
 }
 
+func PrintAdiDirectory() {
+	fmt.Println("  accumulate adi directory [url] 		Get directory of URL's associated with an ADI")
+}
+
+func GetAdiDirectory(actor string) *json.RawMessage {
+
+	u, err := url2.Parse(actor)
+	if err != nil {
+		PrintCredits()
+		log.Fatal(err)
+	}
+
+	var res interface{}
+	var str []byte
+
+	params := acmeapi.APIRequestURL{}
+
+	params.URL = types.String(u.String())
+
+	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	str, err = json.Marshal(res)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(str))
+	ret := json.RawMessage{}
+	ret = str
+	return &ret
+}
+
 func PrintADI() {
 	PrintADIGet()
+	PrintAdiDirectory()
 	PrintADICreate()
 	PrintADIImport()
 }
