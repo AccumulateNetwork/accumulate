@@ -22,7 +22,7 @@ type Chain interface {
 type ChainHeader struct {
 	Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
 	ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	SigSpecId types.Bytes32   `json:"keyBookId"` //this is the chain id for the sig spec for the chain
+	SigSpecId types.Bytes32   `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
 
 	// transient
 	url *url.URL
