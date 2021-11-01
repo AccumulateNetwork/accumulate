@@ -32,7 +32,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 	// Do basic validation and add everything to the state manager
 	urls := make([]*url.URL, len(body.Chains))
 	for i, cc := range body.Chains {
-		record, err := unmarshalRecord(&state.Object{Entry: cc})
+		record, err := unmarshalRecord(&state.Object{Entry: cc.Data})
 		if err != nil {
 			return fmt.Errorf("invalid chain payload: %v", err)
 		}
@@ -42,10 +42,14 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 			return fmt.Errorf("invalid chain URL: %v", err)
 		}
 
-		if _, err := st.LoadUrl(u); err == nil {
-			// The record already exists, but that's ok
-		} else if !errors.Is(err, storage.ErrNotFound) {
-			return fmt.Errorf("error fetching %q: %v", u.String(), err)
+		_, err = st.LoadUrl(u)
+		switch {
+		case err != nil && !errors.Is(err, storage.ErrNotFound):
+			return fmt.Errorf("error fetching %q: %v", u, err)
+		case cc.IsUpdate && errors.Is(err, storage.ErrNotFound):
+			return fmt.Errorf("cannot update %q: does not exist", u)
+		case !cc.IsUpdate && err == nil:
+			return fmt.Errorf("cannot create %q: already exists", u)
 		}
 
 		urls[i] = u

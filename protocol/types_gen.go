@@ -28,8 +28,8 @@ type AnonTokenAccount struct {
 }
 
 type ChainParams struct {
-	Url  string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
-	Data []byte `json:"data" form:"data" query:"data" validate:"required"`
+	Data     []byte `json:"data" form:"data" query:"data" validate:"required"`
+	IsUpdate bool   `json:"isUpdate" form:"isUpdate" query:"isUpdate" validate:"required"`
 }
 
 type CreateSigSpec struct {
@@ -87,8 +87,8 @@ type SigSpecGroup struct {
 }
 
 type SyntheticCreateChain struct {
-	Cause  [32]byte `json:"cause" form:"cause" query:"cause" validate:"required"`
-	Chains [][]byte `json:"chains" form:"chains" query:"chains" validate:"required"`
+	Cause  [32]byte      `json:"cause" form:"cause" query:"cause" validate:"required"`
+	Chains []ChainParams `json:"chains" form:"chains" query:"chains" validate:"required"`
 }
 
 type SyntheticDepositCredits struct {
@@ -194,9 +194,9 @@ func (v *AnonTokenAccount) BinarySize() int {
 func (v *ChainParams) BinarySize() int {
 	var n int
 
-	n += stringBinarySize(v.Url)
-
 	n += bytesBinarySize(v.Data)
+
+	n += boolBinarySize(v.IsUpdate)
 
 	return n
 }
@@ -338,7 +338,7 @@ func (v *SyntheticCreateChain) BinarySize() int {
 	n += uvarintBinarySize(uint64(len(v.Chains)))
 
 	for _, v := range v.Chains {
-		n += bytesBinarySize(v)
+		n += v.BinarySize()
 
 	}
 
@@ -459,9 +459,9 @@ func (v *AnonTokenAccount) MarshalBinary() ([]byte, error) {
 func (v *ChainParams) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(stringMarshalBinary(v.Url))
-
 	buffer.Write(bytesMarshalBinary(v.Data))
+
+	buffer.Write(boolMarshalBinary(v.IsUpdate))
 
 	return buffer.Bytes(), nil
 }
@@ -617,7 +617,11 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 	buffer.Write(uvarintMarshalBinary(uint64(len(v.Chains))))
 	for i, v := range v.Chains {
 		_ = i
-		buffer.Write(bytesMarshalBinary(v))
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding Chains[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
 
 	}
 
@@ -781,19 +785,19 @@ func (v *AnonTokenAccount) UnmarshalBinary(data []byte) error {
 }
 
 func (v *ChainParams) UnmarshalBinary(data []byte) error {
-	if x, err := stringUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Url: %w", err)
-	} else {
-		v.Url = x
-	}
-	data = data[stringBinarySize(v.Url):]
-
 	if x, err := bytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {
 		v.Data = x
 	}
 	data = data[bytesBinarySize(v.Data):]
+
+	if x, err := boolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding IsUpdate: %w", err)
+	} else {
+		v.IsUpdate = x
+	}
+	data = data[boolBinarySize(v.IsUpdate):]
 
 	return nil
 }
@@ -1064,14 +1068,12 @@ func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
 	}
 	data = data[uvarintBinarySize(lenChains):]
 
-	v.Chains = make([][]byte, lenChains)
+	v.Chains = make([]ChainParams, lenChains)
 	for i := range v.Chains {
-		if x, err := bytesUnmarshalBinary(data); err != nil {
+		if err := v.Chains[i].UnmarshalBinary(data); err != nil {
 			return fmt.Errorf("error decoding Chains[%d]: %w", i, err)
-		} else {
-			v.Chains[i] = x
 		}
-		data = data[bytesBinarySize(v.Chains[i]):]
+		data = data[v.Chains[i].BinarySize():]
 
 	}
 
@@ -1237,11 +1239,11 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 
 func (v *ChainParams) MarshalJSON() ([]byte, error) {
 	var u struct {
-		Url  string `json:"url"`
-		Data string `json:"data"`
+		Data     string `json:"data"`
+		IsUpdate bool   `json:"isUpdate"`
 	}
-	u.Url = v.Url
 	u.Data = bytesToJSON(v.Data)
+	u.IsUpdate = v.IsUpdate
 	return json.Marshal(u)
 }
 
@@ -1309,14 +1311,11 @@ func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
 	var u struct {
-		Cause  string   `json:"cause"`
-		Chains []string `json:"chains"`
+		Cause  string        `json:"cause"`
+		Chains []ChainParams `json:"chains"`
 	}
 	u.Cause = chainToJSON(v.Cause)
-	u.Chains = make([]string, len(v.Chains))
-	for i, x := range v.Chains {
-		u.Chains[i] = bytesToJSON(x)
-	}
+	u.Chains = v.Chains
 	return json.Marshal(u)
 }
 
@@ -1358,18 +1357,18 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *ChainParams) UnmarshalJSON(data []byte) error {
 	var u struct {
-		Url  string `json:"url"`
-		Data string `json:"data"`
+		Data     string `json:"data"`
+		IsUpdate bool   `json:"isUpdate"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Url = u.Url
 	if x, err := bytesFromJSON(u.Data); err != nil {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {
 		v.Data = x
 	}
+	v.IsUpdate = u.IsUpdate
 	return nil
 }
 
@@ -1479,8 +1478,8 @@ func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 	var u struct {
-		Cause  string   `json:"cause"`
-		Chains []string `json:"chains"`
+		Cause  string        `json:"cause"`
+		Chains []ChainParams `json:"chains"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -1490,14 +1489,7 @@ func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Cause = x
 	}
-	v.Chains = make([][]byte, len(u.Chains))
-	for i, x := range u.Chains {
-		if x, err := bytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Chains[%d]: %w", i, err)
-		} else {
-			v.Chains[i] = x
-		}
-	}
+	v.Chains = u.Chains
 	return nil
 }
 
