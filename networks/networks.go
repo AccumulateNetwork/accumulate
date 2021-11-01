@@ -23,7 +23,7 @@ var Networks = map[string]*Network{
 		Port: 33000,
 		Nodes: []Node{
 			{"3.140.120.192", Validator},
-			{"18.225.37.17", Validator},
+			{"18.220.147.250", Validator},
 		},
 	},
 	"BVC1": {
@@ -31,8 +31,8 @@ var Networks = map[string]*Network{
 		Type: BVC,
 		Port: 33000,
 		Nodes: []Node{
-			{"52.66.211.207", Validator},
-			{"13.234.239.18", Validator},
+			{"65.0.156.146", Validator},
+			{"13.234.254.178", Validator},
 		},
 	},
 	"BVC2": {
@@ -40,8 +40,8 @@ var Networks = map[string]*Network{
 		Type: BVC,
 		Port: 33000,
 		Nodes: []Node{
-			{"13.49.76.220", Validator},
-			{"13.48.105.158", Validator},
+			{"13.48.159.117", Validator},
+			{"16.170.126.251", Validator},
 		},
 	},
 	"Arches": {
