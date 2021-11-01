@@ -15,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -477,6 +478,42 @@ func TestQueryWrongType(t *testing.T) {
 		require.Contains(t, r.Data, "want ChainTypeAdi, got ChainTypeAnonTokenAccount")
 	default:
 		t.Fatalf("Expected error, got %T", r)
+	}
+}
+
+func TestGetTxId(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Fails on windows (Tendermint cleanup issue)")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+	japi := NewTest(t, query)
+
+	_, origin, _ := ed25519.GenerateKey(nil)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	require.NoError(t, err)
+
+	err = acctesting.SendTxSync(query, tx)
+	require.NoError(t, err)
+
+	u, err := url.Parse(*destAddress.AsString())
+	require.NoError(t, err)
+	u.Path = ""
+	u.Query = fmt.Sprintf("txid=%x", tx.TransactionHash())
+
+	req, err := json.Marshal(&api.APIRequestURL{URL: types.String(u.String())})
+	require.NoError(t, err)
+
+	resp := japi.GetData(context.Background(), req)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.NoError(t, r)
+	case *api.APIDataResponse:
+		// TODO Check response
+	default:
+		require.IsType(t, (*api.APIDataResponse)(nil), r)
 	}
 }
 

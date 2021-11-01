@@ -9,13 +9,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
-
 	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
 	"github.com/AccumulateNetwork/accumulated/types"
+	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/getsentry/sentry-go"
 	"github.com/tendermint/tendermint/abci/example/code"
@@ -105,7 +104,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	ret, err := app.chain.Query(qu)
+	k, v, err := app.chain.Query(qu)
 	if err != nil {
 		// sentry.CaptureException(err)
 		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
@@ -117,7 +116,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	//if we get here, we have a valid state object, so let's return it.
 	resQuery.Code = code.CodeTypeOK
 	//return a generic state object for the chain and let the query deal with decoding it
-	resQuery.Value = ret
+	resQuery.Key, resQuery.Value = k, v
 
 	///implement lazy sync calls. If a node falls behind it needs to have several query calls
 	///1 get current height
