@@ -17,6 +17,8 @@ type TokenTransactionDeposit struct {
 	Metadata      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
+func (*TokenTransactionDeposit) GetType() types.TxType { return types.TxTypeSyntheticTokenDeposit }
+
 func (tx *TokenTransactionDeposit) SetDeposit(tokenUrl types.String, amt *big.Int) error {
 
 	if amt == nil {
