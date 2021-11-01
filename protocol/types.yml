@@ -56,15 +56,15 @@ SyntheticCreateChain:
     - name: Chains
       type: slice
       slice:
-        type: bytes
+        type: ChainParams
+        marshal-as: self
 
 ChainParams:
   fields:
-    - name: Url
-      type: string
-      is-url: true
     - name: Data
       type: bytes
+    - name: IsUpdate
+      type: bool
 
 AddCredits:
   kind: tx
