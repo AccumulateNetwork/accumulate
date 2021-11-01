@@ -32,8 +32,8 @@ func init() {
 }
 
 func PrintCredits() {
-	fmt.Println("  accumulate credits [actor lite account] [key page url] [amount] 		Send credits to a recipient using an anoymous account")
-	fmt.Println("  accumulate credits [actor url] [actor key label] [key index (optional)] [key height (optional)] [key page url] [amount] 		Send credits to a recipient")
+	fmt.Println("  accumulate credits [actor lite account] [lite account or key page url] [amount] 		Send credits using a lite account or adi key page to another lite account or adi key page")
+	fmt.Println("  accumulate credits [actor url] [actor key label] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to a recipient")
 }
 
 func AddCredits(actor string, args []string) {
