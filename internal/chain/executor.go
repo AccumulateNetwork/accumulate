@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,6 +58,20 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
 	return m, nil
+}
+
+func (m *Executor) queryByUrl(u *url.URL) (encoding.BinaryMarshaler, error) {
+	qv := u.QueryValues()
+	if u.Path != "" || u.Fragment != "" || qv.Get("txid") == "" {
+		return m.queryByChainId(u.ResourceChain())
+	}
+
+	txid, err := hex.DecodeString(qv.Get("txid"))
+	if err == nil {
+		return nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
+	}
+
+	return m.queryByTxId(txid)
 }
 
 func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, error) {
@@ -185,7 +201,8 @@ func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid URL in query %s", chr.Url)
 		}
-		obj, err := m.queryByChainId(u.ResourceChain())
+
+		obj, err := m.queryByUrl(u)
 		if err != nil {
 			return nil, err
 		}
