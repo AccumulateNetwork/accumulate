@@ -22,14 +22,26 @@ func (scc *SyntheticCreateChain) GetCause() [32]byte {
 	return scc.Cause
 }
 
-func (scc *SyntheticCreateChain) Add(chains ...state.Chain) error {
+func (scc *SyntheticCreateChain) Create(chains ...state.Chain) error {
 	for _, chain := range chains {
 		b, err := chain.MarshalBinary()
 		if err != nil {
 			return err
 		}
 
-		scc.Chains = append(scc.Chains, b)
+		scc.Chains = append(scc.Chains, ChainParams{Data: b})
+	}
+	return nil
+}
+
+func (scc *SyntheticCreateChain) Update(chains ...state.Chain) error {
+	for _, chain := range chains {
+		b, err := chain.MarshalBinary()
+		if err != nil {
+			return err
+		}
+
+		scc.Chains = append(scc.Chains, ChainParams{Data: b, IsUpdate: true})
 	}
 	return nil
 }
