@@ -10,6 +10,31 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
 
+func boolBinarySize(v bool) int {
+	return 1
+}
+
+func boolMarshalBinary(v bool) []byte {
+	if v {
+		return []byte{1}
+	}
+	return []byte{0}
+}
+
+func boolUnmarshalBinary(b []byte) (bool, error) {
+	if len(b) == 0 {
+		return false, ErrNotEnoughData
+	}
+	switch b[0] {
+	case 0:
+		return false, nil
+	case 1:
+		return true, nil
+	default:
+		return false, fmt.Errorf("%d is not a valid boolean", b[0])
+	}
+}
+
 func uvarintBinarySize(v uint64) int {
 	return len(uvarintMarshalBinary(v))
 }
