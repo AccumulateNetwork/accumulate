@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated"
 	"github.com/AccumulateNetwork/accumulated/config"
 	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
@@ -53,6 +54,10 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 	api.query = q
 
 	methods := jsonrpc2.MethodMap{
+		// Metadata
+		"version": api.version,
+		"metrics": api.Metrics,
+
 		// URL
 		"get":           api.getData,
 		"get-directory": api.GetDirectory,
@@ -77,9 +82,6 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"token-account-history": api.getTokenAccountHistory,
 		"token-tx":              api.getTokenTx,
 		"token-tx-create":       api.createTokenTx,
-
-		// metrics
-		"metrics": api.Metrics,
 
 		// faucet
 		"faucet": api.Faucet,
@@ -600,6 +602,21 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	gtx.Signature = append(gtx.Signature, ed)
 
 	return api.broadcastTx(req.Wait, gtx)
+}
+
+func (api *API) version(_ context.Context, params json.RawMessage) interface{} {
+	ret := acmeapi.APIDataResponse{}
+	ret.Type = "metrics"
+
+	data, _ := json.Marshal(map[string]interface{}{
+		"version":        accumulated.Version,
+		"commit":         accumulated.Commit,
+		"versionIsKnown": accumulated.IsVersionKnown(),
+	})
+	raw := json.RawMessage(data)
+	ret.Data = &raw
+
+	return ret
 }
 
 // Metrics returns Metrics for explorer (tps, etc.)
