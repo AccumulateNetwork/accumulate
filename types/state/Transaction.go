@@ -184,12 +184,9 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 	}
 
 	data = data[t.ChainHeader.GetHeaderSize():]
-	var sLen uint64                               //                Get how many signatures we have
-	sLen, data = common.BytesUint64(data)         //                Of course, need it in an int of some sort
-	if sLen < 1 || sLen > api.MaxTokenTxOutputs { //                If the count isn't reasonable, die
-		panic("signature length out of range") //           With a panic
-	} //
-	for i := uint64(0); i < sLen; i++ { //                  Okay, now cycle for every signature
+	var sLen uint64                       //                Get how many signatures we have
+	sLen, data = common.BytesUint64(data) //                Of course, need it in an int of some sort
+	for i := uint64(0); i < sLen; i++ {   //                  Okay, now cycle for every signature
 		sig := new(transactions.ED25519Sig) // And unmarshal a signature
 		data, err = sig.Unmarshal(data)
 		if err != nil { // If bad data is encountered,
