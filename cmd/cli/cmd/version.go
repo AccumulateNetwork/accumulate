@@ -23,9 +23,8 @@ func init() {
 
 func GetVersion() {
 	var res interface{}
-	params := []byte("")
 
-	if err := Client.Request(context.Background(), "version", params, &res); err != nil {
+	if err := Client.Request(context.Background(), "version", nil, &res); err != nil {
 		log.Fatal(err)
 	}
 
