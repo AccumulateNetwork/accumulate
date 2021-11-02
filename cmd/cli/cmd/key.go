@@ -51,7 +51,7 @@ var keyCmd = &cobra.Command{
 						ExportKeys()
 					case "seed":
 						ExportSeed()
-					case "label":
+					case "name":
 						if len(args) > 2 {
 							ExportKey(args[2])
 						} else {
@@ -149,7 +149,7 @@ func PrintKeyPageGet() {
 
 func PrintKeyExport() {
 	fmt.Println("  accumulate key export all			            export all keys in wallet")
-	fmt.Println("  accumulate key export label [key label]			export key by label")
+	fmt.Println("  accumulate key export name [key label]			export key by key name")
 	fmt.Println("  accumulate key export mnemonic		            export the mnemonic phrase if one was entered")
 	fmt.Println("  accumulate key export seed                       export the seed generated from the mnemonic phrase")
 }
@@ -172,7 +172,7 @@ func PrintKeyUpdate() {
 }
 
 func PrintKeyGenerate() {
-	fmt.Println("  accumulate key generate [label]     Generate a new key and give it a label in the wallet")
+	fmt.Println("  accumulate key generate [key name]     Generate a new key and give it a name in the wallet")
 }
 
 func PrintKeyMnemonic() {
@@ -180,7 +180,7 @@ func PrintKeyMnemonic() {
 }
 
 func PrintKeyImport() {
-	fmt.Println("  accumulate key import [label] [private key hex]     Import a key and assign it to the label")
+	fmt.Println("  accumulate key import [private key hex] [key name]      Import a key and give it a name in the wallet")
 }
 
 func PrintKey() {
@@ -699,6 +699,7 @@ func GenerateKey(label string) {
 
 func ListKeyPublic() {
 
+	fmt.Printf("Key name \t\t Public Key\n")
 	err := Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
@@ -713,7 +714,8 @@ func ListKeyPublic() {
 	}
 }
 
-func ImportKey(label string, pkhex string) {
+// ImportKey will import the private key and assign it to the label
+func ImportKey(pkhex string, label string) {
 	_, err := LookupByLabel(label)
 	if err == nil {
 		log.Fatal("key label is already being used")
