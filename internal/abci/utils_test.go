@@ -46,7 +46,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	n.db = db
 
 	zl := logging.NewTestZeroLogger(t, "plain")
-	zl = zl.Hook(logging.ExcludeMessages("AddStateEntry", "WriteStates", "AddTransaction", "AddSynthTx"))
+	zl = zl.Hook(logging.ExcludeMessages("GetIndex", "WriteIndex"))
 	zl = zl.Hook(logging.BodyHook(func(e *zerolog.Event, _ zerolog.Level, body map[string]interface{}) {
 		module, ok := body["module"].(string)
 		if !ok {
