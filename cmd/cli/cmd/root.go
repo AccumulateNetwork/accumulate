@@ -104,7 +104,7 @@ func initDB() *bolt.DB {
 	})
 
 	err = db.Update(func(tx *bolt.Tx) error {
-		_, err = tx.CreateBucket([]byte("seed"))
+		_, err = tx.CreateBucket([]byte("mnemonic"))
 		if err != nil {
 			return fmt.Errorf("DB: %s", err)
 		}
