@@ -47,11 +47,26 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 	}
 
 	var ssg *protocol.SigSpecGroup
+	var priority = -1
 	if page.SigSpecId != (types.Bytes32{}) {
 		ssg = new(protocol.SigSpecGroup)
 		err = st.LoadAs(page.SigSpecId, ssg)
 		if err != nil {
 			return fmt.Errorf("invalid key book: %v", err)
+		}
+
+		for i, p := range ssg.SigSpecs {
+			if p == st.SponsorChainId {
+				priority = i
+			}
+		}
+		if priority < 0 {
+			return fmt.Errorf("cannot find %q in key book with ID %X", st.SponsorUrl, page.SigSpecId)
+		}
+
+		// 0 is the highest priority, followed by 1, etc
+		if tx.SigInfo.PriorityIdx > uint64(priority) {
+			return fmt.Errorf("cannot modify %q with a lower priority key page", st.SponsorUrl)
 		}
 	}
 
@@ -85,7 +100,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 
 		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
-		if len(page.Keys) == 0 && ssg != nil && ssg.SigSpecs[0] == st.SponsorChainId {
+		if len(page.Keys) == 0 && priority == 0 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
