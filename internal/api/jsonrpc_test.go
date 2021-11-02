@@ -401,6 +401,44 @@ func TestTransactionHistory(t *testing.T) {
 	fmt.Printf("%s\n", string(output))
 }
 
+func TestFaucetTransactionHistory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	}
+
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
+	req := &api.APIRequestURL{}
+	req.URL = types.String(anon.GenerateAcmeAddress(ed25519.PublicKey{}))
+	params, err := json.Marshal(&req)
+	require.NoError(t, err)
+
+	_, _, query := startBVC(t, t.TempDir())
+	jsonapi := NewTest(t, query)
+	res := jsonapi.Faucet(context.Background(), params)
+
+	//allow the transaction to settle.
+	time.Sleep(3 * time.Second)
+
+	jd, err := json.Marshal(res)
+	require.NoError(t, err)
+	r2 := api.APIDataResponse{}
+	err = json.Unmarshal(jd, &r2)
+	require.NoError(t, err)
+
+	txr := response.TokenTx{}
+	err = json.Unmarshal(*r2.Data, &txr)
+	require.NoError(t, err)
+
+	resp, err := query.GetTransactionHistory(genesis.FaucetUrl.String(), 0, 10)
+	require.NoError(t, err)
+	require.Len(t, resp.Data, 2)
+	require.Equal(t, types.String(types.TxTypeSyntheticGenesis.Name()), resp.Data[0].Type)
+	require.Equal(t, types.String(types.TxTypeTokenTx.Name()), resp.Data[1].Type)
+}
+
 func TestMetrics(t *testing.T) {
 	if os.Getenv("CI") == "true" {
 		t.Skip("Depends on an external resource, and thus is not appropriate for CI")
