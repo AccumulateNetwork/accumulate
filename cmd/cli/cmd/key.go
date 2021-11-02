@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -30,27 +31,7 @@ var keyCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
-			//case "get":
-			//	if len(args) > 2 {
-			//		if args[1] == "page" {
-			//			GetKey(args[2], "sig-spec")
-			//		} else if args[1] == "book" {
-			//			GetKey(args[2], "sig-spec-group")
-			//		} else {
-			//			fmt.Println("Usage:")
-			//			PrintKeyGet()
-			//		}
-			//	} else {
-			//		fmt.Println("Usage:")
-			//		PrintKeyGet()
-			//	}
-			//case "create":
-			//	if len(args) > 3 {
-			//		CreateKeyBookOrPage(args[1], args[2], args[3:])
-			//	} else {
-			//		fmt.Println("Usage:")
-			//		PrintKeyCreate()
-			//	}
+
 			case "mnemonic":
 				if len(args) > 12 {
 					ImportMnemonic("seed", args[1:])
@@ -62,6 +43,27 @@ var keyCmd = &cobra.Command{
 					ImportKey(args[1], args[2])
 				} else {
 					PrintKeyImport()
+				}
+			case "export":
+				if len(args) > 1 {
+					switch args[1] {
+					case "all":
+						ExportKeys()
+					case "seed":
+						ExportSeed()
+					case "label":
+						if len(args) > 2 {
+							ExportKey(args[2])
+						} else {
+							PrintKeyExport()
+						}
+					case "mnemonic":
+						ExportMnemonic()
+					default:
+						PrintKeyExport()
+					}
+				} else {
+					PrintKeyExport()
 				}
 			case "book":
 				if len(args) == 3 {
@@ -86,6 +88,8 @@ var keyCmd = &cobra.Command{
 					} else {
 						fmt.Println("Usage:")
 						PrintKeyPageGet()
+						PrintKeyPageCreate()
+						PrintKeyUpdate()
 					}
 				} else if len(args) > 3 {
 					switch args[1] {
@@ -104,6 +108,7 @@ var keyCmd = &cobra.Command{
 					}
 				} else {
 					fmt.Println("Usage:")
+					PrintKeyPageGet()
 					PrintKeyPageCreate()
 					PrintKeyUpdate()
 				}
@@ -142,6 +147,13 @@ func PrintKeyPageGet() {
 	fmt.Println("  accumulate key get page [URL]			Get existing Key Page by URL")
 }
 
+func PrintKeyExport() {
+	fmt.Println("  accumulate key export all			            export all keys in wallet")
+	fmt.Println("  accumulate key export label [key label]			export key by label")
+	fmt.Println("  accumulate key export mnemonic		            export the mnemonic phrase if one was entered")
+	fmt.Println("  accumulate key export seed                       export the seed generated from the mnemonic phrase")
+}
+
 func PrintKeyBookCreate() {
 	fmt.Println("  accumulate key book create [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key book url] [key page url 1] ... [key page url n] Create new key page with 1 to N public keys")
 	fmt.Println("\t\t example usage: accumulate key book create acc://RedWagon redKey5 acc://RedWagon/RedBook acc://RedWagon/RedPage1")
@@ -157,7 +169,6 @@ func PrintKeyUpdate() {
 	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate key page remove [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] Remove key in key page")
 	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
-
 }
 
 func PrintKeyGenerate() {
@@ -169,7 +180,7 @@ func PrintKeyMnemonic() {
 }
 
 func PrintKeyImport() {
-	fmt.Println("  accumulate key import [label] [private key hex]     Generate a new key seed from a mnemonic, all keys will be derived from this seed going forward.")
+	fmt.Println("  accumulate key import [label] [private key hex]     Import a key seed from a mnemonic, all keys will be derived from this seed going forward.")
 }
 
 func PrintKey() {
@@ -177,6 +188,7 @@ func PrintKey() {
 	PrintKeyPageGet()
 	PrintKeyBookCreate()
 	PrintKeyPageCreate()
+	PrintKeyUpdate()
 	PrintKeyGenerate()
 	PrintKeyPublic()
 	PrintKeyImport()
@@ -399,6 +411,7 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 
 	ukp := protocol.UpdateKeyPage{}
 	ukp.Operation = op
+
 	switch op {
 	case protocol.UpdateKey:
 		if len(args) < 2 {
@@ -657,10 +670,13 @@ func GenerateKey(label string) {
 	if err == nil {
 		log.Fatal(fmt.Errorf("key already exists for label %s", label))
 	}
-	pubKey, privKey, err := ed25519.GenerateKey(nil)
+	privKey, err := GeneratePrivateKey()
+
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	pubKey := privKey[32:]
 
 	err = Db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("keys"))
@@ -698,6 +714,11 @@ func ListKeyPublic() {
 }
 
 func ImportKey(label string, pkhex string) {
+	_, err := LookupByLabel(label)
+	if err == nil {
+		log.Fatal("key label is already being used")
+	}
+
 	var pk ed25519.PrivateKey
 
 	token, err := hex.DecodeString(pkhex)
@@ -707,36 +728,57 @@ func ImportKey(label string, pkhex string) {
 
 	if len(token) == 32 {
 		pk = ed25519.NewKeyFromSeed(token)
+	} else {
+		pk = token
 	}
-	pk = token
+
+	_, err = LookupByPubKey(pk[32:])
+	lab := ""
+	if err == nil {
+
+		err = Db.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("label"))
+			c := b.Cursor()
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				if bytes.Equal(v, pk[32:]) {
+					lab = string(k)
+					break
+				}
+			}
+			return nil
+		})
+		log.Fatalf("private key already exists in wallet as label %s", lab)
+	}
 
 	err = Db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("keys"))
-		err := b.Put([]byte(label), pk)
+		err := b.Put([]byte(pk[32:]), pk)
+		return err
+	})
+
+	err = Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("label"))
+		err := b.Put([]byte(label), pk[32:])
 		return err
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("{\"label\":\"%s\",\"publicKey\":\"%x\"}\n", label, token[32:])
+	fmt.Printf("{\"label\":\"%s\",\"publicKey\":\"%x\"}\n", label, pk[32:])
 }
 
 func ExportKey(label string) {
-	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("keys"))
-		pk := b.Get([]byte(label))
-		fmt.Println(hex.EncodeToString(pk))
-		fmt.Printf("{\"label\":\"%s\",\"privateKey\":\"%x\",\"publicKey\":\"%x\"}\n", label, pk[:32], pk[32:])
-		return nil
-	})
+	pk, err := LookupByLabel(label)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("no private key found for label %s", label)
 	}
+	//fmt.Println(hex.EncodeToString(pk))
+	fmt.Printf("{\"label\":\"%s\",\"privateKey\":\"%x\",\"publicKey\":\"%x\"}\n", label, pk[:32], pk[32:])
 }
 
-func GeneratePrivateKey(label string) (privKey []byte, err error) {
-	seed, err := lookupSeed(label)
+func GeneratePrivateKey() (privKey []byte, err error) {
+	seed, err := lookupSeed()
 
 	if err != nil {
 		//if private key seed doesn't exist, just create a key
@@ -748,7 +790,7 @@ func GeneratePrivateKey(label string) (privKey []byte, err error) {
 		//if we do have a seed, then create a new key
 		masterKey, _ := bip32.NewMasterKey(seed)
 
-		newKey, err := masterKey.NewChildKey(uint32(getKeyCount()))
+		newKey, err := masterKey.NewChildKey(uint32(getKeyCountAndIncrement()))
 		if err != nil {
 			return nil, err
 		}
@@ -757,25 +799,33 @@ func GeneratePrivateKey(label string) (privKey []byte, err error) {
 	return
 }
 
-func getKeyCount() (count int64) {
-	_ = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("label"))
+func getKeyCountAndIncrement() (count uint32) {
+	err := Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("mnemonic"))
 		if b != nil {
-			count = b.Tx().Size()
+			ct := b.Get([]byte("count"))
+			if ct != nil {
+				count = binary.LittleEndian.Uint32(ct)
+			}
+			ct = make([]byte, 8)
+			binary.LittleEndian.PutUint32(ct, count+1)
+			return b.Put([]byte("count"), ct)
 		}
-
 		return nil
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
 	return count
 }
 
-func lookupSeed(label string) (seed []byte, err error) {
+func lookupSeed() (seed []byte, err error) {
 
 	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("seed"))
-		seed = b.Get([]byte(label))
+		b := tx.Bucket([]byte("mnemonic"))
+		seed = b.Get([]byte("seed"))
 		if len(seed) == 0 {
-			err = fmt.Errorf("seed for the label %s doesn't exist", label)
+			err = fmt.Errorf("mnemonic seed doesn't exist")
 		}
 		return err
 	})
@@ -796,8 +846,8 @@ func ImportMnemonic(label string, mnemonic []string) {
 	var err error
 
 	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("seed"))
-		seed := b.Get([]byte(label))
+		b := tx.Bucket([]byte("mnemonic"))
+		seed := b.Get([]byte("seed"))
 		if len(seed) != 0 {
 			err = fmt.Errorf("seed for the label %s already exists", label)
 		}
@@ -808,13 +858,61 @@ func ImportMnemonic(label string, mnemonic []string) {
 	}
 
 	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("seed"))
+		b := tx.Bucket([]byte("mnemonic"))
 		if b != nil {
-			b.Put([]byte(label), seed)
+			b.Put([]byte("seed"), seed)
+			b.Put([]byte("phrase"), []byte(mns))
 		} else {
 			return fmt.Errorf("DB: %s", err)
 		}
 		return nil
 	})
 
+}
+
+func ExportKeys() {
+	err := Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("keys"))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, _ = c.Next() {
+			fmt.Printf("%s %x\n", k, v)
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func ExportSeed() {
+	err := Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("mnemonic"))
+		if b != nil {
+			seed := b.Get([]byte("seed"))
+			fmt.Printf(" seed: %x\n", seed)
+		} else {
+			return fmt.Errorf("mnemonic seed not found")
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+}
+
+func ExportMnemonic() {
+	err := Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("mnemonic"))
+		if b != nil {
+			seed := b.Get([]byte("phrase"))
+			fmt.Printf("mnemonic phrase: %x\n", seed)
+		} else {
+			return fmt.Errorf("mnemonic seed not found")
+		}
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 }
