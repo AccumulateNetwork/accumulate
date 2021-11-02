@@ -130,7 +130,7 @@ func fieldError(op, name string, args ...string) string {
 func binarySize(w *bytes.Buffer, field *Field, varName string) {
 	var expr string
 	switch field.Type {
-	case "bytes", "string", "chainSet", "uvarint", "duration":
+	case "bool", "bytes", "string", "chainSet", "uvarint", "duration":
 		expr = field.Type + "BinarySize(%s)"
 	case "bigint", "chain":
 		expr = field.Type + "BinarySize(&%s)"
@@ -160,7 +160,7 @@ func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, 
 	var expr string
 	var canErr bool
 	switch field.Type {
-	case "bytes", "string", "chainSet", "uvarint", "duration":
+	case "bool", "bytes", "string", "chainSet", "uvarint", "duration":
 		expr, canErr = field.Type+"MarshalBinary(%s)", false
 	case "bigint", "chain":
 		expr, canErr = field.Type+"MarshalBinary(&%s)", false
@@ -196,7 +196,7 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string
 	var expr, size, sliceName string
 	var inPlace bool
 	switch field.Type {
-	case "bytes", "string", "chainSet", "uvarint", "duration":
+	case "bool", "bytes", "string", "chainSet", "uvarint", "duration":
 		expr, size, inPlace = field.Type+"UnmarshalBinary(data)", field.Type+"BinarySize(%s)", false
 	case "bigint", "chain":
 		expr, size, inPlace = field.Type+"UnmarshalBinary(data)", field.Type+"BinarySize(&%s)", false
