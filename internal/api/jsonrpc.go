@@ -638,7 +638,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 
 func (api *API) version(_ context.Context, params json.RawMessage) interface{} {
 	ret := acmeapi.APIDataResponse{}
-	ret.Type = "metrics"
+	ret.Type = "version"
 
 	data, _ := json.Marshal(map[string]interface{}{
 		"version":        accumulated.Version,
