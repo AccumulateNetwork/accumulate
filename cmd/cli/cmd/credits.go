@@ -13,7 +13,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// faucetCmd represents the faucet command
+// creditsCmd represents the faucet command
 var creditsCmd = &cobra.Command{
 	Use:   "credits",
 	Short: "Send credits to a recipient",
