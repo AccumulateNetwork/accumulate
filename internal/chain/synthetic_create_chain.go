@@ -3,6 +3,7 @@ package chain
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -75,6 +76,10 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 			// Anything else must be a sub-path
 			if u.Identity().Equal(u) {
 				return fmt.Errorf("%v cannot be its own identity", record.Header().Type)
+			}
+
+			if u.Path != "" && strings.Contains(u.Path[1:], "/") {
+				return fmt.Errorf("%v cannot contain more than one slash in its URL", record.Header().Type)
 			}
 
 			// Make sure the ADI actually exists
