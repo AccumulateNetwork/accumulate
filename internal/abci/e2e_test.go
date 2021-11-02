@@ -341,7 +341,7 @@ func TestCreateSigSpecGroup(t *testing.T) {
 }
 
 func TestAddSigSpec(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, "error")
+	n := createAppWithMemDB(t, crypto.Address{}, "info")
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
 	u := n.ParseUrl("foo/ssg1")
