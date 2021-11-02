@@ -74,8 +74,10 @@ func TestFaucetMultiNetwork(t *testing.T) {
 
 	relay, err := relay.NewWith(rpcAddrs...)
 	require.NoError(t, err)
-	require.NoError(t, relay.Start())
-	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+	if bvc0[0].Config.Accumulate.API.EnableSubscribeTX {
+		require.NoError(t, relay.Start())
+		t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+	}
 	query := api.NewQuery(relay)
 
 	lite, err := url.Parse("acc://b5d4ac455c08bedc04a56d8147e9e9c9494c99eb81e9d8c3/ACME")
