@@ -310,6 +310,7 @@ func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData [
 	}
 
 	//populate the rest of the resp
+	resp.TxId = (*types.Bytes)(&txId)
 	resp.KeyPage = &acmeApi.APIRequestKeyPage{}
 	resp.KeyPage.Height = txSigInfo.MSHeight
 	resp.KeyPage.Index = txSigInfo.PriorityIdx
