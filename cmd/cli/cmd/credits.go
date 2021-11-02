@@ -28,7 +28,8 @@ var creditsCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(creditsCmd)
+	//Temporarily hiding credits for 0.2
+	//rootCmd.AddCommand(creditsCmd)
 }
 
 func PrintCredits() {
