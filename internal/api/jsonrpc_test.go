@@ -12,12 +12,14 @@ import (
 	"time"
 
 	. "github.com/AccumulateNetwork/accumulated/internal/api"
+	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -507,4 +509,53 @@ func TestDirectory(t *testing.T) {
 	default:
 		require.IsType(t, (*api.APIDataResponse)(nil), r)
 	}
+}
+
+func TestFaucetReplay(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	}
+
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+
+	_, kpSponsor, _ := ed25519.GenerateKey(nil)
+	destAccount := anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
+	tx := acmeapi.TokenTx{}
+	tx.From.String = types.String(genesis.FaucetWallet.Addr)
+	tx.AddToAccount(types.String(destAccount), 1000000000)
+
+	genesis.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
+	gtx, err := transactions.New(*tx.From.AsString(), func(hash []byte) (*transactions.ED25519Sig, error) {
+		return genesis.FaucetWallet.Sign(hash), nil
+	}, &tx)
+	require.NoError(t, err)
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+
+	jsonapi := NewTest(t, query)
+	res := jsonapi.BroadcastTx(false, gtx)
+	fmt.Printf("%s\n", *res.Data)
+
+	// Allow the transaction to settle.
+	time.Sleep(3 * time.Second)
+
+	// Read back the result.
+	resp, err := query.GetChainStateByUrl(destAccount)
+	require.NoError(t, err)
+	require.NotNil(t, resp.Data, "token account not found in query after faucet transaction")
+	ta := response.TokenAccount{}
+	require.NoError(t, json.Unmarshal(*resp.Data, &ta))
+	require.Equal(t, "1000000000", ta.Balance.String(), "incorrect balance after faucet transaction")
+
+	// Replay
+	res = jsonapi.BroadcastTx(false, gtx)
+	v := map[string]interface{}{}
+	require.NoError(t, json.Unmarshal(*res.Data, &v))
+
+	// https://github.com/tendermint/tendermint/issues/7185
+	require.Contains(t, v["error"], "tx already exists in cache")
 }
