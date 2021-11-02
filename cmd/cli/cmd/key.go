@@ -163,11 +163,11 @@ func PrintKeyPageCreate() {
 	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 }
 func PrintKeyUpdate() {
-	fmt.Println("  accumulate key page update [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] [new public key or label] Update key page with a new public key")
+	fmt.Println("  accumulate key page update [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] [new public key or label] Update key in a key page with a new public key")
 	fmt.Println("\t\t example usage: accumulate key update page  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
-	fmt.Println("  accumulate key page add [key page url] [signing key label] [key index (optional)] [key height (optional)] [new key label] Add key to key page")
+	fmt.Println("  accumulate key page add [key page url] [signing key label] [key index (optional)] [key height (optional)] [new key label] Add key to a key page")
 	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
-	fmt.Println("  accumulate key page remove [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] Remove key in key page")
+	fmt.Println("  accumulate key page remove [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] Remove key from a key page")
 	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 }
 
@@ -176,11 +176,11 @@ func PrintKeyGenerate() {
 }
 
 func PrintKeyMnemonic() {
-	fmt.Println("  accumulate key mnemonic [mnemonic phrase...]     Generate a new key seed from a mnemonic, all keys will be derived from this seed going forward.")
+	fmt.Println("  accumulate key mnemonic [mnemonic phrase...]     Print the mneumonic used in the wallet")
 }
 
 func PrintKeyImport() {
-	fmt.Println("  accumulate key import [label] [private key hex]     Import a key seed from a mnemonic, all keys will be derived from this seed going forward.")
+	fmt.Println("  accumulate key import [label] [private key hex]     Import a key and assign it to the label")
 }
 
 func PrintKey() {
