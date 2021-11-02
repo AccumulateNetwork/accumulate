@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"context"
+	"encoding"
 	"encoding/json"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
@@ -8,17 +10,10 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"log"
 	"strconv"
+	"time"
 )
-
-func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transactions.ED25519Sig, error) {
-	return func(hash []byte) (*transactions.ED25519Sig, error) {
-		sig := new(transactions.ED25519Sig)
-		return sig, sig.Sign(nonce, key, hash)
-	}
-}
 
 func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
 	//adiActor labelOrPubKeyHex height index
@@ -130,6 +125,27 @@ func IsLiteAccount(url string) bool {
 	return protocol.IsValidAdiUrl(u2) != nil
 }
 
+func GetUrl(url string, method string) ([]byte, error) {
+
+	var res interface{}
+	var str []byte
+
+	u, err := url2.Parse(url)
+	params := acmeapi.APIRequestURL{}
+	params.URL = types.String(u.String())
+
+	if err := Client.Request(context.Background(), method, params, &res); err != nil {
+		log.Fatal(err)
+	}
+
+	str, err = json.Marshal(res)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	return str, nil
+}
+
 type KeyPageStore struct {
 	PrivKeys []types.Bytes `json:"privKeys"`
 }
@@ -181,3 +197,30 @@ type AccountKeyBookStore struct {
 //
 //	return nil
 //}
+
+func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte) (interface{}, error) {
+	json.Marshal(payload)
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dataBinary, err := payload.(encoding.BinaryMarshaler).MarshalBinary()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	nonce := uint64(time.Now().Unix())
+	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var res interface{}
+	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
+		return nil, err
+	}
+
+	return res, nil
+}
