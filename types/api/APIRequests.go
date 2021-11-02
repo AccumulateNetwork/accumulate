@@ -69,7 +69,7 @@ type APIRequestURLPagination struct {
 
 // APIDataResponse is used in "get" API method response
 type APIDataResponse struct {
-	Type    types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,tx,sigSpec,sigSpecGroup,assignSigSpec,addCredits,directory"`
+	Type    types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,tx,sigSpec,sigSpecGroup,assignSigSpec,addCredits,directory,version"`
 	MDRoot  types.Bytes        `json:"mdRoot,omitempty" form:"mdRoot" query:"mdRoot"`
 	Data    *json.RawMessage   `json:"data" form:"data" query:"data"`
 	Sponsor types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`

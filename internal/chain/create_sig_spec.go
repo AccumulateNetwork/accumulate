@@ -58,9 +58,12 @@ func (CreateSigSpec) DeliverTx(st *StateManager, tx *transactions.GenTransaction
 		return err
 	}
 
+	scc := new(protocol.SyntheticCreateChain)
+	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	st.Submit(st.SponsorUrl, scc)
+
 	spec := protocol.NewSigSpec()
 	spec.ChainUrl = types.String(url.String())
-	st.Create(spec)
 
 	if group != nil {
 		groupUrl, err := group.ParseUrl()
@@ -70,15 +73,24 @@ func (CreateSigSpec) DeliverTx(st *StateManager, tx *transactions.GenTransaction
 			return fmt.Errorf("invalid sponsor URL: %v", err)
 		}
 
-		st.Create(group)
 		group.SigSpecs = append(group.SigSpecs, types.Bytes(url.ResourceChain()).AsBytes32())
 		spec.SigSpecId = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+
+		err = scc.Update(group)
+		if err != nil {
+			return fmt.Errorf("failed to marshal state: %v", err)
+		}
 	}
 
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
 		ss.PublicKey = sig.PublicKey
 		spec.Keys = append(spec.Keys, ss)
+	}
+
+	err = scc.Create(spec)
+	if err != nil {
+		return fmt.Errorf("failed to marshal state: %v", err)
 	}
 
 	return nil
