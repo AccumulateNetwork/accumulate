@@ -175,14 +175,19 @@ func (t *GenTransaction) As(subTx encoding.BinaryUnmarshaler) error {
 }
 
 func New(url string, signer func(hash []byte) (*ED25519Sig, error), subTx encoding.BinaryMarshaler) (*GenTransaction, error) {
+	return NewWith(&SignatureInfo{
+		URL: url,
+	}, signer, subTx)
+}
+
+func NewWith(info *SignatureInfo, signer func(hash []byte) (*ED25519Sig, error), subTx encoding.BinaryMarshaler) (*GenTransaction, error) {
 	payload, err := subTx.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
 	tx := new(GenTransaction)
-	tx.SigInfo = new(SignatureInfo)
-	tx.SigInfo.URL = url
+	tx.SigInfo = info
 	tx.Signature = make([]*ED25519Sig, 1)
 	tx.Transaction = payload
 
