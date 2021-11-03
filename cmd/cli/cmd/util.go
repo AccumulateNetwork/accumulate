@@ -31,7 +31,7 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	ed.PriorityIdx = 0
 
 	if IsLiteAccount(actor.String()) == true {
-		privKey, err = LookupByAnon(actor.String())
+		privKey, err = LookupByLabel(actor.String()) //LookupByAnon(actor.String())
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", actor.String(), err)
 		}
@@ -53,6 +53,8 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 			}
 		}
 		ct++
+	} else {
+		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
 	if len(args) > 2 {

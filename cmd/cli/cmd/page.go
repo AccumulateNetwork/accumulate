@@ -25,20 +25,24 @@ var pageCmd = &cobra.Command{
 				PrintKeyPageCreate()
 				PrintKeyUpdate()
 			}
-		} else if len(args) > 2 {
-			switch arg := args[0]; arg {
-			case "create":
+		} else if len(args) > 3 {
+			if args[0] == "create" {
 				CreateKeyPage(args[1], args[2:])
-			case "update":
-				KeyPageUpdate(args[1], protocol.UpdateKey, args[2:])
-			case "add":
-				KeyPageUpdate(args[1], protocol.AddKey, args[2:])
-			case "remove":
-				KeyPageUpdate(args[1], protocol.RemoveKey, args[2:])
-			default:
-				fmt.Println("Usage:")
-				PrintKeyPageCreate()
-				PrintKeyUpdate()
+			} else if args[0] == "key" {
+				switch arg := args[1]; arg {
+				case "update":
+					KeyPageUpdate(args[2], protocol.UpdateKey, args[3:])
+				case "add":
+					KeyPageUpdate(args[2], protocol.AddKey, args[3:])
+				case "remove":
+					KeyPageUpdate(args[2], protocol.RemoveKey, args[3:])
+				default:
+					fmt.Println("Usage:")
+					PrintKeyPageCreate()
+					PrintKeyUpdate()
+				}
+			} else {
+				PrintPage()
 			}
 		} else {
 			PrintPage()
@@ -55,15 +59,15 @@ func PrintKeyPageGet() {
 }
 
 func PrintKeyPageCreate() {
-	fmt.Println("  accumulate page create [actor adi url] [signing key label] [key index (optional)] [key height (optional)] [new key page url] [public key 1] ... [public key hex or label n + 1] Create new key page with 1 to N+1 public keys")
+	fmt.Println("  accumulate page create [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [new key page url] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys")
 	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 }
 func PrintKeyUpdate() {
-	fmt.Println("  accumulate page key update [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] [new public key or label] Update key in a key page with a new public key")
+	fmt.Println("  accumulate page key update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name] Update key in a key page with a new public key")
 	fmt.Println("\t\t example usage: accumulate key update page  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
-	fmt.Println("  accumulate page key add [key page url] [signing key label] [key index (optional)] [key height (optional)] [new key label] Add key to a key page")
+	fmt.Println("  accumulate page key add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name] Add key to a key page")
 	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
-	fmt.Println("  accumulate page key remove [key page url] [signing key label] [key index (optional)] [key height (optional)] [old key label] Remove key from a key page")
+	fmt.Println("  accumulate page key remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] Remove key from a key page")
 	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 }
 
@@ -74,7 +78,7 @@ func PrintPage() {
 }
 
 func GetAndPrintKeyPage(url string) {
-	str, _, err := GetKeyBook(url)
+	str, _, err := GetKeyPage(url)
 	if err != nil {
 		log.Fatal(fmt.Errorf("error retrieving key book for %s", url))
 	}
@@ -136,7 +140,7 @@ func CreateKeyPage(page string, args []string) {
 			ksp.PublicKey, err = pubKeyFromString(keyLabels[i])
 			if err != nil {
 				PrintKeyPageCreate()
-				log.Fatal(fmt.Errorf("key %s, does not exist in wallet, nor is it a valid public key", keyLabels[i]))
+				log.Fatal(fmt.Errorf("key name %s, does not exist in wallet, nor is it a valid public key", keyLabels[i]))
 			}
 		} else {
 			ksp.PublicKey = pk[32:]
@@ -266,7 +270,7 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 
 	var res interface{}
 	var str []byte
-	if err := Client.Request(context.Background(), "key-page-update", params, &res); err != nil {
+	if err := Client.Request(context.Background(), "update-key-page", params, &res); err != nil {
 		log.Fatal(err)
 	}
 
