@@ -6,6 +6,10 @@ if [ -z "$REF" ] ; then
     exit 1
 fi
 
+if [ -e ~/.local/bin/accumulated ]; then
+    mv ~/.local/bin/accumulated{,-old}
+fi
+
 API_V4=https://gitlab.com/api/v4
 PROJECT=29762666
 mkdir -p ~/.local/bin
