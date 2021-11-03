@@ -69,8 +69,8 @@ func PrintADIGet() {
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [actor-lite-account] [adi url to create] [public-key or wallet key label] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
-	fmt.Println("  accumulate adi create [actor-adi-url] [wallet signing key label] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key label] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
+	fmt.Println("  accumulate adi create [actor-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
+	fmt.Println("  accumulate adi create [actor-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
 func PrintADIImport() {
@@ -230,73 +230,6 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 	})
 	fmt.Println(string(str))
 
-}
-
-func NewADIFromLiteAccount(actor *url2.URL, adiUrl string, pubKeyOrLabel string, book string, page string) {
-
-	pubKey, err := getPublicKey(pubKeyOrLabel)
-	if err != nil {
-		log.Fatal("invalid public key")
-	}
-
-	privKey, err := LookupByAnon(actor.String())
-	if err != nil {
-		log.Fatal("cannot resolve private key in wallet")
-	}
-
-	u, err := url2.Parse(adiUrl)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	idc := &protocol.IdentityCreate{}
-	idc.Url = u.Authority
-	idc.PublicKey = pubKey[:]
-	idc.KeyBookName = book
-	idc.KeyPageName = page
-
-	data, err := json.Marshal(idc)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	dataBinary, err := idc.MarshalBinary()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	si := transactions.SignatureInfo{}
-	si.URL = actor.String()
-	si.PriorityIdx = 0
-	si.MSHeight = 1
-	nonce := uint64(time.Now().Unix())
-
-	//the key book is under the anon account.
-	params, err := prepareGenTx(data, dataBinary, actor, &si, privKey, nonce)
-	if err != nil {
-		log.Fatal(err)
-	}
-	var res interface{}
-	var str []byte
-	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(res)
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("adi"))
-		if b != nil {
-			b.Put([]byte(u.Authority), pubKey)
-		} else {
-			return fmt.Errorf("DB: %s", err)
-		}
-		return nil
-	})
-	fmt.Println(string(str))
 }
 
 // NewADI create a new ADI from a sponsored account.
