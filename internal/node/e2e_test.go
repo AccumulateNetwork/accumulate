@@ -16,6 +16,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
+	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
@@ -37,11 +38,17 @@ func TestEndToEnd(t *testing.T) {
 		t.Skip("This test consistently fails in CI")
 	}
 
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *api.Query {
+	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) (*api.Query, acctesting.DB) {
+
 		// Restart the nodes for every test
-		nodes := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
+		nodes, dbs := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
 		query := startNodes(s.T(), nodes)
-		return query
+
+		mdb := make(acctesting.MultiDB, len(dbs))
+		for i, db := range dbs {
+			mdb[i] = db
+		}
+		return query, mdb
 	}))
 }
 
@@ -50,9 +57,9 @@ func TestFaucetMultiNetwork(t *testing.T) {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
 
-	bvc0 := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc1 := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc2 := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc0, _ := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc1, _ := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc2, _ := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	rpcAddrs := make([]string, 0, 3)
 	wg := new(sync.WaitGroup)
 	for _, bvc := range [][]*node.Node{bvc0, bvc1, bvc2} {
