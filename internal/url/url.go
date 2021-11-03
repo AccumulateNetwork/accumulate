@@ -133,6 +133,13 @@ func (u *URL) Password() string {
 	return s
 }
 
+// QueryValues parses Query and returns the corresponding values. It silently
+// discards malformed value pairs. To check errors use net/url.ParseQuery.
+func (u *URL) QueryValues() url.Values {
+	v, _ := url.ParseQuery(u.Query)
+	return v
+}
+
 func chain(s string) []byte {
 	s = strings.ToLower(s)
 	h := sha256.Sum256([]byte(s))
