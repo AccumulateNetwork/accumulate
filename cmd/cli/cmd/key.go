@@ -494,7 +494,7 @@ func ExportMnemonic() {
 		b := tx.Bucket([]byte("mnemonic"))
 		if b != nil {
 			seed := b.Get([]byte("phrase"))
-			fmt.Printf("mnemonic phrase: %x\n", seed)
+			fmt.Printf("mnemonic phrase: %s\n", string(seed))
 		} else {
 			return fmt.Errorf("mnemonic seed not found")
 		}
