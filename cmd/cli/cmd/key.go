@@ -115,6 +115,7 @@ func PrintKey() {
 	PrintKeyGenerate()
 	PrintKeyPublic()
 	PrintKeyImport()
+	PrintKeyExport()
 }
 
 func pubKeyFromString(s string) ([]byte, error) {
@@ -254,6 +255,25 @@ func ListKeyPublic() {
 	}
 }
 
+func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
+
+	err = Db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("label"))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			if bytes.Equal(v, pubKey) {
+				lab = string(k)
+				break
+			}
+		}
+		return nil
+	})
+	if lab == "" {
+		err = fmt.Errorf("key name not found for %x", pubKey)
+	}
+	return lab, err
+}
+
 // ImportKey will import the private key and assign it to the label
 func ImportKey(pkhex string, label string) {
 
@@ -322,7 +342,18 @@ func ImportKey(pkhex string, label string) {
 func ExportKey(label string) {
 	pk, err := LookupByLabel(label)
 	if err != nil {
-		log.Fatalf("no private key found for key name %s", label)
+		pubk, err := pubKeyFromString(label)
+		if err != nil {
+			log.Fatalf("no private key found for key name %s", label)
+		}
+		pk, err = LookupByPubKey(pubk)
+		if err != nil {
+			log.Fatalf("no private key found for key name %s", label)
+		}
+		label, err = FindLabelFromPubKey(pubk)
+		if err != nil {
+			log.Fatalf("no private key found for key name %s", label)
+		}
 	}
 	//fmt.Println(hex.EncodeToString(pk))
 	fmt.Printf("{\"name\":\"%s\",\"privateKey\":\"%x\",\"publicKey\":\"%x\"}\n", label, pk[:32], pk[32:])
@@ -426,8 +457,14 @@ func ExportKeys() {
 	err := Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("keys"))
 		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, _ = c.Next() {
-			fmt.Printf("%s %x\n", k, v)
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			label, err := FindLabelFromPubKey(k)
+			if err != nil {
+				fmt.Printf("Error: Cannot find label for public key %x\n", k)
+			} else {
+				ExportKey(label)
+			}
+			//fmt.Printf("%x %x\n", k, v)
 		}
 		return nil
 	})
