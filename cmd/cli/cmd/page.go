@@ -20,24 +20,33 @@ var pageCmd = &cobra.Command{
 			if args[0] == "get" {
 				GetAndPrintKeyPage(args[1])
 			} else {
+				fmt.Printf("Usage in get: args=%v", args)
 				fmt.Println("Usage:")
 				PrintKeyPageGet()
 				PrintKeyPageCreate()
 				PrintKeyUpdate()
 			}
 		} else if len(args) > 3 {
+
+			println("key or create -<<<<<")
 			if args[0] == "create" {
 				CreateKeyPage(args[1], args[2:])
 			} else if args[0] == "key" {
+				println("key")
 				switch arg := args[1]; arg {
+
 				case "update":
+					println("UPDATE")
 					KeyPageUpdate(args[2], protocol.UpdateKey, args[3:])
 				case "add":
+					println("ADD")
 					KeyPageUpdate(args[2], protocol.AddKey, args[3:])
 				case "remove":
+
+					println("REMOVE")
 					KeyPageUpdate(args[2], protocol.RemoveKey, args[3:])
 				default:
-					fmt.Println("Usage:")
+					fmt.Printf("Usage: args=%v", args)
 					PrintKeyPageCreate()
 					PrintKeyUpdate()
 				}
@@ -157,12 +166,14 @@ func CreateKeyPage(page string, args []string) {
 
 	dataBinary, err := css.MarshalBinary()
 	if err != nil {
+		PrintKeyPageCreate()
 		log.Fatal(err)
 	}
 
 	nonce := uint64(time.Now().Unix())
 	params, err := prepareGenTx(data, dataBinary, pageUrl, si, privKey, nonce)
 	if err != nil {
+		PrintKeyPageCreate()
 		log.Fatal(err)
 	}
 
@@ -194,24 +205,24 @@ func resolveKey(key string) ([]byte, error) {
 }
 
 func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string) {
-
+	println("checkpoint 1")
 	u, err := url2.Parse(actorUrl)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	println("checkpoint 2")
 	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
 		PrintKeyUpdate()
 		log.Fatal(err)
 	}
-
+	println("checkpoint 3")
 	var newKey []byte
 	var oldKey []byte
 
 	ukp := protocol.UpdateKeyPage{}
 	ukp.Operation = op
-
+	println("checkpoint 4")
 	switch op {
 	case protocol.UpdateKey:
 		if len(args) < 2 {
@@ -249,25 +260,25 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 			log.Fatal(err)
 		}
 	}
-
+	println("checkpoint 5")
 	ukp.Key = oldKey[:]
 	ukp.NewKey = newKey[:]
 	data, err := json.Marshal(&ukp)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	println("checkpoint 6")
 	dataBinary, err := ukp.MarshalBinary()
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	println("checkpoint 7")
 	nonce := uint64(time.Now().Unix())
 	params, err := prepareGenTx(data, dataBinary, u, si, privKey, nonce)
 	if err != nil {
 		log.Fatal(err)
 	}
-
+	println("checkpoint 8")
 	var res interface{}
 	var str []byte
 	if err := Client.Request(context.Background(), "update-key-page", params, &res); err != nil {
