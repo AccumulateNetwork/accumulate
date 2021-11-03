@@ -18,20 +18,18 @@ import (
 
 var keyCmd = &cobra.Command{
 	Use:   "key",
-	Short: "Create and manage Keys, Books, and Pages",
+	Short: "Create and manage Keys for ADI Key Books, and Pages",
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
-
-			case "mnemonic":
-				if len(args) > 12 {
-					ImportMnemonic("seed", args[1:])
-				} else {
-					PrintKeyMnemonic()
-				}
 			case "import":
 				if len(args) > 2 {
-					ImportKey(args[1], args[2])
+					switch args[1] {
+					case "mnemonic":
+						ImportMnemonic(args[2:])
+					default:
+						ImportKey(args[1], args[2])
+					}
 				} else {
 					PrintKeyImport()
 				}
@@ -95,11 +93,8 @@ func PrintKeyGenerate() {
 	fmt.Println("  accumulate key generate [key name]     Generate a new key and give it a name in the wallet")
 }
 
-func PrintKeyMnemonic() {
-	fmt.Println("  accumulate key mnemonic [mnemonic phrase...]     Print the mneumonic used in the wallet")
-}
-
 func PrintKeyImport() {
+	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
 	fmt.Println("  accumulate key import [private key hex] [key name]      Import a key and give it a name in the wallet")
 }
 
@@ -107,7 +102,6 @@ func PrintKey() {
 	PrintKeyGenerate()
 	PrintKeyPublic()
 	PrintKeyImport()
-	PrintKeyMnemonic()
 }
 
 func pubKeyFromString(s string) ([]byte, error) {
@@ -358,10 +352,11 @@ func lookupSeed() (seed []byte, err error) {
 	return
 }
 
-func ImportMnemonic(label string, mnemonic []string) {
+func ImportMnemonic(mnemonic []string) {
 	mns := strings.Join(mnemonic, " ")
 
 	if !bip39.IsMnemonicValid(mns) {
+
 		log.Fatal("invalid mnemonic provided")
 	}
 
@@ -374,7 +369,7 @@ func ImportMnemonic(label string, mnemonic []string) {
 		b := tx.Bucket([]byte("mnemonic"))
 		seed := b.Get([]byte("seed"))
 		if len(seed) != 0 {
-			err = fmt.Errorf("seed for the label %s already exists", label)
+			err = fmt.Errorf("mnemonic seed phrase already exists within wallet")
 		}
 		return err
 	})
@@ -423,7 +418,6 @@ func ExportSeed() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 }
 
 func ExportMnemonic() {
