@@ -137,10 +137,10 @@ func (c *ABCIApplicationClient) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	// Synthetic transaction entries are added with a blank TX
 	if st.Tx == nil && tx != nil {
 		st.Tx = tx
-		return st
 	}
 
-	panic("Duplicate TX!")
+	// Ignore duplicate transactions I guess
+	return st
 }
 
 // execute accepts incoming transactions and queues them up for the next block
