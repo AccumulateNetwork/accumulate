@@ -1,8 +1,11 @@
 package testing
 
 import (
+	"bytes"
 	"crypto/sha256"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/AccumulateNetwork/accumulated/internal/chain"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
@@ -14,6 +17,56 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
+
+type DB interface {
+	WriteStates(blockHeight int64) ([]byte, int, error)
+	LoadChainAs(chainId []byte, chain state.Chain) (*state.Object, error)
+	AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object)
+	WriteIndex(index state.Index, chain []byte, key interface{}, value []byte)
+	GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error)
+}
+
+type MultiDB []DB
+
+func (db MultiDB) WriteStates(blockHeight int64) (hash []byte, count int, err error) {
+	var errs []string
+	for i, db := range db {
+		h, c, err := db.WriteStates(blockHeight)
+		if err != nil {
+			errs = append(errs, err.Error())
+		}
+		if i == 0 {
+			hash, count = h, c
+		} else if !bytes.Equal(h, hash) || c != count {
+			// If this happens, there is a consistency error between nodes
+			panic("inconsistency between databases!")
+		}
+	}
+	if len(errs) > 0 {
+		return nil, 0, errors.New(strings.Join(errs, "; "))
+	}
+	return hash, count, nil
+}
+
+func (db MultiDB) LoadChainAs(chainId []byte, chain state.Chain) (*state.Object, error) {
+	return db[0].LoadChainAs(chainId, chain)
+}
+
+func (db MultiDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object) {
+	for _, db := range db {
+		db.AddStateEntry(chainId, txHash, object)
+	}
+}
+
+func (db MultiDB) WriteIndex(index state.Index, chain []byte, key interface{}, value []byte) {
+	for _, db := range db {
+		db.WriteIndex(index, chain, key, value)
+	}
+}
+
+func (db MultiDB) GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error) {
+	return db[0].GetIndex(index, chain, key)
+}
 
 // Token multiplier
 const TokenMx = 100000000
@@ -54,13 +107,13 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	return tx, nil
 }
 
-func CreateAnonTokenAccount(db *state.StateDB, key ed25519.PrivKey, tokens float64) error {
+func CreateAnonTokenAccount(db DB, key ed25519.PrivKey, tokens float64) error {
 	url := types.String(anon.GenerateAcmeAddress(key.PubKey().Bytes()))
 	fmt.Println(url)
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
-func WriteStates(db *state.StateDB, chains ...state.Chain) error {
+func WriteStates(db DB, chains ...state.Chain) error {
 	for _, c := range chains {
 		b, err := c.MarshalBinary()
 		if err != nil {
@@ -82,7 +135,7 @@ func WriteStates(db *state.StateDB, chains ...state.Chain) error {
 	return nil
 }
 
-func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) error {
+func CreateADI(db DB, key ed25519.PrivKey, urlStr types.String) error {
 	keyHash := sha256.Sum256(key.PubKey().Bytes())
 	identityUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
@@ -109,7 +162,7 @@ func CreateADI(db *state.StateDB, key ed25519.PrivKey, urlStr types.String) erro
 	return WriteStates(db, adi, ssg, mss)
 }
 
-func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float64, anon bool) error {
+func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, anon bool) error {
 	u, err := url.Parse(accUrl)
 	if err != nil {
 		return err
@@ -142,7 +195,7 @@ func CreateTokenAccount(db *state.StateDB, accUrl, tokenUrl string, tokens float
 	return nil
 }
 
-func CreateSigSpec(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKey) error {
+func CreateSigSpec(db DB, urlStr types.String, keys ...ed25519.PubKey) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -160,7 +213,7 @@ func CreateSigSpec(db *state.StateDB, urlStr types.String, keys ...ed25519.PubKe
 	return WriteStates(db, mss)
 }
 
-func CreateSigSpecGroup(db *state.StateDB, urlStr types.String, sigSpecUrls ...string) error {
+func CreateSigSpecGroup(db DB, urlStr types.String, sigSpecUrls ...string) error {
 	groupUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
