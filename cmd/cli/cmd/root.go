@@ -12,11 +12,12 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/AccumulateNetwork/accumulated/client"
+	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
 )
 
 var (
 	Client = client.NewAPIClient()
-	Db     = initDB()
+	Db     = initDB() //initManagedDB()
 )
 
 var currentUser = func() *user.User {
@@ -61,23 +62,45 @@ func init() {
 	cobra.OnInitialize()
 }
 
+func initManagedDB() *database.Manager {
+	err := os.MkdirAll(defaultWorkDir, 0600)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	db, err := database.NewDBManager("badger", defaultWorkDir+"/wallet.db")
+	if err != nil {
+		log.Fatal(err)
+	}
+	return db
+}
+
+const (
+	BucketAnon     = "anon"
+	BucketAdi      = "adi"
+	BucketKeys     = "keys"
+	BucketLabel    = "label"
+	BucketMnemonic = "mnemonic"
+)
+
 func initDB() *bolt.DB {
 	err := os.MkdirAll(defaultWorkDir, 0600)
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	db, err := bolt.Open(defaultWorkDir+"/wallet.db", 0600, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucket([]byte("anon"))
-		if err != nil {
-			return fmt.Errorf("DB: %s", err)
-		}
-		return nil
-	})
+	//err = db.Update(func(tx *bolt.Tx) error {
+	//	_, err := tx.CreateBucket([]byte("anon"))
+	//	if err != nil {
+	//		return fmt.Errorf("DB: %s", err)
+	//	}
+	//	return nil
+	//})
 
 	err = db.Update(func(tx *bolt.Tx) error {
 		_, err = tx.CreateBucket([]byte("adi"))

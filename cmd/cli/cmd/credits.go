@@ -29,12 +29,12 @@ var creditsCmd = &cobra.Command{
 
 func init() {
 	//Temporarily hiding credits for 0.2
-	//rootCmd.AddCommand(creditsCmd)
+	rootCmd.AddCommand(creditsCmd)
 }
 
 func PrintCredits() {
 	fmt.Println("  accumulate credits [actor lite account] [lite account or key page url] [amount] 		Send credits using a lite account or adi key page to another lite account or adi key page")
-	fmt.Println("  accumulate credits [actor url] [actor key label] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite account or adi key page")
+	fmt.Println("  accumulate credits [actor url] [actor key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite account or adi key page")
 }
 
 func AddCredits(actor string, args []string) {

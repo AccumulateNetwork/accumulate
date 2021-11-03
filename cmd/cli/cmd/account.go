@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"context"
-	"crypto/ed25519"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,7 +12,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
 
 	"github.com/AccumulateNetwork/accumulated/types"
-	anonaddress "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
@@ -42,23 +39,23 @@ var accountCmd = &cobra.Command{
 					PrintAccountCreate()
 				}
 			case "generate":
-				GenerateAccount()
+				GenerateKey("")
 			case "list":
 				ListAccounts()
-			case "import":
-				if len(args) > 1 {
-					ImportAccount(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintAccountImport()
-				}
-			case "export":
-				if len(args) > 1 {
-					ExportAccount(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintAccountExport()
-				}
+			//case "import":
+			//	if len(args) > 1 {
+			//		ImportAccount(args[1])
+			//	} else {
+			//		fmt.Println("Usage:")
+			//		PrintAccountImport()
+			//	}
+			//case "export":
+			//	if len(args) > 1 {
+			//		ExportAccount(args[1])
+			//	} else {
+			//		fmt.Println("Usage:")
+			//		PrintAccountExport()
+			//	}
 			default:
 				fmt.Println("Usage:")
 				PrintAccount()
@@ -80,7 +77,7 @@ func PrintAccountGet() {
 }
 
 func PrintAccountGenerate() {
-	fmt.Println("  accumulate account generate			Generate random anon token account")
+	fmt.Println("  accumulate account generate			Generate random lite token account")
 }
 
 func PrintAccountList() {
@@ -88,7 +85,7 @@ func PrintAccountList() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create [{actor adi}] [wallet key label] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
 }
 
 func PrintAccountImport() {
@@ -209,25 +206,30 @@ func CreateAccount(url string, args []string) {
 }
 
 func GenerateAccount() {
-	pubKey, privKey, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		log.Fatal(err)
-	}
+	GenerateKey("")
+	/*
+		pubKey, privKey, err := ed25519.GenerateKey(nil)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	address := anonaddress.GenerateAcmeAddress(pubKey)
+		address := anonaddress.GenerateAcmeAddress(pubKey)
 
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
-		err := b.Put([]byte(address), privKey)
-		return err
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
+		err = Db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("anon"))
+			err := b.Put([]byte(address), privKey)
+			return err
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	fmt.Println(address)
+		fmt.Println(address)
+
+	*/
 }
 
+/*
 func ImportAccount(pkhex string) {
 
 	var pk ed25519.PrivateKey
@@ -266,14 +268,24 @@ func ExportAccount(url string) {
 	}
 
 }
+*/
 
 func ListAccounts() {
 
+	//TODO: this probably should also list out adi accounts.
+
 	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
+		//b := tx.Bucket([]byte("anon"))
+		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			fmt.Printf("%s\n", k)
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			lt, err := protocol.AnonymousAddress(v, protocol.AcmeUrl().String())
+			if err != nil {
+				continue
+			}
+			if lt.String() == string(k) {
+				fmt.Printf("%s\n", k)
+			}
 		}
 		return nil
 	})

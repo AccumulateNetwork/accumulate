@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
@@ -23,12 +24,24 @@ var keyCmd = &cobra.Command{
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
 			case "import":
-				if len(args) > 2 {
+				if len(args) == 1 {
+					if args[1] == "lite" {
+						ImportKey(args[2], "")
+					} else {
+						PrintKeyImport()
+					}
+
+				} else if len(args) > 3 {
 					switch args[1] {
 					case "mnemonic":
 						ImportMnemonic(args[2:])
+					case "private":
+						ImportKey(args[2], args[3])
+					case "public":
+						//reserved for future use.
+						fallthrough
 					default:
-						ImportKey(args[1], args[2])
+						PrintKeyImport()
 					}
 				} else {
 					PrintKeyImport()
@@ -40,7 +53,7 @@ var keyCmd = &cobra.Command{
 						ExportKeys()
 					case "seed":
 						ExportSeed()
-					case "name":
+					case "private":
 						if len(args) > 2 {
 							ExportKey(args[2])
 						} else {
@@ -84,7 +97,7 @@ func PrintKeyPublic() {
 
 func PrintKeyExport() {
 	fmt.Println("  accumulate key export all			            export all keys in wallet")
-	fmt.Println("  accumulate key export name [key label]			export key by key name")
+	fmt.Println("  accumulate key export private [key name]			export the private key by key name")
 	fmt.Println("  accumulate key export mnemonic		            export the mnemonic phrase if one was entered")
 	fmt.Println("  accumulate key export seed                       export the seed generated from the mnemonic phrase")
 }
@@ -95,7 +108,7 @@ func PrintKeyGenerate() {
 
 func PrintKeyImport() {
 	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
-	fmt.Println("  accumulate key import [private key hex] [key name]      Import a key and give it a name in the wallet")
+	fmt.Println("  accumulate key import private [private key hex] [key name]      Import a key and give it a name in the wallet")
 }
 
 func PrintKey() {
@@ -107,7 +120,7 @@ func PrintKey() {
 func pubKeyFromString(s string) ([]byte, error) {
 	var pubKey types.Bytes32
 	if len(s) != 64 {
-		return nil, fmt.Errorf("invalid public key or wallet key label")
+		return nil, fmt.Errorf("invalid public key or wallet key name")
 	}
 	i, err := hex.Decode(pubKey[:], []byte(s))
 
@@ -139,20 +152,20 @@ func getPublicKey(s string) ([]byte, error) {
 	return pubKey[:], nil
 }
 
-func LookupByAnon(anon string) (privKey []byte, err error) {
-	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
-		privKey = b.Get([]byte(anon))
-		if len(privKey) == 0 {
-			err = fmt.Errorf("valid key not found for %s", anon)
-		}
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return
-}
+//func LookupByAnon(anon string) (privKey []byte, err error) {
+//	err = Db.View(func(tx *bolt.Tx) error {
+//		b := tx.Bucket([]byte("anon"))
+//		privKey = b.Get([]byte(anon))
+//		if len(privKey) == 0 {
+//			err = fmt.Errorf("valid key not found for %s", anon)
+//		}
+//		return err
+//	})
+//	if err != nil {
+//		return nil, err
+//	}
+//	return
+//}
 
 func LookupByLabel(label string) (asData []byte, err error) {
 	err = Db.View(func(tx *bolt.Tx) error {
@@ -181,12 +194,9 @@ func LookupByPubKey(pubKey []byte) (asData []byte, err error) {
 func GenerateKey(label string) {
 
 	if _, err := strconv.ParseInt(label, 10, 64); err == nil {
-		log.Fatal("label cannot be a number")
+		log.Fatal("key name cannot be a number")
 	}
-	_, err := LookupByLabel(label)
-	if err == nil {
-		log.Fatal(fmt.Errorf("key already exists for label %s", label))
-	}
+
 	privKey, err := GeneratePrivateKey()
 
 	if err != nil {
@@ -194,6 +204,19 @@ func GenerateKey(label string) {
 	}
 
 	pubKey := privKey[32:]
+
+	if label == "" {
+		ltu, err := protocol.AnonymousAddress(pubKey, protocol.AcmeUrl().String())
+		if err != nil {
+			log.Fatal("unable to create lite account")
+		}
+		label = ltu.String()
+	}
+
+	_, err = LookupByLabel(label)
+	if err == nil {
+		log.Fatal(fmt.Errorf("key already exists for key name %s", label))
+	}
 
 	err = Db.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("keys"))
@@ -211,17 +234,17 @@ func GenerateKey(label string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("Public Key %s : %x", label, pubKey)
+	fmt.Printf("%s : %x", label, pubKey)
 }
 
 func ListKeyPublic() {
 
-	fmt.Printf("Key name \t\t Public Key\n")
+	fmt.Printf("%s\t\t\t\t\t\t\t\tKey name\n", "Public Key")
 	err := Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			fmt.Printf("%s \t\t %x\n", k, v)
+			fmt.Printf("%x\t%s\n", v, k)
 		}
 		return nil
 	})
@@ -233,10 +256,6 @@ func ListKeyPublic() {
 
 // ImportKey will import the private key and assign it to the label
 func ImportKey(pkhex string, label string) {
-	_, err := LookupByLabel(label)
-	if err == nil {
-		log.Fatal("key label is already being used")
-	}
 
 	var pk ed25519.PrivateKey
 
@@ -249,6 +268,19 @@ func ImportKey(pkhex string, label string) {
 		pk = ed25519.NewKeyFromSeed(token)
 	} else {
 		pk = token
+	}
+
+	if label == "" {
+		lt, err := protocol.AnonymousAddress(pk, protocol.AcmeUrl().String())
+		if err != nil {
+			log.Fatalf("no label specified and cannot import as lite account")
+		}
+		label = lt.String()
+	}
+
+	_, err = LookupByLabel(label)
+	if err == nil {
+		log.Fatal("key name is already being used")
 	}
 
 	_, err = LookupByPubKey(pk[32:])
@@ -266,7 +298,7 @@ func ImportKey(pkhex string, label string) {
 			}
 			return nil
 		})
-		log.Fatalf("private key already exists in wallet as label %s", lab)
+		log.Fatalf("private key already exists in wallet by key name of %s", lab)
 	}
 
 	err = Db.Update(func(tx *bolt.Tx) error {
@@ -284,16 +316,16 @@ func ImportKey(pkhex string, label string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("{\"label\":\"%s\",\"publicKey\":\"%x\"}\n", label, pk[32:])
+	fmt.Printf("{\"name\":\"%s\",\"publicKey\":\"%x\"}\n", label, pk[32:])
 }
 
 func ExportKey(label string) {
 	pk, err := LookupByLabel(label)
 	if err != nil {
-		log.Fatalf("no private key found for label %s", label)
+		log.Fatalf("no private key found for key name %s", label)
 	}
 	//fmt.Println(hex.EncodeToString(pk))
-	fmt.Printf("{\"label\":\"%s\",\"privateKey\":\"%x\",\"publicKey\":\"%x\"}\n", label, pk[:32], pk[32:])
+	fmt.Printf("{\"name\":\"%s\",\"privateKey\":\"%x\",\"publicKey\":\"%x\"}\n", label, pk[:32], pk[32:])
 }
 
 func GeneratePrivateKey() (privKey []byte, err error) {
