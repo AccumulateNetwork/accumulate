@@ -137,7 +137,9 @@ func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
 
 	qr := query.ResponseByTxId{}
 	qr.TxState, err = m.db.GetTx(txid)
-	if err != nil {
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
+	} else if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
 	qr.TxPendingState, err = m.db.GetPendingTx(txid)
