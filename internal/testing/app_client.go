@@ -288,6 +288,9 @@ func (c *ABCIApplicationClient) Subscribe(ctx context.Context, subscriber, query
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe: %w", err)
 	}
+	if sub == nil {
+		return nil, fmt.Errorf("node is shut down")
+	}
 
 	outc := make(chan ctypes.ResultEvent, outCap)
 	go c.eventsRoutine(sub, subscriber, q, outc)
