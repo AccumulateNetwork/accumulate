@@ -2,9 +2,11 @@ package cmd
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
@@ -42,6 +44,8 @@ var accountCmd = &cobra.Command{
 				GenerateKey("")
 			case "list":
 				ListAccounts()
+			case "restore":
+				RestoreAccounts()
 			//case "import":
 			//	if len(args) > 1 {
 			//		ImportAccount(args[1])
@@ -84,6 +88,10 @@ func PrintAccountList() {
 	fmt.Println("  accumulate account list			Display all anon token accounts")
 }
 
+func PrintAccountRestore() {
+	fmt.Println("  accumulate account restore			Restore old anon token accounts")
+}
+
 func PrintAccountCreate() {
 	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
 }
@@ -100,6 +108,7 @@ func PrintAccount() {
 	PrintAccountGet()
 	PrintAccountGenerate()
 	PrintAccountList()
+	PrintAccountRestore()
 	PrintAccountCreate()
 	PrintAccountImport()
 	PrintAccountExport()
@@ -293,4 +302,50 @@ func ListAccounts() {
 		log.Fatal(err)
 	}
 
+}
+
+func RestoreAccounts() {
+	err := Db.Update(func(tx *bolt.Tx) error {
+		anon := tx.Bucket([]byte("anon"))
+		keys := tx.Bucket([]byte("keys"))
+		label := tx.Bucket([]byte("label"))
+
+		cursor := anon.Cursor()
+		for name, v := cursor.First(); name != nil; name, v = cursor.Next() {
+			u, err := url2.Parse(string(name))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%q is not a valid URL\n", name)
+			}
+			key, _, err := protocol.ParseAnonymousAddress(u)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%q is not a valid lite account: %v\n", name, err)
+			} else if key == nil {
+				fmt.Fprintf(os.Stderr, "%q is not a lite account\n", name)
+			}
+
+			privKey := ed25519.PrivateKey(v)
+			pubKey := privKey.Public().(ed25519.PublicKey)
+			fmt.Printf("Converting %s : %x\n", name, pubKey)
+
+			err = label.Put(name, pubKey)
+			if err != nil {
+				return err
+			}
+
+			err = keys.Put(pubKey, privKey)
+			if err != nil {
+				return err
+			}
+
+			err = anon.Delete(name)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 }
