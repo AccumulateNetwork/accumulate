@@ -1,6 +1,9 @@
 package api
 
 import (
+	"errors"
+
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/getsentry/sentry-go"
 )
@@ -14,6 +17,7 @@ const (
 	ErrCodeAccumulate
 	ErrCodeNotLiteAccount
 	ErrCodeNotAcmeAccount
+	ErrCodeNotFound
 )
 
 // Metrics errors
@@ -38,6 +42,9 @@ func submissionError(err error) jsonrpc2.Error {
 }
 
 func accumulateError(err error) jsonrpc2.Error {
+	if errors.Is(err, storage.ErrNotFound) {
+		return jsonrpc2.NewError(ErrCodeNotFound, "Accumulate Error", "Not Found")
+	}
 	return jsonrpc2.NewError(ErrCodeAccumulate, "Accumulate Error", err)
 }
 

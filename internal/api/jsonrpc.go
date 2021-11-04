@@ -376,7 +376,7 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 
 	resp, err := api.query.GetTokenAccount(*req.URL.AsString())
 	if err != nil {
-		return validatorError(err)
+		return accumulateError(err)
 	}
 
 	return resp
@@ -400,7 +400,7 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 	// Tendermint integration here
 	ret, err := api.query.GetTransactionHistory(*req.URL.AsString(), req.Start, req.Limit)
 	if err != nil {
-		return validatorError(err)
+		return accumulateError(err)
 	}
 
 	ret.Type = "tokenAccountHistory"
@@ -518,7 +518,7 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	// Tendermint's integration here
 	resp, err := api.query.GetTransaction(req.Hash[:])
 	if err != nil {
-		return validatorError(err)
+		return accumulateError(err)
 	}
 
 	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
