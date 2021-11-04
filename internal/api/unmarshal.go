@@ -12,7 +12,9 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/query"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
+	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	tm "github.com/tendermint/tendermint/abci/types"
 )
@@ -193,32 +195,40 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 }
 
 //unmarshalSynthTokenDeposit will unpack the synthetic token deposit and pack it into the response
-func unmarshalSynthTokenDeposit(txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
-	_ = txId
-	tx := synthetic.TokenTransactionDeposit{}
-	err := tx.UnmarshalBinary(txPayload)
-	if err != nil {
-		return nil, accumulateError(err)
-	}
-
+func unmarshalSynthTokenDeposit(txPayload []byte, _ types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
 	if len(txSynthTxIds) != 0 {
 		return nil, fmt.Errorf("there should be no synthetic transaction associated with this transaction")
 	}
 
-	data, err := json.Marshal(&tx)
+	tx := new(synthetic.TokenTransactionDeposit)
+	resp, err := unmarshalTxAs(txPayload, tx)
 	if err != nil {
 		return nil, err
 	}
-	resp := api.APIDataResponse{}
-	resp.Type = types.String(types.TxTypeSyntheticTokenDeposit.Name())
-	resp.Data = new(json.RawMessage)
-	*resp.Data = data
+
 	resp.Sponsor = tx.FromUrl
+	return resp, err
+}
+
+func unmarshalTxAs(payload []byte, v protocol.TransactionPayload) (*api.APIDataResponse, error) {
+	err := v.UnmarshalBinary(payload)
+	if err != nil {
+		return nil, accumulateError(err)
+	}
+
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+
+	resp := api.APIDataResponse{}
+	resp.Type = types.String(v.GetType().Name())
+	resp.Data = (*json.RawMessage)(&data)
 	return &resp, err
 }
 
 //unmarshalTransaction will unpack the transaction stored on-chain and marshal it into a response
-func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
+func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
 
 	txType, _ := common.BytesUint64(txPayload)
 	switch types.TxType(txType) {
@@ -226,16 +236,53 @@ func unmarshalTransaction(txPayload []byte, txId []byte, txSynthTxIds []byte) (r
 		resp, err = unmarshalTokenTx(txPayload, txId, txSynthTxIds)
 	case types.TxTypeSyntheticTokenDeposit:
 		resp, err = unmarshalSynthTokenDeposit(txPayload, txId, txSynthTxIds)
+	case types.TxTypeIdentityCreate:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.IdentityCreate))
+	case types.TxTypeTokenAccountCreate:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.TokenAccountCreate))
+	case types.TxTypeCreateSigSpec:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateSigSpec))
+	case types.TxTypeCreateSigSpecGroup:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateSigSpecGroup))
+	case types.TxTypeAddCredits:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.AddCredits))
+	case types.TxTypeUpdateKeyPage:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.UpdateKeyPage))
+	case types.TxTypeSyntheticCreateChain:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticCreateChain))
+	case types.TxTypeSyntheticDepositCredits:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticDepositCredits))
 	default:
 		err = fmt.Errorf("unable to extract transaction info for type %s : %x", types.TxType(txType).Name(), txPayload)
 	}
+	if err != nil {
+		return nil, err
+	}
 
+	if resp.Sponsor == "" {
+		resp.Sponsor = types.String(sigInfo.URL)
+	}
 	return resp, err
 }
 
-func unmarshalChainState(rQuery tm.ResponseQuery, expect ...types.ChainType) (*api.APIDataResponse, error) {
+func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) (*api.APIDataResponse, error) {
 	if err := responseIsError(rQuery); err != nil {
 		return nil, err
+	}
+
+	switch typ := string(rQuery.Key); typ {
+	case "tx":
+		rid := query.ResponseByTxId{}
+		err := rid.UnmarshalBinary(rQuery.Value)
+		if err != nil {
+			return nil, err
+		}
+
+		return packTransactionQuery(rid.TxId[:], rid.TxState, rid.TxPendingState, rid.TxSynthTxIds)
+	case "chain":
+		// OK
+	default:
+		return nil, fmt.Errorf("want tx or chain, got %q", typ)
 	}
 
 	obj := state.Object{}

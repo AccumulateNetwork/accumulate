@@ -5,14 +5,14 @@
 package mock_abci
 
 import (
-	"github.com/AccumulateNetwork/accumulated/types"
-	api "github.com/AccumulateNetwork/accumulated/types/api/query"
-	"github.com/AccumulateNetwork/accumulated/types/state"
 	reflect "reflect"
 
 	abci "github.com/AccumulateNetwork/accumulated/internal/abci"
 	protocol "github.com/AccumulateNetwork/accumulated/protocol"
+	types "github.com/AccumulateNetwork/accumulated/types"
+	query "github.com/AccumulateNetwork/accumulated/types/api/query"
 	transactions "github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	state "github.com/AccumulateNetwork/accumulated/types/state"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -108,12 +108,13 @@ func (mr *MockChainMockRecorder) EndBlock(arg0 interface{}) *gomock.Call {
 }
 
 // Query mocks base method.
-func (m *MockChain) Query(arg0 *api.Query) ([]byte, error) {
+func (m *MockChain) Query(arg0 *query.Query) ([]byte, []byte, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Query", arg0)
 	ret0, _ := ret[0].([]byte)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].([]byte)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // Query indicates an expected call of Query.
@@ -145,6 +146,18 @@ func (m *MockState) EXPECT() *MockStateMockRecorder {
 	return m.recorder
 }
 
+// AddStateEntry mocks base method.
+func (m *MockState) AddStateEntry(chainId, txHash *types.Bytes32, object *state.Object) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddStateEntry", chainId, txHash, object)
+}
+
+// AddStateEntry indicates an expected call of AddStateEntry.
+func (mr *MockStateMockRecorder) AddStateEntry(chainId, txHash, object interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStateEntry", reflect.TypeOf((*MockState)(nil).AddStateEntry), chainId, txHash, object)
+}
+
 // BlockIndex mocks base method.
 func (m *MockState) BlockIndex() int64 {
 	m.ctrl.T.Helper()
@@ -157,13 +170,6 @@ func (m *MockState) BlockIndex() int64 {
 func (mr *MockStateMockRecorder) BlockIndex() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockIndex", reflect.TypeOf((*MockState)(nil).BlockIndex))
-}
-
-// AddStateEntry used for genesis
-func (m *MockState) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object) {
-	_ = chainId
-	_ = txHash
-	_ = object
 }
 
 // EnsureRootHash mocks base method.
