@@ -10,6 +10,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/synthetic"
 
 	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/query"
@@ -25,6 +26,8 @@ func responseIsError(rQuery tm.ResponseQuery) error {
 	}
 
 	switch {
+	case rQuery.Code == protocol.CodeNotFound:
+		return storage.ErrNotFound
 	case rQuery.Log != "":
 		return errors.New(rQuery.Log)
 	case rQuery.Info != "":
