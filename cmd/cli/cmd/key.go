@@ -389,15 +389,25 @@ func getKeyCountAndIncrement() (count uint32) {
 			if ct != nil {
 				count = binary.LittleEndian.Uint32(ct)
 			}
-			ct = make([]byte, 8)
-			binary.LittleEndian.PutUint32(ct, count+1)
-			return b.Put([]byte("count"), ct)
 		}
 		return nil
 	})
-	if err != nil {
-		log.Fatal(err)
-	}
+
+	err = Db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("mnemonic"))
+		if b != nil {
+			ct := make([]byte, 8)
+			binary.LittleEndian.PutUint32(ct, count+1)
+			return b.Put([]byte("count"), ct)
+			if err != nil {
+				log.Fatal(err)
+			}
+		} else {
+			return fmt.Errorf("DB: %s", err)
+		}
+		return nil
+	})
+
 	return count
 }
 
