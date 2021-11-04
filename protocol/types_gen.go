@@ -170,23 +170,23 @@ func (v *AddCredits) BinarySize() int {
 	return n
 }
 
-func (acct *AnonTokenAccount) BinarySize() int {
+func (v *AnonTokenAccount) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	acct.Type = types.ChainTypeAnonTokenAccount
+	v.Type = types.ChainTypeAnonTokenAccount
 
-	n += acct.ChainHeader.GetHeaderSize()
+	n += v.ChainHeader.GetHeaderSize()
 
-	n += stringBinarySize(acct.TokenUrl)
+	n += stringBinarySize(v.TokenUrl)
 
-	n += bigintBinarySize(&acct.Balance)
+	n += bigintBinarySize(&v.Balance)
 
-	n += uvarintBinarySize(acct.TxCount)
+	n += uvarintBinarySize(v.TxCount)
 
-	n += uvarintBinarySize(acct.Nonce)
+	n += uvarintBinarySize(v.Nonce)
 
-	n += bigintBinarySize(&acct.CreditBalance)
+	n += bigintBinarySize(&v.CreditBalance)
 
 	return n
 }
@@ -295,19 +295,19 @@ func (v *MetricsRequest) BinarySize() int {
 	return n
 }
 
-func (ms *SigSpec) BinarySize() int {
+func (v *SigSpec) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	ms.Type = types.ChainTypeSigSpec
+	v.Type = types.ChainTypeSigSpec
 
-	n += ms.ChainHeader.GetHeaderSize()
+	n += v.ChainHeader.GetHeaderSize()
 
-	n += bigintBinarySize(&ms.CreditBalance)
+	n += bigintBinarySize(&v.CreditBalance)
 
-	n += uvarintBinarySize(uint64(len(ms.Keys)))
+	n += uvarintBinarySize(uint64(len(v.Keys)))
 
-	for _, v := range ms.Keys {
+	for _, v := range v.Keys {
 		n += v.BinarySize()
 
 	}
@@ -432,26 +432,26 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (acct *AnonTokenAccount) MarshalBinary() ([]byte, error) {
+func (v *AnonTokenAccount) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	acct.Type = types.ChainTypeAnonTokenAccount
+	v.Type = types.ChainTypeAnonTokenAccount
 
-	if b, err := acct.ChainHeader.MarshalBinary(); err != nil {
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(stringMarshalBinary(acct.TokenUrl))
+	buffer.Write(stringMarshalBinary(v.TokenUrl))
 
-	buffer.Write(bigintMarshalBinary(&acct.Balance))
+	buffer.Write(bigintMarshalBinary(&v.Balance))
 
-	buffer.Write(uvarintMarshalBinary(acct.TxCount))
+	buffer.Write(uvarintMarshalBinary(v.TxCount))
 
-	buffer.Write(uvarintMarshalBinary(acct.Nonce))
+	buffer.Write(uvarintMarshalBinary(v.Nonce))
 
-	buffer.Write(bigintMarshalBinary(&acct.CreditBalance))
+	buffer.Write(bigintMarshalBinary(&v.CreditBalance))
 
 	return buffer.Bytes(), nil
 }
@@ -564,21 +564,21 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (ms *SigSpec) MarshalBinary() ([]byte, error) {
+func (v *SigSpec) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	ms.Type = types.ChainTypeSigSpec
+	v.Type = types.ChainTypeSigSpec
 
-	if b, err := ms.ChainHeader.MarshalBinary(); err != nil {
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(bigintMarshalBinary(&ms.CreditBalance))
+	buffer.Write(bigintMarshalBinary(&v.CreditBalance))
 
-	buffer.Write(uvarintMarshalBinary(uint64(len(ms.Keys))))
-	for i, v := range ms.Keys {
+	buffer.Write(uvarintMarshalBinary(uint64(len(v.Keys))))
+	for i, v := range v.Keys {
 		_ = i
 		if b, err := v.MarshalBinary(); err != nil {
 			return nil, fmt.Errorf("error encoding Keys[%d]: %w", i, err)
@@ -737,49 +737,49 @@ func (v *AddCredits) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (acct *AnonTokenAccount) UnmarshalBinary(data []byte) error {
+func (v *AnonTokenAccount) UnmarshalBinary(data []byte) error {
 	typ := types.ChainTypeAnonTokenAccount
-	if err := acct.ChainHeader.UnmarshalBinary(data); err != nil {
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
-	} else if acct.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, acct.Type)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
 	}
-	data = data[acct.GetHeaderSize():]
+	data = data[v.GetHeaderSize():]
 
 	if x, err := stringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TokenUrl: %w", err)
 	} else {
-		acct.TokenUrl = x
+		v.TokenUrl = x
 	}
-	data = data[stringBinarySize(acct.TokenUrl):]
+	data = data[stringBinarySize(v.TokenUrl):]
 
 	if x, err := bigintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Balance: %w", err)
 	} else {
-		acct.Balance.Set(x)
+		v.Balance.Set(x)
 	}
-	data = data[bigintBinarySize(&acct.Balance):]
+	data = data[bigintBinarySize(&v.Balance):]
 
 	if x, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TxCount: %w", err)
 	} else {
-		acct.TxCount = x
+		v.TxCount = x
 	}
-	data = data[uvarintBinarySize(acct.TxCount):]
+	data = data[uvarintBinarySize(v.TxCount):]
 
 	if x, err := uvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Nonce: %w", err)
 	} else {
-		acct.Nonce = x
+		v.Nonce = x
 	}
-	data = data[uvarintBinarySize(acct.Nonce):]
+	data = data[uvarintBinarySize(v.Nonce):]
 
 	if x, err := bigintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding CreditBalance: %w", err)
 	} else {
-		acct.CreditBalance.Set(x)
+		v.CreditBalance.Set(x)
 	}
-	data = data[bigintBinarySize(&acct.CreditBalance):]
+	data = data[bigintBinarySize(&v.CreditBalance):]
 
 	return nil
 }
@@ -987,21 +987,21 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (ms *SigSpec) UnmarshalBinary(data []byte) error {
+func (v *SigSpec) UnmarshalBinary(data []byte) error {
 	typ := types.ChainTypeSigSpec
-	if err := ms.ChainHeader.UnmarshalBinary(data); err != nil {
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
-	} else if ms.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, ms.Type)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
 	}
-	data = data[ms.GetHeaderSize():]
+	data = data[v.GetHeaderSize():]
 
 	if x, err := bigintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding CreditBalance: %w", err)
 	} else {
-		ms.CreditBalance.Set(x)
+		v.CreditBalance.Set(x)
 	}
-	data = data[bigintBinarySize(&ms.CreditBalance):]
+	data = data[bigintBinarySize(&v.CreditBalance):]
 
 	var lenKeys uint64
 	if x, err := uvarintUnmarshalBinary(data); err != nil {
@@ -1011,15 +1011,15 @@ func (ms *SigSpec) UnmarshalBinary(data []byte) error {
 	}
 	data = data[uvarintBinarySize(lenKeys):]
 
-	ms.Keys = make([]*KeySpec, lenKeys)
-	for i := range ms.Keys {
+	v.Keys = make([]*KeySpec, lenKeys)
+	for i := range v.Keys {
 		x := new(KeySpec)
 		if err := x.UnmarshalBinary(data); err != nil {
 			return fmt.Errorf("error decoding Keys[%d]: %w", i, err)
 		}
 		data = data[x.BinarySize():]
 
-		ms.Keys[i] = x
+		v.Keys[i] = x
 	}
 
 	return nil
