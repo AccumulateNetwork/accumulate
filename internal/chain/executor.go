@@ -548,7 +548,7 @@ func (m *Executor) Commit() ([]byte, error) {
 
 	m.query.BatchSend()
 
-	fmt.Printf("DB time %f\n", m.db.TimeBucket)
+	// fmt.Printf("DB time %f\n", m.db.TimeBucket)
 	m.db.TimeBucket = 0
 	return mdRoot, nil
 }

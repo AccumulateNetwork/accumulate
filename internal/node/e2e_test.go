@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"runtime"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -39,7 +41,7 @@ func TestEndToEnd(t *testing.T) {
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *api.Query {
 		// Restart the nodes for every test
-		nodes := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
+		nodes := initNodes(s.T(), s.T().TempDir(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
 		query := startNodes(s.T(), nodes)
 		return query
 	}))
@@ -50,9 +52,9 @@ func TestFaucetMultiNetwork(t *testing.T) {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
 
-	bvc0 := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc1 := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc2 := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc0 := initNodes(t, t.TempDir(), "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc1 := initNodes(t, t.TempDir(), "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc2 := initNodes(t, t.TempDir(), "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	rpcAddrs := make([]string, 0, 3)
 	wg := new(sync.WaitGroup)
 	for _, bvc := range [][]*node.Node{bvc0, bvc1, bvc2} {
@@ -121,4 +123,77 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	require.NoError(t, obj.As(chain))
 	require.Equal(t, types.ChainTypeAnonTokenAccount, chain.Type)
 	require.NoError(t, obj.As(account))
+}
+
+func TestAC489(t *testing.T) {
+	workDir := t.TempDir()
+	nodes := initNodes(t, workDir, t.Name(), net.ParseIP("127.0.29.1"), 3000, 2, "info", nil)
+	query := startNodes(t, nodes[:1])
+	jsonapi, err := api.New(new(config.API), query)
+	require.NoError(t, err)
+
+	cmd := exec.Command("go", "run", "../../cmd/accumulated", "run", "-w", workDir, "-n", "1")
+	require.NoError(t, cmd.Start())
+
+	lite, err := url.Parse("acc://b5d4ac455c08bedc04a56d8147e9e9c9494c99eb81e9d8c3/ACME")
+	require.NoError(t, err)
+	require.NotEqual(t, lite.Routing()%3, genesis.FaucetUrl.Routing()%3, "The point of this test is to ensure synthetic transactions are routed correctly. That doesn't work if both URLs route to the same place.")
+
+	req := new(apitypes.APIRequestURL)
+	req.Wait = true
+	req.URL = types.String(lite.String())
+	params, err := json.Marshal(&req)
+	require.NoError(t, err)
+
+	// Faucet request 1
+	res := jsonapi.Faucet(context.Background(), params)
+	switch r := res.(type) {
+	case jsonrpc2.Error:
+		require.NoError(t, r)
+	case *apitypes.APIDataResponse:
+		// OK
+	default:
+		require.IsType(t, apitypes.APIDataResponse{}, r)
+	}
+
+	// Wait for synthetic TX to settle
+	time.Sleep(3 * time.Second)
+
+	// Stop node 1
+	require.NoError(t, syscall.Kill(cmd.Process.Pid, syscall.SIGINT))
+	require.NoError(t, cmd.Wait())
+
+	// Faucet request 2
+	res = jsonapi.Faucet(context.Background(), params)
+	switch r := res.(type) {
+	case jsonrpc2.Error:
+		require.NoError(t, r)
+	case *apitypes.APIDataResponse:
+		// OK
+	default:
+		require.IsType(t, apitypes.APIDataResponse{}, r)
+	}
+
+	// // Restart node 1
+	// cmd = exec.Command("go", "run", "../../cmd/accumulated", "run", "-w", workDir, "-n", "1")
+	// require.NoError(t, cmd.Start())
+
+	// Wait for synthetic TX to settle
+	time.Sleep(10 * time.Second)
+
+	obj := new(state.Object)
+	chain := new(state.ChainHeader)
+	account := new(protocol.AnonTokenAccount)
+	qres, err := query.QueryByUrl(lite.String())
+	require.NoError(t, err)
+	require.Zero(t, qres.Response.Code, "Failed, log=%q, info=%q", qres.Response.Log, qres.Response.Info)
+	require.NoError(t, obj.UnmarshalBinary(qres.Response.Value))
+	require.NoError(t, obj.As(chain))
+	require.Equal(t, types.ChainTypeAnonTokenAccount, chain.Type)
+	require.NoError(t, obj.As(account))
+	require.Equal(t, int64(20*protocol.AcmePrecision), account.Balance.Int64())
+
+	// // Stop node 1
+	// require.NoError(t, syscall.Kill(cmd.Process.Pid, syscall.SIGINT))
+	// require.NoError(t, cmd.Wait())
 }

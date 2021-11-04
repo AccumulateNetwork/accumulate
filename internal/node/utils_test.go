@@ -18,7 +18,7 @@ import (
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, logLevel string, relay []string) []*node.Node {
+func initNodes(t *testing.T, workDir, name string, baseIP net.IP, basePort int, count int, logLevel string, relay []string) []*node.Node {
 	t.Helper()
 
 	IPs := make([]string, count)
@@ -45,7 +45,6 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		config[i].Accumulate.API.EnableSubscribeTX = true
 	}
 
-	workDir := t.TempDir()
 	require.NoError(t, node.Init(node.InitOptions{
 		WorkDir:   workDir,
 		ShardName: name,
@@ -67,32 +66,37 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		c.LogLevel = logLevel
 
 		require.NoError(t, cfg.Store(c))
-
-		nodes[i], _, _, err = acctesting.NewBVCNode(nodeDir, false, c.Accumulate.Networks, func(s string) zerolog.Logger {
-			zl := logging.NewTestZeroLogger(t, s)
-			zl = zl.With().Int("node", i).Logger()
-			zl = zl.Hook(logging.ExcludeMessages("starting service", "stopping service"))
-			zl = zl.Hook(logging.BodyHook(func(e *zerolog.Event, _ zerolog.Level, body map[string]interface{}) {
-				module, ok := body["module"].(string)
-				if !ok {
-					return
-				}
-
-				switch module {
-				case "rpc-server", "p2p", "rpc", "statesync":
-					e.Discard()
-				default:
-					e.Discard()
-				case "accumulate":
-					// OK
-				}
-			}))
-			return zl
-		}, t.Cleanup)
-		require.NoError(t, err)
+		nodes[i] = newNode(t, workDir, i, c)
 	}
 
 	return nodes
+}
+
+func newNode(t *testing.T, workDir string, nodeNum int, config *config.Config) *node.Node {
+	nodeDir := filepath.Join(workDir, fmt.Sprintf("Node%d", nodeNum))
+	n, _, _, err := acctesting.NewBVCNode(nodeDir, false, config.Accumulate.Networks, func(s string) zerolog.Logger {
+		zl := logging.NewTestZeroLogger(t, s)
+		zl = zl.With().Int("node", nodeNum).Logger()
+		zl = zl.Hook(logging.ExcludeMessages("starting service", "stopping service"))
+		zl = zl.Hook(logging.BodyHook(func(e *zerolog.Event, _ zerolog.Level, body map[string]interface{}) {
+			module, ok := body["module"].(string)
+			if !ok {
+				return
+			}
+
+			switch module {
+			case "rpc-server", "p2p", "rpc", "statesync":
+				e.Discard()
+			default:
+				e.Discard()
+			case "accumulate":
+				// OK
+			}
+		}))
+		return zl
+	}, t.Cleanup)
+	require.NoError(t, err)
+	return n
 }
 
 func startNodes(t *testing.T, nodes []*node.Node) *api.Query {
