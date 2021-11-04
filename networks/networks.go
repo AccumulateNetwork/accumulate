@@ -24,6 +24,7 @@ var Networks = map[string]*Network{
 		Nodes: []Node{
 			{"3.140.120.192", Validator},
 			{"18.220.147.250", Validator},
+			{"52.89.160.158", Validator},
 		},
 	},
 	"BVC1": {
@@ -33,6 +34,7 @@ var Networks = map[string]*Network{
 		Nodes: []Node{
 			{"65.0.156.146", Validator},
 			{"13.234.254.178", Validator},
+			{"44.229.57.187", Validator},
 		},
 	},
 	"BVC2": {
@@ -42,6 +44,7 @@ var Networks = map[string]*Network{
 		Nodes: []Node{
 			{"13.48.159.117", Validator},
 			{"16.170.126.251", Validator},
+			{"34.214.215.210", Validator},
 		},
 	},
 	"Arches": {
