@@ -484,7 +484,7 @@ func TestQueryNotFound(t *testing.T) {
 	resp := japi.GetTokenAccount(context.Background(), req)
 	switch r := resp.(type) {
 	case jsonrpc2.Error:
-		require.Contains(t, r.Data, "not found")
+		require.Equal(t, jsonrpc2.ErrorCode(ErrCodeNotFound), r.Code)
 	default:
 		t.Fatalf("Expected error, got %T", r)
 	}
