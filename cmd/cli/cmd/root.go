@@ -40,7 +40,7 @@ var rootCmd = func() *cobra.Command {
 
 	defaultServer := os.Getenv("ACC_API")
 	if defaultServer == "" {
-		defaultServer = "http://localhost:35554/v1"
+		defaultServer = "https://testnet.accumulatenetwork.io/v1"
 	}
 
 	flags := cmd.PersistentFlags()
