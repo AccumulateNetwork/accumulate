@@ -10,6 +10,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 )
 
+// ToDo: Why a parameter? It isn't used for anything.
 func boolBinarySize(v bool) int {
 	return 1
 }
@@ -148,6 +149,7 @@ func bigintUnmarshalBinary(b []byte) (*big.Int, error) {
 	return v, nil
 }
 
+// ToDo:  Why a parameter? It does nothing...
 func chainBinarySize(v *[32]byte) int {
 	return 32
 }

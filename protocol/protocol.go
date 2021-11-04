@@ -50,7 +50,14 @@ func AnonymousAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
+	authority := url.URL{Authority: tokenUrl.Authority}
 
+	if err := IsValidAdiUrl(&authority); err != nil {
+		return nil, errors.New("invalid adi in token URL")
+	}
+	if tokenUrl.Path == "" && !bytes.EqualFold([]byte(tokenUrl.Authority), []byte("acme")) {
+		return nil, errors.New("must have a path in token URL")
+	}
 	if tokenUrl.UserInfo != "" {
 		return nil, errors.New("token URLs cannot include user info")
 	}
