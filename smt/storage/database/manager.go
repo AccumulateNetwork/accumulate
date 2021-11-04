@@ -12,16 +12,21 @@ import (
 
 // Manager
 // The Manager as implemented cannot be accessed concurrently over go routines
-// ToDo: Add Mutex to make conccurency safe
 type Manager struct {
 	DB      storage.KeyValueDB     // Underlying database implementation
 	TXCache map[storage.Key][]byte // TX Cache:  Holds pending tx for the db
+	cacheMu sync.RWMutex
 }
 
 // Equal
 // Return true if the values in the manager are equal to the given manager
 // mostly a testing function
 func (m *Manager) Equal(m2 *Manager) bool {
+	m.cacheMu.RLock()
+	m2.cacheMu.RLock()
+	defer m.cacheMu.RUnlock()
+	defer m2.cacheMu.RUnlock()
+
 	if len(m.TXCache) != len(m2.TXCache) {
 		return false
 	}
@@ -36,6 +41,8 @@ func (m *Manager) Equal(m2 *Manager) bool {
 // ClearCache
 // Clear all the pending key values from the cache in the Databasae Manager
 func (m *Manager) ClearCache() {
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
 	for k := range m.TXCache { // Clear all elements from the cache
 		delete(m.TXCache, k) //    golang optimizer will make loop good
 	}
@@ -116,6 +123,8 @@ func (k KeyRef) Put(value []byte) error {
 // first check the cache before it checks the DB.
 // Returns storage.ErrNotFound if not found.
 func (k KeyRef) Get() ([]byte, error) {
+	k.M.cacheMu.RLock()
+	defer k.M.cacheMu.RUnlock()
 	if v, ok := k.M.TXCache[k.K]; ok {
 		return v, nil
 	}
@@ -124,12 +133,16 @@ func (k KeyRef) Get() ([]byte, error) {
 }
 
 func (k KeyRef) PutBatch(value []byte) {
+	k.M.cacheMu.Lock()
+	defer k.M.cacheMu.Unlock()
 	k.M.TXCache[k.K] = value
 }
 
 // EndBatch
 // Flush anything in the batch list to the database.
 func (m *Manager) EndBatch() {
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
 	if len(m.TXCache) == 0 { // If there is nothing to do, do nothing
 		return
 	}
@@ -142,6 +155,8 @@ func (m *Manager) EndBatch() {
 // BeginBatch
 // initializes the batch list to empty.  Note that we really only support one level of batch processing.
 func (m *Manager) BeginBatch() {
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
 	m.resetCache()
 }
 

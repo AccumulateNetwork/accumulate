@@ -296,7 +296,7 @@ func (api *API) get(params json.RawMessage, expect ...types.ChainType) interface
 		return accumulateError(err)
 	}
 
-	resp, err := unmarshalChainState(r.Response, expect...)
+	resp, err := unmarshalQueryResponse(r.Response, expect...)
 	if err != nil {
 		return accumulateError(err)
 	}

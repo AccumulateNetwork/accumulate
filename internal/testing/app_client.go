@@ -3,6 +3,7 @@ package testing
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sync"
@@ -23,28 +24,42 @@ const debugTX = false
 
 type ABCIApplicationClient struct {
 	*types.EventBus
+
+	CreateEmptyBlocks bool
+
 	appWg      *sync.WaitGroup
-	blockMu    *sync.Mutex
-	blockWg    *sync.WaitGroup
 	app        abci.Application
 	nextHeight func() int64
 	onError    func(err error)
 
-	txResults map[[32]byte]*ctypes.ResultTx
-	txMu      *sync.RWMutex
+	txCh     chan *txStatus
+	txStatus map[[32]byte]*txStatus
+	txMu     *sync.RWMutex
+}
+
+type txStatus struct {
+	Tx            []byte
+	Hash          [32]byte
+	Height        int64
+	Index         uint32
+	DidCheck      chan struct{}
+	DidDeliver    chan struct{}
+	DidCommit     chan struct{}
+	CheckResult   *abci.ResponseCheckTx
+	DeliverResult *abci.ResponseDeliverTx
+	Done          bool
 }
 
 var _ relay.Client = (*ABCIApplicationClient)(nil)
 
-func NewABCIApplicationClient(app <-chan abci.Application, nextHeight func() int64, onError func(err error)) *ABCIApplicationClient {
+func NewABCIApplicationClient(app <-chan abci.Application, nextHeight func() int64, onError func(err error), interval time.Duration) *ABCIApplicationClient {
 	c := new(ABCIApplicationClient)
 	c.appWg = new(sync.WaitGroup)
-	c.blockMu = new(sync.Mutex)
-	c.blockWg = new(sync.WaitGroup)
 	c.nextHeight = nextHeight
 	c.onError = onError
 	c.EventBus = types.NewEventBus()
-	c.txResults = map[[32]byte]*ctypes.ResultTx{}
+	c.txCh = make(chan *txStatus)
+	c.txStatus = map[[32]byte]*txStatus{}
 	c.txMu = new(sync.RWMutex)
 
 	c.appWg.Add(1)
@@ -52,22 +67,13 @@ func NewABCIApplicationClient(app <-chan abci.Application, nextHeight func() int
 		defer c.appWg.Done()
 		c.app = <-app
 	}()
+
+	go c.execute(interval)
 	return c
 }
 
-func (c *ABCIApplicationClient) Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
-	var h [32]byte
-	copy(h[:], hash)
-
-	c.txMu.RLock()
-	r := c.txResults[h]
-	c.txMu.RUnlock()
-
-	if r == nil {
-		return nil, errors.New("not found")
-	}
-
-	return r, nil
+func (c *ABCIApplicationClient) Shutdown() {
+	close(c.txCh)
 }
 
 func (c *ABCIApplicationClient) App() abci.Application {
@@ -77,7 +83,217 @@ func (c *ABCIApplicationClient) App() abci.Application {
 
 // Wait until all pending transactions are done
 func (c *ABCIApplicationClient) Wait() {
-	c.blockWg.Wait()
+	c.txMu.RLock()
+	ch := make([]chan struct{}, 0, len(c.txStatus))
+	for _, st := range c.txStatus {
+		if !st.Done {
+			ch = append(ch, st.DidCommit)
+		}
+	}
+	c.txMu.RUnlock()
+
+	if debugTX {
+		fmt.Printf("Waiting for %d transactions\n", len(ch))
+	}
+	for _, ch := range ch {
+		<-ch
+	}
+	if debugTX {
+		fmt.Printf("Done waiting\n")
+	}
+}
+
+func (c *ABCIApplicationClient) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
+	st := c.didSubmit(tx, sha256.Sum256(tx))
+
+	if debugTX {
+		gtx := new(transactions.GenTransaction)
+		_, _ = gtx.UnMarshal(st.Tx)
+		fmt.Printf("Submitting %v %X\n", gtx.TransactionType(), st.Hash)
+	}
+
+	c.txCh <- st
+	return st
+}
+
+func (c *ABCIApplicationClient) didSubmit(tx []byte, txh [32]byte) *txStatus {
+	c.txMu.Lock()
+	st, ok := c.txStatus[txh]
+	if !ok {
+		st = new(txStatus)
+		c.txStatus[txh] = st
+		st.Tx = tx
+		st.Hash = txh
+		st.DidCheck = make(chan struct{})
+		st.DidDeliver = make(chan struct{})
+		st.DidCommit = make(chan struct{})
+	}
+	c.txMu.Unlock()
+
+	if !ok {
+		return st
+	}
+
+	// Synthetic transaction entries are added with a blank TX
+	if st.Tx == nil && tx != nil {
+		st.Tx = tx
+	}
+
+	// Ignore duplicate transactions I guess
+	return st
+}
+
+// execute accepts incoming transactions and queues them up for the next block
+func (c *ABCIApplicationClient) execute(interval time.Duration) {
+	var queue []*txStatus
+	tick := time.NewTicker(interval)
+
+	for {
+		// Collect transactions, submit at 1Hz
+		select {
+		case sub, ok := <-c.txCh:
+			if !ok {
+				for _, sub := range queue {
+					sub.CheckResult = &abci.ResponseCheckTx{
+						Code: 1,
+						Info: "Canceled",
+						Log:  "Canceled",
+					}
+					close(sub.DidCheck)
+					close(sub.DidDeliver)
+					close(sub.DidCommit)
+					sub.Done = true
+				}
+				return
+			}
+			queue = append(queue, sub)
+			continue
+
+		case <-tick.C:
+			if len(queue) == 0 && !c.CreateEmptyBlocks {
+				continue
+			}
+			if c.app == nil {
+				continue
+			}
+		}
+
+		// Collect any queued up sends
+	collect:
+		select {
+		case sub := <-c.txCh:
+			queue = append(queue, sub)
+			goto collect
+		default:
+			// Done
+		}
+
+		begin := abci.RequestBeginBlock{}
+		begin.Header.Height = c.nextHeight()
+		c.app.BeginBlock(begin)
+
+		// Process the queue
+		var synth [][32]byte
+		for _, sub := range queue {
+			// TODO Index
+			sub.Height = begin.Header.Height
+
+			cr := c.app.CheckTx(abci.RequestCheckTx{Tx: sub.Tx})
+			sub.CheckResult = &cr
+			close(sub.DidCheck)
+			if debugTX {
+				fmt.Printf("Checked %X\n", sub.Hash)
+			}
+			if cr.Code != 0 {
+				c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
+				close(sub.DidDeliver)
+				continue
+			}
+
+			dr := c.app.DeliverTx(abci.RequestDeliverTx{Tx: sub.Tx})
+			sub.DeliverResult = &dr
+			close(sub.DidDeliver)
+			if debugTX {
+				fmt.Printf("Delivered %X\n", sub.Hash)
+			}
+			if dr.Code != 0 {
+				c.onError(fmt.Errorf("DeliverTx failed: %v\n", dr.Log))
+			} else {
+				for _, e := range dr.Events {
+					if e.Type != "accSyn" {
+						continue
+					}
+
+					for _, a := range e.Attributes {
+						if a.Key != "txRef" {
+							continue
+						}
+
+						b, err := hex.DecodeString(a.Value)
+						if err != nil || len(b) != 32 {
+							continue
+						}
+
+						var h [32]byte
+						copy(h[:], b)
+						synth = append(synth, h)
+					}
+				}
+			}
+
+			err := c.PublishEventTx(types.EventDataTx{TxResult: abci.TxResult{
+				Height: sub.Height,
+				Index:  sub.Index,
+				Tx:     sub.Tx,
+				Result: dr,
+			}})
+			if err != nil {
+				c.onError(err)
+			}
+		}
+
+		c.app.EndBlock(abci.RequestEndBlock{})
+		c.app.Commit()
+
+		// Ensure Wait waits for synthetic transactions
+		for _, h := range synth {
+			if debugTX {
+				fmt.Printf("Synthetic %X\n", h)
+			}
+			c.didSubmit(nil, h)
+		}
+
+		for _, sub := range queue {
+			close(sub.DidCommit)
+			sub.Done = true
+			if debugTX {
+				fmt.Printf("Comitted %X\n", sub.Hash)
+			}
+		}
+
+		// Clear the queue (reuse the memory)
+		queue = queue[:0]
+	}
+}
+
+func (c *ABCIApplicationClient) Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
+	var h [32]byte
+	copy(h[:], hash)
+
+	c.txMu.RLock()
+	st := c.txStatus[h]
+	c.txMu.RUnlock()
+
+	if st == nil || st.DeliverResult == nil {
+		return nil, errors.New("not found")
+	}
+	return &ctypes.ResultTx{
+		Hash:     st.Hash[:],
+		Height:   st.Height,
+		Index:    st.Index,
+		Tx:       st.Tx,
+		TxResult: *st.DeliverResult,
+	}, nil
 }
 
 func (c *ABCIApplicationClient) ABCIInfo(context.Context) (*ctypes.ResultABCIInfo, error) {
@@ -96,175 +312,38 @@ func (c *ABCIApplicationClient) ABCIQueryWithOptions(ctx context.Context, path s
 
 func (c *ABCIApplicationClient) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
 	// Wait for nothing
-	c.sendTx(ctx, tx)
+	c.SubmitTx(ctx, tx)
 	return &ctypes.ResultBroadcastTx{}, nil
 }
 
 func (c *ABCIApplicationClient) BroadcastTxSync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
 	// Wait for CheckTx
-	checkChan, _ := c.sendTx(ctx, tx)
-	cr := <-checkChan
+	st := c.SubmitTx(ctx, tx)
+	<-st.DidCheck
 	return &ctypes.ResultBroadcastTx{
-		Code:         cr.Code,
-		Data:         cr.Data,
-		Log:          cr.Log,
-		Codespace:    cr.Codespace,
-		MempoolError: cr.MempoolError,
-		// TODO Hash
+		Code:         st.CheckResult.Code,
+		Data:         st.CheckResult.Data,
+		Log:          st.CheckResult.Log,
+		Codespace:    st.CheckResult.Codespace,
+		MempoolError: st.CheckResult.MempoolError,
+		Hash:         st.Hash[:],
 	}, nil
 }
 
 func (c *ABCIApplicationClient) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
-	checkChan, deliverChan := c.sendTx(ctx, tx)
-	cr := <-checkChan
-	dr := <-deliverChan
-	return &ctypes.ResultBroadcastTxCommit{
-		CheckTx:   cr,
-		DeliverTx: dr,
-		// TODO Hash, Height
-	}, nil
-}
+	st := c.SubmitTx(ctx, tx)
+	<-st.DidCommit
 
-func (c *ABCIApplicationClient) enterBlock() {
-	app := c.App()
-	c.blockMu.Lock()
-	begin := abci.RequestBeginBlock{}
-	begin.Header.Height = c.nextHeight()
-	app.BeginBlock(begin)
-}
-
-func (c *ABCIApplicationClient) exitBlock() {
-	app := c.App()
-	app.EndBlock(abci.RequestEndBlock{})
-
-	// Should commit always happen? Or only on success?
-	app.Commit()
-
-	//need to add artificial sleep to allow for synth tx's to go through
-	time.Sleep(100 * time.Millisecond)
-	c.blockMu.Unlock()
-}
-
-func (c *ABCIApplicationClient) sendTx(ctx context.Context, tx types.Tx) (<-chan abci.ResponseCheckTx, <-chan abci.ResponseDeliverTx) {
-	app := c.App()
-	checkChan := make(chan abci.ResponseCheckTx, 1)
-	deliverChan := make(chan abci.ResponseDeliverTx, 1)
-
-	gtx := new(transactions.GenTransaction)
-	if debugTX {
-		_, err := gtx.UnMarshal(tx)
-		if err != nil {
-			// This should never be enabled outside of debugging, so panicking
-			// is borderline acceptable
-			panic(err)
-		}
-		fmt.Printf("Got TX %X\n", gtx.TransactionHash())
+	r := new(ctypes.ResultBroadcastTxCommit)
+	r.Hash = st.Hash[:]
+	r.Height = st.Height
+	r.CheckTx = *st.CheckResult
+	if st.CheckResult.Code != 0 {
+		return r, nil
 	}
 
-	c.blockWg.Add(1)
-	go func() {
-		defer c.blockWg.Done()
-
-		defer close(checkChan)
-		defer close(deliverChan)
-		if debugTX {
-			defer fmt.Printf("Finished TX %X\n", gtx.TxHash)
-		}
-
-		// TODO Roll up multiple TXs into one block?
-		c.enterBlock()
-		defer c.exitBlock()
-
-		rc := app.CheckTx(abci.RequestCheckTx{Tx: tx})
-		checkChan <- rc
-		if rc.Code != 0 {
-			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Log))
-			return
-		}
-
-		rd := app.DeliverTx(abci.RequestDeliverTx{Tx: tx})
-		hash := sha256.Sum256(tx)
-		txr := &ctypes.ResultTx{
-			// TODO Height, Index
-			Hash:     hash[:],
-			TxResult: rd,
-			Tx:       tx,
-		}
-		c.txMu.Lock()
-		c.txResults[hash] = txr
-		c.txMu.Unlock()
-
-		err := c.PublishEventTx(types.EventDataTx{
-			TxResult: abci.TxResult{
-				// TODO Height, Index
-				Tx:     tx,
-				Result: rd,
-			},
-		})
-		if err != nil {
-			c.onError(err)
-		}
-
-		deliverChan <- rd
-		if rd.Code != 0 {
-			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Log))
-			return
-		}
-	}()
-
-	return checkChan, deliverChan
-}
-
-func (c *ABCIApplicationClient) Batch(inBlock func(func(*transactions.GenTransaction))) {
-	app := c.App()
-
-	c.blockWg.Add(1)
-	defer c.blockWg.Done()
-
-	c.enterBlock()
-	defer c.exitBlock()
-
-	inBlock(func(gtx *transactions.GenTransaction) {
-		tx, err := gtx.Marshal()
-		if err != nil {
-			c.onError(err)
-			return
-		}
-
-		rc := app.CheckTx(abci.RequestCheckTx{Tx: tx})
-		if rc.Code != 0 {
-			c.onError(fmt.Errorf("CheckTx failed: %v\n", rc.Log))
-			return
-		}
-
-		rd := app.DeliverTx(abci.RequestDeliverTx{Tx: tx})
-		hash := sha256.Sum256(tx)
-		txr := &ctypes.ResultTx{
-			// TODO Height, Index
-			Hash:     hash[:],
-			TxResult: rd,
-			Tx:       tx,
-		}
-		c.txMu.Lock()
-		c.txResults[hash] = txr
-		c.txMu.Unlock()
-
-		err = c.PublishEventTx(types.EventDataTx{
-			TxResult: abci.TxResult{
-				// TODO Height, Index
-				Tx:     tx,
-				Result: rd,
-			},
-		})
-		if err != nil {
-			c.onError(err)
-		}
-
-		if rd.Code != 0 {
-			c.onError(fmt.Errorf("DeliverTx failed: %v\n", rd.Log))
-			return
-		}
-	})
+	r.DeliverTx = *st.DeliverResult
+	return r, nil
 }
 
 // Stolen from Tendermint
@@ -287,6 +366,9 @@ func (c *ABCIApplicationClient) Subscribe(ctx context.Context, subscriber, query
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to subscribe: %w", err)
+	}
+	if sub == nil {
+		return nil, fmt.Errorf("node is shut down")
 	}
 
 	outc := make(chan ctypes.ResultEvent, outCap)

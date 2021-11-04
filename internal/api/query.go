@@ -197,7 +197,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response, types.ChainTypeAdi)
+	return unmarshalQueryResponse(r.Response, types.ChainTypeAdi)
 }
 
 // GetToken
@@ -208,7 +208,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response, types.ChainTypeToken)
+	return unmarshalQueryResponse(r.Response, types.ChainTypeToken)
 }
 
 // GetTokenAccount get the token balance for a given url
@@ -218,7 +218,7 @@ func (q *Query) GetTokenAccount(adiChainPath string) (*acmeApi.APIDataResponse, 
 		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response, types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount)
+	return unmarshalQueryResponse(r.Response, types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount)
 }
 
 // GetDirectory returns directory entries for a given url
@@ -259,7 +259,7 @@ func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataRe
 }
 
 // packTransactionQuery
-func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSynthTxIds []byte) (resp *acmeApi.APIDataResponse, err error) {
+func packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSynthTxIds []byte) (resp *acmeApi.APIDataResponse, err error) {
 
 	if len(txSynthTxIds)%32 != 0 {
 		return nil, fmt.Errorf("invalid synth txids")
@@ -304,12 +304,13 @@ func (q *Query) packTransactionQuery(txId []byte, txData []byte, txPendingData [
 		}
 	}
 
-	resp, err = unmarshalTransaction(txStateData.Bytes(), txId, txSynthTxIds)
+	resp, err = unmarshalTransaction(txSigInfo, txStateData.Bytes(), txId, txSynthTxIds)
 	if err != nil {
 		return nil, accumulateError(err)
 	}
 
 	//populate the rest of the resp
+	resp.TxId = (*types.Bytes)(&txId)
 	resp.KeyPage = &acmeApi.APIRequestKeyPage{}
 	resp.KeyPage.Height = txSigInfo.MSHeight
 	resp.KeyPage.Index = txSigInfo.PriorityIdx
@@ -351,7 +352,7 @@ func (q *Query) GetTransaction(txId []byte) (resp *acmeApi.APIDataResponse, err 
 	txData := rid.TxState
 	txPendingData := rid.TxPendingState
 	txSynthTxIds := rid.TxSynthTxIds
-	return q.packTransactionQuery(txId, txData, txPendingData, txSynthTxIds)
+	return packTransactionQuery(txId, txData, txPendingData, txSynthTxIds)
 }
 
 func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*api.APIDataResponsePagination, error) {
@@ -398,7 +399,7 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 		txData := txs.TxState
 		txPendingData := txs.TxPendingState
 		txSynthTxIds := txs.TxSynthTxIds
-		d, err := q.packTransactionQuery(txs.TxId[:], txData, txPendingData, txSynthTxIds)
+		d, err := packTransactionQuery(txs.TxId[:], txData, txPendingData, txSynthTxIds)
 		if err != nil {
 			return nil, err
 		}
@@ -418,7 +419,7 @@ func (q *Query) GetChainStateByUrl(adiChainPath string) (*api.APIDataResponse, e
 		return nil, fmt.Errorf("chain query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalQueryResponse(r.Response)
 }
 
 // GetChainStateByTxId
@@ -431,7 +432,7 @@ func (q *Query) GetChainStateByTxId(txId []byte) (*api.APIDataResponse, error) {
 		return nil, fmt.Errorf("chain query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalQueryResponse(r.Response)
 }
 
 // GetChainStateByChainId
@@ -444,5 +445,5 @@ func (q *Query) GetChainStateByChainId(chainId []byte) (*api.APIDataResponse, er
 		return nil, fmt.Errorf("chain query returned error, %v", err)
 	}
 
-	return unmarshalChainState(r.Response)
+	return unmarshalQueryResponse(r.Response)
 }

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"crypto/ed25519"
 	"crypto/sha256"
+	"encoding"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,6 +58,26 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 
 	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
 	return m, nil
+}
+
+func (m *Executor) queryByUrl(u *url.URL) ([]byte, encoding.BinaryMarshaler, error) {
+	qv := u.QueryValues()
+	switch {
+	case qv.Get("txid") != "":
+		// Query by transaction ID
+		txid, err := hex.DecodeString(qv.Get("txid"))
+		if err != nil {
+			return nil, nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
+		}
+
+		v, err := m.queryByTxId(txid)
+		return []byte("tx"), v, err
+
+	default:
+		// Query by chain URL
+		v, err := m.queryByChainId(u.ResourceChain())
+		return []byte("chain"), v, err
+	}
 }
 
 func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, error) {
@@ -135,100 +157,106 @@ func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
 	return &qr, nil
 }
 
-func (m *Executor) Query(q *query.Query) (ret []byte, err error) {
+func (m *Executor) Query(q *query.Query) (k, v []byte, err error) {
 	switch q.Type {
 	case types.QueryTypeTxId:
 		txr := query.RequestByTxId{}
 		err := txr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		qr, err := m.queryByTxId(txr.TxId[:])
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		ret, err = qr.MarshalBinary()
+		k = []byte("tx")
+		v, err = qr.MarshalBinary()
 		if err != nil {
-			return nil, fmt.Errorf("%v, on Chain %x", err, txr.TxId[:])
+			return nil, nil, fmt.Errorf("%v, on Chain %x", err, txr.TxId[:])
 		}
 	case types.QueryTypeTxHistory:
 		txh := query.RequestTxHistory{}
 		err := txh.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		thr := query.ResponseTxHistory{}
 		txids, maxAmt, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Start+txh.Limit)
 		if err != nil {
-			return nil, fmt.Errorf("error obtaining txid range %v", err)
+			return nil, nil, fmt.Errorf("error obtaining txid range %v", err)
 		}
 		thr.Total = maxAmt
 		for i := range txids {
 			qr, err := m.queryByTxId(txids[i][:])
 			if err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			thr.Transactions = append(thr.Transactions, *qr)
 		}
-		ret, err = thr.MarshalBinary()
+		k = []byte("tx-history")
+		v, err = thr.MarshalBinary()
 		if err != nil {
-			return nil, fmt.Errorf("error marshalling payload for transaction history")
+			return nil, nil, fmt.Errorf("error marshalling payload for transaction history")
 		}
 	case types.QueryTypeUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		u, err := url.Parse(*chr.Url.AsString())
 		if err != nil {
-			return nil, fmt.Errorf("invalid URL in query %s", chr.Url)
+			return nil, nil, fmt.Errorf("invalid URL in query %s", chr.Url)
 		}
-		obj, err := m.queryByChainId(u.ResourceChain())
+
+		var obj encoding.BinaryMarshaler
+		k, obj, err = m.queryByUrl(u)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		ret, err = obj.MarshalBinary()
+		v, err = obj.MarshalBinary()
 		if err != nil {
-			return nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
+			return nil, nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
 		}
 	case types.QueryTypeDirectoryUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		u, err := url.Parse(*chr.Url.AsString())
 		if err != nil {
-			return nil, fmt.Errorf("invalid URL in query %s", chr.Url)
+			return nil, nil, fmt.Errorf("invalid URL in query %s", chr.Url)
 		}
 		dir, err := m.queryDirectoryByChainId(u.ResourceChain())
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		ret, err = dir.MarshalBinary()
+		k = []byte("directory")
+		v, err = dir.MarshalBinary()
 		if err != nil {
-			return nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
+			return nil, nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
 		}
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
 		err := chr.UnmarshalBinary(chr.ChainId[:])
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		obj, err := m.queryByChainId(chr.ChainId[:])
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		ret, err = obj.MarshalBinary()
+		k = []byte("chain")
+		v, err = obj.MarshalBinary()
 		if err != nil {
-			return nil, fmt.Errorf("%v, on Chain %x", err, chr.ChainId)
+			return nil, nil, fmt.Errorf("%v, on Chain %x", err, chr.ChainId)
 		}
 	default:
-		return nil, fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())
+		return nil, nil, fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())
 	}
-	return ret, err
+	return k, v, err
 }
 
 // BeginBlock implements ./abci.Chain

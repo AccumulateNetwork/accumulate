@@ -15,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/genesis"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
@@ -102,12 +103,11 @@ func TestLoadOnRemote(t *testing.T) {
 }
 
 func TestJsonRpcAnonToken(t *testing.T) {
-	if os.Getenv("CI") == "true" {
-		t.Skip("This test is flaky in CI")
-	}
-
-	if testing.Short() {
+	switch {
+	case testing.Short():
 		t.Skip("Skipping test in short mode")
+	case os.Getenv("CI") == "true":
+		t.Skip("This test is flaky in CI")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -212,12 +212,13 @@ func TestJsonRpcAnonToken(t *testing.T) {
 }
 
 func TestFaucet(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
-
-	if testing.Short() {
+	switch {
+	case testing.Short():
 		t.Skip("Skipping test in short mode")
+	case runtime.GOOS == "windows":
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
+		t.Skip("This test is flaky in macOS CI")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -324,12 +325,13 @@ func TestFaucet(t *testing.T) {
 }
 
 func TestTransactionHistory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
-
-	if testing.Short() {
+	switch {
+	case testing.Short():
 		t.Skip("Skipping test in short mode")
+	case runtime.GOOS == "windows":
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
+		t.Skip("This test is flaky in macOS CI")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -426,12 +428,11 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestQueryNotFound(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Fails on windows (Tendermint cleanup issue)")
-	}
-
-	if os.Getenv("CI") == "true" {
-		t.Skip("Flaky in CI")
+	switch {
+	case testing.Short():
+		t.Skip("Skipping test in short mode")
+	case runtime.GOOS == "windows":
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -480,6 +481,42 @@ func TestQueryWrongType(t *testing.T) {
 	}
 }
 
+func TestGetTxId(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Fails on windows (Tendermint cleanup issue)")
+	}
+
+	//make a client, and also spin up the router grpc
+	dir := t.TempDir()
+	_, _, query := startBVC(t, dir)
+	japi := NewTest(t, query)
+
+	_, origin, _ := ed25519.GenerateKey(nil)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	require.NoError(t, err)
+
+	err = acctesting.SendTxSync(query, tx)
+	require.NoError(t, err)
+
+	u, err := url.Parse(*destAddress.AsString())
+	require.NoError(t, err)
+	u.Path = ""
+	u.Query = fmt.Sprintf("txid=%x", tx.TransactionHash())
+
+	req, err := json.Marshal(&api.APIRequestURL{URL: types.String(u.String())})
+	require.NoError(t, err)
+
+	resp := japi.GetData(context.Background(), req)
+	switch r := resp.(type) {
+	case jsonrpc2.Error:
+		require.NoError(t, r)
+	case *api.APIDataResponse:
+		// TODO Check response
+	default:
+		require.IsType(t, (*api.APIDataResponse)(nil), r)
+	}
+}
+
 func TestDirectory(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Fails on windows (Tendermint cleanup issue)")
@@ -512,12 +549,13 @@ func TestDirectory(t *testing.T) {
 }
 
 func TestFaucetReplay(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
-
-	if testing.Short() {
+	switch {
+	case testing.Short():
 		t.Skip("Skipping test in short mode")
+	case runtime.GOOS == "windows":
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
+		t.Skip("This test is flaky in macOS CI")
 	}
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
