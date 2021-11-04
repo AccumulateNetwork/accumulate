@@ -118,7 +118,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 
 	default:
 		sentry.CaptureException(err)
-		app.logger.Info("Query failed", "type", qu.Type.Name(), "error", err)
+		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
 		resQuery.Info = err.Error()
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
