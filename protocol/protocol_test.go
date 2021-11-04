@@ -1,7 +1,9 @@
 package protocol
 
 import (
+	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -43,6 +45,7 @@ func TestIsValidAdiUrl(t *testing.T) {
 
 	for name, str := range good {
 		t.Run(name, func(t *testing.T) {
+			fmt.Println(str)
 			u, err := Parse(str)
 			require.NoError(t, err)
 			require.NoError(t, IsValidAdiUrl(u))
@@ -52,6 +55,29 @@ func TestIsValidAdiUrl(t *testing.T) {
 	for name, c := range bad {
 		t.Run(name, func(t *testing.T) {
 			require.EqualError(t, IsValidAdiUrl(&c.URL), c.err)
+		})
+	}
+}
+
+func TestAnonymousAddress(t *testing.T) {
+	TokenURLs := map[string]string{
+		"good1": "RedWaggon/Wheels",
+		"good2": "BlueBall/Footballs",
+		"good3": "ACME",
+		"bad1":  "RedWaggon",
+		"bad2":  "Red_Waggon/Wheels",
+		"bad3":  "BlueBall.com/Footballs",
+	}
+	for name, str := range TokenURLs {
+		t.Run(name, func(t *testing.T) {
+			publicKey := sha256.Sum256([]byte(name))
+			url, err := AnonymousAddress(publicKey[:], str)
+			if name[:4] == "good" {
+				require.NoError(t, err, "%s should be valid", str)
+				fmt.Println(url.String())
+			} else {
+				require.Errorf(t, err, " %s should be invalid", str)
+			}
 		})
 	}
 }
