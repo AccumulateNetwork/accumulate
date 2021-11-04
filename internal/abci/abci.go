@@ -12,13 +12,13 @@
 package abci
 
 import (
-	"github.com/AccumulateNetwork/accumulated/types"
-	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
-	"github.com/AccumulateNetwork/accumulated/types/state"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/types"
+	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 )
 
 //go:generate go run github.com/golang/mock/mockgen -source abci.go -destination ../mock/abci/abci.go
@@ -35,7 +35,7 @@ type BeginBlockRequest struct {
 type EndBlockRequest struct{}
 
 type Chain interface {
-	Query(*apiQuery.Query) ([]byte, error)
+	Query(*apiQuery.Query) (k, v []byte, err error)
 
 	BeginBlock(BeginBlockRequest)
 	CheckTx(*transactions.GenTransaction) error
