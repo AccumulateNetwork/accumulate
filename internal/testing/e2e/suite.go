@@ -11,7 +11,9 @@ import (
 
 	"github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
+	"github.com/AccumulateNetwork/accumulated/internal/testing"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/stretchr/testify/suite"
@@ -20,10 +22,13 @@ import (
 	"golang.org/x/exp/rand"
 )
 
+type StartNode func(*Suite) (*api.Query, testing.DB)
+
 type Suite struct {
 	suite.Suite
-	start func(*Suite) *api.Query
+	start StartNode
 	query *api.Query
+	db    testing.DB
 	rand  *rand.Rand
 
 	synthMu *sync.Mutex
@@ -32,14 +37,14 @@ type Suite struct {
 
 var _ suite.SetupTestSuite = (*Suite)(nil)
 
-func NewSuite(start func(*Suite) *api.Query) *Suite {
+func NewSuite(start StartNode) *Suite {
 	s := new(Suite)
 	s.start = start
 	return s
 }
 
 func (s *Suite) SetupTest() {
-	s.query = s.start(s)
+	s.query, s.db = s.start(s)
 	s.rand = rand.New(rand.NewSource(0))
 	s.synthMu = new(sync.Mutex)
 	s.synthTx = map[[32]byte]*url.URL{}
@@ -55,6 +60,7 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 }
 
 func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body encoding.BinaryMarshaler) *transactions.GenTransaction {
+	s.T().Helper()
 	tx, err := transactions.New(sponsor.String(), func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
 		return sig, sig.Sign(nonce, key, hash)
@@ -64,6 +70,7 @@ func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, bod
 }
 
 func (s *Suite) getChainAs(url string, obj encoding.BinaryUnmarshaler) {
+	s.T().Helper()
 	r, err := s.query.QueryByUrl(url)
 
 	s.Require().NoError(err)
@@ -74,7 +81,7 @@ func (s *Suite) getChainAs(url string, obj encoding.BinaryUnmarshaler) {
 }
 
 func (s *Suite) sendTxAsync(tx *transactions.GenTransaction) func(relay.BatchedStatus) {
-	done := make(chan abci.TxResult)
+	done := make(chan abci.TxResult, 1)
 	ti, err := s.query.BroadcastTx(tx, done)
 	s.Require().NoError(err)
 
@@ -130,6 +137,7 @@ func (s *Suite) sendTxAsync(tx *transactions.GenTransaction) func(relay.BatchedS
 }
 
 func (s *Suite) waitForSynth() {
+	s.T().Helper()
 	for {
 		s.synthMu.Lock()
 		if len(s.synthTx) == 0 {
@@ -160,4 +168,34 @@ func (s *Suite) waitForSynth() {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
+}
+
+func (s *Suite) parseUrl(str string) *url.URL {
+	u, err := url.Parse(str)
+	s.Require().NoError(err)
+	return u
+}
+
+func (s *Suite) anonUrl(key tmed25519.PrivKey) *url.URL {
+	u, err := protocol.AnonymousAddress(key.PubKey().Bytes(), protocol.ACME)
+	s.Require().NoError(err)
+	return u
+}
+
+func (s *Suite) deposit(sponsor, recipient tmed25519.PrivKey) {
+	tx, err := testing.CreateFakeSyntheticDepositTx(sponsor, recipient)
+	s.Require().NoError(err)
+	s.sendTxAsync(tx)(<-s.query.BatchSend())
+	// Does not generate synthetic transactions
+}
+
+func (s *Suite) createADI(sponsor *url.URL, sponsorKey tmed25519.PrivKey, nonce uint64, adi string, adiKey tmed25519.PrivKey) {
+	ic := new(protocol.IdentityCreate)
+	ic.Url = adi
+	ic.PublicKey = adiKey.PubKey().Bytes()
+	ic.KeyBookName = "key0"
+	ic.KeyPageName = "key0-0"
+
+	tx := s.newTx(sponsor, sponsorKey, nonce, ic)
+	s.sendTxAsync(tx)(<-s.query.BatchSend())
 }

@@ -13,12 +13,13 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, logLevel string, relay []string) []*node.Node {
+func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, logLevel string, relay []string) ([]*node.Node, []*state.StateDB) {
 	t.Helper()
 
 	IPs := make([]string, count)
@@ -57,6 +58,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 	}))
 
 	nodes := make([]*node.Node, count)
+	dbs := make([]*state.StateDB, count)
 	for i := range nodes {
 		nodeDir := filepath.Join(workDir, fmt.Sprintf("Node%d", i))
 		c, err := cfg.Load(nodeDir)
@@ -68,7 +70,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 
 		require.NoError(t, cfg.Store(c))
 
-		nodes[i], _, _, err = acctesting.NewBVCNode(nodeDir, false, c.Accumulate.Networks, func(s string) zerolog.Logger {
+		nodes[i], dbs[i], _, err = acctesting.NewBVCNode(nodeDir, false, c.Accumulate.Networks, func(s string) zerolog.Logger {
 			zl := logging.NewTestZeroLogger(t, s)
 			zl = zl.With().Int("node", i).Logger()
 			zl = zl.Hook(logging.ExcludeMessages("starting service", "stopping service"))
@@ -92,7 +94,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		require.NoError(t, err)
 	}
 
-	return nodes
+	return nodes, dbs
 }
 
 func startNodes(t *testing.T, nodes []*node.Node) *api.Query {

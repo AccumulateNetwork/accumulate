@@ -1,6 +1,7 @@
 package abci_test
 
 import (
+	"context"
 	"crypto/ed25519"
 	"encoding"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulated/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
@@ -24,6 +26,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -75,8 +78,8 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 
 	n.client = acctesting.NewABCIApplicationClient(appChan, n.NextHeight, func(err error) {
 		t.Helper()
-		require.NoError(t, err)
-	})
+		assert.NoError(t, err)
+	}, 100*time.Millisecond)
 	relay := relay.New(n.client)
 	require.NoError(t, relay.Start())
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
@@ -144,7 +147,14 @@ func (n *fakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
 
 func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
 	n.t.Helper()
-	n.client.Batch(inBlock)
+
+	inBlock(func(tx *transactions.GenTransaction) {
+		b, err := tx.Marshal()
+		require.NoError(n.t, err)
+		n.client.SubmitTx(context.Background(), b)
+	})
+
+	n.client.Wait()
 }
 
 func generateKey() tmed25519.PrivKey {
@@ -192,7 +202,7 @@ func (n *fakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
 	require.NoError(n.t, err)
 
 	if r.Response.Code != 0 {
-		n.t.Fatalf("query failed with code %d: %s", r.Response.Code, r.Response.Info)
+		n.t.Fatalf("query for %q failed with code %d: %s", url, r.Response.Code, r.Response.Info)
 	}
 
 	so := state.Object{}

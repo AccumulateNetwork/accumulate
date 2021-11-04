@@ -4,15 +4,19 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"testing"
+	"time"
 
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -20,6 +24,18 @@ import (
 var rand = randpkg.New(randpkg.NewSource(0))
 
 type Tx = transactions.GenTransaction
+
+func TestEndToEndSuite(t *testing.T) {
+	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) (*accapi.Query, acctesting.DB) {
+		// Recreate the app for each test
+		n := createAppWithMemDB(s.T(), crypto.Address{}, "error")
+		n.app.InitChain(abci.RequestInitChain{
+			Time:    time.Now(),
+			ChainId: s.T().Name(),
+		})
+		return n.query, n.db
+	}))
+}
 
 func BenchmarkFaucetAndAnonTx(b *testing.B) {
 	n := createAppWithMemDB(b, crypto.Address{}, "error")
@@ -55,19 +71,19 @@ func BenchmarkFaucetAndAnonTx(b *testing.B) {
 }
 
 func TestCreateAnonAccount(t *testing.T) {
+	var count = 11
 	n := createAppWithMemDB(t, crypto.Address{}, "error")
-	originAddr := n.testAnonTx(11)
-	require.Equal(t, int64(5e4*acctesting.TokenMx-11000), n.GetAnonTokenAccount(originAddr).Balance.Int64())
+	originAddr, balances := n.testAnonTx(count)
+	require.Equal(t, int64(5e4*acctesting.TokenMx-count*1000), n.GetAnonTokenAccount(originAddr).Balance.Int64())
+	for addr, bal := range balances {
+		require.Equal(t, bal, n.GetAnonTokenAccount(addr).Balance.Int64())
+	}
 }
 
-func (n *fakeNode) testAnonTx(count int) string {
+func (n *fakeNode) testAnonTx(count int) (string, map[string]int64) {
 	sponsor := generateKey()
 	_, recipient, gtx, err := acctesting.BuildTestSynthDepositGenTx(sponsor.Bytes())
 	require.NoError(n.t, err)
-
-	n.Batch(func(send func(*transactions.GenTransaction)) {
-		send(gtx)
-	})
 
 	origin := accapi.NewWalletEntry()
 	origin.Nonce = 1
@@ -79,9 +95,16 @@ func (n *fakeNode) testAnonTx(count int) string {
 		recipients[i] = accapi.NewWalletEntry()
 	}
 
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		send(gtx)
+	})
+
+	balance := map[string]int64{}
 	n.Batch(func(send func(*Tx)) {
 		for i := 0; i < count; i++ {
 			recipient := recipients[rand.Intn(len(recipients))]
+			balance[recipient.Addr] += 1000
+
 			exch := api.NewTokenTx(types.String(origin.Addr))
 			exch.AddToAccount(types.String(recipient.Addr), 1000)
 			tx, err := transactions.New(origin.Addr, func(hash []byte) (*transactions.ED25519Sig, error) {
@@ -94,7 +117,7 @@ func (n *fakeNode) testAnonTx(count int) string {
 
 	n.client.Wait()
 
-	return origin.Addr
+	return origin.Addr, balance
 }
 
 func TestCreateADI(t *testing.T) {
@@ -144,7 +167,7 @@ func TestCreateADI(t *testing.T) {
 
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, "info")
+		n := createAppWithMemDB(t, crypto.Address{}, "error")
 		adiKey := generateKey()
 		require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
 		n.WriteStates()
@@ -341,7 +364,7 @@ func TestCreateSigSpecGroup(t *testing.T) {
 }
 
 func TestAddSigSpec(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, "info")
+	n := createAppWithMemDB(t, crypto.Address{}, "error")
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
 	u := n.ParseUrl("foo/ssg1")
