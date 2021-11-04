@@ -74,6 +74,7 @@ type APIDataResponse struct {
 	Data    *json.RawMessage   `json:"data" form:"data" query:"data"`
 	Sponsor types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
 	KeyPage *APIRequestKeyPage `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
+	TxId    *types.Bytes     `json:"txid" form:"txid" query:"txid"`
 	//the following are optional available only if pending chain has not been purged
 	Signer *Signer          `json:"signer,omitempty" form:"signer" query:"signer"`
 	Sig    *types.Bytes64   `json:"sig,omitempty" form:"sig" query:"sig"`
