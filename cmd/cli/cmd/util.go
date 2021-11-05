@@ -96,7 +96,7 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si 
 	gtx.ChainID = actor.ResourceChain()
 	gtx.Routing = actor.Routing()
 
-	si.Unused2 = nonce
+	si.Nonce = nonce
 	gtx.SigInfo = si
 
 	ed := new(transactions.ED25519Sig)
