@@ -130,6 +130,7 @@ func (p *Program) Start(s service.Service) error {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize logger: %v", err)
 		os.Exit(1)
 	}
+	p.db.SetLogger(logger)
 
 	app, err := abci.NewAccumulator(p.db, pv.Key.PubKey.Address(), mgr, logger)
 	if err != nil {
