@@ -60,6 +60,10 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		// URL
 		"get":           api.getData,
 		"get-directory": api.GetDirectory,
+		"directory":     api.GetDirectory,
+
+		// Chain
+		"chain": api.getDataByChainId,
 
 		// ADI
 		"adi":        api.getADI,
@@ -72,6 +76,13 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"create-sig-spec-group": api.createSigSpecGroup,
 		"update-key-page":       api.updateKeyPage,
 		"update-sig-spec":       api.updateKeyPage,
+
+		// Updated Key Management
+		"key-page-create": api.createSigSpec,
+		"key-page-update": api.updateKeyPage,
+		"key-page":        api.getSigSpec,
+		"key-book-create": api.createSigSpec,
+		"key-book":        api.getSigSpecGroup,
 
 		// token
 		"token":                 api.getToken,
@@ -263,6 +274,11 @@ func (api *API) unmarshalRequest(params json.RawMessage, data interface{}) error
 	return nil
 }
 
+func (api *API) prepareGetByChainId(params json.RawMessage) (*acmeapi.APIRequestChainId, error) {
+	req := &acmeapi.APIRequestChainId{}
+	return req, api.unmarshalRequest(params, req)
+}
+
 func (api *API) prepareGet(params json.RawMessage) (*acmeapi.APIRequestURL, error) {
 	req := &acmeapi.APIRequestURL{}
 	return req, api.unmarshalRequest(params, req)
@@ -295,6 +311,22 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	resp, err := api.query.GetChainStateByUrl(string(req.URL))
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return resp
+}
+
+// getData returns Accumulate Object by URL
+func (api *API) getDataByChainId(_ context.Context, params json.RawMessage) interface{} {
+	req := &acmeapi.APIRequestChainId{}
+	err := api.unmarshalRequest(params, req)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	resp, err := api.query.GetChainStateByChainId(req.ChainId)
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -606,7 +638,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 
 func (api *API) version(_ context.Context, params json.RawMessage) interface{} {
 	ret := acmeapi.APIDataResponse{}
-	ret.Type = "metrics"
+	ret.Type = "version"
 
 	data, _ := json.Marshal(map[string]interface{}{
 		"version":        accumulated.Version,

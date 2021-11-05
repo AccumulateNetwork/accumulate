@@ -3,13 +3,17 @@ package cmd
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"time"
+
+	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/types/api/response"
 
 	"github.com/AccumulateNetwork/accumulated/types"
-	anonaddress "github.com/AccumulateNetwork/accumulated/types/anonaddress"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
@@ -29,24 +33,33 @@ var accountCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintAccountGet()
 				}
+			case "create":
+				if len(args) > 3 {
+					CreateAccount(args[1], args[2:])
+				} else {
+					fmt.Println("Usage:")
+					PrintAccountCreate()
+				}
 			case "generate":
-				GenerateAccount()
+				GenerateKey("")
 			case "list":
 				ListAccounts()
-			case "import":
-				if len(args) > 1 {
-					ImportAccount(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintAccountImport()
-				}
-			case "export":
-				if len(args) > 1 {
-					ExportAccount(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintAccountExport()
-				}
+			case "restore":
+				RestoreAccounts()
+			//case "import":
+			//	if len(args) > 1 {
+			//		ImportAccount(args[1])
+			//	} else {
+			//		fmt.Println("Usage:")
+			//		PrintAccountImport()
+			//	}
+			//case "export":
+			//	if len(args) > 1 {
+			//		ExportAccount(args[1])
+			//	} else {
+			//		fmt.Println("Usage:")
+			//		PrintAccountExport()
+			//	}
 			default:
 				fmt.Println("Usage:")
 				PrintAccount()
@@ -68,11 +81,19 @@ func PrintAccountGet() {
 }
 
 func PrintAccountGenerate() {
-	fmt.Println("  accumulate account generate			Generate random anon token account")
+	fmt.Println("  accumulate account generate			Generate random lite token account")
 }
 
 func PrintAccountList() {
 	fmt.Println("  accumulate account list			Display all anon token accounts")
+}
+
+func PrintAccountRestore() {
+	fmt.Println("  accumulate account restore			Restore old anon token accounts")
+}
+
+func PrintAccountCreate() {
+	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
 }
 
 func PrintAccountImport() {
@@ -87,6 +108,8 @@ func PrintAccount() {
 	PrintAccountGet()
 	PrintAccountGenerate()
 	PrintAccountList()
+	PrintAccountRestore()
+	PrintAccountCreate()
 	PrintAccountImport()
 	PrintAccountExport()
 }
@@ -112,27 +135,110 @@ func GetAccount(url string) {
 
 }
 
-func GenerateAccount() {
+//account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
+func CreateAccount(url string, args []string) {
 
-	pubKey, privKey, err := ed25519.GenerateKey(nil)
+	actor, err := url2.Parse(url)
+	if err != nil {
+		PrintAccountCreate()
+		log.Fatal(err)
+	}
+
+	args, si, privKey, err := prepareSigner(actor, args)
+	if len(args) < 3 {
+		PrintAccountCreate()
+		log.Fatal("insufficient number of command line arguments")
+	}
+
+	accountUrl, err := url2.Parse(args[0])
+	if err != nil {
+		PrintAccountCreate()
+		log.Fatalf("invalid account url %s", args[0])
+	}
+	if actor.Authority != accountUrl.Authority {
+		log.Fatalf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, actor.Authority)
+	}
+	tok, err := url2.Parse(args[1])
+	if err != nil {
+		log.Fatal("invalid token url")
+	}
+
+	kbu, err := url2.Parse(args[2])
+	if err != nil {
+		log.Fatal("invalid key book url")
+	}
+
+	//make sure this is a valid token account
+	tokenJson := Get(tok.String())
+	token := response.Token{}
+	err = json.Unmarshal([]byte(tokenJson), &token)
+	if err != nil {
+		PrintAccountCreate()
+		log.Fatal(fmt.Errorf("invalid token type %v", err))
+	}
+
+	tac := &protocol.TokenAccountCreate{}
+	tac.Url = accountUrl.String()
+	tac.TokenUrl = tok.String()
+	tac.KeyBookUrl = kbu.String()
+
+	binaryData, err := tac.MarshalBinary()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	address := anonaddress.GenerateAcmeAddress(pubKey)
-
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
-		err := b.Put([]byte(address), privKey)
-		return err
-	})
+	jsonData, err := json.Marshal(&tac)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	fmt.Println(address)
+	nonce := uint64(time.Now().Unix())
+
+	params, err := prepareGenTx(jsonData, binaryData, actor, si, privKey, nonce)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var res interface{}
+	var str []byte
+	if err := Client.Request(context.Background(), "token-account-create", params, &res); err != nil {
+		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
+		log.Fatal(err)
+	}
+
+	str, err = json.Marshal(res)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println(string(str))
 }
 
+func GenerateAccount() {
+	GenerateKey("")
+	/*
+		pubKey, privKey, err := ed25519.GenerateKey(nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		address := anonaddress.GenerateAcmeAddress(pubKey)
+
+		err = Db.Update(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte("anon"))
+			err := b.Put([]byte(address), privKey)
+			return err
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Println(address)
+
+	*/
+}
+
+/*
 func ImportAccount(pkhex string) {
 
 	var pk ed25519.PrivateKey
@@ -171,14 +277,24 @@ func ExportAccount(url string) {
 	}
 
 }
+*/
 
 func ListAccounts() {
 
+	//TODO: this probably should also list out adi accounts.
+
 	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
+		//b := tx.Bucket([]byte("anon"))
+		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			fmt.Printf("%s\n", k)
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			lt, err := protocol.AnonymousAddress(v, protocol.AcmeUrl().String())
+			if err != nil {
+				continue
+			}
+			if lt.String() == string(k) {
+				fmt.Printf("%s\n", k)
+			}
 		}
 		return nil
 	})
@@ -186,4 +302,50 @@ func ListAccounts() {
 		log.Fatal(err)
 	}
 
+}
+
+func RestoreAccounts() {
+	err := Db.Update(func(tx *bolt.Tx) error {
+		anon := tx.Bucket([]byte("anon"))
+		keys := tx.Bucket([]byte("keys"))
+		label := tx.Bucket([]byte("label"))
+
+		cursor := anon.Cursor()
+		for name, v := cursor.First(); name != nil; name, v = cursor.Next() {
+			u, err := url2.Parse(string(name))
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%q is not a valid URL\n", name)
+			}
+			key, _, err := protocol.ParseAnonymousAddress(u)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "%q is not a valid lite account: %v\n", name, err)
+			} else if key == nil {
+				fmt.Fprintf(os.Stderr, "%q is not a lite account\n", name)
+			}
+
+			privKey := ed25519.PrivateKey(v)
+			pubKey := privKey.Public().(ed25519.PublicKey)
+			fmt.Printf("Converting %s : %x\n", name, pubKey)
+
+			err = label.Put(name, pubKey)
+			if err != nil {
+				return err
+			}
+
+			err = keys.Put(pubKey, privKey)
+			if err != nil {
+				return err
+			}
+
+			err = anon.Delete(name)
+			if err != nil {
+				return err
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 }

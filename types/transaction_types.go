@@ -151,3 +151,19 @@ func (t TxType) AsUint64() uint64 {
 func (t TxType) String() string { return t.Name() }
 
 func (t TxType) IsSynthetic() bool { return t >= txTypeSyntheticBase }
+
+func (t *TxType) UnmarshalJSON(data []byte) error {
+	var s String
+	err := s.UnmarshalJSON(data)
+	if err != nil {
+		return fmt.Errorf("error unmarshaling transaction type")
+	}
+	t.SetType(*s.AsString())
+
+	return nil
+}
+
+func (t *TxType) MarshalJSON() ([]byte, error) {
+	s := String(t.String())
+	return s.MarshalJSON()
+}
