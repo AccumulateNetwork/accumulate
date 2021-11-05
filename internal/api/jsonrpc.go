@@ -445,7 +445,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = string(req.Tx.Sponsor)
-	tx.SigInfo.Unused2 = req.Tx.Signer.Nonce
+	tx.SigInfo.Nonce = req.Tx.Signer.Nonce
 	tx.SigInfo.MSHeight = req.Tx.KeyPage.Height
 	tx.SigInfo.PriorityIdx = req.Tx.KeyPage.Index
 
@@ -616,7 +616,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	gtx.ChainID = genesis.FaucetUrl.ResourceChain()
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = *tx.From.String.AsString()
-	gtx.SigInfo.Unused2 = genesis.FaucetWallet.Nonce
+	gtx.SigInfo.Nonce = genesis.FaucetWallet.Nonce
 	gtx.SigInfo.MSHeight = 1
 	gtx.SigInfo.PriorityIdx = 0
 	gtx.Transaction = txData

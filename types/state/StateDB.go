@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulated/internal/logging"
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/smt/managed"
 	"github.com/AccumulateNetwork/accumulated/smt/pmt"
@@ -90,6 +91,7 @@ func (s *StateDB) SetLogger(logger log.Logger) {
 
 func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	if s.logger != nil {
+		// TODO Maybe this should be Debug?
 		s.logger.Info(msg, keyVals...)
 	}
 }
@@ -209,7 +211,7 @@ func (s *StateDB) GetSyntheticTxIds(txId []byte) (syntheticTxIds []byte, err err
 
 //AddSynthTx add the synthetic transaction which is mapped to the parent transaction
 func (s *StateDB) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synthTxObject *Object) {
-	s.logInfo("AddSynthTx", "txid", synthTxId.AsBytes32(), "entry", synthTxObject.Entry)
+	s.logInfo("AddSynthTx", "txid", logging.AsHex(synthTxId), "entry", logging.AsHex(synthTxObject.Entry))
 	var val *[]transactionStateInfo
 	var ok bool
 
@@ -228,7 +230,7 @@ func (s *StateDB) AddTransaction(chainId *types.Bytes32, txId types.Bytes, txPen
 	if txAccepted != nil {
 		txAcceptedEntry = txAccepted.Entry
 	}
-	s.logInfo("AddTransaction", "chainId", chainId, "txid", txId.AsBytes32(), "pending", txPending.Entry, "accepted", txAcceptedEntry)
+	s.logInfo("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
 
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
@@ -348,7 +350,7 @@ func (s *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (s *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
-	s.logInfo("AddStateEntry", "chainId", chainId, "txHash", txHash, "entry", object.Entry)
+	s.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
 	begin := time.Now()
 
 	s.TimeBucket = s.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
@@ -440,6 +442,7 @@ func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *
 	//add all the transaction states that occurred during this block for this chain (in order of appearance)
 	for _, tx := range currentState.txId {
 		//store the txHash for the chains, they will be mapped back to the above recorded tx's
+		s.logInfo("AddHash", "hash", logging.AsHex(tx))
 		mm.AddHash(managed.Hash(*tx))
 	}
 
@@ -570,7 +573,7 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 
 	//return the state of the BPT for the state of the block
 	rh := types.Bytes(s.RootHash()).AsBytes32()
-	s.logInfo("WriteStates", "height", blockHeight, "hash", &rh)
+	s.logInfo("WriteStates", "height", blockHeight, "hash", logging.AsHex(rh))
 	return s.RootHash(), currentStateCount, nil
 }
 
