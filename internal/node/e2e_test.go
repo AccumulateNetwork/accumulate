@@ -27,6 +27,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	tmnet "github.com/tendermint/tendermint/libs/net"
+	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
 func TestEndToEnd(t *testing.T) {
@@ -50,6 +51,27 @@ func TestEndToEnd(t *testing.T) {
 		}
 		return query, mdb
 	}))
+}
+
+func TestSubscribeAfterClose(t *testing.T) {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		t.Skip("This test does not work well on Windows or macOS")
+	}
+
+	nodes, _ := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, "error", []string{"127.0.30.1"})
+	node := nodes[0]
+	require.NoError(t, node.Start())
+	require.NoError(t, node.Stop())
+	node.Wait()
+
+	client, err := local.New(node.Service.(local.NodeService))
+	require.NoError(t, err)
+	_, err = client.Subscribe(context.Background(), t.Name(), "tm.event = 'Tx'")
+	require.EqualError(t, err, "node was stopped")
+	time.Sleep(time.Millisecond) // Time for it to panic
+
+	// Ideally, this would also test rpc/core.Environment.Subscribe, but that is
+	// not straight forward
 }
 
 func TestFaucetMultiNetwork(t *testing.T) {

@@ -45,8 +45,8 @@ contrib.go.opencensus.io/exporter/stackdriver v0.13.4/go.mod h1:aXENhDJ1Y4lIg4EU
 dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7gZCb22OMCxBHrMx7a5I7Hp++hsVxbQ4BYO7hU=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106 h1:+PPbYmYZ02KDz3FJfxELkwsw/hq8N03E/K59+0c/WBg=
 github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106/go.mod h1:IZ754L8YfDkLr74Dr8tGexsOq6n9hkfM3tvULzBTBn4=
-github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20211104172007-45cd3ffaa5e5 h1:r1swfOpJGxd7qChS+f9RSWs1Bl/yYM17rT5fKGUVWhI=
-github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20211104172007-45cd3ffaa5e5/go.mod h1:dVI5qopRoH6vODLHE/g6iSBFCXCHxGcuxG4/aVTpvlY=
+github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20211104230238-906615e51028 h1:2HwLK4oKWoU2PZE295o/dlyNZCW//aB+g8RMD4fCDGE=
+github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20211104230238-906615e51028/go.mod h1:dVI5qopRoH6vODLHE/g6iSBFCXCHxGcuxG4/aVTpvlY=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d h1:FWutTJGVqBnL4rLgeNaspUYnmnvkXcmDA3QO3rHBGgU=
 github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d/go.mod h1:Nw3sh5L40Xs1wno7ndbD/dYWg+vARpBvpX9Zz1YSxbo=
 github.com/AdamSLevy/jsonrpc2/v14 v14.0.0 h1:ofSXSSa9Opft4KtEcIEshKbI2CAynwtKNZj2ASFDucc=
