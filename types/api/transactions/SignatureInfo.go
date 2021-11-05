@@ -41,8 +41,8 @@ type SignatureInfo struct {
 	URL         string // URL for the transaction
 	MSHeight    uint64 // Height of the multi sig spec
 	PriorityIdx uint64 // Index within the Priority of the signature used
+	Nonce       uint64 // The nonce for the key of the first signature
 	Unused1     uint64 // This field is not used
-	Unused2     uint64 // This field is not used
 }
 
 // Equal
@@ -50,11 +50,11 @@ type SignatureInfo struct {
 // is equal to another.  In testing we marshal and unmarshal a SignatureInfo
 // and test that the information in the SignatureInfo is preserved
 func (t *SignatureInfo) Equal(t2 *SignatureInfo) bool {
-	return t.URL == t2.URL && //               URL equal?
-		t.Unused2 == t2.Unused2 && //              Nonce equal?
-		t.MSHeight == t2.MSHeight && //      SigSpecHt equal?
-		t.Unused1 == t2.Unused1 && //        Priority equal?
-		t.PriorityIdx == t2.PriorityIdx //     PriorityIdx equal?  If any fails, this returns false
+	return t.URL == t2.URL && //           URL equal?
+		t.Nonce == t2.Nonce && //          Nonce equal?
+		t.MSHeight == t2.MSHeight && //    SigSpecHt equal?
+		t.Unused1 == t2.Unused1 && //      Priority equal?
+		t.PriorityIdx == t2.PriorityIdx // PriorityIdx equal?  If any fails, this returns false
 }
 
 // UnMarshal
@@ -67,7 +67,7 @@ func (t *SignatureInfo) Marshal() (data []byte, err error) { //            Seria
 	}()
 
 	data = common.SliceBytes([]byte(t.URL))                   //           URL =>
-	data = append(data, common.Uint64Bytes(t.Unused2)...)     //           Nonce =>
+	data = append(data, common.Uint64Bytes(t.Nonce)...)       //           Nonce =>
 	data = append(data, common.Uint64Bytes(t.MSHeight)...)    //           SigSpecHt =>
 	data = append(data, common.Uint64Bytes(t.Unused1)...)     //           Priority =>
 	data = append(data, common.Uint64Bytes(t.PriorityIdx)...) //           PriorityIdx =>
@@ -86,7 +86,7 @@ func (t *SignatureInfo) UnMarshal(data []byte) (nextData []byte, err error) { //
 
 	URL, data := common.BytesSlice(data)           //                      => URL
 	t.URL = string(URL)                            //                       (url must be a string)
-	t.Unused2, data = common.BytesUint64(data)     //                      => Nonce
+	t.Nonce, data = common.BytesUint64(data)       //                      => Nonce
 	t.MSHeight, data = common.BytesUint64(data)    //                      => SigSpecHt
 	t.Unused1, data = common.BytesUint64(data)     //                      => Priority
 	t.PriorityIdx, data = common.BytesUint64(data) //                      => PriorityIdx

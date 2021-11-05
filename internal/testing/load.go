@@ -156,9 +156,9 @@ func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed2551
 	gtx.Routing = types.GetAddressFromIdentity(destAddress.AsString())
 
 	ed := new(transactions.ED25519Sig)
-	gtx.SigInfo.Unused2 = 1
+	gtx.SigInfo.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.SigInfo.Unused2, privateKey, gtx.TransactionHash())
+	err = ed.Sign(gtx.SigInfo.Nonce, privateKey, gtx.TransactionHash())
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
@@ -190,9 +190,9 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	gtx.Routing = types.GetAddressFromIdentity(from.AsString())
 
 	ed := new(transactions.ED25519Sig)
-	gtx.SigInfo.Unused2 = 1
+	gtx.SigInfo.Nonce = 1
 	ed.PublicKey = sponsor[32:]
-	err = ed.Sign(gtx.SigInfo.Unused2, sponsor, gtx.TransactionHash())
+	err = ed.Sign(gtx.SigInfo.Nonce, sponsor, gtx.TransactionHash())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
