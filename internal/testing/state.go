@@ -96,9 +96,9 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	tx.Routing = types.GetAddressFromIdentity(recipientAdi.AsString())
 
 	ed := new(transactions.ED25519Sig)
-	tx.SigInfo.Unused2 = 1
+	tx.SigInfo.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.SigInfo.Unused2, recipient, tx.TransactionHash())
+	err = ed.Sign(tx.SigInfo.Nonce, recipient, tx.TransactionHash())
 	if err != nil {
 		return nil, err
 	}

@@ -144,6 +144,8 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	app.logger = app.logger.With("chain", req.ChainId)
 	app.logger.Info("Initializing")
 
+	// TODO Store chain ID and reload it from the DB on subsequent runs
+
 	//register a list of the validators.
 	for _, v := range req.Validators {
 		app.updateValidator(v)
