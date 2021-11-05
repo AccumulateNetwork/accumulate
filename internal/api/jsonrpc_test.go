@@ -253,7 +253,7 @@ func TestFaucet(t *testing.T) {
 	gtx.Transaction = tx1
 	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
 	//changing the nonce will invalidate the signature.
-	gtx.SigInfo.Unused2 = 1234
+	gtx.SigInfo.Nonce = 1234
 
 	//intentionally send in a bogus transaction
 	ti1, _ := query.BroadcastTx(&gtx, nil)
