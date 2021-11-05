@@ -15,6 +15,7 @@ import (
 	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/smt/storage"
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/api/query"
@@ -35,7 +36,6 @@ type Executor struct {
 	chainWG map[uint64]*sync.WaitGroup
 	leader  bool
 	height  int64
-	nonce   uint64 //global nonce for synth tx's, needs to be managed in bvc/symnthsigstate.
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -566,6 +566,21 @@ func (m *Executor) Commit() ([]byte, error) {
 	return mdRoot, nil
 }
 
+func (m *Executor) nextSynthCount() (uint64, error) {
+	k := storage.ComputeKey("SyntheticTransactionCount")
+	b, err := m.db.Read(k)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return 0, err
+	}
+
+	var n uint64
+	if len(b) > 0 {
+		n, _ = common.BytesUint64(b)
+	}
+	m.db.Write(k, common.Uint64Bytes(n+1))
+	return n, nil
+}
+
 func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (tmRef []*protocol.TxSynthRef, err error) {
 	if m.leader {
 		tmRef = make([]*protocol.TxSynthRef, len(st.submissions))
@@ -589,8 +604,12 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 		tx.SigInfo.PriorityIdx = 0
 		tx.Transaction = body
 
-		tx.SigInfo.Unused2 = m.nonce
-		m.nonce++ //TODO: make the nonce managed via the BVC admin state for synth tx rather than this way
+		// TODO Populate nonce with something better
+		tx.SigInfo.MSHeight = uint64(m.height)
+		tx.SigInfo.Nonce, err = m.nextSynthCount()
+		if err != nil {
+			return nil, err
+		}
 
 		// Create the state object to store the unsigned pending transaction
 		txSynthetic := state.NewPendingTransaction(tx)
@@ -621,7 +640,7 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 			//in future releases this will be submitted to this BVC to the next block for validation
 			//of the synthetic tx by all the bvc nodes before being dispatched, along with DC receipt
 			ed.PublicKey = m.key[32:]
-			err := ed.Sign(tx.SigInfo.Unused2, m.key, tx.TransactionHash())
+			err := ed.Sign(tx.SigInfo.Nonce, m.key, tx.TransactionHash())
 			if err != nil {
 				return nil, fmt.Errorf("error signing sythetic transaction, %v", err)
 			}

@@ -5,10 +5,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
 	"log"
 	"strconv"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulated/internal/url"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
@@ -214,13 +215,13 @@ func CreateTX(sender string, receiver string, amount string) {
 		gtx.SigInfo.URL = sender
 		//Provide a nonce, typically this will be queried from identity sig spec and incremented.
 		//since SigGroups are not yet implemented, we will use the unix timestamp for now.
-		gtx.SigInfo.Unused2 = params.Tx.Signer.Nonce
+		gtx.SigInfo.Nonce = params.Tx.Signer.Nonce
 		//The following will be defined in the SigSpec Group for which key to use
 		gtx.SigInfo.MSHeight = params.Tx.KeyPage.Height
 		gtx.SigInfo.PriorityIdx = params.Tx.KeyPage.Index
 
 		ed := new(transactions.ED25519Sig)
-		err = ed.Sign(gtx.SigInfo.Unused2, pk, gtx.TransactionHash())
+		err = ed.Sign(gtx.SigInfo.Nonce, pk, gtx.TransactionHash())
 		if err != nil {
 			log.Fatal(err)
 		}
