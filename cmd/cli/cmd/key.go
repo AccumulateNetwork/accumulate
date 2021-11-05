@@ -24,7 +24,7 @@ var keyCmd = &cobra.Command{
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
 			case "import":
-				if len(args) == 1 {
+				if len(args) == 3 {
 					if args[1] == "lite" {
 						ImportKey(args[2], "")
 					} else {
@@ -109,12 +109,14 @@ func PrintKeyGenerate() {
 func PrintKeyImport() {
 	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
 	fmt.Println("  accumulate key import private [private key hex] [key name]      Import a key and give it a name in the wallet")
+	fmt.Println("  accumulate key import lite [private key hex]       Import a key as an anonymous address")
 }
 
 func PrintKey() {
 	PrintKeyGenerate()
 	PrintKeyPublic()
 	PrintKeyImport()
+
 	PrintKeyExport()
 }
 
@@ -172,7 +174,7 @@ func LookupByLabel(label string) (asData []byte, err error) {
 	err = Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("label"))
 		asData = b.Get([]byte(label))
-		if len(asData) == 0 {
+		if asData == nil {
 			err = fmt.Errorf("valid key not found for %s", label)
 		}
 		return err
@@ -187,6 +189,9 @@ func LookupByPubKey(pubKey []byte) (asData []byte, err error) {
 	err = Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("keys"))
 		asData = b.Get(pubKey)
+		if err == nil {
+			err = fmt.Errorf("valid key not found for %s", pubKey)
+		}
 		return err
 	})
 	return
@@ -291,7 +296,7 @@ func ImportKey(pkhex string, label string) {
 	}
 
 	if label == "" {
-		lt, err := protocol.AnonymousAddress(pk, protocol.AcmeUrl().String())
+		lt, err := protocol.AnonymousAddress(pk[32:], protocol.AcmeUrl().String())
 		if err != nil {
 			log.Fatalf("no label specified and cannot import as lite account")
 		}
