@@ -8,10 +8,12 @@ import (
 // General Errors
 const (
 	ErrCodeInternal = -32800 - iota
-	_ // maintain previous numbering
+	_               // maintain previous numbering
 	ErrCodeValidation
 	ErrCodeSubmission
 	ErrCodeAccumulate
+	ErrCodeNotLiteAccount
+	ErrCodeNotAcmeAccount
 )
 
 // Metrics errors

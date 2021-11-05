@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -564,12 +563,13 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	destAccount := types.String(u.String())
 	addr, tok, err := protocol.ParseAnonymousAddress(u)
-	if err != nil {
-		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", destAccount), err)
-	} else if addr == nil {
-		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", destAccount), errors.New("not an anonymous account URL"))
-	} else if !protocol.AcmeUrl().Equal(tok) {
-		return jsonrpc2.NewError(-32802, fmt.Sprintf("Invalid Anonymous ACME address %s: ", destAccount), errors.New("wrong token URL"))
+	switch {
+	case err != nil:
+		return jsonrpc2.NewError(ErrCodeValidation, "Invalid token account", fmt.Errorf("error parsing %q: %v", u, err))
+	case addr == nil:
+		return jsonrpc2.NewError(ErrCodeNotLiteAccount, "Invalid token account", fmt.Errorf("%q is not a lite account", u))
+	case !protocol.AcmeUrl().Equal(tok):
+		return jsonrpc2.NewError(ErrCodeNotAcmeAccount, "Invalid token account", fmt.Errorf("%q is not an ACME account", u))
 	}
 
 	tx := acmeapi.TokenTx{}
