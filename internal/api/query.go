@@ -316,7 +316,7 @@ func packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSy
 	resp.KeyPage.Index = txSigInfo.PriorityIdx
 
 	//if we have pending data (i.e. signature stuff, populate that too.)
-	if txPendingState != nil {
+	if txPendingState != nil && len(txPendingState.Signature) > 0 {
 		//if the pending state still exists
 		resp.Status = &txPendingState.Status
 		resp.Signer = &acmeApi.Signer{}
