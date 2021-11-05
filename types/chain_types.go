@@ -1,5 +1,9 @@
 package types
 
+import (
+	"fmt"
+)
+
 type ChainType uint64
 
 //ChainType enumeration order matters, do not change order or insert new enums.
@@ -77,4 +81,20 @@ func (t ChainType) IsTransaction() bool {
 	default:
 		return false
 	}
+}
+
+func (t *ChainType) UnmarshalJSON(data []byte) error {
+	var s String
+	err := s.UnmarshalJSON(data)
+	if err != nil {
+		return fmt.Errorf("error unmarshaling chain type")
+	}
+	t.SetType(*s.AsString())
+
+	return nil
+}
+
+func (t *ChainType) MarshalJSON() ([]byte, error) {
+	s := String(t.String())
+	return s.MarshalJSON()
 }
