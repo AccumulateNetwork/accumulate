@@ -216,75 +216,13 @@ func CreateAccount(url string, args []string) {
 
 func GenerateAccount() {
 	GenerateKey("")
-	/*
-		pubKey, privKey, err := ed25519.GenerateKey(nil)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		address := anonaddress.GenerateAcmeAddress(pubKey)
-
-		err = Db.Update(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte("anon"))
-			err := b.Put([]byte(address), privKey)
-			return err
-		})
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		fmt.Println(address)
-
-	*/
 }
-
-/*
-func ImportAccount(pkhex string) {
-
-	var pk ed25519.PrivateKey
-
-	token, err := hex.DecodeString(pkhex)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	pk = token
-	address := anonaddress.GenerateAcmeAddress(pk.Public().(ed25519.PublicKey))
-
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
-		err := b.Put([]byte(address), token)
-		return err
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(address)
-
-}
-
-func ExportAccount(url string) {
-
-	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("anon"))
-		pk := b.Get([]byte(url))
-		fmt.Println(hex.EncodeToString(pk))
-		return nil
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-}
-*/
 
 func ListAccounts() {
 
 	//TODO: this probably should also list out adi accounts.
 
 	err := Db.View(func(tx *bolt.Tx) error {
-		//b := tx.Bucket([]byte("anon"))
 		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
