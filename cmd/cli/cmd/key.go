@@ -189,12 +189,12 @@ func LookupByPubKey(pubKey []byte) (asData []byte, err error) {
 	err = Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("keys"))
 		asData = b.Get(pubKey)
-		if err == nil {
-			err = fmt.Errorf("valid key not found for %s", pubKey)
+		if asData == nil {
+			err = fmt.Errorf("valid key not found for %x", pubKey)
 		}
 		return err
 	})
-	return
+	return asData, err
 }
 
 func GenerateKey(label string) {
@@ -309,7 +309,7 @@ func ImportKey(pkhex string, label string) {
 	}
 
 	_, err = LookupByPubKey(pk[32:])
-	lab := ""
+	lab := "not found"
 	if err == nil {
 
 		err = Db.View(func(tx *bolt.Tx) error {
@@ -465,6 +465,8 @@ func ImportMnemonic(mnemonic []string) {
 		}
 		return nil
 	})
+
+	println("mnemonic import successful")
 
 }
 
