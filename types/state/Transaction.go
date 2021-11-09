@@ -13,7 +13,7 @@ import (
 
 //transaction object will either be on main chain or combined with the header and placed on pending chain.  If this is
 // part of the transactionPending, the Transaction can be nil which means the transaction contents are on the main chain
-type txState struct {
+type TxState struct {
 	SigInfo         *transactions.SignatureInfo
 	Transaction     *types.Bytes `json:"tx,omitempty" form:"tx" query:"tx" validate:"optional"`
 	transactionHash *types.Bytes32
@@ -24,7 +24,7 @@ func NewPendingTransaction(gtx *transactions.GenTransaction) *PendingTransaction
 	ret := &PendingTransaction{}
 	ret.ChainHeader.SetHeader(types.String(gtx.SigInfo.URL), types.ChainTypePendingTransaction)
 	ret.Signature = gtx.Signature
-	ret.TransactionState = &txState{}
+	ret.TransactionState = &TxState{}
 	ret.TransactionState.SigInfo = gtx.SigInfo
 	ret.TransactionState.Transaction = &types.Bytes{}
 	*ret.TransactionState.Transaction = gtx.Transaction
@@ -52,13 +52,13 @@ func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransact
 // the body of the transaction can also be stored for pending transactions.
 type Transaction struct {
 	ChainHeader
-	txState
+	TxState
 }
 
 type PendingTransaction struct {
 	ChainHeader
 	Signature        []*transactions.ED25519Sig
-	TransactionState *txState
+	TransactionState *TxState
 	Status           json.RawMessage `json:"status" form:"status" query:"status" validate:"required"`
 }
 
@@ -194,7 +194,7 @@ func (t *PendingTransaction) UnmarshalBinary(data []byte) (err error) {
 		} //
 		t.Signature = append(t.Signature, sig) //           Add each signature to list, and repeat until all done
 	} //
-	t.TransactionState = &txState{}
+	t.TransactionState = &TxState{}
 	t.TransactionState.SigInfo = new(transactions.SignatureInfo) //                Get a SignatureInfo struct
 	data, err = t.TransactionState.SigInfo.UnMarshal(data)       //                And unmarshal it.
 	if err != nil {                                              //                Get an error? Complain to caller!
