@@ -74,3 +74,35 @@ TokenDeposit:
     type: uvarint
   - name: Txid
     type: bytes
+
+UrlRequest:
+  non-binary: true
+  fields:
+  - name: Url
+    type: string
+    is-url: true
+  - name: Start
+    type: uvarint
+    optional: true
+  - name: Count
+    type: uvarint
+    optional: true
+
+IdRequest:
+  non-binary: true
+  fields:
+  - name: Id
+    type: bytes
+
+MetricsRequest:
+  fields:
+    - name: Metric
+      type: string
+    - name: Duration
+      type: duration
+
+MetricsResponse:
+  non-binary: true
+  fields:
+    - name: Value
+      type: any
