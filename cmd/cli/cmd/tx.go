@@ -106,7 +106,6 @@ func GetTX(hash string) {
 	}
 
 	fmt.Println(string(str))
-
 }
 
 func GetTXHistory(accountUrl string, s string, e string) {
@@ -154,8 +153,7 @@ func GetTXHistory(accountUrl string, s string, e string) {
 
 func CreateTX(sender string, args []string) {
 	//sender string, receiver string, amount string
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	var err error
 	u, err := url.Parse(sender)
 	if err != nil {
@@ -204,15 +202,10 @@ func CreateTX(sender string, args []string) {
 		log.Fatal(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create adi result")
 	}
-
-	fmt.Println(string(str))
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	ar.Print()
 }
