@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"github.com/spf13/cobra"
 	"log"
 	"time"
@@ -270,16 +271,15 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "update-key-page", params, &res); err != nil {
 		log.Fatal(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create adi result")
 	}
-
-	fmt.Println(string(str))
+	ar.Print()
 }

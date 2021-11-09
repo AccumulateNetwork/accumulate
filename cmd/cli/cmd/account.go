@@ -46,20 +46,6 @@ var accountCmd = &cobra.Command{
 				ListAccounts()
 			case "restore":
 				RestoreAccounts()
-			//case "import":
-			//	if len(args) > 1 {
-			//		ImportAccount(args[1])
-			//	} else {
-			//		fmt.Println("Usage:")
-			//		PrintAccountImport()
-			//	}
-			//case "export":
-			//	if len(args) > 1 {
-			//		ExportAccount(args[1])
-			//	} else {
-			//		fmt.Println("Usage:")
-			//		PrintAccountExport()
-			//	}
 			default:
 				fmt.Println("Usage:")
 				PrintAccount()
@@ -93,7 +79,7 @@ func PrintAccountRestore() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook]	Create a token account for an ADI")
 }
 
 func PrintAccountImport() {
@@ -163,9 +149,13 @@ func CreateAccount(url string, args []string) {
 		log.Fatal("invalid token url")
 	}
 
-	kbu, err := url2.Parse(args[2])
-	if err != nil {
-		log.Fatal("invalid key book url")
+	var keybook string
+	if len(args) > 2 {
+		kbu, err := url2.Parse(args[2])
+		if err != nil {
+			log.Fatal("invalid key book url")
+		}
+		keybook = kbu.String()
 	}
 
 	//make sure this is a valid token account
@@ -180,7 +170,7 @@ func CreateAccount(url string, args []string) {
 	tac := &protocol.TokenAccountCreate{}
 	tac.Url = accountUrl.String()
 	tac.TokenUrl = tok.String()
-	tac.KeyBookUrl = kbu.String()
+	tac.KeyBookUrl = keybook
 
 	binaryData, err := tac.MarshalBinary()
 	if err != nil {
@@ -199,19 +189,18 @@ func CreateAccount(url string, args []string) {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "token-account-create", params, &res); err != nil {
 		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
 		log.Fatal(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling account create result")
 	}
-
-	fmt.Println(string(str))
+	ar.Print()
 }
 
 func GenerateAccount() {
@@ -221,7 +210,6 @@ func GenerateAccount() {
 func ListAccounts() {
 
 	//TODO: this probably should also list out adi accounts.
-
 	err := Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()

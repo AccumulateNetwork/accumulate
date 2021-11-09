@@ -136,7 +136,6 @@ func GetADI(url string) {
 	}
 
 	fmt.Println(string(str))
-
 }
 
 func NewADIFromADISigner(actor *url2.URL, args []string) {
@@ -207,16 +206,17 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
 		log.Fatal(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create adi result")
 	}
+	ar.Print()
 
 	//todo: turn around and query the ADI and store the results.
 	err = Db.Update(func(tx *bolt.Tx) error {
@@ -228,7 +228,6 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 		}
 		return nil
 	})
-	fmt.Println(string(str))
 
 }
 
@@ -239,20 +238,8 @@ func NewADI(actor string, params []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//
-	//if IsLiteAccount(u.String()) == true {
-	//	var book string
-	//	var page string
-	//	if len(params) > 2 {
-	//		book = params[2]
-	//	}
-	//	if len(params) > 3 {
-	//		page = params[3]
-	//	}
-	//	NewADIFromLiteAccount(u, params[0], params[1], book, page)
-	//} else {
+
 	NewADIFromADISigner(u, params[:])
-	//}
 }
 
 func ListADIs() {
