@@ -226,3 +226,37 @@ func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *tr
 
 	return res, nil
 }
+
+type ActionResponse struct {
+	Txid      types.Bytes32 `json:"txid"`
+	Hash      types.Bytes32 `json:"hash"`
+	Log       types.String  `json:"log"`
+	Code      int64         `json:"code"`
+	Codespace types.String  `json:"codespace"`
+	Error     types.String  `json:"error"`
+}
+
+func (a *ActionResponse) Print() {
+	if WantJsonOutput {
+		dump, err := json.Marshal(a)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(string(dump))
+	} else {
+		fmt.Printf("Transaction Identifier\t:\t%x\n", a.Txid)
+		fmt.Printf("Tendermint Reference\t:\t%x\n", a.Hash)
+		if a.Code != 0 {
+			fmt.Printf("Error code\t:\t%d\n", a.Code)
+		}
+		if a.Error != "" {
+			fmt.Printf("Error\t:\t%s\n", a.Error)
+		}
+		if a.Log != "" {
+			fmt.Printf("Log\t:\t%s\n", a.Log)
+		}
+		if a.Codespace != "" {
+			fmt.Printf("Codespace\t:\t%s\n", a.Codespace)
+		}
+	}
+}
