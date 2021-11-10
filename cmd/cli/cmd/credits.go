@@ -97,7 +97,14 @@ func AddCredits(actor string, args []string) {
 	ar := ActionResponse{}
 	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal("error unmarshalling create adi result")
+		resData, err := json.Marshal(&res)
+		var out string
+		if err != nil {
+			out = fmt.Sprintf("%v", err)
+		} else {
+			out = string(resData)
+		}
+		log.Fatalf("error unmarshalling add credits result %s", out)
 	}
 	ar.Print()
 }
