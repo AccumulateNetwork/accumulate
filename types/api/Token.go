@@ -23,6 +23,8 @@ func NewToken(url string, symbol string, precision byte, propertiesUrl string) *
 	return t
 }
 
+func (t *Token) GetType() types.TxType { return types.TxTypeTokenCreate }
+
 func (t *Token) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
