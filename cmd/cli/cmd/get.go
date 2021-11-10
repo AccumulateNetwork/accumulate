@@ -61,7 +61,7 @@ func GetByChainId(chainId []byte) (*acmeapi.APIDataResponse, error) {
 
 	fmt.Println(string(str1))
 
-	if err := Client.Request(context.Background(), "get", params, &res); err != nil {
+	if err := Client.Request(context.Background(), "chain", params, &res); err != nil {
 		log.Fatal(err)
 	}
 
