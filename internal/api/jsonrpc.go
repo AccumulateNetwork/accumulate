@@ -169,43 +169,46 @@ func listenAndServe(label, address string, handler http.Handler) {
 	}
 }
 
-func (api *API) prepareCreate(params json.RawMessage, data encoding.BinaryMarshaler, fields ...string) (*acmeapi.APIRequestRaw, []byte, error) {
+// prepareCreate unmarshals the request parameters and the transaction payload
+// from JSON, validates them, then marshals the payload as binary so it can be
+// packaged in a GenTransaction.
+func (api *API) prepareCreate(params json.RawMessage, payload encoding.BinaryMarshaler, fields ...string) (*acmeapi.APIRequestRaw, []byte, error) {
 	var err error
 	req := &acmeapi.APIRequestRaw{}
 
-	// unmarshal req
+	// Unmarshal the general request from JSON
 	if err = json.Unmarshal(params, &req); err != nil {
 		return nil, nil, err
 	}
 
-	// validate request
+	// Validate the general request parameters
 	if err = api.validate.Struct(req); err != nil {
 		return nil, nil, err
 	}
 
-	// parse req.tx.data
-	if err = json.Unmarshal(*req.Tx.Data, &data); err != nil {
+	// Unmarshal the TX payload from JSON
+	if err = json.Unmarshal(*req.Tx.Data, &payload); err != nil {
 		return nil, nil, err
 	}
 
-	// validate request data
+	// Validate the TX payload
 	if len(fields) == 0 {
-		if err = api.validate.Struct(data); err != nil {
+		if err = api.validate.Struct(payload); err != nil {
 			return nil, nil, err
 		}
 	} else {
-		if err = api.validate.StructPartial(data, fields...); err != nil {
+		if err = api.validate.StructPartial(payload, fields...); err != nil {
 			return nil, nil, err
 		}
 	}
 
-	// Tendermint integration here
-	var payload []byte
-	if payload, err = data.MarshalBinary(); err != nil {
+	// Marshal the TX payload to binary
+	pdata, err := payload.MarshalBinary()
+	if err != nil {
 		return nil, nil, err
 	}
 
-	return req, payload, nil
+	return req, pdata, nil
 }
 
 // createSigSpec creates a signature specification
@@ -439,6 +442,8 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 	return ret
 }
 
+// sendTx constructs a GenTransaction using the request parameters and
+// transaction payload, then broadcasts it to Tendermint.
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
 	tx := new(transactions.GenTransaction)
 	tx.Transaction = payload
@@ -459,6 +464,11 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 	return api.broadcastTx(req.Wait, tx)
 }
 
+// broadcastTx broadcasts the GenTransaction to Tendermint using
+// broadcast_tx_sync. This returns an error if CheckTx fails, but it does not
+// wait for DeliverTx to complete. If the server has TX subscription enabled and
+// wait is true, broadcastTx uses a WebSocket subscription to wait for
+// DeliverTx. By default, subscriptions are disabled.
 func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
 	// Disable websocket based behavior if it is not enabled
 	if !api.config.EnableSubscribeTX {
@@ -468,20 +478,22 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi
 	ret := &acmeapi.APIDataResponse{}
 	var msg json.RawMessage
 
+	// Channel for waiting for DeliverTx result
 	var done chan abci.TxResult
 	if wait {
 		done = make(chan abci.TxResult, 1)
 	}
 
+	// Broadcast the TX
 	txInfo, err := api.query.BroadcastTx(tx, done)
 	if err != nil {
 		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
 		ret.Data = &msg
 		return ret
 	}
-
 	resp := <-api.query.BatchSend()
 
+	// Retrieve the TX response from the batch
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
 		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", tx.TransactionHash(), err))
@@ -489,12 +501,14 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi
 		return ret
 	}
 
+	// Check for an error
 	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
 		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
 		ret.Data = &msg
 		return ret
 	}
 
+	// Wait up to 5 seconds for DeliverTx result
 	if wait {
 		timer := time.NewTimer(5 * time.Second)
 		defer timer.Stop()
