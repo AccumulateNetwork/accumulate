@@ -151,7 +151,7 @@ func CreateKeyBook(book string, args []string) {
 	}
 
 	var res acmeapi.APIDataResponse
-	if err := Client.Request(context.Background(), "key-book-create", params, &res); err != nil {
+	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
 		PrintJsonRpcError(err)
 	}
 
