@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"log"
 	"strconv"
 	"time"
@@ -67,8 +68,7 @@ func AddCredits(actor string, args []string) {
 		PrintCredits()
 		log.Fatal(fmt.Errorf("amount must be an integer %v", err))
 	}
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2.String()
@@ -94,10 +94,17 @@ func AddCredits(actor string, args []string) {
 		log.Fatal(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		resData, err := json.Marshal(&res)
+		var out string
+		if err != nil {
+			out = fmt.Sprintf("%v", err)
+		} else {
+			out = string(resData)
+		}
+		log.Fatalf("error unmarshalling add credits result %s", out)
 	}
-
-	fmt.Println(string(str))
+	ar.Print()
 }
