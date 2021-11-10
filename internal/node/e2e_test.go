@@ -122,7 +122,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 
 	port, err := tmnet.GetFreePort()
 	require.NoError(t, err)
-	jsonapi, err := api.StartAPI(&config.API{
+	jsonapi, err := api.New(&config.API{
 		JSONListenAddress: fmt.Sprintf("tcp://localhost:%d", port),
 		RESTListenAddress: fmt.Sprintf("tcp://localhost:%d", port+1),
 	}, query)
