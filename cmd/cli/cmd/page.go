@@ -84,7 +84,12 @@ func GetAndPrintKeyPage(url string) {
 		log.Fatal(fmt.Errorf("error retrieving key book for %s", url))
 	}
 
-	fmt.Println(string(str))
+	res := acmeapi.APIDataResponse{}
+	err = json.Unmarshal([]byte(str), &res)
+	if err != nil {
+		log.Fatal(err)
+	}
+	PrintQueryResponse(&res)
 }
 
 func GetKeyPage(url string) ([]byte, *protocol.SigSpecGroup, error) {
