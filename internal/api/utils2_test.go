@@ -12,7 +12,6 @@ import (
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
-	"github.com/ybbus/jsonrpc/v2"
 )
 
 func GetFreePort(t *testing.T) int {
@@ -29,10 +28,9 @@ func NewTest(t *testing.T, q *Query) *API {
 		JSONListenAddress: fmt.Sprintf("localhost:%d", port),
 		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
 	}
-	jsonrpc := jsonrpc.NewClient(fmt.Sprintf("http://localhost:%d/v1", port))
 	v, err := protocol.NewValidator()
 	require.NoError(t, err)
-	return &API{config, v, q, jsonrpc}
+	return &API{config, v, q}
 }
 
 func (api *API) GetData(ctx context.Context, params json.RawMessage) interface{} {
