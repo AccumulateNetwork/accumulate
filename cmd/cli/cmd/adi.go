@@ -81,7 +81,7 @@ func PrintAdiDirectory() {
 	fmt.Println("  accumulate adi directory [url] 		Get directory of URL's associated with an ADI")
 }
 
-func GetAdiDirectory(actor string) *json.RawMessage {
+func GetAdiDirectory(actor string) {
 
 	u, err := url2.Parse(actor)
 	if err != nil {
@@ -89,26 +89,17 @@ func GetAdiDirectory(actor string) *json.RawMessage {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 
 	params := acmeapi.APIRequestURL{}
 
 	params.URL = types.String(u.String())
 
 	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(str))
-	ret := json.RawMessage{}
-	ret = str
-	return &ret
+	PrintQueryResponse(&res)
 }
 
 func PrintADI() {
@@ -120,22 +111,22 @@ func PrintADI() {
 
 func GetADI(url string) {
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
 	if err := Client.Request(context.Background(), "adi", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
-	str, err := json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(str))
+	PrintQueryResponse(&res)
+	//str, err := json.Marshal(res)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//fmt.Println(string(str))
 }
 
 func NewADIFromADISigner(actor *url2.URL, args []string) {
@@ -208,7 +199,7 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 
 	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
 	ar := ActionResponse{}

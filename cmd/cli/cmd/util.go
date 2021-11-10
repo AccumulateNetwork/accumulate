@@ -9,8 +9,12 @@ import (
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulated/types/api/response"
 	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"log"
+	"math"
+	"math/big"
 	"strconv"
 	"time"
 )
@@ -231,9 +235,10 @@ type ActionResponse struct {
 	Txid      types.Bytes32 `json:"txid"`
 	Hash      types.Bytes32 `json:"hash"`
 	Log       types.String  `json:"log"`
-	Code      int64         `json:"code"`
+	Code      types.String  `json:"code"`
 	Codespace types.String  `json:"codespace"`
 	Error     types.String  `json:"error"`
+	Mempool   types.String  `json:"mempool"`
 }
 
 func (a *ActionResponse) Print() {
@@ -242,21 +247,190 @@ func (a *ActionResponse) Print() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(string(dump))
+		log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
+		log.Fatal(string(dump))
 	} else {
-		fmt.Printf("Transaction Identifier\t:\t%x\n", a.Txid)
-		fmt.Printf("Tendermint Reference\t:\t%x\n", a.Hash)
-		if a.Code != 0 {
-			fmt.Printf("Error code\t:\t%d\n", a.Code)
+		var out string
+		out += fmt.Sprintf("\n\tTransaction Identifier\t:\t%x\n", a.Txid)
+		out += fmt.Sprintf("\tTendermint Reference\t:\t%x\n", a.Hash)
+		if a.Code != "0" && a.Code != "" {
+			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
+		} else {
+			out += fmt.Sprintf("\tError code\t\t:\tok\n")
 		}
 		if a.Error != "" {
-			fmt.Printf("Error\t:\t%s\n", a.Error)
+			out += fmt.Sprintf("\tError\t\t:\t%s\n", a.Error)
 		}
 		if a.Log != "" {
-			fmt.Printf("Log\t:\t%s\n", a.Log)
+			out += fmt.Sprintf("\tLog\t\t\t:\t%s\n", a.Log)
 		}
 		if a.Codespace != "" {
-			fmt.Printf("Codespace\t:\t%s\n", a.Codespace)
+			out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
 		}
+		log.Fatal(out)
 	}
+}
+
+func PrintJsonRpcError(err error) {
+	var e jsonrpc2.Error
+	switch err.(type) {
+	case jsonrpc2.Error:
+		e = err.(jsonrpc2.Error)
+	default:
+		log.Fatalf("error with request, %v", err)
+	}
+
+	var out string
+	if WantJsonOutput {
+		dump, err := json.Marshal(e)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
+		log.Fatal(string(dump))
+	} else {
+		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
+		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
+		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
+		log.Fatal(out)
+	}
+}
+
+var (
+	ApiToString = map[string]string{
+		"anonTokenAccount": "lite account",
+		"tokenAccount":     "ADI token account",
+		"adi":              "ADI",
+		"sigSpecGroup":     "Key Book",
+		"sigSpec":          "Key Page",
+	}
+)
+
+func PrintQueryResponse(res *acmeapi.APIDataResponse) {
+
+	if WantJsonOutput {
+		data, err := json.Marshal(res)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
+		log.Fatal(string(data))
+	} else {
+		switch res.Type {
+		case "anonTokenAccount":
+			ata := response.AnonTokenAccount{}
+			err := json.Unmarshal(*res.Data, &ata)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			//query the token
+			tokenData := Get(ata.TokenUrl)
+			r := acmeapi.APIDataResponse{}
+			err = json.Unmarshal([]byte(tokenData), &r)
+			if err != nil {
+				log.Fatal(err)
+			}
+			t := response.Token{}
+			err = json.Unmarshal(*r.Data, &t)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			bf := big.Float{}
+			bd := big.Float{}
+			bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
+			bf.SetInt(&ata.Balance.Int)
+			bal := big.Float{}
+			bal.Quo(&bf, &bd)
+
+			var out string
+			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
+			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
+			out += fmt.Sprintf("\tBalance\t\t:\t%s %s\n", bal.String(), t.Symbol)
+			out += fmt.Sprintf("\tCredits\t\t:\t%s\n", ata.CreditBalance.String())
+			out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
+
+			log.Fatal(out)
+
+		case "tokenAccount":
+			ata := response.TokenAccount{}
+			err := json.Unmarshal(*res.Data, &ata)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			//query the token
+			tokenData := Get(ata.TokenUrl)
+			r := acmeapi.APIDataResponse{}
+			err = json.Unmarshal([]byte(tokenData), &r)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			t := response.Token{}
+			err = json.Unmarshal(*r.Data, &t)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			bf := big.Float{}
+			bd := big.Float{}
+			bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
+			bf.SetInt(&ata.Balance.Int)
+			bal := big.Float{}
+			bal.Quo(&bf, &bd)
+
+			var out string
+			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
+			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
+			out += fmt.Sprintf("\tBalance\t\t:\t%s %s\n", bal.String(), t.Symbol)
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBookUrl)
+
+			log.Fatal(out)
+		case "adi":
+			adi := response.ADI{}
+			err := json.Unmarshal(*res.Data, &adi)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			var out string
+			out += fmt.Sprintf("\n\tADI Url\t\t:\t%v\n", adi.Url)
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", adi.KeyBookName)
+
+			log.Fatal(out)
+		case "directory":
+			dqr := protocol.DirectoryQueryResult{}
+			err := json.Unmarshal(*res.Data, &dqr)
+			if err != nil {
+				log.Fatal(err)
+			}
+			var out string
+			out += fmt.Sprintf("\n\tADI Entries\n")
+			for _, s := range dqr.Entries {
+				data := Get(s)
+				r := acmeapi.APIDataResponse{}
+				err = json.Unmarshal([]byte(data), &r)
+
+				chainType := "unknown"
+				if err == nil {
+					if v, ok := ApiToString[*r.Type.AsString()]; ok {
+						chainType = v
+					}
+				}
+				out += fmt.Sprintf("\t%v (%s)\n", s, chainType)
+			}
+			log.Fatal(out)
+		}
+
+	}
+	//var e jsonrpc2.Error
+	//switch err.(type) {
+	//case jsonrpc2.Error:
+	//	e = err.(jsonrpc2.Error)
+	//default:
+	//	log.Fatalf("error with request, %v", err)
+	//}
+
 }
