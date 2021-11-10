@@ -26,7 +26,8 @@ var getCmd = &cobra.Command{
 			}
 		default:
 			if len(args) > 0 {
-				Get(args[0])
+				str := Get(args[0])
+				fmt.Println(string(str))
 			} else {
 				fmt.Println("Usage:")
 				PrintGet()
@@ -60,7 +61,7 @@ func GetByChainId(chainId []byte) (*acmeapi.APIDataResponse, error) {
 
 	fmt.Println(string(str1))
 
-	if err := Client.Request(context.Background(), "get", params, &res); err != nil {
+	if err := Client.Request(context.Background(), "chain", params, &res); err != nil {
 		log.Fatal(err)
 	}
 
@@ -70,19 +71,10 @@ func GetByChainId(chainId []byte) (*acmeapi.APIDataResponse, error) {
 }
 
 func Get(url string) string {
-
 	var res interface{}
-	var str []byte
 
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
-
-	str1, err1 := json.Marshal(&params)
-	if err1 != nil {
-		log.Fatal(err1)
-	}
-
-	fmt.Println(string(str1))
 
 	if err := Client.Request(context.Background(), "get", params, &res); err != nil {
 		log.Fatal(err)
@@ -93,6 +85,5 @@ func Get(url string) string {
 		log.Fatal(err)
 	}
 
-	fmt.Println(string(str))
 	return string(str)
 }
