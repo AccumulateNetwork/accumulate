@@ -73,7 +73,13 @@ func GetAndPrintKeyBook(url string) {
 		log.Fatal(fmt.Errorf("error retrieving key book for %s", url))
 	}
 
-	fmt.Println(string(str))
+	res := acmeapi.APIDataResponse{}
+	err = json.Unmarshal([]byte(str), &res)
+	if err != nil {
+		log.Fatal(err)
+	}
+	PrintQueryResponse(&res)
+	//fmt.Println(string(str))
 }
 
 func GetKeyBook(url string) ([]byte, *protocol.SigSpecGroup, error) {
@@ -147,7 +153,7 @@ func CreateKeyBook(book string, args []string) {
 
 	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "key-book-create", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
 	ar := ActionResponse{}
