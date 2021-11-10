@@ -442,7 +442,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				log.Fatal(err)
 			}
 			var out string
-			out += fmt.Sprintf("\n\tHeight\t:\tKey Page Url\n")
+			out += fmt.Sprintf("\n\tHeight\t\tKey Page Url\n")
 			for i, v := range ssg.SigSpecs {
 				//enable this code when testnet updated to a version > 0.2.1.
 				//data, err := GetByChainId(v[:])
