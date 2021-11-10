@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"encoding"
 	"encoding/json"
@@ -422,15 +423,72 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				out += fmt.Sprintf("\t%v (%s)\n", s, chainType)
 			}
 			log.Fatal(out)
+		case "sigSpecGroup":
+			var ssg struct {
+				Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
+				ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+				SigSpecId []byte          `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
+				SigSpecs  []types.Bytes32 `json:"sigSpecs"`
+			}
+
+			err := json.Unmarshal(*res.Data, &ssg)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			u, err := url2.Parse(*ssg.ChainUrl.AsString())
+			if err != nil {
+				log.Fatal(err)
+			}
+			var out string
+			out += fmt.Sprintf("\n\tHeight\t:\tKey Page Url\n")
+			for i, v := range ssg.SigSpecs {
+				//enable this code when testnet updated to a version > 0.2.1.
+				//data, err := GetByChainId(v[:])
+				//keypage := "unknown"
+				//
+				//if err == nil {
+				//	r := acmeapi.APIDataResponse{}
+				//	err = json.Unmarshal(*data.Data, &r)
+				//	if err == nil {
+				//		ss := protocol.SigSpec{}
+				//		err = json.Unmarshal(*r.Data, &ss)
+				//		keypage = *ss.ChainUrl.AsString()
+				//	}
+				//}
+				//out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, keypage)
+				s := resolveKeyPageUrl(u.Authority, v[:])
+				out += fmt.Sprintf("\t%d\t:\t%s\n", i+1, s)
+			}
+			log.Fatal(out)
+		}
+	}
+}
+
+func resolveKeyPageUrl(adi string, chainId []byte) string {
+	var res acmeapi.APIDataResponse
+	params := acmeapi.APIRequestURL{}
+	params.URL = types.String(adi)
+	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
+		PrintJsonRpcError(err)
+	}
+
+	dqr := protocol.DirectoryQueryResult{}
+	err := json.Unmarshal(*res.Data, &dqr)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, s := range dqr.Entries {
+		u, err := url2.Parse(s)
+		if err != nil {
+			continue
 		}
 
+		if bytes.Equal(u.ResourceChain(), chainId) {
+			return s
+		}
 	}
-	//var e jsonrpc2.Error
-	//switch err.(type) {
-	//case jsonrpc2.Error:
-	//	e = err.(jsonrpc2.Error)
-	//default:
-	//	log.Fatalf("error with request, %v", err)
-	//}
 
+	return fmt.Sprintf("unresolvable chain %x", chainId)
 }
