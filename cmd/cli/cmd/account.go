@@ -102,22 +102,23 @@ func PrintAccount() {
 
 func GetAccount(url string) {
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
+	//var str []byte
 
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
 	if err := Client.Request(context.Background(), "token-account", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
-	str, err := json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(str))
+	PrintQueryResponse(&res)
+	//str, err := json.Marshal(res)
+	//if err != nil {
+	//	log.Fatalf("error marshaling result, %v", err)
+	//}
+	//
+	//fmt.Println(string(str))
 
 }
 
