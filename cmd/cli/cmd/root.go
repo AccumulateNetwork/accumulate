@@ -16,8 +16,9 @@ import (
 )
 
 var (
-	Client = client.NewAPIClient()
-	Db     = initDB() //initManagedDB()
+	Client         = client.NewAPIClient()
+	Db             = initDB() //initManagedDB()
+	WantJsonOutput = false
 )
 
 var currentUser = func() *user.User {
@@ -47,6 +48,7 @@ var rootCmd = func() *cobra.Command {
 	flags.StringVarP(&Client.Server, "server", "s", defaultServer, "Accumulated server")
 	flags.DurationVarP(&Client.Timeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
 	flags.BoolVarP(&Client.DebugRequest, "debug", "d", false, "Print accumulated API calls")
+	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 
 	return cmd
 
