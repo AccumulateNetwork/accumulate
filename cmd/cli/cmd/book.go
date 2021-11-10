@@ -79,7 +79,6 @@ func GetAndPrintKeyBook(url string) {
 		log.Fatal(err)
 	}
 	PrintQueryResponse(&res)
-	//fmt.Println(string(str))
 }
 
 func GetKeyBook(url string) ([]byte, *protocol.SigSpecGroup, error) {

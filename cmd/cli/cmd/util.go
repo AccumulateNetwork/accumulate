@@ -424,6 +424,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 			}
 			log.Fatal(out)
 		case "sigSpecGroup":
+			//workaround for protocol unmarshaling bug
 			var ssg struct {
 				Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
 				ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
@@ -457,8 +458,26 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				//	}
 				//}
 				//out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, keypage)
+				//hack to resolve the keypage url given the chainid
 				s := resolveKeyPageUrl(u.Authority, v[:])
 				out += fmt.Sprintf("\t%d\t:\t%s\n", i+1, s)
+			}
+			log.Fatal(out)
+		case "sigSpec":
+			ss := protocol.SigSpec{}
+			err := json.Unmarshal(*res.Data, &ss)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			out := fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+			for i, k := range ss.Keys {
+				keyName := ""
+				name, err := FindLabelFromPubKey(k.PublicKey)
+				if err == nil {
+					keyName = name
+				}
+				out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 			}
 			log.Fatal(out)
 		}
