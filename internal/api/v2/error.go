@@ -20,6 +20,7 @@ const (
 	ErrCodeNotLiteAccount
 	ErrCodeNotAcmeAccount
 	ErrCodeNotFound
+	ErrCodeCanceled
 )
 
 // Metrics errors
@@ -31,6 +32,7 @@ const (
 
 var (
 	ErrInternal           = jsonrpc2.NewError(ErrCodeInternal, "Internal Error", "An internal error occured")
+	ErrCanceled           = jsonrpc2.NewError(ErrCodeCanceled, "Canceled", "The request was canceled")
 	ErrMetricsNotAVector  = jsonrpc2.NewError(ErrCodeMetricsNotAVector, "Metrics Query Error", "response is not a vector")
 	ErrMetricsVectorEmpty = jsonrpc2.NewError(ErrCodeMetricsVectorEmpty, "Metrics Query Error", "response vector is empty")
 )
@@ -42,6 +44,7 @@ func validatorError(err error) jsonrpc2.Error {
 func submissionError(err error) jsonrpc2.Error {
 	return jsonrpc2.NewError(ErrCodeSubmission, "Submission Entry Error", err)
 }
+
 func accumulateError(err error) jsonrpc2.Error {
 	if errors.Is(err, storage.ErrNotFound) {
 		return jsonrpc2.NewError(ErrCodeNotFound, "Accumulate Error", "Not Found")
