@@ -244,6 +244,9 @@ type ActionResponse struct {
 
 func (a *ActionResponse) Print() {
 	if WantJsonOutput {
+		if a.Code == "0" || a.Code == "" {
+			 a.Code = "ok"
+		}
 		dump, err := json.Marshal(a)
 		if err != nil {
 			log.Fatal(err)

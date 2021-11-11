@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -105,7 +106,7 @@ func GetTX(hash string) {
 		log.Fatal(err)
 	}
 
-	fmt.Println(string(str))
+	fmt.Fprintf(os.Stderr, string(str))
 }
 
 func GetTXHistory(accountUrl string, s string, e string) {
@@ -147,7 +148,7 @@ func GetTXHistory(accountUrl string, s string, e string) {
 		log.Fatal(err)
 	}
 
-	fmt.Println(string(str))
+	fmt.Fprintf(os.Stderr, string(str))
 
 }
 
