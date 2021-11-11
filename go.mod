@@ -19,7 +19,6 @@ require (
 	github.com/go-playground/validator/v10 v10.9.0
 	github.com/golang/mock v1.5.0
 	github.com/google/go-cmp v0.5.6 // indirect
-	github.com/gorilla/mux v1.8.0
 	github.com/kardianos/service v1.2.0
 	github.com/mitchellh/mapstructure v1.4.2
 	github.com/pelletier/go-toml v1.9.4
