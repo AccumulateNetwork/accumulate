@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
@@ -13,6 +14,8 @@ type RequestByUrl struct {
 type ResponseByUrl struct {
 	state.Object
 }
+
+func (*RequestByUrl) Type() types.QueryType { return types.QueryTypeUrl }
 
 func (r *RequestByUrl) MarshalBinary() ([]byte, error) {
 	return r.Url.MarshalBinary()
