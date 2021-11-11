@@ -43,6 +43,8 @@ func NewTokenTxOutput(url types.String, amount uint64) *TokenTxOutput {
 	return txo
 }
 
+func (*TokenTx) GetType() types.TxType { return types.TxTypeTokenTx }
+
 func (t *TokenTx) AddToAccount(toUrl types.String, amt uint64) {
 	txOut := TokenTxOutput{types.UrlChain{String: toUrl}, amt}
 	t.To = append(t.To, &txOut)
