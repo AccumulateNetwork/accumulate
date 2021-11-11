@@ -97,7 +97,7 @@ func GetTX(hash string) {
 	}
 
 	if err := Client.Request(context.Background(), "token-tx", jsondata, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
 	str, err = json.Marshal(res)
@@ -106,7 +106,6 @@ func GetTX(hash string) {
 	}
 
 	fmt.Println(string(str))
-
 }
 
 func GetTXHistory(accountUrl string, s string, e string) {
@@ -140,7 +139,7 @@ func GetTXHistory(accountUrl string, s string, e string) {
 	}
 
 	if err := Client.Request(context.Background(), "token-account-history", jsondata, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
 	str, err = json.Marshal(res)
@@ -154,8 +153,7 @@ func GetTXHistory(accountUrl string, s string, e string) {
 
 func CreateTX(sender string, args []string) {
 	//sender string, receiver string, amount string
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	var err error
 	u, err := url.Parse(sender)
 	if err != nil {
@@ -181,8 +179,9 @@ func CreateTX(sender string, args []string) {
 
 	to := []*acmeapi.TokenTxOutput{}
 	r := &acmeapi.TokenTxOutput{}
-	amt, err := strconv.ParseUint(amount, 10, 64)
-	r.Amount = uint64(amt)
+
+	amt, err := strconv.ParseFloat(amount, 64)
+	r.Amount = uint64(amt * 1e8)
 	r.URL.String = types.String(u2.String())
 	to = append(to, r)
 	tokentx.To = to
@@ -204,15 +203,10 @@ func CreateTX(sender string, args []string) {
 		log.Fatal(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create adi result")
 	}
-
-	fmt.Println(string(str))
-
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	ar.Print()
 }

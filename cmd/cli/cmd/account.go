@@ -12,6 +12,7 @@ import (
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
+	"github.com/mdp/qrterminal"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
@@ -40,26 +41,19 @@ var accountCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintAccountCreate()
 				}
+			case "qr":
+				if len(args) > 1 {
+					QrAccount(args[1])
+				} else {
+					fmt.Println("Usage:")
+					PrintAccountQr()
+				}
 			case "generate":
 				GenerateKey("")
 			case "list":
 				ListAccounts()
 			case "restore":
 				RestoreAccounts()
-			//case "import":
-			//	if len(args) > 1 {
-			//		ImportAccount(args[1])
-			//	} else {
-			//		fmt.Println("Usage:")
-			//		PrintAccountImport()
-			//	}
-			//case "export":
-			//	if len(args) > 1 {
-			//		ExportAccount(args[1])
-			//	} else {
-			//		fmt.Println("Usage:")
-			//		PrintAccountExport()
-			//	}
 			default:
 				fmt.Println("Usage:")
 				PrintAccount()
@@ -80,6 +74,10 @@ func PrintAccountGet() {
 	fmt.Println("  accumulate account get [url]			Get anon token account by URL")
 }
 
+func PrintAccountQr() {
+	fmt.Println("  accumulate account qr [url]			Display QR code for lite account URL")
+}
+
 func PrintAccountGenerate() {
 	fmt.Println("  accumulate account generate			Generate random lite token account")
 }
@@ -93,7 +91,7 @@ func PrintAccountRestore() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook (optional)]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [token account url] [tokenUrl] [keyBook]	Create a token account for an ADI")
 }
 
 func PrintAccountImport() {
@@ -106,6 +104,7 @@ func PrintAccountExport() {
 
 func PrintAccount() {
 	PrintAccountGet()
+	PrintAccountQr()
 	PrintAccountGenerate()
 	PrintAccountList()
 	PrintAccountRestore()
@@ -116,23 +115,42 @@ func PrintAccount() {
 
 func GetAccount(url string) {
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
+	//var str []byte
 
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
 	if err := Client.Request(context.Background(), "token-account", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
-	str, err := json.Marshal(res)
+	PrintQueryResponse(&res)
+	//str, err := json.Marshal(res)
+	//if err != nil {
+	//	log.Fatalf("error marshaling result, %v", err)
+	//}
+	//
+	//fmt.Println(string(str))
+
+}
+
+func QrAccount(s string) {
+	u, err := url2.Parse(s)
 	if err != nil {
-		log.Fatal(err)
+		fmt.Fprintf(os.Stderr, "%q is not a valid Accumulate URL: %v\n", s, err)
 	}
 
-	fmt.Println(string(str))
-
+	qrterminal.GenerateWithConfig(u.String(), qrterminal.Config{
+		Level:          qrterminal.M,
+		Writer:         os.Stdout,
+		HalfBlocks:     true,
+		BlackChar:      qrterminal.BLACK_BLACK,
+		BlackWhiteChar: qrterminal.BLACK_WHITE,
+		WhiteChar:      qrterminal.WHITE_WHITE,
+		WhiteBlackChar: qrterminal.WHITE_BLACK,
+		QuietZone:      2,
+	})
 }
 
 //account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
@@ -163,9 +181,13 @@ func CreateAccount(url string, args []string) {
 		log.Fatal("invalid token url")
 	}
 
-	kbu, err := url2.Parse(args[2])
-	if err != nil {
-		log.Fatal("invalid key book url")
+	var keybook string
+	if len(args) > 2 {
+		kbu, err := url2.Parse(args[2])
+		if err != nil {
+			log.Fatal("invalid key book url")
+		}
+		keybook = kbu.String()
 	}
 
 	//make sure this is a valid token account
@@ -180,7 +202,7 @@ func CreateAccount(url string, args []string) {
 	tac := &protocol.TokenAccountCreate{}
 	tac.Url = accountUrl.String()
 	tac.TokenUrl = tok.String()
-	tac.KeyBookUrl = kbu.String()
+	tac.KeyBookUrl = keybook
 
 	binaryData, err := tac.MarshalBinary()
 	if err != nil {
@@ -199,19 +221,18 @@ func CreateAccount(url string, args []string) {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "token-account-create", params, &res); err != nil {
 		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
 		log.Fatal(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling account create result")
 	}
-
-	fmt.Println(string(str))
+	ar.Print()
 }
 
 func GenerateAccount() {
@@ -221,7 +242,6 @@ func GenerateAccount() {
 func ListAccounts() {
 
 	//TODO: this probably should also list out adi accounts.
-
 	err := Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
