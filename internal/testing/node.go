@@ -19,8 +19,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 )
 
-func NodeInitOptsForNetwork(name string) (node.InitOptions, error) {
-	network := networks.Networks[name]
+func NodeInitOptsForNetwork(network *networks.Subnet) (node.InitOptions, error) {
 	listenIP := make([]string, len(network.Nodes))
 	remoteIP := make([]string, len(network.Nodes))
 	config := make([]*cfg.Config, len(network.Nodes))

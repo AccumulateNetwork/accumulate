@@ -20,6 +20,7 @@ require (
 	github.com/golang/mock v1.5.0
 	github.com/google/go-cmp v0.5.6 // indirect
 	github.com/kardianos/service v1.2.0
+	github.com/mdp/qrterminal v1.0.1
 	github.com/mitchellh/mapstructure v1.4.2
 	github.com/pelletier/go-toml v1.9.4
 	github.com/prometheus/client_golang v1.11.0

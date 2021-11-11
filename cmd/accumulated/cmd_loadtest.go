@@ -68,7 +68,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	// Create clients for networks
 	for _, name := range flagLoadTest.Networks {
-		net := networks.Networks[name]
+		net := networks.All[name]
 		if net == nil {
 			fatalf("unknown network %q", flagInit.Net)
 		}
