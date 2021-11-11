@@ -35,21 +35,17 @@ func PrintFaucet() {
 
 func Faucet(url string) {
 
-	var res interface{}
-	var str []byte
-
+	var res acmeapi.APIDataResponse
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
 	if err := Client.Request(context.Background(), "faucet", params, &res); err != nil {
 		log.Fatal(err)
 	}
-
-	str, err := json.Marshal(res)
+	ar := ActionResponse{}
+	err := json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create adi result")
 	}
-
-	fmt.Println(string(str))
-
+	ar.Print()
 }

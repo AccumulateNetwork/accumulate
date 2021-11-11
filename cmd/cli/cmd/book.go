@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"log"
 	"time"
 
@@ -72,7 +73,12 @@ func GetAndPrintKeyBook(url string) {
 		log.Fatal(fmt.Errorf("error retrieving key book for %s", url))
 	}
 
-	fmt.Println(string(str))
+	res := acmeapi.APIDataResponse{}
+	err = json.Unmarshal([]byte(str), &res)
+	if err != nil {
+		log.Fatal(err)
+	}
+	PrintQueryResponse(&res)
 }
 
 func GetKeyBook(url string) ([]byte, *protocol.SigSpecGroup, error) {
@@ -144,18 +150,17 @@ func CreateKeyBook(book string, args []string) {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create key book result")
 	}
-
-	fmt.Println(string(str))
+	ar.Print()
 
 }
 

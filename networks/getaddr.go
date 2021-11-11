@@ -7,7 +7,7 @@ import (
 )
 
 func GetRpcAddr(netOrIp string, portOffset int) (string, error) {
-	net := Networks[netOrIp]
+	net := All[netOrIp]
 	ip, err := url.Parse(netOrIp)
 	if net != nil {
 		ip = &url.URL{Scheme: "tcp", Host: fmt.Sprintf("%s:%d", net.Nodes[0].IP, net.Port+portOffset)}
