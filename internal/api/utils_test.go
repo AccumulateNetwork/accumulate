@@ -11,6 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulated/internal/node"
 	"github.com/AccumulateNetwork/accumulated/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
+	"github.com/AccumulateNetwork/accumulated/networks"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,7 @@ import (
 func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query) {
 	t.Helper()
 
-	opts, err := acctesting.NodeInitOptsForNetwork("Badlands")
+	opts, err := acctesting.NodeInitOptsForNetwork(networks.Local["Badlands"])
 	require.NoError(t, err)
 	opts.WorkDir = dir
 	opts.Port = GetFreePort(t)
