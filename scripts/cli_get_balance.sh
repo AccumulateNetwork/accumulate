@@ -7,7 +7,7 @@
 # if ID entered on the command line, prompt for one and exit
 
 if [ -z $1 ]; then
-	echo "Usage: cli_get_balance.sh ID IPAddress:Port"
+	echo "Usage: cli_get_balance.sh ID <IPAddress:Port>"
 	exit 0
 fi
 
@@ -22,17 +22,16 @@ fi
 
 # see if the IP address and port were entered on the command line
 
-if [ -z $2 ]; then
-	echo "You must enter an IPAddress:Port for a server to generate an account"
-	exit 0
-fi
-
 # issue the account get command for the specified ID to the specified server
 
-bal=`$cli account get $id1 -s "http://$2/v1"`
+if [ -z $2 ]; then
+   bal="$($cli account get $id1 -j 2>&1 > /dev/null | /usr/bin/jq .data.balance | /usr/bin/sed 's/\"//g')"
+else
+   bal="$($cli account get $id1 -s http://$2/v1 -j 2>&1 > /dev/null | /usr/bin/jq .data.balance | /usr/bin/sed 's/\"//g')"
+fi
 
 # return the balance information
 
-echo $bal | jq .data.balance | /usr/bin/sed 's/$//g'
+echo $bal 
 
 
