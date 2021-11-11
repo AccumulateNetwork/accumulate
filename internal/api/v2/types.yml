@@ -106,3 +106,54 @@ MetricsResponse:
   fields:
     - name: Value
       type: any
+
+TxRequest:
+  non-binary: true
+  fields:
+  - name: Sponsor
+    type: string
+    is-url: true
+  - name: Signer
+    type: Signer
+    marshal-as: self
+  - name: Signature
+    type: bytes
+  - name: KeyPage
+    type: KeyPage
+    marshal-as: self
+  - name: WaitForDeliver
+    type: bool
+  - name: Payload
+    type: any
+
+TxResponse:
+  non-binary: true
+  fields:
+  - name: Txid
+    type: bytes
+  - name: Hash
+    type: chain
+  - name: Code
+    type: uvarint
+  - name: Message
+    type: string
+  - name: Delivered
+    type: bool
+  - name: Synthetic
+    type: slice
+    slice:
+      type: TxSynthetic
+      marshal-as: self
+      pointer: true
+
+TxSynthetic:
+  non-binary: true
+  fields:
+  - name: Type
+    type: string
+  - name: Txid
+    type: string
+  - name: Hash
+    type: string
+  - name: Url
+    type: string
