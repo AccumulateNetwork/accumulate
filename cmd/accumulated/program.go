@@ -157,7 +157,7 @@ func (p *Program) Start(s service.Service) error {
 		}
 	}
 
-	p.api, err = api.StartAPI(&config.Accumulate.API, api.NewQuery(p.relay))
+	p.api, err = api.New(&config.Accumulate.API, api.NewQuery(p.relay))
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
 	}
