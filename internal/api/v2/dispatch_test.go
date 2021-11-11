@@ -69,10 +69,11 @@ func TestDispatchExecute(t *testing.T) {
 	mux.Handle("/h2", h2)
 
 	s := http.Server{Handler: mux}
-	l, err := net.Listen("tcp", "localhost:")
+
+	l, err := net.Listen("tcp", fmt.Sprintf("localhost:"))
 	require.NoError(t, err)
 	go func() { _ = s.Serve(l) }()
-	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
+	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
 	j, err := NewJrpc(JrpcOptions{
 		Remote: []string{
@@ -107,6 +108,7 @@ func TestDispatchExecuteQueueDepth(t *testing.T) {
 	go func() { _ = s.Serve(l) }()
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
+
 	j, err := NewJrpc(JrpcOptions{
 		Remote:        []string{fmt.Sprintf("http://%s", l.Addr().String())},
 		QueueDuration: 1e6 * time.Hour, // Forever
@@ -125,6 +127,7 @@ func TestDispatchExecuteQueueDuration(t *testing.T) {
 	require.NoError(t, err)
 	go func() { _ = s.Serve(l) }()
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
+
 
 	j, err := NewJrpc(JrpcOptions{
 		Remote:        []string{fmt.Sprintf("http://%s", l.Addr().String())},
