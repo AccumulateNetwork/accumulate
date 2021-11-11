@@ -85,7 +85,7 @@ func init() {
 }
 
 func initNode(cmd *cobra.Command, args []string) {
-	network := networks.Networks[flagInit.Net]
+	network := networks.All[flagInit.Net]
 	if network == nil {
 		fatalf("unknown network %q", flagInit.Net)
 	}
@@ -149,7 +149,7 @@ func initFollower(cmd *cobra.Command, _ []string) {
 		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
 	}
 
-	network := networks.Networks[flagInit.Net]
+	network := networks.All[flagInit.Net]
 	if network == nil {
 		fatalf("unknown network %q", flagInit.Net)
 	}
