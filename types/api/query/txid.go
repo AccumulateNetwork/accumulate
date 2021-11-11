@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"github.com/AccumulateNetwork/accumulated/types"
 )
@@ -18,6 +19,8 @@ type ResponseByTxId struct {
 type RequestByTxId struct {
 	TxId types.Bytes32
 }
+
+func (*RequestByTxId) Type() types.QueryType { return types.QueryTypeTxId }
 
 func (t *ResponseByTxId) Size() int {
 	var d [8]byte
