@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 )
 
@@ -17,6 +18,8 @@ type RequestTxHistory struct {
 	Start   int64
 	Limit   int64
 }
+
+func (*RequestTxHistory) Type() types.QueryType { return types.QueryTypeTxHistory }
 
 func (t *ResponseTxHistory) MarshalBinary() (data []byte, err error) {
 	var buff bytes.Buffer

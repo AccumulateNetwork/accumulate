@@ -2,6 +2,7 @@ package query
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulated/types"
 	"github.com/AccumulateNetwork/accumulated/types/state"
 )
@@ -13,6 +14,8 @@ type RequestByChainId struct {
 type ResponseByChainId struct {
 	state.Object
 }
+
+func (*RequestByChainId) Type() types.QueryType { return types.QueryTypeChainId }
 
 func (r *RequestByChainId) MarshalBinary() ([]byte, error) {
 	return r.ChainId[:], nil
