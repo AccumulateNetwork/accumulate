@@ -12,6 +12,7 @@ import (
 	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
 	"github.com/AccumulateNetwork/accumulated/protocol"
 	"github.com/AccumulateNetwork/accumulated/types/api/response"
+	"github.com/mdp/qrterminal"
 
 	"github.com/AccumulateNetwork/accumulated/types"
 	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
@@ -40,6 +41,13 @@ var accountCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintAccountCreate()
 				}
+			case "qr":
+				if len(args) > 1 {
+					QrAccount(args[1])
+				} else {
+					fmt.Println("Usage:")
+					PrintAccountQr()
+				}
 			case "generate":
 				GenerateKey("")
 			case "list":
@@ -64,6 +72,10 @@ func init() {
 
 func PrintAccountGet() {
 	fmt.Println("  accumulate account get [url]			Get anon token account by URL")
+}
+
+func PrintAccountQr() {
+	fmt.Println("  accumulate account qr [url]			Display QR code for lite account URL")
 }
 
 func PrintAccountGenerate() {
@@ -92,6 +104,7 @@ func PrintAccountExport() {
 
 func PrintAccount() {
 	PrintAccountGet()
+	PrintAccountQr()
 	PrintAccountGenerate()
 	PrintAccountList()
 	PrintAccountRestore()
@@ -120,6 +133,24 @@ func GetAccount(url string) {
 	//
 	//fmt.Println(string(str))
 
+}
+
+func QrAccount(s string) {
+	u, err := url2.Parse(s)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%q is not a valid Accumulate URL: %v\n", s, err)
+	}
+
+	qrterminal.GenerateWithConfig(u.String(), qrterminal.Config{
+		Level:          qrterminal.M,
+		Writer:         os.Stdout,
+		HalfBlocks:     true,
+		BlackChar:      qrterminal.BLACK_BLACK,
+		BlackWhiteChar: qrterminal.BLACK_WHITE,
+		WhiteChar:      qrterminal.WHITE_WHITE,
+		WhiteBlackChar: qrterminal.WHITE_BLACK,
+		QuietZone:      2,
+	})
 }
 
 //account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
