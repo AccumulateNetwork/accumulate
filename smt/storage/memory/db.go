@@ -3,7 +3,7 @@ package memory
 import (
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulated/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
 // DB

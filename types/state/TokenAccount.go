@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type TokenAccount struct {
