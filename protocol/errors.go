@@ -1,6 +1,6 @@
 package protocol
 
-import "github.com/AccumulateNetwork/accumulated/internal/encoding"
+import "github.com/AccumulateNetwork/accumulate/internal/encoding"
 
 var ErrNotEnoughData = encoding.ErrNotEnoughData
 var ErrOverflow = encoding.ErrOverflow

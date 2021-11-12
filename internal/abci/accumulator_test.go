@@ -5,11 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	testing2 "github.com/AccumulateNetwork/accumulated/internal/testing"
-	"github.com/AccumulateNetwork/accumulated/protocol"
+	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 
-	"github.com/AccumulateNetwork/accumulated/internal/abci"
-	mock_abci "github.com/AccumulateNetwork/accumulated/internal/mock/abci"
+	"github.com/AccumulateNetwork/accumulate/internal/abci"
+	mock_abci "github.com/AccumulateNetwork/accumulate/internal/mock/abci"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	tmabci "github.com/tendermint/tendermint/abci/types"

@@ -1,4 +1,4 @@
-module github.com/AccumulateNetwork/accumulated
+module github.com/AccumulateNetwork/accumulate
 
 go 1.16
 

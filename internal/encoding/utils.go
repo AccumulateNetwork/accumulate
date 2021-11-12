@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 )
 
 // Some of these methods have no parameters because they are used by generated

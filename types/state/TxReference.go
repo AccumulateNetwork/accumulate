@@ -3,7 +3,7 @@ package state
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 //TxReference struct stores the transaction hash.  This state object will be a sub-state of
