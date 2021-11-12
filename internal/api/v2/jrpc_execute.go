@@ -10,7 +10,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/ybbus/jsonrpc/v2"
 )
 
@@ -146,16 +145,6 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 		return accumulateError(err)
 	}
 
-	// Disable websocket based behavior if it is not enabled
-	if !m.opts.EnableSubscribeTx {
-		req.WaitForDeliver = false
-	}
-
-	var done chan abci.TxResult
-	if req.WaitForDeliver {
-		done = make(chan abci.TxResult, 1)
-	}
-
 	// Broadcast the TX
 	r, err := m.opts.Local.BroadcastTxSync(ctx, txb)
 	if err != nil {
@@ -176,59 +165,9 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 		res.Message = r.Log
 		return res
 	case r.Code != 0:
+		res.Message = "An unknown error occured"
 		return res
-	case !req.WaitForDeliver:
-		return res
-	}
-
-	timer := time.NewTimer(5 * time.Second)
-	defer timer.Stop()
-
-	// Wait for results
-	select {
-	case txr := <-done:
-		r := txr.Result
-		res.Code = uint64(r.Code)
-		res.Delivered = true
-
-		// Check for errors
-		switch {
-		case len(r.Log) > 0:
-			res.Message = r.Log
-			return res
-		case len(r.Info) > 0:
-			res.Message = r.Info
-			return res
-		case r.Code != 0:
-			return res
-		}
-
-		// Process synthetic TX events
-		for _, e := range r.Events {
-			if e.Type != "accSyn" {
-				continue
-			}
-
-			syn := new(TxSynthetic)
-			res.Synthetic = append(res.Synthetic, syn)
-
-			for _, a := range e.Attributes {
-				switch a.Key {
-				case "type":
-					syn.Type = a.Value
-				case "hash":
-					syn.Txid = a.Value
-				case "txRef":
-					syn.Hash = a.Value
-				case "url":
-					syn.Url = a.Value
-				}
-			}
-		}
-		return res
-
-	case <-timer.C:
-		res.Message = "Timed out while waiting for deliver"
+	default:
 		return res
 	}
 }

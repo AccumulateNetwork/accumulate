@@ -20,13 +20,12 @@ import (
 )
 
 type JrpcOptions struct {
-	Config            *config.API
-	Query             Querier
-	Local             ABCIBroadcastClient
-	Remote            []string
-	EnableSubscribeTx bool
-	QueueDuration     time.Duration
-	QueueDepth        int
+	Config        *config.API
+	Query         Querier
+	Local         ABCIBroadcastClient
+	Remote        []string
+	QueueDuration time.Duration
+	QueueDepth    int
 
 	// Deprecated: will be removed when API v1 is removed
 	QueryV1 *v1.Query
@@ -68,7 +67,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 
 	for i, addr := range opts.Remote {
 		switch {
-		case addr != "self":
+		case addr != "local":
 			m.remote[i] = jsonrpc.NewClient(addr)
 		case m.localIndex < 0:
 			m.localIndex = i
