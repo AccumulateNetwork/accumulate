@@ -21,7 +21,7 @@ func (m *JrpcMethods) Metrics(_ context.Context, params json.RawMessage) interfa
 	}
 
 	c, err := promapi.NewClient(promapi.Config{
-		Address: m.opts.Prometheus,
+		Address: m.opts.Config.PrometheusServer,
 	})
 	if err != nil {
 		return internalError(err)
