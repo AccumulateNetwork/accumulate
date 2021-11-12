@@ -9,11 +9,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated"
-	"github.com/AccumulateNetwork/accumulated/config"
-	v1 "github.com/AccumulateNetwork/accumulated/internal/api"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/config"
+	v1 "github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/ybbus/jsonrpc/v2"
@@ -121,9 +121,9 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 	res := new(QueryResponse)
 	res.Type = "version"
 	res.Data = map[string]interface{}{
-		"version":        accumulated.Version,
-		"commit":         accumulated.Commit,
-		"versionIsKnown": accumulated.IsVersionKnown(),
+		"version":        accumulate.Version,
+		"commit":         accumulate.Commit,
+		"versionIsKnown": accumulate.IsVersionKnown(),
 	}
 	return res
 }

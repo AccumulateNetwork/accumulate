@@ -11,14 +11,14 @@ import (
 	"os"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated"
-	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/internal/genesis"
-	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/genesis"
+	accurl "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	promapi "github.com/prometheus/client_golang/api"
@@ -584,9 +584,9 @@ func (api *API) version(_ context.Context, params json.RawMessage) interface{} {
 	ret.Type = "version"
 
 	data, _ := json.Marshal(map[string]interface{}{
-		"version":        accumulated.Version,
-		"commit":         accumulated.Commit,
-		"versionIsKnown": accumulated.IsVersionKnown(),
+		"version":        accumulate.Version,
+		"commit":         accumulate.Commit,
+		"versionIsKnown": accumulate.IsVersionKnown(),
 	})
 	raw := json.RawMessage(data)
 	ret.Data = &raw
