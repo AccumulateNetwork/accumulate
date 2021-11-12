@@ -41,6 +41,7 @@ func (q queryDirect) query(content queryRequest) (string, []byte, error) {
 func (q queryDirect) queryType(typ types.QueryType, content queryRequest) (string, []byte, error) {
 	var err error
 	req := new(query.Query)
+	req.Type = typ
 	req.Content, err = content.MarshalBinary()
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
