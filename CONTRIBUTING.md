@@ -24,7 +24,7 @@ Please note we have a code of conduct, please follow it in all your interactions
 + **The most important aspects to consider when reviewing changes are
   readability and verification.**
 + A pull request must be small enough that it can be reasonably reviewed. If the
-  request is too large, as the author to split the changes into multiple pull
+  request is too large, ask the author to split the changes into multiple pull
   requests.
 + If the code is difficult to read, leave a comment. This could be a request to
   add additional comments, or to rewrite a function in a more readable way.
