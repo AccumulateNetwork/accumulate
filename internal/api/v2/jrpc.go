@@ -67,7 +67,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 
 	for i, addr := range opts.Remote {
 		switch {
-		case addr != "self":
+		case addr != "local":
 			m.remote[i] = jsonrpc.NewClient(addr)
 		case m.localIndex < 0:
 			m.localIndex = i
