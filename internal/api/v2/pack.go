@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/state"
-	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
 func packStateResponse(obj *state.Object, chain state.Chain) (*QueryResponse, error) {

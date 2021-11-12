@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/internal/encoding"
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 )
 
 type IdRequest struct {

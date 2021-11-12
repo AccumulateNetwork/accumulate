@@ -3,7 +3,7 @@ package state
 import (
 	"encoding/hex"
 
-	"github.com/AccumulateNetwork/accumulated/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
 type Index string

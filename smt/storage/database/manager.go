@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/smt/storage"
-	"github.com/AccumulateNetwork/accumulated/smt/storage/badger"
-	"github.com/AccumulateNetwork/accumulated/smt/storage/memory"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 )
 
 // Manager
