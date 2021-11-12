@@ -65,28 +65,19 @@ type TokenSend struct {
 }
 
 type TxRequest struct {
-	Sponsor        string      `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required,acc-url"`
-	Signer         Signer      `json:"signer" form:"signer" query:"signer" validate:"required"`
-	Signature      []byte      `json:"signature" form:"signature" query:"signature" validate:"required"`
-	KeyPage        KeyPage     `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
-	WaitForDeliver bool        `json:"waitForDeliver" form:"waitForDeliver" query:"waitForDeliver" validate:"required"`
-	Payload        interface{} `json:"payload" form:"payload" query:"payload" validate:"required"`
+	Sponsor   string      `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required,acc-url"`
+	Signer    Signer      `json:"signer" form:"signer" query:"signer" validate:"required"`
+	Signature []byte      `json:"signature" form:"signature" query:"signature" validate:"required"`
+	KeyPage   KeyPage     `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
+	Payload   interface{} `json:"payload" form:"payload" query:"payload" validate:"required"`
 }
 
 type TxResponse struct {
-	Txid      []byte         `json:"txid" form:"txid" query:"txid" validate:"required"`
-	Hash      [32]byte       `json:"hash" form:"hash" query:"hash" validate:"required"`
-	Code      uint64         `json:"code" form:"code" query:"code" validate:"required"`
-	Message   string         `json:"message" form:"message" query:"message" validate:"required"`
-	Delivered bool           `json:"delivered" form:"delivered" query:"delivered" validate:"required"`
-	Synthetic []*TxSynthetic `json:"synthetic" form:"synthetic" query:"synthetic" validate:"required"`
-}
-
-type TxSynthetic struct {
-	Type string `json:"type" form:"type" query:"type" validate:"required"`
-	Txid string `json:"txid" form:"txid" query:"txid" validate:"required"`
-	Hash string `json:"hash" form:"hash" query:"hash" validate:"required"`
-	Url  string `json:"url" form:"url" query:"url" validate:"required"`
+	Txid      []byte   `json:"txid" form:"txid" query:"txid" validate:"required"`
+	Hash      [32]byte `json:"hash" form:"hash" query:"hash" validate:"required"`
+	Code      uint64   `json:"code" form:"code" query:"code" validate:"required"`
+	Message   string   `json:"message" form:"message" query:"message" validate:"required"`
+	Delivered bool     `json:"delivered" form:"delivered" query:"delivered" validate:"required"`
 }
 
 type UrlRequest struct {
@@ -199,37 +190,33 @@ func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 
 func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	var u struct {
-		Sponsor        string      `json:"sponsor"`
-		Signer         Signer      `json:"signer"`
-		Signature      string      `json:"signature"`
-		KeyPage        KeyPage     `json:"keyPage"`
-		WaitForDeliver bool        `json:"waitForDeliver"`
-		Payload        interface{} `json:"payload"`
+		Sponsor   string      `json:"sponsor"`
+		Signer    Signer      `json:"signer"`
+		Signature string      `json:"signature"`
+		KeyPage   KeyPage     `json:"keyPage"`
+		Payload   interface{} `json:"payload"`
 	}
 	u.Sponsor = v.Sponsor
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
-	u.WaitForDeliver = v.WaitForDeliver
 	u.Payload = v.Payload
 	return json.Marshal(u)
 }
 
 func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	var u struct {
-		Txid      string         `json:"txid"`
-		Hash      string         `json:"hash"`
-		Code      uint64         `json:"code"`
-		Message   string         `json:"message"`
-		Delivered bool           `json:"delivered"`
-		Synthetic []*TxSynthetic `json:"synthetic"`
+		Txid      string `json:"txid"`
+		Hash      string `json:"hash"`
+		Code      uint64 `json:"code"`
+		Message   string `json:"message"`
+		Delivered bool   `json:"delivered"`
 	}
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Delivered = v.Delivered
-	u.Synthetic = v.Synthetic
 	return json.Marshal(u)
 }
 
@@ -342,12 +329,11 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 
 func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	var u struct {
-		Sponsor        string      `json:"sponsor"`
-		Signer         Signer      `json:"signer"`
-		Signature      string      `json:"signature"`
-		KeyPage        KeyPage     `json:"keyPage"`
-		WaitForDeliver bool        `json:"waitForDeliver"`
-		Payload        interface{} `json:"payload"`
+		Sponsor   string      `json:"sponsor"`
+		Signer    Signer      `json:"signer"`
+		Signature string      `json:"signature"`
+		KeyPage   KeyPage     `json:"keyPage"`
+		Payload   interface{} `json:"payload"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -360,19 +346,17 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		v.Signature = x
 	}
 	v.KeyPage = u.KeyPage
-	v.WaitForDeliver = u.WaitForDeliver
 	v.Payload = u.Payload
 	return nil
 }
 
 func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	var u struct {
-		Txid      string         `json:"txid"`
-		Hash      string         `json:"hash"`
-		Code      uint64         `json:"code"`
-		Message   string         `json:"message"`
-		Delivered bool           `json:"delivered"`
-		Synthetic []*TxSynthetic `json:"synthetic"`
+		Txid      string `json:"txid"`
+		Hash      string `json:"hash"`
+		Code      uint64 `json:"code"`
+		Message   string `json:"message"`
+		Delivered bool   `json:"delivered"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -390,6 +374,5 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	v.Code = u.Code
 	v.Message = u.Message
 	v.Delivered = u.Delivered
-	v.Synthetic = u.Synthetic
 	return nil
 }
