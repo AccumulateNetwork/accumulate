@@ -6,7 +6,7 @@ import (
 	"os"
 	"path"
 
-	cfg "github.com/AccumulateNetwork/accumulated/config"
+	cfg "github.com/AccumulateNetwork/accumulate/config"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"

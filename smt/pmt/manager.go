@@ -1,7 +1,7 @@
 package pmt
 
 import (
-	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 )
 
 type Manager struct {

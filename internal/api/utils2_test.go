@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"testing"
 
-	cfg "github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 )
