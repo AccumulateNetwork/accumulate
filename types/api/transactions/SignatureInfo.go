@@ -3,7 +3,7 @@ package transactions
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 )
 
 // SignatureInfo

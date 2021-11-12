@@ -3,8 +3,9 @@ package api
 import (
 	"bytes"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types"
+
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type MultiSigTx struct {

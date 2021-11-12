@@ -3,7 +3,7 @@ package api
 import (
 	"errors"
 
-	"github.com/AccumulateNetwork/accumulated/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/getsentry/sentry-go"
 )
