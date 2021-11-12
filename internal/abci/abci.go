@@ -14,11 +14,11 @@ package abci
 import (
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 //go:generate go run github.com/golang/mock/mockgen -source abci.go -destination ../mock/abci/abci.go

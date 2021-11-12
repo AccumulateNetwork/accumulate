@@ -5,7 +5,7 @@ import (
 	"encoding"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 //maybe we should have Chain header then entry, rather than entry containing all the Headers

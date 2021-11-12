@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/smt/storage"
-	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 )
 
 type MerkleManager struct {

@@ -3,7 +3,7 @@ package networks
 import (
 	"fmt"
 
-	. "github.com/AccumulateNetwork/accumulated/config"
+	. "github.com/AccumulateNetwork/accumulate/config"
 )
 
 type Network map[string]*Subnet

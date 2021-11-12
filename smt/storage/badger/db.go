@@ -4,7 +4,7 @@ import (
 	"errors"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulated/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/dgraph-io/badger"
 )
 

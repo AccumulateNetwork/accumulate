@@ -3,7 +3,7 @@ package api
 import (
 	"encoding"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type queryRequest interface {

@@ -1,7 +1,7 @@
 package pmt
 
 import (
-	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 )
 
 // Note that the tree considered here grows up by convention here, where

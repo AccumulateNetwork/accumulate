@@ -6,18 +6,19 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/response"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"log"
 	"math"
 	"math/big"
 	"strconv"
 	"time"
+
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/response"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
 func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {

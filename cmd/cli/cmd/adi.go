@@ -7,11 +7,11 @@ import (
 	"log"
 	"time"
 
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/boltdb/bolt"
 
 	"github.com/spf13/cobra"

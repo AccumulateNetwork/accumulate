@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/go-playground/validator/v10"
 )
 

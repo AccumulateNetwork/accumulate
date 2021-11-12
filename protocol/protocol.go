@@ -11,7 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
 const ACME = "ACME"

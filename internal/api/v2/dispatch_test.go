@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
 )
@@ -108,7 +108,6 @@ func TestDispatchExecuteQueueDepth(t *testing.T) {
 	go func() { _ = s.Serve(l) }()
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
-
 	j, err := NewJrpc(JrpcOptions{
 		Remote:        []string{fmt.Sprintf("http://%s", l.Addr().String())},
 		QueueDuration: 1e6 * time.Hour, // Forever
@@ -127,7 +126,6 @@ func TestDispatchExecuteQueueDuration(t *testing.T) {
 	require.NoError(t, err)
 	go func() { _ = s.Serve(l) }()
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
-
 
 	j, err := NewJrpc(JrpcOptions{
 		Remote:        []string{fmt.Sprintf("http://%s", l.Addr().String())},

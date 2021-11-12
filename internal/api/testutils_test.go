@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/Factom-Asset-Tokens/factom/fat"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )

@@ -10,15 +10,15 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated"
-	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/internal/abci"
-	"github.com/AccumulateNetwork/accumulated/internal/api"
-	"github.com/AccumulateNetwork/accumulated/internal/chain"
-	"github.com/AccumulateNetwork/accumulated/internal/logging"
-	"github.com/AccumulateNetwork/accumulated/internal/node"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/abci"
+	"github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/getsentry/sentry-go"
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
@@ -77,8 +77,8 @@ func (p *Program) Start(s service.Service) error {
 			HTTPTransport: sentryHack{},
 			Debug:         true,
 		}
-		if accumulated.IsVersionKnown() {
-			opts.Release = accumulated.Commit
+		if accumulate.IsVersionKnown() {
+			opts.Release = accumulate.Commit
 		}
 		err = sentry.Init(opts)
 		if err != nil {

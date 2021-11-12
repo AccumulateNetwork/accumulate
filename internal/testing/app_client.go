@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
 	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"

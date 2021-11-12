@@ -9,9 +9,9 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/internal/encoding"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type AddCredits struct {

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 // Token implement the Entry interfaces for a token
