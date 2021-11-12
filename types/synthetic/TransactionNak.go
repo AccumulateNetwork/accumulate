@@ -3,10 +3,11 @@ package synthetic
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type NakCode int
