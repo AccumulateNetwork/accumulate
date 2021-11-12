@@ -5,16 +5,32 @@ email, or any other method with the owners of this repository before making a ch
 
 Please note we have a code of conduct, please follow it in all your interactions with the project.
 
-## Pull Request Process
+## Submitting Changes
 
-1. Ensure any install or build dependencies are removed before the end of the layer when doing a
-build.
-2. Update the README.md with details of changes to the interface, this includes new environment
-variables, exposed ports, useful file locations and container parameters.
-3. Increase the version numbers in any examples files and the README.md to the new version that this
-Pull Request would represent. The versioning scheme we use is [SemVer](http://semver.org/).
-4. You may merge the Pull Request in once you have the sign-off of two other developers, or if you
-do not have permission to do that, you may request the second reviewer to merge it for you.
++ When you are ready to submit your work, create a Pull Request on GitHub
+  merging your branch into `develop`. If you are a core team member, your branch
+  name must be or begin with the Jira task. For example,
+  `AC-123-anon-account-tx`.
++ The pull request description must clearly describe the changes made. If the
+  changes affect functionality, the description must include how the changes can
+  be verified. Otherwise, the description must state that the changes do not
+  affect functionality.
+
+## Reviewing Changes
+
++ In general, a pull request should receive at least some constructive
+  criticism, in the form of a requested change - everyone has room for
+  improvement.
++ **The most important aspects to consider when reviewing changes are
+  readability and verification.**
++ A pull request must be small enough that it can be reasonably reviewed. If the
+  request is too large, as the author to split the changes into multiple pull
+  requests.
++ If the code is difficult to read, leave a comment. This could be a request to
+  add additional comments, or to rewrite a function in a more readable way.
++ If the code is not verified or verifiable, leave a comment. This could be a
+  request to add unit tests, or to rewrite a function in a more testable way, or
+  it could be a comment that the reviewer was unable to debug the changes.
 
 ## Code of Conduct
 
