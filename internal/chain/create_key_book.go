@@ -10,11 +10,11 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-type CreateSigSpecGroup struct{}
+type CreateKeyBook struct{}
 
-func (CreateSigSpecGroup) Type() types.TxType { return types.TxTypeCreateSigSpecGroup }
+func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
-func checkCreateSigSpecGroup(st *StateManager, tx *transactions.GenTransaction) ([]*protocol.SigSpec, *url.URL, error) {
+func checkCreateKeyBook(st *StateManager, tx *transactions.GenTransaction) ([]*protocol.SigSpec, *url.URL, error) {
 	if _, ok := st.Sponsor.(*state.AdiState); !ok {
 		return nil, nil, fmt.Errorf("invalid sponsor: want %v, got %v", types.ChainTypeAdi, st.Sponsor.Header().Type)
 	}
@@ -66,13 +66,13 @@ func checkCreateSigSpecGroup(st *StateManager, tx *transactions.GenTransaction) 
 	return entries, sgUrl, nil
 }
 
-func (CreateSigSpecGroup) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, err := checkCreateSigSpecGroup(st, tx)
+func (CreateKeyBook) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+	_, _, err := checkCreateKeyBook(st, tx)
 	return err
 }
 
-func (CreateSigSpecGroup) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	entries, url, err := checkCreateSigSpecGroup(st, tx)
+func (CreateKeyBook) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+	entries, url, err := checkCreateKeyBook(st, tx)
 	if err != nil {
 		return err
 	}

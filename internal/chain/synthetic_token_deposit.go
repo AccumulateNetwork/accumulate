@@ -15,7 +15,7 @@ import (
 type SyntheticTokenDeposit struct{}
 
 func (SyntheticTokenDeposit) Type() types.TxType {
-	return types.TxTypeSyntheticTokenDeposit
+	return types.TxTypeSyntheticDepositTokens
 }
 
 func checkSyntheticTokenDeposit(st *StateManager, tx *transactions.GenTransaction) (*big.Int, tokenChain, *url.URL, error) {

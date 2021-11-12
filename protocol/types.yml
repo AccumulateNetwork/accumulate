@@ -108,6 +108,7 @@ SigSpec:
 
 CreateSigSpec:
   kind: tx
+  tx-type: CreateKeyPage
   fields:
     - name: Url
       type: string
@@ -127,6 +128,7 @@ SigSpecGroup:
 
 CreateSigSpecGroup:
   kind: tx
+  tx-type: CreateKeyBook
   fields:
     - name: Url
       type: string
@@ -136,6 +138,7 @@ CreateSigSpecGroup:
 
 IdentityCreate:
   kind: tx
+  tx-type: CreateIdentity
   fields:
     - name: Url
       type: string
@@ -151,6 +154,7 @@ IdentityCreate:
 
 TokenAccountCreate:
   kind: tx
+  tx-type: CreateTokenAccount
   fields:
     - name: Url
       type: string

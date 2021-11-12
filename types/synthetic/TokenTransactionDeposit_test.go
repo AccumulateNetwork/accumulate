@@ -83,7 +83,7 @@ func TestTokenTransactionDeposit(t *testing.T) {
 	}
 
 	//now just peek at the transaction type
-	if data[0] != byte(types.TxTypeSyntheticTokenDeposit) {
+	if data[0] != byte(types.TxTypeSyntheticDepositTokens) {
 		t.Fatal("invalid transaction type")
 	}
 

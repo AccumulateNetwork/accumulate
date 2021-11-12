@@ -437,7 +437,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 2)
 	require.Equal(t, types.String(types.TxTypeSyntheticGenesis.Name()), resp.Data[0].Type)
-	require.Equal(t, types.String(types.TxTypeTokenTx.Name()), resp.Data[1].Type)
+	require.Equal(t, types.String(types.TxTypeWithdrawTokens.Name()), resp.Data[1].Type)
 }
 
 func TestMetrics(t *testing.T) {

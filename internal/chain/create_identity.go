@@ -10,11 +10,11 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-type IdentityCreate struct{}
+type CreateIdentity struct{}
 
-func (IdentityCreate) Type() types.TxType { return types.TxTypeIdentityCreate }
+func (CreateIdentity) Type() types.TxType { return types.TxTypeCreateIdentity }
 
-func checkIdentityCreate(st *StateManager, tx *transactions.GenTransaction) (*protocol.IdentityCreate, *url.URL, state.Chain, error) {
+func checkCreateIdentity(st *StateManager, tx *transactions.GenTransaction) (*protocol.IdentityCreate, *url.URL, state.Chain, error) {
 	body := new(protocol.IdentityCreate)
 	err := tx.As(body)
 	if err != nil {
@@ -42,13 +42,13 @@ func checkIdentityCreate(st *StateManager, tx *transactions.GenTransaction) (*pr
 	return body, identityUrl, sponsor, nil
 }
 
-func (IdentityCreate) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, _, err := checkIdentityCreate(st, tx)
+func (CreateIdentity) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+	_, _, _, err := checkCreateIdentity(st, tx)
 	return err
 }
 
-func (IdentityCreate) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	body, identityUrl, _, err := checkIdentityCreate(st, tx)
+func (CreateIdentity) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+	body, identityUrl, _, err := checkCreateIdentity(st, tx)
 	if err != nil {
 		return err
 	}

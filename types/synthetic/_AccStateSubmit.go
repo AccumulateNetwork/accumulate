@@ -19,7 +19,7 @@ type AccStateSubmit struct {
 
 // MarshalBinary serializes the AccStateSubmit struct
 func (s *AccStateSubmit) MarshalBinary() (data []byte, err error) {
-	data = common.Uint64Bytes(uint64(types.TxTypeBvcSubmission))
+	data = common.Uint64Bytes(uint64(types.TxBvcSubmission))
 	data = append(data, common.SliceBytes([]byte(s.LeaderUrl))...)
 	data = append(data, common.Int64Bytes(s.NetworkId)...)
 	data = append(data, common.Int64Bytes(s.Height)...)
@@ -37,9 +37,9 @@ func (s *AccStateSubmit) UnmarshalBinary(data []byte) (err error) {
 
 	var typeId uint64
 	typeId, data = common.BytesUint64(data)
-	if types.TxType(typeId) != types.TxTypeBvcSubmission {
+	if types.TxType(typeId) != types.TxBvcSubmission {
 		return fmt.Errorf("invalid type, received %s(%d) but expected %s", types.TxType(typeId).Name(), typeId,
-			types.TxTypeBvcSubmission.Name())
+			types.TxBvcSubmission.Name())
 	}
 
 	leaderUrl, data := common.BytesSlice(data)
