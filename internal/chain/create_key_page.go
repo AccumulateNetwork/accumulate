@@ -10,11 +10,11 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-type CreateSigSpec struct{}
+type CreateKeyPage struct{}
 
-func (CreateSigSpec) Type() types.TxType { return types.TxTypeCreateSigSpec }
+func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 
-func checkCreateSigSpec(st *StateManager, tx *transactions.GenTransaction) (*protocol.CreateSigSpec, *protocol.SigSpecGroup, *url.URL, error) {
+func checkCreateKeyPage(st *StateManager, tx *transactions.GenTransaction) (*protocol.CreateSigSpec, *protocol.SigSpecGroup, *url.URL, error) {
 	var group *protocol.SigSpecGroup
 	switch sponsor := st.Sponsor.(type) {
 	case *state.AdiState:
@@ -47,13 +47,13 @@ func checkCreateSigSpec(st *StateManager, tx *transactions.GenTransaction) (*pro
 	return body, group, msUrl, nil
 }
 
-func (CreateSigSpec) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, _, err := checkCreateSigSpec(st, tx)
+func (CreateKeyPage) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+	_, _, _, err := checkCreateKeyPage(st, tx)
 	return err
 }
 
-func (CreateSigSpec) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	body, group, url, err := checkCreateSigSpec(st, tx)
+func (CreateKeyPage) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+	body, group, url, err := checkCreateKeyPage(st, tx)
 	if err != nil {
 		return err
 	}

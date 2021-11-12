@@ -61,17 +61,17 @@ func unmarshalTxType(b []byte) types.TxType {
 func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 	var payload protocol.TransactionPayload
 	switch typ := unmarshalTxType(b); typ {
-	case types.TxTypeTokenTx:
+	case types.TxTypeWithdrawTokens:
 		payload = new(api.TokenTx)
-	case types.TxTypeSyntheticTokenDeposit:
+	case types.TxTypeSyntheticDepositTokens:
 		payload = new(synthetic.TokenTransactionDeposit)
-	case types.TxTypeIdentityCreate:
+	case types.TxTypeCreateIdentity:
 		payload = new(protocol.IdentityCreate)
-	case types.TxTypeTokenAccountCreate:
+	case types.TxTypeCreateToken:
 		payload = new(protocol.TokenAccountCreate)
-	case types.TxTypeCreateSigSpec:
+	case types.TxTypeCreateKeyPage:
 		payload = new(protocol.CreateSigSpec)
-	case types.TxTypeCreateSigSpecGroup:
+	case types.TxTypeCreateKeyBook:
 		payload = new(protocol.CreateSigSpecGroup)
 	case types.TxTypeAddCredits:
 		payload = new(protocol.AddCredits)

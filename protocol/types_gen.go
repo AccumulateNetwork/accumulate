@@ -141,28 +141,30 @@ func NewSigSpecGroup() *SigSpecGroup {
 	return v
 }
 
-func (*AddCredits) GetType() types.TxType { return types.TxTypeAddCredits }
+func (*AddCredits) GetType() types.TransactionType { return types.TxTypeAddCredits }
 
-func (*CreateSigSpec) GetType() types.TxType { return types.TxTypeCreateSigSpec }
+func (*CreateSigSpec) GetType() types.TransactionType { return types.TxTypeCreateKeyPage }
 
-func (*CreateSigSpecGroup) GetType() types.TxType { return types.TxTypeCreateSigSpecGroup }
+func (*CreateSigSpecGroup) GetType() types.TransactionType { return types.TxTypeCreateKeyBook }
 
-func (*IdentityCreate) GetType() types.TxType { return types.TxTypeIdentityCreate }
+func (*IdentityCreate) GetType() types.TransactionType { return types.TxTypeCreateIdentity }
 
-func (*SyntheticCreateChain) GetType() types.TxType { return types.TxTypeSyntheticCreateChain }
+func (*SyntheticCreateChain) GetType() types.TransactionType { return types.TxTypeSyntheticCreateChain }
 
-func (*SyntheticDepositCredits) GetType() types.TxType { return types.TxTypeSyntheticDepositCredits }
+func (*SyntheticDepositCredits) GetType() types.TransactionType {
+	return types.TxTypeSyntheticDepositCredits
+}
 
-func (*SyntheticGenesis) GetType() types.TxType { return types.TxTypeSyntheticGenesis }
+func (*SyntheticGenesis) GetType() types.TransactionType { return types.TxTypeSyntheticGenesis }
 
-func (*TokenAccountCreate) GetType() types.TxType { return types.TxTypeTokenAccountCreate }
+func (*TokenAccountCreate) GetType() types.TransactionType { return types.TxTypeCreateTokenAccount }
 
-func (*UpdateKeyPage) GetType() types.TxType { return types.TxTypeUpdateKeyPage }
+func (*UpdateKeyPage) GetType() types.TransactionType { return types.TxTypeUpdateKeyPage }
 
 func (v *AddCredits) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeAddCredits))
+	n += encoding.UvarintBinarySize(types.TxTypeAddCredits.ID())
 
 	n += encoding.StringBinarySize(v.Recipient)
 
@@ -205,7 +207,7 @@ func (v *ChainParams) BinarySize() int {
 func (v *CreateSigSpec) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeCreateSigSpec))
+	n += encoding.UvarintBinarySize(types.TxTypeCreateKeyPage.ID())
 
 	n += encoding.StringBinarySize(v.Url)
 
@@ -222,7 +224,7 @@ func (v *CreateSigSpec) BinarySize() int {
 func (v *CreateSigSpecGroup) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeCreateSigSpecGroup))
+	n += encoding.UvarintBinarySize(types.TxTypeCreateKeyBook.ID())
 
 	n += encoding.StringBinarySize(v.Url)
 
@@ -255,7 +257,7 @@ func (v *DirectoryQueryResult) BinarySize() int {
 func (v *IdentityCreate) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeIdentityCreate))
+	n += encoding.UvarintBinarySize(types.TxTypeCreateIdentity.ID())
 
 	n += encoding.StringBinarySize(v.Url)
 
@@ -332,7 +334,7 @@ func (v *SigSpecGroup) BinarySize() int {
 func (v *SyntheticCreateChain) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeSyntheticCreateChain))
+	n += encoding.UvarintBinarySize(types.TxTypeSyntheticCreateChain.ID())
 
 	n += encoding.ChainBinarySize(&v.Cause)
 
@@ -349,7 +351,7 @@ func (v *SyntheticCreateChain) BinarySize() int {
 func (v *SyntheticDepositCredits) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeSyntheticDepositCredits))
+	n += encoding.UvarintBinarySize(types.TxTypeSyntheticDepositCredits.ID())
 
 	n += encoding.ChainBinarySize(&v.Cause)
 
@@ -361,7 +363,7 @@ func (v *SyntheticDepositCredits) BinarySize() int {
 func (v *SyntheticGenesis) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeSyntheticGenesis))
+	n += encoding.UvarintBinarySize(types.TxTypeSyntheticGenesis.ID())
 
 	return n
 }
@@ -369,7 +371,7 @@ func (v *SyntheticGenesis) BinarySize() int {
 func (v *TokenAccountCreate) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeTokenAccountCreate))
+	n += encoding.UvarintBinarySize(types.TxTypeCreateTokenAccount.ID())
 
 	n += encoding.StringBinarySize(v.Url)
 
@@ -410,7 +412,7 @@ func (v *TxSynthRef) BinarySize() int {
 func (v *UpdateKeyPage) BinarySize() int {
 	var n int
 
-	n += encoding.UvarintBinarySize(uint64(types.TxTypeUpdateKeyPage))
+	n += encoding.UvarintBinarySize(types.TxTypeUpdateKeyPage.ID())
 
 	n += v.Operation.BinarySize()
 
@@ -424,7 +426,7 @@ func (v *UpdateKeyPage) BinarySize() int {
 func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeAddCredits)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeAddCredits.ID()))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Recipient))
 
@@ -470,7 +472,7 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 func (v *CreateSigSpec) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeCreateSigSpec)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeCreateKeyPage.ID()))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
@@ -491,7 +493,7 @@ func (v *CreateSigSpec) MarshalBinary() ([]byte, error) {
 func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeCreateSigSpecGroup)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeCreateKeyBook.ID()))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
@@ -524,7 +526,7 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 func (v *IdentityCreate) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeIdentityCreate)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeCreateIdentity.ID()))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
@@ -611,7 +613,7 @@ func (v *SigSpecGroup) MarshalBinary() ([]byte, error) {
 func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeSyntheticCreateChain)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSyntheticCreateChain.ID()))
 
 	buffer.Write(encoding.ChainMarshalBinary(&v.Cause))
 
@@ -632,7 +634,7 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeSyntheticDepositCredits)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSyntheticDepositCredits.ID()))
 
 	buffer.Write(encoding.ChainMarshalBinary(&v.Cause))
 
@@ -644,7 +646,7 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 func (v *SyntheticGenesis) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeSyntheticGenesis)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSyntheticGenesis.ID()))
 
 	return buffer.Bytes(), nil
 }
@@ -652,7 +654,7 @@ func (v *SyntheticGenesis) MarshalBinary() ([]byte, error) {
 func (v *TokenAccountCreate) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeTokenAccountCreate)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeCreateTokenAccount.ID()))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
@@ -697,7 +699,7 @@ func (v *TxSynthRef) MarshalBinary() ([]byte, error) {
 func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeUpdateKeyPage)))
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeUpdateKeyPage.ID()))
 
 	if b, err := v.Operation.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding Operation: %w", err)
@@ -717,7 +719,7 @@ func (v *AddCredits) UnmarshalBinary(data []byte) error {
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
@@ -804,11 +806,11 @@ func (v *ChainParams) UnmarshalBinary(data []byte) error {
 }
 
 func (v *CreateSigSpec) UnmarshalBinary(data []byte) error {
-	typ := types.TxTypeCreateSigSpec
+	typ := types.TxTypeCreateKeyPage
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
@@ -842,11 +844,11 @@ func (v *CreateSigSpec) UnmarshalBinary(data []byte) error {
 }
 
 func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
-	typ := types.TxTypeCreateSigSpecGroup
+	typ := types.TxTypeCreateKeyBook
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
@@ -902,11 +904,11 @@ func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
 }
 
 func (v *IdentityCreate) UnmarshalBinary(data []byte) error {
-	typ := types.TxTypeIdentityCreate
+	typ := types.TxTypeCreateIdentity
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
@@ -1050,7 +1052,7 @@ func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
@@ -1086,7 +1088,7 @@ func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
@@ -1112,7 +1114,7 @@ func (v *SyntheticGenesis) UnmarshalBinary(data []byte) error {
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
@@ -1120,11 +1122,11 @@ func (v *SyntheticGenesis) UnmarshalBinary(data []byte) error {
 }
 
 func (v *TokenAccountCreate) UnmarshalBinary(data []byte) error {
-	typ := types.TxTypeTokenAccountCreate
+	typ := types.TxTypeCreateTokenAccount
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
@@ -1212,7 +1214,7 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
-		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
