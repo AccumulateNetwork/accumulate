@@ -18,7 +18,8 @@ import (
 type Record struct {
 	name      string
 	Kind      string
-	NonBinary bool `yaml:"non-binary"`
+	TxType    string `yaml:"tx-type"`
+	NonBinary bool   `yaml:"non-binary"`
 	Fields    []*Field
 }
 
@@ -314,6 +315,13 @@ func needsCustomJSON(typ *Record) bool {
 	return false
 }
 
+func (typ *Record) txType() string {
+	if typ.TxType != "" {
+		return "types.TxType" + typ.TxType
+	}
+	return "types.TxType" + typ.name
+}
+
 func run(_ *cobra.Command, args []string) {
 	w := new(bytes.Buffer)
 	fmt.Fprintf(w, "package %s\n\n", flags.Package)
@@ -373,7 +381,7 @@ func run(_ *cobra.Command, args []string) {
 		if typ.Kind != "tx" {
 			continue
 		}
-		fmt.Fprintf(w, "func (*%s) GetType() types.TxType { return types.TxType%[1]s }\n\n", typ.name)
+		fmt.Fprintf(w, "func (*%s) GetType() types.TransactionType { return %s }\n\n", typ.name, typ.txType())
 	}
 
 	for _, typ := range types {
@@ -386,7 +394,7 @@ func run(_ *cobra.Command, args []string) {
 
 		switch typ.Kind {
 		case "tx":
-			fmt.Fprintf(w, "\nn += encoding.UvarintBinarySize(uint64(types.TxType%s))\n\n", typ.name)
+			fmt.Fprintf(w, "\nn += encoding.UvarintBinarySize(%s.ID())\n\n", typ.txType())
 		case "chain":
 			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n", typ.name)
 			fmt.Fprintf(w, "\nn += v.ChainHeader.GetHeaderSize()\n\n")
@@ -409,7 +417,7 @@ func run(_ *cobra.Command, args []string) {
 
 		switch typ.Kind {
 		case "tx":
-			fmt.Fprintf(w, "\tbuffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxType%s)))\n\n", typ.name)
+			fmt.Fprintf(w, "\tbuffer.Write(encoding.UvarintMarshalBinary(%s.ID()))\n\n", typ.txType())
 		case "chain":
 			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n\n", typ.name)
 			err := fieldError("encoding", "header")
@@ -433,8 +441,8 @@ func run(_ *cobra.Command, args []string) {
 		switch typ.Kind {
 		case "tx":
 			err := fieldError("decoding", "TX type")
-			fmt.Fprintf(w, "\ttyp := types.TxType%s\n", typ.name)
-			fmt.Fprintf(w, "\tif v, err := encoding.UvarintUnmarshalBinary(data); err != nil { return %s } else if v != uint64(typ) { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, types.TxType(v)) }\n", err)
+			fmt.Fprintf(w, "\ttyp := %s\n", typ.txType())
+			fmt.Fprintf(w, "\tif v, err := encoding.UvarintUnmarshalBinary(data); err != nil { return %s } else if v != uint64(typ) { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, types.TransactionType(v)) }\n", err)
 			fmt.Fprintf(w, "\tdata = data[encoding.UvarintBinarySize(uint64(typ)):]\n\n")
 
 		case "chain":
