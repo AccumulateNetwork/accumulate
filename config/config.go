@@ -46,6 +46,7 @@ type Config struct {
 
 type Accumulate struct {
 	Type     NetworkType `toml:"type" mapstructure:"type"`
+	Network  string      `toml:"network" mapstructure:"network"`
 	Networks []string    `toml:"networks" mapstructure:"networks"`
 	API      API         `toml:"api" mapstructure:"api"`
 
