@@ -4,31 +4,45 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
+	"net/http"
+	"os"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulated"
+	"github.com/AccumulateNetwork/accumulated/config"
+	v1 "github.com/AccumulateNetwork/accumulated/internal/api"
 	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/ybbus/jsonrpc/v2"
 )
 
 type JrpcOptions struct {
-	Prometheus        string
+	Config            *config.API
 	Query             Querier
 	Local             ABCIBroadcastClient
 	Remote            []string
 	EnableSubscribeTx bool
 	QueueDuration     time.Duration
 	QueueDepth        int
+
+	// Deprecated: will be removed when API v1 is removed
+	QueryV1 *v1.Query
 }
 
 type JrpcMethods struct {
+	methods    jsonrpc2.MethodMap
 	opts       JrpcOptions
 	validate   *validator.Validate
 	remote     []jsonrpc.RPCClient
 	localIndex int
 	exch       chan executeRequest
 	queue      executeQueue
+
+	// Deprecated: will be removed
+	v1 *v1.API
 }
 
 func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
@@ -47,9 +61,14 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		return nil, err
 	}
 
+	m.v1, err = v1.New(opts.Config, opts.QueryV1)
+	if err != nil {
+		return nil, err
+	}
+
 	for i, addr := range opts.Remote {
 		switch {
-		case addr != "local":
+		case addr != "self":
 			m.remote[i] = jsonrpc.NewClient(addr)
 		case m.localIndex < 0:
 			m.localIndex = i
@@ -62,7 +81,40 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		return nil, errors.New("local node specified but no client provided")
 	}
 
+	type PL = protocol.TransactionPayload
+	m.methods = jsonrpc2.MethodMap{
+		// General
+		"version": m.Version,
+		"metrics": m.Metrics,
+
+		// Query
+		"query":            m.Query,
+		"query-directory":  m.QueryDirectory,
+		"query-chain":      m.QueryChain,
+		"query-tx":         m.QueryTx,
+		"query-tx-history": m.QueryTxHistory,
+
+		// Execute
+		"execute":              m.Execute,
+		"create-adi":           m.ExecuteWith(func() PL { return new(protocol.IdentityCreate) }),
+		"create-key-book":      m.ExecuteWith(func() PL { return new(protocol.CreateSigSpecGroup) }),
+		"create-key-page":      m.ExecuteWith(func() PL { return new(protocol.CreateSigSpec) }),
+		"create-token":         m.ExecuteWith(func() PL { return new(api.Token) }),
+		"create-token-account": m.ExecuteWith(func() PL { return new(protocol.TokenAccountCreate) }),
+		"send-tokens":          m.ExecuteWith(func() PL { return new(api.TokenTx) }),
+		"add-credits":          m.ExecuteWith(func() PL { return new(protocol.AddCredits) }),
+		"update-key-page":      m.ExecuteWith(func() PL { return new(protocol.UpdateKeyPage) }),
+		// TODO faucet
+	}
+
 	return m, nil
+}
+
+func (m *JrpcMethods) NewMux() *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.Handle("/v1", m.v1.Handler())
+	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, log.New(os.Stdout, "", 0)))
+	return mux
 }
 
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {
