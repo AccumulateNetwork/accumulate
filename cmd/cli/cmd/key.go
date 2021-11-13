@@ -6,15 +6,16 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
+	"log"
+	"strconv"
+	"strings"
+
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
-	"log"
-	"strconv"
-	"strings"
 )
 
 var keyCmd = &cobra.Command{

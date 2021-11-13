@@ -2,28 +2,35 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated"
-	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/internal/abci"
-	"github.com/AccumulateNetwork/accumulated/internal/api"
-	"github.com/AccumulateNetwork/accumulated/internal/chain"
-	"github.com/AccumulateNetwork/accumulated/internal/logging"
-	"github.com/AccumulateNetwork/accumulated/internal/node"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/abci"
+	apiv1 "github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/getsentry/sentry-go"
 	"github.com/kardianos/service"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/privval"
+	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
 type Program struct {
@@ -31,7 +38,7 @@ type Program struct {
 	db    *state.StateDB
 	node  *node.Node
 	relay *relay.Relay
-	api   *api.API
+	api   *http.Server
 }
 
 func NewProgram(cmd *cobra.Command) *Program {
@@ -77,8 +84,8 @@ func (p *Program) Start(s service.Service) error {
 			HTTPTransport: sentryHack{},
 			Debug:         true,
 		}
-		if accumulated.IsVersionKnown() {
-			opts.Release = accumulated.Commit
+		if accumulate.IsVersionKnown() {
+			opts.Release = accumulate.Commit
 		}
 		err = sentry.Init(opts)
 		if err != nil {
@@ -109,7 +116,7 @@ func (p *Program) Start(s service.Service) error {
 		return fmt.Errorf("failed to create RPC relay: %v", err)
 	}
 
-	mgr, err := chain.NewBlockValidator(api.NewQuery(p.relay), p.db, pv.Key.PrivKey.Bytes())
+	mgr, err := chain.NewBlockValidator(apiv1.NewQuery(p.relay), p.db, pv.Key.PrivKey.Bytes())
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain manager: %v", err)
 	}
@@ -157,20 +164,84 @@ func (p *Program) Start(s service.Service) error {
 		}
 	}
 
-	p.api, err = api.StartAPI(&config.Accumulate.API, api.NewQuery(p.relay))
+	// Create a local client
+	lnode, ok := p.node.Service.(local.NodeService)
+	if !ok {
+		return fmt.Errorf("node is not a local node service!")
+	}
+	lclient, err := local.New(lnode)
+	if err != nil {
+		return fmt.Errorf("failed to create local node client: %v", err)
+	}
+
+	// Configure JSON-RPC
+	var jrpcOpts api.JrpcOptions
+	jrpcOpts.Config = &config.Accumulate.API
+	jrpcOpts.QueueDuration = time.Second / 4
+	jrpcOpts.QueueDepth = 100
+	jrpcOpts.QueryV1 = apiv1.NewQuery(p.relay)
+	jrpcOpts.Local = lclient
+
+	// Build the list of remote addresses and query clients
+	jrpcOpts.Remote = make([]string, len(config.Accumulate.Networks))
+	clients := make([]api.ABCIQueryClient, len(config.Accumulate.Networks))
+	for i, net := range config.Accumulate.Networks {
+		switch {
+		case net == "self", net == config.Accumulate.Network, net == config.RPC.ListenAddress:
+			jrpcOpts.Remote[i] = "local"
+			clients[i] = lclient
+
+		default:
+			addr, err := networks.GetRpcAddr(net, node.TmRpcPortOffset)
+			if err != nil {
+				return fmt.Errorf("invalid network name or address: %v", err)
+			}
+
+			jrpcOpts.Remote[i] = addr
+			clients[i], err = rpchttp.New(addr)
+			if err != nil {
+				return fmt.Errorf("failed to create RPC client: %v", err)
+			}
+		}
+	}
+
+	jrpcOpts.Query = api.NewQueryDispatch(clients)
+
+	jrpc, err := api.NewJrpc(jrpcOpts)
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
 	}
+
+	// Run JSON-RPC server
+	p.api = &http.Server{Handler: jrpc.NewMux()}
+	l, secure, err := listenHttpUrl(config.Accumulate.API.JSONListenAddress)
+	if err != nil {
+		return fmt.Errorf("failed to start JSON-RPC: %v", err)
+	}
+	if secure {
+		return fmt.Errorf("failed to start JSON-RPC: HTTPS is not supported")
+	}
+
+	go func() {
+		err := p.api.Serve(l)
+		if err != nil {
+			logger.Error("JSON-RPC server", "err", err)
+		}
+	}()
+
 	return nil
 }
 
 func (p *Program) Stop(service.Service) error {
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
+	defer cancel()
+
 	var errs []error
 	errs = append(errs, p.node.Stop())
 	if p.node.Config.Accumulate.API.EnableSubscribeTX {
 		errs = append(errs, p.relay.Stop())
 	}
-	// TODO stop API
+	errs = append(errs, p.api.Shutdown(ctx))
 	errs = append(errs, p.db.GetDB().Close())
 
 	for _, err := range errs {
@@ -179,6 +250,36 @@ func (p *Program) Stop(service.Service) error {
 		}
 	}
 	return nil
+}
+
+// listenHttpUrl takes a string such as `http://localhost:123` and creates a TCP
+// listener.
+func listenHttpUrl(s string) (net.Listener, bool, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, false, fmt.Errorf("invalid address: %v", err)
+	}
+
+	if u.Path != "" && u.Path != "/" {
+		return nil, false, fmt.Errorf("invalid address: path is not empty")
+	}
+
+	var secure bool
+	switch u.Scheme {
+	case "tcp", "http":
+		secure = false
+	case "https":
+		secure = true
+	default:
+		return nil, false, fmt.Errorf("invalid address: unsupported scheme %q", u.Scheme)
+	}
+
+	l, err := net.Listen("tcp", u.Host)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return l, secure, nil
 }
 
 type sentryHack struct{}

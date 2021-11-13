@@ -7,9 +7,9 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
-	"github.com/AccumulateNetwork/accumulated/smt/storage/memory"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 )
 
 func TestRestart(t *testing.T) {

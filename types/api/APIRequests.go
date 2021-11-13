@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 const DefaultPaginationSize = 20
@@ -74,7 +74,7 @@ type APIDataResponse struct {
 	Data    *json.RawMessage   `json:"data" form:"data" query:"data"`
 	Sponsor types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
 	KeyPage *APIRequestKeyPage `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
-	TxId    *types.Bytes     `json:"txid" form:"txid" query:"txid"`
+	TxId    *types.Bytes       `json:"txid" form:"txid" query:"txid"`
 	//the following are optional available only if pending chain has not been purged
 	Signer *Signer          `json:"signer,omitempty" form:"signer" query:"signer"`
 	Sig    *types.Bytes64   `json:"sig,omitempty" form:"sig" query:"sig"`
