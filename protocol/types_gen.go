@@ -1306,7 +1306,7 @@ func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
 	}
 	u.ChainHeader = v.ChainHeader
 	u.SigSpecs = chainSetToJSON(v.SigSpecs)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
