@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -35,21 +35,17 @@ func PrintFaucet() {
 
 func Faucet(url string) {
 
-	var res interface{}
-	var str []byte
-
+	var res acmeapi.APIDataResponse
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
 	if err := Client.Request(context.Background(), "faucet", params, &res); err != nil {
 		log.Fatal(err)
 	}
-
-	str, err := json.Marshal(res)
+	ar := ActionResponse{}
+	err := json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create adi result")
 	}
-
-	fmt.Println(string(str))
-
+	ar.Print()
 }

@@ -9,8 +9,9 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type AddCredits struct {
@@ -161,11 +162,11 @@ func (*UpdateKeyPage) GetType() types.TxType { return types.TxTypeUpdateKeyPage 
 func (v *AddCredits) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeAddCredits))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeAddCredits))
 
-	n += stringBinarySize(v.Recipient)
+	n += encoding.StringBinarySize(v.Recipient)
 
-	n += uvarintBinarySize(v.Amount)
+	n += encoding.UvarintBinarySize(v.Amount)
 
 	return n
 }
@@ -178,15 +179,15 @@ func (v *AnonTokenAccount) BinarySize() int {
 
 	n += v.ChainHeader.GetHeaderSize()
 
-	n += stringBinarySize(v.TokenUrl)
+	n += encoding.StringBinarySize(v.TokenUrl)
 
-	n += bigintBinarySize(&v.Balance)
+	n += encoding.BigintBinarySize(&v.Balance)
 
-	n += uvarintBinarySize(v.TxCount)
+	n += encoding.UvarintBinarySize(v.TxCount)
 
-	n += uvarintBinarySize(v.Nonce)
+	n += encoding.UvarintBinarySize(v.Nonce)
 
-	n += bigintBinarySize(&v.CreditBalance)
+	n += encoding.BigintBinarySize(&v.CreditBalance)
 
 	return n
 }
@@ -194,9 +195,9 @@ func (v *AnonTokenAccount) BinarySize() int {
 func (v *ChainParams) BinarySize() int {
 	var n int
 
-	n += bytesBinarySize(v.Data)
+	n += encoding.BytesBinarySize(v.Data)
 
-	n += boolBinarySize(v.IsUpdate)
+	n += encoding.BoolBinarySize(v.IsUpdate)
 
 	return n
 }
@@ -204,11 +205,11 @@ func (v *ChainParams) BinarySize() int {
 func (v *CreateSigSpec) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeCreateSigSpec))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeCreateSigSpec))
 
-	n += stringBinarySize(v.Url)
+	n += encoding.StringBinarySize(v.Url)
 
-	n += uvarintBinarySize(uint64(len(v.Keys)))
+	n += encoding.UvarintBinarySize(uint64(len(v.Keys)))
 
 	for _, v := range v.Keys {
 		n += v.BinarySize()
@@ -221,11 +222,11 @@ func (v *CreateSigSpec) BinarySize() int {
 func (v *CreateSigSpecGroup) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeCreateSigSpecGroup))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeCreateSigSpecGroup))
 
-	n += stringBinarySize(v.Url)
+	n += encoding.StringBinarySize(v.Url)
 
-	n += chainSetBinarySize(v.SigSpecs)
+	n += encoding.ChainSetBinarySize(v.SigSpecs)
 
 	return n
 }
@@ -233,7 +234,7 @@ func (v *CreateSigSpecGroup) BinarySize() int {
 func (v *DirectoryIndexMetadata) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(v.Count)
+	n += encoding.UvarintBinarySize(v.Count)
 
 	return n
 }
@@ -241,10 +242,10 @@ func (v *DirectoryIndexMetadata) BinarySize() int {
 func (v *DirectoryQueryResult) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(len(v.Entries)))
+	n += encoding.UvarintBinarySize(uint64(len(v.Entries)))
 
 	for _, v := range v.Entries {
-		n += stringBinarySize(v)
+		n += encoding.StringBinarySize(v)
 
 	}
 
@@ -254,15 +255,15 @@ func (v *DirectoryQueryResult) BinarySize() int {
 func (v *IdentityCreate) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeIdentityCreate))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeIdentityCreate))
 
-	n += stringBinarySize(v.Url)
+	n += encoding.StringBinarySize(v.Url)
 
-	n += bytesBinarySize(v.PublicKey)
+	n += encoding.BytesBinarySize(v.PublicKey)
 
-	n += stringBinarySize(v.KeyBookName)
+	n += encoding.StringBinarySize(v.KeyBookName)
 
-	n += stringBinarySize(v.KeyPageName)
+	n += encoding.StringBinarySize(v.KeyPageName)
 
 	return n
 }
@@ -270,9 +271,9 @@ func (v *IdentityCreate) BinarySize() int {
 func (v *KeySpec) BinarySize() int {
 	var n int
 
-	n += bytesBinarySize(v.PublicKey)
+	n += encoding.BytesBinarySize(v.PublicKey)
 
-	n += uvarintBinarySize(v.Nonce)
+	n += encoding.UvarintBinarySize(v.Nonce)
 
 	return n
 }
@@ -280,7 +281,7 @@ func (v *KeySpec) BinarySize() int {
 func (v *KeySpecParams) BinarySize() int {
 	var n int
 
-	n += bytesBinarySize(v.PublicKey)
+	n += encoding.BytesBinarySize(v.PublicKey)
 
 	return n
 }
@@ -288,9 +289,9 @@ func (v *KeySpecParams) BinarySize() int {
 func (v *MetricsRequest) BinarySize() int {
 	var n int
 
-	n += stringBinarySize(v.Metric)
+	n += encoding.StringBinarySize(v.Metric)
 
-	n += durationBinarySize(v.Duration)
+	n += encoding.DurationBinarySize(v.Duration)
 
 	return n
 }
@@ -303,9 +304,9 @@ func (v *SigSpec) BinarySize() int {
 
 	n += v.ChainHeader.GetHeaderSize()
 
-	n += bigintBinarySize(&v.CreditBalance)
+	n += encoding.BigintBinarySize(&v.CreditBalance)
 
-	n += uvarintBinarySize(uint64(len(v.Keys)))
+	n += encoding.UvarintBinarySize(uint64(len(v.Keys)))
 
 	for _, v := range v.Keys {
 		n += v.BinarySize()
@@ -323,7 +324,7 @@ func (v *SigSpecGroup) BinarySize() int {
 
 	n += v.ChainHeader.GetHeaderSize()
 
-	n += chainSetBinarySize(v.SigSpecs)
+	n += encoding.ChainSetBinarySize(v.SigSpecs)
 
 	return n
 }
@@ -331,11 +332,11 @@ func (v *SigSpecGroup) BinarySize() int {
 func (v *SyntheticCreateChain) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeSyntheticCreateChain))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeSyntheticCreateChain))
 
-	n += chainBinarySize(&v.Cause)
+	n += encoding.ChainBinarySize(&v.Cause)
 
-	n += uvarintBinarySize(uint64(len(v.Chains)))
+	n += encoding.UvarintBinarySize(uint64(len(v.Chains)))
 
 	for _, v := range v.Chains {
 		n += v.BinarySize()
@@ -348,11 +349,11 @@ func (v *SyntheticCreateChain) BinarySize() int {
 func (v *SyntheticDepositCredits) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeSyntheticDepositCredits))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeSyntheticDepositCredits))
 
-	n += chainBinarySize(&v.Cause)
+	n += encoding.ChainBinarySize(&v.Cause)
 
-	n += uvarintBinarySize(v.Amount)
+	n += encoding.UvarintBinarySize(v.Amount)
 
 	return n
 }
@@ -360,7 +361,7 @@ func (v *SyntheticDepositCredits) BinarySize() int {
 func (v *SyntheticGenesis) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeSyntheticGenesis))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeSyntheticGenesis))
 
 	return n
 }
@@ -368,13 +369,13 @@ func (v *SyntheticGenesis) BinarySize() int {
 func (v *TokenAccountCreate) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeTokenAccountCreate))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeTokenAccountCreate))
 
-	n += stringBinarySize(v.Url)
+	n += encoding.StringBinarySize(v.Url)
 
-	n += stringBinarySize(v.TokenUrl)
+	n += encoding.StringBinarySize(v.TokenUrl)
 
-	n += stringBinarySize(v.KeyBookUrl)
+	n += encoding.StringBinarySize(v.KeyBookUrl)
 
 	return n
 }
@@ -382,7 +383,7 @@ func (v *TokenAccountCreate) BinarySize() int {
 func (v *TxResult) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(len(v.SyntheticTxs)))
+	n += encoding.UvarintBinarySize(uint64(len(v.SyntheticTxs)))
 
 	for _, v := range v.SyntheticTxs {
 		n += v.BinarySize()
@@ -395,13 +396,13 @@ func (v *TxResult) BinarySize() int {
 func (v *TxSynthRef) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(v.Type)
+	n += encoding.UvarintBinarySize(v.Type)
 
-	n += chainBinarySize(&v.Hash)
+	n += encoding.ChainBinarySize(&v.Hash)
 
-	n += stringBinarySize(v.Url)
+	n += encoding.StringBinarySize(v.Url)
 
-	n += chainBinarySize(&v.TxRef)
+	n += encoding.ChainBinarySize(&v.TxRef)
 
 	return n
 }
@@ -409,13 +410,13 @@ func (v *TxSynthRef) BinarySize() int {
 func (v *UpdateKeyPage) BinarySize() int {
 	var n int
 
-	n += uvarintBinarySize(uint64(types.TxTypeUpdateKeyPage))
+	n += encoding.UvarintBinarySize(uint64(types.TxTypeUpdateKeyPage))
 
 	n += v.Operation.BinarySize()
 
-	n += bytesBinarySize(v.Key)
+	n += encoding.BytesBinarySize(v.Key)
 
-	n += bytesBinarySize(v.NewKey)
+	n += encoding.BytesBinarySize(v.NewKey)
 
 	return n
 }
@@ -423,11 +424,11 @@ func (v *UpdateKeyPage) BinarySize() int {
 func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeAddCredits)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeAddCredits)))
 
-	buffer.Write(stringMarshalBinary(v.Recipient))
+	buffer.Write(encoding.StringMarshalBinary(v.Recipient))
 
-	buffer.Write(uvarintMarshalBinary(v.Amount))
+	buffer.Write(encoding.UvarintMarshalBinary(v.Amount))
 
 	return buffer.Bytes(), nil
 }
@@ -443,15 +444,15 @@ func (v *AnonTokenAccount) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(stringMarshalBinary(v.TokenUrl))
+	buffer.Write(encoding.StringMarshalBinary(v.TokenUrl))
 
-	buffer.Write(bigintMarshalBinary(&v.Balance))
+	buffer.Write(encoding.BigintMarshalBinary(&v.Balance))
 
-	buffer.Write(uvarintMarshalBinary(v.TxCount))
+	buffer.Write(encoding.UvarintMarshalBinary(v.TxCount))
 
-	buffer.Write(uvarintMarshalBinary(v.Nonce))
+	buffer.Write(encoding.UvarintMarshalBinary(v.Nonce))
 
-	buffer.Write(bigintMarshalBinary(&v.CreditBalance))
+	buffer.Write(encoding.BigintMarshalBinary(&v.CreditBalance))
 
 	return buffer.Bytes(), nil
 }
@@ -459,9 +460,9 @@ func (v *AnonTokenAccount) MarshalBinary() ([]byte, error) {
 func (v *ChainParams) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(bytesMarshalBinary(v.Data))
+	buffer.Write(encoding.BytesMarshalBinary(v.Data))
 
-	buffer.Write(boolMarshalBinary(v.IsUpdate))
+	buffer.Write(encoding.BoolMarshalBinary(v.IsUpdate))
 
 	return buffer.Bytes(), nil
 }
@@ -469,11 +470,11 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 func (v *CreateSigSpec) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeCreateSigSpec)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeCreateSigSpec)))
 
-	buffer.Write(stringMarshalBinary(v.Url))
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
-	buffer.Write(uvarintMarshalBinary(uint64(len(v.Keys))))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Keys))))
 	for i, v := range v.Keys {
 		_ = i
 		if b, err := v.MarshalBinary(); err != nil {
@@ -490,11 +491,11 @@ func (v *CreateSigSpec) MarshalBinary() ([]byte, error) {
 func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeCreateSigSpecGroup)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeCreateSigSpecGroup)))
 
-	buffer.Write(stringMarshalBinary(v.Url))
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
-	buffer.Write(chainSetMarshalBinary(v.SigSpecs))
+	buffer.Write(encoding.ChainSetMarshalBinary(v.SigSpecs))
 
 	return buffer.Bytes(), nil
 }
@@ -502,7 +503,7 @@ func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(v.Count))
+	buffer.Write(encoding.UvarintMarshalBinary(v.Count))
 
 	return buffer.Bytes(), nil
 }
@@ -510,10 +511,10 @@ func (v *DirectoryIndexMetadata) MarshalBinary() ([]byte, error) {
 func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(len(v.Entries))))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Entries))))
 	for i, v := range v.Entries {
 		_ = i
-		buffer.Write(stringMarshalBinary(v))
+		buffer.Write(encoding.StringMarshalBinary(v))
 
 	}
 
@@ -523,15 +524,15 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 func (v *IdentityCreate) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeIdentityCreate)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeIdentityCreate)))
 
-	buffer.Write(stringMarshalBinary(v.Url))
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
-	buffer.Write(bytesMarshalBinary(v.PublicKey))
+	buffer.Write(encoding.BytesMarshalBinary(v.PublicKey))
 
-	buffer.Write(stringMarshalBinary(v.KeyBookName))
+	buffer.Write(encoding.StringMarshalBinary(v.KeyBookName))
 
-	buffer.Write(stringMarshalBinary(v.KeyPageName))
+	buffer.Write(encoding.StringMarshalBinary(v.KeyPageName))
 
 	return buffer.Bytes(), nil
 }
@@ -539,9 +540,9 @@ func (v *IdentityCreate) MarshalBinary() ([]byte, error) {
 func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(bytesMarshalBinary(v.PublicKey))
+	buffer.Write(encoding.BytesMarshalBinary(v.PublicKey))
 
-	buffer.Write(uvarintMarshalBinary(v.Nonce))
+	buffer.Write(encoding.UvarintMarshalBinary(v.Nonce))
 
 	return buffer.Bytes(), nil
 }
@@ -549,7 +550,7 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(bytesMarshalBinary(v.PublicKey))
+	buffer.Write(encoding.BytesMarshalBinary(v.PublicKey))
 
 	return buffer.Bytes(), nil
 }
@@ -557,9 +558,9 @@ func (v *KeySpecParams) MarshalBinary() ([]byte, error) {
 func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(stringMarshalBinary(v.Metric))
+	buffer.Write(encoding.StringMarshalBinary(v.Metric))
 
-	buffer.Write(durationMarshalBinary(v.Duration))
+	buffer.Write(encoding.DurationMarshalBinary(v.Duration))
 
 	return buffer.Bytes(), nil
 }
@@ -575,9 +576,9 @@ func (v *SigSpec) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(bigintMarshalBinary(&v.CreditBalance))
+	buffer.Write(encoding.BigintMarshalBinary(&v.CreditBalance))
 
-	buffer.Write(uvarintMarshalBinary(uint64(len(v.Keys))))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Keys))))
 	for i, v := range v.Keys {
 		_ = i
 		if b, err := v.MarshalBinary(); err != nil {
@@ -602,7 +603,7 @@ func (v *SigSpecGroup) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(chainSetMarshalBinary(v.SigSpecs))
+	buffer.Write(encoding.ChainSetMarshalBinary(v.SigSpecs))
 
 	return buffer.Bytes(), nil
 }
@@ -610,11 +611,11 @@ func (v *SigSpecGroup) MarshalBinary() ([]byte, error) {
 func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeSyntheticCreateChain)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeSyntheticCreateChain)))
 
-	buffer.Write(chainMarshalBinary(&v.Cause))
+	buffer.Write(encoding.ChainMarshalBinary(&v.Cause))
 
-	buffer.Write(uvarintMarshalBinary(uint64(len(v.Chains))))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Chains))))
 	for i, v := range v.Chains {
 		_ = i
 		if b, err := v.MarshalBinary(); err != nil {
@@ -631,11 +632,11 @@ func (v *SyntheticCreateChain) MarshalBinary() ([]byte, error) {
 func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeSyntheticDepositCredits)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeSyntheticDepositCredits)))
 
-	buffer.Write(chainMarshalBinary(&v.Cause))
+	buffer.Write(encoding.ChainMarshalBinary(&v.Cause))
 
-	buffer.Write(uvarintMarshalBinary(v.Amount))
+	buffer.Write(encoding.UvarintMarshalBinary(v.Amount))
 
 	return buffer.Bytes(), nil
 }
@@ -643,7 +644,7 @@ func (v *SyntheticDepositCredits) MarshalBinary() ([]byte, error) {
 func (v *SyntheticGenesis) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeSyntheticGenesis)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeSyntheticGenesis)))
 
 	return buffer.Bytes(), nil
 }
@@ -651,13 +652,13 @@ func (v *SyntheticGenesis) MarshalBinary() ([]byte, error) {
 func (v *TokenAccountCreate) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeTokenAccountCreate)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeTokenAccountCreate)))
 
-	buffer.Write(stringMarshalBinary(v.Url))
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
-	buffer.Write(stringMarshalBinary(v.TokenUrl))
+	buffer.Write(encoding.StringMarshalBinary(v.TokenUrl))
 
-	buffer.Write(stringMarshalBinary(v.KeyBookUrl))
+	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
 
 	return buffer.Bytes(), nil
 }
@@ -665,7 +666,7 @@ func (v *TokenAccountCreate) MarshalBinary() ([]byte, error) {
 func (v *TxResult) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(len(v.SyntheticTxs))))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.SyntheticTxs))))
 	for i, v := range v.SyntheticTxs {
 		_ = i
 		if b, err := v.MarshalBinary(); err != nil {
@@ -682,13 +683,13 @@ func (v *TxResult) MarshalBinary() ([]byte, error) {
 func (v *TxSynthRef) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(v.Type))
+	buffer.Write(encoding.UvarintMarshalBinary(v.Type))
 
-	buffer.Write(chainMarshalBinary(&v.Hash))
+	buffer.Write(encoding.ChainMarshalBinary(&v.Hash))
 
-	buffer.Write(stringMarshalBinary(v.Url))
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
-	buffer.Write(chainMarshalBinary(&v.TxRef))
+	buffer.Write(encoding.ChainMarshalBinary(&v.TxRef))
 
 	return buffer.Bytes(), nil
 }
@@ -696,7 +697,7 @@ func (v *TxSynthRef) MarshalBinary() ([]byte, error) {
 func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(uvarintMarshalBinary(uint64(types.TxTypeUpdateKeyPage)))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxTypeUpdateKeyPage)))
 
 	if b, err := v.Operation.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding Operation: %w", err)
@@ -704,35 +705,35 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 		buffer.Write(b)
 	}
 
-	buffer.Write(bytesMarshalBinary(v.Key))
+	buffer.Write(encoding.BytesMarshalBinary(v.Key))
 
-	buffer.Write(bytesMarshalBinary(v.NewKey))
+	buffer.Write(encoding.BytesMarshalBinary(v.NewKey))
 
 	return buffer.Bytes(), nil
 }
 
 func (v *AddCredits) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeAddCredits
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Recipient: %w", err)
 	} else {
 		v.Recipient = x
 	}
-	data = data[stringBinarySize(v.Recipient):]
+	data = data[encoding.StringBinarySize(v.Recipient):]
 
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Amount: %w", err)
 	} else {
 		v.Amount = x
 	}
-	data = data[uvarintBinarySize(v.Amount):]
+	data = data[encoding.UvarintBinarySize(v.Amount):]
 
 	return nil
 }
@@ -746,85 +747,85 @@ func (v *AnonTokenAccount) UnmarshalBinary(data []byte) error {
 	}
 	data = data[v.GetHeaderSize():]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TokenUrl: %w", err)
 	} else {
 		v.TokenUrl = x
 	}
-	data = data[stringBinarySize(v.TokenUrl):]
+	data = data[encoding.StringBinarySize(v.TokenUrl):]
 
-	if x, err := bigintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Balance: %w", err)
 	} else {
 		v.Balance.Set(x)
 	}
-	data = data[bigintBinarySize(&v.Balance):]
+	data = data[encoding.BigintBinarySize(&v.Balance):]
 
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TxCount: %w", err)
 	} else {
 		v.TxCount = x
 	}
-	data = data[uvarintBinarySize(v.TxCount):]
+	data = data[encoding.UvarintBinarySize(v.TxCount):]
 
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Nonce: %w", err)
 	} else {
 		v.Nonce = x
 	}
-	data = data[uvarintBinarySize(v.Nonce):]
+	data = data[encoding.UvarintBinarySize(v.Nonce):]
 
-	if x, err := bigintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding CreditBalance: %w", err)
 	} else {
 		v.CreditBalance.Set(x)
 	}
-	data = data[bigintBinarySize(&v.CreditBalance):]
+	data = data[encoding.BigintBinarySize(&v.CreditBalance):]
 
 	return nil
 }
 
 func (v *ChainParams) UnmarshalBinary(data []byte) error {
-	if x, err := bytesUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {
 		v.Data = x
 	}
-	data = data[bytesBinarySize(v.Data):]
+	data = data[encoding.BytesBinarySize(v.Data):]
 
-	if x, err := boolUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding IsUpdate: %w", err)
 	} else {
 		v.IsUpdate = x
 	}
-	data = data[boolBinarySize(v.IsUpdate):]
+	data = data[encoding.BoolBinarySize(v.IsUpdate):]
 
 	return nil
 }
 
 func (v *CreateSigSpec) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeCreateSigSpec
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Url: %w", err)
 	} else {
 		v.Url = x
 	}
-	data = data[stringBinarySize(v.Url):]
+	data = data[encoding.StringBinarySize(v.Url):]
 
 	var lenKeys uint64
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Keys: %w", err)
 	} else {
 		lenKeys = x
 	}
-	data = data[uvarintBinarySize(lenKeys):]
+	data = data[encoding.UvarintBinarySize(lenKeys):]
 
 	v.Keys = make([]*KeySpecParams, lenKeys)
 	for i := range v.Keys {
@@ -842,58 +843,58 @@ func (v *CreateSigSpec) UnmarshalBinary(data []byte) error {
 
 func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeCreateSigSpecGroup
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Url: %w", err)
 	} else {
 		v.Url = x
 	}
-	data = data[stringBinarySize(v.Url):]
+	data = data[encoding.StringBinarySize(v.Url):]
 
-	if x, err := chainSetUnmarshalBinary(data); err != nil {
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding SigSpecs: %w", err)
 	} else {
 		v.SigSpecs = x
 	}
-	data = data[chainSetBinarySize(v.SigSpecs):]
+	data = data[encoding.ChainSetBinarySize(v.SigSpecs):]
 
 	return nil
 }
 
 func (v *DirectoryIndexMetadata) UnmarshalBinary(data []byte) error {
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Count: %w", err)
 	} else {
 		v.Count = x
 	}
-	data = data[uvarintBinarySize(v.Count):]
+	data = data[encoding.UvarintBinarySize(v.Count):]
 
 	return nil
 }
 
 func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
 	var lenEntries uint64
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Entries: %w", err)
 	} else {
 		lenEntries = x
 	}
-	data = data[uvarintBinarySize(lenEntries):]
+	data = data[encoding.UvarintBinarySize(lenEntries):]
 
 	v.Entries = make([]string, lenEntries)
 	for i := range v.Entries {
-		if x, err := stringUnmarshalBinary(data); err != nil {
+		if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 			return fmt.Errorf("error decoding Entries[%d]: %w", i, err)
 		} else {
 			v.Entries[i] = x
 		}
-		data = data[stringBinarySize(v.Entries[i]):]
+		data = data[encoding.StringBinarySize(v.Entries[i]):]
 
 	}
 
@@ -902,87 +903,87 @@ func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
 
 func (v *IdentityCreate) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeIdentityCreate
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Url: %w", err)
 	} else {
 		v.Url = x
 	}
-	data = data[stringBinarySize(v.Url):]
+	data = data[encoding.StringBinarySize(v.Url):]
 
-	if x, err := bytesUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
 		v.PublicKey = x
 	}
-	data = data[bytesBinarySize(v.PublicKey):]
+	data = data[encoding.BytesBinarySize(v.PublicKey):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding KeyBookName: %w", err)
 	} else {
 		v.KeyBookName = x
 	}
-	data = data[stringBinarySize(v.KeyBookName):]
+	data = data[encoding.StringBinarySize(v.KeyBookName):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding KeyPageName: %w", err)
 	} else {
 		v.KeyPageName = x
 	}
-	data = data[stringBinarySize(v.KeyPageName):]
+	data = data[encoding.StringBinarySize(v.KeyPageName):]
 
 	return nil
 }
 
 func (v *KeySpec) UnmarshalBinary(data []byte) error {
-	if x, err := bytesUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
 		v.PublicKey = x
 	}
-	data = data[bytesBinarySize(v.PublicKey):]
+	data = data[encoding.BytesBinarySize(v.PublicKey):]
 
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Nonce: %w", err)
 	} else {
 		v.Nonce = x
 	}
-	data = data[uvarintBinarySize(v.Nonce):]
+	data = data[encoding.UvarintBinarySize(v.Nonce):]
 
 	return nil
 }
 
 func (v *KeySpecParams) UnmarshalBinary(data []byte) error {
-	if x, err := bytesUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
 		v.PublicKey = x
 	}
-	data = data[bytesBinarySize(v.PublicKey):]
+	data = data[encoding.BytesBinarySize(v.PublicKey):]
 
 	return nil
 }
 
 func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Metric: %w", err)
 	} else {
 		v.Metric = x
 	}
-	data = data[stringBinarySize(v.Metric):]
+	data = data[encoding.StringBinarySize(v.Metric):]
 
-	if x, err := durationUnmarshalBinary(data); err != nil {
+	if x, err := encoding.DurationUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Duration: %w", err)
 	} else {
 		v.Duration = x
 	}
-	data = data[durationBinarySize(v.Duration):]
+	data = data[encoding.DurationBinarySize(v.Duration):]
 
 	return nil
 }
@@ -996,20 +997,20 @@ func (v *SigSpec) UnmarshalBinary(data []byte) error {
 	}
 	data = data[v.GetHeaderSize():]
 
-	if x, err := bigintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding CreditBalance: %w", err)
 	} else {
 		v.CreditBalance.Set(x)
 	}
-	data = data[bigintBinarySize(&v.CreditBalance):]
+	data = data[encoding.BigintBinarySize(&v.CreditBalance):]
 
 	var lenKeys uint64
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Keys: %w", err)
 	} else {
 		lenKeys = x
 	}
-	data = data[uvarintBinarySize(lenKeys):]
+	data = data[encoding.UvarintBinarySize(lenKeys):]
 
 	v.Keys = make([]*KeySpec, lenKeys)
 	for i := range v.Keys {
@@ -1034,39 +1035,39 @@ func (v *SigSpecGroup) UnmarshalBinary(data []byte) error {
 	}
 	data = data[v.GetHeaderSize():]
 
-	if x, err := chainSetUnmarshalBinary(data); err != nil {
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding SigSpecs: %w", err)
 	} else {
 		v.SigSpecs = x
 	}
-	data = data[chainSetBinarySize(v.SigSpecs):]
+	data = data[encoding.ChainSetBinarySize(v.SigSpecs):]
 
 	return nil
 }
 
 func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeSyntheticCreateChain
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := chainUnmarshalBinary(data); err != nil {
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)
 	} else {
 		v.Cause = x
 	}
-	data = data[chainBinarySize(&v.Cause):]
+	data = data[encoding.ChainBinarySize(&v.Cause):]
 
 	var lenChains uint64
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Chains: %w", err)
 	} else {
 		lenChains = x
 	}
-	data = data[uvarintBinarySize(lenChains):]
+	data = data[encoding.UvarintBinarySize(lenChains):]
 
 	v.Chains = make([]ChainParams, lenChains)
 	for i := range v.Chains {
@@ -1082,83 +1083,83 @@ func (v *SyntheticCreateChain) UnmarshalBinary(data []byte) error {
 
 func (v *SyntheticDepositCredits) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeSyntheticDepositCredits
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := chainUnmarshalBinary(data); err != nil {
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)
 	} else {
 		v.Cause = x
 	}
-	data = data[chainBinarySize(&v.Cause):]
+	data = data[encoding.ChainBinarySize(&v.Cause):]
 
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Amount: %w", err)
 	} else {
 		v.Amount = x
 	}
-	data = data[uvarintBinarySize(v.Amount):]
+	data = data[encoding.UvarintBinarySize(v.Amount):]
 
 	return nil
 }
 
 func (v *SyntheticGenesis) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeSyntheticGenesis
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
 	return nil
 }
 
 func (v *TokenAccountCreate) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeTokenAccountCreate
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Url: %w", err)
 	} else {
 		v.Url = x
 	}
-	data = data[stringBinarySize(v.Url):]
+	data = data[encoding.StringBinarySize(v.Url):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TokenUrl: %w", err)
 	} else {
 		v.TokenUrl = x
 	}
-	data = data[stringBinarySize(v.TokenUrl):]
+	data = data[encoding.StringBinarySize(v.TokenUrl):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding KeyBookUrl: %w", err)
 	} else {
 		v.KeyBookUrl = x
 	}
-	data = data[stringBinarySize(v.KeyBookUrl):]
+	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
 
 	return nil
 }
 
 func (v *TxResult) UnmarshalBinary(data []byte) error {
 	var lenSyntheticTxs uint64
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding SyntheticTxs: %w", err)
 	} else {
 		lenSyntheticTxs = x
 	}
-	data = data[uvarintBinarySize(lenSyntheticTxs):]
+	data = data[encoding.UvarintBinarySize(lenSyntheticTxs):]
 
 	v.SyntheticTxs = make([]*TxSynthRef, lenSyntheticTxs)
 	for i := range v.SyntheticTxs {
@@ -1175,64 +1176,64 @@ func (v *TxResult) UnmarshalBinary(data []byte) error {
 }
 
 func (v *TxSynthRef) UnmarshalBinary(data []byte) error {
-	if x, err := uvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Type: %w", err)
 	} else {
 		v.Type = x
 	}
-	data = data[uvarintBinarySize(v.Type):]
+	data = data[encoding.UvarintBinarySize(v.Type):]
 
-	if x, err := chainUnmarshalBinary(data); err != nil {
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
 		v.Hash = x
 	}
-	data = data[chainBinarySize(&v.Hash):]
+	data = data[encoding.ChainBinarySize(&v.Hash):]
 
-	if x, err := stringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Url: %w", err)
 	} else {
 		v.Url = x
 	}
-	data = data[stringBinarySize(v.Url):]
+	data = data[encoding.StringBinarySize(v.Url):]
 
-	if x, err := chainUnmarshalBinary(data); err != nil {
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TxRef: %w", err)
 	} else {
 		v.TxRef = x
 	}
-	data = data[chainBinarySize(&v.TxRef):]
+	data = data[encoding.ChainBinarySize(&v.TxRef):]
 
 	return nil
 }
 
 func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeUpdateKeyPage
-	if v, err := uvarintUnmarshalBinary(data); err != nil {
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
 	} else if v != uint64(typ) {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TxType(v))
 	}
-	data = data[uvarintBinarySize(uint64(typ)):]
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
 	if err := v.Operation.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Operation: %w", err)
 	}
 	data = data[v.Operation.BinarySize():]
 
-	if x, err := bytesUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Key: %w", err)
 	} else {
 		v.Key = x
 	}
-	data = data[bytesBinarySize(v.Key):]
+	data = data[encoding.BytesBinarySize(v.Key):]
 
-	if x, err := bytesUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding NewKey: %w", err)
 	} else {
 		v.NewKey = x
 	}
-	data = data[bytesBinarySize(v.NewKey):]
+	data = data[encoding.BytesBinarySize(v.NewKey):]
 
 	return nil
 }
@@ -1242,7 +1243,7 @@ func (v *ChainParams) MarshalJSON() ([]byte, error) {
 		Data     string `json:"data"`
 		IsUpdate bool   `json:"isUpdate"`
 	}
-	u.Data = bytesToJSON(v.Data)
+	u.Data = encoding.BytesToJSON(v.Data)
 	u.IsUpdate = v.IsUpdate
 	return json.Marshal(u)
 }
@@ -1253,7 +1254,7 @@ func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
 		SigSpecs []string `json:"sigSpecs"`
 	}
 	u.Url = v.Url
-	u.SigSpecs = chainSetToJSON(v.SigSpecs)
+	u.SigSpecs = encoding.ChainSetToJSON(v.SigSpecs)
 	return json.Marshal(u)
 }
 
@@ -1265,7 +1266,7 @@ func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
 		KeyPageName string `json:"keyPageName"`
 	}
 	u.Url = v.Url
-	u.PublicKey = bytesToJSON(v.PublicKey)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookName = v.KeyBookName
 	u.KeyPageName = v.KeyPageName
 	return json.Marshal(u)
@@ -1276,7 +1277,7 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 		PublicKey string `json:"publicKey"`
 		Nonce     uint64 `json:"nonce"`
 	}
-	u.PublicKey = bytesToJSON(v.PublicKey)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
 	return json.Marshal(u)
 }
@@ -1285,7 +1286,7 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 	var u struct {
 		PublicKey string `json:"publicKey"`
 	}
-	u.PublicKey = bytesToJSON(v.PublicKey)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	return json.Marshal(u)
 }
 
@@ -1295,7 +1296,7 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 		Duration interface{} `json:"duration"`
 	}
 	u.Metric = v.Metric
-	u.Duration = durationToJSON(v.Duration)
+	u.Duration = encoding.DurationToJSON(v.Duration)
 	return json.Marshal(u)
 }
 
@@ -1305,8 +1306,8 @@ func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
 		SigSpecs []string `json:"sigSpecs"`
 	}
 	u.ChainHeader = v.ChainHeader
-	u.SigSpecs = chainSetToJSON(v.SigSpecs)
-	return json.Marshal(&u)
+	u.SigSpecs = encoding.ChainSetToJSON(v.SigSpecs)
+	return json.Marshal(u)
 }
 
 func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
@@ -1314,7 +1315,7 @@ func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
 		Cause  string        `json:"cause"`
 		Chains []ChainParams `json:"chains"`
 	}
-	u.Cause = chainToJSON(v.Cause)
+	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Chains = v.Chains
 	return json.Marshal(u)
 }
@@ -1324,7 +1325,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 		Cause  string `json:"cause"`
 		Amount uint64 `json:"amount"`
 	}
-	u.Cause = chainToJSON(v.Cause)
+	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Amount = v.Amount
 	return json.Marshal(u)
 }
@@ -1337,9 +1338,9 @@ func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
 		TxRef string `json:"txRef"`
 	}
 	u.Type = v.Type
-	u.Hash = chainToJSON(v.Hash)
+	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Url = v.Url
-	u.TxRef = chainToJSON(v.TxRef)
+	u.TxRef = encoding.ChainToJSON(v.TxRef)
 	return json.Marshal(u)
 }
 
@@ -1350,8 +1351,8 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 		NewKey    string           `json:"newKey"`
 	}
 	u.Operation = v.Operation
-	u.Key = bytesToJSON(v.Key)
-	u.NewKey = bytesToJSON(v.NewKey)
+	u.Key = encoding.BytesToJSON(v.Key)
+	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	return json.Marshal(u)
 }
 
@@ -1363,7 +1364,7 @@ func (v *ChainParams) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := bytesFromJSON(u.Data); err != nil {
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {
 		v.Data = x
@@ -1381,7 +1382,7 @@ func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Url = u.Url
-	if x, err := chainSetFromJSON(u.SigSpecs); err != nil {
+	if x, err := encoding.ChainSetFromJSON(u.SigSpecs); err != nil {
 		return fmt.Errorf("error decoding SigSpecs: %w", err)
 	} else {
 		v.SigSpecs = x
@@ -1400,7 +1401,7 @@ func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Url = u.Url
-	if x, err := bytesFromJSON(u.PublicKey); err != nil {
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
 		v.PublicKey = x
@@ -1418,7 +1419,7 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := bytesFromJSON(u.PublicKey); err != nil {
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
 		v.PublicKey = x
@@ -1434,7 +1435,7 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := bytesFromJSON(u.PublicKey); err != nil {
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
 		return fmt.Errorf("error decoding PublicKey: %w", err)
 	} else {
 		v.PublicKey = x
@@ -1451,7 +1452,7 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Metric = u.Metric
-	if x, err := durationFromJSON(u.Duration); err != nil {
+	if x, err := encoding.DurationFromJSON(u.Duration); err != nil {
 		return fmt.Errorf("error decoding Duration: %w", err)
 	} else {
 		v.Duration = x
@@ -1468,7 +1469,7 @@ func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.ChainHeader = u.ChainHeader
-	if x, err := chainSetFromJSON(u.SigSpecs); err != nil {
+	if x, err := encoding.ChainSetFromJSON(u.SigSpecs); err != nil {
 		return fmt.Errorf("error decoding SigSpecs: %w", err)
 	} else {
 		v.SigSpecs = x
@@ -1484,7 +1485,7 @@ func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := chainFromJSON(u.Cause); err != nil {
+	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)
 	} else {
 		v.Cause = x
@@ -1501,7 +1502,7 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := chainFromJSON(u.Cause); err != nil {
+	if x, err := encoding.ChainFromJSON(u.Cause); err != nil {
 		return fmt.Errorf("error decoding Cause: %w", err)
 	} else {
 		v.Cause = x
@@ -1521,13 +1522,13 @@ func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Type = u.Type
-	if x, err := chainFromJSON(u.Hash); err != nil {
+	if x, err := encoding.ChainFromJSON(u.Hash); err != nil {
 		return fmt.Errorf("error decoding Hash: %w", err)
 	} else {
 		v.Hash = x
 	}
 	v.Url = u.Url
-	if x, err := chainFromJSON(u.TxRef); err != nil {
+	if x, err := encoding.ChainFromJSON(u.TxRef); err != nil {
 		return fmt.Errorf("error decoding TxRef: %w", err)
 	} else {
 		v.TxRef = x
@@ -1545,12 +1546,12 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.Operation = u.Operation
-	if x, err := bytesFromJSON(u.Key); err != nil {
+	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
 		return fmt.Errorf("error decoding Key: %w", err)
 	} else {
 		v.Key = x
 	}
-	if x, err := bytesFromJSON(u.NewKey); err != nil {
+	if x, err := encoding.BytesFromJSON(u.NewKey); err != nil {
 		return fmt.Errorf("error decoding NewKey: %w", err)
 	} else {
 		v.NewKey = x
