@@ -3,7 +3,7 @@ package managed
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 )
 
 // BlockIndex

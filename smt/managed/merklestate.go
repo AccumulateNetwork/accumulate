@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 )
 
 // MerkleState

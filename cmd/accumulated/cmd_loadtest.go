@@ -8,11 +8,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/internal/api"
-	"github.com/AccumulateNetwork/accumulated/internal/node"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
-	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/log"
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
@@ -68,7 +68,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	// Create clients for networks
 	for _, name := range flagLoadTest.Networks {
-		net := networks.Networks[name]
+		net := networks.All[name]
 		if net == nil {
 			fatalf("unknown network %q", flagInit.Net)
 		}

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulated"
+	"github.com/AccumulateNetwork/accumulate"
 	"github.com/spf13/cobra"
 )
 
@@ -26,17 +26,17 @@ func init() {
 }
 
 func showVersion(*cobra.Command, []string) {
-	if flagVersion.KnownVersion && !accumulated.IsVersionKnown() {
+	if flagVersion.KnownVersion && !accumulate.IsVersionKnown() {
 		defer os.Exit(1)
 	} else {
 		defer os.Exit(0)
 	}
 
 	if flagVersion.VersionOnly {
-		fmt.Println(accumulated.Version)
+		fmt.Println(accumulate.Version)
 		return
 	}
 
-	fmt.Printf("%s %s\n", cmdMain.Short, accumulated.Version)
-	fmt.Println(accumulated.Commit)
+	fmt.Printf("%s %s\n", cmdMain.Short, accumulate.Version)
+	fmt.Println(accumulate.Commit)
 }

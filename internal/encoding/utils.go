@@ -1,4 +1,4 @@
-package protocol
+package encoding
 
 import (
 	"encoding/binary"
@@ -7,22 +7,24 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 )
 
-// ToDo: Why a parameter? It isn't used for anything.
-func boolBinarySize(v bool) int {
+// Some of these methods have no parameters because they are used by generated
+// code
+
+func BoolBinarySize(_ bool) int {
 	return 1
 }
 
-func boolMarshalBinary(v bool) []byte {
+func BoolMarshalBinary(v bool) []byte {
 	if v {
 		return []byte{1}
 	}
 	return []byte{0}
 }
 
-func boolUnmarshalBinary(b []byte) (bool, error) {
+func BoolUnmarshalBinary(b []byte) (bool, error) {
 	if len(b) == 0 {
 		return false, ErrNotEnoughData
 	}
@@ -36,15 +38,15 @@ func boolUnmarshalBinary(b []byte) (bool, error) {
 	}
 }
 
-func uvarintBinarySize(v uint64) int {
-	return len(uvarintMarshalBinary(v))
+func UvarintBinarySize(v uint64) int {
+	return len(UvarintMarshalBinary(v))
 }
 
-func uvarintMarshalBinary(v uint64) []byte {
+func UvarintMarshalBinary(v uint64) []byte {
 	return common.Uint64Bytes(v)
 }
 
-func uvarintUnmarshalBinary(b []byte) (uint64, error) {
+func UvarintUnmarshalBinary(b []byte) (uint64, error) {
 	v, n := binary.Uvarint(b)
 	if n == 0 {
 		return 0, ErrNotEnoughData
@@ -55,15 +57,15 @@ func uvarintUnmarshalBinary(b []byte) (uint64, error) {
 	return v, nil
 }
 
-func bytesBinarySize(b []byte) int {
-	return len(bytesMarshalBinary(b))
+func BytesBinarySize(b []byte) int {
+	return len(BytesMarshalBinary(b))
 }
 
-func bytesMarshalBinary(b []byte) []byte {
+func BytesMarshalBinary(b []byte) []byte {
 	return common.SliceBytes(b)
 }
 
-func bytesUnmarshalBinary(b []byte) ([]byte, error) {
+func BytesUnmarshalBinary(b []byte) ([]byte, error) {
 	l, n := binary.Uvarint(b)
 	if n == 0 {
 		return nil, fmt.Errorf("error decoding length: %w", ErrNotEnoughData)
@@ -78,15 +80,15 @@ func bytesUnmarshalBinary(b []byte) ([]byte, error) {
 	return b[:l], nil
 }
 
-func stringBinarySize(s string) int {
-	return len(stringMarshalBinary(s))
+func StringBinarySize(s string) int {
+	return len(StringMarshalBinary(s))
 }
 
-func stringMarshalBinary(s string) []byte {
-	return bytesMarshalBinary([]byte(s))
+func StringMarshalBinary(s string) []byte {
+	return BytesMarshalBinary([]byte(s))
 }
 
-func stringUnmarshalBinary(b []byte) (string, error) {
+func StringUnmarshalBinary(b []byte) (string, error) {
 	l, n := binary.Uvarint(b)
 	if n == 0 {
 		return "", fmt.Errorf("error decoding length: %w", ErrNotEnoughData)
@@ -101,45 +103,45 @@ func stringUnmarshalBinary(b []byte) (string, error) {
 	return string(b[:l]), nil
 }
 
-func splitDuration(d time.Duration) (sec, ns uint64) {
+func SplitDuration(d time.Duration) (sec, ns uint64) {
 	sec = uint64(d.Seconds())
 	ns = uint64((d - d.Round(time.Second)).Nanoseconds())
 	return sec, ns
 }
 
-func durationBinarySize(d time.Duration) int {
-	sec, ns := splitDuration(d)
-	return uvarintBinarySize(sec) + uvarintBinarySize(ns)
+func DurationBinarySize(d time.Duration) int {
+	sec, ns := SplitDuration(d)
+	return UvarintBinarySize(sec) + UvarintBinarySize(ns)
 }
 
-func durationMarshalBinary(d time.Duration) []byte {
-	sec, ns := splitDuration(d)
-	return append(uvarintMarshalBinary(sec), uvarintMarshalBinary(ns)...)
+func DurationMarshalBinary(d time.Duration) []byte {
+	sec, ns := SplitDuration(d)
+	return append(UvarintMarshalBinary(sec), UvarintMarshalBinary(ns)...)
 }
 
-func durationUnmarshalBinary(b []byte) (time.Duration, error) {
-	sec, err := uvarintUnmarshalBinary(b)
+func DurationUnmarshalBinary(b []byte) (time.Duration, error) {
+	sec, err := UvarintUnmarshalBinary(b)
 	if err != nil {
 		return 0, fmt.Errorf("error decoding seconds: %w", err)
 	}
-	ns, err := uvarintUnmarshalBinary(b)
+	ns, err := UvarintUnmarshalBinary(b)
 	if err != nil {
 		return 0, fmt.Errorf("error decoding nanoseconds: %w", err)
 	}
 	return time.Duration(sec)*time.Second + time.Duration(ns), nil
 }
 
-func bigintBinarySize(v *big.Int) int {
-	return bytesBinarySize(v.Bytes())
+func BigintBinarySize(v *big.Int) int {
+	return BytesBinarySize(v.Bytes())
 }
 
-func bigintMarshalBinary(v *big.Int) []byte {
+func BigintMarshalBinary(v *big.Int) []byte {
 	// TODO Why aren't we varint encoding this?
-	return bytesMarshalBinary(v.Bytes())
+	return BytesMarshalBinary(v.Bytes())
 }
 
-func bigintUnmarshalBinary(b []byte) (*big.Int, error) {
-	b, err := bytesUnmarshalBinary(b)
+func BigintUnmarshalBinary(b []byte) (*big.Int, error) {
+	b, err := BytesUnmarshalBinary(b)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding bytes: %w", err)
 	}
@@ -150,15 +152,15 @@ func bigintUnmarshalBinary(b []byte) (*big.Int, error) {
 }
 
 // ToDo:  Why a parameter? It does nothing...
-func chainBinarySize(v *[32]byte) int {
+func ChainBinarySize(v *[32]byte) int {
 	return 32
 }
 
-func chainMarshalBinary(v *[32]byte) []byte {
+func ChainMarshalBinary(v *[32]byte) []byte {
 	return (*v)[:]
 }
 
-func chainUnmarshalBinary(b []byte) ([32]byte, error) {
+func ChainUnmarshalBinary(b []byte) ([32]byte, error) {
 	var v [32]byte
 	if len(b) < 32 {
 		return v, ErrNotEnoughData
@@ -167,12 +169,12 @@ func chainUnmarshalBinary(b []byte) ([32]byte, error) {
 	return v, nil
 }
 
-func chainSetBinarySize(v [][32]byte) int {
-	return uvarintBinarySize(uint64(len(v))) + len(v)*32
+func ChainSetBinarySize(v [][32]byte) int {
+	return UvarintBinarySize(uint64(len(v))) + len(v)*32
 }
 
-func chainSetMarshalBinary(v [][32]byte) []byte {
-	blen := uvarintMarshalBinary(uint64(len(v)))
+func ChainSetMarshalBinary(v [][32]byte) []byte {
+	blen := UvarintMarshalBinary(uint64(len(v)))
 	b := make([]byte, len(blen)+32*len(v))
 	n := copy(b, blen)
 	for i := range v {
@@ -181,13 +183,13 @@ func chainSetMarshalBinary(v [][32]byte) []byte {
 	return b
 }
 
-func chainSetUnmarshalBinary(b []byte) ([][32]byte, error) {
-	l, err := uvarintUnmarshalBinary(b)
+func ChainSetUnmarshalBinary(b []byte) ([][32]byte, error) {
+	l, err := UvarintUnmarshalBinary(b)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding length: %w", err)
 	}
 
-	b = b[uvarintBinarySize(l):]
+	b = b[UvarintBinarySize(l):]
 	if len(b) < int(32*l) {
 		return nil, ErrNotEnoughData
 	}
@@ -200,31 +202,31 @@ func chainSetUnmarshalBinary(b []byte) ([][32]byte, error) {
 	return v, nil
 }
 
-func bytesToJSON(v []byte) string {
+func BytesToJSON(v []byte) string {
 	return hex.EncodeToString(v)
 }
 
-func chainToJSON(v [32]byte) string {
+func ChainToJSON(v [32]byte) string {
 	return hex.EncodeToString(v[:])
 }
 
-func chainSetToJSON(v [][32]byte) []string {
+func ChainSetToJSON(v [][32]byte) []string {
 	s := make([]string, len(v))
 	for i, v := range v {
-		s[i] = chainToJSON(v)
+		s[i] = ChainToJSON(v)
 	}
 	return s
 }
 
-func durationToJSON(v time.Duration) interface{} {
+func DurationToJSON(v time.Duration) interface{} {
 	return v.String()
 }
 
-func bytesFromJSON(s string) ([]byte, error) {
+func BytesFromJSON(s string) ([]byte, error) {
 	return hex.DecodeString(s)
 }
 
-func chainFromJSON(s string) ([32]byte, error) {
+func ChainFromJSON(s string) ([32]byte, error) {
 	var v [32]byte
 	b, err := hex.DecodeString(s)
 	if err != nil {
@@ -236,11 +238,11 @@ func chainFromJSON(s string) ([32]byte, error) {
 	return v, nil
 }
 
-func chainSetFromJSON(s []string) ([][32]byte, error) {
+func ChainSetFromJSON(s []string) ([][32]byte, error) {
 	var err error
 	v := make([][32]byte, len(s))
 	for i, s := range s {
-		v[i], err = chainFromJSON(s)
+		v[i], err = ChainFromJSON(s)
 		if err != nil {
 			return nil, err
 		}
@@ -248,7 +250,7 @@ func chainSetFromJSON(s []string) ([][32]byte, error) {
 	return v, nil
 }
 
-func durationFromJSON(v interface{}) (time.Duration, error) {
+func DurationFromJSON(v interface{}) (time.Duration, error) {
 	switch v := v.(type) {
 	case float64:
 		return time.Duration(v * float64(time.Second)), nil

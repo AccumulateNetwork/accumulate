@@ -10,13 +10,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/internal/logging"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/smt/managed"
-	"github.com/AccumulateNetwork/accumulated/smt/pmt"
-	"github.com/AccumulateNetwork/accumulated/smt/storage"
-	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/managed"
+	"github.com/AccumulateNetwork/accumulate/smt/pmt"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/tendermint/tendermint/libs/log"
 )
 

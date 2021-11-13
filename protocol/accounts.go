@@ -3,7 +3,7 @@ package protocol
 import (
 	"math/big"
 
-	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
 func (ms *SigSpec) CreditCredits(amount uint64) {
