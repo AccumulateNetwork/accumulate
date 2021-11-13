@@ -1,7 +1,7 @@
 package genesis
 
 import (
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 func BootstrapStates() []state.Chain {
