@@ -10,7 +10,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
