@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/spf13/cobra"
 	"log"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/spf13/cobra"
+
+	"github.com/AccumulateNetwork/accumulate/protocol"
 )
 
 var pageCmd = &cobra.Command{
@@ -83,7 +85,12 @@ func GetAndPrintKeyPage(url string) {
 		log.Fatal(fmt.Errorf("error retrieving key book for %s", url))
 	}
 
-	fmt.Println(string(str))
+	res := acmeapi.APIDataResponse{}
+	err = json.Unmarshal([]byte(str), &res)
+	if err != nil {
+		log.Fatal(err)
+	}
+	PrintQueryResponse(&res)
 }
 
 func GetKeyPage(url string) ([]byte, *protocol.SigSpecGroup, error) {
@@ -270,16 +277,15 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "update-key-page", params, &res); err != nil {
 		log.Fatal(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create adi result")
 	}
-
-	fmt.Println(string(str))
+	ar.Print()
 }

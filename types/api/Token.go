@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type TokenCirculationMode int
@@ -22,6 +22,8 @@ func NewToken(url string, symbol string, precision byte, propertiesUrl string) *
 		Precision: types.Byte(precision), PropertiesUrl: types.String(propertiesUrl)}
 	return t
 }
+
+func (t *Token) GetType() types.TxType { return types.TxTypeTokenCreate }
 
 func (t *Token) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
