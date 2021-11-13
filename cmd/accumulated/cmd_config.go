@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AccumulateNetwork/accumulated/config"
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/spf13/cobra"
 )
 

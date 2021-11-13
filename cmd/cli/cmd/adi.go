@@ -7,11 +7,11 @@ import (
 	"log"
 	"time"
 
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/boltdb/bolt"
 
 	"github.com/spf13/cobra"
@@ -81,7 +81,7 @@ func PrintAdiDirectory() {
 	fmt.Println("  accumulate adi directory [url] 		Get directory of URL's associated with an ADI")
 }
 
-func GetAdiDirectory(actor string) *json.RawMessage {
+func GetAdiDirectory(actor string) {
 
 	u, err := url2.Parse(actor)
 	if err != nil {
@@ -89,26 +89,17 @@ func GetAdiDirectory(actor string) *json.RawMessage {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 
 	params := acmeapi.APIRequestURL{}
 
 	params.URL = types.String(u.String())
 
 	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(str))
-	ret := json.RawMessage{}
-	ret = str
-	return &ret
+	PrintQueryResponse(&res)
 }
 
 func PrintADI() {
@@ -120,23 +111,22 @@ func PrintADI() {
 
 func GetADI(url string) {
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
 	if err := Client.Request(context.Background(), "adi", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
-	str, err := json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Println(string(str))
-
+	PrintQueryResponse(&res)
+	//str, err := json.Marshal(res)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//
+	//fmt.Println(string(str))
 }
 
 func NewADIFromADISigner(actor *url2.URL, args []string) {
@@ -207,16 +197,17 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
-		log.Fatal(err)
+		PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("error unmarshalling create adi result")
 	}
+	ar.Print()
 
 	//todo: turn around and query the ADI and store the results.
 	err = Db.Update(func(tx *bolt.Tx) error {
@@ -228,7 +219,6 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 		}
 		return nil
 	})
-	fmt.Println(string(str))
 
 }
 
@@ -239,20 +229,8 @@ func NewADI(actor string, params []string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	//
-	//if IsLiteAccount(u.String()) == true {
-	//	var book string
-	//	var page string
-	//	if len(params) > 2 {
-	//		book = params[2]
-	//	}
-	//	if len(params) > 3 {
-	//		page = params[3]
-	//	}
-	//	NewADIFromLiteAccount(u, params[0], params[1], book, page)
-	//} else {
+
 	NewADIFromADISigner(u, params[:])
-	//}
 }
 
 func ListADIs() {

@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 const MaxTokenTxOutputs = 100
@@ -42,6 +42,8 @@ func NewTokenTxOutput(url types.String, amount uint64) *TokenTxOutput {
 	txo.Amount = amount
 	return txo
 }
+
+func (*TokenTx) GetType() types.TxType { return types.TxTypeTokenTx }
 
 func (t *TokenTx) AddToAccount(toUrl types.String, amt uint64) {
 	txOut := TokenTxOutput{types.UrlChain{String: toUrl}, amt}
