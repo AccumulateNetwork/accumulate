@@ -5,11 +5,11 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	accapi "github.com/AccumulateNetwork/accumulated/internal/api"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	. "github.com/AccumulateNetwork/accumulated/types/state"
+	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	. "github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 func TestTransactionState(t *testing.T) {

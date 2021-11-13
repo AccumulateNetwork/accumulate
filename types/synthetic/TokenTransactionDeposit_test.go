@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/api"
 )
 
 func TestTokenTransactionDeposit(t *testing.T) {

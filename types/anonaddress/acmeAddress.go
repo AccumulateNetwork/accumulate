@@ -3,7 +3,7 @@ package types
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 )
 
 // GenerateAcmeAddress

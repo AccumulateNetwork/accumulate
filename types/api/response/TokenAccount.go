@@ -3,8 +3,8 @@ package response
 import (
 	"math/big"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type TokenAccount struct {

@@ -2,8 +2,9 @@ package synthetic
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types"
+
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 // AccStateSubmit structure sends the information needed for the state of a BVC or DC on accumulate.

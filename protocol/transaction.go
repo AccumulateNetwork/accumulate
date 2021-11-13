@@ -3,8 +3,8 @@ package protocol
 import (
 	"encoding"
 
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type TransactionPayload interface {

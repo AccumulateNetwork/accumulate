@@ -3,13 +3,13 @@ package chain_test
 import (
 	"testing"
 
-	. "github.com/AccumulateNetwork/accumulated/internal/chain"
-	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	. "github.com/AccumulateNetwork/accumulate/internal/chain"
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
 )
 
