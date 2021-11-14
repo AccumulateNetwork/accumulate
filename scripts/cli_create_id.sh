@@ -14,6 +14,6 @@ fi
 
 # return the generated ID 
 
-echo $ID
+echo $acc
 
 
