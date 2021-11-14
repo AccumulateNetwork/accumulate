@@ -28,10 +28,6 @@ fi
 
 TxID=`./cli_faucet.sh $1 $2`
 
-# remove the "s
-
-TxID=`echo $TxID | /usr/bin/sed 's/"//g'`
-
 # check transaction status
 
 Status=`./cli_get_tx_status.sh $TxID $2`
