@@ -40,7 +40,6 @@ fi
 # call our faucet script and get the txid
 
 txid=`./cli_faucet.sh $id1 $2` 
-txid=`echo $txid | /usr/bin/sed 's/"//g'`
 
 # call our get tx status script to get the tx status
 
