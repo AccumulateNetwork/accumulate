@@ -51,14 +51,6 @@ if [ -z $3 ]; then
         exit 0
 fi
 
-# see if the IP address and port were entered on the command line
-
-if [ -z $4 ]; then
-        echo "You must enter an IPAddress:Port for a server to transfer tokens"
-        echo "Usage: test_case_6.1.sh fromID toID numTokens IPAddress:Port"
-        exit 0
-fi
-
 # call our xfer script
 
 ./cli_xfer_tokens.sh $id1 $id2 $3 $4
