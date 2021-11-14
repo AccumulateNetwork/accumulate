@@ -143,6 +143,12 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 	var book string
 	var page string
 
+	//at this point :
+	//args[0] should be the new adi you are creating
+	//args[1] should be the public key you are assigning to the adi
+	//args[2] is an optional setting for the key book name
+	//args[3] is an optional setting for the key page name
+	//Note: if args[2] is not the keybook, the keypage also cannot be specified.
 	if len(args) == 0 {
 		log.Fatal("insufficient number of command line arguments")
 	}
