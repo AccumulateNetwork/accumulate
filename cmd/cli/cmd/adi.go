@@ -162,12 +162,12 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 		}
 	}
 
-	if len(args) > 3 {
-		book = args[3]
+	if len(args) > 2 {
+		book = args[2]
 	}
 
-	if len(args) > 4 {
-		page = args[4]
+	if len(args) > 3 {
+		page = args[3]
 	}
 
 	u, err := url2.Parse(adiUrl)
