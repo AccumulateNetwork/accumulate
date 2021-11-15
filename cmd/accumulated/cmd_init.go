@@ -9,11 +9,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulated/config"
-	cfg "github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/internal/node"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulate/config"
+	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	tmcfg "github.com/tendermint/tendermint/config"
@@ -85,7 +85,7 @@ func init() {
 }
 
 func initNode(cmd *cobra.Command, args []string) {
-	network := networks.Networks[flagInit.Net]
+	network := networks.All[flagInit.Net]
 	if network == nil {
 		fatalf("unknown network %q", flagInit.Net)
 	}
@@ -149,7 +149,7 @@ func initFollower(cmd *cobra.Command, _ []string) {
 		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
 	}
 
-	network := networks.Networks[flagInit.Net]
+	network := networks.All[flagInit.Net]
 	if network == nil {
 		fatalf("unknown network %q", flagInit.Net)
 	}

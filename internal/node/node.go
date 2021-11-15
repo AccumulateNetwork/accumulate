@@ -11,9 +11,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/config"
-	web "github.com/AccumulateNetwork/accumulated/internal/web/static"
-	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulate/config"
+	web "github.com/AccumulateNetwork/accumulate/internal/web/static"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
