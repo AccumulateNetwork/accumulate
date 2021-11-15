@@ -7,14 +7,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulated/internal/chain"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulated/types/state"
-	"github.com/AccumulateNetwork/accumulated/types/synthetic"
+	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 

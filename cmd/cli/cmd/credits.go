@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
 	"log"
 	"strconv"
 	"time"
 
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/spf13/cobra"
 )
 

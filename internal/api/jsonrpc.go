@@ -8,40 +8,32 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated"
-	"github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/internal/genesis"
-	accurl "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/genesis"
+	accurl "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
-	"github.com/gorilla/mux"
 	promapi "github.com/prometheus/client_golang/api"
 	prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/ybbus/jsonrpc/v2"
 )
 
 type API struct {
 	config   *config.API
 	validate *validator.Validate
 	query    *Query
-	jsonrpc  jsonrpc.RPCClient
 }
 
-// StartAPI starts new JSON-RPC server
-func StartAPI(config *config.API, q *Query) (*API, error) {
-
-	// fmt.Printf("Starting JSON-RPC API at http://localhost:%d\n", port)
-
+func New(config *config.API, q *Query) (*API, error) {
 	v, err := protocol.NewValidator()
 	if err != nil {
 		return nil, err
@@ -51,7 +43,10 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 	api.config = config
 	api.validate = v
 	api.query = q
+	return api, nil
+}
 
+func (api *API) Handler() http.Handler {
 	methods := jsonrpc2.MethodMap{
 		// Metadata
 		"version": api.version,
@@ -100,73 +95,7 @@ func StartAPI(config *config.API, q *Query) (*API, error) {
 		"add-credits": api.addCredits,
 	}
 
-	apiHandler := jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
-
-	apiRouter := mux.NewRouter().StrictSlash(true)
-	apiRouter.HandleFunc("/v1", apiHandler)
-
-	proxyRouter := mux.NewRouter().StrictSlash(true)
-	proxyRouter.HandleFunc(`/{url:[a-zA-Z0-9=\.\-\_\~\!\$\&\'\(\)\*\+\,\;\=\:\@\/]+}`, api.proxyHandler)
-
-	rpcUrl, err := url.Parse(config.JSONListenAddress)
-	if err != nil {
-		return nil, err
-	}
-	rpcUrl.Scheme = "http"
-	rpcUrl.Path = "/v1"
-	api.jsonrpc = jsonrpc.NewClient(rpcUrl.String())
-
-	// start JSON RPC API
-	go listenAndServe("JSONRPC API", config.JSONListenAddress, apiRouter)
-
-	// start REST proxy for JSON RPC API
-	go listenAndServe("REST API", config.RESTListenAddress, proxyRouter)
-
-	return api, nil
-}
-
-// proxyHandler makes JSON-RPC API request
-func (api *API) proxyHandler(w http.ResponseWriter, r *http.Request) {
-
-	w.Header().Add("Content-Type", "application/json")
-
-	// make "get" request to JSON RPC API
-	fmt.Printf("=============== proxyHandler Is going to send : %s ===========\n\n\n", r.URL)
-	params := &acmeapi.APIRequestURL{URL: types.String(r.URL.String()[1:])}
-
-	result, err := api.jsonrpc.Call("get", params)
-	if err != nil {
-		fmt.Fprintf(w, "%s", err)
-	}
-
-	response, err := json.Marshal(result)
-	if err != nil {
-		fmt.Fprintf(w, "%s", err)
-	}
-
-	fmt.Fprintf(w, "%s", response)
-}
-
-func listenAndServe(label, address string, handler http.Handler) {
-	if address == "" {
-		log.Fatalf("Address for %s is empty", label)
-	}
-
-	u, err := url.Parse(address)
-	if err != nil {
-		log.Fatal(err)
-	}
-	if u.Scheme == "" {
-		log.Fatalf("Address for %s is missing a scheme: %q", label, address)
-	}
-	if u.Scheme != "tcp" {
-		log.Fatalf("Failed to start HTTP server for %s: unsupported scheme %q", label, address)
-	}
-
-	err = http.ListenAndServe(u.Host, handler)
-	if err != nil {
-		log.Fatal(err)
-	}
+	return jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
 }
 
 // prepareCreate unmarshals the request parameters and the transaction payload
@@ -655,9 +584,9 @@ func (api *API) version(_ context.Context, params json.RawMessage) interface{} {
 	ret.Type = "version"
 
 	data, _ := json.Marshal(map[string]interface{}{
-		"version":        accumulated.Version,
-		"commit":         accumulated.Commit,
-		"versionIsKnown": accumulated.IsVersionKnown(),
+		"version":        accumulate.Version,
+		"commit":         accumulate.Commit,
+		"versionIsKnown": accumulate.IsVersionKnown(),
 	})
 	raw := json.RawMessage(data)
 	ret.Data = &raw
