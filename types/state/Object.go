@@ -5,7 +5,7 @@ import (
 	"encoding"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 //maybe we should have Chain header then entry, rather than entry containing all the Headers
@@ -40,7 +40,9 @@ func (app *Object) UnmarshalBinary(data []byte) (err error) {
 		return fmt.Errorf("insufficient data associated with state entry")
 	}
 
-	app.MDRoot.FromBytes(data)
+	mdRoot := types.Bytes32{}
+	copy(mdRoot[:], data)
+	app.MDRoot = mdRoot
 
 	err = app.Entry.UnmarshalBinary(data[32:])
 	if err != nil {

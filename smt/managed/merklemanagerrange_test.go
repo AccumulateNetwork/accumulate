@@ -3,7 +3,7 @@ package managed
 import (
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 	"github.com/stretchr/testify/require"
 )
 

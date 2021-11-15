@@ -7,11 +7,11 @@ import (
 	"log"
 	"time"
 
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/boltdb/bolt"
 
 	"github.com/spf13/cobra"
@@ -143,6 +143,12 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 	var book string
 	var page string
 
+	//at this point :
+	//args[0] should be the new adi you are creating
+	//args[1] should be the public key you are assigning to the adi
+	//args[2] is an optional setting for the key book name
+	//args[3] is an optional setting for the key page name
+	//Note: if args[2] is not the keybook, the keypage also cannot be specified.
 	if len(args) == 0 {
 		log.Fatal("insufficient number of command line arguments")
 	}
@@ -162,12 +168,12 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 		}
 	}
 
-	if len(args) > 3 {
-		book = args[3]
+	if len(args) > 2 {
+		book = args[2]
 	}
 
-	if len(args) > 4 {
-		page = args[4]
+	if len(args) > 3 {
+		page = args[3]
 	}
 
 	u, err := url2.Parse(adiUrl)

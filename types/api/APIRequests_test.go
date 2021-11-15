@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	"github.com/AccumulateNetwork/accumulated/types"
-	. "github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	. "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"

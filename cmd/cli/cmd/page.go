@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	url2 "github.com/AccumulateNetwork/accumulated/internal/url"
-	acmeapi "github.com/AccumulateNetwork/accumulated/types/api"
-	"github.com/spf13/cobra"
 	"log"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated/protocol"
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/spf13/cobra"
+
+	"github.com/AccumulateNetwork/accumulate/protocol"
 )
 
 var pageCmd = &cobra.Command{

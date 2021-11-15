@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/AccumulateNetwork/accumulated/cmd/cli/cmd"
+	"github.com/AccumulateNetwork/accumulate/cmd/cli/cmd"
 )
 
 func main() {

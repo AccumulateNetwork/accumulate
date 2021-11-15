@@ -5,13 +5,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/config"
-	. "github.com/AccumulateNetwork/accumulated/internal/api"
-	"github.com/AccumulateNetwork/accumulated/internal/logging"
-	"github.com/AccumulateNetwork/accumulated/internal/node"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	acctesting "github.com/AccumulateNetwork/accumulated/internal/testing"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	"github.com/AccumulateNetwork/accumulate/config"
+	. "github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/privval"
@@ -21,7 +22,7 @@ import (
 func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query) {
 	t.Helper()
 
-	opts, err := acctesting.NodeInitOptsForNetwork("Badlands")
+	opts, err := acctesting.NodeInitOptsForNetwork(networks.Local["Badlands"])
 	require.NoError(t, err)
 	opts.WorkDir = dir
 	opts.Port = GetFreePort(t)

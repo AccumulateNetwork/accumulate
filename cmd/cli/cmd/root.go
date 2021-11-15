@@ -11,8 +11,8 @@ import (
 	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
 
-	"github.com/AccumulateNetwork/accumulated/client"
-	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/client"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 )
 
 var (

@@ -7,8 +7,8 @@ import (
 	"math"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 )
 
 func TestMerkleManager_ReadChainHead(t *testing.T) {
