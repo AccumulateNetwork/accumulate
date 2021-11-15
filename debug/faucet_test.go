@@ -4,9 +4,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/internal/api"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
+	"github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

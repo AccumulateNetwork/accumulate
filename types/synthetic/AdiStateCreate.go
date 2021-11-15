@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 // Deprecated: Use protocol.SyntheticCreateChain

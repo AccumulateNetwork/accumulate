@@ -27,12 +27,14 @@ const (
 
 func Default() *Config {
 	c := new(Config)
+	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Config = *tm.DefaultConfig()
 	return c
 }
 
 func DefaultValidator() *Config {
 	c := new(Config)
+	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Config = *tm.DefaultValidatorConfig()
 	return c
 }
@@ -44,6 +46,7 @@ type Config struct {
 
 type Accumulate struct {
 	Type     NetworkType `toml:"type" mapstructure:"type"`
+	Network  string      `toml:"network" mapstructure:"network"`
 	Networks []string    `toml:"networks" mapstructure:"networks"`
 	API      API         `toml:"api" mapstructure:"api"`
 
@@ -57,6 +60,7 @@ type RPC struct {
 }
 
 type API struct {
+	PrometheusServer  string `toml:"prometheus-server" mapstructure:"prometheus-server"`
 	EnableSubscribeTX bool   `toml:"enable-subscribe-tx" mapstructure:"enable-subscribe-tx"`
 	JSONListenAddress string `toml:"json-listen-address" mapstructure:"json-listen-address"`
 	RESTListenAddress string `toml:"rest-listen-address" mapstructure:"rest-listen-address"`

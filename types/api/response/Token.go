@@ -1,7 +1,7 @@
 package response
 
 import (
-	"github.com/AccumulateNetwork/accumulated/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api"
 )
 
 type Token struct {
