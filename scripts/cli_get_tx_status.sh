@@ -24,9 +24,9 @@ fi
 # issue the faucet command for the specified ID to the specified server
 
 if [ -z $2 ]; then
-	Status="$($cli tx get $id1 2>&1 > /dev/null | /usr/bin/jq .status.code | /usr/bin/sed 's/\"/g')"
+	Status="$($cli tx get $id1 2>&1 > /dev/null | jq .status.code | sed 's/\"/g')"
 else
-	Status="$($cli tx get $id1 -s http://$2/v1 2>&1 > /dev/null | /usr/bin/jq .status.code | /usr/bin/sed 's/\"/g')"
+	Status="$($cli tx get $id1 -s http://$2/v1 2>&1 > /dev/null | jq .status.code | sed 's/\"/g')"
 fi
 
 # return the status information

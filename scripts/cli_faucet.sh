@@ -30,9 +30,9 @@ fi
 # issue the faucet command for the specified ID to the specified server
 
 if [ -z $2 ]; then
-   ID="$($cli faucet $id1 -j 2>&1 > /dev/null | /usr/bin/jq .txid)"
+   ID="$($cli faucet $id1 -j 2>&1 > /dev/null | jq .txid)"
 else
-   ID="$($cli faucet $id1 -s http://$2/v1 -j 2>&1 > /dev/null | /usr/bin/jq .txid)"
+   ID="$($cli faucet $id1 -s http://$2/v1 -j 2>&1 > /dev/null | jq .txid)"
 fi
 
 # return the transaction ID 
