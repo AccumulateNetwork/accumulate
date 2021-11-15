@@ -7,6 +7,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 
@@ -78,6 +79,10 @@ func readTypes(file string) []*Record {
 	return r
 }
 
+func methodName(typ, name string) string {
+	return "encoding." + strings.Title(typ) + name
+}
+
 func resolveType(field *Field, forNew bool) string {
 	switch field.Type {
 	case "bytes":
@@ -131,11 +136,11 @@ func binarySize(w *bytes.Buffer, field *Field, varName string) {
 	var expr string
 	switch field.Type {
 	case "bool", "bytes", "string", "chainSet", "uvarint", "duration":
-		expr = field.Type + "BinarySize(%s)"
+		expr = methodName(field.Type, "BinarySize") + "(%s)"
 	case "bigint", "chain":
-		expr = field.Type + "BinarySize(&%s)"
+		expr = methodName(field.Type, "BinarySize") + "(&%s)"
 	case "slice":
-		expr = "uvarintBinarySize(uint64(len(%s)))"
+		expr = "encoding.UvarintBinarySize(uint64(len(%s)))"
 	default:
 		if field.MarshalAs != "self" {
 			panic(fmt.Errorf("cannot determine how to marshal %s", resolveType(field, false)))
@@ -161,11 +166,11 @@ func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, 
 	var canErr bool
 	switch field.Type {
 	case "bool", "bytes", "string", "chainSet", "uvarint", "duration":
-		expr, canErr = field.Type+"MarshalBinary(%s)", false
+		expr, canErr = methodName(field.Type, "MarshalBinary")+"(%s)", false
 	case "bigint", "chain":
-		expr, canErr = field.Type+"MarshalBinary(&%s)", false
+		expr, canErr = methodName(field.Type, "MarshalBinary")+"(&%s)", false
 	case "slice":
-		expr, canErr = "uvarintMarshalBinary(uint64(len(%s)))", false
+		expr, canErr = "encoding.UvarintMarshalBinary(uint64(len(%s)))", false
 	default:
 		if field.MarshalAs != "self" {
 			panic(fmt.Errorf("cannot determine how to marshal %s", resolveType(field, false)))
@@ -197,13 +202,13 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string
 	var inPlace bool
 	switch field.Type {
 	case "bool", "bytes", "string", "chainSet", "uvarint", "duration":
-		expr, size, inPlace = field.Type+"UnmarshalBinary(data)", field.Type+"BinarySize(%s)", false
+		expr, size, inPlace = methodName(field.Type, "UnmarshalBinary")+"(data)", methodName(field.Type, "BinarySize")+"(%s)", false
 	case "bigint", "chain":
-		expr, size, inPlace = field.Type+"UnmarshalBinary(data)", field.Type+"BinarySize(&%s)", false
+		expr, size, inPlace = methodName(field.Type, "UnmarshalBinary")+"(data)", methodName(field.Type, "BinarySize")+"(&%s)", false
 	case "slice":
 		sliceName, varName = varName, "len"+field.Name
 		fmt.Fprintf(w, "var %s uint64\n", varName)
-		expr, size, inPlace = "uvarintUnmarshalBinary(data)", "uvarintBinarySize(%s)", false
+		expr, size, inPlace = "encoding.UvarintUnmarshalBinary(data)", "encoding.UvarintBinarySize(%s)", false
 	default:
 		if field.MarshalAs != "self" {
 			panic(fmt.Errorf("cannot determine how to marshal %s", resolveType(field, false)))
@@ -258,7 +263,7 @@ func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
 func valueToJson(w *bytes.Buffer, field *Field, tgtName, srcName string) {
 	switch field.Type {
 	case "bytes", "chain", "chainSet", "duration":
-		fmt.Fprintf(w, "\t%s = %sToJSON(%s)\n", tgtName, field.Type, srcName)
+		fmt.Fprintf(w, "\t%s = %s(%s)\n", tgtName, methodName(field.Type, "ToJSON"), srcName)
 		return
 
 	case "slice":
@@ -281,7 +286,7 @@ func valueFromJson(w *bytes.Buffer, field *Field, tgtName, srcName, errName stri
 	err := fieldError("decoding", errName, errArgs...)
 	switch field.Type {
 	case "bytes", "chain", "chainSet", "duration":
-		fmt.Fprintf(w, "\tif x, err := %sFromJSON(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = x\n\t}\n", field.Type, srcName, err, tgtName)
+		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = x\n\t}\n", methodName(field.Type, "FromJSON"), srcName, err, tgtName)
 		return
 
 	case "slice":
@@ -320,8 +325,9 @@ func run(_ *cobra.Command, args []string) {
 		"math/big"
 		"time"
 
-		"github.com/AccumulateNetwork/accumulated/types"
-		"github.com/AccumulateNetwork/accumulated/types/state"
+		"github.com/AccumulateNetwork/accumulate/internal/encoding"
+		"github.com/AccumulateNetwork/accumulate/types"
+		"github.com/AccumulateNetwork/accumulate/types/state"
 	)`+"\n\n")
 
 	types := readTypes(args[0])
@@ -380,7 +386,7 @@ func run(_ *cobra.Command, args []string) {
 
 		switch typ.Kind {
 		case "tx":
-			fmt.Fprintf(w, "\nn += uvarintBinarySize(uint64(types.TxType%s))\n\n", typ.name)
+			fmt.Fprintf(w, "\nn += encoding.UvarintBinarySize(uint64(types.TxType%s))\n\n", typ.name)
 		case "chain":
 			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n", typ.name)
 			fmt.Fprintf(w, "\nn += v.ChainHeader.GetHeaderSize()\n\n")
@@ -403,7 +409,7 @@ func run(_ *cobra.Command, args []string) {
 
 		switch typ.Kind {
 		case "tx":
-			fmt.Fprintf(w, "\tbuffer.Write(uvarintMarshalBinary(uint64(types.TxType%s)))\n\n", typ.name)
+			fmt.Fprintf(w, "\tbuffer.Write(encoding.UvarintMarshalBinary(uint64(types.TxType%s)))\n\n", typ.name)
 		case "chain":
 			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n\n", typ.name)
 			err := fieldError("encoding", "header")
@@ -428,8 +434,8 @@ func run(_ *cobra.Command, args []string) {
 		case "tx":
 			err := fieldError("decoding", "TX type")
 			fmt.Fprintf(w, "\ttyp := types.TxType%s\n", typ.name)
-			fmt.Fprintf(w, "\tif v, err := uvarintUnmarshalBinary(data); err != nil { return %s } else if v != uint64(typ) { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, types.TxType(v)) }\n", err)
-			fmt.Fprintf(w, "\tdata = data[uvarintBinarySize(uint64(typ)):]\n\n")
+			fmt.Fprintf(w, "\tif v, err := encoding.UvarintUnmarshalBinary(data); err != nil { return %s } else if v != uint64(typ) { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, types.TxType(v)) }\n", err)
+			fmt.Fprintf(w, "\tdata = data[encoding.UvarintBinarySize(uint64(typ)):]\n\n")
 
 		case "chain":
 			err := fieldError("decoding", "header")
@@ -460,7 +466,7 @@ func run(_ *cobra.Command, args []string) {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
 		}
 
-		fmt.Fprintf(w, "\treturn json.Marshal(u)\t")
+		fmt.Fprintf(w, "\treturn json.Marshal(&u)\t")
 		fmt.Fprintf(w, "}\n\n")
 	}
 
@@ -498,5 +504,8 @@ func run(_ *cobra.Command, args []string) {
 	check(err)
 
 	err = format.Node(f, fset, file)
+	check(err)
+
+	err = exec.Command("go", "run", "golang.org/x/tools/cmd/goimports", "-w", flags.Out).Run()
 	check(err)
 }
