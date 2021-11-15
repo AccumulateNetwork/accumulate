@@ -466,7 +466,7 @@ func run(_ *cobra.Command, args []string) {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
 		}
 
-		fmt.Fprintf(w, "\treturn json.Marshal(u)\t")
+		fmt.Fprintf(w, "\treturn json.Marshal(&u)\t")
 		fmt.Fprintf(w, "}\n\n")
 	}
 

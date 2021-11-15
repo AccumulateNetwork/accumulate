@@ -1245,7 +1245,7 @@ func (v *ChainParams) MarshalJSON() ([]byte, error) {
 	}
 	u.Data = encoding.BytesToJSON(v.Data)
 	u.IsUpdate = v.IsUpdate
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
@@ -1255,7 +1255,7 @@ func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
 	}
 	u.Url = v.Url
 	u.SigSpecs = encoding.ChainSetToJSON(v.SigSpecs)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
@@ -1269,7 +1269,7 @@ func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookName = v.KeyBookName
 	u.KeyPageName = v.KeyPageName
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
@@ -1279,7 +1279,7 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
@@ -1287,7 +1287,7 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 		PublicKey string `json:"publicKey"`
 	}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
@@ -1297,7 +1297,7 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	}
 	u.Metric = v.Metric
 	u.Duration = encoding.DurationToJSON(v.Duration)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
@@ -1307,7 +1307,7 @@ func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
 	}
 	u.ChainHeader = v.ChainHeader
 	u.SigSpecs = encoding.ChainSetToJSON(v.SigSpecs)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
@@ -1317,7 +1317,7 @@ func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
 	}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Chains = v.Chains
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
@@ -1327,7 +1327,7 @@ func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
 	}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Amount = v.Amount
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
@@ -1341,7 +1341,7 @@ func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Url = v.Url
 	u.TxRef = encoding.ChainToJSON(v.TxRef)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
@@ -1353,7 +1353,7 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *ChainParams) UnmarshalJSON(data []byte) error {
