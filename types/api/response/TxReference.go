@@ -1,7 +1,7 @@
 package response
 
 import (
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type TxReference struct {

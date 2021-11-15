@@ -6,7 +6,7 @@ import (
 	"os"
 	"path"
 
-	cfg "github.com/AccumulateNetwork/accumulated/config"
+	cfg "github.com/AccumulateNetwork/accumulate/config"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -63,6 +63,7 @@ func Init(opts InitOptions) (err error) {
 		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmRpcGrpcPortOffset)
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+tmPrometheusPortOffset)
 		config.Instrumentation.Prometheus = true
+		config.Accumulate.Network = opts.ChainID
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {

@@ -1,8 +1,8 @@
 package relay
 
 import (
-	"github.com/AccumulateNetwork/accumulated/internal/node"
-	"github.com/AccumulateNetwork/accumulated/networks"
+	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 

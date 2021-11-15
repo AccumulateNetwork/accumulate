@@ -5,22 +5,21 @@ import (
 	"os"
 	"path/filepath"
 
-	cfg "github.com/AccumulateNetwork/accumulated/config"
-	"github.com/AccumulateNetwork/accumulated/internal/abci"
-	"github.com/AccumulateNetwork/accumulated/internal/api"
-	"github.com/AccumulateNetwork/accumulated/internal/chain"
-	"github.com/AccumulateNetwork/accumulated/internal/logging"
-	"github.com/AccumulateNetwork/accumulated/internal/node"
-	"github.com/AccumulateNetwork/accumulated/internal/relay"
-	"github.com/AccumulateNetwork/accumulated/networks"
-	"github.com/AccumulateNetwork/accumulated/types/state"
+	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/abci"
+	"github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/rs/zerolog"
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/privval"
 )
 
-func NodeInitOptsForNetwork(name string) (node.InitOptions, error) {
-	network := networks.Networks[name]
+func NodeInitOptsForNetwork(network *networks.Subnet) (node.InitOptions, error) {
 	listenIP := make([]string, len(network.Nodes))
 	remoteIP := make([]string, len(network.Nodes))
 	config := make([]*cfg.Config, len(network.Nodes))

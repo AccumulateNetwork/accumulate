@@ -1,0 +1,66 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+)
+
+func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface{} {
+	req := new(UrlRequest)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatQuery(m.opts.Query.QueryUrl(req.Url))
+}
+
+func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) interface{} {
+	req := new(UrlRequest)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatQuery(m.opts.Query.QueryDirectory(req.Url))
+}
+
+func (m *JrpcMethods) QueryChain(_ context.Context, params json.RawMessage) interface{} {
+	req := new(IdRequest)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatQuery(m.opts.Query.QueryChain(req.Id))
+}
+
+func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interface{} {
+	req := new(IdRequest)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatQuery(m.opts.Query.QueryTx(req.Id))
+}
+
+func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) interface{} {
+	req := new(UrlRequest)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	// If the user wants nothing, give them nothing
+	if req.Count == 0 {
+		return new(QueryMultiResponse)
+	}
+
+	res, err := m.opts.Query.QueryTxHistory(req.Url, int64(req.Start), int64(req.Count))
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return res
+}

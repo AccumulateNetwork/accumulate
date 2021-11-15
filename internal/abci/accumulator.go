@@ -10,14 +10,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulated"
-	"github.com/AccumulateNetwork/accumulated/internal/url"
-	"github.com/AccumulateNetwork/accumulated/protocol"
-	_ "github.com/AccumulateNetwork/accumulated/smt/pmt"
-	"github.com/AccumulateNetwork/accumulated/smt/storage"
-	"github.com/AccumulateNetwork/accumulated/types"
-	apiQuery "github.com/AccumulateNetwork/accumulated/types/api/query"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	_ "github.com/AccumulateNetwork/accumulate/smt/pmt"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/types"
+	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/getsentry/sentry-go"
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -53,7 +53,7 @@ func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Lo
 	app.address = make([]byte, len(address))
 	copy(app.address, address)
 
-	logger.Info("Starting ABCI application", "accumulate", accumulated.Version, "abci", Version)
+	logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
 	return app, nil
 }
 
@@ -75,8 +75,8 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	data, err := json.Marshal(struct {
 		Version, Commit string
 	}{
-		Version: accumulated.Version,
-		Commit:  accumulated.Commit,
+		Version: accumulate.Version,
+		Commit:  accumulate.Commit,
 	})
 	if err != nil {
 		sentry.CaptureException(err)

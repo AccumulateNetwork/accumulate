@@ -79,13 +79,12 @@ configure:
   - |
     function init {
       rm -rf .nodes
-      ./accumulated init -w .nodes --no-empty-blocks -r Arches,AmericanSamoa,EastXeons -n $1
+      ./accumulated init -w .nodes --no-empty-blocks -r Zion,Yellowstone -n $1
       tar czf config-$1.tar.gz -C .nodes .
     }
   - go build ./cmd/accumulated
-  - init Arches
-  - init AmericanSamoa
-  - init EastXeons
+  - init Zion
+  - init Yellowstone
   artifacts:
     paths:
     - config-*.tar.gz
@@ -95,9 +94,12 @@ configure:
   only:
   - develop # only run on the main branch
   tags:
-  - docker
   - linux
+  - docker
+  - accumulate
+  image: ubuntu
   script:
+  - apt-get -y update && apt-get -y install ssh
   - mkdir ~/.ssh
   - cp ${SSH_KNOWN_HOSTS} ~/.ssh/known_hosts
   - cp ${SSH_PRIV_KEY} ~/.ssh/id_rsa
@@ -123,32 +125,22 @@ configure:
       screen -d -m -S accumulated bash -c 'accumulated run -n ${NODE} 2>&1 | tee ~/.accumulate/Node${NODE}/acc-$(date +%Y%m%d%H%M%S).log'
     "; fi
 
-deploy 13.51.10.110:
+deploy 1/4:
   extends: .deploy
-  variables:   { HOST: 13.51.10.110,                NETWORK: Arches,          NODE: 0, BIN: accumulated-linux-arm64 }
-  environment: { url: 'http://13.51.10.110:8080',   name: Arches/Node0 }
+  variables:   { HOST: 172.31.4.106,  NETWORK: Zion,         NODE: 0, BIN: accumulated-linux-arm64 }
+  environment: { url: 'http://172.31.4.106:8080',  name: Zion/0 }
 
-deploy 13.232.230.216:
+deploy 2/4:
   extends: .deploy
-  variables:   { HOST: 13.232.230.216,              NETWORK: Arches,          NODE: 1, BIN: accumulated-linux-arm64 }
-  environment: { url: 'http://13.232.230.216:8080', name: Arches/Node1 }
+  variables:   { HOST: 172.31.11.185, NETWORK: Zion,         NODE: 1, BIN: accumulated-linux-arm64 }
+  environment: { url: 'http://172.31.11.185:8080', name: Zion/1 }
 
-deploy 18.221.39.36:
+deploy 3/4:
   extends: .deploy
-  variables:   { HOST: 18.221.39.36,                NETWORK: AmericanSamoa,   NODE: 0, BIN: accumulated-linux-arm64 }
-  environment: { url: 'http://18.221.39.36:8080',   name: AmericanSamoa/Node0 }
+  variables:   { HOST: 172.31.11.104, NETWORK: Yellowstone,  NODE: 0, BIN: accumulated-linux-arm64 }
+  environment: { url: 'http://172.31.11.104:8080', name: Yellowstone/0 }
 
-deploy 44.236.45.58:
+deploy 4/4:
   extends: .deploy
-  variables:   { HOST: 44.236.45.58,                NETWORK: AmericanSamoa,   NODE: 1, BIN: accumulated-linux-arm64 }
-  environment: { url: 'http://44.236.45.58:8080',   name: AmericanSamoa/Node1 }
-
-deploy 18.119.26.7:
-  extends: .deploy
-  variables:   { HOST: 18.119.26.7,                 NETWORK: EastXeons,       NODE: 0, BIN: accumulated-linux-amd64 }
-  environment: { url: 'http://18.119.26.7:8080',    name: EastXeons/Node0 }
-
-deploy 18.119.149.208:
-  extends: .deploy
-  variables:   { HOST: 18.119.149.208,              NETWORK: EastXeons,       NODE: 1, BIN: accumulated-linux-amd64 }
-  environment: { url: 'http://18.119.149.208:8080', name: EastXeons/Node1 }
+  variables:   { HOST: 172.31.13.8,   NETWORK: Yellowstone,  NODE: 1, BIN: accumulated-linux-arm64 }
+  environment: { url: 'http://172.31.13.8:8080',   name: Yellowstone/1 }
