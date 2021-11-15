@@ -4,9 +4,9 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 func TestTransactionNak(t *testing.T) {

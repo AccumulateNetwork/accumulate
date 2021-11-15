@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulated/types"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type KeyType byte

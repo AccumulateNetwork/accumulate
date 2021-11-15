@@ -1,0 +1,139 @@
+QueryResponse:
+  non-binary: true
+  fields:
+  - name: Type
+    type: string
+  - name: MdRoot
+    type: bytes
+  - name: Data
+    type: any
+  - name: Sponsor
+    type: string
+  - name: KeyPage
+    type: KeyPage
+    marshal-as: self
+  - name: Txid
+    type: bytes
+  - name: Signer
+    type: Signer
+    marshal-as: self
+  - name: Sig
+    type: bytes
+  - name: Status
+    type: any
+
+QueryMultiResponse:
+  non-binary: true
+  fields:
+  - name: Items
+    type: slice
+    slice:
+      type: QueryResponse
+      marshal-as: self
+      pointer: true
+  - name: Start
+    type: uvarint
+  - name: Count
+    type: uvarint
+  - name: Total
+    type: uvarint
+
+KeyPage:
+  non-binary: true
+  fields:
+  - name: Height
+    type: uvarint
+  - name: Index
+    type: uvarint
+
+Signer:
+  non-binary: true
+  fields:
+  - name: PublicKey
+    type: bytes
+  - name: Nonce
+    type: uvarint
+
+TokenSend:
+  non-binary: true
+  fields:
+  - name: From
+    type: string
+  - name: To
+    type: slice
+    slice:
+      type: TokenDeposit
+      marshal-as: self
+
+TokenDeposit:
+  non-binary: true
+  fields:
+  - name: Url
+    type: string
+  - name: Amount
+    type: uvarint
+  - name: Txid
+    type: bytes
+
+UrlRequest:
+  non-binary: true
+  fields:
+  - name: Url
+    type: string
+    is-url: true
+  - name: Start
+    type: uvarint
+    optional: true
+  - name: Count
+    type: uvarint
+    optional: true
+
+IdRequest:
+  non-binary: true
+  fields:
+  - name: Id
+    type: bytes
+
+MetricsRequest:
+  fields:
+    - name: Metric
+      type: string
+    - name: Duration
+      type: duration
+
+MetricsResponse:
+  non-binary: true
+  fields:
+    - name: Value
+      type: any
+
+TxRequest:
+  non-binary: true
+  fields:
+  - name: Sponsor
+    type: string
+    is-url: true
+  - name: Signer
+    type: Signer
+    marshal-as: self
+  - name: Signature
+    type: bytes
+  - name: KeyPage
+    type: KeyPage
+    marshal-as: self
+  - name: Payload
+    type: any
+
+TxResponse:
+  non-binary: true
+  fields:
+  - name: Txid
+    type: bytes
+  - name: Hash
+    type: chain
+  - name: Code
+    type: uvarint
+  - name: Message
+    type: string
+  - name: Delivered
+    type: bool

@@ -3,8 +3,8 @@ package api
 import (
 	"crypto/ed25519"
 
-	anon "github.com/AccumulateNetwork/accumulated/types/anonaddress"
-	"github.com/AccumulateNetwork/accumulated/types/api/transactions"
+	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 )
 
 func NewWalletEntry() *transactions.WalletEntry {
