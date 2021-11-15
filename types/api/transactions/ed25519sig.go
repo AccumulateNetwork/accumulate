@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulated/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 )
 
 // ED25519Sig
