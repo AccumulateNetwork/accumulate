@@ -52,9 +52,9 @@ fi
 # issue the account get command for the specified ID to the specified server
 
 if [ -z $4 ]; then
-   txid="$($cli tx create $id1 $id2 $3 -j 2>&1 > /dev/null | /usr/bin/jq .error)"
+   txid="$($cli tx create $id1 $id2 $3 -j 2>&1 > /dev/null | jq .error)"
 else
-   txid="$($cli tx create $id1 $id2 $3 -s http://$4/v1 -j 2>&1 > /dev/null | /usr/bin/jq .error)"
+   txid="$($cli tx create $id1 $id2 $3 -s http://$4/v1 -j 2>&1 > /dev/null | jq .error)"
 fi
 
 # did we get a valid txid?
