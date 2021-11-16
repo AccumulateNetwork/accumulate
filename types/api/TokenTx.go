@@ -43,7 +43,7 @@ func NewTokenTxOutput(url types.String, amount uint64) *TokenTxOutput {
 	return txo
 }
 
-func (*TokenTx) GetType() types.TxType { return types.TxTypeTokenTx }
+func (*TokenTx) GetType() types.TxType { return types.TxTypeWithdrawTokens }
 
 func (t *TokenTx) AddToAccount(toUrl types.String, amt uint64) {
 	txOut := TokenTxOutput{types.UrlChain{String: toUrl}, amt}
@@ -83,7 +83,7 @@ func (t *TokenTx) Equal(t2 *TokenTx) (ret bool) {
 func (t *TokenTx) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(common.Uint64Bytes(types.TxTypeTokenTx.AsUint64()))
+	buffer.Write(common.Uint64Bytes(types.TxTypeWithdrawTokens.ID()))
 
 	data, err := t.From.MarshalBinary()
 	if err != nil {
@@ -129,7 +129,7 @@ func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
 
 	txType, data := common.BytesUint64(data) // get the type
 
-	if txType != types.TxTypeTokenTx.AsUint64() {
+	if txType != types.TxTypeWithdrawTokens.ID() {
 		return fmt.Errorf("invalid transaction type, expecting TokenTx")
 	}
 
