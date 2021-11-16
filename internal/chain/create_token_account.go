@@ -10,11 +10,11 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-type TokenAccountCreate struct{}
+type CreateTokenAccount struct{}
 
-func (TokenAccountCreate) Type() types.TxType { return types.TxTypeTokenAccountCreate }
+func (CreateTokenAccount) Type() types.TxType { return types.TxTypeCreateTokenAccount }
 
-func checkTokenAccountCreate(st *StateManager, tx *transactions.GenTransaction) (accountUrl, tokenUrl, keyBookUrl *url.URL, err error) {
+func checkCreateTokenAccount(st *StateManager, tx *transactions.GenTransaction) (accountUrl, tokenUrl, keyBookUrl *url.URL, err error) {
 	body := new(protocol.TokenAccountCreate)
 	err = tx.As(body)
 	if err != nil {
@@ -52,13 +52,13 @@ func checkTokenAccountCreate(st *StateManager, tx *transactions.GenTransaction) 
 	return accountUrl, tokenUrl, keyBookUrl, nil
 }
 
-func (TokenAccountCreate) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, _, err := checkTokenAccountCreate(st, tx)
+func (CreateTokenAccount) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+	_, _, _, err := checkCreateTokenAccount(st, tx)
 	return err
 }
 
-func (TokenAccountCreate) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	accountUrl, tokenUrl, keyBookUrl, err := checkTokenAccountCreate(st, tx)
+func (CreateTokenAccount) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+	accountUrl, tokenUrl, keyBookUrl, err := checkCreateTokenAccount(st, tx)
 	if err != nil {
 		return err
 	}
