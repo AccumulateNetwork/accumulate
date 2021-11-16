@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -19,7 +20,17 @@ var getCmd = &cobra.Command{
 		switch args[0] {
 		case "chain":
 			if len(args) > 1 {
-				GetByChainId([]byte(args[1]))
+				//decode the inputs to binary
+				var chainId [32]byte
+				i, err := hex.Decode(chainId[:], []byte(args[1]))
+				if err != nil {
+					log.Fatalf("chain id input must be hex, %v", err)
+				}
+				//need to make sure the input is an appropriate length for a chain
+				if i != 32 {
+					log.Fatal("chain id must be 32 bytes in length")
+				}
+				GetByChainId(chainId[:])
 			} else {
 				fmt.Println("Usage:")
 				PrintGet()
