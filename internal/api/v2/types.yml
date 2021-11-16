@@ -110,6 +110,9 @@ MetricsResponse:
 TxRequest:
   non-binary: true
   fields:
+  - name: CheckOnly
+    type: bool
+    optional: true
   - name: Sponsor
     type: string
     is-url: true
