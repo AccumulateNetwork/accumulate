@@ -32,11 +32,8 @@ type TxExecutor interface {
 	// Type is the transaction type the executor can execute.
 	Type() types.TxType
 
-	// CheckTx partially validates the transaction.
-	CheckTx(*StateManager, *transactions.GenTransaction) error
-
-	// DeliverTx fully validates and executes the transaction.
-	DeliverTx(*StateManager, *transactions.GenTransaction) error
+	// Validate fully validates and executes the transaction.
+	Validate(*StateManager, *transactions.GenTransaction) error
 }
 
 type creditChain interface {

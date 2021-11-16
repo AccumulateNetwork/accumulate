@@ -37,6 +37,6 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	st, err := NewStateManager(db, tx)
 	require.NoError(t, err)
 
-	err = SyntheticCreateChain{}.DeliverTx(st, tx)
+	err = SyntheticCreateChain{}.Validate(st, tx)
 	require.EqualError(t, err, `ChainTypeTokenAccount cannot contain more than one slash in its URL`)
 }
