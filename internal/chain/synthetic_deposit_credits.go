@@ -12,11 +12,11 @@ type SyntheticDepositCredits struct{}
 
 func (SyntheticDepositCredits) Type() types.TxType { return types.TxTypeSyntheticDepositCredits }
 
-func checkSyntheticDepositCredits(st *StateManager, tx *transactions.GenTransaction) (*protocol.SyntheticDepositCredits, creditChain, error) {
+func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	body := new(protocol.SyntheticDepositCredits)
 	err := tx.As(body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid payload: %v", err)
+		return fmt.Errorf("invalid payload: %v", err)
 	}
 
 	var account creditChain
@@ -28,24 +28,10 @@ func checkSyntheticDepositCredits(st *StateManager, tx *transactions.GenTransact
 		account = sponsor
 
 	default:
-		return nil, nil, fmt.Errorf("cannot deposit tokens into a %v", st.Sponsor.Header().Type)
+		return fmt.Errorf("cannot deposit tokens into a %v", st.Sponsor.Header().Type)
 	}
 
-	return body, account, nil
-}
-
-func (SyntheticDepositCredits) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, err := checkSyntheticDepositCredits(st, tx)
-	return err
-}
-
-func (SyntheticDepositCredits) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	body, chain, err := checkSyntheticDepositCredits(st, tx)
-	if err != nil {
-		return err
-	}
-
-	chain.CreditCredits(body.Amount)
-	st.Update(chain)
+	account.CreditCredits(body.Amount)
+	st.Update(account)
 	return nil
 }
