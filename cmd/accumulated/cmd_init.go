@@ -16,7 +16,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
-	tmcfg "github.com/tendermint/tendermint/config"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 	"golang.org/x/term"
@@ -107,21 +106,22 @@ func initNode(cmd *cobra.Command, args []string) {
 	for i, net := range network.Nodes {
 		listenIP[i] = "tcp://0.0.0.0"
 		remoteIP[i] = net.IP
-		config[i] = new(cfg.Config)
-		config[i].Accumulate.Type = network.Type
-		config[i].Accumulate.Networks = flagInit.Relay
 
 		switch net.Type {
 		case cfg.Validator:
-			config[i].Config = *tmcfg.DefaultValidatorConfig()
+			config[i] = cfg.DefaultValidator()
 		case cfg.Follower:
-			config[i].Config = *tmcfg.DefaultValidatorConfig()
+			config[i] = cfg.Default()
 		default:
 			fatalf("hard-coded network has invalid node type: %q", net.Type)
 		}
+
 		if flagInit.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
 		}
+
+		config[i].Accumulate.Type = network.Type
+		config[i].Accumulate.Networks = flagInit.Relay
 	}
 
 	check(node.Init(node.InitOptions{
