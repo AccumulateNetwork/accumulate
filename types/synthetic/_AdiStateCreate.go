@@ -26,7 +26,7 @@ func NewAdiStateCreate(txId types.Bytes, from *types.String, to *types.String, k
 func (a *AdiStateCreate) MarshalBinary() ([]byte, error) {
 	var buf bytes.Buffer
 
-	buf.Write(common.Uint64Bytes(types.TxTypeSyntheticIdentityCreate.AsUint64()))
+	buf.Write(common.Uint64Bytes(types.TxSyntheticIdentityCreate.AsUint64()))
 	data, err := a.Header.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal header for Adi State Create message, %v", err)
@@ -45,9 +45,9 @@ func (a *AdiStateCreate) UnmarshalBinary(data []byte) (err error) {
 	}()
 
 	txType, data := common.BytesUint64(data)
-	if txType != types.TxTypeSyntheticIdentityCreate.AsUint64() {
+	if txType != types.TxSyntheticIdentityCreate.AsUint64() {
 		return fmt.Errorf("data is not of a synthetic identity creation type, expected %s, but received %s",
-			types.TxTypeSyntheticTokenDeposit.Name(), types.TxType(txType).Name())
+			types.TxSyntheticDepositTokens.Name(), types.TxType(txType).Name())
 	}
 
 	err = a.Header.UnmarshalBinary(data)

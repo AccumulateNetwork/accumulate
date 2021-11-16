@@ -156,7 +156,7 @@ func TestGenTransaction_TransactionType(t *testing.T) {
 		Data encoding.BinaryMarshaler
 		Type types.TxType
 	}{
-		"ADI": {new(protocol.IdentityCreate), types.TxTypeIdentityCreate},
+		"ADI": {new(protocol.IdentityCreate), types.TxTypeCreateIdentity},
 		// TODO Add all payload types
 	}
 
@@ -167,7 +167,7 @@ func TestGenTransaction_TransactionType(t *testing.T) {
 
 			tx := new(GenTransaction)
 			tx.Transaction = b
-			require.Equal(t, c.Type.AsUint64(), tx.TransactionType().AsUint64())
+			require.Equal(t, c.Type.ID(), tx.TransactionType().ID())
 		})
 	}
 }
