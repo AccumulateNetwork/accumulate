@@ -190,7 +190,7 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 		return nil, err
 	}
 	resp := api.APIDataResponse{}
-	resp.Type = types.String(types.TxTypeTokenTx.Name())
+	resp.Type = types.String(types.TxTypeWithdrawTokens.Name())
 	resp.Data = new(json.RawMessage)
 	*resp.Data = data
 	resp.Sponsor = tx.From.String
@@ -235,17 +235,17 @@ func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte,
 
 	txType, _ := common.BytesUint64(txPayload)
 	switch types.TxType(txType) {
-	case types.TxTypeTokenTx:
+	case types.TxTypeWithdrawTokens:
 		resp, err = unmarshalTokenTx(txPayload, txId, txSynthTxIds)
-	case types.TxTypeSyntheticTokenDeposit:
+	case types.TxTypeSyntheticDepositTokens:
 		resp, err = unmarshalSynthTokenDeposit(txPayload, txId, txSynthTxIds)
-	case types.TxTypeIdentityCreate:
+	case types.TxTypeCreateIdentity:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.IdentityCreate))
-	case types.TxTypeTokenAccountCreate:
+	case types.TxTypeCreateTokenAccount:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.TokenAccountCreate))
-	case types.TxTypeCreateSigSpec:
+	case types.TxTypeCreateKeyPage:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateSigSpec))
-	case types.TxTypeCreateSigSpecGroup:
+	case types.TxTypeCreateKeyBook:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateSigSpecGroup))
 	case types.TxTypeAddCredits:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.AddCredits))

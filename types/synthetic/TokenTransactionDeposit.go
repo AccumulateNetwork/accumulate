@@ -17,7 +17,7 @@ type TokenTransactionDeposit struct {
 	Metadata      *json.RawMessage `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
-func (*TokenTransactionDeposit) GetType() types.TxType { return types.TxTypeSyntheticTokenDeposit }
+func (*TokenTransactionDeposit) GetType() types.TxType { return types.TxTypeSyntheticDepositTokens }
 
 func (tx *TokenTransactionDeposit) SetDeposit(tokenUrl types.String, amt *big.Int) error {
 
@@ -74,7 +74,7 @@ func (tx *TokenTransactionDeposit) MarshalBinary() ([]byte, error) {
 
 	var ret bytes.Buffer
 
-	ret.Write(common.Uint64Bytes(types.TxTypeSyntheticTokenDeposit.AsUint64()))
+	ret.Write(common.Uint64Bytes(types.TxTypeSyntheticDepositTokens.ID()))
 
 	data, err := tx.Header.MarshalBinary()
 	if err != nil {
@@ -115,9 +115,9 @@ func (tx *TokenTransactionDeposit) UnmarshalBinary(data []byte) (err error) {
 	//compare the type to make sure it is a synthetic tx.
 	txType, data := common.BytesUint64(data)
 
-	if txType != uint64(types.TxTypeSyntheticTokenDeposit) {
+	if txType != uint64(types.TxTypeSyntheticDepositTokens) {
 		return fmt.Errorf("invalid transaction type, expecting %s, but received %s",
-			types.TxTypeSyntheticTokenDeposit.Name(), types.TxType(txType).Name())
+			types.TxTypeSyntheticDepositTokens.Name(), types.TxType(txType).Name())
 	}
 
 	err = tx.Header.UnmarshalBinary(data)
