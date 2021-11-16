@@ -7,7 +7,8 @@
 #
 # set cli command and see if it exists
 #
-export cli=../cmd/cli/cli
+./build_cli.sh
+export cli=./test_cli
 
 if [ ! -f $cli ]; then
 	echo "cli command not found in ../cmd/cli, cd to ../cmd/cli and run go build"

@@ -21,9 +21,9 @@ fi
 # issue the key generate command for the specified key name to the specified server
 
 if [ -z $2 ]; then
-   key="$($cli adi create $1 $2 $3 -j 2>&1 > /dev/null | /usr/bin/jq .hash | /usr/bin/sed 's/\"//g')"
+   key="$($cli adi create $1 $2 $3 -j 2>&1 > /dev/null | jq .hash | sed 's/\"//g')"
 else
-   key="$($cli adi create $1 $2 $3 -s http://$4/v1 -j 2>&1 > /dev/null | /usr/bin/jq .hash | /usr/bin/sed 's/\"//g')"
+   key="$($cli adi create $1 $2 $3 -s http://$4/v1 -j 2>&1 > /dev/null | jq .hash | sed 's/\"//g')"
 fi
 
 # return the key

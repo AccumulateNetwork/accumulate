@@ -21,9 +21,9 @@ fi
 # issue the key generate command for the specified key name to the specified server
 
 if [ -z $2 ]; then
-   key="$($cli key generate $1 -j 2>&1 > /dev/null | /usr/bin/jq .publicKey | /usr/bin/sed 's/\"//g')"
+   key="$($cli key generate $1 -j 2>&1 > /dev/null | jq .publicKey | sed 's/\"//g')"
 else
-   key="$($cli key generate $1 -s http://$2/v1 -j 2>&1 > /dev/null | /usr/bin/jq .publicKey | /usr/bin/sed 's/\"//g')"
+   key="$($cli key generate $1 -s http://$2/v1 -j 2>&1 > /dev/null | jq .publicKey | sed 's/\"//g')"
 fi
 
 # return the key
