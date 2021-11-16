@@ -13,12 +13,12 @@ import (
 
 func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
 	return NewExecutor(query, db, key,
-		IdentityCreate{},
-		TokenTx{},
-		TokenAccountCreate{},
+		CreateIdentity{},
+		WithdrawTokens{},
+		CreateTokenAccount{},
 		AddCredits{},
-		CreateSigSpec{},
-		CreateSigSpecGroup{},
+		CreateKeyPage{},
+		CreateKeyBook{},
 		UpdateKeyPage{},
 		SyntheticGenesis{},
 		SyntheticCreateChain{},
