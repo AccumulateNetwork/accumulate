@@ -14,7 +14,7 @@ type MultiSigTx struct {
 
 func (m *MultiSigTx) MarshalBinary() ([]byte, error) {
 	var buf bytes.Buffer
-	buf.Write(common.Uint64Bytes(types.TxTypeMultisigTx.AsUint64()))
+	buf.Write(common.Uint64Bytes(types.TxMultisigTx.AsUint64()))
 	buf.Write(m.TxHash[:])
 
 	return buf.Bytes(), nil
@@ -28,7 +28,7 @@ func (m *MultiSigTx) UnmarshalBinary(data []byte) (err error) {
 	}()
 
 	txType, data := common.BytesUint64(data)
-	if txType != uint64(types.TxTypeMultisigTx) {
+	if txType != uint64(types.TxMultisigTx) {
 		return fmt.Errorf("attempting to unmarshal incompatible type")
 	}
 	copy(m.TxHash[:], data)

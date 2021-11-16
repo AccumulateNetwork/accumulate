@@ -1,169 +1,144 @@
 package types
 
-import "fmt"
-
-type TxType uint64
-
-//Never change the order of these types.
-//If any types are deleted use a placeholder to prevent index number from changing.
-const (
-	TxTypeUnknown = TxType(iota)
-	TxTypeIdentityCreate
-	TxTypeTokenAccountCreate
-	TxTypeTokenTx
-	TxTypeDataChainCreate
-	TxTypeDataEntry //per 256 btes
-	TxTypeScratchChainCreate
-	TxTypeScratchEntry //per 256 bytes
-	TxTypeTokenCreate
-	TxTypeKeyUpdate //update keys on the keychain the identity
-	TxTypeMultisigTx
-	TxTypeStateQuery //sends a query to a chain and returns its state information
-	TxTypeCreateSigSpec
-	TxTypeCreateSigSpecGroup
-	TxTypeAddCredits
-	TxTypeUpdateKeyPage
-
-	//The Following are only valid for DC & BVC use: any other source of this message will be rejected
-	TxTypeSyntheticIdentityCreate = TxType(iota + 0x20)
-	TxTypeSyntheticCreateChain
-	TxTypeSyntheticTokenAccountCreate
-	TxTypeSyntheticTokenDeposit
-	TxTypeSyntheticTxResponse
-	TxTypeSyntheticDepositCredits
-	TxTypeBvcSubmission
-	TxTypeSyntheticGenesis
-	TxTypeDataStore //Data Store can only be sent and thus authorized by an authority node
-	TxTypeAdminVote
-
-	txTypeSyntheticBase = TxTypeSyntheticIdentityCreate
+import (
+	"encoding/json"
+	"fmt"
+	"strings"
 )
 
-// Enum value map for TxType.
-var TxTypeValue = map[string]TxType{}
+// TransactionType is the type of a transaction.
+type TransactionType uint64
 
-func init() {
-	all := []TxType{
-		TxTypeUnknown,
-		TxTypeIdentityCreate,
-		TxTypeTokenAccountCreate,
-		TxTypeTokenTx,
-		TxTypeDataChainCreate,
-		TxTypeDataEntry,
-		TxTypeScratchChainCreate,
-		TxTypeScratchEntry,
-		TxTypeTokenCreate,
-		TxTypeKeyUpdate,
-		TxTypeMultisigTx,
-		TxTypeStateQuery,
-		TxTypeCreateSigSpec,
-		TxTypeCreateSigSpec,
-		TxTypeCreateSigSpecGroup,
-		TxTypeAddCredits,
-		TxTypeUpdateKeyPage,
+// TxType is an alias for TransactionType
+// Deprecated: use TransactionType
+type TxType = TransactionType
 
-		TxTypeSyntheticIdentityCreate,
-		TxTypeSyntheticCreateChain,
-		TxTypeSyntheticTokenAccountCreate,
-		TxTypeSyntheticTokenDeposit,
-		TxTypeSyntheticTxResponse,
-		TxTypeSyntheticDepositCredits,
-		TxTypeBvcSubmission,
-		TxTypeSyntheticGenesis,
-		TxTypeDataStore,
-		TxTypeAdminVote,
-	}
-	for _, t := range all {
-		TxTypeValue[t.Name()] = t
-	}
-}
+const (
+	// TxTypeUnknown represents an unknown transaction type.
+	TxTypeUnknown TransactionType = 0x00
 
-//Name will return the name of the type
-func (t TxType) Name() string {
+	// txSynthetic marks the boundary between user and system transactions.
+	txSynthetic TransactionType = 0x30
+
+	// txMax is the last defined transaction type.
+	txMax = TxTypeSyntheticGenesis
+)
+
+// User transactions
+const (
+	// TxTypeCreateIdentity creates an ADI, which produces a synthetic chain
+	// create transaction.
+	TxTypeCreateIdentity TransactionType = 0x01
+
+	// TxTypeCreateTokenAccount creates an ADI token account, which produces a
+	// synthetic chain create transaction.
+	TxTypeCreateTokenAccount TransactionType = 0x02
+
+	// TxTypeWithdrawTokens transfers tokens between token accounts, which
+	// produces a synthetic deposit tokens transaction.
+	TxTypeWithdrawTokens TransactionType = 0x03
+
+	// TxTypeCreateToken creates a token issuer, which produces a synthetic
+	// chain create transaction.
+	TxTypeCreateToken TransactionType = 0x08
+
+	// TxTypeCreateKeyPage creates a key page, which produces a synthetic chain
+	// create transaction.
+	TxTypeCreateKeyPage TransactionType = 0x0C
+
+	// TxTypeCreateKeyBook creates a key book, which produces a synthetic chain
+	// create transaction.
+	TxTypeCreateKeyBook TransactionType = 0x0D
+
+	// TxTypeAddCredits converts ACME tokens to credits, which produces a
+	// synthetic deposit credits transaction.
+	TxTypeAddCredits TransactionType = 0x0E
+
+	// TxTypeUpdateKeyPage adds, removes, or updates keys in a key page, which
+	// *does not* produce a synthetic transaction.
+	TxTypeUpdateKeyPage TransactionType = 0x0F
+)
+
+// System transactions
+const (
+	// TxTypeSyntheticCreateChain creates or updates chains.
+	TxTypeSyntheticCreateChain TransactionType = 0x31
+
+	// TxTypeSyntheticDepositTokens deposits tokens into token accounts.
+	TxTypeSyntheticDepositTokens TransactionType = 0x33
+
+	// TxTypeSyntheticDepositCredits deposits credits into a credit holder.
+	TxTypeSyntheticDepositCredits TransactionType = 0x35
+
+	// TxTypeSyntheticGenesis initializes system chains.
+	TxTypeSyntheticGenesis TransactionType = 0x37
+)
+
+// IsSynthetic returns true if the transaction type is synthetic.
+func (t TransactionType) IsSynthetic() bool { return t >= txSynthetic }
+
+// ID returns the transaction type ID
+func (t TransactionType) ID() uint64 { return uint64(t) }
+
+// String returns the name of the transaction type
+func (t TransactionType) String() string {
 	switch t {
 	case TxTypeUnknown:
 		return "unknown"
-	case TxTypeIdentityCreate:
-		return "identityCreate"
-	case TxTypeTokenAccountCreate:
-		return "tokenAccountCreate"
-	case TxTypeTokenTx:
-		return "tokenTx"
-	case TxTypeDataChainCreate:
-		return "dataChainCreate"
-	case TxTypeDataEntry:
-		return "dataEntry"
-	case TxTypeScratchChainCreate:
-		return "scratchChainCreate"
-	case TxTypeScratchEntry:
-		return "scratchEntry"
-	case TxTypeTokenCreate:
-		return "tokenCreate"
-	case TxTypeKeyUpdate:
-		return "keyUpdate"
-	case TxTypeMultisigTx:
-		return "multisigTx"
-	case TxTypeStateQuery:
-		return "stateQuery"
-	case TxTypeCreateSigSpec:
-		return "createSigSpec"
-	case TxTypeCreateSigSpecGroup:
-		return "createSigSpecGroup"
+	case TxTypeCreateIdentity:
+		return "createIdentity"
+	case TxTypeCreateTokenAccount:
+		return "createTokenAccount"
+	case TxTypeWithdrawTokens:
+		return "withdrawTokens"
+	case TxTypeCreateKeyPage:
+		return "createKeyPage"
+	case TxTypeCreateKeyBook:
+		return "createKeyBook"
 	case TxTypeAddCredits:
 		return "addCredits"
 	case TxTypeUpdateKeyPage:
 		return "updateKeyPage"
-	case TxTypeSyntheticIdentityCreate:
-		return "syntheticIdentityCreate"
 	case TxTypeSyntheticCreateChain:
 		return "syntheticCreateChain"
-	case TxTypeSyntheticTokenAccountCreate:
-		return "syntheticTokenAccountCreate"
-	case TxTypeSyntheticTokenDeposit:
-		return "syntheticTokenDeposit"
-	case TxTypeSyntheticTxResponse:
-		return "syntheticTxResponse"
+	case TxTypeSyntheticDepositTokens:
+		return "syntheticDepositTokens"
 	case TxTypeSyntheticDepositCredits:
 		return "syntheticDepositCredits"
-	case TxTypeBvcSubmission:
-		return "bvcSubmission"
 	case TxTypeSyntheticGenesis:
 		return "syntheticGenesis"
-	case TxTypeDataStore:
-		return "dataStore"
-	case TxTypeAdminVote:
-		return "adminVote"
 	default:
-		return fmt.Sprintf("TxType:%d", t)
+		return fmt.Sprintf("TransactionType:%d", t)
 	}
 }
 
-//SetType will set the type based on the string name submitted
-func (t *TxType) SetType(s string) {
-	*t = TxTypeValue[s]
+// Name is an alias for String
+// Deprecated: use String
+func (t TransactionType) Name() string { return t.String() }
+
+var txByName = map[string]TransactionType{}
+
+func init() {
+	for t := TxTypeUnknown; t < txMax; t++ {
+		txByName[t.String()] = t
+	}
 }
 
-//AsUint64 casts as a uint64
-func (t TxType) AsUint64() uint64 {
-	return uint64(t)
-}
-
-func (t TxType) String() string { return t.Name() }
-
-func (t TxType) IsSynthetic() bool { return t >= txTypeSyntheticBase }
-
-func (t *TxType) UnmarshalJSON(data []byte) error {
-	var s String
-	err := s.UnmarshalJSON(data)
+func (t *TransactionType) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
 	if err != nil {
-		return fmt.Errorf("error unmarshaling transaction type")
+		return err
 	}
-	t.SetType(*s.AsString())
 
+	var ok bool
+	*t, ok = txByName[s]
+	if !ok || strings.ContainsRune(t.String(), ':') {
+		return fmt.Errorf("invalid transaction type %q", s)
+	}
 	return nil
 }
 
-func (t *TxType) MarshalJSON() ([]byte, error) {
-	s := String(t.String())
-	return s.MarshalJSON()
+func (t TransactionType) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.String())
 }

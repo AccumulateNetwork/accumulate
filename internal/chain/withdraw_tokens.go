@@ -14,9 +14,9 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
-type TokenTx struct{}
+type WithdrawTokens struct{}
 
-func (TokenTx) Type() types.TxType { return types.TxTypeTokenTx }
+func (WithdrawTokens) Type() types.TxType { return types.TxTypeWithdrawTokens }
 
 type tokenSend struct {
 	url    *url.URL
@@ -77,12 +77,12 @@ func checkTokenTx(st *StateManager, tx *transactions.GenTransaction) ([]*tokenSe
 	return sends, account, tokenUrl, &amt.Int, nil
 }
 
-func (c TokenTx) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+func (c WithdrawTokens) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
 	_, _, _, _, err := checkTokenTx(st, tx)
 	return err
 }
 
-func (c TokenTx) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+func (c WithdrawTokens) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
 	body, account, tokenUrl, debit, err := checkTokenTx(st, tx)
 	if err != nil {
 		return err
