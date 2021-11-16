@@ -25,9 +25,9 @@ fi
 # issue the account get command for the specified ID to the specified server
 
 if [ -z $2 ]; then
-   bal="$($cli account get $id1 -j 2>&1 > /dev/null | /usr/bin/jq .data.balance | /usr/bin/sed 's/\"//g')"
+   bal="$($cli account get $id1 -j 2>&1 > /dev/null | jq .data.balance | sed 's/\"//g')"
 else
-   bal="$($cli account get $id1 -s http://$2/v1 -j 2>&1 > /dev/null | /usr/bin/jq .data.balance | /usr/bin/sed 's/\"//g')"
+   bal="$($cli account get $id1 -s http://$2/v1 -j 2>&1 > /dev/null | jq .data.balance | sed 's/\"//g')"
 fi
 
 # return the balance information
