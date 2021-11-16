@@ -15,3 +15,16 @@ batch for each remote API. For example, if the queue duration is 1 second and
 the queue depth is 100, requests will be dispatched 1 second after the request
 that started the queue, or after the queue reaches 100 requests, which ever
 comes first.
+
+## Migrating from v1
+
+* Query methods are now prefixed with `query`.
+* `version` and `metrics` are unchanged.
+* Query methods are general - you can query any TX with `query-tx`, etc.
+* There is a general `execute` method that will accept arbitrary
+  already-marshalled transaction blobs.
+* All transaction methods are `{action}-{noun}`, e.g. `create-adi`.
+* `token-tx-create` is now `send-tokens`.
+* `facuet` has not been reimplemented (yet).
+* Transactions are queued for up to 1/4 second or 100 transactions before they
+  are dispatched.
