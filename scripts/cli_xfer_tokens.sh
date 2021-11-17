@@ -3,6 +3,13 @@
 # This script uses the accumulate cli to create a transfer transaction
 # The script expects two IDs, number of tokesn and server IP:Port to be passed in
 #
+# see if jq exist
+#
+j=`which jq`
+if [ -z $j ]; then
+        echo "jq is needed to get the error code"
+        exit 0
+fi
 
 # if IDs not entered on the command line, prompt for one and exit
 
@@ -52,9 +59,9 @@ fi
 # issue the account get command for the specified ID to the specified server
 
 if [ -z $4 ]; then
-   txid="$($cli tx create $id1 $id2 $3 -j 2>&1 > /dev/null | jq .error)"
+   txid="$($cli tx create $id1 $id2 $3 -j 2>&1 > /dev/null | $j .error)"
 else
-   txid="$($cli tx create $id1 $id2 $3 -s http://$4/v1 -j 2>&1 > /dev/null | jq .error)"
+   txid="$($cli tx create $id1 $id2 $3 -s http://$4/v1 -j 2>&1 > /dev/null | $j .error)"
 fi
 
 # did we get a valid txid?

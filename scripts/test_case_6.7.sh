@@ -10,13 +10,12 @@
 export cli=../cmd/cli/cli
 
 if [ ! -f $cli ]; then
-	echo "cli command not found in ../cmd/cli, cd to ../cmd/cli and run go build"
-	exit 0
-fi
-
-if [ -z $1 ]; then
-	echo "usage: test_cast_6.7.sh server:port"
-	exit 0
+        echo "cli command not found in ../cmd/cli, attempting to build"
+        ./build_cli.sh
+        if [ ! -f $cli ]; then
+                echo "cli command failed to build"
+                exit 0
+        fi
 fi
 
 # create some IDs and don't faucet either of them
