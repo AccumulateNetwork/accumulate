@@ -5,6 +5,58 @@ email, or any other method with the owners of this repository before making a ch
 
 Please note we have a code of conduct, please follow it in all your interactions with the project.
 
+## Commits
+
+In general, the majority of commits should be between 100 and 1000 total lines
+changed (additions + deletions). A large number of small commits may indicate
+that the author is breaking up a large change into many small commits, which can
+make it harder to follow the changes. Very large changes should be broken up
+into smaller commits. There are valid cases where small commits are OK, such as
+fixing typos or bugs.
+
+Commit messages should be of the form `<type>[scope]: <description>` where the
+scope is optional and must be parenthesized ([conventional commits][1]). If the
+commit cannot be fully described in one line, add a blank line followed by a
+longer description. For example:
+
++ Simple
+
+  ```
+  feat: add token issuers
+  ```
+
++ With scope
+
+  ```
+  feat(api): add token issuers
+  ```
+
++ With additional details
+
+  ```
+  feat: add token issuers
+
+  Add an API call to create a new token issuer.
+  ```
+
+The commit type should be one of the following:
+
+| Type       | Description
+| ---------- | -----------
+| `feat`     | New features
+| `fix`      | Bug fixes
+| `chore`    | Chores, such as cleanup
+| `perf`     | Performance improvements
+| `ci`       | Changes relating exclusively to CI/CD
+| `docs`     | Documentation
+| `test`     | Changes relating exclusively to testing
+| `revert`   | Reverting changes
+
+Based on [this list][2]. Refactoring and style changes fall under `chore`.
+
+[1]: https://www.conventionalcommits.org/en/v1.0.0/
+[2]:Lhttps://github.com/conventional-changelog/commitlint/tree/master/%40commitlint/config-conventional#problems
+
 ## Submitting Changes
 
 + When you are ready to submit your work, create a Pull Request on GitHub
