@@ -5,7 +5,8 @@
 #
 # Use jq to parse the returned json information to get the transaction id
 #
-if [ ! -f /usr/bin/jq ]; then
+j=`which jq`
+if [ -z $j ]; then
 	echo "jq must be installed to return the transaction ID"
 	exit 0
 fi
@@ -30,9 +31,9 @@ fi
 # issue the faucet command for the specified ID to the specified server
 
 if [ -z $2 ]; then
-   ID="$($cli faucet $id1 -j 2>&1 > /dev/null | jq .txid)"
+   ID="$($cli faucet $id1 -j 2>&1 > /dev/null | $j .txid)"
 else
-   ID="$($cli faucet $id1 -s http://$2/v1 -j 2>&1 > /dev/null | jq .txid)"
+   ID="$($cli faucet $id1 -s http://$2/v1 -j 2>&1 > /dev/null | $j .txid)"
 fi
 
 # return the transaction ID 

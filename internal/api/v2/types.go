@@ -9,6 +9,7 @@ import (
 )
 
 //go:generate go run ../../cmd/gentypes --package api types.yml
+//go:generate go run github.com/golang/mock/mockgen -source types.go -destination ../../mock/api/types.go
 
 type Querier interface {
 	QueryUrl(url string) (*QueryResponse, error)
@@ -27,6 +28,7 @@ type ABCIQueryClient interface {
 // ABCIBroadcastClient is a subset of from TM/rpc/client.ABCIClient for
 // broadcasting transactions.
 type ABCIBroadcastClient interface {
+	CheckTx(ctx context.Context, tx tm.Tx) (*core.ResultCheckTx, error)
 	BroadcastTxAsync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
 	BroadcastTxSync(context.Context, tm.Tx) (*core.ResultBroadcastTx, error)
 }

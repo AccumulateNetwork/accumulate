@@ -28,7 +28,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	st, err := NewStateManager(db, gtx)
 	require.ErrorIs(t, err, storage.ErrNotFound)
 
-	err = SyntheticTokenDeposit{}.DeliverTx(st, gtx)
+	err = SyntheticTokenDeposit{}.Validate(st, gtx)
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account

@@ -406,7 +406,7 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
 		return fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))
 	}
 
-	return executor.CheckTx(st, tx)
+	return executor.Validate(st, tx)
 }
 
 func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, err error) error {
@@ -476,7 +476,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
-	err = executor.DeliverTx(st, tx)
+	err = executor.Validate(st, tx)
 	if err != nil {
 		err = fmt.Errorf("rejected by chain: %v", err)
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)

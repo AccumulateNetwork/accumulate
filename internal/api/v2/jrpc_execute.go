@@ -145,30 +145,64 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 		return accumulateError(err)
 	}
 
-	// Broadcast the TX
-	r, err := m.opts.Local.BroadcastTxSync(ctx, txb)
-	if err != nil {
-		return accumulateError(err)
-	}
+	// The two cases below look virtually identical. Unfortunately, CheckTx and
+	// BroadcastTxSync return different types, and the latter does not have any
+	// methods, so they have to be handled separately.
 
-	res := new(TxResponse)
-	res.Code = uint64(r.Code)
-	res.Txid = tx.TransactionHash()
-	res.Hash = sha256.Sum256(txb)
-
-	// Check for errors
 	switch {
-	case len(r.MempoolError) > 0:
-		res.Message = r.MempoolError
-		return res
-	case len(r.Log) > 0:
-		res.Message = r.Log
-		return res
-	case r.Code != 0:
-		res.Message = "An unknown error occured"
-		return res
+	case req.CheckOnly:
+		// Check the TX
+		r, err := m.opts.Local.CheckTx(ctx, txb)
+		if err != nil {
+			return accumulateError(err)
+		}
+
+		res := new(TxResponse)
+		res.Code = uint64(r.Code)
+		res.Txid = tx.TransactionHash()
+		res.Hash = sha256.Sum256(txb)
+
+		// Check for errors
+		switch {
+		case len(r.MempoolError) > 0:
+			res.Message = r.MempoolError
+			return res
+		case len(r.Log) > 0:
+			res.Message = r.Log
+			return res
+		case r.Code != 0:
+			res.Message = "An unknown error occured"
+			return res
+		default:
+			return res
+		}
+
 	default:
-		return res
+		// Broadcast the TX
+		r, err := m.opts.Local.BroadcastTxSync(ctx, txb)
+		if err != nil {
+			return accumulateError(err)
+		}
+
+		res := new(TxResponse)
+		res.Code = uint64(r.Code)
+		res.Txid = tx.TransactionHash()
+		res.Hash = sha256.Sum256(txb)
+
+		// Check for errors
+		switch {
+		case len(r.MempoolError) > 0:
+			res.Message = r.MempoolError
+			return res
+		case len(r.Log) > 0:
+			res.Message = r.Log
+			return res
+		case r.Code != 0:
+			res.Message = "An unknown error occured"
+			return res
+		default:
+			return res
+		}
 	}
 }
 
