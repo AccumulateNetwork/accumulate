@@ -12,12 +12,12 @@
 package abci
 
 import (
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	types2 "github.com/tendermint/tendermint/abci/types"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
@@ -35,13 +35,13 @@ type BeginBlockRequest struct {
 type EndBlockRequest struct{}
 
 type Chain interface {
-	Query(*apiQuery.Query) (k, v []byte, err error)
+	Query(*apiQuery.Query) types2.ResponseQuery
 
-	BeginBlock(BeginBlockRequest)
-	CheckTx(*transactions.GenTransaction) error
-	DeliverTx(*transactions.GenTransaction) (*protocol.TxResult, error)
-	EndBlock(EndBlockRequest)
-	Commit() ([]byte, error)
+	BeginBlock(BeginBlockRequest) types2.ResponseBeginBlock
+	CheckTx(*transactions.GenTransaction) types2.ResponseCheckTx
+	DeliverTx(*transactions.GenTransaction) types2.ResponseDeliverTx
+	EndBlock(EndBlockRequest) types2.ResponseEndBlock
+	Commit() types2.ResponseCommit
 }
 
 type State interface {
