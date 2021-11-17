@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 )
 
 func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface{} {
@@ -54,7 +55,7 @@ func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) 
 
 	// If the user wants nothing, give them nothing
 	if req.Count == 0 {
-		return new(QueryMultiResponse)
+		return validatorError(errors.New("count must be greater than 0"))
 	}
 
 	res, err := m.opts.Query.QueryTxHistory(req.Url, int64(req.Start), int64(req.Count))
