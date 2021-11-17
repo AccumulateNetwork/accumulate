@@ -125,19 +125,19 @@ type UpdateKeyPage struct {
 
 func NewAnonTokenAccount() *AnonTokenAccount {
 	v := new(AnonTokenAccount)
-	v.Type = types.ChainTypeAnonTokenAccount
+	v.Type = types.ChainTypeLiteTokenAccount
 	return v
 }
 
 func NewSigSpec() *SigSpec {
 	v := new(SigSpec)
-	v.Type = types.ChainTypeSigSpec
+	v.Type = types.ChainTypeKeyPage
 	return v
 }
 
 func NewSigSpecGroup() *SigSpecGroup {
 	v := new(SigSpecGroup)
-	v.Type = types.ChainTypeSigSpecGroup
+	v.Type = types.ChainTypeKeyBook
 	return v
 }
 
@@ -177,7 +177,7 @@ func (v *AnonTokenAccount) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeAnonTokenAccount
+	v.Type = types.ChainTypeLiteTokenAccount
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -302,7 +302,7 @@ func (v *SigSpec) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeSigSpec
+	v.Type = types.ChainTypeKeyPage
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -322,7 +322,7 @@ func (v *SigSpecGroup) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeSigSpecGroup
+	v.Type = types.ChainTypeKeyBook
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -439,7 +439,7 @@ func (v *AnonTokenAccount) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeAnonTokenAccount
+	v.Type = types.ChainTypeLiteTokenAccount
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -571,7 +571,7 @@ func (v *SigSpec) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeSigSpec
+	v.Type = types.ChainTypeKeyPage
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -598,7 +598,7 @@ func (v *SigSpecGroup) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeSigSpecGroup
+	v.Type = types.ChainTypeKeyBook
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -741,7 +741,7 @@ func (v *AddCredits) UnmarshalBinary(data []byte) error {
 }
 
 func (v *AnonTokenAccount) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeAnonTokenAccount
+	typ := types.ChainTypeLiteTokenAccount
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
@@ -991,7 +991,7 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 }
 
 func (v *SigSpec) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeSigSpec
+	typ := types.ChainTypeKeyPage
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
@@ -1029,7 +1029,7 @@ func (v *SigSpec) UnmarshalBinary(data []byte) error {
 }
 
 func (v *SigSpecGroup) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeSigSpecGroup
+	typ := types.ChainTypeKeyBook
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {

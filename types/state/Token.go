@@ -17,7 +17,7 @@ type Token struct {
 
 func NewToken(tokenUrl string) *Token {
 	token := &Token{}
-	token.SetHeader(types.String(tokenUrl), types.ChainTypeToken)
+	token.SetHeader(types.String(tokenUrl), types.ChainTypeTokenIssuer)
 	return token
 }
 

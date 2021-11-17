@@ -39,7 +39,7 @@ func (h *ChainHeader) SetHeader(chainUrl types.String, chainType types.ChainType
 //GetHeaderSize will return the marshalled binary size of the header.
 func (h *ChainHeader) GetHeaderSize() int {
 	var buf [8]byte
-	i := binary.PutUvarint(buf[:], h.Type.AsUint64())
+	i := binary.PutUvarint(buf[:], h.Type.ID())
 	i += binary.PutUvarint(buf[:], uint64(len(h.ChainUrl)))
 	i += binary.PutUvarint(buf[:], uint64(len(h.SigSpecId)))
 	return i + len(h.ChainUrl) + len(h.SigSpecId)
@@ -74,7 +74,7 @@ func (h *ChainHeader) ParseUrl() (*url.URL, error) {
 func (h *ChainHeader) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(common.Uint64Bytes(h.Type.AsUint64()))
+	buffer.Write(common.Uint64Bytes(h.Type.ID()))
 	buffer.Write(common.SliceBytes([]byte(h.ChainUrl)))
 	buffer.Write(common.SliceBytes(h.SigSpecId[:]))
 
