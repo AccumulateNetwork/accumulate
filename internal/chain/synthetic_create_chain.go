@@ -127,11 +127,3 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 	return nil
 }
-
-func (SyntheticCreateChain) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	return SyntheticCreateChain{}.Validate(st, tx)
-}
-
-func (SyntheticCreateChain) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	return SyntheticCreateChain{}.Validate(st, tx)
-}

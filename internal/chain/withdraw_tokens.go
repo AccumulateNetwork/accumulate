@@ -14,36 +14,27 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
-type TokenTx struct{}
+type WithdrawTokens struct{}
 
-func (TokenTx) Type() types.TxType { return types.TxTypeTokenTx }
+func (WithdrawTokens) Type() types.TxType { return types.TxTypeWithdrawTokens }
 
-type tokenSend struct {
-	url    *url.URL
-	amount *big.Int
-}
-
-func checkTokenTx(st *StateManager, tx *transactions.GenTransaction) ([]*tokenSend, tokenChain, *url.URL, *big.Int, error) {
+func (WithdrawTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	body := new(api.TokenTx)
 	err := tx.As(body)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("invalid payload: %v", err)
+		return fmt.Errorf("invalid payload: %v", err)
 	}
 
 	if body.From.String != types.String(tx.SigInfo.URL) {
-		return nil, nil, nil, nil, fmt.Errorf("withdraw address and transaction sponsor do not match")
+		return fmt.Errorf("withdraw address and transaction sponsor do not match")
 	}
 
-	sends := make([]*tokenSend, len(body.To))
+	recipients := make([]*url.URL, len(body.To))
 	for i, to := range body.To {
-		u, err := url.Parse(*to.URL.AsString())
+		recipients[i], err = url.Parse(*to.URL.AsString())
 		if err != nil {
-			return nil, nil, nil, nil, fmt.Errorf("invalid destination URL: %v", err)
+			return fmt.Errorf("invalid destination URL: %v", err)
 		}
-
-		amount := new(big.Int)
-		amount.SetUint64(to.Amount)
-		sends[i] = &tokenSend{u, amount}
 	}
 
 	var account tokenChain
@@ -53,56 +44,41 @@ func checkTokenTx(st *StateManager, tx *transactions.GenTransaction) ([]*tokenSe
 	case *protocol.AnonTokenAccount:
 		account = sponsor
 	default:
-		return nil, nil, nil, nil, fmt.Errorf("%v cannot sponsor token transactions", st.Sponsor.Header().Type)
+		return fmt.Errorf("%v cannot sponsor token transactions", st.Sponsor.Header().Type)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("invalid token URL: %v", err)
+		return fmt.Errorf("invalid token URL: %v", err)
 	}
 
 	//now check to see if we can transact
 	//really only need to provide one input...
 	//now check to see if the account is good to send tokens from
-	amt := types.Amount{}
-	txAmt := big.NewInt(0)
-	for _, val := range body.To {
-		amt.Add(amt.AsBigInt(), txAmt.SetUint64(val.Amount))
+	total := types.Amount{}
+	for _, to := range body.To {
+		total.Add(total.AsBigInt(), new(big.Int).SetUint64(to.Amount))
 	}
 
-	if !account.CanDebitTokens(&amt.Int) {
-		return nil, nil, nil, nil, fmt.Errorf("insufficient balance")
-	}
-
-	return sends, account, tokenUrl, &amt.Int, nil
-}
-
-func (c TokenTx) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, _, _, err := checkTokenTx(st, tx)
-	return err
-}
-
-func (c TokenTx) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	body, account, tokenUrl, debit, err := checkTokenTx(st, tx)
-	if err != nil {
-		return err
+	if !account.CanDebitTokens(&total.Int) {
+		return fmt.Errorf("insufficient balance")
 	}
 
 	token := types.String(tokenUrl.String())
 	txid := types.Bytes(tx.TransactionHash())
-	for _, send := range body {
+	for i, u := range recipients {
 		from := types.String(st.SponsorUrl.String())
-		to := types.String(send.url.String())
+		to := types.String(u.String())
 		deposit := synthetic.NewTokenTransactionDeposit(txid[:], from, to)
-		err = deposit.SetDeposit(token, send.amount)
+		err = deposit.SetDeposit(token, new(big.Int).SetUint64(body.To[i].Amount))
 		if err != nil {
 			return fmt.Errorf("invalid deposit: %v", err)
 		}
 
-		st.Submit(send.url, deposit)
+		st.Submit(u, deposit)
 	}
 
-	if !account.DebitTokens(debit) {
+	if !account.DebitTokens(&total.Int) {
 		return fmt.Errorf("%q balance is insufficient", st.SponsorUrl)
 	}
 	st.Update(account)

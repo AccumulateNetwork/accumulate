@@ -2,19 +2,29 @@
 #
 # This script uses the accumulate cli to generate an account ID
 #
-# if no command line parameter entered, prompt for one and exit
+# look for jq and sed
 #
-if [ -z $1 ]; then
-	echo "You must enter an IPAddress:Port for a server to generate an account"
+j=`which jq`
+if [ -z $j ]; then
+	echo "jq not found, needed to get account name"
 	exit 0
 fi
-
+s=`which sed`
+if [ -z $s ]; then
+	echo "jq not found, needed to get account name"
+	exit 0
+fi
+#
 # issue the account generate command to the specified server
 
-ID=`$cli account generate -s "http://$1/v1"`
+if [ -z $1 ]; then
+	acc="$($cli account generate -j 2>&1 > /dev/null | $j .name | $s 's/\"//g')"
+else
+	acc="$($cli account generate -j -s http://$1/v1 2>&1 > /dev/null | $j .name | $s 's/\"//g')"
+fi
 
 # return the generated ID 
 
-echo $ID
+echo $acc
 
 

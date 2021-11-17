@@ -13,12 +13,12 @@ import (
 
 func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
 	return NewExecutor(query, db, key,
-		IdentityCreate{},
-		TokenTx{},
-		TokenAccountCreate{},
+		CreateIdentity{},
+		WithdrawTokens{},
+		CreateTokenAccount{},
 		AddCredits{},
-		CreateSigSpec{},
-		CreateSigSpecGroup{},
+		CreateKeyPage{},
+		CreateKeyBook{},
 		UpdateKeyPage{},
 		SyntheticGenesis{},
 		SyntheticCreateChain{},
@@ -32,11 +32,8 @@ type TxExecutor interface {
 	// Type is the transaction type the executor can execute.
 	Type() types.TxType
 
-	// CheckTx partially validates the transaction.
-	CheckTx(*StateManager, *transactions.GenTransaction) error
-
-	// DeliverTx fully validates and executes the transaction.
-	DeliverTx(*StateManager, *transactions.GenTransaction) error
+	// Validate fully validates and executes the transaction.
+	Validate(*StateManager, *transactions.GenTransaction) error
 }
 
 type creditChain interface {

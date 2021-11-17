@@ -1,4 +1,4 @@
-package api
+package api_test
 
 import (
 	"context"
@@ -11,9 +11,13 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	mock_api "github.com/AccumulateNetwork/accumulate/internal/mock/api"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	core "github.com/tendermint/tendermint/rpc/core/types"
 )
 
 type jrpcCounter struct {
@@ -33,7 +37,7 @@ func testExecute(t *testing.T, j *JrpcMethods, count int) {
 		req := new(TxRequest)
 		req.Payload = ""
 		req.Sponsor = fmt.Sprintf("test%d", i)
-		go func() { ch <- j.execute(context.Background(), req, []byte{}) }()
+		go func() { ch <- j.DoExecute(context.Background(), req, []byte{}) }()
 	}
 
 	for i := 0; i < count; i++ {
@@ -136,4 +140,55 @@ func TestDispatchExecuteQueueDuration(t *testing.T) {
 
 	testExecute(t, j, 4)
 	require.Equal(t, 4, c.calls["execute"])
+}
+
+func TestExecuteCheckOnly(t *testing.T) {
+	baseReq := TxRequest{
+		Sponsor: "check",
+		Payload: "",
+		Signer: Signer{
+			PublicKey: make([]byte, 32),
+		},
+		Signature: make([]byte, 64),
+	}
+
+	t.Run("True", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		local := mock_api.NewMockABCIBroadcastClient(ctrl)
+		j, err := NewJrpc(JrpcOptions{
+			Remote: []string{"local"},
+			Local:  local,
+		})
+		require.NoError(t, err)
+
+		local.EXPECT().CheckTx(gomock.Any(), gomock.Any()).Return(new(core.ResultCheckTx), nil)
+
+		req := baseReq
+		req.CheckOnly = true
+		r := j.DoExecute(context.Background(), &req, []byte{})
+		err, _ = r.(error)
+		require.NoError(t, err)
+	})
+
+	t.Run("False", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		local := mock_api.NewMockABCIBroadcastClient(ctrl)
+		j, err := NewJrpc(JrpcOptions{
+			Remote: []string{"local"},
+			Local:  local,
+		})
+		require.NoError(t, err)
+
+		local.EXPECT().BroadcastTxSync(gomock.Any(), gomock.Any()).Return(new(core.ResultBroadcastTx), nil)
+
+		req := baseReq
+		req.CheckOnly = false
+		r := j.DoExecute(context.Background(), &req, []byte{})
+		err, _ = r.(error)
+		require.NoError(t, err)
+	})
 }

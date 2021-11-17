@@ -42,7 +42,7 @@ func NewTransactionNak(txid types.Bytes, from *types.String, to *types.String, c
 }
 
 func (t *TransactionNak) MarshalBinary() (data []byte, err error) {
-	data = append(data, common.Uint64Bytes(types.TxTypeSyntheticTxResponse.AsUint64())...)
+	data = append(data, common.Uint64Bytes(types.TxSyntheticTxResponse.AsUint64())...)
 	header, err := t.Header.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("cannot marshal transactionnak, %v", err)
@@ -61,9 +61,9 @@ func (t *TransactionNak) UnmarshalBinary(data []byte) (err error) {
 	}()
 
 	txType, data := common.BytesUint64(data)
-	if txType != types.TxTypeSyntheticTxResponse.AsUint64() {
+	if txType != types.TxSyntheticTxResponse.AsUint64() {
 		return fmt.Errorf("invalid transaction type, expecting %s received %s",
-			types.TxTypeSyntheticTxResponse.Name(), types.TxType(txType).Name())
+			types.TxSyntheticTxResponse.Name(), types.TxType(txType).Name())
 	}
 
 	err = t.Header.UnmarshalBinary(data)
