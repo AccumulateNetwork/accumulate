@@ -9,6 +9,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	encoding2 "github.com/AccumulateNetwork/accumulate/internal/encoding"
+	types2 "github.com/tendermint/tendermint/abci/types"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
@@ -159,113 +161,159 @@ func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
 	return &qr, nil
 }
 
-func (m *Executor) Query(q *query.Query) (k, v []byte, err error) {
+func (m *Executor) Query(q *query.Query) (queryRes types2.ResponseQuery) {
 	switch q.Type {
 	case types.QueryTypeTxId:
 		txr := query.RequestByTxId{}
 		err := txr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = encoding2.ErrImproperTxnQueryRequest
+			queryRes.Code = encoding2.CodeImproperTxnQueryRequest
+			return queryRes
 		}
 		qr, err := m.queryByTxId(txr.TxId[:])
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = err.Error()
+			queryRes.Code = encoding2.CodeTxnQueryError
+			return queryRes
 		}
-		k = []byte("tx")
-		v, err = qr.MarshalBinary()
+		queryRes.Key = []byte("tx")
+		v, err := qr.MarshalBinary()
 		if err != nil {
-			return nil, nil, fmt.Errorf("%v, on Chain %x", err, txr.TxId[:])
+			queryRes.Info = fmt.Sprintf("%v, on Chain %x", err, txr.TxId[:])
+			queryRes.Code = encoding2.CodeTxnQueryError
+			return queryRes
 		}
+		queryRes.Value = v
 	case types.QueryTypeTxHistory:
 		txh := query.RequestTxHistory{}
 		err := txh.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = encoding2.ErrImproperTxnHistoryRequest
+			queryRes.Code = encoding2.CodeImproperTxnHistoryRequest
+			return queryRes
 		}
 
 		thr := query.ResponseTxHistory{}
 		txids, maxAmt, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Start+txh.Limit)
 		if err != nil {
-			return nil, nil, fmt.Errorf("error obtaining txid range %v", err)
+			queryRes.Info = fmt.Sprintf(encoding2.ErrTxnRange, err)
+			queryRes.Code = encoding2.CodeTxnRange
+			return queryRes
 		}
 		thr.Total = maxAmt
 		for i := range txids {
 			qr, err := m.queryByTxId(txids[i][:])
 			if err != nil {
-				return nil, nil, err
+				queryRes.Info = err.Error()
+				queryRes.Code = encoding2.CodeTxnQueryError
+				return queryRes
 			}
 			thr.Transactions = append(thr.Transactions, *qr)
 		}
-		k = []byte("tx-history")
-		v, err = thr.MarshalBinary()
+		queryRes.Key = []byte("tx-history")
+		v, err := thr.MarshalBinary()
 		if err != nil {
-			return nil, nil, fmt.Errorf("error marshalling payload for transaction history")
+			queryRes.Info = encoding2.ErrTxnHistoryPayload
+			queryRes.Code = encoding2.CodeTxnHistory
+			return queryRes
 		}
+		queryRes.Value = v
 	case types.QueryTypeUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = encoding2.ErrImproperTypeURL
+			queryRes.Code = encoding2.CodeImproperTypeURLRequest
+			return queryRes
 		}
 		u, err := url.Parse(*chr.Url.AsString())
 		if err != nil {
-			return nil, nil, fmt.Errorf("invalid URL in query %s", chr.Url)
+			queryRes.Info = fmt.Sprintf(encoding2.ErrInvalidURL, *chr.Url.AsString())
+			queryRes.Code = encoding2.CodeInvalidURL
+			return queryRes
 		}
 
 		var obj encoding.BinaryMarshaler
-		k, obj, err = m.queryByUrl(u)
+		k, obj, err := m.queryByUrl(u)
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = fmt.Sprintf(encoding2.ErrTypeURL, err.Error())
+			queryRes.Code = encoding2.CodeTypeURL
+			return queryRes
 		}
-		v, err = obj.MarshalBinary()
+		v, err := obj.MarshalBinary()
 		if err != nil {
-			return nil, nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
+			queryRes.Info = fmt.Sprintf("%v, on Url %s", err, chr.Url)
+			queryRes.Code = encoding2.CodeTypeURL
+			return queryRes
 		}
+		queryRes.Key = k
+		queryRes.Value = v
 	case types.QueryTypeDirectoryUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = encoding2.ErrImproperDirectoryURL
+			queryRes.Code = encoding2.CodeImproperDirectoryURLRequest
+			return queryRes
 		}
 		u, err := url.Parse(*chr.Url.AsString())
 		if err != nil {
-			return nil, nil, fmt.Errorf("invalid URL in query %s", chr.Url)
+			queryRes.Info = fmt.Sprintf("%v, on Url %s", err, chr.Url)
+			queryRes.Code = encoding2.CodeInvalidURL
+			return queryRes
 		}
 		dir, err := m.queryDirectoryByChainId(u.ResourceChain())
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = fmt.Sprintf(encoding2.ErrDirectoryURL, err.Error())
+			queryRes.Code = encoding2.CodeDirectoryURL
+			return queryRes
 		}
-		k = []byte("directory")
-		v, err = dir.MarshalBinary()
+		queryRes.Key = []byte("directory")
+		v, err := dir.MarshalBinary()
 		if err != nil {
-			return nil, nil, fmt.Errorf("%v, on Url %s", err, chr.Url)
+			queryRes.Info = fmt.Sprintf("%v, on Url %s", err, chr.Url)
+			queryRes.Code = encoding2.CodeDirectoryURL
+			return queryRes
 		}
+		queryRes.Value = v
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
 		err := chr.UnmarshalBinary(chr.ChainId[:])
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = encoding2.ErrImproperChainId
+			queryRes.Code = encoding2.CodeImproperChainIdRequest
+			return queryRes
 		}
 		obj, err := m.queryByChainId(chr.ChainId[:])
 		if err != nil {
-			return nil, nil, err
+			queryRes.Info = err.Error()
+			queryRes.Code = encoding2.CodeChainIdError
+			return queryRes
 		}
-		k = []byte("chain")
-		v, err = obj.MarshalBinary()
+		queryRes.Key = []byte("chain")
+		v, err := obj.MarshalBinary()
 		if err != nil {
-			return nil, nil, fmt.Errorf("%v, on Chain %x", err, chr.ChainId)
+			queryRes.Info = fmt.Sprintf("%v, on Chain %x", err, chr.ChainId)
+			queryRes.Code = encoding2.CodeChainIdError
+			return queryRes
 		}
+		queryRes.Value = v
 	default:
-		return nil, nil, fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())
+		queryRes.Info = fmt.Sprintf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())
+		queryRes.Code = encoding2.CodeDefaultError
+		return queryRes
 	}
-	return k, v, err
+	queryRes.Code = encoding2.CodeOk
+	return queryRes
 }
 
 // BeginBlock implements ./abci.Chain
-func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
+func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (response types2.ResponseBeginBlock) {
 	m.leader = req.IsLeader
 	m.height = req.Height
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
+	return response
 }
 
 func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error) {
@@ -390,23 +438,26 @@ func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransact
 }
 
 // CheckTx implements ./abci.Chain
-func (m *Executor) CheckTx(tx *transactions.GenTransaction) error {
+func (m *Executor) CheckTx(tx *transactions.GenTransaction) types2.ResponseCheckTx {
 	err := tx.SetRoutingChainID()
 	if err != nil {
-		return err
+		return types2.ResponseCheckTx{Code: encoding2.CodeRoutingChainId, Info: err.Error()}
 	}
 
 	st, err := m.check(tx)
 	if err != nil {
-		return err
+		return types2.ResponseCheckTx{Code: encoding2.CodeTxnCheckFailed, Info: fmt.Sprintf(encoding2.ErrTxnCheckFailed, err.Error())}
 	}
 
 	executor, ok := m.executors[types.TxType(tx.TransactionType())]
 	if !ok {
-		return fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))
+		return types2.ResponseCheckTx{Code: encoding2.CodeUnsupportedTxType, Info: fmt.Sprintf("unsupported TX type: %v", types.TxType(tx.TransactionType()))}
 	}
-
-	return executor.CheckTx(st, tx)
+	err = executor.CheckTx(st, tx)
+	if err != nil {
+		return types2.ResponseCheckTx{Code: encoding2.CodeCheckTxError, Info: fmt.Sprintf(encoding2.ErrCheckTx, err.Error())}
+	}
+	return types2.ResponseCheckTx{Code: encoding2.CodeOk, GasWanted: 1, Data: tx.ChainID, Log: "CheckTx"}
 }
 
 func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, err error) error {
@@ -426,7 +477,7 @@ func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, c
 }
 
 // DeliverTx implements ./abci.Chain
-func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResult, error) {
+func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (response types2.ResponseDeliverTx) {
 	m.wg.Add(1)
 
 	// If this is done async (`go m.deliverTxAsync(tx)`), how would an error
@@ -442,7 +493,8 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	defer m.wg.Done()
 
 	if tx.Transaction == nil || tx.SigInfo == nil || len(tx.ChainID) != 32 {
-		return nil, fmt.Errorf("malformed transaction")
+		return types2.ResponseDeliverTx{Code: encoding2.CodeImproperTxnRequest, GasWanted: 0,
+			Info: encoding2.ErrImproperTxnRequest}
 	}
 
 	txt := types.TxType(tx.TransactionType())
@@ -450,8 +502,8 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	txPending := state.NewPendingTransaction(tx)
 	chainId := types.Bytes(tx.ChainID).AsBytes32()
 	if !ok {
-		err := fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
+		return types2.ResponseDeliverTx{Code: encoding2.CodeUnsupportedTxType, GasWanted: 0,
+			Info: fmt.Sprintf("unsupported TX type: %v", tx.TransactionType().Name())}
 	}
 
 	tx.TransactionHash()
@@ -470,16 +522,16 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 
 	st, err := m.check(tx)
 	if err != nil {
-		err = fmt.Errorf("failed check: %v", err)
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
+		return types2.ResponseDeliverTx{Code: encoding2.CodeTxnCheckFailed, GasWanted: 0,
+			Info: fmt.Sprintf(encoding2.ErrTxnCheckFailed, err.Error())}
 	}
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
 	err = executor.DeliverTx(st, tx)
 	if err != nil {
-		err = fmt.Errorf("rejected by chain: %v", err)
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
+		return types2.ResponseDeliverTx{Code: encoding2.CodeDeliverTxError, GasWanted: 0,
+			Info: fmt.Sprintf(encoding2.ErrDeliverTx, err.Error())}
 	}
 
 	// Ensure the genesis transaction can only be processed once
@@ -496,44 +548,56 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
+		return types2.ResponseDeliverTx{Code: encoding2.CodeImproperAcceptedTxn, GasWanted: 0,
+			Info: fmt.Sprintf(encoding2.ErrImproperAcceptedTxn, err.Error())}
 	}
 
 	txPendingObject := new(state.Object)
 	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
+		return types2.ResponseDeliverTx{Code: encoding2.CodeImproperPendingTxn, GasWanted: 0,
+			Info: fmt.Sprintf(encoding2.ErrImproperPendingTxn, err.Error())}
 	}
 
 	// Store the tx state
 	err = m.db.AddTransaction(&chainId, tx.TransactionHash(), txPendingObject, txAcceptedObject)
 	if err != nil {
-		return nil, err
+		return types2.ResponseDeliverTx{Code: encoding2.CodeTxnStateError, GasWanted: 0,
+			Info: fmt.Sprintf(encoding2.ErrTxnState, err.Error())}
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
 	err = st.commit()
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
+		return types2.ResponseDeliverTx{Code: encoding2.CodeRecordTxnError, GasWanted: 0,
+			Info: fmt.Sprintf(encoding2.ErrRecordTxn, err.Error())}
 	}
 
 	// Process synthetic transactions generated by the validator
 	refs, err := m.submitSyntheticTx(tx.TransactionHash(), st)
 	if err != nil {
-		return nil, err
+		return types2.ResponseDeliverTx{Code: encoding2.CodeSyntheticTxnError, GasWanted: 0,
+			Info: fmt.Sprintf(encoding2.ErrSyntheticTxn, err.Error())}
 	}
 
 	r := new(protocol.TxResult)
 	r.SyntheticTxs = refs
-	return r, nil
+	txBytes, err := json.Marshal(r)
+	if err != nil {
+		return types2.ResponseDeliverTx{Code: encoding2.CodeMarshallingError, GasWanted: 0,
+			Info: encoding2.ErrMarshallingObject}
+	}
+	return types2.ResponseDeliverTx{Code: encoding2.CodeOk, GasWanted: 1, Data: txBytes}
 }
 
 // EndBlock implements ./abci.Chain
-func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
+func (m *Executor) EndBlock(req abci.EndBlockRequest) (response types2.ResponseEndBlock) {
+	return response
+}
 
 // Commit implements ./abci.Chain
-func (m *Executor) Commit() ([]byte, error) {
+func (m *Executor) Commit() (response types2.ResponseCommit) {
 	m.wg.Wait()
 
 	mdRoot, numStateChanges, err := m.db.WriteStates(m.height)
@@ -563,7 +627,7 @@ func (m *Executor) Commit() ([]byte, error) {
 
 	fmt.Printf("DB time %f\n", m.db.TimeBucket)
 	m.db.TimeBucket = 0
-	return mdRoot, nil
+	return types2.ResponseCommit{Data: mdRoot}
 }
 
 func (m *Executor) nextSynthCount() (uint64, error) {
