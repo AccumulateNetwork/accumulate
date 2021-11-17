@@ -7,12 +7,15 @@
 #
 # set cli command and see if it exists
 #
-./build_cli.sh
-export cli=./test_cli
+export cli=./cmd/cli/cli
 
 if [ ! -f $cli ]; then
-	echo "cli command not found in ../cmd/cli, cd to ../cmd/cli and run go build"
-	exit 0
+	echo "cli command not found in ../cmd/cli, attempting to build"
+        ./build_cli.sh
+	if [ ! -f $cli ]; then
+	        echo "cli command failed to build"
+		exit 0
+	fi
 fi
 
 # check for command line parameters
