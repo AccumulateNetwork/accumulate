@@ -72,3 +72,23 @@ func (b *MemoryDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 	}
 	return buck, err
 }
+
+// Delete will remove a key/value pair from the bucket
+func (b *MemoryDB) Delete(bucket []byte, key []byte) (err error) {
+	if b.buckets == nil {
+		return fmt.Errorf("memory database not initialized")
+	}
+
+	if buck, ok := b.buckets[sha256.Sum256(bucket)]; ok {
+		buck.Delete(key)
+	} else {
+		err = fmt.Errorf("bucket not defined")
+	}
+	return err
+}
+
+// DeleteBucket will delete all key/value pairs from a bucket
+func (b *MemoryDB) DeleteBucket(bucket []byte) error {
+	delete(b.buckets, sha256.Sum256(bucket))
+	return nil
+}

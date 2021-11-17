@@ -12,8 +12,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/boltdb/bolt"
-
 	"github.com/spf13/cobra"
 )
 
@@ -121,12 +119,6 @@ func GetADI(url string) {
 	}
 
 	PrintQueryResponse(&res)
-	//str, err := json.Marshal(res)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//
-	//fmt.Println(string(str))
 }
 
 func NewADIFromADISigner(actor *url2.URL, args []string) {
@@ -216,16 +208,10 @@ func NewADIFromADISigner(actor *url2.URL, args []string) {
 	ar.Print()
 
 	//todo: turn around and query the ADI and store the results.
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("adi"))
-		if b != nil {
-			b.Put([]byte(u.Authority), pubKey)
-		} else {
-			return fmt.Errorf("DB: %s", err)
-		}
-		return nil
-	})
-
+	err = Db.Put(BucketAdi, []byte(u.Authority), pubKey)
+	if err != nil {
+		log.Fatalf("DB: %s", err)
+	}
 }
 
 // NewADI create a new ADI from a sponsored account.
@@ -240,17 +226,12 @@ func NewADI(actor string, params []string) {
 }
 
 func ListADIs() {
-
-	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("adi"))
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, _ = c.Next() {
-			fmt.Printf("%s : %s \n", k, string(v))
-		}
-		return nil
-	})
+	b, err := Db.GetBucket(BucketAdi)
 	if err != nil {
 		log.Fatal(err)
 	}
 
+	for _, v := range b.KeyValueList {
+		fmt.Printf("%s : %s \n", v.Key, string(v.Value))
+	}
 }
