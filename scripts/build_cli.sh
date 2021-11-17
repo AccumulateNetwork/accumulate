@@ -1,2 +1,2 @@
 #!/bin/sh
-go build -o test_cli ../cmd/cli 
+go build -o ../cmd/cli/cli ../cmd/cli 

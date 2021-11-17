@@ -3,6 +3,19 @@
 # This script uses the accumulate cli to get the status of a transaction
 # The script expects an ID and server IP:Port to be passed in
 #
+# see if jq and sed exist
+#
+j=`which jq`
+if [ -z $j ]; then
+        echo "jq is needed to get status"
+        exit 0
+fi
+
+s=`which sed`
+if [ -z $s ]; then
+        echo "sed is needed to get status"
+        exit 0
+fi
 
 # if ID entered on the command line, prompt for one and exit
 
@@ -24,9 +37,9 @@ fi
 # issue the faucet command for the specified ID to the specified server
 
 if [ -z $2 ]; then
-	Status="$($cli tx get $id1 2>&1 > /dev/null | jq .status.code | sed 's/\"/g')"
+	Status="$($cli tx get $id1 2>&1 > /dev/null | $j .status.code | $s 's/\"/g')"
 else
-	Status="$($cli tx get $id1 -s http://$2/v1 2>&1 > /dev/null | jq .status.code | sed 's/\"/g')"
+	Status="$($cli tx get $id1 -s http://$2/v1 2>&1 > /dev/null | $j .status.code | $s 's/\"/g')"
 fi
 
 # return the status information
