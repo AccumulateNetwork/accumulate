@@ -513,7 +513,7 @@ func TestQueryWrongType(t *testing.T) {
 	resp := japi.GetADI(context.Background(), req)
 	switch r := resp.(type) {
 	case jsonrpc2.Error:
-		require.Contains(t, r.Data, "want ChainTypeAdi, got ChainTypeAnonTokenAccount")
+		require.Contains(t, r.Data, "want identity, got liteTokenAccount")
 	default:
 		t.Fatalf("Expected error, got %T", r)
 	}

@@ -44,7 +44,7 @@ func (WithdrawTokens) Validate(st *StateManager, tx *transactions.GenTransaction
 	case *protocol.AnonTokenAccount:
 		account = sponsor
 	default:
-		return fmt.Errorf("%v cannot sponsor token transactions", st.Sponsor.Header().Type)
+		return fmt.Errorf("invalid sponsor: want %v or %v, got %v", types.ChainTypeTokenAccount, types.ChainTypeLiteTokenAccount, st.Sponsor.Header().Type)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()

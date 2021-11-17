@@ -13,7 +13,7 @@ func TestStateObject(t *testing.T) {
 
 	adi := types.String("myadi")
 	chain := new(ChainHeader)
-	chain.SetHeader(adi, types.ChainTypeAnonTokenAccount)
+	chain.SetHeader(adi, types.ChainTypeLiteTokenAccount)
 	so.Entry, err = chain.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)

@@ -148,6 +148,6 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	require.Zero(t, qres.Response.Code, "Failed, log=%q, info=%q", qres.Response.Log, qres.Response.Info)
 	require.NoError(t, obj.UnmarshalBinary(qres.Response.Value))
 	require.NoError(t, obj.As(chain))
-	require.Equal(t, types.ChainTypeAnonTokenAccount, chain.Type)
+	require.Equal(t, types.ChainTypeLiteTokenAccount, chain.Type)
 	require.NoError(t, obj.As(account))
 }
