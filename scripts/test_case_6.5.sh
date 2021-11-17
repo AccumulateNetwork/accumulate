@@ -10,8 +10,12 @@
 export cli=../cmd/cli/cli
 
 if [ ! -f $cli ]; then
-	echo "cli command not found in ../cmd/cli, cd to ../cmd/cli and run go build"
-	exit 0
+        echo "cli command not found in ../cmd/cli, attempting to build"
+        ./build_cli.sh
+        if [ ! -f $cli ]; then
+                echo "cli command failed to build"
+                exit 0
+        fi
 fi
 # check for command line parameters
 #
@@ -40,7 +44,6 @@ fi
 # call our faucet script and get the txid
 
 txid=`./cli_faucet.sh $id1 $2` 
-txid=`echo $txid | /usr/bin/sed 's/"//g'`
 
 # call our get tx status script to get the tx status
 

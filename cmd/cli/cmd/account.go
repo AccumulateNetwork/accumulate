@@ -49,7 +49,7 @@ var accountCmd = &cobra.Command{
 					PrintAccountQr()
 				}
 			case "generate":
-				GenerateKey("")
+				GenerateAccount()
 			case "list":
 				ListAccounts()
 			case "restore":
