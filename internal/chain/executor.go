@@ -453,13 +453,11 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) types2.ResponseCheck
 	if !ok {
 		return types2.ResponseCheckTx{Code: encoding2.CodeUnsupportedTxType, Info: fmt.Sprintf("unsupported TX type: %v", types.TxType(tx.TransactionType()))}
 	}
-	err = executor.CheckTx(st, tx)
+	err = executor.Validate(st, tx)
 	if err != nil {
 		return types2.ResponseCheckTx{Code: encoding2.CodeCheckTxError, Info: fmt.Sprintf(encoding2.ErrCheckTx, err.Error())}
 	}
 	return types2.ResponseCheckTx{Code: encoding2.CodeOk, GasWanted: 1, Data: tx.ChainID, Log: "CheckTx"}
-
-	return executor.Validate(st, tx)
 }
 
 func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, err error) error {
