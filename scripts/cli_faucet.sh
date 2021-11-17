@@ -5,7 +5,8 @@
 #
 # Use jq to parse the returned json information to get the transaction id
 #
-if [ ! -f /usr/bin/jq ]; then
+j=`which jq`
+if [ -z $j ]; then
 	echo "jq must be installed to return the transaction ID"
 	exit 0
 fi
@@ -27,18 +28,16 @@ if [ $size -lt 59 ]; then
 fi
 
 # see if the IP address and port were entered on the command line
-
-if [ -z $2 ]; then
-	echo "You must enter an IPAddress:Port for a server to generate an account"
-	exit 0
-fi
-
 # issue the faucet command for the specified ID to the specified server
 
-ID=`$cli faucet $id1 -s "http://$2/v1"`
+if [ -z $2 ]; then
+   ID="$($cli faucet $id1 -j 2>&1 > /dev/null | $j .txid)"
+else
+   ID="$($cli faucet $id1 -s http://$2/v1 -j 2>&1 > /dev/null | $j .txid)"
+fi
 
 # return the transaction ID 
 
-echo $ID | /usr/bin/jq .data.txid
+echo $ID 
 
 

@@ -12,7 +12,7 @@ import (
 
 type TokenIssuance struct{}
 
-func (TokenIssuance) Type() types.TxType { return types.TxTypeTokenCreate }
+func (TokenIssuance) Type() types.TxType { return types.TxTypeCreateToken }
 
 func (TokenIssuance) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
 	return nil

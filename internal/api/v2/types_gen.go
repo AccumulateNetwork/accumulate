@@ -65,6 +65,7 @@ type TokenSend struct {
 }
 
 type TxRequest struct {
+	CheckOnly bool        `json:"checkOnly" form:"checkOnly" query:"checkOnly"`
 	Sponsor   string      `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required,acc-url"`
 	Signer    Signer      `json:"signer" form:"signer" query:"signer" validate:"required"`
 	Signature []byte      `json:"signature" form:"signature" query:"signature" validate:"required"`
@@ -129,7 +130,7 @@ func (v *IdRequest) MarshalJSON() ([]byte, error) {
 		Id string `json:"id"`
 	}
 	u.Id = encoding.BytesToJSON(v.Id)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
@@ -139,7 +140,7 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	}
 	u.Metric = v.Metric
 	u.Duration = encoding.DurationToJSON(v.Duration)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *QueryResponse) MarshalJSON() ([]byte, error) {
@@ -163,7 +164,7 @@ func (v *QueryResponse) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.Sig = encoding.BytesToJSON(v.Sig)
 	u.Status = v.Status
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *Signer) MarshalJSON() ([]byte, error) {
@@ -173,7 +174,7 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 	}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
@@ -185,23 +186,25 @@ func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 	u.Url = v.Url
 	u.Amount = v.Amount
 	u.Txid = encoding.BytesToJSON(v.Txid)
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	var u struct {
+		CheckOnly bool        `json:"checkOnly"`
 		Sponsor   string      `json:"sponsor"`
 		Signer    Signer      `json:"signer"`
 		Signature string      `json:"signature"`
 		KeyPage   KeyPage     `json:"keyPage"`
 		Payload   interface{} `json:"payload"`
 	}
+	u.CheckOnly = v.CheckOnly
 	u.Sponsor = v.Sponsor
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
 	u.Payload = v.Payload
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *TxResponse) MarshalJSON() ([]byte, error) {
@@ -217,7 +220,7 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Delivered = v.Delivered
-	return json.Marshal(u)
+	return json.Marshal(&u)
 }
 
 func (v *IdRequest) UnmarshalJSON(data []byte) error {
@@ -329,6 +332,7 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 
 func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	var u struct {
+		CheckOnly bool        `json:"checkOnly"`
 		Sponsor   string      `json:"sponsor"`
 		Signer    Signer      `json:"signer"`
 		Signature string      `json:"signature"`
@@ -338,6 +342,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.CheckOnly = u.CheckOnly
 	v.Sponsor = u.Sponsor
 	v.Signer = u.Signer
 	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {

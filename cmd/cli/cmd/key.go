@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"os"
 	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strconv"
@@ -86,6 +88,14 @@ var keyCmd = &cobra.Command{
 		}
 
 	},
+}
+
+type KeyResponse struct {
+	Label		string	`json:"name"`
+	PrivateKey	[]byte	`json:"privateKey"`
+	PublicKey	[]byte	`json:"publicKey"`
+	Seed		[]byte	`json:"seed"`
+	Mnemonic	[]byte	`json:"mnemonic"`
 }
 
 func init() {
@@ -241,17 +251,28 @@ func GenerateKey(label string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("%s : %x", label, pubKey)
+	if WantJsonOutput {
+		a := KeyResponse{}
+		a.Label = label
+		a.PublicKey = pubKey
+		dump, err := json.Marshal(a)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Fprintf(os.Stderr, "%s\n",string(dump))
+	} else {
+	   fmt.Fprintf(os.Stderr, "%s : %x", label, pubKey)
+	}
 }
 
 func ListKeyPublic() {
 
-	fmt.Printf("%s\t\t\t\t\t\t\t\tKey name\n", "Public Key")
+	fmt.Fprintf(os.Stderr, "%s\t\t\t\t\t\t\t\tKey name\n", "Public Key")
 	err := Db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte("label"))
 		c := b.Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			fmt.Printf("%x\t%s\n", v, k)
+			fmt.Fprintf(os.Stderr, "%x\t%s\n", v, k)
 		}
 		return nil
 	})
@@ -342,7 +363,18 @@ func ImportKey(pkhex string, label string) {
 		log.Fatal(err)
 	}
 
-	fmt.Printf("{\"name\":\"%s\",\"publicKey\":\"%x\"}\n", label, pk[32:])
+	if WantJsonOutput {
+		a := KeyResponse{}
+		a.Label = label
+		a.PublicKey = pk[32:]
+		dump, err := json.Marshal(a)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Fprintf(os.Stderr, "%s\n",string(dump))
+	} else {
+	   fmt.Fprintf(os.Stderr, "{\"name\":\"%s\",\"publicKey\":\"%x\"}\n", label, pk[32:])
+	}
 }
 
 func ExportKey(label string) {
@@ -362,7 +394,19 @@ func ExportKey(label string) {
 		}
 	}
 	//fmt.Println(hex.EncodeToString(pk))
-	fmt.Printf("{\"name\":\"%s\",\"privateKey\":\"%x\",\"publicKey\":\"%x\"}\n", label, pk[:32], pk[32:])
+	if WantJsonOutput {
+		a := KeyResponse{}
+		a.Label = label
+		a.PrivateKey = pk[:32]
+		a.PublicKey = pk[32:]
+		dump, err := json.Marshal(a)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
+	} else {
+	   fmt.Fprintf(os.Stderr, "{\"name\":\"%s\",\"privateKey\":\"%x\",\"publicKey\":\"%x\"}\n", label, pk[:32], pk[32:])
+	}
 }
 
 func GeneratePrivateKey() (privKey []byte, err error) {
@@ -478,7 +522,7 @@ func ExportKeys() {
 		for k, _ := c.First(); k != nil; k, _ = c.Next() {
 			label, err := FindLabelFromPubKey(k)
 			if err != nil {
-				fmt.Printf("Error: Cannot find label for public key %x\n", k)
+				fmt.Fprintf(os.Stderr, "Error: Cannot find label for public key %x\n", k)
 			} else {
 				ExportKey(label)
 			}
@@ -496,7 +540,17 @@ func ExportSeed() {
 		b := tx.Bucket([]byte("mnemonic"))
 		if b != nil {
 			seed := b.Get([]byte("seed"))
-			fmt.Printf(" seed: %x\n", seed)
+			if WantJsonOutput {
+				a := KeyResponse{}
+				a.Seed = seed
+				dump, err := json.Marshal(a)
+				if err != nil {
+					log.Fatal(err)
+				}
+				fmt.Fprintf(os.Stderr, "%s\n", string(dump))
+			} else {
+				fmt.Fprintf(os.Stderr, " seed: %x\n", seed)
+		   	}
 		} else {
 			return fmt.Errorf("mnemonic seed not found")
 		}
@@ -512,7 +566,17 @@ func ExportMnemonic() {
 		b := tx.Bucket([]byte("mnemonic"))
 		if b != nil {
 			seed := b.Get([]byte("phrase"))
-			fmt.Printf("mnemonic phrase: %s\n", string(seed))
+			if WantJsonOutput {
+				a := KeyResponse{}
+				a.Mnemonic = seed
+				dump, err := json.Marshal(a)
+				if err != nil {
+					log.Fatal(err)
+				}
+				fmt.Fprintf(os.Stderr, "%s\n", string(dump))
+			} else {
+				fmt.Fprintf(os.Stderr, "mnemonic phrase: %s\n", string(seed))
+			}
 		} else {
 			return fmt.Errorf("mnemonic seed not found")
 		}

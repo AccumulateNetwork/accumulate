@@ -10,8 +10,12 @@
 export cli=../cmd/cli/cli
 
 if [ ! -f $cli ]; then
-	echo "cli command not found in ../cmd/cli, cd to ../cmd/cli and run go build"
-	exit 0
+        echo "cli command not found in ../cmd/cli, attempting to build"
+        ./build_cli.sh
+        if [ ! -f $cli ]; then
+                echo "cli command failed to build"
+                exit 0
+        fi
 fi
 # check for command line parameters
 #
@@ -27,10 +31,6 @@ fi
 # call our faucet script
 
 TxID=`./cli_faucet.sh $1 $2`
-
-# remove the "s
-
-TxID=`echo $TxID | /usr/bin/sed 's/"//g'`
 
 # check transaction status
 

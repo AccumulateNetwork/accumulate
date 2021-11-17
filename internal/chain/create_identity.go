@@ -10,47 +10,33 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-type IdentityCreate struct{}
+type CreateIdentity struct{}
 
-func (IdentityCreate) Type() types.TxType { return types.TxTypeIdentityCreate }
+func (CreateIdentity) Type() types.TxType { return types.TxTypeCreateIdentity }
 
-func checkIdentityCreate(st *StateManager, tx *transactions.GenTransaction) (*protocol.IdentityCreate, *url.URL, state.Chain, error) {
+func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+	// *protocol.IdentityCreate, *url.URL, state.Chain
 	body := new(protocol.IdentityCreate)
 	err := tx.As(body)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid payload: %v", err)
+		return fmt.Errorf("invalid payload: %v", err)
 	}
 
 	identityUrl, err := url.Parse(body.Url)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid URL: %v", err)
+		return fmt.Errorf("invalid URL: %v", err)
 	}
 
 	err = protocol.IsValidAdiUrl(identityUrl)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid URL: %v", err)
+		return fmt.Errorf("invalid URL: %v", err)
 	}
 
-	var sponsor state.Chain
 	switch st.Sponsor.(type) {
 	case *protocol.AnonTokenAccount, *state.AdiState:
 		// OK
 	default:
-		return nil, nil, nil, fmt.Errorf("chain type %d cannot sponsor ADIs", st.Sponsor.Header().Type)
-	}
-
-	return body, identityUrl, sponsor, nil
-}
-
-func (IdentityCreate) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, _, err := checkIdentityCreate(st, tx)
-	return err
-}
-
-func (IdentityCreate) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	body, identityUrl, _, err := checkIdentityCreate(st, tx)
-	if err != nil {
-		return err
+		return fmt.Errorf("chain type %d cannot sponsor ADIs", st.Sponsor.Header().Type)
 	}
 
 	var sigSpecUrl, ssgUrl *url.URL

@@ -39,7 +39,7 @@ func TestAnonTokenTransactions(t *testing.T) {
 	st, err := NewStateManager(db, gtx)
 	require.NoError(t, err)
 
-	err = TokenTx{}.DeliverTx(st, gtx)
+	err = WithdrawTokens{}.Validate(st, gtx)
 	require.NoError(t, err)
 
 	//pull the chains again

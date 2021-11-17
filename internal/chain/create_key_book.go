@@ -10,32 +10,32 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-type CreateSigSpecGroup struct{}
+type CreateKeyBook struct{}
 
-func (CreateSigSpecGroup) Type() types.TxType { return types.TxTypeCreateSigSpecGroup }
+func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
-func checkCreateSigSpecGroup(st *StateManager, tx *transactions.GenTransaction) ([]*protocol.SigSpec, *url.URL, error) {
+func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	if _, ok := st.Sponsor.(*state.AdiState); !ok {
-		return nil, nil, fmt.Errorf("invalid sponsor: want %v, got %v", types.ChainTypeAdi, st.Sponsor.Header().Type)
+		return fmt.Errorf("invalid sponsor: want %v, got %v", types.ChainTypeAdi, st.Sponsor.Header().Type)
 	}
 
 	body := new(protocol.CreateSigSpecGroup)
 	err := tx.As(body)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid payload: %v", err)
+		return fmt.Errorf("invalid payload: %v", err)
 	}
 
 	if len(body.SigSpecs) == 0 {
-		return nil, nil, fmt.Errorf("cannot create empty sig spec group")
+		return fmt.Errorf("cannot create empty sig spec group")
 	}
 
 	sgUrl, err := url.Parse(body.Url)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid target URL: %v", err)
+		return fmt.Errorf("invalid target URL: %v", err)
 	}
 
 	if !sgUrl.Identity().Equal(st.SponsorUrl) {
-		return nil, nil, fmt.Errorf("%q does not belong to %q", sgUrl, st.SponsorUrl)
+		return fmt.Errorf("%q does not belong to %q", sgUrl, st.SponsorUrl)
 	}
 
 	entries := make([]*protocol.SigSpec, len(body.SigSpecs))
@@ -43,38 +43,24 @@ func checkCreateSigSpecGroup(st *StateManager, tx *transactions.GenTransaction) 
 		entry := new(protocol.SigSpec)
 		err = st.LoadAs(chainId, entry)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to fetch sig spec: %v", err)
+			return fmt.Errorf("failed to fetch sig spec: %v", err)
 		}
 
 		u, err := entry.ParseUrl()
 		if err != nil {
 			// This should not happen. Only valid URLs should be stored.
-			return nil, nil, fmt.Errorf("invalid sig spec state: bad URL: %v", err)
+			return fmt.Errorf("invalid sig spec state: bad URL: %v", err)
 		}
 
 		if !u.Identity().Equal(st.SponsorUrl) {
-			return nil, nil, fmt.Errorf("%q does not belong to %q", u, st.SponsorUrl)
+			return fmt.Errorf("%q does not belong to %q", u, st.SponsorUrl)
 		}
 
 		if (entry.SigSpecId != types.Bytes32{}) {
-			return nil, nil, fmt.Errorf("%q has already been assigned to an SSG", u)
+			return fmt.Errorf("%q has already been assigned to an SSG", u)
 		}
 
 		entries[i] = entry
-	}
-
-	return entries, sgUrl, nil
-}
-
-func (CreateSigSpecGroup) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, err := checkCreateSigSpecGroup(st, tx)
-	return err
-}
-
-func (CreateSigSpecGroup) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	entries, url, err := checkCreateSigSpecGroup(st, tx)
-	if err != nil {
-		return err
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
@@ -82,9 +68,9 @@ func (CreateSigSpecGroup) DeliverTx(st *StateManager, tx *transactions.GenTransa
 	st.Submit(st.SponsorUrl, scc)
 
 	ssg := protocol.NewSigSpecGroup()
-	ssg.ChainUrl = types.String(url.String())
+	ssg.ChainUrl = types.String(sgUrl.String())
 
-	groupChainId := types.Bytes(url.ResourceChain()).AsBytes32()
+	groupChainId := types.Bytes(sgUrl.ResourceChain()).AsBytes32()
 	for _, spec := range entries {
 		u, err := spec.ParseUrl()
 		if err != nil {
