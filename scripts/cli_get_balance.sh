@@ -3,6 +3,20 @@
 # This script uses the accumulate cli to get the balance of an account
 # The script expects an ID and server IP:Port to be passed in
 #
+# see if jq and sed exist
+#
+j=`which jq`
+if [ -z $j ]; then
+	echo "jq is needed to get balance"
+	exit 0
+fi
+
+s=`which sed`
+if [ -z $s ]; then
+	echo "sed is needed to get balance"
+	exit 0
+fi
+
 
 # if ID entered on the command line, prompt for one and exit
 
@@ -25,9 +39,9 @@ fi
 # issue the account get command for the specified ID to the specified server
 
 if [ -z $2 ]; then
-   bal="$($cli account get $id1 -j 2>&1 > /dev/null | jq .data.balance | sed 's/\"//g')"
+   bal="$($cli account get $id1 -j 2>&1 > /dev/null | $j .data.balance | $s 's/\"//g')"
 else
-   bal="$($cli account get $id1 -s http://$2/v1 -j 2>&1 > /dev/null | jq .data.balance | sed 's/\"//g')"
+   bal="$($cli account get $id1 -s http://$2/v1 -j 2>&1 > /dev/null | $j .data.balance | $s 's/\"//g')"
 fi
 
 # return the balance information

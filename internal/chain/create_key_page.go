@@ -14,7 +14,7 @@ type CreateKeyPage struct{}
 
 func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 
-func checkCreateKeyPage(st *StateManager, tx *transactions.GenTransaction) (*protocol.CreateSigSpec, *protocol.SigSpecGroup, *url.URL, error) {
+func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	var group *protocol.SigSpecGroup
 	switch sponsor := st.Sponsor.(type) {
 	case *state.AdiState:
@@ -22,40 +22,26 @@ func checkCreateKeyPage(st *StateManager, tx *transactions.GenTransaction) (*pro
 	case *protocol.SigSpecGroup:
 		group = sponsor
 	default:
-		return nil, nil, nil, fmt.Errorf("%v cannot sponsor a sig spec", sponsor.Header().Type)
+		return fmt.Errorf("%v cannot sponsor a sig spec", sponsor.Header().Type)
 	}
 
 	body := new(protocol.CreateSigSpec)
 	err := tx.As(body)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid payload: %v", err)
+		return fmt.Errorf("invalid payload: %v", err)
 	}
 
 	if len(body.Keys) == 0 {
-		return nil, nil, nil, fmt.Errorf("cannot create empty sig spec")
+		return fmt.Errorf("cannot create empty sig spec")
 	}
 
 	msUrl, err := url.Parse(body.Url)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid target URL: %v", err)
+		return fmt.Errorf("invalid target URL: %v", err)
 	}
 
 	if !msUrl.Identity().Equal(st.SponsorUrl.Identity()) {
-		return nil, nil, nil, fmt.Errorf("%q does not belong to %q", msUrl, st.SponsorUrl)
-	}
-
-	return body, group, msUrl, nil
-}
-
-func (CreateKeyPage) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, _, err := checkCreateKeyPage(st, tx)
-	return err
-}
-
-func (CreateKeyPage) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	body, group, url, err := checkCreateKeyPage(st, tx)
-	if err != nil {
-		return err
+		return fmt.Errorf("%q does not belong to %q", msUrl, st.SponsorUrl)
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
@@ -63,7 +49,7 @@ func (CreateKeyPage) DeliverTx(st *StateManager, tx *transactions.GenTransaction
 	st.Submit(st.SponsorUrl, scc)
 
 	spec := protocol.NewSigSpec()
-	spec.ChainUrl = types.String(url.String())
+	spec.ChainUrl = types.String(msUrl.String())
 
 	if group != nil {
 		groupUrl, err := group.ParseUrl()
@@ -73,7 +59,7 @@ func (CreateKeyPage) DeliverTx(st *StateManager, tx *transactions.GenTransaction
 			return fmt.Errorf("invalid sponsor URL: %v", err)
 		}
 
-		group.SigSpecs = append(group.SigSpecs, types.Bytes(url.ResourceChain()).AsBytes32())
+		group.SigSpecs = append(group.SigSpecs, types.Bytes(msUrl.ResourceChain()).AsBytes32())
 		spec.SigSpecId = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 
 		err = scc.Update(group)
