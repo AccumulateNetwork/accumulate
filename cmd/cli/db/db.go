@@ -43,10 +43,30 @@ func (b *Bucket) Get(key []byte) (value []byte) {
 	return value
 }
 
+//Delete will remove the value given a key
+func (b *Bucket) Delete(key []byte) (err error) {
+	kh := sha256.Sum256(key)
+	if v, ok := b.ref[kh]; ok {
+		var newList []KeyValue
+		for i, k := range b.KeyValueList {
+			if i == v {
+				continue
+			}
+			newList = append(newList, k)
+		}
+		b.KeyValueList = newList
+		delete(b.ref, kh)
+	}
+	return nil
+}
+
+//DB defines the interface functions to access the database
 type DB interface {
 	Close() error                                            // Returns an error if the close fails
 	InitDB(filepath string) error                            // Sets up the database, returns error if it fails
 	Get(bucket []byte, key []byte) (value []byte, err error) // Get key from database, returns ErrNotFound if the key is not found
 	Put(bucket []byte, key []byte, value []byte) error       // Put the value in the database, throws an error if fails
 	GetBucket(bucket []byte) (*Bucket, error)                // GetBucket retrieves all the data contained within a bucket
+	Delete(bucket []byte, key []byte) error                  // Delete will remove a key/value pair from the bucket
+	DeleteBucket(bucket []byte) error                        // DeleteBucket will delete all key/value pairs from a bucket
 }
