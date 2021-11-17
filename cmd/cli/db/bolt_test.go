@@ -8,26 +8,22 @@ import (
 )
 
 func TestBoltDatabase(t *testing.T) {
-	dname, e := ioutil.TempDir("", "sampledir")
+	dirName, e := ioutil.TempDir("", "boltTest")
 	if e != nil {
 		t.Fatal(e)
 	}
 
-	err := os.MkdirAll(dname, 0600)
+	err := os.MkdirAll(dirName, 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	defer os.RemoveAll(dname)
-
-	filename := filepath.Join(dname, "wallet.db")
+	defer os.RemoveAll(dirName)
 
 	db := BoltDB{}
-	err = db.InitDB(filename)
+	err = db.InitDB(filepath.Join(dirName, "test.db"))
 	if err != nil {
 		t.Fatal(err.Error())
 	}
-
 	defer db.Close()
 
 	databaseTests(t, &db)

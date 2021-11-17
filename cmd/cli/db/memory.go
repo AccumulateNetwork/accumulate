@@ -5,42 +5,35 @@ import (
 	"fmt"
 )
 
-type MemBucket struct {
-	bucket Bucket
-	ref    map[[32]byte]uint64
-}
-
-func NewMemBucket() *MemBucket {
-	b := new(MemBucket)
-	b.ref = make(map[[32]byte]uint64)
-	return b
-}
-
+//MemoryDB holds the main map of buckets for the in-memory database
 type MemoryDB struct {
-	buckets map[[32]byte]*MemBucket
+	buckets map[[32]byte]*Bucket
 }
 
+//Close clears out the data and uninitializes the MemoryDB
 func (b *MemoryDB) Close() error {
 	if b.buckets == nil {
-		return fmt.Errorf("wallet database not open")
+		return fmt.Errorf("memory database not open")
 	}
+	b.buckets = nil
 	return nil
 }
 
+//InitDB initializes the MemoryDB and must be called prior to use of the object
 func (b *MemoryDB) InitDB(string) (err error) {
-	b.buckets = make(map[[32]byte]*MemBucket)
+	b.buckets = make(map[[32]byte]*Bucket)
 	return err
 }
 
+//Get will get an entry in the database given a bucket and key
 func (b *MemoryDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 	if b.buckets == nil {
-		return nil, fmt.Errorf("wallet database not open")
+		return nil, fmt.Errorf("memory database not initialized")
 	}
 
 	if v, ok := b.buckets[sha256.Sum256(bucket)]; ok {
-		if idx, ok := v.ref[sha256.Sum256(key)]; ok {
-			value = v.bucket.KeyValueList[idx].Value
-		} else {
+		value = v.Get(key)
+		if value == nil {
 			err = fmt.Errorf("key not found")
 		}
 	} else {
@@ -49,32 +42,32 @@ func (b *MemoryDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 	return value, err
 }
 
+//Put will write data to a given bucket using the key
 func (b *MemoryDB) Put(bucket []byte, key []byte, value []byte) error {
 	if b.buckets == nil {
-		return fmt.Errorf("wallet database not open")
+		return fmt.Errorf("memory database not initialized")
 	}
 
-	var v *MemBucket
+	var v *Bucket
 	var ok bool
 	bk := sha256.Sum256(bucket)
 	if v, ok = b.buckets[bk]; !ok {
-		v = NewMemBucket()
+		v = NewBucket()
 		b.buckets[bk] = v
 	}
 
-	v.ref[sha256.Sum256(key)] = uint64(len(v.bucket.KeyValueList))
-	v.bucket.KeyValueList = append(v.bucket.KeyValueList, KeyValue{key, value})
+	v.Put(key, value)
 	return nil
 }
 
+//GetBucket will return the contents of a bucket
 func (b *MemoryDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 	if b.buckets == nil {
-		return nil, fmt.Errorf("wallet database not open")
+		return nil, fmt.Errorf("memory database not initialized")
 	}
 
-	if v, ok := b.buckets[sha256.Sum256(bucket)]; ok {
-		buck = &v.bucket
-	} else {
+	var ok bool
+	if buck, ok = b.buckets[sha256.Sum256(bucket)]; !ok {
 		err = fmt.Errorf("bucket not defined")
 	}
 	return buck, err

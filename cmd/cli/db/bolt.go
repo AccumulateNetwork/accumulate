@@ -9,21 +9,24 @@ type BoltDB struct {
 	db *bolt.DB
 }
 
+//Close the database
 func (b *BoltDB) Close() error {
 	if b.db == nil {
-		return fmt.Errorf("wallet database not open")
+		return fmt.Errorf("database not open")
 	}
 	return b.db.Close()
 }
 
+//InitDB will open the database
 func (b *BoltDB) InitDB(filename string) (err error) {
 	b.db, err = bolt.Open(filename, 0600, nil)
 	return err
 }
 
+//Get will get an entry in the database given a bucket and key
 func (b *BoltDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 	if b.db == nil {
-		return nil, fmt.Errorf("wallet database not open")
+		return nil, fmt.Errorf("database not open")
 	}
 
 	err = b.db.View(func(tx *bolt.Tx) error {
@@ -38,9 +41,10 @@ func (b *BoltDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 	return value, err
 }
 
+//Put will write data to a given bucket using the key
 func (b *BoltDB) Put(bucket []byte, key []byte, value []byte) error {
 	if b.db == nil {
-		return fmt.Errorf("wallet database not open")
+		return fmt.Errorf("database not open")
 	}
 
 	return b.db.Update(func(tx *bolt.Tx) error {
@@ -52,9 +56,10 @@ func (b *BoltDB) Put(bucket []byte, key []byte, value []byte) error {
 	})
 }
 
+//GetBucket will return the contents of a bucket
 func (b *BoltDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 	if b.db == nil {
-		return nil, fmt.Errorf("wallet database not open")
+		return nil, fmt.Errorf("database not open")
 	}
 
 	err = b.db.View(func(tx *bolt.Tx) error {
@@ -65,7 +70,7 @@ func (b *BoltDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 		c := b.Cursor()
 		buck = new(Bucket)
 		for k, v := c.First(); k != nil; k, v = c.Next() {
-			buck.KeyValueList = append(buck.KeyValueList, KeyValue{k, v})
+			buck.Put(k, v)
 		}
 		return err
 	})
