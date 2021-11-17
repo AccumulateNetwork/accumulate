@@ -3,11 +3,18 @@
 # This script uses the accumulate cli to generate a key
 # The script expects a key name and server IP:Port to be passed in
 #
-# Use jq to parse the returned json information to get the public key
+# see if jq and sed exist
 #
-if [ ! -f /usr/bin/jq ]; then
-	echo "jq must be installed to return the key"
-	exit 0
+j=`which jq`
+if [ -z $j ]; then
+        echo "jq is needed to get key"
+        exit 0
+fi
+
+s=`which sed`
+if [ -z $s ]; then
+        echo "sed is needed to get key"
+        exit 0
 fi
 
 # if key name not entered on the command line, prompt for one and exit 
@@ -21,9 +28,9 @@ fi
 # issue the key generate command for the specified key name to the specified server
 
 if [ -z $2 ]; then
-   key="$($cli key generate $1 -j 2>&1 > /dev/null | jq .publicKey | sed 's/\"//g')"
+   key="$($cli key generate $1 -j 2>&1 > /dev/null | $j .publicKey | $s 's/\"//g')"
 else
-   key="$($cli key generate $1 -s http://$2/v1 -j 2>&1 > /dev/null | jq .publicKey | sed 's/\"//g')"
+   key="$($cli key generate $1 -s http://$2/v1 -j 2>&1 > /dev/null | $j .publicKey | $s 's/\"//g')"
 fi
 
 # return the key
