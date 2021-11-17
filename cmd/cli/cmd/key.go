@@ -400,7 +400,7 @@ func getKeyCountAndIncrement() (count uint32) {
 func lookupSeed() (seed []byte, err error) {
 	seed, err = Db.Get(BucketMnemonic, []byte("seed"))
 	if err != nil {
-		log.Fatal("mnemonic seed doesn't exist")
+		return nil, fmt.Errorf("mnemonic seed doesn't exist")
 	}
 
 	return seed, nil
