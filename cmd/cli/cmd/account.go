@@ -16,7 +16,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
-	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
 )
 
@@ -114,9 +113,7 @@ func PrintAccount() {
 }
 
 func GetAccount(url string) {
-
 	var res acmeapi.APIDataResponse
-	//var str []byte
 
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
@@ -126,13 +123,6 @@ func GetAccount(url string) {
 	}
 
 	PrintQueryResponse(&res)
-	//str, err := json.Marshal(res)
-	//if err != nil {
-	//	log.Fatalf("error marshaling result, %v", err)
-	//}
-	//
-	//fmt.Println(string(str))
-
 }
 
 func QrAccount(s string) {
@@ -241,69 +231,56 @@ func GenerateAccount() {
 
 func ListAccounts() {
 
-	//TODO: this probably should also list out adi accounts.
-	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("label"))
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			lt, err := protocol.AnonymousAddress(v, protocol.AcmeUrl().String())
-			if err != nil {
-				continue
-			}
-			if lt.String() == string(k) {
-				fmt.Printf("%s\n", k)
-			}
-		}
-		return nil
-	})
+	b, err := Db.GetBucket(BucketLabel)
 	if err != nil {
-		log.Fatal(err)
+		//no accounts so nothing to do...
+		return
 	}
-
+	for _, v := range b.KeyValueList {
+		lt, err := protocol.AnonymousAddress(v.Value, protocol.AcmeUrl().String())
+		if err != nil {
+			continue
+		}
+		if lt.String() == string(v.Key) {
+			fmt.Printf("%s\n", v.Key)
+		}
+	}
+	//TODO: this probably should also list out adi accounts as well
 }
 
 func RestoreAccounts() {
-	err := Db.Update(func(tx *bolt.Tx) error {
-		anon := tx.Bucket([]byte("anon"))
-		keys := tx.Bucket([]byte("keys"))
-		label := tx.Bucket([]byte("label"))
-
-		cursor := anon.Cursor()
-		for name, v := cursor.First(); name != nil; name, v = cursor.Next() {
-			u, err := url2.Parse(string(name))
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%q is not a valid URL\n", name)
-			}
-			key, _, err := protocol.ParseAnonymousAddress(u)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "%q is not a valid lite account: %v\n", name, err)
-			} else if key == nil {
-				fmt.Fprintf(os.Stderr, "%q is not a lite account\n", name)
-			}
-
-			privKey := ed25519.PrivateKey(v)
-			pubKey := privKey.Public().(ed25519.PublicKey)
-			fmt.Printf("Converting %s : %x\n", name, pubKey)
-
-			err = label.Put(name, pubKey)
-			if err != nil {
-				return err
-			}
-
-			err = keys.Put(pubKey, privKey)
-			if err != nil {
-				return err
-			}
-
-			err = anon.Delete(name)
-			if err != nil {
-				return err
-			}
+	anon, err := Db.GetBucket(BucketAnon)
+	if err != nil {
+		//no anon accounts so nothing to do...
+		return
+	}
+	for _, v := range anon.KeyValueList {
+		u, err := url2.Parse(string(v.Key))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%q is not a valid URL\n", v.Key)
+		}
+		key, _, err := protocol.ParseAnonymousAddress(u)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "%q is not a valid lite account: %v\n", v.Key, err)
+		} else if key == nil {
+			fmt.Fprintf(os.Stderr, "%q is not a lite account\n", v.Key)
 		}
 
-		return nil
-	})
-	if err != nil {
-		log.Fatal(err)
+		privKey := ed25519.PrivateKey(v.Value)
+		pubKey := privKey.Public().(ed25519.PublicKey)
+		fmt.Printf("Converting %s : %x\n", v.Key, pubKey)
+
+		err = Db.Put(BucketLabel, v.Key, pubKey)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = Db.Put(BucketKeys, pubKey, privKey)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = Db.DeleteBucket(BucketAnon)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }

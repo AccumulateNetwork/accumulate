@@ -77,3 +77,29 @@ func (b *BoltDB) GetBucket(bucket []byte) (buck *Bucket, err error) {
 
 	return buck, err
 }
+
+// Delete will remove a key/value pair from the bucket
+func (b *BoltDB) Delete(bucket []byte, key []byte) error {
+	if b.db == nil {
+		return fmt.Errorf("database not open")
+	}
+
+	return b.db.Update(func(tx *bolt.Tx) error {
+		buck := tx.Bucket(bucket)
+		if buck != nil {
+			return nil
+		}
+		return buck.Delete(key)
+	})
+}
+
+// DeleteBucket will delete all key/value pairs from a bucket
+func (b *BoltDB) DeleteBucket(bucket []byte) error {
+	if b.db == nil {
+		return fmt.Errorf("database not open")
+	}
+
+	return b.db.Update(func(tx *bolt.Tx) error {
+		return tx.DeleteBucket(bucket)
+	})
+}
