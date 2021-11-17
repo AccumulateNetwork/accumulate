@@ -35,6 +35,9 @@ func (b *BoltDB) Get(bucket []byte, key []byte) (value []byte, err error) {
 			return fmt.Errorf("bucket not defined")
 		}
 		value = b.Get(key)
+		if value == nil {
+			return fmt.Errorf("key not found")
+		}
 		return err
 	})
 

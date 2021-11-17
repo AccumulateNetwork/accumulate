@@ -223,7 +223,7 @@ func GenerateKey(label string) {
 		}
 		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
 	} else {
-		fmt.Fprintf(os.Stderr, "%s : %x", label, pubKey)
+		fmt.Fprintf(os.Stderr, "%s :\t%x", label, pubKey)
 	}
 }
 
