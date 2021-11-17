@@ -17,7 +17,7 @@ type TokenAccountCreate struct {
 func (tac *TokenAccountCreate) MarshalBinary() ([]byte, error) {
 	var buf bytes.Buffer
 
-	buf.Write(common.Uint64Bytes(types.TxTypeSyntheticTokenAccountCreate.AsUint64()))
+	buf.Write(common.Uint64Bytes(types.TxSyntheticTokenAccountCreate.AsUint64()))
 
 	data, err := tac.Header.MarshalBinary()
 	if err != nil {
@@ -36,8 +36,8 @@ func (tac *TokenAccountCreate) MarshalBinary() ([]byte, error) {
 
 func (tac *TokenAccountCreate) UnmarshalBinary(data []byte) error {
 	txType, data := common.BytesUint64(data)
-	if txType != types.TxTypeSyntheticTokenAccountCreate.AsUint64() {
-		return fmt.Errorf("expected %v, got %v", types.TxTypeSyntheticTokenAccountCreate, txType)
+	if txType != types.TxSyntheticTokenAccountCreate.AsUint64() {
+		return fmt.Errorf("expected %v, got %v", types.TxSyntheticTokenAccountCreate, txType)
 	}
 
 	err := tac.Header.UnmarshalBinary(data)

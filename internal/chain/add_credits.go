@@ -16,11 +16,11 @@ type AddCredits struct{}
 
 func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
-func checkAddCredits(st *StateManager, tx *transactions.GenTransaction) (body *protocol.AddCredits, account tokenChain, amount *types.Amount, recipient *url.URL, err error) {
-	body = new(protocol.AddCredits)
-	err = tx.As(body)
+func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+	body := new(protocol.AddCredits)
+	err := tx.As(body)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("invalid payload: %v", err)
+		return fmt.Errorf("invalid payload: %v", err)
 	}
 
 	// This fixes the conversion between ACME tokens and fiat currency to
@@ -30,14 +30,14 @@ func checkAddCredits(st *StateManager, tx *transactions.GenTransaction) (body *p
 	const DollarsPerAcmeToken = 1
 
 	// tokens = credits / (credits per dollar) / (dollars per token)
-	amount = types.NewAmount(protocol.AcmePrecision) // Do everything with ACME precision
-	amount.Mul(int64(body.Amount))                   // Amount in credits
-	amount.Div(protocol.CreditsPerDollar)            // Amount in dollars
-	amount.Div(DollarsPerAcmeToken)                  // Amount in tokens
+	amount := types.NewAmount(protocol.AcmePrecision) // Do everything with ACME precision
+	amount.Mul(int64(body.Amount))                    // Amount in credits
+	amount.Div(protocol.CreditsPerDollar)             // Amount in dollars
+	amount.Div(DollarsPerAcmeToken)                   // Amount in tokens
 
 	recvUrl, err := url.Parse(body.Recipient)
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("invalid recipient")
+		return fmt.Errorf("invalid recipient")
 	}
 
 	recv, err := st.LoadUrl(recvUrl)
@@ -49,54 +49,41 @@ func checkAddCredits(st *StateManager, tx *transactions.GenTransaction) (body *p
 		case *protocol.AnonTokenAccount, *protocol.SigSpec:
 			// OK
 		default:
-			return nil, nil, nil, nil, fmt.Errorf("invalid recipient: wrong chain type: want %v or %v, got %v", types.ChainTypeAnonTokenAccount, types.ChainTypeSigSpec, recv.Header().Type)
+			return fmt.Errorf("invalid recipient: wrong chain type: want %v or %v, got %v", types.ChainTypeAnonTokenAccount, types.ChainTypeSigSpec, recv.Header().Type)
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if recvUrl.Routing() == tx.Routing {
 			// If the recipient and the sponsor have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to
 			// locate the recipient chain means it doesn't exist.
-			return nil, nil, nil, nil, fmt.Errorf("invalid recipient: not found")
+			return fmt.Errorf("invalid recipient: not found")
 		}
 	} else {
-		return nil, nil, nil, nil, fmt.Errorf("failed to load recipient: %v", err)
+		return fmt.Errorf("failed to load recipient: %v", err)
 	}
 
+	var account tokenChain
 	switch sponsor := st.Sponsor.(type) {
 	case *protocol.AnonTokenAccount:
 		account = sponsor
 	case *state.TokenAccount:
 		account = sponsor
 	default:
-		return nil, nil, nil, nil, fmt.Errorf("not an account: %q", tx.SigInfo.URL)
+		return fmt.Errorf("not an account: %q", tx.SigInfo.URL)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("invalid token account: %v", err)
+		return fmt.Errorf("invalid token account: %v", err)
 	}
 
 	// Only ACME tokens can be converted into credits
 	if !protocol.AcmeUrl().Equal(tokenUrl) {
-		return nil, nil, nil, nil, fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
+		return fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
 	}
 
 	if !account.CanDebitTokens(&amount.Int) {
-		return nil, nil, nil, nil, fmt.Errorf("insufficient balance")
-	}
-
-	return body, account, amount, recvUrl, nil
-}
-
-func (AddCredits) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
-	_, _, _, _, err := checkAddCredits(st, tx)
-	return err
-}
-
-func (AddCredits) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
-	body, account, amount, recipient, err := checkAddCredits(st, tx)
-	if err != nil {
-		return err
+		return fmt.Errorf("insufficient balance")
 	}
 
 	if !account.DebitTokens(&amount.Int) {
@@ -108,7 +95,7 @@ func (AddCredits) DeliverTx(st *StateManager, tx *transactions.GenTransaction) e
 	sdc := new(protocol.SyntheticDepositCredits)
 	sdc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
 	sdc.Amount = body.Amount
-	st.Submit(recipient, sdc)
+	st.Submit(recvUrl, sdc)
 
 	return nil
 }

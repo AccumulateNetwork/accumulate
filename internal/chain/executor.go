@@ -334,7 +334,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	st, err := NewStateManager(m.db, tx)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
-		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticTokenDeposit:
+		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens:
 			// TX does not require a sponsor - it may create the sponsor
 		default:
 			return nil, fmt.Errorf("sponsor not found: %v", err)
@@ -458,6 +458,8 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) types2.ResponseCheck
 		return types2.ResponseCheckTx{Code: encoding2.CodeCheckTxError, Info: fmt.Sprintf(encoding2.ErrCheckTx, err.Error())}
 	}
 	return types2.ResponseCheckTx{Code: encoding2.CodeOk, GasWanted: 1, Data: tx.ChainID, Log: "CheckTx"}
+
+	return executor.Validate(st, tx)
 }
 
 func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, err error) error {
@@ -528,7 +530,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (response types2.R
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
-	err = executor.DeliverTx(st, tx)
+	err = executor.Validate(st, tx)
 	if err != nil {
 		return types2.ResponseDeliverTx{Code: encoding2.CodeDeliverTxError, GasWanted: 0,
 			Info: fmt.Sprintf(encoding2.ErrDeliverTx, err.Error())}
