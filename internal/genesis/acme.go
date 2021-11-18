@@ -9,7 +9,7 @@ import (
 var ACME = new(state.Token)
 
 func createAcmeToken() state.Chain {
-	ACME.Type = types.ChainTypeToken
+	ACME.Type = types.ChainTypeTokenIssuer
 
 	ACME.ChainUrl = types.String(protocol.AcmeUrl().String())
 	ACME.Precision = 8
