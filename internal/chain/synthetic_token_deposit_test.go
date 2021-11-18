@@ -35,7 +35,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	tas := new(protocol.AnonTokenAccount)
 	require.NoError(t, st.LoadAs(st.SponsorChainId, tas))
 	require.Equal(t, types.String(gtx.SigInfo.URL), tas.ChainUrl, "invalid chain header")
-	require.Equalf(t, types.ChainTypeAnonTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.ChainHeader.Type.Name())
+	require.Equalf(t, types.ChainTypeLiteTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.ChainHeader.Type.Name())
 	require.Equal(t, tokenUrl, tas.TokenUrl, "token url of state doesn't match expected")
 	require.Equal(t, uint64(1), tas.TxCount)
 

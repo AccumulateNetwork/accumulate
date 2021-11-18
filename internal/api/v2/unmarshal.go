@@ -27,17 +27,17 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	}
 
 	switch header.Type {
-	case types.ChainTypeAdi:
+	case types.ChainTypeIdentity:
 		chain = new(state.AdiState)
-	case types.ChainTypeToken:
+	case types.ChainTypeTokenIssuer:
 		chain = new(state.Token)
 	case types.ChainTypeTokenAccount:
 		chain = new(state.TokenAccount)
-	case types.ChainTypeAnonTokenAccount:
+	case types.ChainTypeLiteTokenAccount:
 		chain = new(protocol.AnonTokenAccount)
-	case types.ChainTypeSigSpec:
+	case types.ChainTypeKeyPage:
 		chain = new(protocol.SigSpec)
-	case types.ChainTypeSigSpecGroup:
+	case types.ChainTypeKeyBook:
 		chain = new(protocol.SigSpecGroup)
 	case types.ChainTypeTransaction:
 		chain = new(state.Transaction)

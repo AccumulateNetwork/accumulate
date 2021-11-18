@@ -28,7 +28,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.GenTr
 		account = sponsor
 
 	default:
-		return fmt.Errorf("cannot deposit tokens into a %v", st.Sponsor.Header().Type)
+		return fmt.Errorf("invalid sponsor: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeKeyPage, st.Sponsor.Header().Type)
 	}
 
 	account.CreditCredits(body.Amount)

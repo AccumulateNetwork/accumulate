@@ -35,6 +35,7 @@ TxSynthRef:
 
 AnonTokenAccount:
   kind: chain
+  chain-type: LiteTokenAccount
   fields:
     - name: TokenUrl
       type: string
@@ -96,6 +97,7 @@ KeySpecParams:
 
 SigSpec:
   kind: chain
+  chain-type: KeyPage
   fields:
     - name: CreditBalance
       type: bigint
@@ -122,6 +124,7 @@ CreateSigSpec:
 
 SigSpecGroup:
   kind: chain
+  chain-type: KeyBook
   fields:
     - name: SigSpecs
       type: chainSet
