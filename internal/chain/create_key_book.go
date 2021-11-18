@@ -16,7 +16,7 @@ func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
 func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	if _, ok := st.Sponsor.(*state.AdiState); !ok {
-		return fmt.Errorf("invalid sponsor: want %v, got %v", types.ChainTypeAdi, st.Sponsor.Header().Type)
+		return fmt.Errorf("invalid sponsor: want chain type %v, got %v", types.ChainTypeIdentity, st.Sponsor.Header().Type)
 	}
 
 	body := new(protocol.CreateSigSpecGroup)

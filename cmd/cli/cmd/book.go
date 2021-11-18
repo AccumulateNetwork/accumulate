@@ -189,7 +189,7 @@ func GetKeyPageInBook(book string, keyLabel string) (*protocol.SigSpec, int, err
 		if err != nil {
 			log.Fatal(err)
 		}
-		if *s.Type.AsString() != types.ChainTypeSigSpec.Name() {
+		if *s.Type.AsString() != types.ChainTypeKeyPage.Name() {
 			log.Fatal(fmt.Errorf("expecting key page, received %s", s.Type))
 		}
 		ss := protocol.SigSpec{}
