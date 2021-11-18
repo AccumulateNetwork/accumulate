@@ -232,6 +232,16 @@ func ListADIs() {
 	}
 
 	for _, v := range b.KeyValueList {
-		fmt.Printf("%s : %s \n", v.Key, string(v.Value))
+		u, err := url2.Parse(string(v.Key))
+		if err != nil {
+			fmt.Printf("%s\t:\t%x \n", v.Key, v.Value)
+		} else {
+			lab, err := FindLabelFromPubKey(v.Value)
+			if err != nil {
+				fmt.Printf("%v\t:\t%x \n", u, v.Value)
+			} else {
+				fmt.Printf("%v\t:\t%s \n", u, lab)
+			}
+		}
 	}
 }

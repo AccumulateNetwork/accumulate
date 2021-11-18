@@ -90,11 +90,11 @@ var keyCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label      string `json:"name"`
-	PrivateKey []byte `json:"privateKey"`
-	PublicKey  []byte `json:"publicKey"`
-	Seed       []byte `json:"seed"`
-	Mnemonic   []byte `json:"mnemonic"`
+	Label      types.String `json:"name"`
+	PrivateKey types.Bytes  `json:"privateKey"`
+	PublicKey  types.Bytes  `json:"publicKey"`
+	Seed       types.Bytes  `json:"seed"`
+	Mnemonic   types.Bytes  `json:"mnemonic"`
 }
 
 func init() {
@@ -215,9 +215,9 @@ func GenerateKey(label string) {
 
 	if WantJsonOutput {
 		a := KeyResponse{}
-		a.Label = label
+		a.Label = types.String(label)
 		a.PublicKey = pubKey
-		dump, err := json.Marshal(a)
+		dump, err := json.Marshal(&a)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -314,9 +314,9 @@ func ImportKey(pkhex string, label string) {
 
 	if WantJsonOutput {
 		a := KeyResponse{}
-		a.Label = label
-		a.PublicKey = pk[32:]
-		dump, err := json.Marshal(a)
+		a.Label = types.String(label)
+		a.PublicKey = types.Bytes(pk[32:])
+		dump, err := json.Marshal(&a)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -345,16 +345,16 @@ func ExportKey(label string) {
 
 	if WantJsonOutput {
 		a := KeyResponse{}
-		a.Label = label
+		a.Label = types.String(label)
 		a.PrivateKey = pk[:32]
 		a.PublicKey = pk[32:]
-		dump, err := json.Marshal(a)
+		dump, err := json.Marshal(&a)
 		if err != nil {
 			log.Fatal(err)
 		}
 		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
 	} else {
-		fmt.Fprintf(os.Stderr, "\tname\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\n", label, pk[:32], pk[32:])
+		fmt.Fprintf(os.Stderr, "name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\n", label, pk[:32], pk[32:])
 	}
 }
 
@@ -458,7 +458,7 @@ func ExportSeed() {
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Seed = seed
-		dump, err := json.Marshal(a)
+		dump, err := json.Marshal(&a)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -476,7 +476,7 @@ func ExportMnemonic() {
 	if WantJsonOutput {
 		a := KeyResponse{}
 		a.Mnemonic = phrase
-		dump, err := json.Marshal(a)
+		dump, err := json.Marshal(&a)
 		if err != nil {
 			log.Fatal(err)
 		}
