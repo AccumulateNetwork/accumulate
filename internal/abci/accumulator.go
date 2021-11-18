@@ -6,7 +6,6 @@ import (
 	_ "crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -14,12 +13,10 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	_ "github.com/AccumulateNetwork/accumulate/smt/pmt"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/getsentry/sentry-go"
-	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
@@ -106,28 +103,31 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	k, v, err := app.chain.Query(qu)
-	switch {
-	case err == nil:
-		// OK
-
-	case errors.Is(err, storage.ErrNotFound):
-		resQuery.Info = err.Error()
-		resQuery.Code = protocol.CodeNotFound
-		return resQuery
-
-	default:
-		sentry.CaptureException(err)
-		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
-		resQuery.Info = err.Error()
-		resQuery.Code = code.CodeTypeUnauthorized
-		return resQuery
+	queryRes := app.chain.Query(qu)
+	if !queryRes.IsOK() {
+		return queryRes
 	}
+	//switch {
+	//case err == nil:
+	//	// OK
+	//
+	//case errors.Is(err, storage.ErrNotFound):
+	//	resQuery.Info = err.Error()
+	//	resQuery.Code = protocol.CodeNotFound
+	//	return resQuery
+	//
+	//default:
+	//	sentry.CaptureException(err)
+	//	app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
+	//	resQuery.Info = err.Error()
+	//	resQuery.Code = code.CodeTypeUnauthorized
+	//	return resQuery
+	//}
 
 	//if we get here, we have a valid state object, so let's return it.
 	resQuery.Code = protocol.CodeOK
 	//return a generic state object for the chain and let the query deal with decoding it
-	resQuery.Key, resQuery.Value = k, v
+	resQuery.Key, resQuery.Value = queryRes.Key, queryRes.Value
 
 	///implement lazy sync calls. If a node falls behind it needs to have several query calls
 	///1 get current height
@@ -165,24 +165,24 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		Height:   -1,
 	})
 
-	err = app.chain.CheckTx(tx)
-	if err != nil {
-		panic(fmt.Errorf("failed to validate genesis TX: %v", err))
+	checkRes := app.chain.CheckTx(tx)
+	if !checkRes.IsOK() {
+		panic(fmt.Errorf("failed to validate genesis TX: %v", checkRes.Info))
 	}
 
-	_, err = app.chain.DeliverTx(tx)
-	if err != nil {
-		panic(fmt.Errorf("failed to execute genesis TX: %v", err))
+	deliverRes := app.chain.DeliverTx(tx)
+	if !deliverRes.IsOK() {
+		panic(fmt.Errorf("failed to execute genesis TX: %v", deliverRes.Info))
 	}
 
 	app.chain.EndBlock(EndBlockRequest{})
 
-	mdRoot, err := app.chain.Commit()
-	if err != nil {
+	commitRes := app.chain.Commit()
+	if commitRes.Data == nil {
 		panic(fmt.Errorf("failed to commit genesis TX: %v", err))
 	}
 
-	return abci.ResponseInitChain{AppHash: mdRoot}
+	return abci.ResponseInitChain{AppHash: commitRes.Data}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
@@ -249,9 +249,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	//create a default response
 	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
 
-	err = app.chain.CheckTx(sub)
+	checkRes := app.chain.CheckTx(sub)
 
-	if err != nil {
+	if !checkRes.IsOK() {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
@@ -292,9 +292,9 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	//run through the validation node
-	r, err := app.chain.DeliverTx(sub)
+	deliverRes := app.chain.DeliverTx(sub)
 
-	if err != nil {
+	if !deliverRes.IsOK() {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
@@ -308,6 +308,12 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		return ret
 	}
 
+	r := new(protocol.TxResult)
+	err = json.Unmarshal(deliverRes.Data, r)
+	if err != nil {
+		return abci.ResponseDeliverTx{Code: protocol.CodeEncodingError, GasWanted: 0,
+			Log: "Unable to decode transaction result"}
+	}
 	for _, syn := range r.SyntheticTxs {
 		ret.Events = append(ret.Events, abci.Event{
 			Type: "accSyn",
@@ -357,14 +363,13 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 	//end the current batch of transactions in the Stateful Merkle Tree
 
-	mdRoot, err := app.chain.Commit()
-	resp.Data = mdRoot
-
-	if err != nil {
-		sentry.CaptureException(err)
-		app.logger.Error(err.Error(), "operation", "commit")
+	commitRes := app.chain.Commit()
+	if commitRes.Data != nil {
+		//sentry.CaptureException(err)
+		app.logger.Error("commit error", "operation", "commit")
 		return
 	}
+	resp.Data = commitRes.Data
 
 	//this will truncate what tendermint stores since we only care about current state
 	//todo: uncomment the next line when we have smt state syncing complete. For now, we are retaining everything for test net
