@@ -14,6 +14,10 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
+type AcmeFaucet struct {
+	Url string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
+}
+
 type AddCredits struct {
 	Recipient string `json:"recipient" form:"recipient" query:"recipient" validate:"required"`
 	Amount    uint64 `json:"amount" form:"amount" query:"amount" validate:"required"`
@@ -193,6 +197,8 @@ func NewSigSpecGroup() *SigSpecGroup {
 	return v
 }
 
+func (*AcmeFaucet) GetType() types.TransactionType { return types.TxTypeAcmeFaucet }
+
 func (*AddCredits) GetType() types.TransactionType { return types.TxTypeAddCredits }
 
 func (*BurnTokens) GetType() types.TransactionType { return types.TxTypeBurnTokens }
@@ -226,6 +232,16 @@ func (*UpdateKeyPage) GetType() types.TransactionType { return types.TxTypeUpdat
 func (*WriteData) GetType() types.TransactionType { return types.TxTypeWriteData }
 
 func (*WriteDataTo) GetType() types.TransactionType { return types.TxTypeWriteDataTo }
+
+func (v *AcmeFaucet) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeAcmeFaucet.ID())
+
+	n += encoding.StringBinarySize(v.Url)
+
+	return n
+}
 
 func (v *AddCredits) BinarySize() int {
 	var n int
@@ -587,6 +603,16 @@ func (v *WriteDataTo) BinarySize() int {
 	n += encoding.BytesBinarySize(v.Data)
 
 	return n
+}
+
+func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeAcmeFaucet.ID()))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
+
+	return buffer.Bytes(), nil
 }
 
 func (v *AddCredits) MarshalBinary() ([]byte, error) {
@@ -984,6 +1010,25 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.Data))
 
 	return buffer.Bytes(), nil
+}
+
+func (v *AcmeFaucet) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeAcmeFaucet
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[encoding.StringBinarySize(v.Url):]
+
+	return nil
 }
 
 func (v *AddCredits) UnmarshalBinary(data []byte) error {
