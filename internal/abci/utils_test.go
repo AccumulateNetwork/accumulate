@@ -155,6 +155,9 @@ func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
 	})
 
 	n.client.Wait()
+
+	// Wait again because ??? (it makes things work)
+	n.client.Wait()
 }
 
 func generateKey() tmed25519.PrivKey {
