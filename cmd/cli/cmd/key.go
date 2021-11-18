@@ -292,9 +292,9 @@ func ImportKey(pkhex string, label string) {
 	if err == nil {
 		b, _ := Db.GetBucket(BucketLabel)
 		if b != nil {
-			for k, v := range b.KeyValueList {
+			for _, v := range b.KeyValueList {
 				if bytes.Equal(v.Value, pk[32:]) {
-					lab = string(k)
+					lab = string(v.Key)
 					break
 				}
 			}
