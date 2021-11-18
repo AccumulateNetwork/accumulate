@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"bytes"
 	"crypto/ed25519"
 	"encoding/binary"
@@ -9,12 +8,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
@@ -91,11 +90,11 @@ var keyCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label		string	`json:"name"`
-	PrivateKey	[]byte	`json:"privateKey"`
-	PublicKey	[]byte	`json:"publicKey"`
-	Seed		[]byte	`json:"seed"`
-	Mnemonic	[]byte	`json:"mnemonic"`
+	Label      types.String `json:"name"`
+	PrivateKey types.Bytes  `json:"privateKey"`
+	PublicKey  types.Bytes  `json:"publicKey"`
+	Seed       types.Bytes  `json:"seed"`
+	Mnemonic   types.Bytes  `json:"mnemonic"`
 }
 
 func init() {
@@ -166,50 +165,19 @@ func getPublicKey(s string) ([]byte, error) {
 	return pubKey[:], nil
 }
 
-//func LookupByAnon(anon string) (privKey []byte, err error) {
-//	err = Db.View(func(tx *bolt.Tx) error {
-//		b := tx.Bucket([]byte("anon"))
-//		privKey = b.Get([]byte(anon))
-//		if len(privKey) == 0 {
-//			err = fmt.Errorf("valid key not found for %s", anon)
-//		}
-//		return err
-//	})
-//	if err != nil {
-//		return nil, err
-//	}
-//	return
-//}
-
-func LookupByLabel(label string) (asData []byte, err error) {
-	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("label"))
-		asData = b.Get([]byte(label))
-		if asData == nil {
-			err = fmt.Errorf("valid key not found for %s", label)
-		}
-		return err
-	})
+func LookupByLabel(label string) ([]byte, error) {
+	pubKey, err := Db.Get(BucketLabel, []byte(label))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("valid key not found for %s", label)
 	}
-	return LookupByPubKey(asData)
+	return LookupByPubKey(pubKey)
 }
 
-func LookupByPubKey(pubKey []byte) (asData []byte, err error) {
-	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("keys"))
-		asData = b.Get(pubKey)
-		if asData == nil {
-			err = fmt.Errorf("valid key not found for %x", pubKey)
-		}
-		return err
-	})
-	return asData, err
+func LookupByPubKey(pubKey []byte) ([]byte, error) {
+	return Db.Get(BucketKeys, pubKey)
 }
 
 func GenerateKey(label string) {
-
 	if _, err := strconv.ParseInt(label, 10, 64); err == nil {
 		log.Fatal("key name cannot be a number")
 	}
@@ -235,66 +203,55 @@ func GenerateKey(label string) {
 		log.Fatal(fmt.Errorf("key already exists for key name %s", label))
 	}
 
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("keys"))
-		err := b.Put(pubKey, privKey)
-		return err
-	})
+	err = Db.Put(BucketKeys, pubKey, privKey)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("label"))
-		err := b.Put([]byte(label), pubKey)
-		return err
-	})
-
+	err = Db.Put(BucketLabel, []byte(label), pubKey)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if WantJsonOutput {
 		a := KeyResponse{}
-		a.Label = label
+		a.Label = types.String(label)
 		a.PublicKey = pubKey
-		dump, err := json.Marshal(a)
+		dump, err := json.Marshal(&a)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Fprintf(os.Stderr, "%s\n",string(dump))
+		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
 	} else {
-	   fmt.Fprintf(os.Stderr, "%s : %x", label, pubKey)
+		fmt.Fprintf(os.Stderr, "%s :\t%x", label, pubKey)
 	}
 }
 
 func ListKeyPublic() {
-
 	fmt.Fprintf(os.Stderr, "%s\t\t\t\t\t\t\t\tKey name\n", "Public Key")
-	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("label"))
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			fmt.Fprintf(os.Stderr, "%x\t%s\n", v, k)
-		}
-		return nil
-	})
-
+	b, err := Db.GetBucket(BucketLabel)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	for _, v := range b.KeyValueList {
+		fmt.Fprintf(os.Stderr, "%x\t%s\n", v.Value, v.Key)
 	}
 }
 
 func FindLabelFromPubKey(pubKey []byte) (lab string, err error) {
+	b, err := Db.GetBucket(BucketLabel)
+	if err != nil {
+		return lab, err
+	}
 
-	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("label"))
-		c := b.Cursor()
-		for k, v := c.First(); k != nil; k, v = c.Next() {
-			if bytes.Equal(v, pubKey) {
-				lab = string(k)
-				break
-			}
+	for _, v := range b.KeyValueList {
+		if bytes.Equal(v.Value, pubKey) {
+			lab = string(v.Key)
+			break
 		}
-		return nil
-	})
+	}
+
 	if lab == "" {
 		err = fmt.Errorf("key name not found for %x", pubKey)
 	}
@@ -333,47 +290,39 @@ func ImportKey(pkhex string, label string) {
 	_, err = LookupByPubKey(pk[32:])
 	lab := "not found"
 	if err == nil {
-
-		err = Db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte("label"))
-			c := b.Cursor()
-			for k, v := c.First(); k != nil; k, v = c.Next() {
-				if bytes.Equal(v, pk[32:]) {
-					lab = string(k)
+		b, _ := Db.GetBucket(BucketLabel)
+		if b != nil {
+			for _, v := range b.KeyValueList {
+				if bytes.Equal(v.Value, pk[32:]) {
+					lab = string(v.Key)
 					break
 				}
 			}
-			return nil
-		})
-		log.Fatalf("private key already exists in wallet by key name of %s", lab)
+			log.Fatalf("private key already exists in wallet by key name of %s", lab)
+		}
 	}
 
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("keys"))
-		err := b.Put([]byte(pk[32:]), pk)
-		return err
-	})
+	err = Db.Put(BucketKeys, pk[32:], pk)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("label"))
-		err := b.Put([]byte(label), pk[32:])
-		return err
-	})
+	err = Db.Put(BucketLabel, []byte(label), pk[32:])
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	if WantJsonOutput {
 		a := KeyResponse{}
-		a.Label = label
-		a.PublicKey = pk[32:]
-		dump, err := json.Marshal(a)
+		a.Label = types.String(label)
+		a.PublicKey = types.Bytes(pk[32:])
+		dump, err := json.Marshal(&a)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Fprintf(os.Stderr, "%s\n",string(dump))
+		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
 	} else {
-	   fmt.Fprintf(os.Stderr, "{\"name\":\"%s\",\"publicKey\":\"%x\"}\n", label, pk[32:])
+		fmt.Fprintf(os.Stderr, "\tname\t\t:%s\n\tpublic key\t:%x\n", label, pk[32:])
 	}
 }
 
@@ -393,19 +342,19 @@ func ExportKey(label string) {
 			log.Fatalf("no private key found for key name %s", label)
 		}
 	}
-	//fmt.Println(hex.EncodeToString(pk))
+
 	if WantJsonOutput {
 		a := KeyResponse{}
-		a.Label = label
+		a.Label = types.String(label)
 		a.PrivateKey = pk[:32]
 		a.PublicKey = pk[32:]
-		dump, err := json.Marshal(a)
+		dump, err := json.Marshal(&a)
 		if err != nil {
 			log.Fatal(err)
 		}
 		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
 	} else {
-	   fmt.Fprintf(os.Stderr, "{\"name\":\"%s\",\"privateKey\":\"%x\",\"publicKey\":\"%x\"}\n", label, pk[:32], pk[32:])
+		fmt.Fprintf(os.Stderr, "name\t\t\t:\t%s\n\tprivate key\t:\t%x\n\tpublic key\t:\t%x\n", label, pk[:32], pk[32:])
 	}
 }
 
@@ -432,157 +381,107 @@ func GeneratePrivateKey() (privKey []byte, err error) {
 }
 
 func getKeyCountAndIncrement() (count uint32) {
-	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("mnemonic"))
-		if b != nil {
-			ct := b.Get([]byte("count"))
-			if ct != nil {
-				count = binary.LittleEndian.Uint32(ct)
-			}
-		}
-		return nil
-	})
 
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("mnemonic"))
-		if b != nil {
-			ct := make([]byte, 8)
-			binary.LittleEndian.PutUint32(ct, count+1)
-			return b.Put([]byte("count"), ct)
-			if err != nil {
-				log.Fatal(err)
-			}
-		} else {
-			return fmt.Errorf("DB: %s", err)
-		}
-		return nil
-	})
+	ct, err := Db.Get(BucketMnemonic, []byte("count"))
+	if ct != nil {
+		count = binary.LittleEndian.Uint32(ct)
+	}
+
+	ct = make([]byte, 8)
+	binary.LittleEndian.PutUint32(ct, count+1)
+	err = Db.Put(BucketMnemonic, []byte("count"), ct)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	return count
 }
 
 func lookupSeed() (seed []byte, err error) {
+	seed, err = Db.Get(BucketMnemonic, []byte("seed"))
+	if err != nil {
+		return nil, fmt.Errorf("mnemonic seed doesn't exist")
+	}
 
-	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("mnemonic"))
-		seed = b.Get([]byte("seed"))
-		if len(seed) == 0 {
-			err = fmt.Errorf("mnemonic seed doesn't exist")
-		}
-		return err
-	})
-
-	return
+	return seed, nil
 }
 
 func ImportMnemonic(mnemonic []string) {
 	mns := strings.Join(mnemonic, " ")
 
 	if !bip39.IsMnemonicValid(mns) {
-
 		log.Fatal("invalid mnemonic provided")
 	}
 
 	// Generate a Bip32 HD wallet for the mnemonic and a user supplied password
 	seed := bip39.NewSeed(mns, "")
 
-	var err error
+	root, err := Db.Get(BucketMnemonic, []byte("seed"))
+	if len(root) != 0 {
+		log.Fatal("mnemonic seed phrase already exists within wallet")
+	}
 
-	err = Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("mnemonic"))
-		seed := b.Get([]byte("seed"))
-		if len(seed) != 0 {
-			err = fmt.Errorf("mnemonic seed phrase already exists within wallet")
-		}
-		return err
-	})
+	err = Db.Put(BucketMnemonic, []byte("seed"), seed)
+	if err != nil {
+		log.Fatalf("DB: seed write error, %v", err)
+	}
+
+	err = Db.Put(BucketMnemonic, []byte("phrase"), []byte(mns))
+	if err != nil {
+		log.Fatalf("DB: phrase write error %s", err)
+	}
+
+	println("mnemonic import successful")
+}
+
+func ExportKeys() {
+	b, err := Db.GetBucket(BucketKeys)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	err = Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("mnemonic"))
-		if b != nil {
-			b.Put([]byte("seed"), seed)
-			b.Put([]byte("phrase"), []byte(mns))
+	for _, v := range b.KeyValueList {
+		label, err := FindLabelFromPubKey(v.Key)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: Cannot find label for public key %x\n", v.Key)
 		} else {
-			return fmt.Errorf("DB: %s", err)
+			ExportKey(label)
 		}
-		return nil
-	})
-
-	println("mnemonic import successful")
-
-}
-
-func ExportKeys() {
-	err := Db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("keys"))
-		c := b.Cursor()
-		for k, _ := c.First(); k != nil; k, _ = c.Next() {
-			label, err := FindLabelFromPubKey(k)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: Cannot find label for public key %x\n", k)
-			} else {
-				ExportKey(label)
-			}
-			//fmt.Printf("%x %x\n", k, v)
-		}
-		return nil
-	})
-	if err != nil {
-		log.Fatal(err)
 	}
 }
 
 func ExportSeed() {
-	err := Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("mnemonic"))
-		if b != nil {
-			seed := b.Get([]byte("seed"))
-			if WantJsonOutput {
-				a := KeyResponse{}
-				a.Seed = seed
-				dump, err := json.Marshal(a)
-				if err != nil {
-					log.Fatal(err)
-				}
-				fmt.Fprintf(os.Stderr, "%s\n", string(dump))
-			} else {
-				fmt.Fprintf(os.Stderr, " seed: %x\n", seed)
-		   	}
-		} else {
-			return fmt.Errorf("mnemonic seed not found")
-		}
-		return nil
-	})
+	seed, err := Db.Get(BucketMnemonic, []byte("seed"))
 	if err != nil {
-		log.Fatal(err)
+		log.Fatal("mnemonic seed not found")
+	}
+	if WantJsonOutput {
+		a := KeyResponse{}
+		a.Seed = seed
+		dump, err := json.Marshal(&a)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
+	} else {
+		fmt.Fprintf(os.Stderr, " seed: %x\n", seed)
 	}
 }
 
 func ExportMnemonic() {
-	err := Db.Update(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte("mnemonic"))
-		if b != nil {
-			seed := b.Get([]byte("phrase"))
-			if WantJsonOutput {
-				a := KeyResponse{}
-				a.Mnemonic = seed
-				dump, err := json.Marshal(a)
-				if err != nil {
-					log.Fatal(err)
-				}
-				fmt.Fprintf(os.Stderr, "%s\n", string(dump))
-			} else {
-				fmt.Fprintf(os.Stderr, "mnemonic phrase: %s\n", string(seed))
-			}
-		} else {
-			return fmt.Errorf("mnemonic seed not found")
-		}
-		return nil
-	})
+	phrase, err := Db.Get(BucketMnemonic, []byte("phrase"))
 	if err != nil {
 		log.Fatal(err)
+	}
+	if WantJsonOutput {
+		a := KeyResponse{}
+		a.Mnemonic = phrase
+		dump, err := json.Marshal(&a)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
+	} else {
+		fmt.Fprintf(os.Stderr, "mnemonic phrase: %s\n", string(phrase))
 	}
 }
