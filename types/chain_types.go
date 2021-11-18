@@ -17,6 +17,9 @@ const (
 )
 
 const (
+	// ChainTypeAnchor is one or more Merkle DAG anchors.
+	ChainTypeAnchor ChainType = 1
+
 	// ChainTypeIdentity is an Identity chain, aka an ADI.
 	ChainTypeIdentity ChainType = 2
 
@@ -44,9 +47,11 @@ const (
 	// ChainTypeKeyBook is a key book chain.
 	ChainTypeKeyBook ChainType = 10
 
-	// TODO Directory node anchor chain?
+	// ChainTypeDataAccount is an ADI Data Account chain.
+	ChainTypeDataAccount ChainType = 11
 
-	// TODO Block validator node anchor chain?
+	// ChainTypeLiteDataAccount is a Lite Data Account chain.
+	ChainTypeLiteDataAccount ChainType = 12
 )
 
 // ID returns the chain type ID
