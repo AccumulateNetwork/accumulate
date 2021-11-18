@@ -1,6 +1,6 @@
 # Accumulate Data Records
 
-- **Lite Account**
+- **Lite Token Account**
   - A token account, independent of any other record
   - Identified solely by a public key (hash) and token issuer URL
   - A lite account may only hold one type of token, which must match the account
@@ -22,3 +22,8 @@
 - **Key page**, previously (Multi) Signature Specification
   - A set of key specifications
   - Belongs to an ADI
+- **Lite Data Account**
+  - A data account, independent of any other record
+  - Identified solely by a hash
+- **ADI Data Account**
+  - A data account associated with an ADI

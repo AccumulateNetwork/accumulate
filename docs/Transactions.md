@@ -1,9 +1,9 @@
 # Accumulate Transactions
 
-- **Identity Create**
+- **Create Identity**
   - Create an ADI
-  - Sponsored by an ADI or Lite Account
-- **Token Account Create**
+  - Sponsored by an ADI or Lite Token Account
+- **Create Token Account**
   - Create an ADI Token Account
   - Sponsored by an ADI
 - **Token Exchange**
@@ -22,20 +22,42 @@
 - **Add Credits**
   - Spend ACME tokens to add credits to a signator
   - Sponsored by a token account (ADI or Lite) holding ACME tokens
-  - Recipient must be a signator (Lite Account or Signature Specification)
+  - Recipient must be a signator (Lite Token Account or Signature Specification)
 - **Update Key Page**
   - Add, remove, or update a key in a key page
   - Sponsored by a key page
+- **Create Data Account**
+  - Create an ADI Data Account
+  - Sponsored by an ADI
+- **Write Data**
+  - Write data to an ADI Data Account
+  - Sponsored by an ADI Data Account
+- **Write Data To**
+  - Write data to an Lite Data Account
+  - Sponsored by an ADI or Lite Token Account
+- **Issue Tokens**
+  - Issue tokens to a token account (ADI or Lite)
+  - Sponsored by a Token Issuer
+- **Burn Tokens**
+  - Burn tokens from a token account (ADI or Lite)
+  - Sponsored by a token account (ADI or Lite)
 
 ## Synthetic
 
 - **Synthetic Create Chain**
   - Creates chains
   - Sponsor is ignored
-- **Synthetic Token Deposit**
+- **Synthetic Write Data**
+  - Writes data to a Lite Data Account
+  - Sponsored by the Lite Data Account
+  - Creates a Lite Data Account if the sponsor is a Lite Data Address with no corresponding account
+- **Synthetic Deposit Tokens**
   - Deposits tokens into an account
   - Sponsored by a token account (ADI or Lite)
-  - Creates a Lite Account if the sponsor is a Lite Address with no corresponding account
+  - Creates a Lite Token Account if the sponsor is a Lite Token Address with no corresponding account
 - **Synthetic Deposit Credits**
   - Deposits credits into a signator
-  - Sponsored by a signator (Lite Account or Signature Specification)
+  - Sponsored by a signator (Lite Token Account or Signature Specification)
+- **Synthetic Burn Tokens**
+  - Returns tokens to a Token Issuer's pool of available tokens
+  - SPonsored by a Token Issuer
