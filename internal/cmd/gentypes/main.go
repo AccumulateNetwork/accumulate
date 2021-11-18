@@ -19,6 +19,7 @@ type Record struct {
 	name      string
 	Kind      string
 	TxType    string `yaml:"tx-type"`
+	ChainType string `yaml:"chain-type"`
 	NonBinary bool   `yaml:"non-binary"`
 	Fields    []*Field
 }
@@ -322,6 +323,13 @@ func (typ *Record) txType() string {
 	return "types.TxType" + typ.name
 }
 
+func (typ *Record) chainType() string {
+	if typ.ChainType != "" {
+		return "types.ChainType" + typ.ChainType
+	}
+	return "types.ChainType" + typ.name
+}
+
 func run(_ *cobra.Command, args []string) {
 	w := new(bytes.Buffer)
 	fmt.Fprintf(w, "package %s\n\n", flags.Package)
@@ -372,9 +380,9 @@ func run(_ *cobra.Command, args []string) {
 		}
 		fmt.Fprintf(w, `func New%s() *%[1]s {
 			v := new(%[1]s)
-			v.Type = types.ChainType%[1]s
+			v.Type = %s
 			return v
-		}`+"\n\n", typ.name)
+		}`+"\n\n", typ.name, typ.chainType())
 	}
 
 	for _, typ := range types {
@@ -396,7 +404,7 @@ func run(_ *cobra.Command, args []string) {
 		case "tx":
 			fmt.Fprintf(w, "\nn += encoding.UvarintBinarySize(%s.ID())\n\n", typ.txType())
 		case "chain":
-			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n", typ.name)
+			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = %s\n", typ.chainType())
 			fmt.Fprintf(w, "\nn += v.ChainHeader.GetHeaderSize()\n\n")
 		}
 
@@ -419,7 +427,7 @@ func run(_ *cobra.Command, args []string) {
 		case "tx":
 			fmt.Fprintf(w, "\tbuffer.Write(encoding.UvarintMarshalBinary(%s.ID()))\n\n", typ.txType())
 		case "chain":
-			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = types.ChainType%s\n\n", typ.name)
+			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = %s\n\n", typ.chainType())
 			err := fieldError("encoding", "header")
 			fmt.Fprintf(w, "\tif b, err := v.ChainHeader.MarshalBinary(); err != nil { return nil, %s } else { buffer.Write(b) }\n", err)
 		}
@@ -447,7 +455,7 @@ func run(_ *cobra.Command, args []string) {
 
 		case "chain":
 			err := fieldError("decoding", "header")
-			fmt.Fprintf(w, "\ttyp := types.ChainType%s\n", typ.name)
+			fmt.Fprintf(w, "\ttyp := %s\n", typ.chainType())
 			fmt.Fprintf(w, "\tif err := v.ChainHeader.UnmarshalBinary(data); err != nil { return %s } else if v.Type != typ { return fmt.Errorf(\"invalid chain type: want %%v, got %%v\", typ, v.Type) }\n", err)
 			fmt.Fprintf(w, "\tdata = data[v.GetHeaderSize():]\n\n")
 		}

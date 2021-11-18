@@ -319,7 +319,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	default:
 		// The TX sponsor cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, fmt.Errorf("%v cannot sponsor transactions", sponsor.Header().Type)
+		return nil, fmt.Errorf("invalid sponsor: chain type %v cannot sponsor transactions", sponsor.Header().Type)
 	}
 
 	if tx.SigInfo.PriorityIdx >= uint64(len(sigGroup.SigSpecs)) {

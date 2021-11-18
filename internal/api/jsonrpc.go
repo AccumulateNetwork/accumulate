@@ -267,11 +267,11 @@ func (api *API) getDataByChainId(_ context.Context, params json.RawMessage) inte
 }
 
 func (api *API) getSigSpec(_ context.Context, params json.RawMessage) interface{} {
-	return api.get(params, types.ChainTypeSigSpec)
+	return api.get(params, types.ChainTypeKeyPage)
 }
 
 func (api *API) getSigSpecGroup(_ context.Context, params json.RawMessage) interface{} {
-	return api.get(params, types.ChainTypeSigSpecGroup)
+	return api.get(params, types.ChainTypeKeyBook)
 }
 
 // getADI returns ADI info
