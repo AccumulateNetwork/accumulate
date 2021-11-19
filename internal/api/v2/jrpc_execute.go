@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -53,6 +54,40 @@ func (m *JrpcMethods) ExecuteWith(newParams func() protocol.TransactionPayload, 
 
 		return m.execute(ctx, req, b)
 	}
+}
+
+func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interface{} {
+	req := new(protocol.AcmeFaucet)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	genesis.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
+	tx := new(transactions.GenTransaction)
+	tx.SigInfo = new(transactions.SignatureInfo)
+	tx.SigInfo.URL = genesis.FaucetUrl.String()
+	tx.SigInfo.Nonce = genesis.FaucetWallet.Nonce
+	tx.SigInfo.MSHeight = 1
+	tx.Transaction, err = req.MarshalBinary()
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	ed := new(transactions.ED25519Sig)
+	tx.Signature = append(tx.Signature, ed)
+	err = ed.Sign(genesis.FaucetWallet.Nonce, genesis.FaucetWallet.PrivateKey, tx.TransactionHash())
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	txrq := new(TxRequest)
+	txrq.Sponsor = tx.SigInfo.URL
+	txrq.Signer.Nonce = tx.SigInfo.Nonce
+	txrq.Signer.PublicKey = tx.Signature[0].PublicKey
+	txrq.KeyPage.Height = tx.SigInfo.MSHeight
+	txrq.Signature = tx.Signature[0].Signature
+	return m.execute(ctx, txrq, tx.Transaction)
 }
 
 // executeQueue manages queues for batching and dispatch of execute requests.

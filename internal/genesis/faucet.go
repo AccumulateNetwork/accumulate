@@ -14,6 +14,10 @@ import (
 var FaucetWallet transactions.WalletEntry
 var FaucetUrl *url.URL
 
+// TODO Set the balance to 0 and/or use a bogus URL for the faucet. Otherwise, a
+// bad actor could generate the faucet private key using the same method we do,
+// then sign arbitrary transactions using the faucet.
+
 func init() {
 	FaucetWallet.Nonce = 1
 
@@ -31,6 +35,7 @@ func createFaucet() state.Chain {
 
 	anon.ChainUrl = types.String(FaucetWallet.Addr)
 	anon.TokenUrl = protocol.AcmeUrl().String()
+
 	anon.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
 	return anon
 }

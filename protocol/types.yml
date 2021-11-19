@@ -268,3 +268,10 @@ SyntheticBurnTokens:
   fields:
   - name: Amount
     type: bigint
+
+AcmeFaucet:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+    is-url: true
