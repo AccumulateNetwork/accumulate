@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
@@ -37,6 +38,7 @@ type Executor struct {
 	leader  bool
 	height  int64
 	dbTx    *state.DBTransaction
+	time    time.Time
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -57,7 +59,14 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 		m.executors[x.Type()] = x
 	}
 
-	fmt.Printf("Loaded height=%d hash=%X\n", db.BlockIndex(), db.EnsureRootHash())
+	height, err := db.BlockIndex()
+	if errors.Is(err, storage.ErrNotFound) {
+		height = 0
+	} else if err != nil {
+		return nil, err
+	}
+
+	fmt.Printf("Loaded height=%d hash=%X\n", height, db.EnsureRootHash())
 	return m, nil
 }
 
@@ -266,6 +275,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 	m.leader = req.IsLeader
 	m.height = req.Height
+	m.time = req.Time
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
 	m.dbTx = m.db.Begin()
 }
@@ -537,13 +547,12 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
 func (m *Executor) Commit() ([]byte, error) {
 	m.wg.Wait()
 
-	mdRoot, numStateChanges, err := m.dbTx.Commit(m.height)
+	mdRoot, err := m.dbTx.Commit(m.height, m.time)
 	if err != nil {
 		// This should never happen
 		panic(fmt.Errorf("fatal error, block not set, %v", err))
 	}
 
-	_ = numStateChanges
 	// // If we have no transactions this block then don't publish anything
 	// if m.leader && numStateChanges > 0 {
 	// 	// Now we create a synthetic transaction and publish to the directory
