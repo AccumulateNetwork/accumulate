@@ -2,7 +2,6 @@ package abci_test
 
 import (
 	"crypto/ed25519"
-	"errors"
 	"testing"
 
 	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -90,7 +89,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
-		s.Chain().EXPECT().CheckTx(gomock.Any()).Return(errors.New("error"))
+		s.Chain().EXPECT().CheckTx(gomock.Any()).Return(&protocol.Error{Code: protocol.CodeUnknownError, Message: "error"})
 
 		resp := s.App(nil).CheckTx(tmabci.RequestCheckTx{Tx: data})
 		s.Require().NotZero(resp.Code)
@@ -135,7 +134,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
-		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(nil, errors.New("error"))
+		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(nil, &protocol.Error{Code: protocol.CodeUnknownError, Message: "error"})
 
 		resp := s.App(nil).DeliverTx(tmabci.RequestDeliverTx{Tx: data})
 		s.Require().NotZero(resp.Code)
