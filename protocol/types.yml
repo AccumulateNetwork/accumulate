@@ -207,3 +207,64 @@ DirectoryQueryResult:
     type: slice
     slice:
       type: string
+
+DataAccount:
+  kind: chain
+  fields:
+  - name: Data
+    type: bytes
+
+LiteDataAccount:
+  kind: chain
+  fields:
+  - name: Data
+    type: bytes
+
+CreateDataAccount:
+  kind: tx
+  fields:
+  - name: Url
+    type: string
+    is-url: true
+
+WriteData:
+  kind: tx
+  fields:
+  - name: Data
+    type: bytes
+
+WriteDataTo:
+  kind: tx
+  fields:
+  - name: Recipient
+    type: string
+    is-url: true
+  - name: Data
+    type: bytes
+
+IssueTokens:
+  kind: tx
+  fields:
+  - name: Recipient
+    type: string
+    is-url: true
+  - name: Amount
+    type: bigint
+
+BurnTokens:
+  kind: tx
+  fields:
+  - name: Amount
+    type: bigint
+
+SyntheticWriteData:
+  kind: tx
+  fields:
+  - name: Data
+    type: bytes
+
+SyntheticBurnTokens:
+  kind: tx
+  fields:
+  - name: Amount
+    type: bigint
