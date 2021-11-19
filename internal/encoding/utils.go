@@ -38,6 +38,24 @@ func BoolUnmarshalBinary(b []byte) (bool, error) {
 	}
 }
 
+func TimeBinarySize(v time.Time) int {
+	return VarintBinarySize(v.UTC().Unix())
+}
+
+func TimeMarshalBinary(v time.Time) []byte {
+	return VarintMarshalBinary(v.UTC().Unix())
+}
+
+func TimeUnmarshalBinary(b []byte) (time.Time, error) {
+	v, err := VarintUnmarshalBinary(b)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	// TODO Does this restore as UTC?
+	return time.Unix(v, 0), nil
+}
+
 func UvarintBinarySize(v uint64) int {
 	return len(UvarintMarshalBinary(v))
 }
@@ -48,6 +66,25 @@ func UvarintMarshalBinary(v uint64) []byte {
 
 func UvarintUnmarshalBinary(b []byte) (uint64, error) {
 	v, n := binary.Uvarint(b)
+	if n == 0 {
+		return 0, ErrNotEnoughData
+	}
+	if n < 0 {
+		return 0, ErrOverflow
+	}
+	return v, nil
+}
+
+func VarintBinarySize(v int64) int {
+	return len(VarintMarshalBinary(v))
+}
+
+func VarintMarshalBinary(v int64) []byte {
+	return common.Int64Bytes(v)
+}
+
+func VarintUnmarshalBinary(b []byte) (int64, error) {
+	v, n := binary.Varint(b)
 	if n == 0 {
 		return 0, ErrNotEnoughData
 	}

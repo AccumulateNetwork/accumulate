@@ -10,11 +10,15 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/types"
 	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -139,6 +143,57 @@ func TestFaucet(t *testing.T) {
 	n.client.Wait()
 
 	require.Equal(t, int64(10*protocol.AcmePrecision), n.GetAnonTokenAccount(aliceUrl).Balance.Int64())
+}
+
+func TestAnchorChain(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
+	anonAccount := generateKey()
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, anonAccount, 5e4))
+	n.WriteStates()
+
+	n.Batch(func(send func(*Tx)) {
+		adi := new(protocol.IdentityCreate)
+		adi.Url = "RoadRunner"
+		adi.KeyBookName = "book"
+		adi.KeyPageName = "page"
+
+		sponsorUrl := anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
+		tx, err := transactions.New(sponsorUrl, edSigner(anonAccount, 1), adi)
+		require.NoError(t, err)
+
+		send(tx)
+	})
+
+	// Sanity check
+	require.Equal(t, types.String("acc://RoadRunner"), n.GetADI("RoadRunner").ChainUrl)
+
+	// Construct a Merkle manager for the anchor chain
+	anchorMM, err := managed.NewMerkleManager(n.db.GetDB(), 0)
+	require.NoError(t, err)
+	require.NoError(t, anchorMM.SetChainID([]byte("MinorAnchorChain")))
+
+	// Extract and verify the anchor chain head
+	head := new(state.AnchorMetadata)
+	data, err := anchorMM.Get(anchorMM.MS.Count - 1)
+	require.NoError(t, err)
+	require.NoError(t, head.UnmarshalBinary(data))
+	require.ElementsMatch(t, [][32]byte{
+		types.Bytes((&url.URL{Authority: "RoadRunner"}).ResourceChain()).AsBytes32(),
+		types.Bytes((&url.URL{Authority: "RoadRunner/book"}).ResourceChain()).AsBytes32(),
+		types.Bytes((&url.URL{Authority: "RoadRunner/page"}).ResourceChain()).AsBytes32(),
+	}, head.Chains)
+
+	// Check each anchor
+	chainMM, err := managed.NewMerkleManager(n.db.GetDB(), 0)
+	require.NoError(t, err)
+	for i, chain := range head.Chains {
+		height := anchorMM.MS.Count - int64(len(head.Chains)) + int64(i)
+		root, err := anchorMM.Get(height - 1)
+		require.NoError(t, err)
+
+		require.NoError(t, chainMM.SetChainID(chain[:]))
+		assert.Equal(t, chainMM.MS.GetMDRoot(), root, "wrong anchor for %X", chain)
+	}
 }
 
 func TestCreateADI(t *testing.T) {

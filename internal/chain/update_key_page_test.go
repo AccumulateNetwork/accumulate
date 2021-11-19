@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"fmt"
 	"testing"
+	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/chain"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -39,7 +40,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	require.NoError(t, acctesting.CreateSigSpec(db, "foo/page1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateSigSpec(db, "foo/page2", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateSigSpecGroup(db, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
-	_, _, err := db.WriteStates(0)
+	_, err := db.WriteStates(0, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	for _, idx := range []uint64{0, 1, 2} {

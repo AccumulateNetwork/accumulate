@@ -77,6 +77,11 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
 
+	n.height, err = db.BlockIndex()
+	if !errors.Is(err, storage.ErrNotFound) {
+		require.NoError(t, err)
+	}
+
 	n.client = acctesting.NewABCIApplicationClient(appChan, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
@@ -121,7 +126,7 @@ func (n *fakeNode) NextHeight() int64 {
 }
 
 func (n *fakeNode) WriteStates() {
-	_, _, err := n.db.WriteStates(n.NextHeight())
+	_, err := n.db.WriteStates(n.NextHeight(), time.Unix(0, 0))
 	require.NoError(n.t, err)
 }
 

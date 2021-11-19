@@ -159,11 +159,12 @@ func (mr *MockStateMockRecorder) AddStateEntry(chainId, txHash, object interface
 }
 
 // BlockIndex mocks base method.
-func (m *MockState) BlockIndex() int64 {
+func (m *MockState) BlockIndex() (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "BlockIndex")
 	ret0, _ := ret[0].(int64)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // BlockIndex indicates an expected call of BlockIndex.

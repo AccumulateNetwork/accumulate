@@ -6,7 +6,6 @@ import (
 	"math"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 )
 
@@ -62,9 +61,6 @@ func (m *MerkleManager) AddHash(hash Hash) {
 // GetElementIndex
 // Get an Element of a Merkle Tree from the database
 func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
-	if len(hash) != 32 {
-		return 0, fmt.Errorf("invalid length %d for hash (should be 32)", len(hash))
-	}
 	data, e := m.Manager.Key(m.cid, "ElementIndex", hash).Get()
 	if e != nil {
 		return 0, err
@@ -206,11 +202,21 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	return ms // return it
 }
 
+// Get the nth leaf node
+func (m *MerkleManager) Get(element int64) (Hash, error) {
+	data, err := m.Manager.Key(m.cid, "Element", element).Get()
+	if err != nil {
+		return nil, err
+	}
+
+	return Hash(data).Copy(), nil
+}
+
 // GetNext
 // Get the next hash to be added to a state at this height
 func (m *MerkleManager) GetNext(element int64) (hash Hash) {
 	data, err := m.Manager.Key(m.cid, "NextElement", element).Get()
-	if err != nil || len(data) != storage.KeyLength {
+	if err != nil {
 		return nil
 	}
 	return Hash(data).Copy()

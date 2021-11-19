@@ -2,6 +2,7 @@ package chain_test
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/chain"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -19,7 +20,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 
 	fooKey := generateKey()
 	require.NoError(t, acctesting.CreateADI(db, fooKey, "foo"))
-	_, _, err := db.WriteStates(0)
+	_, err := db.WriteStates(0, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	book, err := url.Parse("foo/ssg0")

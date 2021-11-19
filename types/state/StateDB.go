@@ -20,8 +20,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 )
 
-var blockIndexKey = sha256.Sum256([]byte("BlockIndex"))
-
 type transactionStateInfo struct {
 	Object  *Object
 	ChainId types.Bytes
@@ -44,21 +42,21 @@ func (t *transactionLists) reset() {
 type bucket string
 
 const (
-	bucketEntry         = bucket("StateEntries")
-	bucketTx            = bucket("Transactions")
-	bucketMainToPending = bucket("MainToPending") //main TXID to PendingTXID
-	bucketPendingTx     = bucket("PendingTx")     //Store pending transaction
-	bucketStagedSynthTx = bucket("StagedSynthTx") //store the staged synthetic transactions
-	bucketTxToSynthTx   = bucket("TxToSynthTx")   //TXID to synthetic TXID
+	bucketEntry            = bucket("StateEntries")
+	bucketTx               = bucket("Transactions")
+	bucketMainToPending    = bucket("MainToPending") //main TXID to PendingTXID
+	bucketPendingTx        = bucket("PendingTx")     //Store pending transaction
+	bucketStagedSynthTx    = bucket("StagedSynthTx") //store the staged synthetic transactions
+	bucketTxToSynthTx      = bucket("TxToSynthTx")   //TXID to synthetic TXID
+	bucketMinorAnchorChain = bucket("MinorAnchorChain")
 
 	markPower = int64(8)
 )
 
 //bucket SynthTx stores a list of synth tx's derived from a tx
 
-func (b bucket) AsString() string {
-	return string(b)
-}
+func (b bucket) String() string { return string(b) }
+func (b bucket) Bytes() []byte  { return []byte(b) }
 
 type blockUpdates struct {
 	bucket    bucket
@@ -72,7 +70,6 @@ type StateDB struct {
 	mm           *managed.MerkleManager
 	debug        bool
 	bpt          *pmt.Manager //pbt is the global patricia trie for the application
-	blockIndex   int64        //Index of the current block
 	TimeBucket   float64
 	mutex        sync.Mutex
 	updates      map[types.Bytes32]*blockUpdates
@@ -96,8 +93,7 @@ func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	}
 }
 
-func (s *StateDB) init(debug bool) (err error) {
-
+func (s *StateDB) init(debug bool) {
 	s.debug = debug
 	s.updates = make(map[types.Bytes32]*blockUpdates)
 	s.writes = map[storage.Key][]byte{}
@@ -105,15 +101,6 @@ func (s *StateDB) init(debug bool) (err error) {
 
 	s.bpt = pmt.NewBPTManager(s.db)
 	managed.NewMerkleManager(s.db, markPower)
-
-	ent, err := s.GetPersistentEntry(blockIndexKey[:], false)
-	if err == nil {
-		s.blockIndex, _ = common.BytesInt64(ent.Entry)
-	} else if !errors.Is(err, storage.ErrNotFound) {
-		return err
-	}
-
-	return nil
 }
 
 // Open database to manage the smt and chain states
@@ -133,7 +120,8 @@ func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool) (err error)
 		return err
 	}
 
-	return s.init(debug)
+	s.init(debug)
+	return nil
 }
 
 func (s *StateDB) Load(db storage.KeyValueDB, debug bool) (err error) {
@@ -143,7 +131,9 @@ func (s *StateDB) Load(db storage.KeyValueDB, debug bool) (err error) {
 	if err != nil {
 		return err
 	}
-	return s.init(debug)
+
+	s.init(debug)
+	return nil
 }
 
 func (s *StateDB) GetDB() *database.Manager {
@@ -173,7 +163,7 @@ func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (ha
 
 //GetTx get the transaction by transaction ID
 func (s *StateDB) GetTx(txId []byte) (tx []byte, err error) {
-	tx, err = s.db.Key(bucketTx.AsString(), txId).Get()
+	tx, err = s.db.Key(bucketTx, txId).Get()
 	if err != nil {
 		return nil, err
 	}
@@ -184,11 +174,11 @@ func (s *StateDB) GetTx(txId []byte) (tx []byte, err error) {
 //GetPendingTx get the pending transactions by primary transaction ID
 func (s *StateDB) GetPendingTx(txId []byte) (pendingTx []byte, err error) {
 
-	pendingTxId, e := s.db.Key(bucketMainToPending.AsString(), txId).Get()
+	pendingTxId, e := s.db.Key(bucketMainToPending, txId).Get()
 	if e != nil {
 		return nil, err
 	}
-	pendingTx, err = s.db.Key(bucketPendingTx.AsString(), pendingTxId).Get()
+	pendingTx, err = s.db.Key(bucketPendingTx, pendingTxId).Get()
 	if err != nil {
 		return nil, err
 	}
@@ -199,7 +189,7 @@ func (s *StateDB) GetPendingTx(txId []byte) (pendingTx []byte, err error) {
 // GetSyntheticTxIds get the transaction id list by the transaction ID that spawned the synthetic transactions
 func (s *StateDB) GetSyntheticTxIds(txId []byte) (syntheticTxIds []byte, err error) {
 
-	syntheticTxIds, err = s.db.Key(bucketTxToSynthTx.AsString(), txId).Get()
+	syntheticTxIds, err = s.db.Key(bucketTxToSynthTx, txId).Get()
 	if err != nil {
 		//this is not a significant error. Synthetic transactions don't usually have other synth tx's.
 		//TODO: Fixme, this isn't an error
@@ -296,7 +286,7 @@ func (s *StateDB) GetTransaction(txid []byte) (*Object, error) {
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data, err := s.db.Key(bucketTx.AsString(), txid).Get()
+	data, err := s.db.Key(bucketTx, txid).Get()
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, fmt.Errorf("%w: no transaction defined for %X", storage.ErrNotFound, txid)
 	}
@@ -385,18 +375,18 @@ func (s *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 					return err
 				}
 
-				s.db.Key(bucketStagedSynthTx.AsString(), "", synthTxInfo.TxId).PutBatch(synthTxData)
+				s.db.Key(bucketStagedSynthTx, "", synthTxInfo.TxId).PutBatch(synthTxData)
 
 				//store the hash of th synthObject in the bpt, will be removed after synth tx is processed
 				s.bpt.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
 			}
 			//store a list of txid to list of synth txid's
-			s.db.Key(bucketTxToSynthTx.AsString(), tx.TxId).PutBatch(synthData)
+			s.db.Key(bucketTxToSynthTx, tx.TxId).PutBatch(synthData)
 		}
 
 		mutex.Lock()
 		//store the transaction in the transaction bucket by txid
-		s.db.Key(bucketTx.AsString(), tx.TxId).PutBatch(data)
+		s.db.Key(bucketTx, tx.TxId).PutBatch(data)
 		//insert the hash of the tx object in the BPT
 		s.bpt.Bpt.Insert(txHash, sha256.Sum256(data))
 		mutex.Unlock()
@@ -415,7 +405,7 @@ func (s *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 		s.db.Key("MainToPending", tx.TxId).PutBatch(pendingHash[:])
 
 		//store the pending transaction by the pending tx hash
-		s.db.Key(bucketPendingTx.AsString(), pendingHash[:]).PutBatch(data)
+		s.db.Key(bucketPendingTx, pendingHash[:]).PutBatch(data)
 		mutex.Unlock()
 	}
 
@@ -426,8 +416,13 @@ func (s *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 	return nil
 }
 
-func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *managed.MerkleManager, chainId types.Bytes32) {
+func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *managed.MerkleManager, chainId types.Bytes32) error {
 	defer group.Done()
+
+	err := s.mm.SetChainID(chainId[:])
+	if err != nil {
+		return err
+	}
 
 	// We get ChainState objects here, instead. And THAT will hold
 	//       the MerkleStateManager for the chain.
@@ -464,7 +459,7 @@ func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *
 		}
 
 		mutex.Lock()
-		s.GetDB().Key(bucketEntry.AsString(), chainId.Bytes()).PutBatch(chainStateObject)
+		s.GetDB().Key(bucketEntry, chainId.Bytes()).PutBatch(chainStateObject)
 		// The bpt stores the hash of the ChainState object hash.
 		s.bpt.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
 		mutex.Unlock()
@@ -479,6 +474,64 @@ func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *
 	//	//todo:  Determine how we purge pending tx's after 2 weeks.
 	//	s.bpt.Bpt.Insert(chainId, *mdRoot)
 	//}
+
+	return nil
+}
+
+func (s *StateDB) writeAnchors(mutex *sync.Mutex, blockIndex int64, timestamp time.Time, chainsThatUpdated []types.Bytes32) error {
+	// Load the previous anchor chain head
+	prevHead, err := s.getAnchorHead()
+	if errors.Is(err, storage.ErrNotFound) {
+		prevHead = &AnchorMetadata{Index: -1}
+	} else if err != nil {
+		return err
+	}
+
+	// Make sure the block index is increasing
+	if prevHead.Index >= blockIndex {
+		panic(fmt.Errorf("Current height is %d but the next block height is %d!", prevHead.Index, blockIndex))
+	}
+
+	// Metadata
+	head := new(AnchorMetadata)
+	head.Index = blockIndex
+	head.PreviousHeight = s.mm.MS.Count
+	head.Timestamp = timestamp
+	head.Chains = make([][32]byte, len(chainsThatUpdated))
+
+	// Add an anchor for each updated chain to the anchor chain
+	for i, chainId := range chainsThatUpdated {
+		head.Chains[i] = chainId
+
+		err := s.mm.SetChainID(chainId[:])
+		if err != nil {
+			return err
+		}
+		root := s.mm.MS.GetMDRoot()
+
+		err = s.mm.SetChainID([]byte(bucketMinorAnchorChain))
+		if err != nil {
+			return err
+		}
+		s.mm.AddHash(root)
+	}
+
+	data, err := head.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	// Add the anchor head to the anchor chain
+	s.mm.AddHash(data)
+
+	// Index the anchor chain against the block index
+	s.GetDB().Key(bucketMinorAnchorChain, "Index", blockIndex).PutBatch(common.Int64Bytes(s.mm.MS.Count))
+
+	// Update the Patricia tree
+	var id [32]byte
+	copy(id[:], []byte(bucketMinorAnchorChain.String()))
+	s.bpt.Bpt.Insert(id, sha256.Sum256(data))
+	return nil
 }
 
 func (s *StateDB) writeBatches() {
@@ -487,22 +540,41 @@ func (s *StateDB) writeBatches() {
 	s.bpt.DBManager.EndBatch()
 }
 
-func (s *StateDB) BlockIndex() int64 {
-	return s.blockIndex
+func (s *StateDB) getAnchorHead() (*AnchorMetadata, error) {
+	err := s.mm.SetChainID([]byte(bucketMinorAnchorChain))
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := s.mm.Get(s.mm.MS.Count - 1)
+	if err != nil {
+		return nil, err
+	}
+
+	head := new(AnchorMetadata)
+	err = head.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return head, nil
+}
+
+func (s *StateDB) BlockIndex() (int64, error) {
+	head, err := s.getAnchorHead()
+	if err != nil {
+		return 0, err
+	}
+
+	return head.Index, nil
 }
 
 // WriteStates will push the data to the database and update the patricia trie
-func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
-	//build a list of keys from the map
-	currentStateCount := len(s.updates)
-	if currentStateCount == 0 {
-		//only attempt to record the block if we have any data.
-		return s.bpt.Bpt.Root.Hash[:], 0, nil
+func (s *StateDB) WriteStates(blockHeight int64, timestamp time.Time) ([]byte, error) {
+	if len(s.updates) == 0 {
+		// Do not write anything if there are no updates
+		return s.bpt.Bpt.Root.Hash[:], nil
 	}
-
-	s.blockIndex = blockHeight
-	// TODO MainIndex and PendingIndex?
-	s.AddStateEntry((*types.Bytes32)(&blockIndexKey), new(types.Bytes32), &Object{Entry: common.Int64Bytes(blockHeight)})
 
 	group := new(sync.WaitGroup)
 	group.Add(1)
@@ -512,7 +584,7 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//to try the multi-threading add "go" in front of the next line
 	err := s.writeTxs(mutex, group)
 	if err != nil {
-		return s.bpt.Bpt.Root.Hash[:], 0, nil
+		return s.bpt.Bpt.Root.Hash[:], nil
 	}
 
 	// Create an ordered list of chain IDs that need updating. The iteration
@@ -529,11 +601,10 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	})
 
 	for _, chainId := range updateOrder {
-		err = s.mm.SetChainID(chainId[:])
+		err = s.writeChainState(group, mutex, s.mm, chainId)
 		if err != nil {
-			return nil, 0, err
+			return nil, err
 		}
-		s.writeChainState(group, mutex, s.mm, chainId)
 
 		//TODO: figure out how to do this with new way state is derived
 		//if len(currentState.pendingTx) != 0 {
@@ -563,6 +634,12 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 		delete(s.writes, k)
 	}
 
+	// Don't write the anchor during the genesis TX
+	err = s.writeAnchors(mutex, blockHeight, timestamp, updateOrder)
+	if err != nil {
+		return nil, fmt.Errorf("failed to make anchor: %v", err)
+	}
+
 	group.Wait()
 
 	s.bpt.Bpt.Update()
@@ -577,7 +654,7 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//return the state of the BPT for the state of the block
 	rh := types.Bytes(s.RootHash()).AsBytes32()
 	s.logInfo("WriteStates", "height", blockHeight, "hash", logging.AsHex(rh))
-	return s.RootHash(), currentStateCount, nil
+	return s.RootHash(), nil
 }
 
 func (s *StateDB) RootHash() []byte {

@@ -1,0 +1,12 @@
+# TODO Move this to Protocol
+
+AnchorMetadata:
+  fields:
+  - name: Index
+    type: varint
+  - name: PreviousHeight
+    type: varint
+  - name: Timestamp
+    type: time
+  - name: Chains
+    type: chainSet

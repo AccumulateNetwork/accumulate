@@ -567,7 +567,7 @@ func TestDirectory(t *testing.T) {
 	_, adiKey, _ := ed25519.GenerateKey(nil)
 	require.NoError(t, acctesting.CreateADI(db, tmed25519.PrivKey(adiKey), "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(db, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	_, _, err := db.WriteStates(0)
+	_, err := db.WriteStates(1, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})
