@@ -203,6 +203,9 @@ func (m *StateManager) Create(record ...state.Chain) {
 
 // Submit queues a synthetic transaction for submission
 func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
+	if m.txType.IsSynthetic() {
+		panic("Called StateManager.Submit from a synthetic transaction!")
+	}
 	m.submissions = append(m.submissions, &submittedTx{url, body})
 }
 
