@@ -22,7 +22,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 	case *protocol.SigSpecGroup:
 		group = sponsor
 	default:
-		return fmt.Errorf("%v cannot sponsor a sig spec", sponsor.Header().Type)
+		return fmt.Errorf("invalid sponsor: want chain type %v or %v, got %v", types.ChainTypeIdentity, types.ChainTypeKeyBook, sponsor.Header().Type)
 	}
 
 	body := new(protocol.CreateSigSpec)
