@@ -326,7 +326,7 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	t := response.Token{}
 	err = json.Unmarshal(*r.Data, &t)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	bf := big.Float{}
