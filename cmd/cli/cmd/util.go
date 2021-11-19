@@ -246,7 +246,7 @@ type ActionResponse struct {
 func (a *ActionResponse) Print() {
 	if WantJsonOutput {
 		if a.Code == "0" || a.Code == "" {
-			 a.Code = "ok"
+			a.Code = "ok"
 		}
 		dump, err := json.Marshal(a)
 		if err != nil {
@@ -334,7 +334,7 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	bal := big.Float{}
 	bal.Quo(&bf, &bd)
 
-	return bal.String(),nil
+	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
 }
 
 func PrintQueryResponse(res *acmeapi.APIDataResponse) {
@@ -390,11 +390,14 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				log.Fatal(err)
 			}
 
-			amt := formatAmount(ata.TokenUrl, &ata.Balance.Int)
+			amt, err := formatAmount(ata.TokenUrl, &ata.Balance.Int)
+			if err != nil {
+				amt = "unknown"
+			}
 			var out string
 			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
-			out += fmt.Sprintf("\tBalance\t\t:\t%s %s\n", bal.String(), t.Symbol)
+			out += fmt.Sprintf("\tBalance\t\t:\t%s %s\n", amt)
 			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBookUrl)
 
 			log.Fatal(out)
@@ -490,24 +493,24 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 			}
 			log.Fatal(out)
 		case "tokenTx":
-
 			tx := acmeapi.TokenTx{}
-			err := json.Unmarshal(*res.Data,&tx)
+			err := json.Unmarshal(*res.Data, &tx)
 			if err != nil {
 				log.Fatalf("Cannot extract token transaction data from request")
 			}
-			//str, err := json.Marshal(res)
-			//if err != nil {
-			//	log.Fatal(err)
-			//}
-			//fmt.
 
-			out := fmt.Sprintf("From\t:%s", tx.From)
+			out := "\n"
 			for i := range tx.To {
-				out += fmt.Sprintf("To\t:%stx.To[i]
+				bi := big.Int{}
+				bi.SetInt64(int64(tx.To[i].Amount))
+				amt, err := formatAmount("acc://ACME", &bi)
+				if err != nil {
+					amt = "unknown"
+				}
+				out += fmt.Sprintf("Send %s from %s to %s\n", amt, tx.From.String, tx.To[i].URL.String)
 			}
-			out += fmt.Sprintf(")
-
+			log.Fatal(out)
+		case "tokenAccountHistory":
 		default:
 
 		}
