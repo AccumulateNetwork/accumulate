@@ -44,7 +44,7 @@ type Chain interface {
 
 type State interface {
 	// BlockIndex returns the current block index/height of the chain
-	BlockIndex() int64
+	BlockIndex() (int64, error)
 
 	// RootHash returns the root hash of the chain
 	RootHash() []byte
