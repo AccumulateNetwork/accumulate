@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
@@ -106,20 +105,20 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	k, v, err := app.chain.Query(qu)
+	k, v, customErr := app.chain.Query(qu)
 	switch {
-	case err == nil:
-		// OK
+	case customErr == nil:
+		//Ok
 
-	case strings.Contains(err.Error(), storage.ErrNotFound.Error()):
-		resQuery.Info = err.Error()
+	case customErr.Error() == storage.ErrNotFound.Error():
+		resQuery.Info = customErr.Error()
 		resQuery.Code = protocol.CodeNotFound
 		return resQuery
 
 	default:
-		sentry.CaptureException(err)
-		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
-		resQuery.Info = err.Error()
+		sentry.CaptureException(customErr)
+		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", customErr)
+		resQuery.Info = customErr.Error()
 		resQuery.Code = code.CodeTypeUnauthorized
 		return resQuery
 	}
