@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
 	"strconv"
 	"time"
 
@@ -80,7 +79,6 @@ func PrintTX() {
 func GetTX(hash string) {
 
 	var res acmeapi.APIDataResponse
-	var str []byte
 	var hashbytes types.Bytes32
 
 	params := new(acmeapi.TokenTxRequest)
@@ -101,8 +99,6 @@ func GetTX(hash string) {
 	}
 
 	PrintQueryResponse(&res)
-
-	//fmt.Fprintf(os.Stderr, string(str))
 }
 
 func GetTXHistory(accountUrl string, s string, e string) {
@@ -121,8 +117,7 @@ func GetTXHistory(accountUrl string, s string, e string) {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 
 	params := new(acmeapi.APIRequestURLPagination)
 	params.URL = types.String(u.String())
@@ -139,12 +134,7 @@ func GetTXHistory(accountUrl string, s string, e string) {
 		PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Fprintf(os.Stderr, string(str))
+	PrintQueryResponse(&res)
 
 }
 
