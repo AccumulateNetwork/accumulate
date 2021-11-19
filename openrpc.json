@@ -1,271 +1,72 @@
 {
-    "components": {
-        "schemas": {
-            "adi": {
-                "properties": {
-                    "publicKey": {
-                        "$ref": "#/components/schemas/hex",
-                        "description": "ADI Public Key",
-                        "title": "ADI Public Key"
-                    },
-                    "url": {
-                        "$ref": "#/components/schemas/adiURL",
-                        "description": "Accumulate ADI URL",
-                        "title": "ADI URL"
-                    }
-                },
-                "title": "ADI (Accumulate Digital Identity)",
-                "type": "object"
-            },
-            "hex": {
-                "pattern": "^[0-9a-f]+$",
-                "type": "string"
-            },
-            "keyBook": {
-                "description": "Previously called Signature Specification Group",
-                "properties": {
-                    "chainUrl": {
-                        "$ref": "#/components/schemas/url",
-                        "description": "URL",
-                        "title": "URL"
-                    },
-                    "sigSpecs": {
-                        "description": "Chain IDs of pages in the book",
-                        "items": {
-                            "$ref": "#/components/schemas/hex"
-                        },
-                        "title": "Key page IDs",
-                        "type": "array"
-                    }
-                },
-                "title": "Key Book",
-                "type": "object"
-            },
-            "keyPage": {
-                "description": "Previously called Signature Specification",
-                "properties": {
-                    "chainUrl": {
-                        "$ref": "#/components/schemas/url",
-                        "description": "URL",
-                        "title": "URL"
-                    },
-                    "creditBalance": {
-                        "description": "Credit balance",
-                        "title": "Credit balance",
-                        "type": "integer"
-                    },
-                    "keys": {
-                        "description": "Keys specifications",
-                        "items": {
-                            "description": "A public key or public key hash",
-                            "properties": {
-                                "nonce": {
-                                    "description": "Key nonce",
-                                    "title": "Nonce",
-                                    "type": "integer"
-                                },
-                                "publicKey": {
-                                    "description": "Base64 encoded public key or public key hash",
-                                    "title": "Public key or hash",
-                                    "type": "string"
-                                }
-                            },
-                            "title": "Key specification",
-                            "type": "object"
-                        },
-                        "title": "Keys",
-                        "type": "array"
-                    },
-                    "sigSpecId": {
-                        "$ref": "#/components/schemas/hex",
-                        "description": "Chain ID of the book the page belongs to",
-                        "title": "Key book ID"
-                    }
-                },
-                "title": "Key Page",
-                "type": "object"
-            },
-            "tokenAccount": {
-                "properties": {
-                    "balance": {
-                        "description": "Token Account balance",
-                        "title": "Balance",
-                        "type": "integer"
-                    },
-                    "creditBalance": {
-                        "description": "Credit balance, for lite accounts",
-                        "title": "Credit balance",
-                        "type": "integer"
-                    },
-                    "nonce": {
-                        "description": "Key nonce, for lite accounts",
-                        "title": "Nonce",
-                        "type": "integer"
-                    },
-                    "tokenURL": {
-                        "$ref": "#/components/schemas/url",
-                        "description": "Token Issuer URL",
-                        "title": "Token URL",
-                        "type": "string"
-                    },
-                    "url": {
-                        "$ref": "#/components/schemas/url",
-                        "description": "Token Account URL",
-                        "title": "URL"
-                    }
-                },
-                "title": "Token Account",
-                "type": "object"
-            },
-            "tokenTx": {
-                "properties": {
-                    "from": {
-                        "$ref": "#/components/schemas/url",
-                        "description": "Token Account URL",
-                        "title": "Sender Token Account"
-                    },
-                    "hash": {
-                        "$ref": "#/components/schemas/hex",
-                        "description": "Transaction Hash",
-                        "title": "Hash"
-                    },
-                    "meta": {
-                        "description": "Transaction Metadata",
-                        "title": "Metadata",
-                        "type": "string"
-                    },
-                    "to": {
-                        "description": "Token Account URL",
-                        "items": {
-                            "description": "Token Account URL and amount",
-                            "properties": {
-                                "amount": {
-                                    "description": "Number of tokens",
-                                    "title": "Amount",
-                                    "type": "integer"
-                                },
-                                "url": {
-                                    "$ref": "#/components/schemas/url",
-                                    "description": "Token Account URL",
-                                    "title": "Token Account URL"
-                                }
-                            },
-                            "title": "Receiver Token Account",
-                            "type": "object"
-                        },
-                        "title": "Receiver(s) Token Account(s)",
-                        "type": "array"
-                    }
-                },
-                "title": "Token Tx",
-                "type": "object"
-            },
-            "txKeyPage": {
-                "properties": {
-                    "height": {
-                        "type": "integer"
-                    },
-                    "index": {
-                        "type": "integer"
-                    }
-                },
-                "type": "object"
-            },
-            "txSigner": {
-                "properties": {
-                    "nonce": {
-                        "type": "integer"
-                    },
-                    "publicKey": {
-                        "$ref": "#/components/schemas/hex"
-                    }
-                },
-                "type": "object"
-            },
-            "url": {
-                "pattern": "^(acc://)?[\\w-]+(/[\\w-.]+)*$",
-                "type": "string"
+	"openrpc": "1.2.4",
+	"info": {
+		"title": "Accumulate API",
+		"description": "A public JSON RPC API of the Accumulate Node",
+		"version": "0.2.0",
+		"license": {
+			"name": "MIT"
+		}
+	},
+	"methods": [
+		{
+			"name": "adi",
+			"summary": "Get ADI (Accumulate Digital Identity) info",
+			"tags": [
+				{
+					"name": "ADI"
+				}
+			],
+			"params": [
+				{
+					"name": "url",
+					"summary": "Accumulate ADI URL",
+					"required": true,
+					"schema": {
+						"$ref": "#/components/schemas/url"
+					}
+				}
+			],
+			"result": {
+				"name": "ADI",
+				"schema": {
+					"$ref": "#/components/schemas/adi"
+				}
+			},
+			"errors": [
+              {
+                "code": -32901,
+                "message": "invalid adi url"
+              },
+              {
+                "code": -32902,
+                "message": "adi does not exist"
+              }
+            ]
+        },
+      {
+        "name": "token-account",
+        "summary": "Get Token Account info",
+        "tags": [
+          {
+            "name": "token"
+          }
+        ],
+        "params": [
+          {
+            "name": "url",
+            "summary": "Accumulate Token Account URL",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/url"
             }
-        }
-    },
-    "info": {
-        "description": "A public JSON RPC API of the Accumulate Node",
-        "license": {
-            "name": "MIT"
-        },
-        "title": "Accumulate API",
-        "version": "0.2.0"
-    },
-    "methods": [
-        {
-            "errors": [
-                {
-                    "code": -32901,
-                    "message": "invalid adi url"
-                },
-                {
-                    "code": -32902,
-                    "message": "adi does not exist"
-                }
-            ],
-            "name": "adi",
-            "params": [
-                {
-                    "name": "url",
-                    "required": true,
-                    "schema": {
-                        "$ref": "#/components/schemas/url"
-                    },
-                    "summary": "Accumulate ADI URL"
-                }
-            ],
-            "result": {
-                "name": "ADI",
-                "schema": {
-                    "$ref": "#/components/schemas/adi"
-                }
-            },
-            "summary": "Get ADI (Accumulate Digital Identity) info",
-            "tags": [
-                {
-                    "name": "ADI"
-                }
-            ]
-        },
-        {
-            "errors": [
-                {
-                    "code": -34001,
-                    "message": "invalid token account url"
-                },
-                {
-                    "code": -34002,
-                    "message": "token account does not exist"
-                }
-            ],
-            "name": "token-account",
-            "params": [
-                {
-                    "name": "url",
-                    "required": true,
-                    "schema": {
-                        "$ref": "#/components/schemas/url"
-                    },
-                    "summary": "Accumulate Token Account URL"
-                }
-            ],
-            "result": {
-                "name": "Token Account",
-                "schema": {
-                    "$ref": "#/components/schemas/tokenAccount"
-                }
-            },
-            "summary": "Get Token Account info",
-            "tags": [
-                {
-                    "name": "token"
-                }
-            ]
+          }
+        ],
+        "result": {
+          "name": "Token Account",
+          "schema": {
+            "$ref": "#/components/schemas/tokenAccount"
+          }
         },
         {
             "errors": [
