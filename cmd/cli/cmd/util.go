@@ -311,8 +311,33 @@ var (
 	}
 )
 
-func PrintQueryResponse(res *acmeapi.APIDataResponse) {
+func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 
+	//query the token
+	tokenData := Get(tokenUrl)
+	r := acmeapi.APIDataResponse{}
+	err := json.Unmarshal([]byte(tokenData), &r)
+	if err != nil {
+		return "", err
+	}
+
+	t := response.Token{}
+	err = json.Unmarshal(*r.Data, &t)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	bf := big.Float{}
+	bd := big.Float{}
+	bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
+	bf.SetInt(amount)
+	bal := big.Float{}
+	bal.Quo(&bf, &bd)
+
+	return bal.String(),nil
+}
+
+func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 	if WantJsonOutput {
 		data, err := json.Marshal(res)
 		if err != nil {
@@ -365,27 +390,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				log.Fatal(err)
 			}
 
-			//query the token
-			tokenData := Get(ata.TokenUrl)
-			r := acmeapi.APIDataResponse{}
-			err = json.Unmarshal([]byte(tokenData), &r)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			t := response.Token{}
-			err = json.Unmarshal(*r.Data, &t)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			bf := big.Float{}
-			bd := big.Float{}
-			bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
-			bf.SetInt(&ata.Balance.Int)
-			bal := big.Float{}
-			bal.Quo(&bf, &bd)
-
+			amt := formatAmount(ata.TokenUrl, &ata.Balance.Int)
 			var out string
 			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
@@ -484,6 +489,27 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 			}
 			log.Fatal(out)
+		case "tokenTx":
+
+			tx := acmeapi.TokenTx{}
+			err := json.Unmarshal(*res.Data,&tx)
+			if err != nil {
+				log.Fatalf("Cannot extract token transaction data from request")
+			}
+			//str, err := json.Marshal(res)
+			//if err != nil {
+			//	log.Fatal(err)
+			//}
+			//fmt.
+
+			out := fmt.Sprintf("From\t:%s", tx.From)
+			for i := range tx.To {
+				out += fmt.Sprintf("To\t:%stx.To[i]
+			}
+			out += fmt.Sprintf(")
+
+		default:
+
 		}
 	}
 }
