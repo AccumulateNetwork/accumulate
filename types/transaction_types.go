@@ -50,6 +50,10 @@ const (
 	// synthetic write data transaction.
 	TxTypeWriteDataTo TransactionType = 0x06
 
+	// TxTypeAcmeFaucet produces a synthetic deposit tokens transaction that
+	// deposits ACME tokens into a lite account.
+	TxTypeAcmeFaucet TransactionType = 0x07
+
 	// TxTypeCreateToken creates a token issuer, which produces a synthetic
 	// chain create transaction.
 	TxTypeCreateToken TransactionType = 0x08
@@ -118,6 +122,8 @@ func (t TransactionType) String() string {
 		return "createTokenAccount"
 	case TxTypeWithdrawTokens:
 		return "withdrawTokens"
+	case TxTypeAcmeFaucet:
+		return "acmeFaucet"
 	case TxTypeCreateKeyPage:
 		return "createKeyPage"
 	case TxTypeCreateKeyBook:
