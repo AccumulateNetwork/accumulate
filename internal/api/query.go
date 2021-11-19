@@ -197,7 +197,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalQueryResponse(r.Response, types.ChainTypeAdi)
+	return unmarshalQueryResponse(r.Response, types.ChainTypeIdentity)
 }
 
 // GetToken
@@ -208,7 +208,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalQueryResponse(r.Response, types.ChainTypeToken)
+	return unmarshalQueryResponse(r.Response, types.ChainTypeTokenIssuer)
 }
 
 // GetTokenAccount get the token balance for a given url
@@ -218,7 +218,7 @@ func (q *Query) GetTokenAccount(adiChainPath string) (*acmeApi.APIDataResponse, 
 		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
 	}
 
-	return unmarshalQueryResponse(r.Response, types.ChainTypeTokenAccount, types.ChainTypeAnonTokenAccount)
+	return unmarshalQueryResponse(r.Response, types.ChainTypeTokenAccount, types.ChainTypeLiteTokenAccount)
 }
 
 // GetDirectory returns directory entries for a given url

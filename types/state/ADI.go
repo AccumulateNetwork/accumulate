@@ -48,13 +48,13 @@ type AdiState struct {
 // NewIdentityState this will eventually be the key groups and potentially just a multi-map of types to chain paths controlled by the identity
 func NewIdentityState(adi types.String) *AdiState {
 	r := &AdiState{}
-	r.SetHeader(adi, types.ChainTypeAdi)
+	r.SetHeader(adi, types.ChainTypeIdentity)
 	return r
 }
 
 func NewADI(url types.String, keyType KeyType, keyData []byte) *AdiState {
 	r := new(AdiState)
-	r.SetHeader(url, types.ChainTypeAdi)
+	r.SetHeader(url, types.ChainTypeIdentity)
 	r.KeyType = keyType
 	r.KeyData = keyData
 	return r
