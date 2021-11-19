@@ -117,7 +117,7 @@ func GetTXHistory(accountUrl string, s string, e string) {
 		log.Fatal(err)
 	}
 
-	var res acmeapi.APIDataResponse
+	var res acmeapi.APIDataResponsePagination
 
 	params := new(acmeapi.APIRequestURLPagination)
 	params.URL = types.String(u.String())
@@ -134,8 +134,9 @@ func GetTXHistory(accountUrl string, s string, e string) {
 		PrintJsonRpcError(err)
 	}
 
-	PrintQueryResponse(&res)
-
+	for i := range res.Data {
+		PrintQueryResponse(res.Data[i])
+	}
 }
 
 func CreateTX(sender string, args []string) {
