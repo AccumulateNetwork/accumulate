@@ -38,9 +38,29 @@ const (
 	// produces a synthetic deposit tokens transaction.
 	TxTypeWithdrawTokens TransactionType = 0x03
 
+	// TxTypeCreateDataAccount creates an ADI Data Account, which produces a
+	// synthetic chain create transaction.
+	TxTypeCreateDataAccount TransactionType = 0x04
+
+	// TxTypeWriteData writes data to an ADI Data Account, which *does not*
+	// produce a synthetic transaction.
+	TxTypeWriteData TransactionType = 0x05
+
+	// TxTypeWriteDataTo writes data to a Lite Data Account, which produces a
+	// synthetic write data transaction.
+	TxTypeWriteDataTo TransactionType = 0x06
+
 	// TxTypeCreateToken creates a token issuer, which produces a synthetic
 	// chain create transaction.
 	TxTypeCreateToken TransactionType = 0x08
+
+	// TxTypeIssueTokens issues tokens to a token account, which produces a
+	// synthetic token deposit transaction.
+	TxTypeIssueTokens TransactionType = 0x09
+
+	// TxTypeBurnTokens burns tokens from a token account, which produces a
+	// synthetic burn tokens transaction.
+	TxTypeBurnTokens TransactionType = 0x0A
 
 	// TxTypeCreateKeyPage creates a key page, which produces a synthetic chain
 	// create transaction.
@@ -64,11 +84,18 @@ const (
 	// TxTypeSyntheticCreateChain creates or updates chains.
 	TxTypeSyntheticCreateChain TransactionType = 0x31
 
+	// TxTypeSyntheticWriteData writes data to a data account.
+	TxTypeSyntheticWriteData TransactionType = 0x32
+
 	// TxTypeSyntheticDepositTokens deposits tokens into token accounts.
 	TxTypeSyntheticDepositTokens TransactionType = 0x33
 
 	// TxTypeSyntheticDepositCredits deposits credits into a credit holder.
 	TxTypeSyntheticDepositCredits TransactionType = 0x35
+
+	// TxTypeSyntheticBurnTokens returns tokens to a token issuer's pool of
+	// issuable tokens.
+	TxTypeSyntheticBurnTokens TransactionType = 0x36
 
 	// TxTypeSyntheticGenesis initializes system chains.
 	TxTypeSyntheticGenesis TransactionType = 0x37
