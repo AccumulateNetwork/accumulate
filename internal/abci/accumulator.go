@@ -6,8 +6,8 @@ import (
 	_ "crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
@@ -111,7 +111,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	case err == nil:
 		// OK
 
-	case errors.Is(err, storage.ErrNotFound):
+	case strings.Contains(err.Error(), storage.ErrNotFound.Error()):
 		resQuery.Info = err.Error()
 		resQuery.Code = protocol.CodeNotFound
 		return resQuery
@@ -165,14 +165,14 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		Height:   -1,
 	})
 
-	err = app.chain.CheckTx(tx)
-	if err != nil {
-		panic(fmt.Errorf("failed to validate genesis TX: %v", err))
+	customErr := app.chain.CheckTx(tx)
+	if customErr != nil && customErr.Code != protocol.CodeOK {
+		panic(fmt.Errorf("failed to validate genesis TX: %v", customErr))
 	}
 
-	_, err = app.chain.DeliverTx(tx)
-	if err != nil {
-		panic(fmt.Errorf("failed to execute genesis TX: %v", err))
+	_, customErr = app.chain.DeliverTx(tx)
+	if customErr != nil && customErr.Code != protocol.CodeOK {
+		panic(fmt.Errorf("failed to execute genesis TX: %v", customErr))
 	}
 
 	app.chain.EndBlock(EndBlockRequest{})
@@ -249,9 +249,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	//create a default response
 	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
 
-	err = app.chain.CheckTx(sub)
+	customErr := app.chain.CheckTx(sub)
 
-	if err != nil {
+	if customErr != nil && customErr.Code != protocol.CodeOK {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
@@ -292,9 +292,9 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	//run through the validation node
-	r, err := app.chain.DeliverTx(sub)
+	r, customErr := app.chain.DeliverTx(sub)
 
-	if err != nil {
+	if customErr != nil && customErr.Code != protocol.CodeOK {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {

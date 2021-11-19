@@ -44,6 +44,8 @@ const (
 	CodeValidateTxnError ErrorCode = 21
 	//CodeInvalidTxnError is returned when txn doesn't contains proper data
 	CodeInvalidTxnError ErrorCode = 22
+	//CodeAddTxnError is returned when adding txn to state db fails
+	CodeAddTxnError ErrorCode = 23
 )
 
 type Error struct {
