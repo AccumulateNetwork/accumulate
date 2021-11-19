@@ -309,22 +309,22 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 	}
 
 	switch sChain.Type {
-	case types.ChainTypeAdi:
+	case types.ChainTypeIdentity:
 		return unmarshalADI(rQuery)
 
-	case types.ChainTypeToken:
+	case types.ChainTypeTokenIssuer:
 		return unmarshalToken(rQuery)
 
 	case types.ChainTypeTokenAccount:
 		return unmarshalTokenAccount(rQuery)
 
-	case types.ChainTypeAnonTokenAccount:
+	case types.ChainTypeLiteTokenAccount:
 		return unmarshalAnonTokenAccount(rQuery)
 
-	case types.ChainTypeSigSpec:
+	case types.ChainTypeKeyPage:
 		return unmarshalSigSpec(rQuery)
 
-	case types.ChainTypeSigSpecGroup:
+	case types.ChainTypeKeyBook:
 		return unmarshalSigSpecGroup(rQuery)
 
 	case types.ChainTypeTransaction:

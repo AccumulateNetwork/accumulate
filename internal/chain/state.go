@@ -203,6 +203,9 @@ func (m *StateManager) Create(record ...state.Chain) {
 
 // Submit queues a synthetic transaction for submission
 func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
+	if m.txType.IsSynthetic() {
+		panic("Called StateManager.Submit from a synthetic transaction!")
+	}
 	m.submissions = append(m.submissions, &submittedTx{url, body})
 }
 
@@ -272,11 +275,11 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 	var record state.Chain
 	switch header.Type {
 	// TODO DC, BVC, Token
-	case types.ChainTypeAdi:
+	case types.ChainTypeIdentity:
 		record = new(state.AdiState)
 	case types.ChainTypeTokenAccount:
 		record = new(state.TokenAccount)
-	case types.ChainTypeAnonTokenAccount:
+	case types.ChainTypeLiteTokenAccount:
 		record = new(protocol.AnonTokenAccount)
 	case types.ChainTypeTransactionReference:
 		record = new(state.TxReference)
@@ -284,9 +287,9 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 		record = new(state.Transaction)
 	case types.ChainTypePendingTransaction:
 		record = new(state.PendingTransaction)
-	case types.ChainTypeSigSpec:
+	case types.ChainTypeKeyPage:
 		record = new(protocol.SigSpec)
-	case types.ChainTypeSigSpecGroup:
+	case types.ChainTypeKeyBook:
 		record = new(protocol.SigSpecGroup)
 	default:
 		return nil, fmt.Errorf("unrecognized chain type %v", header.Type)

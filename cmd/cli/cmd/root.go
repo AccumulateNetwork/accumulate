@@ -1,14 +1,13 @@
 package cmd
 
 import (
-	"fmt"
+	"github.com/AccumulateNetwork/accumulate/cmd/cli/db"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"time"
 
-	"github.com/boltdb/bolt"
 	"github.com/spf13/cobra"
 
 	"github.com/AccumulateNetwork/accumulate/client"
@@ -77,63 +76,24 @@ func initManagedDB() *database.Manager {
 	return db
 }
 
-const (
-	BucketAnon     = "anon"
-	BucketAdi      = "adi"
-	BucketKeys     = "keys"
-	BucketLabel    = "label"
-	BucketMnemonic = "mnemonic"
+var (
+	BucketAnon     = []byte("anon")
+	BucketAdi      = []byte("adi")
+	BucketKeys     = []byte("keys")
+	BucketLabel    = []byte("label")
+	BucketMnemonic = []byte("mnemonic")
 )
 
-func initDB() *bolt.DB {
+func initDB() db.DB {
 	err := os.MkdirAll(defaultWorkDir, 0600)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	db, err := bolt.Open(defaultWorkDir+"/wallet.db", 0600, nil)
+	db := new(db.BoltDB)
+	err = db.InitDB(filepath.Join(defaultWorkDir, "wallet.db"))
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	//err = db.Update(func(tx *bolt.Tx) error {
-	//	_, err := tx.CreateBucket([]byte("anon"))
-	//	if err != nil {
-	//		return fmt.Errorf("DB: %s", err)
-	//	}
-	//	return nil
-	//})
-
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err = tx.CreateBucket([]byte("adi"))
-		if err != nil {
-			return fmt.Errorf("DB: %s", err)
-		}
-		return nil
-	})
-
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err = tx.CreateBucket([]byte("keys"))
-		if err != nil {
-			return fmt.Errorf("DB: %s", err)
-		}
-		return nil
-	})
-
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err = tx.CreateBucket([]byte("label"))
-		if err != nil {
-			return fmt.Errorf("DB: %s", err)
-		}
-		return nil
-	})
-
-	err = db.Update(func(tx *bolt.Tx) error {
-		_, err = tx.CreateBucket([]byte("mnemonic"))
-		if err != nil {
-			return fmt.Errorf("DB: %s", err)
-		}
-		return nil
-	})
 	return db
 }

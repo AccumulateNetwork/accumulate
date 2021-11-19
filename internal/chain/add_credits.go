@@ -49,7 +49,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 		case *protocol.AnonTokenAccount, *protocol.SigSpec:
 			// OK
 		default:
-			return fmt.Errorf("invalid recipient: wrong chain type: want %v or %v, got %v", types.ChainTypeAnonTokenAccount, types.ChainTypeSigSpec, recv.Header().Type)
+			return fmt.Errorf("invalid recipient: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeKeyPage, recv.Header().Type)
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if recvUrl.Routing() == tx.Routing {

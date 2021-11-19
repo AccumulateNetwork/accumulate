@@ -47,7 +47,7 @@ func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTran
 		case *state.TokenAccount:
 			account = sponsor
 		default:
-			return fmt.Errorf("cannot deposit tokens to %v", sponsor.Header().Type)
+			return fmt.Errorf("invalid sponsor: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, sponsor.Header().Type)
 		}
 	} else if keyHash, tok, err := protocol.ParseAnonymousAddress(accountUrl); err != nil {
 		return fmt.Errorf("invalid anonymous token account URL: %v", err)

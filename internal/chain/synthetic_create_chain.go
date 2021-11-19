@@ -67,7 +67,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 		// Check the identity
 		switch record.Header().Type {
-		case types.ChainTypeAdi:
+		case types.ChainTypeIdentity:
 			// An ADI must be its own identity
 			if !u.Identity().Equal(u) {
 				return fmt.Errorf("ADI is not its own identity")
@@ -75,11 +75,11 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 		default:
 			// Anything else must be a sub-path
 			if u.Identity().Equal(u) {
-				return fmt.Errorf("%v cannot be its own identity", record.Header().Type)
+				return fmt.Errorf("chain type %v cannot be its own identity", record.Header().Type)
 			}
 
 			if u.Path != "" && strings.Contains(u.Path[1:], "/") {
-				return fmt.Errorf("%v cannot contain more than one slash in its URL", record.Header().Type)
+				return fmt.Errorf("chain type %v cannot contain more than one slash in its URL", record.Header().Type)
 			}
 
 			// Make sure the ADI actually exists
@@ -99,13 +99,13 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 		// Check the key book
 		switch record.Header().Type {
-		case types.ChainTypeSigSpecGroup:
+		case types.ChainTypeKeyBook:
 			// A key book does not itself have a key book
 			if record.Header().SigSpecId != (types.Bytes32{}) {
 				return errors.New("invalid key book: SigSpecId is not empty")
 			}
 
-		case types.ChainTypeSigSpec:
+		case types.ChainTypeKeyPage:
 			// A key page can be unbound
 
 		default:
