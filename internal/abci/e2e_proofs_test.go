@@ -14,7 +14,7 @@ import (
 )
 
 func TestProofADI(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, "error")
+	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 
 	// Setup keys and the lite account
 	liteKey, adiKey := generateKey(), generateKey()
