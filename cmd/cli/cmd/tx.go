@@ -1,11 +1,11 @@
 package cmd
 
 import (
-	"os"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strconv"
 	"time"
 
@@ -79,7 +79,7 @@ func PrintTX() {
 
 func GetTX(hash string) {
 
-	var res interface{}
+	var res acmeapi.APIDataResponse
 	var str []byte
 	var hashbytes types.Bytes32
 
@@ -88,7 +88,6 @@ func GetTX(hash string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	params.Hash = hashbytes
 
 	data, err := json.Marshal(params)
@@ -101,12 +100,9 @@ func GetTX(hash string) {
 		PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
+	PrintQueryResponse(&res)
 
-	fmt.Fprintf(os.Stderr, string(str))
+	//fmt.Fprintf(os.Stderr, string(str))
 }
 
 func GetTXHistory(accountUrl string, s string, e string) {
