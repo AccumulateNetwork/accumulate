@@ -37,14 +37,33 @@ To run a node in the testnet, run `accumulated run -w <dir>/Node<n>`, e.g.
 
 Accumulate is broken into the following components:
 
-- `cmd/accumulated` - CLI
-- `internal/abci` - Tendermint ABCI application
-- `internal/chain` - Accumulate chain validation and processing
-- `internal/node` - Tendermint node configuration, initialization, and execution
-- `internal/relay` - The relay, responsible for relaying transactions to the appropriate BVC
+- `cmd/accumulated` - Daemon
+- `cmd/cli` - CLI wallet
+- `config` - Daemon configuration types
+- `internal/abci` - [ABCI](https://docs.tendermint.com/master/spec/abci/)
+  implementation
+- `internal/api`- JSON-RPC v1; **Deprecated**: use `internal/api/v2`
+- `internal/api/v2`- JSON-RPC v2
+- `internal/chain` - Transaction validation and processing (aka chain
+  validators)
+- `internal/cmd/gentypes` - Type generator for `internal/api` and `protocol`
+- `internal/encoding` - Shared code used by generated types in `internal/api`
+  and `protocol`
+- `internal/genesis` - Objects that are created when the node first starts up
+- `internal/logging` - Logging setup
+- `internal/node` - Node configuration, initialization, and execution
+- `internal/relay` - The relay, responsible for relaying transactions to the
+  appropriate BVC; **Deprecated**: use `internal/api/v2`
+- `internal/testing` - Test helpers
+- `internal/url` - Accumulate URL parser
+- `internal/web/static` - Embedded web server content
+- `networks` - Accumulate network definitions
+- `protocol` - Protocol types and definitions
 - `router` - Accumulate API
 - `smt` - Stateful Merkle Tree
-- `types` - Data type definitions, used for RPC and persistence
+- `types` - Data type definitions, used for RPC and persistence; **Deprecated**:
+  these packages will eventually be moved or replaced, new work should happen
+  elsewhere
 
 ### Load Test
 

@@ -24,7 +24,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 
 	page, ok := st.Sponsor.(*protocol.SigSpec)
 	if !ok {
-		return fmt.Errorf("invalid sponsor: want %v, got %v", types.ChainTypeSigSpec, st.Sponsor.Header().Type)
+		return fmt.Errorf("invalid sponsor: want chain type %v, got %v", types.ChainTypeKeyPage, st.Sponsor.Header().Type)
 	}
 
 	// We're changing the height of the key page, so reset all the nonces
