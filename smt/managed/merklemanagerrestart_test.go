@@ -1,7 +1,6 @@
 package managed
 
 import (
-	"crypto/sha256"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -36,7 +35,7 @@ func TestRestart(t *testing.T) {
 				}
 			}
 			for rand.Int()%30 > 0 { //                                       Add 0 or more random hashes
-				MM1.AddHash(sha256.Sum256(common.Int64Bytes(rand.Int63()))) // Generate and add one random hash
+				MM1.AddHash(Sha256(common.Int64Bytes(rand.Int63()))) // Generate and add one random hash
 			}
 		}
 	}
@@ -51,7 +50,7 @@ func RandInt() uint64 {
 	return seed<<11 ^ seed>>5
 }
 func RandHash() Hash {
-	return sha256.Sum256(common.Uint64Bytes(RandInt()))
+	return Sha256(common.Uint64Bytes(RandInt()))
 }
 
 func TestRand(t *testing.T) {
@@ -94,7 +93,7 @@ func TestRestartCache(t *testing.T) {
 			t.Errorf("did not create a merkle manager: %v", err) //  won't get one unless something is really sick
 		}
 
-		var cached [][32]byte // Using this slice to track the hashes that have been written to MM1
+		var cached [][]byte // Using this slice to track the hashes that have been written to MM1
 		//                       but not yet written to disk by MM1.  Calling EndBatch on MM1 will need to
 		//                       clear this cache.
 	TestLoop:
@@ -129,6 +128,7 @@ func TestRestartCache(t *testing.T) {
 				}
 
 				if !MM1.MS.Equal(MM2.MS) { // MM2 should be the same as MM1
+					MM1.MS.Equal(MM2.MS)
 					t.Errorf("MM2 isn't tracking MM1 at index: %d %d", i, j) // are going to be messed up.
 				}
 				break TestLoop
