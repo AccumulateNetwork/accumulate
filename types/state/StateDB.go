@@ -165,7 +165,7 @@ func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (ha
 		return nil, 0, err
 	}
 	for i := range h {
-		hashes = append(hashes, types.Bytes32(h[i]))
+		hashes = append(hashes, h[i].Bytes32())
 	}
 
 	return hashes, maxAvailable, nil
@@ -443,7 +443,7 @@ func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *
 	for _, tx := range currentState.txId {
 		//store the txHash for the chains, they will be mapped back to the above recorded tx's
 		s.logInfo("AddHash", "hash", logging.AsHex(tx))
-		mm.AddHash(managed.Hash(*tx))
+		mm.AddHash(managed.Hash((*tx)[:]))
 	}
 
 	if currentState.stateData != nil {
@@ -455,7 +455,7 @@ func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *
 		}
 
 		//store the state of the main chain in the state object
-		currentState.stateData.MDRoot = types.Bytes32(*mdRoot)
+		currentState.stateData.MDRoot = mdRoot.Bytes32()
 
 		//now store the state object
 		chainStateObject, err := currentState.stateData.MarshalBinary()
@@ -529,7 +529,10 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	})
 
 	for _, chainId := range updateOrder {
-		s.mm.SetChainID(chainId[:])
+		err = s.mm.SetChainID(chainId[:])
+		if err != nil {
+			return nil, 0, err
+		}
 		s.writeChainState(group, mutex, s.mm, chainId)
 
 		//TODO: figure out how to do this with new way state is derived

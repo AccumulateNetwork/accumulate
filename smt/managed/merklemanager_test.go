@@ -23,7 +23,7 @@ func TestMerkleManager_ReadChainHead(t *testing.T) {
 	MM1.SetChainID([]byte{1})
 
 	for i := 0; i < 100; i++ {
-		MM1.AddHash(sha256.Sum256([]byte{byte(i), byte(i >> 8), byte(i >> 16), byte(i >> 24)}))
+		MM1.AddHash(Sha256([]byte{byte(i), byte(i >> 8), byte(i >> 16), byte(i >> 24)}))
 		err1 := MM1.WriteChainHead([]byte{1})
 		if err1 != nil {
 			t.Fatalf("didn't write chain head")
@@ -64,7 +64,7 @@ func TestIndexing2(t *testing.T) {
 	for i := 0; i < testlen; i++ {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
-		MM1.AddHash(dataHash)
+		MM1.AddHash(dataHash[:])
 		dataI, e := MM1.Manager.Key(Chain, "ElementIndex", dataHash).Get()
 		if e != nil {
 			t.Fatalf("error")
@@ -108,7 +108,7 @@ func TestMerkleManager(t *testing.T) {
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
 	for i := 0; i < testLen; i++ {
-		MM1.AddHash(hash)
+		MM1.AddHash(hash[:])
 		hash = sha256.Sum256(hash[:])
 	}
 

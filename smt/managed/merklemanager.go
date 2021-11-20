@@ -22,12 +22,14 @@ type MerkleManager struct {
 // AddHash
 // Add a Hash to the Chain controlled by the ChainManager
 func (m *MerkleManager) AddHash(hash Hash) {
+	hash = hash.Copy() // Just to make sure hash doesn't get changed
+
 	// Keep the index of every element added to the Merkle Tree, but only of the first instance
-	i, err := m.GetElementIndex(hash[:])
+	i, err := m.GetElementIndex(hash)
 	_ = i
 	if err == nil { // So only if the hash is not yet added to the Merkle Tree
-		m.Manager.Key(m.cid, "ElementIndex", hash[:]).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
-		m.Manager.Key(m.cid, "Element", m.MS.Count).PutBatch(hash[:])
+		m.Manager.Key(m.cid, "ElementIndex", hash).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
+		m.Manager.Key(m.cid, "Element", m.MS.Count).PutBatch(hash)
 	}
 
 	switch m.MS.Count & m.MarkMask { // Mask to the bits counting up to a mark.
@@ -39,8 +41,8 @@ func (m *MerkleManager) AddHash(hash Hash) {
 			panic(fmt.Sprintf("could not marshal MerkleState: %v", err)) //
 		}
 
-		m.Manager.Key(m.cid, "States", MSCount).PutBatch(MSState)      //     Save Merkle State at n*MarkFreq-1
-		m.Manager.Key(m.cid, "NextElement", MSCount).PutBatch(hash[:]) //     Save Hash added at n*MarkFreq-1
+		m.Manager.Key(m.cid, "States", MSCount).PutBatch(MSState)   //     Save Merkle State at n*MarkFreq-1
+		m.Manager.Key(m.cid, "NextElement", MSCount).PutBatch(hash) //     Save Hash added at n*MarkFreq-1
 
 		m.MS.AddToMerkleTree(hash) //                                  Add the hash to the Merkle Tree
 
@@ -206,14 +208,12 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 
 // GetNext
 // Get the next hash to be added to a state at this height
-func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
+func (m *MerkleManager) GetNext(element int64) (hash Hash) {
 	data, err := m.Manager.Key(m.cid, "NextElement", element).Get()
 	if err != nil || len(data) != storage.KeyLength {
 		return nil
 	}
-	hash = new(Hash)
-	copy(hash[:], data)
-	return hash
+	return Hash(data).Copy()
 }
 
 // AddHashString
@@ -222,8 +222,6 @@ func (m *MerkleManager) AddHashString(hash string) {
 	if h, err := hex.DecodeString(hash); err != nil { //                             Convert to a binary slice
 		panic(fmt.Sprintf("failed to decode a hash %s with error %v", hash, err)) // If this fails, panic; no recovery
 	} else {
-		var h2 [32]byte // Make the slice into a 32 byte array
-		copy(h2[:], h)  // copy the data
-		m.AddHash(h2)   // Add the hash
+		m.AddHash(h) // Add the hash
 	}
 }
