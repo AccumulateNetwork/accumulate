@@ -24,6 +24,9 @@ func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.Priva
 		SyntheticCreateChain{},
 		SyntheticTokenDeposit{},
 		SyntheticDepositCredits{},
+
+		// TODO Only for TestNet
+		AcmeFaucet{},
 	)
 }
 
