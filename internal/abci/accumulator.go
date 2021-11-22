@@ -165,12 +165,12 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	})
 
 	customErr := app.chain.CheckTx(tx)
-	if customErr != nil && customErr.Code != protocol.CodeOK {
+	if customErr != nil {
 		panic(fmt.Errorf("failed to validate genesis TX: %v", customErr))
 	}
 
 	_, customErr = app.chain.DeliverTx(tx)
-	if customErr != nil && customErr.Code != protocol.CodeOK {
+	if customErr != nil {
 		panic(fmt.Errorf("failed to execute genesis TX: %v", customErr))
 	}
 
@@ -250,7 +250,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 
 	customErr := app.chain.CheckTx(sub)
 
-	if customErr != nil && customErr.Code != protocol.CodeOK {
+	if customErr != nil {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
@@ -293,7 +293,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	//run through the validation node
 	r, customErr := app.chain.DeliverTx(sub)
 
-	if customErr != nil && customErr.Code != protocol.CodeOK {
+	if customErr != nil {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
