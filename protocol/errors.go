@@ -8,8 +8,27 @@ var ErrOverflow = encoding.ErrOverflow
 type ErrorCode int
 
 const (
-	//CodeTxnQueryError is returned when txn is not found
-	CodeTxnQueryError ErrorCode = 5
+	// CodeOK is returned when the operation succeeded
+	CodeOK ErrorCode = 0
+
+	// CodeEncodingError is returned when un/marshalling fails
+	CodeEncodingError ErrorCode = 1
+
+	// CodeBadNonce is returned when the transaction's nonce is invalid
+	CodeBadNonce ErrorCode = 2
+
+	// CodeInvalidRequest is returned when the request parameters are invalid
+	CodeInvalidRequest ErrorCode = 3
+
+	// CodeInternalError is returned when an internal error occurs
+	CodeInternalError ErrorCode = 4
+
+	// CodeNotFound is returned when the record is not found
+	CodeNotFound ErrorCode = 5
+
+	// CodeInvalidRecord is returned when a database record is invalid
+	CodeInvalidRecord ErrorCode = 17
+
 	//CodeTxnRange is returned when txn range query fails
 	CodeTxnRange ErrorCode = 6
 	//CodeTxnHistory is returned when txn history query fails
@@ -32,18 +51,14 @@ const (
 	CodeRecordTxnError ErrorCode = 15
 	//CodeSyntheticTxnError is returned when submit synthetic txn fails
 	CodeSyntheticTxnError ErrorCode = 16
-	//CodeMarshallingError is returned when marshaling  object or binary fails
-	CodeMarshallingError ErrorCode = 17
-	//CodeUnMarshallingError is returned when unmarshaling  object or binary fails
-	CodeUnMarshallingError ErrorCode = 18
-	//CodeInvalidQueryType is returned when query type in request is not matched with the available ones
+
 	CodeInvalidQueryType ErrorCode = 19
 	//CodeInvalidTxnType is returned when txn type passed is not available
 	CodeInvalidTxnType ErrorCode = 20
 	//CodeValidateTxnError is returned when execution validation of txn fails
 	CodeValidateTxnError ErrorCode = 21
-	//CodeInvalidTxnError is returned when txn doesn't contains proper data
-	CodeInvalidTxnError ErrorCode = 22
+	//CodeInvalidTx is returned when txn doesn't contains proper data
+	CodeInvalidTx ErrorCode = 22
 	//CodeAddTxnError is returned when adding txn to state db fails
 	CodeAddTxnError ErrorCode = 23
 )

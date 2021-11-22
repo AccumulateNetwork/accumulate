@@ -7,19 +7,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	_ "github.com/AccumulateNetwork/accumulate/smt/pmt"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/getsentry/sentry-go"
-	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
@@ -102,30 +99,21 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		// sentry.CaptureException(err)
 		app.logger.Debug("Query failed", "error", err)
 		resQuery.Info = "request is not an Accumulate Query"
-		resQuery.Code = protocol.CodeEncodingError
+		resQuery.Code = uint32(protocol.CodeEncodingError)
 		return resQuery
 	}
 
-	k, v, err := app.chain.Query(qu)
-	switch {
-	case err == nil:
-		// OK
-
-	case strings.Contains(err.Error(), storage.ErrNotFound.Error()):
-		resQuery.Info = err.Error()
-		resQuery.Code = protocol.CodeNotFound
-		return resQuery
-
-	default:
-		sentry.CaptureException(err)
-		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
-		resQuery.Info = err.Error()
-		resQuery.Code = code.CodeTypeUnauthorized
+	k, v, customErr := app.chain.Query(qu)
+	if customErr != nil && customErr.Code != protocol.CodeOK {
+		sentry.CaptureException(customErr)
+		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", customErr)
+		resQuery.Info = customErr.Message
+		resQuery.Code = uint32(customErr.Code)
 		return resQuery
 	}
 
 	//if we get here, we have a valid state object, so let's return it.
-	resQuery.Code = protocol.CodeOK
+	resQuery.Code = uint32(protocol.CodeOK)
 	//return a generic state object for the chain and let the query deal with decoding it
 	resQuery.Key, resQuery.Value = k, v
 
@@ -242,7 +230,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		sentry.CaptureException(err)
 		app.logger.Info("Check failed", "tx", txHash, "error", err)
 		//reject it
-		return abci.ResponseCheckTx{Code: protocol.CodeEncodingError, GasWanted: 0,
+		return abci.ResponseCheckTx{Code: uint32(protocol.CodeEncodingError), GasWanted: 0,
 			Log: "Unable to decode transaction"}
 	}
 
@@ -257,12 +245,12 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		if e2 == nil {
 			u2 = u.String()
 		}
-		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
-		ret.Code = protocol.CodeUnknownError
+		sentry.CaptureException(customErr)
+		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", customErr)
+		ret.Code = uint32(customErr.Code)
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
+		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
 		return ret
 	}
 
@@ -277,7 +265,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
 	h := sha256.Sum256(req.Tx)
 	txHash := hex.EncodeToString(h[:])
-	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: protocol.CodeOK}
+	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: uint32(protocol.CodeOK)}
 
 	sub := &transactions.GenTransaction{}
 
@@ -287,7 +275,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	if err != nil {
 		sentry.CaptureException(err)
 		app.logger.Info("Deliver failed", "tx", txHash, "error", err)
-		return abci.ResponseDeliverTx{Code: protocol.CodeEncodingError, GasWanted: 0,
+		return abci.ResponseDeliverTx{Code: uint32(protocol.CodeEncodingError), GasWanted: 0,
 			Log: "Unable to decode transaction"}
 	}
 
@@ -300,11 +288,11 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		if e2 == nil {
 			u2 = u.String()
 		}
-		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
-		ret.Code = protocol.CodeUnknownError
+		sentry.CaptureException(customErr)
+		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", customErr)
+		ret.Code = uint32(customErr.Code)
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
-		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
+		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
 		return ret
 	}
 

@@ -60,18 +60,18 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 	return m, nil
 }
 
-func (m *Executor) queryByUrl(u *url.URL) ([]byte, encoding.BinaryMarshaler, error) {
+func (m *Executor) queryByUrl(u *url.URL) ([]byte, encoding.BinaryMarshaler, *protocol.Error) {
 	qv := u.QueryValues()
 	switch {
 	case qv.Get("txid") != "":
 		// Query by transaction ID
 		txid, err := hex.DecodeString(qv.Get("txid"))
 		if err != nil {
-			return nil, nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
+			return nil, nil, protocolErrorf(protocol.CodeInvalidRequest, "invalid txid %q: %v", qv.Get("txid"), err)
 		}
 
-		v, err := m.queryByTxId(txid)
-		return []byte("tx"), v, err
+		v, perr := m.queryByTxId(txid)
+		return []byte("tx"), v, perr
 
 	default:
 		// Query by chain URL
@@ -80,7 +80,7 @@ func (m *Executor) queryByUrl(u *url.URL) ([]byte, encoding.BinaryMarshaler, err
 	}
 }
 
-func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, error) {
+func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, *protocol.Error) {
 	qr := query.ResponseByChainId{}
 
 	// This intentionally uses GetPersistentEntry instead of GetCurrentEntry.
@@ -92,32 +92,32 @@ func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, err
 	}
 	// Not a state entry or a transaction
 	if errors.Is(err, storage.ErrNotFound) {
-		return nil, fmt.Errorf("%w: no chain or transaction found for %X", storage.ErrNotFound, chainId)
+		return nil, protocolErrorf(protocol.CodeNotFound, "%w: no chain or transaction found for %X", storage.ErrNotFound, chainId)
 	}
 	// Some other error
 	if err != nil {
-		return nil, fmt.Errorf("failed to locate chain entry for chain id %x: %v", chainId, err)
+		return nil, protocolErrorf(0, "failed to locate chain entry for chain id %x: %v", chainId, err)
 	}
 
 	err = obj.As(new(state.ChainHeader))
 	if err != nil {
-		return nil, fmt.Errorf("unable to extract chain header for chain id %x: %v", chainId, err)
+		return nil, protocolErrorf(protocol.CodeEncodingError, "unable to extract chain header for chain id %x: %v", chainId, err)
 	}
 
 	qr.Object = *obj
 	return &qr, nil
 }
 
-func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQueryResult, error) {
+func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQueryResult, *protocol.Error) {
 	b, err := m.db.GetIndex(state.DirectoryIndex, chainId, "Metadata")
 	if err != nil {
-		return nil, err
+		return nil, protocolError(0, err)
 	}
 
 	md := new(protocol.DirectoryIndexMetadata)
 	err = md.UnmarshalBinary(b)
 	if err != nil {
-		return nil, err
+		return nil, protocolError(protocol.CodeEncodingError, err)
 	}
 
 	resp := new(protocol.DirectoryQueryResult)
@@ -125,33 +125,33 @@ func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQ
 	for i := range resp.Entries {
 		b, err := m.db.GetIndex(state.DirectoryIndex, chainId, uint64(i))
 		if err != nil {
-			return nil, fmt.Errorf("failed to get entry %d", i)
+			return nil, protocolErrorf(0, "failed to get entry %d", i)
 		}
 		resp.Entries[i] = string(b)
 	}
 	return resp, nil
 }
 
-func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
+func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, *protocol.Error) {
 	var err error
 
 	qr := query.ResponseByTxId{}
 	qr.TxState, err = m.db.GetTx(txid)
 	if errors.Is(err, storage.ErrNotFound) {
-		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
+		return nil, protocolErrorf(protocol.CodeNotFound, "tx %X %w", txid, storage.ErrNotFound)
 	} else if err != nil {
-		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+		return nil, protocolErrorf(0, "invalid query from GetTx in state database, %v", err)
 	}
 	qr.TxPendingState, err = m.db.GetPendingTx(txid)
 	if !errors.Is(err, storage.ErrNotFound) && err != nil {
 		//this is only an error if the pending states have not yet been purged or some other database error occurred
-		return nil, fmt.Errorf("%w: error in query for pending chain on txid %X", storage.ErrNotFound, txid)
+		return nil, protocolErrorf(protocol.CodeNotFound, "%w: error in query for pending chain on txid %X", storage.ErrNotFound, txid)
 	}
 
 	qr.TxSynthTxIds, err = m.db.GetSyntheticTxIds(txid)
 	if !errors.Is(err, storage.ErrNotFound) && err != nil {
 		//this is only an error if the transactions produced synth tx's or some other database error occurred
-		return nil, fmt.Errorf("%w: error in query for synthetic txid txid %X", storage.ErrNotFound, txid)
+		return nil, protocolErrorf(protocol.CodeNotFound, "%w: error in query for synthetic txid txid %X", storage.ErrNotFound, txid)
 	}
 
 	qr.TxId.FromBytes(txid)
@@ -165,98 +165,99 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		txr := query.RequestByTxId{}
 		err := txr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, protocolError(protocol.CodeEncodingError, err)
 		}
-		qr, err := m.queryByTxId(txr.TxId[:])
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err.Error()}
+		qr, perr := m.queryByTxId(txr.TxId[:])
+		if perr != nil {
+			return nil, nil, perr
 		}
 		k = []byte("tx")
 		v, err = qr.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("%v, on Chain %x", err, txr.TxId[:])}
+			return nil, nil, protocolErrorf(protocol.CodeInternalError, "failed to marshal: %v", err)
 		}
 	case types.QueryTypeTxHistory:
 		txh := query.RequestTxHistory{}
 		err := txh.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, protocolError(protocol.CodeEncodingError, err)
 		}
 
 		thr := query.ResponseTxHistory{}
 		txids, maxAmt, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Start+txh.Limit)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Sprintf("error obtaining txid range %v", err)}
+			return nil, nil, protocolErrorf(protocol.CodeTxnHistory, "error obtaining txid range %v", err)
 		}
 		thr.Total = maxAmt
 		for i := range txids {
 			qr, err := m.queryByTxId(txids[i][:])
 			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err.Error()}
+				return nil, nil, err
 			}
 			thr.Transactions = append(thr.Transactions, *qr)
 		}
 		k = []byte("tx-history")
 		v, err = thr.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: "error marshalling payload for transaction history"}
+			return nil, nil, protocolErrorf(protocol.CodeInternalError, "failed to marshal: %v", err)
 		}
 	case types.QueryTypeUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, protocolError(protocol.CodeEncodingError, err)
 		}
 		u, err := url.Parse(*chr.Url.AsString())
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Sprintf("invalid URL in query %s", chr.Url)}
+			return nil, nil, protocolErrorf(protocol.CodeInvalidRequest, "%q is not a valid URL: %v", *chr.Url.AsString(), err)
 		}
 
 		var obj encoding.BinaryMarshaler
-		k, obj, err = m.queryByUrl(u)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: fmt.Sprintf("invalid URL in query %s", chr.Url)}
+		var perr *protocol.Error
+		k, obj, perr = m.queryByUrl(u)
+		if perr != nil {
+			return nil, nil, perr
 		}
 		v, err = obj.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("%v, on Url %s", err, chr.Url)}
+			return nil, nil, protocolErrorf(protocol.CodeInternalError, "failed to marshal: %v", err)
 		}
 	case types.QueryTypeDirectoryUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, protocolError(protocol.CodeEncodingError, err)
 		}
 		u, err := url.Parse(*chr.Url.AsString())
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Sprintf("invalid URL in query %s", chr.Url)}
+			return nil, nil, protocolErrorf(protocol.CodeInvalidRequest, "%q is not a valid URL: %v", *chr.Url.AsString(), err)
 		}
-		dir, err := m.queryDirectoryByChainId(u.ResourceChain())
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err.Error()}
+		dir, perr := m.queryDirectoryByChainId(u.ResourceChain())
+		if perr != nil {
+			return nil, nil, perr
 		}
 		k = []byte("directory")
 		v, err = dir.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("%v, on Url %s", err, chr.Url)}
+			return nil, nil, protocolErrorf(protocol.CodeInternalError, "failed to marshal: %v", err)
 		}
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
 		err := chr.UnmarshalBinary(chr.ChainId[:])
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, protocolError(protocol.CodeEncodingError, err)
 		}
-		obj, err := m.queryByChainId(chr.ChainId[:])
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err.Error()}
+		obj, perr := m.queryByChainId(chr.ChainId[:])
+		if perr != nil {
+			return nil, nil, perr
 		}
 		k = []byte("chain")
 		v, err = obj.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("%v, on Chain %x", err, chr.ChainId)}
+			return nil, nil, protocolErrorf(protocol.CodeInternalError, "failed to marshal: %v", err)
 		}
 	default:
-		return nil, nil, &protocol.Error{Code: protocol.CodeInvalidQueryType, Message: fmt.Sprintf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())}
+		return nil, nil, protocolErrorf(protocol.CodeInvalidQueryType, "%v (%d) is not a supported query type", q.Type, q.Type.AsUint64())
 	}
 	return k, v, err
 }
@@ -268,31 +269,32 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
 }
 
-func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error) {
+func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, *protocol.Error) {
 	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
-		return NewStateManager(m.db, tx)
+		st, err := NewStateManager(m.db, tx)
+		return st, protocolError(0, err)
 	}
 
 	if len(tx.Signature) == 0 {
-		return nil, fmt.Errorf("transaction is not signed")
+		return nil, protocolErrorf(protocol.CodeInvalidTx, "transaction is not signed")
 	}
 
 	if !tx.ValidateSig() {
-		return nil, fmt.Errorf("invalid signature")
+		return nil, protocolErrorf(protocol.CodeInvalidTx, "invalid signature")
 	}
 
 	txt := tx.TransactionType()
 
 	st, err := NewStateManager(m.db, tx)
-	if errors.Is(err, storage.ErrNotFound) {
+	if perr != nil && perr.Code == protocol.CodeNotFound {
 		switch txt {
 		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens:
 			// TX does not require a sponsor - it may create the sponsor
 		default:
-			return nil, fmt.Errorf("sponsor not found: %v", err)
+			return nil, perr
 		}
-	} else if err != nil {
-		return nil, err
+	} else if perr != nil {
+		return nil, perr
 	}
 
 	if txt.IsSynthetic() {
@@ -306,11 +308,11 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 
 	case *state.AdiState, *state.TokenAccount, *protocol.SigSpec:
 		if (sponsor.Header().SigSpecId == types.Bytes32{}) {
-			return nil, fmt.Errorf("sponsor has not been assigned to an SSG")
+			return nil, protocolErrorf(protocol.CodeInvalidRecord, "sponsor has not been assigned to an SSG")
 		}
 		err := st.LoadAs(sponsor.Header().SigSpecId, sigGroup)
 		if err != nil {
-			return nil, fmt.Errorf("invalid SigSpecId: %v", err)
+			return nil, protocolErrorf(protocol.CodeInvalidRecord, "invalid SigSpecId: %v", err)
 		}
 
 	case *protocol.SigSpecGroup:
@@ -319,17 +321,17 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	default:
 		// The TX sponsor cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, fmt.Errorf("%v cannot sponsor transactions", sponsor.Header().Type)
+		return nil, protocolErrorf(protocol.CodeInvalidTx, "%v cannot sponsor transactions", sponsor.Header().Type)
 	}
 
 	if tx.SigInfo.PriorityIdx >= uint64(len(sigGroup.SigSpecs)) {
-		return nil, fmt.Errorf("invalid sig spec index")
+		return nil, protocolErrorf(protocol.CodeInvalidTx, "invalid sig spec index")
 	}
 
 	sigSpec := new(protocol.SigSpec)
-	err = st.LoadAs(sigGroup.SigSpecs[tx.SigInfo.PriorityIdx], sigSpec)
+	err := st.LoadAs(sigGroup.SigSpecs[tx.SigInfo.PriorityIdx], sigSpec)
 	if err != nil {
-		return nil, fmt.Errorf("invalid sig spec: %v", err)
+		return nil, protocolErrorf(0, "error loading sig spec: %w", err)
 	}
 
 	// TODO check height
@@ -337,11 +339,11 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	for i, sig := range tx.Signature {
 		ks := sigSpec.FindKey(sig.PublicKey)
 		if ks == nil {
-			return nil, fmt.Errorf("no key spec matches signature %d", i)
+			return nil, protocolErrorf(protocol.CodeInvalidTx, "no key spec matches signature %d", i)
 		}
 
 		if ks.Nonce >= sig.Nonce {
-			return nil, fmt.Errorf("invalid nonce")
+			return nil, protocolErrorf(protocol.CodeInvalidTx, "invalid nonce")
 		}
 		// TODO add pending update for the nonce
 	}
@@ -349,7 +351,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	return st, nil
 }
 
-func (m *Executor) checkSynthetic(st *StateManager, tx *transactions.GenTransaction) error {
+func (m *Executor) checkSynthetic(st *StateManager, tx *transactions.GenTransaction) *protocol.Error {
 	//placeholder for special validation rules for synthetic transactions.
 	//need to verify the sender is a legit bvc validator also need the dbvc receipt
 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
@@ -358,29 +360,29 @@ func (m *Executor) checkSynthetic(st *StateManager, tx *transactions.GenTransact
 	return nil
 }
 
-func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransaction, account *protocol.AnonTokenAccount) error {
+func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransaction, account *protocol.AnonTokenAccount) *protocol.Error {
 	u, err := account.ParseUrl()
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
 		// into the database.
-		return fmt.Errorf("invalid sponsor URL: %v", err)
+		return protocolErrorf(protocol.CodeInvalidRecord, "sponsor record URL is invalid: %v", err)
 	}
 
 	urlKH, _, err := protocol.ParseAnonymousAddress(u)
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
 		// into the database.
-		return fmt.Errorf("invalid anonymous token URL: %v", err)
+		return protocolErrorf(protocol.CodeInvalidRecord, "invalid anonymous token URL: %v", err)
 	}
 
 	for i, sig := range tx.Signature {
 		sigKH := sha256.Sum256(sig.PublicKey)
 		if !bytes.Equal(urlKH, sigKH[:20]) {
-			return fmt.Errorf("signature %d's public key does not match the sponsor", i)
+			return protocolErrorf(protocol.CodeInvalidTx, "signature %d's public key does not match the sponsor", i)
 		}
 
 		if account.Nonce >= sig.Nonce {
-			return fmt.Errorf("invalid nonce")
+			return protocolErrorf(protocol.CodeInvalidTx, "invalid nonce")
 		}
 	}
 
@@ -393,21 +395,22 @@ func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransact
 func (m *Executor) CheckTx(tx *transactions.GenTransaction) *protocol.Error {
 	err := tx.SetRoutingChainID()
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeRoutingChainId, Message: err.Error()}
+		return protocolError(protocol.CodeInvalidRequest, err)
 	}
 
-	st, err := m.check(tx)
-	if err != nil {
+	st, perr := m.check(tx)
+	if perr != nil {
 		return &protocol.Error{Code: protocol.CodeCheckTxError, Message: err.Error()}
 	}
 
 	executor, ok := m.executors[types.TxType(tx.TransactionType())]
 	if !ok {
-		return &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Sprintf("unsupported TX type: %v", types.TxType(tx.TransactionType()))}
+		txt := types.TxType(tx.TransactionType())
+		return protocolErrorf(protocol.CodeInvalidTxnType, "%s (%d) is not a supported transaction type", txt, txt.ID())
 	}
 	err = executor.Validate(st, tx)
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeValidateTxnError, Message: err.Error()}
+		return protocolError(protocol.CodeInvalidTx, err)
 	}
 	return nil
 }
@@ -418,11 +421,11 @@ func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, c
 	e, err1 := txPending.MarshalBinary()
 	txPendingObject.Entry = e
 	if err1 != nil {
-		return &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("failed marshaling pending tx (%v) on error: %v", err1, err)}
+		return protocolErrorf(protocol.CodeInternalError, "failed marshaling pending tx (%v) on error: %v", err1, err)
 	}
 	err1 = m.db.AddTransaction(chainId, txid, txPendingObject, nil)
 	if err1 != nil {
-		err = &protocol.Error{Code: protocol.CodeAddTxnError, Message: fmt.Sprintf("error adding pending tx (%v) on error %v", err1, err)}
+		return protocolErrorf(protocol.CodeInternalError, "error adding pending tx (%v) on error %v", err1, err)
 	}
 	return err
 }
@@ -444,7 +447,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	defer m.wg.Done()
 
 	if tx.Transaction == nil || tx.SigInfo == nil || len(tx.ChainID) != 32 {
-		return nil, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: "malformed transaction error"}
+		return nil, protocolErrorf(protocol.CodeInvalidTx, "malformed transaction")
 	}
 
 	txt := types.TxType(tx.TransactionType())
@@ -452,7 +455,8 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	txPending := state.NewPendingTransaction(tx)
 	chainId := types.Bytes(tx.ChainID).AsBytes32()
 	if !ok {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Sprintf("unsupported TX type: %v", tx.TransactionType().Name())})
+		err := protocolErrorf(protocol.CodeInvalidTxnType, "%s (%d) is not a supported transaction type", txt, txt.ID())
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	tx.TransactionHash()
@@ -469,16 +473,17 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	defer group.Done()
 	m.mu.Unlock()
 
-	st, err := m.check(tx)
-	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Sprintf("txn check failed : %v", err)})
+	st, perr := m.check(tx)
+	if perr != nil {
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), perr)
 	}
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
-	err = executor.Validate(st, tx)
+	err := executor.Validate(st, tx)
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Sprintf("txn validation failed : %v", err)})
+		err := protocolError(protocol.CodeInvalidTx, err)
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	// Ensure the genesis transaction can only be processed once
@@ -494,33 +499,35 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	txAccepted, txPending := state.NewTransaction(txPending)
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
-	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err.Error()})
+	if perr != nil {
+		err := protocolError(protocol.CodeInternalError, perr)
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	txPendingObject := new(state.Object)
 	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
-	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err.Error()})
+	if perr != nil {
+		err := protocolError(protocol.CodeInternalError, perr)
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), err)
 	}
 
 	// Store the tx state
 	err = m.db.AddTransaction(&chainId, tx.TransactionHash(), txPendingObject, txAcceptedObject)
-	if err != nil {
-		return nil, &protocol.Error{Code: protocol.CodeTxnStateError, Message: err.Error()}
+	if perr != nil {
+		return nil, protocolError(protocol.CodeTxnStateError, perr)
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
-	err = st.commit()
-	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err.Error()})
+	perr = st.commit()
+	if perr != nil {
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: perr.Error()})
 	}
 
 	// Process synthetic transactions generated by the validator
-	refs, err := m.submitSyntheticTx(tx.TransactionHash(), st)
-	if err != nil {
-		return nil, &protocol.Error{Code: protocol.CodeSyntheticTxnError, Message: err.Error()}
+	refs, perr := m.submitSyntheticTx(tx.TransactionHash(), st)
+	if perr != nil {
+		return nil, &protocol.Error{Code: protocol.CodeSyntheticTxnError, Message: perr.Error()}
 	}
 
 	r := new(protocol.TxResult)
@@ -580,7 +587,8 @@ func (m *Executor) nextSynthCount() (uint64, error) {
 	return n, nil
 }
 
-func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (tmRef []*protocol.TxSynthRef, err error) {
+func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) ([]*protocol.TxSynthRef, *protocol.Error) {
+	var tmRef []*protocol.TxSynthRef
 	if m.leader {
 		tmRef = make([]*protocol.TxSynthRef, len(st.submissions))
 	}
@@ -593,7 +601,7 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 
 		body, err := sub.body.MarshalBinary()
 		if err != nil {
-			return nil, fmt.Errorf("failed to marshal synthetic transaction payload: %v", err)
+			return nil, protocolErrorf(protocol.CodeInternalError, "failed to marshal synthetic transaction payload: %v", err)
 		}
 
 		tx := new(transactions.GenTransaction)
@@ -607,7 +615,7 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 		tx.SigInfo.MSHeight = uint64(m.height)
 		tx.SigInfo.Nonce, err = m.nextSynthCount()
 		if err != nil {
-			return nil, err
+			return nil, protocolError(0, err)
 		}
 
 		// Create the state object to store the unsigned pending transaction
@@ -615,7 +623,7 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 		txSyntheticObject := new(state.Object)
 		synthTxData, err := txSynthetic.MarshalBinary()
 		if err != nil {
-			return nil, err
+			return nil, protocolError(0, err)
 		}
 		txSyntheticObject.Entry = synthTxData
 		m.db.AddSynthTx(parentTxId, tx.TransactionHash(), txSyntheticObject)
@@ -641,13 +649,13 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 			ed.PublicKey = m.key[32:]
 			err := ed.Sign(tx.SigInfo.Nonce, m.key, tx.TransactionHash())
 			if err != nil {
-				return nil, fmt.Errorf("error signing sythetic transaction, %v", err)
+				return nil, protocolErrorf(protocol.CodeInternalError, "error signing sythetic transaction, %v", err)
 			}
 
 			tx.Signature = append(tx.Signature, ed)
 			ti, err := m.query.BroadcastTx(tx, nil)
 			if err != nil {
-				return nil, err
+				return nil, protocolError(0, err)
 			}
 
 			tmRef[i] = new(protocol.TxSynthRef)

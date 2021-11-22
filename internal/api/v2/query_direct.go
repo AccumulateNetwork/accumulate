@@ -23,7 +23,7 @@ func (queryDirect) responseIsError(r tm.ResponseQuery) error {
 	}
 
 	switch {
-	case r.Code == protocol.CodeNotFound:
+	case r.Code == uint32(protocol.CodeNotFound):
 		return storage.ErrNotFound
 	case r.Log != "":
 		return errors.New(r.Log)
@@ -58,7 +58,7 @@ func (q queryDirect) queryType(typ types.QueryType, content queryRequest) (strin
 	}
 
 	switch {
-	case res.Response.Code == protocol.CodeNotFound:
+	case res.Response.Code == uint32(protocol.CodeNotFound):
 		return "", nil, storage.ErrNotFound
 	case res.Response.Log != "":
 		return "", nil, errors.New(res.Response.Log)

@@ -26,7 +26,7 @@ func responseIsError(rQuery tm.ResponseQuery) error {
 	}
 
 	switch {
-	case rQuery.Code == protocol.CodeNotFound:
+	case rQuery.Code == uint32(protocol.CodeNotFound):
 		return storage.ErrNotFound
 	case rQuery.Log != "":
 		return errors.New(rQuery.Log)

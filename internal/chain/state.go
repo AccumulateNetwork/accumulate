@@ -57,7 +57,7 @@ func NewStateManager(db *state.StateDB, tx *transactions.GenTransaction) (*State
 	var err error
 	m.SponsorUrl, err = url.Parse(tx.SigInfo.URL)
 	if err != nil {
-		return nil, err
+		return nil, protocolErrorf(protocol.CodeInvalidRequest, "%q is not a valid URL: %v", tx.SigInfo.URL, err)
 	}
 
 	copy(m.SponsorChainId[:], m.SponsorUrl.ResourceChain())
@@ -67,9 +67,9 @@ func NewStateManager(db *state.StateDB, tx *transactions.GenTransaction) (*State
 	}
 
 	if errors.Is(err, storage.ErrNotFound) {
-		return m, fmt.Errorf("sponsor %q %w", m.SponsorUrl, err)
+		return m, protocolErrorf(protocol.CodeNotFound, "sponsor %q %w", m.SponsorUrl, err)
 	}
-	return nil, err
+	return nil, protocolError(0, err)
 }
 
 type submittedTx struct {
@@ -209,7 +209,7 @@ func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
 	m.submissions = append(m.submissions, &submittedTx{url, body})
 }
 
-func (m *StateManager) commit() error {
+func (m *StateManager) commit() *protocol.Error {
 	for k, v := range m.writes {
 		m.db.Write(k, v)
 	}
@@ -225,7 +225,7 @@ func (m *StateManager) commit() error {
 	for _, store := range stores {
 		data, err := store.record.MarshalBinary()
 		if err != nil {
-			return fmt.Errorf("failed to marshal record: %v", err)
+			return protocolErrorf(protocol.CodeInternalError, "failed to marshal record: %v", err)
 		}
 
 		if !store.isCreate {
@@ -234,10 +234,10 @@ func (m *StateManager) commit() error {
 				// If the record already exists, update it
 			} else if !errors.Is(err, storage.ErrNotFound) {
 				// Handle unexpected errors
-				return fmt.Errorf("failed to check for an existing record: %v", err)
+				return protocolErrorf(protocol.CodeInternalError, "failed to check for an existing record: %v", err)
 			} else if !(m.txType.IsSynthetic() || store.record.Header().Type.IsTransaction()) {
 				// Unless the TX is synthetic or the record is a TX, reject the update
-				return fmt.Errorf("cannot create a data record in a non-synthetic transaction")
+				return protocolErrorf(protocol.CodeInternalError, "cannot create a data record in a non-synthetic transaction")
 			}
 
 			m.db.AddStateEntry((*types.Bytes32)(store.chainId), &m.txHash, &state.Object{Entry: data})
@@ -246,7 +246,7 @@ func (m *StateManager) commit() error {
 
 		u, err := store.record.Header().ParseUrl()
 		if err != nil {
-			return fmt.Errorf("record has invalid URL: %v", err)
+			return protocolErrorf(protocol.CodeInvalidRecord, "record has invalid URL: %v", err)
 		}
 
 		id := u.Identity()
