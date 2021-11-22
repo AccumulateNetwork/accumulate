@@ -36,6 +36,7 @@ type Executor struct {
 	chainWG map[uint64]*sync.WaitGroup
 	leader  bool
 	height  int64
+	dbTx    *state.DBTransactional
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -266,11 +267,12 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 	m.leader = req.IsLeader
 	m.height = req.Height
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
+	m.dbTx = m.db.Begin()
 }
 
 func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error) {
 	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
-		return NewStateManager(m.db, tx)
+		return NewStateManager(m.dbTx, tx)
 	}
 
 	if len(tx.Signature) == 0 {
@@ -283,7 +285,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 
 	txt := tx.TransactionType()
 
-	st, err := NewStateManager(m.db, tx)
+	st, err := NewStateManager(m.dbTx, tx)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
 		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens:
@@ -507,7 +509,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	}
 
 	// Store the tx state
-	err = m.db.AddTransaction(&chainId, tx.TransactionHash(), txPendingObject, txAcceptedObject)
+	err = m.dbTx.AddTransaction(&chainId, tx.TransactionHash(), txPendingObject, txAcceptedObject)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +538,7 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
 func (m *Executor) Commit() ([]byte, error) {
 	m.wg.Wait()
 
-	mdRoot, numStateChanges, err := m.db.WriteStates(m.height)
+	mdRoot, numStateChanges, err := m.dbTx.Commit(m.height)
 	if err != nil {
 		// This should never happen
 		panic(fmt.Errorf("fatal error, block not set, %v", err))

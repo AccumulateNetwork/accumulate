@@ -55,7 +55,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			}, edSigner(testKey, 1), body)
 			require.NoError(t, err)
 
-			st, err := NewStateManager(db, tx)
+			st, err := NewStateManager(db.Begin(), tx)
 			require.NoError(t, err)
 
 			err = UpdateKeyPage{}.DeliverTx(st, tx)
