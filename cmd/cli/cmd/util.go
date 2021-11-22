@@ -412,7 +412,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 			var out string
 			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
-			out += fmt.Sprintf("\tBalance\t\t:\t%s %s\n", amt)
+			out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBookUrl)
 
 			fmt.Fprintf(os.Stderr, string(out))
