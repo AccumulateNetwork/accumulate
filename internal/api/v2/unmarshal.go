@@ -83,6 +83,8 @@ func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 		payload = new(protocol.SyntheticDepositCredits)
 	case types.TxTypeSyntheticGenesis:
 		payload = new(protocol.SyntheticGenesis)
+	case types.TxTypeAcmeFaucet:
+		payload = new(protocol.AcmeFaucet)
 	default:
 		return nil, fmt.Errorf("unknown TX type %v", typ)
 	}
