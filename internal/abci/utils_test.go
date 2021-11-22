@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -33,15 +34,15 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
 
-func createAppWithMemDB(t testing.TB, addr crypto.Address, logLevel string) *fakeNode {
+func createAppWithMemDB(t testing.TB, addr crypto.Address, logLevel string, doGenesis bool) *fakeNode {
 	db := new(state.StateDB)
 	err := db.Open("memory", true, true)
 	require.NoError(t, err)
 
-	return createApp(t, db, addr, logLevel)
+	return createApp(t, db, addr, logLevel, doGenesis)
 }
 
-func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel string) *fakeNode {
+func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel string, doGenesis bool) *fakeNode {
 	_, bvcKey, _ := ed25519.GenerateKey(rand)
 
 	n := new(fakeNode)
@@ -91,6 +92,16 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
 	require.NoError(t, err)
 	appChan <- n.app
+
+	if doGenesis {
+		n.Batch(func(send func(*transactions.GenTransaction)) {
+			tx, err := transactions.New(protocol.ACME, func(hash []byte) (*transactions.ED25519Sig, error) {
+				return genesis.FaucetWallet.Sign(hash), nil
+			}, new(protocol.SyntheticGenesis))
+			require.NoError(t, err)
+			send(tx)
+		})
+	}
 
 	return n
 }
