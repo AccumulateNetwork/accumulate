@@ -36,7 +36,7 @@ func TestAnonTokenTransactions(t *testing.T) {
 	destAddr := anon.GenerateAcmeAddress(destPrivKey[32:])
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 
-	st, err := NewStateManager(db, gtx)
+	st, err := NewStateManager(db.Begin(), gtx)
 	require.NoError(t, err)
 
 	err = WithdrawTokens{}.Validate(st, gtx)
