@@ -85,6 +85,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		// General
 		"version": m.Version,
 		"metrics": m.Metrics,
+		"faucet":  m.Faucet,
 
 		// Query
 		"query":            m.Query,
@@ -103,7 +104,6 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		"send-tokens":          m.ExecuteWith(func() PL { return new(api.TokenTx) }),
 		"add-credits":          m.ExecuteWith(func() PL { return new(protocol.AddCredits) }),
 		"update-key-page":      m.ExecuteWith(func() PL { return new(protocol.UpdateKeyPage) }),
-		// TODO faucet
 	}
 
 	return m, nil
