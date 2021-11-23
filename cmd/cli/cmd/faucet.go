@@ -25,10 +25,6 @@ var faucetCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(faucetCmd)
-}
-
 func PrintFaucet() {
 	fmt.Println("  accumulate faucet [url] 		Get tokens from faucet to address")
 }

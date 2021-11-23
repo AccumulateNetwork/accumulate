@@ -97,10 +97,6 @@ type KeyResponse struct {
 	Mnemonic   types.Bytes  `json:"mnemonic"`
 }
 
-func init() {
-	rootCmd.AddCommand(keyCmd)
-}
-
 func PrintKeyPublic() {
 	fmt.Println("  accumulate key list			List generated keys associated with the wallet")
 }
@@ -177,15 +173,16 @@ func LookupByPubKey(pubKey []byte) ([]byte, error) {
 	return Db.Get(BucketKeys, pubKey)
 }
 
-func GenerateKey(label string) {
+func GenerateKey(label string) (string, error) {
+	var out string
 	if _, err := strconv.ParseInt(label, 10, 64); err == nil {
-		log.Fatal("key name cannot be a number")
+		return "", fmt.Errorf("key name cannot be a number")
 	}
 
 	privKey, err := GeneratePrivateKey()
 
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	pubKey := privKey[32:]
@@ -193,24 +190,24 @@ func GenerateKey(label string) {
 	if label == "" {
 		ltu, err := protocol.AnonymousAddress(pubKey, protocol.AcmeUrl().String())
 		if err != nil {
-			log.Fatal("unable to create lite account")
+			return "", fmt.Errorf("unable to create lite account")
 		}
 		label = ltu.String()
 	}
 
 	_, err = LookupByLabel(label)
 	if err == nil {
-		log.Fatal(fmt.Errorf("key already exists for key name %s", label))
+		return "", fmt.Errorf("key already exists for key name %s", label)
 	}
 
 	err = Db.Put(BucketKeys, pubKey, privKey)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	err = Db.Put(BucketLabel, []byte(label), pubKey)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	if WantJsonOutput {
@@ -219,12 +216,13 @@ func GenerateKey(label string) {
 		a.PublicKey = pubKey
 		dump, err := json.Marshal(&a)
 		if err != nil {
-			log.Fatal(err)
+			return "", err
 		}
-		fmt.Fprintf(os.Stderr, "%s\n", string(dump))
+		out += fmt.Sprintf("%s\n", string(dump))
 	} else {
-		fmt.Fprintf(os.Stderr, "%s :\t%x", label, pubKey)
+		out += fmt.Sprintf("%s :\t%x", label, pubKey)
 	}
+	return out, nil
 }
 
 func ListKeyPublic() {

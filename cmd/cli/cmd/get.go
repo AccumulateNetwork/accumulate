@@ -41,10 +41,6 @@ var getCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(getCmd)
-}
-
 func PrintGet() {
 	fmt.Println("  accumulate get [url] 		Get data by Accumulate URL")
 	//fmt.Println("  accumulate get [chain id] 		Get data by Accumulate chain id")
