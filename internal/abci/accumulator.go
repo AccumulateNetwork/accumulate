@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
@@ -110,7 +111,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 	case customErr == nil:
 		//Ok
 
-	case customErr.Error() == storage.ErrNotFound.Error():
+	case strings.Contains(customErr.Error(), storage.ErrNotFound.Error()):
 		resQuery.Info = customErr.Error()
 		resQuery.Code = protocol.CodeNotFound
 		return resQuery
