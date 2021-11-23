@@ -6,7 +6,6 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	"log"
 	"math"
 	"math/big"
@@ -20,6 +19,7 @@ import (
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
@@ -246,8 +246,9 @@ type ActionResponse struct {
 }
 
 func (a *ActionResponse) Print() {
+	ok := a.Code == "0" || a.Code == ""
 	if WantJsonOutput {
-		if a.Code == "0" || a.Code == "" {
+		if ok {
 			a.Code = "ok"
 		}
 		dump, err := json.Marshal(a)
@@ -255,12 +256,12 @@ func (a *ActionResponse) Print() {
 			log.Fatal(err)
 		}
 		log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
-		log.Fatal(string(dump))
+		log.Print(string(dump))
 	} else {
 		var out string
 		out += fmt.Sprintf("\n\tTransaction Identifier\t:\t%x\n", a.Txid)
 		out += fmt.Sprintf("\tTendermint Reference\t:\t%x\n", a.Hash)
-		if a.Code != "0" && a.Code != "" {
+		if !ok {
 			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
 		} else {
 			out += fmt.Sprintf("\tError code\t\t:\tok\n")
@@ -274,7 +275,11 @@ func (a *ActionResponse) Print() {
 		if a.Codespace != "" {
 			out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
 		}
-		log.Fatal(out)
+		log.Print(out)
+	}
+
+	if !ok {
+		os.Exit(1)
 	}
 }
 
@@ -294,12 +299,12 @@ func PrintJsonRpcError(err error) {
 			log.Fatal(err)
 		}
 		log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
-		log.Fatal(string(dump))
+		log.Print(string(dump))
 	} else {
 		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
 		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
 		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
-		log.Fatal(out)
+		log.Print(out)
 	}
 }
 
