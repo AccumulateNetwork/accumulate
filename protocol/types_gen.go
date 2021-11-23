@@ -55,6 +55,13 @@ type CreateSigSpecGroup struct {
 	SigSpecs [][32]byte `json:"sigSpecs" form:"sigSpecs" query:"sigSpecs" validate:"required"`
 }
 
+type CreateToken struct {
+	Url        string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
+	Symbol     string `json:"symbol" form:"symbol" query:"symbol" validate:"required"`
+	Precision  uint64 `json:"precision" form:"precision" query:"precision" validate:"required"`
+	Properties string `json:"properties" form:"properties" query:"properties" validate:"acc-url"`
+}
+
 type DataAccount struct {
 	state.ChainHeader
 	Data []byte `json:"data" form:"data" query:"data" validate:"required"`
@@ -141,6 +148,13 @@ type TokenAccountCreate struct {
 	KeyBookUrl string `json:"keyBookUrl" form:"keyBookUrl" query:"keyBookUrl" validate:"required,acc-url"`
 }
 
+type TokenIssuer struct {
+	state.ChainHeader
+	Symbol     string `json:"symbol" form:"symbol" query:"symbol" validate:"required"`
+	Precision  uint64 `json:"precision" form:"precision" query:"precision" validate:"required"`
+	Properties string `json:"properties" form:"properties" query:"properties" validate:"required,acc-url"`
+}
+
 type TxResult struct {
 	SyntheticTxs []*TxSynthRef `json:"syntheticTxs" form:"syntheticTxs" query:"syntheticTxs" validate:"required"`
 }
@@ -197,6 +211,12 @@ func NewSigSpecGroup() *SigSpecGroup {
 	return v
 }
 
+func NewTokenIssuer() *TokenIssuer {
+	v := new(TokenIssuer)
+	v.Type = types.ChainTypeTokenIssuer
+	return v
+}
+
 func (*AcmeFaucet) GetType() types.TransactionType { return types.TxTypeAcmeFaucet }
 
 func (*AddCredits) GetType() types.TransactionType { return types.TxTypeAddCredits }
@@ -208,6 +228,8 @@ func (*CreateDataAccount) GetType() types.TransactionType { return types.TxTypeC
 func (*CreateSigSpec) GetType() types.TransactionType { return types.TxTypeCreateKeyPage }
 
 func (*CreateSigSpecGroup) GetType() types.TransactionType { return types.TxTypeCreateKeyBook }
+
+func (*CreateToken) GetType() types.TransactionType { return types.TxTypeCreateToken }
 
 func (*IdentityCreate) GetType() types.TransactionType { return types.TxTypeCreateIdentity }
 
@@ -331,6 +353,22 @@ func (v *CreateSigSpecGroup) BinarySize() int {
 	n += encoding.StringBinarySize(v.Url)
 
 	n += encoding.ChainSetBinarySize(v.SigSpecs)
+
+	return n
+}
+
+func (v *CreateToken) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeCreateToken.ID())
+
+	n += encoding.StringBinarySize(v.Url)
+
+	n += encoding.StringBinarySize(v.Symbol)
+
+	n += encoding.UvarintBinarySize(v.Precision)
+
+	n += encoding.StringBinarySize(v.Properties)
 
 	return n
 }
@@ -542,6 +580,23 @@ func (v *TokenAccountCreate) BinarySize() int {
 	return n
 }
 
+func (v *TokenIssuer) BinarySize() int {
+	var n int
+
+	// Enforce sanity
+	v.Type = types.ChainTypeTokenIssuer
+
+	n += v.ChainHeader.GetHeaderSize()
+
+	n += encoding.StringBinarySize(v.Symbol)
+
+	n += encoding.UvarintBinarySize(v.Precision)
+
+	n += encoding.StringBinarySize(v.Properties)
+
+	return n
+}
+
 func (v *TxResult) BinarySize() int {
 	var n int
 
@@ -710,6 +765,22 @@ func (v *CreateSigSpecGroup) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
 	buffer.Write(encoding.ChainSetMarshalBinary(v.SigSpecs))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *CreateToken) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeCreateToken.ID()))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Symbol))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Precision))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Properties))
 
 	return buffer.Bytes(), nil
 }
@@ -937,6 +1008,26 @@ func (v *TokenAccountCreate) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.TokenUrl))
 
 	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	// Enforce sanity
+	v.Type = types.ChainTypeTokenIssuer
+
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+	buffer.Write(encoding.StringMarshalBinary(v.Symbol))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Precision))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Properties))
 
 	return buffer.Bytes(), nil
 }
@@ -1220,6 +1311,46 @@ func (v *CreateSigSpecGroup) UnmarshalBinary(data []byte) error {
 		v.SigSpecs = x
 	}
 	data = data[encoding.ChainSetBinarySize(v.SigSpecs):]
+
+	return nil
+}
+
+func (v *CreateToken) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeCreateToken
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[encoding.StringBinarySize(v.Url):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Symbol: %w", err)
+	} else {
+		v.Symbol = x
+	}
+	data = data[encoding.StringBinarySize(v.Symbol):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Precision: %w", err)
+	} else {
+		v.Precision = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Precision):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Properties: %w", err)
+	} else {
+		v.Properties = x
+	}
+	data = data[encoding.StringBinarySize(v.Properties):]
 
 	return nil
 }
@@ -1607,6 +1738,39 @@ func (v *TokenAccountCreate) UnmarshalBinary(data []byte) error {
 		v.KeyBookUrl = x
 	}
 	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
+
+	return nil
+}
+
+func (v *TokenIssuer) UnmarshalBinary(data []byte) error {
+	typ := types.ChainTypeTokenIssuer
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding header: %w", err)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+	}
+	data = data[v.GetHeaderSize():]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Symbol: %w", err)
+	} else {
+		v.Symbol = x
+	}
+	data = data[encoding.StringBinarySize(v.Symbol):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Precision: %w", err)
+	} else {
+		v.Precision = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Precision):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Properties: %w", err)
+	} else {
+		v.Properties = x
+	}
+	data = data[encoding.StringBinarySize(v.Properties):]
 
 	return nil
 }

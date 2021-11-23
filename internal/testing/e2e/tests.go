@@ -9,12 +9,11 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 func (s *Suite) TestGenesis() {
 	s.Run("ACME", func() {
-		acme := new(state.Token)
+		acme := new(protocol.TokenIssuer)
 		s.getChainAs(protocol.AcmeUrl().String(), acme)
 		s.Assert().Equal(protocol.AcmeUrl().String(), string(acme.ChainUrl))
 		s.Assert().Equal(protocol.ACME, string(acme.Symbol))
