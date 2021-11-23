@@ -14,7 +14,7 @@ import (
 
 // Metrics returns Metrics for explorer (tps, etc.)
 func (m *JrpcMethods) Metrics(_ context.Context, params json.RawMessage) interface{} {
-	req := new(MetricsRequest)
+	req := new(MetricsQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
