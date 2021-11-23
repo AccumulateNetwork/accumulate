@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"time"
@@ -36,24 +38,24 @@ var accountCmd = &cobra.Command{
 				}
 			case "create":
 				if len(args) > 3 {
-					CreateAccount(args[1], args[2:])
+					out, err = CreateAccount(args[1], args[2:])
 				} else {
 					fmt.Println("Usage:")
 					PrintAccountCreate()
 				}
 			case "qr":
 				if len(args) > 1 {
-					QrAccount(args[1])
+					out, err = QrAccount(args[1])
 				} else {
 					fmt.Println("Usage:")
 					PrintAccountQr()
 				}
 			case "generate":
-				GenerateAccount()
+				out, err = GenerateAccount()
 			case "list":
-				ListAccounts()
+				out, err = ListAccounts()
 			case "restore":
-				RestoreAccounts()
+				out, err = RestoreAccounts()
 			default:
 				fmt.Println("Usage:")
 				PrintAccount()
@@ -63,7 +65,9 @@ var accountCmd = &cobra.Command{
 			PrintAccount()
 		}
 		if err != nil {
-			log.Fatal(err)
+			fmt.Println("Usage:")
+			PrintAccount()
+			cmd.PrintErr(err)
 		} else {
 			cmd.Println(out)
 		}
@@ -126,15 +130,16 @@ func GetAccount(url string) (string, error) {
 	return PrintQueryResponse(&res)
 }
 
-func QrAccount(s string) (string, error){
+func QrAccount(s string) (string, error) {
 	u, err := url2.Parse(s)
 	if err != nil {
 		return "", fmt.Errorf("%q is not a valid Accumulate URL: %v\n", s, err)
 	}
 
+	b := bytes.NewBufferString("")
 	qrterminal.GenerateWithConfig(u.String(), qrterminal.Config{
 		Level:          qrterminal.M,
-		Writer:         os.Stdout, //fixme
+		Writer:         b,
 		HalfBlocks:     true,
 		BlackChar:      qrterminal.BLACK_BLACK,
 		BlackWhiteChar: qrterminal.BLACK_WHITE,
@@ -142,7 +147,9 @@ func QrAccount(s string) (string, error){
 		WhiteBlackChar: qrterminal.WHITE_BLACK,
 		QuietZone:      2,
 	})
-	return "", nil
+
+	r, err := ioutil.ReadAll(b)
+	return string(r), err
 }
 
 //account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
@@ -183,12 +190,15 @@ func CreateAccount(url string, args []string) (string, error) {
 	}
 
 	//make sure this is a valid token account
-	tokenJson := Get(tok.String())
+	tokenJson, err := Get(tok.String())
+	if err != nil {
+		return "", err
+	}
 	token := response.Token{}
 	err = json.Unmarshal([]byte(tokenJson), &token)
 	if err != nil {
 		PrintAccountCreate()
-		return "", fmt.Errorf("invalid token type %v", err))
+		return "", fmt.Errorf("invalid token type %v", err)
 	}
 
 	tac := &protocol.TokenAccountCreate{}
@@ -198,7 +208,7 @@ func CreateAccount(url string, args []string) (string, error) {
 
 	binaryData, err := tac.MarshalBinary()
 	if err != nil {
-		return "", fmt.Errorf(err)
+		return "", err
 	}
 
 	jsonData, err := json.Marshal(&tac)
@@ -228,7 +238,7 @@ func CreateAccount(url string, args []string) (string, error) {
 	return ar.Print()
 }
 
-func GenerateAccount() (string, error){
+func GenerateAccount() (string, error) {
 	return GenerateKey("")
 }
 
@@ -253,7 +263,7 @@ func ListAccounts() (string, error) {
 	return out, nil
 }
 
-func RestoreAccounts() (out string,err error) {
+func RestoreAccounts() (out string, err error) {
 	anon, err := Db.GetBucket(BucketAnon)
 	if err != nil {
 		//no anon accounts so nothing to do...

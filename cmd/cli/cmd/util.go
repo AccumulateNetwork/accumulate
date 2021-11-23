@@ -255,7 +255,7 @@ func (a *ActionResponse) Print() (string, error) {
 			return "", err
 		}
 
-		return out, nil
+		return string(out), nil
 	} else {
 		var out string
 		out += fmt.Sprintf("\n\tTransaction Identifier\t:\t%x\n", a.Txid)
@@ -316,9 +316,12 @@ var (
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 
 	//query the token
-	tokenData := Get(tokenUrl)
+	tokenData, err := Get(tokenUrl)
+	if err != nil {
+		return "", fmt.Errorf("error retrieving token url, %v", err)
+	}
 	r := acmeapi.APIDataResponse{}
-	err := json.Unmarshal([]byte(tokenData), &r)
+	err = json.Unmarshal([]byte(tokenData), &r)
 	if err != nil {
 		return "", err
 	}
@@ -369,7 +372,10 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			}
 
 			//query the token
-			tokenData := Get(ata.TokenUrl)
+			tokenData, err := Get(ata.TokenUrl)
+			if err != nil {
+				return "", fmt.Errorf("error retrieving tokenUrl, %v", err)
+			}
 			r := acmeapi.APIDataResponse{}
 			err = json.Unmarshal([]byte(tokenData), &r)
 			if err != nil {
@@ -435,7 +441,10 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			var out string
 			out += fmt.Sprintf("\n\tADI Entries\n")
 			for _, s := range dqr.Entries {
-				data := Get(s)
+				data, err := Get(s)
+				if err != nil {
+					return "", err
+				}
 				r := acmeapi.APIDataResponse{}
 				err = json.Unmarshal([]byte(data), &r)
 
@@ -484,7 +493,10 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				//}
 				//out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, keypage)
 				//hack to resolve the keypage url given the chainid
-				s := resolveKeyPageUrl(u.Authority, v[:])
+				s, err := resolveKeyPageUrl(u.Authority, v[:])
+				if err != nil {
+					return "", err
+				}
 				out += fmt.Sprintf("\t%d\t:\t%s\n", i+1, s)
 			}
 			return out, nil
@@ -551,12 +563,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 	return "", nil
 }
 
-func resolveKeyPageUrl(adi string, chainId []byte) string {
+func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
 	var res acmeapi.APIDataResponse
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(adi)
 	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
-		PrintJsonRpcError(err)
+		return PrintJsonRpcError(err)
 	}
 
 	dqr := protocol.DirectoryQueryResult{}
@@ -572,9 +584,9 @@ func resolveKeyPageUrl(adi string, chainId []byte) string {
 		}
 
 		if bytes.Equal(u.ResourceChain(), chainId) {
-			return s
+			return s, nil
 		}
 	}
 
-	return fmt.Sprintf("unresolvable chain %x", chainId)
+	return fmt.Sprintf("unresolvable chain %x", chainId), nil
 }
