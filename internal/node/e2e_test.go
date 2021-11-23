@@ -47,7 +47,7 @@ func TestEndToEnd(t *testing.T) {
 
 		mdb := make(acctesting.MultiDB, len(dbs))
 		for i, db := range dbs {
-			mdb[i] = db
+			mdb[i] = db.Begin()
 		}
 		return query, mdb
 	}))

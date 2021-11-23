@@ -18,8 +18,9 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, db.Open("mem", true, true))
 
 	fooKey := generateKey()
-	require.NoError(t, acctesting.CreateADI(db, fooKey, "foo"))
-	_, _, err := db.WriteStates(0)
+	dbTx := db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	_, _, err := dbTx.WriteStates(0)
 	require.NoError(t, err)
 
 	book, err := url.Parse("foo/ssg0")

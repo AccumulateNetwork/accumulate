@@ -18,7 +18,7 @@ import (
 )
 
 type StateManager struct {
-	dbTx        *state.DBTransactional
+	dbTx        *state.DBTransaction
 	stores      map[[32]byte]*storeState
 	chains      map[[32]byte]state.Chain
 	writes      map[storage.Key][]byte
@@ -39,7 +39,7 @@ type storeState struct {
 	record   state.Chain
 }
 
-func NewStateManager(dbTx *state.DBTransactional, tx *transactions.GenTransaction) (*StateManager, error) {
+func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction) (*StateManager, error) {
 	m := new(StateManager)
 	m.dbTx = dbTx
 	m.chains = map[[32]byte]state.Chain{}

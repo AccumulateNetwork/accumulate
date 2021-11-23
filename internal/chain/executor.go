@@ -36,7 +36,7 @@ type Executor struct {
 	chainWG map[uint64]*sync.WaitGroup
 	leader  bool
 	height  int64
-	dbTx    *state.DBTransactional
+	dbTx    *state.DBTransaction
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -420,7 +420,7 @@ func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, c
 		err = fmt.Errorf("failed marshaling pending tx (%v) on error: %v", err1, err)
 		return err
 	}
-	err1 = m.db.AddTransaction(chainId, txid, txPendingObject, nil)
+	err1 = m.dbTx.AddTransaction(chainId, txid, txPendingObject, nil)
 	if err1 != nil {
 		err = fmt.Errorf("error adding pending tx (%v) on error %v", err1, err)
 	}
@@ -579,7 +579,7 @@ func (m *Executor) nextSynthCount() (uint64, error) {
 	if len(b) > 0 {
 		n, _ = common.BytesUint64(b)
 	}
-	m.db.Write(k, common.Uint64Bytes(n+1))
+	m.dbTx.Write(k, common.Uint64Bytes(n+1))
 	return n, nil
 }
 

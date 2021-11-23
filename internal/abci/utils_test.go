@@ -89,7 +89,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	mgr, err := chain.NewBlockValidator(n.query, db, bvcKey)
 	require.NoError(t, err)
 
-	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
+	n.app, err = abci.NewAccumulator(db.Begin(), addr, mgr, logger)
 	require.NoError(t, err)
 	appChan <- n.app
 
@@ -121,7 +121,7 @@ func (n *fakeNode) NextHeight() int64 {
 }
 
 func (n *fakeNode) WriteStates() {
-	_, _, err := n.db.WriteStates(n.NextHeight())
+	_, _, err := n.db.Begin().WriteStates(n.NextHeight())
 	require.NoError(n.t, err)
 }
 

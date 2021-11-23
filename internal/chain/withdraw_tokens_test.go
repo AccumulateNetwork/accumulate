@@ -25,7 +25,7 @@ func TestAnonTokenTransactions(t *testing.T) {
 	_, privKey, _ := ed25519.GenerateKey(nil)
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)
 
-	require.NoError(t, acctesting.CreateAnonTokenAccount(db, tmed25519.PrivKey(privKey), 5e4))
+	require.NoError(t, acctesting.CreateAnonTokenAccount(db.Begin(), tmed25519.PrivKey(privKey), 5e4))
 	sponsorAddr := anon.GenerateAcmeAddress(privKey[32:])
 	anonChain, err := db.GetCurrentEntry(types.GetChainIdFromChainPath(&sponsorAddr).Bytes())
 	require.NoError(t, err)
