@@ -50,10 +50,6 @@ var bookCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(bookCmd)
-}
-
 func PrintKeyBookGet() {
 	fmt.Println("  accumulate book get [URL]			Get existing Key Book by URL")
 }
