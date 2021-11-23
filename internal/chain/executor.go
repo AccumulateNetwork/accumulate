@@ -214,8 +214,10 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 
 		var obj encoding.BinaryMarshaler
 		k, obj, err = m.queryByUrl(u)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: fmt.Sprintf("invalid URL in query %s", chr.Url)}
+		if err != nil && errors.Is(err, storage.ErrNotFound) {
+			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err.Error()}
+		} else if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err.Error()}
 		}
 		v, err = obj.MarshalBinary()
 		if err != nil {
