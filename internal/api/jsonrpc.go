@@ -320,7 +320,7 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 
 // createToken creates Token
 func (api *API) createToken(_ context.Context, params json.RawMessage) interface{} {
-	data := &acmeapi.Token{}
+	data := new(protocol.CreateToken)
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
