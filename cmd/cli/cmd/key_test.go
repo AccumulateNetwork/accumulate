@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"fmt"
 	"io/ioutil"
 	"testing"
 )
@@ -23,7 +24,7 @@ import (
 //
 //}
 
-func execTest(t *testing.T, args []string) ([]byte, error) {
+func execTest(t *testing.T, args []string) (string, error) {
 	defaultWorkDir, err := ioutil.TempDir("", "cliTest")
 	if err != nil {
 		t.Fatal(t)
@@ -31,13 +32,20 @@ func execTest(t *testing.T, args []string) ([]byte, error) {
 
 	rootCmd := InitRootCmd(initDB(defaultWorkDir))
 
+	e := bytes.NewBufferString("")
 	b := bytes.NewBufferString("")
-	rootCmd.SetErr(b)
-	//rootCmd.SetOut(b)
-	rootCmd.Stderr =
-		rootCmd.SetArgs(args)
+	rootCmd.SetErr(e)
+	rootCmd.SetOut(b)
+	rootCmd.SetArgs(args)
 	rootCmd.Execute()
-	return ioutil.ReadAll(b)
+	eprint, err := ioutil.ReadAll(e)
+	if err != nil {
+		return "", err
+	} else if len(eprint) != 0 {
+		return "", fmt.Errorf("%s", string(eprint))
+	}
+	ret, err := ioutil.ReadAll(b)
+	return string(ret), err
 }
 
 func TestKeys(t *testing.T) {
