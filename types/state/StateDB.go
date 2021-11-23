@@ -349,34 +349,34 @@ func (s *StateDB) GetCurrentEntry(chainId []byte) (*Object, error) {
 // the transaction is against touches another chain. One example would be an account type chain
 // may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
-func (s *StateDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
-	s.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
+func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
+	tx.state.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
 	begin := time.Now()
 
-	s.TimeBucket = s.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
+	tx.state.TimeBucket = tx.state.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
 
-	s.mutex.Lock()
-	updates := s.updates[*chainId]
-	s.mutex.Unlock()
+	tx.state.mutex.Lock()
+	updates := tx.state.updates[*chainId]
+	tx.state.mutex.Unlock()
 
 	if updates == nil {
 		updates = new(blockUpdates)
-		s.updates[*chainId] = updates
+		tx.state.updates[*chainId] = updates
 	}
 
 	updates.txId = append(updates.txId, txHash)
 	updates.stateData = object
 }
 
-func (s *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
+func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 	defer group.Done()
 	//record transactions
-	for _, tx := range s.transactions.validatedTx {
-		data, _ := tx.Object.MarshalBinary()
+	for _, txn := range tx.state.transactions.validatedTx {
+		data, _ := txn.Object.MarshalBinary()
 		//store the transaction
 
-		txHash := tx.TxId.AsBytes32()
-		if synthTxInfos, ok := s.transactions.synthTxMap[txHash]; ok {
+		txHash := txn.TxId.AsBytes32()
+		if synthTxInfos, ok := tx.state.transactions.synthTxMap[txHash]; ok {
 			var synthData []byte
 			for _, synthTxInfo := range *synthTxInfos {
 				synthData = append(synthData, synthTxInfo.TxId...)
@@ -385,44 +385,44 @@ func (s *StateDB) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 					return err
 				}
 
-				s.db.Key(bucketStagedSynthTx.AsString(), "", synthTxInfo.TxId).PutBatch(synthTxData)
+				tx.state.db.Key(bucketStagedSynthTx.AsString(), "", synthTxInfo.TxId).PutBatch(synthTxData)
 
 				//store the hash of th synthObject in the bpt, will be removed after synth tx is processed
-				s.bpt.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
+				tx.state.bpt.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
 			}
 			//store a list of txid to list of synth txid's
-			s.db.Key(bucketTxToSynthTx.AsString(), tx.TxId).PutBatch(synthData)
+			tx.state.db.Key(bucketTxToSynthTx.AsString(), txn.TxId).PutBatch(synthData)
 		}
 
 		mutex.Lock()
 		//store the transaction in the transaction bucket by txid
-		s.db.Key(bucketTx.AsString(), tx.TxId).PutBatch(data)
+		tx.state.db.Key(bucketTx.AsString(), txn.TxId).PutBatch(data)
 		//insert the hash of the tx object in the BPT
-		s.bpt.Bpt.Insert(txHash, sha256.Sum256(data))
+		tx.state.bpt.Bpt.Insert(txHash, sha256.Sum256(data))
 		mutex.Unlock()
 	}
 
 	// record pending transactions
-	for _, tx := range s.transactions.pendingTx {
+	for _, txn := range tx.state.transactions.pendingTx {
 		//marshal the pending transaction state
-		data, _ := tx.Object.MarshalBinary()
+		data, _ := txn.Object.MarshalBinary()
 		//hash it and add to the merkle state for the pending chain
 		pendingHash := sha256.Sum256(data)
 
 		mutex.Lock()
 		//Store the mapping of the Transaction hash to the pending transaction hash which can be used for
 		// validation so we can find the pending transaction
-		s.db.Key("MainToPending", tx.TxId).PutBatch(pendingHash[:])
+		tx.state.db.Key("MainToPending", txn.TxId).PutBatch(pendingHash[:])
 
 		//store the pending transaction by the pending tx hash
-		s.db.Key(bucketPendingTx.AsString(), pendingHash[:]).PutBatch(data)
+		tx.state.db.Key(bucketPendingTx.AsString(), pendingHash[:]).PutBatch(data)
 		mutex.Unlock()
 	}
 
 	//clear out the transactions after they have been processed
-	s.transactions.validatedTx = nil
-	s.transactions.pendingTx = nil
-	s.transactions.synthTxMap = make(map[types.Bytes32]*[]transactionStateInfo)
+	tx.state.transactions.validatedTx = nil
+	tx.state.transactions.pendingTx = nil
+	tx.state.transactions.synthTxMap = make(map[types.Bytes32]*[]transactionStateInfo)
 	return nil
 }
 
@@ -492,27 +492,27 @@ func (s *StateDB) BlockIndex() int64 {
 }
 
 // WriteStates will push the data to the database and update the patricia trie
-func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
+func (tx *DBTransaction) WriteStates(blockHeight int64) ([]byte, int, error) {
 	//build a list of keys from the map
-	currentStateCount := len(s.updates)
+	currentStateCount := len(tx.state.updates)
 	if currentStateCount == 0 {
 		//only attempt to record the block if we have any data.
-		return s.bpt.Bpt.Root.Hash[:], 0, nil
+		return tx.state.bpt.Bpt.Root.Hash[:], 0, nil
 	}
 
-	s.blockIndex = blockHeight
+	tx.state.blockIndex = blockHeight
 	// TODO MainIndex and PendingIndex?
-	s.AddStateEntry((*types.Bytes32)(&blockIndexKey), new(types.Bytes32), &Object{Entry: common.Int64Bytes(blockHeight)})
+	tx.AddStateEntry((*types.Bytes32)(&blockIndexKey), new(types.Bytes32), &Object{Entry: common.Int64Bytes(blockHeight)})
 
 	group := new(sync.WaitGroup)
 	group.Add(1)
-	group.Add(len(s.updates))
+	group.Add(len(tx.state.updates))
 
 	mutex := new(sync.Mutex)
 	//to try the multi-threading add "go" in front of the next line
-	err := s.writeTxs(mutex, group)
+	err := tx.writeTxs(mutex, group)
 	if err != nil {
-		return s.bpt.Bpt.Root.Hash[:], 0, nil
+		return tx.state.bpt.Bpt.Root.Hash[:], 0, nil
 	}
 
 	// Create an ordered list of chain IDs that need updating. The iteration
@@ -520,8 +520,8 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	// because that leads to consensus errors between nodes, since each node
 	// will have a different random order. So we need updates to have some
 	// consistent order, regardless of what it is.
-	updateOrder := make([]types.Bytes32, 0, len(s.updates))
-	for id := range s.updates {
+	updateOrder := make([]types.Bytes32, 0, len(tx.state.updates))
+	for id := range tx.state.updates {
 		updateOrder = append(updateOrder, id)
 	}
 	sort.Slice(updateOrder, func(i, j int) bool {
@@ -529,8 +529,8 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	})
 
 	for _, chainId := range updateOrder {
-		s.mm.SetChainID(chainId[:])
-		s.writeChainState(group, mutex, s.mm, chainId)
+		tx.state.mm.SetChainID(chainId[:])
+		tx.state.writeChainState(group, mutex, tx.state.mm, chainId)
 
 		//TODO: figure out how to do this with new way state is derived
 		//if len(currentState.pendingTx) != 0 {
@@ -545,36 +545,36 @@ func (s *StateDB) WriteStates(blockHeight int64) ([]byte, int, error) {
 	}
 
 	// Process pending writes
-	writeOrder := make([]storage.Key, 0, len(s.writes))
-	for k := range s.writes {
+	writeOrder := make([]storage.Key, 0, len(tx.state.writes))
+	for k := range tx.state.writes {
 		writeOrder = append(writeOrder, k)
 	}
 	sort.Slice(writeOrder, func(i, j int) bool {
 		return bytes.Compare(writeOrder[i][:], writeOrder[j][:]) < 0
 	})
 	for _, k := range writeOrder {
-		s.GetDB().Key(k).PutBatch(s.writes[k])
+		tx.state.GetDB().Key(k).PutBatch(tx.state.writes[k])
 	}
 	// The compiler optimizes this into a constant-time operation
-	for k := range s.writes {
-		delete(s.writes, k)
+	for k := range tx.state.writes {
+		delete(tx.state.writes, k)
 	}
 
 	group.Wait()
 
-	s.bpt.Bpt.Update()
+	tx.state.bpt.Bpt.Update()
 
 	//reset out block update buffer to get ready for the next round
-	s.sync.Add(1)
+	tx.state.sync.Add(1)
 	//to enable threaded batch writes, put go in front of next line.
-	s.writeBatches()
+	tx.state.writeBatches()
 
-	s.updates = make(map[types.Bytes32]*blockUpdates)
+	tx.state.updates = make(map[types.Bytes32]*blockUpdates)
 
 	//return the state of the BPT for the state of the block
-	rh := types.Bytes(s.RootHash()).AsBytes32()
-	s.logInfo("WriteStates", "height", blockHeight, "hash", logging.AsHex(rh))
-	return s.RootHash(), currentStateCount, nil
+	rh := types.Bytes(tx.state.RootHash()).AsBytes32()
+	tx.state.logInfo("WriteStates", "height", blockHeight, "hash", logging.AsHex(rh))
+	return tx.state.RootHash(), currentStateCount, nil
 }
 
 func (s *StateDB) RootHash() []byte {
