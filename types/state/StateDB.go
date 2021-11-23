@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/bits"
 	"sort"
 	"sync"
 	"time"
@@ -447,15 +448,17 @@ func (s *StateDB) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *
 	}
 
 	if currentState.stateData != nil {
-		//store the MD root for the state
-		mdRoot := mm.MS.GetMDRoot()
-		if mdRoot == nil {
-			//shouldn't get here, but will reject if I do
-			panic(fmt.Sprintf("shouldn't get here on writeState() on chain id %X obtaining merkle state", chainId))
-		}
-
 		//store the state of the main chain in the state object
-		currentState.stateData.MDRoot = types.Bytes32(*mdRoot)
+		count := uint64(mm.MS.Count)
+		currentState.stateData.Height = count
+		currentState.stateData.Roots = make([][]byte, 64-bits.LeadingZeros64(count))
+		for i := range currentState.stateData.Roots {
+			if count&(1<<i) == 0 {
+				// Only store the hashes we need
+				continue
+			}
+			currentState.stateData.Roots[i] = (*mm.MS.Pending[i])[:]
+		}
 
 		//now store the state object
 		chainStateObject, err := currentState.stateData.MarshalBinary()
