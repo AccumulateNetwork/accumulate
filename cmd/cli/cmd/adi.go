@@ -58,10 +58,6 @@ var adiCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(adiCmd)
-}
-
 func PrintADIGet() {
 	fmt.Println("  accumulate adi get [URL]			Get existing ADI by URL")
 }

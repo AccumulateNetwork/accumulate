@@ -52,10 +52,6 @@ var pageCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(pageCmd)
-}
-
 func PrintKeyPageGet() {
 	fmt.Println("  accumulate page get [URL]			Get existing Key Page by URL")
 }

@@ -4,8 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/spf13/cobra"
 	"log"
+
+	"github.com/spf13/cobra"
 )
 
 // version represents the faucet command
@@ -15,10 +16,6 @@ var versionCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		GetVersion()
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(versionCmd)
 }
 
 func GetVersion() {

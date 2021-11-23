@@ -54,10 +54,6 @@ var txCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(txCmd)
-}
-
 func PrintTXGet() {
 	fmt.Println("  accumulate tx get [txid]			Get token transaction by txid")
 }

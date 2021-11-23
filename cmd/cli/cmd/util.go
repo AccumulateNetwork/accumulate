@@ -6,13 +6,13 @@ import (
 	"encoding"
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	"log"
 	"math"
 	"math/big"
-	"os"
 	"strconv"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -145,12 +145,12 @@ func GetUrl(url string, method string) ([]byte, error) {
 	params.URL = types.String(u.String())
 
 	if err := Client.Request(context.Background(), method, params, &res); err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	str, err = json.Marshal(res)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	return str, nil
@@ -213,18 +213,18 @@ func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *tr
 
 	data, err := json.Marshal(payload)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	dataBinary, err := payload.(encoding.BinaryMarshaler).MarshalBinary()
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	nonce := uint64(time.Now().Unix())
 	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
 
 	var res interface{}
@@ -245,17 +245,17 @@ type ActionResponse struct {
 	Mempool   types.String  `json:"mempool"`
 }
 
-func (a *ActionResponse) Print() {
+func (a *ActionResponse) Print() (string, error) {
 	if WantJsonOutput {
 		if a.Code == "0" || a.Code == "" {
 			a.Code = "ok"
 		}
-		dump, err := json.Marshal(a)
+		out, err := json.Marshal(a)
 		if err != nil {
-			log.Fatal(err)
+			return "", err
 		}
-		log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
-		log.Fatal(string(dump))
+
+		return out, nil
 	} else {
 		var out string
 		out += fmt.Sprintf("\n\tTransaction Identifier\t:\t%x\n", a.Txid)
@@ -274,32 +274,32 @@ func (a *ActionResponse) Print() {
 		if a.Codespace != "" {
 			out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
 		}
-		log.Fatal(out)
+		return out, nil
 	}
 }
 
-func PrintJsonRpcError(err error) {
+func PrintJsonRpcError(err error) (string, error) {
 	var e jsonrpc2.Error
 	switch err.(type) {
 	case jsonrpc2.Error:
 		e = err.(jsonrpc2.Error)
+		return "", fmt.Errorf("jsonrpc error. %v", e)
 	default:
-		log.Fatalf("error with request, %v", err)
+		return "", fmt.Errorf("error with request, %v", err)
 	}
 
 	var out string
 	if WantJsonOutput {
-		dump, err := json.Marshal(e)
+		out, err := json.Marshal(e)
 		if err != nil {
-			log.Fatal(err)
+			return "", err
 		}
-		log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
-		log.Fatal(string(dump))
+		return fmt.Sprintf(string(out)), nil
 	} else {
 		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
 		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
 		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
-		log.Fatal(out)
+		return fmt.Sprintf(string(out)), nil
 	}
 }
 
@@ -352,22 +352,20 @@ func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
 	return out
 }
 
-func PrintQueryResponse(res *acmeapi.APIDataResponse) {
+func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 	if WantJsonOutput {
 		data, err := json.Marshal(res)
 		if err != nil {
-			log.Fatal(err)
+			return "", err
 		}
-		//log.SetFlags(log.Flags() &^ (log.Ldate | log.Ltime))
-		//log.Fatal(string(data))
-		fmt.Fprintf(os.Stderr, string(data))
+		return string(data), nil
 	} else {
 		switch res.Type {
 		case "anonTokenAccount":
 			ata := response.AnonTokenAccount{}
 			err := json.Unmarshal(*res.Data, &ata)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 
 			//query the token
@@ -375,12 +373,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 			r := acmeapi.APIDataResponse{}
 			err = json.Unmarshal([]byte(tokenData), &r)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 			t := response.Token{}
 			err = json.Unmarshal(*r.Data, &t)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 
 			bf := big.Float{}
@@ -397,12 +395,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 			out += fmt.Sprintf("\tCredits\t\t:\t%s\n", ata.CreditBalance.String())
 			out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 
-			fmt.Fprintf(os.Stderr, string(out))
+			return out, nil
 		case "tokenAccount":
 			ata := response.TokenAccount{}
 			err := json.Unmarshal(*res.Data, &ata)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 
 			amt, err := formatAmount(ata.TokenUrl, &ata.Balance.Int)
@@ -415,24 +413,24 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 			out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBookUrl)
 
-			fmt.Fprintf(os.Stderr, string(out))
+			return out, nil
 		case "adi":
 			adi := response.ADI{}
 			err := json.Unmarshal(*res.Data, &adi)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 
 			var out string
 			out += fmt.Sprintf("\n\tADI Url\t\t:\t%v\n", adi.Url)
 			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", adi.KeyBookName)
 
-			fmt.Fprintf(os.Stderr, string(out))
+			return out, nil
 		case "directory":
 			dqr := protocol.DirectoryQueryResult{}
 			err := json.Unmarshal(*res.Data, &dqr)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 			var out string
 			out += fmt.Sprintf("\n\tADI Entries\n")
@@ -449,7 +447,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				}
 				out += fmt.Sprintf("\t%v (%s)\n", s, chainType)
 			}
-			fmt.Fprintf(os.Stderr, string(out))
+			return out, nil
 		case "sigSpecGroup":
 			//workaround for protocol unmarshaling bug
 			var ssg struct {
@@ -461,12 +459,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 
 			err := json.Unmarshal(*res.Data, &ssg)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 
 			u, err := url2.Parse(*ssg.ChainUrl.AsString())
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 			var out string
 			out += fmt.Sprintf("\n\tHeight\t\tKey Page Url\n")
@@ -489,12 +487,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				s := resolveKeyPageUrl(u.Authority, v[:])
 				out += fmt.Sprintf("\t%d\t:\t%s\n", i+1, s)
 			}
-			fmt.Fprintf(os.Stderr, string(out))
+			return out, nil
 		case "sigSpec":
 			ss := protocol.SigSpec{}
 			err := json.Unmarshal(*res.Data, &ss)
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 
 			out := fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
@@ -506,12 +504,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				}
 				out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 			}
-			fmt.Fprintf(os.Stderr, string(out))
+			return out, nil
 		case "tokenTx":
 			tx := response.TokenTx{}
 			err := json.Unmarshal(*res.Data, &tx)
 			if err != nil {
-				log.Fatalf("Cannot extract token transaction data from request")
+				return "", fmt.Errorf("cannot extract token transaction data from request")
 			}
 
 			var out string
@@ -527,13 +525,13 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 			}
 
 			out += printGeneralTransactionParameters(res)
-			fmt.Fprintf(os.Stderr, string(out))
+			return out, nil
 		case "syntheticTokenDeposit":
 			deposit := synthetic.TokenTransactionDeposit{}
 			err := json.Unmarshal(*res.Data, &deposit)
 
 			if err != nil {
-				log.Fatal(err)
+				return "", err
 			}
 
 			out := "\n"
@@ -545,12 +543,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) {
 				*deposit.ToUrl.AsString())
 
 			out += printGeneralTransactionParameters(res)
-			fmt.Fprintf(os.Stderr, string(out))
+			return out, nil
 
 		default:
-
 		}
 	}
+	return "", nil
 }
 
 func resolveKeyPageUrl(adi string, chainId []byte) string {
@@ -564,7 +562,7 @@ func resolveKeyPageUrl(adi string, chainId []byte) string {
 	dqr := protocol.DirectoryQueryResult{}
 	err := json.Unmarshal(*res.Data, &dqr)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	for _, s := range dqr.Entries {
