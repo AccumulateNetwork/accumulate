@@ -7,7 +7,7 @@ import (
 )
 
 func GetRpcAddr(netOrIp string, portOffset int) (string, error) {
-	net := All[netOrIp]
+	net := all[netOrIp]
 	ip, err := url.Parse(netOrIp)
 	if net != nil {
 		ip = &url.URL{Scheme: "tcp", Host: fmt.Sprintf("%s:%d", net.Nodes[0].IP, net.Port+portOffset)}
@@ -20,4 +20,15 @@ func GetRpcAddr(netOrIp string, portOffset int) (string, error) {
 	}
 
 	return ip.String(), nil
+}
+
+func Resolve(name string) (*Subnet, error) {
+	sub := all[name]
+	if sub != nil {
+		return sub, nil
+	}
+	if nameCount[name] > 1 {
+		return nil, fmt.Errorf("%q is ambiguous and must be qualified with the network name", name)
+	}
+	return nil, fmt.Errorf("%q is not the name of a subnet", name)
 }
