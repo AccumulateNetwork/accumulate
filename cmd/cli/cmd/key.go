@@ -86,8 +86,7 @@ var keyCmd = &cobra.Command{
 			PrintKey()
 		}
 		if err != nil {
-			fmt.Println("Usage:")
-			PrintKey()
+			cmd.Print("Error: ")
 			cmd.PrintErr(err)
 		} else {
 			cmd.Println(out)
