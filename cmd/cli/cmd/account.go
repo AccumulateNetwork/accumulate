@@ -11,7 +11,6 @@ import (
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/mdp/qrterminal"
 
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -182,7 +181,7 @@ func CreateAccount(url string, args []string) {
 
 	//make sure this is a valid token account
 	tokenJson := Get(tok.String())
-	token := response.Token{}
+	token := protocol.TokenIssuer{}
 	err = json.Unmarshal([]byte(tokenJson), &token)
 	if err != nil {
 		PrintAccountCreate()

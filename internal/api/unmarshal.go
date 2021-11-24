@@ -89,14 +89,9 @@ func unmarshalADI(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 
 func unmarshalToken(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 	return unmarshalAs(rQuery, "token", func(b []byte) (interface{}, error) {
-		sToken := new(state.Token)
-		err := sToken.UnmarshalBinary(b)
-		rToken := new(response.Token)
-		rToken.Precision = sToken.Precision
-		rToken.URL = sToken.ChainUrl
-		rToken.Symbol = sToken.Symbol
-		rToken.PropertiesUrl = sToken.PropertiesUrl
-		return rToken, err
+		r := new(protocol.TokenIssuer)
+		err := r.UnmarshalBinary(b)
+		return r, err
 	})
 }
 
