@@ -120,11 +120,6 @@ func (n *fakeNode) NextHeight() int64 {
 	return n.height
 }
 
-func (n *fakeNode) WriteStates() {
-	_, _, err := n.db.Begin().Commit(n.NextHeight())
-	require.NoError(n.t, err)
-}
-
 func (n *fakeNode) Query(q *query.Query) *api.APIDataResponse {
 	payload, err := q.MarshalBinary()
 	require.NoError(n.t, err)
