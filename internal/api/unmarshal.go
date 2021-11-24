@@ -71,7 +71,12 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 		return nil, err
 	}
 
-	rAPI.MDRoot = obj.MDRoot[:]
+	rAPI.MerkleState = new(api.MerkleState)
+	rAPI.MerkleState.Count = obj.Height
+	rAPI.MerkleState.Roots = make([]types.Bytes, len(obj.Roots))
+	for i, r := range obj.Roots {
+		rAPI.MerkleState.Roots[i] = r
+	}
 	rAPI.Data = (*json.RawMessage)(&data)
 	return rAPI, nil
 }
@@ -89,14 +94,9 @@ func unmarshalADI(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 
 func unmarshalToken(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 	return unmarshalAs(rQuery, "token", func(b []byte) (interface{}, error) {
-		sToken := new(state.Token)
-		err := sToken.UnmarshalBinary(b)
-		rToken := new(response.Token)
-		rToken.Precision = sToken.Precision
-		rToken.URL = sToken.ChainUrl
-		rToken.Symbol = sToken.Symbol
-		rToken.PropertiesUrl = sToken.PropertiesUrl
-		return rToken, err
+		r := new(protocol.TokenIssuer)
+		err := r.UnmarshalBinary(b)
+		return r, err
 	})
 }
 
@@ -341,7 +341,12 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 	rAPI.Type = types.String(sChain.Type.Name())
 
 	msg := []byte(fmt.Sprintf("{\"state\":\"%x\"}", obj.Entry))
-	rAPI.MDRoot = obj.MDRoot[:]
+	rAPI.MerkleState = new(api.MerkleState)
+	rAPI.MerkleState.Count = obj.Height
+	rAPI.MerkleState.Roots = make([]types.Bytes, len(obj.Roots))
+	for i, r := range obj.Roots {
+		rAPI.MerkleState.Roots[i] = r
+	}
 	rAPI.Data = (*json.RawMessage)(&msg)
 	return rAPI, nil
 }
