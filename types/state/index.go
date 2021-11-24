@@ -25,7 +25,11 @@ func (tx *DBTransaction) Read(key storage.Key) ([]byte, error) {
 	if ok {
 		return w, nil
 	}
-	return tx.state.GetDB().Key(key).Get()
+	return tx.state.Read(key)
+}
+
+func (db *StateDB) Read(key storage.Key) ([]byte, error) {
+	return db.GetDB().Key(key).Get()
 }
 
 func (tx *DBTransaction) WriteIndex(index Index, chain []byte, key interface{}, value []byte) {
@@ -38,4 +42,10 @@ func (tx *DBTransaction) GetIndex(index Index, chain []byte, key interface{}) ([
 	k := storage.ComputeKey(string(index), chain, key)
 	tx.state.logInfo("GetIndex", "index", string(index), "chain", hex.EncodeToString(chain), "key", key, "computed", hex.EncodeToString(k[:]))
 	return tx.Read(k)
+}
+
+func (db *StateDB) GetIndex(index Index, chain []byte, key interface{}) ([]byte, error) {
+	k := storage.ComputeKey(string(index), chain, key)
+	db.logInfo("GetIndex", "index", string(index), "chain", hex.EncodeToString(chain), "key", key, "computed", hex.EncodeToString(k[:]))
+	return db.Read(k)
 }

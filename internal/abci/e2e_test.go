@@ -149,7 +149,7 @@ func TestCreateADI(t *testing.T) {
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
 	dbTx := n.db.Begin()
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, anonAccount, 5e4))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	wallet := new(transactions.WalletEntry)
 	wallet.Nonce = 1
@@ -192,7 +192,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey := generateKey()
 		dbTx := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
-		dbTx.Commit(dbTx.BlockIndex())
+		dbTx.Commit(n.NextHeight())
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
 			tac := new(protocol.TokenAccountCreate)
@@ -224,7 +224,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
 		require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/page1", pageKey.PubKey().Bytes()))
 		require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/book1", "foo/page1"))
-		dbTx.Commit(dbTx.BlockIndex())
+		dbTx.Commit(n.NextHeight())
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
 			tac := new(protocol.TokenAccountCreate)
@@ -256,7 +256,7 @@ func TestAnonAccountTx(t *testing.T) {
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, alice, 5e4))
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, bob, 0))
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, charlie, 0))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	aliceUrl := anon.GenerateAcmeAddress(alice.PubKey().Bytes())
 	bobUrl := anon.GenerateAcmeAddress(bob.PubKey().Bytes())
@@ -287,7 +287,7 @@ func TestAdiAccountTx(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
 	require.NoError(t, acctesting.CreateADI(dbTx, barKey, "bar"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		tokenTx := api.NewTokenTx("foo/tokens")
@@ -310,7 +310,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1e2, false))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		ac := new(protocol.AddCredits)
@@ -335,7 +335,7 @@ func TestCreateSigSpec(t *testing.T) {
 	fooKey, testKey := generateKey(), generateKey()
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		cms := new(protocol.CreateSigSpec)
@@ -364,7 +364,7 @@ func TestCreateSigSpecGroup(t *testing.T) {
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	specUrl := n.ParseUrl("foo/sigspec1")
 	specChainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
@@ -402,7 +402,7 @@ func TestAddSigSpec(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	// Sanity check
 	require.Equal(t, groupChainId, n.GetSigSpec("foo/sigspec1").SigSpecId)
@@ -436,7 +436,7 @@ func TestAddKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	newKey := generateKey()
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -464,7 +464,7 @@ func TestUpdateKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	newKey := generateKey()
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -493,7 +493,7 @@ func TestRemoveKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
-	dbTx.Commit(dbTx.BlockIndex())
+	dbTx.Commit(n.NextHeight())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		body := new(protocol.UpdateKeyPage)

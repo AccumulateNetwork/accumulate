@@ -113,7 +113,7 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 
 	sdb.SetLogger(logger)
 
-	app, err := abci.NewAccumulator(sdb.Begin(), pv.Key.PubKey.Address(), mgr, logger)
+	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr, logger)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create ABCI app: %v", err)
 	}
