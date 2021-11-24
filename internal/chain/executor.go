@@ -110,7 +110,7 @@ func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, err
 }
 
 func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQueryResult, error) {
-	b, err := m.dbTx.GetIndex(state.DirectoryIndex, chainId, "Metadata")
+	b, err := m.db.GetIndex(state.DirectoryIndex, chainId, "Metadata")
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQ
 	resp := new(protocol.DirectoryQueryResult)
 	resp.Entries = make([]string, md.Count)
 	for i := range resp.Entries {
-		b, err := m.dbTx.GetIndex(state.DirectoryIndex, chainId, uint64(i))
+		b, err := m.db.GetIndex(state.DirectoryIndex, chainId, uint64(i))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}

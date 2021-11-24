@@ -89,7 +89,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	mgr, err := chain.NewBlockValidator(n.query, db, bvcKey)
 	require.NoError(t, err)
 
-	n.app, err = abci.NewAccumulator(db.Begin(), addr, mgr, logger)
+	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
 	require.NoError(t, err)
 	appChan <- n.app
 
@@ -190,8 +190,7 @@ func (n *fakeNode) GetDirectory(adi string) []string {
 
 	md := new(protocol.DirectoryIndexMetadata)
 	idc := u.IdentityChain()
-	dbTx := n.db.Begin()
-	b, err := dbTx.GetIndex(state.DirectoryIndex, idc, "Metadata")
+	b, err := n.db.GetIndex(state.DirectoryIndex, idc, "Metadata")
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil
 	}
@@ -200,7 +199,7 @@ func (n *fakeNode) GetDirectory(adi string) []string {
 
 	chains := make([]string, md.Count)
 	for i := range chains {
-		b, err := dbTx.GetIndex(state.DirectoryIndex, idc, uint64(i))
+		b, err := n.db.GetIndex(state.DirectoryIndex, idc, uint64(i))
 		require.NoError(n.t, err)
 		chains[i] = string(b)
 	}
