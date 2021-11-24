@@ -88,11 +88,11 @@ func (v *Object) UnmarshalBinary(data []byte) error {
 }
 
 func (v *Object) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Entry  *string   `json:"entry,omitempty"`
 		Height uint64    `json:"height,omitempty"`
 		Roots  []*string `json:"roots,omitempty"`
-	}
+	}{}
 	u.Entry = encoding.BytesToJSON(v.Entry)
 	u.Height = v.Height
 	u.Roots = make([]*string, len(v.Roots))
@@ -103,11 +103,11 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 }
 
 func (v *Object) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Entry  *string   `json:"entry,omitempty"`
 		Height uint64    `json:"height,omitempty"`
 		Roots  []*string `json:"roots,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
