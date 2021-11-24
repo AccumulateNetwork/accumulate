@@ -498,7 +498,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				if err != nil {
 					return "", err
 				}
-				out += fmt.Sprintf("\t%d\t:\t%s\n", i+1, s)
+				out += fmt.Sprintf("\t%d\t\t:\t%s\n", i+1, s)
 			}
 			return out, nil
 		case "sigSpec":
