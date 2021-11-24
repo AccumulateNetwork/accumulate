@@ -13,10 +13,6 @@ type DBTransaction struct {
 	transactions transactionLists
 }
 
-func (tx *DBTransaction) WriteStates(blockHeight int64) ([]byte, int, error) {
-	panic("implement me")
-}
-
 func (s *StateDB) Begin() *DBTransaction {
 	dbTx := &DBTransaction{
 		state: s,
