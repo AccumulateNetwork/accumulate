@@ -43,7 +43,7 @@ echo $bal
 
 # generate a key
 
-Key=`./cli_key_generate t27key $1`
+Key=`./cli_key_generate.sh t27key $1`
 
 echo $key
 
@@ -52,5 +52,5 @@ echo $key
 
 ID2=${ID%/A*}
 
-echo "./cli_adi_create_account.sh $ID $ID2 t27key $1"
+echo `./cli_adi_create_account.sh $ID $ID2 t27key $1`
 
