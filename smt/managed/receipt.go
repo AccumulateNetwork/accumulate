@@ -38,11 +38,15 @@ func GetElementState(
 	}
 	// currentState is the state we are going to modify until it is the state we want
 	currentIndex := elementIndex & (manager.MarkMask ^ -1) // Find the mark previous to element (current if at mark)
-	currentState = manager.GetState(currentIndex)          // Get that state
-	currentState.InitSha256()                              // Use sha256
-	nextMarkIndex = currentIndex + manager.MarkFreq        // Next mark has the list of elements to add
-	nextMark = manager.GetState(nextMarkIndex)             // Get that NextMark state. Now bracket element, search
-	if nextMark == nil {                                   // If there is no state at the next mark,
+	if currentIndex == 0 {                                 // Get that state
+		currentState = manager.GetState(0)
+	} else {
+		currentState = manager.GetState(currentIndex - 1)
+	}
+	currentState.InitSha256()                           // Use sha256
+	nextMarkIndex = currentIndex + manager.MarkFreq - 1 // Next mark has the list of elements to add
+	nextMark = manager.GetState(nextMarkIndex)          // Get that NextMark state. Now bracket element, search
+	if nextMark == nil {                                // If there is no state at the next mark,
 		nextMark = manager.MS.Copy() //                        then just use the last state of the Merkle Tree
 	}
 	for i, v1 := range nextMark.HashList { //                Go through the pending elements
