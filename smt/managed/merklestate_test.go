@@ -2,19 +2,21 @@ package managed
 
 import (
 	"bytes"
-	"crypto/sha256"
+	"crypto/rand"
 	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestCopy(t *testing.T) {
 	ms1 := new(MerkleState)
 	ms1.InitSha256()
 	for i := 0; i < 15; i++ {
-		hash := Hash(sha256.Sum256([]byte(fmt.Sprintf("%x", i*i*i*i))))
+		hash := Sha256([]byte(fmt.Sprintf("%x", i*i*i*i)))
 		ms1.AddToMerkleTree(hash)
 	}
-	ms1.AddToMerkleTree(Hash(sha256.Sum256([]byte{1, 2, 3, 4, 5})))
+	ms1.AddToMerkleTree(Sha256([]byte{1, 2, 3, 4, 5}))
 	ms2 := ms1
 	if !ms1.Equal(ms2) {
 		t.Error("ms1 should be equal ms2")
@@ -25,12 +27,34 @@ func TestCopy(t *testing.T) {
 		t.Error("ms1 ms2 and ms3 should all be equal")
 	}
 
-	ms1.AddToMerkleTree(Hash(sha256.Sum256([]byte{1, 2, 3, 4, 5})))
+	ms1.AddToMerkleTree(Sha256([]byte{1, 2, 3, 4, 5}))
 	if ms1.Equal(ms2) {
 		t.Error("ms1 should not equal ms2")
 	}
 	//fmt.Println(ms1.String())
 	//fmt.Println(ms2.String())
+}
+
+func TestUnmarshalMemorySafety(t *testing.T) {
+	// Create a Merkle state and add entries
+	MS1 := new(MerkleState)
+	MS1.InitSha256()
+	for i := 0; i < 10; i++ {
+		MS1.AddToMerkleTree(MS1.HashFunction([]byte(fmt.Sprintf("%8d", i))))
+	}
+
+	// Marshal and unmarshal into a new state
+	data, err := MS1.Marshal()
+	require.NoError(t, err)
+	MS2 := new(MerkleState)
+	require.NoError(t, MS2.UnMarshal(data))
+
+	// Overwrite the data array with garbage
+	rand.Read(data)
+
+	// Ensure that MS2 did not change
+	MS1.HashFunction = nil
+	require.True(t, MS1.Equal(MS2), "States do not match")
 }
 
 func TestMarshal(t *testing.T) {

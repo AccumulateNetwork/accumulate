@@ -22,13 +22,12 @@ import (
 	"golang.org/x/exp/rand"
 )
 
-type StartNode func(*Suite) (*api.Query, testing.DB)
+type StartNode func(*Suite) *api.Query
 
 type Suite struct {
 	suite.Suite
 	start StartNode
 	query *api.Query
-	db    testing.DB
 	rand  *rand.Rand
 
 	synthMu *sync.Mutex
@@ -44,7 +43,7 @@ func NewSuite(start StartNode) *Suite {
 }
 
 func (s *Suite) SetupTest() {
-	s.query, s.db = s.start(s)
+	s.query = s.start(s)
 	s.rand = rand.New(rand.NewSource(0))
 	s.synthMu = new(sync.Mutex)
 	s.synthTx = map[[32]byte]*url.URL{}

@@ -34,12 +34,13 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	require.NoError(t, db.Open("mem", true, true))
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
-	require.NoError(t, acctesting.CreateADI(db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(db, "foo/page0", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpec(db, "foo/page1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpec(db, "foo/page2", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(db, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
-	_, _, err := db.WriteStates(0)
+	dbtx := db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbtx, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(dbtx, "foo/page0", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpec(dbtx, "foo/page1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpec(dbtx, "foo/page2", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(dbtx, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
+	_, _, err := dbtx.Commit(0)
 	require.NoError(t, err)
 
 	for _, idx := range []uint64{0, 1, 2} {
@@ -55,7 +56,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			}, edSigner(testKey, 1), body)
 			require.NoError(t, err)
 
-			st, err := NewStateManager(db, tx)
+			st, err := NewStateManager(db.Begin(), tx)
 			require.NoError(t, err)
 
 			err = UpdateKeyPage{}.DeliverTx(st, tx)
