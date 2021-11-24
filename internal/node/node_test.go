@@ -2,8 +2,10 @@ package node_test
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	cfg "github.com/AccumulateNetwork/accumulate/config"
@@ -12,11 +14,12 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 )
 
-func TestNodeSetup(t *testing.T) {
+func TestNodeLifecycle(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
 	}
@@ -46,12 +49,42 @@ func TestNodeSetup(t *testing.T) {
 		return logging.NewTestZeroLogger(t, s)
 	}
 
-	node, _, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
-	require.NoError(t, err)                                                             //
-	require.NoError(t, node.Start())                                                    // Start
-	require.NoError(t, node.Stop())                                                     // Stop
-	node.Quit()
-	node.Wait() //
+	node, db, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup)
+	require.NoError(t, err)          // Initialize the node
+	require.NoError(t, node.Start()) // Start the node
+	require.NoError(t, node.Stop())  // Stop the node
+	node.Wait()                      // Wait for the node to stop
+
+	// procfs is a linux thing
+	if runtime.GOOS != "linux" {
+		return
+	}
+
+	// Ensure valacc.db is closed
+	db.GetDB().Close()
+
+	fds := filepath.Join("/proc", fmt.Sprint(os.Getpid()), "fd")
+	entries, err := os.ReadDir(fds)
+	require.NoError(t, err)
+	for _, e := range entries {
+		if e.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+
+		file, err := filepath.EvalSymlinks(filepath.Join(fds, e.Name()))
+		if err != nil {
+			continue
+		}
+
+		rel, err := filepath.Rel(nodeDir, file)
+		require.NoError(t, err)
+
+		if strings.HasPrefix(rel, "../") {
+			continue
+		}
+
+		assert.Failf(t, "Files are still open after the node was shut down", "%q is open", rel)
+	}
 }
 
 func TestNodeSetupTwiceWithPrometheus(t *testing.T) {

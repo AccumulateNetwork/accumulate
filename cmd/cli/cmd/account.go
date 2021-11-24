@@ -8,12 +8,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/mdp/qrterminal"
 
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -193,7 +191,7 @@ func CreateAccount(url string, args []string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	token := response.Token{}
+	token := protocol.TokenIssuer{}
 	err = json.Unmarshal([]byte(tokenJson), &token)
 	if err != nil {
 		PrintAccountCreate()
@@ -277,7 +275,7 @@ func RestoreAccounts() (out string, err error) {
 		if err != nil {
 			out += fmt.Sprintf("%q is not a valid lite account: %v\n", v.Key, err)
 		} else if key == nil {
-			fmt.Fprintf(os.Stderr, "%q is not a lite account\n", v.Key)
+			out += fmt.Sprintf("%q is not a lite account\n", v.Key)
 		}
 
 		privKey := ed25519.PrivateKey(v.Value)

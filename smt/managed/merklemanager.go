@@ -2,6 +2,7 @@ package managed
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 
@@ -25,7 +26,7 @@ func (m *MerkleManager) AddHash(hash Hash) {
 	// Keep the index of every element added to the Merkle Tree, but only of the first instance
 	i, err := m.GetElementIndex(hash[:])
 	_ = i
-	if err == nil { // So only if the hash is not yet added to the Merkle Tree
+	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
 		m.Manager.Key(m.cid, "ElementIndex", hash[:]).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
 		m.Manager.Key(m.cid, "Element", m.MS.Count).PutBatch(hash[:])
 	}
@@ -63,8 +64,8 @@ func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
 	if len(hash) != 32 {
 		return 0, fmt.Errorf("invalid length %d for hash (should be 32)", len(hash))
 	}
-	data, e := m.Manager.Key(m.cid, "ElementIndex", hash).Get()
-	if e != nil {
+	data, err := m.Manager.Key(m.cid, "ElementIndex", hash).Get()
+	if err != nil {
 		return 0, err
 	}
 	i, _ = common.BytesInt64(data)
