@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
-
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
