@@ -22,7 +22,6 @@ func TestProofADI(t *testing.T) {
 	dbTx := n.db.Begin()
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, liteKey, 5e4))
 	dbTx.Commit(dbTx.BlockIndex())
-	n.WriteStates()
 
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {
