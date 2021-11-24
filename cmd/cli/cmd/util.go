@@ -12,14 +12,13 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
-
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
@@ -327,7 +326,7 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 		return "", err
 	}
 
-	t := response.Token{}
+	t := protocol.TokenIssuer{}
 	err = json.Unmarshal(*r.Data, &t)
 	if err != nil {
 		return "", err
@@ -346,7 +345,6 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TxId.AsBytes32())
-	out += fmt.Sprintf("  - Merkle DAG Root       : %x\n", res.MDRoot.AsBytes32())
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Sponsor)
 	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig.Bytes())
 	out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
@@ -372,33 +370,15 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				return "", err
 			}
 
-			//query the token
-			tokenData, err := Get(ata.TokenUrl)
+			amt, err := formatAmount(ata.TokenUrl, &ata.Balance.Int)
 			if err != nil {
-				return "", fmt.Errorf("error retrieving tokenUrl, %v", err)
+				amt = "unknown"
 			}
-			r := acmeapi.APIDataResponse{}
-			err = json.Unmarshal([]byte(tokenData), &r)
-			if err != nil {
-				return "", err
-			}
-			t := response.Token{}
-			err = json.Unmarshal(*r.Data, &t)
-			if err != nil {
-				return "", err
-			}
-
-			bf := big.Float{}
-			bd := big.Float{}
-			bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
-			bf.SetInt(&ata.Balance.Int)
-			bal := big.Float{}
-			bal.Quo(&bf, &bd)
 
 			var out string
 			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
 			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
-			out += fmt.Sprintf("\tBalance\t\t:\t%s %s\n", bal.String(), t.Symbol)
+			out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 			out += fmt.Sprintf("\tCredits\t\t:\t%s\n", ata.CreditBalance.String())
 			out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 

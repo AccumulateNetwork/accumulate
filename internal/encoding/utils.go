@@ -73,6 +73,9 @@ func BytesUnmarshalBinary(b []byte) ([]byte, error) {
 	if n < 0 {
 		return nil, fmt.Errorf("error decoding length: %w", ErrOverflow)
 	}
+	if l == 0 {
+		return nil, nil
+	}
 	b = b[n:]
 	if len(b) < int(l) {
 		return nil, ErrNotEnoughData
@@ -202,8 +205,12 @@ func ChainSetUnmarshalBinary(b []byte) ([][32]byte, error) {
 	return v, nil
 }
 
-func BytesToJSON(v []byte) string {
-	return hex.EncodeToString(v)
+func BytesToJSON(v []byte) *string {
+	if v == nil {
+		return nil
+	}
+	s := hex.EncodeToString(v)
+	return &s
 }
 
 func ChainToJSON(v [32]byte) string {
@@ -222,8 +229,11 @@ func DurationToJSON(v time.Duration) interface{} {
 	return v.String()
 }
 
-func BytesFromJSON(s string) ([]byte, error) {
-	return hex.DecodeString(s)
+func BytesFromJSON(s *string) ([]byte, error) {
+	if s == nil {
+		return nil, nil
+	}
+	return hex.DecodeString(*s)
 }
 
 func ChainFromJSON(s string) ([32]byte, error) {
