@@ -121,7 +121,7 @@ func (n *fakeNode) NextHeight() int64 {
 }
 
 func (n *fakeNode) WriteStates() {
-	_, _, err := n.db.Begin().WriteStates(n.NextHeight())
+	_, _, err := n.db.Begin().Commit(n.NextHeight())
 	require.NoError(n.t, err)
 }
 
@@ -195,7 +195,8 @@ func (n *fakeNode) GetDirectory(adi string) []string {
 
 	md := new(protocol.DirectoryIndexMetadata)
 	idc := u.IdentityChain()
-	b, err := n.db.GetIndex(state.DirectoryIndex, idc, "Metadata")
+	dbTx := n.db.Begin()
+	b, err := dbTx.GetIndex(state.DirectoryIndex, idc, "Metadata")
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil
 	}
@@ -204,7 +205,7 @@ func (n *fakeNode) GetDirectory(adi string) []string {
 
 	chains := make([]string, md.Count)
 	for i := range chains {
-		b, err := n.db.GetIndex(state.DirectoryIndex, idc, uint64(i))
+		b, err := dbTx.GetIndex(state.DirectoryIndex, idc, uint64(i))
 		require.NoError(n.t, err)
 		chains[i] = string(b)
 	}
