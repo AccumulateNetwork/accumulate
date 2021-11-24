@@ -19,8 +19,9 @@ func TestProofADI(t *testing.T) {
 	// Setup keys and the lite account
 	liteKey, adiKey := generateKey(), generateKey()
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, liteKey, 5e4))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, liteKey, 5e4))
+	dbTx.Commit(n.NextHeight())
 
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {

@@ -15,10 +15,8 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 //go:generate go run github.com/golang/mock/mockgen -source abci.go -destination ../mock/abci/abci.go
@@ -50,10 +48,4 @@ type State interface {
 
 	// RootHash returns the root hash of the chain
 	RootHash() []byte
-
-	// AddStateEntry only used for genesis
-	AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object)
-
-	// TODO I think this can be removed
-	EnsureRootHash() []byte
 }
