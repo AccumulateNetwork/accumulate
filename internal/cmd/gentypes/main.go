@@ -251,7 +251,7 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string
 }
 
 func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
-	fmt.Fprintf(w, "\tvar %s struct{\n", varName)
+	fmt.Fprintf(w, "\t%s := struct{\n", varName)
 	if typ.Kind == "chain" {
 		fmt.Fprintf(w, "\t\tstate.ChainHeader\n")
 	}
@@ -263,7 +263,7 @@ func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
 		}
 		fmt.Fprintf(w, "\t\t%s %s `json:\"%s,omitempty\"`\n", f.Name, typ, lcName)
 	}
-	fmt.Fprintf(w, "\t}\n")
+	fmt.Fprintf(w, "\t}{}\n")
 }
 
 func valueToJson(w *bytes.Buffer, field *Field, tgtName, srcName string) {
