@@ -1,11 +1,8 @@
 package testing
 
 import (
-	"bytes"
 	"crypto/sha256"
-	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -19,7 +16,6 @@ import (
 )
 
 type DB interface {
-	WriteStates(blockHeight int64) ([]byte, int, error)
 	LoadChainAs(chainId []byte, chain state.Chain) (*state.Object, error)
 	AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object)
 	WriteIndex(index state.Index, chain []byte, key interface{}, value []byte)
@@ -27,26 +23,6 @@ type DB interface {
 }
 
 type MultiDB []DB
-
-func (db MultiDB) WriteStates(blockHeight int64) (hash []byte, count int, err error) {
-	var errs []string
-	for i, db := range db {
-		h, c, err := db.WriteStates(blockHeight)
-		if err != nil {
-			errs = append(errs, err.Error())
-		}
-		if i == 0 {
-			hash, count = h, c
-		} else if !bytes.Equal(h, hash) || c != count {
-			// If this happens, there is a consistency error between nodes
-			panic("inconsistency between databases!")
-		}
-	}
-	if len(errs) > 0 {
-		return nil, 0, errors.New(strings.Join(errs, "; "))
-	}
-	return hash, count, nil
-}
 
 func (db MultiDB) LoadChainAs(chainId []byte, chain state.Chain) (*state.Object, error) {
 	return db[0].LoadChainAs(chainId, chain)
