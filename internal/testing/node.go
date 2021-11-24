@@ -122,6 +122,10 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create node: %v", err)
 	}
+	go func() {
+		<-node.Quit()
+		sdb.GetDB().Close()
+	}()
 	cleanup(func() {
 		_ = node.Stop()
 		node.Wait()
