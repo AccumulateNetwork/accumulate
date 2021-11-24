@@ -56,10 +56,10 @@ type CreateSigSpecGroup struct {
 }
 
 type CreateToken struct {
-	Url        string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
-	Symbol     string `json:"symbol" form:"symbol" query:"symbol" validate:"required"`
-	Precision  uint64 `json:"precision" form:"precision" query:"precision" validate:"required"`
-	Properties string `json:"properties" form:"properties" query:"properties" validate:"acc-url"`
+	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"acc-url"`
 }
 
 type DataAccount struct {
@@ -150,9 +150,9 @@ type TokenAccountCreate struct {
 
 type TokenIssuer struct {
 	state.ChainHeader
-	Symbol     string `json:"symbol" form:"symbol" query:"symbol" validate:"required"`
-	Precision  uint64 `json:"precision" form:"precision" query:"precision" validate:"required"`
-	Properties string `json:"properties" form:"properties" query:"properties" validate:"required,acc-url"`
+	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"required,acc-url"`
 }
 
 type TxResult struct {
