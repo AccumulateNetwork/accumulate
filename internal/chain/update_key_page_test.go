@@ -40,7 +40,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	require.NoError(t, acctesting.CreateSigSpec(dbtx, "foo/page1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateSigSpec(dbtx, "foo/page2", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateSigSpecGroup(dbtx, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
-	_, _, err := dbtx.WriteStates(0)
+	_, _, err := dbtx.Commit(0)
 	require.NoError(t, err)
 
 	for _, idx := range []uint64{0, 1, 2} {
