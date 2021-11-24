@@ -65,7 +65,9 @@ func readTypes(file string) []*Record {
 	defer f.Close()
 
 	var v map[string]*Record
-	err = yaml.NewDecoder(f).Decode(&v)
+	dec := yaml.NewDecoder(f)
+	dec.KnownFields(true)
+	err = dec.Decode(&v)
 	check(err)
 
 	r := make([]*Record, 0, len(v))
@@ -114,7 +116,9 @@ func resolveType(field *Field, forNew bool) string {
 
 func jsonType(field *Field) string {
 	switch field.Type {
-	case "bytes", "chain":
+	case "bytes":
+		return "*string"
+	case "chain":
 		return "string"
 	case "chainSet":
 		return "[]string"
@@ -257,7 +261,7 @@ func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
 		if typ == "" {
 			typ = resolveType(f, false)
 		}
-		fmt.Fprintf(w, "\t\t%s %s `json:\"%s\"`\n", f.Name, typ, lcName)
+		fmt.Fprintf(w, "\t\t%s %s `json:\"%s,omitempty\"`\n", f.Name, typ, lcName)
 	}
 	fmt.Fprintf(w, "\t}\n")
 }
@@ -356,7 +360,7 @@ func run(_ *cobra.Command, args []string) {
 		for _, field := range typ.Fields {
 			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
 			fmt.Fprintf(w, "\t%s %s `", field.Name, resolveType(field, false))
-			fmt.Fprintf(w, `json:"%[1]s" form:"%[1]s" query:"%[1]s"`, lcName)
+			fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
 
 			var validate []string
 			if !field.Optional {

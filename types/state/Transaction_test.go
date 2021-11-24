@@ -121,8 +121,9 @@ func TestTransactionState(t *testing.T) {
 	}
 
 	txPendingStateObject := Object{}
-	mdRoot := sha256.Sum256([]byte("some mdroot"))
-	txPendingStateObject.MDRoot = mdRoot
+	root := sha256.Sum256([]byte("some mdroot"))
+	txPendingStateObject.Roots = [][]byte{root[:]}
+	txPendingStateObject.Height = 1
 	txPendingStateObject.Entry = data
 	pendingStateData, err := txPendingStateObject.MarshalBinary()
 	if err != nil {

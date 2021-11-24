@@ -30,7 +30,7 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	case types.ChainTypeIdentity:
 		chain = new(state.AdiState)
 	case types.ChainTypeTokenIssuer:
-		chain = new(state.Token)
+		chain = new(protocol.TokenIssuer)
 	case types.ChainTypeTokenAccount:
 		chain = new(state.TokenAccount)
 	case types.ChainTypeLiteTokenAccount:
