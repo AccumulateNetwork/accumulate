@@ -87,7 +87,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  app.state.BlockIndex(),
-		LastBlockAppHash: app.state.EnsureRootHash(),
+		LastBlockAppHash: app.state.RootHash(),
 	}
 }
 
