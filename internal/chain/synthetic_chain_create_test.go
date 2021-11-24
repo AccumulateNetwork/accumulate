@@ -18,8 +18,9 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, db.Open("mem", true, true))
 
 	fooKey := generateKey()
-	require.NoError(t, acctesting.CreateADI(db, fooKey, "foo"))
-	_, _, err := db.WriteStates(0)
+	dbTx := db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	_, _, err := dbTx.Commit(0)
 	require.NoError(t, err)
 
 	book, err := url.Parse("foo/ssg0")
@@ -34,7 +35,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	tx, err := transactions.New("foo", edSigner(fooKey, 1), body)
 	require.NoError(t, err)
 
-	st, err := NewStateManager(db, tx)
+	st, err := NewStateManager(db.Begin(), tx)
 	require.NoError(t, err)
 
 	err = SyntheticCreateChain{}.Validate(st, tx)
