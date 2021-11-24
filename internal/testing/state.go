@@ -22,28 +22,6 @@ type DB interface {
 	GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error)
 }
 
-type MultiDB []DB
-
-func (db MultiDB) LoadChainAs(chainId []byte, chain state.Chain) (*state.Object, error) {
-	return db[0].LoadChainAs(chainId, chain)
-}
-
-func (db MultiDB) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object) {
-	for _, db := range db {
-		db.AddStateEntry(chainId, txHash, object)
-	}
-}
-
-func (db MultiDB) WriteIndex(index state.Index, chain []byte, key interface{}, value []byte) {
-	for _, db := range db {
-		db.WriteIndex(index, chain, key, value)
-	}
-}
-
-func (db MultiDB) GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error) {
-	return db[0].GetIndex(index, chain, key)
-}
-
 // Token multiplier
 const TokenMx = 100000000
 

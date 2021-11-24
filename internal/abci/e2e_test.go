@@ -27,14 +27,14 @@ var rand = randpkg.New(randpkg.NewSource(0))
 type Tx = transactions.GenTransaction
 
 func TestEndToEndSuite(t *testing.T) {
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) (*accapi.Query, acctesting.DB) {
+	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *accapi.Query {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", false)
 		n.app.InitChain(abci.RequestInitChain{
 			Time:    time.Now(),
 			ChainId: s.T().Name(),
 		})
-		return n.query, n.db.Begin()
+		return n.query
 	}))
 }
 
