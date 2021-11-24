@@ -19,7 +19,6 @@ import (
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/getsentry/sentry-go"
-	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
@@ -106,21 +105,21 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	k, v, err := app.chain.Query(qu)
+	k, v, customErr := app.chain.Query(qu)
 	switch {
-	case err == nil:
-		// OK
+	case customErr == nil:
+		//Ok
 
-	case errors.Is(err, storage.ErrNotFound):
-		resQuery.Info = err.Error()
+	case errors.Is(customErr.Unwrap(), storage.ErrNotFound):
+		resQuery.Info = customErr.Error()
 		resQuery.Code = protocol.CodeNotFound
 		return resQuery
 
 	default:
-		sentry.CaptureException(err)
-		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
-		resQuery.Info = err.Error()
-		resQuery.Code = code.CodeTypeUnauthorized
+		sentry.CaptureException(customErr)
+		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", customErr)
+		resQuery.Info = customErr.Error()
+		resQuery.Code = uint32(customErr.Code)
 		return resQuery
 	}
 
@@ -165,14 +164,14 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		Height:   -1,
 	})
 
-	err = app.chain.CheckTx(tx)
-	if err != nil {
-		panic(fmt.Errorf("failed to validate genesis TX: %v", err))
+	customErr := app.chain.CheckTx(tx)
+	if customErr != nil {
+		panic(fmt.Errorf("failed to validate genesis TX: %v", customErr))
 	}
 
-	_, err = app.chain.DeliverTx(tx)
-	if err != nil {
-		panic(fmt.Errorf("failed to execute genesis TX: %v", err))
+	_, customErr = app.chain.DeliverTx(tx)
+	if customErr != nil {
+		panic(fmt.Errorf("failed to execute genesis TX: %v", customErr))
 	}
 
 	app.chain.EndBlock(EndBlockRequest{})
@@ -249,9 +248,9 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	//create a default response
 	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
 
-	err = app.chain.CheckTx(sub)
+	customErr := app.chain.CheckTx(sub)
 
-	if err != nil {
+	if customErr != nil {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
@@ -259,7 +258,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 		sentry.CaptureException(err)
 		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
-		ret.Code = protocol.CodeUnknownError
+		ret.Code = uint32(customErr.Code)
 		ret.GasWanted = 0
 		ret.GasUsed = 0
 		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
@@ -292,9 +291,9 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	//run through the validation node
-	r, err := app.chain.DeliverTx(sub)
+	r, customErr := app.chain.DeliverTx(sub)
 
-	if err != nil {
+	if customErr != nil {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
@@ -302,7 +301,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 		sentry.CaptureException(err)
 		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
-		ret.Code = protocol.CodeUnknownError
+		ret.Code = uint32(customErr.Code)
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
 		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
 		return ret
