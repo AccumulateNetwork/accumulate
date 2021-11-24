@@ -69,16 +69,21 @@ type APIRequestURLPagination struct {
 
 // APIDataResponse is used in "get" API method response
 type APIDataResponse struct {
-	Type    types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,tx,sigSpec,sigSpecGroup,assignSigSpec,addCredits,directory,version"`
-	MDRoot  types.Bytes        `json:"mdRoot,omitempty" form:"mdRoot" query:"mdRoot"`
-	Data    *json.RawMessage   `json:"data" form:"data" query:"data"`
-	Sponsor types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
-	KeyPage *APIRequestKeyPage `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
-	TxId    *types.Bytes       `json:"txid" form:"txid" query:"txid"`
+	Type        types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,tx,sigSpec,sigSpecGroup,assignSigSpec,addCredits,directory,version"`
+	MerkleState *MerkleState       `json:"merkleState,omitempty" form:"merkleState" query:"merkleState"`
+	Data        *json.RawMessage   `json:"data" form:"data" query:"data"`
+	Sponsor     types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
+	KeyPage     *APIRequestKeyPage `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
+	TxId        *types.Bytes       `json:"txid" form:"txid" query:"txid"`
 	//the following are optional available only if pending chain has not been purged
 	Signer *Signer          `json:"signer,omitempty" form:"signer" query:"signer"`
 	Sig    *types.Bytes64   `json:"sig,omitempty" form:"sig" query:"sig"`
 	Status *json.RawMessage `json:"status,omitempty" form:"status" query:"status"`
+}
+
+type MerkleState struct {
+	Count uint64        `json:"count,omitempty" form:"count" query:"count"`
+	Roots []types.Bytes `json:"roots,omitempty" form:"roots" query:"roots"`
 }
 
 // APIDataResponsePagination is APIDataResponse with pagination data

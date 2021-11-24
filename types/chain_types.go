@@ -12,8 +12,6 @@ type ChainType uint64
 const (
 	// ChainTypeUnknown represents an unknown chain type.
 	ChainTypeUnknown = ChainType(iota)
-
-	chainMax = ChainTypeKeyBook
 )
 
 const (
@@ -52,6 +50,9 @@ const (
 
 	// ChainTypeLiteDataAccount is a Lite Data Account chain.
 	ChainTypeLiteDataAccount ChainType = 12
+
+	// chainMax needs to be set to the last type in the list above
+	chainMax = ChainTypeLiteDataAccount
 )
 
 // ID returns the chain type ID
@@ -90,6 +91,10 @@ func (t ChainType) String() string {
 		return "keyPage"
 	case ChainTypeKeyBook:
 		return "keyBook"
+	case ChainTypeDataAccount:
+		return "dataAccount"
+	case ChainTypeLiteDataAccount:
+		return "liteDataAccount"
 	default:
 		return fmt.Sprintf("ChainType:%d", t)
 	}
@@ -102,7 +107,7 @@ func (t ChainType) Name() string { return t.String() }
 var chainByName = map[string]ChainType{}
 
 func init() {
-	for t := ChainTypeUnknown; t < chainMax; t++ {
+	for t := ChainTypeUnknown; t <= chainMax; t++ {
 		chainByName[t.String()] = t
 	}
 }

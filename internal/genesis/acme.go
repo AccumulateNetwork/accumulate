@@ -6,7 +6,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-var ACME = new(state.Token)
+var ACME = new(protocol.TokenIssuer)
 
 func createAcmeToken() state.Chain {
 	ACME.Type = types.ChainTypeTokenIssuer
