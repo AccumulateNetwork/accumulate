@@ -43,13 +43,13 @@ echo $bal
 
 # generate a key
 
-Key=`./cli_key_generate t34key $1`
+Key=`./cli_key_generate.sh t34key $1`
 
 echo $key
 
 # create account
 
-echo "./cli_adi_create_account.sh $ID acc://t34acct t34key $1"
+echo `./cli_adi_create_account.sh $ID acc://t34acct t34key $1`
 
 # call cli faucet 
 
