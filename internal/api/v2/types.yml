@@ -75,7 +75,7 @@ TokenDeposit:
   - name: Txid
     type: bytes
 
-UrlRequest:
+UrlQuery:
   non-binary: true
   fields:
   - name: Url
@@ -88,13 +88,19 @@ UrlRequest:
     type: uvarint
     optional: true
 
-IdRequest:
+TxIdQuery:
   non-binary: true
   fields:
-  - name: Id
+  - name: Txid
     type: bytes
 
-MetricsRequest:
+ChainIdQuery:
+  non-binary: true
+  fields:
+  - name: ChainId
+    type: bytes
+
+MetricsQuery:
   fields:
     - name: Metric
       type: string
