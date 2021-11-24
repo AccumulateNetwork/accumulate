@@ -165,100 +165,98 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		txr := query.RequestByTxId{}
 		err := txr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 		qr, err := m.queryByTxId(txr.TxId[:])
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err.Error()}
+			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
 		}
 		k = []byte("tx")
 		v, err = qr.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("%v, on Chain %x", err, txr.TxId[:])}
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, txr.TxId[:])}
 		}
 	case types.QueryTypeTxHistory:
 		txh := query.RequestTxHistory{}
 		err := txh.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 
 		thr := query.ResponseTxHistory{}
 		txids, maxAmt, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Start+txh.Limit)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Sprintf("error obtaining txid range %v", err)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 		}
 		thr.Total = maxAmt
 		for i := range txids {
 			qr, err := m.queryByTxId(txids[i][:])
 			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err.Error()}
+				return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
 			}
 			thr.Transactions = append(thr.Transactions, *qr)
 		}
 		k = []byte("tx-history")
 		v, err = thr.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: "error marshalling payload for transaction history"}
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("error marshalling payload for transaction history")}
 		}
 	case types.QueryTypeUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 		u, err := url.Parse(*chr.Url.AsString())
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Sprintf("invalid URL in query %s", chr.Url)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
 
 		var obj encoding.BinaryMarshaler
 		k, obj, err = m.queryByUrl(u)
-		if err != nil && errors.Is(err, storage.ErrNotFound) {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err.Error()}
-		} else if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err.Error()}
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
 		}
 		v, err = obj.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("%v, on Url %s", err, chr.Url)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, chr.Url)}
 		}
 	case types.QueryTypeDirectoryUrl:
 		chr := query.RequestByUrl{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 		u, err := url.Parse(*chr.Url.AsString())
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Sprintf("invalid URL in query %s", chr.Url)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
 		dir, err := m.queryDirectoryByChainId(u.ResourceChain())
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err.Error()}
+			return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
 		}
 		k = []byte("directory")
 		v, err = dir.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("%v, on Url %s", err, chr.Url)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, chr.Url)}
 		}
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
 		err := chr.UnmarshalBinary(chr.ChainId[:])
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err.Error()}
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 		obj, err := m.queryByChainId(chr.ChainId[:])
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err.Error()}
+			return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
 		}
 		k = []byte("chain")
 		v, err = obj.MarshalBinary()
 		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("%v, on Chain %x", err, chr.ChainId)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, chr.ChainId)}
 		}
 	default:
-		return nil, nil, &protocol.Error{Code: protocol.CodeInvalidQueryType, Message: fmt.Sprintf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())}
+		return nil, nil, &protocol.Error{Code: protocol.CodeInvalidQueryType, Message: fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())}
 	}
 	return k, v, err
 }
@@ -395,21 +393,21 @@ func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransact
 func (m *Executor) CheckTx(tx *transactions.GenTransaction) *protocol.Error {
 	err := tx.SetRoutingChainID()
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeRoutingChainId, Message: err.Error()}
+		return &protocol.Error{Code: protocol.CodeRoutingChainId, Message: err}
 	}
 
 	st, err := m.check(tx)
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeCheckTxError, Message: err.Error()}
+		return &protocol.Error{Code: protocol.CodeCheckTxError, Message: err}
 	}
 
 	executor, ok := m.executors[types.TxType(tx.TransactionType())]
 	if !ok {
-		return &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Sprintf("unsupported TX type: %v", types.TxType(tx.TransactionType()))}
+		return &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))}
 	}
 	err = executor.Validate(st, tx)
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeValidateTxnError, Message: err.Error()}
+		return &protocol.Error{Code: protocol.CodeValidateTxnError, Message: err}
 	}
 	return nil
 }
@@ -420,11 +418,11 @@ func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, c
 	e, err1 := txPending.MarshalBinary()
 	txPendingObject.Entry = e
 	if err1 != nil {
-		return &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Sprintf("failed marshaling pending tx (%v) on error: %v", err1, err)}
+		return &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("failed marshaling pending tx (%v) on error: %v", err1, err)}
 	}
 	err1 = m.db.AddTransaction(chainId, txid, txPendingObject, nil)
 	if err1 != nil {
-		err = &protocol.Error{Code: protocol.CodeAddTxnError, Message: fmt.Sprintf("error adding pending tx (%v) on error %v", err1, err)}
+		err = &protocol.Error{Code: protocol.CodeAddTxnError, Message: fmt.Errorf("error adding pending tx (%v) on error %v", err1, err)}
 	}
 	return err
 }
@@ -446,7 +444,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	defer m.wg.Done()
 
 	if tx.Transaction == nil || tx.SigInfo == nil || len(tx.ChainID) != 32 {
-		return nil, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: "malformed transaction error"}
+		return nil, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("malformed transaction error")}
 	}
 
 	txt := types.TxType(tx.TransactionType())
@@ -454,7 +452,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	txPending := state.NewPendingTransaction(tx)
 	chainId := types.Bytes(tx.ChainID).AsBytes32()
 	if !ok {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Sprintf("unsupported TX type: %v", tx.TransactionType().Name())})
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())})
 	}
 
 	tx.TransactionHash()
@@ -473,14 +471,14 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 
 	st, err := m.check(tx)
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Sprintf("txn check failed : %v", err)})
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
 	err = executor.Validate(st, tx)
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Sprintf("txn validation failed : %v", err)})
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
 	}
 
 	// Ensure the genesis transaction can only be processed once
@@ -497,32 +495,32 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err.Error()})
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	txPendingObject := new(state.Object)
 	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err.Error()})
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	// Store the tx state
 	err = m.db.AddTransaction(&chainId, tx.TransactionHash(), txPendingObject, txAcceptedObject)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.CodeTxnStateError, Message: err.Error()}
+		return nil, &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
 	err = st.commit()
 	if err != nil {
-		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err.Error()})
+		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
 	}
 
 	// Process synthetic transactions generated by the validator
 	refs, err := m.submitSyntheticTx(tx.TransactionHash(), st)
 	if err != nil {
-		return nil, &protocol.Error{Code: protocol.CodeSyntheticTxnError, Message: err.Error()}
+		return nil, &protocol.Error{Code: protocol.CodeSyntheticTxnError, Message: err}
 	}
 
 	r := new(protocol.TxResult)

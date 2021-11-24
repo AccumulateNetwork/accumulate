@@ -50,11 +50,15 @@ const (
 
 type Error struct {
 	Code    ErrorCode
-	Message string
+	Message error
 }
 
 var _ error = (*Error)(nil)
 
 func (err *Error) Error() string {
+	return err.Message.Error()
+}
+
+func (err *Error) Unwrap() error {
 	return err.Message
 }
