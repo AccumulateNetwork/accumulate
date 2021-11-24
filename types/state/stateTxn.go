@@ -1,8 +1,6 @@
 package state
 
 import (
-	"errors"
-	"fmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -29,50 +27,32 @@ func (s *StateDB) Begin() *DBTransaction {
 	return dbTx
 }
 
-//GetPersistentEntry will pull the data from the database for the StateEntries bucket.
+// GetPersistentEntry calls StateDB.GetPersistentEntry(...).
 func (tx *DBTransaction) GetPersistentEntry(chainId []byte, verify bool) (*Object, error) {
-	_ = verify
-	tx.state.Sync()
-
-	if tx.state.db == nil {
-		return nil, fmt.Errorf("database has not been initialized")
-	}
-
-	data, err := tx.state.db.Key("StateEntries", chainId).Get()
-	if errors.Is(err, storage.ErrNotFound) {
-		return nil, fmt.Errorf("%w: no state defined for %X", storage.ErrNotFound, chainId)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get state entry %X: %v", chainId, err)
-	}
-
-	ret := &Object{}
-	err = ret.UnmarshalBinary(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal state for %x", chainId)
-	}
-	//if verify {
-	//todo: generate and verify data to make sure the state matches what is in the patricia trie
-	//}
-	return ret, nil
+	return tx.state.GetPersistentEntry(chainId, verify)
 }
 
+// GetDB calls StateDB.GetDB().
 func (tx *DBTransaction) GetDB() *database.Manager {
 	return tx.state.GetDB()
 }
 
+// Sync calls StateDB.Sync().
 func (tx *DBTransaction) Sync() {
 	tx.state.Sync()
 }
 
+// RootHash calls StateDB.RootHash().
 func (tx *DBTransaction) RootHash() []byte {
 	return tx.state.RootHash()
 }
 
+// BlockIndex calls StateDB.BlockIndex().
 func (tx *DBTransaction) BlockIndex() int64 {
 	return tx.state.BlockIndex()
 }
 
+// EnsureRootHash calls StateDB.EnsureRootHash().
 func (tx *DBTransaction) EnsureRootHash() []byte {
 	return tx.state.EnsureRootHash()
 }
