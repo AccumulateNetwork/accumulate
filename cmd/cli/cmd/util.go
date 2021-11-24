@@ -246,21 +246,22 @@ type ActionResponse struct {
 }
 
 func (a *ActionResponse) Print() (string, error) {
+	ok := a.Code == "0" || a.Code == ""
+
 	if WantJsonOutput {
-		if a.Code == "0" || a.Code == "" {
+		if ok {
 			a.Code = "ok"
 		}
 		out, err := json.Marshal(a)
 		if err != nil {
 			return "", err
 		}
-
 		return string(out), nil
 	} else {
 		var out string
 		out += fmt.Sprintf("\n\tTransaction Identifier\t:\t%x\n", a.Txid)
 		out += fmt.Sprintf("\tTendermint Reference\t:\t%x\n", a.Hash)
-		if a.Code != "0" && a.Code != "" {
+		if !ok {
 			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
 		} else {
 			out += fmt.Sprintf("\tError code\t\t:\tok\n")
@@ -294,12 +295,12 @@ func PrintJsonRpcError(err error) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf(string(out)), nil
+		return string(out), nil
 	} else {
 		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
 		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
 		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
-		return fmt.Sprintf(string(out)), nil
+		return out, nil
 	}
 }
 

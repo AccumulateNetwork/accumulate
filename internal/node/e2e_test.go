@@ -16,7 +16,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -39,17 +38,12 @@ func TestEndToEnd(t *testing.T) {
 		t.Skip("This test consistently fails in CI")
 	}
 
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) (*api.Query, acctesting.DB) {
+	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *api.Query {
 
 		// Restart the nodes for every test
-		nodes, dbs := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
+		nodes, _ := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
 		query := startNodes(s.T(), nodes)
-
-		mdb := make(acctesting.MultiDB, len(dbs))
-		for i, db := range dbs {
-			mdb[i] = db
-		}
-		return query, mdb
+		return query
 	}))
 }
 

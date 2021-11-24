@@ -38,7 +38,7 @@ func ComputeKey(keys ...interface{}) Key {
 			bkeys[i] = []byte{}
 		case []byte:
 			bkeys[i] = key
-		case [32]uint8:
+		case [32]byte:
 			bkeys[i] = key[:]
 		case types.Bytes:
 			bkeys[i] = key
@@ -48,6 +48,8 @@ func ComputeKey(keys ...interface{}) Key {
 			bkeys[i] = []byte(key)
 		case types.String:
 			bkeys[i] = []byte(key)
+		case interface{ Bytes() []byte }:
+			bkeys[i] = key.Bytes()
 		case uint:
 			bkeys[i] = common.Uint64Bytes(uint64(key))
 		case uint8:
