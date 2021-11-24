@@ -345,7 +345,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		}
 		// TODO add pending update for the nonce
 	}
-
+	st.Update(sigSpec, sigGroup)
 	return st, nil
 }
 
@@ -385,7 +385,7 @@ func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransact
 	}
 
 	// TODO add pending update for the nonce
-
+	st.Update(account)
 	return nil
 }
 
