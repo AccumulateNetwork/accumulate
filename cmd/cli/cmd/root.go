@@ -1,17 +1,16 @@
 package cmd
 
 import (
-	"github.com/AccumulateNetwork/accumulate/cmd/cli/db"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"github.com/AccumulateNetwork/accumulate/client"
+	"github.com/AccumulateNetwork/accumulate/cmd/cli/db"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
+	"github.com/spf13/cobra"
 )
 
 var (
