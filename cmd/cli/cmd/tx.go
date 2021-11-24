@@ -51,8 +51,7 @@ var txCmd = &cobra.Command{
 			PrintTX()
 		}
 		if err != nil {
-			fmt.Println("Usage:")
-			PrintTX()
+			cmd.Print("Error: ")
 			cmd.PrintErr(err)
 		} else {
 			cmd.Println(out)

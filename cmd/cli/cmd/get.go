@@ -40,8 +40,7 @@ var getCmd = &cobra.Command{
 			PrintGet()
 		}
 		if err != nil {
-			fmt.Println("Usage:")
-			PrintGet()
+			cmd.Print("Error: ")
 			cmd.PrintErr(err)
 		} else {
 			cmd.Println(out)

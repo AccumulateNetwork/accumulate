@@ -51,8 +51,7 @@ var pageCmd = &cobra.Command{
 			PrintPage()
 		}
 		if err != nil {
-			fmt.Println("Usage:")
-			PrintPage()
+			cmd.Print("Error: ")
 			cmd.PrintErr(err)
 		} else {
 			cmd.Println(out)
@@ -70,7 +69,7 @@ func PrintKeyPageCreate() {
 }
 func PrintKeyUpdate() {
 	fmt.Println("  accumulate page key update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name] Update key in a key page with a new public key")
-	fmt.Println("\t\t example usage: accumulate key update page  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key update page  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate page key add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name] Add key to a key page")
 	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate page key remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] Remove key from a key page")
@@ -86,7 +85,7 @@ func PrintPage() {
 func GetAndPrintKeyPage(url string) (string, error) {
 	str, _, err := GetKeyPage(url)
 	if err != nil {
-		return "", fmt.Errorf("error retrieving key book for %s", url)
+		return "", fmt.Errorf("error retrieving key page for %s, %v", url, err)
 	}
 
 	res := acmeapi.APIDataResponse{}
@@ -97,19 +96,25 @@ func GetAndPrintKeyPage(url string) (string, error) {
 	return PrintQueryResponse(&res)
 }
 
-func GetKeyPage(url string) ([]byte, *protocol.SigSpecGroup, error) {
+func GetKeyPage(url string) ([]byte, *protocol.SigSpec, error) {
 	s, err := GetUrl(url, "sig-spec")
 	if err != nil {
 		return nil, nil, err
 	}
 
-	ssg := protocol.SigSpecGroup{}
-	err = json.Unmarshal(s, &ssg)
+	res := acmeapi.APIDataResponse{}
+	err = json.Unmarshal(s, &res)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return s, &ssg, nil
+	ss := protocol.SigSpec{}
+	err = json.Unmarshal(*res.Data, &ss)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return s, &ss, nil
 }
 
 // CreateKeyPage create a new key page
@@ -133,7 +138,6 @@ func CreateKeyPage(page string, args []string) (string, error) {
 	keyLabels := args[1:]
 	//when creating a key page you need to have the keys already generated and labeled.
 	if newUrl.Authority != pageUrl.Authority {
-		PrintKeyPageCreate()
 		return "", fmt.Errorf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
 	}
 
@@ -149,7 +153,6 @@ func CreateKeyPage(page string, args []string) (string, error) {
 			//now check to see if it is a valid key hex, if so we can assume that is the public key.
 			ksp.PublicKey, err = pubKeyFromString(keyLabels[i])
 			if err != nil {
-				PrintKeyPageCreate()
 				return "", fmt.Errorf("key name %s, does not exist in wallet, nor is it a valid public key", keyLabels[i])
 			}
 		} else {

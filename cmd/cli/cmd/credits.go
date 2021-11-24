@@ -28,7 +28,7 @@ var creditsCmd = &cobra.Command{
 			PrintCredits()
 		}
 		if err != nil {
-			PrintCredits()
+			cmd.Print("Error: ")
 			cmd.PrintErr(err)
 		} else {
 			cmd.Println(out)

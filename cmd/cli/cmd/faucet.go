@@ -24,8 +24,7 @@ var faucetCmd = &cobra.Command{
 			PrintFaucet()
 		}
 		if err != nil {
-			fmt.Println("Usage:")
-			PrintFaucet()
+			cmd.Print("Error: ")
 			cmd.PrintErr(err)
 		} else {
 			cmd.Println(out)

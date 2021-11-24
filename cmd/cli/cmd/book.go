@@ -49,8 +49,7 @@ var bookCmd = &cobra.Command{
 			PrintKeyBook()
 		}
 		if err != nil {
-			fmt.Println("Usage:")
-			PrintKeyBook()
+			cmd.Print("Error: ")
 			cmd.PrintErr(err)
 		} else {
 			cmd.Println(out)
@@ -92,8 +91,16 @@ func GetKeyBook(url string) ([]byte, *protocol.SigSpecGroup, error) {
 		return nil, nil, err
 	}
 
+	res := acmeapi.APIDataResponse{}
+	err = json.Unmarshal(s, &res)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	//added for compatibility with v1
+	//data := strings.ReplaceAll(string(*res.Data), "keyBook", "sigSpecGroup")
 	ssg := protocol.SigSpecGroup{}
-	err = json.Unmarshal([]byte(s), &ssg)
+	err = json.Unmarshal(*res.Data, &ssg)
 	if err != nil {
 		return nil, nil, err
 	}

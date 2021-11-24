@@ -145,7 +145,8 @@ func GetUrl(url string, method string) ([]byte, error) {
 	params.URL = types.String(u.String())
 
 	if err := Client.Request(context.Background(), method, params, &res); err != nil {
-		return nil, err
+		ret, err := PrintJsonRpcError(err)
+		return []byte(ret), err
 	}
 
 	str, err = json.Marshal(res)
