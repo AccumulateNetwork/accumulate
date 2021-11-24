@@ -342,7 +342,6 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TxId.AsBytes32())
-	out += fmt.Sprintf("  - Merkle DAG Root       : %x\n", res.MDRoot.AsBytes32())
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Sponsor)
 	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig.Bytes())
 	out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
