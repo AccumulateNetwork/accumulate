@@ -7,10 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
-
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 

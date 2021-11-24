@@ -12,10 +12,9 @@ import (
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/mdp/qrterminal"
-
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 )
 
