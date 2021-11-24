@@ -27,14 +27,14 @@ var rand = randpkg.New(randpkg.NewSource(0))
 type Tx = transactions.GenTransaction
 
 func TestEndToEndSuite(t *testing.T) {
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) (*accapi.Query, acctesting.DB) {
+	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *accapi.Query {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", false)
 		n.app.InitChain(abci.RequestInitChain{
 			Time:    time.Now(),
 			ChainId: s.T().Name(),
 		})
-		return n.query, n.db
+		return n.query
 	}))
 }
 
@@ -147,9 +147,9 @@ func TestCreateADI(t *testing.T) {
 	anonAccount := generateKey()
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
-
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, anonAccount, 5e4))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, anonAccount, 5e4))
+	dbTx.Commit(n.NextHeight())
 
 	wallet := new(transactions.WalletEntry)
 	wallet.Nonce = 1
@@ -190,8 +190,9 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
 		n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 		adiKey := generateKey()
-		require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
-		n.WriteStates()
+		dbTx := n.db.Begin()
+		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
+		dbTx.Commit(n.NextHeight())
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
 			tac := new(protocol.TokenAccountCreate)
@@ -219,10 +220,11 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Custom Key Book", func(t *testing.T) {
 		n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 		adiKey, pageKey := generateKey(), generateKey()
-		require.NoError(t, acctesting.CreateADI(n.db, adiKey, "FooBar"))
-		require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/page1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/book1", "foo/page1"))
-		n.WriteStates()
+		dbTx := n.db.Begin()
+		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/page1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/book1", "foo/page1"))
+		dbTx.Commit(n.NextHeight())
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
 			tac := new(protocol.TokenAccountCreate)
@@ -250,10 +252,11 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 func TestAnonAccountTx(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, alice, 5e4))
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, bob, 0))
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(n.db, charlie, 0))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, alice, 5e4))
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, bob, 0))
+	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, charlie, 0))
+	dbTx.Commit(n.NextHeight())
 
 	aliceUrl := anon.GenerateAcmeAddress(alice.PubKey().Bytes())
 	bobUrl := anon.GenerateAcmeAddress(bob.PubKey().Bytes())
@@ -279,11 +282,12 @@ func TestAnonAccountTx(t *testing.T) {
 func TestAdiAccountTx(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, barKey := generateKey(), generateKey()
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateTokenAccount(n.db, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	require.NoError(t, acctesting.CreateADI(n.db, barKey, "bar"))
-	require.NoError(t, acctesting.CreateTokenAccount(n.db, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
+	require.NoError(t, acctesting.CreateADI(dbTx, barKey, "bar"))
+	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
+	dbTx.Commit(n.NextHeight())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		tokenTx := api.NewTokenTx("foo/tokens")
@@ -303,9 +307,10 @@ func TestAdiAccountTx(t *testing.T) {
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey := generateKey()
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateTokenAccount(n.db, "foo/tokens", protocol.AcmeUrl().String(), 1e2, false))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1e2, false))
+	dbTx.Commit(n.NextHeight())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		ac := new(protocol.AddCredits)
@@ -328,8 +333,9 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 func TestCreateSigSpec(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, testKey := generateKey(), generateKey()
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	dbTx.Commit(n.NextHeight())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		cms := new(protocol.CreateSigSpec)
@@ -355,9 +361,10 @@ func TestCreateSigSpec(t *testing.T) {
 func TestCreateSigSpecGroup(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, testKey := generateKey(), generateKey()
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey.PubKey().Bytes()))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
+	dbTx.Commit(n.NextHeight())
 
 	specUrl := n.ParseUrl("foo/sigspec1")
 	specChainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
@@ -391,10 +398,11 @@ func TestAddSigSpec(t *testing.T) {
 	u := n.ParseUrl("foo/ssg1")
 	groupChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/ssg1", "foo/sigspec1"))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
+	dbTx.Commit(n.NextHeight())
 
 	// Sanity check
 	require.Equal(t, groupChainId, n.GetSigSpec("foo/sigspec1").SigSpecId)
@@ -424,10 +432,11 @@ func TestAddKey(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, testKey := generateKey(), generateKey()
 
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/ssg1", "foo/sigspec1"))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
+	dbTx.Commit(n.NextHeight())
 
 	newKey := generateKey()
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -451,10 +460,11 @@ func TestUpdateKey(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, testKey := generateKey(), generateKey()
 
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/ssg1", "foo/sigspec1"))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
+	dbTx.Commit(n.NextHeight())
 
 	newKey := generateKey()
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -479,10 +489,11 @@ func TestRemoveKey(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
-	require.NoError(t, acctesting.CreateADI(n.db, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(n.db, "foo/sigspec1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(n.db, "foo/ssg1", "foo/sigspec1"))
-	n.WriteStates()
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
+	dbTx.Commit(n.NextHeight())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		body := new(protocol.UpdateKeyPage)
