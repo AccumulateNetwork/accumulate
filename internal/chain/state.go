@@ -39,6 +39,9 @@ type storeState struct {
 	record   state.Chain
 }
 
+// NewStateManager creates a new state manager and loads the transaction's
+// sponsor. If the sponsor is not found, NewStateManager returns a valid state
+// manager along with a not-found error.
 func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction) (*StateManager, error) {
 	m := new(StateManager)
 	m.dbTx = dbTx
@@ -48,24 +51,28 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 	m.txHash = types.Bytes(tx.TransactionHash()).AsBytes32()
 	m.txType = tx.TransactionType()
 
+	// The genesis TX is special
 	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
 		m.SponsorUrl = protocol.AcmeUrl()
 		m.Sponsor = genesis.ACME
 		return m, nil
 	}
 
+	// The sponsor URL must be valid
 	var err error
 	m.SponsorUrl, err = url.Parse(tx.SigInfo.URL)
 	if err != nil {
 		return nil, err
 	}
 
+	// Find the sponsor
 	copy(m.SponsorChainId[:], m.SponsorUrl.ResourceChain())
 	m.Sponsor, err = m.Load(m.SponsorChainId)
 	if err == nil {
 		return m, nil
 	}
 
+	// If the sponsor doesn't exist, that might be OK
 	if errors.Is(err, storage.ErrNotFound) {
 		return m, fmt.Errorf("sponsor %q %w", m.SponsorUrl, err)
 	}
@@ -77,6 +84,7 @@ type submittedTx struct {
 	body encoding.BinaryMarshaler
 }
 
+// LoadString loads a chain by URL and unmarshals it.
 func (m *StateManager) LoadString(s string) (state.Chain, error) {
 	u, err := url.Parse(s)
 	if err != nil {
@@ -86,12 +94,14 @@ func (m *StateManager) LoadString(s string) (state.Chain, error) {
 	return m.LoadUrl(u)
 }
 
+// LoadUrl loads a chain by URL and unmarshals it.
 func (m *StateManager) LoadUrl(u *url.URL) (state.Chain, error) {
 	var chainId [32]byte
 	copy(chainId[:], u.ResourceChain())
 	return m.Load(chainId)
 }
 
+// LoadStringAs loads a chain by URL and unmarshals it as a specific type.
 func (m *StateManager) LoadStringAs(s string, v interface{}) error {
 	u, err := url.Parse(s)
 	if err != nil {
@@ -101,13 +111,14 @@ func (m *StateManager) LoadStringAs(s string, v interface{}) error {
 	return m.LoadUrlAs(u, v)
 }
 
+// LoadUrlAs loads a chain by URL and unmarshals it as a specific type.
 func (m *StateManager) LoadUrlAs(u *url.URL, v interface{}) error {
 	var chainId [32]byte
 	copy(chainId[:], u.ResourceChain())
 	return m.LoadAs(chainId, v)
 }
 
-// Load loads the given chain and unmarshals it
+// Load loads a chain by ID and unmarshals it.
 func (m *StateManager) Load(chainId [32]byte) (state.Chain, error) {
 	record, ok := m.chains[chainId]
 	if ok {
@@ -131,6 +142,7 @@ func (m *StateManager) Load(chainId [32]byte) (state.Chain, error) {
 	return record, nil
 }
 
+// LoadAs loads a chain by ID and unmarshals it as a specific type.
 func (m *StateManager) LoadAs(chainId [32]byte, v interface{}) (err error) {
 	record, err := m.Load(chainId)
 	if err != nil {
@@ -153,6 +165,7 @@ func (m *StateManager) LoadAs(chainId [32]byte, v interface{}) (err error) {
 	return nil
 }
 
+// store adds a chain to the cache.
 func (m *StateManager) store(record state.Chain, isCreate bool) {
 	u, err := record.Header().ParseUrl()
 	if err != nil {
@@ -201,11 +214,15 @@ func (m *StateManager) Create(record ...state.Chain) {
 	}
 }
 
-// Submit queues a synthetic transaction for submission
+// Submit queues a synthetic transaction for submission.
 func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
+	if m.txType.IsSynthetic() {
+		panic("Called StateManager.Submit from a synthetic transaction!")
+	}
 	m.submissions = append(m.submissions, &submittedTx{url, body})
 }
 
+// commit writes pending records to the database.
 func (m *StateManager) commit() error {
 	for k, v := range m.writes {
 		m.dbTx.Write(k, v)
@@ -218,6 +235,7 @@ func (m *StateManager) commit() error {
 	}
 	sort.Slice(stores, func(i, j int) bool { return stores[i].order < stores[j].order })
 
+	// Push pending writes to the database
 	create := map[string]*protocol.SyntheticCreateChain{}
 	for _, store := range stores {
 		data, err := store.record.MarshalBinary()
@@ -225,38 +243,68 @@ func (m *StateManager) commit() error {
 			return fmt.Errorf("failed to marshal record: %v", err)
 		}
 
-		if !store.isCreate {
+		switch {
+		case store.isCreate:
+			// Create: create a new record by adding it to a synthetic create
+			// chain TX. All of the records created by a given synthetic create
+			// chain MUST belong to the same routing location. Since routing
+			// locations will change as the network grows, we cannot guarentee
+			// that two different identities will route the same. So we will
+			// create a synthetic create chain for each identity.
+
+			// Parse the URL
+			u, err := store.record.Header().ParseUrl()
+			if err != nil {
+				return fmt.Errorf("record has invalid URL: %v", err)
+			}
+
+			// If we have not created a synthetic create chain for this record's
+			// identity, create one
+			id := u.Identity()
+			idStr := strings.ToLower(id.String())
+			scc, ok := create[idStr]
+			if !ok {
+				scc = new(protocol.SyntheticCreateChain)
+				scc.Cause = m.txHash
+
+				// Submit just holds a reference to scc, so this will work fine
+				m.Submit(id, scc)
+				create[idStr] = scc
+			}
+
+			scc.Chains = append(scc.Chains, protocol.ChainParams{Data: data})
+
+		default:
+			// Update: update an existing record. Non-synthetic transactions are
+			// not allowed to create records, so we must check if the record
+			// already exists. The record may have been added to the DB
+			// transaction already, so in order to actually know if the record
+			// exists on disk, we have to use GetPersistentEntry.
+
 			_, err = m.dbTx.GetPersistentEntry((*store.chainId)[:], false)
-			if err == nil {
+			switch {
+			case err == nil:
 				// If the record already exists, update it
-			} else if !errors.Is(err, storage.ErrNotFound) {
+
+			case !errors.Is(err, storage.ErrNotFound):
 				// Handle unexpected errors
 				return fmt.Errorf("failed to check for an existing record: %v", err)
-			} else if !(m.txType.IsSynthetic() || store.record.Header().Type.IsTransaction()) {
-				// Unless the TX is synthetic or the record is a TX, reject the update
+
+			case store.record.Header().Type.IsTransaction():
+				// Non-synthetic transactions are allowed to create transaction
+				// records
+
+			case m.txType.IsSynthetic():
+				// Synthetic transactions are allowed to create records
+
+			default:
+				// Non-synthetic transactions are NOT allowed to create records
+				// (except for TX records)
 				return fmt.Errorf("cannot create a data record in a non-synthetic transaction")
 			}
 
 			m.dbTx.AddStateEntry((*types.Bytes32)(store.chainId), &m.txHash, &state.Object{Entry: data})
-			continue
 		}
-
-		u, err := store.record.Header().ParseUrl()
-		if err != nil {
-			return fmt.Errorf("record has invalid URL: %v", err)
-		}
-
-		id := u.Identity()
-		idStr := strings.ToLower(id.String())
-		scc, ok := create[idStr]
-		if !ok {
-			scc = new(protocol.SyntheticCreateChain)
-			scc.Cause = m.txHash
-			m.Submit(id, scc)
-			create[idStr] = scc
-		}
-
-		scc.Chains = append(scc.Chains, protocol.ChainParams{Data: data})
 	}
 
 	return nil
