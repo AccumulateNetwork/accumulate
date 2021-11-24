@@ -11,8 +11,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 )
 
-type IdRequest struct {
-	Id []byte `json:"id" form:"id" query:"id" validate:"required"`
+type ChainIdQuery struct {
+	ChainId []byte `json:"chainId" form:"chainId" query:"chainId" validate:"required"`
 }
 
 type KeyPage struct {
@@ -20,7 +20,7 @@ type KeyPage struct {
 	Index  uint64 `json:"index" form:"index" query:"index" validate:"required"`
 }
 
-type MetricsRequest struct {
+type MetricsQuery struct {
 	Metric   string        `json:"metric" form:"metric" query:"metric" validate:"required"`
 	Duration time.Duration `json:"duration" form:"duration" query:"duration" validate:"required"`
 }
@@ -64,6 +64,10 @@ type TokenSend struct {
 	To   []TokenDeposit `json:"to" form:"to" query:"to" validate:"required"`
 }
 
+type TxIdQuery struct {
+	Txid []byte `json:"txid" form:"txid" query:"txid" validate:"required"`
+}
+
 type TxRequest struct {
 	CheckOnly bool        `json:"checkOnly" form:"checkOnly" query:"checkOnly"`
 	Sponsor   string      `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required,acc-url"`
@@ -81,13 +85,13 @@ type TxResponse struct {
 	Delivered bool     `json:"delivered" form:"delivered" query:"delivered" validate:"required"`
 }
 
-type UrlRequest struct {
+type UrlQuery struct {
 	Url   string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
 	Start uint64 `json:"start" form:"start" query:"start"`
 	Count uint64 `json:"count" form:"count" query:"count"`
 }
 
-func (v *MetricsRequest) BinarySize() int {
+func (v *MetricsQuery) BinarySize() int {
 	var n int
 
 	n += encoding.StringBinarySize(v.Metric)
@@ -97,7 +101,7 @@ func (v *MetricsRequest) BinarySize() int {
 	return n
 }
 
-func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
+func (v *MetricsQuery) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(encoding.StringMarshalBinary(v.Metric))
@@ -107,7 +111,7 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
+func (v *MetricsQuery) UnmarshalBinary(data []byte) error {
 	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Metric: %w", err)
 	} else {
@@ -125,15 +129,15 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (v *IdRequest) MarshalJSON() ([]byte, error) {
+func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {
 	var u struct {
-		Id string `json:"id"`
+		ChainId string `json:"chainId"`
 	}
-	u.Id = encoding.BytesToJSON(v.Id)
+	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	return json.Marshal(&u)
 }
 
-func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
+func (v *MetricsQuery) MarshalJSON() ([]byte, error) {
 	var u struct {
 		Metric   string      `json:"metric"`
 		Duration interface{} `json:"duration"`
@@ -189,6 +193,14 @@ func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *TxIdQuery) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Txid string `json:"txid"`
+	}
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	return json.Marshal(&u)
+}
+
 func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	var u struct {
 		CheckOnly bool        `json:"checkOnly"`
@@ -223,22 +235,22 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *IdRequest) UnmarshalJSON(data []byte) error {
+func (v *ChainIdQuery) UnmarshalJSON(data []byte) error {
 	var u struct {
-		Id string `json:"id"`
+		ChainId string `json:"chainId"`
 	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.Id); err != nil {
-		return fmt.Errorf("error decoding Id: %w", err)
+	if x, err := encoding.BytesFromJSON(u.ChainId); err != nil {
+		return fmt.Errorf("error decoding ChainId: %w", err)
 	} else {
-		v.Id = x
+		v.ChainId = x
 	}
 	return nil
 }
 
-func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
+func (v *MetricsQuery) UnmarshalJSON(data []byte) error {
 	var u struct {
 		Metric   string      `json:"metric"`
 		Duration interface{} `json:"duration"`
@@ -322,6 +334,21 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 	}
 	v.Url = u.Url
 	v.Amount = u.Amount
+	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
+		return fmt.Errorf("error decoding Txid: %w", err)
+	} else {
+		v.Txid = x
+	}
+	return nil
+}
+
+func (v *TxIdQuery) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Txid string `json:"txid"`
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
 	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
 		return fmt.Errorf("error decoding Txid: %w", err)
 	} else {
