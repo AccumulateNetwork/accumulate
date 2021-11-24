@@ -80,6 +80,10 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		return nil, errors.New("local node specified but no client provided")
 	}
 
+	if opts.Config.DebugJSONRPC {
+		jsonrpc2.DebugMethodFunc = true
+	}
+
 	type PL = protocol.TransactionPayload
 	m.methods = jsonrpc2.MethodMap{
 		// General
