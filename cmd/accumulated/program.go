@@ -139,7 +139,7 @@ func (p *Program) Start(s service.Service) error {
 	}
 	p.db.SetLogger(logger)
 
-	app, err := abci.NewAccumulator(p.db.Begin(), pv.Key.PubKey.Address(), mgr, logger)
+	app, err := abci.NewAccumulator(p.db, pv.Key.PubKey.Address(), mgr, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize ACBI app: %v", err)
 	}
