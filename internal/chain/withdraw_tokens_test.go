@@ -22,12 +22,13 @@ func TestAnonTokenTransactions(t *testing.T) {
 	err := db.Open("mem", true, true)
 	require.NoError(t, err)
 
+	dbTx := db.Begin()
 	_, privKey, _ := ed25519.GenerateKey(nil)
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)
 
-	require.NoError(t, acctesting.CreateAnonTokenAccount(db.Begin(), tmed25519.PrivKey(privKey), 5e4))
+	require.NoError(t, acctesting.CreateAnonTokenAccount(dbTx, tmed25519.PrivKey(privKey), 5e4))
 	sponsorAddr := anon.GenerateAcmeAddress(privKey[32:])
-	anonChain, err := db.GetCurrentEntry(types.GetChainIdFromChainPath(&sponsorAddr).Bytes())
+	anonChain, err := dbTx.GetCurrentEntry(types.GetChainIdFromChainPath(&sponsorAddr).Bytes())
 	require.NoError(t, err)
 	anonAcct := new(protocol.AnonTokenAccount)
 	require.NoError(t, anonChain.As(anonAcct))
@@ -36,7 +37,7 @@ func TestAnonTokenTransactions(t *testing.T) {
 	destAddr := anon.GenerateAcmeAddress(destPrivKey[32:])
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 
-	st, err := NewStateManager(db.Begin(), gtx)
+	st, err := NewStateManager(dbTx, gtx)
 	require.NoError(t, err)
 
 	err = WithdrawTokens{}.Validate(st, gtx)

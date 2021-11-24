@@ -110,7 +110,7 @@ func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, err
 }
 
 func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQueryResult, error) {
-	b, err := m.db.GetIndex(state.DirectoryIndex, chainId, "Metadata")
+	b, err := m.dbTx.GetIndex(state.DirectoryIndex, chainId, "Metadata")
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQ
 	resp := new(protocol.DirectoryQueryResult)
 	resp.Entries = make([]string, md.Count)
 	for i := range resp.Entries {
-		b, err := m.db.GetIndex(state.DirectoryIndex, chainId, uint64(i))
+		b, err := m.dbTx.GetIndex(state.DirectoryIndex, chainId, uint64(i))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}
@@ -570,7 +570,7 @@ func (m *Executor) Commit() ([]byte, error) {
 
 func (m *Executor) nextSynthCount() (uint64, error) {
 	k := storage.ComputeKey("SyntheticTransactionCount")
-	b, err := m.db.Read(k)
+	b, err := m.dbTx.Read(k)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return 0, err
 	}
@@ -621,7 +621,7 @@ func (m *Executor) submitSyntheticTx(parentTxId types.Bytes, st *StateManager) (
 			return nil, err
 		}
 		txSyntheticObject.Entry = synthTxData
-		m.db.AddSynthTx(parentTxId, tx.TransactionHash(), txSyntheticObject)
+		m.dbTx.AddSynthTx(parentTxId, tx.TransactionHash(), txSyntheticObject)
 
 		// TODO In order for other BVCs to be able to validate the synthetic
 		// transaction, a wrapped signed version must be resubmitted to this BVC network
