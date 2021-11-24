@@ -19,7 +19,6 @@ import (
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/getsentry/sentry-go"
-	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
@@ -120,7 +119,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		sentry.CaptureException(customErr)
 		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", customErr)
 		resQuery.Info = customErr.Error()
-		resQuery.Code = code.CodeTypeUnauthorized
+		resQuery.Code = uint32(customErr.Code)
 		return resQuery
 	}
 
@@ -259,7 +258,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 		sentry.CaptureException(err)
 		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
-		ret.Code = protocol.CodeUnknownError
+		ret.Code = uint32(customErr.Code)
 		ret.GasWanted = 0
 		ret.GasUsed = 0
 		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
@@ -302,7 +301,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 		sentry.CaptureException(err)
 		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
-		ret.Code = protocol.CodeUnknownError
+		ret.Code = uint32(customErr.Code)
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
 		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
 		return ret
