@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	mock_abci "github.com/AccumulateNetwork/accumulate/internal/mock/abci"
+	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	tmabci "github.com/tendermint/tendermint/abci/types"
