@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"os"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -79,8 +78,7 @@ func PrintTX() {
 
 func GetTX(hash string) {
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	var hashbytes types.Bytes32
 
 	params := new(acmeapi.TokenTxRequest)
@@ -88,7 +86,6 @@ func GetTX(hash string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	params.Hash = hashbytes
 
 	data, err := json.Marshal(params)
@@ -101,12 +98,7 @@ func GetTX(hash string) {
 		PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	fmt.Fprintf(os.Stderr, string(str))
+	PrintQueryResponse(&res)
 }
 
 func GetTXHistory(accountUrl string, s string, e string) {
@@ -125,8 +117,7 @@ func GetTXHistory(accountUrl string, s string, e string) {
 		log.Fatal(err)
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponsePagination
 
 	params := new(acmeapi.APIRequestURLPagination)
 	params.URL = types.String(u.String())
@@ -143,13 +134,9 @@ func GetTXHistory(accountUrl string, s string, e string) {
 		PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
-	if err != nil {
-		log.Fatal(err)
+	for i := range res.Data {
+		PrintQueryResponse(res.Data[i])
 	}
-
-	fmt.Fprintf(os.Stderr, string(str))
-
 }
 
 func CreateTX(sender string, args []string) {
