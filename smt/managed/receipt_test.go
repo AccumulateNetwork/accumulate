@@ -16,7 +16,7 @@ import (
 )
 
 func GetHash(i int) Hash {
-	return sha256.Sum256([]byte(fmt.Sprint(i)))
+	return Sha256([]byte(fmt.Sprint(i)))
 }
 
 func TestReceipt(t *testing.T) {

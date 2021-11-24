@@ -18,7 +18,7 @@ import (
 )
 
 type StateManager struct {
-	db          *state.StateDB
+	dbTx        *state.DBTransaction
 	stores      map[[32]byte]*storeState
 	chains      map[[32]byte]state.Chain
 	writes      map[storage.Key][]byte
@@ -42,9 +42,9 @@ type storeState struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // sponsor. If the sponsor is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(db *state.StateDB, tx *transactions.GenTransaction) (*StateManager, error) {
+func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction) (*StateManager, error) {
 	m := new(StateManager)
-	m.db = db
+	m.dbTx = dbTx
 	m.chains = map[[32]byte]state.Chain{}
 	m.stores = map[[32]byte]*storeState{}
 	m.writes = map[storage.Key][]byte{}
@@ -125,7 +125,7 @@ func (m *StateManager) Load(chainId [32]byte) (state.Chain, error) {
 		return record, nil
 	}
 
-	obj, err := m.db.GetCurrentEntry(chainId[:])
+	obj, err := m.dbTx.GetCurrentEntry(chainId[:])
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +225,7 @@ func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
 // commit writes pending records to the database.
 func (m *StateManager) commit() error {
 	for k, v := range m.writes {
-		m.db.Write(k, v)
+		m.dbTx.Write(k, v)
 	}
 
 	// Create an ordered list of state stores
@@ -281,7 +281,7 @@ func (m *StateManager) commit() error {
 			// transaction already, so in order to actually know if the record
 			// exists on disk, we have to use GetPersistentEntry.
 
-			_, err = m.db.GetPersistentEntry((*store.chainId)[:], false)
+			_, err = m.dbTx.GetPersistentEntry((*store.chainId)[:], false)
 			switch {
 			case err == nil:
 				// If the record already exists, update it
@@ -303,7 +303,7 @@ func (m *StateManager) commit() error {
 				return fmt.Errorf("cannot create a data record in a non-synthetic transaction")
 			}
 
-			m.db.AddStateEntry((*types.Bytes32)(store.chainId), &m.txHash, &state.Object{Entry: data})
+			m.dbTx.AddStateEntry((*types.Bytes32)(store.chainId), &m.txHash, &state.Object{Entry: data})
 		}
 	}
 
@@ -359,7 +359,7 @@ func (s *StateManager) GetIndex(index state.Index, chain []byte, key interface{}
 	if ok {
 		return w, nil
 	}
-	return s.db.GetIndex(index, chain, key)
+	return s.dbTx.GetIndex(index, chain, key)
 }
 
 func (m *StateManager) AddDirectoryEntry(u *url.URL) error {
