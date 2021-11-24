@@ -11,7 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
+func NewBlockValidatorExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
 	return NewExecutor(query, db, key,
 		CreateIdentity{},
 		WithdrawTokens{},
@@ -27,6 +27,12 @@ func NewBlockValidator(query *accapi.Query, db *state.StateDB, key ed25519.Priva
 
 		// TODO Only for TestNet
 		AcmeFaucet{},
+	)
+}
+
+func NewDirectoryExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
+	return NewExecutor(query, db, key,
+		// TODO Add DN validators
 	)
 }
 

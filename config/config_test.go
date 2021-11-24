@@ -13,9 +13,8 @@ func TestPersistence(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "config"), 0777))
 
 	// Create
-	cfg := DefaultValidator()
+	cfg := Default(BlockValidator, Follower)
 	cfg.SetRoot(dir)
-	cfg.Accumulate.Type = BVC
 	cfg.Accumulate.API.JSONListenAddress = "api-json-listen"
 	cfg.Accumulate.API.RESTListenAddress = "api-rest-listen"
 

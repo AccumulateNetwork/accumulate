@@ -91,7 +91,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
-	mgr, err := chain.NewBlockValidator(n.query, db, bvcKey)
+	mgr, err := chain.NewBlockValidatorExecutor(n.query, db, bvcKey)
 	require.NoError(t, err)
 
 	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)

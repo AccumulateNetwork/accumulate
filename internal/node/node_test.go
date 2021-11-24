@@ -10,7 +10,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
@@ -25,7 +24,7 @@ func TestNodeSetup(t *testing.T) {
 		t.Skip("Skipping test in short mode")
 	}
 
-	opts, err := acctesting.NodeInitOptsForNetwork(networks.Local["Badlands"])
+	opts, err := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
 	require.NoError(t, err)
 	opts.WorkDir = t.TempDir()
 	opts.Port = getFreePort(t)
@@ -59,7 +58,7 @@ func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		t.Run(fmt.Sprintf("Try %d", i+1), func(t *testing.T) {
-			opts, err := acctesting.NodeInitOptsForNetwork(networks.Local["Badlands"])
+			opts, err := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
 			require.NoError(t, err)
 			opts.ShardName = "accumulate"
 			opts.WorkDir = t.TempDir()
