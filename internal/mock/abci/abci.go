@@ -52,10 +52,10 @@ func (mr *MockChainMockRecorder) BeginBlock(arg0 interface{}) *gomock.Call {
 }
 
 // CheckTx mocks base method.
-func (m *MockChain) CheckTx(arg0 *transactions.GenTransaction) error {
+func (m *MockChain) CheckTx(arg0 *transactions.GenTransaction) *protocol.Error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTx", arg0)
-	ret0, _ := ret[0].(error)
+	ret0, _ := ret[0].(*protocol.Error)
 	return ret0
 }
 
@@ -81,11 +81,11 @@ func (mr *MockChainMockRecorder) Commit() *gomock.Call {
 }
 
 // DeliverTx mocks base method.
-func (m *MockChain) DeliverTx(arg0 *transactions.GenTransaction) (*protocol.TxResult, error) {
+func (m *MockChain) DeliverTx(arg0 *transactions.GenTransaction) (*protocol.TxResult, *protocol.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeliverTx", arg0)
 	ret0, _ := ret[0].(*protocol.TxResult)
-	ret1, _ := ret[1].(error)
+	ret1, _ := ret[1].(*protocol.Error)
 	return ret0, ret1
 }
 
@@ -108,12 +108,12 @@ func (mr *MockChainMockRecorder) EndBlock(arg0 interface{}) *gomock.Call {
 }
 
 // Query mocks base method.
-func (m *MockChain) Query(arg0 *query.Query) ([]byte, []byte, error) {
+func (m *MockChain) Query(arg0 *query.Query) ([]byte, []byte, *protocol.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Query", arg0)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].([]byte)
-	ret2, _ := ret[2].(error)
+	ret2, _ := ret[2].(*protocol.Error)
 	return ret0, ret1, ret2
 }
 
