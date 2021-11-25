@@ -54,7 +54,7 @@ func (mr *MockQuerierMockRecorder) QueryChain(id interface{}) *gomock.Call {
 }
 
 // QueryDirectory mocks base method.
-func (m *MockQuerier) QueryDirectory(url string) (*api.QueryResponse, error) {
+func (m *MockQuerier) QueryDirectory(url string, expandChains bool) (*api.QueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryDirectory", url)
 	ret0, _ := ret[0].(*api.QueryResponse)
