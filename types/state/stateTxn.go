@@ -44,7 +44,7 @@ func (tx *DBTransaction) RootHash() []byte {
 }
 
 // BlockIndex calls StateDB.BlockIndex().
-func (tx *DBTransaction) BlockIndex() int64 {
+func (tx *DBTransaction) BlockIndex() (int64, error) {
 	return tx.state.BlockIndex()
 }
 

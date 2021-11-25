@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"fmt"
 	"testing"
+	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/chain"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -27,7 +28,7 @@ func TestAnonTokenTransactions(t *testing.T) {
 
 	dbTx := db.Begin()
 	require.NoError(t, acctesting.CreateAnonTokenAccount(dbTx, tmed25519.PrivKey(privKey), 5e4))
-	_, _, err = dbTx.Commit(0)
+	_, err = dbTx.Commit(1, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	sponsorAddr := anon.GenerateAcmeAddress(privKey[32:])
