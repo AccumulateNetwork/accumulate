@@ -78,7 +78,7 @@ configure:
   - |
     function init {
       rm -rf .nodes
-      ./accumulated init -w .nodes --no-empty-blocks -r Zion,Yellowstone -n $1
+      ./accumulated init -w .nodes --no-empty-blocks -n $1
       tar czf config-$1.tar.gz -C .nodes .
     }
   - build-daemon
