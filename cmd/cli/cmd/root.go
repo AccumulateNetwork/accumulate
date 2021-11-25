@@ -1,22 +1,20 @@
 package cmd
 
 import (
-	"github.com/AccumulateNetwork/accumulate/cmd/cli/db"
 	"log"
 	"os"
 	"os/user"
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
-
 	"github.com/AccumulateNetwork/accumulate/client"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/cmd/cli/db"
+	"github.com/spf13/cobra"
 )
 
 var (
 	Client         = client.NewAPIClient()
-	Db             = initDB() //initManagedDB()
+	Db             db.DB
 	WantJsonOutput = false
 )
 
@@ -28,11 +26,8 @@ var currentUser = func() *user.User {
 	return usr
 }()
 
-var defaultWorkDir = filepath.Join(currentUser.HomeDir, ".accumulate")
-
-// rootCmd represents the base command when called without any subcommands
-var rootCmd = func() *cobra.Command {
-
+func InitRootCmd(database db.DB) *cobra.Command {
+	Db = database
 	cmd := &cobra.Command{
 		Use:   "accumulate",
 		Short: "CLI for Accumulate Network",
@@ -49,31 +44,34 @@ var rootCmd = func() *cobra.Command {
 	flags.BoolVarP(&Client.DebugRequest, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 
-	return cmd
+	//add the commands
+	cmd.AddCommand(accountCmd)
+	cmd.AddCommand(adiCmd)
+	cmd.AddCommand(bookCmd)
+	cmd.AddCommand(creditsCmd)
+	cmd.AddCommand(getCmd)
+	cmd.AddCommand(keyCmd)
+	cmd.AddCommand(pageCmd)
+	cmd.AddCommand(txCmd)
+	cmd.AddCommand(versionCmd)
+	//cmd.AddCommand(tokenCmd)
 
-}()
+	//for the testnet integration
+	cmd.AddCommand(faucetCmd)
+
+	return cmd
+}
 
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
+	rootCmd := InitRootCmd(initDB(filepath.Join(currentUser.HomeDir, ".accumulate")))
+
 	cobra.CheckErr(rootCmd.Execute())
 }
 
 func init() {
 	cobra.OnInitialize()
-}
-
-func initManagedDB() *database.Manager {
-	err := os.MkdirAll(defaultWorkDir, 0600)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	db, err := database.NewDBManager("badger", defaultWorkDir+"/wallet.db")
-	if err != nil {
-		log.Fatal(err)
-	}
-	return db
 }
 
 var (
@@ -84,7 +82,8 @@ var (
 	BucketMnemonic = []byte("mnemonic")
 )
 
-func initDB() db.DB {
+func initDB(defaultWorkDir string) db.DB {
+
 	err := os.MkdirAll(defaultWorkDir, 0600)
 	if err != nil {
 		log.Fatal(err)

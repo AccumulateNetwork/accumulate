@@ -30,7 +30,7 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	case types.ChainTypeIdentity:
 		chain = new(state.AdiState)
 	case types.ChainTypeTokenIssuer:
-		chain = new(state.Token)
+		chain = new(protocol.TokenIssuer)
 	case types.ChainTypeTokenAccount:
 		chain = new(state.TokenAccount)
 	case types.ChainTypeLiteTokenAccount:
@@ -83,6 +83,8 @@ func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 		payload = new(protocol.SyntheticDepositCredits)
 	case types.TxTypeSyntheticGenesis:
 		payload = new(protocol.SyntheticGenesis)
+	case types.TxTypeAcmeFaucet:
+		payload = new(protocol.AcmeFaucet)
 	default:
 		return nil, fmt.Errorf("unknown TX type %v", typ)
 	}

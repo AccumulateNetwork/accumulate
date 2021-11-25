@@ -5,14 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
-
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -21,18 +19,20 @@ var bookCmd = &cobra.Command{
 	Use:   "book",
 	Short: "Manage key books for a ADI chains",
 	Run: func(cmd *cobra.Command, args []string) {
+		var out string
+		var err error
 		if len(args) > 0 {
 			switch args[0] {
 			case "get":
 				if len(args) > 0 {
-					GetAndPrintKeyBook(args[1])
+					out, err = GetAndPrintKeyBook(args[1])
 				} else {
 					PrintKeyBookGet()
 				}
 			case "create":
 				if len(args) > 3 {
 					if args[0] == "create" {
-						CreateKeyBook(args[1], args[2:])
+						out, err = CreateKeyBook(args[1], args[2:])
 					} else {
 						fmt.Println("Usage:")
 						PrintKeyBookCreate()
@@ -47,11 +47,13 @@ var bookCmd = &cobra.Command{
 		} else {
 			PrintKeyBook()
 		}
+		if err != nil {
+			cmd.Print("Error: ")
+			cmd.PrintErr(err)
+		} else {
+			cmd.Println(out)
+		}
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(bookCmd)
 }
 
 func PrintKeyBookGet() {
@@ -68,57 +70,63 @@ func PrintKeyBook() {
 	PrintKeyBookCreate()
 }
 
-func GetAndPrintKeyBook(url string) {
+func GetAndPrintKeyBook(url string) (string, error) {
 	str, _, err := GetKeyBook(url)
 	if err != nil {
-		log.Fatal(fmt.Errorf("error retrieving key book for %s", url))
+		return "", fmt.Errorf("error retrieving key book for %s", url)
 	}
 
 	res := acmeapi.APIDataResponse{}
 	err = json.Unmarshal([]byte(str), &res)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
-	PrintQueryResponse(&res)
+	return PrintQueryResponse(&res)
 }
 
 func GetKeyBook(url string) ([]byte, *protocol.SigSpecGroup, error) {
 	s, err := GetUrl(url, "sig-spec-group")
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, err
 	}
 
-	ssg := protocol.SigSpecGroup{}
-	err = json.Unmarshal([]byte(s), &ssg)
+	res := acmeapi.APIDataResponse{}
+	err = json.Unmarshal(s, &res)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, err
+	}
+
+	//added for compatibility with v1
+	//data := strings.ReplaceAll(string(*res.Data), "keyBook", "sigSpecGroup")
+	ssg := protocol.SigSpecGroup{}
+	err = json.Unmarshal(*res.Data, &ssg)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	return s, &ssg, nil
 }
 
 // CreateKeyBook create a new key page
-func CreateKeyBook(book string, args []string) {
+func CreateKeyBook(book string, args []string) (string, error) {
 
 	bookUrl, err := url2.Parse(book)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	args, si, privKey, err := prepareSigner(bookUrl, args)
 	if err != nil {
-		PrintKeyBookCreate()
-		log.Fatal(err)
+		return "", err
 	}
 	if len(args) < 2 {
-		PrintKeyBookCreate()
-		log.Fatal(fmt.Errorf("invalid number of arguments"))
+		return "", fmt.Errorf("invalid number of arguments")
 	}
 
 	newUrl, err := url2.Parse(args[0])
 
 	if newUrl.Authority != bookUrl.Authority {
-		log.Fatalf("book url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, bookUrl.Authority)
+		return "", fmt.Errorf("book url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, bookUrl.Authority)
 	}
 
 	ssg := protocol.CreateSigSpecGroup{}
@@ -129,7 +137,7 @@ func CreateKeyBook(book string, args []string) {
 	for i := range pageUrls {
 		u2, err := url2.Parse(pageUrls[i])
 		if err != nil {
-			log.Fatalf("invalid page url %s, %v", pageUrls[i], err)
+			return "", fmt.Errorf("invalid page url %s, %v", pageUrls[i], err)
 		}
 		chainId.FromBytes(u2.ResourceChain())
 		ssg.SigSpecs = append(ssg.SigSpecs, chainId)
@@ -137,49 +145,48 @@ func CreateKeyBook(book string, args []string) {
 
 	data, err := json.Marshal(&ssg)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	dataBinary, err := ssg.MarshalBinary()
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	nonce := uint64(time.Now().Unix())
 	params, err := prepareGenTx(data, dataBinary, bookUrl, si, privKey, nonce)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
-		PrintJsonRpcError(err)
+		return PrintJsonRpcError(err)
 	}
 
 	ar := ActionResponse{}
 	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal("error unmarshalling create key book result")
+		return "", fmt.Errorf("error unmarshalling create key book result")
 	}
-	ar.Print()
-
+	return ar.Print()
 }
 
 func GetKeyPageInBook(book string, keyLabel string) (*protocol.SigSpec, int, error) {
 
 	b, err := url2.Parse(book)
 	if err != nil {
-		log.Fatal(err)
+		return nil, 0, err
 	}
 
 	privKey, err := LookupByLabel(keyLabel)
 	if err != nil {
-		log.Fatal(err)
+		return nil, 0, err
 	}
 
 	_, kb, err := GetKeyBook(b.String())
 	if err != nil {
-		log.Fatal(err)
+		return nil, 0, err
 	}
 
 	for i := range kb.SigSpecs {
@@ -187,15 +194,15 @@ func GetKeyPageInBook(book string, keyLabel string) (*protocol.SigSpec, int, err
 		//we have a match so go fetch the ssg
 		s, err := GetByChainId(v[:])
 		if err != nil {
-			log.Fatal(err)
+			return nil, 0, err
 		}
 		if *s.Type.AsString() != types.ChainTypeKeyPage.Name() {
-			log.Fatal(fmt.Errorf("expecting key page, received %s", s.Type))
+			return nil, 0, fmt.Errorf("expecting key page, received %s", s.Type)
 		}
 		ss := protocol.SigSpec{}
 		err = ss.UnmarshalBinary(*s.Data)
 		if err != nil {
-			log.Fatal(err)
+			return nil, 0, err
 		}
 
 		for j := range ss.Keys {
