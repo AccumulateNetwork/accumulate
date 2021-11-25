@@ -13,12 +13,7 @@ var versionCmd = &cobra.Command{
 	Short: "get version of the accumulate node",
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := GetVersion()
-		if err != nil {
-			cmd.Print("Error: ")
-			cmd.PrintErr(err)
-		} else {
-			cmd.Println(out)
-		}
+		printOutput(cmd, out, err)
 	},
 }
 
