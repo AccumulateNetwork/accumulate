@@ -9,10 +9,8 @@ import (
 
 	abci "github.com/AccumulateNetwork/accumulate/internal/abci"
 	protocol "github.com/AccumulateNetwork/accumulate/protocol"
-	types "github.com/AccumulateNetwork/accumulate/types"
 	query "github.com/AccumulateNetwork/accumulate/types/api/query"
 	transactions "github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	state "github.com/AccumulateNetwork/accumulate/types/state"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -146,18 +144,6 @@ func (m *MockState) EXPECT() *MockStateMockRecorder {
 	return m.recorder
 }
 
-// AddStateEntry mocks base method.
-func (m *MockState) AddStateEntry(chainId, txHash *types.Bytes32, object *state.Object) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "AddStateEntry", chainId, txHash, object)
-}
-
-// AddStateEntry indicates an expected call of AddStateEntry.
-func (mr *MockStateMockRecorder) AddStateEntry(chainId, txHash, object interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddStateEntry", reflect.TypeOf((*MockState)(nil).AddStateEntry), chainId, txHash, object)
-}
-
 // BlockIndex mocks base method.
 func (m *MockState) BlockIndex() int64 {
 	m.ctrl.T.Helper()
@@ -170,20 +156,6 @@ func (m *MockState) BlockIndex() int64 {
 func (mr *MockStateMockRecorder) BlockIndex() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BlockIndex", reflect.TypeOf((*MockState)(nil).BlockIndex))
-}
-
-// EnsureRootHash mocks base method.
-func (m *MockState) EnsureRootHash() []byte {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "EnsureRootHash")
-	ret0, _ := ret[0].([]byte)
-	return ret0
-}
-
-// EnsureRootHash indicates an expected call of EnsureRootHash.
-func (mr *MockStateMockRecorder) EnsureRootHash() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureRootHash", reflect.TypeOf((*MockState)(nil).EnsureRootHash))
 }
 
 // RootHash mocks base method.
