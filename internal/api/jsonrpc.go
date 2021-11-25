@@ -440,14 +440,14 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeap
 	// Broadcast the TX
 	txInfo, err := api.query.BroadcastTx(tx, done)
 	if err != nil {
-		return nil, jsonrpc2.NewError(ErrCodeInternal, err.Error(), fmt.Sprintf("txid: %x", tx.TransactionHash()))
+		return nil, jsonrpc2.NewError(ErrCodeInternal, err.Error(), formatTransactionData(tx))
 	}
 	resp := <-api.query.BatchSend()
 
 	// Retrieve the TX response from the batch
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
-		return nil, jsonrpc2.NewError(ErrCodeInternal, err.Error(), fmt.Sprintf("txid: %x", tx.TransactionHash()))
+		return nil, jsonrpc2.NewError(ErrCodeInternal, err.Error(), formatTransactionData(tx))
 	}
 
 	// Check for an error
@@ -480,6 +480,13 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeap
 	ret.Data = &msg
 	return ret, nil
 
+}
+
+func formatTransactionData(tx *transactions.GenTransaction) interface{} {
+	if tx.TransactionHash() != nil {
+		return fmt.Sprintf("txid: %x", tx.TransactionHash())
+	}
+	return nil
 }
 
 // createTokenAccount creates Token Account
