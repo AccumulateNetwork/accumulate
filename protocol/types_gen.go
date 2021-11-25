@@ -56,10 +56,10 @@ type CreateSigSpecGroup struct {
 }
 
 type CreateToken struct {
-	Url        string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
-	Symbol     string `json:"symbol" form:"symbol" query:"symbol" validate:"required"`
-	Precision  uint64 `json:"precision" form:"precision" query:"precision" validate:"required"`
-	Properties string `json:"properties" form:"properties" query:"properties" validate:"acc-url"`
+	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"acc-url"`
 }
 
 type DataAccount struct {
@@ -150,9 +150,9 @@ type TokenAccountCreate struct {
 
 type TokenIssuer struct {
 	state.ChainHeader
-	Symbol     string `json:"symbol" form:"symbol" query:"symbol" validate:"required"`
-	Precision  uint64 `json:"precision" form:"precision" query:"precision" validate:"required"`
-	Properties string `json:"properties" form:"properties" query:"properties" validate:"required,acc-url"`
+	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"required,acc-url"`
 }
 
 type TxResult struct {
@@ -1907,42 +1907,42 @@ func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 }
 
 func (v *ChainParams) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Data     *string `json:"data,omitempty"`
 		IsUpdate bool    `json:"isUpdate,omitempty"`
-	}
+	}{}
 	u.Data = encoding.BytesToJSON(v.Data)
 	u.IsUpdate = v.IsUpdate
 	return json.Marshal(&u)
 }
 
 func (v *CreateSigSpecGroup) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Url      string   `json:"url,omitempty"`
 		SigSpecs []string `json:"sigSpecs,omitempty"`
-	}
+	}{}
 	u.Url = v.Url
 	u.SigSpecs = encoding.ChainSetToJSON(v.SigSpecs)
 	return json.Marshal(&u)
 }
 
 func (v *DataAccount) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		state.ChainHeader
 		Data *string `json:"data,omitempty"`
-	}
+	}{}
 	u.ChainHeader = v.ChainHeader
 	u.Data = encoding.BytesToJSON(v.Data)
 	return json.Marshal(&u)
 }
 
 func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Url         string  `json:"url,omitempty"`
 		PublicKey   *string `json:"publicKey,omitempty"`
 		KeyBookName string  `json:"keyBookName,omitempty"`
 		KeyPageName string  `json:"keyPageName,omitempty"`
-	}
+	}{}
 	u.Url = v.Url
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookName = v.KeyBookName
@@ -1951,88 +1951,88 @@ func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
 }
 
 func (v *KeySpec) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
 		Nonce     uint64  `json:"nonce,omitempty"`
-	}
+	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
 	return json.Marshal(&u)
 }
 
 func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
-	}
+	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	return json.Marshal(&u)
 }
 
 func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		state.ChainHeader
 		Data *string `json:"data,omitempty"`
-	}
+	}{}
 	u.ChainHeader = v.ChainHeader
 	u.Data = encoding.BytesToJSON(v.Data)
 	return json.Marshal(&u)
 }
 
 func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Metric   string      `json:"metric,omitempty"`
 		Duration interface{} `json:"duration,omitempty"`
-	}
+	}{}
 	u.Metric = v.Metric
 	u.Duration = encoding.DurationToJSON(v.Duration)
 	return json.Marshal(&u)
 }
 
 func (v *SigSpecGroup) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		state.ChainHeader
 		SigSpecs []string `json:"sigSpecs,omitempty"`
-	}
+	}{}
 	u.ChainHeader = v.ChainHeader
 	u.SigSpecs = encoding.ChainSetToJSON(v.SigSpecs)
 	return json.Marshal(&u)
 }
 
 func (v *SyntheticCreateChain) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Cause  string        `json:"cause,omitempty"`
 		Chains []ChainParams `json:"chains,omitempty"`
-	}
+	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Chains = v.Chains
 	return json.Marshal(&u)
 }
 
 func (v *SyntheticDepositCredits) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Cause  string `json:"cause,omitempty"`
 		Amount uint64 `json:"amount,omitempty"`
-	}
+	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Amount = v.Amount
 	return json.Marshal(&u)
 }
 
 func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Data *string `json:"data,omitempty"`
-	}
+	}{}
 	u.Data = encoding.BytesToJSON(v.Data)
 	return json.Marshal(&u)
 }
 
 func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Type  uint64 `json:"type,omitempty"`
 		Hash  string `json:"hash,omitempty"`
 		Url   string `json:"url,omitempty"`
 		TxRef string `json:"txRef,omitempty"`
-	}
+	}{}
 	u.Type = v.Type
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Url = v.Url
@@ -2041,11 +2041,11 @@ func (v *TxSynthRef) MarshalJSON() ([]byte, error) {
 }
 
 func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Operation KeyPageOperation `json:"operation,omitempty"`
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
-	}
+	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
@@ -2053,28 +2053,28 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 }
 
 func (v *WriteData) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Data *string `json:"data,omitempty"`
-	}
+	}{}
 	u.Data = encoding.BytesToJSON(v.Data)
 	return json.Marshal(&u)
 }
 
 func (v *WriteDataTo) MarshalJSON() ([]byte, error) {
-	var u struct {
+	u := struct {
 		Recipient string  `json:"recipient,omitempty"`
 		Data      *string `json:"data,omitempty"`
-	}
+	}{}
 	u.Recipient = v.Recipient
 	u.Data = encoding.BytesToJSON(v.Data)
 	return json.Marshal(&u)
 }
 
 func (v *ChainParams) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Data     *string `json:"data,omitempty"`
 		IsUpdate bool    `json:"isUpdate,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2088,10 +2088,10 @@ func (v *ChainParams) UnmarshalJSON(data []byte) error {
 }
 
 func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Url      string   `json:"url,omitempty"`
 		SigSpecs []string `json:"sigSpecs,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2105,10 +2105,10 @@ func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
 }
 
 func (v *DataAccount) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		state.ChainHeader
 		Data *string `json:"data,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2122,12 +2122,12 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 }
 
 func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Url         string  `json:"url,omitempty"`
 		PublicKey   *string `json:"publicKey,omitempty"`
 		KeyBookName string  `json:"keyBookName,omitempty"`
 		KeyPageName string  `json:"keyPageName,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2143,10 +2143,10 @@ func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
 }
 
 func (v *KeySpec) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
 		Nonce     uint64  `json:"nonce,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2160,9 +2160,9 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 }
 
 func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2175,10 +2175,10 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 }
 
 func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		state.ChainHeader
 		Data *string `json:"data,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2192,10 +2192,10 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 }
 
 func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Metric   string      `json:"metric,omitempty"`
 		Duration interface{} `json:"duration,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2209,10 +2209,10 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 }
 
 func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		state.ChainHeader
 		SigSpecs []string `json:"sigSpecs,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2226,10 +2226,10 @@ func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
 }
 
 func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Cause  string        `json:"cause,omitempty"`
 		Chains []ChainParams `json:"chains,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2243,10 +2243,10 @@ func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 }
 
 func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Cause  string `json:"cause,omitempty"`
 		Amount uint64 `json:"amount,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2260,9 +2260,9 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 }
 
 func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Data *string `json:"data,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2275,12 +2275,12 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 }
 
 func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Type  uint64 `json:"type,omitempty"`
 		Hash  string `json:"hash,omitempty"`
 		Url   string `json:"url,omitempty"`
 		TxRef string `json:"txRef,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2300,11 +2300,11 @@ func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
 }
 
 func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Operation KeyPageOperation `json:"operation,omitempty"`
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2323,9 +2323,9 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 }
 
 func (v *WriteData) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Data *string `json:"data,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2338,10 +2338,10 @@ func (v *WriteData) UnmarshalJSON(data []byte) error {
 }
 
 func (v *WriteDataTo) UnmarshalJSON(data []byte) error {
-	var u struct {
+	u := struct {
 		Recipient string  `json:"recipient,omitempty"`
 		Data      *string `json:"data,omitempty"`
-	}
+	}{}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}

@@ -6,14 +6,13 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
-
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	acmeApi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	abci "github.com/tendermint/tendermint/abci/types"

@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+
 	"github.com/boltdb/bolt"
 )
 
