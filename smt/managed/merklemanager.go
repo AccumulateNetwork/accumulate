@@ -2,6 +2,7 @@ package managed
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 
@@ -22,31 +23,40 @@ type MerkleManager struct {
 // AddHash
 // Add a Hash to the Chain controlled by the ChainManager
 func (m *MerkleManager) AddHash(hash Hash) {
+	hash = hash.Copy() // Just to make sure hash doesn't get changed
+
 	// Keep the index of every element added to the Merkle Tree, but only of the first instance
-	i, err := m.GetElementIndex(hash[:])
+	i, err := m.GetElementIndex(hash)
 	_ = i
-	if err == nil { // So only if the hash is not yet added to the Merkle Tree
-		m.Manager.Key(m.cid, "ElementIndex", hash[:]).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
-		m.Manager.Key(m.cid, "Element", m.MS.Count).PutBatch(hash[:])
+	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
+		m.Manager.Key(m.cid, "ElementIndex", hash).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
+	} else if err != nil {
+		panic(err) // TODO Panics are bad, but I don't want to change the signature now
 	}
+
+	m.Manager.Key(m.cid, "Element", m.MS.Count).PutBatch(hash)
 
 	switch m.MS.Count & m.MarkMask { // Mask to the bits counting up to a mark.
 	case m.MarkMask: // This is the case just before rolling into a Mark (all bits set. +1 more will be zero)
 
-		MSCount := common.Int64Bytes(m.MS.Count) // Get the current index as a varInt
-		MSState, err := m.MS.Marshal()           // Get the current state
-		if err != nil {                          // Panic if we cannot, because that should never happen.
+		MSState, err := m.MS.Marshal() // Get the current state
+		if err != nil {                // Panic if we cannot, because that should never happen.
 			panic(fmt.Sprintf("could not marshal MerkleState: %v", err)) //
 		}
 
-		m.Manager.Key(m.cid, "States", MSCount).PutBatch(MSState)      //     Save Merkle State at n*MarkFreq-1
-		m.Manager.Key(m.cid, "NextElement", MSCount).PutBatch(hash[:]) //     Save Hash added at n*MarkFreq-1
+		count := m.MS.Count
+		m.Manager.Key(m.cid, "States", count).PutBatch(MSState)   //     Save Merkle State at n*MarkFreq-1
+		m.Manager.Key(m.cid, "NextElement", count).PutBatch(hash) //     Save Hash added at n*MarkFreq-1
 
 		m.MS.AddToMerkleTree(hash) //                                  Add the hash to the Merkle Tree
 
-		state, err := m.MS.Marshal()                            // Create the marshaled Merkle State
-		m.Manager.Key(m.cid, "States", MSCount).PutBatch(state) // Save Merkle State at n*MarkFreq
-		m.MS.HashList = m.MS.HashList[:0]                       // We need to clear the HashList first
+		// TODO This overwrites the states entry. Either it should write to
+		// `m.MS.Count` instead of `count` or the previous write should be
+		// removed.
+
+		state, err := m.MS.Marshal()                          // Create the marshaled Merkle State
+		m.Manager.Key(m.cid, "States", count).PutBatch(state) // Save Merkle State at n*MarkFreq
+		m.MS.HashList = m.MS.HashList[:0]                     // We need to clear the HashList first
 
 	default: // This is the case of not rolling into a mark; Just add the hash to the Merkle Tree
 		m.MS.AddToMerkleTree(hash) //                                      Always add to the merkle tree
@@ -60,11 +70,8 @@ func (m *MerkleManager) AddHash(hash Hash) {
 // GetElementIndex
 // Get an Element of a Merkle Tree from the database
 func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
-	if len(hash) != 32 {
-		return 0, fmt.Errorf("invalid length %d for hash (should be 32)", len(hash))
-	}
-	data, e := m.Manager.Key(m.cid, "ElementIndex", hash).Get()
-	if e != nil {
+	data, err := m.Manager.Key(m.cid, "ElementIndex", hash).Get()
+	if err != nil {
 		return 0, err
 	}
 	i, _ = common.BytesInt64(data)
@@ -197,6 +204,9 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	if e != nil {                                            // If nil, there is no state saved
 		return nil //                                                   return nil, as no state exists
 	}
+	if element == 15 {
+		// fmt.Printf("GetState %d %X\n", element, data)
+	}
 	ms := new(MerkleState)                     //                                 Get a fresh new MerkleState
 	if err := ms.UnMarshal(data); err != nil { //                                 set it the MerkleState
 		panic(fmt.Sprintf("corrupted database; invalid state. error: %v", err)) // panic if the database is corrupted.
@@ -204,16 +214,24 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 	return ms // return it
 }
 
+// Get the nth leaf node
+func (m *MerkleManager) Get(element int64) (Hash, error) {
+	data, err := m.Manager.Key(m.cid, "Element", element).Get()
+	if err != nil {
+		return nil, err
+	}
+
+	return Hash(data).Copy(), nil
+}
+
 // GetNext
 // Get the next hash to be added to a state at this height
-func (m *MerkleManager) GetNext(element int64) (hash *Hash) {
+func (m *MerkleManager) GetNext(element int64) (hash Hash) {
 	data, err := m.Manager.Key(m.cid, "NextElement", element).Get()
-	if err != nil || len(data) != storage.KeyLength {
+	if err != nil {
 		return nil
 	}
-	hash = new(Hash)
-	copy(hash[:], data)
-	return hash
+	return Hash(data).Copy()
 }
 
 // AddHashString
@@ -222,8 +240,6 @@ func (m *MerkleManager) AddHashString(hash string) {
 	if h, err := hex.DecodeString(hash); err != nil { //                             Convert to a binary slice
 		panic(fmt.Sprintf("failed to decode a hash %s with error %v", hash, err)) // If this fails, panic; no recovery
 	} else {
-		var h2 [32]byte // Make the slice into a 32 byte array
-		copy(h2[:], h)  // copy the data
-		m.AddHash(h2)   // Add the hash
+		m.AddHash(h) // Add the hash
 	}
 }

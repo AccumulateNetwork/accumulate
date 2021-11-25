@@ -16,6 +16,8 @@ var getCmd = &cobra.Command{
 	Use:   "get",
 	Short: "Get data by URL",
 	Run: func(cmd *cobra.Command, args []string) {
+		var out string
+		var err error
 		if len(args) > 0 {
 			switch args[0] {
 			case "chain":
@@ -27,8 +29,7 @@ var getCmd = &cobra.Command{
 				}
 			default:
 				if len(args) > 0 {
-					str := Get(args[0])
-					fmt.Println(string(str))
+					out, err = Get(args[0])
 				} else {
 					fmt.Println("Usage:")
 					PrintGet()
@@ -38,11 +39,13 @@ var getCmd = &cobra.Command{
 			fmt.Println("Usage:")
 			PrintGet()
 		}
+		if err != nil {
+			cmd.Print("Error: ")
+			cmd.PrintErr(err)
+		} else {
+			cmd.Println(out)
+		}
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(getCmd)
 }
 
 func PrintGet() {
@@ -74,20 +77,20 @@ func GetByChainId(chainId []byte) (*acmeapi.APIDataResponse, error) {
 	return &resp, nil
 }
 
-func Get(url string) string {
+func Get(url string) (string, error) {
 	var res interface{}
 
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
 	if err := Client.Request(context.Background(), "get", params, &res); err != nil {
-		log.Fatal(err)
+		return PrintJsonRpcError(err)
 	}
 
 	str, err := json.Marshal(res)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
-	return string(str)
+	return string(str), nil
 }
