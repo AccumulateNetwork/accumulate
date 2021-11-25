@@ -53,6 +53,11 @@ type QueryResponse struct {
 	Status      interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 }
 
+type DirectoryQueryResult struct {
+	Entries         []string         `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	ExpandedEntries []*QueryResponse `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries" `
+}
+
 type Signer struct {
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
@@ -91,9 +96,16 @@ type TxResponse struct {
 }
 
 type UrlQuery struct {
-	Url   string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+}
+
+type QueryPagination struct {
 	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
 	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
+}
+
+type QueryOptions struct {
+	ExpandChains bool `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
 }
 
 func (v *MetricsQuery) BinarySize() int {
@@ -337,6 +349,29 @@ func (v *QueryResponse) UnmarshalJSON(data []byte) error {
 		v.Sig = x
 	}
 	v.Status = u.Status
+	return nil
+}
+
+func (v *DirectoryQueryResult) UnmarshalJSON(data []byte) error {
+	var lenEntries uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entries: %w", err)
+	} else {
+		lenEntries = x
+	}
+	data = data[encoding.UvarintBinarySize(lenEntries):]
+
+	v.Entries = make([]string, lenEntries)
+	for i := range v.Entries {
+		if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Entries[%d]: %w", i, err)
+		} else {
+			v.Entries[i] = x
+		}
+		data = data[encoding.StringBinarySize(v.Entries[i]):]
+
+	}
+
 	return nil
 }
 
