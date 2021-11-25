@@ -7,10 +7,9 @@ import (
 	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
-
-	"github.com/AccumulateNetwork/accumulate/protocol"
 )
 
 var pageCmd = &cobra.Command{
@@ -50,12 +49,7 @@ var pageCmd = &cobra.Command{
 		} else {
 			PrintPage()
 		}
-		if err != nil {
-			cmd.Print("Error: ")
-			cmd.PrintErr(err)
-		} else {
-			cmd.Println(out)
-		}
+		printOutput(cmd, out, err)
 	},
 }
 
@@ -69,11 +63,11 @@ func PrintKeyPageCreate() {
 }
 func PrintKeyUpdate() {
 	fmt.Println("  accumulate page key update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name] Update key in a key page with a new public key")
-	fmt.Println("\t\t example usage: accumulate page key update page  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key update  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate page key add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name] Add key to a key page")
-	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate page key remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] Remove key from a key page")
-	fmt.Println("\t\t example usage: accumulate key add page acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 }
 
 func PrintPage() {
@@ -181,18 +175,17 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", err
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "create-sig-spec", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error unmarshalling create adi result, %v", err)
 	}
-
-	return string(str), nil
+	return ar.Print()
 }
 
 func resolveKey(key string) ([]byte, error) {

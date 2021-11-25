@@ -219,7 +219,7 @@ func (q queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiRe
 	res := new(QueryMultiResponse)
 	res.Items = make([]*QueryResponse, len(txh.Transactions))
 	res.Start = uint64(start)
-	res.Count = uint64(len(txh.Transactions))
+	res.Count = uint64(count)
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
 		main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)

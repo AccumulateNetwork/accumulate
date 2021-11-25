@@ -12,10 +12,9 @@ import (
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/mdp/qrterminal"
-
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 )
 
@@ -62,12 +61,7 @@ var accountCmd = &cobra.Command{
 			fmt.Println("Usage:")
 			PrintAccount()
 		}
-		if err != nil {
-			cmd.Print("Error: ")
-			cmd.PrintErr(err)
-		} else {
-			cmd.Println(out)
-		}
+		printOutput(cmd, out, err)
 	},
 }
 

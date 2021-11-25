@@ -25,10 +25,10 @@ jobs:
             false
           fi
 
-      - name: Verify generated types are up to date
+      - name: Verify generated files are up to date
         run: |
-          go generate ./protocol
-          if ! git diff --quiet protocol ; then
-            echo -e "\033[1;31mGenerated types are not up to date. Please run \`go generate ./protocol\`.\033[0m"
+          go generate ./...
+          if ! git diff --quiet ; then
+            echo -e "\033[1;31mGenerated files are not up to date. Please run \`go generate ./...\`.\033[0m"
             false
           fi

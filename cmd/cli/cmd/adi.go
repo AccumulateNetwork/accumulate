@@ -55,12 +55,7 @@ var adiCmd = &cobra.Command{
 			fmt.Println("Usage:")
 			PrintADI()
 		}
-		if err != nil {
-			cmd.Print("Error: ")
-			cmd.PrintErr(err)
-		} else {
-			cmd.Println(out)
-		}
+		printOutput(cmd, out, err)
 	},
 }
 
