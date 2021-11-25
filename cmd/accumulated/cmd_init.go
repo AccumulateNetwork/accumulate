@@ -101,9 +101,7 @@ func initNode(*cobra.Command, []string) {
 			}
 
 			name := s.FullName()
-			if s == subnet {
-				name = "self"
-			}
+			// TODO Set to "self" if s == subnet
 
 			relayTo = append(relayTo, name)
 			index[name] = s.Index
@@ -260,6 +258,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 			config.Accumulate.Directory = IPs[0]
 		}
 		config.Accumulate.Network = "LocalDevNet"
+		// TODO Set to []string{"self"}
 		config.Accumulate.Networks = []string{fmt.Sprintf("%s:%d", ip, flagInitDevnet.BasePort+node.TmRpcPortOffset)}
 		if flagInit.NoEmptyBlocks {
 			config.Consensus.CreateEmptyBlocks = false

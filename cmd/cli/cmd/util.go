@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -20,6 +21,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/spf13/cobra"
 )
 
 func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
@@ -248,17 +250,17 @@ type ActionResponse struct {
 func (a *ActionResponse) Print() (string, error) {
 	ok := a.Code == "0" || a.Code == ""
 
+	var out string
 	if WantJsonOutput {
 		if ok {
 			a.Code = "ok"
 		}
-		out, err := json.Marshal(a)
+		b, err := json.Marshal(a)
 		if err != nil {
 			return "", err
 		}
-		return string(out), nil
+		out = string(b)
 	} else {
-		var out string
 		out += fmt.Sprintf("\n\tTransaction Identifier\t:\t%x\n", a.Txid)
 		out += fmt.Sprintf("\tTendermint Reference\t:\t%x\n", a.Hash)
 		if !ok {
@@ -275,32 +277,46 @@ func (a *ActionResponse) Print() (string, error) {
 		if a.Codespace != "" {
 			out += fmt.Sprintf("\tCodespace\t\t:\t%s\n", a.Codespace)
 		}
+	}
+
+	if ok {
 		return out, nil
 	}
+	return "", errors.New(out)
 }
 
 func PrintJsonRpcError(err error) (string, error) {
 	var e jsonrpc2.Error
-	switch err.(type) {
+	switch err := err.(type) {
 	case jsonrpc2.Error:
-		e = err.(jsonrpc2.Error)
-		return "", fmt.Errorf("jsonrpc error. %v", e)
+		e = err
 	default:
 		return "", fmt.Errorf("error with request, %v", err)
 	}
 
-	var out string
 	if WantJsonOutput {
 		out, err := json.Marshal(e)
 		if err != nil {
 			return "", err
 		}
-		return string(out), nil
+		return "", errors.New(string(out))
 	} else {
+		var out string
 		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
 		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
 		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
-		return out, nil
+		return "", errors.New(out)
+	}
+}
+
+func printOutput(cmd *cobra.Command, out string, err error) {
+	if err != nil {
+		cmd.Print("Error: ")
+		cmd.PrintErr(err)
+		cmd.Println()
+		DidError = true
+	} else {
+		cmd.Println(out)
 	}
 }
 
