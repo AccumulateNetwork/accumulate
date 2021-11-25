@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
-
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -17,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	tm "github.com/tendermint/tendermint/abci/types"
 )
 

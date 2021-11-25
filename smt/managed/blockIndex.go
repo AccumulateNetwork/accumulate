@@ -78,7 +78,7 @@ func EndBlock(manager *MerkleManager, cID []byte, blockIndex uint64) error {
 	b.BlockIndex = uint64(manager.MS.Count)
 
 	data := b.Marshal()
-	blkIdxHash := [32]byte(manager.MS.HashFunction(data))
+	blkIdxHash := manager.MS.HashFunction(data)
 	manager.AddHash(blkIdxHash)
 	manager.Manager.Key(blkIdxHash).PutBatch(data)
 
