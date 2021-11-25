@@ -130,6 +130,14 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 		return PrintJsonRpcError(err)
 	}
 
+	if WantJsonOutput {
+		data, err := json.Marshal(res)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+
 	var out string
 	for i := range res.Data {
 		s, err := PrintQueryResponse(res.Data[i])
