@@ -9,36 +9,63 @@ import (
 type Network map[string]*Subnet
 
 type Subnet struct {
-	Name  string
-	Index int
-	Type  NetworkType
-	Port  int
-	Nodes []Node
+	Name        string
+	Index       int
+	Type        NetworkType
+	Port        int
+	Directory   string
+	Nodes       []Node
+	NetworkName string
+
+	Network Network
 }
+
+func (s *Subnet) FullName() string { return s.NetworkName + "." + s.Name }
 
 type Node struct {
 	IP   string
 	Type NodeType
 }
 
-var All = func() Network {
-	all := Network{}
-	for _, net := range []Network{TestNet, DevNet, OGTestNet, Local} {
+var all = Network{}
+var nameCount = map[string]int{}
+
+func init() {
+	// Ensure 'Directory' must be qualified, e.g. 'DevNet.Directory'
+	nameCount["Directory"] = 1
+
+	networks := map[string]Network{
+		"TestNet": TestNet,
+		"DevNet":  DevNet,
+	}
+
+	for _, net := range networks {
 		for name, sub := range net {
-			if all[name] != nil {
-				panic(fmt.Errorf("networks: redefined %q", name))
+			nameCount[name]++
+			all[sub.NetworkName+"."+name] = sub
+			sub.Network = networks[sub.NetworkName]
+
+			if sub.Network == nil {
+				panic(fmt.Sprintf("Subnet %q claims it is part of %q but no such network exists", name, sub.NetworkName))
 			}
-			all[name] = sub
+
+			// If two subnets have the same name, they must be qualified
+			switch nameCount[name] {
+			case 1:
+				all[name] = sub
+			case 2:
+				delete(all, name)
+			}
 		}
 	}
-	return all
-}()
+}
 
 var TestNet = Network{
 	"BVC0": {
-		Name: "BVC0",
-		Type: BVC,
-		Port: 33000,
+		Name:        "BVC0",
+		NetworkName: "TestNet",
+		Type:        BlockValidator,
+		Port:        33000,
 		Nodes: []Node{
 			{"3.140.120.192", Validator},
 			{"18.220.147.250", Validator},
@@ -46,9 +73,10 @@ var TestNet = Network{
 		},
 	},
 	"BVC1": {
-		Name: "BVC1",
-		Type: BVC,
-		Port: 33000,
+		Name:        "BVC1",
+		NetworkName: "TestNet",
+		Type:        BlockValidator,
+		Port:        33000,
 		Nodes: []Node{
 			{"65.0.156.146", Validator},
 			{"13.234.254.178", Validator},
@@ -56,9 +84,10 @@ var TestNet = Network{
 		},
 	},
 	"BVC2": {
-		Name: "BVC2",
-		Type: BVC,
-		Port: 33000,
+		Name:        "BVC2",
+		NetworkName: "TestNet",
+		Type:        BlockValidator,
+		Port:        33000,
 		Nodes: []Node{
 			{"13.48.159.117", Validator},
 			{"16.170.126.251", Validator},
@@ -68,88 +97,40 @@ var TestNet = Network{
 }
 
 var DevNet = Network{
+	"Directory": {
+		Name:        "Directory",
+		NetworkName: "DevNet",
+		Type:        Directory,
+		Port:        34000,
+		Nodes: []Node{
+			{"172.31.4.106", Validator},  // Zion 0
+			{"172.31.11.185", Follower},  // Zion 1
+			{"172.31.11.104", Validator}, // Yellowstone 0
+			{"172.31.13.8", Follower},    // Yellowstone 1
+		},
+	},
 	"Zion": {
-		Name:  "Zion",
-		Index: 0,
-		Type:  BVC,
-		Port:  33000,
+		Name:        "Zion",
+		NetworkName: "DevNet",
+		Index:       0,
+		Type:        BlockValidator,
+		Port:        33000,
+		Directory:   "tcp://localhost:34000",
 		Nodes: []Node{
 			{"172.31.4.106", Validator},
 			{"172.31.11.185", Validator},
 		},
 	},
 	"Yellowstone": {
-		Name:  "Yellowstone",
-		Index: 1,
-		Type:  BVC,
-		Port:  33000,
+		Name:        "Yellowstone",
+		NetworkName: "DevNet",
+		Index:       1,
+		Type:        BlockValidator,
+		Port:        33000,
+		Directory:   "tcp://localhost:34000",
 		Nodes: []Node{
 			{"172.31.11.104", Validator},
 			{"172.31.13.8", Validator},
-		},
-	},
-}
-
-var OGTestNet = Network{
-	"Arches": {
-		Name:  "Arches",
-		Index: 0,
-		Type:  BVC,
-		Port:  33000,
-		Nodes: []Node{
-			{"13.51.10.110", Validator},
-			{"13.232.230.216", Validator},
-		},
-	},
-	"AmericanSamoa": {
-		Name:  "AmericanSamoa",
-		Index: 1,
-		Type:  BVC,
-		Port:  33000,
-		Nodes: []Node{
-			{"18.221.39.36", Validator},
-			{"44.236.45.58", Validator},
-		},
-	},
-	"EastXeons": {
-		Name:  "EastXeons",
-		Index: 2,
-		Type:  BVC,
-		Port:  33000,
-		Nodes: []Node{
-			{"18.119.26.7", Validator},
-			{"18.119.149.208", Validator},
-		},
-	},
-	"EastXeons-DC": {
-		Name:  "EastXeons-DC",
-		Index: -1,
-		Type:  DC,
-		Port:  33100,
-		Nodes: []Node{
-			{"18.119.26.7", Validator},
-			{"18.119.149.208", Validator},
-		},
-	},
-}
-
-var Local = Network{
-	"Badlands": {
-		Name: "Badlands",
-		Type: BVC,
-		Port: 35550,
-		Nodes: []Node{
-			{"127.0.0.1", Validator},
-		},
-	},
-	"BigBend": {
-		Name: "BigBend",
-		Type: BVC,
-		Port: 26656,
-		Nodes: []Node{
-			{"127.0.1.1", Validator},
-			{"127.0.1.2", Validator},
-			{"127.0.1.3", Validator},
 		},
 	},
 }
