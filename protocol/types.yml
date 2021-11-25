@@ -266,38 +266,38 @@ SyntheticWriteData:
 SyntheticBurnTokens:
   kind: tx
   fields:
-  - name: Amount
-    type: bigint
+    - name: Amount
+      type: bigint
 
 AcmeFaucet:
   kind: tx
   fields:
-  - name: Url
-    type: string
-    is-url: true
+    - name: Url
+      type: string
+      is-url: true
 
 CreateToken:
   kind: tx
   fields:
-  - name: Url
-    type: string
-    is-url: true
-  - name: Symbol
-    type: string
-  - name: Precision
-    type: uvarint
-  - name: Properties
-    type: string
-    is-url: true
-    optional: true
+    - name: Url
+      type: string
+      is-url: true
+    - name: Symbol
+      type: string
+    - name: Precision
+      type: uvarint
+    - name: Properties
+      type: string
+      is-url: true
+      optional: true
 
 TokenIssuer:
   kind: chain
   fields:
-  - name: Symbol
-    type: string
-  - name: Precision
-    type: uvarint
-  - name: Properties
-    type: string
-    is-url: true
+    - name: Symbol
+      type: string
+    - name: Precision
+      type: uvarint
+    - name: Properties
+      type: string
+      is-url: true
