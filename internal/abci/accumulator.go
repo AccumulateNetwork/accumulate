@@ -30,13 +30,14 @@ import (
 type Accumulator struct {
 	abci.BaseApplication
 
-	chainId string
-	state   State
-	address crypto.Address
-	txct    int64
-	timer   time.Time
-	chain   Chain
-	logger  log.Logger
+	chainId  string
+	state    State
+	address  crypto.Address
+	txct     int64
+	timer    time.Time
+	chain    Chain
+	logger   log.Logger
+	didPanic bool
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -58,8 +59,28 @@ func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Lo
 
 var _ abci.Application = (*Accumulator)(nil)
 
+func (app *Accumulator) recover(code *uint32) {
+	r := recover()
+	if r == nil {
+		return
+	}
+
+	app.didPanic = true
+	if code != nil {
+		*code = protocol.CodeUnknownError
+	}
+
+	if err, ok := r.(error); ok {
+		sentry.CaptureException(fmt.Errorf("did panic: %w", err))
+	} else {
+		sentry.CaptureException(fmt.Errorf("did panic: %v", r))
+	}
+}
+
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
+	defer app.recover(nil)
+
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
 
 	if app.chain == nil {
@@ -81,11 +102,19 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
+	height, err := app.state.BlockIndex()
+	if errors.Is(err, storage.ErrNotFound) {
+		height = 0
+	} else if err != nil {
+		height = -1
+		sentry.CaptureException(err)
+	}
+
 	return abci.ResponseInfo{
 		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
-		LastBlockHeight:  app.state.BlockIndex(),
+		LastBlockHeight:  height,
 		LastBlockAppHash: app.state.RootHash(),
 	}
 }
@@ -94,6 +123,15 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 //
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
+	defer app.recover(&resQuery.Code)
+
+	if app.didPanic {
+		return abci.ResponseQuery{
+			Code: protocol.CodeDidPanic,
+			Info: "Node state is invalid",
+		}
+	}
+
 	resQuery.Key = reqQuery.Data
 	qu := new(apiQuery.Query)
 	err := qu.UnmarshalBinary(reqQuery.Data)
@@ -139,6 +177,8 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
+	defer app.recover(nil)
+
 	app.chainId = req.ChainId
 	app.logger = app.logger.With("chain", req.ChainId)
 	app.logger.Info("Initializing")
@@ -161,7 +201,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 	app.chain.BeginBlock(BeginBlockRequest{
 		IsLeader: false,
-		Height:   -1,
+		Height:   0,
 	})
 
 	customErr := app.chain.CheckTx(tx)
@@ -186,6 +226,8 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
+	defer app.recover(nil)
+
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	app.chain.BeginBlock(BeginBlockRequest{
 		IsLeader: bytes.Equal(app.address.Bytes(), req.Header.GetProposerAddress()),
@@ -227,6 +269,15 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 //
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
+	defer app.recover(&rct.Code)
+
+	if app.didPanic {
+		return abci.ResponseCheckTx{
+			Code: protocol.CodeDidPanic,
+			Info: "Node state is invalid",
+		}
+	}
+
 	h := sha256.Sum256(req.Tx)
 	txHash := hex.EncodeToString(h[:])
 
@@ -274,6 +325,15 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 //
 // Verifies the transaction is valid.
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
+	defer app.recover(&rdt.Code)
+
+	if app.didPanic {
+		return abci.ResponseDeliverTx{
+			Code: protocol.CodeDidPanic,
+			Info: "Node state is invalid",
+		}
+	}
+
 	h := sha256.Sum256(req.Tx)
 	txHash := hex.EncodeToString(h[:])
 	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: protocol.CodeOK}
@@ -328,6 +388,8 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEndBlock) {
+	defer app.recover(nil)
+
 	// Select our leader who will initiate consensus on dbvc chain.
 	//resp.ConsensusParamUpdates
 	//for _, ev := range req.ByzantineValidators {
@@ -354,6 +416,8 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
+	defer app.recover(nil)
+
 	//end the current batch of transactions in the Stateful Merkle Tree
 
 	mdRoot, err := app.chain.Commit()

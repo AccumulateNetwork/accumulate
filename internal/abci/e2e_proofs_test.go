@@ -3,6 +3,7 @@ package abci_test
 import (
 	"crypto/sha256"
 	"testing"
+	"time"
 
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -21,7 +22,7 @@ func TestProofADI(t *testing.T) {
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
 	dbTx := n.db.Begin()
 	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, liteKey, 5e4))
-	dbTx.Commit(n.NextHeight())
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {
