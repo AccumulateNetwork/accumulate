@@ -68,10 +68,8 @@ func loadTest(cmd *cobra.Command, args []string) {
 
 	// Create clients for networks
 	for _, name := range flagLoadTest.Networks {
-		net := networks.All[name]
-		if net == nil {
-			fatalf("unknown network %q", flagInit.Net)
-		}
+		net, err := networks.Resolve(flagInit.Net)
+		checkf(err, "--network")
 
 		lAddr := fmt.Sprintf("tcp://%s:%d", net.Nodes[0].IP, net.Port+node.TmRpcPortOffset)
 		client, err := rpc.New(lAddr)
