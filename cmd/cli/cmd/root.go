@@ -84,7 +84,7 @@ var (
 
 func initDB(defaultWorkDir string) db.DB {
 
-	err := os.MkdirAll(defaultWorkDir, 0600)
+	err := os.MkdirAll(defaultWorkDir, 0700)
 	if err != nil {
 		log.Fatal(err)
 	}
