@@ -24,9 +24,8 @@ func (s *AccumulatorTestSuite) TestInfo() {
 	const height int64 = 10
 	var rootHash = [32]byte{1, 2, 3, 4, 5, 6}
 
-	s.State().EXPECT().BlockIndex().AnyTimes().Return(height)
+	s.State().EXPECT().BlockIndex().AnyTimes().Return(height, nil)
 	s.State().EXPECT().RootHash().AnyTimes().Return(rootHash[:])
-	s.State().EXPECT().EnsureRootHash().AnyTimes().Return(rootHash[:])
 
 	resp := s.App(nil).Info(tmabci.RequestInfo{})
 	s.Require().Equal(height, resp.LastBlockHeight)
