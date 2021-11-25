@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
 	"time"
 
@@ -18,26 +17,27 @@ var txCmd = &cobra.Command{
 	Use:   "tx",
 	Short: "Create and get token txs",
 	Run: func(cmd *cobra.Command, args []string) {
-
+		var out string
+		var err error
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
 			case "get":
 				if len(args) > 1 {
-					GetTX(args[1])
+					out, err = GetTX(args[1])
 				} else {
 					fmt.Println("Usage:")
 					PrintTXGet()
 				}
 			case "history":
 				if len(args) > 3 {
-					GetTXHistory(args[1], args[2], args[3])
+					out, err = GetTXHistory(args[1], args[2], args[3])
 				} else {
 					fmt.Println("Usage:")
 					PrintTXHistoryGet()
 				}
 			case "create":
 				if len(args) > 3 {
-					CreateTX(args[1], args[2:])
+					out, err = CreateTX(args[1], args[2:])
 				} else {
 					fmt.Println("Usage:")
 					PrintTXCreate()
@@ -50,12 +50,13 @@ var txCmd = &cobra.Command{
 			fmt.Println("Usage:")
 			PrintTX()
 		}
-
+		if err != nil {
+			cmd.Print("Error: ")
+			cmd.PrintErr(err)
+		} else {
+			cmd.Println(out)
+		}
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(txCmd)
 }
 
 func PrintTXGet() {
@@ -76,7 +77,7 @@ func PrintTX() {
 	PrintTXHistoryGet()
 }
 
-func GetTX(hash string) {
+func GetTX(hash string) (string, error) {
 
 	var res acmeapi.APIDataResponse
 	var hashbytes types.Bytes32
@@ -84,37 +85,37 @@ func GetTX(hash string) {
 	params := new(acmeapi.TokenTxRequest)
 	err := hashbytes.FromString(hash)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 	params.Hash = hashbytes
 
 	data, err := json.Marshal(params)
 	jsondata := json.RawMessage(data)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	if err := Client.Request(context.Background(), "token-tx", jsondata, &res); err != nil {
-		PrintJsonRpcError(err)
+		return PrintJsonRpcError(err)
 	}
 
-	PrintQueryResponse(&res)
+	return PrintQueryResponse(&res)
 }
 
-func GetTXHistory(accountUrl string, s string, e string) {
+func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 
 	start, err := strconv.Atoi(s)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 	end, err := strconv.Atoi(e)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	u, err := url.Parse(accountUrl)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	var res acmeapi.APIDataResponsePagination
@@ -127,37 +128,43 @@ func GetTXHistory(accountUrl string, s string, e string) {
 	data, err := json.Marshal(params)
 	jsondata := json.RawMessage(data)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	if err := Client.Request(context.Background(), "token-account-history", jsondata, &res); err != nil {
-		PrintJsonRpcError(err)
+		return PrintJsonRpcError(err)
 	}
 
+	var out string
 	for i := range res.Data {
-		PrintQueryResponse(res.Data[i])
+		s, err := PrintQueryResponse(res.Data[i])
+		if err != nil {
+			return "", err
+		}
+		out += s
 	}
+	return out, err
 }
 
-func CreateTX(sender string, args []string) {
+func CreateTX(sender string, args []string) (string, error) {
 	//sender string, receiver string, amount string
 	var res acmeapi.APIDataResponse
 	var err error
 	u, err := url.Parse(sender)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	args, si, pk, err := prepareSigner(u, args)
 
 	if len(args) < 2 {
 		PrintTXCreate()
-		log.Fatal("invalid number of arguments for tx create")
+		return "", fmt.Errorf("invalid number of arguments for tx create")
 	}
 
 	u2, err := url.Parse(args[0])
 	if err != nil {
-		log.Fatalf("invalid receiver url %s, %v", args[0], err)
+		return "", fmt.Errorf("invalid receiver url %s, %v", args[0], err)
 	}
 	amount := args[1]
 
@@ -176,25 +183,28 @@ func CreateTX(sender string, args []string) {
 
 	data, err := json.Marshal(tokentx)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	dataBinary, err := tokentx.MarshalBinary()
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
 	nonce := uint64(time.Now().Unix())
 	params, err := prepareGenTx(data, dataBinary, u, si, pk, nonce)
+	if err != nil {
+		return "", err
+	}
 
 	if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
-		log.Fatal(err)
+		return PrintJsonRpcError(err)
 	}
 
 	ar := ActionResponse{}
 	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		log.Fatal("error unmarshalling create adi result")
+		return "", fmt.Errorf("error unmarshalling create adi result")
 	}
-	ar.Print()
+	return ar.Print()
 }
