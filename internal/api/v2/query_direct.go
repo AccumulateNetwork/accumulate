@@ -112,7 +112,7 @@ func (q queryDirect) QueryUrl(s string) (*QueryResponse, error) {
 	}
 }
 
-func (q queryDirect) QueryDirectory(s string) (*QueryResponse, error) {
+func (q queryDirect) QueryDirectory(s string, expandChains bool) (*QueryResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
@@ -128,10 +128,15 @@ func (q queryDirect) QueryDirectory(s string) (*QueryResponse, error) {
 		return nil, fmt.Errorf("unknown response type: want directory, got %q", k)
 	}
 
-	dir := new(protocol.DirectoryQueryResult)
-	err = dir.UnmarshalBinary(v)
+	dir := new(DirectoryQueryResult)
+	err = dir.UnmarshalJSON(v)
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+
+	if expandChains {
+		dir.ExpandedEntries, _ = q.expandChainEntries(dir.Entries)
+		dir.Entries = nil
 	}
 
 	res := new(QueryResponse)
@@ -234,4 +239,35 @@ func (q queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiRe
 	}
 
 	return res, nil
+}
+
+func (q queryDirect) expandChainEntries(entries []string) ([]*QueryResponse, error) {
+	expandedEntries := make([]*QueryResponse, len(entries))
+	for i, entry := range entries {
+		queryReq := new(query.RequestByUrl)
+		queryReq.Url = types.String(entry)
+
+		k, v, err := q.query(queryReq)
+		if k != "chain" {
+			return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if k != "chain" {
+			return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
+		}
+
+		obj, chain, err := unmarshalState(v)
+		if err != nil {
+			return nil, err
+		}
+
+		expandedEntries[i], err = packStateResponse(obj, chain)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return expandedEntries, nil
 }
