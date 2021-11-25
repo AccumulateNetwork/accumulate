@@ -560,6 +560,15 @@ func (s *StateDB) getAnchorHead() (*AnchorMetadata, error) {
 
 	return head, nil
 }
+
+func (s *StateDB) SubnetID() (string, error) {
+	b, err := s.GetDB().Key("SubnetID").Get()
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func (s *StateDB) BlockIndex() (int64, error) {
 	head, err := s.getAnchorHead()
 	if err != nil {
