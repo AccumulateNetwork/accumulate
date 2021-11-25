@@ -608,9 +608,6 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return err
 	}
 
-	if broadcastTx.Err != nil {
-		return broadcastTx.Err
-	}
 	return broadcastTx
 }
 
