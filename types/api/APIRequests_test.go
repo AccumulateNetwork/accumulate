@@ -31,9 +31,9 @@ func createAdiTx(adiUrl string, pubkey []byte) (string, error) {
 }
 
 func createToken(tokenUrl string) (string, error) {
-	data := &Token{}
+	data := &protocol.CreateToken{}
 
-	data.URL = types.String(tokenUrl)
+	data.Url = tokenUrl
 	data.Precision = 8
 	data.Symbol = "ACME"
 	ret, err := json.Marshal(data)
@@ -167,7 +167,7 @@ func TestAPIRequest_Token(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := &Token{}
+	data := &protocol.CreateToken{}
 
 	// parse req.tx.data
 	err = mapstructure.Decode(req.Tx.Data, data)
