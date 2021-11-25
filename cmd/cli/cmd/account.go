@@ -61,12 +61,7 @@ var accountCmd = &cobra.Command{
 			fmt.Println("Usage:")
 			PrintAccount()
 		}
-		if err != nil {
-			cmd.Print("Error: ")
-			cmd.PrintErr(err)
-		} else {
-			cmd.Println(out)
-		}
+		printOutput(cmd, out, err)
 	},
 }
 

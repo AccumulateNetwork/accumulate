@@ -49,12 +49,7 @@ var pageCmd = &cobra.Command{
 		} else {
 			PrintPage()
 		}
-		if err != nil {
-			cmd.Print("Error: ")
-			cmd.PrintErr(err)
-		} else {
-			cmd.Println(out)
-		}
+		printOutput(cmd, out, err)
 	},
 }
 
@@ -180,18 +175,17 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", err
 	}
 
-	var res interface{}
-	var str []byte
+	var res acmeapi.APIDataResponse
 	if err := Client.Request(context.Background(), "create-sig-spec", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	str, err = json.Marshal(res)
+	ar := ActionResponse{}
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("error unmarshalling create adi result, %v", err)
 	}
-
-	return string(str), nil
+	return ar.Print()
 }
 
 func resolveKey(key string) ([]byte, error) {
