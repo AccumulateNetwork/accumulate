@@ -56,7 +56,7 @@ func NodeInitOptsForNetwork(network *networks.Subnet) (node.InitOptions, error) 
 
 	return node.InitOptions{
 		ShardName: "accumulate.",
-		ChainID:   network.Name,
+		SubnetID:  network.Name,
 		Port:      network.Port,
 		Config:    config,
 		RemoteIP:  remoteIP,

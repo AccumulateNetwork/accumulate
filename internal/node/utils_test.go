@@ -50,7 +50,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 	require.NoError(t, node.Init(node.InitOptions{
 		WorkDir:   workDir,
 		ShardName: name,
-		ChainID:   name,
+		SubnetID:  name,
 		Port:      basePort,
 		Config:    config,
 		RemoteIP:  IPs,
