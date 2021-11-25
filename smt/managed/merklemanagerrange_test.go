@@ -12,8 +12,9 @@ func b2i(b Hash) int64 {
 	return i
 }
 
-func i2b(i int64) [32]byte {
-	return [32]byte{byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)}
+func i2b(i int64) []byte {
+	b := [32]byte{byte(i >> 24), byte(i >> 16), byte(i >> 8), byte(i)}
+	return b[:]
 }
 
 func TestConversions(t *testing.T) {
@@ -50,9 +51,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		h := i2b(i)
 		MM1.AddHash(h)
 		iCnt, err := MM1.GetElementIndex(h[:])
-		if err != nil {
-			t.Fatal("failed to get the index of a hash")
-		}
+		require.NoError(t, err, "failed to get the index of a hash")
 		require.True(t, i == iCnt, "should get back what we set")
 
 	}
