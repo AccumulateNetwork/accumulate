@@ -15,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -64,6 +65,23 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 
 	fmt.Printf("Loaded height=%d hash=%X\n", height, db.EnsureRootHash())
 	return m, nil
+}
+
+func (m *Executor) InitChain(state []byte) error {
+	src := new(memory.DB)
+	_ = src.InitDB("")
+	err := src.UnmarshalBinary(state)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal app state: %v", err)
+	}
+
+	dst := m.db.GetDB().DB
+	err = dst.EndBatch(src.Export())
+	if err != nil {
+		return fmt.Errorf("failed to load app state into database: %v", err)
+	}
+
+	return nil
 }
 
 // BeginBlock implements ./abci.Chain
