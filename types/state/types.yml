@@ -1,0 +1,22 @@
+Object:
+  fields:
+  - name: Entry
+    type: bytes
+  - name: Height
+    type: uvarint
+  - name: Roots
+    type: slice
+    slice:
+      type: bytes
+
+# TODO Move this to Protocol
+AnchorMetadata:
+  fields:
+  - name: Index
+    type: varint
+  - name: PreviousHeight
+    type: varint
+  - name: Timestamp
+    type: time
+  - name: Chains
+    type: chainSet

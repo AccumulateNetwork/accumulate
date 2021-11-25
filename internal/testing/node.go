@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	cfg "github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/api"
@@ -18,6 +19,15 @@ import (
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/privval"
 )
+
+var LocalBVN = &networks.Subnet{
+	Name: "Local",
+	Type: config.BlockValidator,
+	Port: 35550,
+	Nodes: []networks.Node{
+		{IP: "127.0.0.1", Type: config.Validator},
+	},
+}
 
 func NodeInitOptsForNetwork(network *networks.Subnet) (node.InitOptions, error) {
 	listenIP := make([]string, len(network.Nodes))
@@ -89,7 +99,7 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 		return nil, nil, nil, fmt.Errorf("failed to create RPC relay: %v", err)
 	}
 
-	mgr, err := chain.NewBlockValidator(api.NewQuery(relay), sdb, pv.Key.PrivKey.Bytes())
+	mgr, err := chain.NewBlockValidatorExecutor(api.NewQuery(relay), sdb, pv.Key.PrivKey.Bytes())
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
 	}
@@ -122,6 +132,10 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create node: %v", err)
 	}
+	go func() {
+		<-node.Quit()
+		sdb.GetDB().Close()
+	}()
 	cleanup(func() {
 		_ = node.Stop()
 		node.Wait()

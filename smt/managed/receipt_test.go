@@ -2,6 +2,7 @@ package managed
 
 import (
 	"crypto/sha256"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -15,11 +16,10 @@ import (
 )
 
 func GetHash(i int) Hash {
-	return sha256.Sum256([]byte(fmt.Sprint(i)))
+	return Sha256([]byte(fmt.Sprint(i)))
 }
 
 func TestReceipt(t *testing.T) {
-	t.Skip("ignore")
 	const testMerkleTreeSize = 7
 
 	// Create a memory based database
@@ -74,7 +74,6 @@ func TestReceipt(t *testing.T) {
 }
 
 func TestReceiptAll(t *testing.T) {
-	t.Skip("ignore")
 	const testMerkleTreeSize = 500
 
 	// Create a memory based database
@@ -218,8 +217,6 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 }
 
 func TestBadgerReceipts(t *testing.T) {
-
-	t.SkipNow()
 	manager, dir := GetManager(2, true, "", t)
 	defer func() {
 		_ = os.RemoveAll(dir)
@@ -230,9 +227,13 @@ func TestBadgerReceipts(t *testing.T) {
 
 }
 
+var badgerReceiptsBig = flag.Bool("badger-receipts-big", false, "Run TestBadgerReceiptsBig")
+
 func TestBadgerReceiptsBig(t *testing.T) {
-	t.Skip("ignore")
-	t.SkipNow()
+	if !*badgerReceiptsBig {
+		t.Skip("This test takes a long time to run")
+	}
+
 	// Don't remove the database (it's not temp)
 	manager, _ := GetManager(2, false, "40million", t)
 
