@@ -6,14 +6,36 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 )
+
+type AnchorMetadata struct {
+	Index          int64      `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	PreviousHeight int64      `json:"previousHeight,omitempty" form:"previousHeight" query:"previousHeight" validate:"required"`
+	Timestamp      time.Time  `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	Chains         [][32]byte `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+}
 
 type Object struct {
 	Entry  []byte   `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 	Height uint64   `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	Roots  [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
+}
+
+func (v *AnchorMetadata) BinarySize() int {
+	var n int
+
+	n += encoding.VarintBinarySize(v.Index)
+
+	n += encoding.VarintBinarySize(v.PreviousHeight)
+
+	n += encoding.TimeBinarySize(v.Timestamp)
+
+	n += encoding.ChainSetBinarySize(v.Chains)
+
+	return n
 }
 
 func (v *Object) BinarySize() int {
@@ -33,6 +55,20 @@ func (v *Object) BinarySize() int {
 	return n
 }
 
+func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.VarintMarshalBinary(v.Index))
+
+	buffer.Write(encoding.VarintMarshalBinary(v.PreviousHeight))
+
+	buffer.Write(encoding.TimeMarshalBinary(v.Timestamp))
+
+	buffer.Write(encoding.ChainSetMarshalBinary(v.Chains))
+
+	return buffer.Bytes(), nil
+}
+
 func (v *Object) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -48,6 +84,38 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 	}
 
 	return buffer.Bytes(), nil
+}
+
+func (v *AnchorMetadata) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Index: %w", err)
+	} else {
+		v.Index = x
+	}
+	data = data[encoding.VarintBinarySize(v.Index):]
+
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding PreviousHeight: %w", err)
+	} else {
+		v.PreviousHeight = x
+	}
+	data = data[encoding.VarintBinarySize(v.PreviousHeight):]
+
+	if x, err := encoding.TimeUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Timestamp: %w", err)
+	} else {
+		v.Timestamp = x
+	}
+	data = data[encoding.TimeBinarySize(v.Timestamp):]
+
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Chains: %w", err)
+	} else {
+		v.Chains = x
+	}
+	data = data[encoding.ChainSetBinarySize(v.Chains):]
+
+	return nil
 }
 
 func (v *Object) UnmarshalBinary(data []byte) error {
@@ -87,6 +155,20 @@ func (v *Object) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
+	var u struct {
+		Index          int64     `json:"index,omitempty"`
+		PreviousHeight int64     `json:"previousHeight,omitempty"`
+		Timestamp      time.Time `json:"timestamp,omitempty"`
+		Chains         []string  `json:"chains,omitempty"`
+	}
+	u.Index = v.Index
+	u.PreviousHeight = v.PreviousHeight
+	u.Timestamp = v.Timestamp
+	u.Chains = encoding.ChainSetToJSON(v.Chains)
+	return json.Marshal(&u)
+}
+
 func (v *Object) MarshalJSON() ([]byte, error) {
 	var u struct {
 		Entry  *string   `json:"entry,omitempty"`
@@ -100,6 +182,27 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 		u.Roots[i] = encoding.BytesToJSON(x)
 	}
 	return json.Marshal(&u)
+}
+
+func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
+	var u struct {
+		Index          int64     `json:"index,omitempty"`
+		PreviousHeight int64     `json:"previousHeight,omitempty"`
+		Timestamp      time.Time `json:"timestamp,omitempty"`
+		Chains         []string  `json:"chains,omitempty"`
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Index = u.Index
+	v.PreviousHeight = u.PreviousHeight
+	v.Timestamp = u.Timestamp
+	if x, err := encoding.ChainSetFromJSON(u.Chains); err != nil {
+		return fmt.Errorf("error decoding Chains: %w", err)
+	} else {
+		v.Chains = x
+	}
+	return nil
 }
 
 func (v *Object) UnmarshalJSON(data []byte) error {
