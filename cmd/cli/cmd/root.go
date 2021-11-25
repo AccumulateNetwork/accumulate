@@ -26,6 +26,8 @@ var currentUser = func() *user.User {
 	return usr
 }()
 
+var DidError bool
+
 func InitRootCmd(database db.DB) *cobra.Command {
 	Db = database
 	cmd := &cobra.Command{
@@ -58,6 +60,12 @@ func InitRootCmd(database db.DB) *cobra.Command {
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
+
+	cmd.PersistentPostRun = func(*cobra.Command, []string) {
+		if DidError {
+			os.Exit(1)
+		}
+	}
 
 	return cmd
 }

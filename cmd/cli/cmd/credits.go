@@ -7,10 +7,9 @@ import (
 	"strconv"
 	"time"
 
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
-
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -27,12 +26,7 @@ var creditsCmd = &cobra.Command{
 			fmt.Println("Usage:")
 			PrintCredits()
 		}
-		if err != nil {
-			cmd.Print("Error: ")
-			cmd.PrintErr(err)
-		} else {
-			cmd.Println(out)
-		}
+		printOutput(cmd, out, err)
 	},
 }
 

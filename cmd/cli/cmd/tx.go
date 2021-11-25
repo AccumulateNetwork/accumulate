@@ -50,12 +50,7 @@ var txCmd = &cobra.Command{
 			fmt.Println("Usage:")
 			PrintTX()
 		}
-		if err != nil {
-			cmd.Print("Error: ")
-			cmd.PrintErr(err)
-		} else {
-			cmd.Println(out)
-		}
+		printOutput(cmd, out, err)
 	},
 }
 
@@ -133,6 +128,14 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 
 	if err := Client.Request(context.Background(), "token-account-history", jsondata, &res); err != nil {
 		return PrintJsonRpcError(err)
+	}
+
+	if WantJsonOutput {
+		data, err := json.Marshal(res)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
 	}
 
 	var out string
