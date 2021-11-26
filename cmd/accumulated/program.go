@@ -72,14 +72,14 @@ func (p *Program) Start(s service.Service) error {
 		return err
 	}
 
-	config, err := config.Load(workDir)
+	cfg, err := config.Load(workDir)
 	if err != nil {
 		return fmt.Errorf("reading config file: %v", err)
 	}
 
-	if config.Accumulate.SentryDSN != "" {
+	if cfg.Accumulate.SentryDSN != "" {
 		opts := sentry.ClientOptions{
-			Dsn:           config.Accumulate.SentryDSN,
+			Dsn:           cfg.Accumulate.SentryDSN,
 			Environment:   "Accumulate",
 			HTTPTransport: sentryHack{},
 			Debug:         true,
@@ -94,7 +94,7 @@ func (p *Program) Start(s service.Service) error {
 		defer sentry.Flush(2 * time.Second)
 	}
 
-	dbPath := filepath.Join(config.RootDir, "valacc.db")
+	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
 	p.db = new(state.StateDB)
 	err = p.db.Open(dbPath, false, true)
@@ -104,48 +104,57 @@ func (p *Program) Start(s service.Service) error {
 
 	// read private validator
 	pv, err := privval.LoadFilePV(
-		config.PrivValidator.KeyFile(),
-		config.PrivValidator.StateFile(),
+		cfg.PrivValidator.KeyFile(),
+		cfg.PrivValidator.StateFile(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	p.relay, err = relay.NewWith(config.Accumulate.Networks...)
+	p.relay, err = relay.NewWith(cfg.Accumulate.Networks...)
 	if err != nil {
 		return fmt.Errorf("failed to create RPC relay: %v", err)
 	}
 
-	mgr, err := chain.NewBlockValidator(apiv1.NewQuery(p.relay), p.db, pv.Key.PrivKey.Bytes())
+	var exec *chain.Executor
+	query := apiv1.NewQuery(p.relay)
+	switch cfg.Accumulate.Type {
+	case config.BlockValidator:
+		exec, err = chain.NewBlockValidatorExecutor(query, p.db, pv.Key.PrivKey.Bytes())
+	case config.Directory:
+		exec, err = chain.NewDirectoryExecutor(query, p.db, pv.Key.PrivKey.Bytes())
+	default:
+		return fmt.Errorf("%q is not a valid Accumulate subnet type", cfg.Accumulate.Type)
+	}
 	if err != nil {
-		return fmt.Errorf("failed to initialize chain manager: %v", err)
+		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
 	var logWriter io.Writer
 	if service.Interactive() {
-		logWriter, err = logging.NewConsoleWriter(config.LogFormat)
+		logWriter, err = logging.NewConsoleWriter(cfg.LogFormat)
 	} else {
-		logWriter, err = logging.NewServiceLogger(s, config.LogFormat)
+		logWriter, err = logging.NewServiceLogger(s, cfg.LogFormat)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize logger: %v", err)
 		os.Exit(1)
 	}
 
-	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), config.LogLevel, false)
+	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), cfg.LogLevel, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to initialize logger: %v", err)
 		os.Exit(1)
 	}
 	p.db.SetLogger(logger)
 
-	app, err := abci.NewAccumulator(p.db, pv.Key.PubKey.Address(), mgr, logger)
+	app, err := abci.NewAccumulator(p.db, pv.Key.PubKey.Address(), exec, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize ACBI app: %v", err)
 	}
 
 	// Create node
-	p.node, err = node.New(config, app, logger)
+	p.node, err = node.New(cfg, app, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize node: %v", err)
 	}
@@ -157,7 +166,7 @@ func (p *Program) Start(s service.Service) error {
 		return fmt.Errorf("failed to start node: %v", err)
 	}
 
-	if config.Accumulate.API.EnableSubscribeTX {
+	if cfg.Accumulate.API.EnableSubscribeTX {
 		err = p.relay.Start()
 		if err != nil {
 			return fmt.Errorf("failed to start RPC relay: %v", err)
@@ -176,18 +185,18 @@ func (p *Program) Start(s service.Service) error {
 
 	// Configure JSON-RPC
 	var jrpcOpts api.JrpcOptions
-	jrpcOpts.Config = &config.Accumulate.API
+	jrpcOpts.Config = &cfg.Accumulate.API
 	jrpcOpts.QueueDuration = time.Second / 4
 	jrpcOpts.QueueDepth = 100
 	jrpcOpts.QueryV1 = apiv1.NewQuery(p.relay)
 	jrpcOpts.Local = lclient
 
 	// Build the list of remote addresses and query clients
-	jrpcOpts.Remote = make([]string, len(config.Accumulate.Networks))
-	clients := make([]api.ABCIQueryClient, len(config.Accumulate.Networks))
-	for i, net := range config.Accumulate.Networks {
+	jrpcOpts.Remote = make([]string, len(cfg.Accumulate.Networks))
+	clients := make([]api.ABCIQueryClient, len(cfg.Accumulate.Networks))
+	for i, net := range cfg.Accumulate.Networks {
 		switch {
-		case net == "self", net == config.Accumulate.Network, net == config.RPC.ListenAddress:
+		case net == "self", net == cfg.Accumulate.Network, net == cfg.RPC.ListenAddress:
 			jrpcOpts.Remote[i] = "local"
 			clients[i] = lclient
 
@@ -214,7 +223,7 @@ func (p *Program) Start(s service.Service) error {
 
 	// Run JSON-RPC server
 	p.api = &http.Server{Handler: jrpc.NewMux()}
-	l, secure, err := listenHttpUrl(config.Accumulate.API.JSONListenAddress)
+	l, secure, err := listenHttpUrl(cfg.Accumulate.API.JSONListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to start JSON-RPC: %v", err)
 	}

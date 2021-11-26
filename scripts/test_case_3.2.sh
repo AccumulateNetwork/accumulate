@@ -43,11 +43,11 @@ echo $bal
 
 # generate a key
 
-Key=`./cli_key_generate t32key $1`
+Key=`./cli_key_generate.sh t32key $1`
 
 echo $key
 
 # create account without adi account
 
-echo "./cli account create acc://t32acct t32key acc://t32acct/myacmeacct acc://ACME acc://t32acct/ssg0 -s http://$1/v1"
+echo `./cli account create acc://t32acct t32key acc://t32acct/myacmeacct acc://ACME acc://t32acct/ssg0 -s http://$1/v1`
 

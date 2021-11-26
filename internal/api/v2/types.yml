@@ -1,54 +1,54 @@
 QueryResponse:
   non-binary: true
   fields:
-  - name: Type
-    type: string
-  - name: MerkleState
-    type: MerkleState
-    pointer: true
-    marshal-as: self
-  - name: Data
-    type: any
-  - name: Sponsor
-    type: string
-  - name: KeyPage
-    type: KeyPage
-    marshal-as: self
-  - name: Txid
-    type: bytes
-  - name: Signer
-    type: Signer
-    marshal-as: self
-  - name: Sig
-    type: bytes
-  - name: Status
-    type: any
+    - name: Type
+      type: string
+    - name: MerkleState
+      type: MerkleState
+      pointer: true
+      marshal-as: self
+    - name: Data
+      type: any
+    - name: Sponsor
+      type: string
+    - name: KeyPage
+      type: KeyPage
+      marshal-as: self
+    - name: Txid
+      type: bytes
+    - name: Signer
+      type: Signer
+      marshal-as: self
+    - name: Sig
+      type: bytes
+    - name: Status
+      type: any
 
 MerkleState:
   non-binary: true
   fields:
-  - name: Count
-    type: uvarint
-  - name: Roots
-    type: slice
-    slice:
-      type: bytes
+    - name: Count
+      type: uvarint
+    - name: Roots
+      type: slice
+      slice:
+        type: bytes
 
 QueryMultiResponse:
   non-binary: true
   fields:
-  - name: Items
-    type: slice
-    slice:
-      type: QueryResponse
-      marshal-as: self
-      pointer: true
-  - name: Start
-    type: uvarint
-  - name: Count
-    type: uvarint
-  - name: Total
-    type: uvarint
+    - name: Items
+      type: slice
+      slice:
+        type: QueryResponse
+        marshal-as: self
+        pointer: true
+    - name: Start
+      type: uvarint
+    - name: Count
+      type: uvarint
+    - name: Total
+      type: uvarint
 
 KeyPage:
   non-binary: true
