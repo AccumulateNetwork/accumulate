@@ -17,7 +17,7 @@ type ChainIdQuery struct {
 
 type KeyPage struct {
 	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
-	Index  uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Index  uint64 `json:"index,omitempty" form:"index" query:"index"`
 }
 
 type MerkleState struct {
