@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -135,7 +136,7 @@ func (q queryDirect) QueryDirectory(s string, expandChains bool) (*QueryResponse
 	}
 
 	if expandChains {
-		dir.ExpandedEntries, _ = q.expandChainEntries(dir.Entries)
+		dir.ExpandedEntries, _ = q.expandChainEntries(context.Background(), dir.Entries)
 		dir.Entries = nil
 	}
 
@@ -241,33 +242,41 @@ func (q queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiRe
 	return res, nil
 }
 
-func (q queryDirect) expandChainEntries(entries []string) ([]*QueryResponse, error) {
-	expandedEntries := make([]*QueryResponse, len(entries))
+func (q queryDirect) expandChainEntries(ctx context.Context, entries []string) ([]*QueryResponse, error) {
+	expEntries := make([]*QueryResponse, len(entries))
+	errs, ctx := errgroup.WithContext(ctx)
+
 	for i, entry := range entries {
-		queryReq := new(query.RequestByUrl)
-		queryReq.Url = types.String(entry)
-
-		k, v, err := q.query(queryReq)
-		if k != "chain" {
-			return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
-		}
-		if err != nil {
-			return nil, err
-		}
-
-		if k != "chain" {
-			return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
-		}
-
-		obj, chain, err := unmarshalState(v)
-		if err != nil {
-			return nil, err
-		}
-
-		expandedEntries[i], err = packStateResponse(obj, chain)
-		if err != nil {
-			return nil, err
-		}
+		errs.Go(func() error {
+			expEntry, err := q.expandChainEntry(entry)
+			expEntries[i] = expEntry
+			return err
+		})
 	}
-	return expandedEntries, nil
+	err := errs.Wait()
+	if err != nil {
+		return nil, err
+	}
+
+	return expEntries, nil
+}
+
+func (q queryDirect) expandChainEntry(entry string) (*QueryResponse, error) {
+	queryReq := new(query.RequestByUrl)
+	queryReq.Url = types.String(entry)
+
+	key, value, err := q.query(queryReq)
+	if key != "chain" {
+		return nil, fmt.Errorf("unknown response type: want chain, got %q", key)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	obj, chain, err := unmarshalState(value)
+	if err != nil {
+		return nil, err
+	}
+
+	return packStateResponse(obj, chain)
 }
