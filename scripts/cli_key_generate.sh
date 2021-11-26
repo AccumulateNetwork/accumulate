@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash 
 #
 # This script uses the accumulate cli to generate a key
 # The script expects a key name and server IP:Port to be passed in
@@ -15,6 +15,10 @@ s=`which sed`
 if [ -z $s ]; then
         echo "sed is needed to get key"
         exit 0
+fi
+
+if [ -z $cli ]; then
+	cli=../cmd/cli/cli
 fi
 
 # if key name not entered on the command line, prompt for one and exit 
