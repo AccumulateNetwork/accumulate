@@ -140,6 +140,9 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	}
 
 	// TODO check height
+	if sigSpec.GetHeight() != tx.SigInfo.MSHeight {
+		return nil, fmt.Errorf("invalid height")
+	}
 
 	for i, sig := range tx.Signature {
 		ks := sigSpec.FindKey(sig.PublicKey)
