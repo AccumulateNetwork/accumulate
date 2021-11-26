@@ -213,7 +213,7 @@ func (r *Relay) BatchSend() <-chan BatchedStatus {
 		//reset the queue here.
 		r.txQueue[i] = txBatch{}
 	}
-	stat := make(chan BatchedStatus)
+	stat := make(chan BatchedStatus, 1)
 	go dispatch(r.client, sendTxsAsBatch, sendTxsAsSingle, stat)
 	r.resetBatches()
 

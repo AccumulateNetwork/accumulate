@@ -21,12 +21,13 @@ func TestStateDBConsistency(t *testing.T) {
 	sdb := new(state.StateDB)
 	require.NoError(t, sdb.Load(db, true))
 
-	n := createApp(t, sdb, crypto.Address{}, "error", false)
+	n := createApp(t, sdb, crypto.Address{}, "error", true)
 	n.testAnonTx(10)
 
 	height, err := sdb.BlockIndex()
 	require.NoError(t, err)
 	rootHash := sdb.RootHash()
+	n.client.Shutdown()
 
 	// Reopen the database
 	sdb = new(state.StateDB)
