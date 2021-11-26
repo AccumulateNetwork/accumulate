@@ -23,7 +23,7 @@ func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) 
 		return err
 	}
 	queryOptions := new(QueryOptions)
-	err = m.parse(params, urlQuery)
+	err = m.parse(params, queryOptions)
 	if err != nil {
 		return err
 	}
