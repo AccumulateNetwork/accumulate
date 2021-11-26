@@ -134,7 +134,7 @@ func initNode(*cobra.Command, []string) {
 	check(node.Init(node.InitOptions{
 		WorkDir:   flagMain.WorkDir,
 		ShardName: "accumulate.",
-		ChainID:   subnet.Name,
+		SubnetID:  subnet.Name,
 		Port:      subnet.Port,
 		Config:    config,
 		RemoteIP:  remoteIP,
@@ -194,7 +194,7 @@ func initFollower(cmd *cobra.Command, _ []string) {
 	check(node.Init(node.InitOptions{
 		WorkDir:    flagMain.WorkDir,
 		ShardName:  "accumulate.",
-		ChainID:    subnet.Name,
+		SubnetID:   subnet.Name,
 		Port:       port,
 		GenesisDoc: genDoc,
 		Config:     []*cfg.Config{config},
@@ -268,7 +268,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	check(node.Init(node.InitOptions{
 		WorkDir:   filepath.Join(flagMain.WorkDir, "dn"),
 		ShardName: flagInitDevnet.Name,
-		ChainID:   flagInitDevnet.Name,
+		SubnetID:  flagInitDevnet.Name,
 		Port:      flagInitDevnet.BasePort,
 		Config:    config[:flagInitDevnet.NumDirNodes],
 		RemoteIP:  IPs[:flagInitDevnet.NumDirNodes],
@@ -277,7 +277,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	check(node.Init(node.InitOptions{
 		WorkDir:   filepath.Join(flagMain.WorkDir, "bvn"),
 		ShardName: flagInitDevnet.Name,
-		ChainID:   flagInitDevnet.Name,
+		SubnetID:  flagInitDevnet.Name,
 		Port:      flagInitDevnet.BasePort,
 		Config:    config[flagInitDevnet.NumDirNodes:],
 		RemoteIP:  IPs[flagInitDevnet.NumDirNodes:],
