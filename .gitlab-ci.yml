@@ -156,4 +156,6 @@ validate:
   variables:
     ACC_API: https://devnet.accumulatenetwork.io/v1
     MNEMONIC: bench industry mirror above van second avoid maximum genius person swear cage
-  script: ./scripts/validate.sh
+  script:
+  - apt-get -y update && apt-get -y install jq
+  - ./scripts/validate.sh
