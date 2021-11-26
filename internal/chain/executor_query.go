@@ -138,7 +138,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		}
 
 		thr := query.ResponseTxHistory{}
-		txids, maxAmt, err := m.db.GetTxRange(&txh.ChainId, txh.Start, txh.Start+txh.Limit)
+		txids, maxAmt, err := m.db.GetChainRange(txh.ChainId[:], txh.Start, txh.Start+txh.Limit)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 		}
