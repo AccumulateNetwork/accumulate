@@ -35,8 +35,9 @@ func TestEndToEndSuite(t *testing.T) {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", false)
 		n.app.InitChain(abci.RequestInitChain{
-			Time:    time.Now(),
-			ChainId: s.T().Name(),
+			Time:          time.Now(),
+			ChainId:       s.T().Name(),
+			AppStateBytes: []byte(`""`),
 		})
 		return n.query
 	}))
@@ -566,4 +567,55 @@ func TestRemoveKey(t *testing.T) {
 	spec := n.GetSigSpec("foo/sigspec1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, testKey2.PubKey().Bytes(), spec.Keys[0].PublicKey)
+}
+
+func TestSignatorHeight(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
+	liteKey, fooKey := generateKey(), generateKey()
+
+	liteUrl, err := protocol.AnonymousAddress(liteKey.PubKey().Bytes(), "ACME")
+	require.NoError(t, err)
+	tokenUrl, err := url.Parse("foo/tokens")
+	require.NoError(t, err)
+	keyPageUrl, err := url.Parse("foo/page0")
+	require.NoError(t, err)
+
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateAnonTokenAccount(dbTx, liteKey, 1))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+
+	getHeight := func(u *url.URL) uint64 {
+		obj, _, err := n.db.Begin().LoadChain(u.ResourceChain())
+		require.NoError(t, err)
+		return obj.Height
+	}
+
+	liteHeight := getHeight(liteUrl)
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		adi := new(protocol.IdentityCreate)
+		adi.Url = "foo"
+		adi.PublicKey = fooKey.PubKey().Bytes()
+		adi.KeyBookName = "book"
+		adi.KeyPageName = "page0"
+
+		tx, err := transactions.New(liteUrl.String(), edSigner(liteKey, 1), adi)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	require.Equal(t, liteHeight, getHeight(liteUrl), "Lite account height changed")
+
+	keyPageHeight := getHeight(keyPageUrl)
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		tac := new(protocol.TokenAccountCreate)
+		tac.Url = tokenUrl.String()
+		tac.TokenUrl = protocol.AcmeUrl().String()
+		tx, err := transactions.New("foo", edSigner(fooKey, 1), tac)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	require.Equal(t, keyPageHeight, getHeight(keyPageUrl), "Key page height changed")
 }
