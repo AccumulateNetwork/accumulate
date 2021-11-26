@@ -266,11 +266,11 @@ func (q queryDirect) expandChainEntry(entry string) (*QueryResponse, error) {
 	queryReq.Url = types.String(entry)
 
 	key, value, err := q.query(queryReq)
-	if key != "chain" {
-		return nil, fmt.Errorf("unknown response type: want chain, got %q", key)
-	}
 	if err != nil {
 		return nil, err
+	}
+	if key != "chain" {
+		return nil, fmt.Errorf("unknown response type: want chain, got %q", key)
 	}
 
 	obj, chain, err := unmarshalState(value)
