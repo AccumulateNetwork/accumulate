@@ -1,8 +1,11 @@
 package memory
 
 import (
+	"bytes"
+	"sort"
 	"sync"
 
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
@@ -11,9 +14,8 @@ import (
 // state for the database That must be handled by the caller, but see the
 // notes on InitDB for future improvements.
 type DB struct {
-	Filename string
-	Entries  map[storage.Key][]byte
-	mutex    sync.Mutex
+	entries map[storage.Key][]byte
+	mutex   sync.Mutex
 }
 
 // EndBatch
@@ -24,7 +26,7 @@ func (m *DB) EndBatch(txCache map[storage.Key][]byte) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	for k, v := range txCache {
-		m.Entries[k] = v
+		m.entries[k] = v
 	}
 	return nil
 }
@@ -34,27 +36,32 @@ func (m *DB) EndBatch(txCache map[storage.Key][]byte) error {
 func (m *DB) GetKeys() [][32]byte {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	keys := make([][32]byte, len(m.Entries))
+	keys := make([][32]byte, len(m.entries))
 	idx := 0
-	for k := range m.Entries {
+	for k := range m.entries {
 		keys[idx] = k
 		idx++
 	}
 	return keys
 }
 
+// Export writes the database to a map
+func (m *DB) Export() map[storage.Key][]byte {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	ex := make(map[storage.Key][]byte)
+	for k, v := range m.entries {
+		ex[k] = v
+	}
+	return ex
+}
+
 // Copy
 // Make a copy of the database; a useful function for testing
 func (m *DB) Copy() *DB {
-	m.mutex.Lock()
-	defer m.mutex.Unlock()
 	db := new(DB)
-	db.Filename = m.Filename
-	db.Entries = make(map[storage.Key][]byte)
-	for k, v := range m.Entries {
-		db.Entries[k] = v
-	}
-
+	db.entries = m.Export()
 	return db
 }
 
@@ -63,8 +70,8 @@ func (m *DB) Copy() *DB {
 func (m *DB) Close() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	for k := range m.Entries {
-		delete(m.Entries, k)
+	for k := range m.entries {
+		delete(m.entries, k)
 	}
 	return nil
 }
@@ -78,14 +85,13 @@ func (m *DB) Close() error {
 func (m *DB) InitDB(filename string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	m.Filename = filename
 
 	// Either allocate a new map, or clear an existing one.
-	if m.Entries == nil {
-		m.Entries = make(map[storage.Key][]byte)
+	if m.entries == nil {
+		m.entries = make(map[storage.Key][]byte)
 	} else {
-		for k := range m.Entries {
-			delete(m.Entries, k)
+		for k := range m.entries {
+			delete(m.entries, k)
 		}
 	}
 	return nil
@@ -96,7 +102,7 @@ func (m *DB) InitDB(filename string) error {
 func (m *DB) Get(key storage.Key) (value []byte, err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	v, ok := m.Entries[key]
+	v, ok := m.entries[key]
 	if !ok {
 		return nil, storage.ErrNotFound
 	}
@@ -108,6 +114,63 @@ func (m *DB) Get(key storage.Key) (value []byte, err error) {
 func (m *DB) Put(key storage.Key, value []byte) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	m.Entries[key] = value
+	m.entries[key] = value
+	return nil
+}
+
+func (m *DB) MarshalBinary() ([]byte, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	var size uint64
+	var keys []storage.Key
+	for key, entry := range m.entries {
+		keys = append(keys, key)
+		n := uint64(len(entry))
+		size += 32
+		size += uint64(encoding.UvarintBinarySize(n))
+		size += n
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return bytes.Compare(keys[i][:], keys[j][:]) < 0
+	})
+
+	b := make([]byte, 0, size)
+	for _, key := range keys {
+		entry := m.entries[key]
+		b = append(b, key[:]...)
+		b = append(b, encoding.UvarintMarshalBinary(uint64(len(entry)))...)
+		b = append(b, entry...)
+	}
+	return b, nil
+}
+
+func (m *DB) UnmarshalBinary(b []byte) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+
+	// Delete all entries first?
+
+	for len(b) > 0 {
+		key, err := encoding.ChainUnmarshalBinary(b)
+		if err != nil {
+			return err
+		}
+		b = b[encoding.ChainBinarySize(&key):]
+
+		n, err := encoding.UvarintUnmarshalBinary(b)
+		if err != nil {
+			return err
+		}
+		b = b[encoding.UvarintBinarySize(n):]
+
+		if uint64(len(b)) < n {
+			return encoding.ErrNotEnoughData
+		}
+		entry := b[:n]
+		b = b[n:]
+
+		m.entries[key] = entry
+	}
 	return nil
 }
