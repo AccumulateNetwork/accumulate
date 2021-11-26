@@ -20,12 +20,14 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
+	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
 func TestEndToEnd(t *testing.T) {
@@ -37,13 +39,38 @@ func TestEndToEnd(t *testing.T) {
 		t.Skip("This test consistently fails in CI")
 	}
 
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *api.Query {
+	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 
 		// Restart the nodes for every test
-		nodes, _ := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
+		nodes, dbs := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
 		query := startNodes(s.T(), nodes)
-		return query
+		client, err := local.New(nodes[0].Service.(local.NodeService))
+		require.NoError(s.T(), err)
+		return &e2eDUT{s, dbs[0], query, client}
 	}))
+}
+
+type e2eDUT struct {
+	*e2e.Suite
+	db     *state.StateDB
+	query  *api.Query
+	client *local.Local
+}
+
+func (d *e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {
+	return d.query.QueryByUrl(url)
+}
+
+func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
+	b, err := tx.Marshal()
+	d.NoError(err)
+	_, err = d.client.BroadcastTxAsync(context.Background(), b)
+	d.NoError(err)
+}
+
+func (d *e2eDUT) WaitForTxns() {
+	// Is there a better way to do this?
+	time.Sleep(2 * time.Second)
 }
 
 func TestSubscribeAfterClose(t *testing.T) {
@@ -131,7 +158,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	}
 
 	// Wait for synthetic TX to settle
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Second)
 
 	obj := new(state.Object)
 	chain := new(state.ChainHeader)
