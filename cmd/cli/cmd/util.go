@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"time"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -82,7 +83,29 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	return args[ct:], &ed, privKey, nil
 }
 
+func signGenTx(binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+	gtx := new(transactions.GenTransaction)
+	gtx.Transaction = binaryPayload
+
+	gtx.ChainID = actor.ResourceChain()
+	gtx.Routing = actor.Routing()
+
+	si.Nonce = nonce
+	gtx.SigInfo = si
+
+	ed := new(transactions.ED25519Sig)
+	err := ed.Sign(nonce, privKey, gtx.TransactionHash())
+	if err != nil {
+		return nil, err
+	}
+	return ed, nil
+}
+
 func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*acmeapi.APIRequestRaw, error) {
+	ed, err := signGenTx(binaryPayload, actor, si, privKey, nonce)
+	if err != nil {
+		return nil, err
+	}
 
 	params := &acmeapi.APIRequestRaw{}
 	params.Tx = &acmeapi.APIRequestRawTx{}
@@ -99,27 +122,36 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si 
 
 	params.Tx.Sig = types.Bytes64{}
 
-	gtx := new(transactions.GenTransaction)
-	gtx.Transaction = binaryPayload
-
-	gtx.ChainID = actor.ResourceChain()
-	gtx.Routing = actor.Routing()
-
-	si.Nonce = nonce
-	gtx.SigInfo = si
-
-	ed := new(transactions.ED25519Sig)
-	err := ed.Sign(nonce, privKey, gtx.TransactionHash())
-	if err != nil {
-		return nil, err
-	}
 	params.Tx.Sig.FromBytes(ed.GetSignature())
 	//The public key needs to be used to verify the signature, however,
 	//to pass verification, the validator will hash the key and check the
 	//sig spec group to make sure this key belongs to the identity.
 	params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
 
-	gtx.Signature = append(gtx.Signature, ed)
+	return params, err
+}
+
+func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+	ed, err := signGenTx(binaryPayload, actor, si, privKey, nonce)
+	if err != nil {
+		return nil, err
+	}
+
+	params := &api2.TxRequest{}
+
+	// TODO The payload field can be set equal to the struct, without marshalling first
+	params.Payload = json.RawMessage(jsonPayload)
+	params.Signer.PublicKey = privKey[32:]
+	params.Signer.Nonce = nonce
+	params.Sponsor = actor.String()
+	params.KeyPage.Height = si.MSHeight
+	params.KeyPage.Index = si.PriorityIdx
+
+	params.Signature = ed.GetSignature()
+	//The public key needs to be used to verify the signature, however,
+	//to pass verification, the validator will hash the key and check the
+	//sig spec group to make sure this key belongs to the identity.
+	params.Signer.PublicKey = ed.GetPublicKey()
 
 	return params, err
 }
@@ -247,6 +279,15 @@ type ActionResponse struct {
 	Mempool   types.String  `json:"mempool"`
 }
 
+func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
+	return &ActionResponse{
+		Txid:  types.Bytes(r.Txid).AsBytes32(),
+		Hash:  r.Hash,
+		Error: types.String(r.Message),
+		Code:  types.String(fmt.Sprint(r.Code)),
+	}
+}
+
 func (a *ActionResponse) Print() (string, error) {
 	ok := a.Code == "0" || a.Code == ""
 
@@ -269,7 +310,7 @@ func (a *ActionResponse) Print() (string, error) {
 			out += fmt.Sprintf("\tError code\t\t:\tok\n")
 		}
 		if a.Error != "" {
-			out += fmt.Sprintf("\tError\t\t:\t%s\n", a.Error)
+			out += fmt.Sprintf("\tError\t\t\t:\t%s\n", a.Error)
 		}
 		if a.Log != "" {
 			out += fmt.Sprintf("\tLog\t\t\t:\t%s\n", a.Log)
