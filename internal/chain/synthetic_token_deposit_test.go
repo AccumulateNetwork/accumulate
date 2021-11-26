@@ -25,7 +25,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	db := new(state.StateDB)
 	require.NoError(t, db.Open("mem", true, true))
 
-	st, err := NewStateManager(db, gtx)
+	st, err := NewStateManager(db.Begin(), gtx)
 	require.ErrorIs(t, err, storage.ErrNotFound)
 
 	err = SyntheticTokenDeposit{}.Validate(st, gtx)
