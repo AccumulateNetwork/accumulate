@@ -35,8 +35,9 @@ func TestEndToEndSuite(t *testing.T) {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", false)
 		n.app.InitChain(abci.RequestInitChain{
-			Time:    time.Now(),
-			ChainId: s.T().Name(),
+			Time:          time.Now(),
+			ChainId:       s.T().Name(),
+			AppStateBytes: []byte(`""`),
 		})
 		return n.query
 	}))
