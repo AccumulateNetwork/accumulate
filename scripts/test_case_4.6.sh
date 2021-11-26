@@ -1,13 +1,18 @@
-#!/bin/bash
+#!/bin/bash 
 #
-# test case 2.1
+# test case 4.6
 #
-# create an adi "redwagon" sponsored by a lite account
+# delete a key page
 # server IP:Port needed unless defaulting to localhost
 #
 # set cli command and see if it exists
 #
 export cli=../cmd/cli/cli
+
+if [ -z $1 ]; then
+	echo "must supply host:port"
+	exit 0
+fi
 
 if [ ! -f $cli ]; then
 	        echo "cli command not found in ../cmd/cli, attempting to build"
@@ -20,6 +25,7 @@ fi
 
 # call cli account generate
 #
+
 ID=`./cli_create_id.sh $1`
 
 echo $ID
@@ -31,23 +37,27 @@ if [ -z $ID ]; then
    exit 0
 fi
 
+sleep .5
+
 # call cli faucet 
 
 TxID=`./cli_faucet.sh $ID $1`
 
-# get our balance
-
-bal=`./cli_get_balance.sh $ID $1`
-
-echo $bal
-
 # generate a key
 
-Key=`./cli_key_generate.sh t21key $1`
+Key=`./cli_key_generate.sh t46key $1`
+Key2=`./cli_key_generate.sh t46key2 $1`
 
-echo $key
+#echo $Key
+#echo $Key2
 
 # create account
 
-echo `./cli_adi_create_account.sh $ID acc://t21acct t21key $1`
+sleep 2
+./cli_adi_create_account.sh $ID acc://t46acct t46key $1
 
+sleep 2
+$cli page create acc://t46acct t46key acc://t46acct/keypage46 t46key2 -s http://$1/v1
+
+sleep 2
+$cli page remove acc://t46acct t46key acc://t46acct/keypage46 -s http://$1/v1
