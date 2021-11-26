@@ -77,15 +77,14 @@ configure:
   script:
   - |
     function init {
-      rm -rf .nodes
-      ./accumulated init -w .nodes --no-empty-blocks -n $1
-      tar czf config-$1.tar.gz -C .nodes .
+      ./accumulated init -w config-$1 "${@:2}" -n $1
+      (cd config-$1 && tar czf ../config-$1.tar.gz *)
     }
   - build-daemon
-  - build-daemon linux amd64
   - build-daemon linux arm64
-  - init Zion
-  - init Yellowstone
+  - init DevNet.Directory --no-empty-blocks --no-website
+  - init DevNet.Zion --no-empty-blocks
+  - init DevNet.Yellowstone --no-empty-blocks
   artifacts:
     paths:
     - config-*.tar.gz
@@ -107,44 +106,26 @@ configure:
   - cp ${SSH_PRIV_KEY} ~/.ssh/id_rsa
   - cp ${SSH_PUB_KEY} ~/.ssh/id_rsa.pub
   - chmod -R 600 ~/.ssh
-  - scp ${BIN} ec2-user@${HOST}:accumulated-latest
-  - scp config-${NETWORK}.tar.gz ec2-user@${HOST}:config.tar.gz
-  - ssh ec2-user@${HOST} '~/accumulated-latest version'
-  - varname=DEPLOY_${NETWORK}_${NODE}
-  - echo ${varname}=${!varname}
-  - |
-    if [ "${!varname}" = "yes" ]; then ssh ec2-user@${HOST} "
-      set -ex
-      export PATH="'"$PATH:$HOME/.local/bin"'"
-      screen -wipe || true
-      screen -ls | grep '\baccumulated\b' && screen -S accumulated -X stuff ^C
-      while screen -ls | grep -q '\baccumulated\b'; do sleep 1; done
-      rm -f ~/.local/bin/accumulated
-      mv accumulated-latest ~/.local/bin/accumulated
-      rm -rf ~/.accumulate
-      mkdir ~/.accumulate
-      tar xf config.tar.gz -C ~/.accumulate
-      screen -d -m -S accumulated bash -c 'accumulated run -n ${NODE} 2>&1 | tee ~/.accumulate/Node${NODE}/acc-$(date +%Y%m%d%H%M%S).log'
-    "; fi
+  - ./scripts/ci/devnet-deploy.sh
 
 deploy 1/4:
   extends: .deploy
-  variables:   { HOST: 172.31.4.106,  NETWORK: Zion,         NODE: 0, BIN: accumulated-linux-arm64 }
+  variables:   { HOST: 172.31.4.106,  NETWORK: Zion,         NODE: 0, DN_NODE: 0, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.4.106:8080',  name: Zion/0 }
 
 deploy 2/4:
   extends: .deploy
-  variables:   { HOST: 172.31.11.185, NETWORK: Zion,         NODE: 1, BIN: accumulated-linux-arm64 }
+  variables:   { HOST: 172.31.11.185, NETWORK: Zion,         NODE: 1, DN_NODE: 1, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.11.185:8080', name: Zion/1 }
 
 deploy 3/4:
   extends: .deploy
-  variables:   { HOST: 172.31.11.104, NETWORK: Yellowstone,  NODE: 0, BIN: accumulated-linux-arm64 }
+  variables:   { HOST: 172.31.11.104, NETWORK: Yellowstone,  NODE: 0, DN_NODE: 2, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.11.104:8080', name: Yellowstone/0 }
 
 deploy 4/4:
   extends: .deploy
-  variables:   { HOST: 172.31.13.8,   NETWORK: Yellowstone,  NODE: 1, BIN: accumulated-linux-arm64 }
+  variables:   { HOST: 172.31.13.8,   NETWORK: Yellowstone,  NODE: 1, DN_NODE: 3, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.13.8:8080',   name: Yellowstone/1 }
 
 validate:
