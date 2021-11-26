@@ -6,7 +6,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 )
 
@@ -59,6 +58,14 @@ type PendingTransaction struct {
 	Signature        []*transactions.ED25519Sig
 	TransactionState *TxState
 	Status           json.RawMessage `json:"status" form:"status" query:"status" validate:"required"`
+}
+
+func (tx *PendingTransaction) Restore() *transactions.GenTransaction {
+	gtx := new(transactions.GenTransaction)
+	gtx.Signature = tx.Signature
+	gtx.SigInfo = tx.TransactionState.SigInfo
+	gtx.Transaction = *tx.TransactionState.Transaction
+	return gtx
 }
 
 func (is *Transaction) TransactionHash() *types.Bytes32 {
@@ -126,8 +133,8 @@ func (is *Transaction) UnmarshalBinary(data []byte) (err error) {
 
 func (t *PendingTransaction) MarshalBinary() (data []byte, err error) {
 	defer func() {
-		if recover(); err != nil {
-			err = fmt.Errorf("error marshaling Pending Transaction State %v", err)
+		if r := recover(); r != nil {
+			err = fmt.Errorf("error marshaling Pending Transaction State %v", r)
 		}
 	}()
 
@@ -139,9 +146,6 @@ func (t *PendingTransaction) MarshalBinary() (data []byte, err error) {
 	data = append(data, headerData...)
 
 	sLen := uint64(len(t.Signature))
-	if sLen < 1 || sLen > api.MaxTokenTxOutputs {
-		panic("must have 1 to 100 signatures")
-	}
 	data = append(data, common.Uint64Bytes(sLen)...)
 	for _, v := range t.Signature {
 		if sig, err := v.Marshal(); err == nil {
