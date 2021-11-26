@@ -138,13 +138,23 @@ func (p *Program) Start(s service.Service) error {
 		return fmt.Errorf("failed to create RPC relay: %v", err)
 	}
 
+	// Create a proxy local client which we will populate with the local client
+	// after the node has been created.
+	clientProxy := node.NewLocalClient()
+
+	execOpts := chain.ExecutorOptions{
+		Query:  apiv1.NewQuery(p.relay),
+		Local:  clientProxy,
+		DB:     p.db,
+		Logger: logger,
+		Key:    pv.Key.PrivKey.Bytes(),
+	}
 	var exec *chain.Executor
-	query := apiv1.NewQuery(p.relay)
 	switch cfg.Accumulate.Type {
 	case config.BlockValidator:
-		exec, err = chain.NewBlockValidatorExecutor(query, p.db, logger, pv.Key.PrivKey.Bytes())
+		exec, err = chain.NewBlockValidatorExecutor(execOpts)
 	case config.Directory:
-		exec, err = chain.NewDirectoryExecutor(query, p.db, logger, pv.Key.PrivKey.Bytes())
+		exec, err = chain.NewDirectoryExecutor(execOpts)
 	default:
 		return fmt.Errorf("%q is not a valid Accumulate subnet type", cfg.Accumulate.Type)
 	}
@@ -186,6 +196,7 @@ func (p *Program) Start(s service.Service) error {
 	if err != nil {
 		return fmt.Errorf("failed to create local node client: %v", err)
 	}
+	clientProxy.Set(lclient)
 
 	// Configure JSON-RPC
 	var jrpcOpts api.JrpcOptions

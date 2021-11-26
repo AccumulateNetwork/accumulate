@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	. "github.com/AccumulateNetwork/accumulate/internal/api"
@@ -43,6 +44,7 @@ func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query
 	require.NoError(t, err)                                                                //
 	cfg.Accumulate.WebsiteEnabled = false                                                  // Disable the website
 	cfg.Instrumentation.Prometheus = false                                                 // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+	cfg.Consensus.TimeoutCommit = time.Second / 10                                         // ~10 blocks per second
 	require.NoError(t, config.Store(cfg))                                                  //
 	node, sdb, pv, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
 	require.NoError(t, err)                                                                //
