@@ -43,14 +43,14 @@ echo $bal
 
 # generate a key
 
-Key=`./cli_key_generate t25key $1`
+Key=`./cli_key_generate.sh t25key $1`
 
 echo $key
 
 # create account
 
-echo "./cli_adi_create_account.sh $ID acc://t25acct t25key $1"
+echo `./cli_adi_create_account.sh $ID acc://t25acct t25key $1`
 
 # try again
-echo "./cli_adi_create_account.sh $ID acc://t25acct t25key $1"
+echo `./cli_adi_create_account.sh $ID acc://t25acct t25key $1`
 
