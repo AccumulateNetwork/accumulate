@@ -352,7 +352,7 @@ func (v *QueryResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *DirectoryQueryResult) UnmarshalJSON(data []byte) error {
+func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
 	var lenEntries uint64
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Entries: %w", err)

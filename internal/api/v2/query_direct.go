@@ -130,7 +130,7 @@ func (q queryDirect) QueryDirectory(s string, expandChains bool) (*QueryResponse
 	}
 
 	dir := new(DirectoryQueryResult)
-	err = dir.UnmarshalJSON(v)
+	err = dir.UnmarshalBinary(v)
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
 	}
