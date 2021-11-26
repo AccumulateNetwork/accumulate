@@ -30,7 +30,7 @@ import (
 type Accumulator struct {
 	abci.BaseApplication
 
-	chainId  string
+	subnetID string
 	state    State
 	address  crypto.Address
 	txct     int64
@@ -52,6 +52,17 @@ func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Lo
 
 	app.address = make([]byte, len(address))
 	copy(app.address, address)
+
+	var err error
+	app.subnetID, err = db.SubnetID()
+	switch {
+	case err == nil:
+		logger = logger.With("subnet", app.subnetID)
+	case errors.Is(err, storage.ErrNotFound):
+		// OK
+	default:
+		return nil, fmt.Errorf("failed to load chain ID: %v", err)
+	}
 
 	logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
 	return app, nil
@@ -177,20 +188,34 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	defer app.recover(nil)
+	_, err := app.state.BlockIndex()
+	if err == nil {
+		// InitChain already happened
+		return abci.ResponseInitChain{AppHash: app.state.RootHash()}
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		panic(fmt.Errorf("failed to check block index: %v", err))
+	}
 
-	app.chainId = req.ChainId
-	app.logger = app.logger.With("chain", req.ChainId)
+	var appState []byte
+	err = json.Unmarshal(req.AppStateBytes, &appState)
+	if err != nil {
+		panic(fmt.Errorf("failed to decode app state: %v", err))
+	}
+
+	err = app.chain.InitChain(appState)
+	if err != nil {
+		panic(fmt.Errorf("failed to init chain: %v", err))
+	}
+
+	app.subnetID = req.ChainId
+	app.logger = app.logger.With("subnet", req.ChainId)
 	app.logger.Info("Initializing")
-
-	// TODO Store chain ID and reload it from the DB on subsequent runs
 
 	//register a list of the validators.
 	for _, v := range req.Validators {
 		app.updateValidator(v)
 	}
 
-	var err error
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = protocol.ACME
