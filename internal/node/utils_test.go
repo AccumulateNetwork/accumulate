@@ -33,7 +33,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 	}
 
 	for i := range config {
-		config[i] = cfg.DefaultValidator()
+		config[i] = cfg.Default(cfg.BlockValidator, cfg.Validator)
 		if relay != nil {
 			config[i].Accumulate.Networks = make([]string, len(relay))
 			for j, r := range relay {

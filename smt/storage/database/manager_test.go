@@ -1,4 +1,4 @@
-package database_test
+package database
 
 import (
 	"bytes"
@@ -11,14 +11,13 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 )
 
 func TestDBManager_TransactionsBadger(t *testing.T) {
 
-	dbManager := new(database.Manager)
+	dbManager := new(Manager)
 
 	dir, err := ioutil.TempDir("", "badger")
 	if err != nil {
@@ -39,7 +38,7 @@ func TestDBManager_TransactionsBadger(t *testing.T) {
 
 func TestDBManager_TransactionsMemory(t *testing.T) {
 
-	dbManager := new(database.Manager)
+	dbManager := new(Manager)
 	_ = dbManager.Init("memory", "")
 	writeAndReadBatch(t, dbManager)
 	writeAndRead(t, dbManager)
@@ -53,13 +52,13 @@ func randSHA() [32]byte {
 	return sha256.Sum256(b[:])
 }
 
-func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
+func writeAndReadBatch(t *testing.T, dbManager *Manager) {
 	const cnt = 10 // how many test values used
 
 	// Buckets are "a" "b" and "c"
 
 	type ent struct { // Keep a history
-		Key   database.KeyRef
+		Key   KeyRef
 		Value []byte
 	}
 	var submissions []ent // Every key/value submitted goes here, in order
@@ -75,8 +74,8 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 	for i := byte(0); i < cnt; i++ {
 		add()
 		for i, pair := range submissions {
-			require.NotNil(t, dbManager.TXCache[pair.Key.K], "Entry %d missing", i)
-			require.Equal(t, pair.Value[:], dbManager.TXCache[pair.Key.K], "Entry %d has wrong value", i)
+			require.NotNil(t, dbManager.txCache[pair.Key.K], "Entry %d missing", i)
+			require.Equal(t, pair.Value[:], dbManager.txCache[pair.Key.K], "Entry %d has wrong value", i)
 		}
 	}
 
@@ -90,7 +89,7 @@ func writeAndReadBatch(t *testing.T, dbManager *database.Manager) {
 
 }
 
-func writeAndRead(t *testing.T, dbManager *database.Manager) {
+func writeAndRead(t *testing.T, dbManager *Manager) {
 	d1 := []byte{1, 2, 3}
 	d2 := []byte{2, 3, 4}
 	d3 := []byte{3, 4, 5}
