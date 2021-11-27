@@ -10,29 +10,99 @@
 // about the directory block at DBlockBucket+MetaLabel
 package managed
 
-// This Stateful Merkle Tree implementation handles 256 bit hashes
-type Hash [32]byte
+import (
+	"bytes"
+	"crypto/sha256"
 
-// Bytes
-// Return a []byte for the Hash
-func (h Hash) Bytes() []byte {
-	return h[:]
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+)
+
+// This Stateful Merkle Tree implementation handles 256 bit hashes
+type Hash []byte
+
+func (h Hash) Bytes32() [32]byte {
+	if len(h) != 32 {
+		panic("hash is not 32 bytes")
+	}
+	var g [32]byte
+	copy(g[:], h)
+	return g
 }
+
+func (h Hash) Bytes() []byte { return h }
 
 // Copy
 // Make a copy of a Hash (so the caller cannot modify the original version)
 func (h Hash) Copy() Hash {
-	return h
+	if h == nil {
+		return nil
+	}
+	g := make(Hash, len(h))
+	copy(g, h)
+	return g
 }
 
-// Copy
-// Make a copy of a Hash (so the caller cannot modify the original version)
-func (h Hash) CopyAndPoint() *Hash {
-	return &h
-}
+func (h Hash) Equal(g Hash) bool { return bytes.Equal(h, g) }
 
 // Combine
 // Hash this hash (the left hash) with the given right hash to produce a new hash
 func (h Hash) Combine(hf func(data []byte) Hash, right Hash) Hash {
-	return hf(append(h[:], right[:]...)) // Process the left side, i.e. v from this position in c.MD
+	return hf(append(h.Copy(), right[:]...)) // Process the left side, i.e. v from this position in c.MD
+}
+
+func Sha256(b []byte) Hash {
+	h := sha256.Sum256(b)
+	return h[:]
+}
+
+func (h Hash) BinarySize() int {
+	return encoding.BytesBinarySize(h)
+}
+
+func (h Hash) MarshalBinary() ([]byte, error) {
+	return encoding.BytesMarshalBinary(h), nil
+}
+
+func (h *Hash) UnmarhsalBinary(b []byte) error {
+	v, err := encoding.BytesUnmarshalBinary(b)
+	*h = v
+	return err
+}
+
+type HashList []Hash
+
+func (h HashList) BinarySize() int {
+	s := encoding.UvarintBinarySize(uint64(len(h)))
+	for _, h := range h {
+		s += h.BinarySize()
+	}
+	return s
+}
+
+func (h HashList) MarshalBinary() ([]byte, error) {
+	b := encoding.UvarintMarshalBinary(uint64(len(h)))
+	for _, h := range h {
+		c, _ := h.MarshalBinary()
+		b = append(b, c...)
+	}
+	return b, nil
+}
+
+func (h *HashList) UnmarhsalBinary(b []byte) error {
+	l, err := encoding.UvarintUnmarshalBinary(b)
+	if err != nil {
+		return err
+	}
+	b = b[encoding.UvarintBinarySize(l):]
+
+	*h = make(HashList, l)
+	for i := range *h {
+		err = (*h)[i].UnmarhsalBinary(b)
+		if err != nil {
+			return err
+		}
+		b = b[(*h)[i].BinarySize():]
+	}
+
+	return nil
 }

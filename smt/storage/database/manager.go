@@ -14,7 +14,7 @@ import (
 // The Manager as implemented cannot be accessed concurrently over go routines
 type Manager struct {
 	DB      storage.KeyValueDB     // Underlying database implementation
-	TXCache map[storage.Key][]byte // TX Cache:  Holds pending tx for the db
+	txCache map[storage.Key][]byte // TX Cache:  Holds pending tx for the db
 	cacheMu sync.RWMutex
 }
 
@@ -27,11 +27,11 @@ func (m *Manager) Equal(m2 *Manager) bool {
 	defer m.cacheMu.RUnlock()
 	defer m2.cacheMu.RUnlock()
 
-	if len(m.TXCache) != len(m2.TXCache) {
+	if len(m.txCache) != len(m2.txCache) {
 		return false
 	}
-	for k, v := range m.TXCache {
-		if !bytes.Equal(v, m2.TXCache[k]) {
+	for k, v := range m.txCache {
+		if !bytes.Equal(v, m2.txCache[k]) {
 			return false
 		}
 	}
@@ -43,9 +43,7 @@ func (m *Manager) Equal(m2 *Manager) bool {
 func (m *Manager) ClearCache() {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
-	for k := range m.TXCache { // Clear all elements from the cache
-		delete(m.TXCache, k) //    golang optimizer will make loop good
-	}
+	m.resetCache()
 }
 
 var AppIDMutex sync.Mutex // Creating new AppIDs has to be atomic
@@ -70,7 +68,7 @@ func NewDBManager(databaseTag, filename string) (*Manager, error) {
 }
 
 func (m *Manager) init() {
-	m.TXCache = make(map[storage.Key][]byte, 100) // Preallocate 100 slots
+	m.txCache = make(map[storage.Key][]byte, 100) // Preallocate 100 slots
 }
 
 // Init
@@ -125,8 +123,12 @@ func (k KeyRef) Put(value []byte) error {
 func (k KeyRef) Get() ([]byte, error) {
 	k.M.cacheMu.RLock()
 	defer k.M.cacheMu.RUnlock()
-	if v, ok := k.M.TXCache[k.K]; ok {
-		return v, nil
+	if v, ok := k.M.txCache[k.K]; ok {
+		// Return a copy. Otherwise the caller could change it, and that would
+		// change what's in the cache.
+		u := make([]byte, len(v))
+		copy(u, v)
+		return u, nil
 	}
 	// Assume the DB implementation correctly implements the interface
 	return k.M.DB.Get(k.K)
@@ -135,7 +137,11 @@ func (k KeyRef) Get() ([]byte, error) {
 func (k KeyRef) PutBatch(value []byte) {
 	k.M.cacheMu.Lock()
 	defer k.M.cacheMu.Unlock()
-	k.M.TXCache[k.K] = value
+	// Save a copy. Otherwise the caller could change it, and that would change
+	// what's in the cache.
+	u := make([]byte, len(value))
+	copy(u, value)
+	k.M.txCache[k.K] = u
 }
 
 // EndBatch
@@ -143,10 +149,10 @@ func (k KeyRef) PutBatch(value []byte) {
 func (m *Manager) EndBatch() {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
-	if len(m.TXCache) == 0 { // If there is nothing to do, do nothing
+	if len(m.txCache) == 0 { // If there is nothing to do, do nothing
 		return
 	}
-	if err := m.DB.EndBatch(m.TXCache); err != nil {
+	if err := m.DB.EndBatch(m.txCache); err != nil {
 		panic("batch failed to persist to the database")
 	}
 	m.resetCache()
@@ -164,7 +170,7 @@ func (m *Manager) resetCache() {
 	// The compiler optimizes away the loop. This is demonstrably faster and
 	// less memory intensive than re-making the map. The savings in GC presure
 	// scale proportionally with the batch size.
-	for k := range m.TXCache {
-		delete(m.TXCache, k)
+	for k := range m.txCache {
+		delete(m.txCache, k)
 	}
 }
