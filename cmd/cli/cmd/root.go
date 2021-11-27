@@ -16,6 +16,7 @@ var (
 	Client         = client.NewAPIClient()
 	Db             db.DB
 	WantJsonOutput = false
+	TxPretend      = false
 )
 
 var currentUser = func() *user.User {
@@ -45,6 +46,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.DurationVarP(&Client.Timeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
 	flags.BoolVarP(&Client.DebugRequest, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
+	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
 
 	//add the commands
 	cmd.AddCommand(accountCmd)

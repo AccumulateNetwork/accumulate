@@ -139,6 +139,10 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *tran
 
 	params := &api2.TxRequest{}
 
+	if TxPretend {
+		params.CheckOnly = true
+	}
+
 	// TODO The payload field can be set equal to the struct, without marshalling first
 	params.Payload = json.RawMessage(jsonPayload)
 	params.Signer.PublicKey = privKey[32:]
