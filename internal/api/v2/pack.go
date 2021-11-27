@@ -18,7 +18,9 @@ func packStateResponse(obj *state.Object, chain state.Chain) (*QueryResponse, er
 
 	res := new(QueryResponse)
 	res.Type = chain.Header().Type.Name()
-	res.MdRoot = obj.MDRoot[:]
+	res.MerkleState = new(MerkleState)
+	res.MerkleState.Count = obj.Height
+	res.MerkleState.Roots = obj.Roots
 	res.Data = (*json.RawMessage)(&b)
 	return res, nil
 }

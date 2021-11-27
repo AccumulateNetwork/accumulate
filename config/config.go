@@ -14,8 +14,8 @@ import (
 type NetworkType string
 
 const (
-	BVC NetworkType = "bvc"
-	DC  NetworkType = "dc"
+	BlockValidator NetworkType = "block-validator"
+	Directory      NetworkType = "directory"
 )
 
 type NodeType string
@@ -25,17 +25,18 @@ const (
 	Follower  NodeType = "follower"
 )
 
-func Default() *Config {
+func Default(net NetworkType, node NodeType) *Config {
 	c := new(Config)
+	c.Accumulate.Type = net
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
-	c.Config = *tm.DefaultConfig()
-	return c
-}
-
-func DefaultValidator() *Config {
-	c := new(Config)
-	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
-	c.Config = *tm.DefaultValidatorConfig()
+	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
+	c.Accumulate.WebsiteEnabled = true
+	switch node {
+	case Validator:
+		c.Config = *tm.DefaultValidatorConfig()
+	default:
+		c.Config = *tm.DefaultConfig()
+	}
 	return c
 }
 
@@ -45,10 +46,11 @@ type Config struct {
 }
 
 type Accumulate struct {
-	Type     NetworkType `toml:"type" mapstructure:"type"`
-	Network  string      `toml:"network" mapstructure:"network"`
-	Networks []string    `toml:"networks" mapstructure:"networks"`
-	API      API         `toml:"api" mapstructure:"api"`
+	Type      NetworkType `toml:"type" mapstructure:"type"`
+	Network   string      `toml:"network" mapstructure:"network"`
+	Networks  []string    `toml:"networks" mapstructure:"networks"`
+	API       API         `toml:"api" mapstructure:"api"`
+	Directory string      `toml:"directory" mapstructure:"directory"`
 
 	WebsiteEnabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
 	WebsiteListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`

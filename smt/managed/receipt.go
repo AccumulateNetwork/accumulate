@@ -2,14 +2,13 @@ package managed
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"fmt"
 	"math"
 )
 
 type Node struct {
 	Right bool
-	Hash  [32]byte
+	Hash  Hash
 }
 
 // Receipt
@@ -38,16 +37,20 @@ func GetElementState(
 	}
 	// currentState is the state we are going to modify until it is the state we want
 	currentIndex := elementIndex & (manager.MarkMask ^ -1) // Find the mark previous to element (current if at mark)
-	currentState = manager.GetState(currentIndex)          // Get that state
-	currentState.InitSha256()                              // Use sha256
-	nextMarkIndex = currentIndex + manager.MarkFreq        // Next mark has the list of elements to add
-	nextMark = manager.GetState(nextMarkIndex)             // Get that NextMark state. Now bracket element, search
-	if nextMark == nil {                                   // If there is no state at the next mark,
+	if currentIndex == 0 {                                 // Get that state
+		currentState = manager.GetState(0)
+	} else {
+		currentState = manager.GetState(currentIndex - 1)
+	}
+	currentState.InitSha256()                           // Use sha256
+	nextMarkIndex = currentIndex + manager.MarkFreq - 1 // Next mark has the list of elements to add
+	nextMark = manager.GetState(nextMarkIndex)          // Get that NextMark state. Now bracket element, search
+	if nextMark == nil {                                // If there is no state at the next mark,
 		nextMark = manager.MS.Copy() //                        then just use the last state of the Merkle Tree
 	}
 	for i, v1 := range nextMark.HashList { //                Go through the pending elements
-		nextMarkIndex = int64(i) //                           Return location in this HashList for next step
-		if v1 == element {       //                           If the element is found
+		nextMarkIndex = int64(i)      //                           Return location in this HashList for next step
+		if bytes.Equal(v1, element) { //                           If the element is found
 			return currentState, nextMark, height, int64(i) // Return location so following code can reuse it
 		}
 		currentState.AddToMerkleTree(v1) //                   Otherwise, just add value to merkle tree and keep looking
@@ -112,7 +115,7 @@ func (r *Receipt) AdvanceMarkToMark(manager *MerkleManager, anchorState, current
 	// markNext is the next element to be added to the Merkle Tree.  It WILL carry into height, so
 	// we have to use AddAHash to add its contribution to the receipt.
 	markNext := manager.GetNext(currentState.Count + markStep - 1) // Get the the next element
-	height = r.AddAHash(currentState, height, true, *markNext)     // Record its impact on the receipt
+	height = r.AddAHash(currentState, height, true, markNext)      // Record its impact on the receipt
 	// Handle the special case where the Mark we jump to == the AnchorState
 	if currentState.Count == anchorState.Count {
 		return true, height
@@ -148,7 +151,7 @@ func (r *Receipt) AddAHash(
 			if Right {
 				node.Hash = v1
 			} else {
-				node.Hash = *v2
+				node.Hash = v2
 			}
 			//fmt.Printf("Height %3d %x\n", Height, node.Hash)
 			// v1 becomes HashOf(pending[j]+v1)
@@ -162,15 +165,14 @@ func (r *Receipt) AddAHash(
 }
 
 func (r *Receipt) ComputeDag(manager *MerkleManager, currentState *MerkleState, height int, right bool) {
-	var anchor *Hash
+	var anchor Hash
 	for i, v := range currentState.Pending {
 		if v == nil { // if v is nil, there is nothing to do regardless. Note i cannot == Height
 			continue // because the previous code tracks Height such that there is always a value.
 		}
 		if anchor == nil { // Find the first non nil in pending
-			anchor = new(Hash) // Make an anchor
-			*anchor = *v       // copy over the value of v (which is never nil
-			if i == height {   // Note that there is no way this code does not
+			anchor = v.Copy() // Copy the anchor
+			if i == height {  // Note that there is no way this code does not
 				right = false //      execute before the following code that adds
 			} else { //               applyHash records to the receipt
 				right = true
@@ -182,15 +184,14 @@ func (r *Receipt) ComputeDag(manager *MerkleManager, currentState *MerkleState, 
 			r.Nodes = append(r.Nodes, node)
 			node.Right = right // We record if the proof path is in the anchor
 			if right {         // or in the pending array
-				node.Hash = *anchor
+				node.Hash = anchor
 			} else {
-				node.Hash = *v
+				node.Hash = v
 			}
 			// Note once the object derivative is in anchor, it never leaves. All combining
 			right = false // then comes from the left
 			// Combine all the pending hash values into the anchor
-			hash := currentState.HashFunction(append((*v)[:], (*anchor)[:]...))
-			anchor = &hash
+			anchor = v.Combine(currentState.HashFunction, anchor)
 		}
 	}
 	// We are testing anchor, but it can't be nil
@@ -198,7 +199,7 @@ func (r *Receipt) ComputeDag(manager *MerkleManager, currentState *MerkleState, 
 		panic("anchor was nil, and this should not be possible.")
 	}
 	// Put the resulting anchor into the receipt
-	r.Anchor = *anchor
+	r.Anchor = anchor
 }
 
 // String
@@ -212,9 +213,9 @@ func (r *Receipt) String() string {
 		r := "L"
 		if v.Right {
 			r = "R"
-			working = sha256.Sum256(append(working[:], v.Hash[:]...))
+			working = Sha256(append(working[:], v.Hash[:]...))
 		} else {
-			working = sha256.Sum256(append(v.Hash[:], working[:]...))
+			working = Sha256(append(v.Hash[:], working[:]...))
 		}
 		b.WriteString(fmt.Sprintf(" %10d Apply %s %x working: %x \n", i, r, v.Hash, working))
 	}
@@ -272,15 +273,15 @@ func (r Receipt) Validate() bool {
 	// Now apply all the path hashes to the anchor
 	for _, node := range r.Nodes {
 		// Need a [32]byte to slice
-		hash := [32]byte(node.Hash)
+		hash := node.Hash
 		if node.Right {
 			// If this hash comes from the right, apply it that way
-			anchor = sha256.Sum256(append(anchor[:], hash[:]...))
+			anchor = anchor.Combine(Sha256, hash)
 		} else {
 			// If this hash comes from the left, apply it that way
-			anchor = sha256.Sum256(append(hash[:], anchor[:]...))
+			anchor = hash.Combine(Sha256, anchor)
 		}
 	}
 	// In the end, anchor should be the same hash the receipt expects.
-	return anchor == r.Anchor
+	return anchor.Equal(r.Anchor)
 }
