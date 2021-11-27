@@ -342,7 +342,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	}
 
 	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
-	app.logger.Info("Check succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
+	app.logger.Debug("Check succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
 	return ret
 }
 
@@ -407,7 +407,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	//now we need to store the data returned by the validator and feed into accumulator
 	app.txct++
 
-	app.logger.Info("Deliver succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
+	app.logger.Debug("Deliver succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
 	return ret
 }
 

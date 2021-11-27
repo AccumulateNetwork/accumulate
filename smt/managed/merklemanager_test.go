@@ -13,7 +13,7 @@ import (
 
 func TestMerkleManager_ReadChainHead(t *testing.T) {
 	dbManager := new(database.Manager)
-	if err := dbManager.Init("memory", ""); err != nil {
+	if err := dbManager.Init("memory", "", nil); err != nil {
 		t.Fatal(err)
 	}
 	MM1, err := NewMerkleManager(dbManager, 2)
@@ -44,7 +44,7 @@ func TestIndexing2(t *testing.T) {
 	const testlen = 1024
 
 	dbManager := new(database.Manager)
-	if err := dbManager.Init("memory", ""); err != nil {
+	if err := dbManager.Init("memory", "", nil); err != nil {
 		t.Fatal(err)
 	}
 
@@ -86,7 +86,7 @@ func TestMerkleManager(t *testing.T) {
 	const testLen = 1024
 
 	dbManager := new(database.Manager)
-	if err := dbManager.Init("memory", ""); err != nil {
+	if err := dbManager.Init("memory", "", nil); err != nil {
 		t.Fatal(err)
 	}
 

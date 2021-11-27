@@ -77,12 +77,34 @@ func (p *Program) Start(s service.Service) error {
 		return fmt.Errorf("reading config file: %v", err)
 	}
 
+	var logWriter io.Writer
+	if service.Interactive() {
+		logWriter, err = logging.NewConsoleWriter(cfg.LogFormat)
+	} else {
+		logWriter, err = logging.NewServiceLogger(s, cfg.LogFormat)
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to initialize log writer: %v", err)
+		os.Exit(1)
+	}
+
+	logLevel, logWriter, err := logging.ParseLogLevel(cfg.LogLevel, logWriter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
+		os.Exit(1)
+	}
+
+	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to initialize logger: %v", err)
+		os.Exit(1)
+	}
+
 	if cfg.Accumulate.SentryDSN != "" {
 		opts := sentry.ClientOptions{
 			Dsn:           cfg.Accumulate.SentryDSN,
 			Environment:   "Accumulate",
 			HTTPTransport: sentryHack{},
-			Debug:         true,
 		}
 		if accumulate.IsVersionKnown() {
 			opts.Release = accumulate.Commit
@@ -97,7 +119,7 @@ func (p *Program) Start(s service.Service) error {
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
 	p.db = new(state.StateDB)
-	err = p.db.Open(dbPath, false, true)
+	err = p.db.Open(dbPath, false, false, logger)
 	if err != nil {
 		return fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
@@ -120,33 +142,15 @@ func (p *Program) Start(s service.Service) error {
 	query := apiv1.NewQuery(p.relay)
 	switch cfg.Accumulate.Type {
 	case config.BlockValidator:
-		exec, err = chain.NewBlockValidatorExecutor(query, p.db, pv.Key.PrivKey.Bytes())
+		exec, err = chain.NewBlockValidatorExecutor(query, p.db, logger, pv.Key.PrivKey.Bytes())
 	case config.Directory:
-		exec, err = chain.NewDirectoryExecutor(query, p.db, pv.Key.PrivKey.Bytes())
+		exec, err = chain.NewDirectoryExecutor(query, p.db, logger, pv.Key.PrivKey.Bytes())
 	default:
 		return fmt.Errorf("%q is not a valid Accumulate subnet type", cfg.Accumulate.Type)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
-
-	var logWriter io.Writer
-	if service.Interactive() {
-		logWriter, err = logging.NewConsoleWriter(cfg.LogFormat)
-	} else {
-		logWriter, err = logging.NewServiceLogger(s, cfg.LogFormat)
-	}
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to initialize logger: %v", err)
-		os.Exit(1)
-	}
-
-	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), cfg.LogLevel, false)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to initialize logger: %v", err)
-		os.Exit(1)
-	}
-	p.db.SetLogger(logger)
 
 	app, err := abci.NewAccumulator(p.db, pv.Key.PubKey.Address(), exec, logger)
 	if err != nil {
