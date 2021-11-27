@@ -90,30 +90,24 @@ func WriteStates(db DB, chains ...state.Chain) error {
 }
 
 func CreateADI(db DB, key ed25519.PrivKey, urlStr types.String) error {
-	keyHash := sha256.Sum256(key.PubKey().Bytes())
-	identityUrl, err := url.Parse(*urlStr.AsString())
-	if err != nil {
-		return err
-	}
-
-	sigSpecUrl := identityUrl.JoinPath("sigspec0")
-	ssgUrl := identityUrl.JoinPath("ssg0")
-
-	ss := new(protocol.KeySpec)
-	ss.PublicKey = keyHash[:]
-
-	mss := protocol.NewSigSpec()
-	mss.ChainUrl = types.String(sigSpecUrl.String())
-	mss.Keys = append(mss.Keys, ss)
-
-	ssg := protocol.NewSigSpecGroup()
-	ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
-	ssg.SigSpecs = append(ssg.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
-
-	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
-	adi.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
-
-	return WriteStates(db, adi, ssg, mss)
+    keyHash := sha256.Sum256(key.PubKey().Bytes())
+    identityUrl, err := url.Parse(*urlStr.AsString())
+    if err != nil {
+        return err
+    }
+    sigSpecUrl := identityUrl.JoinPath("keyPage1")
+    ssgUrl := identityUrl.JoinPath("keyBook")
+    ss := new(protocol.KeySpec)
+    ss.PublicKey = keyHash[:]
+    mss := protocol.NewSigSpec()
+    mss.ChainUrl = types.String(sigSpecUrl.String())
+    mss.Keys = append(mss.Keys, ss)
+    ssg := protocol.NewSigSpecGroup()
+    ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
+    ssg.SigSpecs = append(ssg.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
+    adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
+    adi.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
+    return WriteStates(db, adi, ssg, mss)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, anon bool) error {

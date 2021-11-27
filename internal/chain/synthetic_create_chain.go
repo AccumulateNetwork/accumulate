@@ -90,12 +90,18 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 				return fmt.Errorf("error fetching %q: %v", u.String(), err)
 			}
 
-			// Update the ADI's directory index
-			err = st.AddDirectoryEntry(u)
-			if err != nil {
-				return fmt.Errorf("failed to add ADI directory entry: %v", err)
-			}
+			if u.Path != "" {
+				if errors.Is(err, storage.ErrNotFound) {
+					return fmt.Errorf("path %q is already in use", u.Path)
+				} else if err != nil {
+					err := st.AddDirectoryEntry(u)
+					if err != nil {
+						return fmt.Errorf("error adding directory entry: %v", err)
+					}
+				}
+		
 		}
+	}
 
 		// Check the key book
 		switch record.Header().Type {

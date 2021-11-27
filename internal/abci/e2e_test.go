@@ -387,31 +387,31 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 }
 
 func TestCreateSigSpec(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
-	fooKey, testKey := generateKey(), generateKey()
-	dbTx := n.db.Begin()
-	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
-
-	n.Batch(func(send func(*transactions.GenTransaction)) {
-		cms := new(protocol.CreateSigSpec)
-		cms.Url = "foo/keyset1"
-		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
-			PublicKey: testKey.PubKey().Bytes(),
-		})
-
-		tx, err := transactions.New("foo", edSigner(fooKey, 1), cms)
-		require.NoError(t, err)
-		send(tx)
-	})
-
-	n.client.Wait()
-	spec := n.GetSigSpec("foo/keyset1")
-	require.Len(t, spec.Keys, 1)
-	key := spec.Keys[0]
-	require.Equal(t, types.Bytes32{}, spec.SigSpecId)
-	require.Equal(t, uint64(0), key.Nonce)
-	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
+    n := createAppWithMemDB(t, crypto.Address{}, "error", true)
+    fooKey, testKey := generateKey(), generateKey()
+    dbTx := n.db.Begin()
+    require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+    dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+    n.Batch(func(send func(*transactions.GenTransaction)) {
+        cms := new(protocol.CreateSigSpec)
+        cms.Url = "foo/keyPage2"
+        cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
+            PublicKey: testKey.PubKey().Bytes(),
+        })
+        tx, err := transactions.New("foo/keyBook", edSigner(fooKey, 1), cms)
+        require.NoError(t, err)
+        send(tx)
+    })
+    keyBookId := (&url.URL{Authority: "foo", Path: "/keyBook"}).ResourceChain()
+    n.client.Wait()
+    spec := n.GetSigSpec("foo/keyPage2")
+    require.Len(t, spec.Keys, 1)
+    key := spec.Keys[0]
+    require.Equal(t, types.Bytes(keyBookId).AsBytes32(), spec.SigSpecId)
+    require.Equal(t, uint64(0), key.Nonce)
+    require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
+    dir := n.GetDirectory("foo")
+    t.Log(dir)
 }
 
 func TestCreateSigSpecGroup(t *testing.T) {
