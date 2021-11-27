@@ -77,6 +77,11 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
 
+	n.height, err = db.BlockIndex()
+	if !errors.Is(err, storage.ErrNotFound) {
+		require.NoError(t, err)
+	}
+
 	n.client = acctesting.NewABCIApplicationClient(appChan, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
@@ -86,7 +91,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
-	mgr, err := chain.NewBlockValidator(n.query, db, bvcKey)
+	mgr, err := chain.NewBlockValidatorExecutor(n.query, db, bvcKey)
 	require.NoError(t, err)
 
 	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
@@ -118,11 +123,6 @@ type fakeNode struct {
 func (n *fakeNode) NextHeight() int64 {
 	n.height++
 	return n.height
-}
-
-func (n *fakeNode) WriteStates() {
-	_, _, err := n.db.WriteStates(n.NextHeight())
-	require.NoError(n.t, err)
 }
 
 func (n *fakeNode) Query(q *query.Query) *api.APIDataResponse {

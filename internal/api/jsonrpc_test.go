@@ -565,9 +565,10 @@ func TestDirectory(t *testing.T) {
 	japi := NewTest(t, query)
 
 	_, adiKey, _ := ed25519.GenerateKey(nil)
-	require.NoError(t, acctesting.CreateADI(db, tmed25519.PrivKey(adiKey), "foo"))
-	require.NoError(t, acctesting.CreateTokenAccount(db, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	_, _, err := db.WriteStates(0)
+	dbTx := db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, tmed25519.PrivKey(adiKey), "foo"))
+	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
+	_, err := dbTx.Commit(1, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})

@@ -11,83 +11,92 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 )
 
-type IdRequest struct {
-	Id []byte `json:"id" form:"id" query:"id" validate:"required"`
+type ChainIdQuery struct {
+	ChainId []byte `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
 type KeyPage struct {
-	Height uint64 `json:"height" form:"height" query:"height" validate:"required"`
-	Index  uint64 `json:"index" form:"index" query:"index" validate:"required"`
+	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
+	Index  uint64 `json:"index,omitempty" form:"index" query:"index"`
 }
 
-type MetricsRequest struct {
-	Metric   string        `json:"metric" form:"metric" query:"metric" validate:"required"`
-	Duration time.Duration `json:"duration" form:"duration" query:"duration" validate:"required"`
+type MerkleState struct {
+	Count uint64   `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Roots [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
+}
+
+type MetricsQuery struct {
+	Metric   string        `json:"metric,omitempty" form:"metric" query:"metric" validate:"required"`
+	Duration time.Duration `json:"duration,omitempty" form:"duration" query:"duration" validate:"required"`
 }
 
 type MetricsResponse struct {
-	Value interface{} `json:"value" form:"value" query:"value" validate:"required"`
+	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
 type QueryMultiResponse struct {
-	Items []*QueryResponse `json:"items" form:"items" query:"items" validate:"required"`
-	Start uint64           `json:"start" form:"start" query:"start" validate:"required"`
-	Count uint64           `json:"count" form:"count" query:"count" validate:"required"`
-	Total uint64           `json:"total" form:"total" query:"total" validate:"required"`
+	Items []*QueryResponse `json:"items,omitempty" form:"items" query:"items" validate:"required"`
+	Start uint64           `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Count uint64           `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Total uint64           `json:"total,omitempty" form:"total" query:"total" validate:"required"`
 }
 
 type QueryResponse struct {
-	Type    string      `json:"type" form:"type" query:"type" validate:"required"`
-	MdRoot  []byte      `json:"mdRoot" form:"mdRoot" query:"mdRoot" validate:"required"`
-	Data    interface{} `json:"data" form:"data" query:"data" validate:"required"`
-	Sponsor string      `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
-	KeyPage KeyPage     `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
-	Txid    []byte      `json:"txid" form:"txid" query:"txid" validate:"required"`
-	Signer  Signer      `json:"signer" form:"signer" query:"signer" validate:"required"`
-	Sig     []byte      `json:"sig" form:"sig" query:"sig" validate:"required"`
-	Status  interface{} `json:"status" form:"status" query:"status" validate:"required"`
+	Type        string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MerkleState *MerkleState `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
+	Data        interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Sponsor     string       `json:"sponsor,omitempty" form:"sponsor" query:"sponsor" validate:"required"`
+	KeyPage     KeyPage      `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	Txid        []byte       `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Signer      Signer       `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Sig         []byte       `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
+	Status      interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 }
 
 type Signer struct {
-	PublicKey []byte `json:"publicKey" form:"publicKey" query:"publicKey" validate:"required"`
-	Nonce     uint64 `json:"nonce" form:"nonce" query:"nonce" validate:"required"`
+	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
 }
 
 type TokenDeposit struct {
-	Url    string `json:"url" form:"url" query:"url" validate:"required"`
-	Amount uint64 `json:"amount" form:"amount" query:"amount" validate:"required"`
-	Txid   []byte `json:"txid" form:"txid" query:"txid" validate:"required"`
+	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Txid   []byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 }
 
 type TokenSend struct {
-	From string         `json:"from" form:"from" query:"from" validate:"required"`
-	To   []TokenDeposit `json:"to" form:"to" query:"to" validate:"required"`
+	From string         `json:"from,omitempty" form:"from" query:"from" validate:"required"`
+	To   []TokenDeposit `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+}
+
+type TxIdQuery struct {
+	Txid []byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 }
 
 type TxRequest struct {
-	CheckOnly bool        `json:"checkOnly" form:"checkOnly" query:"checkOnly"`
-	Sponsor   string      `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required,acc-url"`
-	Signer    Signer      `json:"signer" form:"signer" query:"signer" validate:"required"`
-	Signature []byte      `json:"signature" form:"signature" query:"signature" validate:"required"`
-	KeyPage   KeyPage     `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
-	Payload   interface{} `json:"payload" form:"payload" query:"payload" validate:"required"`
+	CheckOnly bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
+	Sponsor   string      `json:"sponsor,omitempty" form:"sponsor" query:"sponsor" validate:"required,acc-url"`
+	Signer    Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signature []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	KeyPage   KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	Payload   interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
 }
 
 type TxResponse struct {
-	Txid      []byte   `json:"txid" form:"txid" query:"txid" validate:"required"`
-	Hash      [32]byte `json:"hash" form:"hash" query:"hash" validate:"required"`
-	Code      uint64   `json:"code" form:"code" query:"code" validate:"required"`
-	Message   string   `json:"message" form:"message" query:"message" validate:"required"`
-	Delivered bool     `json:"delivered" form:"delivered" query:"delivered" validate:"required"`
+	Txid      []byte   `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Code      uint64   `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Message   string   `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Delivered bool     `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 }
 
-type UrlRequest struct {
-	Url   string `json:"url" form:"url" query:"url" validate:"required,acc-url"`
-	Start uint64 `json:"start" form:"start" query:"start"`
-	Count uint64 `json:"count" form:"count" query:"count"`
+type UrlQuery struct {
+	Url   string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
+	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
 }
 
-func (v *MetricsRequest) BinarySize() int {
+func (v *MetricsQuery) BinarySize() int {
 	var n int
 
 	n += encoding.StringBinarySize(v.Metric)
@@ -97,7 +106,7 @@ func (v *MetricsRequest) BinarySize() int {
 	return n
 }
 
-func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
+func (v *MetricsQuery) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(encoding.StringMarshalBinary(v.Metric))
@@ -107,7 +116,7 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
+func (v *MetricsQuery) UnmarshalBinary(data []byte) error {
 	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Metric: %w", err)
 	} else {
@@ -125,38 +134,51 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (v *IdRequest) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Id string `json:"id"`
-	}
-	u.Id = encoding.BytesToJSON(v.Id)
+func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ChainId *string `json:"chainId,omitempty"`
+	}{}
+	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	return json.Marshal(&u)
 }
 
-func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Metric   string      `json:"metric"`
-		Duration interface{} `json:"duration"`
+func (v *MerkleState) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Count uint64    `json:"count,omitempty"`
+		Roots []*string `json:"roots,omitempty"`
+	}{}
+	u.Count = v.Count
+	u.Roots = make([]*string, len(v.Roots))
+	for i, x := range v.Roots {
+		u.Roots[i] = encoding.BytesToJSON(x)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *MetricsQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Metric   string      `json:"metric,omitempty"`
+		Duration interface{} `json:"duration,omitempty"`
+	}{}
 	u.Metric = v.Metric
 	u.Duration = encoding.DurationToJSON(v.Duration)
 	return json.Marshal(&u)
 }
 
 func (v *QueryResponse) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Type    string      `json:"type"`
-		MdRoot  string      `json:"mdRoot"`
-		Data    interface{} `json:"data"`
-		Sponsor string      `json:"sponsor"`
-		KeyPage KeyPage     `json:"keyPage"`
-		Txid    string      `json:"txid"`
-		Signer  Signer      `json:"signer"`
-		Sig     string      `json:"sig"`
-		Status  interface{} `json:"status"`
-	}
+	u := struct {
+		Type        string       `json:"type,omitempty"`
+		MerkleState *MerkleState `json:"merkleState,omitempty"`
+		Data        interface{}  `json:"data,omitempty"`
+		Sponsor     string       `json:"sponsor,omitempty"`
+		KeyPage     KeyPage      `json:"keyPage,omitempty"`
+		Txid        *string      `json:"txid,omitempty"`
+		Signer      Signer       `json:"signer,omitempty"`
+		Sig         *string      `json:"sig,omitempty"`
+		Status      interface{}  `json:"status,omitempty"`
+	}{}
 	u.Type = v.Type
-	u.MdRoot = encoding.BytesToJSON(v.MdRoot)
+	u.MerkleState = v.MerkleState
 	u.Data = v.Data
 	u.Sponsor = v.Sponsor
 	u.KeyPage = v.KeyPage
@@ -168,36 +190,44 @@ func (v *QueryResponse) MarshalJSON() ([]byte, error) {
 }
 
 func (v *Signer) MarshalJSON() ([]byte, error) {
-	var u struct {
-		PublicKey string `json:"publicKey"`
-		Nonce     uint64 `json:"nonce"`
-	}
+	u := struct {
+		PublicKey *string `json:"publicKey,omitempty"`
+		Nonce     uint64  `json:"nonce,omitempty"`
+	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
 	return json.Marshal(&u)
 }
 
 func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Url    string `json:"url"`
-		Amount uint64 `json:"amount"`
-		Txid   string `json:"txid"`
-	}
+	u := struct {
+		Url    string  `json:"url,omitempty"`
+		Amount uint64  `json:"amount,omitempty"`
+		Txid   *string `json:"txid,omitempty"`
+	}{}
 	u.Url = v.Url
 	u.Amount = v.Amount
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	return json.Marshal(&u)
 }
 
+func (v *TxIdQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Txid *string `json:"txid,omitempty"`
+	}{}
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	return json.Marshal(&u)
+}
+
 func (v *TxRequest) MarshalJSON() ([]byte, error) {
-	var u struct {
-		CheckOnly bool        `json:"checkOnly"`
-		Sponsor   string      `json:"sponsor"`
-		Signer    Signer      `json:"signer"`
-		Signature string      `json:"signature"`
-		KeyPage   KeyPage     `json:"keyPage"`
-		Payload   interface{} `json:"payload"`
-	}
+	u := struct {
+		CheckOnly bool        `json:"checkOnly,omitempty"`
+		Sponsor   string      `json:"sponsor,omitempty"`
+		Signer    Signer      `json:"signer,omitempty"`
+		Signature *string     `json:"signature,omitempty"`
+		KeyPage   KeyPage     `json:"keyPage,omitempty"`
+		Payload   interface{} `json:"payload,omitempty"`
+	}{}
 	u.CheckOnly = v.CheckOnly
 	u.Sponsor = v.Sponsor
 	u.Signer = v.Signer
@@ -208,13 +238,13 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 }
 
 func (v *TxResponse) MarshalJSON() ([]byte, error) {
-	var u struct {
-		Txid      string `json:"txid"`
-		Hash      string `json:"hash"`
-		Code      uint64 `json:"code"`
-		Message   string `json:"message"`
-		Delivered bool   `json:"delivered"`
-	}
+	u := struct {
+		Txid      *string `json:"txid,omitempty"`
+		Hash      string  `json:"hash,omitempty"`
+		Code      uint64  `json:"code,omitempty"`
+		Message   string  `json:"message,omitempty"`
+		Delivered bool    `json:"delivered,omitempty"`
+	}{}
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Code = v.Code
@@ -223,26 +253,54 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *IdRequest) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Id string `json:"id"`
-	}
+func (v *ChainIdQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ChainId *string `json:"chainId,omitempty"`
+	}{}
+	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	if x, err := encoding.BytesFromJSON(u.Id); err != nil {
-		return fmt.Errorf("error decoding Id: %w", err)
+	if x, err := encoding.BytesFromJSON(u.ChainId); err != nil {
+		return fmt.Errorf("error decoding ChainId: %w", err)
 	} else {
-		v.Id = x
+		v.ChainId = x
 	}
 	return nil
 }
 
-func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Metric   string      `json:"metric"`
-		Duration interface{} `json:"duration"`
+func (v *MerkleState) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Count uint64    `json:"count,omitempty"`
+		Roots []*string `json:"roots,omitempty"`
+	}{}
+	u.Count = v.Count
+	u.Roots = make([]*string, len(v.Roots))
+	for i, x := range v.Roots {
+		u.Roots[i] = encoding.BytesToJSON(x)
 	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Count = u.Count
+	v.Roots = make([][]byte, len(u.Roots))
+	for i, x := range u.Roots {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Roots[%d]: %w", i, err)
+		} else {
+			v.Roots[i] = x
+		}
+	}
+	return nil
+}
+
+func (v *MetricsQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Metric   string      `json:"metric,omitempty"`
+		Duration interface{} `json:"duration,omitempty"`
+	}{}
+	u.Metric = v.Metric
+	u.Duration = encoding.DurationToJSON(v.Duration)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -256,26 +314,31 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 }
 
 func (v *QueryResponse) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Type    string      `json:"type"`
-		MdRoot  string      `json:"mdRoot"`
-		Data    interface{} `json:"data"`
-		Sponsor string      `json:"sponsor"`
-		KeyPage KeyPage     `json:"keyPage"`
-		Txid    string      `json:"txid"`
-		Signer  Signer      `json:"signer"`
-		Sig     string      `json:"sig"`
-		Status  interface{} `json:"status"`
-	}
+	u := struct {
+		Type        string       `json:"type,omitempty"`
+		MerkleState *MerkleState `json:"merkleState,omitempty"`
+		Data        interface{}  `json:"data,omitempty"`
+		Sponsor     string       `json:"sponsor,omitempty"`
+		KeyPage     KeyPage      `json:"keyPage,omitempty"`
+		Txid        *string      `json:"txid,omitempty"`
+		Signer      Signer       `json:"signer,omitempty"`
+		Sig         *string      `json:"sig,omitempty"`
+		Status      interface{}  `json:"status,omitempty"`
+	}{}
+	u.Type = v.Type
+	u.MerkleState = v.MerkleState
+	u.Data = v.Data
+	u.Sponsor = v.Sponsor
+	u.KeyPage = v.KeyPage
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.Signer = v.Signer
+	u.Sig = encoding.BytesToJSON(v.Sig)
+	u.Status = v.Status
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Type = u.Type
-	if x, err := encoding.BytesFromJSON(u.MdRoot); err != nil {
-		return fmt.Errorf("error decoding MdRoot: %w", err)
-	} else {
-		v.MdRoot = x
-	}
+	v.MerkleState = u.MerkleState
 	v.Data = u.Data
 	v.Sponsor = u.Sponsor
 	v.KeyPage = u.KeyPage
@@ -295,10 +358,12 @@ func (v *QueryResponse) UnmarshalJSON(data []byte) error {
 }
 
 func (v *Signer) UnmarshalJSON(data []byte) error {
-	var u struct {
-		PublicKey string `json:"publicKey"`
-		Nonce     uint64 `json:"nonce"`
-	}
+	u := struct {
+		PublicKey *string `json:"publicKey,omitempty"`
+		Nonce     uint64  `json:"nonce,omitempty"`
+	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Nonce = v.Nonce
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -312,11 +377,14 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 }
 
 func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Url    string `json:"url"`
-		Amount uint64 `json:"amount"`
-		Txid   string `json:"txid"`
-	}
+	u := struct {
+		Url    string  `json:"url,omitempty"`
+		Amount uint64  `json:"amount,omitempty"`
+		Txid   *string `json:"txid,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Amount = v.Amount
+	u.Txid = encoding.BytesToJSON(v.Txid)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -330,15 +398,37 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *TxRequest) UnmarshalJSON(data []byte) error {
-	var u struct {
-		CheckOnly bool        `json:"checkOnly"`
-		Sponsor   string      `json:"sponsor"`
-		Signer    Signer      `json:"signer"`
-		Signature string      `json:"signature"`
-		KeyPage   KeyPage     `json:"keyPage"`
-		Payload   interface{} `json:"payload"`
+func (v *TxIdQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Txid *string `json:"txid,omitempty"`
+	}{}
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
 	}
+	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
+		return fmt.Errorf("error decoding Txid: %w", err)
+	} else {
+		v.Txid = x
+	}
+	return nil
+}
+
+func (v *TxRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		CheckOnly bool        `json:"checkOnly,omitempty"`
+		Sponsor   string      `json:"sponsor,omitempty"`
+		Signer    Signer      `json:"signer,omitempty"`
+		Signature *string     `json:"signature,omitempty"`
+		KeyPage   KeyPage     `json:"keyPage,omitempty"`
+		Payload   interface{} `json:"payload,omitempty"`
+	}{}
+	u.CheckOnly = v.CheckOnly
+	u.Sponsor = v.Sponsor
+	u.Signer = v.Signer
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.KeyPage = v.KeyPage
+	u.Payload = v.Payload
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -356,13 +446,18 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 }
 
 func (v *TxResponse) UnmarshalJSON(data []byte) error {
-	var u struct {
-		Txid      string `json:"txid"`
-		Hash      string `json:"hash"`
-		Code      uint64 `json:"code"`
-		Message   string `json:"message"`
-		Delivered bool   `json:"delivered"`
-	}
+	u := struct {
+		Txid      *string `json:"txid,omitempty"`
+		Hash      string  `json:"hash,omitempty"`
+		Code      uint64  `json:"code,omitempty"`
+		Message   string  `json:"message,omitempty"`
+		Delivered bool    `json:"delivered,omitempty"`
+	}{}
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Code = v.Code
+	u.Message = v.Message
+	u.Delivered = v.Delivered
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
