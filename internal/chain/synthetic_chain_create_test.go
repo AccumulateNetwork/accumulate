@@ -2,6 +2,7 @@ package chain_test
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/chain"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -18,8 +19,9 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, db.Open("mem", true, true))
 
 	fooKey := generateKey()
-	require.NoError(t, acctesting.CreateADI(db, fooKey, "foo"))
-	_, _, err := db.WriteStates(0)
+	dbTx := db.Begin()
+	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
+	_, err := dbTx.Commit(1, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	book, err := url.Parse("foo/ssg0")
@@ -34,7 +36,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	tx, err := transactions.New("foo", edSigner(fooKey, 1), body)
 	require.NoError(t, err)
 
-	st, err := NewStateManager(db, tx)
+	st, err := NewStateManager(db.Begin(), tx)
 	require.NoError(t, err)
 
 	err = SyntheticCreateChain{}.Validate(st, tx)

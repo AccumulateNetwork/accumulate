@@ -44,10 +44,6 @@ var tokenCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	rootCmd.AddCommand(tokenCmd)
-}
-
 func PrintTokenGet() {
 	fmt.Println("  accumulate token get [URL]						Get token by URL")
 }

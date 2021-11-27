@@ -2,14 +2,13 @@ package abci_test
 
 import (
 	"crypto/ed25519"
-	"errors"
+	"fmt"
 	"testing"
-
-	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	mock_abci "github.com/AccumulateNetwork/accumulate/internal/mock/abci"
+	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
 	tmabci "github.com/tendermint/tendermint/abci/types"
@@ -25,9 +24,8 @@ func (s *AccumulatorTestSuite) TestInfo() {
 	const height int64 = 10
 	var rootHash = [32]byte{1, 2, 3, 4, 5, 6}
 
-	s.State().EXPECT().BlockIndex().AnyTimes().Return(height)
+	s.State().EXPECT().BlockIndex().AnyTimes().Return(height, nil)
 	s.State().EXPECT().RootHash().AnyTimes().Return(rootHash[:])
-	s.State().EXPECT().EnsureRootHash().AnyTimes().Return(rootHash[:])
 
 	resp := s.App(nil).Info(tmabci.RequestInfo{})
 	s.Require().Equal(height, resp.LastBlockHeight)
@@ -90,7 +88,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
-		s.Chain().EXPECT().CheckTx(gomock.Any()).Return(errors.New("error"))
+		s.Chain().EXPECT().CheckTx(gomock.Any()).Return(&protocol.Error{Code: protocol.CodeUnknownError, Message: fmt.Errorf("error")})
 
 		resp := s.App(nil).CheckTx(tmabci.RequestCheckTx{Tx: data})
 		s.Require().NotZero(resp.Code)
@@ -135,7 +133,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 		data, err := tx.Marshal()
 		s.Require().NoError(err)
 
-		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(nil, errors.New("error"))
+		s.Chain().EXPECT().DeliverTx(gomock.Any()).Return(nil, &protocol.Error{Code: protocol.CodeUnknownError, Message: fmt.Errorf("error")})
 
 		resp := s.App(nil).DeliverTx(tmabci.RequestDeliverTx{Tx: data})
 		s.Require().NotZero(resp.Code)
@@ -180,6 +178,8 @@ func (s *AccumulatorTestSuite) vars() *accVars {
 	v.State = mock_abci.NewMockState(v.MockCtrl)
 	v.Chain = mock_abci.NewMockChain(v.MockCtrl)
 	s.varMap[s.T()] = v
+
+	v.State.EXPECT().SubnetID().AnyTimes()
 
 	s.T().Cleanup(func() {
 		v.MockCtrl.Finish()

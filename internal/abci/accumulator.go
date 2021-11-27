@@ -19,7 +19,6 @@ import (
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/getsentry/sentry-go"
-	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
@@ -31,13 +30,14 @@ import (
 type Accumulator struct {
 	abci.BaseApplication
 
-	chainId string
-	state   State
-	address crypto.Address
-	txct    int64
-	timer   time.Time
-	chain   Chain
-	logger  log.Logger
+	subnetID string
+	state    State
+	address  crypto.Address
+	txct     int64
+	timer    time.Time
+	chain    Chain
+	logger   log.Logger
+	didPanic bool
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -53,14 +53,45 @@ func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Lo
 	app.address = make([]byte, len(address))
 	copy(app.address, address)
 
+	var err error
+	app.subnetID, err = db.SubnetID()
+	switch {
+	case err == nil:
+		logger = logger.With("subnet", app.subnetID)
+	case errors.Is(err, storage.ErrNotFound):
+		// OK
+	default:
+		return nil, fmt.Errorf("failed to load chain ID: %v", err)
+	}
+
 	logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
 	return app, nil
 }
 
 var _ abci.Application = (*Accumulator)(nil)
 
+func (app *Accumulator) recover(code *uint32) {
+	r := recover()
+	if r == nil {
+		return
+	}
+
+	app.didPanic = true
+	if code != nil {
+		*code = protocol.CodeUnknownError
+	}
+
+	if err, ok := r.(error); ok {
+		sentry.CaptureException(fmt.Errorf("did panic: %w", err))
+	} else {
+		sentry.CaptureException(fmt.Errorf("did panic: %v", r))
+	}
+}
+
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
+	defer app.recover(nil)
+
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
 
 	if app.chain == nil {
@@ -82,12 +113,20 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
+	height, err := app.state.BlockIndex()
+	if errors.Is(err, storage.ErrNotFound) {
+		height = 0
+	} else if err != nil {
+		height = -1
+		sentry.CaptureException(err)
+	}
+
 	return abci.ResponseInfo{
 		Data:             string(data),
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
-		LastBlockHeight:  app.state.BlockIndex(),
-		LastBlockAppHash: app.state.EnsureRootHash(),
+		LastBlockHeight:  height,
+		LastBlockAppHash: app.state.RootHash(),
 	}
 }
 
@@ -95,6 +134,15 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 //
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
+	defer app.recover(&resQuery.Code)
+
+	if app.didPanic {
+		return abci.ResponseQuery{
+			Code: protocol.CodeDidPanic,
+			Info: "Node state is invalid",
+		}
+	}
+
 	resQuery.Key = reqQuery.Data
 	qu := new(apiQuery.Query)
 	err := qu.UnmarshalBinary(reqQuery.Data)
@@ -106,21 +154,21 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	k, v, err := app.chain.Query(qu)
+	k, v, customErr := app.chain.Query(qu)
 	switch {
-	case err == nil:
-		// OK
+	case customErr == nil:
+		//Ok
 
-	case errors.Is(err, storage.ErrNotFound):
-		resQuery.Info = err.Error()
+	case errors.Is(customErr.Unwrap(), storage.ErrNotFound):
+		resQuery.Info = customErr.Error()
 		resQuery.Code = protocol.CodeNotFound
 		return resQuery
 
 	default:
-		sentry.CaptureException(err)
-		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", err)
-		resQuery.Info = err.Error()
-		resQuery.Code = code.CodeTypeUnauthorized
+		sentry.CaptureException(customErr)
+		app.logger.Debug("Query failed", "type", qu.Type.Name(), "error", customErr)
+		resQuery.Info = customErr.Error()
+		resQuery.Code = uint32(customErr.Code)
 		return resQuery
 	}
 
@@ -140,18 +188,34 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	app.chainId = req.ChainId
-	app.logger = app.logger.With("chain", req.ChainId)
-	app.logger.Info("Initializing")
+	_, err := app.state.BlockIndex()
+	if err == nil {
+		// InitChain already happened
+		return abci.ResponseInitChain{AppHash: app.state.RootHash()}
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		panic(fmt.Errorf("failed to check block index: %v", err))
+	}
 
-	// TODO Store chain ID and reload it from the DB on subsequent runs
+	var appState []byte
+	err = json.Unmarshal(req.AppStateBytes, &appState)
+	if err != nil {
+		panic(fmt.Errorf("failed to decode app state: %v", err))
+	}
+
+	err = app.chain.InitChain(appState)
+	if err != nil {
+		panic(fmt.Errorf("failed to init chain: %v", err))
+	}
+
+	app.subnetID = req.ChainId
+	app.logger = app.logger.With("subnet", req.ChainId)
+	app.logger.Info("Initializing")
 
 	//register a list of the validators.
 	for _, v := range req.Validators {
 		app.updateValidator(v)
 	}
 
-	var err error
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = protocol.ACME
@@ -162,17 +226,17 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 	app.chain.BeginBlock(BeginBlockRequest{
 		IsLeader: false,
-		Height:   -1,
+		Height:   0,
 	})
 
-	err = app.chain.CheckTx(tx)
-	if err != nil {
-		panic(fmt.Errorf("failed to validate genesis TX: %v", err))
+	customErr := app.chain.CheckTx(tx)
+	if customErr != nil {
+		panic(fmt.Errorf("failed to validate genesis TX: %v", customErr))
 	}
 
-	_, err = app.chain.DeliverTx(tx)
-	if err != nil {
-		panic(fmt.Errorf("failed to execute genesis TX: %v", err))
+	_, customErr = app.chain.DeliverTx(tx)
+	if customErr != nil {
+		panic(fmt.Errorf("failed to execute genesis TX: %v", customErr))
 	}
 
 	app.chain.EndBlock(EndBlockRequest{})
@@ -187,6 +251,8 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
+	defer app.recover(nil)
+
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
 	app.chain.BeginBlock(BeginBlockRequest{
 		IsLeader: bytes.Equal(app.address.Bytes(), req.Header.GetProposerAddress()),
@@ -228,6 +294,15 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 //
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
+	defer app.recover(&rct.Code)
+
+	if app.didPanic {
+		return abci.ResponseCheckTx{
+			Code: protocol.CodeDidPanic,
+			Info: "Node state is invalid",
+		}
+	}
+
 	h := sha256.Sum256(req.Tx)
 	txHash := hex.EncodeToString(h[:])
 
@@ -249,20 +324,20 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	//create a default response
 	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
 
-	err = app.chain.CheckTx(sub)
+	customErr := app.chain.CheckTx(sub)
 
-	if err != nil {
+	if customErr != nil {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
 			u2 = u.String()
 		}
 		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
-		ret.Code = protocol.CodeUnknownError
+		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", customErr)
+		ret.Code = uint32(customErr.Code)
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
+		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
 		return ret
 	}
 
@@ -275,6 +350,15 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 //
 // Verifies the transaction is valid.
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
+	defer app.recover(&rdt.Code)
+
+	if app.didPanic {
+		return abci.ResponseDeliverTx{
+			Code: protocol.CodeDidPanic,
+			Info: "Node state is invalid",
+		}
+	}
+
 	h := sha256.Sum256(req.Tx)
 	txHash := hex.EncodeToString(h[:])
 	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: protocol.CodeOK}
@@ -292,19 +376,19 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	//run through the validation node
-	r, err := app.chain.DeliverTx(sub)
+	r, customErr := app.chain.DeliverTx(sub)
 
-	if err != nil {
+	if customErr != nil {
 		u2 := sub.SigInfo.URL
 		u, e2 := url.Parse(sub.SigInfo.URL)
 		if e2 == nil {
 			u2 = u.String()
 		}
 		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
-		ret.Code = protocol.CodeUnknownError
+		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", customErr)
+		ret.Code = uint32(customErr.Code)
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
-		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
+		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
 		return ret
 	}
 
@@ -329,6 +413,8 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEndBlock) {
+	defer app.recover(nil)
+
 	// Select our leader who will initiate consensus on dbvc chain.
 	//resp.ConsensusParamUpdates
 	//for _, ev := range req.ByzantineValidators {
@@ -355,6 +441,8 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
+	defer app.recover(nil)
+
 	//end the current batch of transactions in the Stateful Merkle Tree
 
 	mdRoot, err := app.chain.Commit()

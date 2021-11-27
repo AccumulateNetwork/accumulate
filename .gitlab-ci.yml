@@ -2,6 +2,7 @@ stages:
 - test
 - build
 - deploy
+- validate
 
 variables:
   GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
@@ -11,29 +12,40 @@ default:
     key: go-mod-cache
     paths:
     - .go-mod-cache
+  before_script:
+  - |
+    function build-daemon {
+      export GOOS=$1
+      export GOARCH=$2
+      BIN=accumulated
+      [ -z "$GOOS" ] || BIN=${BIN}-${GOOS}
+      [ -z "$GOARCH" ] || BIN=${BIN}-${GOARCH}
+      [[ $GOOS == windows ]] && BIN=${BIN}.exe
+      export BUILDFLAGS="-o ${BIN}"
+      echo Build $BIN
+      make GIT_COMMIT=${CI_COMMIT_SHA} GIT_DESCRIBE=${GIT_DESCRIBE}
+    }
 
 .test:
   stage: test
-  tags:
-  - docker
-  - linux
+  needs: []
+  tags: [docker, linux]
   script:
   - go build -v ./...
   - go test -v -cpu=4 -count=1 ./...
 
-test go1.16:
+test 1/2:
   extends: .test
   image: golang:1.16
 
-test go1.17:
+test 2/2:
   extends: .test
   image: golang:1.17
 
 git describe:
-  stage: test
-  tags:
-  - docker
-  - linux
+  stage: build
+  needs: []
+  tags: [docker, linux]
   script:
   - git fetch --unshallow
   - echo "GIT_DESCRIBE=$(git describe --dirty)" >> git.env
@@ -43,56 +55,45 @@ git describe:
 
 build:
   stage: build
-  tags:
-  - docker
-  - linux
+  needs: [git describe]
+  tags: [docker, linux]
   image: golang:1.17
-  before_script:
-  - |
-    function build {
-      export GOOS=$1
-      export GOARCH=$2
-      BIN=accumulated-${GOOS}-${GOARCH}
-      [ $GOOS == windows ] && BIN=${BIN}.exe
-      export BUILDFLAGS="-o ${BIN}"
-      echo Build $BIN
-      make GIT_COMMIT=${CI_COMMIT_SHA} GIT_DESCRIBE=${GIT_DESCRIBE}
-    }
   script:
-  - build linux amd64
-  - build linux arm64
-  - build windows amd64
-  - build windows arm64
-  - build darwin amd64
-  - build darwin arm64
+  - build-daemon linux amd64
+  - build-daemon linux arm64
+  - build-daemon windows amd64
+  - build-daemon windows arm64
+  - build-daemon darwin amd64
+  - build-daemon darwin arm64
   artifacts:
     paths:
     - accumulated-*
 
 configure:
   stage: build
-  tags:
-  - docker
-  - linux
+  needs: [git describe]
+  tags: [docker, linux]
   image: golang:1.17
   script:
   - |
     function init {
-      rm -rf .nodes
-      ./accumulated init -w .nodes --no-empty-blocks -r Zion,Yellowstone -n $1
-      tar czf config-$1.tar.gz -C .nodes .
+      ./accumulated init -w config-$1 "${@:2}" -n $1
+      (cd config-$1 && tar czf ../config-$1.tar.gz *)
     }
-  - go build ./cmd/accumulated
-  - init Zion
-  - init Yellowstone
+  - build-daemon
+  - build-daemon linux arm64
+  - init DevNet.Directory --no-empty-blocks --no-website
+  - init DevNet.Zion --no-empty-blocks
+  - init DevNet.Yellowstone --no-empty-blocks
   artifacts:
     paths:
     - config-*.tar.gz
+    - accumulated-*
 
 .deploy:
   stage: deploy
-  only:
-  - develop # only run on the main branch
+  only: [develop] # only run on the main branch
+  needs: [configure, test 1/2, test 2/2]
   tags:
   - linux
   - docker
@@ -105,42 +106,37 @@ configure:
   - cp ${SSH_PRIV_KEY} ~/.ssh/id_rsa
   - cp ${SSH_PUB_KEY} ~/.ssh/id_rsa.pub
   - chmod -R 600 ~/.ssh
-  - scp ${BIN} ec2-user@${HOST}:accumulated-latest
-  - scp config-${NETWORK}.tar.gz ec2-user@${HOST}:config.tar.gz
-  - ssh ec2-user@${HOST} '~/accumulated-latest version'
-  - varname=DEPLOY_${NETWORK}_${NODE}
-  - echo ${varname}=${!varname}
-  - |
-    if [ "${!varname}" = "yes" ]; then ssh ec2-user@${HOST} "
-      set -ex
-      export PATH="'"$PATH:$HOME/.local/bin"'"
-      screen -wipe || true
-      screen -ls | grep '\baccumulated\b' && screen -S accumulated -X stuff ^C
-      while screen -ls | grep -q '\baccumulated\b'; do sleep 1; done
-      rm -f ~/.local/bin/accumulated
-      mv accumulated-latest ~/.local/bin/accumulated
-      rm -rf ~/.accumulate
-      mkdir ~/.accumulate
-      tar xf config.tar.gz -C ~/.accumulate
-      screen -d -m -S accumulated bash -c 'accumulated run -n ${NODE} 2>&1 | tee ~/.accumulate/Node${NODE}/acc-$(date +%Y%m%d%H%M%S).log'
-    "; fi
+  - ./scripts/ci/devnet-deploy.sh
 
 deploy 1/4:
   extends: .deploy
-  variables:   { HOST: 172.31.4.106,  NETWORK: Zion,         NODE: 0, BIN: accumulated-linux-arm64 }
+  variables:   { HOST: 172.31.4.106,  NETWORK: Zion,         NODE: 0, DN_NODE: 0, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.4.106:8080',  name: Zion/0 }
 
 deploy 2/4:
   extends: .deploy
-  variables:   { HOST: 172.31.11.185, NETWORK: Zion,         NODE: 1, BIN: accumulated-linux-arm64 }
+  variables:   { HOST: 172.31.11.185, NETWORK: Zion,         NODE: 1, DN_NODE: 1, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.11.185:8080', name: Zion/1 }
 
 deploy 3/4:
   extends: .deploy
-  variables:   { HOST: 172.31.11.104, NETWORK: Yellowstone,  NODE: 0, BIN: accumulated-linux-arm64 }
+  variables:   { HOST: 172.31.11.104, NETWORK: Yellowstone,  NODE: 0, DN_NODE: 2, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.11.104:8080', name: Yellowstone/0 }
 
 deploy 4/4:
   extends: .deploy
-  variables:   { HOST: 172.31.13.8,   NETWORK: Yellowstone,  NODE: 1, BIN: accumulated-linux-arm64 }
+  variables:   { HOST: 172.31.13.8,   NETWORK: Yellowstone,  NODE: 1, DN_NODE: 3, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.13.8:8080',   name: Yellowstone/1 }
+
+validate:
+  stage: validate
+  only: [develop] # only run on the main branch
+  needs: [deploy 1/4, deploy 2/4, deploy 3/4, deploy 4/4]
+  tags: [docker, linux]
+  image: golang:1.17
+  variables:
+    ACC_API: https://devnet.accumulatenetwork.io/v1
+    MNEMONIC: bench industry mirror above van second avoid maximum genius person swear cage
+  script:
+  - apt-get -y update && apt-get -y install jq
+  - ./scripts/validate.sh

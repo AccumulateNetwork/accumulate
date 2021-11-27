@@ -6,13 +6,14 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	cfg "github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
@@ -44,8 +45,8 @@ var cmdInitDevnet = &cobra.Command{
 
 var flagInit struct {
 	Net           string
-	Relay         []string
 	NoEmptyBlocks bool
+	NoWebsite     bool
 }
 
 var flagInitFollower struct {
@@ -55,6 +56,7 @@ var flagInitFollower struct {
 
 var flagInitDevnet struct {
 	Name          string
+	NumDirNodes   int
 	NumValidators int
 	NumFollowers  int
 	BasePort      int
@@ -66,10 +68,9 @@ func init() {
 	cmdInit.AddCommand(cmdInitFollower, cmdInitDevnet)
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
-	cmdInit.PersistentFlags().StringSliceVarP(&flagInit.Relay, "relay-to", "r", nil, "Other networks that should be relayed to")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
+	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.MarkFlagRequired("network")
-	cmdInit.MarkFlagRequired("relay-to")
 
 	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
 	cmdInitFollower.Flags().StringVarP(&flagInitFollower.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
@@ -77,58 +78,70 @@ func init() {
 	cmdInitFollower.MarkFlagRequired("listen")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumDirNodes, "directory-nodes", "d", 1, "Number of directory validator nodes to configure")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes to configure")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes to configure")
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
 }
 
-func initNode(cmd *cobra.Command, args []string) {
-	network := networks.All[flagInit.Net]
-	if network == nil {
-		fatalf("unknown network %q", flagInit.Net)
-	}
+func initNode(*cobra.Command, []string) {
+	subnet, err := networks.Resolve(flagInit.Net)
+	checkf(err, "--network")
 
-	if !stringSliceContains(flagInit.Relay, flagInit.Net) {
-		fmt.Fprintf(os.Stderr, "Error: the node's own network, %q, must be included in --relay-to\n", flagInit.Net)
-		printUsageAndExit1(cmd, args)
-	}
+	// Build the relay list
+	var relayTo []string
+	switch subnet.Type {
+	case cfg.Directory:
+		relayTo = []string{subnet.FullName()}
 
-	_, err := relay.NewWith(flagInit.Relay...)
-	checkf(err, "--relay-to", err)
+	case cfg.BlockValidator:
+		index := map[string]int{}
+		for _, s := range subnet.Network {
+			if s.Type != cfg.BlockValidator {
+				continue
+			}
 
-	fmt.Printf("Building config for %s\n", network.Name)
+			name := s.FullName()
+			// TODO Set to "self" if s == subnet
 
-	listenIP := make([]string, len(network.Nodes))
-	remoteIP := make([]string, len(network.Nodes))
-	config := make([]*cfg.Config, len(network.Nodes))
-
-	for i, net := range network.Nodes {
-		listenIP[i] = "tcp://0.0.0.0"
-		remoteIP[i] = net.IP
-
-		switch net.Type {
-		case cfg.Validator:
-			config[i] = cfg.DefaultValidator()
-		case cfg.Follower:
-			config[i] = cfg.Default()
-		default:
-			fatalf("hard-coded network has invalid node type: %q", net.Type)
+			relayTo = append(relayTo, name)
+			index[name] = s.Index
 		}
+		sort.Slice(relayTo, func(i, j int) bool {
+			return index[relayTo[i]] < index[relayTo[j]]
+		})
+	}
+
+	fmt.Printf("Building config for %s (%s)\n", subnet.Name, subnet.NetworkName)
+
+	listenIP := make([]string, len(subnet.Nodes))
+	remoteIP := make([]string, len(subnet.Nodes))
+	config := make([]*cfg.Config, len(subnet.Nodes))
+
+	for i, node := range subnet.Nodes {
+		listenIP[i] = "tcp://0.0.0.0"
+		remoteIP[i] = node.IP
+		config[i] = cfg.Default(subnet.Type, node.Type)
 
 		if flagInit.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
 		}
 
-		config[i].Accumulate.Type = network.Type
-		config[i].Accumulate.Networks = flagInit.Relay
+		if flagInit.NoWebsite {
+			config[i].Accumulate.WebsiteEnabled = false
+		}
+
+		config[i].Accumulate.Network = subnet.FullName()
+		config[i].Accumulate.Networks = relayTo
+		config[i].Accumulate.Directory = subnet.Directory
 	}
 
 	check(node.Init(node.InitOptions{
 		WorkDir:   flagMain.WorkDir,
 		ShardName: "accumulate.",
-		ChainID:   network.Name,
-		Port:      network.Port,
+		SubnetID:  subnet.Name,
+		Port:      subnet.Port,
 		Config:    config,
 		RemoteIP:  remoteIP,
 		ListenIP:  listenIP,
@@ -149,10 +162,8 @@ func initFollower(cmd *cobra.Command, _ []string) {
 		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
 	}
 
-	network := networks.All[flagInit.Net]
-	if network == nil {
-		fatalf("unknown network %q", flagInit.Net)
-	}
+	subnet, err := networks.Resolve(flagInit.Net)
+	checkf(err, "--network")
 
 	var genDoc *types.GenesisDoc
 	if cmd.Flag("genesis-doc").Changed {
@@ -160,9 +171,9 @@ func initFollower(cmd *cobra.Command, _ []string) {
 		checkf(err, "failed to load genesis doc %q", flagInitFollower.GenesisDoc)
 	}
 
-	peers := make([]string, len(network.Nodes))
-	for i, n := range network.Nodes {
-		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", n.IP, network.Port+node.TmRpcPortOffset))
+	peers := make([]string, len(subnet.Nodes))
+	for i, n := range subnet.Nodes {
+		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", n.IP, subnet.Port+node.TmRpcPortOffset))
 		checkf(err, "failed to connect to %s", n.IP)
 
 		if genDoc == nil {
@@ -180,16 +191,16 @@ func initFollower(cmd *cobra.Command, _ []string) {
 		status, err := client.Status(context.Background())
 		checkf(err, "failed to get status of %s", n)
 
-		peers[i] = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, n.IP, network.Port)
+		peers[i] = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, n.IP, subnet.Port)
 	}
 
-	config := config.Default()
+	config := config.Default(subnet.Type, cfg.Follower)
 	config.P2P.PersistentPeers = strings.Join(peers, ",")
 
 	check(node.Init(node.InitOptions{
 		WorkDir:    flagMain.WorkDir,
 		ShardName:  "accumulate.",
-		ChainID:    network.Name,
+		SubnetID:   subnet.Name,
 		Port:       port,
 		GenesisDoc: genDoc,
 		Config:     []*cfg.Config{config},
@@ -198,12 +209,24 @@ func initFollower(cmd *cobra.Command, _ []string) {
 	}))
 }
 
+func nextIP(baseIP net.IP) net.IP {
+	ip := make(net.IP, len(baseIP))
+	copy(ip, baseIP)
+	baseIP[15]++
+	return ip
+}
+
 func initDevNet(cmd *cobra.Command, args []string) {
 	if cmd.Flag("network").Changed {
 		fatalf("--network is not applicable to devnet")
 	}
-	if cmd.Flag("relay-to").Changed {
-		fatalf("--relay-to is not applicable to devnet")
+
+	if flagInitDevnet.NumDirNodes == 0 {
+		fatalf("Must have at least one directory node")
+	}
+
+	if flagInitDevnet.NumValidators == 0 {
+		fatalf("Must have at least one block validator node")
 	}
 
 	baseIP := net.ParseIP(flagInitDevnet.BaseIP)
@@ -216,35 +239,57 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		printUsageAndExit1(cmd, args)
 	}
 
-	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
-	IPs := make([]string, count)
-	config := make([]*cfg.Config, count)
+	IPs := make([]string, flagInitDevnet.NumDirNodes+flagInitDevnet.NumValidators+flagInitDevnet.NumFollowers)
 	for i := range IPs {
-		ip := make(net.IP, len(baseIP))
-		copy(ip, baseIP)
-		ip[15] += byte(i)
+		ip := nextIP(baseIP)
 		IPs[i] = fmt.Sprintf("tcp://%v", ip)
 	}
 
-	for i := range config {
-		if i < flagInitDevnet.NumValidators {
-			config[i] = cfg.DefaultValidator()
+	config := make([]*cfg.Config, 0, len(IPs))
+	for i := 0; i < flagInitDevnet.NumDirNodes; i++ {
+		config = append(config, cfg.Default(cfg.Directory, cfg.Validator))
+	}
+	for i := 0; i < flagInitDevnet.NumValidators; i++ {
+		config = append(config, cfg.Default(cfg.BlockValidator, cfg.Validator))
+	}
+	for i := 0; i < flagInitDevnet.NumFollowers; i++ {
+		config = append(config, cfg.Default(cfg.BlockValidator, cfg.Follower))
+	}
+
+	for _, config := range config {
+		ip := IPs[flagInitDevnet.NumDirNodes]
+		if config.Accumulate.Type == cfg.Directory {
+			ip = IPs[0]
 		} else {
-			config[i] = cfg.Default()
+			config.Accumulate.Directory = IPs[0]
 		}
-		config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], flagInitDevnet.BasePort+node.TmRpcPortOffset)}
+		config.Accumulate.Network = "LocalDevNet"
+		// TODO Set to []string{"self"}
+		config.Accumulate.Networks = []string{fmt.Sprintf("%s:%d", ip, flagInitDevnet.BasePort+node.TmRpcPortOffset)}
 		if flagInit.NoEmptyBlocks {
-			config[i].Consensus.CreateEmptyBlocks = false
+			config.Consensus.CreateEmptyBlocks = false
+		}
+		if flagInit.NoWebsite {
+			config.Accumulate.WebsiteEnabled = false
 		}
 	}
 
 	check(node.Init(node.InitOptions{
-		WorkDir:   flagMain.WorkDir,
+		WorkDir:   filepath.Join(flagMain.WorkDir, "dn"),
 		ShardName: flagInitDevnet.Name,
-		ChainID:   flagInitDevnet.Name,
+		SubnetID:  flagInitDevnet.Name,
 		Port:      flagInitDevnet.BasePort,
-		Config:    config,
-		RemoteIP:  IPs,
-		ListenIP:  IPs,
+		Config:    config[:flagInitDevnet.NumDirNodes],
+		RemoteIP:  IPs[:flagInitDevnet.NumDirNodes],
+		ListenIP:  IPs[:flagInitDevnet.NumDirNodes],
+	}))
+	check(node.Init(node.InitOptions{
+		WorkDir:   filepath.Join(flagMain.WorkDir, "bvn"),
+		ShardName: flagInitDevnet.Name,
+		SubnetID:  flagInitDevnet.Name,
+		Port:      flagInitDevnet.BasePort,
+		Config:    config[flagInitDevnet.NumDirNodes:],
+		RemoteIP:  IPs[flagInitDevnet.NumDirNodes:],
+		ListenIP:  IPs[flagInitDevnet.NumDirNodes:],
 	}))
 }
