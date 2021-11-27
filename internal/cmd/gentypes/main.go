@@ -286,6 +286,14 @@ func run(_ *cobra.Command, args []string) {
 
 		fmt.Fprintf(w, "func (v *%s) UnmarshalJSON(data []byte) error {\t", typ.name)
 		jsonVar(w, typ, "u")
+
+		if typ.Kind == "chain" {
+			fmt.Fprintf(w, "\tu.ChainHeader = v.ChainHeader\n")
+		}
+		for _, f := range typ.Fields {
+			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
+		}
+
 		fmt.Fprintf(w, "\tif err := json.Unmarshal(data, &u); err != nil {\n\t\treturn err\n\t}\n")
 
 		if typ.Kind == "chain" {

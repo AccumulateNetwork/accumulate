@@ -29,6 +29,8 @@ func Default(net NetworkType, node NodeType) *Config {
 	c := new(Config)
 	c.Accumulate.Type = net
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
+	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
+	c.Accumulate.WebsiteEnabled = true
 	switch node {
 	case Validator:
 		c.Config = *tm.DefaultValidatorConfig()

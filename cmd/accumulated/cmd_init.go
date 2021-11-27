@@ -46,6 +46,7 @@ var cmdInitDevnet = &cobra.Command{
 var flagInit struct {
 	Net           string
 	NoEmptyBlocks bool
+	NoWebsite     bool
 }
 
 var flagInitFollower struct {
@@ -68,6 +69,7 @@ func init() {
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
+	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
@@ -124,6 +126,10 @@ func initNode(*cobra.Command, []string) {
 
 		if flagInit.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
+		}
+
+		if flagInit.NoWebsite {
+			config[i].Accumulate.WebsiteEnabled = false
 		}
 
 		config[i].Accumulate.Network = subnet.FullName()
@@ -262,6 +268,9 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		config.Accumulate.Networks = []string{fmt.Sprintf("%s:%d", ip, flagInitDevnet.BasePort+node.TmRpcPortOffset)}
 		if flagInit.NoEmptyBlocks {
 			config.Consensus.CreateEmptyBlocks = false
+		}
+		if flagInit.NoWebsite {
+			config.Accumulate.WebsiteEnabled = false
 		}
 	}
 
