@@ -13,7 +13,7 @@ import (
 
 func TestRestart(t *testing.T) {
 
-	dbManager, err := database.NewDBManager("memory", "")
+	dbManager, err := database.NewDBManager("memory", "", nil)
 	if err != nil {
 		t.Fatalf("could not create database. error: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestRand(t *testing.T) {
 
 func TestRestartCache(t *testing.T) {
 
-	dbManager, err := database.NewDBManager("memory", "")
+	dbManager, err := database.NewDBManager("memory", "", nil)
 	if err != nil {
 		t.Fatalf("could not create database. error: %v", err)
 	}

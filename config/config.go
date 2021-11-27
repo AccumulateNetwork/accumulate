@@ -35,6 +35,7 @@ func Default(net NetworkType, node NodeType) *Config {
 	default:
 		c.Config = *tm.DefaultConfig()
 	}
+	c.LogLevel = "error;main=info;state=info;statesync=info;accumulate=info;executor=info"
 	return c
 }
 

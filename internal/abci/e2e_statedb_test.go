@@ -14,7 +14,7 @@ import (
 func TestStateDBConsistency(t *testing.T) {
 	dir := t.TempDir()
 	db := new(badger.DB)
-	err := db.InitDB(filepath.Join(dir, "valacc.db"))
+	err := db.InitDB(filepath.Join(dir, "valacc.db"), nil)
 	require.NoError(t, err)
 	defer db.Close()
 

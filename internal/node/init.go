@@ -107,7 +107,7 @@ func Init(opts InitOptions) (err error) {
 	genDoc := opts.GenesisDoc
 	if genDoc == nil {
 		db := new(memory.DB)
-		_ = db.InitDB("")
+		_ = db.InitDB("", nil)
 		_ = db.Put(storage.ComputeKey("SubnetID"), []byte(opts.SubnetID))
 		state, _ := db.MarshalBinary()
 		state, err := json.Marshal(state)
