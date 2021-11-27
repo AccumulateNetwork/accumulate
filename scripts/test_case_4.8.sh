@@ -76,6 +76,9 @@ sleep 2.5
 $cli book create acc://t48acct t48key acc://t48acct/book48 acc://t48acct/keypage48 acc://t48acct/keypage48_2 -s http://$1/v1
 
 sleep 2.5
-$cli tx create acc://t48acct/keypage48_2 acc://t48acct2 10
+$cli account create acc://t48acct t48key acc://t48acct/myacmeacct acc://acme acc://t48acct/book48
+
+sleep 2.5
+$cli tx create acc://t48acct/myacmeacct keypage48_2 1 1 acc://t48acct2 10
 
 
