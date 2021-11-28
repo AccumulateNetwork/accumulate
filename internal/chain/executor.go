@@ -12,6 +12,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -19,6 +20,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 const chainWGSize = 4
@@ -36,11 +38,12 @@ type Executor struct {
 	height  int64
 	dbTx    *state.DBTransaction
 	time    time.Time
+	logger  log.Logger
 }
 
 var _ abci.Chain = (*Executor)(nil)
 
-func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, executors ...TxExecutor) (*Executor, error) {
+func NewExecutor(query *accapi.Query, db *state.StateDB, logger log.Logger, key ed25519.PrivateKey, executors ...TxExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.db = db
 	m.executors = map[types.TxType]TxExecutor{}
@@ -48,6 +51,7 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
 	m.query = query
+	m.logger = logger.With("module", "executor")
 
 	for _, x := range executors {
 		if _, ok := m.executors[x.Type()]; ok {
@@ -63,13 +67,13 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 		return nil, err
 	}
 
-	fmt.Printf("Loaded height=%d hash=%X\n", height, db.EnsureRootHash())
+	m.logger.Info("Loaded", "height", height, "hash", logging.AsHex(db.RootHash()))
 	return m, nil
 }
 
 func (m *Executor) InitChain(state []byte) error {
 	src := new(memory.DB)
-	_ = src.InitDB("")
+	_ = src.InitDB("", nil)
 	err := src.UnmarshalBinary(state)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal app state: %v", err)
@@ -384,7 +388,7 @@ func (m *Executor) Commit() ([]byte, error) {
 
 	m.query.BatchSend()
 
-	fmt.Printf("DB time %f\n", m.db.TimeBucket)
+	m.logger.Info("Committed", "db_time", m.db.TimeBucket)
 	m.db.TimeBucket = 0
 	return mdRoot, nil
 }
