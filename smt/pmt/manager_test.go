@@ -44,7 +44,7 @@ func TestManager(t *testing.T) {
 
 	d := 100000
 
-	dbManager, err := database.NewDBManager("memory", "")
+	dbManager, err := database.NewDBManager("memory", "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestManagerSeries(t *testing.T) {
 	SetOfValues := make(map[[32]byte][32]byte) // Keep up with key/values we add
 	d := 100                                   // Add 100 entries each pass.
 
-	dbManager, err := database.NewDBManager("memory", "") // One dbManager, memory based
+	dbManager, err := database.NewDBManager("memory", "", nil) // One dbManager, memory based
 	if err != nil {
 		t.Fatal(err)
 	}
