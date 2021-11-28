@@ -24,7 +24,7 @@ func TestReceipt(t *testing.T) {
 
 	// Create a memory based database
 	dbManager := new(database.Manager)
-	_ = dbManager.Init("memory", "")
+	_ = dbManager.Init("memory", "", nil)
 	// Create a MerkleManager for the memory database
 	manager, err := NewMerkleManager(dbManager, 4)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestReceiptAll(t *testing.T) {
 
 	// Create a memory based database
 	dbManager := new(database.Manager)
-	_ = dbManager.Init("memory", "")
+	_ = dbManager.Init("memory", "", nil)
 	// Create a MerkleManager for the memory database
 	manager, err := NewMerkleManager(dbManager, 4)
 	if err != nil {
@@ -126,11 +126,11 @@ func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (ma
 		if err != nil {
 			log.Fatal(err)
 		}
-		if err = dbManager.Init("badger", dir); err != nil {
+		if err = dbManager.Init("badger", dir, nil); err != nil {
 			t.Fatal("Failed to create database: ", err)
 		}
 	} else {
-		if err := dbManager.Init("badger", databaseName); err != nil {
+		if err := dbManager.Init("badger", databaseName, nil); err != nil {
 			t.Fatal("Failed to create database: ", databaseName)
 		}
 	}

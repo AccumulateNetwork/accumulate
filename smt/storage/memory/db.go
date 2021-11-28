@@ -82,7 +82,7 @@ func (m *DB) Close() error {
 // a memory database from a file in the future.
 //
 // An existing memory database will be cleared by calling InitDB
-func (m *DB) InitDB(filename string) error {
+func (m *DB) InitDB(filename string, _ storage.Logger) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 

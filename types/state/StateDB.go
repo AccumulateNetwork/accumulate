@@ -77,13 +77,6 @@ type StateDB struct {
 	logger     log.Logger
 }
 
-func (s *StateDB) SetLogger(logger log.Logger) {
-	if logger != nil {
-		logger = logger.With("module", "db")
-	}
-	s.logger = logger
-}
-
 func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	if s.logger != nil {
 		// TODO Maybe this should be Debug?
@@ -99,13 +92,21 @@ func (s *StateDB) init(debug bool) {
 }
 
 // Open database to manage the smt and chain states
-func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool) (err error) {
+func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool, logger log.Logger) (err error) {
+	if logger != nil {
+		s.logger = logger.With("module", "db")
+	}
+
 	dbType := "badger"
 	if useMemDB {
 		dbType = "memory"
 	}
 
-	s.db, err = database.NewDBManager(dbType, dbFilename)
+	if logger != nil {
+		logger = logger.With("module", dbType)
+	}
+
+	s.db, err = database.NewDBManager(dbType, dbFilename, logger)
 	if err != nil {
 		return err
 	}
@@ -338,7 +339,7 @@ func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Byt
 	tx.state.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
 	begin := time.Now()
 
-	tx.state.TimeBucket = tx.state.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
+	tx.state.TimeBucket += float64(time.Since(begin)) * float64(time.Nanosecond) * 1e-9
 
 	tx.state.mutex.Lock()
 	updates := tx.updates[*chainId]
