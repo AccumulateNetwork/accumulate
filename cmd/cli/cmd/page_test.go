@@ -56,7 +56,7 @@ func testCase4_2(t *testing.T, tc *testCmd) {
 func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	t.Log("skipping broken test")
+	t.Log("Awaiting key page update fix for api validation error, skipping... ")
 	return
 
 	//uncomment after key page fix
@@ -99,7 +99,7 @@ func testCase4_5(t *testing.T, tc *testCmd) {
 func testCase4_6(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	t.Log("skipping broken test")
+	t.Log("Awaiting key page update fix for api validation error, skipping... ")
 	return
 
 	//uncomment after fix key page remove
@@ -117,7 +117,7 @@ func testCase4_6(t *testing.T, tc *testCmd) {
 func testCase4_7(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	t.Log("skipping broken test")
+	t.Log("Awaiting key page update fix for api validation error, skipping... ")
 	return
 
 	//uncomment after key page update fix.

@@ -241,7 +241,6 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		newKey, err = resolveKey(args[0])
-		oldKey = newKey
 		if err != nil {
 			PrintKeyUpdate()
 			return "", err
@@ -252,8 +251,6 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		oldKey, err = resolveKey(args[0])
-		//workaround for validation error
-		//newKey = oldKey
 		if err != nil {
 			PrintKeyUpdate()
 			return "", err
