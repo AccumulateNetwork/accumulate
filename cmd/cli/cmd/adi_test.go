@@ -86,7 +86,7 @@ func testCase2_4(t *testing.T, tc *testCmd) {
 func testCase2_5(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	t.Log("Need to support get txid to perform test, skipping... ")
+	t.Log("Need to support get txid with upgrade to V2 api to perform test, skipping... ")
 	return
 
 	commandLine := fmt.Sprintf("adi create %s acc://RedWagon red5 blue green", liteAccounts[0])
