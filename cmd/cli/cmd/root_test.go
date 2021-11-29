@@ -39,13 +39,15 @@ type testMatrixTests []testCase
 var testMatrix testMatrixTests
 
 func TestCli(t *testing.T) {
-	if testing.Short() {
+	switch {
+	case testing.Short():
 		t.Skip("Skipping test in short mode")
+	case runtime.GOOS == "windows":
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
+		t.Skip("This test is flaky in macOS CI")
 	}
-	//
-	//if os.Getenv("CI") == "true" {
-	//	t.Skip("Depends on an external resource, and thus is not appropriate for CI")
-	//}
+
 	tc := &testCmd{}
 	tc.initalize(t)
 
