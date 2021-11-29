@@ -12,7 +12,6 @@ import (
 	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -419,6 +418,9 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	_, _, query := startBVC(t, t.TempDir())
 	jsonapi := NewTest(t, query)
 	res := jsonapi.Faucet(context.Background(), params)
+	if err, ok := res.(error); ok {
+		require.NoError(t, err)
+	}
 
 	//allow the transaction to settle.
 	time.Sleep(3 * time.Second)
@@ -433,7 +435,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	err = json.Unmarshal(*r2.Data, &txr)
 	require.NoError(t, err)
 
-	resp, err := query.GetTransactionHistory(genesis.FaucetUrl.String(), 0, 10)
+	resp, err := query.GetTransactionHistory(protocol.FaucetUrl.String(), 0, 10)
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 2)
 	require.Equal(t, types.String(types.TxTypeSyntheticGenesis.Name()), resp.Data[0].Type)
@@ -568,7 +570,7 @@ func TestDirectory(t *testing.T) {
 	dbTx := db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, tmed25519.PrivKey(adiKey), "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	_, err := dbTx.Commit(1, time.Unix(0, 0))
+	_, err := dbTx.Commit(2, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})
@@ -600,12 +602,12 @@ func TestFaucetReplay(t *testing.T) {
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 	destAccount := anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
 	tx := acmeapi.TokenTx{}
-	tx.From.String = types.String(genesis.FaucetWallet.Addr)
+	tx.From.String = types.String(protocol.FaucetWallet.Addr)
 	tx.AddToAccount(types.String(destAccount), 1000000000)
 
-	genesis.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
+	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
 	gtx, err := transactions.New(*tx.From.AsString(), func(hash []byte) (*transactions.ED25519Sig, error) {
-		return genesis.FaucetWallet.Sign(hash), nil
+		return protocol.FaucetWallet.Sign(hash), nil
 	}, &tx)
 	require.NoError(t, err)
 

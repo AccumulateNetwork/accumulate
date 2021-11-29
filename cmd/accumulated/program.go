@@ -205,7 +205,7 @@ func (p *Program) Start(s service.Service) error {
 			clients[i] = lclient
 
 		default:
-			addr, err := networks.GetRpcAddr(net, node.TmRpcPortOffset)
+			addr, err := networks.GetRpcAddr(net, networks.TmRpcPortOffset)
 			if err != nil {
 				return fmt.Errorf("invalid network name or address: %v", err)
 			}

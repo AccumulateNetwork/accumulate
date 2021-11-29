@@ -7,7 +7,6 @@ import (
 	"time"
 
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -21,7 +20,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -33,12 +31,7 @@ type Tx = transactions.GenTransaction
 func TestEndToEndSuite(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *accapi.Query {
 		// Recreate the app for each test
-		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", false)
-		n.app.InitChain(abci.RequestInitChain{
-			Time:          time.Now(),
-			ChainId:       s.T().Name(),
-			AppStateBytes: []byte(`""`),
-		})
+		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", true)
 		return n.query
 	}))
 }
@@ -134,8 +127,8 @@ func TestFaucet(t *testing.T) {
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		body := new(protocol.AcmeFaucet)
 		body.Url = aliceUrl
-		tx, err := transactions.New(genesis.FaucetUrl.String(), func(hash []byte) (*transactions.ED25519Sig, error) {
-			return genesis.FaucetWallet.Sign(hash), nil
+		tx, err := transactions.New(protocol.FaucetUrl.String(), func(hash []byte) (*transactions.ED25519Sig, error) {
+			return protocol.FaucetWallet.Sign(hash), nil
 		}, body)
 		require.NoError(t, err)
 		send(tx)
