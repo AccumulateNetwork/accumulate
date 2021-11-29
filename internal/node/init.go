@@ -24,8 +24,8 @@ const (
 	tmP2pPortOffset         = 0
 	TmRpcPortOffset         = 1
 	tmRpcGrpcPortOffset     = 2
-	accRouterJsonPortOffset = 4
-	accRouterRestPortOffset = 5
+	AccRouterJsonPortOffset = 4
+	AccRouterRestPortOffset = 5
 	tmPrometheusPortOffset  = 6
 )
 
@@ -170,8 +170,8 @@ func Init(opts InitOptions) (err error) {
 		config.Moniker = fmt.Sprintf("Node%d", i)
 
 		config.Accumulate.WebsiteListenAddress = fmt.Sprintf("%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRouterJsonPortOffset)
-		config.Accumulate.API.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRouterRestPortOffset)
+		config.Accumulate.API.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+AccRouterJsonPortOffset)
+		config.Accumulate.API.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+AccRouterRestPortOffset)
 
 		err := cfg.Store(config)
 		if err != nil {
