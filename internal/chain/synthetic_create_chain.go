@@ -91,10 +91,12 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 			}
 
 			// Update the ADI's directory index
-			err = st.AddDirectoryEntry(u)
-			if err != nil {
-				return fmt.Errorf("failed to add ADI directory entry: %v", err)
-			}
+			if record.Header().SigSpecId != (types.Bytes32{}) {
+				err = st.AddDirectoryEntry(u)
+				if err != nil {
+					return fmt.Errorf("error adding directory entry: %v", err)
+					}
+				}
 		}
 
 		// Check the key book
