@@ -16,12 +16,13 @@ import (
 )
 
 type Record struct {
-	name      string
-	Kind      string
-	TxType    string `yaml:"tx-type"`
-	ChainType string `yaml:"chain-type"`
-	NonBinary bool   `yaml:"non-binary"`
-	Fields    []*Field
+	name         string
+	Kind         string
+	TxType       string `yaml:"tx-type"`
+	ChainType    string `yaml:"chain-type"`
+	NonBinary    bool   `yaml:"non-binary"`
+	Incomparable bool   `yaml:"incomparable"`
+	Fields       []*Field
 }
 
 type Field struct {
@@ -183,6 +184,24 @@ func run(_ *cobra.Command, args []string) {
 			continue
 		}
 		fmt.Fprintf(w, "func (*%s) GetType() types.TransactionType { return %s }\n\n", typ.name, typ.txType())
+	}
+
+	for _, typ := range types {
+		if typ.Incomparable {
+			continue
+		}
+
+		fmt.Fprintf(w, "func (v *%s) Equal(u *%[1]s) bool {\n", typ.name)
+
+		if typ.Kind == "chain" {
+			fmt.Fprintf(w, "\tif !v.ChainHeader.Equal(&u.ChainHeader) { return false }\n\n")
+		}
+
+		for _, field := range typ.Fields {
+			areEqual(w, field, "v."+field.Name, "u."+field.Name)
+		}
+
+		fmt.Fprintf(w, "\n\treturn true\n}\n\n")
 	}
 
 	for _, typ := range types {
