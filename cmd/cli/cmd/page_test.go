@@ -59,13 +59,14 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Log("skipping broken test")
 	return
 
-	commandLine := fmt.Sprintf("-d page key add acc://RedWagon/page1 red2 red4")
-	r, err := tc.execute(t, commandLine)
-	require.NoError(t, err)
-
-	t.Log(r)
-
-	time.Sleep(2 * time.Second)
+	//uncomment after key page fix
+	//commandLine := fmt.Sprintf("-d page key add acc://RedWagon/page1 red2 red4")
+	//r, err := tc.execute(t, commandLine)
+	//require.NoError(t, err)
+	//
+	//t.Log(r)
+	//
+	//time.Sleep(2 * time.Second)
 }
 
 //testCase4_4 Create additional key pages sponsored by a book
@@ -91,7 +92,7 @@ func testCase4_5(t *testing.T, tc *testCmd) {
 
 	t.Log(r)
 
-	time.Sleep(2 * time.Second)
+	time.Sleep(3 * time.Second)
 }
 
 //testCase4_6 Delete a key in a key page
@@ -101,14 +102,15 @@ func testCase4_6(t *testing.T, tc *testCmd) {
 	t.Log("skipping broken test")
 	return
 
-	//remove red4
-	commandLine := fmt.Sprintf("page key remove acc://RedWagon/page2 red3 red4")
-	r, err := tc.execute(t, commandLine)
-	require.NoError(t, err)
-
-	t.Log(r)
-
-	time.Sleep(2 * time.Second)
+	//uncomment after fix key page remove
+	////remove red4
+	//commandLine := fmt.Sprintf("page key remove acc://RedWagon/page2 red3 red4")
+	//r, err := tc.execute(t, commandLine)
+	//require.NoError(t, err)
+	//
+	//t.Log(r)
+	//
+	//time.Sleep(2 * time.Second)
 }
 
 //testCase4_7 update a key in a key page
@@ -118,24 +120,22 @@ func testCase4_7(t *testing.T, tc *testCmd) {
 	t.Log("skipping broken test")
 	return
 
-	//replace key3 with key 4
-	commandLine := fmt.Sprintf("page key update acc://RedWagon/page2 red3 red3 red4")
-	r, err := tc.execute(t, commandLine)
-	require.NoError(t, err)
-
-	t.Log(r)
-
-	time.Sleep(2 * time.Second)
+	//uncomment after key page update fix.
+	////replace key3 with key 4
+	//commandLine := fmt.Sprintf("page key update acc://RedWagon/page2 red3 red3 red4")
+	//r, err := tc.execute(t, commandLine)
+	//require.NoError(t, err)
+	//
+	//t.Log(r)
+	//
+	//time.Sleep(2 * time.Second)
 }
 
 //testCase4_8 Sign a transaction with a secondary key page
 func testCase4_8(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	t.Log("skipping broken test")
-	return
-
-	commandLine := fmt.Sprintf("tx create %s acc://RedWagon/acct2 10", liteAccounts[0])
+	commandLine := fmt.Sprintf("tx create %s acc://RedWagon/acct2 5", liteAccounts[0])
 	r, err := tc.execute(t, commandLine)
 	require.NoError(t, err)
 
