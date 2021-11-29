@@ -7,7 +7,6 @@ import (
 
 	api2 "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
-
 	"github.com/stretchr/testify/require"
 )
 
