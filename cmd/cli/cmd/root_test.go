@@ -119,16 +119,11 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	cfg.Instrumentation.Prometheus = false            // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	require.NoError(t, config.Store(cfg))             //
 
-	bvnNode, _, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
-	require.NoError(t, err)                                                                //
-	require.NoError(t, bvnNode.Start())                                                    // Launch
+	bvnNode, _, _, err := acctesting.NewBVCNode(nodeDir, true, nil, newLogger, t.Cleanup) // Initialize
+	require.NoError(t, err)                                                               //
+	require.NoError(t, bvnNode.Start())                                                   // Launch
 	relayTo := []string{cfg.RPC.ListenAddress}
 	relay, err := relay.NewWith(relayTo...)
-
-	t.Cleanup(func() {
-		require.NoError(t, bvnNode.Stop())
-		bvnNode.Wait()
-	})
 
 	// Create a local client
 	lnode, ok := bvnNode.Service.(local.NodeService)
@@ -206,11 +201,16 @@ func (c *testCmd) initalize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c.rootCmd = InitRootCmd(initDB(defaultWorkDir))
+	c.rootCmd = InitRootCmd(initDB(defaultWorkDir, true))
 	c.rootCmd.PersistentPostRun = nil
 
 	c.jsonRpcPort, c.restPort = NewTestBVNN(t, defaultWorkDir)
 	time.Sleep(2 * time.Second)
+
+	t.Cleanup(func() {
+		os.Remove(defaultWorkDir)
+	})
+
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
