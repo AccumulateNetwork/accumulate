@@ -32,6 +32,7 @@ type AppFactory func(*privval.FilePV) (abci.Application, error)
 type Node struct {
 	service.Service
 	Config *config.Config
+	ABCI   abci.Application
 	logger log.Logger
 }
 
@@ -39,6 +40,7 @@ type Node struct {
 func New(config *config.Config, app abci.Application, logger log.Logger) (*Node, error) {
 	node := new(Node)
 	node.Config = config
+	node.ABCI = app
 	node.logger = logger
 
 	// create node
@@ -101,7 +103,7 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 
 func (n *Node) waitForRPC() error {
 	for _, bvc := range n.Config.Accumulate.Networks {
-		addr, err := networks.GetRpcAddr(bvc, TmRpcPortOffset)
+		addr, err := networks.GetRpcAddr(bvc, networks.TmRpcPortOffset)
 		if err != nil {
 			return err
 		}
