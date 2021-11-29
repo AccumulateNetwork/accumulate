@@ -183,7 +183,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	go func() {
 		err := s.Serve(l)
 		if err != nil {
-			t.Log("JSON-RPC server has been shut down, %v", err)
+			t.Logf("JSON-RPC server has been shut down, %v", err)
 		}
 	}()
 
