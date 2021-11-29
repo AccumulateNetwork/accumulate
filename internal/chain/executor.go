@@ -176,12 +176,17 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 			return nil, fmt.Errorf("no key spec matches signature %d", i)
 		}
 
-		if ks.Nonce >= sig.Nonce {
+		switch {
+		case i > 0:
+			// Only check the nonce of the first key
+		case ks.Nonce >= sig.Nonce:
 			return nil, fmt.Errorf("invalid nonce")
+		default:
+			ks.Nonce = sig.Nonce
 		}
-		// TODO add pending update for the nonce
 	}
-	st.Update(sigSpec, sigGroup)
+
+	st.UpdateNonce(sigSpec)
 	return st, nil
 }
 
@@ -215,13 +220,17 @@ func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransact
 			return fmt.Errorf("signature %d's public key does not match the sponsor", i)
 		}
 
-		if account.Nonce >= sig.Nonce {
+		switch {
+		case i > 0:
+			// Only check the nonce of the first key
+		case account.Nonce >= sig.Nonce:
 			return fmt.Errorf("invalid nonce")
+		default:
+			account.Nonce = sig.Nonce
 		}
 	}
 
-	// TODO add pending update for the nonce
-	st.Update(account)
+	st.UpdateNonce(account)
 	return nil
 }
 

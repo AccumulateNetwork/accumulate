@@ -32,11 +32,19 @@ type StateManager struct {
 	SponsorChainId [32]byte
 }
 
+type storeKind int
+
+const (
+	createRecord storeKind = iota + 1
+	updateRecord
+	updateNonce
+)
+
 type storeState struct {
-	isCreate bool
-	order    int
-	chainId  *[32]byte
-	record   state.Chain
+	kind    storeKind
+	order   int
+	chainId *[32]byte
+	record  state.Chain
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
@@ -175,7 +183,7 @@ func (m *StateManager) LoadAs(chainId [32]byte, v interface{}) (err error) {
 }
 
 // store adds a chain to the cache.
-func (m *StateManager) store(record state.Chain, isCreate bool) {
+func (m *StateManager) store(record state.Chain, kind storeKind) {
 	u, err := record.Header().ParseUrl()
 	if err != nil {
 		// The caller must ensure the chain URL is correct
@@ -194,7 +202,7 @@ func (m *StateManager) store(record state.Chain, isCreate bool) {
 
 	s.chainId = &chainId
 	s.record = record
-	s.isCreate = isCreate
+	s.kind = kind
 	s.order = m.storeCount
 	m.storeCount++
 }
@@ -204,8 +212,12 @@ func (m *StateManager) store(record state.Chain, isCreate bool) {
 // synthetic transaction, or the record is a transaction.
 func (m *StateManager) Update(record ...state.Chain) {
 	for _, r := range record {
-		m.store(r, false)
+		m.store(r, updateRecord)
 	}
+}
+
+func (m *StateManager) UpdateNonce(record state.Chain) {
+	m.store(record, updateNonce)
 }
 
 // Create queues a record for a synthetic chain create transaction. Will panic
@@ -219,7 +231,7 @@ func (m *StateManager) Create(record ...state.Chain) {
 		if r.Header().Type.IsTransaction() {
 			panic("Called StateManager.Create with a transaction record!")
 		}
-		m.store(r, true)
+		m.store(r, createRecord)
 	}
 }
 
@@ -252,8 +264,8 @@ func (m *StateManager) commit() error {
 			return fmt.Errorf("failed to marshal record: %v", err)
 		}
 
-		switch {
-		case store.isCreate:
+		switch store.kind {
+		case createRecord:
 			// Create: create a new record by adding it to a synthetic create
 			// chain TX. All of the records created by a given synthetic create
 			// chain MUST belong to the same routing location. Since routing
@@ -283,7 +295,7 @@ func (m *StateManager) commit() error {
 
 			scc.Chains = append(scc.Chains, protocol.ChainParams{Data: data})
 
-		default:
+		case updateRecord:
 			// Update: update an existing record. Non-synthetic transactions are
 			// not allowed to create records, so we must check if the record
 			// already exists. The record may have been added to the DB
@@ -313,6 +325,52 @@ func (m *StateManager) commit() error {
 			}
 
 			m.dbTx.AddStateEntry((*types.Bytes32)(store.chainId), &m.txHash, &state.Object{Entry: data})
+
+		case updateNonce:
+			// Load the previous state of the record
+			obj, err := m.dbTx.GetPersistentEntry(store.chainId[:], false)
+			if err != nil {
+				return fmt.Errorf("failed to load state for %q", store.record.Header().ChainUrl)
+			}
+
+			var old state.Chain
+			switch store.record.Header().Type {
+			case types.ChainTypeLiteTokenAccount:
+				old = new(protocol.AnonTokenAccount)
+			case types.ChainTypeKeyPage:
+				old = new(protocol.SigSpec)
+			default:
+				return fmt.Errorf("chain type %d is not a signator", store.record.Header().Type)
+			}
+
+			err = obj.As(old)
+			if err != nil {
+				return fmt.Errorf("failed to unmarshal %q: %v", store.record.Header().ChainUrl, err)
+			}
+
+			// Check that the nonce is the only thing that changed
+			switch store.record.Header().Type {
+			case types.ChainTypeLiteTokenAccount:
+				old, new := old.(*protocol.AnonTokenAccount), store.record.(*protocol.AnonTokenAccount)
+				old.Nonce = new.Nonce
+				if !old.Equal(new) {
+					return fmt.Errorf("attempted to change more than the nonce")
+				}
+
+			case types.ChainTypeKeyPage:
+				old, new := old.(*protocol.SigSpec), store.record.(*protocol.SigSpec)
+				for i := 0; i < len(old.Keys) && i < len(new.Keys); i++ {
+					old.Keys[i].Nonce = new.Keys[i].Nonce
+				}
+				if !old.Equal(new) {
+					return fmt.Errorf("attempted to change more than a nonce")
+				}
+			}
+
+			m.dbTx.UpdateNonce((*types.Bytes32)(store.chainId), &state.Object{Entry: data})
+
+		default:
+			panic(fmt.Errorf("invalid store kind %d", store.kind))
 		}
 	}
 

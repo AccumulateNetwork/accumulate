@@ -337,6 +337,21 @@ func (tx *DBTransaction) GetCurrentEntry(chainId []byte) (*Object, error) {
 // of a transaction.  The entry is the state object associated with
 func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
 	tx.state.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
+
+	if txHash == nil {
+		panic("Cannot add state entry without a transaction ID!")
+	}
+
+	tx.addStateEntry(chainId, txHash, object)
+}
+
+// UpdateNonce updates the state of a signator record _without adding to the
+// transaction chain_.
+func (tx *DBTransaction) UpdateNonce(chainId *types.Bytes32, object *Object) {
+	tx.addStateEntry(chainId, nil, object)
+}
+
+func (tx *DBTransaction) addStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
 	begin := time.Now()
 
 	tx.state.TimeBucket += float64(time.Since(begin)) * float64(time.Nanosecond) * 1e-9
@@ -350,7 +365,9 @@ func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Byt
 		tx.updates[*chainId] = updates
 	}
 
-	updates.txId = append(updates.txId, txHash)
+	if txHash != nil {
+		updates.txId = append(updates.txId, txHash)
+	}
 	updates.stateData = object
 }
 
