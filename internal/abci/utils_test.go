@@ -36,7 +36,7 @@ import (
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, logLevel string, doGenesis bool) *fakeNode {
 	db := new(state.StateDB)
-	err := db.Open("memory", true, true)
+	err := db.Open("memory", true, true, nil)
 	require.NoError(t, err)
 
 	return createApp(t, db, addr, logLevel, doGenesis)
@@ -72,8 +72,6 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 		os.Exit(1)
 	}
 
-	db.SetLogger(logger)
-
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
 
@@ -91,7 +89,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
-	mgr, err := chain.NewBlockValidatorExecutor(n.query, db, bvcKey)
+	mgr, err := chain.NewBlockValidatorExecutor(n.query, db, logger, bvcKey)
 	require.NoError(t, err)
 
 	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
