@@ -31,14 +31,14 @@ type TokenTxOutput struct {
 
 func NewTokenTx(from types.String, to ...*TokenTxOutput) *TokenTx {
 	tx := &TokenTx{}
-	tx.From = types.UrlChain{from}
+	tx.From = types.UrlChain{String: from}
 	tx.To = to
 	return tx
 }
 
 func NewTokenTxOutput(url types.String, amount uint64) *TokenTxOutput {
 	txo := new(TokenTxOutput)
-	txo.URL = types.UrlChain{url}
+	txo.URL = types.UrlChain{String: url}
 	txo.Amount = amount
 	return txo
 }

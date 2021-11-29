@@ -2,11 +2,14 @@ package node
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
 
 	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -29,7 +32,7 @@ const (
 type InitOptions struct {
 	WorkDir    string
 	ShardName  string
-	ChainID    string
+	SubnetID   string
 	Port       int
 	GenesisDoc *types.GenesisDoc
 	Config     []*cfg.Config
@@ -74,7 +77,7 @@ func Init(opts InitOptions) (err error) {
 			return fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &opts.ChainID); err != nil {
+		if err := initFilesWithConfig(config, &opts.SubnetID); err != nil {
 			return err
 		}
 
@@ -103,12 +106,24 @@ func Init(opts InitOptions) (err error) {
 	// Generate genesis doc from generated validators
 	genDoc := opts.GenesisDoc
 	if genDoc == nil {
+		db := new(memory.DB)
+		_ = db.InitDB("", nil)
+		_ = db.Put(storage.ComputeKey("SubnetID"), []byte(opts.SubnetID))
+		state, _ := db.MarshalBinary()
+		state, err := json.Marshal(state)
+		if err != nil {
+			return err
+		}
+		bptRoot := make([]byte, 32)
+
 		genDoc = &types.GenesisDoc{
-			ChainID:         opts.ChainID,
+			ChainID:         opts.SubnetID,
 			GenesisTime:     tmtime.Now(),
 			InitialHeight:   0,
 			Validators:      genVals,
 			ConsensusParams: types.DefaultConsensusParams(),
+			AppState:        state,
+			AppHash:         bptRoot,
 		}
 	}
 
@@ -154,8 +169,6 @@ func Init(opts InitOptions) (err error) {
 		}
 		config.Moniker = fmt.Sprintf("Node%d", i)
 
-		config.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
-		config.Accumulate.WebsiteEnabled = true
 		config.Accumulate.WebsiteListenAddress = fmt.Sprintf("%s:8080", opts.ListenIP[i])
 		config.Accumulate.API.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRouterJsonPortOffset)
 		config.Accumulate.API.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRouterRestPortOffset)

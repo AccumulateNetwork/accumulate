@@ -33,7 +33,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 	NumTests := int64(40)
 
 	dbManager := new(database.Manager)
-	if err := dbManager.Init("memory", ""); err != nil {
+	if err := dbManager.Init("memory", "", nil); err != nil {
 		t.Fatal(err)
 	}
 

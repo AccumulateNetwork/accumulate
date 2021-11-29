@@ -30,8 +30,8 @@ func NewConsoleWriter(format string) (io.Writer, error) {
 // as plain text for the console. It is based on part of Tendermint's NewTendermintLogger.
 func newConsoleWriter(w io.Writer) *zerolog.ConsoleWriter {
 	return &zerolog.ConsoleWriter{
-		Out:        w,
-		NoColor:    true,
+		Out: w,
+		// NoColor:    true,
 		TimeFormat: time.RFC3339,
 		FormatLevel: func(i interface{}) string {
 			if ll, ok := i.(string); ok {

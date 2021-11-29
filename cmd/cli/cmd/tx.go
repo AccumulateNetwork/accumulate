@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
@@ -151,7 +152,7 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 
 func CreateTX(sender string, args []string) (string, error) {
 	//sender string, receiver string, amount string
-	var res acmeapi.APIDataResponse
+	var res api2.TxResponse
 	var err error
 	u, err := url.Parse(sender)
 	if err != nil {
@@ -173,7 +174,7 @@ func CreateTX(sender string, args []string) (string, error) {
 
 	//fmt.Println(hex.EncodeToString(pk))
 	tokentx := new(acmeapi.TokenTx)
-	tokentx.From = types.UrlChain{types.String(u.String())}
+	tokentx.From = types.UrlChain{String: types.String(u.String())}
 
 	to := []*acmeapi.TokenTxOutput{}
 	r := &acmeapi.TokenTxOutput{}
@@ -195,19 +196,14 @@ func CreateTX(sender string, args []string) (string, error) {
 	}
 
 	nonce := uint64(time.Now().Unix())
-	params, err := prepareGenTx(data, dataBinary, u, si, pk, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, u, si, pk, nonce)
 	if err != nil {
 		return "", err
 	}
 
-	if err := Client.Request(context.Background(), "token-tx-create", params, &res); err != nil {
+	if err := Client.RequestV2(context.Background(), "send-tokens", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling create adi result")
-	}
-	return ar.Print()
+	return ActionResponseFrom(&res).Print()
 }

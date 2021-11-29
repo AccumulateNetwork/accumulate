@@ -46,6 +46,7 @@ var cmdInitDevnet = &cobra.Command{
 var flagInit struct {
 	Net           string
 	NoEmptyBlocks bool
+	NoWebsite     bool
 }
 
 var flagInitFollower struct {
@@ -68,6 +69,7 @@ func init() {
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
+	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
@@ -126,6 +128,10 @@ func initNode(*cobra.Command, []string) {
 			config[i].Consensus.CreateEmptyBlocks = false
 		}
 
+		if flagInit.NoWebsite {
+			config[i].Accumulate.WebsiteEnabled = false
+		}
+
 		config[i].Accumulate.Network = subnet.FullName()
 		config[i].Accumulate.Networks = relayTo
 		config[i].Accumulate.Directory = subnet.Directory
@@ -134,7 +140,7 @@ func initNode(*cobra.Command, []string) {
 	check(node.Init(node.InitOptions{
 		WorkDir:   flagMain.WorkDir,
 		ShardName: "accumulate.",
-		ChainID:   subnet.Name,
+		SubnetID:  subnet.Name,
 		Port:      subnet.Port,
 		Config:    config,
 		RemoteIP:  remoteIP,
@@ -194,7 +200,7 @@ func initFollower(cmd *cobra.Command, _ []string) {
 	check(node.Init(node.InitOptions{
 		WorkDir:    flagMain.WorkDir,
 		ShardName:  "accumulate.",
-		ChainID:    subnet.Name,
+		SubnetID:   subnet.Name,
 		Port:       port,
 		GenesisDoc: genDoc,
 		Config:     []*cfg.Config{config},
@@ -263,12 +269,15 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		if flagInit.NoEmptyBlocks {
 			config.Consensus.CreateEmptyBlocks = false
 		}
+		if flagInit.NoWebsite {
+			config.Accumulate.WebsiteEnabled = false
+		}
 	}
 
 	check(node.Init(node.InitOptions{
 		WorkDir:   filepath.Join(flagMain.WorkDir, "dn"),
 		ShardName: flagInitDevnet.Name,
-		ChainID:   flagInitDevnet.Name,
+		SubnetID:  flagInitDevnet.Name,
 		Port:      flagInitDevnet.BasePort,
 		Config:    config[:flagInitDevnet.NumDirNodes],
 		RemoteIP:  IPs[:flagInitDevnet.NumDirNodes],
@@ -277,7 +286,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	check(node.Init(node.InitOptions{
 		WorkDir:   filepath.Join(flagMain.WorkDir, "bvn"),
 		ShardName: flagInitDevnet.Name,
-		ChainID:   flagInitDevnet.Name,
+		SubnetID:  flagInitDevnet.Name,
 		Port:      flagInitDevnet.BasePort,
 		Config:    config[flagInitDevnet.NumDirNodes:],
 		RemoteIP:  IPs[flagInitDevnet.NumDirNodes:],

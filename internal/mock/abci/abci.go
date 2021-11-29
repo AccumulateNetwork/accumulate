@@ -105,6 +105,20 @@ func (mr *MockChainMockRecorder) EndBlock(arg0 interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EndBlock", reflect.TypeOf((*MockChain)(nil).EndBlock), arg0)
 }
 
+// InitChain mocks base method.
+func (m *MockChain) InitChain(state []byte) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "InitChain", state)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// InitChain indicates an expected call of InitChain.
+func (mr *MockChainMockRecorder) InitChain(state interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitChain", reflect.TypeOf((*MockChain)(nil).InitChain), state)
+}
+
 // Query mocks base method.
 func (m *MockChain) Query(arg0 *query.Query) ([]byte, []byte, *protocol.Error) {
 	m.ctrl.T.Helper()
@@ -171,4 +185,19 @@ func (m *MockState) RootHash() []byte {
 func (mr *MockStateMockRecorder) RootHash() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RootHash", reflect.TypeOf((*MockState)(nil).RootHash))
+}
+
+// SubnetID mocks base method.
+func (m *MockState) SubnetID() (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubnetID")
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SubnetID indicates an expected call of SubnetID.
+func (mr *MockStateMockRecorder) SubnetID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubnetID", reflect.TypeOf((*MockState)(nil).SubnetID))
 }

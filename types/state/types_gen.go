@@ -191,6 +191,10 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 		Timestamp      time.Time `json:"timestamp,omitempty"`
 		Chains         []string  `json:"chains,omitempty"`
 	}{}
+	u.Index = v.Index
+	u.PreviousHeight = v.PreviousHeight
+	u.Timestamp = v.Timestamp
+	u.Chains = encoding.ChainSetToJSON(v.Chains)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -211,6 +215,12 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 		Height uint64    `json:"height,omitempty"`
 		Roots  []*string `json:"roots,omitempty"`
 	}{}
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	u.Height = v.Height
+	u.Roots = make([]*string, len(v.Roots))
+	for i, x := range v.Roots {
+		u.Roots[i] = encoding.BytesToJSON(x)
+	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
