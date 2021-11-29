@@ -17,6 +17,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v2
 
+      - name: Vet
+        run: go vet ./...
+
       - name: Verify go.mod is tidy
         run: |
           go mod tidy

@@ -174,7 +174,7 @@ func CreateTX(sender string, args []string) (string, error) {
 
 	//fmt.Println(hex.EncodeToString(pk))
 	tokentx := new(acmeapi.TokenTx)
-	tokentx.From = types.UrlChain{types.String(u.String())}
+	tokentx.From = types.UrlChain{String: types.String(u.String())}
 
 	to := []*acmeapi.TokenTxOutput{}
 	r := &acmeapi.TokenTxOutput{}
