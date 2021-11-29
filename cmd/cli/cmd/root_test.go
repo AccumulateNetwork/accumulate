@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io/ioutil"
 	net2 "net"
@@ -183,6 +184,12 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 		err := s.Serve(l)
 		require.NoError(t, err, "JSON-RPC server", "err", err)
 	}()
+
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		s.Shutdown(ctx)
+	})
 
 	time.Sleep(time.Second)
 	return opts.Port + node.AccRouterJsonPortOffset, opts.Port + node.AccRouterRestPortOffset
