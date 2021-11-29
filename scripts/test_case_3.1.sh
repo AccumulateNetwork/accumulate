@@ -37,6 +37,7 @@ TxID=`./cli_faucet.sh $ID $1`
 
 # get our balance
 
+sleep 2.5
 bal=`./cli_get_balance.sh $ID $1`
 
 echo $bal
@@ -49,7 +50,8 @@ echo $key
 
 # create account
 
-echo `./cli_adi_create_account.sh $ID acc://t31acct t31key $1`
+./cli_adi_create_account.sh $ID acc://t31acct t31key $1
 
-echo `./cli account create acc://t31acct t31key acc://t31acct/myacmeacct acc://ACME acc://t31acct/ssg0 -s http://$1/v1`
+sleep 2.5
+$cli account create acc://t31acct t31key acc://t31acct/myacmeacct acc://ACME acc://t31acct/ssg0 -s http://$1/v1
 
