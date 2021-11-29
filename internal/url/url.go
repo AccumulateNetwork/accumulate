@@ -140,10 +140,10 @@ func (u *URL) QueryValues() url.Values {
 	return v
 }
 
-func chain(s string) []byte {
+func chain(s string) [32]byte {
 	s = strings.ToLower(s)
 	h := sha256.Sum256([]byte(s))
-	return h[:]
+	return h
 }
 
 func ensurePath(s string) string {
@@ -165,6 +165,12 @@ func (u *URL) Identity() *URL {
 //
 //   Chain = Hash(LowerCase(u.Host()))
 func (u *URL) IdentityChain() []byte {
+	c := u.IdentityChain32()
+	return c[:]
+}
+
+// IdentityChain32 returns IdentityChain as a [32]byte.
+func (u *URL) IdentityChain32() [32]byte {
 	return chain(u.Hostname())
 }
 
@@ -174,6 +180,12 @@ func (u *URL) IdentityChain() []byte {
 //
 //   Chain = Hash(LowerCase(Sprintf("%s/%s", u.Host(), u.Path)))
 func (u *URL) ResourceChain() []byte {
+	c := u.ResourceChain32()
+	return c[:]
+}
+
+// ResourceChain32 returns ResourceChain as a [32]byte.
+func (u *URL) ResourceChain32() [32]byte {
 	return chain(u.Hostname() + ensurePath(u.Path))
 }
 

@@ -2,13 +2,14 @@ package node
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path"
 
 	cfg "github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/internal/genesis"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
@@ -18,16 +19,7 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-const (
-	nodeDirPerm = 0755
-
-	tmP2pPortOffset         = 0
-	TmRpcPortOffset         = 1
-	tmRpcGrpcPortOffset     = 2
-	AccRouterJsonPortOffset = 4
-	AccRouterRestPortOffset = 5
-	tmPrometheusPortOffset  = 6
-)
+const nodeDirPerm = 0755
 
 type InitOptions struct {
 	WorkDir    string
@@ -55,16 +47,23 @@ func Init(opts InitOptions) (err error) {
 	config := opts.Config
 	genVals := make([]types.GenesisValidator, 0, len(config))
 
+	var networkType cfg.NetworkType
 	for i, config := range config {
+		if i == 0 {
+			networkType = config.Accumulate.Type
+		} else if config.Accumulate.Type != networkType {
+			return errors.New("Cannot initialize multiple networks at once")
+		}
+
 		nodeDirName := fmt.Sprintf("Node%d", i)
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
 		config.ProxyApp = ""
-		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmP2pPortOffset)
-		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+TmRpcPortOffset)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmRpcGrpcPortOffset)
-		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+tmPrometheusPortOffset)
+		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmP2pPortOffset)
+		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+networks.TmPrometheusPortOffset)
 		config.Instrumentation.Prometheus = true
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
@@ -106,24 +105,30 @@ func Init(opts InitOptions) (err error) {
 	// Generate genesis doc from generated validators
 	genDoc := opts.GenesisDoc
 	if genDoc == nil {
+		genTime := tmtime.Now()
+
 		db := new(memory.DB)
 		_ = db.InitDB("", nil)
-		_ = db.Put(storage.ComputeKey("SubnetID"), []byte(opts.SubnetID))
-		state, _ := db.MarshalBinary()
-		state, err := json.Marshal(state)
+		root, err := genesis.Init(db, genesis.InitOpts{
+			SubnetID:    opts.SubnetID,
+			NetworkType: config[0].Accumulate.Type,
+			GenesisTime: genTime,
+			Validators:  genVals,
+		})
+
+		state, _ := db.MarshalJSON()
 		if err != nil {
 			return err
 		}
-		bptRoot := make([]byte, 32)
 
 		genDoc = &types.GenesisDoc{
 			ChainID:         opts.SubnetID,
-			GenesisTime:     tmtime.Now(),
-			InitialHeight:   0,
+			GenesisTime:     genTime,
+			InitialHeight:   2,
 			Validators:      genVals,
 			ConsensusParams: types.DefaultConsensusParams(),
 			AppState:        state,
-			AppHash:         bptRoot,
+			AppHash:         root,
 		}
 	}
 
@@ -170,8 +175,8 @@ func Init(opts InitOptions) (err error) {
 		config.Moniker = fmt.Sprintf("Node%d", i)
 
 		config.Accumulate.WebsiteListenAddress = fmt.Sprintf("%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+AccRouterJsonPortOffset)
-		config.Accumulate.API.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+AccRouterRestPortOffset)
+		config.Accumulate.API.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
+		config.Accumulate.API.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterRestPortOffset)
 
 		err := cfg.Store(config)
 		if err != nil {
