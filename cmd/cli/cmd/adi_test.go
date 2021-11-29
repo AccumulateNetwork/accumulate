@@ -89,18 +89,19 @@ func testCase2_5(t *testing.T, tc *testCmd) {
 	t.Log("Need to support get txid with upgrade to V2 api to perform test, skipping... ")
 	return
 
-	commandLine := fmt.Sprintf("adi create %s acc://RedWagon red5 blue green", liteAccounts[0])
-	r, err := tc.execute(t, commandLine)
-	require.NoError(t, err)
-
-	var res map[string]interface{}
-	require.NoError(t, json.Unmarshal([]byte(r), &res))
-
-	time.Sleep(time.Second)
-	//now query the txid
-	commandLine = fmt.Sprintf("get txid %v", res["txid"])
-	r, err = tc.execute(t, commandLine)
-	t.Log(r)
+	//uncomment after V2 upgrade
+	//commandLine := fmt.Sprintf("adi create %s acc://RedWagon red5 blue green", liteAccounts[0])
+	//r, err := tc.execute(t, commandLine)
+	//require.NoError(t, err)
+	//
+	//var res map[string]interface{}
+	//require.NoError(t, json.Unmarshal([]byte(r), &res))
+	//
+	//time.Sleep(time.Second)
+	////now query the txid
+	//commandLine = fmt.Sprintf("get txid %v", res["txid"])
+	//r, err = tc.execute(t, commandLine)
+	//t.Log(r)
 }
 
 //testCase2_6
