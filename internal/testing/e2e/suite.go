@@ -60,7 +60,8 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 
 func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body encoding.BinaryMarshaler) *transactions.GenTransaction {
 	s.T().Helper()
-	tx, err := transactions.New(sponsor.String(), func(hash []byte) (*transactions.ED25519Sig, error) {
+	state, _ := s.query.GetChainStateByUrl(sponsor.String())
+	tx, err := transactions.New(sponsor.String(), state.MerkleState.Count, func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
 		return sig, sig.Sign(nonce, key, hash)
 	}, body)

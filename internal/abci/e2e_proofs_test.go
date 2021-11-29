@@ -32,7 +32,7 @@ func TestProofADI(t *testing.T) {
 		adi.PublicKey = keyHash[:]
 
 		sponsorUrl := anon.GenerateAcmeAddress(liteKey.PubKey().Bytes())
-		tx, err := transactions.New(sponsorUrl, edSigner(liteKey, 1), adi)
+		tx, err := transactions.New(sponsorUrl, 1, edSigner(liteKey, 1), adi)
 		require.NoError(t, err)
 
 		send(tx)
@@ -44,7 +44,7 @@ func TestProofADI(t *testing.T) {
 		tac := new(protocol.TokenAccountCreate)
 		tac.Url = "RoadRunner/Baz"
 		tac.TokenUrl = protocol.AcmeUrl().String()
-		tx, err := transactions.New("RoadRunner", edSigner(adiKey, 1), tac)
+		tx, err := transactions.New("RoadRunner", 1, edSigner(adiKey, 1), tac)
 		require.NoError(t, err)
 		send(tx)
 	})
