@@ -142,6 +142,15 @@ func (m *StateManager) Load(chainId [32]byte) (state.Chain, error) {
 	return record, nil
 }
 
+//GetHeight loads the height of the chain
+func (m *StateManager) GetHeight(chainId [32]byte) (uint64, error) {
+	obj, err := m.dbTx.GetCurrentEntry(chainId[:])
+	if err != nil {
+		return 0, err
+	}
+	return obj.Height, nil
+}
+
 // LoadAs loads a chain by ID and unmarshals it as a specific type.
 func (m *StateManager) LoadAs(chainId [32]byte, v interface{}) (err error) {
 	record, err := m.Load(chainId)

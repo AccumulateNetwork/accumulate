@@ -98,7 +98,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 
 	if doGenesis {
 		n.Batch(func(send func(*transactions.GenTransaction)) {
-			tx, err := transactions.New(protocol.ACME, func(hash []byte) (*transactions.ED25519Sig, error) {
+			tx, err := transactions.New(protocol.ACME, uint64(n.NextHeight()), func(hash []byte) (*transactions.ED25519Sig, error) {
 				return genesis.FaucetWallet.Sign(hash), nil
 			}, new(protocol.SyntheticGenesis))
 			require.NoError(t, err)
