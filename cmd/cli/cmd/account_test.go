@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"testing"
 
+	api2 "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/response"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -69,4 +72,27 @@ func testCase3_3(t *testing.T, tc *testCmd) {
 
 	t.Log(r)
 
+}
+
+//testGetBalance helper function to get the balance of a token account
+func testGetBalance(t *testing.T, tc *testCmd, accountUrl string) (string, error) {
+	//now query the account to make sure each account has 10 acme.
+	commandLine := fmt.Sprintf("account get %s", accountUrl)
+	r, err := tc.execute(t, commandLine)
+	if err != nil {
+		return "", err
+	}
+
+	res := api2.APIDataResponse{}
+	err = json.Unmarshal([]byte(r), &res)
+	if err != nil {
+		return "", err
+	}
+
+	acc := response.AnonTokenAccount{} //protocol.AnonTokenAccount{}
+	err = json.Unmarshal(*res.Data, &acc)
+	if err != nil {
+		return "", err
+	}
+	return acc.Balance.String(), nil
 }
