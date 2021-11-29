@@ -1,20 +1,6 @@
 package cmd
 
-import (
-	"encoding/json"
-	"fmt"
-	"testing"
-	"time"
-
-	api2 "github.com/AccumulateNetwork/accumulate/types/api"
-	"github.com/AccumulateNetwork/accumulate/types/api/response"
-	"github.com/stretchr/testify/require"
-)
-
-func init() {
-	testMatrix.addTest(testCase5_1)
-}
-
+//liteAccounts is the predictable test accounts for the unit tests.
 var liteAccounts = []string{
 	"acc://61c185c8c6c929d6ad00aa5529ca880808718258c1bb69df/ACME", "acc://8861d93730671aad03bc144532d5d0b6d422a8c93cb68940/ACME",
 	"acc://dcb37f329ea6423d6677680eed80d0604d2573b899facd49/ACME", "acc://1bd9e22f4e4d67d5c11589f04242ca76ee8e48c723bce32d/ACME",
@@ -66,62 +52,4 @@ var liteAccounts = []string{
 	"acc://ce5133baac9b530b47f998c0244b0394efaee495312c4d2f/ACME", "acc://fbd8e461221b468f77247c87e2a78b6f47cce727dd1b0567/ACME",
 	"acc://d1f4f1c258ff95b25829c31e89b77d4de882ad2e4102c563/ACME", "acc://b7d5d9f09d5d41f53002a1f17724fa6ba8f63a28e62224d9/ACME",
 	"acc://a5253a6a9bf587bdcc6af0a70597e5abb6963dd923818f74/ACME", "acc://dbfb670fdc701001820e7db1f6d3d62d3f53375f3663e1f7/ACME",
-}
-
-func testGetBalance(t *testing.T, tc *testCmd, accountUrl string) (string, error) {
-	//now query the account to make sure each account has 10 acme.
-	commandLine := fmt.Sprintf("account get %s", accountUrl)
-	r, err := tc.execute(t, commandLine)
-	if err != nil {
-		return "", err
-	}
-
-	res := api2.APIDataResponse{}
-	err = json.Unmarshal([]byte(r), &res)
-	if err != nil {
-		return "", err
-	}
-
-	acc := response.AnonTokenAccount{} //protocol.AnonTokenAccount{}
-	err = json.Unmarshal(*res.Data, &acc)
-	if err != nil {
-		return "", err
-	}
-	return acc.Balance.String(), nil
-}
-
-func testCase5_1(t *testing.T, tc *testCmd) {
-	t.Helper()
-
-	var beenFauceted []bool
-	//test to see if things have already been fauceted...
-	for i := range liteAccounts {
-		bal, _ := testGetBalance(t, tc, liteAccounts[i])
-		beenFauceted = append(beenFauceted, bal == "1000000000")
-	}
-
-	for i := range liteAccounts {
-		commandLine := fmt.Sprintf("faucet %s", liteAccounts[i])
-		_, err := tc.execute(t, commandLine)
-		require.NoError(t, err)
-	}
-
-	time.Sleep(time.Second)
-	for i := range liteAccounts {
-		//now query the account to make sure each account has 10 acme.
-		commandLine := fmt.Sprintf("account get %s", liteAccounts[i])
-		r, err := tc.execute(t, commandLine)
-		require.NoError(t, err)
-
-		res := api2.APIDataResponse{}
-		require.NoError(t, json.Unmarshal([]byte(r), &res))
-
-		acc := response.AnonTokenAccount{} //protocol.AnonTokenAccount{}
-		require.NoError(t, json.Unmarshal(*res.Data, &acc), "received error on liteAccount[%d] %s ", i, liteAccounts[i])
-
-		if !beenFauceted[i] {
-			require.Equal(t, "1000000000", acc.Balance.String(),
-				"balance does not match not expected for account %s", liteAccounts[i])
-		}
-	}
 }
