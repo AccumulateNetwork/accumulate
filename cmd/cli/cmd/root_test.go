@@ -127,6 +127,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 
 	t.Cleanup(func() {
 		require.NoError(t, bvnNode.Stop())
+		bvnNode.Wait()
 		os.RemoveAll(defaultWorkDir)
 	})
 
