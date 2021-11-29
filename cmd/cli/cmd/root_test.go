@@ -39,15 +39,22 @@ type testMatrixTests []testCase
 var testMatrix testMatrixTests
 
 func TestCli(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping test in short mode")
+	}
+	//
+	//if os.Getenv("CI") == "true" {
+	//	t.Skip("Depends on an external resource, and thus is not appropriate for CI")
+	//}
 	tc := &testCmd{}
 	tc.initalize(t)
-	defer tc.finalize(t)
 
 	//set mnemonic for predictable addresses
 	_, err := tc.execute(t, "key import mnemonic yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow")
 	require.NoError(t, err)
 
 	testMatrix.execute(t, tc)
+
 }
 
 func GetFunctionName(i interface{}) string {
@@ -82,13 +89,6 @@ type testCmd struct {
 	jsonRpcPort    int
 }
 
-func (c *testCmd) finalize(t *testing.T) {
-	//c.validatorCmd.Process.Kill()
-	//c.directoryCmd.Process.Kill()
-
-	//os.RemoveAll(c.defaultWorkDir)
-}
-
 //NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports
 func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	t.Helper()
@@ -101,7 +101,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	cfg.Mempool.MaxBatchBytes = 1048576
 	cfg.Mempool.CacheSize = 1048576
 	cfg.Mempool.Size = 50000
-	cfg.Accumulate.API.EnableSubscribeTX = true
+	cfg.Accumulate.API.EnableSubscribeTX = false
 	cfg.Accumulate.Networks[0] =
 		fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
 
@@ -208,26 +208,6 @@ func (c *testCmd) initalize(t *testing.T) {
 	c.rootCmd.PersistentPostRun = nil
 
 	c.jsonRpcPort, c.restPort = NewTestBVNN(t, defaultWorkDir)
-	//accumulateThis := fmt.Sprintf("go run ../../accumulated/main.go -w %s ", defaultWorkDir)
-	////start the dirctory node
-	//initCmd := exec.Command(accumulateThis + "init -n LocalNet")
-	//err = initCmd.Run()
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//
-	//c.directoryCmd = exec.Command(accumulateThis + "run -n 0")
-	//err = c.directoryCmd.Start()
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	////start the Badlands node.
-	//c.validatorCmd = exec.Command(accumulateThis + "run -n 0")
-	//err = c.validatorCmd.Start()
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//
 	time.Sleep(2 * time.Second)
 }
 
@@ -243,18 +223,18 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	c.rootCmd.SetArgs(args)
 	c.rootCmd.Execute()
 
-	eprint, err := ioutil.ReadAll(e)
+	errPrint, err := ioutil.ReadAll(e)
 	if err != nil {
 		return "", err
-	} else if len(eprint) != 0 {
-		return "", fmt.Errorf("%s", string(eprint))
+	} else if len(errPrint) != 0 {
+		return "", fmt.Errorf("%s", string(errPrint))
 	}
 	ret, err := ioutil.ReadAll(b)
 	return string(ret), err
 }
 
-// listenHttpUrl takes a string such as `http://localhost:123` and creates a TCP
-// listener.
+// listenHttpUrl
+// takes a string such as `http://localhost:123` and creates a TCP listener.
 func listenHttpUrl(s string) (net2.Listener, bool, error) {
 	u, err := url.Parse(s)
 	if err != nil {
