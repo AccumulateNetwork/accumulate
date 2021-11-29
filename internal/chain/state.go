@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -50,13 +49,6 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 	m.writes = map[storage.Key][]byte{}
 	m.txHash = types.Bytes(tx.TransactionHash()).AsBytes32()
 	m.txType = tx.TransactionType()
-
-	// The genesis TX is special
-	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
-		m.SponsorUrl = protocol.AcmeUrl()
-		m.Sponsor = genesis.ACME
-		return m, nil
-	}
 
 	// The sponsor URL must be valid
 	var err error
@@ -223,7 +215,7 @@ func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
 }
 
 // commit writes pending records to the database.
-func (m *StateManager) commit() error {
+func (m *StateManager) Commit() error {
 	for k, v := range m.writes {
 		m.dbTx.Write(k, v)
 	}
