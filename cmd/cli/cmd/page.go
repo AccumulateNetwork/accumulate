@@ -63,11 +63,11 @@ func PrintKeyPageCreate() {
 }
 func PrintKeyUpdate() {
 	fmt.Println("  accumulate page key update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name] Update key in a key page with a new public key")
-	fmt.Println("\t\t example usage: accumulate page key update  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key update  acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate page key add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name] Add key to a key page")
-	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedPage1 redKey1 redKey2 ")
 	fmt.Println("  accumulate page key remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] Remove key from a key page")
-	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon/RedPage1 redKey1 redKey2")
 }
 
 func PrintPage() {
@@ -241,6 +241,7 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		newKey, err = resolveKey(args[0])
+		oldKey = newKey
 		if err != nil {
 			PrintKeyUpdate()
 			return "", err
@@ -251,6 +252,8 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		oldKey, err = resolveKey(args[0])
+		//workaround for validation error
+		//newKey = oldKey
 		if err != nil {
 			PrintKeyUpdate()
 			return "", err
