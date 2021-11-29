@@ -1,24 +1,25 @@
 QueryResponse:
   non-binary: true
+  incomparable: true
   fields:
     - name: Type
       type: string
     - name: MerkleState
       type: MerkleState
       pointer: true
-      marshal-as: self
+      marshal-as: reference
     - name: Data
       type: any
     - name: Sponsor
       type: string
     - name: KeyPage
       type: KeyPage
-      marshal-as: self
+      marshal-as: reference
     - name: Txid
       type: bytes
     - name: Signer
       type: Signer
-      marshal-as: self
+      marshal-as: reference
     - name: Sig
       type: bytes
     - name: Status
@@ -26,6 +27,7 @@ QueryResponse:
 
 MerkleState:
   non-binary: true
+  incomparable: true
   fields:
     - name: Count
       type: uvarint
@@ -36,12 +38,13 @@ MerkleState:
 
 QueryMultiResponse:
   non-binary: true
+  incomparable: true
   fields:
     - name: Items
       type: slice
       slice:
         type: QueryResponse
-        marshal-as: self
+        marshal-as: reference
         pointer: true
     - name: Start
       type: uvarint
@@ -52,6 +55,7 @@ QueryMultiResponse:
 
 KeyPage:
   non-binary: true
+  incomparable: true
   fields:
   - name: Height
     type: uvarint
@@ -61,6 +65,7 @@ KeyPage:
 
 Signer:
   non-binary: true
+  incomparable: true
   fields:
   - name: PublicKey
     type: bytes
@@ -69,6 +74,7 @@ Signer:
 
 TokenSend:
   non-binary: true
+  incomparable: true
   fields:
   - name: From
     type: string
@@ -76,10 +82,11 @@ TokenSend:
     type: slice
     slice:
       type: TokenDeposit
-      marshal-as: self
+      marshal-as: reference
 
 TokenDeposit:
   non-binary: true
+  incomparable: true
   fields:
   - name: Url
     type: string
@@ -90,6 +97,7 @@ TokenDeposit:
 
 UrlQuery:
   non-binary: true
+  incomparable: true
   fields:
   - name: Url
     type: string
@@ -103,17 +111,21 @@ UrlQuery:
 
 TxIdQuery:
   non-binary: true
+  incomparable: true
   fields:
   - name: Txid
     type: bytes
 
 ChainIdQuery:
   non-binary: true
+  incomparable: true
   fields:
   - name: ChainId
     type: bytes
 
 MetricsQuery:
+  non-binary: true
+  incomparable: true
   fields:
     - name: Metric
       type: string
@@ -122,12 +134,14 @@ MetricsQuery:
 
 MetricsResponse:
   non-binary: true
+  incomparable: true
   fields:
     - name: Value
       type: any
 
 TxRequest:
   non-binary: true
+  incomparable: true
   fields:
   - name: CheckOnly
     type: bool
@@ -137,17 +151,18 @@ TxRequest:
     is-url: true
   - name: Signer
     type: Signer
-    marshal-as: self
+    marshal-as: reference
   - name: Signature
     type: bytes
   - name: KeyPage
     type: KeyPage
-    marshal-as: self
+    marshal-as: reference
   - name: Payload
     type: any
 
 TxResponse:
   non-binary: true
+  incomparable: true
   fields:
   - name: Txid
     type: bytes

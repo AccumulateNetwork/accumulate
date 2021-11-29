@@ -24,6 +24,56 @@ type Object struct {
 	Roots  [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
 }
 
+func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
+	if !(v.Index == u.Index) {
+		return false
+	}
+
+	if !(v.PreviousHeight == u.PreviousHeight) {
+		return false
+	}
+
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+
+	if !(len(v.Chains) == len(u.Chains)) {
+		return false
+	}
+
+	for i := range v.Chains {
+		if v.Chains[i] != u.Chains[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *Object) Equal(u *Object) bool {
+	if !(bytes.Equal(v.Entry, u.Entry)) {
+		return false
+	}
+
+	if !(v.Height == u.Height) {
+		return false
+	}
+
+	if !(len(v.Roots) == len(u.Roots)) {
+		return false
+	}
+
+	for i := range v.Roots {
+		v, u := v.Roots[i], u.Roots[i]
+		if !(bytes.Equal(v, u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
 func (v *AnchorMetadata) BinarySize() int {
 	var n int
 

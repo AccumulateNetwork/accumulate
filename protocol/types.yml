@@ -19,7 +19,7 @@ TxResult:
       slice:
         type: TxSynthRef
         pointer: true
-        marshal-as: self
+        marshal-as: reference
 
 TxSynthRef:
   fields:
@@ -58,7 +58,7 @@ SyntheticCreateChain:
       type: slice
       slice:
         type: ChainParams
-        marshal-as: self
+        marshal-as: reference
 
 ChainParams:
   fields:
@@ -106,7 +106,7 @@ SigSpec:
       slice:
         type: KeySpec
         pointer: true
-        marshal-as: self
+        marshal-as: reference
 
 CreateSigSpec:
   kind: tx
@@ -120,7 +120,7 @@ CreateSigSpec:
       slice:
         type: KeySpecParams
         pointer: true
-        marshal-as: self
+        marshal-as: reference
 
 SigSpecGroup:
   kind: chain
@@ -174,7 +174,7 @@ UpdateKeyPage:
   fields:
     - name: Operation
       type: KeyPageOperation
-      marshal-as: self
+      marshal-as: value
     - name: Key
       type: bytes
     - name: NewKey
@@ -189,6 +189,7 @@ MetricsRequest:
 
 MetricsResponse:
   non-binary: true
+  incomparable: true
   fields:
     - name: Value
       type: any
