@@ -23,14 +23,12 @@ type ChainHeader struct {
 	Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
 	ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
 	SigSpecId types.Bytes32   `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
-	height    uint64          `json:"height" form:"height" query:"height" validate:"required"`
 
 	// transient
 	url *url.URL
 }
 
 func (h *ChainHeader) Header() *ChainHeader { return h }
-func (h *ChainHeader) GetHeight() uint64    { return h.height }
 
 //SetHeader sets the data for a chain header
 func (h *ChainHeader) SetHeader(chainUrl types.String, chainType types.ChainType) {
@@ -99,9 +97,6 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 
 	spec, _ := common.BytesSlice(data)
 	h.SigSpecId.FromBytes(spec)
-
-	height, _ := common.BytesUint64(data)
-	h.height = height
 
 	return nil
 }

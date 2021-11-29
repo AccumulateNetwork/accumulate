@@ -604,7 +604,7 @@ func TestFaucetReplay(t *testing.T) {
 	tx.AddToAccount(types.String(destAccount), 1000000000)
 
 	genesis.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	gtx, err := transactions.New(*tx.From.AsString(), func(hash []byte) (*transactions.ED25519Sig, error) {
+	gtx, err := transactions.New(*tx.From.AsString(), 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 		return genesis.FaucetWallet.Sign(hash), nil
 	}, &tx)
 	require.NoError(t, err)

@@ -162,7 +162,11 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	}
 
 	// TODO check height
-	if sigSpec.GetHeight() != tx.SigInfo.MSHeight {
+	height, err := st.GetHeight(sigGroup.SigSpecs[tx.SigInfo.PriorityIdx])
+	if err != nil {
+		return nil, err
+	}
+	if height != tx.SigInfo.MSHeight {
 		return nil, fmt.Errorf("invalid height")
 	}
 
