@@ -28,7 +28,7 @@ func TestReceipt(t *testing.T) {
 	// Create a MerkleManager for the memory database
 	manager, err := NewMerkleManager(dbManager, 4)
 	if err != nil {
-		fmt.Errorf("did not create a merkle manager: %v", err)
+		t.Fatalf("did not create a merkle manager: %v", err)
 	}
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
@@ -139,7 +139,7 @@ func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (ma
 	var err error
 	manager, err = NewMerkleManager(dbManager, 2)
 	if err != nil {
-		fmt.Errorf("did not create a merkle manager: %v", err)
+		t.Fatalf("did not create a merkle manager: %v", err)
 	}
 	return manager, dir
 }
@@ -179,14 +179,17 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 					j < 0 || j >= int(manager.MS.Count) || //        Or j is out of range
 					j < i { //                                    Or if the anchor is before the element
 					if r != nil { //                            then you should not be able to generate a receipt
-						t.Fatal("Should not be able to generate a receipt")
+						t.Error("Should not be able to generate a receipt")
+						return
 					}
 				} else {
 					if r == nil {
-						t.Fatal("Failed to generate receipt", i, j)
+						t.Error("Failed to generate receipt", i, j)
+						return
 					}
 					if !r.Validate() {
-						t.Fatal("Receipt fails for element ", i, " anchor ", j)
+						t.Error("Receipt fails for element ", i, " anchor ", j)
+						return
 					}
 					atomic.AddInt64(total, 1)
 				}
