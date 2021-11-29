@@ -2,7 +2,9 @@ package badger
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/dgraph-io/badger"
@@ -25,7 +27,7 @@ func (d *DB) Close() error {
 // Initialize the database by the given filename (includes directory path).
 // This will certainly open an existing database, but will also initialize
 // an new, empty database.
-func (d *DB) InitDB(filepath string) error {
+func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 	// Make sure all directories exist
 	err := os.MkdirAll(filepath, 0777)
 	if err != nil {
@@ -33,7 +35,11 @@ func (d *DB) InitDB(filepath string) error {
 	}
 	d.DBHome = filepath
 	// Open Badger
-	d.badgerDB, err = badger.Open(badger.DefaultOptions(d.DBHome))
+	opts := badger.DefaultOptions(d.DBHome)
+	if logger != nil {
+		opts = opts.WithLogger(badgerLogger{logger})
+	}
+	d.badgerDB, err = badger.Open(opts)
 	if err != nil { // Panic if we can't open Badger
 		return err
 	}
@@ -114,4 +120,29 @@ func (d *DB) EndBatch(TXCache map[storage.Key][]byte) error {
 	}
 
 	return nil
+}
+
+type badgerLogger struct {
+	storage.Logger
+}
+
+func (l badgerLogger) format(format string, args ...interface{}) string {
+	s := fmt.Sprintf(format, args...)
+	return strings.TrimRight(s, "\n")
+}
+
+func (l badgerLogger) Errorf(format string, args ...interface{}) {
+	l.Error(l.format(format, args...))
+}
+
+func (l badgerLogger) Warningf(format string, args ...interface{}) {
+	l.Error(l.format(format, args...))
+}
+
+func (l badgerLogger) Infof(format string, args ...interface{}) {
+	l.Info(l.format(format, args...))
+}
+
+func (l badgerLogger) Debugf(format string, args ...interface{}) {
+	l.Debug(l.format(format, args...))
 }

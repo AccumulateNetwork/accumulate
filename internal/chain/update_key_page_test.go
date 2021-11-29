@@ -32,7 +32,7 @@ func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transacti
 
 func TestUpdateKeyPage_Priority(t *testing.T) {
 	db := new(state.StateDB)
-	require.NoError(t, db.Open("mem", true, true))
+	require.NoError(t, db.Open("mem", true, true, nil))
 
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	dbtx := db.Begin()

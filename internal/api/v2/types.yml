@@ -57,6 +57,7 @@ KeyPage:
     type: uvarint
   - name: Index
     type: uvarint
+    optional: true
 
 Signer:
   non-binary: true
