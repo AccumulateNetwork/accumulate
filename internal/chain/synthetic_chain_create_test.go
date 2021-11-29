@@ -16,7 +16,7 @@ import (
 
 func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	db := new(state.StateDB)
-	require.NoError(t, db.Open("mem", true, true))
+	require.NoError(t, db.Open("mem", true, true, nil))
 
 	fooKey := generateKey()
 	dbTx := db.Begin()
