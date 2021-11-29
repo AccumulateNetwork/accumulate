@@ -11,6 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -30,7 +31,7 @@ func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query
 	cfg.Mempool.CacheSize = 1048576
 	cfg.Mempool.Size = 50000
 	cfg.Accumulate.API.EnableSubscribeTX = true
-	cfg.Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
+	cfg.Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+networks.TmRpcPortOffset)
 
 	newLogger := func(s string) zerolog.Logger {
 		return logging.NewTestZeroLogger(t, s)

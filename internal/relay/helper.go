@@ -1,7 +1,6 @@
 package relay
 
 import (
-	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
@@ -9,7 +8,7 @@ import (
 func NewClients(targetList ...string) ([]Client, error) {
 	clients := []Client{}
 	for _, nameOrIP := range targetList {
-		addr, err := networks.GetRpcAddr(nameOrIP, node.TmRpcPortOffset)
+		addr, err := networks.GetRpcAddr(nameOrIP, networks.TmRpcPortOffset)
 		if err != nil {
 			return nil, err
 		}
