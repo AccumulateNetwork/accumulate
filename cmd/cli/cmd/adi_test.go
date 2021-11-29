@@ -3,10 +3,11 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/stretchr/testify/require"
 	"testing"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
