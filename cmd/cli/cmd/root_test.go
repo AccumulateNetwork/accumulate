@@ -106,7 +106,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	cfg.Mempool.Size = 50000
 	cfg.Accumulate.API.EnableSubscribeTX = false
 	cfg.Accumulate.Networks[0] =
-		fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
+		fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+networks.TmRpcPortOffset)
 
 	newLogger := func(s string) zerolog.Logger {
 		return logging.NewTestZeroLogger(t, s)
@@ -154,7 +154,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 			clients[i] = lclient
 
 		default:
-			addr, err := networks.GetRpcAddr(net, node.TmRpcPortOffset)
+			addr, err := networks.GetRpcAddr(net, networks.TmRpcPortOffset)
 			if err != nil {
 				t.Fatalf("invalid network name or address: %v", err)
 			}
@@ -194,7 +194,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	})
 
 	time.Sleep(time.Second)
-	return opts.Port + node.AccRouterJsonPortOffset, opts.Port + node.AccRouterRestPortOffset
+	return opts.Port + networks.AccRouterJsonPortOffset, opts.Port + networks.AccRouterRestPortOffset
 }
 
 func (c *testCmd) initalize(t *testing.T) {
