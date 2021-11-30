@@ -14,7 +14,7 @@ import (
 
 func TestTransactionState(t *testing.T) {
 	nts1 := api.TokenTx{}
-	nts1.From = types.UrlChain{"RedWagon/myAccount"}
+	nts1.From = types.UrlChain{String: "RedWagon/myAccount"}
 	nts1.AddToAccount("BlueWagon/account", uint64(100*100000000))
 
 	we := accapi.NewWalletEntry()

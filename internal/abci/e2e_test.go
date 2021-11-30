@@ -7,7 +7,6 @@ import (
 	"time"
 
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -21,7 +20,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -33,11 +31,7 @@ type Tx = transactions.GenTransaction
 func TestEndToEndSuite(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *accapi.Query {
 		// Recreate the app for each test
-		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", false)
-		n.app.InitChain(abci.RequestInitChain{
-			Time:    time.Now(),
-			ChainId: s.T().Name(),
-		})
+		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", true)
 		return n.query
 	}))
 }
@@ -133,8 +127,8 @@ func TestFaucet(t *testing.T) {
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		body := new(protocol.AcmeFaucet)
 		body.Url = aliceUrl
-		tx, err := transactions.New(genesis.FaucetUrl.String(), func(hash []byte) (*transactions.ED25519Sig, error) {
-			return genesis.FaucetWallet.Sign(hash), nil
+		tx, err := transactions.New(protocol.FaucetUrl.String(), func(hash []byte) (*transactions.ED25519Sig, error) {
+			return protocol.FaucetWallet.Sign(hash), nil
 		}, body)
 		require.NoError(t, err)
 		send(tx)
@@ -566,4 +560,55 @@ func TestRemoveKey(t *testing.T) {
 	spec := n.GetSigSpec("foo/sigspec1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, testKey2.PubKey().Bytes(), spec.Keys[0].PublicKey)
+}
+
+func TestSignatorHeight(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
+	liteKey, fooKey := generateKey(), generateKey()
+
+	liteUrl, err := protocol.AnonymousAddress(liteKey.PubKey().Bytes(), "ACME")
+	require.NoError(t, err)
+	tokenUrl, err := url.Parse("foo/tokens")
+	require.NoError(t, err)
+	keyPageUrl, err := url.Parse("foo/page0")
+	require.NoError(t, err)
+
+	dbTx := n.db.Begin()
+	require.NoError(t, acctesting.CreateAnonTokenAccount(dbTx, liteKey, 1))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+
+	getHeight := func(u *url.URL) uint64 {
+		obj, _, err := n.db.Begin().LoadChain(u.ResourceChain())
+		require.NoError(t, err)
+		return obj.Height
+	}
+
+	liteHeight := getHeight(liteUrl)
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		adi := new(protocol.IdentityCreate)
+		adi.Url = "foo"
+		adi.PublicKey = fooKey.PubKey().Bytes()
+		adi.KeyBookName = "book"
+		adi.KeyPageName = "page0"
+
+		tx, err := transactions.New(liteUrl.String(), edSigner(liteKey, 1), adi)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	require.Equal(t, liteHeight, getHeight(liteUrl), "Lite account height changed")
+
+	keyPageHeight := getHeight(keyPageUrl)
+
+	n.Batch(func(send func(*transactions.GenTransaction)) {
+		tac := new(protocol.TokenAccountCreate)
+		tac.Url = tokenUrl.String()
+		tac.TokenUrl = protocol.AcmeUrl().String()
+		tx, err := transactions.New("foo", edSigner(fooKey, 1), tac)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	require.Equal(t, keyPageHeight, getHeight(keyPageUrl), "Key page height changed")
 }

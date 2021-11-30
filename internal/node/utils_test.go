@@ -8,11 +8,13 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -37,10 +39,10 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		if relay != nil {
 			config[i].Accumulate.Networks = make([]string, len(relay))
 			for j, r := range relay {
-				config[i].Accumulate.Networks[j] = fmt.Sprintf("tcp://%s:%d", r, basePort+node.TmRpcPortOffset)
+				config[i].Accumulate.Networks[j] = fmt.Sprintf("tcp://%s:%d", r, basePort+networks.TmRpcPortOffset)
 			}
 		} else {
-			config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], basePort+node.TmRpcPortOffset)}
+			config[i].Accumulate.Networks = []string{fmt.Sprintf("%s:%d", IPs[0], basePort+networks.TmRpcPortOffset)}
 		}
 		config[i].Consensus.CreateEmptyBlocks = false
 		config[i].Accumulate.API.EnableSubscribeTX = true
@@ -50,7 +52,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 	require.NoError(t, node.Init(node.InitOptions{
 		WorkDir:   workDir,
 		ShardName: name,
-		ChainID:   name,
+		SubnetID:  name,
 		Port:      basePort,
 		Config:    config,
 		RemoteIP:  IPs,
@@ -92,6 +94,8 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 			return zl
 		}, t.Cleanup)
 		require.NoError(t, err)
+
+		nodes[i].ABCI.(*abci.Accumulator).OnFatal(func(err error) { require.NoError(t, err) })
 	}
 
 	return nodes, dbs

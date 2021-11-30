@@ -77,13 +77,6 @@ type StateDB struct {
 	logger     log.Logger
 }
 
-func (s *StateDB) SetLogger(logger log.Logger) {
-	if logger != nil {
-		logger = logger.With("module", "db")
-	}
-	s.logger = logger
-}
-
 func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	if s.logger != nil {
 		// TODO Maybe this should be Debug?
@@ -99,13 +92,21 @@ func (s *StateDB) init(debug bool) {
 }
 
 // Open database to manage the smt and chain states
-func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool) (err error) {
+func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool, logger log.Logger) (err error) {
+	if logger != nil {
+		s.logger = logger.With("module", "db")
+	}
+
 	dbType := "badger"
 	if useMemDB {
 		dbType = "memory"
 	}
 
-	s.db, err = database.NewDBManager(dbType, dbFilename)
+	if logger != nil {
+		logger = logger.With("module", dbType)
+	}
+
+	s.db, err = database.NewDBManager(dbType, dbFilename, logger)
 	if err != nil {
 		return err
 	}
@@ -139,21 +140,34 @@ func (s *StateDB) Sync() {
 	s.sync.Wait()
 }
 
-//GetTxRange get the transaction id's in a given range
-func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
+//GetChainRange get the transaction id's in a given range
+func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
 	s.mutex.Lock()
-	h, err := s.mm.GetRange(chainId[:], start, end)
-	s.mm.SetChainID(chainId[:])
-	maxAvailable = s.mm.GetElementCount()
-	s.mutex.Unlock()
+	defer s.mutex.Unlock()
+
+	err = s.mm.SetChainID(chainId)
 	if err != nil {
 		return nil, 0, err
 	}
-	for i := range h {
-		hashes = append(hashes, h[i].Bytes32())
+
+	if end > s.mm.MS.Count {
+		end = s.mm.MS.Count
 	}
 
-	return hashes, maxAvailable, nil
+	hashes = make([]types.Bytes32, 0, end-start)
+	for start < end {
+		h, err := s.mm.GetRange(chainId, start, end)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		for i := range h {
+			hashes = append(hashes, h[i].Bytes32())
+		}
+		start += int64(len(h))
+	}
+
+	return hashes, s.mm.GetElementCount(), nil
 }
 
 //GetTx get the transaction by transaction ID
@@ -338,7 +352,7 @@ func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Byt
 	tx.state.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
 	begin := time.Now()
 
-	tx.state.TimeBucket = tx.state.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
+	tx.state.TimeBucket += float64(time.Since(begin)) * float64(time.Nanosecond) * 1e-9
 
 	tx.state.mutex.Lock()
 	updates := tx.updates[*chainId]
@@ -479,7 +493,7 @@ func (tx *DBTransaction) writeAnchors(mutex *sync.Mutex, blockIndex int64, times
 	// Load the previous anchor chain head
 	prevHead, err := tx.state.getAnchorHead()
 	if errors.Is(err, storage.ErrNotFound) {
-		prevHead = &AnchorMetadata{Index: -1}
+		prevHead = &AnchorMetadata{Index: 0}
 	} else if err != nil {
 		return err
 	}
@@ -560,6 +574,15 @@ func (s *StateDB) getAnchorHead() (*AnchorMetadata, error) {
 
 	return head, nil
 }
+
+func (s *StateDB) SubnetID() (string, error) {
+	b, err := s.GetDB().Key("SubnetID").Get()
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func (s *StateDB) BlockIndex() (int64, error) {
 	head, err := s.getAnchorHead()
 	if err != nil {

@@ -13,7 +13,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
@@ -105,7 +104,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 
 	lite, err := url.Parse("acc://b5d4ac455c08bedc04a56d8147e9e9c9494c99eb81e9d8c3/ACME")
 	require.NoError(t, err)
-	require.NotEqual(t, lite.Routing()%3, genesis.FaucetUrl.Routing()%3, "The point of this test is to ensure synthetic transactions are routed correctly. That doesn't work if both URLs route to the same place.")
+	require.NotEqual(t, lite.Routing()%3, protocol.FaucetUrl.Routing()%3, "The point of this test is to ensure synthetic transactions are routed correctly. That doesn't work if both URLs route to the same place.")
 
 	req := new(apitypes.APIRequestURL)
 	req.Wait = true

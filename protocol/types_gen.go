@@ -2113,6 +2113,8 @@ func (v *ChainParams) UnmarshalJSON(data []byte) error {
 		Data     *string `json:"data,omitempty"`
 		IsUpdate bool    `json:"isUpdate,omitempty"`
 	}{}
+	u.Data = encoding.BytesToJSON(v.Data)
+	u.IsUpdate = v.IsUpdate
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2130,6 +2132,8 @@ func (v *CreateSigSpecGroup) UnmarshalJSON(data []byte) error {
 		Url      string   `json:"url,omitempty"`
 		SigSpecs []string `json:"sigSpecs,omitempty"`
 	}{}
+	u.Url = v.Url
+	u.SigSpecs = encoding.ChainSetToJSON(v.SigSpecs)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2147,6 +2151,8 @@ func (v *DataAccount) UnmarshalJSON(data []byte) error {
 		state.ChainHeader
 		Data *string `json:"data,omitempty"`
 	}{}
+	u.ChainHeader = v.ChainHeader
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2166,6 +2172,10 @@ func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
 		KeyBookName string  `json:"keyBookName,omitempty"`
 		KeyPageName string  `json:"keyPageName,omitempty"`
 	}{}
+	u.Url = v.Url
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.KeyBookName = v.KeyBookName
+	u.KeyPageName = v.KeyPageName
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2185,6 +2195,8 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 		PublicKey *string `json:"publicKey,omitempty"`
 		Nonce     uint64  `json:"nonce,omitempty"`
 	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Nonce = v.Nonce
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2201,6 +2213,7 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
 	}{}
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2217,6 +2230,8 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 		state.ChainHeader
 		Data *string `json:"data,omitempty"`
 	}{}
+	u.ChainHeader = v.ChainHeader
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2234,6 +2249,8 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 		Metric   string      `json:"metric,omitempty"`
 		Duration interface{} `json:"duration,omitempty"`
 	}{}
+	u.Metric = v.Metric
+	u.Duration = encoding.DurationToJSON(v.Duration)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2251,6 +2268,8 @@ func (v *SigSpecGroup) UnmarshalJSON(data []byte) error {
 		state.ChainHeader
 		SigSpecs []string `json:"sigSpecs,omitempty"`
 	}{}
+	u.ChainHeader = v.ChainHeader
+	u.SigSpecs = encoding.ChainSetToJSON(v.SigSpecs)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2268,6 +2287,8 @@ func (v *SyntheticCreateChain) UnmarshalJSON(data []byte) error {
 		Cause  string        `json:"cause,omitempty"`
 		Chains []ChainParams `json:"chains,omitempty"`
 	}{}
+	u.Cause = encoding.ChainToJSON(v.Cause)
+	u.Chains = v.Chains
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2285,6 +2306,8 @@ func (v *SyntheticDepositCredits) UnmarshalJSON(data []byte) error {
 		Cause  string `json:"cause,omitempty"`
 		Amount uint64 `json:"amount,omitempty"`
 	}{}
+	u.Cause = encoding.ChainToJSON(v.Cause)
+	u.Amount = v.Amount
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2301,6 +2324,7 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Data *string `json:"data,omitempty"`
 	}{}
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2319,6 +2343,10 @@ func (v *TxSynthRef) UnmarshalJSON(data []byte) error {
 		Url   string `json:"url,omitempty"`
 		TxRef string `json:"txRef,omitempty"`
 	}{}
+	u.Type = v.Type
+	u.Hash = encoding.ChainToJSON(v.Hash)
+	u.Url = v.Url
+	u.TxRef = encoding.ChainToJSON(v.TxRef)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2343,6 +2371,9 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
 	}{}
+	u.Operation = v.Operation
+	u.Key = encoding.BytesToJSON(v.Key)
+	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2364,6 +2395,7 @@ func (v *WriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Data *string `json:"data,omitempty"`
 	}{}
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -2380,6 +2412,8 @@ func (v *WriteDataTo) UnmarshalJSON(data []byte) error {
 		Recipient string  `json:"recipient,omitempty"`
 		Data      *string `json:"data,omitempty"`
 	}{}
+	u.Recipient = v.Recipient
+	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}

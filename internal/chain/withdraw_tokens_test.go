@@ -20,7 +20,7 @@ import (
 func TestAnonTokenTransactions(t *testing.T) {
 	tokenUrl := types.String(protocol.AcmeUrl().String())
 	db := &state.StateDB{}
-	err := db.Open("mem", true, true)
+	err := db.Open("mem", true, true, nil)
 	require.NoError(t, err)
 
 	_, privKey, _ := ed25519.GenerateKey(nil)

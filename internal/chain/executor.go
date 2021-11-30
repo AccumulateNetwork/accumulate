@@ -12,12 +12,15 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 const chainWGSize = 4
@@ -35,11 +38,12 @@ type Executor struct {
 	height  int64
 	dbTx    *state.DBTransaction
 	time    time.Time
+	logger  log.Logger
 }
 
 var _ abci.Chain = (*Executor)(nil)
 
-func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey, executors ...TxExecutor) (*Executor, error) {
+func NewExecutor(query *accapi.Query, db *state.StateDB, logger log.Logger, key ed25519.PrivateKey, executors ...TxExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.db = db
 	m.executors = map[types.TxType]TxExecutor{}
@@ -47,6 +51,7 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
 	m.query = query
+	m.logger = logger.With("module", "executor")
 
 	for _, x := range executors {
 		if _, ok := m.executors[x.Type()]; ok {
@@ -62,8 +67,25 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey,
 		return nil, err
 	}
 
-	fmt.Printf("Loaded height=%d hash=%X\n", height, db.EnsureRootHash())
+	m.logger.Info("Loaded", "height", height, "hash", logging.AsHex(db.RootHash()))
 	return m, nil
+}
+
+func (m *Executor) InitChain(state []byte) error {
+	src := new(memory.DB)
+	_ = src.InitDB("", nil)
+	err := src.UnmarshalJSON(state)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal app state: %v", err)
+	}
+
+	dst := m.db.GetDB().DB
+	err = dst.EndBatch(src.Export())
+	if err != nil {
+		return fmt.Errorf("failed to load app state into database: %v", err)
+	}
+
+	return nil
 }
 
 // BeginBlock implements ./abci.Chain
@@ -76,10 +98,6 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 }
 
 func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error) {
-	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
-		return NewStateManager(m.dbTx, tx)
-	}
-
 	if len(tx.Signature) == 0 {
 		return nil, fmt.Errorf("transaction is not signed")
 	}
@@ -90,6 +108,9 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 
 	txt := tx.TransactionType()
 
+	if m.dbTx == nil {
+		m.dbTx = m.db.Begin()
+	}
 	st, err := NewStateManager(m.dbTx, tx)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
@@ -288,11 +309,6 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
 	}
 
-	// Ensure the genesis transaction can only be processed once
-	if executor.Type() == types.TxTypeSyntheticGenesis {
-		delete(m.executors, types.TxTypeSyntheticGenesis)
-	}
-
 	// If we get here, we were successful in validating.  So, we need to
 	// split the transaction in 2, the body (i.e. TxAccepted), and the
 	// validation material (i.e. TxPending).  The body of the transaction
@@ -319,7 +335,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
-	err = st.commit()
+	err = st.Commit()
 	if err != nil {
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
 	}
@@ -366,7 +382,7 @@ func (m *Executor) Commit() ([]byte, error) {
 
 	m.query.BatchSend()
 
-	fmt.Printf("DB time %f\n", m.db.TimeBucket)
+	m.logger.Info("Committed", "db_time", m.db.TimeBucket)
 	m.db.TimeBucket = 0
 	return mdRoot, nil
 }
