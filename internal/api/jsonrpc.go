@@ -13,7 +13,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	accurl "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -548,18 +547,18 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	tx := acmeapi.TokenTx{}
-	tx.From.String = types.String(genesis.FaucetWallet.Addr)
+	tx.From.String = types.String(protocol.FaucetWallet.Addr)
 	tx.AddToAccount(destAccount, 1000000000)
 
 	txData, err := tx.MarshalBinary()
 
-	genesis.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
+	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
 	gtx := new(transactions.GenTransaction)
-	gtx.Routing = genesis.FaucetUrl.Routing()
-	gtx.ChainID = genesis.FaucetUrl.ResourceChain()
+	gtx.Routing = protocol.FaucetUrl.Routing()
+	gtx.ChainID = protocol.FaucetUrl.ResourceChain()
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = *tx.From.String.AsString()
-	gtx.SigInfo.Nonce = genesis.FaucetWallet.Nonce
+	gtx.SigInfo.Nonce = protocol.FaucetWallet.Nonce
 	gtx.SigInfo.MSHeight = 1
 	gtx.SigInfo.PriorityIdx = 0
 	gtx.Transaction = txData
@@ -569,7 +568,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	dataToSign := gtx.TransactionHash()
 
 	ed := new(transactions.ED25519Sig)
-	err = ed.Sign(genesis.FaucetWallet.Nonce, genesis.FaucetWallet.PrivateKey, dataToSign)
+	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, dataToSign)
 	if err != nil {
 		return submissionError(err)
 	}

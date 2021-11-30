@@ -510,7 +510,7 @@ func (tx *DBTransaction) writeAnchors(mutex *sync.Mutex, blockIndex int64, times
 	// Load the previous anchor chain head
 	prevHead, err := tx.state.getAnchorHead()
 	if errors.Is(err, storage.ErrNotFound) {
-		prevHead = &AnchorMetadata{Index: -1}
+		prevHead = &AnchorMetadata{Index: 0}
 	} else if err != nil {
 		return err
 	}

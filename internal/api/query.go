@@ -382,6 +382,9 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 	if err != nil {
 		return nil, err
 	}
+	if res.Response.Code != 0 {
+		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
+	}
 	thr := query.ResponseTxHistory{}
 	err = thr.UnmarshalBinary(res.Response.Value)
 	if err != nil {
