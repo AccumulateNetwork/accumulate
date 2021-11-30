@@ -21,7 +21,6 @@ func NewBlockValidatorExecutor(query *accapi.Query, db *state.StateDB, logger lo
 		CreateKeyPage{},
 		CreateKeyBook{},
 		UpdateKeyPage{},
-		SyntheticGenesis{},
 		SyntheticCreateChain{},
 		SyntheticTokenDeposit{},
 		SyntheticDepositCredits{},
