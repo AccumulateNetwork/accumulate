@@ -61,8 +61,8 @@ func (t *SignatureInfo) Equal(t2 *SignatureInfo) bool {
 // Create the binary representation of the GenTransaction
 func (t *SignatureInfo) Marshal() (data []byte, err error) { //            Serialize the Signature Info
 	defer func() { //                                                      If any problems are encountered, then
-		if err := recover(); err != nil { //                               Complain
-			err = fmt.Errorf("error marshaling GenTransaction %v", err) //
+		if r := recover(); r != nil { //                               Complain
+			err = fmt.Errorf("error marshaling GenTransaction %v", r) //
 		} //
 	}()
 
@@ -79,8 +79,8 @@ func (t *SignatureInfo) Marshal() (data []byte, err error) { //            Seria
 // the GenTransaction
 func (t *SignatureInfo) UnMarshal(data []byte) (nextData []byte, err error) { // Get the data from the input stream
 	defer func() { //                                                            and set the values.  Any problem
-		if err := recover(); err != nil { //                                     will be reported
-			err = fmt.Errorf("error unmarshaling GenTransaction %v", err) //
+		if r := recover(); r != nil { //                                     will be reported
+			err = fmt.Errorf("error unmarshaling GenTransaction %v", r) //
 		} //
 	}() //
 
