@@ -244,7 +244,7 @@ func (api *API) getData(_ context.Context, params json.RawMessage) interface{} {
 
 	resp, err := api.query.GetChainStateByUrl(string(req.URL))
 	if err != nil {
-		return accumulateError(err)
+		return chainStateError(err)
 	}
 
 	return resp
@@ -260,7 +260,7 @@ func (api *API) getDataByChainId(_ context.Context, params json.RawMessage) inte
 
 	resp, err := api.query.GetChainStateByChainId(req.ChainId)
 	if err != nil {
-		return accumulateError(err)
+		return chainStateError(err)
 	}
 
 	return resp
@@ -283,7 +283,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 	resp, err := api.query.GetAdi(*req.URL.AsString())
 	if err != nil {
-		return accumulateError(err)
+		return adiError(err)
 	}
 
 	return resp
@@ -311,7 +311,7 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 
 	resp, err := api.query.GetToken(*req.URL.AsString())
 	if err != nil {
-		return accumulateError(err)
+		return tokenError(err)
 	}
 
 	return resp
@@ -340,7 +340,7 @@ func (api *API) getTokenAccount(_ context.Context, params json.RawMessage) inter
 
 	resp, err := api.query.GetTokenAccount(*req.URL.AsString())
 	if err != nil {
-		return accumulateError(err)
+		return tokenAccountError(err)
 	}
 
 	return resp
@@ -358,13 +358,13 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 
 	// validate URL
 	if err = api.validate.Struct(req); err != nil {
-		return validatorError(err)
+		return invalidTxnTypeError(err)
 	}
 
 	// Tendermint integration here
 	ret, err := api.query.GetTransactionHistory(*req.URL.AsString(), req.Start, req.Limit)
 	if err != nil {
-		return accumulateError(err)
+		return transactionHistoryError(err)
 	}
 
 	ret.Type = "tokenAccountHistory"
@@ -493,11 +493,11 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 	// Tendermint's integration here
 	resp, err := api.query.GetTransaction(req.Hash[:])
 	if err != nil {
-		return accumulateError(err)
+		return transactionError(err)
 	}
 
 	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
-		return validatorError(fmt.Errorf("transaction type is %s and not a token transaction", resp.Type))
+		return invalidTxnTypeError(fmt.Errorf("transaction type is %s and not a token transaction", resp.Type))
 	}
 
 	return resp
@@ -564,7 +564,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	gtx.SigInfo.PriorityIdx = 0
 	gtx.Transaction = txData
 	if err := gtx.SetRoutingChainID(); err != nil {
-		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", destAccount), err)
+		return jsonrpc2.NewError(ErrCodeBadURL, fmt.Sprintf("bad url generated %s: ", destAccount), err)
 	}
 	dataToSign := gtx.TransactionHash()
 
@@ -654,7 +654,7 @@ func (api *API) GetDirectory(_ context.Context, params json.RawMessage) interfac
 
 	resp, err := api.query.GetDirectory(*req.URL.AsString())
 	if err != nil {
-		return accumulateError(err)
+		return directoryError(err)
 	}
 
 	return resp
