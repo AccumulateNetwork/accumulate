@@ -15,6 +15,16 @@ type ChainIdQuery struct {
 	ChainId []byte `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
+type DirectoryQuery struct {
+	UrlQuery
+	QueryOptions
+}
+
+type DirectoryQueryResult struct {
+	Entries         []string         `json:"entries,omitempty" form:"entries" query:"entries"`
+	ExpandedEntries []*QueryResponse `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
+}
+
 type KeyPage struct {
 	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	Index  uint64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
@@ -41,6 +51,15 @@ type QueryMultiResponse struct {
 	Total uint64           `json:"total,omitempty" form:"total" query:"total" validate:"required"`
 }
 
+type QueryOptions struct {
+	ExpandChains bool `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
+}
+
+type QueryPagination struct {
+	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
+	Count uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+}
+
 type QueryResponse struct {
 	Type        string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	MerkleState *MerkleState `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
@@ -51,11 +70,6 @@ type QueryResponse struct {
 	Signer      Signer       `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Sig         []byte       `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
 	Status      interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-}
-
-type DirectoryQueryResult struct {
-	Entries         []string         `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
-	ExpandedEntries []*QueryResponse `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries" `
 }
 
 type Signer struct {
@@ -72,6 +86,11 @@ type TokenDeposit struct {
 type TokenSend struct {
 	From string         `json:"from,omitempty" form:"from" query:"from" validate:"required"`
 	To   []TokenDeposit `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+}
+
+type TxHistoryQuery struct {
+	UrlQuery
+	QueryPagination
 }
 
 type TxIdQuery struct {
@@ -97,15 +116,6 @@ type TxResponse struct {
 
 type UrlQuery struct {
 	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-}
-
-type QueryPagination struct {
-	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
-	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
-}
-
-type QueryOptions struct {
-	ExpandChains bool `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
 }
 
 func (v *MetricsQuery) BinarySize() int {
@@ -349,29 +359,6 @@ func (v *QueryResponse) UnmarshalJSON(data []byte) error {
 		v.Sig = x
 	}
 	v.Status = u.Status
-	return nil
-}
-
-func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
-	var lenEntries uint64
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Entries: %w", err)
-	} else {
-		lenEntries = x
-	}
-	data = data[encoding.UvarintBinarySize(lenEntries):]
-
-	v.Entries = make([]string, lenEntries)
-	for i := range v.Entries {
-		if x, err := encoding.StringUnmarshalBinary(data); err != nil {
-			return fmt.Errorf("error decoding Entries[%d]: %w", i, err)
-		} else {
-			v.Entries[i] = x
-		}
-		data = data[encoding.StringBinarySize(v.Entries[i]):]
-
-	}
-
 	return nil
 }
 
