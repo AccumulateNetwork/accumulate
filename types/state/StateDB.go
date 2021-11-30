@@ -140,21 +140,34 @@ func (s *StateDB) Sync() {
 	s.sync.Wait()
 }
 
-//GetTxRange get the transaction id's in a given range
-func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
+//GetChainRange get the transaction id's in a given range
+func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
 	s.mutex.Lock()
-	h, err := s.mm.GetRange(chainId[:], start, end)
-	s.mm.SetChainID(chainId[:])
-	maxAvailable = s.mm.GetElementCount()
-	s.mutex.Unlock()
+	defer s.mutex.Unlock()
+
+	err = s.mm.SetChainID(chainId)
 	if err != nil {
 		return nil, 0, err
 	}
-	for i := range h {
-		hashes = append(hashes, h[i].Bytes32())
+
+	if end > s.mm.MS.Count {
+		end = s.mm.MS.Count
 	}
 
-	return hashes, maxAvailable, nil
+	hashes = make([]types.Bytes32, 0, end-start)
+	for start < end {
+		h, err := s.mm.GetRange(chainId, start, end)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		for i := range h {
+			hashes = append(hashes, h[i].Bytes32())
+		}
+		start += int64(len(h))
+	}
+
+	return hashes, s.mm.GetElementCount(), nil
 }
 
 //GetTx get the transaction by transaction ID
