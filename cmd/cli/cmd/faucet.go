@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
@@ -35,13 +36,17 @@ func Faucet(url string) (string, error) {
 
 	var res acmeapi.APIDataResponse
 	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(url)
+	u, err := url2.Parse(url)
+	if err != nil {
+		return "", err
+	}
+	params.URL = types.String(u.String())
 
 	if err := Client.Request(context.Background(), "faucet", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 	ar := ActionResponse{}
-	err := json.Unmarshal(*res.Data, &ar)
+	err = json.Unmarshal(*res.Data, &ar)
 	if err != nil {
 		return "", fmt.Errorf("error unmarshalling create adi result")
 	}

@@ -122,8 +122,20 @@ func (t TransactionType) String() string {
 		return "createTokenAccount"
 	case TxTypeWithdrawTokens:
 		return "withdrawTokens"
+	case TxTypeCreateDataAccount:
+		return "createDataAccount"
+	case TxTypeWriteData:
+		return "writeData"
+	case TxTypeWriteDataTo:
+		return "writeDataTo"
 	case TxTypeAcmeFaucet:
 		return "acmeFaucet"
+	case TxTypeCreateToken:
+		return "createToken"
+	case TxTypeIssueTokens:
+		return "issueTokens"
+	case TxTypeBurnTokens:
+		return "burnTokens"
 	case TxTypeCreateKeyPage:
 		return "createKeyPage"
 	case TxTypeCreateKeyBook:
@@ -134,10 +146,14 @@ func (t TransactionType) String() string {
 		return "updateKeyPage"
 	case TxTypeSyntheticCreateChain:
 		return "syntheticCreateChain"
+	case TxTypeSyntheticWriteData:
+		return "syntheticWriteData"
 	case TxTypeSyntheticDepositTokens:
 		return "syntheticDepositTokens"
 	case TxTypeSyntheticDepositCredits:
 		return "syntheticDepositCredits"
+	case TxTypeSyntheticBurnTokens:
+		return "syntheticBurnTokens"
 	case TxTypeSyntheticGenesis:
 		return "syntheticGenesis"
 	default:
