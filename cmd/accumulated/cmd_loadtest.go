@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/networks"
@@ -71,7 +70,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 		net, err := networks.Resolve(flagInit.Net)
 		checkf(err, "--network")
 
-		lAddr := fmt.Sprintf("tcp://%s:%d", net.Nodes[0].IP, net.Port+node.TmRpcPortOffset)
+		lAddr := fmt.Sprintf("tcp://%s:%d", net.Nodes[0].IP, net.Port+networks.TmRpcPortOffset)
 		client, err := rpc.New(lAddr)
 		checkf(err, "failed to create RPC client for network %q", name)
 
