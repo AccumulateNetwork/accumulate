@@ -22,7 +22,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	page, ok := st.Sponsor.(*protocol.SigSpec)
+	page, ok := st.Sponsor.(*protocol.KeyPage)
 	if !ok {
 		return fmt.Errorf("invalid sponsor: want chain type %v, got %v", types.ChainTypeKeyPage, st.Sponsor.Header().Type)
 	}
@@ -46,26 +46,26 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 	}
 
-	var ssg *protocol.SigSpecGroup
+	var ssg *protocol.KeyBook
 	var priority = -1
-	if page.SigSpecId != (types.Bytes32{}) {
-		ssg = new(protocol.SigSpecGroup)
-		err = st.LoadAs(page.SigSpecId, ssg)
+	if page.KeyBook != (types.Bytes32{}) {
+		ssg = new(protocol.KeyBook)
+		err = st.LoadAs(page.KeyBook, ssg)
 		if err != nil {
 			return fmt.Errorf("invalid key book: %v", err)
 		}
 
-		for i, p := range ssg.SigSpecs {
+		for i, p := range ssg.Pages {
 			if p == st.SponsorChainId {
 				priority = i
 			}
 		}
 		if priority < 0 {
-			return fmt.Errorf("cannot find %q in key book with ID %X", st.SponsorUrl, page.SigSpecId)
+			return fmt.Errorf("cannot find %q in key book with ID %X", st.SponsorUrl, page.KeyBook)
 		}
 
 		// 0 is the highest priority, followed by 1, etc
-		if tx.SigInfo.PriorityIdx > uint64(priority) {
+		if tx.SigInfo.KeyPageIndex > uint64(priority) {
 			return fmt.Errorf("cannot modify %q with a lower priority key page", st.SponsorUrl)
 		}
 	}
