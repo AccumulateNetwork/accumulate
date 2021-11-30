@@ -8,7 +8,7 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
+	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
@@ -21,7 +21,7 @@ func TestProofADI(t *testing.T) {
 	liteKey, adiKey := generateKey(), generateKey()
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
 	dbTx := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, liteKey, 5e4))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, liteKey, 5e4))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	// Create ADI
@@ -31,7 +31,7 @@ func TestProofADI(t *testing.T) {
 		adi.KeyPageName = "page0"
 		adi.PublicKey = keyHash[:]
 
-		sponsorUrl := anon.GenerateAcmeAddress(liteKey.PubKey().Bytes())
+		sponsorUrl := lite.GenerateAcmeAddress(liteKey.PubKey().Bytes())
 		tx, err := transactions.New(sponsorUrl, edSigner(liteKey, 1), adi)
 		require.NoError(t, err)
 

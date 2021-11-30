@@ -50,9 +50,9 @@ The `ACME` token issuer is built into the protocol. In the future, other token
 issuers can be created. Every token issuer has a token URL, such as `acc://ACME`
 or `acc://bobs/tokens`.
 
-## Anonymous Token Accounts
+## Lite Token Accounts
 
-The steps to construct the URL of an anonymous token account are as follows:
+The steps to construct the URL of an lite token account are as follows:
 
 1. Calculate the SHA-256 hash of the public key and hex encode the first 20 bytes.
     - For example, `C3AB8FF13720E8AD9047DD39466B3C8974E592C2`
@@ -61,7 +61,7 @@ The steps to construct the URL of an anonymous token account are as follows:
 4. Append the previous result to the key hash, as a checksum.
     - `acc://C3AB8FF13720E8AD9047DD39466B3C8974E592C226E2A324/bobs/tokens`
 
-The ADI URL corresponding to the public key hash of an anonymous token account
-is reserved as soon as any anonymous token account is created for that key. For
-example, once `acc://deadbeef/ACME` is created as an anonymous token account,
-`acc://deadbeef` can no longer be used.
+The ADI URL corresponding to the public key hash of an lite token account is
+reserved as soon as any lite token account is created for that key. For example,
+once `acc://deadbeef/ACME` is created as an lite token account, `acc://deadbeef`
+can no longer be used.

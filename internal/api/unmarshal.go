@@ -111,11 +111,11 @@ func unmarshalTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error
 	})
 }
 
-func unmarshalAnonTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, "anonTokenAccount", func(b []byte) (interface{}, error) {
-		sAccount := new(protocol.AnonTokenAccount)
+func unmarshalLiteTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, types.ChainTypeLiteTokenAccount.String(), func(b []byte) (interface{}, error) {
+		sAccount := new(protocol.LiteTokenAccount)
 		err := sAccount.UnmarshalBinary(b)
-		rAccount := new(response.AnonTokenAccount)
+		rAccount := new(response.LiteTokenAccount)
 		rAccount.TokenAccountCreate = new(protocol.TokenAccountCreate)
 		rAccount.Url = string(sAccount.ChainUrl)
 		rAccount.TokenUrl = string(sAccount.TokenUrl)
@@ -320,7 +320,7 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 		return unmarshalTokenAccount(rQuery)
 
 	case types.ChainTypeLiteTokenAccount:
-		return unmarshalAnonTokenAccount(rQuery)
+		return unmarshalLiteTokenAccount(rQuery)
 
 	case types.ChainTypeKeyPage:
 		return unmarshalKeyPage(rQuery)
