@@ -2,11 +2,13 @@ package memory
 
 import (
 	"bytes"
+	"encoding/json"
 	"sort"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 // DB
@@ -118,7 +120,14 @@ func (m *DB) Put(key storage.Key, value []byte) error {
 	return nil
 }
 
-func (m *DB) MarshalBinary() ([]byte, error) {
+type jsonDB []jsonEntry
+
+type jsonEntry struct {
+	Key   types.Bytes32
+	Value types.Bytes
+}
+
+func (m *DB) MarshalJSON() ([]byte, error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -135,42 +144,28 @@ func (m *DB) MarshalBinary() ([]byte, error) {
 		return bytes.Compare(keys[i][:], keys[j][:]) < 0
 	})
 
-	b := make([]byte, 0, size)
+	jdb := make(jsonDB, 0, size)
 	for _, key := range keys {
 		entry := m.entries[key]
-		b = append(b, key[:]...)
-		b = append(b, encoding.UvarintMarshalBinary(uint64(len(entry)))...)
-		b = append(b, entry...)
+		jdb = append(jdb, jsonEntry{types.Bytes32(key), entry})
 	}
-	return b, nil
+	return json.Marshal(jdb)
 }
 
-func (m *DB) UnmarshalBinary(b []byte) error {
+func (m *DB) UnmarshalJSON(b []byte) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
+	var jdb jsonDB
+	err := json.Unmarshal(b, &jdb)
+	if err != nil {
+		return err
+	}
+
 	// Delete all entries first?
 
-	for len(b) > 0 {
-		key, err := encoding.ChainUnmarshalBinary(b)
-		if err != nil {
-			return err
-		}
-		b = b[encoding.ChainBinarySize(&key):]
-
-		n, err := encoding.UvarintUnmarshalBinary(b)
-		if err != nil {
-			return err
-		}
-		b = b[encoding.UvarintBinarySize(n):]
-
-		if uint64(len(b)) < n {
-			return encoding.ErrNotEnoughData
-		}
-		entry := b[:n]
-		b = b[n:]
-
-		m.entries[key] = entry
+	for _, e := range jdb {
+		m.entries[storage.Key(e.Key)] = e.Value
 	}
 	return nil
 }
