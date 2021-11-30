@@ -38,6 +38,8 @@ type Accumulator struct {
 	chain    Chain
 	logger   log.Logger
 	didPanic bool
+
+	onFatal func(error)
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -70,6 +72,11 @@ func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Lo
 
 var _ abci.Application = (*Accumulator)(nil)
 
+// FOR TESTING ONLY
+func (app *Accumulator) OnFatal(f func(error)) {
+	app.onFatal = f
+}
+
 func (app *Accumulator) recover(code *uint32) {
 	r := recover()
 	if r == nil {
@@ -81,10 +88,16 @@ func (app *Accumulator) recover(code *uint32) {
 		*code = protocol.CodeUnknownError
 	}
 
-	if err, ok := r.(error); ok {
-		sentry.CaptureException(fmt.Errorf("did panic: %w", err))
+	err, ok := r.(error)
+	if ok {
+		err = fmt.Errorf("did panic: %w", err)
 	} else {
-		sentry.CaptureException(fmt.Errorf("did panic: %v", r))
+		err = fmt.Errorf("did panic: %v", r)
+	}
+
+	sentry.CaptureException(err)
+	if app.onFatal != nil {
+		app.onFatal(err)
 	}
 }
 
@@ -196,18 +209,16 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to check block index: %v", err))
 	}
 
-	var appState []byte
-	err = json.Unmarshal(req.AppStateBytes, &appState)
-	if err != nil {
-		panic(fmt.Errorf("failed to decode app state: %v", err))
-	}
-
-	err = app.chain.InitChain(appState)
+	err = app.chain.InitChain(req.AppStateBytes)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
 
-	app.subnetID = req.ChainId
+	app.subnetID, err = app.state.SubnetID()
+	if err != nil {
+		panic(fmt.Errorf("failed to load subnet ID: %v", err))
+	}
+
 	app.logger = app.logger.With("subnet", req.ChainId)
 	app.logger.Info("Initializing")
 
@@ -216,37 +227,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		app.updateValidator(v)
 	}
 
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = protocol.ACME
-	tx.Transaction, err = new(protocol.SyntheticGenesis).MarshalBinary()
-	if err != nil {
-		panic(fmt.Errorf("failed to marshal genesis TX: %v", err))
-	}
-
-	app.chain.BeginBlock(BeginBlockRequest{
-		IsLeader: false,
-		Height:   0,
-	})
-
-	customErr := app.chain.CheckTx(tx)
-	if customErr != nil {
-		panic(fmt.Errorf("failed to validate genesis TX: %v", customErr))
-	}
-
-	_, customErr = app.chain.DeliverTx(tx)
-	if customErr != nil {
-		panic(fmt.Errorf("failed to execute genesis TX: %v", customErr))
-	}
-
-	app.chain.EndBlock(EndBlockRequest{})
-
-	mdRoot, err := app.chain.Commit()
-	if err != nil {
-		panic(fmt.Errorf("failed to commit genesis TX: %v", err))
-	}
-
-	return abci.ResponseInitChain{AppHash: mdRoot}
+	return abci.ResponseInitChain{AppHash: app.state.RootHash()}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.

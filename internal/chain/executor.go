@@ -74,7 +74,7 @@ func NewExecutor(query *accapi.Query, db *state.StateDB, logger log.Logger, key 
 func (m *Executor) InitChain(state []byte) error {
 	src := new(memory.DB)
 	_ = src.InitDB("", nil)
-	err := src.UnmarshalBinary(state)
+	err := src.UnmarshalJSON(state)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
@@ -98,10 +98,6 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) {
 }
 
 func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error) {
-	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
-		return NewStateManager(m.dbTx, tx)
-	}
-
 	if len(tx.Signature) == 0 {
 		return nil, fmt.Errorf("transaction is not signed")
 	}
@@ -112,6 +108,9 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 
 	txt := tx.TransactionType()
 
+	if m.dbTx == nil {
+		m.dbTx = m.db.Begin()
+	}
 	st, err := NewStateManager(m.dbTx, tx)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
@@ -326,11 +325,6 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
 	}
 
-	// Ensure the genesis transaction can only be processed once
-	if executor.Type() == types.TxTypeSyntheticGenesis {
-		delete(m.executors, types.TxTypeSyntheticGenesis)
-	}
-
 	// If we get here, we were successful in validating.  So, we need to
 	// split the transaction in 2, the body (i.e. TxAccepted), and the
 	// validation material (i.e. TxPending).  The body of the transaction
@@ -357,7 +351,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) (*protocol.TxResul
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
-	err = st.commit()
+	err = st.Commit()
 	if err != nil {
 		return nil, m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
 	}
