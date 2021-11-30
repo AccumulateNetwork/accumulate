@@ -173,7 +173,7 @@ func initFollower(cmd *cobra.Command, _ []string) {
 
 	peers := make([]string, len(subnet.Nodes))
 	for i, n := range subnet.Nodes {
-		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", n.IP, subnet.Port+node.TmRpcPortOffset))
+		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", n.IP, subnet.Port+networks.TmRpcPortOffset))
 		checkf(err, "failed to connect to %s", n.IP)
 
 		if genDoc == nil {
@@ -265,7 +265,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		}
 		config.Accumulate.Network = "LocalDevNet"
 		// TODO Set to []string{"self"}
-		config.Accumulate.Networks = []string{fmt.Sprintf("%s:%d", ip, flagInitDevnet.BasePort+node.TmRpcPortOffset)}
+		config.Accumulate.Networks = []string{fmt.Sprintf("%s:%d", ip, flagInitDevnet.BasePort+networks.TmRpcPortOffset)}
 		if flagInit.NoEmptyBlocks {
 			config.Consensus.CreateEmptyBlocks = false
 		}
