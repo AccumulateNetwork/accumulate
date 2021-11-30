@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -176,7 +175,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Url %s", err, chr.Url)}
 		}
 	case types.QueryTypeDirectoryUrl:
-		chr := query.RequestByUrl{}
+		chr := query.RequestDirectory{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
@@ -189,6 +188,16 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
 		}
+
+		if chr.ExpandChains {
+			entries, err := m.expandChainEntries(dir.Entries)
+			if err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
+			}
+			dir.ExpandedEntries = entries
+			dir.Entries = nil
+		}
+
 		k = []byte("directory")
 		v, err = dir.MarshalBinary()
 		if err != nil {
@@ -213,4 +222,30 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		return nil, nil, &protocol.Error{Code: protocol.CodeInvalidQueryType, Message: fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())}
 	}
 	return k, v, err
+}
+
+func (m *Executor) expandChainEntries(entries []string) ([]*state.Object, error) {
+	expEntries := make([]*state.Object, len(entries))
+	for i, entry := range entries {
+		index := i
+		r, err := m.expandChainEntry(entry)
+		if err != nil {
+			return nil, err
+		}
+		expEntries[index] = r
+	}
+	return expEntries, nil
+}
+
+func (m *Executor) expandChainEntry(entryUrl string) (*state.Object, error) {
+	u, err := url.Parse(entryUrl)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL in query %s", entryUrl)
+	}
+
+	v, err := m.queryByChainId(u.ResourceChain())
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
+	}
+	return &state.Object{Entry: v.Entry, Height: v.Height, Roots: v.Roots}, nil
 }

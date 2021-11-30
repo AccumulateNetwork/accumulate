@@ -50,6 +50,23 @@ QueryMultiResponse:
     - name: Total
       type: uvarint
 
+DirectoryQueryResult:
+  non-binary: true
+  fields:
+  - name: Entries
+    type: slice
+    slice:
+      type: string
+    optional: true
+  - name: ExpandedEntries
+    type: slice
+    slice:
+      type: QueryResponse
+      pointer: true
+      marshal-as: self
+    optional: true
+
+
 KeyPage:
   non-binary: true
   fields:
@@ -93,12 +110,35 @@ UrlQuery:
   - name: Url
     type: string
     is-url: true
+
+TxHistoryQuery:
+  non-binary: true
+  embeddings:
+  - UrlQuery
+  - QueryPagination
+
+QueryPagination:
+  non-binary: true
+  fields:
   - name: Start
     type: uvarint
     optional: true
   - name: Count
     type: uvarint
-    optional: true
+    optional: false
+
+DirectoryQuery:
+  non-binary: true
+  embeddings:
+    - UrlQuery
+    - QueryOptions
+
+QueryOptions:
+  non-binary: true
+  fields:
+    - name: ExpandChains
+      type: bool
+      optional: true
 
 TxIdQuery:
   non-binary: true
