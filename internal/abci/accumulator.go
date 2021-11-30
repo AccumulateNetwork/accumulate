@@ -30,7 +30,7 @@ import (
 type Accumulator struct {
 	abci.BaseApplication
 
-	chainId  string
+	subnetID string
 	state    State
 	address  crypto.Address
 	txct     int64
@@ -38,6 +38,8 @@ type Accumulator struct {
 	chain    Chain
 	logger   log.Logger
 	didPanic bool
+
+	onFatal func(error)
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -53,11 +55,27 @@ func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Lo
 	app.address = make([]byte, len(address))
 	copy(app.address, address)
 
+	var err error
+	app.subnetID, err = db.SubnetID()
+	switch {
+	case err == nil:
+		logger = logger.With("subnet", app.subnetID)
+	case errors.Is(err, storage.ErrNotFound):
+		// OK
+	default:
+		return nil, fmt.Errorf("failed to load chain ID: %v", err)
+	}
+
 	logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
 	return app, nil
 }
 
 var _ abci.Application = (*Accumulator)(nil)
+
+// FOR TESTING ONLY
+func (app *Accumulator) OnFatal(f func(error)) {
+	app.onFatal = f
+}
 
 func (app *Accumulator) recover(code *uint32) {
 	r := recover()
@@ -70,10 +88,16 @@ func (app *Accumulator) recover(code *uint32) {
 		*code = protocol.CodeUnknownError
 	}
 
-	if err, ok := r.(error); ok {
-		sentry.CaptureException(fmt.Errorf("did panic: %w", err))
+	err, ok := r.(error)
+	if ok {
+		err = fmt.Errorf("did panic: %w", err)
 	} else {
-		sentry.CaptureException(fmt.Errorf("did panic: %v", r))
+		err = fmt.Errorf("did panic: %v", r)
+	}
+
+	sentry.CaptureException(err)
+	if app.onFatal != nil {
+		app.onFatal(err)
 	}
 }
 
@@ -177,51 +201,33 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	defer app.recover(nil)
+	_, err := app.state.BlockIndex()
+	if err == nil {
+		// InitChain already happened
+		return abci.ResponseInitChain{AppHash: app.state.RootHash()}
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		panic(fmt.Errorf("failed to check block index: %v", err))
+	}
 
-	app.chainId = req.ChainId
-	app.logger = app.logger.With("chain", req.ChainId)
+	err = app.chain.InitChain(req.AppStateBytes)
+	if err != nil {
+		panic(fmt.Errorf("failed to init chain: %v", err))
+	}
+
+	app.subnetID, err = app.state.SubnetID()
+	if err != nil {
+		panic(fmt.Errorf("failed to load subnet ID: %v", err))
+	}
+
+	app.logger = app.logger.With("subnet", req.ChainId)
 	app.logger.Info("Initializing")
-
-	// TODO Store chain ID and reload it from the DB on subsequent runs
 
 	//register a list of the validators.
 	for _, v := range req.Validators {
 		app.updateValidator(v)
 	}
 
-	var err error
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = protocol.ACME
-	tx.Transaction, err = new(protocol.SyntheticGenesis).MarshalBinary()
-	if err != nil {
-		panic(fmt.Errorf("failed to marshal genesis TX: %v", err))
-	}
-
-	app.chain.BeginBlock(BeginBlockRequest{
-		IsLeader: false,
-		Height:   0,
-	})
-
-	customErr := app.chain.CheckTx(tx)
-	if customErr != nil {
-		panic(fmt.Errorf("failed to validate genesis TX: %v", customErr))
-	}
-
-	_, customErr = app.chain.DeliverTx(tx)
-	if customErr != nil {
-		panic(fmt.Errorf("failed to execute genesis TX: %v", customErr))
-	}
-
-	app.chain.EndBlock(EndBlockRequest{})
-
-	mdRoot, err := app.chain.Commit()
-	if err != nil {
-		panic(fmt.Errorf("failed to commit genesis TX: %v", err))
-	}
-
-	return abci.ResponseInitChain{AppHash: mdRoot}
+	return abci.ResponseInitChain{AppHash: app.state.RootHash()}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
@@ -308,16 +314,16 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			u2 = u.String()
 		}
 		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
+		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", customErr)
 		ret.Code = uint32(customErr.Code)
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
+		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
 		return ret
 	}
 
 	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
-	app.logger.Info("Check succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
+	app.logger.Debug("Check succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
 	return ret
 }
 
@@ -360,10 +366,10 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 			u2 = u.String()
 		}
 		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", err)
+		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", customErr)
 		ret.Code = uint32(customErr.Code)
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
-		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), err)
+		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
 		return ret
 	}
 
@@ -382,7 +388,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	//now we need to store the data returned by the validator and feed into accumulator
 	app.txct++
 
-	app.logger.Info("Deliver succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
+	app.logger.Debug("Deliver succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
 	return ret
 }
 

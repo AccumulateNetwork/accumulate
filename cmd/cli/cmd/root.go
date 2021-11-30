@@ -16,6 +16,7 @@ var (
 	Client         = client.NewAPIClient()
 	Db             db.DB
 	WantJsonOutput = false
+	TxPretend      = false
 )
 
 var currentUser = func() *user.User {
@@ -45,6 +46,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.DurationVarP(&Client.Timeout, "timeout", "t", 5*time.Second, "Timeout for all API requests (i.e. 10s, 1m)")
 	flags.BoolVarP(&Client.DebugRequest, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
+	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
 
 	//add the commands
 	cmd.AddCommand(accountCmd)
@@ -73,7 +75,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	rootCmd := InitRootCmd(initDB(filepath.Join(currentUser.HomeDir, ".accumulate")))
+	rootCmd := InitRootCmd(initDB(filepath.Join(currentUser.HomeDir, ".accumulate"), false))
 
 	cobra.CheckErr(rootCmd.Execute())
 }
@@ -90,17 +92,22 @@ var (
 	BucketMnemonic = []byte("mnemonic")
 )
 
-func initDB(defaultWorkDir string) db.DB {
+func initDB(defaultWorkDir string, memDb bool) db.DB {
+	var ret db.DB
+	if memDb == true {
+		ret = new(db.MemoryDB)
+	} else {
+		err := os.MkdirAll(defaultWorkDir, 0700)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	err := os.MkdirAll(defaultWorkDir, 0600)
+		ret = new(db.BoltDB)
+	}
+	err := ret.InitDB(filepath.Join(defaultWorkDir, "wallet.db"))
 	if err != nil {
 		log.Fatal(err)
 	}
+	return ret
 
-	db := new(db.BoltDB)
-	err = db.InitDB(filepath.Join(defaultWorkDir, "wallet.db"))
-	if err != nil {
-		log.Fatal(err)
-	}
-	return db
 }

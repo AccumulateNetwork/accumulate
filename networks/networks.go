@@ -6,6 +6,15 @@ import (
 	. "github.com/AccumulateNetwork/accumulate/config"
 )
 
+const (
+	TmP2pPortOffset         = 0
+	TmRpcPortOffset         = 1
+	TmRpcGrpcPortOffset     = 2
+	AccRouterJsonPortOffset = 4
+	AccRouterRestPortOffset = 5
+	TmPrometheusPortOffset  = 6
+)
+
 type Network map[string]*Subnet
 
 type Subnet struct {
