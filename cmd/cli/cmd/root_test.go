@@ -78,8 +78,8 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 
 	//execute the tests
 	for _, f := range testMatrix {
-		t.Log(GetFunctionName(f))
-		f(t, tc)
+		name := strings.Split(GetFunctionName(f), ".")
+		t.Run(name[len(name)-1], func(t *testing.T) { f(t, tc) })
 	}
 }
 
@@ -214,7 +214,7 @@ func (c *testCmd) initalize(t *testing.T) {
 	c.rootCmd.PersistentPostRun = nil
 
 	c.jsonRpcPort, c.restPort = NewTestBVNN(t, defaultWorkDir)
-	time.Sleep(2 * time.Second)
+	time.Sleep(10 * time.Second)
 
 	t.Cleanup(func() {
 		os.Remove(defaultWorkDir)
