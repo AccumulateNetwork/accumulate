@@ -36,9 +36,9 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	case types.ChainTypeLiteTokenAccount:
 		chain = new(protocol.AnonTokenAccount)
 	case types.ChainTypeKeyPage:
-		chain = new(protocol.SigSpec)
+		chain = new(protocol.KeyPage)
 	case types.ChainTypeKeyBook:
-		chain = new(protocol.SigSpecGroup)
+		chain = new(protocol.KeyBook)
 	case types.ChainTypeTransaction:
 		chain = new(state.Transaction)
 	default:
@@ -70,9 +70,9 @@ func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 	case types.TxTypeCreateToken:
 		payload = new(protocol.TokenAccountCreate)
 	case types.TxTypeCreateKeyPage:
-		payload = new(protocol.CreateSigSpec)
+		payload = new(protocol.CreateKeyPage)
 	case types.TxTypeCreateKeyBook:
-		payload = new(protocol.CreateSigSpecGroup)
+		payload = new(protocol.CreateKeyBook)
 	case types.TxTypeAddCredits:
 		payload = new(protocol.AddCredits)
 	case types.TxTypeUpdateKeyPage:

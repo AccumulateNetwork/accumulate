@@ -171,22 +171,22 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		return st, m.checkSynthetic(st, tx)
 	}
 
-	sigGroup := new(protocol.SigSpecGroup)
+	book := new(protocol.KeyBook)
 	switch sponsor := st.Sponsor.(type) {
 	case *protocol.AnonTokenAccount:
 		return st, m.checkAnonymous(st, tx, sponsor)
 
-	case *state.AdiState, *state.TokenAccount, *protocol.SigSpec:
-		if (sponsor.Header().SigSpecId == types.Bytes32{}) {
+	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage:
+		if (sponsor.Header().KeyBook == types.Bytes32{}) {
 			return nil, fmt.Errorf("sponsor has not been assigned to an SSG")
 		}
-		err := st.LoadAs(sponsor.Header().SigSpecId, sigGroup)
+		err := st.LoadAs(sponsor.Header().KeyBook, book)
 		if err != nil {
-			return nil, fmt.Errorf("invalid SigSpecId: %v", err)
+			return nil, fmt.Errorf("invalid KeyBook: %v", err)
 		}
 
-	case *protocol.SigSpecGroup:
-		sigGroup = sponsor
+	case *protocol.KeyBook:
+		book = sponsor
 
 	default:
 		// The TX sponsor cannot be a transaction
@@ -194,12 +194,12 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		return nil, fmt.Errorf("invalid sponsor: chain type %v cannot sponsor transactions", sponsor.Header().Type)
 	}
 
-	if tx.SigInfo.PriorityIdx >= uint64(len(sigGroup.SigSpecs)) {
+	if tx.SigInfo.KeyPageIndex >= uint64(len(book.Pages)) {
 		return nil, fmt.Errorf("invalid sig spec index")
 	}
 
-	sigSpec := new(protocol.SigSpec)
-	err = st.LoadAs(sigGroup.SigSpecs[tx.SigInfo.PriorityIdx], sigSpec)
+	page := new(protocol.KeyPage)
+	err = st.LoadAs(book.Pages[tx.SigInfo.KeyPageIndex], page)
 	if err != nil {
 		return nil, fmt.Errorf("invalid sig spec: %v", err)
 	}
@@ -207,7 +207,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	// TODO check height
 
 	for i, sig := range tx.Signature {
-		ks := sigSpec.FindKey(sig.PublicKey)
+		ks := page.FindKey(sig.PublicKey)
 		if ks == nil {
 			return nil, fmt.Errorf("no key spec matches signature %d", i)
 		}
@@ -458,11 +458,11 @@ func (m *Executor) addSynthTxns(parentTxId types.Bytes, st *StateManager) error 
 		tx := new(transactions.GenTransaction)
 		tx.SigInfo = new(transactions.SignatureInfo)
 		tx.SigInfo.URL = sub.url.String()
-		tx.SigInfo.MSHeight = 1
-		tx.SigInfo.PriorityIdx = 0
+		tx.SigInfo.KeyPageHeight = 1
+		tx.SigInfo.KeyPageIndex = 0
 		tx.Transaction = body
 
-		tx.SigInfo.MSHeight = 1
+		tx.SigInfo.KeyPageHeight = 1
 		tx.SigInfo.Nonce, err = m.nextSynthCount()
 		if err != nil {
 			return err
@@ -548,12 +548,12 @@ func (m *Executor) signSynthTxns() error {
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = protocol.ACME
-	tx.SigInfo.PriorityIdx = 0
+	tx.SigInfo.KeyPageIndex = 0
 	tx.Transaction, err = body.MarshalBinary()
 	if err != nil {
 		return err
 	}
-	tx.SigInfo.MSHeight = 1
+	tx.SigInfo.KeyPageHeight = 1
 	tx.SigInfo.Nonce, err = m.nextSynthCount()
 	if err != nil {
 		return err

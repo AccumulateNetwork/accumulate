@@ -223,10 +223,10 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, types.String("acc://RoadRunner"), r.ChainUrl)
 	require.Equal(t, types.Bytes(keyHash[:]), r.KeyData)
 
-	kg := n.GetSigSpecGroup("RoadRunner/foo-book")
-	require.Len(t, kg.SigSpecs, 1)
+	kg := n.GetKeyBook("RoadRunner/foo-book")
+	require.Len(t, kg.Pages, 1)
 
-	ks := n.GetSigSpec("RoadRunner/bar-page")
+	ks := n.GetKeyPage("RoadRunner/bar-page")
 	require.Len(t, ks.Keys, 1)
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
 }
@@ -265,8 +265,8 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey, pageKey := generateKey(), generateKey()
 		dbTx := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
-		require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/page1", pageKey.PubKey().Bytes()))
-		require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/book1", "foo/page1"))
+		require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/page1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/book1", "foo/page1"))
 		dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -286,7 +286,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
 		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
-		require.Equal(t, bookChainId, r.SigSpecId)
+		require.Equal(t, bookChainId, r.KeyBook)
 	})
 }
 
@@ -359,13 +359,13 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 		send(tx)
 	})
 
-	ks := n.GetSigSpec("foo/sigspec0")
+	ks := n.GetKeyPage("foo/sigspec0")
 	acct := n.GetTokenAccount("foo/tokens")
 	require.Equal(t, int64(55), ks.CreditBalance.Int64())
 	require.Equal(t, int64(protocol.AcmePrecision*1e2-protocol.AcmePrecision/protocol.CreditsPerDollar*55), acct.Balance.Int64())
 }
 
-func TestCreateSigSpec(t *testing.T) {
+func TestCreateKeyPage(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, testKey := generateKey(), generateKey()
 	dbTx := n.db.Begin()
@@ -373,7 +373,7 @@ func TestCreateSigSpec(t *testing.T) {
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		cms := new(protocol.CreateSigSpec)
+		cms := new(protocol.CreateKeyPage)
 		cms.Url = "foo/keyset1"
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey.PubKey().Bytes(),
@@ -384,20 +384,20 @@ func TestCreateSigSpec(t *testing.T) {
 		send(tx)
 	})
 
-	spec := n.GetSigSpec("foo/keyset1")
+	spec := n.GetKeyPage("foo/keyset1")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, types.Bytes32{}, spec.SigSpecId)
+	require.Equal(t, types.Bytes32{}, spec.KeyBook)
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
 
-func TestCreateSigSpecGroup(t *testing.T) {
+func TestCreateKeyBook(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, testKey := generateKey(), generateKey()
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	specUrl := n.ParseUrl("foo/sigspec1")
@@ -407,24 +407,24 @@ func TestCreateSigSpecGroup(t *testing.T) {
 	groupChainId := types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		csg := new(protocol.CreateSigSpecGroup)
+		csg := new(protocol.CreateKeyBook)
 		csg.Url = "foo/ssg1"
-		csg.SigSpecs = append(csg.SigSpecs, specChainId)
+		csg.Pages = append(csg.Pages, specChainId)
 
 		tx, err := transactions.New("foo", edSigner(fooKey, 1), csg)
 		require.NoError(t, err)
 		send(tx)
 	})
 
-	group := n.GetSigSpecGroup("foo/ssg1")
-	require.Len(t, group.SigSpecs, 1)
-	require.Equal(t, specChainId, types.Bytes32(group.SigSpecs[0]))
+	group := n.GetKeyBook("foo/ssg1")
+	require.Len(t, group.Pages, 1)
+	require.Equal(t, specChainId, types.Bytes32(group.Pages[0]))
 
-	spec := n.GetSigSpec("foo/sigspec1")
-	require.Equal(t, spec.SigSpecId, groupChainId)
+	spec := n.GetKeyPage("foo/sigspec1")
+	require.Equal(t, spec.KeyBook, groupChainId)
 }
 
-func TestAddSigSpec(t *testing.T) {
+func TestAddKeyPage(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
@@ -433,15 +433,15 @@ func TestAddSigSpec(t *testing.T) {
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	// Sanity check
-	require.Equal(t, groupChainId, n.GetSigSpec("foo/sigspec1").SigSpecId)
+	require.Equal(t, groupChainId, n.GetKeyPage("foo/sigspec1").KeyBook)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		cms := new(protocol.CreateSigSpec)
+		cms := new(protocol.CreateKeyPage)
 		cms.Url = "foo/sigspec2"
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey2.PubKey().Bytes(),
@@ -452,10 +452,10 @@ func TestAddSigSpec(t *testing.T) {
 		send(tx)
 	})
 
-	spec := n.GetSigSpec("foo/sigspec2")
+	spec := n.GetKeyPage("foo/sigspec2")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, groupChainId, spec.SigSpecId)
+	require.Equal(t, groupChainId, spec.KeyBook)
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }
@@ -466,8 +466,8 @@ func TestAddKey(t *testing.T) {
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	newKey := generateKey()
@@ -481,7 +481,7 @@ func TestAddKey(t *testing.T) {
 		send(tx)
 	})
 
-	spec := n.GetSigSpec("foo/sigspec1")
+	spec := n.GetKeyPage("foo/sigspec1")
 	require.Len(t, spec.Keys, 2)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[1].PublicKey)
 }
@@ -492,8 +492,8 @@ func TestUpdateKey(t *testing.T) {
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	newKey := generateKey()
@@ -508,7 +508,7 @@ func TestUpdateKey(t *testing.T) {
 		send(tx)
 	})
 
-	spec := n.GetSigSpec("foo/sigspec1")
+	spec := n.GetKeyPage("foo/sigspec1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
@@ -519,8 +519,8 @@ func TestRemoveKey(t *testing.T) {
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(dbTx, "foo/ssg1", "foo/sigspec1"))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -533,7 +533,7 @@ func TestRemoveKey(t *testing.T) {
 		send(tx)
 	})
 
-	spec := n.GetSigSpec("foo/sigspec1")
+	spec := n.GetKeyPage("foo/sigspec1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, testKey2.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }

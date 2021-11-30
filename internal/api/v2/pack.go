@@ -37,8 +37,8 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 	res.Type = payload.GetType().String()
 	res.Data = payload
 	res.Txid = txid[:]
-	res.KeyPage.Height = tx.SigInfo.MSHeight
-	res.KeyPage.Index = tx.SigInfo.PriorityIdx
+	res.KeyPage.Height = tx.SigInfo.KeyPageHeight
+	res.KeyPage.Index = tx.SigInfo.KeyPageIndex
 
 	switch payload := payload.(type) {
 	case *api.TokenTx:

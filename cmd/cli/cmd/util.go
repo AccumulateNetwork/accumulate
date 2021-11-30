@@ -37,8 +37,8 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 
 	ed := transactions.SignatureInfo{}
 	ed.URL = actor.String()
-	ed.MSHeight = 1
-	ed.PriorityIdx = 0
+	ed.KeyPageHeight = 1
+	ed.KeyPageIndex = 0
 
 	if IsLiteAccount(actor.String()) == true {
 		privKey, err = LookupByLabel(actor.String()) //LookupByAnon(actor.String())
@@ -70,11 +70,11 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	if len(args) > 2 {
 		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
 			ct++
-			ed.PriorityIdx = uint64(v)
+			ed.KeyPageIndex = uint64(v)
 			if len(args) > 3 {
 				if v, err := strconv.ParseInt(args[2], 10, 64); err == nil {
 					ct++
-					ed.MSHeight = uint64(v)
+					ed.KeyPageHeight = uint64(v)
 				}
 			}
 		}
@@ -117,8 +117,8 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si 
 	params.Tx.Signer.Nonce = nonce
 	params.Tx.Sponsor = types.String(actor.String())
 	params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
-	params.Tx.KeyPage.Height = si.MSHeight
-	params.Tx.KeyPage.Index = si.PriorityIdx
+	params.Tx.KeyPage.Height = si.KeyPageHeight
+	params.Tx.KeyPage.Index = si.KeyPageIndex
 
 	params.Tx.Sig = types.Bytes64{}
 
@@ -148,8 +148,8 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *tran
 	params.Signer.PublicKey = privKey[32:]
 	params.Signer.Nonce = nonce
 	params.Sponsor = actor.String()
-	params.KeyPage.Height = si.MSHeight
-	params.KeyPage.Index = si.PriorityIdx
+	params.KeyPage.Height = si.KeyPageHeight
+	params.KeyPage.Index = si.KeyPageIndex
 
 	params.Signature = ed.GetSignature()
 	//The public key needs to be used to verify the signature, however,
@@ -370,8 +370,8 @@ var (
 		"anonTokenAccount": "lite account",
 		"tokenAccount":     "ADI token account",
 		"adi":              "ADI",
-		"sigSpecGroup":     "Key Book",
-		"sigSpec":          "Key Page",
+		"keyBook":          "Key Book",
+		"keyPage":          "Key Page",
 	}
 )
 
@@ -500,7 +500,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%v (%s)\n", s, chainType)
 			}
 			return out, nil
-		case "sigSpecGroup":
+		case "keyBook":
 			//workaround for protocol unmarshaling bug
 			var ssg struct {
 				Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
@@ -529,7 +529,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				//	r := acmeapi.APIDataResponse{}
 				//	err = json.Unmarshal(*data.Data, &r)
 				//	if err == nil {
-				//		ss := protocol.SigSpec{}
+				//		ss := protocol.KeyPage{}
 				//		err = json.Unmarshal(*r.Data, &ss)
 				//		keypage = *ss.ChainUrl.AsString()
 				//	}
@@ -543,8 +543,8 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%d\t\t:\t%s\n", i+1, s)
 			}
 			return out, nil
-		case "sigSpec":
-			ss := protocol.SigSpec{}
+		case "keyPage":
+			ss := protocol.KeyPage{}
 			err := json.Unmarshal(*res.Data, &ss)
 			if err != nil {
 				return "", err
