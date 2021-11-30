@@ -4,7 +4,7 @@ import (
 	"bytes"
 )
 
-func (ms *SigSpec) FindKey(pubKey []byte) *KeySpec {
+func (ms *KeyPage) FindKey(pubKey []byte) *KeySpec {
 	// Check each key
 	for _, candidate := range ms.Keys {
 		// Try with each supported hash algorithm
