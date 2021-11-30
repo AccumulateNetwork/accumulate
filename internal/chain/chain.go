@@ -9,10 +9,11 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
-func NewBlockValidatorExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
-	return NewExecutor(query, db, key,
+func NewBlockValidatorExecutor(query *accapi.Query, db *state.StateDB, logger log.Logger, key ed25519.PrivateKey) (*Executor, error) {
+	return NewExecutor(query, db, logger, key,
 		CreateIdentity{},
 		WithdrawTokens{},
 		CreateTokenAccount{},
@@ -20,7 +21,6 @@ func NewBlockValidatorExecutor(query *accapi.Query, db *state.StateDB, key ed255
 		CreateKeyPage{},
 		CreateKeyBook{},
 		UpdateKeyPage{},
-		SyntheticGenesis{},
 		SyntheticCreateChain{},
 		SyntheticTokenDeposit{},
 		SyntheticDepositCredits{},
@@ -30,9 +30,8 @@ func NewBlockValidatorExecutor(query *accapi.Query, db *state.StateDB, key ed255
 	)
 }
 
-func NewDirectoryExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
-	return NewExecutor(query, db, key) // TODO Add DN validators
-
+func NewDirectoryExecutor(query *accapi.Query, db *state.StateDB, logger log.Logger, key ed25519.PrivateKey) (*Executor, error) {
+	return NewExecutor(query, db, logger, key) // TODO Add DN validators
 }
 
 // TxExecutor executes a specific type of transaction.

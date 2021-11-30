@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
@@ -21,6 +22,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/query"
@@ -32,11 +34,12 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	tmtypes "github.com/tendermint/tendermint/types"
 )
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, logLevel string, doGenesis bool) *fakeNode {
 	db := new(state.StateDB)
-	err := db.Open("memory", true, true)
+	err := db.Open("memory", true, true, nil)
 	require.NoError(t, err)
 
 	return createApp(t, db, addr, logLevel, doGenesis)
@@ -72,8 +75,6 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 		os.Exit(1)
 	}
 
-	db.SetLogger(logger)
-
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
 
@@ -91,22 +92,40 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
-	mgr, err := chain.NewBlockValidatorExecutor(n.query, db, bvcKey)
+	mgr, err := chain.NewBlockValidatorExecutor(n.query, db, logger, bvcKey)
 	require.NoError(t, err)
 
 	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
 	require.NoError(t, err)
 	appChan <- n.app
+	n.app.(*abci.Accumulator).OnFatal(func(err error) { require.NoError(t, err) })
 
-	if doGenesis {
-		n.Batch(func(send func(*transactions.GenTransaction)) {
-			tx, err := transactions.New(protocol.ACME, func(hash []byte) (*transactions.ED25519Sig, error) {
-				return genesis.FaucetWallet.Sign(hash), nil
-			}, new(protocol.SyntheticGenesis))
-			require.NoError(t, err)
-			send(tx)
-		})
+	if !doGenesis {
+		return n
 	}
+
+	n.height++
+
+	kv := new(memory.DB)
+	_ = kv.InitDB("", nil)
+	_, err = genesis.Init(kv, genesis.InitOpts{
+		SubnetID:    t.Name(),
+		NetworkType: config.BlockValidator,
+		GenesisTime: time.Now(),
+		Validators: []tmtypes.GenesisValidator{
+			{PubKey: tmed25519.PrivKey(bvcKey).PubKey()},
+		},
+	})
+	require.NoError(t, err)
+
+	state, err := kv.MarshalJSON()
+	require.NoError(t, err)
+
+	n.app.InitChain(abcitypes.RequestInitChain{
+		Time:          time.Now(),
+		ChainId:       t.Name(),
+		AppStateBytes: state,
+	})
 
 	return n
 }

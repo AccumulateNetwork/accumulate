@@ -179,6 +179,8 @@ func (s *AccumulatorTestSuite) vars() *accVars {
 	v.Chain = mock_abci.NewMockChain(v.MockCtrl)
 	s.varMap[s.T()] = v
 
+	v.State.EXPECT().SubnetID().AnyTimes()
+
 	s.T().Cleanup(func() {
 		v.MockCtrl.Finish()
 	})

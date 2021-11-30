@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -28,23 +27,18 @@ func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) inter
 
 func (m *JrpcMethods) ExecuteWith(newParams func() protocol.TransactionPayload, validateFields ...string) jsonrpc2.MethodFunc {
 	return func(ctx context.Context, params json.RawMessage) interface{} {
-		payload := newParams()
+		var raw json.RawMessage
 		req := new(TxRequest)
-		req.Payload = payload
+		req.Payload = &raw
 		err := m.parse(params, req)
 		if err != nil {
 			return err
 		}
 
-		// validate request data
-		if len(validateFields) == 0 {
-			if err = m.validate.Struct(payload); err != nil {
-				return validatorError(err)
-			}
-		} else {
-			if err = m.validate.StructPartial(payload, validateFields...); err != nil {
-				return validatorError(err)
-			}
+		payload := newParams()
+		err = m.parse(raw, payload, validateFields...)
+		if err != nil {
+			return err
 		}
 
 		b, err := payload.MarshalBinary()
@@ -63,11 +57,11 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 		return err
 	}
 
-	genesis.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
+	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = genesis.FaucetUrl.String()
-	tx.SigInfo.Nonce = genesis.FaucetWallet.Nonce
+	tx.SigInfo.URL = protocol.FaucetUrl.String()
+	tx.SigInfo.Nonce = protocol.FaucetWallet.Nonce
 	tx.SigInfo.MSHeight = 1
 	tx.Transaction, err = req.MarshalBinary()
 	if err != nil {
@@ -76,7 +70,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 	ed := new(transactions.ED25519Sig)
 	tx.Signature = append(tx.Signature, ed)
-	err = ed.Sign(genesis.FaucetWallet.Nonce, genesis.FaucetWallet.PrivateKey, tx.TransactionHash())
+	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, tx.TransactionHash())
 	if err != nil {
 		return accumulateError(err)
 	}
