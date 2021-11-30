@@ -21,7 +21,7 @@ func (SyntheticGenesis) Validate(st *StateManager, tx *transactions.GenTransacti
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	for _, record := range genesis.BootstrapStates() {
+	for _, record := range genesis.OldBootstrapStates() {
 		st.Update(record)
 	}
 	return nil

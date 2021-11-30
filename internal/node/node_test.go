@@ -12,6 +12,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestNodeLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	opts.WorkDir = t.TempDir()
 	opts.Port = getFreePort(t)
-	opts.Config[0].Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
+	opts.Config[0].Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+networks.TmRpcPortOffset)
 
 	require.NoError(t, node.Init(opts)) // Configure
 
@@ -97,7 +98,7 @@ func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
 			opts.WorkDir = t.TempDir()
 			opts.Port = getFreePort(t)
 			opts.Config[0].Instrumentation.Prometheus = true
-			opts.Config[0].Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
+			opts.Config[0].Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+networks.TmRpcPortOffset)
 
 			newLogger := func(s string) zerolog.Logger {
 				return logging.NewTestZeroLogger(t, s)
