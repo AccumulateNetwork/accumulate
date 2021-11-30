@@ -86,8 +86,8 @@ func (s *Suite) parseUrl(str string) *url.URL {
 	return u
 }
 
-func (s *Suite) anonUrl(key tmed25519.PrivKey) *url.URL {
-	u, err := protocol.AnonymousAddress(key.PubKey().Bytes(), protocol.ACME)
+func (s *Suite) liteUrl(key tmed25519.PrivKey) *url.URL {
+	u, err := protocol.LiteAddress(key.PubKey().Bytes(), protocol.ACME)
 	s.Require().NoError(err)
 	return u
 }

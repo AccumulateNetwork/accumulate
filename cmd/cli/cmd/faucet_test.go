@@ -43,7 +43,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		res := api2.APIDataResponse{}
 		require.NoError(t, json.Unmarshal([]byte(r), &res))
 
-		acc := response.AnonTokenAccount{} //protocol.AnonTokenAccount{}
+		acc := response.LiteTokenAccount{} //protocol.LiteTokenAccount{}
 		require.NoError(t, json.Unmarshal(*res.Data, &acc), "received error on liteAccount[%d] %s ", i, liteAccounts[i])
 
 		if !beenFauceted[i] {
