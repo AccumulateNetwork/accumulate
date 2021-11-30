@@ -13,7 +13,7 @@ import (
 
 type Querier interface {
 	QueryUrl(url string) (*QueryResponse, error)
-	QueryDirectory(url string, expandChains bool) (*QueryResponse, error)
+	QueryDirectory(url string, queryOptions *QueryOptions) (*QueryResponse, error)
 	QueryChain(id []byte) (*QueryResponse, error)
 	QueryTx(id []byte) (*QueryResponse, error)
 	QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error)

@@ -13,17 +13,25 @@ import (
 
 func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	var obj state.Object
-	var header state.ChainHeader
-	var chain state.Chain
-
 	err := obj.UnmarshalBinary(b)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid state response: %v", err)
 	}
 
-	err = obj.As(&header)
+	chain, err := chainFromStateObj(&obj)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid state response: %v", err)
+		return nil, nil, err
+	}
+
+	return &obj, chain, nil
+}
+
+func chainFromStateObj(obj *state.Object) (state.Chain, error) {
+	var header state.ChainHeader
+	var chain state.Chain
+	err := obj.As(&header)
+	if err != nil {
+		return nil, fmt.Errorf("invalid state response: %v", err)
 	}
 
 	switch header.Type {
@@ -42,15 +50,14 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	case types.ChainTypeTransaction:
 		chain = new(state.Transaction)
 	default:
-		return nil, nil, fmt.Errorf("unknown chain type %v", header.Type)
+		return nil, fmt.Errorf("unknown chain type %v", header.Type)
 	}
 
 	err = obj.As(chain)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid state response: %v", err)
+		return nil, fmt.Errorf("invalid state response: %v", err)
 	}
-
-	return &obj, chain, nil
+	return chain, nil
 }
 
 func unmarshalTxType(b []byte) types.TxType {

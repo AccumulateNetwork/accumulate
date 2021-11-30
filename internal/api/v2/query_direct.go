@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"golang.org/x/sync/errgroup"
-
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -113,14 +111,15 @@ func (q queryDirect) QueryUrl(s string) (*QueryResponse, error) {
 	}
 }
 
-func (q queryDirect) QueryDirectory(s string, expandChains bool) (*QueryResponse, error) {
+func (q queryDirect) QueryDirectory(s string, queryOptions *QueryOptions) (*QueryResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
 	}
 
-	req := new(query.RequestByUrl)
+	req := new(query.RequestDirectory)
 	req.Url = types.String(u.String())
+	req.ExpandChains = types.Bool(queryOptions.ExpandChains)
 	k, v, err := q.queryType(types.QueryTypeDirectoryUrl, req)
 	if err != nil {
 		return nil, err
@@ -129,21 +128,38 @@ func (q queryDirect) QueryDirectory(s string, expandChains bool) (*QueryResponse
 		return nil, fmt.Errorf("unknown response type: want directory, got %q", k)
 	}
 
-	dir := new(DirectoryQueryResult)
-	err = dir.UnmarshalBinary(v)
+	protoDir := new(protocol.DirectoryQueryResult)
+	err = protoDir.UnmarshalBinary(v)
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
 	}
-
-	if expandChains {
-		dir.ExpandedEntries, _ = q.expandChainEntries(context.Background(), dir.Entries)
-		dir.Entries = nil
+	respDir, err := responseDirFromProto(protoDir)
+	if err != nil {
+		return nil, err
 	}
 
 	res := new(QueryResponse)
 	res.Type = "directory"
-	res.Data = dir
+	res.Data = respDir
 	return res, nil
+}
+
+func responseDirFromProto(protoDir *protocol.DirectoryQueryResult) (*DirectoryQueryResult, error) {
+	respDir := new(DirectoryQueryResult)
+	respDir.Entries = protoDir.Entries
+	respDir.ExpandedEntries = make([]*QueryResponse, len(protoDir.ExpandedEntries))
+	for i, entry := range protoDir.ExpandedEntries {
+		chain, err := chainFromStateObj(entry)
+		if err != nil {
+			return nil, err
+		}
+		response, err := packStateResponse(entry, chain)
+		if err != nil {
+			return nil, err
+		}
+		respDir.ExpandedEntries[i] = response
+	}
+	return respDir, nil
 }
 
 func (q queryDirect) QueryChain(id []byte) (*QueryResponse, error) {
@@ -240,43 +256,4 @@ func (q queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiRe
 	}
 
 	return res, nil
-}
-
-func (q queryDirect) expandChainEntries(ctx context.Context, entries []string) ([]*QueryResponse, error) {
-	expEntries := make([]*QueryResponse, len(entries))
-	errs, ctx := errgroup.WithContext(ctx)
-
-	for i, entry := range entries {
-		errs.Go(func() error {
-			expEntry, err := q.expandChainEntry(entry)
-			expEntries[i] = expEntry
-			return err
-		})
-	}
-	err := errs.Wait()
-	if err != nil {
-		return nil, err
-	}
-
-	return expEntries, nil
-}
-
-func (q queryDirect) expandChainEntry(entry string) (*QueryResponse, error) {
-	queryReq := new(query.RequestByUrl)
-	queryReq.Url = types.String(entry)
-
-	key, value, err := q.query(queryReq)
-	if err != nil {
-		return nil, err
-	}
-	if key != "chain" {
-		return nil, fmt.Errorf("unknown response type: want chain, got %q", key)
-	}
-
-	obj, chain, err := unmarshalState(value)
-	if err != nil {
-		return nil, err
-	}
-
-	return packStateResponse(obj, chain)
 }
