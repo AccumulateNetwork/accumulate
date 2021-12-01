@@ -17,6 +17,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -84,6 +85,7 @@ func NewExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 }
 
 func (m *Executor) InitChain(state []byte) error {
+	// Load the genesis state (JSON) into an in-memory key-value store
 	src := new(memory.DB)
 	_ = src.InitDB("", nil)
 	err := src.UnmarshalJSON(state)
@@ -91,10 +93,37 @@ func (m *Executor) InitChain(state []byte) error {
 		return fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
 
+	// Load the BPT root hash so we can verify the system state
+	var hash [32]byte
+	data, err := src.Get(storage.ComputeKey("BPT", "Root"))
+	switch {
+	case err == nil:
+		bpt := new(pmt.BPT)
+		bpt.Root = new(pmt.Node)
+		bpt.UnMarshal(data)
+		hash = bpt.Root.Hash
+	case errors.Is(err, storage.ErrNotFound):
+		// OK
+	default:
+		return fmt.Errorf("failed to load BPT root hash from app state: %v", err)
+	}
+
+	// Dump the genesis state into the key-value store
 	dst := m.db.GetDB().DB
 	err = dst.EndBatch(src.Export())
 	if err != nil {
 		return fmt.Errorf("failed to load app state into database: %v", err)
+	}
+
+	// Load the genesis state into the StateDB
+	err = m.db.Load(dst, false)
+	if err != nil {
+		return fmt.Errorf("faild to reload state database: %v", err)
+	}
+
+	// Make sure the StateDB BPT root hash matches what we found in the genesis state
+	if !bytes.Equal(hash[:], m.db.RootHash()) {
+		panic("BPT root hash from state DB does not match the app state")
 	}
 
 	return nil
