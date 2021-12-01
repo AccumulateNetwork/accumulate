@@ -23,17 +23,11 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	// This fixes the conversion between ACME tokens and fiat currency to
-	// 1:1, as in $1 per 1 ACME token.
-	//
-	// TODO This should be retrieved from an oracle.
-	const DollarsPerAcmeToken = 1
-
 	// tokens = credits / (credits per dollar) / (dollars per token)
 	amount := types.NewAmount(protocol.AcmePrecision) // Do everything with ACME precision
 	amount.Mul(int64(body.Amount))                    // Amount in credits
-	amount.Div(protocol.CreditsPerDollar)             // Amount in dollars
-	amount.Div(DollarsPerAcmeToken)                   // Amount in tokens
+	amount.Div(protocol.CreditsPerFiatUnit)           // Amount in dollars
+	amount.Div(protocol.FiatUnitsPerAcmeToken)        // Amount in tokens
 
 	recvUrl, err := url.Parse(body.Recipient)
 	if err != nil {
