@@ -32,7 +32,6 @@ var keyCmd = &cobra.Command{
 					} else {
 						PrintKeyImport()
 					}
-
 				} else if len(args) > 3 {
 					switch args[1] {
 					case "mnemonic":

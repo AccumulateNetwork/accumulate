@@ -14,19 +14,20 @@ import (
 func TestStateDBConsistency(t *testing.T) {
 	dir := t.TempDir()
 	db := new(badger.DB)
-	err := db.InitDB(filepath.Join(dir, "valacc.db"))
+	err := db.InitDB(filepath.Join(dir, "valacc.db"), nil)
 	require.NoError(t, err)
 	defer db.Close()
 
 	sdb := new(state.StateDB)
 	require.NoError(t, sdb.Load(db, true))
 
-	n := createApp(t, sdb, crypto.Address{}, "error", false)
+	n := createApp(t, sdb, crypto.Address{}, "error", true)
 	n.testAnonTx(10)
 
 	height, err := sdb.BlockIndex()
 	require.NoError(t, err)
 	rootHash := sdb.RootHash()
+	n.client.Shutdown()
 
 	// Reopen the database
 	sdb = new(state.StateDB)

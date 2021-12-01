@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -26,6 +25,7 @@ type StateManager struct {
 	storeCount  int
 	txHash      types.Bytes32
 	txType      types.TxType
+	synthSigs   []*state.SyntheticSignature
 
 	Sponsor        state.Chain
 	SponsorUrl     *url.URL
@@ -50,13 +50,6 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 	m.writes = map[storage.Key][]byte{}
 	m.txHash = types.Bytes(tx.TransactionHash()).AsBytes32()
 	m.txType = tx.TransactionType()
-
-	// The genesis TX is special
-	if tx.TransactionType() == types.TxTypeSyntheticGenesis {
-		m.SponsorUrl = protocol.AcmeUrl()
-		m.Sponsor = genesis.ACME
-		return m, nil
-	}
 
 	// The sponsor URL must be valid
 	var err error
@@ -223,7 +216,7 @@ func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
 }
 
 // commit writes pending records to the database.
-func (m *StateManager) commit() error {
+func (m *StateManager) Commit() error {
 	for k, v := range m.writes {
 		m.dbTx.Write(k, v)
 	}
@@ -307,6 +300,10 @@ func (m *StateManager) commit() error {
 		}
 	}
 
+	for _, sig := range m.synthSigs {
+		m.dbTx.AddSynthTxnSig(sig)
+	}
+
 	return nil
 }
 
@@ -319,7 +316,8 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 
 	var record state.Chain
 	switch header.Type {
-	// TODO DC, BVC, Token
+	case types.ChainTypeTokenIssuer:
+		record = new(protocol.TokenIssuer)
 	case types.ChainTypeIdentity:
 		record = new(state.AdiState)
 	case types.ChainTypeTokenAccount:
@@ -333,9 +331,9 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 	case types.ChainTypePendingTransaction:
 		record = new(state.PendingTransaction)
 	case types.ChainTypeKeyPage:
-		record = new(protocol.SigSpec)
+		record = new(protocol.KeyPage)
 	case types.ChainTypeKeyBook:
-		record = new(protocol.SigSpecGroup)
+		record = new(protocol.KeyBook)
 	default:
 		return nil, fmt.Errorf("unrecognized chain type %v", header.Type)
 	}
@@ -390,4 +388,31 @@ func AddDirectoryEntry(db interface {
 	db.WriteIndex(state.DirectoryIndex, idc, "Metadata", b)
 	db.WriteIndex(state.DirectoryIndex, idc, c, []byte(u.String()))
 	return nil
+}
+
+// LoadSynthTxn loads and unmarshals a saved synthetic transaction
+func (m *StateManager) LoadSynthTxn(txid [32]byte) (*state.PendingTransaction, error) {
+	obj, err := m.dbTx.DB().GetSynthTxn(txid)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get txn %X: %v", txid, err)
+	}
+
+	state := new(state.PendingTransaction)
+	err = obj.As(state)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal txn %X: %v", txid, err)
+	}
+
+	return state, nil
+}
+
+// AddSynthTxnSig adds a synthetic transaction signature to the list of
+// synthetic transactions that should be sent next block.
+func (m *StateManager) AddSynthTxnSig(publicKey []byte, sig *protocol.SyntheticSignature) {
+	m.synthSigs = append(m.synthSigs, &state.SyntheticSignature{
+		Txid:      sig.Txid,
+		Signature: sig.Signature,
+		PublicKey: publicKey,
+		Nonce:     sig.Nonce,
+	})
 }

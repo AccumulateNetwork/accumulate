@@ -63,11 +63,11 @@ func PrintKeyPageCreate() {
 }
 func PrintKeyUpdate() {
 	fmt.Println("  accumulate page key update [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] [new public key or name] Update key in a key page with a new public key")
-	fmt.Println("\t\t example usage: accumulate page key update  acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key update  acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 	fmt.Println("  accumulate page key add [key page url] [signing key name] [key index (optional)] [key height (optional)] [new key name] Add key to a key page")
-	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key add acc://RedWagon/RedPage1 redKey1 redKey2 ")
 	fmt.Println("  accumulate page key remove [key page url] [signing key name] [key index (optional)] [key height (optional)] [old key name] Remove key from a key page")
-	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
+	fmt.Println("\t\t example usage: accumulate page key remove acc://RedWagon/RedPage1 redKey1 redKey2")
 }
 
 func PrintPage() {
@@ -90,7 +90,7 @@ func GetAndPrintKeyPage(url string) (string, error) {
 	return PrintQueryResponse(&res)
 }
 
-func GetKeyPage(url string) ([]byte, *protocol.SigSpec, error) {
+func GetKeyPage(url string) ([]byte, *protocol.KeyPage, error) {
 	s, err := GetUrl(url, "sig-spec")
 	if err != nil {
 		return nil, nil, err
@@ -102,7 +102,7 @@ func GetKeyPage(url string) ([]byte, *protocol.SigSpec, error) {
 		return nil, nil, err
 	}
 
-	ss := protocol.SigSpec{}
+	ss := protocol.KeyPage{}
 	err = json.Unmarshal(*res.Data, &ss)
 	if err != nil {
 		return nil, nil, err
@@ -135,7 +135,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", fmt.Errorf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
 	}
 
-	css := protocol.CreateSigSpec{}
+	css := protocol.CreateKeyPage{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
 	css.Url = newUrl.String()
 	css.Keys = ksp

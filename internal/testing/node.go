@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog"
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/privval"
+	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
 var LocalBVN = &networks.Subnet{
@@ -56,7 +57,7 @@ func NodeInitOptsForNetwork(network *networks.Subnet) (node.InitOptions, error) 
 
 	return node.InitOptions{
 		ShardName: "accumulate.",
-		ChainID:   network.Name,
+		SubnetID:  network.Name,
 		Port:      network.Port,
 		Config:    config,
 		RemoteIP:  remoteIP,
@@ -70,10 +71,27 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 		return nil, nil, nil, fmt.Errorf("failed to load config: %v", err)
 	}
 
+	var zl zerolog.Logger
+	if newZL == nil {
+		w, err := logging.NewConsoleWriter(cfg.LogFormat)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		zl = zerolog.New(w)
+	} else {
+		zl = newZL(cfg.LogFormat)
+	}
+
+	logger, err := logging.NewTendermintLogger(zl, cfg.LogLevel, false)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
+		os.Exit(1)
+	}
+
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
 	sdb := new(state.StateDB)
-	err = sdb.Open(dbPath, memDB, true)
+	err = sdb.Open(dbPath, memDB, true, logger)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
@@ -99,29 +117,17 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 		return nil, nil, nil, fmt.Errorf("failed to create RPC relay: %v", err)
 	}
 
-	mgr, err := chain.NewBlockValidatorExecutor(api.NewQuery(relay), sdb, pv.Key.PrivKey.Bytes())
+	clientProxy := node.NewLocalClient()
+	mgr, err := chain.NewBlockValidatorExecutor(chain.ExecutorOptions{
+		Query:  api.NewQuery(relay),
+		Local:  clientProxy,
+		DB:     sdb,
+		Logger: logger,
+		Key:    pv.Key.PrivKey.Bytes(),
+	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
 	}
-
-	var zl zerolog.Logger
-	if newZL == nil {
-		w, err := logging.NewConsoleWriter(cfg.LogFormat)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		zl = zerolog.New(w)
-	} else {
-		zl = newZL(cfg.LogFormat)
-	}
-
-	logger, err := logging.NewTendermintLogger(zl, cfg.LogLevel, false)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
-		os.Exit(1)
-	}
-
-	sdb.SetLogger(logger)
 
 	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr, logger)
 	if err != nil {
@@ -140,6 +146,16 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 		_ = node.Stop()
 		node.Wait()
 	})
+
+	lnode, ok := node.Service.(local.NodeService)
+	if !ok {
+		return nil, nil, nil, fmt.Errorf("node is not a local node service!")
+	}
+	lclient, err := local.New(lnode)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create local node client: %v", err)
+	}
+	clientProxy.Set(lclient)
 
 	return node, sdb, pv, nil
 }
