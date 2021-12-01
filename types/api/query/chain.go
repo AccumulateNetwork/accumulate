@@ -31,6 +31,8 @@ func (r *RequestByUrl) UnmarshalBinary(data []byte) (err error) {
 	return r.Url.UnmarshalBinary(data)
 }
 
+func (*RequestDirectory) Type() types.QueryType { return types.QueryTypeDirectoryUrl }
+
 func (r *RequestDirectory) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 	binary, err := r.Url.MarshalBinary()
