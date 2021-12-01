@@ -23,7 +23,7 @@ type AddCredits struct {
 	Amount    uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
-type LiteTokenAccount struct {
+type AnonTokenAccount struct {
 	state.ChainHeader
 	TokenUrl      string  `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	Balance       big.Int `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
@@ -181,8 +181,8 @@ type WriteDataTo struct {
 	Data      []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 }
 
-func NewAnonTokenAccount() *LiteTokenAccount {
-	v := new(LiteTokenAccount)
+func NewAnonTokenAccount() *AnonTokenAccount {
+	v := new(AnonTokenAccount)
 	v.Type = types.ChainTypeLiteTokenAccount
 	return v
 }
@@ -277,7 +277,7 @@ func (v *AddCredits) BinarySize() int {
 	return n
 }
 
-func (v *LiteTokenAccount) BinarySize() int {
+func (v *AnonTokenAccount) BinarySize() int {
 	var n int
 
 	// Enforce sanity
@@ -682,7 +682,7 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
+func (v *AnonTokenAccount) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
@@ -1148,7 +1148,7 @@ func (v *AddCredits) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (v *LiteTokenAccount) UnmarshalBinary(data []byte) error {
+func (v *AnonTokenAccount) UnmarshalBinary(data []byte) error {
 	typ := types.ChainTypeLiteTokenAccount
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
