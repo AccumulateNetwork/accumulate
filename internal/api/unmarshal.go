@@ -127,17 +127,17 @@ func unmarshalAnonTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, e
 	})
 }
 
-func unmarshalSigSpec(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, "sigSpec", func(b []byte) (interface{}, error) {
-		r := new(protocol.SigSpec)
+func unmarshalKeyPage(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, types.ChainTypeKeyPage.String(), func(b []byte) (interface{}, error) {
+		r := new(protocol.KeyPage)
 		err := r.UnmarshalBinary(b)
 		return r, err
 	})
 }
 
-func unmarshalSigSpecGroup(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, "sigSpecGroup", func(b []byte) (interface{}, error) {
-		r := new(protocol.SigSpecGroup)
+func unmarshalKeyBook(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
+	return unmarshalAs(rQuery, types.ChainTypeKeyBook.String(), func(b []byte) (interface{}, error) {
+		r := new(protocol.KeyBook)
 		err := r.UnmarshalBinary(b)
 		return r, err
 	})
@@ -243,9 +243,9 @@ func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte,
 	case types.TxTypeCreateTokenAccount:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.TokenAccountCreate))
 	case types.TxTypeCreateKeyPage:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateSigSpec))
+		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateKeyPage))
 	case types.TxTypeCreateKeyBook:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateSigSpecGroup))
+		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateKeyBook))
 	case types.TxTypeAddCredits:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.AddCredits))
 	case types.TxTypeUpdateKeyPage:
@@ -323,10 +323,10 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 		return unmarshalAnonTokenAccount(rQuery)
 
 	case types.ChainTypeKeyPage:
-		return unmarshalSigSpec(rQuery)
+		return unmarshalKeyPage(rQuery)
 
 	case types.ChainTypeKeyBook:
-		return unmarshalSigSpecGroup(rQuery)
+		return unmarshalKeyBook(rQuery)
 
 	case types.ChainTypeTransaction:
 		return unmarshalAs(rQuery, "tx", func(b []byte) (interface{}, error) {
