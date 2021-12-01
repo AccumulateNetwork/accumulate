@@ -80,7 +80,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		return nil, errors.New("local node specified but no client provided")
 	}
 
-	if opts.Config.DebugJSONRPC {
+	if opts.Config != nil && opts.Config.DebugJSONRPC {
 		jsonrpc2.DebugMethodFunc = true
 	}
 

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	abci "github.com/tendermint/tendermint/abci/types"
+	jrpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 )
 
 type API struct {
@@ -446,6 +448,10 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeap
 	// Retrieve the TX response from the batch
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
+		var rpcErr *jrpctypes.RPCError
+		if errors.As(err, &rpcErr) && rpcErr.Data == "tx already exists in cache" {
+			return nil, jsonrpc2.NewError(ErrCodeDuplicateTxn, "tx already exists in cache", formatTransactionData(tx))
+		}
 		return nil, jsonrpc2.NewError(ErrCodeInternal, err.Error(), formatTransactionData(tx))
 	}
 
