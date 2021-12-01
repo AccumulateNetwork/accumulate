@@ -36,12 +36,12 @@ section "Generate a Lite Token Account"
 cli account list 2>&1 | grep -q ACME || cli account generate
 LITE=$(cli account list 2>&1 | grep ACME | head -1)
 cli faucet ${LITE}
-sleep 3
+sleep 7
 cli account get ${LITE} &> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
 cli credits ${LITE} ${LITE} 100
-sleep 3
+sleep 7
 BALANCE=$(cli -j account get ${LITE} 2>&1 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
 
@@ -55,13 +55,13 @@ echo
 
 section "Create an ADI"
 cli adi create ${LITE} keytest keytest-0-0 book page0
-sleep 3
+sleep 7
 cli adi get keytest &> /dev/null && success || die "Cannot find keytest"
 
 section "Create additional Key Pages"
 cli page create keytest/book keytest-0-0 keytest/page1 keytest-1-0
 cli page create keytest/book keytest-0-0 keytest/page2 keytest-2-0
-sleep 3
+sleep 7
 cli page get keytest/page1 &> /dev/null || die "Cannot find keytest/page1"
 cli page get keytest/page2 &> /dev/null || die "Cannot find keytest/page2"
 success
@@ -74,18 +74,18 @@ success
 
 section "Create an ADI Token Account"
 cli account create keytest keytest-0-0 0 1 keytest/tokens ACME keytest/book
-sleep 3
+sleep 7
 cli account get keytest/tokens &> /dev/null && success || die "Cannot find keytest/tokens"
 
 section "Send tokens from the lite token account to the ADI token account"
 cli tx create ${LITE} keytest/tokens 5
-sleep 3
+sleep 7
 BALANCE=$(cli -j account get keytest/tokens 2>&1 | jq -r .data.balance)
 [ "$BALANCE" -eq 500000000 ] && success || die "${LITE} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
 
 section "Add credits to the ADI's key page 0"
 cli credits keytest/tokens keytest-0-0 0 1 keytest/page0 125
-sleep 3
+sleep 7
 BALANCE=$(cli -j page get keytest/page0 2>&1 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 125 ] && success || die "keytest/page0 should have 125 credits but has ${BALANCE}"
 
@@ -101,7 +101,7 @@ success
 section "API v2 faucet (AC-570)"
 BEFORE=$(cli -j account get ${LITE} 2>&1 | jq -r .data.balance)
 api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE}'"}}'
-sleep 3
+sleep 7
 AFTER=$(cli -j account get ${LITE} 2>&1 | jq -r .data.balance)
 DIFF=$(expr $AFTER - $BEFORE)
 [ $DIFF -eq 1000000000 ] && success || die "Faucet did not work, want +1000000000, got ${DIFF}"
