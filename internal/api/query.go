@@ -311,8 +311,8 @@ func packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSy
 	//populate the rest of the resp
 	resp.TxId = (*types.Bytes)(&txId)
 	resp.KeyPage = &acmeApi.APIRequestKeyPage{}
-	resp.KeyPage.Height = txSigInfo.MSHeight
-	resp.KeyPage.Index = txSigInfo.PriorityIdx
+	resp.KeyPage.Height = txSigInfo.KeyPageHeight
+	resp.KeyPage.Index = txSigInfo.KeyPageIndex
 
 	//if we have pending data (i.e. signature stuff, populate that too.)
 	if txPendingState != nil && len(txPendingState.Signature) > 0 {
@@ -381,6 +381,9 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 	res, err := q.txRelay.Query(qu.RouteId, qd)
 	if err != nil {
 		return nil, err
+	}
+	if res.Response.Code != 0 {
+		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
 	}
 	thr := query.ResponseTxHistory{}
 	err = thr.UnmarshalBinary(res.Response.Value)

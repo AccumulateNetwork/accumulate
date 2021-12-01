@@ -38,20 +38,20 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransac
 
 	account := state.NewTokenAccount(accountUrl.String(), tokenUrl.String())
 	if body.KeyBookUrl == "" {
-		account.SigSpecId = st.Sponsor.Header().SigSpecId
+		account.KeyBook = st.Sponsor.Header().KeyBook
 	} else {
 		keyBookUrl, err := url.Parse(body.KeyBookUrl)
 		if err != nil {
 			return fmt.Errorf("invalid key book URL: %v", err)
 		}
 
-		ssg := new(protocol.SigSpecGroup)
+		ssg := new(protocol.KeyBook)
 		err = st.LoadUrlAs(keyBookUrl, ssg)
 		if err != nil {
 			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
 
-		copy(account.SigSpecId[:], keyBookUrl.ResourceChain())
+		copy(account.KeyBook[:], keyBookUrl.ResourceChain())
 	}
 
 	st.Create(account)

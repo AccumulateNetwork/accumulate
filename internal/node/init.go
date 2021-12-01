@@ -2,11 +2,15 @@ package node
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path"
 
 	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/genesis"
+	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	tmcfg "github.com/tendermint/tendermint/config"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
@@ -15,21 +19,12 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-const (
-	nodeDirPerm = 0755
-
-	tmP2pPortOffset         = 0
-	TmRpcPortOffset         = 1
-	tmRpcGrpcPortOffset     = 2
-	accRouterJsonPortOffset = 4
-	accRouterRestPortOffset = 5
-	tmPrometheusPortOffset  = 6
-)
+const nodeDirPerm = 0755
 
 type InitOptions struct {
 	WorkDir    string
 	ShardName  string
-	ChainID    string
+	SubnetID   string
 	Port       int
 	GenesisDoc *types.GenesisDoc
 	Config     []*cfg.Config
@@ -52,16 +47,23 @@ func Init(opts InitOptions) (err error) {
 	config := opts.Config
 	genVals := make([]types.GenesisValidator, 0, len(config))
 
+	var networkType cfg.NetworkType
 	for i, config := range config {
+		if i == 0 {
+			networkType = config.Accumulate.Type
+		} else if config.Accumulate.Type != networkType {
+			return errors.New("Cannot initialize multiple networks at once")
+		}
+
 		nodeDirName := fmt.Sprintf("Node%d", i)
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
 		config.ProxyApp = ""
-		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmP2pPortOffset)
-		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+TmRpcPortOffset)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+tmRpcGrpcPortOffset)
-		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+tmPrometheusPortOffset)
+		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmP2pPortOffset)
+		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
+		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+networks.TmPrometheusPortOffset)
 		config.Instrumentation.Prometheus = true
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
@@ -74,7 +76,7 @@ func Init(opts InitOptions) (err error) {
 			return fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &opts.ChainID); err != nil {
+		if err := initFilesWithConfig(config, &opts.SubnetID); err != nil {
 			return err
 		}
 
@@ -103,12 +105,30 @@ func Init(opts InitOptions) (err error) {
 	// Generate genesis doc from generated validators
 	genDoc := opts.GenesisDoc
 	if genDoc == nil {
+		genTime := tmtime.Now()
+
+		db := new(memory.DB)
+		_ = db.InitDB("", nil)
+		root, err := genesis.Init(db, genesis.InitOpts{
+			SubnetID:    opts.SubnetID,
+			NetworkType: config[0].Accumulate.Type,
+			GenesisTime: genTime,
+			Validators:  genVals,
+		})
+
+		state, _ := db.MarshalJSON()
+		if err != nil {
+			return err
+		}
+
 		genDoc = &types.GenesisDoc{
-			ChainID:         opts.ChainID,
-			GenesisTime:     tmtime.Now(),
-			InitialHeight:   0,
+			ChainID:         opts.SubnetID,
+			GenesisTime:     genTime,
+			InitialHeight:   2,
 			Validators:      genVals,
 			ConsensusParams: types.DefaultConsensusParams(),
+			AppState:        state,
+			AppHash:         root,
 		}
 	}
 
@@ -154,11 +174,9 @@ func Init(opts InitOptions) (err error) {
 		}
 		config.Moniker = fmt.Sprintf("Node%d", i)
 
-		config.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
-		config.Accumulate.WebsiteEnabled = true
 		config.Accumulate.WebsiteListenAddress = fmt.Sprintf("%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRouterJsonPortOffset)
-		config.Accumulate.API.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+accRouterRestPortOffset)
+		config.Accumulate.API.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
+		config.Accumulate.API.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterRestPortOffset)
 
 		err := cfg.Store(config)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	. "github.com/AccumulateNetwork/accumulate/internal/api"
@@ -11,6 +12,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
@@ -30,7 +32,7 @@ func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query
 	cfg.Mempool.CacheSize = 1048576
 	cfg.Mempool.Size = 50000
 	cfg.Accumulate.API.EnableSubscribeTX = true
-	cfg.Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+node.TmRpcPortOffset)
+	cfg.Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+networks.TmRpcPortOffset)
 
 	newLogger := func(s string) zerolog.Logger {
 		return logging.NewTestZeroLogger(t, s)
@@ -42,6 +44,7 @@ func startBVC(t *testing.T, dir string) (*state.StateDB, *privval.FilePV, *Query
 	require.NoError(t, err)                                                                //
 	cfg.Accumulate.WebsiteEnabled = false                                                  // Disable the website
 	cfg.Instrumentation.Prometheus = false                                                 // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+	cfg.Consensus.TimeoutCommit = time.Second / 10                                         // ~10 blocks per second
 	require.NoError(t, config.Store(cfg))                                                  //
 	node, sdb, pv, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
 	require.NoError(t, err)                                                                //

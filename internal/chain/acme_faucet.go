@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -64,7 +63,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 
 	// Load the faucet state
 	faucet := new(protocol.AnonTokenAccount)
-	err = st.LoadUrlAs(genesis.FaucetUrl, faucet)
+	err = st.LoadUrlAs(protocol.FaucetUrl, faucet)
 	if err != nil {
 		return fmt.Errorf("failed to load faucet: %v", err)
 	}
@@ -75,7 +74,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	// Submit a synthetic deposit token TX
 	txid := types.Bytes(tx.TransactionHash())
 	amount := new(big.Int).SetUint64(10 * protocol.AcmePrecision)
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], types.String(genesis.FaucetUrl.String()), types.String(u.String()))
+	deposit := synthetic.NewTokenTransactionDeposit(txid[:], types.String(protocol.FaucetUrl.String()), types.String(u.String()))
 	err = deposit.SetDeposit(protocol.ACME, amount)
 	if err != nil {
 		return fmt.Errorf("invalid deposit: %v", err)

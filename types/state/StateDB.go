@@ -30,14 +30,14 @@ type transactionStateInfo struct {
 type transactionLists struct {
 	validatedTx []*transactionStateInfo //list of validated transaction chain state objects for block
 	pendingTx   []*transactionStateInfo //list of pending transaction chain state objects for block
-	synthTxMap  map[types.Bytes32]*[]transactionStateInfo
+	synthTxMap  map[types.Bytes32][]transactionStateInfo
 }
 
 // reset will (re)initialize the transaction lists, this should be done on startup and at the end of each block
 func (t *transactionLists) reset() {
 	t.pendingTx = nil
 	t.validatedTx = nil
-	t.synthTxMap = make(map[types.Bytes32]*[]transactionStateInfo)
+	t.synthTxMap = make(map[types.Bytes32][]transactionStateInfo)
 }
 
 type bucket string
@@ -50,6 +50,7 @@ const (
 	bucketStagedSynthTx    = bucket("StagedSynthTx") //store the staged synthetic transactions
 	bucketTxToSynthTx      = bucket("TxToSynthTx")   //TXID to synthetic TXID
 	bucketMinorAnchorChain = bucket("MinorAnchorChain")
+	bucketSynthTxnSigs     = bucket("SyntheticTransactionSignatures")
 
 	markPower = int64(8)
 )
@@ -77,13 +78,6 @@ type StateDB struct {
 	logger     log.Logger
 }
 
-func (s *StateDB) SetLogger(logger log.Logger) {
-	if logger != nil {
-		logger = logger.With("module", "db")
-	}
-	s.logger = logger
-}
-
 func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	if s.logger != nil {
 		// TODO Maybe this should be Debug?
@@ -99,13 +93,21 @@ func (s *StateDB) init(debug bool) {
 }
 
 // Open database to manage the smt and chain states
-func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool) (err error) {
+func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool, logger log.Logger) (err error) {
+	if logger != nil {
+		s.logger = logger.With("module", "db")
+	}
+
 	dbType := "badger"
 	if useMemDB {
 		dbType = "memory"
 	}
 
-	s.db, err = database.NewDBManager(dbType, dbFilename)
+	if logger != nil {
+		logger = logger.With("module", dbType)
+	}
+
+	s.db, err = database.NewDBManager(dbType, dbFilename, logger)
 	if err != nil {
 		return err
 	}
@@ -139,21 +141,36 @@ func (s *StateDB) Sync() {
 	s.sync.Wait()
 }
 
-//GetTxRange get the transaction id's in a given range
-func (s *StateDB) GetTxRange(chainId *types.Bytes32, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
+//GetChainRange get the transaction id's in a given range
+func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) (hashes []types.Bytes32, maxAvailable int64, err error) {
 	s.mutex.Lock()
-	h, err := s.mm.GetRange(chainId[:], start, end)
-	s.mm.SetChainID(chainId[:])
-	maxAvailable = s.mm.GetElementCount()
-	s.mutex.Unlock()
+	defer s.mutex.Unlock()
+
+	err = s.mm.SetChainID(chainId)
 	if err != nil {
 		return nil, 0, err
 	}
-	for i := range h {
-		hashes = append(hashes, h[i].Bytes32())
+
+	if end > s.mm.MS.Count {
+		end = s.mm.MS.Count
 	}
 
-	return hashes, maxAvailable, nil
+	// GetRange will not cross mark point boundaries, so we may need to call it
+	// multiple times
+	hashes = make([]types.Bytes32, 0, end-start)
+	for start < end {
+		h, err := s.mm.GetRange(chainId, start, end)
+		if err != nil {
+			return nil, 0, err
+		}
+
+		for i := range h {
+			hashes = append(hashes, h[i].Bytes32())
+		}
+		start += int64(len(h))
+	}
+
+	return hashes, s.mm.MS.Count, nil
 }
 
 //GetTx get the transaction by transaction ID
@@ -197,15 +214,11 @@ func (s *StateDB) GetSyntheticTxIds(txId []byte) (syntheticTxIds []byte, err err
 //AddSynthTx add the synthetic transaction which is mapped to the parent transaction
 func (tx *DBTransaction) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synthTxObject *Object) {
 	tx.state.logInfo("AddSynthTx", "txid", logging.AsHex(synthTxId), "entry", logging.AsHex(synthTxObject.Entry))
-	var val *[]transactionStateInfo
-	var ok bool
+	tx.dirty = true
 
 	parentHash := parentTxId.AsBytes32()
-	if val, ok = tx.transactions.synthTxMap[parentHash]; !ok {
-		val = new([]transactionStateInfo)
-		tx.transactions.synthTxMap[parentHash] = val
-	}
-	*val = append(*val, transactionStateInfo{synthTxObject, nil, synthTxId})
+	m := tx.transactions.synthTxMap
+	m[parentHash] = append(m[parentHash], transactionStateInfo{synthTxObject, nil, synthTxId})
 }
 
 // AddTransaction queues (pending) transaction signatures and (optionally) an
@@ -216,6 +229,7 @@ func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes
 		txAcceptedEntry = txAccepted.Entry
 	}
 	tx.state.logInfo("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
+	tx.dirty = true
 
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
@@ -273,15 +287,42 @@ func (s *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, erro
 	return ret, nil
 }
 
-// GetTransaction loads the state of the given transaction.
-func (s *StateDB) GetTransaction(txid []byte) (*Object, error) {
+func (s *StateDB) getObject(keys ...interface{}) (*Object, error) {
 	s.Sync()
 
 	if s.db == nil {
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data, err := s.db.Key(bucketTx, txid).Get()
+	data, err := s.db.Key(keys...).Get()
+	if err != nil {
+		return nil, err
+	}
+
+	ret := &Object{}
+	err = ret.UnmarshalBinary(data)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unmarshal: %v", err)
+	}
+
+	return ret, nil
+}
+
+// GetTransaction loads the state of the given transaction.
+func (s *StateDB) GetTransaction(txid []byte) (*Object, error) {
+	obj, err := s.getObject(bucketTx, txid)
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, fmt.Errorf("%w: no transaction defined for %X", storage.ErrNotFound, txid)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction %X: %v", txid, err)
+	}
+	return obj, nil
+}
+
+// GetSynthTxn loads the state of the given staged synthetic transaction.
+func (s *StateDB) GetSynthTxn(txid [32]byte) (*Object, error) {
+	obj, err := s.getObject(bucketStagedSynthTx, "", txid)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, fmt.Errorf("%w: no transaction defined for %X", storage.ErrNotFound, txid)
 	}
@@ -289,13 +330,8 @@ func (s *StateDB) GetTransaction(txid []byte) (*Object, error) {
 		return nil, fmt.Errorf("failed to get transaction %X: %v", txid, err)
 	}
 
-	ret := &Object{}
-	err = ret.UnmarshalBinary(data)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal state for %x", txid)
-	}
-
-	return ret, nil
+	s.logInfo("GetSynthTxn", "txid", logging.AsHex(txid), "entry", logging.AsHex(obj.Entry))
+	return obj, nil
 }
 
 // GetCurrentEntry retrieves the current state object from the database based upon chainId.  Current state either comes
@@ -332,13 +368,14 @@ func (tx *DBTransaction) GetCurrentEntry(chainId []byte) (*Object, error) {
 
 // AddStateEntry append the entry to the chain, the subChainId is if the chain upon which
 // the transaction is against touches another chain. One example would be an account type chain
-// may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
+// may change the state of the KeyBook chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
 	tx.state.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
+	tx.dirty = true
 	begin := time.Now()
 
-	tx.state.TimeBucket = tx.state.TimeBucket + float64(time.Since(begin))*float64(time.Nanosecond)*1e-9
+	tx.state.TimeBucket += float64(time.Since(begin)) * float64(time.Nanosecond) * 1e-9
 
 	tx.state.mutex.Lock()
 	updates := tx.updates[*chainId]
@@ -363,7 +400,7 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 		txHash := txn.TxId.AsBytes32()
 		if synthTxInfos, ok := tx.transactions.synthTxMap[txHash]; ok {
 			var synthData []byte
-			for _, synthTxInfo := range *synthTxInfos {
+			for _, synthTxInfo := range synthTxInfos {
 				synthData = append(synthData, synthTxInfo.TxId...)
 				synthTxData, err := synthTxInfo.Object.MarshalBinary()
 				if err != nil {
@@ -404,10 +441,6 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 		mutex.Unlock()
 	}
 
-	//clear out the transactions after they have been processed
-	tx.transactions.validatedTx = nil
-	tx.transactions.pendingTx = nil
-	tx.transactions.synthTxMap = make(map[types.Bytes32]*[]transactionStateInfo)
 	return nil
 }
 
@@ -475,11 +508,111 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 	return nil
 }
 
-func (tx *DBTransaction) writeAnchors(mutex *sync.Mutex, blockIndex int64, timestamp time.Time, chainsThatUpdated []types.Bytes32) error {
-	// Load the previous anchor chain head
-	prevHead, err := tx.state.getAnchorHead()
+func (s *StateDB) GetSynthTxnSigs() ([]SyntheticSignature, error) {
+	b, err := s.GetDB().Key(bucketSynthTxnSigs).Get()
 	if errors.Is(err, storage.ErrNotFound) {
-		prevHead = &AnchorMetadata{Index: -1}
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	sigs := new(SyntheticSignatures)
+	err = sigs.UnmarshalBinary(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return sigs.Signatures, nil
+}
+
+func (tx *DBTransaction) writeSynthTxnSigs() error {
+	sigMap := map[[32]byte]*SyntheticSignature{}
+
+	// Get the current set of signatures
+	sigs, err := tx.state.GetSynthTxnSigs()
+	if err != nil {
+		return err
+	}
+	for _, sig := range sigs {
+		sigMap[sig.Txid] = &sig
+	}
+
+	// Remove any deleted entries
+	for _, txid := range tx.delSynthSigs {
+		delete(sigMap, txid)
+	}
+
+	// Add new entries
+	for _, sig := range tx.addSynthSigs {
+		sigMap[sig.Txid] = sig
+	}
+
+	// Create a sorted array of the transaction IDs
+	txids := make([][32]byte, 0, len(sigMap))
+	for txid := range sigMap {
+		txids = append(txids, txid)
+	}
+	sort.Slice(txids, func(i, j int) bool {
+		return bytes.Compare(txids[i][:], txids[j][:]) < 0
+	})
+
+	// Create a sorted array from the map
+	sigs = make([]SyntheticSignature, 0, len(txids))
+	for _, sig := range sigMap {
+		sigs = append(sigs, *sig)
+	}
+	sort.Slice(sigs, func(i, j int) bool {
+		return bytes.Compare(sigs[i].Txid[:], sigs[j].Txid[:]) < 0
+	})
+
+	// Marshal it
+	b, err := (&SyntheticSignatures{Signatures: sigs}).MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	// Store it in SyntheticTransactionSignatures
+	tx.GetDB().Key(bucketSynthTxnSigs).PutBatch(b)
+	hash := sha256.Sum256(b)
+
+	// Add its hash to the BPT
+	var id [32]byte
+	copy(id[:], []byte(bucketSynthTxnSigs))
+	tx.state.bpt.Bpt.Insert(id, hash)
+	return nil
+}
+
+func (tx *DBTransaction) writeAnchors(blockIndex int64, timestamp time.Time) error {
+	// Collect and sort a list of all chain IDs
+	chains := make([][32]byte, 0, len(tx.updates))
+	for id := range tx.updates {
+		chains = append(chains, id)
+	}
+	sort.Slice(chains, func(i, j int) bool {
+		return bytes.Compare(chains[i][:], chains[j][:]) < 0
+	})
+
+	// Collect and sort a list of all synthetic transaction IDs
+	var txids [][32]byte
+	seen := map[[32]byte]bool{}
+	for _, txns := range tx.transactions.synthTxMap {
+		for _, txn := range txns {
+			txid := txn.TxId.AsBytes32()
+			if seen[txid] {
+				continue
+			}
+			seen[txid] = true
+			txids = append(txids, txid)
+		}
+	}
+	sort.Slice(txids, func(i, j int) bool {
+		return bytes.Compare(txids[i][:], txids[j][:]) < 0
+	})
+
+	// Load the previous anchor chain head
+	prevHead, prevCount, err := tx.state.GetAnchorHead()
+	if errors.Is(err, storage.ErrNotFound) {
+		prevHead = &AnchorMetadata{Index: 0}
 	} else if err != nil {
 		return err
 	}
@@ -489,17 +622,8 @@ func (tx *DBTransaction) writeAnchors(mutex *sync.Mutex, blockIndex int64, times
 		panic(fmt.Errorf("Current height is %d but the next block height is %d!", prevHead.Index, blockIndex))
 	}
 
-	// Metadata
-	head := new(AnchorMetadata)
-	head.Index = blockIndex
-	head.PreviousHeight = tx.state.mm.MS.Count
-	head.Timestamp = timestamp
-	head.Chains = make([][32]byte, len(chainsThatUpdated))
-
 	// Add an anchor for each updated chain to the anchor chain
-	for i, chainId := range chainsThatUpdated {
-		head.Chains[i] = chainId
-
+	for _, chainId := range chains {
 		err := tx.state.mm.SetChainID(chainId[:])
 		if err != nil {
 			return err
@@ -513,12 +637,21 @@ func (tx *DBTransaction) writeAnchors(mutex *sync.Mutex, blockIndex int64, times
 		tx.state.mm.AddHash(root)
 	}
 
+	// Add all of the synth txids
+	for _, txid := range txids {
+		tx.state.mm.AddHash(txid[:])
+	}
+
+	// Add the anchor head to the anchor chain
+	head := new(AnchorMetadata)
+	head.Index = blockIndex
+	head.PreviousHeight = prevCount
+	head.Timestamp = timestamp
+	head.Chains = chains
 	data, err := head.MarshalBinary()
 	if err != nil {
 		return err
 	}
-
-	// Add the anchor head to the anchor chain
 	tx.state.mm.AddHash(data)
 
 	// Index the anchor chain against the block index
@@ -526,8 +659,8 @@ func (tx *DBTransaction) writeAnchors(mutex *sync.Mutex, blockIndex int64, times
 
 	// Update the Patricia tree
 	var id [32]byte
-	copy(id[:], []byte(bucketMinorAnchorChain.String()))
-	tx.state.bpt.Bpt.Insert(id, sha256.Sum256(data))
+	copy(id[:], []byte(bucketMinorAnchorChain))
+	tx.state.bpt.Bpt.Insert(id, tx.state.mm.MS.GetMDRoot().Bytes32())
 	return nil
 }
 
@@ -537,31 +670,45 @@ func (tx *DBTransaction) writeBatches() {
 	tx.state.bpt.DBManager.EndBatch()
 }
 
-func (s *StateDB) getAnchorHead() (*AnchorMetadata, error) {
+func (s *StateDB) GetAnchorHead() (*AnchorMetadata, int64, error) {
 	err := s.mm.SetChainID([]byte(bucketMinorAnchorChain))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	if s.mm.MS.Count == 0 {
-		return nil, storage.ErrNotFound
+		return nil, 0, storage.ErrNotFound
 	}
 
 	data, err := s.mm.Get(s.mm.MS.Count - 1)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read anchor chain element %d", s.mm.MS.Count-1)
+		return nil, 0, fmt.Errorf("failed to read anchor chain element %d", s.mm.MS.Count-1)
 	}
 
 	head := new(AnchorMetadata)
 	err = head.UnmarshalBinary(data)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	return head, nil
+	return head, s.mm.MS.Count, nil
 }
+
+func (s *StateDB) GetAnchors(start, end int64) ([]types.Bytes32, error) {
+	h, _, err := s.GetChainRange([]byte(bucketMinorAnchorChain), start, end)
+	return h, err
+}
+
+func (s *StateDB) SubnetID() (string, error) {
+	b, err := s.GetDB().Key("SubnetID").Get()
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func (s *StateDB) BlockIndex() (int64, error) {
-	head, err := s.getAnchorHead()
+	head, _, err := s.GetAnchorHead()
 	if err != nil {
 		return 0, err
 	}
@@ -572,8 +719,7 @@ func (s *StateDB) BlockIndex() (int64, error) {
 // Commit will push the data to the database and update the patricia trie
 func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte, error) {
 	//build a list of keys from the map
-	currentStateCount := len(tx.updates)
-	if currentStateCount == 0 {
+	if !tx.dirty {
 		//only attempt to record the block if we have any data.
 		return tx.RootHash(), nil
 	}
@@ -631,13 +777,13 @@ func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte,
 	for _, k := range writeOrder {
 		tx.state.GetDB().Key(k).PutBatch(tx.writes[k])
 	}
-	// The compiler optimizes this into a constant-time operation
-	for k := range tx.writes {
-		delete(tx.writes, k)
+
+	err = tx.writeSynthTxnSigs()
+	if err != nil {
+		return nil, fmt.Errorf("failed to save synth txn signatures: %v", err)
 	}
 
-	// Don't write the anchor during the genesis TX
-	err = tx.writeAnchors(mutex, blockHeight, timestamp, updateOrder)
+	err = tx.writeAnchors(blockHeight, timestamp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make anchor: %v", err)
 	}
@@ -652,6 +798,16 @@ func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte,
 	tx.writeBatches()
 
 	tx.updates = make(map[types.Bytes32]*blockUpdates)
+
+	// The compiler optimizes this into a constant-time operation
+	for k := range tx.writes {
+		delete(tx.writes, k)
+	}
+
+	//clear out the transactions after they have been processed
+	tx.transactions.validatedTx = nil
+	tx.transactions.pendingTx = nil
+	tx.transactions.synthTxMap = make(map[types.Bytes32][]transactionStateInfo)
 
 	//return the state of the BPT for the state of the block
 	rh := types.Bytes(tx.state.RootHash()).AsBytes32()

@@ -92,8 +92,8 @@ func (e *ED25519Sig) Verify(hash []byte) bool {
 func (e *ED25519Sig) Marshal() (data []byte, err error) { //
 
 	defer func() { //                                                   On any error, just report the error
-		if err := recover(); err != nil { //                            Check for error on exist
-			err = fmt.Errorf("error marshaling ED25519Sig %v", err) //  Generate the error message
+		if r := recover(); r != nil { //                            Check for error on exist
+			err = fmt.Errorf("error marshaling ED25519Sig %v", r) //  Generate the error message
 		} //
 	}() //                                                              If no error occurs, err will be nil
 

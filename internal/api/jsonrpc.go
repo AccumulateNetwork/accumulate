@@ -13,7 +13,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	accurl "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -65,19 +64,19 @@ func (api *API) Handler() http.Handler {
 		"adi-create": api.createADI,
 
 		// Key management
-		"sig-spec":              api.getSigSpec,
-		"create-sig-spec":       api.createSigSpec,
-		"sig-spec-group":        api.getSigSpecGroup,
-		"create-sig-spec-group": api.createSigSpecGroup,
+		"sig-spec":              api.getKeyPage,
+		"create-sig-spec":       api.createKeyPage,
+		"sig-spec-group":        api.getKeyBook,
+		"create-sig-spec-group": api.createKeyBook,
 		"update-key-page":       api.updateKeyPage,
 		"update-sig-spec":       api.updateKeyPage,
 
 		// Updated Key Management
-		"key-page-create": api.createSigSpec,
+		"key-page-create": api.createKeyPage,
 		"key-page-update": api.updateKeyPage,
-		"key-page":        api.getSigSpec,
-		"key-book-create": api.createSigSpec,
-		"key-book":        api.getSigSpecGroup,
+		"key-page":        api.getKeyPage,
+		"key-book-create": api.createKeyPage,
+		"key-book":        api.getKeyBook,
 
 		// token
 		"token":                 api.getToken,
@@ -140,9 +139,9 @@ func (api *API) prepareCreate(params json.RawMessage, payload encoding.BinaryMar
 	return req, pdata, nil
 }
 
-// createSigSpec creates a signature specification
-func (api *API) createSigSpec(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.CreateSigSpec{}
+// createKeyPage creates a signature specification
+func (api *API) createKeyPage(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.CreateKeyPage{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
@@ -153,7 +152,7 @@ func (api *API) createSigSpec(_ context.Context, params json.RawMessage) interfa
 		return err
 	}
 
-	ret.Type = "sigSpec"
+	ret.Type = "keyPage"
 	return ret
 }
 
@@ -170,13 +169,13 @@ func (api *API) updateKeyPage(_ context.Context, params json.RawMessage) interfa
 		return err
 	}
 
-	ret.Type = "sigSpec"
+	ret.Type = "keyPage"
 	return ret
 }
 
-// createSigSpecGroup creates a signature specification group
-func (api *API) createSigSpecGroup(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.CreateSigSpecGroup{}
+// createKeyBook creates a signature specification group
+func (api *API) createKeyBook(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.CreateKeyBook{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
@@ -187,7 +186,7 @@ func (api *API) createSigSpecGroup(_ context.Context, params json.RawMessage) in
 		return err
 	}
 
-	ret.Type = "sigSpecGroup"
+	ret.Type = types.String(types.ChainTypeKeyBook.String())
 	return ret
 }
 
@@ -282,11 +281,11 @@ func (api *API) getDataByChainId(_ context.Context, params json.RawMessage) inte
 	return resp
 }
 
-func (api *API) getSigSpec(_ context.Context, params json.RawMessage) interface{} {
+func (api *API) getKeyPage(_ context.Context, params json.RawMessage) interface{} {
 	return api.get(params, types.ChainTypeKeyPage)
 }
 
-func (api *API) getSigSpecGroup(_ context.Context, params json.RawMessage) interface{} {
+func (api *API) getKeyBook(_ context.Context, params json.RawMessage) interface{} {
 	return api.get(params, types.ChainTypeKeyBook)
 }
 
@@ -404,8 +403,8 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) (*acmeapi.API
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = string(req.Tx.Sponsor)
 	tx.SigInfo.Nonce = req.Tx.Signer.Nonce
-	tx.SigInfo.MSHeight = req.Tx.KeyPage.Height
-	tx.SigInfo.PriorityIdx = req.Tx.KeyPage.Index
+	tx.SigInfo.KeyPageHeight = req.Tx.KeyPage.Height
+	tx.SigInfo.KeyPageIndex = req.Tx.KeyPage.Index
 
 	ed := new(transactions.ED25519Sig)
 	ed.Nonce = req.Tx.Signer.Nonce
@@ -582,20 +581,20 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	tx := acmeapi.TokenTx{}
-	tx.From.String = types.String(genesis.FaucetWallet.Addr)
+	tx.From.String = types.String(protocol.FaucetWallet.Addr)
 	tx.AddToAccount(destAccount, 1000000000)
 
 	txData, err := tx.MarshalBinary()
 
-	genesis.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
+	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
 	gtx := new(transactions.GenTransaction)
-	gtx.Routing = genesis.FaucetUrl.Routing()
-	gtx.ChainID = genesis.FaucetUrl.ResourceChain()
+	gtx.Routing = protocol.FaucetUrl.Routing()
+	gtx.ChainID = protocol.FaucetUrl.ResourceChain()
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = *tx.From.String.AsString()
-	gtx.SigInfo.Nonce = genesis.FaucetWallet.Nonce
-	gtx.SigInfo.MSHeight = 1
-	gtx.SigInfo.PriorityIdx = 0
+	gtx.SigInfo.Nonce = protocol.FaucetWallet.Nonce
+	gtx.SigInfo.KeyPageHeight = 1
+	gtx.SigInfo.KeyPageIndex = 0
 	gtx.Transaction = txData
 	if err := gtx.SetRoutingChainID(); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", destAccount), err)
@@ -603,7 +602,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	dataToSign := gtx.TransactionHash()
 
 	ed := new(transactions.ED25519Sig)
-	err = ed.Sign(genesis.FaucetWallet.Nonce, genesis.FaucetWallet.PrivateKey, dataToSign)
+	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, dataToSign)
 	if err != nil {
 		return submissionError(err)
 	}

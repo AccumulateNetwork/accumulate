@@ -1,18 +1,17 @@
 package chain
 
 import (
-	"crypto/ed25519"
 	"math/big"
 
-	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-func NewBlockValidatorExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
-	return NewExecutor(query, db, key,
+// NewBlockValidatorExecutor creates a new Executor for a block validator node.
+func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
+	return NewExecutor(opts,
 		CreateIdentity{},
 		WithdrawTokens{},
 		CreateTokenAccount{},
@@ -20,19 +19,18 @@ func NewBlockValidatorExecutor(query *accapi.Query, db *state.StateDB, key ed255
 		CreateKeyPage{},
 		CreateKeyBook{},
 		UpdateKeyPage{},
-		SyntheticGenesis{},
 		SyntheticCreateChain{},
 		SyntheticTokenDeposit{},
 		SyntheticDepositCredits{},
+		SyntheticSignTransactions{},
 
 		// TODO Only for TestNet
 		AcmeFaucet{},
 	)
 }
 
-func NewDirectoryExecutor(query *accapi.Query, db *state.StateDB, key ed25519.PrivateKey) (*Executor, error) {
-	return NewExecutor(query, db, key) // TODO Add DN validators
-
+func NewDirectoryExecutor(opts ExecutorOptions) (*Executor, error) {
+	return NewExecutor(opts) // TODO Add DN validators
 }
 
 // TxExecutor executes a specific type of transaction.

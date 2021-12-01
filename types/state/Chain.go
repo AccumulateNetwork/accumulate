@@ -20,9 +20,9 @@ type Chain interface {
 //ChainHeader information for the state object.  Each state object will contain a header
 //that will consist of the chain type enumerator
 type ChainHeader struct {
-	Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
-	ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	SigSpecId types.Bytes32   `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
+	Type     types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
+	ChainUrl types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	KeyBook  types.Bytes32   `json:"keyBook"` //this is the chain id for the sig spec for the chain
 
 	// transient
 	url *url.URL
@@ -41,8 +41,8 @@ func (h *ChainHeader) GetHeaderSize() int {
 	var buf [8]byte
 	i := binary.PutUvarint(buf[:], h.Type.ID())
 	i += binary.PutUvarint(buf[:], uint64(len(h.ChainUrl)))
-	i += binary.PutUvarint(buf[:], uint64(len(h.SigSpecId)))
-	return i + len(h.ChainUrl) + len(h.SigSpecId)
+	i += binary.PutUvarint(buf[:], uint64(len(h.KeyBook)))
+	return i + len(h.ChainUrl) + len(h.KeyBook)
 }
 
 //GetType will return the chain type
@@ -76,7 +76,7 @@ func (h *ChainHeader) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(common.Uint64Bytes(h.Type.ID()))
 	buffer.Write(common.SliceBytes([]byte(h.ChainUrl)))
-	buffer.Write(common.SliceBytes(h.SigSpecId[:]))
+	buffer.Write(common.SliceBytes(h.KeyBook[:]))
 
 	return buffer.Bytes(), nil
 }
@@ -96,7 +96,7 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	h.ChainUrl = types.String(url)
 
 	spec, _ := common.BytesSlice(data)
-	h.SigSpecId.FromBytes(spec)
+	h.KeyBook.FromBytes(spec)
 
 	return nil
 }

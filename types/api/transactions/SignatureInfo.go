@@ -19,10 +19,10 @@ import (
 // The URL forces the transaction onto the chain identified by the URL.
 //
 // The ChainID derived from the URL allows the chain to provide the
-// SigSpecGroup (signature specification group) that applies to this chain.
+// KeyBook (signature specification group) that applies to this chain.
 //
-// The SigSpecHt specifies the number of elements in the SigSpecGroup when
-// the signature was generated.  Any change to the keys of the SigSpecGroup
+// The SigSpecHt specifies the number of elements in the KeyBook when
+// the signature was generated.  Any change to the keys of the KeyBook
 // will increment the height, and if the transaction has not been promoted,
 // the transaction will be invalided.
 //
@@ -38,11 +38,11 @@ type SignatureInfo struct {
 	// The following elements are all part of the Transaction that goes onto
 	// the main chain.  But the only thing that varies from one transaction
 	// to another is the transaction itself.
-	URL         string // URL for the transaction
-	MSHeight    uint64 // Height of the multi sig spec
-	PriorityIdx uint64 // Index within the Priority of the signature used
-	Nonce       uint64 // The nonce for the key of the first signature
-	Unused1     uint64 // This field is not used
+	URL           string // URL for the transaction
+	KeyPageHeight uint64 // Height of the multi sig spec
+	KeyPageIndex  uint64 // Index within the Priority of the signature used
+	Nonce         uint64 // The nonce for the key of the first signature
+	Unused1       uint64 // This field is not used
 }
 
 // Equal
@@ -52,26 +52,26 @@ type SignatureInfo struct {
 func (t *SignatureInfo) Equal(t2 *SignatureInfo) bool {
 	return t.URL == t2.URL && //           URL equal?
 		t.Nonce == t2.Nonce && //          Nonce equal?
-		t.MSHeight == t2.MSHeight && //    SigSpecHt equal?
+		t.KeyPageHeight == t2.KeyPageHeight && //    SigSpecHt equal?
 		t.Unused1 == t2.Unused1 && //      Priority equal?
-		t.PriorityIdx == t2.PriorityIdx // PriorityIdx equal?  If any fails, this returns false
+		t.KeyPageIndex == t2.KeyPageIndex // PriorityIdx equal?  If any fails, this returns false
 }
 
 // UnMarshal
 // Create the binary representation of the GenTransaction
 func (t *SignatureInfo) Marshal() (data []byte, err error) { //            Serialize the Signature Info
 	defer func() { //                                                      If any problems are encountered, then
-		if err := recover(); err != nil { //                               Complain
-			err = fmt.Errorf("error marshaling GenTransaction %v", err) //
+		if r := recover(); r != nil { //                               Complain
+			err = fmt.Errorf("error marshaling GenTransaction %v", r) //
 		} //
 	}()
 
-	data = common.SliceBytes([]byte(t.URL))                   //           URL =>
-	data = append(data, common.Uint64Bytes(t.Nonce)...)       //           Nonce =>
-	data = append(data, common.Uint64Bytes(t.MSHeight)...)    //           SigSpecHt =>
-	data = append(data, common.Uint64Bytes(t.Unused1)...)     //           Priority =>
-	data = append(data, common.Uint64Bytes(t.PriorityIdx)...) //           PriorityIdx =>
-	return data, nil                                          //           All good, return data and nil error
+	data = common.SliceBytes([]byte(t.URL))                     //           URL =>
+	data = append(data, common.Uint64Bytes(t.Nonce)...)         //           Nonce =>
+	data = append(data, common.Uint64Bytes(t.KeyPageHeight)...) //           SigSpecHt =>
+	data = append(data, common.Uint64Bytes(t.Unused1)...)       //           Priority =>
+	data = append(data, common.Uint64Bytes(t.KeyPageIndex)...)  //           PriorityIdx =>
+	return data, nil                                            //           All good, return data and nil error
 }
 
 // UnMarshal
@@ -79,16 +79,16 @@ func (t *SignatureInfo) Marshal() (data []byte, err error) { //            Seria
 // the GenTransaction
 func (t *SignatureInfo) UnMarshal(data []byte) (nextData []byte, err error) { // Get the data from the input stream
 	defer func() { //                                                            and set the values.  Any problem
-		if err := recover(); err != nil { //                                     will be reported
-			err = fmt.Errorf("error unmarshaling GenTransaction %v", err) //
+		if r := recover(); r != nil { //                                     will be reported
+			err = fmt.Errorf("error unmarshaling GenTransaction %v", r) //
 		} //
 	}() //
 
-	URL, data := common.BytesSlice(data)           //                      => URL
-	t.URL = string(URL)                            //                       (url must be a string)
-	t.Nonce, data = common.BytesUint64(data)       //                      => Nonce
-	t.MSHeight, data = common.BytesUint64(data)    //                      => SigSpecHt
-	t.Unused1, data = common.BytesUint64(data)     //                      => Priority
-	t.PriorityIdx, data = common.BytesUint64(data) //                      => PriorityIdx
-	return data, nil                               //
+	URL, data := common.BytesSlice(data)             //                      => URL
+	t.URL = string(URL)                              //                       (url must be a string)
+	t.Nonce, data = common.BytesUint64(data)         //                      => Nonce
+	t.KeyPageHeight, data = common.BytesUint64(data) //                      => SigSpecHt
+	t.Unused1, data = common.BytesUint64(data)       //                      => Priority
+	t.KeyPageIndex, data = common.BytesUint64(data)  //                      => PriorityIdx
+	return data, nil                                 //
 } //

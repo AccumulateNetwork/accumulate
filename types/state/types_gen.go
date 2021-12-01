@@ -24,6 +24,17 @@ type Object struct {
 	Roots  [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
 }
 
+type SyntheticSignature struct {
+	Txid      [32]byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Signature []byte   `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	PublicKey []byte   `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
+	Nonce     uint64   `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+}
+
+type SyntheticSignatures struct {
+	Signatures []SyntheticSignature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+}
+
 func (v *AnchorMetadata) BinarySize() int {
 	var n int
 
@@ -55,6 +66,33 @@ func (v *Object) BinarySize() int {
 	return n
 }
 
+func (v *SyntheticSignature) BinarySize() int {
+	var n int
+
+	n += encoding.ChainBinarySize(&v.Txid)
+
+	n += encoding.BytesBinarySize(v.Signature)
+
+	n += encoding.BytesBinarySize(v.PublicKey)
+
+	n += encoding.UvarintBinarySize(v.Nonce)
+
+	return n
+}
+
+func (v *SyntheticSignatures) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(uint64(len(v.Signatures)))
+
+	for _, v := range v.Signatures {
+		n += v.BinarySize()
+
+	}
+
+	return n
+}
+
 func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -80,6 +118,37 @@ func (v *Object) MarshalBinary() ([]byte, error) {
 	for i, v := range v.Roots {
 		_ = i
 		buffer.Write(encoding.BytesMarshalBinary(v))
+
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SyntheticSignature) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.Txid))
+
+	buffer.Write(encoding.BytesMarshalBinary(v.Signature))
+
+	buffer.Write(encoding.BytesMarshalBinary(v.PublicKey))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Nonce))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SyntheticSignatures) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Signatures))))
+	for i, v := range v.Signatures {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding Signatures[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
 
 	}
 
@@ -155,6 +224,59 @@ func (v *Object) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *SyntheticSignature) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Txid: %w", err)
+	} else {
+		v.Txid = x
+	}
+	data = data[encoding.ChainBinarySize(&v.Txid):]
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	data = data[encoding.BytesBinarySize(v.Signature):]
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	data = data[encoding.BytesBinarySize(v.PublicKey):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Nonce: %w", err)
+	} else {
+		v.Nonce = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Nonce):]
+
+	return nil
+}
+
+func (v *SyntheticSignatures) UnmarshalBinary(data []byte) error {
+	var lenSignatures uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Signatures: %w", err)
+	} else {
+		lenSignatures = x
+	}
+	data = data[encoding.UvarintBinarySize(lenSignatures):]
+
+	v.Signatures = make([]SyntheticSignature, lenSignatures)
+	for i := range v.Signatures {
+		if err := v.Signatures[i].UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Signatures[%d]: %w", i, err)
+		}
+		data = data[v.Signatures[i].BinarySize():]
+
+	}
+
+	return nil
+}
+
 func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Index          int64     `json:"index,omitempty"`
@@ -184,6 +306,20 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SyntheticSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Txid      string  `json:"txid,omitempty"`
+		Signature *string `json:"signature,omitempty"`
+		PublicKey *string `json:"publicKey,omitempty"`
+		Nonce     uint64  `json:"nonce,omitempty"`
+	}{}
+	u.Txid = encoding.ChainToJSON(v.Txid)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Nonce = v.Nonce
+	return json.Marshal(&u)
+}
+
 func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Index          int64     `json:"index,omitempty"`
@@ -191,6 +327,10 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 		Timestamp      time.Time `json:"timestamp,omitempty"`
 		Chains         []string  `json:"chains,omitempty"`
 	}{}
+	u.Index = v.Index
+	u.PreviousHeight = v.PreviousHeight
+	u.Timestamp = v.Timestamp
+	u.Chains = encoding.ChainSetToJSON(v.Chains)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -211,6 +351,12 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 		Height uint64    `json:"height,omitempty"`
 		Roots  []*string `json:"roots,omitempty"`
 	}{}
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	u.Height = v.Height
+	u.Roots = make([]*string, len(v.Roots))
+	for i, x := range v.Roots {
+		u.Roots[i] = encoding.BytesToJSON(x)
+	}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -228,5 +374,38 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 			v.Roots[i] = x
 		}
 	}
+	return nil
+}
+
+func (v *SyntheticSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Txid      string  `json:"txid,omitempty"`
+		Signature *string `json:"signature,omitempty"`
+		PublicKey *string `json:"publicKey,omitempty"`
+		Nonce     uint64  `json:"nonce,omitempty"`
+	}{}
+	u.Txid = encoding.ChainToJSON(v.Txid)
+	u.Signature = encoding.BytesToJSON(v.Signature)
+	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
+	u.Nonce = v.Nonce
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.Txid); err != nil {
+		return fmt.Errorf("error decoding Txid: %w", err)
+	} else {
+		v.Txid = x
+	}
+	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	} else {
+		v.Signature = x
+	}
+	if x, err := encoding.BytesFromJSON(u.PublicKey); err != nil {
+		return fmt.Errorf("error decoding PublicKey: %w", err)
+	} else {
+		v.PublicKey = x
+	}
+	v.Nonce = u.Nonce
 	return nil
 }
