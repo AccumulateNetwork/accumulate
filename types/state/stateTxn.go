@@ -8,8 +8,11 @@ import (
 
 type DBTransaction struct {
 	state        *StateDB
+	dirty        bool
 	updates      map[types.Bytes32]*blockUpdates
 	writes       map[storage.Key][]byte
+	addSynthSigs []*SyntheticSignature
+	delSynthSigs [][32]byte
 	transactions transactionLists
 }
 
@@ -21,6 +24,19 @@ func (s *StateDB) Begin() *DBTransaction {
 	dbTx.writes = map[storage.Key][]byte{}
 	dbTx.transactions.reset()
 	return dbTx
+}
+
+// DB returns the transaction's database.
+func (tx *DBTransaction) DB() *StateDB { return tx.state }
+
+func (tx *DBTransaction) AddSynthTxnSig(sig *SyntheticSignature) {
+	tx.dirty = true
+	tx.addSynthSigs = append(tx.addSynthSigs, sig)
+}
+
+func (tx *DBTransaction) DeleteSynthTxnSig(txid [32]byte) {
+	tx.dirty = true
+	tx.delSynthSigs = append(tx.delSynthSigs, txid)
 }
 
 // GetPersistentEntry calls StateDB.GetPersistentEntry(...).

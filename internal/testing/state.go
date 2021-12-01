@@ -63,7 +63,6 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 
 func CreateAnonTokenAccount(db DB, key ed25519.PrivKey, tokens float64) error {
 	url := types.String(anon.GenerateAcmeAddress(key.PubKey().Bytes()))
-	fmt.Println(url)
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
@@ -102,16 +101,16 @@ func CreateADI(db DB, key ed25519.PrivKey, urlStr types.String) error {
 	ss := new(protocol.KeySpec)
 	ss.PublicKey = keyHash[:]
 
-	mss := protocol.NewSigSpec()
+	mss := protocol.NewKeyPage()
 	mss.ChainUrl = types.String(sigSpecUrl.String())
 	mss.Keys = append(mss.Keys, ss)
 
-	ssg := protocol.NewSigSpecGroup()
+	ssg := protocol.NewKeyBook()
 	ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
-	ssg.SigSpecs = append(ssg.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
+	ssg.Pages = append(ssg.Pages, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
 
 	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
-	adi.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
+	adi.KeyBook = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
 
 	return WriteStates(db, adi, ssg, mss)
 }
@@ -134,7 +133,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, anon boo
 		chain = account
 	} else {
 		account := state.NewTokenAccount(u.String(), tokenUrl)
-		account.SigSpecId = types.Bytes(sigSpecId).AsBytes32()
+		account.KeyBook = types.Bytes(sigSpecId).AsBytes32()
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		account.TxCount++
 		chain = account
@@ -149,13 +148,13 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, anon boo
 	return nil
 }
 
-func CreateSigSpec(db DB, urlStr types.String, keys ...ed25519.PubKey) error {
+func CreateKeyPage(db DB, urlStr types.String, keys ...ed25519.PubKey) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	mss := protocol.NewSigSpec()
+	mss := protocol.NewKeyPage()
 	mss.ChainUrl = types.String(u.String())
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
@@ -167,15 +166,15 @@ func CreateSigSpec(db DB, urlStr types.String, keys ...ed25519.PubKey) error {
 	return WriteStates(db, mss)
 }
 
-func CreateSigSpecGroup(db DB, urlStr types.String, sigSpecUrls ...string) error {
+func CreateKeyBook(db DB, urlStr types.String, sigSpecUrls ...string) error {
 	groupUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	group := protocol.NewSigSpecGroup()
+	group := protocol.NewKeyBook()
 	group.ChainUrl = types.String(groupUrl.String())
-	group.SigSpecs = make([][32]byte, len(sigSpecUrls))
+	group.Pages = make([][32]byte, len(sigSpecUrls))
 	states := []state.Chain{group}
 
 	for i, s := range sigSpecUrls {
@@ -185,19 +184,19 @@ func CreateSigSpecGroup(db DB, urlStr types.String, sigSpecUrls ...string) error
 		}
 
 		chainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
-		group.SigSpecs[i] = chainId
+		group.Pages[i] = chainId
 
-		spec := new(protocol.SigSpec)
+		spec := new(protocol.KeyPage)
 		_, err = db.LoadChainAs(chainId[:], spec)
 		if err != nil {
 			return err
 		}
 
-		if (spec.SigSpecId != types.Bytes32{}) {
+		if (spec.KeyBook != types.Bytes32{}) {
 			return fmt.Errorf("%q is already attached to an SSG", s)
 		}
 
-		spec.SigSpecId = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 		states = append(states, spec)
 	}
 

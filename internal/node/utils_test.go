@@ -5,6 +5,7 @@ import (
 	"net"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	cfg "github.com/AccumulateNetwork/accumulate/config"
@@ -69,6 +70,9 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		c.Instrumentation.Prometheus = false
 		c.Accumulate.WebsiteEnabled = false
 		c.LogLevel = logLevel
+
+		// Make a block every 1/10th second, to make tests go faster
+		c.Consensus.TimeoutCommit = time.Second / 10
 
 		require.NoError(t, cfg.Store(c))
 
