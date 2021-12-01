@@ -616,7 +616,8 @@ func TestFaucetReplay(t *testing.T) {
 	_, _, query := startBVC(t, dir)
 
 	jsonapi := NewTest(t, query)
-	res := jsonapi.BroadcastTx(false, gtx)
+	res, err := jsonapi.BroadcastTx(false, gtx)
+	require.NoError(t, err)
 	fmt.Printf("%s\n", *res.Data)
 
 	// Allow the transaction to settle.
@@ -630,11 +631,8 @@ func TestFaucetReplay(t *testing.T) {
 	require.NoError(t, json.Unmarshal(*resp.Data, &ta))
 	require.Equal(t, "1000000000", ta.Balance.String(), "incorrect balance after faucet transaction")
 
-	// Replay
-	res = jsonapi.BroadcastTx(false, gtx)
-	v := map[string]interface{}{}
-	require.NoError(t, json.Unmarshal(*res.Data, &v))
-
-	// https://github.com/tendermint/tendermint/issues/7185
-	require.Contains(t, v["error"], "tx already exists in cache")
+	// Replay - see https://github.com/tendermint/tendermint/issues/7185
+	res, err = jsonapi.BroadcastTx(false, gtx)
+	require.IsType(t, jsonrpc2.Error{}, err)
+	require.Equal(t, jsonrpc2.ErrorCode(ErrCodeDuplicateTxn), err.(jsonrpc2.Error).Code)
 }
