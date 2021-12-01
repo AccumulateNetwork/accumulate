@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,4 +32,37 @@ func TestStateDB_GetChainRange(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(N), count)
 	require.Equal(t, end-start, len(hashes))
+}
+
+func TestDBTransaction_writeSynthTxnSigs(t *testing.T) {
+	type fields struct {
+		state        *StateDB
+		updates      map[types.Bytes32]*blockUpdates
+		writes       map[storage.Key][]byte
+		addSynthSigs []*SyntheticSignature
+		delSynthSigs [][32]byte
+		transactions transactionLists
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx := &DBTransaction{
+				state:        tt.fields.state,
+				updates:      tt.fields.updates,
+				writes:       tt.fields.writes,
+				addSynthSigs: tt.fields.addSynthSigs,
+				delSynthSigs: tt.fields.delSynthSigs,
+				transactions: tt.fields.transactions,
+			}
+			if err := tx.writeSynthTxnSigs(); (err != nil) != tt.wantErr {
+				t.Errorf("DBTransaction.writeSynthTxnSigs() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }

@@ -12,27 +12,6 @@
 # Duration is marshalled as two uvarints: seconds and nanoseconds. A duration of
 # 1 hour and 1 ns is marshalled as (3600, 1).
 
-TxResult:
-  fields:
-    - name: SyntheticTxs
-      type: slice
-      slice:
-        type: TxSynthRef
-        pointer: true
-        marshal-as: self
-
-TxSynthRef:
-  fields:
-    - name: Type
-      type: uvarint
-    - name: Hash
-      type: chain
-    - name: Url
-      type: string
-      is-url: true
-    - name: TxRef # The hash of the transaction blob submitted to Tendermint. Use to look up the transaction status.
-      type: chain
-
 AnonTokenAccount:
   kind: chain
   chain-type: LiteTokenAccount
@@ -95,7 +74,7 @@ KeySpecParams:
     - name: PublicKey
       type: bytes
 
-SigSpec:
+KeyPage:
   kind: chain
   chain-type: KeyPage
   fields:
@@ -108,7 +87,7 @@ SigSpec:
         pointer: true
         marshal-as: self
 
-CreateSigSpec:
+CreateKeyPage:
   kind: tx
   tx-type: CreateKeyPage
   fields:
@@ -122,21 +101,19 @@ CreateSigSpec:
         pointer: true
         marshal-as: self
 
-SigSpecGroup:
+KeyBook:
   kind: chain
-  chain-type: KeyBook
   fields:
-    - name: SigSpecs
+    - name: Pages
       type: chainSet
 
-CreateSigSpecGroup:
+CreateKeyBook:
   kind: tx
-  tx-type: CreateKeyBook
   fields:
     - name: Url
       type: string
       is-url: true
-    - name: SigSpecs
+    - name: Pages
       type: chainSet
 
 IdentityCreate:
@@ -309,3 +286,21 @@ TokenIssuer:
     - name: Properties
       type: string
       is-url: true
+
+SyntheticSignTransactions:
+  kind: tx
+  fields:
+    - name: Transactions
+      type: slice
+      slice:
+        type: SyntheticSignature
+        marshal-as: self
+
+SyntheticSignature:
+  fields:
+    - name: Txid
+      type: chain
+    - name: Signature
+      type: bytes
+    - name: Nonce
+      type: uvarint

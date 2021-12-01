@@ -32,7 +32,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 	}
 
 	//wait for settlement
-	time.Sleep(3 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	for i := range liteAccounts {
 		//now query the account to make sure each account has 10 acme.
