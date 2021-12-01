@@ -3,7 +3,6 @@ package e2e
 import (
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -28,9 +27,8 @@ func (s *Suite) TestCreateAnonAccount() {
 
 	tx, err := acctesting.CreateFakeSyntheticDepositTx(sponsor, sender)
 	s.Require().NoError(err)
-	s.sendTxAsync(tx)(<-s.query.BatchSend())
-
-	s.waitForSynth()
+	s.dut.SubmitTxn(tx)
+	s.dut.WaitForTxns()
 
 	account := new(protocol.AnonTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
@@ -44,7 +42,6 @@ func (s *Suite) TestCreateAnonAccount() {
 		recipients[i] = u
 	}
 
-	var fns []func(relay.BatchedStatus)
 	var total int64
 	for i := 0; i < 10; i++ {
 		if i > 2 && testing.Short() {
@@ -62,16 +59,10 @@ func (s *Suite) TestCreateAnonAccount() {
 		}
 
 		tx := s.newTx(senderUrl, sender, uint64(i+1), exch)
-		fn := s.sendTxAsync(tx)
-		fns = append(fns, fn)
+		s.dut.SubmitTxn(tx)
 	}
 
-	bs := <-s.query.BatchSend()
-	for _, fn := range fns {
-		fn(bs)
-	}
-
-	s.waitForSynth()
+	s.dut.WaitForTxns()
 
 	account = new(protocol.AnonTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
