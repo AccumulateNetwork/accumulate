@@ -39,33 +39,33 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction
 		return fmt.Errorf("chain type %d cannot sponsor ADIs", st.Sponsor.Header().Type)
 	}
 
-	var sigSpecUrl, ssgUrl *url.URL
+	var pageUrl, bookUrl *url.URL
 	if body.KeyPageName == "" {
-		sigSpecUrl = identityUrl.JoinPath("sigspec0")
+		pageUrl = identityUrl.JoinPath("sigspec0")
 	} else {
-		sigSpecUrl = identityUrl.JoinPath(body.KeyPageName)
+		pageUrl = identityUrl.JoinPath(body.KeyPageName)
 	}
 	if body.KeyBookName == "" {
-		ssgUrl = identityUrl.JoinPath("ssg0")
+		bookUrl = identityUrl.JoinPath("ssg0")
 	} else {
-		ssgUrl = identityUrl.JoinPath(body.KeyBookName)
+		bookUrl = identityUrl.JoinPath(body.KeyBookName)
 	}
 
 	keySpec := new(protocol.KeySpec)
 	keySpec.PublicKey = body.PublicKey
 
-	sigSpec := protocol.NewSigSpec()
-	sigSpec.ChainUrl = types.String(sigSpecUrl.String()) // TODO Allow override
-	sigSpec.Keys = append(sigSpec.Keys, keySpec)
-	sigSpec.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
+	page := protocol.NewKeyPage()
+	page.ChainUrl = types.String(pageUrl.String()) // TODO Allow override
+	page.Keys = append(page.Keys, keySpec)
+	page.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
 
-	group := protocol.NewSigSpecGroup()
-	group.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
-	group.SigSpecs = append(group.SigSpecs, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
+	book := protocol.NewKeyBook()
+	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
+	book.Pages = append(book.Pages, types.Bytes(pageUrl.ResourceChain()).AsBytes32())
 
 	identity := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, body.PublicKey)
-	identity.SigSpecId = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
+	identity.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
 
-	st.Create(identity, group, sigSpec)
+	st.Create(identity, book, page)
 	return nil
 }

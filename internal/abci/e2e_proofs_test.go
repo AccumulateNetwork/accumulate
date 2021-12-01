@@ -37,7 +37,7 @@ func TestProofADI(t *testing.T) {
 
 		send(tx)
 	})
-	require.Equal(t, keyHash[:], n.GetSigSpec("RoadRunner/page0").Keys[0].PublicKey)
+	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/page0").Keys[0].PublicKey)
 
 	// Create ADI token account
 	n.Batch(func(send func(*transactions.GenTransaction)) {
