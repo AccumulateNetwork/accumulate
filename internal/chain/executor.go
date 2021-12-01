@@ -17,6 +17,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -84,6 +85,7 @@ func NewExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 }
 
 func (m *Executor) InitChain(state []byte) error {
+	// Load the genesis state (JSON) into an in-memory key-value store
 	src := new(memory.DB)
 	_ = src.InitDB("", nil)
 	err := src.UnmarshalJSON(state)
@@ -91,10 +93,37 @@ func (m *Executor) InitChain(state []byte) error {
 		return fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
 
+	// Load the BPT root hash so we can verify the system state
+	var hash [32]byte
+	data, err := src.Get(storage.ComputeKey("BPT", "Root"))
+	switch {
+	case err == nil:
+		bpt := new(pmt.BPT)
+		bpt.Root = new(pmt.Node)
+		bpt.UnMarshal(data)
+		hash = bpt.Root.Hash
+	case errors.Is(err, storage.ErrNotFound):
+		// OK
+	default:
+		return fmt.Errorf("failed to load BPT root hash from app state: %v", err)
+	}
+
+	// Dump the genesis state into the key-value store
 	dst := m.db.GetDB().DB
 	err = dst.EndBatch(src.Export())
 	if err != nil {
 		return fmt.Errorf("failed to load app state into database: %v", err)
+	}
+
+	// Load the genesis state into the StateDB
+	err = m.db.Load(dst, false)
+	if err != nil {
+		return fmt.Errorf("faild to reload state database: %v", err)
+	}
+
+	// Make sure the StateDB BPT root hash matches what we found in the genesis state
+	if !bytes.Equal(hash[:], m.db.RootHash()) {
+		panic("BPT root hash from state DB does not match the app state")
 	}
 
 	return nil
@@ -171,22 +200,22 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		return st, m.checkSynthetic(st, tx)
 	}
 
-	sigGroup := new(protocol.SigSpecGroup)
+	book := new(protocol.KeyBook)
 	switch sponsor := st.Sponsor.(type) {
 	case *protocol.AnonTokenAccount:
 		return st, m.checkAnonymous(st, tx, sponsor)
 
-	case *state.AdiState, *state.TokenAccount, *protocol.SigSpec:
-		if (sponsor.Header().SigSpecId == types.Bytes32{}) {
+	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage:
+		if (sponsor.Header().KeyBook == types.Bytes32{}) {
 			return nil, fmt.Errorf("sponsor has not been assigned to an SSG")
 		}
-		err := st.LoadAs(sponsor.Header().SigSpecId, sigGroup)
+		err := st.LoadAs(sponsor.Header().KeyBook, book)
 		if err != nil {
-			return nil, fmt.Errorf("invalid SigSpecId: %v", err)
+			return nil, fmt.Errorf("invalid KeyBook: %v", err)
 		}
 
-	case *protocol.SigSpecGroup:
-		sigGroup = sponsor
+	case *protocol.KeyBook:
+		book = sponsor
 
 	default:
 		// The TX sponsor cannot be a transaction
@@ -194,12 +223,12 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		return nil, fmt.Errorf("invalid sponsor: chain type %v cannot sponsor transactions", sponsor.Header().Type)
 	}
 
-	if tx.SigInfo.PriorityIdx >= uint64(len(sigGroup.SigSpecs)) {
+	if tx.SigInfo.KeyPageIndex >= uint64(len(book.Pages)) {
 		return nil, fmt.Errorf("invalid sig spec index")
 	}
 
-	sigSpec := new(protocol.SigSpec)
-	err = st.LoadAs(sigGroup.SigSpecs[tx.SigInfo.PriorityIdx], sigSpec)
+	page := new(protocol.KeyPage)
+	err = st.LoadAs(book.Pages[tx.SigInfo.KeyPageIndex], page)
 	if err != nil {
 		return nil, fmt.Errorf("invalid sig spec: %v", err)
 	}
@@ -214,7 +243,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	}
 
 	for i, sig := range tx.Signature {
-		ks := sigSpec.FindKey(sig.PublicKey)
+		ks := page.FindKey(sig.PublicKey)
 		if ks == nil {
 			return nil, fmt.Errorf("no key spec matches signature %d", i)
 		}
@@ -474,11 +503,11 @@ func (m *Executor) addSynthTxns(parentTxId types.Bytes, st *StateManager) error 
 		tx := new(transactions.GenTransaction)
 		tx.SigInfo = new(transactions.SignatureInfo)
 		tx.SigInfo.URL = sub.url.String()
-		tx.SigInfo.MSHeight = 1
-		tx.SigInfo.PriorityIdx = 0
+		tx.SigInfo.KeyPageHeight = 1
+		tx.SigInfo.KeyPageIndex = 0
 		tx.Transaction = body
 
-		tx.SigInfo.MSHeight = 1
+		tx.SigInfo.KeyPageHeight = 1
 		tx.SigInfo.Nonce, err = m.nextSynthCount()
 		if err != nil {
 			return err
@@ -564,12 +593,12 @@ func (m *Executor) signSynthTxns() error {
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = protocol.ACME
-	tx.SigInfo.PriorityIdx = 0
+	tx.SigInfo.KeyPageIndex = 0
 	tx.Transaction, err = body.MarshalBinary()
 	if err != nil {
 		return err
 	}
-	tx.SigInfo.MSHeight = 1
+	tx.SigInfo.KeyPageHeight = 1
 	tx.SigInfo.Nonce, err = m.nextSynthCount()
 	if err != nil {
 		return err

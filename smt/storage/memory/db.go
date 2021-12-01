@@ -52,7 +52,7 @@ func (m *DB) Export() map[storage.Key][]byte {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
-	ex := make(map[storage.Key][]byte)
+	ex := make(map[storage.Key][]byte, len(m.entries))
 	for k, v := range m.entries {
 		ex[k] = v
 	}

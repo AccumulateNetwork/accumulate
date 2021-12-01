@@ -311,8 +311,8 @@ func packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSy
 	//populate the rest of the resp
 	resp.TxId = (*types.Bytes)(&txId)
 	resp.KeyPage = &acmeApi.APIRequestKeyPage{}
-	resp.KeyPage.Height = txSigInfo.MSHeight
-	resp.KeyPage.Index = txSigInfo.PriorityIdx
+	resp.KeyPage.Height = txSigInfo.KeyPageHeight
+	resp.KeyPage.Index = txSigInfo.KeyPageIndex
 
 	//if we have pending data (i.e. signature stuff, populate that too.)
 	if txPendingState != nil && len(txPendingState.Signature) > 0 {
