@@ -35,13 +35,9 @@ func (queryDirect) responseIsError(r tm.ResponseQuery) error {
 }
 
 func (q queryDirect) query(content queryRequest) (string, []byte, error) {
-	return q.queryType(content.Type(), content)
-}
-
-func (q queryDirect) queryType(typ types.QueryType, content queryRequest) (string, []byte, error) {
 	var err error
 	req := new(query.Query)
-	req.Type = typ
+	req.Type = content.Type()
 	req.Content, err = content.MarshalBinary()
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
@@ -121,7 +117,7 @@ func (q queryDirect) QueryDirectory(s string, queryOptions *QueryOptions) (*Quer
 	req := new(query.RequestDirectory)
 	req.Url = types.String(u.String())
 	req.ExpandChains = types.Bool(queryOptions.ExpandChains)
-	k, v, err := q.queryType(types.QueryTypeDirectoryUrl, req)
+	k, v, err := q.query(req)
 	if err != nil {
 		return nil, err
 	}
