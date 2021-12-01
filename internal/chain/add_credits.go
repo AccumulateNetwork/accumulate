@@ -46,7 +46,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 		// recipient. Most credit transfers will be within the same ADI, so this
 		// should catch most mistakes early.
 		switch recv := recv.(type) {
-		case *protocol.AnonTokenAccount, *protocol.SigSpec:
+		case *protocol.AnonTokenAccount, *protocol.KeyPage:
 			// OK
 		default:
 			return fmt.Errorf("invalid recipient: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeKeyPage, recv.Header().Type)
