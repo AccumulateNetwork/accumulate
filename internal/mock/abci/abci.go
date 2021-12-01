@@ -38,9 +38,12 @@ func (m *MockChain) EXPECT() *MockChainMockRecorder {
 }
 
 // BeginBlock mocks base method.
-func (m *MockChain) BeginBlock(arg0 abci.BeginBlockRequest) {
+func (m *MockChain) BeginBlock(arg0 abci.BeginBlockRequest) (abci.BeginBlockResponse, error) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "BeginBlock", arg0)
+	ret := m.ctrl.Call(m, "BeginBlock", arg0)
+	ret0, _ := ret[0].(abci.BeginBlockResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // BeginBlock indicates an expected call of BeginBlock.
@@ -79,12 +82,11 @@ func (mr *MockChainMockRecorder) Commit() *gomock.Call {
 }
 
 // DeliverTx mocks base method.
-func (m *MockChain) DeliverTx(arg0 *transactions.GenTransaction) (*protocol.TxResult, *protocol.Error) {
+func (m *MockChain) DeliverTx(arg0 *transactions.GenTransaction) *protocol.Error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeliverTx", arg0)
-	ret0, _ := ret[0].(*protocol.TxResult)
-	ret1, _ := ret[1].(*protocol.Error)
-	return ret0, ret1
+	ret0, _ := ret[0].(*protocol.Error)
+	return ret0
 }
 
 // DeliverTx indicates an expected call of DeliverTx.

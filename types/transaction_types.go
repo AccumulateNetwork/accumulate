@@ -18,7 +18,7 @@ const (
 	TxTypeUnknown TransactionType = 0x00
 
 	// txSynthetic marks the boundary between user and system transactions.
-	txSynthetic TransactionType = 0x30
+	txSynthetic = TxTypeSyntheticSignTransactions
 
 	// txMax is the last defined transaction type.
 	txMax = TxTypeSyntheticGenesis
@@ -85,6 +85,10 @@ const (
 
 // System transactions
 const (
+	// TxTypeSyntheticCreateChain propagates signatures for synthetic
+	// transactions so they can be submitted to the network.
+	TxTypeSyntheticSignTransactions TransactionType = 0x30
+
 	// TxTypeSyntheticCreateChain creates or updates chains.
 	TxTypeSyntheticCreateChain TransactionType = 0x31
 
@@ -144,6 +148,8 @@ func (t TransactionType) String() string {
 		return "addCredits"
 	case TxTypeUpdateKeyPage:
 		return "updateKeyPage"
+	case TxTypeSyntheticSignTransactions:
+		return "syntheticSignTransactions"
 	case TxTypeSyntheticCreateChain:
 		return "syntheticCreateChain"
 	case TxTypeSyntheticWriteData:
