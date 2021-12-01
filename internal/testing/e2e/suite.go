@@ -8,6 +8,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/suite"
@@ -61,8 +62,14 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 
 func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body encoding.BinaryMarshaler) *transactions.GenTransaction {
 	s.T().Helper()
-	state, _ := s.query.GetChainStateByUrl(sponsor.String())
-	tx, err := transactions.New(sponsor.String(), state.MerkleState.Count, func(hash []byte) (*transactions.ED25519Sig, error) {
+	abci, err := s.dut.GetUrl(sponsor.String())
+	s.Require().NoError(err)
+	s.Require().Zero(abci.Response.Code)
+	s.Require().Equal([]byte("chain"), abci.Response.Key)
+	qr := new(query.ResponseByChainId)
+	s.Require().NoError(qr.UnmarshalBinary(abci.Response.Value))
+
+	tx, err := transactions.New(sponsor.String(), qr.Height, func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
 		return sig, sig.Sign(nonce, key, hash)
 	}, body)
