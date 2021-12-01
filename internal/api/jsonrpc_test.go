@@ -122,7 +122,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	}
 
 	//wait 3 seconds for the transaction to process for the block to complete.
-	time.Sleep(10 * time.Second)
+	time.Sleep(time.Second)
 
 	queryTokenUrl := addrList[1]
 	resp, err := query.GetTokenAccount(queryTokenUrl)
@@ -294,7 +294,7 @@ func TestFaucet(t *testing.T) {
 	fmt.Println(string(data))
 
 	//allow the transaction to settle.
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Second)
 
 	//readback the result.
 	resp, err := query.GetChainStateByUrl(string(req.URL))
@@ -358,7 +358,7 @@ func TestTransactionHistory(t *testing.T) {
 	fmt.Println(string(data))
 
 	//allow the transaction to settle.
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Second)
 
 	jd, err := json.Marshal(res)
 	if err != nil {
@@ -423,7 +423,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	}
 
 	//allow the transaction to settle.
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Second)
 
 	jd, err := json.Marshal(res)
 	require.NoError(t, err)
@@ -620,7 +620,7 @@ func TestFaucetReplay(t *testing.T) {
 	fmt.Printf("%s\n", *res.Data)
 
 	// Allow the transaction to settle.
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Second)
 
 	// Read back the result.
 	resp, err := query.GetChainStateByUrl(destAccount)
