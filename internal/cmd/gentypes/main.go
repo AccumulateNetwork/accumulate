@@ -32,6 +32,7 @@ type Field struct {
 	Pointer   bool
 	Optional  bool
 	IsUrl     bool `yaml:"is-url"`
+	KeepEmpty bool `yaml:"keep-empty"`
 }
 
 var flags struct {
@@ -149,7 +150,11 @@ func run(_ *cobra.Command, args []string) {
 		for _, field := range typ.Fields {
 			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
 			fmt.Fprintf(w, "\t%s %s `", field.Name, resolveType(field, false))
-			fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
+			if field.KeepEmpty {
+				fmt.Fprintf(w, `json:"%[1]s" form:"%[1]s" query:"%[1]s"`, lcName)
+			} else {
+				fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
+			}
 
 			var validate []string
 			if !field.Optional {
