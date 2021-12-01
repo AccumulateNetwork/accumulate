@@ -85,6 +85,42 @@ func (v *Object) Equal(u *Object) bool {
 	return true
 }
 
+func (v *SyntheticSignature) Equal(u *SyntheticSignature) bool {
+	if !(v.Txid == u.Txid) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticSignatures) Equal(u *SyntheticSignatures) bool {
+	if !(len(v.Signatures) == len(u.Signatures)) {
+		return false
+	}
+
+	for i := range v.Signatures {
+		v, u := v.Signatures[i], u.Signatures[i]
+		if !(v.Equal(&u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
 func (v *AnchorMetadata) BinarySize() int {
 	var n int
 

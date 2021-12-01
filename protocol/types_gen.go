@@ -591,6 +591,38 @@ func (v *SyntheticGenesis) Equal(u *SyntheticGenesis) bool {
 	return true
 }
 
+func (v *SyntheticSignTransactions) Equal(u *SyntheticSignTransactions) bool {
+	if !(len(v.Transactions) == len(u.Transactions)) {
+		return false
+	}
+
+	for i := range v.Transactions {
+		v, u := v.Transactions[i], u.Transactions[i]
+		if !(v.Equal(&u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
+func (v *SyntheticSignature) Equal(u *SyntheticSignature) bool {
+	if !(v.Txid == u.Txid) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+
+	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SyntheticWriteData) Equal(u *SyntheticWriteData) bool {
 	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
@@ -629,42 +661,6 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 	}
 
 	if !(v.Properties == u.Properties) {
-		return false
-	}
-
-	return true
-}
-
-func (v *TxResult) Equal(u *TxResult) bool {
-	if !(len(v.SyntheticTxs) == len(u.SyntheticTxs)) {
-		return false
-	}
-
-	for i := range v.SyntheticTxs {
-		v, u := v.SyntheticTxs[i], u.SyntheticTxs[i]
-		if !(v.Equal(u)) {
-			return false
-		}
-
-	}
-
-	return true
-}
-
-func (v *TxSynthRef) Equal(u *TxSynthRef) bool {
-	if !(v.Type == u.Type) {
-		return false
-	}
-
-	if !(v.Hash == u.Hash) {
-		return false
-	}
-
-	if !(v.Url == u.Url) {
-		return false
-	}
-
-	if !(v.TxRef == u.TxRef) {
 		return false
 	}
 
