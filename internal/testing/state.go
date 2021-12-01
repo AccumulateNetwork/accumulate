@@ -63,7 +63,6 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 
 func CreateAnonTokenAccount(db DB, key ed25519.PrivKey, tokens float64) error {
 	url := types.String(anon.GenerateAcmeAddress(key.PubKey().Bytes()))
-	fmt.Println(url)
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 

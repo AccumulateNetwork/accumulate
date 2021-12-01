@@ -29,10 +29,10 @@ var rand = randpkg.New(randpkg.NewSource(0))
 type Tx = transactions.GenTransaction
 
 func TestEndToEndSuite(t *testing.T) {
-	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) *accapi.Query {
+	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, "error", true)
-		return n.query
+		return e2eDUT{n}
 	}))
 }
 
@@ -114,8 +114,6 @@ func (n *fakeNode) testAnonTx(count int) (string, map[string]int64) {
 		}
 	})
 
-	n.client.Wait()
-
 	return origin.Addr, balance
 }
 
@@ -133,8 +131,6 @@ func TestFaucet(t *testing.T) {
 		require.NoError(t, err)
 		send(tx)
 	})
-
-	n.client.Wait()
 
 	require.Equal(t, int64(10*protocol.AcmePrecision), n.GetAnonTokenAccount(aliceUrl).Balance.Int64())
 }
@@ -205,6 +201,7 @@ func TestCreateADI(t *testing.T) {
 	wallet.Nonce = 1
 	wallet.PrivateKey = anonAccount.Bytes()
 	wallet.Addr = anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
+	n.GetAnonTokenAccount(wallet.Addr)
 
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.IdentityCreate)
@@ -221,8 +218,6 @@ func TestCreateADI(t *testing.T) {
 
 		send(tx)
 	})
-
-	n.client.Wait()
 
 	r := n.GetADI("RoadRunner")
 	require.Equal(t, types.String("acc://RoadRunner"), r.ChainUrl)
@@ -252,8 +247,6 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			require.NoError(t, err)
 			send(tx)
 		})
-
-		n.client.Wait()
 
 		r := n.GetTokenAccount("FooBar/Baz")
 		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
@@ -285,8 +278,6 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 			require.NoError(t, err)
 			send(tx)
 		})
-
-		n.client.Wait()
 
 		u := n.ParseUrl("foo/book1")
 		bookChainId := types.Bytes(u.ResourceChain()).AsBytes32()
@@ -322,8 +313,6 @@ func TestAnonAccountTx(t *testing.T) {
 		send(tx)
 	})
 
-	n.client.Wait()
-
 	require.Equal(t, int64(5e4*acctesting.TokenMx-3000), n.GetAnonTokenAccount(aliceUrl).Balance.Int64())
 	require.Equal(t, int64(1000), n.GetAnonTokenAccount(bobUrl).Balance.Int64())
 	require.Equal(t, int64(2000), n.GetAnonTokenAccount(charlieUrl).Balance.Int64())
@@ -348,8 +337,6 @@ func TestAdiAccountTx(t *testing.T) {
 		send(tx)
 	})
 
-	n.client.Wait()
-
 	require.Equal(t, int64(acctesting.TokenMx-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
 }
@@ -371,8 +358,6 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 		require.NoError(t, err)
 		send(tx)
 	})
-
-	n.client.Wait()
 
 	ks := n.GetSigSpec("foo/sigspec0")
 	acct := n.GetTokenAccount("foo/tokens")
@@ -399,7 +384,6 @@ func TestCreateSigSpec(t *testing.T) {
 		send(tx)
 	})
 
-	n.client.Wait()
 	spec := n.GetSigSpec("foo/keyset1")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
@@ -432,7 +416,6 @@ func TestCreateSigSpecGroup(t *testing.T) {
 		send(tx)
 	})
 
-	n.client.Wait()
 	group := n.GetSigSpecGroup("foo/ssg1")
 	require.Len(t, group.SigSpecs, 1)
 	require.Equal(t, specChainId, types.Bytes32(group.SigSpecs[0]))
@@ -469,7 +452,6 @@ func TestAddSigSpec(t *testing.T) {
 		send(tx)
 	})
 
-	n.client.Wait()
 	spec := n.GetSigSpec("foo/sigspec2")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
@@ -499,8 +481,6 @@ func TestAddKey(t *testing.T) {
 		send(tx)
 	})
 
-	n.client.Wait()
-
 	spec := n.GetSigSpec("foo/sigspec1")
 	require.Len(t, spec.Keys, 2)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[1].PublicKey)
@@ -528,8 +508,6 @@ func TestUpdateKey(t *testing.T) {
 		send(tx)
 	})
 
-	n.client.Wait()
-
 	spec := n.GetSigSpec("foo/sigspec1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[0].PublicKey)
@@ -554,8 +532,6 @@ func TestRemoveKey(t *testing.T) {
 		require.NoError(t, err)
 		send(tx)
 	})
-
-	n.client.Wait()
 
 	spec := n.GetSigSpec("foo/sigspec1")
 	require.Len(t, spec.Keys, 1)
