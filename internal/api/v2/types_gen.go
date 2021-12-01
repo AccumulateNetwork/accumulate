@@ -36,9 +36,9 @@ type MetricsResponse struct {
 
 type QueryMultiResponse struct {
 	Items []*QueryResponse `json:"items,omitempty" form:"items" query:"items" validate:"required"`
-	Start uint64           `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Count uint64           `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	Total uint64           `json:"total,omitempty" form:"total" query:"total" validate:"required"`
+	Start uint64           `json:"start" form:"start" query:"start" validate:"required"`
+	Count uint64           `json:"count" form:"count" query:"count" validate:"required"`
+	Total uint64           `json:"total" form:"total" query:"total" validate:"required"`
 }
 
 type QueryResponse struct {
