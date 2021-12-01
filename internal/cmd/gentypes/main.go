@@ -55,10 +55,20 @@ func main() {
 	_ = cmd.Execute()
 }
 
+func fatalf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	os.Exit(1)
+}
+
 func check(err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		fatalf("%v", err)
+	}
+}
+
+func checkf(err error, format string, otherArgs ...interface{}) {
+	if err != nil {
+		fatalf(format+": %v", append(otherArgs, err)...)
 	}
 }
 
@@ -82,6 +92,14 @@ func readTypes(file string) []*Record {
 	sort.Slice(r, func(i, j int) bool {
 		return r[i].name < r[j].name
 	})
+
+	for _, typ := range r {
+		for _, f := range typ.Fields {
+			if f.Slice != nil {
+				f.Slice.Name = f.Name
+			}
+		}
+	}
 
 	return r
 }
@@ -198,7 +216,8 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			areEqual(w, field, "v."+field.Name, "u."+field.Name)
+			err := areEqual(w, field, "v."+field.Name, "u."+field.Name)
+			checkf(err, "building Equal for %q", typ.name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn true\n}\n\n")
@@ -221,7 +240,8 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			binarySize(w, field, "v."+field.Name)
+			err := binarySize(w, field, "v."+field.Name)
+			checkf(err, "building BinarySize for %q", typ.name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn n\n}\n\n")
@@ -245,7 +265,8 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			binaryMarshalValue(w, field, "v."+field.Name, field.Name)
+			err := binaryMarshalValue(w, field, "v."+field.Name, field.Name)
+			checkf(err, "building MarshalBinary for %q", typ.name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn buffer.Bytes(), nil\n}\n\n")
@@ -273,7 +294,8 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			binaryUnmarshalValue(w, field, "v."+field.Name, field.Name)
+			err := binaryUnmarshalValue(w, field, "v."+field.Name, field.Name)
+			checkf(err, "building UnmarshalBinary for %q", typ.name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn nil\n}\n\n")
