@@ -79,7 +79,7 @@ func GetAndPrintKeyBook(url string) (string, error) {
 	return PrintQueryResponse(&res)
 }
 
-func GetKeyBook(url string) ([]byte, *protocol.SigSpecGroup, error) {
+func GetKeyBook(url string) ([]byte, *protocol.KeyBook, error) {
 	s, err := GetUrl(url, "sig-spec-group")
 	if err != nil {
 		return nil, nil, err
@@ -93,7 +93,7 @@ func GetKeyBook(url string) ([]byte, *protocol.SigSpecGroup, error) {
 
 	//added for compatibility with v1
 	//data := strings.ReplaceAll(string(*res.Data), "keyBook", "sigSpecGroup")
-	ssg := protocol.SigSpecGroup{}
+	ssg := protocol.KeyBook{}
 	err = json.Unmarshal(*res.Data, &ssg)
 	if err != nil {
 		return nil, nil, err
@@ -124,7 +124,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		return "", fmt.Errorf("book url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, bookUrl.Authority)
 	}
 
-	ssg := protocol.CreateSigSpecGroup{}
+	ssg := protocol.CreateKeyBook{}
 	ssg.Url = newUrl.String()
 
 	var chainId types.Bytes32
@@ -135,7 +135,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 			return "", fmt.Errorf("invalid page url %s, %v", pageUrls[i], err)
 		}
 		chainId.FromBytes(u2.ResourceChain())
-		ssg.SigSpecs = append(ssg.SigSpecs, chainId)
+		ssg.Pages = append(ssg.Pages, chainId)
 	}
 
 	data, err := json.Marshal(&ssg)
@@ -167,7 +167,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 	return ar.Print()
 }
 
-func GetKeyPageInBook(book string, keyLabel string) (*protocol.SigSpec, int, error) {
+func GetKeyPageInBook(book string, keyLabel string) (*protocol.KeyPage, int, error) {
 
 	b, err := url2.Parse(book)
 	if err != nil {
@@ -184,8 +184,8 @@ func GetKeyPageInBook(book string, keyLabel string) (*protocol.SigSpec, int, err
 		return nil, 0, err
 	}
 
-	for i := range kb.SigSpecs {
-		v := kb.SigSpecs[i]
+	for i := range kb.Pages {
+		v := kb.Pages[i]
 		//we have a match so go fetch the ssg
 		s, err := GetByChainId(v[:])
 		if err != nil {
@@ -194,7 +194,7 @@ func GetKeyPageInBook(book string, keyLabel string) (*protocol.SigSpec, int, err
 		if *s.Type.AsString() != types.ChainTypeKeyPage.Name() {
 			return nil, 0, fmt.Errorf("expecting key page, received %s", s.Type)
 		}
-		ss := protocol.SigSpec{}
+		ss := protocol.KeyPage{}
 		err = ss.UnmarshalBinary(*s.Data)
 		if err != nil {
 			return nil, 0, err

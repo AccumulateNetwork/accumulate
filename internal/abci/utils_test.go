@@ -271,14 +271,14 @@ func (n *fakeNode) GetADI(url string) *state.AdiState {
 	return adi
 }
 
-func (n *fakeNode) GetSigSpecGroup(url string) *protocol.SigSpecGroup {
-	ssg := new(protocol.SigSpecGroup)
+func (n *fakeNode) GetKeyBook(url string) *protocol.KeyBook {
+	ssg := new(protocol.KeyBook)
 	n.GetChainAs(url, ssg)
 	return ssg
 }
 
-func (n *fakeNode) GetSigSpec(url string) *protocol.SigSpec {
-	mss := new(protocol.SigSpec)
+func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {
+	mss := new(protocol.KeyPage)
 	n.GetChainAs(url, mss)
 	return mss
 }
