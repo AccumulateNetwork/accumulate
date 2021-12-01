@@ -118,6 +118,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	require.NoError(t, err)                           //
 	cfg.Accumulate.WebsiteEnabled = false             // Disable the website
 	cfg.Instrumentation.Prometheus = false            // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+	cfg.Consensus.TimeoutCommit = time.Second / 10    // Increase block frequency
 	require.NoError(t, config.Store(cfg))             //
 
 	bvnNode, _, _, err := acctesting.NewBVCNode(nodeDir, true, nil, newLogger, t.Cleanup) // Initialize
@@ -214,7 +215,7 @@ func (c *testCmd) initalize(t *testing.T) {
 	c.rootCmd.PersistentPostRun = nil
 
 	c.jsonRpcPort, c.restPort = NewTestBVNN(t, defaultWorkDir)
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	t.Cleanup(func() {
 		os.Remove(defaultWorkDir)
