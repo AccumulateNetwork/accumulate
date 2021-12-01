@@ -35,14 +35,14 @@ func testCase2_1(t *testing.T, tc *testCmd) {
 	testCase5_1(t, tc)
 
 	//need to wait a sec to make sure faucet tx settles
-	time.Sleep(time.Second)
+	time.Sleep(2 * time.Second)
 
 	commandLine := fmt.Sprintf("adi create %s acc://RedWagon red1", liteAccounts[0])
 	_, err := tc.execute(t, commandLine)
 	require.NoError(t, err)
 
 	//need to wait 2 secs to make sure adi create settles
-	time.Sleep(3 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	//if this doesn't fail, then adi is created
 	_, err = tc.execute(t, "adi directory acc://RedWagon")

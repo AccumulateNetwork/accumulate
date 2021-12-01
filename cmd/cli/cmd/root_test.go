@@ -78,8 +78,8 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 
 	//execute the tests
 	for _, f := range testMatrix {
-		t.Log(GetFunctionName(f))
-		f(t, tc)
+		name := strings.Split(GetFunctionName(f), ".")
+		t.Run(name[len(name)-1], func(t *testing.T) { f(t, tc) })
 	}
 }
 
@@ -118,6 +118,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	require.NoError(t, err)                           //
 	cfg.Accumulate.WebsiteEnabled = false             // Disable the website
 	cfg.Instrumentation.Prometheus = false            // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+	cfg.Consensus.TimeoutCommit = time.Second / 10    // Increase block frequency
 	require.NoError(t, config.Store(cfg))             //
 
 	bvnNode, _, _, err := acctesting.NewBVCNode(nodeDir, true, nil, newLogger, t.Cleanup) // Initialize

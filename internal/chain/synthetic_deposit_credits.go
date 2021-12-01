@@ -24,7 +24,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.GenTr
 	case *protocol.AnonTokenAccount:
 		account = sponsor
 
-	case *protocol.SigSpec:
+	case *protocol.KeyPage:
 		account = sponsor
 
 	default:

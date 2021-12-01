@@ -34,6 +34,7 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
@@ -83,7 +84,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 		require.NoError(t, err)
 	}
 
-	n.client = acctesting.NewABCIApplicationClient(appChan, n.NextHeight, func(err error) {
+	n.client = acctesting.NewABCIApplicationClient(appChan, db, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
 	}, 100*time.Millisecond)
@@ -92,13 +93,21 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
-	mgr, err := chain.NewBlockValidatorExecutor(n.query, db, logger, bvcKey)
+	mgr, err := chain.NewBlockValidatorExecutor(chain.ExecutorOptions{
+		Query:  n.query,
+		Local:  n.client,
+		DB:     n.db,
+		Logger: logger,
+		Key:    bvcKey,
+	})
 	require.NoError(t, err)
 
 	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
 	require.NoError(t, err)
 	appChan <- n.app
 	n.app.(*abci.Accumulator).OnFatal(func(err error) { require.NoError(t, err) })
+
+	t.Cleanup(func() { n.client.Shutdown() })
 
 	if !doGenesis {
 		return n
@@ -185,9 +194,6 @@ func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
 	})
 
 	n.client.Wait()
-
-	// Wait again because ??? (it makes things work)
-	n.client.Wait()
 }
 
 func generateKey() tmed25519.PrivKey {
@@ -265,14 +271,32 @@ func (n *fakeNode) GetADI(url string) *state.AdiState {
 	return adi
 }
 
-func (n *fakeNode) GetSigSpecGroup(url string) *protocol.SigSpecGroup {
-	ssg := new(protocol.SigSpecGroup)
+func (n *fakeNode) GetKeyBook(url string) *protocol.KeyBook {
+	ssg := new(protocol.KeyBook)
 	n.GetChainAs(url, ssg)
 	return ssg
 }
 
-func (n *fakeNode) GetSigSpec(url string) *protocol.SigSpec {
-	mss := new(protocol.SigSpec)
+func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {
+	mss := new(protocol.KeyPage)
 	n.GetChainAs(url, mss)
 	return mss
+}
+
+type e2eDUT struct {
+	*fakeNode
+}
+
+func (n e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {
+	return n.query.QueryByUrl(url)
+}
+
+func (n e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
+	b, err := tx.Marshal()
+	require.NoError(n.t, err)
+	n.client.SubmitTx(context.Background(), b)
+}
+
+func (n e2eDUT) WaitForTxns() {
+	n.client.Wait()
 }
