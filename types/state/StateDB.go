@@ -368,7 +368,7 @@ func (tx *DBTransaction) GetCurrentEntry(chainId []byte) (*Object, error) {
 
 // AddStateEntry append the entry to the chain, the subChainId is if the chain upon which
 // the transaction is against touches another chain. One example would be an account type chain
-// may change the state of the sigspecgroup chain (i.e. a sub/secondary chain) based on the effect
+// may change the state of the KeyBook chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
 	tx.state.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
