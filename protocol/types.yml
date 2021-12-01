@@ -74,7 +74,7 @@ KeySpecParams:
     - name: PublicKey
       type: bytes
 
-SigSpec:
+KeyPage:
   kind: chain
   chain-type: KeyPage
   fields:
@@ -87,7 +87,7 @@ SigSpec:
         pointer: true
         marshal-as: self
 
-CreateSigSpec:
+CreateKeyPage:
   kind: tx
   tx-type: CreateKeyPage
   fields:
@@ -101,21 +101,19 @@ CreateSigSpec:
         pointer: true
         marshal-as: self
 
-SigSpecGroup:
+KeyBook:
   kind: chain
-  chain-type: KeyBook
   fields:
-    - name: SigSpecs
+    - name: Pages
       type: chainSet
 
-CreateSigSpecGroup:
+CreateKeyBook:
   kind: tx
-  tx-type: CreateKeyBook
   fields:
     - name: Url
       type: string
       is-url: true
-    - name: SigSpecs
+    - name: Pages
       type: chainSet
 
 IdentityCreate:
