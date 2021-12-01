@@ -33,7 +33,7 @@ TxSynthRef:
     - name: TxRef # The hash of the transaction blob submitted to Tendermint. Use to look up the transaction status.
       type: chain
 
-AnonTokenAccount:
+LiteTokenAccount:
   kind: chain
   chain-type: LiteTokenAccount
   fields:

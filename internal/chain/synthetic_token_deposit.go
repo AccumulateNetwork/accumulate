@@ -57,7 +57,7 @@ func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTran
 		return fmt.Errorf("token URL does not match anonymous token account URL")
 	} else {
 		// Address is anonymous and the account doesn't exist, so create one
-		anon := protocol.NewAnonTokenAccount()
+		anon := protocol.NewLiteTokenAccount()
 		anon.ChainUrl = types.String(accountUrl.String())
 		anon.TokenUrl = tokenUrl.String()
 		account = anon
