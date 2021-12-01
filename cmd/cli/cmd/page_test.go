@@ -36,7 +36,7 @@ func testCase4_1(t *testing.T, tc *testCmd) {
 
 	t.Log(r)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 }
 
 //testCase4_2 Create a key book from unbounded key pages
@@ -49,7 +49,7 @@ func testCase4_2(t *testing.T, tc *testCmd) {
 
 	t.Log(r)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 }
 
 //testCase4_3 Add a key to a key page
@@ -66,7 +66,7 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 	//
 	//t.Log(r)
 	//
-	//time.Sleep(10 * time.Second)
+	//time.Sleep(2 * time.Second)
 }
 
 //testCase4_4 Create additional key pages sponsored by a book
@@ -79,7 +79,7 @@ func testCase4_4(t *testing.T, tc *testCmd) {
 
 	t.Log(r)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 }
 
 //testCase4_5 Create an adi token account bound to a key book
@@ -92,7 +92,7 @@ func testCase4_5(t *testing.T, tc *testCmd) {
 
 	t.Log(r)
 
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 }
 
 //testCase4_6 Delete a key in a key page
@@ -110,7 +110,7 @@ func testCase4_6(t *testing.T, tc *testCmd) {
 	//
 	//t.Log(r)
 	//
-	//time.Sleep(10 * time.Second)
+	//time.Sleep(2 * time.Second)
 }
 
 //testCase4_7 update a key in a key page
@@ -128,7 +128,7 @@ func testCase4_7(t *testing.T, tc *testCmd) {
 	//
 	//t.Log(r)
 	//
-	//time.Sleep(10 * time.Second)
+	//time.Sleep(2 * time.Second)
 }
 
 //testCase4_8 Sign a transaction with a secondary key page
@@ -142,12 +142,12 @@ func testCase4_8(t *testing.T, tc *testCmd) {
 	//r, err := tc.execute(t, commandLine)
 	//require.NoError(t, err)
 	//
-	//time.Sleep(10 * time.Second)
+	//time.Sleep(2 * time.Second)
 	//commandLine = fmt.Sprintf("tx create acc://RedWagon/acct2 red3 1 1 acc://Redwagon/acct 1.1234")
 	//r, err = tc.execute(t, commandLine)
 	//require.NoError(t, err)
 	//
 	//t.Log(r)
 	//
-	//time.Sleep(10 * time.Second)
+	//time.Sleep(2 * time.Second)
 }
