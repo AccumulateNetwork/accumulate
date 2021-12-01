@@ -9,7 +9,16 @@ Object:
     slice:
       type: bytes
 
-# TODO Move this to Protocol
+SyntheticSignatures:
+  fields:
+  - name: Signatures
+    type: slice
+    slice:
+      type: SyntheticSignature
+      marshal-as: self
+
+# TODO Move these to Protocol
+
 AnchorMetadata:
   fields:
   - name: Index
@@ -20,3 +29,14 @@ AnchorMetadata:
     type: time
   - name: Chains
     type: chainSet
+
+SyntheticSignature:
+  fields:
+  - name: Txid
+    type: chain
+  - name: Signature
+    type: bytes
+  - name: PublicKey
+    type: bytes
+  - name: Nonce
+    type: uvarint

@@ -14,7 +14,7 @@ func GetKey(key []byte) (dbKey [32]byte) {
 func TestDatabase(t *testing.T) {
 
 	db := new(DB)
-	_ = db.InitDB("test")
+	_ = db.InitDB("test", nil)
 
 	for i := 0; i < 10000; i++ {
 		err := db.Put(GetKey([]byte(fmt.Sprintf("answer %d", i))), []byte(fmt.Sprintf("%x this much data ", i)))

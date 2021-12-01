@@ -174,7 +174,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 
 	tokenTx := apitypes.TokenTx{}
 
-	tokenTx.From = types.UrlChain{from}
+	tokenTx.From = types.UrlChain{String: from}
 	tokenTx.AddToAccount(types.String(destAddr), amount)
 
 	txData, err := tokenTx.MarshalBinary()

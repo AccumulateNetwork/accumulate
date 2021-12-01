@@ -59,9 +59,9 @@ func (m *Manager) getInt64(keys ...interface{}) (int64, error) {
 
 // NewDBManager
 // Create and initialize a new database manager
-func NewDBManager(databaseTag, filename string) (*Manager, error) {
+func NewDBManager(databaseTag, filename string, logger storage.Logger) (*Manager, error) {
 	manager := new(Manager)
-	if err := manager.Init(databaseTag, filename); err != nil {
+	if err := manager.Init(databaseTag, filename, logger); err != nil {
 		return nil, err
 	}
 	return manager, nil
@@ -75,17 +75,17 @@ func (m *Manager) init() {
 // Initialize the Manager with a specified underlying database. databaseTag
 // can currently be either badger or memory.  The filename indicates where
 // the database is persisted (ignored by memory).PendingChain
-func (m *Manager) Init(databaseTag, filename string) error {
+func (m *Manager) Init(databaseTag, filename string, logger storage.Logger) error {
 	m.init()
 	switch databaseTag { //                              match with a supported databaseTag
 	case "badger": //                                    Badger database indicated
-		m.DB = new(badger.DB)                         // Create a badger struct
-		if err := m.DB.InitDB(filename); err != nil { // Initialize it with the given filename
+		m.DB = new(badger.DB)                                 // Create a badger struct
+		if err := m.DB.InitDB(filename, logger); err != nil { // Initialize it with the given filename
 			return err
 		}
 	case "memory": //                                    memory database indicated
-		m.DB = new(memory.DB)     //                     Allocate the structure
-		_ = m.DB.InitDB(filename) //                     filename is ignored, but must allocate the underlying map
+		m.DB = new(memory.DB)             //                     Allocate the structure
+		_ = m.DB.InitDB(filename, logger) //                     filename is ignored, but must allocate the underlying map
 	}
 	return nil
 }

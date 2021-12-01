@@ -32,12 +32,16 @@ type AppFactory func(*privval.FilePV) (abci.Application, error)
 type Node struct {
 	service.Service
 	Config *config.Config
+	ABCI   abci.Application
+	logger log.Logger
 }
 
 // New initializes a Tendermint node for the given ABCI application.
 func New(config *config.Config, app abci.Application, logger log.Logger) (*Node, error) {
 	node := new(Node)
 	node.Config = config
+	node.ABCI = app
+	node.logger = logger
 
 	// create node
 	var err error
@@ -71,7 +75,7 @@ func (n *Node) Start() error {
 			website.Shutdown(context.Background())
 		}()
 		go func() {
-			stdlog.Printf("Starting website on %s", u.Host)
+			n.logger.Info("Listening", "host", u.Host, "module", "website")
 			err := website.ListenAndServe()
 			if err != nil && !errors.Is(err, http.ErrServerClosed) {
 				stdlog.Fatalf("Failed to start website: %v", err)
@@ -99,7 +103,7 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 
 func (n *Node) waitForRPC() error {
 	for _, bvc := range n.Config.Accumulate.Networks {
-		addr, err := networks.GetRpcAddr(bvc, TmRpcPortOffset)
+		addr, err := networks.GetRpcAddr(bvc, networks.TmRpcPortOffset)
 		if err != nil {
 			return err
 		}
