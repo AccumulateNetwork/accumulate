@@ -45,10 +45,13 @@ QueryMultiResponse:
         pointer: true
     - name: Start
       type: uvarint
+      keep-empty: true
     - name: Count
       type: uvarint
+      keep-empty: true
     - name: Total
       type: uvarint
+      keep-empty: true
 
 KeyPage:
   non-binary: true
