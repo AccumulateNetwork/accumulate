@@ -126,7 +126,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, anon boo
 
 	var chain state.Chain
 	if anon {
-		account := new(protocol.AnonTokenAccount)
+		account := new(protocol.LiteTokenAccount)
 		account.ChainUrl = types.String(u.String())
 		account.TokenUrl = tokenUrl
 		account.Balance.SetInt64(int64(tokens * TokenMx))

@@ -31,7 +31,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	// Check the recipient
-	account := new(protocol.AnonTokenAccount)
+	account := new(protocol.LiteTokenAccount)
 	err = st.LoadUrlAs(u, account)
 	switch {
 	case err == nil:
@@ -62,7 +62,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	// Load the faucet state
-	faucet := new(protocol.AnonTokenAccount)
+	faucet := new(protocol.LiteTokenAccount)
 	err = st.LoadUrlAs(protocol.FaucetUrl, faucet)
 	if err != nil {
 		return fmt.Errorf("failed to load faucet: %v", err)

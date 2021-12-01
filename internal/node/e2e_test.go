@@ -135,7 +135,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 
 	obj := new(state.Object)
 	chain := new(state.ChainHeader)
-	account := new(protocol.AnonTokenAccount)
+	account := new(protocol.LiteTokenAccount)
 	qres, err := query.QueryByUrl(lite.String())
 	require.NoError(t, err)
 	require.Zero(t, qres.Response.Code, "Failed, log=%q, info=%q", qres.Response.Log, qres.Response.Info)

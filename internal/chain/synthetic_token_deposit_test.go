@@ -32,7 +32,7 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account
-	tas := new(protocol.AnonTokenAccount)
+	tas := new(protocol.LiteTokenAccount)
 	require.NoError(t, st.LoadAs(st.SponsorChainId, tas))
 	require.Equal(t, types.String(gtx.SigInfo.URL), tas.ChainUrl, "invalid chain header")
 	require.Equalf(t, types.ChainTypeLiteTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.ChainHeader.Type.Name())

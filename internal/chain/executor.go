@@ -129,7 +129,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 
 	sigGroup := new(protocol.SigSpecGroup)
 	switch sponsor := st.Sponsor.(type) {
-	case *protocol.AnonTokenAccount:
+	case *protocol.LiteTokenAccount:
 		return st, m.checkAnonymous(st, tx, sponsor)
 
 	case *state.AdiState, *state.TokenAccount, *protocol.SigSpec:
@@ -186,7 +186,7 @@ func (m *Executor) checkSynthetic(st *StateManager, tx *transactions.GenTransact
 	return nil
 }
 
-func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransaction, account *protocol.AnonTokenAccount) error {
+func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransaction, account *protocol.LiteTokenAccount) error {
 	u, err := account.ParseUrl()
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it

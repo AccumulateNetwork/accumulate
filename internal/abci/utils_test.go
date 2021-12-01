@@ -253,8 +253,8 @@ func (n *fakeNode) GetTokenAccount(url string) *state.TokenAccount {
 	return acct
 }
 
-func (n *fakeNode) GetAnonTokenAccount(url string) *protocol.AnonTokenAccount {
-	acct := new(protocol.AnonTokenAccount)
+func (n *fakeNode) GetAnonTokenAccount(url string) *protocol.LiteTokenAccount {
+	acct := new(protocol.LiteTokenAccount)
 	n.GetChainAs(url, acct)
 	return acct
 }

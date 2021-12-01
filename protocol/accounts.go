@@ -23,7 +23,7 @@ func (ms *SigSpec) DebitCredits(amount uint64) bool {
 	return true
 }
 
-func (acct *AnonTokenAccount) CreditTokens(amount *big.Int) bool {
+func (acct *LiteTokenAccount) CreditTokens(amount *big.Int) bool {
 	if amount == nil || amount.Sign() < 0 {
 		return false
 	}
@@ -32,11 +32,11 @@ func (acct *AnonTokenAccount) CreditTokens(amount *big.Int) bool {
 	return true
 }
 
-func (acct *AnonTokenAccount) CanDebitTokens(amount *big.Int) bool {
+func (acct *LiteTokenAccount) CanDebitTokens(amount *big.Int) bool {
 	return amount != nil && acct.Balance.Cmp(amount) >= 0
 }
 
-func (acct *AnonTokenAccount) DebitTokens(amount *big.Int) bool {
+func (acct *LiteTokenAccount) DebitTokens(amount *big.Int) bool {
 	if !acct.CanDebitTokens(amount) {
 		return false
 	}
@@ -45,13 +45,13 @@ func (acct *AnonTokenAccount) DebitTokens(amount *big.Int) bool {
 	return true
 }
 
-func (acct *AnonTokenAccount) CreditCredits(amount uint64) {
+func (acct *LiteTokenAccount) CreditCredits(amount uint64) {
 	amt := new(big.Int)
 	amt.SetUint64(amount)
 	acct.CreditBalance.Add(&acct.CreditBalance, amt)
 }
 
-func (acct *AnonTokenAccount) DebitCredits(amount uint64) bool {
+func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
 	amt := new(big.Int)
 	amt.SetUint64(amount)
 	if amt.Cmp(&acct.CreditBalance) > 0 {
@@ -62,12 +62,12 @@ func (acct *AnonTokenAccount) DebitCredits(amount uint64) bool {
 	return true
 }
 
-func (acct *AnonTokenAccount) NextTx() uint64 {
+func (acct *LiteTokenAccount) NextTx() uint64 {
 	c := acct.TxCount
 	acct.TxCount++
 	return c
 }
 
-func (acct *AnonTokenAccount) ParseTokenUrl() (*url.URL, error) {
+func (acct *LiteTokenAccount) ParseTokenUrl() (*url.URL, error) {
 	return url.Parse(acct.TokenUrl)
 }

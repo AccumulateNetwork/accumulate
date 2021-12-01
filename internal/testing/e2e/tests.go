@@ -32,7 +32,7 @@ func (s *Suite) TestCreateAnonAccount() {
 
 	s.waitForSynth()
 
-	account := new(protocol.AnonTokenAccount)
+	account := new(protocol.LiteTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx), account.Balance.Int64())
 
@@ -73,7 +73,7 @@ func (s *Suite) TestCreateAnonAccount() {
 
 	s.waitForSynth()
 
-	account = new(protocol.AnonTokenAccount)
+	account = new(protocol.LiteTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx-total), account.Balance.Int64())
 }

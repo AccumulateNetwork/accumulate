@@ -113,7 +113,7 @@ func unmarshalTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error
 
 func unmarshalAnonTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
 	return unmarshalAs(rQuery, "anonTokenAccount", func(b []byte) (interface{}, error) {
-		sAccount := new(protocol.AnonTokenAccount)
+		sAccount := new(protocol.LiteTokenAccount)
 		err := sAccount.UnmarshalBinary(b)
 		rAccount := new(response.AnonTokenAccount)
 		rAccount.TokenAccountCreate = new(protocol.TokenAccountCreate)

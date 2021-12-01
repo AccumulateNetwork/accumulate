@@ -42,7 +42,7 @@ func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTran
 	var account tokenChain
 	if st.Sponsor != nil {
 		switch sponsor := st.Sponsor.(type) {
-		case *protocol.AnonTokenAccount:
+		case *protocol.LiteTokenAccount:
 			account = sponsor
 		case *state.TokenAccount:
 			account = sponsor
