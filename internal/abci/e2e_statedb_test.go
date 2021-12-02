@@ -22,7 +22,7 @@ func TestStateDBConsistency(t *testing.T) {
 	require.NoError(t, sdb.Load(db, true))
 
 	n := createApp(t, sdb, crypto.Address{}, "error", true)
-	n.testAnonTx(10)
+	n.testLiteTx(10)
 
 	height, err := sdb.BlockIndex()
 	require.NoError(t, err)
@@ -41,5 +41,5 @@ func TestStateDBConsistency(t *testing.T) {
 
 	// Recreate the app and try to do more transactions
 	n = createApp(t, sdb, crypto.Address{}, "error", false)
-	n.testAnonTx(10)
+	n.testLiteTx(10)
 }
