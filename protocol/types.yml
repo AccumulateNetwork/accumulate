@@ -205,6 +205,9 @@ CreateDataAccount:
   - name: Url
     type: string
     is-url: true
+  - name: KeyBookUrl
+    type: string
+    is-url: true
 
 WriteData:
   kind: tx

@@ -10,19 +10,18 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
-type TokenAccount struct {
+type DataAccount struct {
 	ChainHeader
-	TokenUrl types.UrlChain `json:"tokenUrl"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
-	Balance  big.Int        `json:"balance"`  //store the balance as a big int.
-	TxCount  uint64         `json:"txCount"`  //the number of transactions associated with this account (this is used to derive the txurl)
+	ManagerKeyBookUrl types.String    `json:"managerKeyBookUrl"`
+	EntryHashes       []types.Bytes32 `json:"entries"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
 }
 
 //NewTokenAccount create a new token account.  Requires the identity/chain id's and coinbase if applicable
-func NewTokenAccount(accountUrl string, tokenUrl string) *TokenAccount {
-	tas := TokenAccount{}
+func NewDataAccount(accountUrl string, managerKeyBookUrl string) *DataAccount {
+	tas := DataAccount{}
 
-	tas.SetHeader(types.String(accountUrl), types.ChainTypeTokenAccount)
-	tas.TokenUrl.String = types.String(tokenUrl)
+	tas.SetHeader(types.String(accountUrl), types.ChainTypeDataAccount)
+	tas.ManagerKeyBookUrl = types.String(managerKeyBookUrl)
 
 	return &tas
 }
@@ -39,9 +38,9 @@ func (app *TokenAccount) Set(accountState *TokenAccount) {
 }
 
 // CanTransact returns true/false if there is a sufficient balance
-func (app *TokenAccount) CanTransact(amt *big.Int) bool {
-	//make sure the user has enough in the account to perform the transaction
-	//if the balance is greater than or equal to the amount, then we are good.
+func (app *TokenAccount) ComputeEntryHash(extIds []byte, data []byte) bool {
+	//Build a merkle tree to compute the entry hash.
+
 	return app.GetBalance().Cmp(amt) >= 0
 }
 
