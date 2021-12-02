@@ -13,16 +13,20 @@ QueryResponse:
       type: string
     - name: KeyPage
       type: KeyPage
+      pointer: true
       marshal-as: self
     - name: Txid
       type: bytes
     - name: Signer
       type: Signer
+      pointer: true
       marshal-as: self
     - name: Sig
       type: bytes
     - name: Status
       type: any
+    - name: SyntheticTxids
+      type: chainSet
 
 MerkleState:
   non-binary: true
@@ -141,11 +145,14 @@ QueryOptions:
       type: bool
       optional: true
 
-TxIdQuery:
+TxnQuery:
   non-binary: true
   fields:
   - name: Txid
     type: bytes
+  - name: Wait
+    type: duration
+    optional: true
 
 ChainIdQuery:
   non-binary: true

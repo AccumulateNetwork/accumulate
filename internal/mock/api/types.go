@@ -7,6 +7,7 @@ package mock_api
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	api "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	gomock "github.com/golang/mock/gomock"
@@ -54,33 +55,33 @@ func (mr *MockQuerierMockRecorder) QueryChain(id interface{}) *gomock.Call {
 }
 
 // QueryDirectory mocks base method.
-func (m *MockQuerier) QueryDirectory(url string, queryOptions *api.QueryOptions) (*api.QueryResponse, error) {
+func (m *MockQuerier) QueryDirectory(url string, opts *api.QueryOptions) (*api.QueryResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryDirectory", url, queryOptions)
+	ret := m.ctrl.Call(m, "QueryDirectory", url, opts)
 	ret0, _ := ret[0].(*api.QueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // QueryDirectory indicates an expected call of QueryDirectory.
-func (mr *MockQuerierMockRecorder) QueryDirectory(url, queryOptions interface{}) *gomock.Call {
+func (mr *MockQuerierMockRecorder) QueryDirectory(url, opts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryDirectory", reflect.TypeOf((*MockQuerier)(nil).QueryDirectory), url, queryOptions)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryDirectory", reflect.TypeOf((*MockQuerier)(nil).QueryDirectory), url, opts)
 }
 
 // QueryTx mocks base method.
-func (m *MockQuerier) QueryTx(id []byte) (*api.QueryResponse, error) {
+func (m *MockQuerier) QueryTx(id []byte, wait time.Duration) (*api.QueryResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryTx", id)
+	ret := m.ctrl.Call(m, "QueryTx", id, wait)
 	ret0, _ := ret[0].(*api.QueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // QueryTx indicates an expected call of QueryTx.
-func (mr *MockQuerierMockRecorder) QueryTx(id interface{}) *gomock.Call {
+func (mr *MockQuerierMockRecorder) QueryTx(id, wait interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryTx", reflect.TypeOf((*MockQuerier)(nil).QueryTx), id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryTx", reflect.TypeOf((*MockQuerier)(nil).QueryTx), id, wait)
 }
 
 // QueryTxHistory mocks base method.

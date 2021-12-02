@@ -37,13 +37,22 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 	res.Type = payload.GetType().String()
 	res.Data = payload
 	res.Txid = txid[:]
+	res.KeyPage = new(KeyPage)
 	res.KeyPage.Height = tx.SigInfo.KeyPageHeight
 	res.KeyPage.Index = tx.SigInfo.KeyPageIndex
 
+	if len(synth)%32 != 0 {
+		return nil, fmt.Errorf("invalid synthetic transaction information, not divisible by 32")
+	}
+	res.SyntheticTxids = make([][32]byte, len(synth)/32)
+	for i := range res.SyntheticTxids {
+		copy(res.SyntheticTxids[i][:], synth[i*32:(i+1)*32])
+	}
+
 	switch payload := payload.(type) {
 	case *api.TokenTx:
-		if len(synth) != len(payload.To)*32 {
-			return nil, fmt.Errorf("not enough synthetic TXs: wanted %d*32 bytes, got %d", len(payload.To), len(synth))
+		if len(res.SyntheticTxids) != len(payload.To) {
+			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
 
 		res.Sponsor = tx.SigInfo.URL
@@ -71,6 +80,7 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 	if pend != nil && len(pend.Signature) > 0 {
 		sig := pend.Signature[0]
 		res.Status = pend.Status
+		res.Signer = new(Signer)
 		res.Signer.PublicKey = sig.PublicKey
 		res.Signer.Nonce = sig.Nonce
 		res.Sig = sig.Signature

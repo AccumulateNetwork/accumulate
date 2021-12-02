@@ -43,13 +43,13 @@ func (s *Suite) TestCreateAnonAccount() {
 	}
 
 	var total int64
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1; i++ {
 		if i > 2 && testing.Short() {
 			break
 		}
 
 		exch := apitypes.NewTokenTx(types.String(senderUrl.String()))
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 1; i++ {
 			if i > 2 && testing.Short() {
 				break
 			}
