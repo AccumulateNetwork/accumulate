@@ -16,12 +16,13 @@ import (
 )
 
 type Record struct {
-	name      string
-	Kind      string
-	TxType    string `yaml:"tx-type"`
-	ChainType string `yaml:"chain-type"`
-	NonBinary bool   `yaml:"non-binary"`
-	Fields    []*Field
+	name       string
+	Kind       string
+	TxType     string `yaml:"tx-type"`
+	ChainType  string `yaml:"chain-type"`
+	NonBinary  bool   `yaml:"non-binary"`
+	Fields     []*Field
+	Embeddings []string `yaml:"embeddings"`
 }
 
 type Field struct {
@@ -145,6 +146,13 @@ func run(_ *cobra.Command, args []string) {
 			} else {
 				fmt.Fprintf(w, "\nstate.ChainHeader\n")
 			}
+		}
+
+		if len(typ.Embeddings) > 0 && !typ.NonBinary {
+			check(fmt.Errorf("type %q: embedding is not supported for binary-marshalled types", typ.name))
+		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\t\t%s\n", e)
 		}
 		for _, field := range typ.Fields {
 			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]

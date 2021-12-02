@@ -93,7 +93,7 @@ func (q *Query) QueryDirectoryByUrl(url string) (*ctypes.ResultABCIQuery, error)
 	qu := query.Query{}
 	qu.RouteId = u.Routing()
 	qu.Type = types.QueryTypeDirectoryUrl
-	ru := query.RequestByUrl{}
+	ru := query.RequestDirectory{}
 	ru.Url = types.String(u.String())
 	qu.Content, err = ru.MarshalBinary()
 	if err != nil {

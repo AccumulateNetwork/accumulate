@@ -35,13 +35,9 @@ func (queryDirect) responseIsError(r tm.ResponseQuery) error {
 }
 
 func (q queryDirect) query(content queryRequest) (string, []byte, error) {
-	return q.queryType(content.Type(), content)
-}
-
-func (q queryDirect) queryType(typ types.QueryType, content queryRequest) (string, []byte, error) {
 	var err error
 	req := new(query.Query)
-	req.Type = typ
+	req.Type = content.Type()
 	req.Content, err = content.MarshalBinary()
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
@@ -112,15 +108,16 @@ func (q queryDirect) QueryUrl(s string) (*QueryResponse, error) {
 	}
 }
 
-func (q queryDirect) QueryDirectory(s string) (*QueryResponse, error) {
+func (q queryDirect) QueryDirectory(s string, queryOptions *QueryOptions) (*QueryResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
 	}
 
-	req := new(query.RequestByUrl)
+	req := new(query.RequestDirectory)
 	req.Url = types.String(u.String())
-	k, v, err := q.queryType(types.QueryTypeDirectoryUrl, req)
+	req.ExpandChains = types.Bool(queryOptions.ExpandChains)
+	k, v, err := q.query(req)
 	if err != nil {
 		return nil, err
 	}
@@ -128,16 +125,38 @@ func (q queryDirect) QueryDirectory(s string) (*QueryResponse, error) {
 		return nil, fmt.Errorf("unknown response type: want directory, got %q", k)
 	}
 
-	dir := new(protocol.DirectoryQueryResult)
-	err = dir.UnmarshalBinary(v)
+	protoDir := new(protocol.DirectoryQueryResult)
+	err = protoDir.UnmarshalBinary(v)
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+	respDir, err := responseDirFromProto(protoDir)
+	if err != nil {
+		return nil, err
 	}
 
 	res := new(QueryResponse)
 	res.Type = "directory"
-	res.Data = dir
+	res.Data = respDir
 	return res, nil
+}
+
+func responseDirFromProto(protoDir *protocol.DirectoryQueryResult) (*DirectoryQueryResult, error) {
+	respDir := new(DirectoryQueryResult)
+	respDir.Entries = protoDir.Entries
+	respDir.ExpandedEntries = make([]*QueryResponse, len(protoDir.ExpandedEntries))
+	for i, entry := range protoDir.ExpandedEntries {
+		chain, err := chainFromStateObj(entry)
+		if err != nil {
+			return nil, err
+		}
+		response, err := packStateResponse(entry, chain)
+		if err != nil {
+			return nil, err
+		}
+		respDir.ExpandedEntries[i] = response
+	}
+	return respDir, nil
 }
 
 func (q queryDirect) QueryChain(id []byte) (*QueryResponse, error) {
