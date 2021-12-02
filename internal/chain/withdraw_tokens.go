@@ -40,7 +40,7 @@ func (WithdrawTokens) Validate(st *StateManager, tx *transactions.GenTransaction
 	switch sponsor := st.Sponsor.(type) {
 	case *state.TokenAccount:
 		account = sponsor
-	case *protocol.AnonTokenAccount:
+	case *protocol.LiteTokenAccount:
 		account = sponsor
 	default:
 		return fmt.Errorf("invalid sponsor: want %v or %v, got %v", types.ChainTypeTokenAccount, types.ChainTypeLiteTokenAccount, st.Sponsor.Header().Type)
