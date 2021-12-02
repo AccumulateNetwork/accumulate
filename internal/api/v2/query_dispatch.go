@@ -3,21 +3,23 @@ package api
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
 type queryDispatch struct {
+	QuerierOptions
 	clients []ABCIQueryClient
 }
 
-func (q queryDispatch) direct(i uint64) queryDirect {
+func (q *queryDispatch) direct(i uint64) *queryDirect {
 	i = i % uint64(len(q.clients))
-	return queryDirect{q.clients[i]}
+	return &queryDirect{q.QuerierOptions, q.clients[i]}
 }
 
-func (q queryDispatch) routing(s string) (uint64, error) {
+func (q *queryDispatch) routing(s string) (uint64, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return 0, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
@@ -26,10 +28,10 @@ func (q queryDispatch) routing(s string) (uint64, error) {
 	return u.Routing(), nil
 }
 
-func (q queryDispatch) queryAll(query func(queryDirect) (*QueryResponse, error)) ([]*QueryResponse, error) {
+func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error)) ([]*QueryResponse, error) {
 	res := make([]*QueryResponse, 0, 1)
 	for _, c := range q.clients {
-		r, err := query(queryDirect{c})
+		r, err := query(&queryDirect{q.QuerierOptions, c})
 		if err == nil {
 			res = append(res, r)
 		} else if !errors.Is(err, storage.ErrNotFound) {
@@ -44,7 +46,7 @@ func (q queryDispatch) queryAll(query func(queryDirect) (*QueryResponse, error))
 	return res, nil
 }
 
-func (q queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
+func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
@@ -53,8 +55,8 @@ func (q queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
 	return q.direct(r).QueryUrl(url)
 }
 
-func (q queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
-	res, err := q.queryAll(func(q queryDirect) (*QueryResponse, error) {
+func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
+	res, err := q.queryAll(func(q *queryDirect) (*QueryResponse, error) {
 		return q.QueryChain(id)
 	})
 	if err != nil {
@@ -68,18 +70,18 @@ func (q queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 	return res[0], nil
 }
 
-func (q queryDispatch) QueryDirectory(url string) (*QueryResponse, error) {
+func (q *queryDispatch) QueryDirectory(url string, queryOptions *QueryOptions) (*QueryResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QueryDirectory(url)
+	return q.direct(r).QueryDirectory(url, queryOptions)
 }
 
-func (q queryDispatch) QueryTx(id []byte) (*QueryResponse, error) {
-	res, err := q.queryAll(func(q queryDirect) (*QueryResponse, error) {
-		return q.QueryTx(id)
+func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, error) {
+	res, err := q.queryAll(func(q *queryDirect) (*QueryResponse, error) {
+		return q.QueryTx(id, wait)
 	})
 	if err != nil {
 		return nil, err
@@ -92,7 +94,7 @@ func (q queryDispatch) QueryTx(id []byte) (*QueryResponse, error) {
 	return res[0], nil
 }
 
-func (q queryDispatch) QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error) {
+func (q *queryDispatch) QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
