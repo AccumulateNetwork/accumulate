@@ -694,5 +694,6 @@ func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
 }
 
 func nonceFromTimeNow() uint64 {
-	return uint64(time.Now().UnixMicro())
+	t := time.Now()
+	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
 }
