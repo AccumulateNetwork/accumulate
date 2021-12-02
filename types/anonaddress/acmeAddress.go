@@ -8,11 +8,11 @@ import (
 
 // GenerateAcmeAddress
 // Given a public key, create a Ascii representation that can be used
-// for the Anonymous token chain.
+// for the lite token chain.
 //
-// Deprecated: use ./protocol.AnonymousAddress
+// Deprecated: use ./protocol.LiteAddress
 func GenerateAcmeAddress(pubKey []byte) string {
-	u, err := protocol.AnonymousAddress(pubKey, protocol.ACME)
+	u, err := protocol.LiteAddress(pubKey, protocol.ACME)
 	if err != nil {
 		// If the hard-coded ACME token URL is invalid, something is seriously
 		// wrong

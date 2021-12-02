@@ -11,7 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
+	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/synthetic"
@@ -28,9 +28,9 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 	wallet = append(wallet, api.NewWalletEntry())          // wallet[0] is where we put 5000 ACME tokens
 	wallet[0].Nonce = 1                                    // start the nonce at 1
 	wallet[0].PrivateKey = Origin                          // Put the private key for the origin
-	wallet[0].Addr = anon.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
+	wallet[0].Addr = lite.GenerateAcmeAddress(Origin[32:]) // Generate the origin address
 
-	for i := 0; i < walletCount; i++ { //                            create a 1000 addresses for anonymous token chains
+	for i := 0; i < walletCount; i++ { //                            create a 1000 addresses for lite token chains
 		wallet = append(wallet, api.NewWalletEntry()) // create a new wallet entry
 	}
 
@@ -127,11 +127,11 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 
 func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed25519.PrivateKey, *transactions.GenTransaction, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	adiSponsor := types.String(anon.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
+	adiSponsor := types.String(lite.GenerateAcmeAddress(origin.Public().(ed25519.PublicKey)))
 
 	_, privateKey, _ := ed25519.GenerateKey(nil)
 	//set destination url address
-	destAddress := types.String(anon.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
+	destAddress := types.String(lite.GenerateAcmeAddress(privateKey.Public().(ed25519.PublicKey)))
 
 	txid := sha256.Sum256([]byte("fake txid"))
 
@@ -170,7 +170,7 @@ func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed2551
 
 func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	from := types.String(anon.GenerateAcmeAddress(sponsor.Public().(ed25519.PublicKey)))
+	from := types.String(lite.GenerateAcmeAddress(sponsor.Public().(ed25519.PublicKey)))
 
 	tokenTx := apitypes.TokenTx{}
 

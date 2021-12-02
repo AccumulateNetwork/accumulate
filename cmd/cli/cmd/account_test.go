@@ -40,7 +40,7 @@ func testCase3_1(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	commandLine := fmt.Sprintf("account create acc://RedWagon red1 acc://RedWagon/acct acc://acme acc://RedWagon/ssg0")
-	r, err := tc.execute(t, commandLine)
+	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
 	t.Log(r)
@@ -88,7 +88,7 @@ func testGetBalance(t *testing.T, tc *testCmd, accountUrl string) (string, error
 		return "", err
 	}
 
-	acc := response.AnonTokenAccount{} //protocol.AnonTokenAccount{}
+	acc := response.LiteTokenAccount{} //protocol.LiteTokenAccount{}
 	err = json.Unmarshal(*res.Data, &acc)
 	if err != nil {
 		return "", err
