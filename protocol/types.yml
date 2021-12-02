@@ -154,8 +154,10 @@ UpdateKeyPage:
       marshal-as: self
     - name: Key
       type: bytes
+      optional: true
     - name: NewKey
       type: bytes
+      optional: true
 
 MetricsRequest:
   fields:
