@@ -42,7 +42,8 @@ type ChainParams struct {
 }
 
 type CreateDataAccount struct {
-	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	KeyBookUrl string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"required,acc-url"`
 }
 
 type CreateSigSpec struct {
@@ -327,6 +328,8 @@ func (v *CreateDataAccount) BinarySize() int {
 	n += encoding.UvarintBinarySize(types.TxTypeCreateDataAccount.ID())
 
 	n += encoding.StringBinarySize(v.Url)
+
+	n += encoding.StringBinarySize(v.KeyBookUrl)
 
 	return n
 }
@@ -735,6 +738,8 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeCreateDataAccount.ID()))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
+
+	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
 
 	return buffer.Bytes(), nil
 }
@@ -1250,6 +1255,13 @@ func (v *CreateDataAccount) UnmarshalBinary(data []byte) error {
 		v.Url = x
 	}
 	data = data[encoding.StringBinarySize(v.Url):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyBookUrl: %w", err)
+	} else {
+		v.KeyBookUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
 
 	return nil
 }
