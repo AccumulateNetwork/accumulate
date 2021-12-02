@@ -42,7 +42,7 @@ func chainFromStateObj(obj *state.Object) (state.Chain, error) {
 	case types.ChainTypeTokenAccount:
 		chain = new(state.TokenAccount)
 	case types.ChainTypeLiteTokenAccount:
-		chain = new(protocol.AnonTokenAccount)
+		chain = new(protocol.LiteTokenAccount)
 	case types.ChainTypeKeyPage:
 		chain = new(protocol.KeyPage)
 	case types.ChainTypeKeyBook:
@@ -75,6 +75,8 @@ func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 	case types.TxTypeCreateIdentity:
 		payload = new(protocol.IdentityCreate)
 	case types.TxTypeCreateToken:
+		payload = new(protocol.CreateToken)
+	case types.TxTypeCreateTokenAccount:
 		payload = new(protocol.TokenAccountCreate)
 	case types.TxTypeCreateKeyPage:
 		payload = new(protocol.CreateKeyPage)
@@ -119,7 +121,7 @@ func unmarshalTxResponse(mainData, pendData []byte) (*state.Transaction, *state.
 	}
 
 	err = pendObj.UnmarshalBinary(pendData)
-	if err != nil {
+	if err == nil {
 		pend = new(state.PendingTransaction)
 		err = pendObj.As(pend)
 		if err != nil {

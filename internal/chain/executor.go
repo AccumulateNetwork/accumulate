@@ -202,8 +202,8 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 
 	book := new(protocol.KeyBook)
 	switch sponsor := st.Sponsor.(type) {
-	case *protocol.AnonTokenAccount:
-		return st, m.checkAnonymous(st, tx, sponsor)
+	case *protocol.LiteTokenAccount:
+		return st, m.checkLite(st, tx, sponsor)
 
 	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage:
 		if (sponsor.Header().KeyBook == types.Bytes32{}) {
@@ -271,7 +271,7 @@ func (m *Executor) checkSynthetic(st *StateManager, tx *transactions.GenTransact
 	return nil
 }
 
-func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransaction, account *protocol.AnonTokenAccount) error {
+func (m *Executor) checkLite(st *StateManager, tx *transactions.GenTransaction, account *protocol.LiteTokenAccount) error {
 	u, err := account.ParseUrl()
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
@@ -279,11 +279,11 @@ func (m *Executor) checkAnonymous(st *StateManager, tx *transactions.GenTransact
 		return fmt.Errorf("invalid sponsor URL: %v", err)
 	}
 
-	urlKH, _, err := protocol.ParseAnonymousAddress(u)
+	urlKH, _, err := protocol.ParseLiteAddress(u)
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
 		// into the database.
-		return fmt.Errorf("invalid anonymous token URL: %v", err)
+		return fmt.Errorf("invalid lite token URL: %v", err)
 	}
 
 	for i, sig := range tx.Signature {

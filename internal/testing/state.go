@@ -8,7 +8,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
+	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/AccumulateNetwork/accumulate/types/synthetic"
@@ -26,8 +26,8 @@ type DB interface {
 const TokenMx = 100000000
 
 func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transactions.GenTransaction, error) {
-	sponsorAdi := types.String(anon.GenerateAcmeAddress(sponsor.PubKey().Bytes()))
-	recipientAdi := types.String(anon.GenerateAcmeAddress(recipient.PubKey().Bytes()))
+	sponsorAdi := types.String(lite.GenerateAcmeAddress(sponsor.PubKey().Bytes()))
+	recipientAdi := types.String(lite.GenerateAcmeAddress(recipient.PubKey().Bytes()))
 
 	//create a fake synthetic deposit for faucet.
 	fakeTxid := sha256.Sum256([]byte("fake txid"))
@@ -61,8 +61,8 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	return tx, nil
 }
 
-func CreateAnonTokenAccount(db DB, key ed25519.PrivKey, tokens float64) error {
-	url := types.String(anon.GenerateAcmeAddress(key.PubKey().Bytes()))
+func CreateLiteTokenAccount(db DB, key ed25519.PrivKey, tokens float64) error {
+	url := types.String(lite.GenerateAcmeAddress(key.PubKey().Bytes()))
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
@@ -115,7 +115,7 @@ func CreateADI(db DB, key ed25519.PrivKey, urlStr types.String) error {
 	return WriteStates(db, adi, ssg, mss)
 }
 
-func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, anon bool) error {
+func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
 	u, err := url.Parse(accUrl)
 	if err != nil {
 		return err
@@ -124,8 +124,8 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, anon boo
 	sigSpecId := u.Identity().JoinPath("ssg0").ResourceChain() // assume the sig spec is adi/ssg0
 
 	var chain state.Chain
-	if anon {
-		account := new(protocol.AnonTokenAccount)
+	if lite {
+		account := new(protocol.LiteTokenAccount)
 		account.ChainUrl = types.String(u.String())
 		account.TokenUrl = tokenUrl
 		account.Balance.SetInt64(int64(tokens * TokenMx))

@@ -17,7 +17,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
+	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
@@ -101,7 +101,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcLiteToken(t *testing.T) {
 	switch {
 	case testing.Short():
 		t.Skip("Skipping test in short mode")
@@ -113,7 +113,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	dir := t.TempDir()
 	_, pv, query := startBVC(t, dir)
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	kpSponsor := ed25519.NewKeyFromSeed(pv.Key.PrivKey.Bytes()[:32])
 
 	addrList, err := acctesting.RunLoadTest(query, kpSponsor, *loadWalletCount, *loadTxCount)
@@ -224,12 +224,12 @@ func TestFaucet(t *testing.T) {
 	dir := t.TempDir()
 	_, _, query := startBVC(t, dir)
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
 	req.Wait = true
-	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -337,11 +337,11 @@ func TestTransactionHistory(t *testing.T) {
 	dir := t.TempDir()
 	_, _, query := startBVC(t, dir)
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
-	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -411,7 +411,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	}
 
 	req := &api.APIRequestURL{}
-	req.URL = types.String(anon.GenerateAcmeAddress(ed25519.PublicKey{}))
+	req.URL = types.String(lite.GenerateAcmeAddress(ed25519.PublicKey{}))
 	params, err := json.Marshal(&req)
 	require.NoError(t, err)
 
@@ -600,7 +600,7 @@ func TestFaucetReplay(t *testing.T) {
 	}
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
-	destAccount := anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
+	destAccount := lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
 	tx := acmeapi.TokenTx{}
 	tx.From.String = types.String(protocol.FaucetWallet.Addr)
 	tx.AddToAccount(types.String(destAccount), 1000000000)
