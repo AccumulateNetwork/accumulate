@@ -323,7 +323,7 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 	case types.ChainTypeTokenAccount:
 		record = new(state.TokenAccount)
 	case types.ChainTypeLiteTokenAccount:
-		record = new(protocol.AnonTokenAccount)
+		record = new(protocol.LiteTokenAccount)
 	case types.ChainTypeTransactionReference:
 		record = new(state.TxReference)
 	case types.ChainTypeTransaction:
@@ -331,9 +331,9 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 	case types.ChainTypePendingTransaction:
 		record = new(state.PendingTransaction)
 	case types.ChainTypeKeyPage:
-		record = new(protocol.SigSpec)
+		record = new(protocol.KeyPage)
 	case types.ChainTypeKeyBook:
-		record = new(protocol.SigSpecGroup)
+		record = new(protocol.KeyBook)
 	default:
 		return nil, fmt.Errorf("unrecognized chain type %v", header.Type)
 	}

@@ -42,25 +42,25 @@ func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTran
 	var account tokenChain
 	if st.Sponsor != nil {
 		switch sponsor := st.Sponsor.(type) {
-		case *protocol.AnonTokenAccount:
+		case *protocol.LiteTokenAccount:
 			account = sponsor
 		case *state.TokenAccount:
 			account = sponsor
 		default:
 			return fmt.Errorf("invalid sponsor: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, sponsor.Header().Type)
 		}
-	} else if keyHash, tok, err := protocol.ParseAnonymousAddress(accountUrl); err != nil {
-		return fmt.Errorf("invalid anonymous token account URL: %v", err)
+	} else if keyHash, tok, err := protocol.ParseLiteAddress(accountUrl); err != nil {
+		return fmt.Errorf("invalid lite token account URL: %v", err)
 	} else if keyHash == nil {
 		return fmt.Errorf("could not find token account")
 	} else if !tokenUrl.Equal(tok) {
-		return fmt.Errorf("token URL does not match anonymous token account URL")
+		return fmt.Errorf("token URL does not match lite token account URL")
 	} else {
-		// Address is anonymous and the account doesn't exist, so create one
-		anon := protocol.NewAnonTokenAccount()
-		anon.ChainUrl = types.String(accountUrl.String())
-		anon.TokenUrl = tokenUrl.String()
-		account = anon
+		// Address is lite and the account doesn't exist, so create one
+		lite := protocol.NewLiteTokenAccount()
+		lite.ChainUrl = types.String(accountUrl.String())
+		lite.TokenUrl = tokenUrl.String()
+		account = lite
 	}
 
 	if !account.CreditTokens(&body.DepositAmount.Int) {
