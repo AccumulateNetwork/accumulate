@@ -106,7 +106,7 @@ func (s *StateDB) open(dbType string, dbFilename string, logger log.Logger) (err
 	return err
 }
 
-func (s *StateDB) loadDB(db storage.KeyValueDB) (err error) {
+func (s *StateDB) Load(db storage.KeyValueDB) (err error) {
 	s.dbMgr = new(database.Manager)
 	s.dbMgr.InitWithDB(db)
 	s.merkleMgr, err = managed.NewMerkleManager(s.dbMgr, markPower)

@@ -52,7 +52,7 @@ func (sb *stateDbBuilder) OpenFromFile(filePath string) (*StateDB, error) {
 func (sb *stateDbBuilder) LoadKeyValueDB(db storage.KeyValueDB) (*StateDB, error) {
 	stateDB := new(StateDB)
 	createStateLogger(sb, stateDB)
-	err := stateDB.loadDB(db)
+	err := stateDB.Load(db)
 	stateDB.init(sb.debug)
 	return stateDB, err
 }
