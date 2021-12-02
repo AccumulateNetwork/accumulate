@@ -426,6 +426,18 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 
 	}
 
+	if !(len(v.ExpandedEntries) == len(u.ExpandedEntries)) {
+		return false
+	}
+
+	for i := range v.ExpandedEntries {
+		v, u := v.ExpandedEntries[i], u.ExpandedEntries[i]
+		if !(v.Equal(u)) {
+			return false
+		}
+
+	}
+
 	return true
 }
 

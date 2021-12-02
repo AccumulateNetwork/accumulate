@@ -58,6 +58,7 @@ QueryMultiResponse:
 
 DirectoryQueryResult:
   non-binary: true
+  incomparable: true
   fields:
   - name: Entries
     type: slice
@@ -69,7 +70,7 @@ DirectoryQueryResult:
     slice:
       type: QueryResponse
       pointer: true
-      marshal-as: self
+      marshal-as: reference
     optional: true
 
 
@@ -125,12 +126,14 @@ UrlQuery:
 
 TxHistoryQuery:
   non-binary: true
+  incomparable: true
   embeddings:
   - UrlQuery
   - QueryPagination
 
 QueryPagination:
   non-binary: true
+  incomparable: true
   fields:
   - name: Start
     type: uvarint
@@ -141,12 +144,14 @@ QueryPagination:
 
 DirectoryQuery:
   non-binary: true
+  incomparable: true
   embeddings:
     - UrlQuery
     - QueryOptions
 
 QueryOptions:
   non-binary: true
+  incomparable: true
   fields:
     - name: ExpandChains
       type: bool
