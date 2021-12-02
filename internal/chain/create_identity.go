@@ -33,7 +33,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction
 	}
 
 	switch st.Sponsor.(type) {
-	case *protocol.AnonTokenAccount, *state.AdiState:
+	case *protocol.LiteTokenAccount, *state.AdiState:
 		// OK
 	default:
 		return fmt.Errorf("chain type %d cannot sponsor ADIs", st.Sponsor.Header().Type)

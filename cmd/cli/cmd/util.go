@@ -367,7 +367,7 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 
 var (
 	ApiToString = map[string]string{
-		"anonTokenAccount": "lite account",
+		"liteTokenAccount": "lite account",
 		"tokenAccount":     "ADI token account",
 		"adi":              "ADI",
 		"keyBook":          "Key Book",
@@ -409,11 +409,70 @@ func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TxId.AsBytes32())
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Sponsor)
 	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig.Bytes())
-	out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
-	out += fmt.Sprintf("  - Signer Nonce          : %d\n", res.Signer.Nonce)
+	if res.Signer != nil {
+		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
+		out += fmt.Sprintf("  - Signer Nonce          : %d\n", res.Signer.Nonce)
+	}
 	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
 	out += fmt.Sprintf("===\n")
 	return out
+}
+
+func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
+	if WantJsonOutput {
+		data, err := json.Marshal(v2)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+
+	v1 := new(acmeapi.APIDataResponse)
+	v1.Type = types.String(v2.Type)
+	if v2.MerkleState != nil {
+		v1.MerkleState = new(acmeapi.MerkleState)
+		v1.MerkleState.Count = v2.MerkleState.Count
+		v1.MerkleState.Roots = make([]types.Bytes, len(v2.MerkleState.Roots))
+		for i, r := range v2.MerkleState.Roots {
+			v1.MerkleState.Roots[i] = r
+		}
+	}
+	v1.Sponsor = types.String(v2.Sponsor)
+	if v2.KeyPage != nil {
+		v1.KeyPage = new(acmeapi.APIRequestKeyPage)
+		v1.KeyPage.Height = v2.KeyPage.Height
+		v1.KeyPage.Index = v2.KeyPage.Index
+	}
+	v1.TxId = (*types.Bytes)(&v2.Txid)
+	if v2.Signer != nil {
+		v1.Signer = new(acmeapi.Signer)
+		v1.Signer.PublicKey = types.Bytes(v2.Signer.PublicKey).AsBytes32()
+		v1.Signer.Nonce = v2.Signer.Nonce
+	}
+	sig := types.Bytes(v2.Sig).AsBytes64()
+	v1.Sig = &sig
+
+	b, err := json.Marshal(v2.Data)
+	if err != nil {
+		return "", err
+	}
+	v1.Data = (*json.RawMessage)(&b)
+
+	b, err = json.Marshal(v2.Status)
+	if err != nil {
+		return "", err
+	}
+	v1.Status = (*json.RawMessage)(&b)
+
+	out, err := PrintQueryResponse(v1)
+	if err != nil {
+		return "", err
+	}
+
+	for i, txid := range v2.SyntheticTxids {
+		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
+	}
+	return out, nil
 }
 
 func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
@@ -425,8 +484,8 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 		return string(data), nil
 	} else {
 		switch res.Type {
-		case "anonTokenAccount":
-			ata := response.AnonTokenAccount{}
+		case "liteTokenAccount":
+			ata := response.LiteTokenAccount{}
 			err := json.Unmarshal(*res.Data, &ata)
 			if err != nil {
 				return "", err
@@ -560,7 +619,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 			}
 			return out, nil
-		case "tokenTx":
+		case "withdrawTokens":
 			tx := response.TokenTx{}
 			err := json.Unmarshal(*res.Data, &tx)
 			if err != nil {
@@ -581,7 +640,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 
 			out += printGeneralTransactionParameters(res)
 			return out, nil
-		case "syntheticTokenDeposit":
+		case "syntheticDepositTokens":
 			deposit := synthetic.TokenTransactionDeposit{}
 			err := json.Unmarshal(*res.Data, &deposit)
 
@@ -601,9 +660,9 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			return out, nil
 
 		default:
+			return "", fmt.Errorf("unknown response type %q", res.Type)
 		}
 	}
-	return "", nil
 }
 
 func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
