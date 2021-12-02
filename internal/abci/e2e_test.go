@@ -13,7 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/types"
-	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
+	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -36,7 +36,7 @@ func TestEndToEndSuite(t *testing.T) {
 	}))
 }
 
-func BenchmarkFaucetAndAnonTx(b *testing.B) {
+func BenchmarkFaucetAndLiteTx(b *testing.B) {
 	n := createAppWithMemDB(b, crypto.Address{}, "error", true)
 
 	sponsor := generateKey()
@@ -51,7 +51,7 @@ func BenchmarkFaucetAndAnonTx(b *testing.B) {
 	origin := accapi.NewWalletEntry()
 	origin.Nonce = 1
 	origin.PrivateKey = recipient.Bytes()
-	origin.Addr = anon.GenerateAcmeAddress(recipient.PubKey().Address())
+	origin.Addr = lite.GenerateAcmeAddress(recipient.PubKey().Address())
 
 	rwallet := accapi.NewWalletEntry()
 
@@ -69,17 +69,17 @@ func BenchmarkFaucetAndAnonTx(b *testing.B) {
 	})
 }
 
-func TestCreateAnonAccount(t *testing.T) {
+func TestCreateLiteAccount(t *testing.T) {
 	var count = 11
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
-	originAddr, balances := n.testAnonTx(count)
-	require.Equal(t, int64(5e4*acctesting.TokenMx-count*1000), n.GetAnonTokenAccount(originAddr).Balance.Int64())
+	originAddr, balances := n.testLiteTx(count)
+	require.Equal(t, int64(5e4*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
-		require.Equal(t, bal, n.GetAnonTokenAccount(addr).Balance.Int64())
+		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
 	}
 }
 
-func (n *fakeNode) testAnonTx(count int) (string, map[string]int64) {
+func (n *fakeNode) testLiteTx(count int) (string, map[string]int64) {
 	sponsor := generateKey()
 	_, recipient, gtx, err := acctesting.BuildTestSynthDepositGenTx(sponsor.Bytes())
 	require.NoError(n.t, err)
@@ -87,7 +87,7 @@ func (n *fakeNode) testAnonTx(count int) (string, map[string]int64) {
 	origin := accapi.NewWalletEntry()
 	origin.Nonce = 1
 	origin.PrivateKey = recipient
-	origin.Addr = anon.GenerateAcmeAddress(recipient.Public().(ed25519.PublicKey))
+	origin.Addr = lite.GenerateAcmeAddress(recipient.Public().(ed25519.PublicKey))
 
 	recipients := make([]*transactions.WalletEntry, 10)
 	for i := range recipients {
@@ -120,7 +120,7 @@ func (n *fakeNode) testAnonTx(count int) (string, map[string]int64) {
 func TestFaucet(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	alice := generateKey()
-	aliceUrl := anon.GenerateAcmeAddress(alice.PubKey().Bytes())
+	aliceUrl := lite.GenerateAcmeAddress(alice.PubKey().Bytes())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		body := new(protocol.AcmeFaucet)
@@ -132,14 +132,14 @@ func TestFaucet(t *testing.T) {
 		send(tx)
 	})
 
-	require.Equal(t, int64(10*protocol.AcmePrecision), n.GetAnonTokenAccount(aliceUrl).Balance.Int64())
+	require.Equal(t, int64(10*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl).Balance.Int64())
 }
 
 func TestAnchorChain(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
-	anonAccount := generateKey()
+	liteAccount := generateKey()
 	dbTx := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, anonAccount, 5e4))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, liteAccount, 5e4))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	n.Batch(func(send func(*Tx)) {
@@ -148,8 +148,8 @@ func TestAnchorChain(t *testing.T) {
 		adi.KeyBookName = "book"
 		adi.KeyPageName = "page"
 
-		sponsorUrl := anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
-		tx, err := transactions.New(sponsorUrl, 1, edSigner(anonAccount, 1), adi)
+		sponsorUrl := lite.GenerateAcmeAddress(liteAccount.PubKey().Bytes())
+		tx, err := transactions.New(sponsorUrl, 1, edSigner(liteAccount, 1), adi)
 		require.NoError(t, err)
 
 		send(tx)
@@ -190,18 +190,17 @@ func TestAnchorChain(t *testing.T) {
 func TestCreateADI(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 
-	anonAccount := generateKey()
+	liteAccount := generateKey()
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
 	dbTx := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, anonAccount, 5e4))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, liteAccount, 5e4))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	wallet := new(transactions.WalletEntry)
 	wallet.Nonce = 1
-	wallet.PrivateKey = anonAccount.Bytes()
-	wallet.Addr = anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
-	n.GetAnonTokenAccount(wallet.Addr)
+	wallet.PrivateKey = liteAccount.Bytes()
+	wallet.Addr = lite.GenerateAcmeAddress(liteAccount.PubKey().Bytes())
 
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.IdentityCreate)
@@ -210,7 +209,7 @@ func TestCreateADI(t *testing.T) {
 		adi.KeyBookName = "foo-book"
 		adi.KeyPageName = "bar-page"
 
-		sponsorUrl := anon.GenerateAcmeAddress(anonAccount.PubKey().Bytes())
+		sponsorUrl := lite.GenerateAcmeAddress(liteAccount.PubKey().Bytes())
 		tx, err := transactions.New(sponsorUrl, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 			return wallet.Sign(hash), nil
 		}, adi)
@@ -290,18 +289,18 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	})
 }
 
-func TestAnonAccountTx(t *testing.T) {
+func TestLiteAccountTx(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
 	dbTx := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, alice, 5e4))
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, bob, 0))
-	require.NoError(n.t, acctesting.CreateAnonTokenAccount(dbTx, charlie, 0))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, alice, 5e4))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, bob, 0))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, charlie, 0))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
-	aliceUrl := anon.GenerateAcmeAddress(alice.PubKey().Bytes())
-	bobUrl := anon.GenerateAcmeAddress(bob.PubKey().Bytes())
-	charlieUrl := anon.GenerateAcmeAddress(charlie.PubKey().Bytes())
+	aliceUrl := lite.GenerateAcmeAddress(alice.PubKey().Bytes())
+	bobUrl := lite.GenerateAcmeAddress(bob.PubKey().Bytes())
+	charlieUrl := lite.GenerateAcmeAddress(charlie.PubKey().Bytes())
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		tokenTx := api.NewTokenTx(types.String(aliceUrl))
@@ -313,9 +312,9 @@ func TestAnonAccountTx(t *testing.T) {
 		send(tx)
 	})
 
-	require.Equal(t, int64(5e4*acctesting.TokenMx-3000), n.GetAnonTokenAccount(aliceUrl).Balance.Int64())
-	require.Equal(t, int64(1000), n.GetAnonTokenAccount(bobUrl).Balance.Int64())
-	require.Equal(t, int64(2000), n.GetAnonTokenAccount(charlieUrl).Balance.Int64())
+	require.Equal(t, int64(5e4*acctesting.TokenMx-3000), n.GetLiteTokenAccount(aliceUrl).Balance.Int64())
+	require.Equal(t, int64(1000), n.GetLiteTokenAccount(bobUrl).Balance.Int64())
+	require.Equal(t, int64(2000), n.GetLiteTokenAccount(charlieUrl).Balance.Int64())
 }
 
 func TestAdiAccountTx(t *testing.T) {
@@ -542,7 +541,7 @@ func TestSignatorHeight(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, "error", true)
 	liteKey, fooKey := generateKey(), generateKey()
 
-	liteUrl, err := protocol.AnonymousAddress(liteKey.PubKey().Bytes(), "ACME")
+	liteUrl, err := protocol.LiteAddress(liteKey.PubKey().Bytes(), "ACME")
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)
@@ -550,7 +549,7 @@ func TestSignatorHeight(t *testing.T) {
 	require.NoError(t, err)
 
 	dbTx := n.db.Begin()
-	require.NoError(t, acctesting.CreateAnonTokenAccount(dbTx, liteKey, 1))
+	require.NoError(t, acctesting.CreateLiteTokenAccount(dbTx, liteKey, 1))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
 
 	getHeight := func(u *url.URL) uint64 {

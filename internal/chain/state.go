@@ -390,7 +390,7 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 	case types.ChainTypeTokenAccount:
 		record = new(state.TokenAccount)
 	case types.ChainTypeLiteTokenAccount:
-		record = new(protocol.AnonTokenAccount)
+		record = new(protocol.LiteTokenAccount)
 	case types.ChainTypeTransactionReference:
 		record = new(state.TxReference)
 	case types.ChainTypeTransaction:
