@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"math/big"
 	"strings"
+	"sync/atomic"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -465,4 +466,21 @@ func (s *Amount) UnmarshalJSON(data []byte) error {
 	str := strings.Trim(string(data), `"`)
 	s.SetString(str, 10)
 	return nil
+}
+
+type AtomicBool int32
+
+func (a *AtomicBool) Store(x bool) {
+	var v int = 0
+	if x {
+		v = 1
+	}
+	atomic.StoreInt32((*int32)(a), int32(v))
+}
+
+func (a *AtomicBool) Load() (v bool) {
+	if atomic.LoadInt32((*int32)(a)) != 0 {
+		v = true
+	}
+	return v
 }
