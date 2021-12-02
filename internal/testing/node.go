@@ -90,7 +90,7 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
-	sdb, err := state.NewStateDB().WithDebug().WithLogger(logger).OpenInMemory()
+	sdb, err := state.OpenDBInMemory(&state.OpenOptions{Logger: logger})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}

@@ -33,7 +33,7 @@ func mustParseUrl(s string) *url.URL {
 }
 
 func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
-	db, err := state.NewStateDB().WithDebug().LoadKeyValueDB(kvdb)
+	db, err := state.LoadKeyValueDB(kvdb, &state.OpenOptions{Debug: true})
 	if err != nil {
 		return nil, err
 	}

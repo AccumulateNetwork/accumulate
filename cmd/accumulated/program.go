@@ -118,7 +118,7 @@ func (p *Program) Start(s service.Service) error {
 
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
-	p.db, err = state.NewStateDB().WithLogger(logger).OpenFromFile(dbPath)
+	p.db, err = state.OpenDBFromFile(dbPath, &state.OpenOptions{Logger: logger})
 	if err != nil {
 		return fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}

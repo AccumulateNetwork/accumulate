@@ -10,8 +10,8 @@ import (
 )
 
 func TestStateDB_GetChainRange(t *testing.T) {
-	s := new(StateDB)
-	require.NoError(t, s.Open("", true, false, nil))
+	s, err := OpenDBInMemory(&OpenOptions{})
+	require.NoError(t, err)
 
 	// Set the mark frequency to 4
 	s.merkleMgr.MarkPower = 2

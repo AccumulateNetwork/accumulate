@@ -39,7 +39,7 @@ import (
 )
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, logLevel string, doGenesis bool) *fakeNode {
-	db, err := state.NewStateDB().WithDebug().OpenInMemory()
+	db, err := state.OpenDBInMemory(&state.OpenOptions{Debug: true})
 	require.NoError(t, err)
 
 	return createApp(t, db, addr, logLevel, doGenesis)

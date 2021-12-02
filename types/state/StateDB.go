@@ -78,6 +78,50 @@ type StateDB struct {
 	logger     log.Logger
 }
 
+type OpenOptions struct {
+	Debug  bool
+	Logger log.Logger
+}
+
+func OpenDBInMemory(options *OpenOptions) (*StateDB, error) {
+	stateDB := new(StateDB)
+	dbType := "memory"
+	stateDB.setStateLogger(options.Logger)
+	err := stateDB.open(dbType, dbType, options.Logger)
+	if err != nil {
+		return nil, err
+	}
+	stateDB.init(options.Debug)
+	return stateDB, nil
+}
+
+func OpenDBFromFile(filePath string, options *OpenOptions) (*StateDB, error) {
+	stateDB := new(StateDB)
+	dbType := "badger"
+	stateDB.setStateLogger(options.Logger)
+	err := stateDB.open(dbType, filePath, options.Logger)
+	if err != nil {
+		return nil, err
+	}
+
+	stateDB.init(options.Debug)
+	return stateDB, nil
+}
+
+func LoadKeyValueDB(db storage.KeyValueDB, options *OpenOptions) (*StateDB, error) {
+	stateDB := new(StateDB)
+	stateDB.setStateLogger(options.Logger)
+	err := stateDB.loadDB(db)
+	stateDB.init(options.Debug)
+	return stateDB, err
+}
+
+func (s *StateDB) setStateLogger(logger log.Logger) {
+	if logger != nil {
+		s.logger = logger.With("module", "dbMgr")
+	}
+}
+
 func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	if s.logger != nil {
 		// TODO Maybe this should be Debug?
