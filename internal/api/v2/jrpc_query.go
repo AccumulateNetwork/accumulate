@@ -37,13 +37,13 @@ func (m *JrpcMethods) QueryChain(_ context.Context, params json.RawMessage) inte
 }
 
 func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interface{} {
-	req := new(TxIdQuery)
+	req := new(TxnQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatQuery(m.opts.Query.QueryTx(req.Txid))
+	return jrpcFormatQuery(m.opts.Query.QueryTx(req.Txid, req.Wait))
 }
 
 func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) interface{} {
