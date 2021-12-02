@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	api2 "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
@@ -25,14 +24,18 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		beenFauceted = append(beenFauceted, bal == "1000000000")
 	}
 
+	var results []string
 	for i := range liteAccounts {
 		commandLine := fmt.Sprintf("faucet %s", liteAccounts[i])
-		_, err := tc.execute(t, commandLine)
+		r, err := tc.execute(t, commandLine)
 		require.NoError(t, err)
+		results = append(results, r)
 	}
 
 	//wait for settlement
-	time.Sleep(2 * time.Second)
+	for _, r := range results {
+		waitForTxns(t, tc, r)
+	}
 
 	for i := range liteAccounts {
 		//now query the account to make sure each account has 10 acme.
