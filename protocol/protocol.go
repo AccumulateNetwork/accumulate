@@ -24,17 +24,29 @@ func AcmeUrl() *url.URL {
 // AcmePrecision is the precision of ACME token amounts.
 const AcmePrecision = 1e8
 
-// CreditsPerDollar is the conversion rate from 1 unit of fiat currency to
-// credits. We call this 'dollars' because it's easier to write, and we are most
-// likely going to use USD idefinitely.
-const CreditsPerDollar = 1e2
+// FiatUnitsPerAcmeToken fixes the conversion between ACME tokens and fiat
+// currency to 1:1, as in $1 per 1 ACME token.
+//
+// As soon as we have an oracle, this must be removed.
+const FiatUnitsPerAcmeToken = 1
 
-// AnonymousAddress returns an anonymous address for the given public key and
-// token URL as `acc://<key-hash-and-checksum>/<token-url>`.
+// CreditPrecision is the precision of credit balances.
+const CreditPrecision = 1e2
+
+// CreditsPerFiatUnit is the conversion rate from credit balances to fiat
+// currency. We expect to use USD indefinitely as the fiat currency.
+//
+// 100 credits converts to 1 dollar, but we charge down to 0.01 credits, so the
+// actual conversion rate of the credit balance field to dollars is is 10,000 to
+// 1.
+const CreditsPerFiatUnit = 1e2 * CreditPrecision
+
+// LiteAddress returns an lite address for the given public key and token URL as
+// `acc://<key-hash-and-checksum>/<token-url>`.
 //
 // Only the first 20 bytes of the public key hash is used. The checksum is the
-// last four bytes of the hexadecimal partial key hash. For an ACME anonymous
-// token account URL for a key with a public key hash of
+// last four bytes of the hexadecimal partial key hash. For an ACME lite token
+// account URL for a key with a public key hash of
 //
 //   "aec070645fe53ee3b3763059376134f058cc337247c978add178b6ccdfb0019f"
 //
@@ -45,7 +57,7 @@ const CreditsPerDollar = 1e2
 // The resulting URL is
 //
 //   "acc://aec070645fe53ee3b3763059376134f058cc337226e2a324/ACME"
-func AnonymousAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
+func LiteAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	tokenUrl, err := url.Parse(tokenUrlStr)
 	if err != nil {
 		return nil, err
@@ -71,28 +83,28 @@ func AnonymousAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 		return nil, errors.New("token URLs cannot include a fragment")
 	}
 
-	anonUrl := new(url.URL)
+	liteUrl := new(url.URL)
 	keyHash := sha256.Sum256(pubKey)
 	keyStr := fmt.Sprintf("%x", keyHash[:20])
 	checkSum := sha256.Sum256([]byte(keyStr))
 	checkStr := fmt.Sprintf("%x", checkSum[28:])
-	anonUrl.Authority = keyStr + checkStr
-	anonUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
-	return anonUrl, nil
+	liteUrl.Authority = keyStr + checkStr
+	liteUrl.Path = fmt.Sprintf("/%s%s", tokenUrl.Authority, tokenUrl.Path)
+	return liteUrl, nil
 }
 
-// ParseAnonymousAddress extracts the key hash and token URL from an anonymous
-// token account URL. Returns `nil, nil, nil` if the URL is not an anonymous
-// token account URL. Returns an error if the checksum is invalid.
-func ParseAnonymousAddress(u *url.URL) ([]byte, *url.URL, error) {
+// ParseLiteAddress extracts the key hash and token URL from an lite token
+// account URL. Returns `nil, nil, nil` if the URL is not an lite token account
+// URL. Returns an error if the checksum is invalid.
+func ParseLiteAddress(u *url.URL) ([]byte, *url.URL, error) {
 	if u.Path == "" || u.Path[0] != '/' || len(u.Path) == 1 {
-		// A URL with an empty or invalid path cannot be anonymous
+		// A URL with an empty or invalid path cannot be lite
 		return nil, nil, nil
 	}
 
 	b, err := hex.DecodeString(u.Hostname())
 	if err != nil || len(b) != 24 {
-		// Hostname is not hex or is the wrong length, therefore the URL is not anonymous
+		// Hostname is not hex or is the wrong length, therefore the URL is not lite
 		return nil, nil, nil
 	}
 
