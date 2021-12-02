@@ -185,6 +185,14 @@ DirectoryQueryResult:
     type: slice
     slice:
       type: string
+    optional: true
+  - name: ExpandedEntries
+    type: slice
+    slice:
+      type: state.Object
+      pointer: true
+      marshal-as: self
+    optional: true
 
 DataAccount:
   kind: chain
