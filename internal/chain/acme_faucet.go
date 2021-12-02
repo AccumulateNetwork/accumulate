@@ -31,7 +31,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	// Check the recipient
-	account := new(protocol.AnonTokenAccount)
+	account := new(protocol.LiteTokenAccount)
 	err = st.LoadUrlAs(u, account)
 	switch {
 	case err == nil:
@@ -47,7 +47,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 
 	case errors.Is(err, storage.ErrNotFound):
 		// If the recipient doesn't exist, ensure it is an ACME lite address
-		addr, tok, err := protocol.ParseAnonymousAddress(u)
+		addr, tok, err := protocol.ParseLiteAddress(u)
 		switch {
 		case err != nil:
 			return fmt.Errorf("error parsing lite address %q: %v", u, err)
@@ -62,7 +62,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	// Load the faucet state
-	faucet := new(protocol.AnonTokenAccount)
+	faucet := new(protocol.LiteTokenAccount)
 	err = st.LoadUrlAs(protocol.FaucetUrl, faucet)
 	if err != nil {
 		return fmt.Errorf("failed to load faucet: %v", err)
