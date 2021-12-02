@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -207,7 +206,7 @@ func CreateAccount(url string, args []string) (string, error) {
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 
 	params, err := prepareGenTx(jsonData, binaryData, actor, si, privKey, nonce)
 	if err != nil {
