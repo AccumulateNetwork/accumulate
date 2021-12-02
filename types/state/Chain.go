@@ -33,7 +33,7 @@ func (h *ChainHeader) Header() *ChainHeader { return h }
 func (h *ChainHeader) Equal(g *ChainHeader) bool {
 	return h.Type == g.Type &&
 		h.ChainUrl == g.ChainUrl &&
-		h.SigSpecId == g.SigSpecId
+		h.KeyBook == g.KeyBook
 }
 
 //SetHeader sets the data for a chain header
