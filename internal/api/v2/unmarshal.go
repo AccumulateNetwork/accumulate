@@ -42,7 +42,7 @@ func chainFromStateObj(obj *state.Object) (state.Chain, error) {
 	case types.ChainTypeTokenAccount:
 		chain = new(state.TokenAccount)
 	case types.ChainTypeLiteTokenAccount:
-		chain = new(protocol.AnonTokenAccount)
+		chain = new(protocol.LiteTokenAccount)
 	case types.ChainTypeKeyPage:
 		chain = new(protocol.KeyPage)
 	case types.ChainTypeKeyBook:

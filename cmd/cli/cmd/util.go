@@ -367,7 +367,7 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 
 var (
 	ApiToString = map[string]string{
-		"anonTokenAccount": "lite account",
+		"liteTokenAccount": "lite account",
 		"tokenAccount":     "ADI token account",
 		"adi":              "ADI",
 		"keyBook":          "Key Book",
@@ -425,8 +425,8 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 		return string(data), nil
 	} else {
 		switch res.Type {
-		case "anonTokenAccount":
-			ata := response.AnonTokenAccount{}
+		case "liteTokenAccount":
+			ata := response.LiteTokenAccount{}
 			err := json.Unmarshal(*res.Data, &ata)
 			if err != nil {
 				return "", err

@@ -88,7 +88,7 @@ func testGetBalance(t *testing.T, tc *testCmd, accountUrl string) (string, error
 		return "", err
 	}
 
-	acc := response.AnonTokenAccount{} //protocol.AnonTokenAccount{}
+	acc := response.LiteTokenAccount{} //protocol.LiteTokenAccount{}
 	err = json.Unmarshal(*res.Data, &acc)
 	if err != nil {
 		return "", err
