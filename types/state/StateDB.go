@@ -527,23 +527,6 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 	return nil
 }
 
-func (s *StateDB) GetSynthTxnSigs() ([]SyntheticSignature, error) {
-	b, err := s.GetDB().Key(bucketSynthTxnSigs).Get()
-	if errors.Is(err, storage.ErrNotFound) {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	sigs := new(SyntheticSignatures)
-	err = sigs.UnmarshalBinary(b)
-	if err != nil {
-		return nil, err
-	}
-
-	return sigs.Signatures, nil
-}
-
 func (tx *DBTransaction) writeSynthTxnSigs() error {
 	sigMap := map[[32]byte]*SyntheticSignature{}
 
@@ -599,6 +582,23 @@ func (tx *DBTransaction) writeSynthTxnSigs() error {
 	copy(id[:], []byte(bucketSynthTxnSigs))
 	tx.state.bptMgr.Bpt.Insert(id, hash)
 	return nil
+}
+
+func (s *StateDB) GetSynthTxnSigs() ([]SyntheticSignature, error) {
+	b, err := s.GetDB().Key(bucketSynthTxnSigs).Get()
+	if errors.Is(err, storage.ErrNotFound) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	sigs := new(SyntheticSignatures)
+	err = sigs.UnmarshalBinary(b)
+	if err != nil {
+		return nil, err
+	}
+
+	return sigs.Signatures, nil
 }
 
 func (tx *DBTransaction) writeAnchors(blockIndex int64, timestamp time.Time) error {
