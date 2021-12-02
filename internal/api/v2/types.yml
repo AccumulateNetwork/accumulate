@@ -13,16 +13,20 @@ QueryResponse:
       type: string
     - name: KeyPage
       type: KeyPage
+      pointer: true
       marshal-as: self
     - name: Txid
       type: bytes
     - name: Signer
       type: Signer
+      pointer: true
       marshal-as: self
     - name: Sig
       type: bytes
     - name: Status
       type: any
+    - name: SyntheticTxids
+      type: chainSet
 
 MerkleState:
   non-binary: true
@@ -45,10 +49,30 @@ QueryMultiResponse:
         pointer: true
     - name: Start
       type: uvarint
+      keep-empty: true
     - name: Count
       type: uvarint
+      keep-empty: true
     - name: Total
       type: uvarint
+      keep-empty: true
+
+DirectoryQueryResult:
+  non-binary: true
+  fields:
+  - name: Entries
+    type: slice
+    slice:
+      type: string
+    optional: true
+  - name: ExpandedEntries
+    type: slice
+    slice:
+      type: QueryResponse
+      pointer: true
+      marshal-as: self
+    optional: true
+
 
 KeyPage:
   non-binary: true
@@ -94,18 +118,44 @@ UrlQuery:
   - name: Url
     type: string
     is-url: true
+
+TxHistoryQuery:
+  non-binary: true
+  embeddings:
+  - UrlQuery
+  - QueryPagination
+
+QueryPagination:
+  non-binary: true
+  fields:
   - name: Start
     type: uvarint
     optional: true
   - name: Count
     type: uvarint
-    optional: true
+    optional: false
 
-TxIdQuery:
+DirectoryQuery:
+  non-binary: true
+  embeddings:
+    - UrlQuery
+    - QueryOptions
+
+QueryOptions:
+  non-binary: true
+  fields:
+    - name: ExpandChains
+      type: bool
+      optional: true
+
+TxnQuery:
   non-binary: true
   fields:
   - name: Txid
     type: bytes
+  - name: Wait
+    type: duration
+    optional: true
 
 ChainIdQuery:
   non-binary: true

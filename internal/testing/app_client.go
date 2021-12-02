@@ -211,22 +211,29 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 	var hadTxnLastTime bool
 	tick := time.NewTicker(interval)
 
+	defer func() {
+		for _, sub := range queue {
+			sub.CheckResult = &abci.ResponseCheckTx{
+				Code: 1,
+				Info: "Canceled",
+				Log:  "Canceled",
+			}
+			close(sub.DidCheck)
+			close(sub.DidDeliver)
+			close(sub.DidCommit)
+			sub.Done = true
+		}
+
+		c.txActive = 0
+		c.txPend = map[[32]byte]bool{}
+		c.txCond.Broadcast()
+	}()
+
 	for {
 		// Collect transactions, submit at 1Hz
 		select {
 		case sub, ok := <-c.txCh:
 			if !ok {
-				for _, sub := range queue {
-					sub.CheckResult = &abci.ResponseCheckTx{
-						Code: 1,
-						Info: "Canceled",
-						Log:  "Canceled",
-					}
-					close(sub.DidCheck)
-					close(sub.DidDeliver)
-					close(sub.DidCommit)
-					sub.Done = true
-				}
 				return
 			}
 			queue = append(queue, sub)
@@ -244,7 +251,10 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		// Collect any queued up sends
 	collect:
 		select {
-		case sub := <-c.txCh:
+		case sub, ok := <-c.txCh:
+			if !ok {
+				return
+			}
 			queue = append(queue, sub)
 			goto collect
 		default:

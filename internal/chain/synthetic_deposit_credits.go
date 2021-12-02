@@ -21,10 +21,10 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.GenTr
 
 	var account creditChain
 	switch sponsor := st.Sponsor.(type) {
-	case *protocol.AnonTokenAccount:
+	case *protocol.LiteTokenAccount:
 		account = sponsor
 
-	case *protocol.SigSpec:
+	case *protocol.KeyPage:
 		account = sponsor
 
 	default:

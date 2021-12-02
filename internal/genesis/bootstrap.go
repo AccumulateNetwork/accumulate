@@ -90,11 +90,11 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 	case config.BlockValidator:
 		uAdi = mustParseUrl("bvn-" + opts.SubnetID)
 
-		anon := protocol.NewAnonTokenAccount()
-		anon.ChainUrl = types.String(protocol.FaucetWallet.Addr)
-		anon.TokenUrl = protocol.AcmeUrl().String()
-		anon.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
-		st.Update(anon)
+		lite := protocol.NewLiteTokenAccount()
+		lite.ChainUrl = types.String(protocol.FaucetWallet.Addr)
+		lite.TokenUrl = protocol.AcmeUrl().String()
+		lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
+		st.Update(lite)
 	}
 
 	// Create the ADI
@@ -102,15 +102,15 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 	uPage := uAdi.JoinPath("validators0")
 
 	adi := state.NewIdentityState(types.String(uAdi.String()))
-	adi.SigSpecId = uBook.ResourceChain32()
+	adi.KeyBook = uBook.ResourceChain32()
 
-	book := protocol.NewSigSpecGroup()
+	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(uBook.String())
-	book.SigSpecs = [][32]byte{uPage.ResourceChain32()}
+	book.Pages = [][32]byte{uPage.ResourceChain32()}
 
-	page := protocol.NewSigSpec()
+	page := protocol.NewKeyPage()
 	page.ChainUrl = types.String(uPage.String())
-	page.SigSpecId = uBook.ResourceChain32()
+	page.KeyBook = uBook.ResourceChain32()
 
 	page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
 	for i, val := range opts.Validators {

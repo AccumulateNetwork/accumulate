@@ -13,17 +13,25 @@ import (
 
 func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	var obj state.Object
-	var header state.ChainHeader
-	var chain state.Chain
-
 	err := obj.UnmarshalBinary(b)
 	if err != nil {
 		return nil, nil, fmt.Errorf("invalid state response: %v", err)
 	}
 
-	err = obj.As(&header)
+	chain, err := chainFromStateObj(&obj)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid state response: %v", err)
+		return nil, nil, err
+	}
+
+	return &obj, chain, nil
+}
+
+func chainFromStateObj(obj *state.Object) (state.Chain, error) {
+	var header state.ChainHeader
+	var chain state.Chain
+	err := obj.As(&header)
+	if err != nil {
+		return nil, fmt.Errorf("invalid state response: %v", err)
 	}
 
 	switch header.Type {
@@ -34,23 +42,22 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 	case types.ChainTypeTokenAccount:
 		chain = new(state.TokenAccount)
 	case types.ChainTypeLiteTokenAccount:
-		chain = new(protocol.AnonTokenAccount)
+		chain = new(protocol.LiteTokenAccount)
 	case types.ChainTypeKeyPage:
-		chain = new(protocol.SigSpec)
+		chain = new(protocol.KeyPage)
 	case types.ChainTypeKeyBook:
-		chain = new(protocol.SigSpecGroup)
+		chain = new(protocol.KeyBook)
 	case types.ChainTypeTransaction:
 		chain = new(state.Transaction)
 	default:
-		return nil, nil, fmt.Errorf("unknown chain type %v", header.Type)
+		return nil, fmt.Errorf("unknown chain type %v", header.Type)
 	}
 
 	err = obj.As(chain)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid state response: %v", err)
+		return nil, fmt.Errorf("invalid state response: %v", err)
 	}
-
-	return &obj, chain, nil
+	return chain, nil
 }
 
 func unmarshalTxType(b []byte) types.TxType {
@@ -68,11 +75,13 @@ func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 	case types.TxTypeCreateIdentity:
 		payload = new(protocol.IdentityCreate)
 	case types.TxTypeCreateToken:
+		payload = new(protocol.CreateToken)
+	case types.TxTypeCreateTokenAccount:
 		payload = new(protocol.TokenAccountCreate)
 	case types.TxTypeCreateKeyPage:
-		payload = new(protocol.CreateSigSpec)
+		payload = new(protocol.CreateKeyPage)
 	case types.TxTypeCreateKeyBook:
-		payload = new(protocol.CreateSigSpecGroup)
+		payload = new(protocol.CreateKeyBook)
 	case types.TxTypeAddCredits:
 		payload = new(protocol.AddCredits)
 	case types.TxTypeUpdateKeyPage:
@@ -112,7 +121,7 @@ func unmarshalTxResponse(mainData, pendData []byte) (*state.Transaction, *state.
 	}
 
 	err = pendObj.UnmarshalBinary(pendData)
-	if err != nil {
+	if err == nil {
 		pend = new(state.PendingTransaction)
 		err = pendObj.As(pend)
 		if err != nil {

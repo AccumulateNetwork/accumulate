@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	net2 "net"
@@ -21,12 +22,10 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/net"
@@ -108,21 +107,20 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	cfg.Accumulate.Networks[0] =
 		fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+networks.TmRpcPortOffset)
 
-	newLogger := func(s string) zerolog.Logger {
-		return logging.NewTestZeroLogger(t, s)
-	}
-
 	require.NoError(t, node.Init(opts))               // Configure
 	nodeDir := filepath.Join(defaultWorkDir, "Node0") //
 	cfg, err = config.Load(nodeDir)                   // Modify configuration
 	require.NoError(t, err)                           //
 	cfg.Accumulate.WebsiteEnabled = false             // Disable the website
 	cfg.Instrumentation.Prometheus = false            // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	require.NoError(t, config.Store(cfg))             //
+	cfg.Consensus.TimeoutCommit = time.Second / 10    // Increase block frequency
+	cfg.Accumulate.API.TxMaxWaitTime = 10 * time.Second
+	cfg.LogLevel = "error;main=info;state=info;statesync=info;accumulate=info;executor=info"
+	require.NoError(t, config.Store(cfg))
 
-	bvnNode, _, _, err := acctesting.NewBVCNode(nodeDir, true, nil, newLogger, t.Cleanup) // Initialize
-	require.NoError(t, err)                                                               //
-	require.NoError(t, bvnNode.Start())                                                   // Launch
+	bvnNode, _, _, err := acctesting.NewBVCNode(nodeDir, true, nil, nil, t.Cleanup) // Initialize
+	require.NoError(t, err)                                                         //
+	require.NoError(t, bvnNode.Start())                                             // Launch
 	relayTo := []string{cfg.RPC.ListenAddress}
 	relay, err := relay.NewWith(relayTo...)
 
@@ -167,7 +165,9 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 		}
 	}
 
-	jrpcOpts.Query = api2.NewQueryDispatch(clients)
+	jrpcOpts.Query = api2.NewQueryDispatch(clients, api2.QuerierOptions{
+		TxMaxWaitTime: cfg.Accumulate.API.TxMaxWaitTime,
+	})
 
 	jrpc, err := api2.NewJrpc(jrpcOpts)
 	if err != nil {
@@ -214,7 +214,7 @@ func (c *testCmd) initalize(t *testing.T) {
 	c.rootCmd.PersistentPostRun = nil
 
 	c.jsonRpcPort, c.restPort = NewTestBVNN(t, defaultWorkDir)
-	time.Sleep(10 * time.Second)
+	time.Sleep(2 * time.Second)
 
 	t.Cleanup(func() {
 		os.Remove(defaultWorkDir)
@@ -242,6 +242,14 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	}
 	ret, err := ioutil.ReadAll(b)
 	return string(ret), err
+}
+
+func (c *testCmd) executeTx(t *testing.T, cmdLine string) (string, error) {
+	out, err := c.execute(t, cmdLine)
+	if err == nil {
+		waitForTxns(t, c, out)
+	}
+	return out, err
 }
 
 // listenHttpUrl
@@ -272,4 +280,17 @@ func listenHttpUrl(s string) (net2.Listener, bool, error) {
 	}
 
 	return l, secure, nil
+}
+
+func waitForTxns(t *testing.T, tc *testCmd, jsonRes string) {
+	t.Helper()
+
+	var res struct {
+		Txid string
+	}
+	require.NoError(t, json.Unmarshal([]byte(jsonRes), &res))
+
+	commandLine := fmt.Sprintf("tx get --wait 10s --wait-synth 10s %s", res.Txid)
+	_, err := tc.execute(t, commandLine)
+	require.NoError(t, err)
 }

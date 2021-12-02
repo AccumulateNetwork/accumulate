@@ -316,6 +316,25 @@ func (s *String) UnmarshalBinary(data []byte) error {
 	return err
 }
 
+type Bool bool
+
+func (s *Bool) MarshalBinary() []byte {
+	if *s {
+		return []byte{1}
+	} else {
+		return []byte{0}
+	}
+}
+
+func (s *Bool) UnmarshalBinary(data []byte) error {
+	var b Byte
+	err := b.UnmarshalBinary(data)
+	if err == nil {
+		*s = b > 0
+	}
+	return err
+}
+
 func (s *String) Size(varintbuf *[8]byte) int {
 	b := Bytes(*s)
 	return b.Size(varintbuf)
