@@ -331,7 +331,7 @@ func (m *StateManager) Commit() error {
 			case types.ChainTypeLiteTokenAccount:
 				old = new(protocol.AnonTokenAccount)
 			case types.ChainTypeKeyPage:
-				old = new(protocol.SigSpec)
+				old = new(protocol.KeyPage)
 			default:
 				return fmt.Errorf("chain type %d is not a signator", store.record.Header().Type)
 			}
@@ -351,7 +351,7 @@ func (m *StateManager) Commit() error {
 				}
 
 			case types.ChainTypeKeyPage:
-				old, new := old.(*protocol.SigSpec), store.record.(*protocol.SigSpec)
+				old, new := old.(*protocol.KeyPage), store.record.(*protocol.KeyPage)
 				for i := 0; i < len(old.Keys) && i < len(new.Keys); i++ {
 					old.Keys[i].Nonce = new.Keys[i].Nonce
 				}

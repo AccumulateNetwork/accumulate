@@ -175,8 +175,8 @@ func (t *GenTransaction) As(subTx encoding.BinaryUnmarshaler) error {
 
 func New(url string, height uint64, signer func(hash []byte) (*ED25519Sig, error), subTx encoding.BinaryMarshaler) (*GenTransaction, error) {
 	return NewWith(&SignatureInfo{
-		URL:      url,
-		MSHeight: height,
+		URL:           url,
+		KeyPageHeight: height,
 	}, signer, subTx)
 }
 
