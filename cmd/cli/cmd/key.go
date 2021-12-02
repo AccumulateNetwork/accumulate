@@ -114,7 +114,7 @@ func PrintKeyGenerate() {
 func PrintKeyImport() {
 	fmt.Println("  accumulate key import mnemonic [mnemonic phrase...]     Import the mneumonic phrase used to generate keys in the wallet")
 	fmt.Println("  accumulate key import private [private key hex] [key name]      Import a key and give it a name in the wallet")
-	fmt.Println("  accumulate key import lite [private key hex]       Import a key as an anonymous address")
+	fmt.Println("  accumulate key import lite [private key hex]       Import a key as a lite address")
 }
 
 func PrintKey() {
@@ -187,7 +187,7 @@ func GenerateKey(label string) (string, error) {
 	pubKey := privKey[32:]
 
 	if label == "" {
-		ltu, err := protocol.AnonymousAddress(pubKey, protocol.AcmeUrl().String())
+		ltu, err := protocol.LiteAddress(pubKey, protocol.AcmeUrl().String())
 		if err != nil {
 			return "", fmt.Errorf("unable to create lite account")
 		}
@@ -273,7 +273,7 @@ func ImportKey(pkhex string, label string) (out string, err error) {
 	}
 
 	if label == "" {
-		lt, err := protocol.AnonymousAddress(pk[32:], protocol.AcmeUrl().String())
+		lt, err := protocol.LiteAddress(pk[32:], protocol.AcmeUrl().String())
 		if err != nil {
 			return "", fmt.Errorf("no label specified and cannot import as lite account")
 		}
