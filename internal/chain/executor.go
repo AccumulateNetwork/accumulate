@@ -116,7 +116,7 @@ func (m *Executor) InitChain(state []byte) error {
 	}
 
 	// Load the genesis state into the StateDB
-	err = m.db.Load(dst, false)
+	err = m.db.Load(dst)
 	if err != nil {
 		return fmt.Errorf("faild to reload state database: %v", err)
 	}

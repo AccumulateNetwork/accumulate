@@ -111,7 +111,7 @@ func OpenDBFromFile(filePath string, options *OpenOptions) (*StateDB, error) {
 func LoadKeyValueDB(db storage.KeyValueDB, options *OpenOptions) (*StateDB, error) {
 	stateDB := new(StateDB)
 	stateDB.setStateLogger(options.Logger)
-	err := stateDB.loadDB(db)
+	err := stateDB.Load(db)
 	stateDB.init(options.Debug)
 	return stateDB, err
 }
@@ -150,7 +150,7 @@ func (s *StateDB) open(dbType string, dbFilename string, logger log.Logger) (err
 	return err
 }
 
-func (s *StateDB) loadDB(db storage.KeyValueDB) (err error) {
+func (s *StateDB) Load(db storage.KeyValueDB) (err error) {
 	s.dbMgr = new(database.Manager)
 	s.dbMgr.InitWithDB(db)
 	s.merkleMgr, err = managed.NewMerkleManager(s.dbMgr, markPower)
