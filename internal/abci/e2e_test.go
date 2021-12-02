@@ -362,7 +362,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	ks := n.GetKeyPage("foo/sigspec0")
 	acct := n.GetTokenAccount("foo/tokens")
 	require.Equal(t, int64(55), ks.CreditBalance.Int64())
-	require.Equal(t, int64(protocol.AcmePrecision*1e2-protocol.AcmePrecision/protocol.CreditsPerDollar*55), acct.Balance.Int64())
+	require.Equal(t, int64(protocol.AcmePrecision*1e2-protocol.AcmePrecision/protocol.CreditsPerFiatUnit*55), acct.Balance.Int64())
 }
 
 func TestCreateKeyPage(t *testing.T) {
