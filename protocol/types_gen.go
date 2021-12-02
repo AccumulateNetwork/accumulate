@@ -72,7 +72,8 @@ type DirectoryIndexMetadata struct {
 }
 
 type DirectoryQueryResult struct {
-	Entries []string `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+	Entries         []string        `json:"entries,omitempty" form:"entries" query:"entries"`
+	ExpandedEntries []*state.Object `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
 }
 
 type IdentityCreate struct {
@@ -852,6 +853,13 @@ func (v *DirectoryQueryResult) BinarySize() int {
 
 	}
 
+	n += encoding.UvarintBinarySize(uint64(len(v.ExpandedEntries)))
+
+	for _, v := range v.ExpandedEntries {
+		n += v.BinarySize()
+
+	}
+
 	return n
 }
 
@@ -1264,6 +1272,17 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 	for i, v := range v.Entries {
 		_ = i
 		buffer.Write(encoding.StringMarshalBinary(v))
+
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.ExpandedEntries))))
+	for i, v := range v.ExpandedEntries {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding ExpandedEntries[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
 
 	}
 
@@ -1851,6 +1870,25 @@ func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
 		}
 		data = data[encoding.StringBinarySize(v.Entries[i]):]
 
+	}
+
+	var lenExpandedEntries uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ExpandedEntries: %w", err)
+	} else {
+		lenExpandedEntries = x
+	}
+	data = data[encoding.UvarintBinarySize(lenExpandedEntries):]
+
+	v.ExpandedEntries = make([]*state.Object, lenExpandedEntries)
+	for i := range v.ExpandedEntries {
+		x := new(state.Object)
+		if err := x.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding ExpandedEntries[%d]: %w", i, err)
+		}
+		data = data[x.BinarySize():]
+
+		v.ExpandedEntries[i] = x
 	}
 
 	return nil

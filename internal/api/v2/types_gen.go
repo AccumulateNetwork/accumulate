@@ -14,6 +14,16 @@ type ChainIdQuery struct {
 	ChainId []byte `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
+type DirectoryQuery struct {
+	UrlQuery
+	QueryOptions
+}
+
+type DirectoryQueryResult struct {
+	Entries         []string         `json:"entries,omitempty" form:"entries" query:"entries"`
+	ExpandedEntries []*QueryResponse `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
+}
+
 type KeyPage struct {
 	Height uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	Index  uint64 `json:"index,omitempty" form:"index" query:"index"`
@@ -35,9 +45,18 @@ type MetricsResponse struct {
 
 type QueryMultiResponse struct {
 	Items []*QueryResponse `json:"items,omitempty" form:"items" query:"items" validate:"required"`
-	Start uint64           `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Count uint64           `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	Total uint64           `json:"total,omitempty" form:"total" query:"total" validate:"required"`
+	Start uint64           `json:"start" form:"start" query:"start" validate:"required"`
+	Count uint64           `json:"count" form:"count" query:"count" validate:"required"`
+	Total uint64           `json:"total" form:"total" query:"total" validate:"required"`
+}
+
+type QueryOptions struct {
+	ExpandChains bool `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
+}
+
+type QueryPagination struct {
+	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
+	Count uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 }
 
 type QueryResponse struct {
@@ -68,6 +87,11 @@ type TokenSend struct {
 	To   []TokenDeposit `json:"to,omitempty" form:"to" query:"to" validate:"required"`
 }
 
+type TxHistoryQuery struct {
+	UrlQuery
+	QueryPagination
+}
+
 type TxIdQuery struct {
 	Txid []byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 }
@@ -90,9 +114,7 @@ type TxResponse struct {
 }
 
 type UrlQuery struct {
-	Url   string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
-	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
+	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 }
 
 func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {

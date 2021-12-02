@@ -256,7 +256,11 @@ func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
 		if typ == "" {
 			typ = resolveType(f, false)
 		}
-		fmt.Fprintf(w, "\t\t%s %s `json:\"%s,omitempty\"`\n", f.Name, typ, lcName)
+		if f.KeepEmpty {
+			fmt.Fprintf(w, "\t\t%s %s `json:\"%s\"`\n", f.Name, typ, lcName)
+		} else {
+			fmt.Fprintf(w, "\t\t%s %s `json:\"%s,omitempty\"`\n", f.Name, typ, lcName)
+		}
 	}
 	fmt.Fprintf(w, "\t}{}\n")
 }

@@ -23,6 +23,7 @@ type Record struct {
 	NonBinary    bool   `yaml:"non-binary"`
 	Incomparable bool   `yaml:"incomparable"`
 	Fields       []*Field
+	Embeddings   []string `yaml:"embeddings"`
 }
 
 type Field struct {
@@ -33,6 +34,7 @@ type Field struct {
 	Pointer   bool
 	Optional  bool
 	IsUrl     bool `yaml:"is-url"`
+	KeepEmpty bool `yaml:"keep-empty"`
 }
 
 var flags struct {
@@ -165,10 +167,21 @@ func run(_ *cobra.Command, args []string) {
 				fmt.Fprintf(w, "\nstate.ChainHeader\n")
 			}
 		}
+
+		if len(typ.Embeddings) > 0 && !typ.NonBinary {
+			check(fmt.Errorf("type %q: embedding is not supported for binary-marshalled types", typ.name))
+		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\t\t%s\n", e)
+		}
 		for _, field := range typ.Fields {
 			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
 			fmt.Fprintf(w, "\t%s %s `", field.Name, resolveType(field, false))
-			fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
+			if field.KeepEmpty {
+				fmt.Fprintf(w, `json:"%[1]s" form:"%[1]s" query:"%[1]s"`, lcName)
+			} else {
+				fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
+			}
 
 			var validate []string
 			if !field.Optional {

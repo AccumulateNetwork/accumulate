@@ -24,10 +24,22 @@ func AcmeUrl() *url.URL {
 // AcmePrecision is the precision of ACME token amounts.
 const AcmePrecision = 1e8
 
-// CreditsPerDollar is the conversion rate from 1 unit of fiat currency to
-// credits. We call this 'dollars' because it's easier to write, and we are most
-// likely going to use USD idefinitely.
-const CreditsPerDollar = 1e2
+// FiatUnitsPerAcmeToken fixes the conversion between ACME tokens and fiat
+// currency to 1:1, as in $1 per 1 ACME token.
+//
+// As soon as we have an oracle, this must be removed.
+const FiatUnitsPerAcmeToken = 1
+
+// CreditPrecision is the precision of credit balances.
+const CreditPrecision = 1e2
+
+// CreditsPerFiatUnit is the conversion rate from credit balances to fiat
+// currency. We expect to use USD indefinitely as the fiat currency.
+//
+// 100 credits converts to 1 dollar, but we charge down to 0.01 credits, so the
+// actual conversion rate of the credit balance field to dollars is is 10,000 to
+// 1.
+const CreditsPerFiatUnit = 1e2 * CreditPrecision
 
 // AnonymousAddress returns an anonymous address for the given public key and
 // token URL as `acc://<key-hash-and-checksum>/<token-url>`.
