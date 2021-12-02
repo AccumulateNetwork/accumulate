@@ -2,7 +2,7 @@
 Transactions must be unique (giving them a unique hash and ensuring that replays of transactions are not possible).  This is uniquely difficult where signatures will not be included in the transaction itself.
 
 Design:
-Signatures are defined by ADIs.  For Anonymous Token Chains, the one chain serves as the security, ADI, and token chain.  For everything else, we have
+Signatures are defined by ADIs.  For Lite Token Chains, the one chain serves as the security, ADI, and token chain.  For everything else, we have
 
 1. ADI (which can have one or more Signature Specification Groups that
 control the ADI chain and sub chains)
