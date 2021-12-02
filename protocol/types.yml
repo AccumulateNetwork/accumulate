@@ -213,6 +213,9 @@ CreateDataAccount:
   - name: KeyBookUrl
     type: string
     is-url: true
+  - name: ManagerKeyBookUrl
+    type: string
+    is-url: true
 
 WriteData:
   kind: tx

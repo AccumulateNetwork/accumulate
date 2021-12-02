@@ -2,18 +2,17 @@ package state
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"fmt"
-	"math/big"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type DataAccount struct {
 	ChainHeader
-	ManagerKeyBookUrl types.String    `json:"managerKeyBookUrl"`
-	EntryHashes       []types.Bytes32 `json:"entries"` //need to know who issued tokens, this can be condensed maybe back to adi chain path
+	ManagerKeyBookUrl types.String        `json:"managerKeyBookUrl"` //this probably should be moved to chain header
+	EntrySMT          managed.MerkleState `json:"entryState"`        //store the merkle state of the entry hashes
 }
 
 //NewTokenAccount create a new token account.  Requires the identity/chain id's and coinbase if applicable
@@ -26,60 +25,31 @@ func NewDataAccount(accountUrl string, managerKeyBookUrl string) *DataAccount {
 	return &tas
 }
 
-//Set will copy a token account state
-func (app *TokenAccount) Set(accountState *TokenAccount) {
-	if accountState == nil {
-		return
+// ComputeEntryHash returns the entry hash given the chainid, external id's, and data
+func ComputeEntryHash(chainId []byte, extIds [][]byte, data []byte) types.Bytes {
+	smt := managed.MerkleState{}
+	//Seed the smt with the chainId
+	smt.AddToMerkleTree(chainId)
+	//add the external id's to the merkle tree
+	for i := range extIds {
+		h := sha256.Sum256(extIds[i])
+		smt.AddToMerkleTree(h[:])
 	}
-	app.Balance.Set(&accountState.Balance)
-	app.ChainUrl = accountState.ChainUrl
-	app.TokenUrl = accountState.TokenUrl
-	app.Type = accountState.Type
+	//add the data to the merkle tree
+	h := sha256.Sum256(data)
+	smt.AddToMerkleTree(h[:])
+	//return the entry hash
+	return smt.GetMDRoot().Bytes()
 }
 
-// CanTransact returns true/false if there is a sufficient balance
-func (app *TokenAccount) ComputeEntryHash(extIds []byte, data []byte) bool {
-	//Build a merkle tree to compute the entry hash.
-
-	return app.GetBalance().Cmp(amt) >= 0
-}
-
-//SubBalance will subtract a balance form the account.  If this is a coinbase account,
-//the balance will not be subtracted.
-func (app *TokenAccount) SubBalance(amt *big.Int) error {
-	if amt == nil {
-		return fmt.Errorf("invalid input amount specified to subtract from balance")
-	}
-
-	if app.Balance.Cmp(amt) < 0 {
-		return fmt.Errorf("insufficient balance, amount available : %d, requested, %d", app.GetBalance(), amt)
-	}
-
-	app.Balance.Sub(&app.Balance, amt)
-	return nil
-}
-
-//GetBalance will return the balance of the account
-func (app *TokenAccount) GetBalance() *big.Int {
-	return &app.Balance
-}
-
-//AddBalance will add an amount to the balance. It only accepts a positive balance.
-func (app *TokenAccount) AddBalance(amt *big.Int) error {
-	if amt == nil {
-		return fmt.Errorf("invalid input amount specified to add to balance")
-	}
-
-	if amt.Sign() <= 0 {
-		return fmt.Errorf("amount to add to balance must be a positive amount")
-	}
-
-	app.Balance.Add(&app.Balance, amt)
-	return nil
+// UpdateMerkleState updates the state of the data account given a new entry hash.
+func (app *DataAccount) UpdateMerkleState(chainId []byte, extIds [][]byte, data []byte) {
+	//Build a merkle state to compute the entry hash.
+	app.EntrySMT.AddToMerkleTree(ComputeEntryHash(chainId, extIds, data))
 }
 
 //MarshalBinary creates a byte array of the state object needed for storage
-func (app *TokenAccount) MarshalBinary() (ret []byte, err error) {
+func (app *DataAccount) MarshalBinary() (ret []byte, err error) {
 	var buffer bytes.Buffer
 
 	header, err := app.ChainHeader.MarshalBinary()
@@ -88,20 +58,23 @@ func (app *TokenAccount) MarshalBinary() (ret []byte, err error) {
 	}
 	buffer.Write(header)
 
-	tokenUrlData, err := app.TokenUrl.MarshalBinary()
+	managerKeyBookUrlData, err := app.ManagerKeyBookUrl.MarshalBinary()
 	if err != nil {
-		return nil, fmt.Errorf("cannot marshal binary for token URL in TokenAccount, %v", err)
+		return nil, fmt.Errorf("cannot marshal binary for token URL in DataAccount, %v", err)
 	}
-	buffer.Write(tokenUrlData)
+	buffer.Write(managerKeyBookUrlData)
 
-	buffer.Write(common.SliceBytes(app.Balance.Bytes()))
-	buffer.Write(common.Uint64Bytes(app.TxCount))
+	smt, err := app.EntrySMT.Marshal()
+	if err != nil {
+		return nil, fmt.Errorf("cannot marshal binary for SMT in DataAccount, %v", err)
+	}
+	buffer.Write(smt)
 
 	return buffer.Bytes(), nil
 }
 
 //UnmarshalBinary will deserialize a byte array
-func (app *TokenAccount) UnmarshalBinary(data []byte) (err error) {
+func (app *DataAccount) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("error marshaling TokenTx State %v", r)
@@ -113,55 +86,23 @@ func (app *TokenAccount) UnmarshalBinary(data []byte) (err error) {
 		return err
 	}
 
-	if app.Type != types.ChainTypeTokenAccount {
+	if app.Type != types.ChainTypeDataAccount {
 		return fmt.Errorf("invalid chain type: want %v, got %v", types.ChainTypeTokenAccount, app.Type)
 	}
 
 	i := app.GetHeaderSize()
 
-	err = app.TokenUrl.UnmarshalBinary(data[i:])
+	err = app.ManagerKeyBookUrl.UnmarshalBinary(data[i:])
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal binary for token account, %v", err)
 	}
 
-	i += app.TokenUrl.Size(nil)
+	i += app.ManagerKeyBookUrl.Size(nil)
 
-	bal, data := common.BytesSlice(data[i:])
-
-	app.Balance.SetBytes(bal)
-	app.TxCount, _ = common.BytesUint64(data)
+	err = app.EntrySMT.UnMarshal(data[i:])
+	if err != nil {
+		return err
+	}
 
 	return nil
-}
-
-func (acct *TokenAccount) CreditTokens(amount *big.Int) bool {
-	if amount == nil || amount.Sign() < 0 {
-		return false
-	}
-
-	acct.Balance.Add(&acct.Balance, amount)
-	return true
-}
-
-func (acct *TokenAccount) CanDebitTokens(amount *big.Int) bool {
-	return amount != nil && acct.Balance.Cmp(amount) >= 0
-}
-
-func (acct *TokenAccount) DebitTokens(amount *big.Int) bool {
-	if !acct.CanDebitTokens(amount) {
-		return false
-	}
-
-	acct.Balance.Sub(&acct.Balance, amount)
-	return true
-}
-
-func (acct *TokenAccount) NextTx() uint64 {
-	c := acct.TxCount
-	acct.TxCount++
-	return c
-}
-
-func (acct *TokenAccount) ParseTokenUrl() (*url.URL, error) {
-	return url.Parse(*acct.TokenUrl.AsString())
 }
