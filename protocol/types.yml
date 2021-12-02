@@ -191,7 +191,7 @@ DirectoryQueryResult:
     slice:
       type: state.Object
       pointer: true
-      marshal-as: self
+      marshal-as: reference
     optional: true
 
 DataAccount:
