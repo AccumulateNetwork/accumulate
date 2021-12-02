@@ -229,7 +229,9 @@ func (p *Program) Start(s service.Service) error {
 		}
 	}
 
-	jrpcOpts.Query = api.NewQueryDispatch(clients)
+	jrpcOpts.Query = api.NewQueryDispatch(clients, api.QuerierOptions{
+		TxMaxWaitTime: cfg.Accumulate.API.TxMaxWaitTime,
+	})
 
 	jrpc, err := api.NewJrpc(jrpcOpts)
 	if err != nil {
