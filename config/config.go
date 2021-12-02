@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
@@ -25,19 +26,22 @@ const (
 	Follower  NodeType = "follower"
 )
 
+const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info"
+
 func Default(net NetworkType, node NodeType) *Config {
 	c := new(Config)
 	c.Accumulate.Type = net
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
 	c.Accumulate.WebsiteEnabled = true
+	c.Accumulate.API.TxMaxWaitTime = 10 * time.Second
 	switch node {
 	case Validator:
 		c.Config = *tm.DefaultValidatorConfig()
 	default:
 		c.Config = *tm.DefaultConfig()
 	}
-	c.LogLevel = "error;main=info;state=info;statesync=info;accumulate=info;executor=info"
+	c.LogLevel = DefaultLogLevels
 	return c
 }
 
@@ -63,10 +67,12 @@ type RPC struct {
 }
 
 type API struct {
-	PrometheusServer  string `toml:"prometheus-server" mapstructure:"prometheus-server"`
-	EnableSubscribeTX bool   `toml:"enable-subscribe-tx" mapstructure:"enable-subscribe-tx"`
-	JSONListenAddress string `toml:"json-listen-address" mapstructure:"json-listen-address"`
-	RESTListenAddress string `toml:"rest-listen-address" mapstructure:"rest-listen-address"`
+	TxMaxWaitTime     time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
+	PrometheusServer  string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
+	EnableSubscribeTX bool          `toml:"enable-subscribe-tx" mapstructure:"enable-subscribe-tx"`
+	JSONListenAddress string        `toml:"json-listen-address" mapstructure:"json-listen-address"`
+	RESTListenAddress string        `toml:"rest-listen-address" mapstructure:"rest-listen-address"`
+	DebugJSONRPC      bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 }
 
 func Load(dir string) (*Config, error) {

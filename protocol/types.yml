@@ -12,9 +12,8 @@
 # Duration is marshalled as two uvarints: seconds and nanoseconds. A duration of
 # 1 hour and 1 ns is marshalled as (3600, 1).
 
-AnonTokenAccount:
+LiteTokenAccount:
   kind: chain
-  chain-type: LiteTokenAccount
   fields:
     - name: TokenUrl
       type: string
@@ -37,7 +36,7 @@ SyntheticCreateChain:
       type: slice
       slice:
         type: ChainParams
-        marshal-as: self
+        marshal-as: reference
 
 ChainParams:
   fields:
@@ -74,7 +73,7 @@ KeySpecParams:
     - name: PublicKey
       type: bytes
 
-SigSpec:
+KeyPage:
   kind: chain
   chain-type: KeyPage
   fields:
@@ -85,9 +84,9 @@ SigSpec:
       slice:
         type: KeySpec
         pointer: true
-        marshal-as: self
+        marshal-as: reference
 
-CreateSigSpec:
+CreateKeyPage:
   kind: tx
   tx-type: CreateKeyPage
   fields:
@@ -99,23 +98,21 @@ CreateSigSpec:
       slice:
         type: KeySpecParams
         pointer: true
-        marshal-as: self
+        marshal-as: reference
 
-SigSpecGroup:
+KeyBook:
   kind: chain
-  chain-type: KeyBook
   fields:
-    - name: SigSpecs
+    - name: Pages
       type: chainSet
 
-CreateSigSpecGroup:
+CreateKeyBook:
   kind: tx
-  tx-type: CreateKeyBook
   fields:
     - name: Url
       type: string
       is-url: true
-    - name: SigSpecs
+    - name: Pages
       type: chainSet
 
 IdentityCreate:
@@ -153,7 +150,7 @@ UpdateKeyPage:
   fields:
     - name: Operation
       type: KeyPageOperation
-      marshal-as: self
+      marshal-as: value
     - name: Key
       type: bytes
     - name: NewKey
@@ -168,6 +165,7 @@ MetricsRequest:
 
 MetricsResponse:
   non-binary: true
+  incomparable: true
   fields:
     - name: Value
       type: any
@@ -186,6 +184,14 @@ DirectoryQueryResult:
     type: slice
     slice:
       type: string
+    optional: true
+  - name: ExpandedEntries
+    type: slice
+    slice:
+      type: state.Object
+      pointer: true
+      marshal-as: reference
+    optional: true
 
 DataAccount:
   kind: chain
@@ -288,7 +294,7 @@ SyntheticSignTransactions:
       type: slice
       slice:
         type: SyntheticSignature
-        marshal-as: self
+        marshal-as: reference
 
 SyntheticSignature:
   fields:
