@@ -33,7 +33,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	body.Cause[0] = 1
 	require.NoError(t, body.Create(account))
 
-	tx, err := transactions.New("foo", edSigner(fooKey, 1), body)
+	tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), body)
 	require.NoError(t, err)
 
 	st, err := NewStateManager(db.Begin(), tx)

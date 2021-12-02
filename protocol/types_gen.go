@@ -261,6 +261,463 @@ func (*WriteData) GetType() types.TransactionType { return types.TxTypeWriteData
 
 func (*WriteDataTo) GetType() types.TransactionType { return types.TxTypeWriteDataTo }
 
+func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AddCredits) Equal(u *AddCredits) bool {
+	if !(v.Recipient == u.Recipient) {
+		return false
+	}
+
+	if !(v.Amount == u.Amount) {
+		return false
+	}
+
+	return true
+}
+
+func (v *BurnTokens) Equal(u *BurnTokens) bool {
+	if !(v.Amount.Cmp(&u.Amount) == 0) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ChainParams) Equal(u *ChainParams) bool {
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	if !(v.IsUpdate == u.IsUpdate) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CreateKeyBook) Equal(u *CreateKeyBook) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(len(v.Pages) == len(u.Pages)) {
+		return false
+	}
+
+	for i := range v.Pages {
+		if v.Pages[i] != u.Pages[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *CreateKeyPage) Equal(u *CreateKeyPage) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(len(v.Keys) == len(u.Keys)) {
+		return false
+	}
+
+	for i := range v.Keys {
+		v, u := v.Keys[i], u.Keys[i]
+		if !(v.Equal(u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
+func (v *CreateToken) Equal(u *CreateToken) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(v.Symbol == u.Symbol) {
+		return false
+	}
+
+	if !(v.Precision == u.Precision) {
+		return false
+	}
+
+	if !(v.Properties == u.Properties) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DataAccount) Equal(u *DataAccount) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DirectoryIndexMetadata) Equal(u *DirectoryIndexMetadata) bool {
+	if !(v.Count == u.Count) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
+	if !(len(v.Entries) == len(u.Entries)) {
+		return false
+	}
+
+	for i := range v.Entries {
+		v, u := v.Entries[i], u.Entries[i]
+		if !(v == u) {
+			return false
+		}
+
+	}
+
+	if !(len(v.ExpandedEntries) == len(u.ExpandedEntries)) {
+		return false
+	}
+
+	for i := range v.ExpandedEntries {
+		v, u := v.ExpandedEntries[i], u.ExpandedEntries[i]
+		if !(v.Equal(u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
+func (v *IdentityCreate) Equal(u *IdentityCreate) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	if !(v.KeyBookName == u.KeyBookName) {
+		return false
+	}
+
+	if !(v.KeyPageName == u.KeyPageName) {
+		return false
+	}
+
+	return true
+}
+
+func (v *IssueTokens) Equal(u *IssueTokens) bool {
+	if !(v.Recipient == u.Recipient) {
+		return false
+	}
+
+	if !(v.Amount.Cmp(&u.Amount) == 0) {
+		return false
+	}
+
+	return true
+}
+
+func (v *KeyBook) Equal(u *KeyBook) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(len(v.Pages) == len(u.Pages)) {
+		return false
+	}
+
+	for i := range v.Pages {
+		if v.Pages[i] != u.Pages[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *KeyPage) Equal(u *KeyPage) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.CreditBalance.Cmp(&u.CreditBalance) == 0) {
+		return false
+	}
+
+	if !(len(v.Keys) == len(u.Keys)) {
+		return false
+	}
+
+	for i := range v.Keys {
+		v, u := v.Keys[i], u.Keys[i]
+		if !(v.Equal(u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
+func (v *KeySpec) Equal(u *KeySpec) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+
+	return true
+}
+
+func (v *KeySpecParams) Equal(u *KeySpecParams) bool {
+	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *LiteDataAccount) Equal(u *LiteDataAccount) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.TokenUrl == u.TokenUrl) {
+		return false
+	}
+
+	if !(v.Balance.Cmp(&u.Balance) == 0) {
+		return false
+	}
+
+	if !(v.TxCount == u.TxCount) {
+		return false
+	}
+
+	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+
+	if !(v.CreditBalance.Cmp(&u.CreditBalance) == 0) {
+		return false
+	}
+
+	return true
+}
+
+func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
+	if !(v.Metric == u.Metric) {
+		return false
+	}
+
+	if !(v.Duration == u.Duration) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticBurnTokens) Equal(u *SyntheticBurnTokens) bool {
+	if !(v.Amount.Cmp(&u.Amount) == 0) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticCreateChain) Equal(u *SyntheticCreateChain) bool {
+	if !(v.Cause == u.Cause) {
+		return false
+	}
+
+	if !(len(v.Chains) == len(u.Chains)) {
+		return false
+	}
+
+	for i := range v.Chains {
+		v, u := v.Chains[i], u.Chains[i]
+		if !(v.Equal(&u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
+func (v *SyntheticDepositCredits) Equal(u *SyntheticDepositCredits) bool {
+	if !(v.Cause == u.Cause) {
+		return false
+	}
+
+	if !(v.Amount == u.Amount) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticGenesis) Equal(u *SyntheticGenesis) bool {
+
+	return true
+}
+
+func (v *SyntheticSignTransactions) Equal(u *SyntheticSignTransactions) bool {
+	if !(len(v.Transactions) == len(u.Transactions)) {
+		return false
+	}
+
+	for i := range v.Transactions {
+		v, u := v.Transactions[i], u.Transactions[i]
+		if !(v.Equal(&u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
+func (v *SyntheticSignature) Equal(u *SyntheticSignature) bool {
+	if !(v.Txid == u.Txid) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Signature, u.Signature)) {
+		return false
+	}
+
+	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticWriteData) Equal(u *SyntheticWriteData) bool {
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *TokenAccountCreate) Equal(u *TokenAccountCreate) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(v.TokenUrl == u.TokenUrl) {
+		return false
+	}
+
+	if !(v.KeyBookUrl == u.KeyBookUrl) {
+		return false
+	}
+
+	return true
+}
+
+func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.Symbol == u.Symbol) {
+		return false
+	}
+
+	if !(v.Precision == u.Precision) {
+		return false
+	}
+
+	if !(v.Properties == u.Properties) {
+		return false
+	}
+
+	return true
+}
+
+func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
+	if !(v.Operation == u.Operation) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Key, u.Key)) {
+		return false
+	}
+
+	if !(bytes.Equal(v.NewKey, u.NewKey)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *WriteData) Equal(u *WriteData) bool {
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *WriteDataTo) Equal(u *WriteDataTo) bool {
+	if !(v.Recipient == u.Recipient) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *AcmeFaucet) BinarySize() int {
 	var n int
 

@@ -7,10 +7,12 @@ import (
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/dgraph-io/badger"
 )
 
 type DB struct {
+	DBOpen   types.AtomicBool
 	DBHome   string
 	badgerDB *badger.DB
 }
@@ -20,6 +22,7 @@ var _ storage.KeyValueDB = (*DB)(nil)
 // Close
 // Close the underlying database
 func (d *DB) Close() error {
+	defer d.DBOpen.Store(false)
 	return d.badgerDB.Close()
 }
 
@@ -43,13 +46,21 @@ func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 	if err != nil { // Panic if we can't open Badger
 		return err
 	}
+	d.DBOpen.Store(true)
 	return nil
+}
+
+func (d *DB) Ready() bool {
+	return d.DBOpen.Load()
 }
 
 // Get
 // Look in the given bucket, and return the key found.  Returns nil if no value
 // is found for the given key
 func (d *DB) Get(key storage.Key) (value []byte, err error) {
+	if !d.Ready() {
+		return nil, errors.New("database is not open")
+	}
 	err = d.badgerDB.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key[:])
 		if err != nil {
@@ -79,6 +90,9 @@ func (d *DB) Get(key storage.Key) (value []byte, err error) {
 // Put a key/value in the database.  We return an error if there was a problem
 // writing the key/value pair to the database.
 func (d *DB) Put(key storage.Key, value []byte) error {
+	if !d.Ready() {
+		return errors.New("database is not open")
+	}
 	// Update the key/value in the database
 	err := d.badgerDB.Update(func(txn *badger.Txn) error {
 		err := txn.Set(key[:], value)
