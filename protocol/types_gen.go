@@ -334,7 +334,25 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 	return true
 }
 
-func (v *CreateSigSpec) Equal(u *CreateSigSpec) bool {
+func (v *CreateKeyBook) Equal(u *CreateKeyBook) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(len(v.Pages) == len(u.Pages)) {
+		return false
+	}
+
+	for i := range v.Pages {
+		if v.Pages[i] != u.Pages[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *CreateKeyPage) Equal(u *CreateKeyPage) bool {
 	if !(v.Url == u.Url) {
 		return false
 	}
@@ -349,24 +367,6 @@ func (v *CreateSigSpec) Equal(u *CreateSigSpec) bool {
 			return false
 		}
 
-	}
-
-	return true
-}
-
-func (v *CreateSigSpecGroup) Equal(u *CreateSigSpecGroup) bool {
-	if !(v.Url == u.Url) {
-		return false
-	}
-
-	if !(len(v.SigSpecs) == len(u.SigSpecs)) {
-		return false
-	}
-
-	for i := range v.SigSpecs {
-		if v.SigSpecs[i] != u.SigSpecs[i] {
-			return false
-		}
 	}
 
 	return true
@@ -460,6 +460,48 @@ func (v *IssueTokens) Equal(u *IssueTokens) bool {
 	return true
 }
 
+func (v *KeyBook) Equal(u *KeyBook) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(len(v.Pages) == len(u.Pages)) {
+		return false
+	}
+
+	for i := range v.Pages {
+		if v.Pages[i] != u.Pages[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
+func (v *KeyPage) Equal(u *KeyPage) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.CreditBalance.Cmp(&u.CreditBalance) == 0) {
+		return false
+	}
+
+	if !(len(v.Keys) == len(u.Keys)) {
+		return false
+	}
+
+	for i := range v.Keys {
+		v, u := v.Keys[i], u.Keys[i]
+		if !(v.Equal(u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
 func (v *KeySpec) Equal(u *KeySpec) bool {
 	if !(bytes.Equal(v.PublicKey, u.PublicKey)) {
 		return false
@@ -499,48 +541,6 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 
 	if !(v.Duration == u.Duration) {
 		return false
-	}
-
-	return true
-}
-
-func (v *SigSpec) Equal(u *SigSpec) bool {
-	if !v.ChainHeader.Equal(&u.ChainHeader) {
-		return false
-	}
-
-	if !(v.CreditBalance.Cmp(&u.CreditBalance) == 0) {
-		return false
-	}
-
-	if !(len(v.Keys) == len(u.Keys)) {
-		return false
-	}
-
-	for i := range v.Keys {
-		v, u := v.Keys[i], u.Keys[i]
-		if !(v.Equal(u)) {
-			return false
-		}
-
-	}
-
-	return true
-}
-
-func (v *SigSpecGroup) Equal(u *SigSpecGroup) bool {
-	if !v.ChainHeader.Equal(&u.ChainHeader) {
-		return false
-	}
-
-	if !(len(v.SigSpecs) == len(u.SigSpecs)) {
-		return false
-	}
-
-	for i := range v.SigSpecs {
-		if v.SigSpecs[i] != u.SigSpecs[i] {
-			return false
-		}
 	}
 
 	return true

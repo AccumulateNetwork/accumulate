@@ -234,11 +234,11 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	}
 
 	// TODO check height
-	height, err := st.GetHeight(sigGroup.SigSpecs[tx.SigInfo.PriorityIdx])
+	height, err := st.GetHeight(book.Pages[tx.SigInfo.KeyPageIndex])
 	if err != nil {
 		return nil, err
 	}
-	if height != tx.SigInfo.MSHeight {
+	if height != tx.SigInfo.KeyPageHeight {
 		return nil, fmt.Errorf("invalid height")
 	}
 
@@ -258,7 +258,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		}
 	}
 
-	st.UpdateNonce(sigSpec)
+	st.UpdateNonce(page)
 	return st, nil
 }
 
