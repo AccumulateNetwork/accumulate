@@ -428,7 +428,7 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 
 				tx.state.dbMgr.Key(bucketStagedSynthTx, "", synthTxInfo.TxId).PutBatch(synthTxData)
 
-				//store the hash of th synthObject in the bptMgr, will be removed after synth tx is processed
+				//store the hash of th synthObject in the bpt, will be removed after synth tx is processed
 				tx.state.bptMgr.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
 			}
 			//store a list of txid to list of synth txid's
@@ -509,7 +509,7 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 
 		mutex.Lock()
 		tx.GetDB().Key(bucketEntry, chainId.Bytes()).PutBatch(chainStateObject)
-		// The bptMgr stores the hash of the ChainState object hash.
+		// The bpt stores the hash of the ChainState object hash.
 		tx.state.bptMgr.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
 		mutex.Unlock()
 	}
