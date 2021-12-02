@@ -11,7 +11,7 @@ import (
 // General Errors
 const (
 	ErrCodeInternal = -32800 - iota
-	_               // maintain previous numbering
+	ErrCodeDuplicateTxn
 	ErrCodeValidation
 	ErrCodeSubmission
 	ErrCodeAccumulate
