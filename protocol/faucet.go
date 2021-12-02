@@ -23,6 +23,6 @@ func init() {
 	pubKey := privKey.Public().(ed25519.PublicKey)
 
 	FaucetWallet.PrivateKey = privKey
-	FaucetUrl, _ = AnonymousAddress(pubKey, AcmeUrl().String())
+	FaucetUrl, _ = LiteAddress(pubKey, AcmeUrl().String())
 	FaucetWallet.Addr = FaucetUrl.String()
 }

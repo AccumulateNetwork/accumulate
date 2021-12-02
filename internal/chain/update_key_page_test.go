@@ -37,10 +37,10 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	fooKey, testKey, newKey := generateKey(), generateKey(), generateKey()
 	dbtx := db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbtx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateSigSpec(dbtx, "foo/page0", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpec(dbtx, "foo/page1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpec(dbtx, "foo/page2", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateSigSpecGroup(dbtx, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
+	require.NoError(t, acctesting.CreateKeyPage(dbtx, "foo/page0", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyPage(dbtx, "foo/page1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyPage(dbtx, "foo/page2", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbtx, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
 	_, err := dbtx.Commit(1, time.Unix(0, 0))
 	require.NoError(t, err)
 
@@ -52,8 +52,8 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			body.NewKey = newKey.PubKey().Bytes()
 
 			tx, err := transactions.NewWith(&transactions.SignatureInfo{
-				URL:         "foo/page1",
-				PriorityIdx: idx,
+				URL:          "foo/page1",
+				KeyPageIndex: idx,
 			}, edSigner(testKey, 1), body)
 			require.NoError(t, err)
 

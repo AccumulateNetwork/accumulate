@@ -19,10 +19,10 @@ func (s *Suite) TestGenesis() {
 	})
 }
 
-func (s *Suite) TestCreateAnonAccount() {
+func (s *Suite) TestCreateLiteAccount() {
 	sponsor, sender := s.generateTmKey(), s.generateTmKey()
 
-	senderUrl, err := protocol.AnonymousAddress(sender.PubKey().Bytes(), protocol.ACME)
+	senderUrl, err := protocol.LiteAddress(sender.PubKey().Bytes(), protocol.ACME)
 	s.Require().NoError(err)
 
 	tx, err := acctesting.CreateFakeSyntheticDepositTx(sponsor, sender)
@@ -30,26 +30,26 @@ func (s *Suite) TestCreateAnonAccount() {
 	s.dut.SubmitTxn(tx)
 	s.dut.WaitForTxns()
 
-	account := new(protocol.AnonTokenAccount)
+	account := new(protocol.LiteTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx), account.Balance.Int64())
 
 	recipients := make([]*url.URL, 10)
 	for i := range recipients {
 		key := s.generateTmKey()
-		u, err := protocol.AnonymousAddress(key.PubKey().Bytes(), protocol.ACME)
+		u, err := protocol.LiteAddress(key.PubKey().Bytes(), protocol.ACME)
 		s.Require().NoError(err)
 		recipients[i] = u
 	}
 
 	var total int64
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 1; i++ {
 		if i > 2 && testing.Short() {
 			break
 		}
 
 		exch := apitypes.NewTokenTx(types.String(senderUrl.String()))
-		for i := 0; i < 10; i++ {
+		for i := 0; i < 1; i++ {
 			if i > 2 && testing.Short() {
 				break
 			}
@@ -64,7 +64,7 @@ func (s *Suite) TestCreateAnonAccount() {
 
 	s.dut.WaitForTxns()
 
-	account = new(protocol.AnonTokenAccount)
+	account = new(protocol.LiteTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx-total), account.Balance.Int64())
 }

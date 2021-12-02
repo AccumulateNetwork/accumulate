@@ -7,7 +7,7 @@ import (
 type WalletEntry struct {
 	PrivateKey ed25519.PrivateKey // 32 bytes private key, 32 bytes public key
 	Nonce      uint64             // Nonce for the signature
-	Addr       string             // The address url for the anonymous token chain
+	Addr       string             // The address url for the lite token chain
 }
 
 // Sign
