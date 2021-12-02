@@ -56,7 +56,65 @@ func jsonType(field *Field) string {
 	return ""
 }
 
-func binarySize(w *bytes.Buffer, field *Field, varName string) {
+func areEqual(w *bytes.Buffer, field *Field, varName, otherName string) error {
+	var expr string
+	switch field.Type {
+	case "bool", "string", "chain", "uvarint", "varint", "duration", "time":
+		expr = "%s == %s"
+	case "bytes":
+		expr = "bytes.Equal(%s, %s)"
+	case "bigint":
+		if field.Pointer {
+			expr = "%s.Cmp(%s) == 0"
+		} else {
+			expr = "%s.Cmp(&%s) == 0"
+		}
+	case "slice", "chainSet":
+		expr = "len(%s) == len(%s)"
+	default:
+		switch field.MarshalAs {
+		case "reference":
+			if field.Pointer {
+				expr = "%s.Equal(%s)"
+			} else {
+				expr = "%s.Equal(&%s)"
+			}
+		case "value":
+			if field.Pointer {
+				expr = "*%s == *%s"
+			} else {
+				expr = "%s == %s"
+			}
+		default:
+			return fmt.Errorf("field %q: cannot determine how to compare %s", field.Name, resolveType(field, false))
+		}
+	}
+
+	expr = fmt.Sprintf(expr, varName, otherName)
+	fmt.Fprintf(w, "\tif !(%s) { return false }\n\n", expr)
+
+	switch field.Type {
+	case "slice":
+		fmt.Fprintf(w, "\tfor i := range %s {\n", varName)
+		fmt.Fprintf(w, "\t\tv, u := %s[i], %s[i]\n", varName, otherName)
+		err := areEqual(w, field.Slice, "v", "u")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "\t}\n\n")
+
+	case "chainSet":
+		fmt.Fprintf(w, "\tfor i := range %s {\n", varName)
+		fmt.Fprintf(w, "\t\tif %s[i] != %s[i] { return false }\n", varName, otherName)
+		fmt.Fprintf(w, "\t}\n\n")
+
+	default:
+		fmt.Fprintf(w, "\n")
+	}
+	return nil
+}
+
+func binarySize(w *bytes.Buffer, field *Field, varName string) error {
 	var expr string
 	switch field.Type {
 	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
@@ -66,8 +124,8 @@ func binarySize(w *bytes.Buffer, field *Field, varName string) {
 	case "slice":
 		expr = "encoding.UvarintBinarySize(uint64(len(%s)))"
 	default:
-		if field.MarshalAs != "self" {
-			panic(fmt.Errorf("cannot determine how to marshal %s", resolveType(field, false)))
+		if field.MarshalAs != "reference" && field.MarshalAs != "value" {
+			return fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, resolveType(field, false))
 		}
 		expr = "%s.BinarySize()"
 	}
@@ -77,15 +135,19 @@ func binarySize(w *bytes.Buffer, field *Field, varName string) {
 
 	if field.Type != "slice" {
 		fmt.Fprintf(w, "\n")
-		return
+		return nil
 	}
 
 	fmt.Fprintf(w, "\tfor _, v := range %s {\n", varName)
-	binarySize(w, field.Slice, "v")
+	err := binarySize(w, field.Slice, "v")
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(w, "\t}\n\n")
+	return nil
 }
 
-func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) {
+func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) error {
 	var expr string
 	var canErr bool
 	switch field.Type {
@@ -96,8 +158,8 @@ func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, 
 	case "slice":
 		expr, canErr = "encoding.UvarintMarshalBinary(uint64(len(%s)))", false
 	default:
-		if field.MarshalAs != "self" {
-			panic(fmt.Errorf("cannot determine how to marshal %s", resolveType(field, false)))
+		if field.MarshalAs != "reference" && field.MarshalAs != "value" {
+			return fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, resolveType(field, false))
 		}
 		expr, canErr = "%s.MarshalBinary()", true
 	}
@@ -112,16 +174,20 @@ func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, 
 
 	if field.Type != "slice" {
 		fmt.Fprintf(w, "\n")
-		return
+		return nil
 	}
 
 	fmt.Fprintf(w, "\tfor i, v := range %s {\n", varName)
 	fmt.Fprintf(w, "\t\t_ = i\n")
-	binaryMarshalValue(w, field.Slice, "v", errName+"[%d]", "i")
+	err := binaryMarshalValue(w, field.Slice, "v", errName+"[%d]", "i")
+	if err != nil {
+		return err
+	}
 	fmt.Fprintf(w, "\t}\n\n")
+	return nil
 }
 
-func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) {
+func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) error {
 	var expr, size, sliceName string
 	var inPlace bool
 	switch field.Type {
@@ -134,8 +200,8 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string
 		fmt.Fprintf(w, "var %s uint64\n", varName)
 		expr, size, inPlace = "encoding.UvarintUnmarshalBinary(data)", "encoding.UvarintBinarySize(%s)", false
 	default:
-		if field.MarshalAs != "self" {
-			panic(fmt.Errorf("cannot determine how to marshal %s", resolveType(field, false)))
+		if field.MarshalAs != "reference" && field.MarshalAs != "value" {
+			return fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, resolveType(field, false))
 		}
 		expr, size, inPlace = "%s.UnmarshalBinary(data)", "%s.BinarySize()", true
 	}
@@ -153,19 +219,26 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string
 	fmt.Fprintf(w, "\tdata = data[%s:]\n\n", size)
 
 	if field.Type != "slice" {
-		return
+		return nil
 	}
 
 	fmt.Fprintf(w, "\t%s = make(%s, %s)\n", sliceName, resolveType(field, false), varName)
 	fmt.Fprintf(w, "\tfor i := range %s {\n", sliceName)
 	if field.Slice.Pointer {
 		fmt.Fprintf(w, "\t\tx := new(%s)\n", resolveType(field.Slice, true))
-		binaryUnmarshalValue(w, field.Slice, "x", errName+"[%d]", "i")
+		err := binaryUnmarshalValue(w, field.Slice, "x", errName+"[%d]", "i")
+		if err != nil {
+			return err
+		}
 		fmt.Fprintf(w, "\t\t%s[i] = x", sliceName)
 	} else {
-		binaryUnmarshalValue(w, field.Slice, sliceName+"[i]", errName+"[%d]", "i")
+		err := binaryUnmarshalValue(w, field.Slice, sliceName+"[i]", errName+"[%d]", "i")
+		if err != nil {
+			return err
+		}
 	}
 	fmt.Fprintf(w, "\t}\n\n")
+	return nil
 }
 
 func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
