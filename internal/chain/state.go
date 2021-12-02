@@ -329,7 +329,7 @@ func (m *StateManager) Commit() error {
 			var old state.Chain
 			switch store.record.Header().Type {
 			case types.ChainTypeLiteTokenAccount:
-				old = new(protocol.AnonTokenAccount)
+				old = new(protocol.LiteTokenAccount)
 			case types.ChainTypeKeyPage:
 				old = new(protocol.KeyPage)
 			default:
@@ -344,7 +344,7 @@ func (m *StateManager) Commit() error {
 			// Check that the nonce is the only thing that changed
 			switch store.record.Header().Type {
 			case types.ChainTypeLiteTokenAccount:
-				old, new := old.(*protocol.AnonTokenAccount), store.record.(*protocol.AnonTokenAccount)
+				old, new := old.(*protocol.LiteTokenAccount), store.record.(*protocol.LiteTokenAccount)
 				old.Nonce = new.Nonce
 				if !old.Equal(new) {
 					return fmt.Errorf("attempted to change more than the nonce")
