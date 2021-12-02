@@ -802,11 +802,6 @@ func (tx *DBTransaction) commitTxWrites() {
 	}
 }
 
-func (s *StateDB) RootHash() []byte {
-	h := s.bptMgr.Bpt.Root.Hash // Make a copy
-	return h[:]                 // Return a reference to the copy
-}
-
 func (tx *DBTransaction) cleanupTx() {
 	tx.updates = make(map[types.Bytes32]*blockUpdates)
 
@@ -819,6 +814,11 @@ func (tx *DBTransaction) cleanupTx() {
 	tx.transactions.validatedTx = nil
 	tx.transactions.pendingTx = nil
 	tx.transactions.synthTxMap = make(map[types.Bytes32][]transactionStateInfo)
+}
+
+func (s *StateDB) RootHash() []byte {
+	h := s.bptMgr.Bpt.Root.Hash // Make a copy
+	return h[:]                 // Return a reference to the copy
 }
 
 func (s *StateDB) EnsureRootHash() []byte {
