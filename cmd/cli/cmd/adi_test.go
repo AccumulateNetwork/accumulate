@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/stretchr/testify/require"
@@ -34,15 +33,9 @@ func testCase2_1(t *testing.T, tc *testCmd) {
 	//faucet the lite account to make sure there are tokens available
 	testCase5_1(t, tc)
 
-	//need to wait a sec to make sure faucet tx settles
-	time.Sleep(10 * time.Second)
-
 	commandLine := fmt.Sprintf("adi create %s acc://RedWagon red1", liteAccounts[0])
-	_, err := tc.execute(t, commandLine)
+	_, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
-
-	//need to wait 2 secs to make sure adi create settles
-	time.Sleep(10 * time.Second)
 
 	//if this doesn't fail, then adi is created
 	_, err = tc.execute(t, "adi directory acc://RedWagon")
@@ -91,13 +84,12 @@ func testCase2_5(t *testing.T, tc *testCmd) {
 
 	//uncomment after V2 upgrade
 	//commandLine := fmt.Sprintf("adi create %s acc://RedWagon red5 blue green", liteAccounts[0])
-	//r, err := tc.execute(t, commandLine)
+	//r, err := tc.executeTx(t, commandLine)
 	//require.NoError(t, err)
 	//
 	//var res map[string]interface{}
 	//require.NoError(t, json.Unmarshal([]byte(r), &res))
 	//
-	//time.Sleep(time.Second)
 	////now query the txid
 	//commandLine = fmt.Sprintf("get txid %v", res["txid"])
 	//r, err = tc.execute(t, commandLine)
@@ -110,12 +102,10 @@ func testCase2_6(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://Redstone red2")
-	r, err := tc.execute(t, commandLine)
+	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
 	t.Log(r)
-	//need to wait 2 secs to make sure adi create settles
-	time.Sleep(10 * time.Second)
 
 	//if this doesn't fail, then adi is created
 	r, err = tc.execute(t, "adi directory acc://Redstone")
@@ -134,7 +124,7 @@ func testCase2_7(t *testing.T, tc *testCmd) {
 
 	pubKey, err := pubKeyFromString(fmt.Sprintf("%s", res["publicKey"]))
 	require.NoError(t, err)
-	u, err := protocol.AnonymousAddress(pubKey, "acc://ACME")
+	u, err := protocol.LiteAddress(pubKey, "acc://ACME")
 	require.NoError(t, err)
 
 	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 %s red2", u.String())

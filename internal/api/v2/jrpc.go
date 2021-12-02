@@ -80,6 +80,10 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		return nil, errors.New("local node specified but no client provided")
 	}
 
+	if opts.Config != nil && opts.Config.DebugJSONRPC {
+		jsonrpc2.DebugMethodFunc = true
+	}
+
 	type PL = protocol.TransactionPayload
 	m.methods = jsonrpc2.MethodMap{
 		// General
@@ -97,8 +101,8 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		// Execute
 		"execute":              m.Execute,
 		"create-adi":           m.ExecuteWith(func() PL { return new(protocol.IdentityCreate) }),
-		"create-key-book":      m.ExecuteWith(func() PL { return new(protocol.CreateSigSpecGroup) }),
-		"create-key-page":      m.ExecuteWith(func() PL { return new(protocol.CreateSigSpec) }),
+		"create-key-book":      m.ExecuteWith(func() PL { return new(protocol.CreateKeyBook) }),
+		"create-key-page":      m.ExecuteWith(func() PL { return new(protocol.CreateKeyPage) }),
 		"create-token":         m.ExecuteWith(func() PL { return new(protocol.CreateToken) }),
 		"create-token-account": m.ExecuteWith(func() PL { return new(protocol.TokenAccountCreate) }),
 		"send-tokens":          m.ExecuteWith(func() PL { return new(api.TokenTx) }, "From", "To"),
