@@ -259,7 +259,7 @@ func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *tr
 		return nil, err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
 	if err != nil {
 		return nil, err
@@ -691,4 +691,8 @@ func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
 	}
 
 	return fmt.Sprintf("unresolvable chain %x", chainId), nil
+}
+
+func nonceFromTimeNow() uint64 {
+	return uint64(time.Now().UnixMicro())
 }
