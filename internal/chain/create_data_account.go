@@ -1,15 +1,13 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types/state"
-
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type CreateDataAccount struct{}
@@ -28,29 +26,33 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 		return fmt.Errorf("invalid account URL: %v", err)
 	}
 
+	//only the ADI can
 	if !dataAccountUrl.Identity().Equal(st.SponsorUrl) {
 		return fmt.Errorf("%q cannot sponsor %q", st.SponsorUrl, dataAccountUrl)
 	}
 
-	state.NewTokenAccount()
-	account := state.NewDataAccount(dataAccountUrl.String(), tokenUrl.String())
+	managerBookUrl, err := url.Parse(body.Url)
+	if err != nil {
+		return fmt.Errorf("invalid manager key book URL: %v", err)
+	}
+
+	account := state.NewDataAccount(dataAccountUrl.String(), managerBookUrl.String())
 	if body.KeyBookUrl == "" {
-		account.SigSpecId = st.Sponsor.Header().SigSpecId
+		account.KeyBook = st.Sponsor.Header().KeyBook
 	} else {
 		keyBookUrl, err := url.Parse(body.KeyBookUrl)
 		if err != nil {
 			return fmt.Errorf("invalid key book URL: %v", err)
 		}
 
-		ssg := new(protocol.SigSpecGroup)
+		ssg := new(protocol.KeyBook)
 		err = st.LoadUrlAs(keyBookUrl, ssg)
 		if err != nil {
 			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
-
-		copy(account.SigSpecId[:], keyBookUrl.ResourceChain())
+		copy(account.KeyBook[:], keyBookUrl.ResourceChain())
 	}
 
 	st.Create(account)
-	return errors.New("not implemented") // TODO
+	return nil
 }
