@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	_ "crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	_ "github.com/AccumulateNetwork/accumulate/smt/pmt"
@@ -301,7 +301,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	}
 
 	h := sha256.Sum256(req.Tx)
-	txHash := hex.EncodeToString(h[:])
+	txHash := logging.AsHex(h[:])
 
 	//the submission is the format of the Tx input
 	sub := new(transactions.GenTransaction)
@@ -318,6 +318,8 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			Log: "Unable to decode transaction"}
 	}
 
+	txid := logging.AsHex(sub.TransactionHash())
+
 	//create a default response
 	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
 
@@ -330,7 +332,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			u2 = u.String()
 		}
 		sentry.CaptureException(customErr)
-		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", customErr)
+		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash, "error", customErr)
 		ret.Code = uint32(customErr.Code)
 		ret.GasWanted = 0
 		ret.GasUsed = 0
@@ -339,7 +341,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	}
 
 	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
-	app.logger.Debug("Check succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
+	app.logger.Debug("Check succeeded", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash)
 	return ret
 }
 
@@ -357,7 +359,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	h := sha256.Sum256(req.Tx)
-	txHash := hex.EncodeToString(h[:])
+	txHash := logging.AsHex(h[:])
 	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: protocol.CodeOK}
 
 	sub := &transactions.GenTransaction{}
@@ -372,6 +374,8 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 			Log: "Unable to decode transaction"}
 	}
 
+	txid := logging.AsHex(sub.TransactionHash())
+
 	//run through the validation node
 	customErr := app.chain.DeliverTx(sub)
 
@@ -382,7 +386,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 			u2 = u.String()
 		}
 		sentry.CaptureException(customErr)
-		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "tx", txHash, "error", customErr)
+		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash, "error", customErr)
 		ret.Code = uint32(customErr.Code)
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
 		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
@@ -392,7 +396,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	//now we need to store the data returned by the validator and feed into accumulator
 	app.txct++
 
-	app.logger.Debug("Deliver succeeded", "type", sub.TransactionType().Name(), "tx", txHash)
+	app.logger.Debug("Deliver succeeded", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash)
 	return ret
 }
 

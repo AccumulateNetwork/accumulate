@@ -15,17 +15,17 @@ type CreateKeyPage struct{}
 func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 
 func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	var group *protocol.SigSpecGroup
+	var group *protocol.KeyBook
 	switch sponsor := st.Sponsor.(type) {
 	case *state.AdiState:
 		// Create an unbound sig spec
-	case *protocol.SigSpecGroup:
+	case *protocol.KeyBook:
 		group = sponsor
 	default:
 		return fmt.Errorf("invalid sponsor: want chain type %v or %v, got %v", types.ChainTypeIdentity, types.ChainTypeKeyBook, sponsor.Header().Type)
 	}
 
-	body := new(protocol.CreateSigSpec)
+	body := new(protocol.CreateKeyPage)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)
@@ -48,7 +48,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
 	st.Submit(st.SponsorUrl, scc)
 
-	spec := protocol.NewSigSpec()
+	spec := protocol.NewKeyPage()
 	spec.ChainUrl = types.String(msUrl.String())
 
 	if group != nil {
@@ -59,8 +59,8 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 			return fmt.Errorf("invalid sponsor URL: %v", err)
 		}
 
-		group.SigSpecs = append(group.SigSpecs, types.Bytes(msUrl.ResourceChain()).AsBytes32())
-		spec.SigSpecId = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+		group.Pages = append(group.Pages, types.Bytes(msUrl.ResourceChain()).AsBytes32())
+		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 
 		err = scc.Update(group)
 		if err != nil {

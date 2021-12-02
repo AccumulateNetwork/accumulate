@@ -62,7 +62,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = protocol.FaucetUrl.String()
 	tx.SigInfo.Nonce = protocol.FaucetWallet.Nonce
-	tx.SigInfo.MSHeight = 1
+	tx.SigInfo.KeyPageHeight = 1
 	tx.Transaction, err = req.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
@@ -79,7 +79,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	txrq.Sponsor = tx.SigInfo.URL
 	txrq.Signer.Nonce = tx.SigInfo.Nonce
 	txrq.Signer.PublicKey = tx.Signature[0].PublicKey
-	txrq.KeyPage.Height = tx.SigInfo.MSHeight
+	txrq.KeyPage.Height = tx.SigInfo.KeyPageHeight
 	txrq.Signature = tx.Signature[0].Signature
 	return m.execute(ctx, txrq, tx.Transaction)
 }
@@ -160,8 +160,8 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = req.Sponsor
 	tx.SigInfo.Nonce = req.Signer.Nonce
-	tx.SigInfo.MSHeight = req.KeyPage.Height
-	tx.SigInfo.PriorityIdx = req.KeyPage.Index
+	tx.SigInfo.KeyPageHeight = req.KeyPage.Height
+	tx.SigInfo.KeyPageIndex = req.KeyPage.Index
 
 	ed := new(transactions.ED25519Sig)
 	ed.Nonce = req.Signer.Nonce

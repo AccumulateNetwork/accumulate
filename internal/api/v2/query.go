@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/types"
 )
@@ -11,10 +12,14 @@ type queryRequest interface {
 	Type() types.QueryType
 }
 
-func NewQueryDirect(c ABCIQueryClient) Querier {
-	return queryDirect{c}
+type QuerierOptions struct {
+	TxMaxWaitTime time.Duration
 }
 
-func NewQueryDispatch(c []ABCIQueryClient) Querier {
-	return queryDispatch{c}
+func NewQueryDirect(c ABCIQueryClient, opts QuerierOptions) Querier {
+	return &queryDirect{opts, c}
+}
+
+func NewQueryDispatch(c []ABCIQueryClient, opts QuerierOptions) Querier {
+	return &queryDispatch{opts, c}
 }

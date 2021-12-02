@@ -136,7 +136,8 @@ deploy 4/4:
   image: golang:1.17
   variables:
     ACC_API: https://devnet.accumulatenetwork.io/v1
-    MNEMONIC: bench industry mirror above van second avoid maximum genius person swear cage
+    # set mnemonic for predictable addresses
+    MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
 
 validate:
   extends: .validate
