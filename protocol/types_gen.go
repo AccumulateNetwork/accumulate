@@ -279,34 +279,6 @@ func (v *AddCredits) Equal(u *AddCredits) bool {
 	return true
 }
 
-func (v *AnonTokenAccount) Equal(u *AnonTokenAccount) bool {
-	if !v.ChainHeader.Equal(&u.ChainHeader) {
-		return false
-	}
-
-	if !(v.TokenUrl == u.TokenUrl) {
-		return false
-	}
-
-	if !(v.Balance.Cmp(&u.Balance) == 0) {
-		return false
-	}
-
-	if !(v.TxCount == u.TxCount) {
-		return false
-	}
-
-	if !(v.Nonce == u.Nonce) {
-		return false
-	}
-
-	if !(v.CreditBalance.Cmp(&u.CreditBalance) == 0) {
-		return false
-	}
-
-	return true
-}
-
 func (v *BurnTokens) Equal(u *BurnTokens) bool {
 	if !(v.Amount.Cmp(&u.Amount) == 0) {
 		return false
@@ -541,6 +513,34 @@ func (v *LiteDataAccount) Equal(u *LiteDataAccount) bool {
 	}
 
 	if !(bytes.Equal(v.Data, u.Data)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.TokenUrl == u.TokenUrl) {
+		return false
+	}
+
+	if !(v.Balance.Cmp(&u.Balance) == 0) {
+		return false
+	}
+
+	if !(v.TxCount == u.TxCount) {
+		return false
+	}
+
+	if !(v.Nonce == u.Nonce) {
+		return false
+	}
+
+	if !(v.CreditBalance.Cmp(&u.CreditBalance) == 0) {
 		return false
 	}
 
