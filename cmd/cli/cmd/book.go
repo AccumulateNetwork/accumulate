@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -148,7 +147,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTx(data, dataBinary, bookUrl, si, privKey, nonce)
 	if err != nil {
 		return "", err
