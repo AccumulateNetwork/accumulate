@@ -17,13 +17,13 @@ func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface
 }
 
 func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) interface{} {
-	req := new(UrlQuery)
+	req := new(DirectoryQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatQuery(m.opts.Query.QueryDirectory(req.Url))
+	return jrpcFormatQuery(m.opts.Query.QueryDirectory(req.Url, &req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryChain(_ context.Context, params json.RawMessage) interface{} {
@@ -47,7 +47,7 @@ func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interfa
 }
 
 func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) interface{} {
-	req := new(UrlQuery)
+	req := new(TxHistoryQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
