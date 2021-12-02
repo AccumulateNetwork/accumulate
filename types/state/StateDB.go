@@ -93,44 +93,24 @@ func (s *StateDB) init(debug bool) {
 }
 
 // Open database to manage the smt and chain states
-func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool, logger log.Logger) (err error) {
-	if logger != nil {
-		s.logger = logger.With("module", "dbMgr")
-	}
-
-	dbType := "badger"
-	if useMemDB {
-		dbType = "memory"
-	}
-
+func (s *StateDB) open(dbType string, dbFilename string, logger log.Logger) (err error) {
 	if logger != nil {
 		logger = logger.With("module", dbType)
 	}
-
 	s.dbMgr, err = database.NewDBManager(dbType, dbFilename, logger)
 	if err != nil {
 		return err
 	}
 
 	s.merkleMgr, err = managed.NewMerkleManager(s.dbMgr, markPower)
-	if err != nil {
-		return err
-	}
-
-	s.init(debug)
-	return nil
+	return err
 }
 
-func (s *StateDB) Load(db storage.KeyValueDB, debug bool) (err error) {
+func (s *StateDB) loadDB(db storage.KeyValueDB) (err error) {
 	s.dbMgr = new(database.Manager)
 	s.dbMgr.InitWithDB(db)
 	s.merkleMgr, err = managed.NewMerkleManager(s.dbMgr, markPower)
-	if err != nil {
-		return err
-	}
-
-	s.init(debug)
-	return nil
+	return err
 }
 
 func (s *StateDB) GetDB() *database.Manager {
