@@ -77,6 +77,7 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		cfg.LogLevel, w, err = logging.ParseLogLevel(cfg.LogLevel, w)
 		zl = zerolog.New(w)
 	} else {
 		zl = newZL(cfg.LogFormat)

@@ -15,7 +15,7 @@ SyntheticSignatures:
     type: slice
     slice:
       type: SyntheticSignature
-      marshal-as: self
+      marshal-as: reference
 
 # TODO Move these to Protocol
 

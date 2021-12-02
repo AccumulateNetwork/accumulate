@@ -5,7 +5,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
-type AnonTokenAccount struct {
+type LiteTokenAccount struct {
 	*protocol.TokenAccountCreate
 	Balance       types.Amount `json:"balance" form:"balance" query:"balance"`
 	TxCount       uint64       `json:"txCount" form:"txCount" query:"txCount"`

@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestSynthTokenDeposit_Anon(t *testing.T) {
+func TestSynthTokenDeposit_Lite(t *testing.T) {
 	tokenUrl := protocol.AcmeUrl().String()
 
 	_, privKey, _ := ed25519.GenerateKey(nil)
@@ -32,10 +32,10 @@ func TestSynthTokenDeposit_Anon(t *testing.T) {
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account
-	tas := new(protocol.AnonTokenAccount)
+	tas := new(protocol.LiteTokenAccount)
 	require.NoError(t, st.LoadAs(st.SponsorChainId, tas))
 	require.Equal(t, types.String(gtx.SigInfo.URL), tas.ChainUrl, "invalid chain header")
-	require.Equalf(t, types.ChainTypeLiteTokenAccount, tas.Type, "chain state is not an anon account, it is %s", tas.ChainHeader.Type.Name())
+	require.Equalf(t, types.ChainTypeLiteTokenAccount, tas.Type, "chain state is not a lite account, it is %s", tas.ChainHeader.Type.Name())
 	require.Equal(t, tokenUrl, tas.TokenUrl, "token url of state doesn't match expected")
 	require.Equal(t, uint64(1), tas.TxCount)
 
