@@ -16,7 +16,10 @@ func TestStateDBConsistency(t *testing.T) {
 	db := new(badger.DB)
 	err := db.InitDB(filepath.Join(dir, "valacc.db"), nil)
 	require.NoError(t, err)
-	defer db.Close()
+
+	// Call during test cleanup. This ensures that the app client is shutdown
+	// before the database is closed.
+	t.Cleanup(func() { db.Close() })
 
 	sdb := new(state.StateDB)
 	require.NoError(t, sdb.Load(db, true))
