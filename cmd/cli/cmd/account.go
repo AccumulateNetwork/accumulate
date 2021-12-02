@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -66,7 +65,7 @@ var accountCmd = &cobra.Command{
 }
 
 func PrintAccountGet() {
-	fmt.Println("  accumulate account get [url]			Get anon token account by URL")
+	fmt.Println("  accumulate account get [url]			Get lite token account by URL")
 }
 
 func PrintAccountQr() {
@@ -78,11 +77,11 @@ func PrintAccountGenerate() {
 }
 
 func PrintAccountList() {
-	fmt.Println("  accumulate account list			Display all anon token accounts")
+	fmt.Println("  accumulate account list			Display all lite token accounts")
 }
 
 func PrintAccountRestore() {
-	fmt.Println("  accumulate account restore			Restore old anon token accounts")
+	fmt.Println("  accumulate account restore			Restore old lite token accounts")
 }
 
 func PrintAccountCreate() {
@@ -90,11 +89,11 @@ func PrintAccountCreate() {
 }
 
 func PrintAccountImport() {
-	fmt.Println("  accumulate account import [private-key]	Import anon token account from private key hex")
+	fmt.Println("  accumulate account import [private-key]	Import lite token account from private key hex")
 }
 
 func PrintAccountExport() {
-	fmt.Println("  accumulate account export [url]		Export private key hex of anon token account")
+	fmt.Println("  accumulate account export [url]		Export private key hex of lite token account")
 }
 
 func PrintAccount() {
@@ -207,7 +206,7 @@ func CreateAccount(url string, args []string) (string, error) {
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 
 	params, err := prepareGenTx(jsonData, binaryData, actor, si, privKey, nonce)
 	if err != nil {
@@ -242,7 +241,7 @@ func ListAccounts() (string, error) {
 	}
 	var out string
 	for _, v := range b.KeyValueList {
-		lt, err := protocol.AnonymousAddress(v.Value, protocol.AcmeUrl().String())
+		lt, err := protocol.LiteAddress(v.Value, protocol.AcmeUrl().String())
 		if err != nil {
 			continue
 		}
@@ -265,7 +264,7 @@ func RestoreAccounts() (out string, err error) {
 		if err != nil {
 			out += fmt.Sprintf("%q is not a valid URL\n", v.Key)
 		}
-		key, _, err := protocol.ParseAnonymousAddress(u)
+		key, _, err := protocol.ParseLiteAddress(u)
 		if err != nil {
 			out += fmt.Sprintf("%q is not a valid lite account: %v\n", v.Key, err)
 		} else if key == nil {

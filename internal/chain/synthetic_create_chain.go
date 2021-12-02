@@ -101,8 +101,8 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 		switch record.Header().Type {
 		case types.ChainTypeKeyBook:
 			// A key book does not itself have a key book
-			if record.Header().SigSpecId != (types.Bytes32{}) {
-				return errors.New("invalid key book: SigSpecId is not empty")
+			if record.Header().KeyBook != (types.Bytes32{}) {
+				return errors.New("invalid key book: KeyBook is not empty")
 			}
 
 		case types.ChainTypeKeyPage:
@@ -110,15 +110,15 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 		default:
 			// Anything else must have a key book
-			if record.Header().SigSpecId == (types.Bytes32{}) {
+			if record.Header().KeyBook == (types.Bytes32{}) {
 				return fmt.Errorf("%q does not specify a key book", u)
 			}
 		}
 
 		// Make sure the key book actually exists
-		if record.Header().SigSpecId != (types.Bytes32{}) {
-			ssg := new(protocol.SigSpecGroup)
-			err = st.LoadAs(record.Header().SigSpecId, ssg)
+		if record.Header().KeyBook != (types.Bytes32{}) {
+			ssg := new(protocol.KeyBook)
+			err = st.LoadAs(record.Header().KeyBook, ssg)
 			if err != nil {
 				return fmt.Errorf("invalid key book for %q: %v", u, err)
 			}

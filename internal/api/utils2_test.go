@@ -49,6 +49,6 @@ func (api *API) GetADI(ctx context.Context, params json.RawMessage) interface{} 
 	return api.getADI(ctx, params)
 }
 
-func (api *API) BroadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
+func (api *API) BroadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeapi.APIDataResponse, error) {
 	return api.broadcastTx(wait, tx)
 }

@@ -19,13 +19,13 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 		return fmt.Errorf("invalid sponsor: want chain type %v, got %v", types.ChainTypeIdentity, st.Sponsor.Header().Type)
 	}
 
-	body := new(protocol.CreateSigSpecGroup)
+	body := new(protocol.CreateKeyBook)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	if len(body.SigSpecs) == 0 {
+	if len(body.Pages) == 0 {
 		return fmt.Errorf("cannot create empty sig spec group")
 	}
 
@@ -38,9 +38,9 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 		return fmt.Errorf("%q does not belong to %q", sgUrl, st.SponsorUrl)
 	}
 
-	entries := make([]*protocol.SigSpec, len(body.SigSpecs))
-	for i, chainId := range body.SigSpecs {
-		entry := new(protocol.SigSpec)
+	entries := make([]*protocol.KeyPage, len(body.Pages))
+	for i, chainId := range body.Pages {
+		entry := new(protocol.KeyPage)
 		err = st.LoadAs(chainId, entry)
 		if err != nil {
 			return fmt.Errorf("failed to fetch sig spec: %v", err)
@@ -56,7 +56,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 			return fmt.Errorf("%q does not belong to %q", u, st.SponsorUrl)
 		}
 
-		if (entry.SigSpecId != types.Bytes32{}) {
+		if (entry.KeyBook != types.Bytes32{}) {
 			return fmt.Errorf("%q has already been assigned to an SSG", u)
 		}
 
@@ -67,7 +67,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
 	st.Submit(st.SponsorUrl, scc)
 
-	ssg := protocol.NewSigSpecGroup()
+	ssg := protocol.NewKeyBook()
 	ssg.ChainUrl = types.String(sgUrl.String())
 
 	groupChainId := types.Bytes(sgUrl.ResourceChain()).AsBytes32()
@@ -79,8 +79,8 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 
 		specChainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		ssg.SigSpecs = append(ssg.SigSpecs, specChainId)
-		spec.SigSpecId = groupChainId
+		ssg.Pages = append(ssg.Pages, specChainId)
+		spec.KeyBook = groupChainId
 		err = scc.Update(spec)
 		if err != nil {
 			return fmt.Errorf("failed to marshal state: %v", err)
