@@ -59,7 +59,7 @@ func TestIsValidAdiUrl(t *testing.T) {
 	}
 }
 
-func TestAnonymousAddress(t *testing.T) {
+func TestLiteAddress(t *testing.T) {
 	TokenURLs := map[string]string{
 		"good1": "RedWaggon/Wheels",
 		"good2": "BlueBall/Footballs",
@@ -71,7 +71,7 @@ func TestAnonymousAddress(t *testing.T) {
 	for name, str := range TokenURLs {
 		t.Run(name, func(t *testing.T) {
 			publicKey := sha256.Sum256([]byte(name))
-			url, err := AnonymousAddress(publicKey[:], str)
+			url, err := LiteAddress(publicKey[:], str)
 			if name[:4] == "good" {
 				require.NoError(t, err, "%s should be valid", str)
 				fmt.Println(url.String())

@@ -37,8 +37,8 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 
 	ed := transactions.SignatureInfo{}
 	ed.URL = actor.String()
-	ed.MSHeight = 1
-	ed.PriorityIdx = 0
+	ed.KeyPageHeight = 1
+	ed.KeyPageIndex = 0
 
 	if IsLiteAccount(actor.String()) == true {
 		privKey, err = LookupByLabel(actor.String()) //LookupByAnon(actor.String())
@@ -70,11 +70,11 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	if len(args) > 2 {
 		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
 			ct++
-			ed.PriorityIdx = uint64(v)
+			ed.KeyPageIndex = uint64(v)
 			if len(args) > 3 {
 				if v, err := strconv.ParseInt(args[2], 10, 64); err == nil {
 					ct++
-					ed.MSHeight = uint64(v)
+					ed.KeyPageHeight = uint64(v)
 				}
 			}
 		}
@@ -117,8 +117,8 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si 
 	params.Tx.Signer.Nonce = nonce
 	params.Tx.Sponsor = types.String(actor.String())
 	params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
-	params.Tx.KeyPage.Height = si.MSHeight
-	params.Tx.KeyPage.Index = si.PriorityIdx
+	params.Tx.KeyPage.Height = si.KeyPageHeight
+	params.Tx.KeyPage.Index = si.KeyPageIndex
 
 	params.Tx.Sig = types.Bytes64{}
 
@@ -148,8 +148,8 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *tran
 	params.Signer.PublicKey = privKey[32:]
 	params.Signer.Nonce = nonce
 	params.Sponsor = actor.String()
-	params.KeyPage.Height = si.MSHeight
-	params.KeyPage.Index = si.PriorityIdx
+	params.KeyPage.Height = si.KeyPageHeight
+	params.KeyPage.Index = si.KeyPageIndex
 
 	params.Signature = ed.GetSignature()
 	//The public key needs to be used to verify the signature, however,
@@ -259,7 +259,7 @@ func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *tr
 		return nil, err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
 	if err != nil {
 		return nil, err
@@ -367,11 +367,11 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 
 var (
 	ApiToString = map[string]string{
-		"anonTokenAccount": "lite account",
+		"liteTokenAccount": "lite account",
 		"tokenAccount":     "ADI token account",
 		"adi":              "ADI",
-		"sigSpecGroup":     "Key Book",
-		"sigSpec":          "Key Page",
+		"keyBook":          "Key Book",
+		"keyPage":          "Key Page",
 	}
 )
 
@@ -409,11 +409,70 @@ func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TxId.AsBytes32())
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Sponsor)
 	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig.Bytes())
-	out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
-	out += fmt.Sprintf("  - Signer Nonce          : %d\n", res.Signer.Nonce)
+	if res.Signer != nil {
+		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
+		out += fmt.Sprintf("  - Signer Nonce          : %d\n", res.Signer.Nonce)
+	}
 	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
 	out += fmt.Sprintf("===\n")
 	return out
+}
+
+func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
+	if WantJsonOutput {
+		data, err := json.Marshal(v2)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+
+	v1 := new(acmeapi.APIDataResponse)
+	v1.Type = types.String(v2.Type)
+	if v2.MerkleState != nil {
+		v1.MerkleState = new(acmeapi.MerkleState)
+		v1.MerkleState.Count = v2.MerkleState.Count
+		v1.MerkleState.Roots = make([]types.Bytes, len(v2.MerkleState.Roots))
+		for i, r := range v2.MerkleState.Roots {
+			v1.MerkleState.Roots[i] = r
+		}
+	}
+	v1.Sponsor = types.String(v2.Sponsor)
+	if v2.KeyPage != nil {
+		v1.KeyPage = new(acmeapi.APIRequestKeyPage)
+		v1.KeyPage.Height = v2.KeyPage.Height
+		v1.KeyPage.Index = v2.KeyPage.Index
+	}
+	v1.TxId = (*types.Bytes)(&v2.Txid)
+	if v2.Signer != nil {
+		v1.Signer = new(acmeapi.Signer)
+		v1.Signer.PublicKey = types.Bytes(v2.Signer.PublicKey).AsBytes32()
+		v1.Signer.Nonce = v2.Signer.Nonce
+	}
+	sig := types.Bytes(v2.Sig).AsBytes64()
+	v1.Sig = &sig
+
+	b, err := json.Marshal(v2.Data)
+	if err != nil {
+		return "", err
+	}
+	v1.Data = (*json.RawMessage)(&b)
+
+	b, err = json.Marshal(v2.Status)
+	if err != nil {
+		return "", err
+	}
+	v1.Status = (*json.RawMessage)(&b)
+
+	out, err := PrintQueryResponse(v1)
+	if err != nil {
+		return "", err
+	}
+
+	for i, txid := range v2.SyntheticTxids {
+		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
+	}
+	return out, nil
 }
 
 func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
@@ -425,8 +484,8 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 		return string(data), nil
 	} else {
 		switch res.Type {
-		case "anonTokenAccount":
-			ata := response.AnonTokenAccount{}
+		case "liteTokenAccount":
+			ata := response.LiteTokenAccount{}
 			err := json.Unmarshal(*res.Data, &ata)
 			if err != nil {
 				return "", err
@@ -500,7 +559,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%v (%s)\n", s, chainType)
 			}
 			return out, nil
-		case "sigSpecGroup":
+		case "keyBook":
 			//workaround for protocol unmarshaling bug
 			var ssg struct {
 				Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
@@ -529,7 +588,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				//	r := acmeapi.APIDataResponse{}
 				//	err = json.Unmarshal(*data.Data, &r)
 				//	if err == nil {
-				//		ss := protocol.SigSpec{}
+				//		ss := protocol.KeyPage{}
 				//		err = json.Unmarshal(*r.Data, &ss)
 				//		keypage = *ss.ChainUrl.AsString()
 				//	}
@@ -543,8 +602,8 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%d\t\t:\t%s\n", i+1, s)
 			}
 			return out, nil
-		case "sigSpec":
-			ss := protocol.SigSpec{}
+		case "keyPage":
+			ss := protocol.KeyPage{}
 			err := json.Unmarshal(*res.Data, &ss)
 			if err != nil {
 				return "", err
@@ -560,7 +619,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 			}
 			return out, nil
-		case "tokenTx":
+		case "withdrawTokens":
 			tx := response.TokenTx{}
 			err := json.Unmarshal(*res.Data, &tx)
 			if err != nil {
@@ -581,7 +640,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 
 			out += printGeneralTransactionParameters(res)
 			return out, nil
-		case "syntheticTokenDeposit":
+		case "syntheticDepositTokens":
 			deposit := synthetic.TokenTransactionDeposit{}
 			err := json.Unmarshal(*res.Data, &deposit)
 
@@ -601,9 +660,9 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			return out, nil
 
 		default:
+			return "", fmt.Errorf("unknown response type %q", res.Type)
 		}
 	}
-	return "", nil
 }
 
 func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
@@ -632,4 +691,9 @@ func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
 	}
 
 	return fmt.Sprintf("unresolvable chain %x", chainId), nil
+}
+
+func nonceFromTimeNow() uint64 {
+	t := time.Now()
+	return uint64(t.Unix()*1e6) + uint64(t.Nanosecond())/1e3
 }

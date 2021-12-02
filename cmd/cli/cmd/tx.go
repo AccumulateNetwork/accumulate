@@ -2,7 +2,9 @@ package cmd
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -11,7 +13,9 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 var txCmd = &cobra.Command{
@@ -55,6 +59,16 @@ var txCmd = &cobra.Command{
 	},
 }
 
+var (
+	TxWait      time.Duration
+	TxWaitSynth time.Duration
+)
+
+func init() {
+	txCmd.Flags().DurationVarP(&TxWait, "wait", "w", 0, "Wait for the transaction to complete")
+	txCmd.Flags().DurationVar(&TxWaitSynth, "wait-synth", 0, "Wait for synthetic transactions to complete")
+}
+
 func PrintTXGet() {
 	fmt.Println("  accumulate tx get [txid]			Get token transaction by txid")
 }
@@ -73,29 +87,93 @@ func PrintTX() {
 	PrintTXHistoryGet()
 }
 
-func GetTX(hash string) (string, error) {
+func getTX(hash []byte, wait time.Duration) (*api2.QueryResponse, error) {
+	var res api2.QueryResponse
+	var err error
 
-	var res acmeapi.APIDataResponse
-	var hashbytes types.Bytes32
+	params := new(api2.TxnQuery)
+	params.Txid = hash
 
-	params := new(acmeapi.TokenTxRequest)
-	err := hashbytes.FromString(hash)
-	if err != nil {
-		return "", err
+	if wait > 0 {
+		params.Wait = wait
 	}
-	params.Hash = hashbytes
 
 	data, err := json.Marshal(params)
 	jsondata := json.RawMessage(data)
 	if err != nil {
+		return nil, err
+	}
+
+	err = Client.RequestV2(context.Background(), "query-tx", jsondata, &res)
+	if err != nil {
+		return nil, err
+	}
+	return &res, nil
+}
+
+func GetTX(hash string) (string, error) {
+	txid, err := hex.DecodeString(hash)
+	if err != nil {
 		return "", err
 	}
 
-	if err := Client.Request(context.Background(), "token-tx", jsondata, &res); err != nil {
+	t := Client.Timeout
+	defer func() { Client.Timeout = t }()
+
+	if TxWait > 0 {
+		Client.Timeout = TxWait * 11 / 10
+	}
+
+	res, err := getTX(txid, TxWait)
+	if err != nil {
+		var rpcErr jsonrpc2.Error
+		if errors.As(err, &rpcErr) {
+			return PrintJsonRpcError(err)
+		}
+		return "", err
+	}
+
+	out, err := PrintQueryResponseV2(res)
+	if err != nil {
+		return "", err
+	}
+
+	if TxWaitSynth == 0 || len(res.SyntheticTxids) == 0 {
+		return out, nil
+	}
+
+	if TxWaitSynth > 0 {
+		Client.Timeout = TxWaitSynth * 11 / 10
+	}
+
+	errg := new(errgroup.Group)
+	for _, txid := range res.SyntheticTxids {
+		txid := txid // Do not capture the loop variable in the closure
+		errg.Go(func() error {
+			res, err := getTX(txid[:], TxWaitSynth)
+			if err != nil {
+				return err
+			}
+
+			o, err := PrintQueryResponseV2(res)
+			if err != nil {
+				return err
+			}
+
+			out += o
+			return nil
+		})
+	}
+	err = errg.Wait()
+	if err != nil {
+		var rpcErr jsonrpc2.Error
+		if errors.As(err, &rpcErr) {
+			return PrintJsonRpcError(err)
+		}
 		return PrintJsonRpcError(err)
 	}
 
-	return PrintQueryResponse(&res)
+	return out, nil
 }
 
 func GetTXHistory(accountUrl string, s string, e string) (string, error) {
@@ -195,7 +273,7 @@ func CreateTX(sender string, args []string) (string, error) {
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTxV2(data, dataBinary, u, si, pk, nonce)
 	if err != nil {
 		return "", err

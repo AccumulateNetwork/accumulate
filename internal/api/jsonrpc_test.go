@@ -17,7 +17,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	anon "github.com/AccumulateNetwork/accumulate/types/anonaddress"
+	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
@@ -101,7 +101,7 @@ func TestLoadOnRemote(t *testing.T) {
 	}
 }
 
-func TestJsonRpcAnonToken(t *testing.T) {
+func TestJsonRpcLiteToken(t *testing.T) {
 	switch {
 	case testing.Short():
 		t.Skip("Skipping test in short mode")
@@ -113,7 +113,7 @@ func TestJsonRpcAnonToken(t *testing.T) {
 	dir := t.TempDir()
 	_, pv, query := startBVC(t, dir)
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	kpSponsor := ed25519.NewKeyFromSeed(pv.Key.PrivKey.Bytes()[:32])
 
 	addrList, err := acctesting.RunLoadTest(query, kpSponsor, *loadWalletCount, *loadTxCount)
@@ -224,12 +224,12 @@ func TestFaucet(t *testing.T) {
 	dir := t.TempDir()
 	_, _, query := startBVC(t, dir)
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
 	req.Wait = true
-	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -337,11 +337,11 @@ func TestTransactionHistory(t *testing.T) {
 	dir := t.TempDir()
 	_, _, query := startBVC(t, dir)
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the anon token.
+	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
-	req.URL = types.String(anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -411,7 +411,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	}
 
 	req := &api.APIRequestURL{}
-	req.URL = types.String(anon.GenerateAcmeAddress(ed25519.PublicKey{}))
+	req.URL = types.String(lite.GenerateAcmeAddress(ed25519.PublicKey{}))
 	params, err := json.Marshal(&req)
 	require.NoError(t, err)
 
@@ -600,13 +600,13 @@ func TestFaucetReplay(t *testing.T) {
 	}
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
-	destAccount := anon.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
+	destAccount := lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
 	tx := acmeapi.TokenTx{}
 	tx.From.String = types.String(protocol.FaucetWallet.Addr)
 	tx.AddToAccount(types.String(destAccount), 1000000000)
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	gtx, err := transactions.New(*tx.From.AsString(), func(hash []byte) (*transactions.ED25519Sig, error) {
+	gtx, err := transactions.New(*tx.From.AsString(), 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 		return protocol.FaucetWallet.Sign(hash), nil
 	}, &tx)
 	require.NoError(t, err)
@@ -616,7 +616,8 @@ func TestFaucetReplay(t *testing.T) {
 	_, _, query := startBVC(t, dir)
 
 	jsonapi := NewTest(t, query)
-	res := jsonapi.BroadcastTx(false, gtx)
+	res, err := jsonapi.BroadcastTx(false, gtx)
+	require.NoError(t, err)
 	fmt.Printf("%s\n", *res.Data)
 
 	// Allow the transaction to settle.
@@ -630,11 +631,8 @@ func TestFaucetReplay(t *testing.T) {
 	require.NoError(t, json.Unmarshal(*resp.Data, &ta))
 	require.Equal(t, "1000000000", ta.Balance.String(), "incorrect balance after faucet transaction")
 
-	// Replay
-	res = jsonapi.BroadcastTx(false, gtx)
-	v := map[string]interface{}{}
-	require.NoError(t, json.Unmarshal(*res.Data, &v))
-
-	// https://github.com/tendermint/tendermint/issues/7185
-	require.Contains(t, v["error"], "tx already exists in cache")
+	// Replay - see https://github.com/tendermint/tendermint/issues/7185
+	res, err = jsonapi.BroadcastTx(false, gtx)
+	require.IsType(t, jsonrpc2.Error{}, err)
+	require.Equal(t, jsonrpc2.ErrorCode(ErrCodeDuplicateTxn), err.(jsonrpc2.Error).Code)
 }
