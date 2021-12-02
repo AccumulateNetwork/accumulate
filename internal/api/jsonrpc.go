@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	abci "github.com/tendermint/tendermint/abci/types"
+	jrpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 )
 
 type API struct {
@@ -64,19 +66,19 @@ func (api *API) Handler() http.Handler {
 		"adi-create": api.createADI,
 
 		// Key management
-		"sig-spec":              api.getSigSpec,
-		"create-sig-spec":       api.createSigSpec,
-		"sig-spec-group":        api.getSigSpecGroup,
-		"create-sig-spec-group": api.createSigSpecGroup,
+		"sig-spec":              api.getKeyPage,
+		"create-sig-spec":       api.createKeyPage,
+		"sig-spec-group":        api.getKeyBook,
+		"create-sig-spec-group": api.createKeyBook,
 		"update-key-page":       api.updateKeyPage,
 		"update-sig-spec":       api.updateKeyPage,
 
 		// Updated Key Management
-		"key-page-create": api.createSigSpec,
+		"key-page-create": api.createKeyPage,
 		"key-page-update": api.updateKeyPage,
-		"key-page":        api.getSigSpec,
-		"key-book-create": api.createSigSpec,
-		"key-book":        api.getSigSpecGroup,
+		"key-page":        api.getKeyPage,
+		"key-book-create": api.createKeyPage,
+		"key-book":        api.getKeyBook,
 
 		// token
 		"token":                 api.getToken,
@@ -139,16 +141,20 @@ func (api *API) prepareCreate(params json.RawMessage, payload encoding.BinaryMar
 	return req, pdata, nil
 }
 
-// createSigSpec creates a signature specification
-func (api *API) createSigSpec(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.CreateSigSpec{}
+// createKeyPage creates a signature specification
+func (api *API) createKeyPage(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.CreateKeyPage{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
 	}
 
-	ret := api.sendTx(req, payload)
-	ret.Type = "sigSpec"
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
+
+	ret.Type = "keyPage"
 	return ret
 }
 
@@ -160,21 +166,29 @@ func (api *API) updateKeyPage(_ context.Context, params json.RawMessage) interfa
 		return validatorError(err)
 	}
 
-	ret := api.sendTx(req, payload)
-	ret.Type = "sigSpec"
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
+
+	ret.Type = "keyPage"
 	return ret
 }
 
-// createSigSpecGroup creates a signature specification group
-func (api *API) createSigSpecGroup(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.CreateSigSpecGroup{}
+// createKeyBook creates a signature specification group
+func (api *API) createKeyBook(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.CreateKeyBook{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
 	}
 
-	ret := api.sendTx(req, payload)
-	ret.Type = "sigSpecGroup"
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
+
+	ret.Type = types.String(types.ChainTypeKeyBook.String())
 	return ret
 }
 
@@ -185,7 +199,11 @@ func (api *API) addCredits(_ context.Context, params json.RawMessage) interface{
 		return validatorError(err)
 	}
 
-	ret := api.sendTx(req, payload)
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
+
 	ret.Type = "addCredits"
 	return ret
 }
@@ -265,11 +283,11 @@ func (api *API) getDataByChainId(_ context.Context, params json.RawMessage) inte
 	return resp
 }
 
-func (api *API) getSigSpec(_ context.Context, params json.RawMessage) interface{} {
+func (api *API) getKeyPage(_ context.Context, params json.RawMessage) interface{} {
 	return api.get(params, types.ChainTypeKeyPage)
 }
 
-func (api *API) getSigSpecGroup(_ context.Context, params json.RawMessage) interface{} {
+func (api *API) getKeyBook(_ context.Context, params json.RawMessage) interface{} {
 	return api.get(params, types.ChainTypeKeyBook)
 }
 
@@ -296,7 +314,11 @@ func (api *API) createADI(_ context.Context, params json.RawMessage) interface{}
 		return validatorError(err)
 	}
 
-	ret := api.sendTx(req, payload)
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
+
 	ret.Type = "tokenTx"
 	return ret
 }
@@ -325,7 +347,11 @@ func (api *API) createToken(_ context.Context, params json.RawMessage) interface
 		return validatorError(err)
 	}
 
-	ret := api.sendTx(req, payload)
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
+
 	ret.Type = "token"
 	return ret
 }
@@ -372,15 +398,15 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 
 // sendTx constructs a GenTransaction using the request parameters and
 // transaction payload, then broadcasts it to Tendermint.
-func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APIDataResponse {
+func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) (*acmeapi.APIDataResponse, error) {
 	tx := new(transactions.GenTransaction)
 	tx.Transaction = payload
 
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = string(req.Tx.Sponsor)
 	tx.SigInfo.Nonce = req.Tx.Signer.Nonce
-	tx.SigInfo.MSHeight = req.Tx.KeyPage.Height
-	tx.SigInfo.PriorityIdx = req.Tx.KeyPage.Index
+	tx.SigInfo.KeyPageHeight = req.Tx.KeyPage.Height
+	tx.SigInfo.KeyPageIndex = req.Tx.KeyPage.Index
 
 	ed := new(transactions.ED25519Sig)
 	ed.Nonce = req.Tx.Signer.Nonce
@@ -397,7 +423,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) *acmeapi.APID
 // wait for DeliverTx to complete. If the server has TX subscription enabled and
 // wait is true, broadcastTx uses a WebSocket subscription to wait for
 // DeliverTx. By default, subscriptions are disabled.
-func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi.APIDataResponse {
+func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeapi.APIDataResponse, error) {
 	// Disable websocket based behavior if it is not enabled
 	if !api.config.EnableSubscribeTX {
 		wait = false
@@ -415,25 +441,25 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi
 	// Broadcast the TX
 	txInfo, err := api.query.BroadcastTx(tx, done)
 	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"error\":\"%v\"}", err))
-		ret.Data = &msg
-		return ret
+		return nil, jsonrpc2.NewError(ErrCodeInternal, err.Error(), formatTransactionData(tx))
 	}
 	resp := <-api.query.BatchSend()
 
 	// Retrieve the TX response from the batch
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"error\":\"%v\"}", tx.TransactionHash(), err))
-		ret.Data = &msg
-		return ret
+		var rpcErr *jrpctypes.RPCError
+		if errors.As(err, &rpcErr) && rpcErr.Data == "tx already exists in cache" {
+			return nil, jsonrpc2.NewError(ErrCodeDuplicateTxn, "tx already exists in cache", formatTransactionData(tx))
+		}
+		return nil, jsonrpc2.NewError(ErrCodeInternal, err.Error(), formatTransactionData(tx))
 	}
 
 	// Check for an error
 	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
 		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
 		ret.Data = &msg
-		return ret
+		return ret, nil
 	}
 
 	// Wait up to 5 seconds for DeliverTx result
@@ -448,7 +474,7 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi
 			if txr.Result.Code != 0 {
 				msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, hash, resolved.Code, resolved.Codespace))
 				ret.Data = &msg
-				return ret
+				return ret, nil
 			}
 
 		case <-timer.C:
@@ -457,8 +483,15 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) *acmeapi
 
 	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Hash, resolved.Codespace))
 	ret.Data = &msg
-	return ret
+	return ret, nil
 
+}
+
+func formatTransactionData(tx *transactions.GenTransaction) interface{} {
+	if tx.TransactionHash() != nil {
+		return fmt.Sprintf("txid: %x", tx.TransactionHash())
+	}
+	return nil
 }
 
 // createTokenAccount creates Token Account
@@ -469,7 +502,11 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 		return validatorError(err)
 	}
 
-	ret := api.sendTx(req, payload)
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
+
 	ret.Type = "tokenAccount"
 	return ret
 }
@@ -510,7 +547,10 @@ func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interfa
 		return validatorError(err)
 	}
 
-	ret := api.sendTx(req, payload)
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
 	ret.Type = "tokenTx"
 	return ret
 }
@@ -536,7 +576,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	destAccount := types.String(u.String())
-	addr, tok, err := protocol.ParseAnonymousAddress(u)
+	addr, tok, err := protocol.ParseLiteAddress(u)
 	switch {
 	case err != nil:
 		return jsonrpc2.NewError(ErrCodeValidation, "Invalid token account", fmt.Errorf("error parsing %q: %v", u, err))
@@ -559,8 +599,8 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	gtx.SigInfo = new(transactions.SignatureInfo)
 	gtx.SigInfo.URL = *tx.From.String.AsString()
 	gtx.SigInfo.Nonce = protocol.FaucetWallet.Nonce
-	gtx.SigInfo.MSHeight = 1
-	gtx.SigInfo.PriorityIdx = 0
+	gtx.SigInfo.KeyPageHeight = 1
+	gtx.SigInfo.KeyPageIndex = 0
 	gtx.Transaction = txData
 	if err := gtx.SetRoutingChainID(); err != nil {
 		return jsonrpc2.NewError(-32802, fmt.Sprintf("bad url generated %s: ", destAccount), err)
@@ -575,7 +615,12 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	gtx.Signature = append(gtx.Signature, ed)
 
-	return api.broadcastTx(req.Wait, gtx)
+	broadcastTx, err := api.broadcastTx(req.Wait, gtx)
+	if err != nil {
+		return err
+	}
+
+	return broadcastTx
 }
 
 func (api *API) version(_ context.Context, params json.RawMessage) interface{} {

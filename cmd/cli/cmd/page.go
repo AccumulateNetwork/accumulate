@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -90,7 +89,7 @@ func GetAndPrintKeyPage(url string) (string, error) {
 	return PrintQueryResponse(&res)
 }
 
-func GetKeyPage(url string) ([]byte, *protocol.SigSpec, error) {
+func GetKeyPage(url string) ([]byte, *protocol.KeyPage, error) {
 	s, err := GetUrl(url, "sig-spec")
 	if err != nil {
 		return nil, nil, err
@@ -102,7 +101,7 @@ func GetKeyPage(url string) ([]byte, *protocol.SigSpec, error) {
 		return nil, nil, err
 	}
 
-	ss := protocol.SigSpec{}
+	ss := protocol.KeyPage{}
 	err = json.Unmarshal(*res.Data, &ss)
 	if err != nil {
 		return nil, nil, err
@@ -135,7 +134,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", fmt.Errorf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
 	}
 
-	css := protocol.CreateSigSpec{}
+	css := protocol.CreateKeyPage{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
 	css.Url = newUrl.String()
 	css.Keys = ksp
@@ -168,7 +167,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTx(data, dataBinary, pageUrl, si, privKey, nonce)
 	if err != nil {
 		PrintKeyPageCreate()
@@ -269,7 +268,7 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTx(data, dataBinary, u, si, privKey, nonce)
 	if err != nil {
 		return "", err

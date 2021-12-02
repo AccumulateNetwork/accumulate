@@ -16,12 +16,14 @@ import (
 )
 
 type Record struct {
-	name      string
-	Kind      string
-	TxType    string `yaml:"tx-type"`
-	ChainType string `yaml:"chain-type"`
-	NonBinary bool   `yaml:"non-binary"`
-	Fields    []*Field
+	name         string
+	Kind         string
+	TxType       string `yaml:"tx-type"`
+	ChainType    string `yaml:"chain-type"`
+	NonBinary    bool   `yaml:"non-binary"`
+	Incomparable bool   `yaml:"incomparable"`
+	Fields       []*Field
+	Embeddings   []string `yaml:"embeddings"`
 }
 
 type Field struct {
@@ -32,6 +34,7 @@ type Field struct {
 	Pointer   bool
 	Optional  bool
 	IsUrl     bool `yaml:"is-url"`
+	KeepEmpty bool `yaml:"keep-empty"`
 }
 
 var flags struct {
@@ -54,10 +57,20 @@ func main() {
 	_ = cmd.Execute()
 }
 
+func fatalf(format string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, "Error: "+format+"\n", args...)
+	os.Exit(1)
+}
+
 func check(err error) {
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		fatalf("%v", err)
+	}
+}
+
+func checkf(err error, format string, otherArgs ...interface{}) {
+	if err != nil {
+		fatalf(format+": %v", append(otherArgs, err)...)
 	}
 }
 
@@ -81,6 +94,14 @@ func readTypes(file string) []*Record {
 	sort.Slice(r, func(i, j int) bool {
 		return r[i].name < r[j].name
 	})
+
+	for _, typ := range r {
+		for _, f := range typ.Fields {
+			if f.Slice != nil {
+				f.Slice.Name = f.Name
+			}
+		}
+	}
 
 	return r
 }
@@ -146,10 +167,21 @@ func run(_ *cobra.Command, args []string) {
 				fmt.Fprintf(w, "\nstate.ChainHeader\n")
 			}
 		}
+
+		if len(typ.Embeddings) > 0 && !typ.NonBinary {
+			check(fmt.Errorf("type %q: embedding is not supported for binary-marshalled types", typ.name))
+		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\t\t%s\n", e)
+		}
 		for _, field := range typ.Fields {
 			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
 			fmt.Fprintf(w, "\t%s %s `", field.Name, resolveType(field, false))
-			fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
+			if field.KeepEmpty {
+				fmt.Fprintf(w, `json:"%[1]s" form:"%[1]s" query:"%[1]s"`, lcName)
+			} else {
+				fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
+			}
 
 			var validate []string
 			if !field.Optional {
@@ -186,6 +218,25 @@ func run(_ *cobra.Command, args []string) {
 	}
 
 	for _, typ := range types {
+		if typ.Incomparable {
+			continue
+		}
+
+		fmt.Fprintf(w, "func (v *%s) Equal(u *%[1]s) bool {\n", typ.name)
+
+		if typ.Kind == "chain" {
+			fmt.Fprintf(w, "\tif !v.ChainHeader.Equal(&u.ChainHeader) { return false }\n\n")
+		}
+
+		for _, field := range typ.Fields {
+			err := areEqual(w, field, "v."+field.Name, "u."+field.Name)
+			checkf(err, "building Equal for %q", typ.name)
+		}
+
+		fmt.Fprintf(w, "\n\treturn true\n}\n\n")
+	}
+
+	for _, typ := range types {
 		if typ.NonBinary {
 			continue
 		}
@@ -202,7 +253,8 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			binarySize(w, field, "v."+field.Name)
+			err := binarySize(w, field, "v."+field.Name)
+			checkf(err, "building BinarySize for %q", typ.name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn n\n}\n\n")
@@ -226,7 +278,8 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			binaryMarshalValue(w, field, "v."+field.Name, field.Name)
+			err := binaryMarshalValue(w, field, "v."+field.Name, field.Name)
+			checkf(err, "building MarshalBinary for %q", typ.name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn buffer.Bytes(), nil\n}\n\n")
@@ -254,7 +307,8 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
-			binaryUnmarshalValue(w, field, "v."+field.Name, field.Name)
+			err := binaryUnmarshalValue(w, field, "v."+field.Name, field.Name)
+			checkf(err, "building UnmarshalBinary for %q", typ.name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn nil\n}\n\n")
