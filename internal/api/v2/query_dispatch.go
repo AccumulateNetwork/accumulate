@@ -70,13 +70,13 @@ func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 	return res[0], nil
 }
 
-func (q *queryDispatch) QueryDirectory(url string, queryOptions *QueryOptions) (*QueryResponse, error) {
+func (q *queryDispatch) QueryDirectory(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QueryDirectory(url, queryOptions)
+	return q.direct(r).QueryDirectory(url, pagination, queryOptions)
 }
 
 func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, error) {
