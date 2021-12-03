@@ -26,23 +26,25 @@ func (l *TestLogger) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func NewTestZeroLogger(t testing.TB, format string) zerolog.Logger {
-	var w io.Writer = &TestLogger{Test: t}
-	switch strings.ToLower(format) {
-	case log.LogFormatPlain, log.LogFormatText:
-		w = newConsoleWriter(w)
+func TestLogWriter(t testing.TB) func(string) io.Writer {
+	return func(format string) io.Writer {
+		var w io.Writer = &TestLogger{Test: t}
+		switch strings.ToLower(format) {
+		case log.LogFormatPlain, log.LogFormatText:
+			w = newConsoleWriter(w)
 
-	case log.LogFormatJSON:
+		case log.LogFormatJSON:
 
-	default:
-		t.Fatalf("Unsupported log format: %s", format)
+		default:
+			t.Fatalf("Unsupported log format: %s", format)
+		}
+
+		return w
 	}
-
-	return zerolog.New(w)
 }
 
 func ExcludeMessages(messages ...string) zerolog.HookFunc {
-	return func(e *zerolog.Event, level zerolog.Level, message string) {
+	return func(e *zerolog.Event, _ zerolog.Level, message string) {
 		for _, m := range messages {
 			if m == message {
 				e.Discard()

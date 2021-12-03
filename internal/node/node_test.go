@@ -13,7 +13,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	tmnet "github.com/tendermint/tendermint/libs/net"
@@ -45,11 +44,10 @@ func TestNodeLifecycle(t *testing.T) {
 	c.Accumulate.WebsiteEnabled = false
 	cfg.Store(c)
 
-	newLogger := func(s string) zerolog.Logger {
-		return logging.NewTestZeroLogger(t, s)
-	}
-
-	node, db, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup)
+	node, db, _, err := acctesting.NewBVNN(acctesting.BVNNOptions{
+		Dir:       nodeDir,
+		LogWriter: logging.TestLogWriter(t),
+	}, t.Cleanup)
 	require.NoError(t, err)          // Initialize the node
 	require.NoError(t, node.Start()) // Start the node
 	require.NoError(t, node.Stop())  // Stop the node
@@ -100,17 +98,16 @@ func TestNodeSetupTwiceWithPrometheus(t *testing.T) {
 			opts.Config[0].Instrumentation.Prometheus = true
 			opts.Config[0].Accumulate.Networks[0] = fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+networks.TmRpcPortOffset)
 
-			newLogger := func(s string) zerolog.Logger {
-				return logging.NewTestZeroLogger(t, s)
+			opts2 := acctesting.BVNNOptions{
+				Dir:       filepath.Join(opts.WorkDir, "Node0"),
+				LogWriter: logging.TestLogWriter(t),
 			}
-
-			require.NoError(t, node.Init(opts))                                                 // Configure
-			nodeDir := filepath.Join(opts.WorkDir, "Node0")                                     //
-			node, _, _, err := acctesting.NewBVCNode(nodeDir, false, nil, newLogger, t.Cleanup) // Initialize
-			require.NoError(t, err)                                                             //
-			require.NoError(t, node.Start())                                                    // Start
-			require.NoError(t, node.Stop())                                                     // Stop
-			node.Wait()                                                                         //
+			require.NoError(t, node.Init(opts))                     // Configure
+			node, _, _, err := acctesting.NewBVNN(opts2, t.Cleanup) // Initialize
+			require.NoError(t, err)                                 //
+			require.NoError(t, node.Start())                        // Start
+			require.NoError(t, node.Stop())                         // Stop
+			node.Wait()                                             //
 		})
 	}
 }

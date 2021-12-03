@@ -2,6 +2,7 @@ package node_test
 
 import (
 	"fmt"
+	"io"
 	"net"
 	"path/filepath"
 	"testing"
@@ -22,7 +23,7 @@ import (
 	rpc "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, logLevel string, relay []string) ([]*node.Node, []*state.StateDB) {
+func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, relay []string) ([]*node.Node, []*state.StateDB) {
 	t.Helper()
 
 	IPs := make([]string, count)
@@ -69,34 +70,39 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 
 		c.Instrumentation.Prometheus = false
 		c.Accumulate.WebsiteEnabled = false
-		c.LogLevel = logLevel
 
 		// Make a block every 1/10th second, to make tests go faster
 		c.Consensus.TimeoutCommit = time.Second / 10
 
 		require.NoError(t, cfg.Store(c))
 
-		nodes[i], dbs[i], _, err = acctesting.NewBVCNode(nodeDir, false, c.Accumulate.Networks, func(s string) zerolog.Logger {
-			zl := logging.NewTestZeroLogger(t, s)
-			zl = zl.With().Int("node", i).Logger()
-			zl = zl.Hook(logging.ExcludeMessages("starting service", "stopping service"))
-			zl = zl.Hook(logging.BodyHook(func(e *zerolog.Event, _ zerolog.Level, body map[string]interface{}) {
-				module, ok := body["module"].(string)
-				if !ok {
-					return
-				}
+		opts := acctesting.BVNNOptions{
+			Dir:       nodeDir,
+			LogWriter: logging.TestLogWriter(t),
+			Logger: func(w io.Writer) zerolog.Logger {
+				zl := zerolog.New(w)
+				zl = zl.With().Int("node", i).Logger()
+				zl = zl.Hook(logging.ExcludeMessages("starting service", "stopping service"))
+				// zl = zl.Hook(logging.BodyHook(func(e *zerolog.Event, _ zerolog.Level, body map[string]interface{}) {
+				// 	module, ok := body["module"].(string)
+				// 	if !ok {
+				// 		return
+				// 	}
 
-				switch module {
-				case "rpc-server", "p2p", "rpc", "statesync":
-					e.Discard()
-				default:
-					e.Discard()
-				case "accumulate":
-					// OK
-				}
-			}))
-			return zl
-		}, t.Cleanup)
+				// 	switch module {
+				// 	case "rpc-server", "p2p", "rpc", "statesync":
+				// 		e.Discard()
+				// 	default:
+				// 		e.Discard()
+				// 	case "accumulate":
+				// 		// OK
+				// 	}
+				// }))
+				return zl
+			},
+		}
+
+		nodes[i], dbs[i], _, err = acctesting.NewBVNN(opts, t.Cleanup)
 		require.NoError(t, err)
 
 		nodes[i].ABCI.(*abci.Accumulator).OnFatal(func(err error) { require.NoError(t, err) })

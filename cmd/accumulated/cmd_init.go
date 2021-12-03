@@ -56,7 +56,7 @@ var flagInitFollower struct {
 
 var flagInitDevnet struct {
 	Name          string
-	NumDirNodes   int
+	NumBvns       int
 	NumValidators int
 	NumFollowers  int
 	BasePort      int
@@ -78,9 +78,9 @@ func init() {
 	cmdInitFollower.MarkFlagRequired("listen")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumDirNodes, "directory-nodes", "d", 1, "Number of directory validator nodes to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes to configure")
-	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per subnet to configure")
+	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per subnet to configure")
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
 }
@@ -221,8 +221,8 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		fatalf("--network is not applicable to devnet")
 	}
 
-	if flagInitDevnet.NumDirNodes == 0 {
-		fatalf("Must have at least one directory node")
+	if flagInitDevnet.NumBvns == 0 {
+		fatalf("Must have at least one block validator network")
 	}
 
 	if flagInitDevnet.NumValidators == 0 {
@@ -239,57 +239,81 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		printUsageAndExit1(cmd, args)
 	}
 
-	IPs := make([]string, flagInitDevnet.NumDirNodes+flagInitDevnet.NumValidators+flagInitDevnet.NumFollowers)
-	for i := range IPs {
-		ip := nextIP(baseIP)
-		IPs[i] = fmt.Sprintf("tcp://%v", ip)
+	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
+	dnConfig := make([]*cfg.Config, count)
+	dnIPs := make([]string, count)
+	for i := 0; i < count; i++ {
+		nodeType := cfg.Validator
+		if i > flagInitDevnet.NumValidators {
+			nodeType = cfg.Follower
+		}
+		dnConfig[i], dnIPs[i] = initDevNetNode(baseIP, cfg.Directory, nodeType, 0)
 	}
 
-	config := make([]*cfg.Config, 0, len(IPs))
-	for i := 0; i < flagInitDevnet.NumDirNodes; i++ {
-		config = append(config, cfg.Default(cfg.Directory, cfg.Validator))
-	}
-	for i := 0; i < flagInitDevnet.NumValidators; i++ {
-		config = append(config, cfg.Default(cfg.BlockValidator, cfg.Validator))
-	}
-	for i := 0; i < flagInitDevnet.NumFollowers; i++ {
-		config = append(config, cfg.Default(cfg.BlockValidator, cfg.Follower))
+	bvnConfig := make([][]*cfg.Config, flagInitDevnet.NumBvns)
+	bvnIPs := make([][]string, flagInitDevnet.NumBvns)
+	bvns := make([]string, flagInitDevnet.NumBvns)
+	for bvn := range bvnConfig {
+		bvnConfig[bvn] = make([]*cfg.Config, count)
+		bvnIPs[bvn] = make([]string, count)
+		for i := 0; i < count; i++ {
+			nodeType := cfg.Validator
+			if i > flagInitDevnet.NumValidators {
+				nodeType = cfg.Follower
+			}
+			bvnConfig[bvn][i], bvnIPs[bvn][i] = initDevNetNode(baseIP, cfg.BlockValidator, nodeType, bvn)
+			bvnConfig[bvn][i].Accumulate.Directory = fmt.Sprintf("%s:%d", dnIPs[0], flagInitDevnet.BasePort+networks.TmRpcPortOffset)
+		}
+		bvns[bvn] = fmt.Sprintf("%s:%d", bvnIPs[bvn][0], flagInitDevnet.BasePort+networks.TmRpcPortOffset)
 	}
 
-	for _, config := range config {
-		ip := IPs[flagInitDevnet.NumDirNodes]
-		if config.Accumulate.Type == cfg.Directory {
-			ip = IPs[0]
-		} else {
-			config.Accumulate.Directory = IPs[0]
-		}
-		config.Accumulate.Network = "LocalDevNet"
-		// TODO Set to []string{"self"}
-		config.Accumulate.Networks = []string{fmt.Sprintf("%s:%d", ip, flagInitDevnet.BasePort+networks.TmRpcPortOffset)}
-		if flagInit.NoEmptyBlocks {
-			config.Consensus.CreateEmptyBlocks = false
-		}
-		if flagInit.NoWebsite {
-			config.Accumulate.WebsiteEnabled = false
+	for _, c := range dnConfig {
+		c.Accumulate.Networks = bvns
+	}
+	for _, c := range bvnConfig {
+		for _, c := range c {
+			c.Accumulate.Networks = bvns
 		}
 	}
 
 	check(node.Init(node.InitOptions{
 		WorkDir:   filepath.Join(flagMain.WorkDir, "dn"),
-		ShardName: flagInitDevnet.Name,
-		SubnetID:  flagInitDevnet.Name,
+		ShardName: dnConfig[0].Accumulate.Network,
+		SubnetID:  dnConfig[0].Accumulate.Network,
 		Port:      flagInitDevnet.BasePort,
-		Config:    config[:flagInitDevnet.NumDirNodes],
-		RemoteIP:  IPs[:flagInitDevnet.NumDirNodes],
-		ListenIP:  IPs[:flagInitDevnet.NumDirNodes],
+		Config:    dnConfig,
+		RemoteIP:  dnIPs,
+		ListenIP:  dnIPs,
 	}))
-	check(node.Init(node.InitOptions{
-		WorkDir:   filepath.Join(flagMain.WorkDir, "bvn"),
-		ShardName: flagInitDevnet.Name,
-		SubnetID:  flagInitDevnet.Name,
-		Port:      flagInitDevnet.BasePort,
-		Config:    config[flagInitDevnet.NumDirNodes:],
-		RemoteIP:  IPs[flagInitDevnet.NumDirNodes:],
-		ListenIP:  IPs[flagInitDevnet.NumDirNodes:],
-	}))
+	for bvn := range bvnConfig {
+		bvnConfig, bvnIPs := bvnConfig[bvn], bvnIPs[bvn]
+		check(node.Init(node.InitOptions{
+			WorkDir:   filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
+			ShardName: bvnConfig[0].Accumulate.Network,
+			SubnetID:  bvnConfig[0].Accumulate.Network,
+			Port:      flagInitDevnet.BasePort,
+			Config:    bvnConfig,
+			RemoteIP:  bvnIPs,
+			ListenIP:  bvnIPs,
+		}))
+	}
+}
+
+func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeType, bvn int) (*cfg.Config, string) {
+	ip := nextIP(baseIP)
+	config := cfg.Default(netType, nodeType)
+	if netType == cfg.Directory {
+		config.Accumulate.Network = flagInitDevnet.Name + ".Directory"
+	} else {
+		config.Accumulate.Network = fmt.Sprintf("%s.BVN%d", flagInitDevnet.Name, bvn)
+	}
+
+	if flagInit.NoEmptyBlocks {
+		config.Consensus.CreateEmptyBlocks = false
+	}
+	if flagInit.NoWebsite {
+		config.Accumulate.WebsiteEnabled = false
+	}
+
+	return config, fmt.Sprintf("tcp://%s", ip)
 }
