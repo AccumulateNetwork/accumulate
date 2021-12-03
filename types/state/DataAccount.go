@@ -16,20 +16,21 @@ type DataAccount struct {
 }
 
 //NewTokenAccount create a new token account.  Requires the identity/chain id's and coinbase if applicable
-func NewDataAccount(accountUrl string, managerKeyBookUrl string) *DataAccount {
+func NewDataAccount(chainId []byte, accountUrl string, managerKeyBookUrl string) *DataAccount {
 	tas := DataAccount{}
 
 	tas.SetHeader(types.String(accountUrl), types.ChainTypeDataAccount)
 	tas.ManagerKeyBookUrl = types.String(managerKeyBookUrl)
+	tas.EntrySMT.AddToMerkleTree(chainId)
 
 	return &tas
 }
 
-// ComputeEntryHash returns the entry hash given the chainid, external id's, and data
-func ComputeEntryHash(chainId []byte, extIds [][]byte, data []byte) types.Bytes {
+// ComputeEntryHash returns the entry hash given the merkle root for the state, external id's, and data
+func ComputeEntryHash(root []byte, extIds [][]byte, data []byte) types.Bytes {
 	smt := managed.MerkleState{}
 	//Seed the smt with the chainId
-	smt.AddToMerkleTree(chainId)
+	smt.AddToMerkleTree(root)
 	//add the external id's to the merkle tree
 	for i := range extIds {
 		h := sha256.Sum256(extIds[i])
@@ -42,10 +43,13 @@ func ComputeEntryHash(chainId []byte, extIds [][]byte, data []byte) types.Bytes 
 	return smt.GetMDRoot().Bytes()
 }
 
-// UpdateMerkleState updates the state of the data account given a new entry hash.
-func (app *DataAccount) UpdateMerkleState(chainId []byte, extIds [][]byte, data []byte) {
+// UpdateMerkleState updates the state of the data account given a new entry hash.  The Entry Hash is unique
+// and is seeded by the merkle root of the previous entry.  The seed for the first entry is the chainId
+func (app *DataAccount) UpdateMerkleState(extIds [][]byte, data []byte) {
 	//Build a merkle state to compute the entry hash.
-	app.EntrySMT.AddToMerkleTree(ComputeEntryHash(chainId, extIds, data))
+	root := app.EntrySMT.GetMDRoot()
+	entryHash := ComputeEntryHash(root, extIds, data)
+	app.EntrySMT.AddToMerkleTree(entryHash)
 }
 
 //MarshalBinary creates a byte array of the state object needed for storage
