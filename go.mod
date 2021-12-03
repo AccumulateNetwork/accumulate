@@ -4,6 +4,7 @@ go 1.16
 
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106
+	github.com/BurntSushi/toml v0.4.1
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/Factom-Asset-Tokens/factom v0.0.0-20200222022020-d06cbcfe6ece
 	github.com/boltdb/bolt v1.3.1

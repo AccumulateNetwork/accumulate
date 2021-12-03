@@ -51,6 +51,13 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 			return fmt.Errorf("cannot update %q: does not exist", u)
 		case !cc.IsUpdate && err == nil:
 			return fmt.Errorf("cannot create %q: already exists", u)
+		case !cc.IsUpdate:
+
+			_, err := st.LoadUrl(u)
+			if err == nil {
+				return fmt.Errorf("cannot create %q: already exists", u)
+			}
+			err = st.AddDirectoryEntry(u)
 		}
 
 		urls[i] = u
@@ -90,13 +97,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 				return fmt.Errorf("error fetching %q: %v", u.String(), err)
 			}
 
-			// Update the ADI's directory index
-			if record.Header().SigSpecId != (types.Bytes32{}) {
-				err = st.AddDirectoryEntry(u)
-				if err != nil {
-					return fmt.Errorf("error adding directory entry: %v", err)
-					}
-				}
+
 		}
 
 		// Check the key book
