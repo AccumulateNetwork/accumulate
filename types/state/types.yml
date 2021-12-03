@@ -19,16 +19,15 @@ SyntheticSignatures:
 
 # TODO Move these to Protocol
 
-AnchorMetadata:
+Anchor:
+  kind: chain
   fields:
-  - name: Index
-    type: varint
-  - name: PreviousHeight
-    type: varint
-  - name: Timestamp
-    type: time
-  - name: Chains
-    type: chainSet
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
+    - name: Chains
+      type: chainSet
 
 SyntheticSignature:
   fields:
@@ -40,3 +39,12 @@ SyntheticSignature:
     type: bytes
   - name: Nonce
     type: uvarint
+
+SyntheticTransactionChain:
+  kind: chain
+  chain-type: SyntheticTransactions
+  fields:
+    - name: Index
+      type: varint
+    - name: Count
+      type: varint
