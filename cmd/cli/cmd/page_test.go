@@ -62,11 +62,14 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 	//t.Log(r)
 }
 
+// accumulate page create [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [new key page url] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys
+
 //testCase4_4 Create additional key pages sponsored by a book
 func testCase4_4(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("page create acc://RedWagon/book red2 acc://RedWagon/page3 red5")
+	// TODO we can remove the height once the CLI automatically populates it
+	commandLine := fmt.Sprintf("page create acc://RedWagon/book red2 0 2 acc://RedWagon/page3 red5")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 

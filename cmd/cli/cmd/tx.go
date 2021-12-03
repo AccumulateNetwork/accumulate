@@ -273,7 +273,7 @@ func CreateTX(sender string, args []string) (string, error) {
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTxV2(data, dataBinary, u, si, pk, nonce)
 	if err != nil {
 		return "", err
