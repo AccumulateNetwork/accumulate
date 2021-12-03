@@ -51,15 +51,12 @@ func testCase4_2(t *testing.T, tc *testCmd) {
 func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	t.Log("Awaiting key page update fix for api validation error, skipping... ")
-	return
-
 	//uncomment after key page fix
-	//commandLine := fmt.Sprintf("-d page key add acc://RedWagon/page1 red2 red4")
-	//r, err := tc.executeTx(t, commandLine)
-	//require.NoError(t, err)
-	//
-	//t.Log(r)
+	commandLine := fmt.Sprintf("page key add acc://RedWagon/page1 red2 0 2 red4")
+	r, err := tc.executeTx(t, commandLine)
+	require.NoError(t, err)
+
+	t.Log(r)
 }
 
 // accumulate page create [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [new key page url] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys
@@ -69,7 +66,7 @@ func testCase4_4(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	// TODO we can remove the height once the CLI automatically populates it
-	commandLine := fmt.Sprintf("page create acc://RedWagon/book red2 0 2 acc://RedWagon/page3 red5")
+	commandLine := fmt.Sprintf("page create acc://RedWagon/book red2 0 3 acc://RedWagon/page3 red5")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
@@ -87,36 +84,28 @@ func testCase4_5(t *testing.T, tc *testCmd) {
 	t.Log(r)
 }
 
-//testCase4_6 Delete a key in a key page
+//testCase4_6 update a key in a key page
 func testCase4_6(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	t.Log("Awaiting key page update fix for api validation error, skipping... ")
-	return
+	//replace key3 with key 4
+	commandLine := fmt.Sprintf("page key update acc://RedWagon/page1 red2 0 3 red2 red5")
+	r, err := tc.executeTx(t, commandLine)
+	require.NoError(t, err)
 
-	//uncomment after fix key page remove
-	////remove red4
-	//commandLine := fmt.Sprintf("page key remove acc://RedWagon/page2 red3 red4")
-	//r, err := tc.executeTx(t, commandLine)
-	//require.NoError(t, err)
-	//
-	//t.Log(r)
+	t.Log(r)
 }
 
-//testCase4_7 update a key in a key page
+//testCase4_7 Delete a key in a key page
 func testCase4_7(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	t.Log("Awaiting key page update fix for api validation error, skipping... ")
-	return
+	//remove red4
+	commandLine := fmt.Sprintf("page key remove acc://RedWagon/page1 red5 0 4 red5")
+	r, err := tc.executeTx(t, commandLine)
+	require.NoError(t, err)
 
-	//uncomment after key page update fix.
-	////replace key3 with key 4
-	//commandLine := fmt.Sprintf("page key update acc://RedWagon/page2 red3 red3 red4")
-	//r, err := tc.executeTx(t, commandLine)
-	//require.NoError(t, err)
-	//
-	//t.Log(r)
+	t.Log(r)
 }
 
 //testCase4_8 Sign a transaction with a secondary key page
@@ -127,12 +116,15 @@ func testCase4_8(t *testing.T, tc *testCmd) {
 	return
 
 	//commandLine := fmt.Sprintf("tx create %s acc://RedWagon/acct2 5", liteAccounts[0])
-	//r, err := tc.executeTx(t, commandLine)
+	//r, err := tc.execute(t, commandLine)
 	//require.NoError(t, err)
 	//
+	//time.Sleep(2 * time.Second)
 	//commandLine = fmt.Sprintf("tx create acc://RedWagon/acct2 red3 1 1 acc://Redwagon/acct 1.1234")
-	//r, err = tc.executeTx(t, commandLine)
+	//r, err = tc.execute(t, commandLine)
 	//require.NoError(t, err)
 	//
 	//t.Log(r)
+	//
+	//time.Sleep(2 * time.Second)
 }
