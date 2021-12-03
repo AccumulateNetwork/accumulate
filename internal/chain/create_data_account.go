@@ -60,6 +60,17 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 		copy(account.KeyBook[:], keyBookUrl.ResourceChain())
 	}
 
+	if managerBookUrl != "" {
+		c, err := st.LoadString(managerBookUrl)
+		if err != nil {
+			return fmt.Errorf("invalid key book %q: %v", managerBookUrl, err)
+		}
+		if c.Header().Type != types.ChainTypeKeyBook {
+			return fmt.Errorf("expected key book url for %v, received %s",
+				managerBookUrl, c.Header().Type)
+		}
+	}
+
 	st.Create(account)
 	return nil
 }
