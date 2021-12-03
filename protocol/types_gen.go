@@ -170,8 +170,8 @@ type TokenIssuer struct {
 
 type UpdateKeyPage struct {
 	Operation KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
-	Key       []byte           `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey" validate:"required"`
+	Key       []byte           `json:"key,omitempty" form:"key" query:"key"`
+	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey"`
 }
 
 type WriteData struct {
