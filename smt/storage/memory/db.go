@@ -3,6 +3,7 @@ package memory
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"sort"
 	"sync"
 
@@ -16,8 +17,15 @@ import (
 // state for the database That must be handled by the caller, but see the
 // notes on InitDB for future improvements.
 type DB struct {
+	DBOpen  types.AtomicBool
 	entries map[storage.Key][]byte
 	mutex   sync.Mutex
+}
+
+// Ready
+// Returns true if the database is open and ready to accept reads/writes
+func (m *DB) Ready() bool {
+	return m.DBOpen.Load()
 }
 
 // EndBatch
@@ -26,6 +34,9 @@ type DB struct {
 // the cache is applied to a key value store does not matter.
 func (m *DB) EndBatch(txCache map[storage.Key][]byte) error {
 	m.mutex.Lock()
+	if !m.Ready() {
+		return errors.New("database is not open")
+	}
 	defer m.mutex.Unlock()
 	for k, v := range txCache {
 		m.entries[k] = v
@@ -38,6 +49,9 @@ func (m *DB) EndBatch(txCache map[storage.Key][]byte) error {
 func (m *DB) GetKeys() [][32]byte {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	if !m.Ready() {
+		return nil
+	}
 	keys := make([][32]byte, len(m.entries))
 	idx := 0
 	for k := range m.entries {
@@ -51,6 +65,9 @@ func (m *DB) GetKeys() [][32]byte {
 func (m *DB) Export() map[storage.Key][]byte {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	if !m.Ready() {
+		return nil
+	}
 
 	ex := make(map[storage.Key][]byte, len(m.entries))
 	for k, v := range m.entries {
@@ -64,6 +81,7 @@ func (m *DB) Export() map[storage.Key][]byte {
 func (m *DB) Copy() *DB {
 	db := new(DB)
 	db.entries = m.Export()
+	db.DBOpen.Store(true)
 	return db
 }
 
@@ -72,6 +90,13 @@ func (m *DB) Copy() *DB {
 func (m *DB) Close() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+
+	if !m.Ready() { // not an error to try and close a db twice
+		return nil
+	}
+
+	m.DBOpen.Store(false) // When close is done, mark the database as such
+
 	for k := range m.entries {
 		delete(m.entries, k)
 	}
@@ -96,6 +121,7 @@ func (m *DB) InitDB(filename string, _ storage.Logger) error {
 			delete(m.entries, k)
 		}
 	}
+	m.DBOpen.Store(true)
 	return nil
 }
 
@@ -104,6 +130,10 @@ func (m *DB) InitDB(filename string, _ storage.Logger) error {
 func (m *DB) Get(key storage.Key) (value []byte, err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	if !m.Ready() {
+		return nil, errors.New("database is not open")
+	}
+
 	v, ok := m.entries[key]
 	if !ok {
 		return nil, storage.ErrNotFound
@@ -116,6 +146,9 @@ func (m *DB) Get(key storage.Key) (value []byte, err error) {
 func (m *DB) Put(key storage.Key, value []byte) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
+	if !m.Ready() {
+		return errors.New("database is not open")
+	}
 	m.entries[key] = value
 	return nil
 }
