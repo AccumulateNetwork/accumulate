@@ -84,24 +84,24 @@ func testCase4_5(t *testing.T, tc *testCmd) {
 	t.Log(r)
 }
 
-//testCase4_6 update a key in a key page
+//testCase4_6 Delete a key in a key page
 func testCase4_6(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	//replace key3 with key 4
-	commandLine := fmt.Sprintf("page key update acc://RedWagon/page1 red2 0 3 red2 red5")
+	//remove red4
+	commandLine := fmt.Sprintf("page key remove acc://RedWagon/page1 red2 0 3 red4")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
 	t.Log(r)
 }
 
-//testCase4_7 Delete a key in a key page
+//testCase4_7 update a key in a key page
 func testCase4_7(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	//remove red4
-	commandLine := fmt.Sprintf("page key remove acc://RedWagon/page1 red5 0 4 red5")
+	//replace key3 with key 4
+	commandLine := fmt.Sprintf("page key update acc://RedWagon/page1 red2 0 4 red2 red5")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
