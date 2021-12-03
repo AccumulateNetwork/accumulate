@@ -78,7 +78,7 @@ func (m *Executor) queryDirectoryByChainId(chainId []byte, start uint64, limit u
 	if start+count > md.Count {
 		count = md.Count - start
 	}
-	if count > md.Count {
+	if count > md.Count { // when uint64 0-x is really big number
 		count = 0
 	}
 
