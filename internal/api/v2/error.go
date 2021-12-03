@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/getsentry/sentry-go"
@@ -30,6 +31,11 @@ const (
 	ErrCodeMetricsVectorEmpty
 )
 
+//Custom errors
+const (
+	ErrCodeProtocolBase = -33000 - iota
+)
+
 var (
 	ErrInternal           = jsonrpc2.NewError(ErrCodeInternal, "Internal Error", "An internal error occured")
 	ErrCanceled           = jsonrpc2.NewError(ErrCodeCanceled, "Canceled", "The request was canceled")
@@ -48,6 +54,9 @@ func submissionError(err error) jsonrpc2.Error {
 func accumulateError(err error) jsonrpc2.Error {
 	if errors.Is(err, storage.ErrNotFound) {
 		return jsonrpc2.NewError(ErrCodeNotFound, "Accumulate Error", "Not Found")
+	}
+	if err, ok := err.(*protocol.Error); ok {
+		return jsonrpc2.NewError(jsonrpc2.ErrorCode(ErrCodeProtocolBase+err.Code), "Accumulate Error", err.Message)
 	}
 	return jsonrpc2.NewError(ErrCodeAccumulate, "Accumulate Error", err)
 }
