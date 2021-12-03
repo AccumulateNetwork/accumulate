@@ -16,12 +16,16 @@ type ChainIdQuery struct {
 
 type DirectoryQuery struct {
 	UrlQuery
+	QueryPagination
 	QueryOptions
 }
 
 type DirectoryQueryResult struct {
 	Entries         []string         `json:"entries,omitempty" form:"entries" query:"entries"`
 	ExpandedEntries []*QueryResponse `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
+	Start           uint64           `json:"start" form:"start" query:"start" validate:"required"`
+	Count           uint64           `json:"count" form:"count" query:"count" validate:"required"`
+	Total           uint64           `json:"total" form:"total" query:"total" validate:"required"`
 }
 
 type KeyPage struct {
@@ -56,7 +60,7 @@ type QueryOptions struct {
 
 type QueryPagination struct {
 	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
-	Count uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
 }
 
 type QueryResponse struct {
