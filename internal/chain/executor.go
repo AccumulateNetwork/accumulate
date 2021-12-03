@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
-	apiv2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
@@ -29,11 +29,10 @@ import (
 const chainWGSize = 4
 
 type Executor struct {
-	db        *state.StateDB
-	key       ed25519.PrivateKey
-	query     *accapi.Query
-	local     apiv2.ABCIBroadcastClient
-	executors map[types.TxType]TxExecutor
+	ExecutorOptions
+
+	executors  map[types.TxType]TxExecutor
+	dispatcher *dispatcher
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -48,23 +47,27 @@ type Executor struct {
 var _ abci.Chain = (*Executor)(nil)
 
 type ExecutorOptions struct {
-	Query  *accapi.Query
-	DB     *state.StateDB
-	Logger log.Logger
-	Key    ed25519.PrivateKey
-	Local  apiv2.ABCIBroadcastClient
+	DB              *state.StateDB
+	Logger          log.Logger
+	Key             ed25519.PrivateKey
+	Local           api.ABCIBroadcastClient
+	Directory       string
+	BlockValidators []string
 }
 
-func NewExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, error) {
+func NewExecutor(opts ExecutorOptions, isDirectory bool, executors ...TxExecutor) (*Executor, error) {
 	m := new(Executor)
-	m.db = opts.DB
+	m.ExecutorOptions = opts
 	m.executors = map[types.TxType]TxExecutor{}
-	m.key = opts.Key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
-	m.query = opts.Query
 	m.logger = opts.Logger.With("module", "executor")
-	m.local = opts.Local
+
+	var err error
+	m.dispatcher, err = newDispatcher(opts, isDirectory)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, x := range executors {
 		if _, ok := m.executors[x.Type()]; ok {
@@ -73,14 +76,14 @@ func NewExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 		m.executors[x.Type()] = x
 	}
 
-	height, err := m.db.BlockIndex()
+	height, err := m.DB.BlockIndex()
 	if errors.Is(err, storage.ErrNotFound) {
 		height = 0
 	} else if err != nil {
 		return nil, err
 	}
 
-	m.logger.Info("Loaded", "height", height, "hash", logging.AsHex(m.db.RootHash()))
+	m.logger.Info("Loaded", "height", height, "hash", logging.AsHex(m.DB.RootHash()))
 	return m, nil
 }
 
@@ -109,20 +112,20 @@ func (m *Executor) InitChain(state []byte) error {
 	}
 
 	// Dump the genesis state into the key-value store
-	dst := m.db.GetDB().DB
+	dst := m.DB.GetDB().DB
 	err = dst.EndBatch(src.Export())
 	if err != nil {
 		return fmt.Errorf("failed to load app state into database: %v", err)
 	}
 
 	// Load the genesis state into the StateDB
-	err = m.db.Load(dst, false)
+	err = m.DB.Load(dst, false)
 	if err != nil {
 		return fmt.Errorf("faild to reload state database: %v", err)
 	}
 
 	// Make sure the StateDB BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(hash[:], m.db.RootHash()) {
+	if !bytes.Equal(hash[:], m.DB.RootHash()) {
 		panic("BPT root hash from state DB does not match the app state")
 	}
 
@@ -135,7 +138,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	m.height = req.Height
 	m.time = req.Time
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
-	m.dbTx = m.db.Begin()
+	m.dbTx = m.DB.Begin()
 
 	// In order for other BVCs to be able to validate the synthetic transaction,
 	// a wrapped signed version must be resubmitted to this BVC network and the
@@ -149,6 +152,9 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	// leader signed synth tx to the designated BVC network it takes advantage
 	// of the flood-fill gossip network tendermint will provide and ensure the
 	// synth transaction will be picked up.
+
+	// Reset dispatcher
+	m.dispatcher.Reset(context.Background())
 
 	// If we're the leader, sign synthetic transactions produced by the previous
 	// block
@@ -164,6 +170,15 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	if err != nil {
 		return abci.BeginBlockResponse{}, err
 	}
+
+	// Dispatch transactions. Due to Tendermint's locks, this cannot be
+	// synchronous.
+	go func() {
+		err := m.dispatcher.Send(context.Background())
+		if err != nil {
+			m.logger.Error("Failed to dispatch transactions", "error", err)
+		}
+	}()
 
 	return abci.BeginBlockResponse{
 		SynthTxns: txns,
@@ -182,7 +197,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	txt := tx.TransactionType()
 
 	if m.dbTx == nil {
-		m.dbTx = m.db.Begin()
+		m.dbTx = m.DB.Begin()
 	}
 	st, err := NewStateManager(m.dbTx, tx)
 	if errors.Is(err, storage.ErrNotFound) {
@@ -450,8 +465,8 @@ func (m *Executor) Commit() ([]byte, error) {
 		return nil, err
 	}
 
-	m.logger.Info("Committed", "db_time", m.db.TimeBucket)
-	m.db.TimeBucket = 0
+	m.logger.Info("Committed", "db_time", m.DB.TimeBucket)
+	m.DB.TimeBucket = 0
 	return mdRoot, nil
 }
 
@@ -535,7 +550,7 @@ func (m *Executor) signSynthTxns() error {
 	// won't get lost.
 
 	// Load the synth txid chain
-	chain, err := m.db.SynthTxidChain()
+	chain, err := m.DB.SynthTxidChain()
 	if err != nil {
 		return err
 	}
@@ -578,8 +593,8 @@ func (m *Executor) signSynthTxns() error {
 
 		// Sign it
 		ed := new(transactions.ED25519Sig)
-		ed.PublicKey = m.key[32:]
-		err = ed.Sign(synthSig.Nonce, m.key, txid[:])
+		ed.PublicKey = m.Key[32:]
+		err = ed.Sign(synthSig.Nonce, m.Key, txid[:])
 		if err != nil {
 			return err
 		}
@@ -607,8 +622,8 @@ func (m *Executor) signSynthTxns() error {
 	// Sign it
 	ed := new(transactions.ED25519Sig)
 	tx.Signature = append(tx.Signature, ed)
-	ed.PublicKey = m.key[32:]
-	err = ed.Sign(tx.SigInfo.Nonce, m.key, tx.TransactionHash())
+	ed.PublicKey = m.Key[32:]
+	err = ed.Sign(tx.SigInfo.Nonce, m.Key, tx.TransactionHash())
 	if err != nil {
 		return err
 	}
@@ -620,16 +635,21 @@ func (m *Executor) signSynthTxns() error {
 	}
 
 	// Send it
-	go m.local.BroadcastTxAsync(context.Background(), data)
+	go m.Local.BroadcastTxAsync(context.Background(), data)
 	return nil
 }
 
 // sendSynthTxns sends signed synthetic transactions from previous blocks.
 func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 	// Get the signatures from the last block
-	sigs, err := m.db.GetSynthTxnSigs()
+	sigs, err := m.DB.GetSynthTxnSigs()
 	if err != nil {
 		return nil, err
+	}
+
+	// Is there anything to send?
+	if len(sigs) == 0 {
+		return nil, nil
 	}
 
 	// Array for synth TXN references
@@ -638,7 +658,7 @@ func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 	// Process all the transactions
 	for _, sig := range sigs {
 		// Load the pending transaction object
-		obj, err := m.db.GetSynthTxn(sig.Txid)
+		obj, err := m.DB.GetSynthTxn(sig.Txid)
 		if err != nil {
 			return nil, err
 		}
@@ -660,11 +680,20 @@ func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 			Signature: sig.Signature,
 		})
 
-		// Add it to the batch
-		ti, err := m.query.BroadcastTx(tx, nil)
+		// Marshal the transaction
+		raw, err := tx.Marshal()
 		if err != nil {
-			continue
+			return nil, err
 		}
+
+		// Parse the URL
+		u, err := url.Parse(tx.SigInfo.URL)
+		if err != nil {
+			return nil, err
+		}
+
+		// Add it to the batch
+		m.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
 
 		// Delete the signature
 		m.dbTx.DeleteSynthTxnSig(sig.Txid)
@@ -673,13 +702,10 @@ func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 		var ref abci.SynthTxnReference
 		ref.Type = uint64(tx.TransactionType())
 		ref.Url = tx.SigInfo.URL
+		ref.TxRef = sha256.Sum256(raw)
 		copy(ref.Hash[:], tx.TransactionHash())
-		copy(ref.TxRef[:], ti.ReferenceId)
 		refs = append(refs, ref)
 	}
-
-	// Send the batches
-	m.query.BatchSend()
 
 	return refs, nil
 }
