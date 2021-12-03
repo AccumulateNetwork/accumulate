@@ -37,18 +37,20 @@ func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
 		return "", nil, fmt.Errorf("failed to send request: %v", err)
 	}
 
-	switch {
-	case res.Response.Code == protocol.CodeNotFound:
-		return "", nil, storage.ErrNotFound
-	case res.Response.Log != "":
-		return "", nil, errors.New(res.Response.Log)
-	case res.Response.Info != "":
-		return "", nil, errors.New(res.Response.Info)
-	case res.Response.Code != 0:
-		return "", nil, fmt.Errorf("query failed with code %d", res.Response.Code)
+	if res.Response.Code == 0 {
+		return string(res.Response.Key), res.Response.Value, nil
 	}
-
-	return string(res.Response.Key), res.Response.Value, nil
+	if res.Response.Code == protocol.CodeNotFound {
+		return "", nil, storage.ErrNotFound
+	}
+	protoError := new(protocol.Error)
+	protoError.Code = protocol.ErrorCode(res.Response.Code)
+	if res.Response.Info != "" {
+		protoError.Message = errors.New(res.Response.Info)
+	} else {
+		protoError.Message = errors.New(res.Response.Log)
+	}
+	return "", nil, nil
 }
 
 func (q *queryDirect) QueryUrl(s string) (*QueryResponse, error) {
