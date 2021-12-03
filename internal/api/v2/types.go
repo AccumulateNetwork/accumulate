@@ -14,7 +14,7 @@ import (
 
 type Querier interface {
 	QueryUrl(url string) (*QueryResponse, error)
-	QueryDirectory(url string, opts *QueryOptions) (*QueryResponse, error)
+	QueryDirectory(url string, pagination *QueryPagination, opts *QueryOptions) (*QueryResponse, error)
 	QueryChain(id []byte) (*QueryResponse, error)
 	QueryTx(id []byte, wait time.Duration) (*QueryResponse, error)
 	QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error)
