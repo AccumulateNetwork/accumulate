@@ -76,6 +76,16 @@ DirectoryQueryResult:
       pointer: true
       marshal-as: reference
     optional: true
+  - name: Start
+    type: uvarint
+    keep-empty: true
+  - name: Count
+    type: uvarint
+    keep-empty: true
+  - name: Total
+    type: uvarint
+    keep-empty: true
+
 
 
 KeyPage:
@@ -144,13 +154,14 @@ QueryPagination:
     optional: true
   - name: Count
     type: uvarint
-    optional: false
+    optional: true
 
 DirectoryQuery:
   non-binary: true
   incomparable: true
   embeddings:
     - UrlQuery
+    - QueryPagination
     - QueryOptions
 
 QueryOptions:

@@ -66,6 +66,7 @@ type DirectoryIndexMetadata struct {
 type DirectoryQueryResult struct {
 	Entries         []string        `json:"entries,omitempty" form:"entries" query:"entries"`
 	ExpandedEntries []*state.Object `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
+	Total           uint64          `json:"total" form:"total" query:"total" validate:"required"`
 }
 
 type IdentityCreate struct {
@@ -427,6 +428,10 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 			return false
 		}
 
+	}
+
+	if !(v.Total == u.Total) {
+		return false
 	}
 
 	return true
@@ -870,6 +875,8 @@ func (v *CreateKeyPage) BinarySize() int {
 		n += v.BinarySize()
 
 	}
+
+	n += encoding.UvarintBinarySize(v.Total)
 
 	return n
 }
@@ -1319,6 +1326,8 @@ func (v *CreateKeyPage) MarshalBinary() ([]byte, error) {
 		}
 
 	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Total))
 
 	return buffer.Bytes(), nil
 }
@@ -2002,6 +2011,13 @@ func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
 
 		v.ExpandedEntries[i] = x
 	}
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Total: %w", err)
+	} else {
+		v.Total = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Total):]
 
 	return nil
 }
