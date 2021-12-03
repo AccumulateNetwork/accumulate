@@ -9,13 +9,14 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
-type AnchorMetadata struct {
-	Index          int64      `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	PreviousHeight int64      `json:"previousHeight,omitempty" form:"previousHeight" query:"previousHeight" validate:"required"`
-	Timestamp      time.Time  `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	Chains         [][32]byte `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+type Anchor struct {
+	ChainHeader
+	Index     int64      `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Timestamp time.Time  `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	Chains    [][32]byte `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 }
 
 type Object struct {
@@ -35,12 +36,30 @@ type SyntheticSignatures struct {
 	Signatures []SyntheticSignature `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 }
 
-func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
-	if !(v.Index == u.Index) {
+type SyntheticTransactionChain struct {
+	ChainHeader
+	Index int64 `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Count int64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+}
+
+func NewAnchor() *Anchor {
+	v := new(Anchor)
+	v.Type = types.ChainTypeAnchor
+	return v
+}
+
+func NewSyntheticTransactionChain() *SyntheticTransactionChain {
+	v := new(SyntheticTransactionChain)
+	v.Type = types.ChainTypeSyntheticTransactions
+	return v
+}
+
+func (v *Anchor) Equal(u *Anchor) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
 		return false
 	}
 
-	if !(v.PreviousHeight == u.PreviousHeight) {
+	if !(v.Index == u.Index) {
 		return false
 	}
 
@@ -121,12 +140,31 @@ func (v *SyntheticSignatures) Equal(u *SyntheticSignatures) bool {
 	return true
 }
 
-func (v *AnchorMetadata) BinarySize() int {
+func (v *SyntheticTransactionChain) Equal(u *SyntheticTransactionChain) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.Index == u.Index) {
+		return false
+	}
+
+	if !(v.Count == u.Count) {
+		return false
+	}
+
+	return true
+}
+
+func (v *Anchor) BinarySize() int {
 	var n int
 
-	n += encoding.VarintBinarySize(v.Index)
+	// Enforce sanity
+	v.Type = types.ChainTypeAnchor
 
-	n += encoding.VarintBinarySize(v.PreviousHeight)
+	n += v.ChainHeader.GetHeaderSize()
+
+	n += encoding.VarintBinarySize(v.Index)
 
 	n += encoding.TimeBinarySize(v.Timestamp)
 
@@ -179,12 +217,33 @@ func (v *SyntheticSignatures) BinarySize() int {
 	return n
 }
 
-func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
+func (v *SyntheticTransactionChain) BinarySize() int {
+	var n int
+
+	// Enforce sanity
+	v.Type = types.ChainTypeSyntheticTransactions
+
+	n += v.ChainHeader.GetHeaderSize()
+
+	n += encoding.VarintBinarySize(v.Index)
+
+	n += encoding.VarintBinarySize(v.Count)
+
+	return n
+}
+
+func (v *Anchor) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(encoding.VarintMarshalBinary(v.Index))
+	// Enforce sanity
+	v.Type = types.ChainTypeAnchor
 
-	buffer.Write(encoding.VarintMarshalBinary(v.PreviousHeight))
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+	buffer.Write(encoding.VarintMarshalBinary(v.Index))
 
 	buffer.Write(encoding.TimeMarshalBinary(v.Timestamp))
 
@@ -241,20 +300,39 @@ func (v *SyntheticSignatures) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *AnchorMetadata) UnmarshalBinary(data []byte) error {
+func (v *SyntheticTransactionChain) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	// Enforce sanity
+	v.Type = types.ChainTypeSyntheticTransactions
+
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+	buffer.Write(encoding.VarintMarshalBinary(v.Index))
+
+	buffer.Write(encoding.VarintMarshalBinary(v.Count))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *Anchor) UnmarshalBinary(data []byte) error {
+	typ := types.ChainTypeAnchor
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding header: %w", err)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+	}
+	data = data[v.GetHeaderSize():]
+
 	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Index: %w", err)
 	} else {
 		v.Index = x
 	}
 	data = data[encoding.VarintBinarySize(v.Index):]
-
-	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding PreviousHeight: %w", err)
-	} else {
-		v.PreviousHeight = x
-	}
-	data = data[encoding.VarintBinarySize(v.PreviousHeight):]
 
 	if x, err := encoding.TimeUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Timestamp: %w", err)
@@ -363,15 +441,41 @@ func (v *SyntheticSignatures) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
+func (v *SyntheticTransactionChain) UnmarshalBinary(data []byte) error {
+	typ := types.ChainTypeSyntheticTransactions
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding header: %w", err)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+	}
+	data = data[v.GetHeaderSize():]
+
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Index: %w", err)
+	} else {
+		v.Index = x
+	}
+	data = data[encoding.VarintBinarySize(v.Index):]
+
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Count: %w", err)
+	} else {
+		v.Count = x
+	}
+	data = data[encoding.VarintBinarySize(v.Count):]
+
+	return nil
+}
+
+func (v *Anchor) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Index          int64     `json:"index,omitempty"`
-		PreviousHeight int64     `json:"previousHeight,omitempty"`
-		Timestamp      time.Time `json:"timestamp,omitempty"`
-		Chains         []string  `json:"chains,omitempty"`
+		ChainHeader
+		Index     int64     `json:"index,omitempty"`
+		Timestamp time.Time `json:"timestamp,omitempty"`
+		Chains    []string  `json:"chains,omitempty"`
 	}{}
+	u.ChainHeader = v.ChainHeader
 	u.Index = v.Index
-	u.PreviousHeight = v.PreviousHeight
 	u.Timestamp = v.Timestamp
 	u.Chains = encoding.ChainSetToJSON(v.Chains)
 	return json.Marshal(&u)
@@ -406,22 +510,22 @@ func (v *SyntheticSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
+func (v *Anchor) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Index          int64     `json:"index,omitempty"`
-		PreviousHeight int64     `json:"previousHeight,omitempty"`
-		Timestamp      time.Time `json:"timestamp,omitempty"`
-		Chains         []string  `json:"chains,omitempty"`
+		ChainHeader
+		Index     int64     `json:"index,omitempty"`
+		Timestamp time.Time `json:"timestamp,omitempty"`
+		Chains    []string  `json:"chains,omitempty"`
 	}{}
+	u.ChainHeader = v.ChainHeader
 	u.Index = v.Index
-	u.PreviousHeight = v.PreviousHeight
 	u.Timestamp = v.Timestamp
 	u.Chains = encoding.ChainSetToJSON(v.Chains)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.ChainHeader = u.ChainHeader
 	v.Index = u.Index
-	v.PreviousHeight = u.PreviousHeight
 	v.Timestamp = u.Timestamp
 	if x, err := encoding.ChainSetFromJSON(u.Chains); err != nil {
 		return fmt.Errorf("error decoding Chains: %w", err)
