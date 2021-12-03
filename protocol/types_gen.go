@@ -306,6 +306,14 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 		return false
 	}
 
+	if !(v.KeyBookUrl == u.KeyBookUrl) {
+		return false
+	}
+
+	if !(v.ManagerKeyBookUrl == u.ManagerKeyBookUrl) {
+		return false
+	}
+
 	return true
 }
 
