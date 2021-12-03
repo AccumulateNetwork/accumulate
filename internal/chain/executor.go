@@ -534,8 +534,14 @@ func (m *Executor) signSynthTxns() error {
 	// move to the next block? We need to be sure that synthetic transactions
 	// won't get lost.
 
-	// Get the anchor chain head
-	head, height, err := m.db.GetAnchorHead()
+	// Load the synth txid chain
+	chain, err := m.db.SynthTxidChain()
+	if err != nil {
+		return err
+	}
+
+	head := new(state.SyntheticTransactionChain)
+	err = chain.RecordAs(head)
 	if errors.Is(err, storage.ErrNotFound) {
 		// Nothing to do
 		return nil
@@ -543,19 +549,13 @@ func (m *Executor) signSynthTxns() error {
 		return err
 	}
 
-	// Only proceed if the previous block did something
+	// Only proceed if chain was updated last block
 	if head.Index != m.height-1 {
 		return nil
 	}
 
-	// Only proceed if the previous block generated synthetic transactions
-	count := height - head.PreviousHeight - int64(len(head.Chains)) - 1
-	if count == 0 {
-		return nil
-	}
-
 	// Pull the transaction IDs from the anchor chain
-	txns, err := m.db.GetAnchors(height-count-1, height-1)
+	txns, err := chain.Entries(chain.Height()-head.Count, chain.Height())
 	if err != nil {
 		return err
 	}
@@ -571,7 +571,7 @@ func (m *Executor) signSynthTxns() error {
 	for i, txid := range txns {
 		// For each pending synthetic transaction
 		var synthSig protocol.SyntheticSignature
-		synthSig.Txid = txid
+		copy(synthSig.Txid[:], txid)
 
 		// The nonce must be the final nonce minus (I + 1)
 		synthSig.Nonce = nonce - 1 - uint64(i)

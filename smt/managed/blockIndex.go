@@ -47,8 +47,8 @@ func (b *BlockIndex) UnMarshal(data []byte) (newData []byte) {
 }
 
 func EndBlock(manager *MerkleManager, cID []byte, blockIndex uint64) error {
-	oldCid := manager.cid                   // Get the old cid
-	defer func() { manager.cid = oldCid }() // and restore it when done
+	oldCid := manager.key                   // Get the old cid
+	defer func() { manager.key = oldCid }() // and restore it when done
 
 	if len(cID) != 32 {
 		return fmt.Errorf("chainID is not 32 bytes in length %x", cID)
@@ -59,19 +59,19 @@ func EndBlock(manager *MerkleManager, cID []byte, blockIndex uint64) error {
 	bIdx[31] += 2        //
 	b := new(BlockIndex) // allocate a block index
 
-	err := manager.SetChainID(cID[:])
+	err := manager.SetKey(cID[:])
 	if err != nil {
 		return err
 	}
 	b.MainIndex = uint64(manager.MS.Count)
 
-	err = manager.SetChainID(pID[:])
+	err = manager.SetKey(pID[:])
 	if err != nil {
 		return err
 	}
 	b.PendingIndex = uint64(manager.MS.Count)
 
-	err = manager.SetChainID(bIdx[:])
+	err = manager.SetKey(bIdx[:])
 	if err != nil {
 		return err
 	}
