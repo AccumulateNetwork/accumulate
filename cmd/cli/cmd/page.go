@@ -244,7 +244,6 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 			PrintKeyUpdate()
 			return "", err
 		}
-		oldKey = newKey
 	case protocol.RemoveKey:
 		if len(args) < 1 {
 			PrintKeyUpdate()
@@ -255,7 +254,6 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 			PrintKeyUpdate()
 			return "", err
 		}
-		newKey = oldKey
 	}
 
 	ukp.Key = oldKey[:]
