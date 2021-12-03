@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -168,7 +167,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTx(data, dataBinary, pageUrl, si, privKey, nonce)
 	if err != nil {
 		PrintKeyPageCreate()
@@ -271,7 +270,7 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 		return "", err
 	}
 
-	nonce := uint64(time.Now().Unix())
+	nonce := nonceFromTimeNow()
 	params, err := prepareGenTx(data, dataBinary, u, si, privKey, nonce)
 	if err != nil {
 		return "", err

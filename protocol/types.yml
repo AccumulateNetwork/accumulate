@@ -36,7 +36,7 @@ SyntheticCreateChain:
       type: slice
       slice:
         type: ChainParams
-        marshal-as: self
+        marshal-as: reference
 
 ChainParams:
   fields:
@@ -84,7 +84,7 @@ KeyPage:
       slice:
         type: KeySpec
         pointer: true
-        marshal-as: self
+        marshal-as: reference
 
 CreateKeyPage:
   kind: tx
@@ -98,7 +98,7 @@ CreateKeyPage:
       slice:
         type: KeySpecParams
         pointer: true
-        marshal-as: self
+        marshal-as: reference
 
 KeyBook:
   kind: chain
@@ -150,7 +150,7 @@ UpdateKeyPage:
   fields:
     - name: Operation
       type: KeyPageOperation
-      marshal-as: self
+      marshal-as: value
     - name: Key
       type: bytes
       optional: true
@@ -167,6 +167,7 @@ MetricsRequest:
 
 MetricsResponse:
   non-binary: true
+  incomparable: true
   fields:
     - name: Value
       type: any
@@ -191,7 +192,7 @@ DirectoryQueryResult:
     slice:
       type: state.Object
       pointer: true
-      marshal-as: self
+      marshal-as: reference
     optional: true
 
 DataAccount:
@@ -295,7 +296,7 @@ SyntheticSignTransactions:
       type: slice
       slice:
         type: SyntheticSignature
-        marshal-as: self
+        marshal-as: reference
 
 SyntheticSignature:
   fields:
