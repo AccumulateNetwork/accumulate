@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"crypto/sha256"
+
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
 )
 
