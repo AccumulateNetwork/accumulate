@@ -15,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -42,7 +43,7 @@ func TestEndToEnd(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 
 		// Restart the nodes for every test
-		nodes, dbs := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, "error", nil)
+		nodes, dbs := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, nil)
 		query := startNodes(s.T(), nodes)
 		client, err := local.New(nodes[0].Service.(local.NodeService))
 		require.NoError(s.T(), err)
@@ -78,7 +79,7 @@ func TestSubscribeAfterClose(t *testing.T) {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
 
-	nodes, _ := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, "error", []string{"127.0.30.1"})
+	nodes, _ := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, []string{"127.0.30.1"})
 	node := nodes[0]
 	require.NoError(t, node.Start())
 	require.NoError(t, node.Stop())
@@ -99,9 +100,9 @@ func TestFaucetMultiNetwork(t *testing.T) {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
 
-	bvc0, _ := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc1, _ := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc2, _ := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, "error", []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc0, _ := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc1, _ := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc2, _ := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	rpcAddrs := make([]string, 0, 3)
 	wg := new(sync.WaitGroup)
 	for _, bvc := range [][]*node.Node{bvc0, bvc1, bvc2} {
@@ -152,9 +153,9 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	case jsonrpc2.Error:
 		require.NoError(t, r)
 	case *apitypes.APIDataResponse:
-		// OK
+		require.NoError(t, acctesting.WaitForTxV1(query, r))
 	default:
-		require.IsType(t, apitypes.APIDataResponse{}, r)
+		require.IsType(t, (*apitypes.APIDataResponse)(nil), r)
 	}
 
 	// Wait for synthetic TX to settle
