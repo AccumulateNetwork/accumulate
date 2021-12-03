@@ -206,7 +206,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		}
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
-		err := chr.UnmarshalBinary(chr.ChainId[:])
+		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
