@@ -227,7 +227,7 @@ func TestCreateADI(t *testing.T) {
 
 func TestCreateAdiDataAccount(t *testing.T) {
 	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, "error", true)
+		n := createAppWithMemDB(t, crypto.Address{}, true)
 		adiKey := generateKey()
 		dbTx := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
@@ -253,7 +253,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account w/ Custom Key Book and Manager Key Book Url", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, "error", true)
+		n := createAppWithMemDB(t, crypto.Address{}, true)
 		adiKey, pageKey := generateKey(), generateKey()
 		dbTx := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
