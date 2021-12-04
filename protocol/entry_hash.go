@@ -8,16 +8,13 @@ import (
 
 // ComputeEntryHash
 // returns the entry hash given external id's and data associated with an entry
-func ComputeEntryHash(root []byte, extIds [][]byte, data []byte) []byte {
+func ComputeEntryHash(data [][]byte) []byte {
 	smt := managed.MerkleState{}
 	//add the external id's to the merkle tree
-	for i := range extIds {
-		h := sha256.Sum256(extIds[i])
+	for i := range data {
+		h := sha256.Sum256(data[i])
 		smt.AddToMerkleTree(h[:])
 	}
-	//add the data to the merkle tree
-	h := sha256.Sum256(data)
-	smt.AddToMerkleTree(h[:])
 	//return the entry hash
 	return smt.GetMDRoot().Bytes()
 }
