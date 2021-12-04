@@ -170,27 +170,35 @@ func (c *ABCIApplicationClient) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	return st
 }
 
-func (c *ABCIApplicationClient) addSynthTxns() {
-	// Check for synthetic transactions in the anchor chain
-	head, height, err := c.db.GetAnchorHead()
+func (c *ABCIApplicationClient) addSynthTxns(blockIndex int64) {
+	// Load the synth txid chain
+	chain, err := c.db.SynthTxidChain()
+	if err != nil {
+		c.onError(err)
+		return
+	}
+
+	head := new(state.SyntheticTransactionChain)
+	err = chain.RecordAs(head)
 	if errors.Is(err, storage.ErrNotFound) {
+		// Nothing to do
 		return
 	} else if err != nil {
 		c.onError(err)
 		return
 	}
 
-	count := height - head.PreviousHeight - int64(len(head.Chains)) - 1
-	if count == 0 {
+	if head.Index != blockIndex {
 		return
 	}
 
 	if debugTX {
-		fmt.Printf("The last block created %d synthetic transactions\n", count)
+		fmt.Printf("The last block created %d synthetic transactions\n", head.Count)
 	}
 
 	// Pull the transaction IDs from the anchor chain
-	txns, err := c.db.GetAnchors(height-count-1, height-1)
+	height := chain.Height()
+	txns, err := chain.Entries(height-head.Count, height)
 	if err != nil {
 		c.onError(err)
 		return
@@ -199,7 +207,9 @@ func (c *ABCIApplicationClient) addSynthTxns() {
 	c.txMu.Lock()
 	defer c.txMu.Unlock()
 	for _, h := range txns {
-		c.txPend[h] = true
+		var h32 [32]byte
+		copy(h32[:], h)
+		c.txPend[h32] = true
 	}
 }
 
@@ -320,7 +330,7 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		}
 
 		// Ensure Wait waits for synthetic transactions
-		c.addSynthTxns()
+		c.addSynthTxns(height)
 
 		c.txActive -= len(queue)
 		c.txCond.Broadcast()

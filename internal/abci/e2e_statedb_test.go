@@ -24,7 +24,7 @@ func TestStateDBConsistency(t *testing.T) {
 	sdb := new(state.StateDB)
 	require.NoError(t, sdb.Load(db, true))
 
-	n := createApp(t, sdb, crypto.Address{}, "error", true)
+	n := createApp(t, sdb, crypto.Address{}, true)
 	n.testLiteTx(10)
 
 	height, err := sdb.BlockIndex()
@@ -43,6 +43,6 @@ func TestStateDBConsistency(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", sdb.RootHash()), "Hash does not match after load from disk")
 
 	// Recreate the app and try to do more transactions
-	n = createApp(t, sdb, crypto.Address{}, "error", false)
+	n = createApp(t, sdb, crypto.Address{}, false)
 	n.testLiteTx(10)
 }

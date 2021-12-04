@@ -7,8 +7,8 @@ import "fmt"
 // begin must be before or equal to end.  The hash with index begin and end
 // are included in the hashes returned.  Indexes are zero based, so the
 // first hash in the MerkleState is at 0
-func (m *MerkleManager) GetRange(ChainID []byte, begin, end int64) (hashes []Hash, err error) {
-	m.SetChainID(ChainID)
+func (m *MerkleManager) GetRange(key []interface{}, begin, end int64) (hashes []Hash, err error) {
+	m.SetKey(key...)
 	// We return nothing for ranges that are out of range.
 	if begin < 0 { // begin cannot be negative.  If it is, assume the user meant zero
 		begin = 0
@@ -31,9 +31,9 @@ func (m *MerkleManager) GetRange(ChainID []byte, begin, end int64) (hashes []Has
 	s := m.GetState(markPoint) // Get the state of the mark right after the begin index
 	var hl []Hash              // Collect all the hashes of the mark points covering the range of begin-end
 	if s == nil {              // If no state found, then get the highest state of the chain
-		head, err := m.ReadChainHead(ChainID) //
-		if err != nil {                       // If we have an error, we will just ignore it.
-			return nil, fmt.Errorf("No State found %x:  %v:err", ChainID, err)
+		head, err := m.ReadChainHead(key...) //
+		if err != nil {                      // If we have an error, we will just ignore it.
+			return nil, fmt.Errorf("No State found %v:  %v:err", key, err)
 		}
 		hl = append(hl, head.HashList...)
 	} else { // If a mark follows begin, then
@@ -42,9 +42,9 @@ func (m *MerkleManager) GetRange(ChainID []byte, begin, end int64) (hashes []Has
 		if s != nil {
 			hl = append(hl, s.HashList...)
 		} else {
-			head, err := m.ReadChainHead(ChainID)
+			head, err := m.ReadChainHead(key...)
 			if err != nil { // If we have an error, we will just ignore it.
-				return nil, fmt.Errorf("No State found %x:  %v:err", ChainID, err)
+				return nil, fmt.Errorf("No State found %v:  %v:err", key, err)
 			}
 			hl = append(hl, head.HashList...)
 		}
