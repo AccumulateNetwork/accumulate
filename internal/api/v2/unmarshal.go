@@ -27,6 +27,7 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 }
 
 func chainFromStateObj(obj *state.Object) (state.Chain, error) {
+
 	var header state.ChainHeader
 	var chain state.Chain
 	err := obj.As(&header)
@@ -49,6 +50,10 @@ func chainFromStateObj(obj *state.Object) (state.Chain, error) {
 		chain = new(protocol.KeyBook)
 	case types.ChainTypeTransaction:
 		chain = new(state.Transaction)
+	case types.ChainTypeDataAccount:
+		chain = new(protocol.DataAccount)
+	case types.ChainTypeLiteDataAccount:
+		chain = new(protocol.LiteDataAccount)
 	default:
 		return nil, fmt.Errorf("unknown chain type %v", header.Type)
 	}

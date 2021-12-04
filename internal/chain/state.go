@@ -401,6 +401,10 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 		record = new(protocol.KeyPage)
 	case types.ChainTypeKeyBook:
 		record = new(protocol.KeyBook)
+	case types.ChainTypeDataAccount:
+		record = new(protocol.DataAccount)
+	case types.ChainTypeLiteDataAccount:
+		record = new(protocol.LiteDataAccount)
 	default:
 		return nil, fmt.Errorf("unrecognized chain type %v", header.Type)
 	}
