@@ -51,8 +51,11 @@ const (
 	// ChainTypeLiteDataAccount is a Lite Data Account chain.
 	ChainTypeLiteDataAccount ChainType = 12
 
+	// ChainTypeSyntheticTransactions is a chain of synthetic transactions.
+	ChainTypeSyntheticTransactions ChainType = 13
+
 	// chainMax needs to be set to the last type in the list above
-	chainMax = ChainTypeLiteDataAccount
+	chainMax = ChainTypeSyntheticTransactions
 )
 
 // ID returns the chain type ID
@@ -95,6 +98,8 @@ func (t ChainType) String() string {
 		return "dataAccount"
 	case ChainTypeLiteDataAccount:
 		return "liteDataAccount"
+	case ChainTypeSyntheticTransactions:
+		return "syntheticTransactions"
 	default:
 		return fmt.Sprintf("ChainType:%d", t)
 	}
