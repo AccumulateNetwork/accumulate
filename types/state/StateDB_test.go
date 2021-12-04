@@ -19,7 +19,7 @@ func TestStateDB_GetChainRange(t *testing.T) {
 	s.merkleMgr.MarkMask = s.merkleMgr.MarkFreq - 1
 
 	id := []byte(t.Name())
-	require.NoError(t, s.merkleMgr.SetChainID(id))
+	require.NoError(t, s.merkleMgr.SetKey(id))
 
 	const N = 10
 	for i := byte(0); i < N; i++ {
