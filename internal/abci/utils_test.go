@@ -253,8 +253,8 @@ func (n *fakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
 	require.NoError(n.t, obj.UnmarshalBinary(so.Entry))
 }
 
-func (n *fakeNode) GetDataAccount(url string) *state.DataAccount {
-	acct := new(state.DataAccount)
+func (n *fakeNode) GetDataAccount(url string) *protocol.DataAccount {
+	acct := protocol.NewDataAccount()
 	n.GetChainAs(url, acct)
 	return acct
 }
