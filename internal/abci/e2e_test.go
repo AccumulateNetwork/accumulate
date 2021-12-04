@@ -225,6 +225,66 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
 }
 
+func TestCreateAdiDataAccount(t *testing.T) {
+	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
+		n := createAppWithMemDB(t, crypto.Address{}, true)
+		adiKey := generateKey()
+		dbTx := n.db.Begin()
+		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
+		dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+
+		n.Batch(func(send func(*transactions.GenTransaction)) {
+			tac := new(protocol.CreateDataAccount)
+			tac.Url = "FooBar/oof"
+			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), tac)
+			require.NoError(t, err)
+			send(tx)
+		})
+
+		r := n.GetDataAccount("FooBar/oof")
+		require.Equal(t, types.ChainTypeDataAccount, r.Type)
+		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
+
+		require.Equal(t, []string{
+			n.ParseUrl("FooBar/ssg0").String(),
+			n.ParseUrl("FooBar/sigspec0").String(),
+			n.ParseUrl("FooBar/oof").String(),
+		}, n.GetDirectory("FooBar"))
+	})
+
+	t.Run("Data Account w/ Custom Key Book and Manager Key Book Url", func(t *testing.T) {
+		n := createAppWithMemDB(t, crypto.Address{}, true)
+		adiKey, pageKey := generateKey(), generateKey()
+		dbTx := n.db.Begin()
+		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateKeyPage(dbTx, "acc://FooBar/foo/page1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyBook(dbTx, "acc://FooBar/foo/book1", "acc://FooBar/foo/page1"))
+		require.NoError(t, acctesting.CreateKeyPage(dbTx, "acc://FooBar/mgr/page1", pageKey.PubKey().Bytes()))
+		require.NoError(t, acctesting.CreateKeyBook(dbTx, "acc://FooBar/mgr/book1", "acc://FooBar/mgr/page1"))
+		dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+
+		n.Batch(func(send func(*transactions.GenTransaction)) {
+			cda := new(protocol.CreateDataAccount)
+			cda.Url = "FooBar/oof"
+			cda.KeyBookUrl = "acc://FooBar/foo/book1"
+			cda.ManagerKeyBookUrl = "acc://FooBar/mgr/book1"
+			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), cda)
+			require.NoError(t, err)
+			send(tx)
+		})
+
+		u := n.ParseUrl("acc://FooBar/foo/book1")
+		bookChainId := types.Bytes(u.ResourceChain()).AsBytes32()
+
+		r := n.GetDataAccount("FooBar/oof")
+		require.Equal(t, types.ChainTypeDataAccount, r.Type)
+		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
+		require.Equal(t, types.String("acc://FooBar/mgr/book1"), r.ManagerKeyBook)
+		require.Equal(t, bookChainId, r.KeyBook)
+
+	})
+}
+
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
 		n := createAppWithMemDB(t, crypto.Address{}, true)
