@@ -33,7 +33,9 @@ type ChainParams struct {
 }
 
 type CreateDataAccount struct {
-	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Url               string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	KeyBookUrl        string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"required,acc-url"`
+	ManagerKeyBookUrl string `json:"managerKeyBookUrl,omitempty" form:"managerKeyBookUrl" query:"managerKeyBookUrl" validate:"required,acc-url"`
 }
 
 type CreateKeyBook struct {
@@ -55,7 +57,6 @@ type CreateToken struct {
 
 type DataAccount struct {
 	state.ChainHeader
-	Data []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 }
 
 type DirectoryIndexMetadata struct {
@@ -304,6 +305,14 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 		return false
 	}
 
+	if !(v.KeyBookUrl == u.KeyBookUrl) {
+		return false
+	}
+
+	if !(v.ManagerKeyBookUrl == u.ManagerKeyBookUrl) {
+		return false
+	}
+
 	return true
 }
 
@@ -367,10 +376,6 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 
 func (v *DataAccount) Equal(u *DataAccount) bool {
 	if !v.ChainHeader.Equal(&u.ChainHeader) {
-		return false
-	}
-
-	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
 	}
 
@@ -765,6 +770,10 @@ func (v *CreateDataAccount) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Url)
 
+	n += encoding.StringBinarySize(v.KeyBookUrl)
+
+	n += encoding.StringBinarySize(v.ManagerKeyBookUrl)
+
 	return n
 }
 
@@ -820,8 +829,6 @@ func (v *DataAccount) BinarySize() int {
 	v.Type = types.ChainTypeDataAccount
 
 	n += v.ChainHeader.GetHeaderSize()
-
-	n += encoding.BytesBinarySize(v.Data)
 
 	return n
 }
@@ -1177,6 +1184,10 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
+	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
+
+	buffer.Write(encoding.StringMarshalBinary(v.ManagerKeyBookUrl))
+
 	return buffer.Bytes(), nil
 }
 
@@ -1240,7 +1251,6 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(encoding.BytesMarshalBinary(v.Data))
 
 	return buffer.Bytes(), nil
 }
@@ -1680,6 +1690,20 @@ func (v *CreateDataAccount) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Url):]
 
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyBookUrl: %w", err)
+	} else {
+		v.KeyBookUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ManagerKeyBookUrl: %w", err)
+	} else {
+		v.ManagerKeyBookUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.ManagerKeyBookUrl):]
+
 	return nil
 }
 
@@ -1795,13 +1819,6 @@ func (v *DataAccount) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
-
-	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
-	}
-	data = data[encoding.BytesBinarySize(v.Data):]
 
 	return nil
 }
@@ -2423,16 +2440,6 @@ func (v *CreateKeyBook) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *DataAccount) MarshalJSON() ([]byte, error) {
-	u := struct {
-		state.ChainHeader
-		Data *string `json:"data,omitempty"`
-	}{}
-	u.ChainHeader = v.ChainHeader
-	u.Data = encoding.BytesToJSON(v.Data)
-	return json.Marshal(&u)
-}
-
 func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url         string  `json:"url,omitempty"`
@@ -2599,25 +2606,6 @@ func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Pages: %w", err)
 	} else {
 		v.Pages = x
-	}
-	return nil
-}
-
-func (v *DataAccount) UnmarshalJSON(data []byte) error {
-	u := struct {
-		state.ChainHeader
-		Data *string `json:"data,omitempty"`
-	}{}
-	u.ChainHeader = v.ChainHeader
-	u.Data = encoding.BytesToJSON(v.Data)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.ChainHeader = u.ChainHeader
-	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
 	}
 	return nil
 }

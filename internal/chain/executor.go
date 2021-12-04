@@ -220,7 +220,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	case *protocol.LiteTokenAccount:
 		return st, m.checkLite(st, tx, sponsor)
 
-	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage:
+	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
 		if (sponsor.Header().KeyBook == types.Bytes32{}) {
 			return nil, fmt.Errorf("sponsor has not been assigned to an SSG")
 		}
