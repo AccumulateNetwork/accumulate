@@ -143,11 +143,12 @@ func (p *Program) Start(s service.Service) error {
 	clientProxy := node.NewLocalClient()
 
 	execOpts := chain.ExecutorOptions{
-		Query:  apiv1.NewQuery(p.relay),
-		Local:  clientProxy,
-		DB:     p.db,
-		Logger: logger,
-		Key:    pv.Key.PrivKey.Bytes(),
+		Local:           clientProxy,
+		DB:              p.db,
+		Logger:          logger,
+		Key:             pv.Key.PrivKey.Bytes(),
+		Directory:       cfg.Accumulate.Directory,
+		BlockValidators: cfg.Accumulate.Networks,
 	}
 	var exec *chain.Executor
 	switch cfg.Accumulate.Type {
@@ -216,7 +217,7 @@ func (p *Program) Start(s service.Service) error {
 			clients[i] = lclient
 
 		default:
-			addr, err := networks.GetRpcAddr(net, networks.TmRpcPortOffset)
+			addr, err := networks.GetRpcAddr(net)
 			if err != nil {
 				return fmt.Errorf("invalid network name or address: %v", err)
 			}
