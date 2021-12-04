@@ -27,6 +27,7 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 }
 
 func chainFromStateObj(obj *state.Object) (state.Chain, error) {
+
 	var header state.ChainHeader
 	var chain state.Chain
 	err := obj.As(&header)
