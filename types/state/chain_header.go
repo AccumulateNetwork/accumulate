@@ -20,10 +20,10 @@ type Chain interface {
 //ChainHeader information for the state object.  Each state object will contain a header
 //that will consist of the chain type enumerator
 type ChainHeader struct {
-	Type     types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
-	ChainUrl types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	KeyBook  types.Bytes32   `json:"keyBook"` //this is the chain id for the sig spec for the chain
-
+	Type           types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
+	ChainUrl       types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	KeyBook        types.Bytes32   `json:"keyBook"`        //this is the chain id for the sig spec for the chain
+	ManagerKeyBook types.String    `json:"managerKeyBook"` //this is the manager key book url for the chain
 	// transient
 	url *url.URL
 }
@@ -33,7 +33,8 @@ func (h *ChainHeader) Header() *ChainHeader { return h }
 func (h *ChainHeader) Equal(g *ChainHeader) bool {
 	return h.Type == g.Type &&
 		h.ChainUrl == g.ChainUrl &&
-		h.KeyBook == g.KeyBook
+		h.KeyBook == g.KeyBook &&
+		h.ManagerKeyBook == g.ManagerKeyBook
 }
 
 //SetHeader sets the data for a chain header
@@ -48,7 +49,8 @@ func (h *ChainHeader) GetHeaderSize() int {
 	i := binary.PutUvarint(buf[:], h.Type.ID())
 	i += binary.PutUvarint(buf[:], uint64(len(h.ChainUrl)))
 	i += binary.PutUvarint(buf[:], uint64(len(h.KeyBook)))
-	return i + len(h.ChainUrl) + len(h.KeyBook)
+	i += binary.PutUvarint(buf[:], uint64(len(h.ManagerKeyBook)))
+	return i + len(h.ChainUrl) + len(h.KeyBook) + len(h.ManagerKeyBook)
 }
 
 //GetType will return the chain type
@@ -83,6 +85,7 @@ func (h *ChainHeader) MarshalBinary() ([]byte, error) {
 	buffer.Write(common.Uint64Bytes(h.Type.ID()))
 	buffer.Write(common.SliceBytes([]byte(h.ChainUrl)))
 	buffer.Write(common.SliceBytes(h.KeyBook[:]))
+	buffer.Write(common.SliceBytes([]byte(h.ManagerKeyBook)))
 
 	return buffer.Bytes(), nil
 }
@@ -98,11 +101,14 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	chainType, data := common.BytesUint64(data)
 	h.Type = types.ChainType(chainType)
 
-	url, data := common.BytesSlice(data)
-	h.ChainUrl = types.String(url)
+	u, data := common.BytesSlice(data)
+	h.ChainUrl = types.String(u)
 
-	spec, _ := common.BytesSlice(data)
+	spec, data := common.BytesSlice(data)
 	h.KeyBook.FromBytes(spec)
+
+	mgr, _ := common.BytesSlice(data)
+	h.ManagerKeyBook = types.String(mgr)
 
 	return nil
 }

@@ -198,8 +198,6 @@ DirectoryQueryResult:
 DataAccount:
   kind: chain
   fields:
-  - name: Data
-    type: bytes
 
 LiteDataAccount:
   kind: chain
