@@ -22,6 +22,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -118,9 +119,14 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	cfg.LogLevel = "error;main=info;state=info;statesync=info;accumulate=info;executor=info"
 	require.NoError(t, config.Store(cfg))
 
-	bvnNode, _, _, err := acctesting.NewBVCNode(nodeDir, true, nil, nil, t.Cleanup) // Initialize
-	require.NoError(t, err)                                                         //
-	require.NoError(t, bvnNode.Start())                                             // Launch
+	opts2 := acctesting.BVNNOptions{
+		Dir:       nodeDir,
+		LogWriter: logging.TestLogWriter(t),
+	}
+
+	bvnNode, _, _, err := acctesting.NewBVNN(opts2, t.Cleanup) // Initialize
+	require.NoError(t, err)                                    //
+	require.NoError(t, bvnNode.Start())                        // Launch
 	relayTo := []string{cfg.RPC.ListenAddress}
 	relay, err := relay.NewWith(relayTo...)
 
@@ -152,7 +158,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 			clients[i] = lclient
 
 		default:
-			addr, err := networks.GetRpcAddr(net, networks.TmRpcPortOffset)
+			addr, err := networks.GetRpcAddr(net)
 			if err != nil {
 				t.Fatalf("invalid network name or address: %v", err)
 			}
