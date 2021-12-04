@@ -198,8 +198,6 @@ DirectoryQueryResult:
 DataAccount:
   kind: chain
   fields:
-  - name: Data
-    type: bytes
 
 LiteDataAccount:
   kind: chain
@@ -211,6 +209,12 @@ CreateDataAccount:
   kind: tx
   fields:
   - name: Url
+    type: string
+    is-url: true
+  - name: KeyBookUrl
+    type: string
+    is-url: true
+  - name: ManagerKeyBookUrl
     type: string
     is-url: true
 

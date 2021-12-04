@@ -15,6 +15,7 @@ func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
 		CreateIdentity{},
 		WithdrawTokens{},
 		CreateTokenAccount{},
+		CreateDataAccount{},
 		AddCredits{},
 		CreateKeyPage{},
 		CreateKeyBook{},
