@@ -20,7 +20,7 @@ func TestMerkleManager_ReadChainHead(t *testing.T) {
 	if err != nil {
 		t.Fatal("didn't create a Merkle Manager")
 	}
-	MM1.SetChainID([]byte{1})
+	MM1.SetKey([]byte{1})
 
 	for i := 0; i < 100; i++ {
 		MM1.AddHash(Sha256([]byte{byte(i), byte(i >> 8), byte(i >> 16), byte(i >> 24)}))
@@ -30,7 +30,7 @@ func TestMerkleManager_ReadChainHead(t *testing.T) {
 		}
 		MM1.Manager.EndBatch()
 		MM2, err := NewMerkleManager(dbManager, 2)
-		MM2.SetChainID([]byte{1})
+		MM2.SetKey([]byte{1})
 		if err != nil {
 			t.Fatalf("didn't create another Merkle Manager")
 		}
@@ -57,7 +57,7 @@ func TestIndexing2(t *testing.T) {
 		t.Fatal("didn't create a Merkle Manager")
 	}
 
-	if err := MM1.SetChainID(Chain[:]); err != nil {
+	if err := MM1.SetKey(Chain[:]); err != nil {
 		t.Fatal(err)
 	}
 

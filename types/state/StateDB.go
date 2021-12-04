@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -142,35 +141,22 @@ func (s *StateDB) Sync() {
 }
 
 //GetChainRange get the transaction id's in a given range
-func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) (resultHashes []types.Bytes32, maxAvailable int64, err error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	err = s.merkleMgr.SetChainID(chainId)
+func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) ([]types.Bytes32, int64, error) {
+	mgr, err := s.ManageChain(chainId)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	if end > s.merkleMgr.MS.Count {
-		end = s.merkleMgr.MS.Count
+	h, err := mgr.Entries(start, end)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	// GetRange will not cross mark point boundaries, so we may need to call it
-	// multiple times
-	resultHashes = make([]types.Bytes32, 0, end-start)
-	for start < end {
-		hashes, err := s.merkleMgr.GetRange(chainId, start, end)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		for i := range hashes {
-			resultHashes = append(resultHashes, hashes[i].Bytes32())
-		}
-		start += int64(len(hashes))
+	resultHashes := make([]types.Bytes32, len(h))
+	for i, h := range h {
+		copy(resultHashes[i][:], h)
 	}
-
-	return resultHashes, s.merkleMgr.MS.Count, nil
+	return resultHashes, mgr.Height(), nil
 }
 
 //GetTx get the transaction by transaction ID
@@ -466,7 +452,7 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *managed.MerkleManager, chainId types.Bytes32) error {
 	defer group.Done()
 
-	err := tx.state.merkleMgr.SetChainID(chainId[:])
+	err := tx.state.merkleMgr.SetKey(chainId[:])
 	if err != nil {
 		return err
 	}
@@ -601,121 +587,10 @@ func (tx *DBTransaction) writeSynthTxnSigs() error {
 	return nil
 }
 
-func (tx *DBTransaction) writeAnchors(blockIndex int64, timestamp time.Time) error {
-	// Collect and sort a list of all chain IDs
-	chains := make([][32]byte, 0, len(tx.updates))
-	for id := range tx.updates {
-		chains = append(chains, id)
-	}
-	sort.Slice(chains, func(i, j int) bool {
-		return bytes.Compare(chains[i][:], chains[j][:]) < 0
-	})
-
-	// Collect and sort a list of all synthetic transaction IDs
-	var txids [][32]byte
-	seen := map[[32]byte]bool{}
-	for _, txns := range tx.transactions.synthTxMap {
-		for _, txn := range txns {
-			txid := txn.TxId.AsBytes32()
-			if seen[txid] {
-				continue
-			}
-			seen[txid] = true
-			txids = append(txids, txid)
-		}
-	}
-	sort.Slice(txids, func(i, j int) bool {
-		return bytes.Compare(txids[i][:], txids[j][:]) < 0
-	})
-
-	// Load the previous anchor chain head
-	prevHead, prevCount, err := tx.state.GetAnchorHead()
-	if errors.Is(err, storage.ErrNotFound) {
-		prevHead = &AnchorMetadata{Index: 0}
-	} else if err != nil {
-		return err
-	}
-
-	// Make sure the block index is increasing
-	if prevHead.Index >= blockIndex {
-		panic(fmt.Errorf("Current height is %d but the next block height is %d!", prevHead.Index, blockIndex))
-	}
-
-	// Add an anchor for each updated chain to the anchor chain
-	for _, chainId := range chains {
-		err := tx.state.merkleMgr.SetChainID(chainId[:])
-		if err != nil {
-			return err
-		}
-		root := tx.state.merkleMgr.MS.GetMDRoot()
-
-		err = tx.state.merkleMgr.SetChainID([]byte(bucketMinorAnchorChain))
-		if err != nil {
-			return err
-		}
-		tx.state.merkleMgr.AddHash(root)
-	}
-
-	// Add all of the synth txids
-	for _, txid := range txids {
-		tx.state.merkleMgr.AddHash(txid[:])
-	}
-
-	// Add the anchor head to the anchor chain
-	head := new(AnchorMetadata)
-	head.Index = blockIndex
-	head.PreviousHeight = prevCount
-	head.Timestamp = timestamp
-	head.Chains = chains
-	data, err := head.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	tx.state.merkleMgr.AddHash(data)
-
-	// Index the anchor chain against the block index
-	tx.GetDB().Key(bucketMinorAnchorChain, "Index", blockIndex).PutBatch(common.Int64Bytes(tx.state.merkleMgr.MS.Count))
-
-	// Update the Patricia tree
-	var id [32]byte
-	copy(id[:], []byte(bucketMinorAnchorChain))
-	tx.state.bptMgr.Bpt.Insert(id, tx.state.merkleMgr.MS.GetMDRoot().Bytes32())
-	return nil
-}
-
 func (tx *DBTransaction) writeBatches() {
 	defer tx.state.sync.Done()
 	tx.state.dbMgr.EndBatch()
 	tx.state.bptMgr.DBManager.EndBatch()
-}
-
-func (s *StateDB) GetAnchorHead() (*AnchorMetadata, int64, error) {
-	err := s.merkleMgr.SetChainID([]byte(bucketMinorAnchorChain))
-	if err != nil {
-		return nil, 0, err
-	}
-
-	if s.merkleMgr.MS.Count == 0 {
-		return nil, 0, storage.ErrNotFound
-	}
-
-	data, err := s.merkleMgr.Get(s.merkleMgr.MS.Count - 1)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to read anchor chain element %d", s.merkleMgr.MS.Count-1)
-	}
-
-	head := new(AnchorMetadata)
-	err = head.UnmarshalBinary(data)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return head, s.merkleMgr.MS.Count, nil
-}
-
-func (s *StateDB) GetAnchors(start, end int64) ([]types.Bytes32, error) {
-	h, _, err := s.GetChainRange([]byte(bucketMinorAnchorChain), start, end)
-	return h, err
 }
 
 func (s *StateDB) SubnetID() (string, error) {
@@ -727,7 +602,16 @@ func (s *StateDB) SubnetID() (string, error) {
 }
 
 func (s *StateDB) BlockIndex() (int64, error) {
-	head, _, err := s.GetAnchorHead()
+	mgr, err := s.MinorAnchorChain()
+	if err != nil {
+		return 0, err
+	}
+
+	if mgr.Height() == 0 {
+		return 0, storage.ErrNotFound
+	}
+
+	head, err := mgr.Record()
 	if err != nil {
 		return 0, err
 	}
@@ -767,9 +651,14 @@ func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte,
 		return nil, fmt.Errorf("failed to save synth txn signatures: %v", err)
 	}
 
-	err = tx.writeAnchors(blockHeight, timestamp)
+	err = tx.writeSynthChain(blockHeight)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make anchor: %v", err)
+		return nil, fmt.Errorf("failed to write synth chain: %v", err)
+	}
+
+	err = tx.writeAnchorChain(blockHeight, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write anchor chain: %v", err)
 	}
 
 	group.Wait()

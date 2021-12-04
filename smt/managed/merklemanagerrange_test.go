@@ -43,7 +43,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		t.Fatal("didn't create a Merkle Manager")
 	}
 
-	if err := MM1.SetChainID([]byte{1}); err != nil {
+	if err := MM1.SetKey([]byte{1}); err != nil {
 		t.Fatalf("Error setting chain ID: %v", err)
 	}
 
@@ -82,7 +82,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 			if lastIndex < 0 {
 				lastIndex = 0
 			}
-			list, err := MM1.GetRange([]byte{1}, begin, end)
+			list, err := MM1.GetRange([]interface{}{[]byte{1}}, begin, end)
 			if begin >= 0 && begin < NumTests-1 && end > begin && end > 0 && err != nil {
 				t.Fatalf("shouldn't happen %v", err)
 			}

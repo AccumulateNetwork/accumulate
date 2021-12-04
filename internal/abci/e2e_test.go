@@ -11,12 +11,10 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/types"
 	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -158,16 +156,13 @@ func TestAnchorChain(t *testing.T) {
 	// Sanity check
 	require.Equal(t, types.String("acc://RoadRunner"), n.GetADI("RoadRunner").ChainUrl)
 
-	// Construct a Merkle manager for the anchor chain
-	anchorMM, err := managed.NewMerkleManager(n.db.GetDB(), 0)
+	// Get the anchor chain manager
+	anchor, err := n.db.MinorAnchorChain()
 	require.NoError(t, err)
-	require.NoError(t, anchorMM.SetChainID([]byte("MinorAnchorChain")))
 
 	// Extract and verify the anchor chain head
-	head := new(state.AnchorMetadata)
-	data, err := anchorMM.Get(anchorMM.MS.Count - 1)
+	head, err := anchor.Record()
 	require.NoError(t, err)
-	require.NoError(t, head.UnmarshalBinary(data))
 	require.ElementsMatch(t, [][32]byte{
 		types.Bytes((&url.URL{Authority: "RoadRunner"}).ResourceChain()).AsBytes32(),
 		types.Bytes((&url.URL{Authority: "RoadRunner/book"}).ResourceChain()).AsBytes32(),
@@ -175,15 +170,15 @@ func TestAnchorChain(t *testing.T) {
 	}, head.Chains)
 
 	// Check each anchor
-	chainMM, err := managed.NewMerkleManager(n.db.GetDB(), 0)
-	require.NoError(t, err)
+	first := anchor.Height() - int64(len(head.Chains))
 	for i, chain := range head.Chains {
-		height := anchorMM.MS.Count - int64(len(head.Chains)) + int64(i)
-		root, err := anchorMM.Get(height - 1)
+		mgr, err := n.db.ManageChain(chain)
 		require.NoError(t, err)
 
-		require.NoError(t, chainMM.SetChainID(chain[:]))
-		assert.Equal(t, chainMM.MS.GetMDRoot(), root, "wrong anchor for %X", chain)
+		root, err := anchor.Chain.Entry(first + int64(i))
+		require.NoError(t, err)
+
+		assert.Equal(t, mgr.Anchor(), root, "wrong anchor for %X", chain)
 	}
 }
 
