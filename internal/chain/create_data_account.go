@@ -7,7 +7,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type CreateDataAccount struct{}
@@ -31,18 +30,18 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 		return fmt.Errorf("%q cannot sponsor %q", st.SponsorUrl, dataAccountUrl)
 	}
 
-	//if we have a manger book URL, then we need to parse it.
-	var managerBookUrl string
-	if len(body.ManagerKeyBookUrl) != 0 {
+	//create the data account
+	account := protocol.NewDataAccount()
+	account.ChainUrl = types.String(dataAccountUrl.String())
+
+	//if we have a manger book URL, then we need make sure it is valid url syntax
+	if body.ManagerKeyBookUrl != "" {
 		u, err := url.Parse(body.ManagerKeyBookUrl)
 		if err != nil {
 			return fmt.Errorf("manager key book specified, but url is invalid: %v", err)
 		}
-		managerBookUrl = u.String()
+		account.ManagerKeyBook = types.String(u.String())
 	}
-
-	//create the data account
-	account := state.NewDataAccount(dataAccountUrl.String(), managerBookUrl)
 
 	//setup key book associated with account
 	if body.KeyBookUrl == "" {
@@ -59,17 +58,6 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
 		copy(account.KeyBook[:], keyBookUrl.ResourceChain())
-	}
-
-	if managerBookUrl != "" {
-		c, err := st.LoadString(managerBookUrl)
-		if err != nil {
-			return fmt.Errorf("invalid key book %q: %v", managerBookUrl, err)
-		}
-		if c.Header().Type != types.ChainTypeKeyBook {
-			return fmt.Errorf("expected key book url for %v, received %s",
-				managerBookUrl, c.Header().Type)
-		}
 	}
 
 	st.Create(account)
