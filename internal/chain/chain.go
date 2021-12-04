@@ -20,6 +20,7 @@ func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
 		CreateKeyPage{},
 		CreateKeyBook{},
 		UpdateKeyPage{},
+		WriteData{},
 		SyntheticCreateChain{},
 		SyntheticTokenDeposit{},
 		SyntheticDepositCredits{},

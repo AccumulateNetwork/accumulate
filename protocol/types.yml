@@ -221,8 +221,12 @@ CreateDataAccount:
 WriteData:
   kind: tx
   fields:
-  - name: Data
-    type: bytes
+    - name: ExtIds
+      type: slice
+      slice:
+        type: bytes
+    - name: Data
+      type: bytes
 
 WriteDataTo:
   kind: tx

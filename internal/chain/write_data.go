@@ -20,5 +20,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
+	//	entryHash := protocol.ComputeEntryHash(append(body.ExtIds, body.Data))
+
 	return errors.New("not implemented") // TODO
 }
