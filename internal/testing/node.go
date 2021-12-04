@@ -2,21 +2,19 @@ package testing
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	cfg "github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/rs/zerolog"
-	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/rpc/client/local"
 )
@@ -39,17 +37,7 @@ func NodeInitOptsForNetwork(network *networks.Subnet) (node.InitOptions, error) 
 		listenIP[i] = "tcp://localhost"
 		remoteIP[i] = net.IP
 
-		config[i] = new(cfg.Config)
-		switch net.Type {
-		case cfg.Validator:
-			config[i].Config = *tmcfg.DefaultValidatorConfig()
-		case cfg.Follower:
-			config[i].Config = *tmcfg.DefaultConfig()
-		default:
-			return node.InitOptions{}, fmt.Errorf("Error: hard-coded network has invalid node type: %q\n", net.Type)
-		}
-
-		config[i].LogLevel = "error"
+		config[i] = cfg.Default(network.Type, net.Type)
 		config[i].Consensus.CreateEmptyBlocks = false
 		config[i].Accumulate.Type = network.Type
 		config[i].Accumulate.Networks = []string{fmt.Sprintf("tcp://%s:%d", remoteIP[0], network.Port)}
@@ -65,25 +53,39 @@ func NodeInitOptsForNetwork(network *networks.Subnet) (node.InitOptions, error) 
 	}, nil
 }
 
-func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zerolog.Logger, cleanup func(func())) (*node.Node, *state.StateDB, *privval.FilePV, error) {
-	cfg, err := cfg.Load(dir)
+type BVNNOptions struct {
+	Dir       string
+	MemDB     bool
+	LogWriter func(string) io.Writer
+	Logger    func(io.Writer) zerolog.Logger
+}
+
+func NewBVNN(opts BVNNOptions, cleanup func(func())) (*node.Node, *state.StateDB, *privval.FilePV, error) {
+	cfg, err := cfg.Load(opts.Dir)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to load config: %v", err)
 	}
 
-	var zl zerolog.Logger
-	if newZL == nil {
-		w, err := logging.NewConsoleWriter(cfg.LogFormat)
+	var logWriter io.Writer
+	if opts.LogWriter == nil {
+		logWriter, err = logging.NewConsoleWriter(cfg.LogFormat)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		cfg.LogLevel, w, err = logging.ParseLogLevel(cfg.LogLevel, w)
-		zl = zerolog.New(w)
 	} else {
-		zl = newZL(cfg.LogFormat)
+		logWriter = opts.LogWriter(cfg.LogFormat)
 	}
 
-	logger, err := logging.NewTendermintLogger(zl, cfg.LogLevel, false)
+	logLevel, logWriter, err := logging.ParseLogLevel(cfg.LogLevel, logWriter)
+
+	var zl zerolog.Logger
+	if opts.Logger == nil {
+		zl = zerolog.New(logWriter)
+	} else {
+		zl = opts.Logger(logWriter)
+	}
+
+	logger, err := logging.NewTendermintLogger(zl, logLevel, false)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
 		os.Exit(1)
@@ -92,7 +94,7 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
 	sdb := new(state.StateDB)
-	err = sdb.Open(dbPath, memDB, true, logger)
+	err = sdb.Open(dbPath, opts.MemDB, true, logger)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
@@ -109,22 +111,14 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 		return nil, nil, nil, fmt.Errorf("failed to load file PV: %v", err)
 	}
 
-	if relayTo == nil {
-		relayTo = []string{cfg.RPC.ListenAddress}
-	}
-
-	relay, err := relay.NewWith(relayTo...)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create RPC relay: %v", err)
-	}
-
 	clientProxy := node.NewLocalClient()
 	mgr, err := chain.NewBlockValidatorExecutor(chain.ExecutorOptions{
-		Query:  api.NewQuery(relay),
-		Local:  clientProxy,
-		DB:     sdb,
-		Logger: logger,
-		Key:    pv.Key.PrivKey.Bytes(),
+		Local:           clientProxy,
+		DB:              sdb,
+		Logger:          logger,
+		Key:             pv.Key.PrivKey.Bytes(),
+		Directory:       cfg.Accumulate.Directory,
+		BlockValidators: cfg.Accumulate.Networks,
 	})
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
@@ -141,7 +135,7 @@ func NewBVCNode(dir string, memDB bool, relayTo []string, newZL func(string) zer
 	}
 	go func() {
 		<-node.Quit()
-		sdb.GetDB().Close()
+		_ = sdb.GetDB().Close()
 	}()
 	cleanup(func() {
 		_ = node.Stop()

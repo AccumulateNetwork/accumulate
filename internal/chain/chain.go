@@ -11,7 +11,7 @@ import (
 
 // NewBlockValidatorExecutor creates a new Executor for a block validator node.
 func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
-	return NewExecutor(opts,
+	return NewExecutor(opts, false,
 		CreateIdentity{},
 		WithdrawTokens{},
 		CreateTokenAccount{},
@@ -30,7 +30,7 @@ func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
 }
 
 func NewDirectoryExecutor(opts ExecutorOptions) (*Executor, error) {
-	return NewExecutor(opts) // TODO Add DN validators
+	return NewExecutor(opts, true) // TODO Add DN validators
 }
 
 // TxExecutor executes a specific type of transaction.
