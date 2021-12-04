@@ -29,6 +29,8 @@ func (s *StateDB) Begin() *DBTransaction {
 // DB returns the transaction's database.
 func (tx *DBTransaction) DB() *StateDB { return tx.state }
 
+func (tx *DBTransaction) Dirty() bool { return true }
+
 func (tx *DBTransaction) AddSynthTxnSig(sig *SyntheticSignature) {
 	tx.dirty = true
 	tx.addSynthSigs = append(tx.addSynthSigs, sig)
