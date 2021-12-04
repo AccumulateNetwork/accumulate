@@ -284,7 +284,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		r := n.GetDataAccount("FooBar/oof")
 		require.Equal(t, types.ChainTypeDataAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
-		require.Equal(t, types.String("acc://FooBar/mgr/book1"), r.ManagerKeyBookUrl)
+		require.Equal(t, types.String("acc://FooBar/mgr/book1"), r.ManagerKeyBook)
 		require.Equal(t, bookChainId, r.KeyBook)
 
 	})
