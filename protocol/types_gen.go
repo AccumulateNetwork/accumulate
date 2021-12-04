@@ -174,7 +174,8 @@ type UpdateKeyPage struct {
 }
 
 type WriteData struct {
-	Data []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	ExtIds [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
+	Data   []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 }
 
 type WriteDataTo struct {
@@ -702,6 +703,18 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 }
 
 func (v *WriteData) Equal(u *WriteData) bool {
+	if !(len(v.ExtIds) == len(u.ExtIds)) {
+		return false
+	}
+
+	for i := range v.ExtIds {
+		v, u := v.ExtIds[i], u.ExtIds[i]
+		if !(bytes.Equal(v, u)) {
+			return false
+		}
+
+	}
+
 	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
 	}
@@ -1117,6 +1130,13 @@ func (v *WriteData) BinarySize() int {
 	var n int
 
 	n += encoding.UvarintBinarySize(types.TxTypeWriteData.ID())
+
+	n += encoding.UvarintBinarySize(uint64(len(v.ExtIds)))
+
+	for _, v := range v.ExtIds {
+		n += encoding.BytesBinarySize(v)
+
+	}
 
 	n += encoding.BytesBinarySize(v.Data)
 
@@ -1574,6 +1594,13 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeWriteData.ID()))
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.ExtIds))))
+	for i, v := range v.ExtIds {
+		_ = i
+		buffer.Write(encoding.BytesMarshalBinary(v))
+
+	}
 
 	buffer.Write(encoding.BytesMarshalBinary(v.Data))
 
@@ -2384,6 +2411,25 @@ func (v *WriteData) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
+	var lenExtIds uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ExtIds: %w", err)
+	} else {
+		lenExtIds = x
+	}
+	data = data[encoding.UvarintBinarySize(lenExtIds):]
+
+	v.ExtIds = make([][]byte, lenExtIds)
+	for i := range v.ExtIds {
+		if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding ExtIds[%d]: %w", i, err)
+		} else {
+			v.ExtIds[i] = x
+		}
+		data = data[encoding.BytesBinarySize(v.ExtIds[i]):]
+
+	}
+
 	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {
@@ -2556,8 +2602,13 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *WriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Data *string `json:"data,omitempty"`
+		ExtIds []*string `json:"extIds,omitempty"`
+		Data   *string   `json:"data,omitempty"`
 	}{}
+	u.ExtIds = make([]*string, len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
 	u.Data = encoding.BytesToJSON(v.Data)
 	return json.Marshal(&u)
 }
@@ -2835,11 +2886,24 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *WriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Data *string `json:"data,omitempty"`
+		ExtIds []*string `json:"extIds,omitempty"`
+		Data   *string   `json:"data,omitempty"`
 	}{}
+	u.ExtIds = make([]*string, len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
 	u.Data = encoding.BytesToJSON(v.Data)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	v.ExtIds = make([][]byte, len(u.ExtIds))
+	for i, x := range u.ExtIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ExtIds[%d]: %w", i, err)
+		} else {
+			v.ExtIds[i] = x
+		}
 	}
 	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
 		return fmt.Errorf("error decoding Data: %w", err)
