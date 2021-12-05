@@ -62,7 +62,7 @@ func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, err
 	return &qr, nil
 }
 
-func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQueryResult, error) {
+func (m *Executor) queryDirectoryByChainId(chainId []byte, start uint64, limit uint64) (*protocol.DirectoryQueryResult, error) {
 	b, err := m.DB.GetIndex(state.DirectoryIndex, chainId, "Metadata")
 	if err != nil {
 		return nil, err
@@ -74,15 +74,26 @@ func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQ
 		return nil, err
 	}
 
+	count := limit
+	if start+count > md.Count {
+		count = md.Count - start
+	}
+	if count > md.Count { // when uint64 0-x is really big number
+		count = 0
+	}
+
 	resp := new(protocol.DirectoryQueryResult)
-	resp.Entries = make([]string, md.Count)
-	for i := range resp.Entries {
-		b, err := m.DB.GetIndex(state.DirectoryIndex, chainId, uint64(i))
+	resp.Entries = make([]string, count)
+
+	for i := uint64(0); i < count; i++ {
+		b, err := m.DB.GetIndex(state.DirectoryIndex, chainId, start+i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}
 		resp.Entries[i] = string(b)
 	}
+	resp.Total = md.Count
+
 	return resp, nil
 }
 
@@ -185,7 +196,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
-		dir, err := m.queryDirectoryByChainId(u.ResourceChain())
+		dir, err := m.queryDirectoryByChainId(u.ResourceChain(), chr.Start, chr.Limit)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
 		}
