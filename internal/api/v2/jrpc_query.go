@@ -23,7 +23,12 @@ func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) 
 		return err
 	}
 
-	return jrpcFormatQuery(m.opts.Query.QueryDirectory(req.Url, &req.QueryOptions))
+	res, err := m.opts.Query.QueryDirectory(req.Url, &req.QueryPagination, &req.QueryOptions)
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return res
 }
 
 func (m *JrpcMethods) QueryChain(_ context.Context, params json.RawMessage) interface{} {
