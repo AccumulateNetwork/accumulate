@@ -178,8 +178,7 @@ func (c *ABCIApplicationClient) addSynthTxns(blockIndex int64) {
 		return
 	}
 
-	head := new(state.SyntheticTransactionChain)
-	err = chain.RecordAs(head)
+	head, err := chain.Record()
 	if errors.Is(err, storage.ErrNotFound) {
 		// Nothing to do
 		return
@@ -198,7 +197,7 @@ func (c *ABCIApplicationClient) addSynthTxns(blockIndex int64) {
 
 	// Pull the transaction IDs from the anchor chain
 	height := chain.Height()
-	txns, err := chain.Entries(height-head.Count, height)
+	txns, err := chain.Chain.Entries(height-head.Count, height)
 	if err != nil {
 		c.onError(err)
 		return
