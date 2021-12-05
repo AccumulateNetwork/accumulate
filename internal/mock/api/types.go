@@ -55,18 +55,18 @@ func (mr *MockQuerierMockRecorder) QueryChain(id interface{}) *gomock.Call {
 }
 
 // QueryDirectory mocks base method.
-func (m *MockQuerier) QueryDirectory(url string, opts *api.QueryOptions) (*api.QueryResponse, error) {
+func (m *MockQuerier) QueryDirectory(url string, pagination *api.QueryPagination, opts *api.QueryOptions) (*api.QueryResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryDirectory", url, opts)
+	ret := m.ctrl.Call(m, "QueryDirectory", url, pagination, opts)
 	ret0, _ := ret[0].(*api.QueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // QueryDirectory indicates an expected call of QueryDirectory.
-func (mr *MockQuerierMockRecorder) QueryDirectory(url, opts interface{}) *gomock.Call {
+func (mr *MockQuerierMockRecorder) QueryDirectory(url, pagination, opts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryDirectory", reflect.TypeOf((*MockQuerier)(nil).QueryDirectory), url, opts)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryDirectory", reflect.TypeOf((*MockQuerier)(nil).QueryDirectory), url, pagination, opts)
 }
 
 // QueryTx mocks base method.
