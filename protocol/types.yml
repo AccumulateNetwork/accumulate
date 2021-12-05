@@ -194,6 +194,9 @@ DirectoryQueryResult:
       pointer: true
       marshal-as: reference
     optional: true
+  - name: Total
+    type: uvarint
+    keep-empty: true
 
 DataAccount:
   kind: chain
