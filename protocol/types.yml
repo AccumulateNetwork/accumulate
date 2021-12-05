@@ -313,3 +313,24 @@ SyntheticSignature:
       type: bytes
     - name: Nonce
       type: uvarint
+
+SyntheticAnchor:
+  kind: tx
+  fields:
+    - name: Source
+      type: string
+      is-url: true
+    - name: Major
+      type: bool
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
+    - name: Root
+      type: chain
+    - name: SynthTxnAnchor
+      type: chain
+    - name: ChainAnchor
+      type: chain
+    - name: Chains
+      type: chainSet
