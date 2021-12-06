@@ -11,6 +11,7 @@ var cmdRun = &cobra.Command{
 	Use:   "run",
 	Short: "Run node",
 	Run:   runNode,
+	Args:  cobra.NoArgs,
 }
 
 var flagRun = struct {
