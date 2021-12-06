@@ -43,6 +43,7 @@ type bucket string
 
 const (
 	bucketEntry            = bucket("StateEntries")
+	bucketDataEntry        = bucket("DataEntries") //map of entry hash to WriteData Entry
 	bucketTx               = bucket("Transactions")
 	bucketMainToPending    = bucket("MainToPending") //main TXID to PendingTXID
 	bucketPendingTx        = bucket("PendingTx")     //Store pending transaction
@@ -214,6 +215,44 @@ func (tx *DBTransaction) AddSynthTx(parentTxId types.Bytes, synthTxId types.Byte
 	txMap[parentHash] = append(txMap[parentHash], transactionStateInfo{synthTxObject, nil, synthTxId})
 }
 
+// AddDataTransaction queues (pending) transaction signatures and (optionally) an
+// accepted transaction for storage to their respective chains.
+func (tx *DBTransaction) AddDataTransaction(chainId *types.Bytes32, txId types.Bytes, txPending, txAccepted *Object) error {
+	var txAcceptedEntry []byte
+	if txAccepted != nil {
+		txAcceptedEntry = txAccepted.Entry
+	}
+	tx.state.logDebug("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
+	tx.dirty = true
+
+	chainType, _ := binary.Uvarint(txPending.Entry)
+	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
+		return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
+			types.ChainTypePendingTransaction.Name(), types.TxType(chainType).Name())
+	}
+
+	if txAccepted != nil {
+		chainType, _ = binary.Uvarint(txAccepted.Entry)
+		if types.ChainType(chainType) != types.ChainTypeTransaction {
+			return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
+				types.ChainTypeTransaction.Name(), types.ChainType(chainType).Name())
+		}
+	}
+
+	//append the list of pending Tx's, txId's, and validated Tx's.
+	tx.state.mutex.Lock()
+	defer tx.state.mutex.Unlock()
+
+	tsi := transactionStateInfo{txPending, chainId.Bytes(), txId}
+	tx.transactions.pendingTx = append(tx.transactions.pendingTx, &tsi)
+
+	if txAccepted != nil {
+		tsi := transactionStateInfo{txAccepted, chainId.Bytes(), txId}
+		tx.transactions.validatedTx = append(tx.transactions.validatedTx, &tsi)
+	}
+	return nil
+}
+
 // AddTransaction queues (pending) transaction signatures and (optionally) an
 // accepted transaction for storage to their respective chains.
 func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes, txPending, txAccepted *Object) error {
@@ -227,7 +266,7 @@ func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
 		return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
-			types.ChainTypePendingTransaction.Name(), types.TxType(chainType).Name())
+			types.ChainTypePendingTransaction.Name(), chainType)
 	}
 
 	if txAccepted != nil {
