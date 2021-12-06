@@ -71,12 +71,6 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
 			ct++
 			ed.KeyPageIndex = uint64(v)
-			if len(args) > 3 {
-				if v, err := strconv.ParseInt(args[2], 10, 64); err == nil {
-					ct++
-					ed.KeyPageHeight = uint64(v)
-				}
-			}
 		}
 	}
 
