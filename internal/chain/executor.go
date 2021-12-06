@@ -435,6 +435,11 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 	// validation material (i.e. TxPending).  The body of the transaction
 	// gets put on the main chain, and the validation material gets put on
 	// the pending chain which is purged after about 2 weeks
+	//
+	// Note: if this is a WriteData or WriteDataTo transaction then the DataEntry Payload is
+	// stripped from the transaction and replaced with an entry hash.  The reason this is done
+	// because when the transaction is queried, it will return a reference to where the data
+	// actually resides.  This prevents unnecessary duplication of data
 	txAccepted, txPending := state.NewTransaction(txPending)
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()

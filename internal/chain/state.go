@@ -38,6 +38,7 @@ const (
 	createRecord storeKind = iota + 1
 	updateRecord
 	updateNonce
+	updateDataEntry
 )
 
 type storeState struct {

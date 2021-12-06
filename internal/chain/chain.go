@@ -41,7 +41,7 @@ func NewDirectoryExecutor(opts ExecutorOptions) (*Executor, error) {
 // TxExecutor executes a specific type of transaction.
 type TxExecutor interface {
 	// Type is the transaction type the executor can execute.
-	Type() types.TxType
+	Type() types.TransactionType
 
 	// Validate fully validates and executes the transaction.
 	Validate(*StateManager, *transactions.GenTransaction) error
