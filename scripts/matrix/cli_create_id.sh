@@ -7,24 +7,36 @@
 j=`which jq`
 if [ -z $j ]; then
 	echo "jq not found, needed to get account name"
-	exit 0
+	exit 1
 fi
 s=`which sed`
 if [ -z $s ]; then
-	echo "jq not found, needed to get account name"
-	exit 0
+	echo "sed not found, needed to get account name"
+	exit 1
 fi
 #
 # issue the account generate command to the specified server
 
 if [ -z $1 ]; then
-	acc="$($cli account generate -j 2>&1 > /dev/null | $j .name | $s 's/\"//g')"
+	accid="$($cli account generate -j 2>&1 > /dev/null)"
+	if [ $? -eq 0 ]; then
+           acc=`echo $accid | $j .name | $s 's/\"//g'`
+        else
+	   echo "cli account generate failed"
+	   exit 1
+        fi
 else
-	acc="$($cli account generate -j -s http://$1/v1 2>&1 > /dev/null | $j .name | $s 's/\"//g')"
+	accid="$($cli account generate -j -s http://$1/v1 2>&1 > /dev/null)"
+        if [ $? -eq 0 ]; then
+	   acc=`echo $accid | $j .name | $s 's/\"//g'`
+	else
+	   echo "cli account generate failed"
+	   exit 1
+        fi
 fi
 
 # return the generated ID 
 
 echo $acc
-
+exit 0
 

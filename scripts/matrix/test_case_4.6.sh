@@ -7,19 +7,19 @@
 #
 # set cli command and see if it exists
 #
-export cli=../cmd/cli/cli
+export cli=../../cmd/cli/cli
 
 if [ -z $1 ]; then
 	echo "must supply host:port"
-	exit 0
+	exit 1
 fi
 
 if [ ! -f $cli ]; then
-	        echo "cli command not found in ../cmd/cli, attempting to build"
+	echo "cli command not found in ../../cmd/cli, attempting to build"
         ./build_cli.sh
         if [ ! -f $cli ]; then
-                echo "cli command failed to build"
-                exit 0
+           echo "cli command failed to build"
+                exit 1
         fi
 fi
 
@@ -28,14 +28,11 @@ fi
 
 ID=`./cli_create_id.sh $1`
 
-echo $ID
-
-# see if we got an id, if not, exit
-
-if [ -z $ID ]; then
-   echo "Account creation failed"
-   exit 0
+if [ $? -ne 0 ]; then
+	echo "cli create id failed"
+	exit 1
 fi
+echo $ID
 
 sleep .5
 
@@ -43,21 +40,43 @@ sleep .5
 
 TxID=`./cli_faucet.sh $ID $1`
 
+if [ $? -ne 0 ]; then
+	echo "cli faucet failed"
+	exit 1
+fi
 # generate a key
 
 Key=`./cli_key_generate.sh t46key $1`
+if [ $? -ne 0 ]; then
+	echo "cli key generate failed"
+	exit 1
+fi
 Key2=`./cli_key_generate.sh t46key2 $1`
-
-#echo $Key
-#echo $Key2
+if [ $? -ne 0 ]; then
+	echo "cli key generate failed"
+	exit 1
+fi
 
 # create account
 
 sleep 2
 ./cli_adi_create_account.sh $ID acc://t46acct t46key $1
+if [ $? -ne 0 ]; then
+	echo "cli adi create account failed"
+	exit 1
+fi
 
 sleep 2
 $cli page create acc://t46acct t46key acc://t46acct/keypage46 t46key2 -s http://$1/v1
+if [ $? -ne 0 ]; then
+	echo "cli page create failed"
+	exit 1
+fi
 
 sleep 2
 $cli page remove acc://t46acct t46key acc://t46acct/keypage46 -s http://$1/v1
+if [ $? -ne 0 ]; then
+	echo "cli page remove failed"
+	exit 1
+fi
+exit 0
