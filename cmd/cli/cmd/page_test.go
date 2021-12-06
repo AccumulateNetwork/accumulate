@@ -2,9 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"testing"
-
 	"github.com/stretchr/testify/require"
+	"testing"
 )
 
 func init() {
@@ -52,7 +51,7 @@ func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//uncomment after key page fix
-	commandLine := fmt.Sprintf("page key add acc://RedWagon/page1 red2 0 2 red4")
+	commandLine := fmt.Sprintf("page key add acc://RedWagon/page1 red2 red4")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
@@ -66,7 +65,7 @@ func testCase4_4(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	// TODO we can remove the height once the CLI automatically populates it
-	commandLine := fmt.Sprintf("page create acc://RedWagon/book red2 0 3 acc://RedWagon/page3 red5")
+	commandLine := fmt.Sprintf("page create acc://RedWagon/book red2 acc://RedWagon/page3 red5")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
@@ -89,7 +88,7 @@ func testCase4_6(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//remove red4
-	commandLine := fmt.Sprintf("page key remove acc://RedWagon/page1 red2 0 3 red4")
+	commandLine := fmt.Sprintf("page key remove acc://RedWagon/page1 red2 red4")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
@@ -101,7 +100,7 @@ func testCase4_7(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//replace key3 with key 4
-	commandLine := fmt.Sprintf("page key update acc://RedWagon/page1 red2 0 4 red2 red5")
+	commandLine := fmt.Sprintf("page key update acc://RedWagon/page1 red2 red2 red5")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 

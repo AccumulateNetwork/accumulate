@@ -123,6 +123,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		PrintKeyBookCreate()
 		return "", err
 	}
+
 	if len(args) < 2 {
 		PrintKeyPageCreate()
 		return "", fmt.Errorf("invalid number of arguments")
@@ -133,6 +134,18 @@ func CreateKeyPage(page string, args []string) (string, error) {
 	if newUrl.Authority != pageUrl.Authority {
 		return "", fmt.Errorf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
 	}
+
+	resp, err := Get(si.URL)
+	if err != nil {
+		PrintKeyUpdate()
+		return "", err
+	}
+	apiRes := acmeapi.APIDataResponse{}
+	if err := json.Unmarshal([]byte(resp), &apiRes); err != nil {
+		PrintKeyUpdate()
+		return "", err
+	}
+	si.KeyPageHeight = apiRes.MerkleState.Count
 
 	css := protocol.CreateKeyPage{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
@@ -211,6 +224,18 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 		PrintKeyUpdate()
 		return "", err
 	}
+
+	resp, err := Get(si.URL)
+	if err != nil {
+		PrintKeyUpdate()
+		return "", err
+	}
+	apiRes := acmeapi.APIDataResponse{}
+	if err := json.Unmarshal([]byte(resp), &apiRes); err != nil {
+		PrintKeyUpdate()
+		return "", err
+	}
+	si.KeyPageHeight = apiRes.MerkleState.Count
 
 	var newKey []byte
 	var oldKey []byte
