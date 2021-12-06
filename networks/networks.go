@@ -76,9 +76,9 @@ var TestNet = Network{
 		Type:        BlockValidator,
 		Port:        33000,
 		Nodes: []Node{
-			{"3.140.120.192", Validator},
-			{"18.220.147.250", Validator},
-			{"52.89.160.158", Validator},
+			{"0.bvn0.testnet.accumulatenetwork.io", Validator},
+			{"1.bvn0.testnet.accumulatenetwork.io", Validator},
+			{"2.bvn0.testnet.accumulatenetwork.io", Validator},
 		},
 	},
 	"BVC1": {
@@ -87,9 +87,9 @@ var TestNet = Network{
 		Type:        BlockValidator,
 		Port:        33000,
 		Nodes: []Node{
-			{"65.0.156.146", Validator},
-			{"13.234.254.178", Validator},
-			{"44.229.57.187", Validator},
+			{"0.bvn1.testnet.accumulatenetwork.io", Validator},
+			{"1.bvn1.testnet.accumulatenetwork.io", Validator},
+			{"2.bvn1.testnet.accumulatenetwork.io", Validator},
 		},
 	},
 	"BVC2": {
@@ -98,9 +98,9 @@ var TestNet = Network{
 		Type:        BlockValidator,
 		Port:        33000,
 		Nodes: []Node{
-			{"13.48.159.117", Validator},
-			{"16.170.126.251", Validator},
-			{"34.214.215.210", Validator},
+			{"0.bvn2.testnet.accumulatenetwork.io", Validator},
+			{"1.bvn2.testnet.accumulatenetwork.io", Validator},
+			{"2.bvn2.testnet.accumulatenetwork.io", Validator},
 		},
 	},
 }
@@ -112,10 +112,10 @@ var DevNet = Network{
 		Type:        Directory,
 		Port:        34000,
 		Nodes: []Node{
-			{"172.31.4.106", Validator},  // Zion 0
-			{"172.31.11.185", Follower},  // Zion 1
-			{"172.31.11.104", Validator}, // Yellowstone 0
-			{"172.31.13.8", Follower},    // Yellowstone 1
+			{"0.zion.devnet.accumulatenetwork.io", Validator},
+			{"1.zion.devnet.accumulatenetwork.io", Follower},
+			{"0.yellowstone.devnet.accumulatenetwork.io", Validator},
+			{"1.yellowstone.devnet.accumulatenetwork.io", Follower},
 		},
 	},
 	"Zion": {
@@ -126,8 +126,8 @@ var DevNet = Network{
 		Port:        33000,
 		Directory:   "tcp://localhost:34000",
 		Nodes: []Node{
-			{"172.31.4.106", Validator},
-			{"172.31.11.185", Validator},
+			{"0.zion.devnet.accumulatenetwork.io", Validator},
+			{"1.zion.devnet.accumulatenetwork.io", Validator},
 		},
 	},
 	"Yellowstone": {
@@ -138,8 +138,8 @@ var DevNet = Network{
 		Port:        33000,
 		Directory:   "tcp://localhost:34000",
 		Nodes: []Node{
-			{"172.31.11.104", Validator},
-			{"172.31.13.8", Validator},
+			{"0.yellowstone.devnet.accumulatenetwork.io", Validator},
+			{"1.yellowstone.devnet.accumulatenetwork.io", Validator},
 		},
 	},
 }
