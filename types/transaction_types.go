@@ -197,3 +197,39 @@ func (t *TransactionType) UnmarshalJSON(data []byte) error {
 func (t TransactionType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())
 }
+
+//
+//func (t TransactionType) UnitCost() int {
+//	switch t {
+//	case TxTypeCreateIdentity:
+//		return protocol.FeeCreateIdentity.AsInt()
+//	case TxTypeCreateTokenAccount:
+//		return protocol.FeeCreateTokenAccount.AsInt()
+//	case TxTypeWithdrawTokens:
+//		return protocol.FeeWithdrawTokens.AsInt()
+//	case TxTypeCreateDataAccount:
+//		return protocol.FeeCreateDataAccount.AsInt()
+//	case TxTypeWriteData:
+//		return protocol.FeeWriteData.AsInt()
+//	case TxTypeWriteDataTo:
+//		return protocol.FeeWriteDataTo.AsInt()
+//	case TxTypeAcmeFaucet:
+//		return protocol.FeeAcmeFaucet.AsInt()
+//	case TxTypeCreateToken:
+//		return protocol.FeeCreateToken.AsInt()
+//	case TxTypeIssueTokens:
+//		return protocol.FeeIssueTokens.AsInt()
+//	case TxTypeBurnTokens:
+//		return protocol.FeeBurnTokens.AsInt()
+//	case TxTypeCreateKeyPage:
+//		return protocol.FeeCreateKeyPage.AsInt()
+//	case TxTypeCreateKeyBook:
+//		return protocol.FeeCreateKeyBook.AsInt()
+//	case TxTypeAddCredits:
+//		return protocol.FeeAddCredits.AsInt()
+//	case TxTypeUpdateKeyPage:
+//		return protocol.FeeUpdateKeyPage.AsInt()
+//	default:
+//		return 0
+//	}
+//}

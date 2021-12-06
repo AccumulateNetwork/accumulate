@@ -273,6 +273,15 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		}
 	}
 
+	//cost, err := protocol.ComputeFee(tx)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//if !page.DebitCredits(uint64(cost)) {
+	//	return nil, fmt.Errorf("insufficent credits for the transaction")
+	//}
+	//st.UpdateCreditBalance(page)
+
 	st.UpdateNonce(page)
 	return st, nil
 }
@@ -379,7 +388,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 		return &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("malformed transaction error")}
 	}
 
-	txt := types.TxType(tx.TransactionType())
+	txt := tx.TransactionType()
 	executor, ok := m.executors[txt]
 	txPending := state.NewPendingTransaction(tx)
 	chainId := types.Bytes(tx.ChainID).AsBytes32()
