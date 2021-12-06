@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -11,7 +10,7 @@ import (
 
 type WriteData struct{}
 
-func (WriteData) Type() types.TxType { return types.TxTypeWriteData }
+func (WriteData) Type() types.TransactionType { return types.TxTypeWriteData }
 
 func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	body := new(protocol.WriteData)
@@ -20,7 +19,20 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	//	entryHash := protocol.ComputeEntryHash(append(body.ExtIds, body.Data))
+	if st.Sponsor.Header().Type != types.ChainTypeDataAccount {
+		return fmt.Errorf("sponsor is not a data account: want %v, got %v",
+			types.ChainTypeDataAccount, st.Sponsor.Header().Type)
+	}
 
-	return errors.New("not implemented") // TODO
+	//cost will return error if there is too much data or no data for the entry
+	_, err = body.CheckSize()
+	if err != nil {
+		return err
+	}
+
+	//todo: need to deduct credits from page, should this be done by check?
+	_, _ = body.Cost()
+	//? st.DeductFee(page, cost)
+
+	return nil
 }
