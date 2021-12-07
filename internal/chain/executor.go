@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
@@ -29,9 +30,9 @@ const chainWGSize = 4
 type Executor struct {
 	ExecutorOptions
 
-	executors   map[types.TxType]TxExecutor
-	dispatcher  *dispatcher
-	isDirectory bool
+	executors  map[types.TxType]TxExecutor
+	dispatcher *dispatcher
+	isGenesis  bool
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -50,21 +51,27 @@ type ExecutorOptions struct {
 	Logger          log.Logger
 	Key             ed25519.PrivateKey
 	Local           api.ABCIBroadcastClient
+	SubnetType      config.NetworkType
 	Directory       string
 	BlockValidators []string
+
+	// TODO Remove once tests support running the DN
+	IsTest bool
 }
 
-func NewExecutor(opts ExecutorOptions, isDirectory bool, executors ...TxExecutor) (*Executor, error) {
+func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.ExecutorOptions = opts
-	m.isDirectory = isDirectory
 	m.executors = map[types.TxType]TxExecutor{}
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
-	m.logger = opts.Logger.With("module", "executor")
+
+	if opts.Logger != nil {
+		m.logger = opts.Logger.With("module", "executor")
+	}
 
 	var err error
-	m.dispatcher, err = newDispatcher(opts, isDirectory)
+	m.dispatcher, err = newDispatcher(opts)
 	if err != nil {
 		return nil, err
 	}
@@ -83,11 +90,87 @@ func NewExecutor(opts ExecutorOptions, isDirectory bool, executors ...TxExecutor
 		return nil, err
 	}
 
-	m.logger.Info("Loaded", "height", height, "hash", logging.AsHex(m.DB.RootHash()))
+	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(m.DB.RootHash()))
 	return m, nil
 }
 
+func (m *Executor) logDebug(msg string, keyVals ...interface{}) {
+	if m.logger != nil {
+		m.logger.Debug(msg, keyVals...)
+	}
+}
+
+func (m *Executor) logInfo(msg string, keyVals ...interface{}) {
+	if m.logger != nil {
+		m.logger.Info(msg, keyVals...)
+	}
+}
+
+func (m *Executor) logError(msg string, keyVals ...interface{}) {
+	if m.logger != nil {
+		m.logger.Error(msg, keyVals...)
+	}
+}
+
+func (m *Executor) Genesis(time time.Time, callback func(st *StateManager)) ([]byte, error) {
+	var err error
+
+	if !m.isGenesis {
+		panic("Cannot call Genesis on a node txn executor")
+	}
+
+	m.height = 1
+	m.time = time
+
+	tx := new(transactions.GenTransaction)
+	tx.SigInfo = new(transactions.SignatureInfo)
+	tx.SigInfo.URL = protocol.ACME
+	tx.Transaction, err = new(protocol.SyntheticGenesis).MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	m.dbTx = m.DB.Begin()
+	st, err := NewStateManager(m.dbTx, tx)
+	if err == nil {
+		return nil, errors.New("already initialized")
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		return nil, err
+	}
+
+	txPending := state.NewPendingTransaction(tx)
+	txAccepted, txPending := state.NewTransaction(txPending)
+	dataAccepted, err := txAccepted.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	txPending.Status = json.RawMessage("{\"code\":\"0\"}")
+	dataPending, err := txPending.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	chainId := protocol.AcmeUrl().ResourceChain32()
+	err = m.dbTx.AddTransaction((*types.Bytes32)(&chainId), tx.TransactionHash(), &state.Object{Entry: dataPending}, &state.Object{Entry: dataAccepted})
+	if err != nil {
+		return nil, err
+	}
+
+	callback(st)
+
+	err = st.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	return m.Commit()
+}
+
 func (m *Executor) InitChain(state []byte) error {
+	if m.isGenesis {
+		panic("Cannot call InitChain on a genesis txn executor")
+	}
+
 	// Load the genesis state (JSON) into an in-memory key-value store
 	src := new(memory.DB)
 	_ = src.InitDB("", nil)
@@ -134,7 +217,7 @@ func (m *Executor) InitChain(state []byte) error {
 
 // BeginBlock implements ./abci.Chain
 func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockResponse, error) {
-	m.logger.Debug("Begin block", "height", req.Height, "leader", req.IsLeader, "time", req.Time)
+	m.logDebug("Begin block", "height", req.Height, "leader", req.IsLeader, "time", req.Time)
 
 	m.leader = req.IsLeader
 	m.height = req.Height
@@ -158,19 +241,10 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	// Reset dispatcher
 	m.dispatcher.Reset(context.Background())
 
-	// Add a synthetic transaction for the previous block's anchor
-	anchorTxns, err := m.addAnchorTxn(m.height)
+	// Sign synthetic transactions produced by the previous block
+	err := m.signSynthTxns()
 	if err != nil {
 		return abci.BeginBlockResponse{}, err
-	}
-
-	// If we're the leader, sign synthetic transactions produced by the previous
-	// block
-	if m.leader {
-		err := m.signSynthTxns(anchorTxns)
-		if err != nil {
-			return abci.BeginBlockResponse{}, err
-		}
 	}
 
 	// Send synthetic transactions produced in the previous block
@@ -468,12 +542,15 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
 func (m *Executor) Commit() ([]byte, error) {
 	m.wg.Wait()
 
-	mdRoot, err := m.dbTx.Commit(m.height, m.time)
+	mdRoot, err := m.dbTx.Commit(m.height, m.time, func() error {
+		// Add a synthetic transaction for the previous block's anchor
+		return m.addAnchorTxn()
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	m.logger.Info("Committed", "db_time", m.DB.TimeBucket)
+	m.logInfo("Committed", "db_time", m.DB.TimeBucket)
 	m.DB.TimeBucket = 0
 	return mdRoot, nil
 }
