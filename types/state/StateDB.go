@@ -60,6 +60,17 @@ const (
 func (b bucket) String() string { return string(b) }
 func (b bucket) Bytes() []byte  { return []byte(b) }
 
+type dataBlock struct {
+	EntryHash []byte
+	Data      []byte
+}
+
+type dataBlockUpdates struct {
+	bucket    bucket
+	entries   []dataBlock
+	stateData *Object //the data chain state
+}
+
 type blockUpdates struct {
 	bucket    bucket
 	txId      []*types.Bytes32
@@ -215,41 +226,24 @@ func (tx *DBTransaction) AddSynthTx(parentTxId types.Bytes, synthTxId types.Byte
 	txMap[parentHash] = append(txMap[parentHash], transactionStateInfo{synthTxObject, nil, synthTxId})
 }
 
-// AddDataTransaction queues (pending) transaction signatures and (optionally) an
-// accepted transaction for storage to their respective chains.
-func (tx *DBTransaction) AddDataTransaction(chainId *types.Bytes32, txId types.Bytes, txPending, txAccepted *Object) error {
-	var txAcceptedEntry []byte
-	if txAccepted != nil {
-		txAcceptedEntry = txAccepted.Entry
-	}
-	tx.state.logDebug("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
-	tx.dirty = true
+// AddDataEntry append the entry to the chain, the subChainId is if the chain upon which
+// the transaction is against touches another chain. One example would be an account type chain
+// may change the state of the KeyBook chain (i.e. a sub/secondary chain) based on the effect
+// of a transaction.  The entry is the state object associated with
+func (tx *DBTransaction) AddDataEntry(chainId *types.Bytes32, entryHash []byte, dataEntry []byte, dataState *Object) error {
+	tx.state.logDebug("AddDataEntry", "chainId", logging.AsHex(chainId),
+		"entryHash", logging.AsHex(entryHash), "entry", logging.AsHex(dataEntry))
 
-	chainType, _ := binary.Uvarint(txPending.Entry)
-	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
-		return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
-			types.ChainTypePendingTransaction.Name(), types.TxType(chainType).Name())
+	if len(entryHash) != 32 {
+		return fmt.Errorf("cannot add data entry without an entry hash!")
 	}
 
-	if txAccepted != nil {
-		chainType, _ = binary.Uvarint(txAccepted.Entry)
-		if types.ChainType(chainType) != types.ChainTypeTransaction {
-			return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
-				types.ChainTypeTransaction.Name(), types.ChainType(chainType).Name())
-		}
+	if dataEntry == nil {
+		return fmt.Errorf("cannot add data entry without an entry!")
 	}
 
-	//append the list of pending Tx's, txId's, and validated Tx's.
-	tx.state.mutex.Lock()
-	defer tx.state.mutex.Unlock()
+	tx.addDataEntry(chainId, entryHash, dataEntry, dataState)
 
-	tsi := transactionStateInfo{txPending, chainId.Bytes(), txId}
-	tx.transactions.pendingTx = append(tx.transactions.pendingTx, &tsi)
-
-	if txAccepted != nil {
-		tsi := transactionStateInfo{txAccepted, chainId.Bytes(), txId}
-		tx.transactions.validatedTx = append(tx.transactions.validatedTx, &tsi)
-	}
 	return nil
 }
 
@@ -416,6 +410,26 @@ func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Byt
 // transaction chain_.
 func (tx *DBTransaction) UpdateNonce(chainId *types.Bytes32, object *Object) {
 	tx.addStateEntry(chainId, nil, object)
+}
+
+func (tx *DBTransaction) addDataEntry(chainId *types.Bytes32, entryHash []byte, dataEntry []byte, dataState *Object) {
+	tx.state.mutex.Lock()
+	defer tx.state.mutex.Unlock()
+
+	tx.dirty = true
+
+	dataUpdates := tx.dataUpdates[*chainId]
+
+	if dataUpdates == nil {
+		dataUpdates = new(dataBlockUpdates)
+		tx.dataUpdates[*chainId] = dataUpdates
+	}
+
+	if entryHash != nil {
+		dataUpdates.entries = append(dataUpdates.entries, dataBlock{entryHash[:], dataEntry})
+	}
+
+	dataUpdates.stateData = dataState
 }
 
 func (tx *DBTransaction) addStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
@@ -796,6 +810,7 @@ func (s *StateDB) RootHash() []byte {
 
 func (tx *DBTransaction) cleanupTx() {
 	tx.updates = make(map[types.Bytes32]*blockUpdates)
+	tx.dataUpdates = make(map[types.Bytes32]*dataBlockUpdates)
 
 	// The compiler optimizes this into a constant-time operation
 	for k := range tx.writes {

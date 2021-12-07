@@ -24,7 +24,7 @@ type StateManager struct {
 	submissions []*submittedTx
 	storeCount  int
 	txHash      types.Bytes32
-	txType      types.TxType
+	txType      types.TransactionType
 	synthSigs   []*state.SyntheticSignature
 
 	Sponsor        state.Chain
@@ -38,7 +38,7 @@ const (
 	createRecord storeKind = iota + 1
 	updateRecord
 	updateNonce
-	updateDataEntry
+	addDataEntry
 )
 
 type storeState struct {
@@ -214,6 +214,18 @@ func (m *StateManager) UpdateNonce(record state.Chain) {
 	m.store(record, updateNonce)
 }
 
+//UpdateCredits update the credits used for a transaction
+func (m *StateManager) UpdateCredits(record state.Chain) {
+	//todo implement
+}
+
+//UpdateData will cache a data associated with a DataAccount chain.
+//the cache data will not be stored directly in the state but can be used
+//upstream for storing a chain in the state database.
+func (m *StateManager) UpdateData(record state.Chain) {
+	m.store(record, addDataEntry)
+}
+
 // Create queues a record for a synthetic chain create transaction. Will panic
 // if called by a synthetic transaction. Will panic if the record is a
 // transaction.
@@ -362,7 +374,16 @@ func (m *StateManager) Commit() error {
 			}
 
 			m.dbTx.UpdateNonce((*types.Bytes32)(store.chainId), &state.Object{Entry: data})
+		case addDataEntry:
+			var cache *protocol.DataAccountStateCache
+			switch store.record.(type) {
+			case *protocol.DataAccountStateCache:
+				cache = store.record.(*protocol.DataAccountStateCache)
+			default:
+				return fmt.Errorf("record %d is not a DataAccountStateCache chain", store.record.Header().Type)
+			}
 
+			return m.dbTx.AddDataEntry((*types.Bytes32)(store.chainId), cache.GetEntryHash(), cache.GetData(), &state.Object{Entry: data})
 		default:
 			panic(fmt.Errorf("invalid store kind %d", store.kind))
 		}

@@ -11,6 +11,30 @@ import (
 //	return true
 //}
 
+type DataAccountStateCache struct {
+	DataAccount
+
+	//this is part of the data cache and is not persisted with the state.
+	entryHash []byte
+	data      []byte
+}
+
+func NewDataAccountStateCache(da *DataAccount, entryHash []byte, data []byte) *DataAccountStateCache {
+	cachedState := new(DataAccountStateCache)
+	cachedState.DataAccount = *da
+	cachedState.entryHash = entryHash
+	cachedState.data = data
+	return cachedState
+}
+
+func (d *DataAccountStateCache) GetData() []byte {
+	return d.data
+}
+
+func (d *DataAccountStateCache) GetEntryHash() []byte {
+	return d.entryHash
+}
+
 // ComputeEntryHash
 // returns the entry hash given external id's and data associated with an entry
 func ComputeEntryHash(data [][]byte) []byte {

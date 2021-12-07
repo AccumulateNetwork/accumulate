@@ -211,15 +211,24 @@ LiteDataAccount:
 CreateDataAccount:
   kind: tx
   fields:
-  - name: Url
-    type: string
-    is-url: true
-  - name: KeyBookUrl
-    type: string
-    is-url: true
-  - name: ManagerKeyBookUrl
-    type: string
-    is-url: true
+    - name: Url
+      type: string
+      is-url: true
+    - name: KeyBookUrl
+      type: string
+      is-url: true
+    - name: ManagerKeyBookUrl
+      type: string
+      is-url: true
+
+SegWitDataEntry:
+  kind: tx
+  fields:
+    - name: EntryUrl
+      type: string
+      is-url: true
+    - name: EntryHash
+      type: chain
 
 DataEntry:
   fields:
