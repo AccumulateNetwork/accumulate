@@ -2,6 +2,7 @@ package testing
 
 import (
 	"fmt"
+	"github.com/tendermint/tendermint/libs/log"
 	"io"
 	"os"
 	"path/filepath"
@@ -93,9 +94,9 @@ func NewBVNN(opts BVNNOptions, cleanup func(func())) (*node.Node, *state.StateDB
 
 	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
-	sdb, err := state.NewStateDB().WithDebug().WithLogger(logger).OpenInMemory()
+	sdb, err := openStateDB(dbPath, opts.MemDB, logger)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
+		return nil, nil, nil, err
 	}
 	cleanup(func() {
 		_ = sdb.GetDB().Close()
@@ -152,4 +153,21 @@ func NewBVNN(opts BVNNOptions, cleanup func(func())) (*node.Node, *state.StateDB
 	clientProxy.Set(lclient)
 
 	return node, sdb, pv, nil
+}
+
+func openStateDB(dbPath string, memDB bool, logger log.Logger) (*state.StateDB, error) {
+	stateDBBuilder := state.NewStateDB().WithDebug().WithLogger(logger)
+	if memDB {
+		sdb, err := stateDBBuilder.OpenInMemory()
+		if err != nil {
+			return nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
+		}
+		return sdb, nil
+	} else {
+		sdb, err := stateDBBuilder.OpenFromFile(dbPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to open in-memory database: %v", err)
+		}
+		return sdb, nil
+	}
 }
