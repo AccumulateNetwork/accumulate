@@ -9,6 +9,7 @@ import (
 type DBTransaction struct {
 	state        *StateDB
 	dirty        bool
+	dataUpdates  map[types.Bytes32]*dataBlockUpdates
 	updates      map[types.Bytes32]*blockUpdates
 	writes       map[storage.Key][]byte
 	addSynthSigs []*SyntheticSignature

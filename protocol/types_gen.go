@@ -129,6 +129,11 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
+type SegWitDataEntry struct {
+	EntryUrl  string   `json:"entryUrl,omitempty" form:"entryUrl" query:"entryUrl" validate:"required,acc-url"`
+	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+}
+
 type SyntheticAnchor struct {
 	Source         string     `json:"source,omitempty" form:"source" query:"source" validate:"required,acc-url"`
 	Major          bool       `json:"major,omitempty" form:"major" query:"major" validate:"required"`
@@ -252,6 +257,8 @@ func (*CreateToken) GetType() types.TransactionType { return types.TxTypeCreateT
 func (*IdentityCreate) GetType() types.TransactionType { return types.TxTypeCreateIdentity }
 
 func (*IssueTokens) GetType() types.TransactionType { return types.TxTypeIssueTokens }
+
+func (*SegWitDataEntry) GetType() types.TransactionType { return types.TxTypeSegWitDataEntry }
 
 func (*SyntheticAnchor) GetType() types.TransactionType { return types.TxTypeSyntheticAnchor }
 
@@ -601,6 +608,18 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	}
 
 	if !(v.Duration == u.Duration) {
+		return false
+	}
+
+	return true
+}
+
+func (v *SegWitDataEntry) Equal(u *SegWitDataEntry) bool {
+	if !(v.EntryUrl == u.EntryUrl) {
+		return false
+	}
+
+	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
 
@@ -1086,6 +1105,18 @@ func (v *MetricsRequest) BinarySize() int {
 	return n
 }
 
+func (v *SegWitDataEntry) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeSegWitDataEntry.ID())
+
+	n += encoding.StringBinarySize(v.EntryUrl)
+
+	n += encoding.ChainBinarySize(&v.EntryHash)
+
+	return n
+}
+
 func (v *SyntheticAnchor) BinarySize() int {
 	var n int
 
@@ -1565,6 +1596,18 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Metric))
 
 	buffer.Write(encoding.DurationMarshalBinary(v.Duration))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSegWitDataEntry.ID()))
+
+	buffer.Write(encoding.StringMarshalBinary(v.EntryUrl))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
 
 	return buffer.Bytes(), nil
 }
@@ -2324,6 +2367,32 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *SegWitDataEntry) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeSegWitDataEntry
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding EntryUrl: %w", err)
+	} else {
+		v.EntryUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.EntryUrl):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
+	data = data[encoding.ChainBinarySize(&v.EntryHash):]
+
+	return nil
+}
+
 func (v *SyntheticAnchor) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeSyntheticAnchor
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
@@ -2791,6 +2860,16 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SegWitDataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		EntryUrl  string `json:"entryUrl,omitempty"`
+		EntryHash string `json:"entryHash,omitempty"`
+	}{}
+	u.EntryUrl = v.EntryUrl
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Source         string    `json:"source,omitempty"`
@@ -3045,6 +3124,25 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Duration: %w", err)
 	} else {
 		v.Duration = x
+	}
+	return nil
+}
+
+func (v *SegWitDataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		EntryUrl  string `json:"entryUrl,omitempty"`
+		EntryHash string `json:"entryHash,omitempty"`
+	}{}
+	u.EntryUrl = v.EntryUrl
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.EntryUrl = u.EntryUrl
+	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
 	}
 	return nil
 }
