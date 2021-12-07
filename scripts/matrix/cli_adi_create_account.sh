@@ -8,17 +8,17 @@
 j=`which jq`
 if [ -z $j ]; then
 	echo "jq must be installed to return the key"
-	exit 0
+	exit 1
 fi
 
 s=`which sed`
 if [ -z $s ]; then
 	echo "sed must be installed to return the key"
-	exit 0
+	exit 1
 fi
 
 if [ -z $cli ]; then
-	cli=../cmd/cli/cli
+	cli=../../cmd/cli/cli
 fi
 
 # if lite account, account name, and key name not entered on the command line, prompt and exit 
@@ -31,8 +31,14 @@ fi
 # see if the IP address and port were entered on the command line
 # issue the adi create command for the specified key name to the specified server
 
-key="$($cli adi create $1 $2 $3 -s http://$4/v1 -j 2>&1 > /dev/null | $j .hash | $s 's/\"//g')"
+keyn="$($cli adi create $1 $2 $3 -s http://$4/v1 -j 2>&1 > /dev/null)"
+if [ $? -eq 0 ]; then
+	key=`echo $keyn | $j .hash | $s 's/\"//g'`
+else
+	echo "cli adi create failed"
+	exit 1
+fi
 
 echo $key 
-
+exit 0
 
