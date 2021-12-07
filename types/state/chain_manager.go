@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/bits"
 
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
@@ -128,8 +129,12 @@ func (c *ChainManager) Update(record []byte) error {
 		return fmt.Errorf("failed to marshal: %v", err)
 	}
 
+	h := sha256.Sum256(data)
+	c.state.logDebug("Updating chain state", "key", c.key, "hash", logging.AsHex(h))
+
 	c.state.dbMgr.Key(append(c.key, "Record")...).PutBatch(data)
-	c.state.bptMgr.Bpt.Insert(storage.ComputeKey(c.key...), sha256.Sum256(data))
+	c.state.bptMgr.Bpt.Insert(storage.ComputeKey(c.key...), h)
+
 	return nil
 }
 
