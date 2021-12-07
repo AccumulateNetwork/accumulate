@@ -241,9 +241,6 @@ func TestCreateADI(t *testing.T) {
 	ks := n.GetSigSpec("RoadRunner/bar-page")
 	require.Len(t, ks.Keys, 1)
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
-	
-	z := n.GetDirectory("RoadRunner")
-	t.Log(z)
 }
 
 func TestCreateAdiTokenAccount(t *testing.T) {
@@ -362,10 +359,6 @@ func TestAdiAccountTx(t *testing.T) {
 
 	require.Equal(t, int64(acctesting.TokenMx-68), n.GetTokenAccount("foo/tokens").Balance.Int64())
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
-	dir := n.GetDirectory("foo")
-	t.Log(dir)
-	dirr := n.GetDirectory("bar")
-	t.Log(dirr)
 }
 
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
@@ -420,8 +413,6 @@ func TestCreateSigSpec(t *testing.T) {
 	require.Equal(t, types.Bytes32{}, spec.SigSpecId)
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
-	dir := n.GetDirectory("foo")
-	t.Log(dir)
 }
 
 func TestCreateSigSpecGroup(t *testing.T) {
@@ -455,8 +446,6 @@ func TestCreateSigSpecGroup(t *testing.T) {
 
 	spec := n.GetSigSpec("foo/sigspec1")
 	require.Equal(t, spec.SigSpecId, groupChainId)
-	dir := n.GetDirectory("foo")
-    t.Log(dir)
 }
 
 func TestAddSigSpec(t *testing.T) {
@@ -629,32 +618,4 @@ func TestSignatorHeight(t *testing.T) {
 	})
 
 	require.Equal(t, keyPageHeight, getHeight(keyPageUrl), "Key page height changed")
-}
-
-func TestVerifyCreateSigSpec(t *testing.T) {
-    n := createAppWithMemDB(t, crypto.Address{}, "error", true)
-    fooKey, testKey := generateKey(), generateKey()
-    dbTx := n.db.Begin()
-    require.NoError(t, acctesting.CreateADIVerify(dbTx, fooKey, "foo"))
-    dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
-    n.Batch(func(send func(*transactions.GenTransaction)) {
-        cms := new(protocol.CreateSigSpec)
-        cms.Url = "foo/keyPage2"
-        cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
-            PublicKey: testKey.PubKey().Bytes(),
-        })
-        tx, err := transactions.New("foo/keyBook", edSigner(fooKey, 1), cms)
-        require.NoError(t, err)
-        send(tx)
-    })
-    keyBookId := (&url.URL{Authority: "foo", Path: "/keyBook"}).ResourceChain()
-    n.client.Wait()
-    spec := n.GetSigSpec("foo/keyPage2")
-    require.Len(t, spec.Keys, 1)
-    key := spec.Keys[0]
-    require.Equal(t, types.Bytes(keyBookId).AsBytes32(), spec.SigSpecId)
-    require.Equal(t, uint64(0), key.Nonce)
-    require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
-    dir := n.GetDirectory("foo")
-    t.Log(dir)
 }

@@ -97,7 +97,6 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 				return fmt.Errorf("error fetching %q: %v", u.String(), err)
 			}
 
-
 		}
 
 		// Check the key book
