@@ -25,13 +25,13 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 	}
 
 	//cost will return error if there is too much data or no data for the entry
-	_, err = body.CheckSize()
+	_, err = body.Entry.CheckSize()
 	if err != nil {
 		return err
 	}
 
 	//todo: need to deduct credits from page, should this be done by check?
-	_, _ = body.Cost()
+	_, _ = body.Entry.Cost()
 	//? st.DeductFee(page, cost)
 
 	return nil
