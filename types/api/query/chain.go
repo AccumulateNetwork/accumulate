@@ -3,6 +3,7 @@ package query
 import (
 	"bytes"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/types"
