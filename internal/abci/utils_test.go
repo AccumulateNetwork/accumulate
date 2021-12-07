@@ -38,7 +38,7 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
-func createAppWithMemDB(t testing.TB, addr crypto.Address, logLevel string, doGenesis bool) *fakeNode {
+func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
 	db, err := state.NewStateDB().WithDebug().OpenInMemory()
 	require.NoError(t, err)
 
