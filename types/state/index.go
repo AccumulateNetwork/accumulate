@@ -34,18 +34,18 @@ func (db *StateDB) Read(key storage.Key) ([]byte, error) {
 
 func (tx *DBTransaction) WriteIndex(index Index, chain []byte, key interface{}, value []byte) {
 	k := storage.ComputeKey(string(index), chain, key)
-	tx.state.logInfo("WriteIndex", "index", string(index), "chain", hex.EncodeToString(chain), "key", key, "value", hex.EncodeToString(value), "computed", hex.EncodeToString(k[:]))
+	tx.state.logDebug("WriteIndex", "index", string(index), "chain", hex.EncodeToString(chain), "key", key, "value", hex.EncodeToString(value), "computed", hex.EncodeToString(k[:]))
 	tx.Write(k, value)
 }
 
 func (tx *DBTransaction) GetIndex(index Index, chain []byte, key interface{}) ([]byte, error) {
 	k := storage.ComputeKey(string(index), chain, key)
-	tx.state.logInfo("GetIndex", "index", string(index), "chain", hex.EncodeToString(chain), "key", key, "computed", hex.EncodeToString(k[:]))
+	tx.state.logDebug("GetIndex", "index", string(index), "chain", hex.EncodeToString(chain), "key", key, "computed", hex.EncodeToString(k[:]))
 	return tx.Read(k)
 }
 
 func (db *StateDB) GetIndex(index Index, chain []byte, key interface{}) ([]byte, error) {
 	k := storage.ComputeKey(string(index), chain, key)
-	db.logInfo("GetIndex", "index", string(index), "chain", hex.EncodeToString(chain), "key", key, "computed", hex.EncodeToString(k[:]))
+	db.logDebug("GetIndex", "index", string(index), "chain", hex.EncodeToString(chain), "key", key, "computed", hex.EncodeToString(k[:]))
 	return db.Read(k)
 }

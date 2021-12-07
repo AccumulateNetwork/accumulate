@@ -24,6 +24,7 @@ func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
 		SyntheticTokenDeposit{},
 		SyntheticDepositCredits{},
 		SyntheticSignTransactions{},
+		SyntheticAnchor{IsDirectory: false},
 
 		// TODO Only for TestNet
 		AcmeFaucet{},
@@ -31,7 +32,9 @@ func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
 }
 
 func NewDirectoryExecutor(opts ExecutorOptions) (*Executor, error) {
-	return NewExecutor(opts, true) // TODO Add DN validators
+	return NewExecutor(opts, true,
+		SyntheticAnchor{IsDirectory: true},
+	)
 }
 
 // TxExecutor executes a specific type of transaction.
