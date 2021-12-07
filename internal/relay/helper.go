@@ -8,7 +8,7 @@ import (
 func NewClients(targetList ...string) ([]Client, error) {
 	clients := []Client{}
 	for _, nameOrIP := range targetList {
-		addr, err := networks.GetRpcAddr(nameOrIP, networks.TmRpcPortOffset)
+		addr, err := networks.GetRpcAddr(nameOrIP)
 		if err != nil {
 			return nil, err
 		}

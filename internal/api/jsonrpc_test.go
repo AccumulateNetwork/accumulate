@@ -287,14 +287,8 @@ func TestFaucet(t *testing.T) {
 	jsonapi := NewTest(t, query)
 
 	res := jsonapi.Faucet(context.Background(), params)
-	data, err := json.Marshal(res)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(data))
-
-	//allow the transaction to settle.
-	time.Sleep(time.Second)
+	require.IsType(t, (*api.APIDataResponse)(nil), res)
+	require.NoError(t, acctesting.WaitForTxV1(query, res.(*acmeapi.APIDataResponse)))
 
 	//readback the result.
 	resp, err := query.GetChainStateByUrl(string(req.URL))

@@ -6,11 +6,11 @@ import (
 	"strconv"
 )
 
-func GetRpcAddr(netOrIp string, portOffset int) (string, error) {
+func GetRpcAddr(netOrIp string) (string, error) {
 	net := all[netOrIp]
 	ip, err := url.Parse(netOrIp)
 	if net != nil {
-		ip = &url.URL{Scheme: "tcp", Host: fmt.Sprintf("%s:%d", net.Nodes[0].IP, net.Port+portOffset)}
+		ip = &url.URL{Scheme: "tcp", Host: fmt.Sprintf("%s:%d", net.Nodes[0].IP, net.Port+TmRpcPortOffset)}
 	} else if err != nil {
 		return "", fmt.Errorf("%q is not a URL or a named network", netOrIp)
 	} else if ip.Port() == "" {

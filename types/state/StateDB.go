@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -78,9 +77,14 @@ type StateDB struct {
 	logger     log.Logger
 }
 
+func (s *StateDB) logDebug(msg string, keyVals ...interface{}) {
+	if s.logger != nil {
+		s.logger.Debug(msg, keyVals...)
+	}
+}
+
 func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	if s.logger != nil {
-		// TODO Maybe this should be Debug?
 		s.logger.Info(msg, keyVals...)
 	}
 }
@@ -97,6 +101,7 @@ func (s *StateDB) open(dbType string, dbFilename string, logger log.Logger) (err
 	if logger != nil {
 		logger = logger.With("module", dbType)
 	}
+
 	s.dbMgr, err = database.NewDBManager(dbType, dbFilename, logger)
 	if err != nil {
 		return err
@@ -122,35 +127,22 @@ func (s *StateDB) Sync() {
 }
 
 //GetChainRange get the transaction id's in a given range
-func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) (resultHashes []types.Bytes32, maxAvailable int64, err error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	err = s.merkleMgr.SetChainID(chainId)
+func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) ([]types.Bytes32, int64, error) {
+	mgr, err := s.ManageChain(chainId)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	if end > s.merkleMgr.MS.Count {
-		end = s.merkleMgr.MS.Count
+	h, err := mgr.Entries(start, end)
+	if err != nil {
+		return nil, 0, err
 	}
 
-	// GetRange will not cross mark point boundaries, so we may need to call it
-	// multiple times
-	resultHashes = make([]types.Bytes32, 0, end-start)
-	for start < end {
-		hashes, err := s.merkleMgr.GetRange(chainId, start, end)
-		if err != nil {
-			return nil, 0, err
-		}
-
-		for i := range hashes {
-			resultHashes = append(resultHashes, hashes[i].Bytes32())
-		}
-		start += int64(len(hashes))
+	resultHashes := make([]types.Bytes32, len(h))
+	for i, h := range h {
+		copy(resultHashes[i][:], h)
 	}
-
-	return resultHashes, s.merkleMgr.MS.Count, nil
+	return resultHashes, mgr.Height(), nil
 }
 
 //GetTx get the transaction by transaction ID
@@ -195,7 +187,7 @@ func (s *StateDB) GetSyntheticTxIds(txId []byte) (syntheticTxIds []byte, err err
 func (tx *DBTransaction) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synthTxObject *Object) {
 	// TODO: Move the transaction related functions to stateTxn at a time where the impact on other branches is minimal
 
-	tx.state.logInfo("AddSynthTx", "txid", logging.AsHex(synthTxId), "entry", logging.AsHex(synthTxObject.Entry))
+	tx.state.logDebug("AddSynthTx", "txid", logging.AsHex(synthTxId), "entry", logging.AsHex(synthTxObject.Entry))
 	tx.dirty = true
 
 	parentHash := parentTxId.AsBytes32()
@@ -210,7 +202,7 @@ func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes
 	if txAccepted != nil {
 		txAcceptedEntry = txAccepted.Entry
 	}
-	tx.state.logInfo("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
+	tx.state.logDebug("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
 	tx.dirty = true
 
 	chainType, _ := binary.Uvarint(txPending.Entry)
@@ -312,7 +304,7 @@ func (s *StateDB) GetSynthTxn(txid [32]byte) (*Object, error) {
 		return nil, fmt.Errorf("failed to get transaction %X: %v", txid, err)
 	}
 
-	s.logInfo("GetSynthTxn", "txid", logging.AsHex(txid), "entry", logging.AsHex(obj.Entry))
+	s.logDebug("GetSynthTxn", "txid", logging.AsHex(txid), "entry", logging.AsHex(obj.Entry))
 	return obj, nil
 }
 
@@ -353,7 +345,7 @@ func (tx *DBTransaction) GetCurrentEntry(chainId []byte) (*Object, error) {
 // may change the state of the KeyBook chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
-	tx.state.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
+	tx.state.logDebug("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
 
 	if txHash == nil {
 		panic("Cannot add state entry without a transaction ID!")
@@ -389,6 +381,20 @@ func (tx *DBTransaction) addStateEntry(chainId *types.Bytes32, txHash *types.Byt
 	updates.stateData = object
 }
 
+func (tx *DBTransaction) WriteSynthTxn(txid []byte, obj *Object) error {
+	data, err := obj.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	var txid32 [32]byte
+	copy(txid32[:], txid)
+
+	tx.state.dbMgr.Key(bucketStagedSynthTx, "", txid).PutBatch(data)
+	tx.state.bptMgr.Bpt.Insert(txid32, sha256.Sum256(data))
+	return nil
+}
+
 func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 	defer group.Done()
 	//record transactions
@@ -401,15 +407,10 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 			var synthData []byte
 			for _, synthTxInfo := range synthTxInfos {
 				synthData = append(synthData, synthTxInfo.TxId...)
-				synthTxData, err := synthTxInfo.Object.MarshalBinary()
+				err := tx.WriteSynthTxn(synthTxInfo.TxId, synthTxInfo.Object)
 				if err != nil {
 					return err
 				}
-
-				tx.state.dbMgr.Key(bucketStagedSynthTx, "", synthTxInfo.TxId).PutBatch(synthTxData)
-
-				//store the hash of th synthObject in the bptMgr, will be removed after synth tx is processed
-				tx.state.bptMgr.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
 			}
 			//store a list of txid to list of synth txid's
 			tx.state.dbMgr.Key(bucketTxToSynthTx, txn.TxId).PutBatch(synthData)
@@ -446,7 +447,7 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *managed.MerkleManager, chainId types.Bytes32) error {
 	defer group.Done()
 
-	err := tx.state.merkleMgr.SetChainID(chainId[:])
+	err := tx.state.merkleMgr.SetKey(chainId[:])
 	if err != nil {
 		return err
 	}
@@ -464,7 +465,7 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 	//add all the transaction states that occurred during this block for this chain (in order of appearance)
 	for _, txn := range currentState.txId {
 		//store the txHash for the chains, they will be mapped back to the above recorded tx's
-		tx.state.logInfo("AddHash", "hash", logging.AsHex(tx))
+		tx.state.logDebug("AddHash", "hash", logging.AsHex(tx))
 		mm.AddHash(managed.Hash((*txn)[:]))
 	}
 
@@ -489,7 +490,7 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 
 		mutex.Lock()
 		tx.GetDB().Key(bucketEntry, chainId.Bytes()).PutBatch(chainStateObject)
-		// The bptMgr stores the hash of the ChainState object hash.
+		// The bpt stores the hash of the ChainState object hash.
 		tx.state.bptMgr.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
 		mutex.Unlock()
 	}
@@ -526,6 +527,13 @@ func (s *StateDB) GetSynthTxnSigs() ([]SyntheticSignature, error) {
 
 func (tx *DBTransaction) writeSynthTxnSigs() error {
 	sigMap := map[[32]byte]*SyntheticSignature{}
+	delMap := map[[32]byte]bool{}
+
+	// Remove any deleted entries
+	for _, txid := range tx.delSynthSigs {
+		tx.state.logInfo("Removing synth txn sig", "txid", logging.AsHex(txid))
+		delMap[txid] = true
+	}
 
 	// Get the current set of signatures
 	sigs, err := tx.state.GetSynthTxnSigs()
@@ -533,16 +541,17 @@ func (tx *DBTransaction) writeSynthTxnSigs() error {
 		return err
 	}
 	for _, sig := range sigs {
-		sigMap[sig.Txid] = &sig
-	}
+		if delMap[sig.Txid] {
+			continue
+		}
 
-	// Remove any deleted entries
-	for _, txid := range tx.delSynthSigs {
-		delete(sigMap, txid)
+		tx.state.logInfo("Keeping synth txn sig", "txid", logging.AsHex(sig.Txid))
+		sigMap[sig.Txid] = &sig
 	}
 
 	// Add new entries
 	for _, sig := range tx.addSynthSigs {
+		tx.state.logInfo("Adding synth txn sig", "txid", logging.AsHex(sig.Txid))
 		sigMap[sig.Txid] = sig
 	}
 
@@ -581,121 +590,10 @@ func (tx *DBTransaction) writeSynthTxnSigs() error {
 	return nil
 }
 
-func (tx *DBTransaction) writeAnchors(blockIndex int64, timestamp time.Time) error {
-	// Collect and sort a list of all chain IDs
-	chains := make([][32]byte, 0, len(tx.updates))
-	for id := range tx.updates {
-		chains = append(chains, id)
-	}
-	sort.Slice(chains, func(i, j int) bool {
-		return bytes.Compare(chains[i][:], chains[j][:]) < 0
-	})
-
-	// Collect and sort a list of all synthetic transaction IDs
-	var txids [][32]byte
-	seen := map[[32]byte]bool{}
-	for _, txns := range tx.transactions.synthTxMap {
-		for _, txn := range txns {
-			txid := txn.TxId.AsBytes32()
-			if seen[txid] {
-				continue
-			}
-			seen[txid] = true
-			txids = append(txids, txid)
-		}
-	}
-	sort.Slice(txids, func(i, j int) bool {
-		return bytes.Compare(txids[i][:], txids[j][:]) < 0
-	})
-
-	// Load the previous anchor chain head
-	prevHead, prevCount, err := tx.state.GetAnchorHead()
-	if errors.Is(err, storage.ErrNotFound) {
-		prevHead = &AnchorMetadata{Index: 0}
-	} else if err != nil {
-		return err
-	}
-
-	// Make sure the block index is increasing
-	if prevHead.Index >= blockIndex {
-		panic(fmt.Errorf("Current height is %d but the next block height is %d!", prevHead.Index, blockIndex))
-	}
-
-	// Add an anchor for each updated chain to the anchor chain
-	for _, chainId := range chains {
-		err := tx.state.merkleMgr.SetChainID(chainId[:])
-		if err != nil {
-			return err
-		}
-		root := tx.state.merkleMgr.MS.GetMDRoot()
-
-		err = tx.state.merkleMgr.SetChainID([]byte(bucketMinorAnchorChain))
-		if err != nil {
-			return err
-		}
-		tx.state.merkleMgr.AddHash(root)
-	}
-
-	// Add all of the synth txids
-	for _, txid := range txids {
-		tx.state.merkleMgr.AddHash(txid[:])
-	}
-
-	// Add the anchor head to the anchor chain
-	head := new(AnchorMetadata)
-	head.Index = blockIndex
-	head.PreviousHeight = prevCount
-	head.Timestamp = timestamp
-	head.Chains = chains
-	data, err := head.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	tx.state.merkleMgr.AddHash(data)
-
-	// Index the anchor chain against the block index
-	tx.GetDB().Key(bucketMinorAnchorChain, "Index", blockIndex).PutBatch(common.Int64Bytes(tx.state.merkleMgr.MS.Count))
-
-	// Update the Patricia tree
-	var id [32]byte
-	copy(id[:], []byte(bucketMinorAnchorChain))
-	tx.state.bptMgr.Bpt.Insert(id, tx.state.merkleMgr.MS.GetMDRoot().Bytes32())
-	return nil
-}
-
 func (tx *DBTransaction) writeBatches() {
 	defer tx.state.sync.Done()
 	tx.state.dbMgr.EndBatch()
 	tx.state.bptMgr.DBManager.EndBatch()
-}
-
-func (s *StateDB) GetAnchorHead() (*AnchorMetadata, int64, error) {
-	err := s.merkleMgr.SetChainID([]byte(bucketMinorAnchorChain))
-	if err != nil {
-		return nil, 0, err
-	}
-
-	if s.merkleMgr.MS.Count == 0 {
-		return nil, 0, storage.ErrNotFound
-	}
-
-	data, err := s.merkleMgr.Get(s.merkleMgr.MS.Count - 1)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to read anchor chain element %d", s.merkleMgr.MS.Count-1)
-	}
-
-	head := new(AnchorMetadata)
-	err = head.UnmarshalBinary(data)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	return head, s.merkleMgr.MS.Count, nil
-}
-
-func (s *StateDB) GetAnchors(start, end int64) ([]types.Bytes32, error) {
-	h, _, err := s.GetChainRange([]byte(bucketMinorAnchorChain), start, end)
-	return h, err
 }
 
 func (s *StateDB) SubnetID() (string, error) {
@@ -707,7 +605,16 @@ func (s *StateDB) SubnetID() (string, error) {
 }
 
 func (s *StateDB) BlockIndex() (int64, error) {
-	head, _, err := s.GetAnchorHead()
+	mgr, err := s.MinorAnchorChain()
+	if err != nil {
+		return 0, err
+	}
+
+	if mgr.Height() == 0 {
+		return 0, storage.ErrNotFound
+	}
+
+	head, err := mgr.Record()
 	if err != nil {
 		return 0, err
 	}
@@ -747,9 +654,14 @@ func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte,
 		return nil, fmt.Errorf("failed to save synth txn signatures: %v", err)
 	}
 
-	err = tx.writeAnchors(blockHeight, timestamp)
+	err = tx.writeSynthChain(blockHeight)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make anchor: %v", err)
+		return nil, fmt.Errorf("failed to write synth chain: %v", err)
+	}
+
+	err = tx.writeAnchorChain(blockHeight, timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("failed to write anchor chain: %v", err)
 	}
 
 	group.Wait()
@@ -764,7 +676,7 @@ func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte,
 
 	//return the state of the BPT for the state of the block
 	rh := types.Bytes(tx.state.RootHash()).AsBytes32()
-	tx.state.logInfo("WriteStates", "height", blockHeight, "hash", logging.AsHex(rh))
+	tx.state.logDebug("WriteStates", "height", blockHeight, "hash", logging.AsHex(rh))
 	return tx.state.RootHash(), nil
 }
 
@@ -819,6 +731,11 @@ func (tx *DBTransaction) commitTxWrites() {
 	}
 }
 
+func (s *StateDB) RootHash() []byte {
+	h := s.bptMgr.Bpt.Root.Hash // Make a copy
+	return h[:]                 // Return a reference to the copy
+}
+
 func (tx *DBTransaction) cleanupTx() {
 	tx.updates = make(map[types.Bytes32]*blockUpdates)
 
@@ -831,11 +748,6 @@ func (tx *DBTransaction) cleanupTx() {
 	tx.transactions.validatedTx = nil
 	tx.transactions.pendingTx = nil
 	tx.transactions.synthTxMap = make(map[types.Bytes32][]transactionStateInfo)
-}
-
-func (s *StateDB) RootHash() []byte {
-	h := s.bptMgr.Bpt.Root.Hash // Make a copy
-	return h[:]                 // Return a reference to the copy
 }
 
 func (s *StateDB) EnsureRootHash() []byte {

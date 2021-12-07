@@ -12,11 +12,9 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
-	apiv2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
@@ -29,11 +27,11 @@ import (
 const chainWGSize = 4
 
 type Executor struct {
-	db        *state.StateDB
-	key       ed25519.PrivateKey
-	query     *accapi.Query
-	local     apiv2.ABCIBroadcastClient
-	executors map[types.TxType]TxExecutor
+	ExecutorOptions
+
+	executors   map[types.TxType]TxExecutor
+	dispatcher  *dispatcher
+	isDirectory bool
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -48,23 +46,28 @@ type Executor struct {
 var _ abci.Chain = (*Executor)(nil)
 
 type ExecutorOptions struct {
-	Query  *accapi.Query
-	DB     *state.StateDB
-	Logger log.Logger
-	Key    ed25519.PrivateKey
-	Local  apiv2.ABCIBroadcastClient
+	DB              *state.StateDB
+	Logger          log.Logger
+	Key             ed25519.PrivateKey
+	Local           api.ABCIBroadcastClient
+	Directory       string
+	BlockValidators []string
 }
 
-func NewExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, error) {
+func NewExecutor(opts ExecutorOptions, isDirectory bool, executors ...TxExecutor) (*Executor, error) {
 	m := new(Executor)
-	m.db = opts.DB
+	m.ExecutorOptions = opts
+	m.isDirectory = isDirectory
 	m.executors = map[types.TxType]TxExecutor{}
-	m.key = opts.Key
 	m.wg = new(sync.WaitGroup)
 	m.mu = new(sync.Mutex)
-	m.query = opts.Query
 	m.logger = opts.Logger.With("module", "executor")
-	m.local = opts.Local
+
+	var err error
+	m.dispatcher, err = newDispatcher(opts, isDirectory)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, x := range executors {
 		if _, ok := m.executors[x.Type()]; ok {
@@ -73,14 +76,14 @@ func NewExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 		m.executors[x.Type()] = x
 	}
 
-	height, err := m.db.BlockIndex()
+	height, err := m.DB.BlockIndex()
 	if errors.Is(err, storage.ErrNotFound) {
 		height = 0
 	} else if err != nil {
 		return nil, err
 	}
 
-	m.logger.Info("Loaded", "height", height, "hash", logging.AsHex(m.db.RootHash()))
+	m.logger.Info("Loaded", "height", height, "hash", logging.AsHex(m.DB.RootHash()))
 	return m, nil
 }
 
@@ -109,7 +112,7 @@ func (m *Executor) InitChain(state []byte) error {
 	}
 
 	// Dump the genesis state into the key-value store
-	dst := m.db.GetDB().DB
+	dst := m.DB.GetDB().DB
 	err = dst.EndBatch(src.Export())
 	if err != nil {
 		return fmt.Errorf("failed to load app state into database: %v", err)
@@ -122,7 +125,7 @@ func (m *Executor) InitChain(state []byte) error {
 	}
 
 	// Make sure the StateDB BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(hash[:], m.db.RootHash()) {
+	if !bytes.Equal(hash[:], m.DB.RootHash()) {
 		panic("BPT root hash from state DB does not match the app state")
 	}
 
@@ -131,11 +134,13 @@ func (m *Executor) InitChain(state []byte) error {
 
 // BeginBlock implements ./abci.Chain
 func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockResponse, error) {
+	m.logger.Debug("Begin block", "height", req.Height, "leader", req.IsLeader, "time", req.Time)
+
 	m.leader = req.IsLeader
 	m.height = req.Height
 	m.time = req.Time
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
-	m.dbTx = m.db.Begin()
+	m.dbTx = m.DB.Begin()
 
 	// In order for other BVCs to be able to validate the synthetic transaction,
 	// a wrapped signed version must be resubmitted to this BVC network and the
@@ -150,10 +155,19 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	// of the flood-fill gossip network tendermint will provide and ensure the
 	// synth transaction will be picked up.
 
+	// Reset dispatcher
+	m.dispatcher.Reset(context.Background())
+
+	// Add a synthetic transaction for the previous block's anchor
+	anchorTxns, err := m.addAnchorTxn(m.height)
+	if err != nil {
+		return abci.BeginBlockResponse{}, err
+	}
+
 	// If we're the leader, sign synthetic transactions produced by the previous
 	// block
 	if m.leader {
-		err := m.signSynthTxns()
+		err := m.signSynthTxns(anchorTxns)
 		if err != nil {
 			return abci.BeginBlockResponse{}, err
 		}
@@ -164,6 +178,15 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	if err != nil {
 		return abci.BeginBlockResponse{}, err
 	}
+
+	// Dispatch transactions. Due to Tendermint's locks, this cannot be
+	// synchronous.
+	go func() {
+		err := m.dispatcher.Send(context.Background())
+		if err != nil {
+			m.logger.Error("Failed to dispatch transactions", "error", err)
+		}
+	}()
 
 	return abci.BeginBlockResponse{
 		SynthTxns: txns,
@@ -182,7 +205,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	txt := tx.TransactionType()
 
 	if m.dbTx == nil {
-		m.dbTx = m.db.Begin()
+		m.dbTx = m.DB.Begin()
 	}
 	st, err := NewStateManager(m.dbTx, tx)
 	if errors.Is(err, storage.ErrNotFound) {
@@ -205,7 +228,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	case *protocol.LiteTokenAccount:
 		return st, m.checkLite(st, tx, sponsor)
 
-	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage:
+	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
 		if (sponsor.Header().KeyBook == types.Bytes32{}) {
 			return nil, fmt.Errorf("sponsor has not been assigned to an SSG")
 		}
@@ -450,236 +473,7 @@ func (m *Executor) Commit() ([]byte, error) {
 		return nil, err
 	}
 
-	m.logger.Info("Committed", "db_time", m.db.TimeBucket)
-	m.db.TimeBucket = 0
+	m.logger.Info("Committed", "db_time", m.DB.TimeBucket)
+	m.DB.TimeBucket = 0
 	return mdRoot, nil
-}
-
-// synthCount returns the number of synthetic transactions sent by this subnet.
-func (m *Executor) synthCount() (uint64, error) {
-	k := storage.ComputeKey("SyntheticTransactionCount")
-	b, err := m.dbTx.Read(k)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return 0, err
-	}
-
-	var n uint64
-	if len(b) > 0 {
-		n, _ = common.BytesUint64(b)
-	}
-	return n, nil
-}
-
-// nextSynthCount returns and increments the number of synthetic transactions
-// sent by this subnet.
-func (m *Executor) nextSynthCount() (uint64, error) {
-	// TODO Replace this with the actual key nonce
-
-	n, err := m.synthCount()
-	if err != nil {
-		return 0, err
-	}
-
-	k := storage.ComputeKey("SyntheticTransactionCount")
-	m.dbTx.Write(k, common.Uint64Bytes(n+1))
-	return n, nil
-}
-
-// addSynthTxns prepares synthetic transactions for signing next block.
-func (m *Executor) addSynthTxns(parentTxId types.Bytes, st *StateManager) error {
-	// Need to pass this to a threaded batcher / dispatcher to do both signing
-	// and sending of synth tx. No need to spend valuable time here doing that.
-	for _, sub := range st.submissions {
-		// Generate a synthetic tx and send to the router. Need to track txid to
-		// make sure they get processed.
-
-		// Marshal the payload
-		body, err := sub.body.MarshalBinary()
-		if err != nil {
-			return fmt.Errorf("failed to marshal synthetic transaction payload: %v", err)
-		}
-
-		// Build the transaction
-		tx := new(transactions.GenTransaction)
-		tx.SigInfo = new(transactions.SignatureInfo)
-		tx.SigInfo.URL = sub.url.String()
-		tx.SigInfo.KeyPageHeight = 1
-		tx.SigInfo.KeyPageIndex = 0
-		tx.Transaction = body
-
-		tx.SigInfo.KeyPageHeight = 1
-		tx.SigInfo.Nonce, err = m.nextSynthCount()
-		if err != nil {
-			return err
-		}
-
-		// Create the state object to store the unsigned pending transaction
-		txSynthetic := state.NewPendingTransaction(tx)
-		txSyntheticObject := new(state.Object)
-		synthTxData, err := txSynthetic.MarshalBinary()
-		if err != nil {
-			return err
-		}
-		txSyntheticObject.Entry = synthTxData
-		m.dbTx.AddSynthTx(parentTxId, tx.TransactionHash(), txSyntheticObject)
-	}
-
-	return nil
-}
-
-// signSynthTxns signs synthetic transactions from the previous block and
-// prepares them to be sent next block.
-func (m *Executor) signSynthTxns() error {
-	// TODO If the leader fails, will the block happen again or will Tendermint
-	// move to the next block? We need to be sure that synthetic transactions
-	// won't get lost.
-
-	// Get the anchor chain head
-	head, height, err := m.db.GetAnchorHead()
-	if errors.Is(err, storage.ErrNotFound) {
-		// Nothing to do
-		return nil
-	} else if err != nil {
-		return err
-	}
-
-	// Only proceed if the previous block did something
-	if head.Index != m.height-1 {
-		return nil
-	}
-
-	// Only proceed if the previous block generated synthetic transactions
-	count := height - head.PreviousHeight - int64(len(head.Chains)) - 1
-	if count == 0 {
-		return nil
-	}
-
-	// Pull the transaction IDs from the anchor chain
-	txns, err := m.db.GetAnchors(height-count-1, height-1)
-	if err != nil {
-		return err
-	}
-
-	// Use the synthetic transaction count to calculate what the nonces were
-	nonce, err := m.synthCount()
-	if err != nil {
-		return err
-	}
-
-	// Sign all of the transactions
-	body := new(protocol.SyntheticSignTransactions)
-	for i, txid := range txns {
-		// For each pending synthetic transaction
-		var synthSig protocol.SyntheticSignature
-		synthSig.Txid = txid
-
-		// The nonce must be the final nonce minus (I + 1)
-		synthSig.Nonce = nonce - 1 - uint64(i)
-
-		// Sign it
-		ed := new(transactions.ED25519Sig)
-		ed.PublicKey = m.key[32:]
-		err = ed.Sign(synthSig.Nonce, m.key, txid[:])
-		if err != nil {
-			return err
-		}
-
-		// Add it to the list
-		synthSig.Signature = ed.Signature
-		body.Transactions = append(body.Transactions, synthSig)
-	}
-
-	// Construct the signature transaction
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = protocol.ACME
-	tx.SigInfo.KeyPageIndex = 0
-	tx.Transaction, err = body.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	tx.SigInfo.KeyPageHeight = 1
-	tx.SigInfo.Nonce, err = m.nextSynthCount()
-	if err != nil {
-		return err
-	}
-
-	// Sign it
-	ed := new(transactions.ED25519Sig)
-	tx.Signature = append(tx.Signature, ed)
-	ed.PublicKey = m.key[32:]
-	err = ed.Sign(tx.SigInfo.Nonce, m.key, tx.TransactionHash())
-	if err != nil {
-		return err
-	}
-
-	// Marshal it
-	data, err := tx.Marshal()
-	if err != nil {
-		return err
-	}
-
-	// Send it
-	go m.local.BroadcastTxAsync(context.Background(), data)
-	return nil
-}
-
-// sendSynthTxns sends signed synthetic transactions from previous blocks.
-func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
-	// Get the signatures from the last block
-	sigs, err := m.db.GetSynthTxnSigs()
-	if err != nil {
-		return nil, err
-	}
-
-	// Array for synth TXN references
-	refs := make([]abci.SynthTxnReference, 0, len(sigs))
-
-	// Process all the transactions
-	for _, sig := range sigs {
-		// Load the pending transaction object
-		obj, err := m.db.GetSynthTxn(sig.Txid)
-		if err != nil {
-			return nil, err
-		}
-
-		// Unmarshal it
-		state := new(state.PendingTransaction)
-		err = obj.As(state)
-		if err != nil {
-			return nil, err
-		}
-
-		// Convert it back to a transaction
-		tx := state.Restore()
-
-		// Add the signature
-		tx.Signature = append(tx.Signature, &transactions.ED25519Sig{
-			Nonce:     sig.Nonce,
-			PublicKey: sig.PublicKey,
-			Signature: sig.Signature,
-		})
-
-		// Add it to the batch
-		ti, err := m.query.BroadcastTx(tx, nil)
-		if err != nil {
-			continue
-		}
-
-		// Delete the signature
-		m.dbTx.DeleteSynthTxnSig(sig.Txid)
-
-		// Add the synthetic transaction reference
-		var ref abci.SynthTxnReference
-		ref.Type = uint64(tx.TransactionType())
-		ref.Url = tx.SigInfo.URL
-		copy(ref.Hash[:], tx.TransactionHash())
-		copy(ref.TxRef[:], ti.ReferenceId)
-		refs = append(refs, ref)
-	}
-
-	// Send the batches
-	m.query.BatchSend()
-
-	return refs, nil
 }

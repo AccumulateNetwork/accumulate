@@ -16,12 +16,15 @@ func TestStateDBConsistency(t *testing.T) {
 	db := new(badger.DB)
 	err := db.InitDB(filepath.Join(dir, "valacc.db"), nil)
 	require.NoError(t, err)
-	defer db.Close()
+
+	// Call during test cleanup. This ensures that the app client is shutdown
+	// before the database is closed.
+	t.Cleanup(func() { db.Close() })
 
 	sdb := new(state.StateDB)
 	require.NoError(t, sdb.Load(db, true))
 
-	n := createApp(t, sdb, crypto.Address{}, "error", true)
+	n := createApp(t, sdb, crypto.Address{}, true)
 	n.testLiteTx(10)
 
 	height, err := sdb.BlockIndex()
@@ -40,6 +43,6 @@ func TestStateDBConsistency(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", sdb.RootHash()), "Hash does not match after load from disk")
 
 	// Recreate the app and try to do more transactions
-	n = createApp(t, sdb, crypto.Address{}, "error", false)
+	n = createApp(t, sdb, crypto.Address{}, false)
 	n.testLiteTx(10)
 }

@@ -11,10 +11,11 @@ import (
 
 // NewBlockValidatorExecutor creates a new Executor for a block validator node.
 func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
-	return NewExecutor(opts,
+	return NewExecutor(opts, false,
 		CreateIdentity{},
 		WithdrawTokens{},
 		CreateTokenAccount{},
+		CreateDataAccount{},
 		AddCredits{},
 		CreateKeyPage{},
 		CreateKeyBook{},
@@ -23,6 +24,7 @@ func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
 		SyntheticTokenDeposit{},
 		SyntheticDepositCredits{},
 		SyntheticSignTransactions{},
+		SyntheticAnchor{IsDirectory: false},
 
 		// TODO Only for TestNet
 		AcmeFaucet{},
@@ -30,7 +32,9 @@ func NewBlockValidatorExecutor(opts ExecutorOptions) (*Executor, error) {
 }
 
 func NewDirectoryExecutor(opts ExecutorOptions) (*Executor, error) {
-	return NewExecutor(opts) // TODO Add DN validators
+	return NewExecutor(opts, true,
+		SyntheticAnchor{IsDirectory: true},
+	)
 }
 
 // TxExecutor executes a specific type of transaction.

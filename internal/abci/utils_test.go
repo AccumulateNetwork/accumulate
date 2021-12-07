@@ -42,32 +42,19 @@ func createAppWithMemDB(t testing.TB, addr crypto.Address, logLevel string, doGe
 	db, err := state.NewStateDB().WithDebug().OpenInMemory()
 	require.NoError(t, err)
 
-	return createApp(t, db, addr, logLevel, doGenesis)
+	return createApp(t, db, addr, doGenesis)
 }
 
-func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel string, doGenesis bool) *fakeNode {
+func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis bool) *fakeNode {
 	_, bvcKey, _ := ed25519.GenerateKey(rand)
 
 	n := new(fakeNode)
 	n.t = t
 	n.db = db
 
-	zl := logging.NewTestZeroLogger(t, "plain")
-	zl = zl.Hook(logging.ExcludeMessages("GetIndex", "WriteIndex"))
-	zl = zl.Hook(logging.BodyHook(func(e *zerolog.Event, _ zerolog.Level, body map[string]interface{}) {
-		module, ok := body["module"].(string)
-		if !ok {
-			return
-		}
-
-		switch module {
-		case "db":
-		// case "accumulate", "db":
-		// OK
-		default:
-			e.Discard()
-		}
-	}))
+	logWriter := logging.TestLogWriter(t)("plain")
+	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
+	zl := zerolog.New(logWriter)
 
 	logger, err := logging.NewTendermintLogger(zl, logLevel, false)
 	if err != nil {
@@ -93,18 +80,20 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, logLevel st
 	n.query = accapi.NewQuery(relay)
 
 	mgr, err := chain.NewBlockValidatorExecutor(chain.ExecutorOptions{
-		Query:  n.query,
-		Local:  n.client,
-		DB:     n.db,
-		Logger: logger,
-		Key:    bvcKey,
+		Local:           n.client,
+		DB:              n.db,
+		Logger:          logger,
+		Key:             bvcKey,
+		BlockValidators: []string{"self"},
 	})
 	require.NoError(t, err)
 
 	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
 	require.NoError(t, err)
 	appChan <- n.app
-	n.app.(*abci.Accumulator).OnFatal(func(err error) { require.NoError(t, err) })
+	n.app.(*abci.Accumulator).OnFatal(func(err error) {
+		require.NoError(t, err)
+	})
 
 	t.Cleanup(func() { n.client.Shutdown() })
 
@@ -250,6 +239,12 @@ func (n *fakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
 	}
 
 	require.NoError(n.t, obj.UnmarshalBinary(so.Entry))
+}
+
+func (n *fakeNode) GetDataAccount(url string) *protocol.DataAccount {
+	acct := protocol.NewDataAccount()
+	n.GetChainAs(url, acct)
+	return acct
 }
 
 func (n *fakeNode) GetTokenAccount(url string) *state.TokenAccount {

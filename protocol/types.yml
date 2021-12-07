@@ -153,8 +153,10 @@ UpdateKeyPage:
       marshal-as: value
     - name: Key
       type: bytes
+      optional: true
     - name: NewKey
       type: bytes
+      optional: true
 
 MetricsRequest:
   fields:
@@ -192,12 +194,13 @@ DirectoryQueryResult:
       pointer: true
       marshal-as: reference
     optional: true
+  - name: Total
+    type: uvarint
+    keep-empty: true
 
 DataAccount:
   kind: chain
   fields:
-  - name: Data
-    type: bytes
 
 LiteDataAccount:
   kind: chain
@@ -209,6 +212,12 @@ CreateDataAccount:
   kind: tx
   fields:
   - name: Url
+    type: string
+    is-url: true
+  - name: KeyBookUrl
+    type: string
+    is-url: true
+  - name: ManagerKeyBookUrl
     type: string
     is-url: true
 
@@ -304,3 +313,24 @@ SyntheticSignature:
       type: bytes
     - name: Nonce
       type: uvarint
+
+SyntheticAnchor:
+  kind: tx
+  fields:
+    - name: Source
+      type: string
+      is-url: true
+    - name: Major
+      type: bool
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
+    - name: Root
+      type: chain
+    - name: SynthTxnAnchor
+      type: chain
+    - name: ChainAnchor
+      type: chain
+    - name: Chains
+      type: chainSet

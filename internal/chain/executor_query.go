@@ -39,10 +39,10 @@ func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, err
 
 	// This intentionally uses GetPersistentEntry instead of GetCurrentEntry.
 	// Callers should never see uncommitted values.
-	obj, err := m.db.GetPersistentEntry(chainId, false)
+	obj, err := m.DB.GetPersistentEntry(chainId, false)
 	// Or a transaction
 	if errors.Is(err, storage.ErrNotFound) {
-		obj, err = m.db.GetTransaction(chainId)
+		obj, err = m.DB.GetTransaction(chainId)
 	}
 	// Not a state entry or a transaction
 	if errors.Is(err, storage.ErrNotFound) {
@@ -62,8 +62,8 @@ func (m *Executor) queryByChainId(chainId []byte) (*query.ResponseByChainId, err
 	return &qr, nil
 }
 
-func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQueryResult, error) {
-	b, err := m.db.GetIndex(state.DirectoryIndex, chainId, "Metadata")
+func (m *Executor) queryDirectoryByChainId(chainId []byte, start uint64, limit uint64) (*protocol.DirectoryQueryResult, error) {
+	b, err := m.DB.GetIndex(state.DirectoryIndex, chainId, "Metadata")
 	if err != nil {
 		return nil, err
 	}
@@ -74,15 +74,26 @@ func (m *Executor) queryDirectoryByChainId(chainId []byte) (*protocol.DirectoryQ
 		return nil, err
 	}
 
+	count := limit
+	if start+count > md.Count {
+		count = md.Count - start
+	}
+	if count > md.Count { // when uint64 0-x is really big number
+		count = 0
+	}
+
 	resp := new(protocol.DirectoryQueryResult)
-	resp.Entries = make([]string, md.Count)
-	for i := range resp.Entries {
-		b, err := m.db.GetIndex(state.DirectoryIndex, chainId, uint64(i))
+	resp.Entries = make([]string, count)
+
+	for i := uint64(0); i < count; i++ {
+		b, err := m.DB.GetIndex(state.DirectoryIndex, chainId, start+i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}
 		resp.Entries[i] = string(b)
 	}
+	resp.Total = md.Count
+
 	return resp, nil
 }
 
@@ -90,19 +101,19 @@ func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
 	var err error
 
 	qr := query.ResponseByTxId{}
-	qr.TxState, err = m.db.GetTx(txid)
+	qr.TxState, err = m.DB.GetTx(txid)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
 	} else if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
-	qr.TxPendingState, err = m.db.GetPendingTx(txid)
+	qr.TxPendingState, err = m.DB.GetPendingTx(txid)
 	if !errors.Is(err, storage.ErrNotFound) && err != nil {
 		//this is only an error if the pending states have not yet been purged or some other database error occurred
 		return nil, fmt.Errorf("%w: error in query for pending chain on txid %X", storage.ErrNotFound, txid)
 	}
 
-	qr.TxSynthTxIds, err = m.db.GetSyntheticTxIds(txid)
+	qr.TxSynthTxIds, err = m.DB.GetSyntheticTxIds(txid)
 	if !errors.Is(err, storage.ErrNotFound) && err != nil {
 		//this is only an error if the transactions produced synth tx's or some other database error occurred
 		return nil, fmt.Errorf("%w: error in query for synthetic txid txid %X", storage.ErrNotFound, txid)
@@ -138,7 +149,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		}
 
 		thr := query.ResponseTxHistory{}
-		txids, maxAmt, err := m.db.GetChainRange(txh.ChainId[:], txh.Start, txh.Start+txh.Limit)
+		txids, maxAmt, err := m.DB.GetChainRange(txh.ChainId[:], txh.Start, txh.Start+txh.Limit)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 		}
@@ -185,7 +196,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
-		dir, err := m.queryDirectoryByChainId(u.ResourceChain())
+		dir, err := m.queryDirectoryByChainId(u.ResourceChain(), chr.Start, chr.Limit)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
 		}
@@ -206,7 +217,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		}
 	case types.QueryTypeChainId:
 		chr := query.RequestByChainId{}
-		err := chr.UnmarshalBinary(chr.ChainId[:])
+		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}

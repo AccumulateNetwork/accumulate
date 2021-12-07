@@ -103,7 +103,7 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 
 func (n *Node) waitForRPC() error {
 	for _, bvc := range n.Config.Accumulate.Networks {
-		addr, err := networks.GetRpcAddr(bvc, networks.TmRpcPortOffset)
+		addr, err := networks.GetRpcAddr(bvc)
 		if err != nil {
 			return err
 		}

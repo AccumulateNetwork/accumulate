@@ -37,18 +37,20 @@ func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
 		return "", nil, fmt.Errorf("failed to send request: %v", err)
 	}
 
-	switch {
-	case res.Response.Code == protocol.CodeNotFound:
-		return "", nil, storage.ErrNotFound
-	case res.Response.Log != "":
-		return "", nil, errors.New(res.Response.Log)
-	case res.Response.Info != "":
-		return "", nil, errors.New(res.Response.Info)
-	case res.Response.Code != 0:
-		return "", nil, fmt.Errorf("query failed with code %d", res.Response.Code)
+	if res.Response.Code == 0 {
+		return string(res.Response.Key), res.Response.Value, nil
 	}
-
-	return string(res.Response.Key), res.Response.Value, nil
+	if res.Response.Code == protocol.CodeNotFound {
+		return "", nil, storage.ErrNotFound
+	}
+	protoError := new(protocol.Error)
+	protoError.Code = protocol.ErrorCode(res.Response.Code)
+	if res.Response.Info != "" {
+		protoError.Message = errors.New(res.Response.Info)
+	} else {
+		protoError.Message = errors.New(res.Response.Log)
+	}
+	return "", nil, nil
 }
 
 func (q *queryDirect) QueryUrl(s string) (*QueryResponse, error) {
@@ -92,7 +94,7 @@ func (q *queryDirect) QueryUrl(s string) (*QueryResponse, error) {
 	}
 }
 
-func (q *queryDirect) QueryDirectory(s string, opts *QueryOptions) (*QueryResponse, error) {
+func (q *queryDirect) QueryDirectory(s string, pagination *QueryPagination, opts *QueryOptions) (*QueryResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
@@ -100,21 +102,23 @@ func (q *queryDirect) QueryDirectory(s string, opts *QueryOptions) (*QueryRespon
 
 	req := new(query.RequestDirectory)
 	req.Url = types.String(u.String())
-	req.ExpandChains = types.Bool(opts.ExpandChains)
-	k, v, err := q.query(req)
+	req.Start = pagination.Start
+	req.Limit = pagination.Count
+	req.ExpandChains = opts.ExpandChains
+	key, val, err := q.query(req)
 	if err != nil {
 		return nil, err
 	}
-	if k != "directory" {
-		return nil, fmt.Errorf("unknown response type: want directory, got %q", k)
+	if key != "directory" {
+		return nil, fmt.Errorf("unknown response type: want directory, got %q", key)
 	}
 
 	protoDir := new(protocol.DirectoryQueryResult)
-	err = protoDir.UnmarshalBinary(v)
+	err = protoDir.UnmarshalBinary(val)
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
 	}
-	respDir, err := responseDirFromProto(protoDir)
+	respDir, err := responseDirFromProto(protoDir, pagination)
 	if err != nil {
 		return nil, err
 	}
@@ -125,9 +129,12 @@ func (q *queryDirect) QueryDirectory(s string, opts *QueryOptions) (*QueryRespon
 	return res, nil
 }
 
-func responseDirFromProto(protoDir *protocol.DirectoryQueryResult) (*DirectoryQueryResult, error) {
+func responseDirFromProto(protoDir *protocol.DirectoryQueryResult, pagination *QueryPagination) (*DirectoryQueryResult, error) {
 	respDir := new(DirectoryQueryResult)
 	respDir.Entries = protoDir.Entries
+	respDir.Start = pagination.Start
+	respDir.Count = pagination.Count
+	respDir.Total = protoDir.Total
 	respDir.ExpandedEntries = make([]*QueryResponse, len(protoDir.ExpandedEntries))
 	for i, entry := range protoDir.ExpandedEntries {
 		chain, err := chainFromStateObj(entry)

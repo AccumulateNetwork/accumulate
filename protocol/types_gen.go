@@ -33,7 +33,9 @@ type ChainParams struct {
 }
 
 type CreateDataAccount struct {
-	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Url               string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	KeyBookUrl        string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"required,acc-url"`
+	ManagerKeyBookUrl string `json:"managerKeyBookUrl,omitempty" form:"managerKeyBookUrl" query:"managerKeyBookUrl" validate:"required,acc-url"`
 }
 
 type CreateKeyBook struct {
@@ -55,7 +57,6 @@ type CreateToken struct {
 
 type DataAccount struct {
 	state.ChainHeader
-	Data []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 }
 
 type DirectoryIndexMetadata struct {
@@ -65,6 +66,7 @@ type DirectoryIndexMetadata struct {
 type DirectoryQueryResult struct {
 	Entries         []string        `json:"entries,omitempty" form:"entries" query:"entries"`
 	ExpandedEntries []*state.Object `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
+	Total           uint64          `json:"total" form:"total" query:"total" validate:"required"`
 }
 
 type IdentityCreate struct {
@@ -122,6 +124,17 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
+type SyntheticAnchor struct {
+	Source         string     `json:"source,omitempty" form:"source" query:"source" validate:"required,acc-url"`
+	Major          bool       `json:"major,omitempty" form:"major" query:"major" validate:"required"`
+	Index          int64      `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Timestamp      time.Time  `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	Root           [32]byte   `json:"root,omitempty" form:"root" query:"root" validate:"required"`
+	SynthTxnAnchor [32]byte   `json:"synthTxnAnchor,omitempty" form:"synthTxnAnchor" query:"synthTxnAnchor" validate:"required"`
+	ChainAnchor    [32]byte   `json:"chainAnchor,omitempty" form:"chainAnchor" query:"chainAnchor" validate:"required"`
+	Chains         [][32]byte `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+}
+
 type SyntheticBurnTokens struct {
 	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
@@ -168,8 +181,8 @@ type TokenIssuer struct {
 
 type UpdateKeyPage struct {
 	Operation KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
-	Key       []byte           `json:"key,omitempty" form:"key" query:"key" validate:"required"`
-	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey" validate:"required"`
+	Key       []byte           `json:"key,omitempty" form:"key" query:"key"`
+	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey"`
 }
 
 type WriteData struct {
@@ -234,6 +247,8 @@ func (*CreateToken) GetType() types.TransactionType { return types.TxTypeCreateT
 func (*IdentityCreate) GetType() types.TransactionType { return types.TxTypeCreateIdentity }
 
 func (*IssueTokens) GetType() types.TransactionType { return types.TxTypeIssueTokens }
+
+func (*SyntheticAnchor) GetType() types.TransactionType { return types.TxTypeSyntheticAnchor }
 
 func (*SyntheticBurnTokens) GetType() types.TransactionType { return types.TxTypeSyntheticBurnTokens }
 
@@ -304,6 +319,14 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 		return false
 	}
 
+	if !(v.KeyBookUrl == u.KeyBookUrl) {
+		return false
+	}
+
+	if !(v.ManagerKeyBookUrl == u.ManagerKeyBookUrl) {
+		return false
+	}
+
 	return true
 }
 
@@ -370,10 +393,6 @@ func (v *DataAccount) Equal(u *DataAccount) bool {
 		return false
 	}
 
-	if !(bytes.Equal(v.Data, u.Data)) {
-		return false
-	}
-
 	return true
 }
 
@@ -408,6 +427,10 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 			return false
 		}
 
+	}
+
+	if !(v.Total == u.Total) {
+		return false
 	}
 
 	return true
@@ -554,6 +577,48 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 
 	if !(v.Duration == u.Duration) {
 		return false
+	}
+
+	return true
+}
+
+func (v *SyntheticAnchor) Equal(u *SyntheticAnchor) bool {
+	if !(v.Source == u.Source) {
+		return false
+	}
+
+	if !(v.Major == u.Major) {
+		return false
+	}
+
+	if !(v.Index == u.Index) {
+		return false
+	}
+
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+
+	if !(v.Root == u.Root) {
+		return false
+	}
+
+	if !(v.SynthTxnAnchor == u.SynthTxnAnchor) {
+		return false
+	}
+
+	if !(v.ChainAnchor == u.ChainAnchor) {
+		return false
+	}
+
+	if !(len(v.Chains) == len(u.Chains)) {
+		return false
+	}
+
+	for i := range v.Chains {
+		if v.Chains[i] != u.Chains[i] {
+			return false
+		}
 	}
 
 	return true
@@ -765,6 +830,10 @@ func (v *CreateDataAccount) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Url)
 
+	n += encoding.StringBinarySize(v.KeyBookUrl)
+
+	n += encoding.StringBinarySize(v.ManagerKeyBookUrl)
+
 	return n
 }
 
@@ -821,8 +890,6 @@ func (v *DataAccount) BinarySize() int {
 
 	n += v.ChainHeader.GetHeaderSize()
 
-	n += encoding.BytesBinarySize(v.Data)
-
 	return n
 }
 
@@ -850,6 +917,8 @@ func (v *DirectoryQueryResult) BinarySize() int {
 		n += v.BinarySize()
 
 	}
+
+	n += encoding.UvarintBinarySize(v.Total)
 
 	return n
 }
@@ -973,6 +1042,30 @@ func (v *MetricsRequest) BinarySize() int {
 	n += encoding.StringBinarySize(v.Metric)
 
 	n += encoding.DurationBinarySize(v.Duration)
+
+	return n
+}
+
+func (v *SyntheticAnchor) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeSyntheticAnchor.ID())
+
+	n += encoding.StringBinarySize(v.Source)
+
+	n += encoding.BoolBinarySize(v.Major)
+
+	n += encoding.VarintBinarySize(v.Index)
+
+	n += encoding.TimeBinarySize(v.Timestamp)
+
+	n += encoding.ChainBinarySize(&v.Root)
+
+	n += encoding.ChainBinarySize(&v.SynthTxnAnchor)
+
+	n += encoding.ChainBinarySize(&v.ChainAnchor)
+
+	n += encoding.ChainSetBinarySize(v.Chains)
 
 	return n
 }
@@ -1177,6 +1270,10 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
+	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
+
+	buffer.Write(encoding.StringMarshalBinary(v.ManagerKeyBookUrl))
+
 	return buffer.Bytes(), nil
 }
 
@@ -1240,7 +1337,6 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(encoding.BytesMarshalBinary(v.Data))
 
 	return buffer.Bytes(), nil
 }
@@ -1273,6 +1369,8 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 		}
 
 	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Total))
 
 	return buffer.Bytes(), nil
 }
@@ -1412,6 +1510,30 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Metric))
 
 	buffer.Write(encoding.DurationMarshalBinary(v.Duration))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSyntheticAnchor.ID()))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Source))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.Major))
+
+	buffer.Write(encoding.VarintMarshalBinary(v.Index))
+
+	buffer.Write(encoding.TimeMarshalBinary(v.Timestamp))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.Root))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.SynthTxnAnchor))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.ChainAnchor))
+
+	buffer.Write(encoding.ChainSetMarshalBinary(v.Chains))
 
 	return buffer.Bytes(), nil
 }
@@ -1680,6 +1802,20 @@ func (v *CreateDataAccount) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Url):]
 
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyBookUrl: %w", err)
+	} else {
+		v.KeyBookUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ManagerKeyBookUrl: %w", err)
+	} else {
+		v.ManagerKeyBookUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.ManagerKeyBookUrl):]
+
 	return nil
 }
 
@@ -1796,13 +1932,6 @@ func (v *DataAccount) UnmarshalBinary(data []byte) error {
 	}
 	data = data[v.GetHeaderSize():]
 
-	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
-	}
-	data = data[encoding.BytesBinarySize(v.Data):]
-
 	return nil
 }
 
@@ -1855,6 +1984,13 @@ func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
 
 		v.ExpandedEntries[i] = x
 	}
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Total: %w", err)
+	} else {
+		v.Total = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Total):]
 
 	return nil
 }
@@ -2091,6 +2227,74 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 		v.Duration = x
 	}
 	data = data[encoding.DurationBinarySize(v.Duration):]
+
+	return nil
+}
+
+func (v *SyntheticAnchor) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeSyntheticAnchor
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Source: %w", err)
+	} else {
+		v.Source = x
+	}
+	data = data[encoding.StringBinarySize(v.Source):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Major: %w", err)
+	} else {
+		v.Major = x
+	}
+	data = data[encoding.BoolBinarySize(v.Major):]
+
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Index: %w", err)
+	} else {
+		v.Index = x
+	}
+	data = data[encoding.VarintBinarySize(v.Index):]
+
+	if x, err := encoding.TimeUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Timestamp: %w", err)
+	} else {
+		v.Timestamp = x
+	}
+	data = data[encoding.TimeBinarySize(v.Timestamp):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Root: %w", err)
+	} else {
+		v.Root = x
+	}
+	data = data[encoding.ChainBinarySize(&v.Root):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding SynthTxnAnchor: %w", err)
+	} else {
+		v.SynthTxnAnchor = x
+	}
+	data = data[encoding.ChainBinarySize(&v.SynthTxnAnchor):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ChainAnchor: %w", err)
+	} else {
+		v.ChainAnchor = x
+	}
+	data = data[encoding.ChainBinarySize(&v.ChainAnchor):]
+
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Chains: %w", err)
+	} else {
+		v.Chains = x
+	}
+	data = data[encoding.ChainSetBinarySize(v.Chains):]
 
 	return nil
 }
@@ -2423,16 +2627,6 @@ func (v *CreateKeyBook) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *DataAccount) MarshalJSON() ([]byte, error) {
-	u := struct {
-		state.ChainHeader
-		Data *string `json:"data,omitempty"`
-	}{}
-	u.ChainHeader = v.ChainHeader
-	u.Data = encoding.BytesToJSON(v.Data)
-	return json.Marshal(&u)
-}
-
 func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url         string  `json:"url,omitempty"`
@@ -2492,6 +2686,28 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Metric = v.Metric
 	u.Duration = encoding.DurationToJSON(v.Duration)
+	return json.Marshal(&u)
+}
+
+func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Source         string    `json:"source,omitempty"`
+		Major          bool      `json:"major,omitempty"`
+		Index          int64     `json:"index,omitempty"`
+		Timestamp      time.Time `json:"timestamp,omitempty"`
+		Root           string    `json:"root,omitempty"`
+		SynthTxnAnchor string    `json:"synthTxnAnchor,omitempty"`
+		ChainAnchor    string    `json:"chainAnchor,omitempty"`
+		Chains         []string  `json:"chains,omitempty"`
+	}{}
+	u.Source = v.Source
+	u.Major = v.Major
+	u.Index = v.Index
+	u.Timestamp = v.Timestamp
+	u.Root = encoding.ChainToJSON(v.Root)
+	u.SynthTxnAnchor = encoding.ChainToJSON(v.SynthTxnAnchor)
+	u.ChainAnchor = encoding.ChainToJSON(v.ChainAnchor)
+	u.Chains = encoding.ChainSetToJSON(v.Chains)
 	return json.Marshal(&u)
 }
 
@@ -2599,25 +2815,6 @@ func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Pages: %w", err)
 	} else {
 		v.Pages = x
-	}
-	return nil
-}
-
-func (v *DataAccount) UnmarshalJSON(data []byte) error {
-	u := struct {
-		state.ChainHeader
-		Data *string `json:"data,omitempty"`
-	}{}
-	u.ChainHeader = v.ChainHeader
-	u.Data = encoding.BytesToJSON(v.Data)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.ChainHeader = u.ChainHeader
-	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
 	}
 	return nil
 }
@@ -2735,6 +2932,55 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Duration: %w", err)
 	} else {
 		v.Duration = x
+	}
+	return nil
+}
+
+func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Source         string    `json:"source,omitempty"`
+		Major          bool      `json:"major,omitempty"`
+		Index          int64     `json:"index,omitempty"`
+		Timestamp      time.Time `json:"timestamp,omitempty"`
+		Root           string    `json:"root,omitempty"`
+		SynthTxnAnchor string    `json:"synthTxnAnchor,omitempty"`
+		ChainAnchor    string    `json:"chainAnchor,omitempty"`
+		Chains         []string  `json:"chains,omitempty"`
+	}{}
+	u.Source = v.Source
+	u.Major = v.Major
+	u.Index = v.Index
+	u.Timestamp = v.Timestamp
+	u.Root = encoding.ChainToJSON(v.Root)
+	u.SynthTxnAnchor = encoding.ChainToJSON(v.SynthTxnAnchor)
+	u.ChainAnchor = encoding.ChainToJSON(v.ChainAnchor)
+	u.Chains = encoding.ChainSetToJSON(v.Chains)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Source = u.Source
+	v.Major = u.Major
+	v.Index = u.Index
+	v.Timestamp = u.Timestamp
+	if x, err := encoding.ChainFromJSON(u.Root); err != nil {
+		return fmt.Errorf("error decoding Root: %w", err)
+	} else {
+		v.Root = x
+	}
+	if x, err := encoding.ChainFromJSON(u.SynthTxnAnchor); err != nil {
+		return fmt.Errorf("error decoding SynthTxnAnchor: %w", err)
+	} else {
+		v.SynthTxnAnchor = x
+	}
+	if x, err := encoding.ChainFromJSON(u.ChainAnchor); err != nil {
+		return fmt.Errorf("error decoding ChainAnchor: %w", err)
+	} else {
+		v.ChainAnchor = x
+	}
+	if x, err := encoding.ChainSetFromJSON(u.Chains); err != nil {
+		return fmt.Errorf("error decoding Chains: %w", err)
+	} else {
+		v.Chains = x
 	}
 	return nil
 }
