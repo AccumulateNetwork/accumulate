@@ -221,8 +221,7 @@ CreateDataAccount:
     type: string
     is-url: true
 
-WriteData:
-  kind: tx
+DataEntry:
   fields:
     - name: ExtIds
       type: slice
@@ -231,14 +230,22 @@ WriteData:
     - name: Data
       type: bytes
 
+WriteData:
+  kind: tx
+  fields:
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
+
 WriteDataTo:
   kind: tx
   fields:
   - name: Recipient
     type: string
     is-url: true
-  - name: Data
-    type: bytes
+  - name: Entry
+    type: DataEntry
+    marshal-as: reference
 
 IssueTokens:
   kind: tx

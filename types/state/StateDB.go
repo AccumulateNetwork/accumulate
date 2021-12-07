@@ -266,7 +266,7 @@ func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
 		return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
-			types.ChainTypePendingTransaction.Name(), chainType)
+			types.ChainTypePendingTransaction.Name(), types.ChainType(chainType).Name())
 	}
 
 	if txAccepted != nil {
