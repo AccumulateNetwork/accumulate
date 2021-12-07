@@ -22,7 +22,7 @@ func TestProofADI(t *testing.T) {
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
 	dbTx := n.db.Begin()
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, liteKey, 5e4))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {
