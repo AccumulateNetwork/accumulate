@@ -3,10 +3,13 @@ package protocol
 import (
 	"crypto/sha256"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
-	"github.com/AccumulateNetwork/accumulate/types"
 )
+
+//func (e *DataEntry) Equal(rhs DataEntry) bool {
+//	return true
+//}
 
 // ComputeEntryHash
 // returns the entry hash given external id's and data associated with an entry
@@ -23,14 +26,14 @@ func ComputeEntryHash(data [][]byte) []byte {
 
 const WriteDataMax = 10240
 
-func (w *WriteData) Hash() []byte {
-	return ComputeEntryHash(append(w.ExtIds, w.Data))
+func (e *DataEntry) Hash() []byte {
+	return ComputeEntryHash(append(e.ExtIds, e.Data))
 }
 
 //CheckSize is the marshaled size minus the implicit type header,
 //returns error if there is too much or no data
-func (w *WriteData) CheckSize() (int, error) {
-	size := w.BinarySize() - len(encoding.UvarintMarshalBinary(types.TxTypeWriteData.ID()))
+func (e *DataEntry) CheckSize() (int, error) {
+	size := e.BinarySize()
 	if size > WriteDataMax {
 		return 0, fmt.Errorf("data amount exceeds %v byte entry limit", WriteDataMax)
 	}
@@ -41,8 +44,8 @@ func (w *WriteData) CheckSize() (int, error) {
 }
 
 //Cost will return the number of credits to be used for the data write
-func (w *WriteData) Cost() (int, error) {
-	size, err := w.CheckSize()
+func (e *DataEntry) Cost() (int, error) {
+	size, err := e.CheckSize()
 	if err != nil {
 		return 0, err
 	}
