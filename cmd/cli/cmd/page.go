@@ -135,18 +135,6 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", fmt.Errorf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
 	}
 
-	resp, err := Get(si.URL)
-	if err != nil {
-		PrintKeyUpdate()
-		return "", err
-	}
-	apiRes := acmeapi.APIDataResponse{}
-	if err := json.Unmarshal([]byte(resp), &apiRes); err != nil {
-		PrintKeyUpdate()
-		return "", err
-	}
-	si.KeyPageHeight = apiRes.MerkleState.Count
-
 	css := protocol.CreateKeyPage{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
 	css.Url = newUrl.String()
@@ -224,18 +212,6 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 		PrintKeyUpdate()
 		return "", err
 	}
-
-	resp, err := Get(si.URL)
-	if err != nil {
-		PrintKeyUpdate()
-		return "", err
-	}
-	apiRes := acmeapi.APIDataResponse{}
-	if err := json.Unmarshal([]byte(resp), &apiRes); err != nil {
-		PrintKeyUpdate()
-		return "", err
-	}
-	si.KeyPageHeight = apiRes.MerkleState.Count
 
 	var newKey []byte
 	var oldKey []byte
