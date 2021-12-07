@@ -1,8 +1,6 @@
 package state
 
 import (
-	"bytes"
-	"sort"
 	"time"
 )
 
@@ -14,12 +12,16 @@ func (s *StateDB) MinorAnchorChain() (*AnchorChainManager, error) {
 	return &AnchorChainManager{*mgr}, nil
 }
 
-func (s *StateDB) SynthTxidChain() (*ChainManager, error) {
-	return s.ManageChain("Synthetic", "Txid")
+func (s *StateDB) SynthTxidChain() (*SynthChainManager, error) {
+	mgr, err := s.ManageChain("Synthetic", "Txid")
+	if err != nil {
+		return nil, err
+	}
+	return &SynthChainManager{*mgr}, nil
 }
 
 func (tx *DBTransaction) writeSynthChain(blockIndex int64) error {
-	// Collect and sort a list of all synthetic transaction IDs
+	// Collect synthetic transaction IDs
 	var txids [][32]byte
 	seen := map[[32]byte]bool{}
 	for _, txns := range tx.transactions.synthTxMap {
@@ -32,13 +34,6 @@ func (tx *DBTransaction) writeSynthChain(blockIndex int64) error {
 			txids = append(txids, txid)
 		}
 	}
-	sort.Slice(txids, func(i, j int) bool {
-		return bytes.Compare(txids[i][:], txids[j][:]) < 0
-	})
-
-	if len(txids) == 0 {
-		return nil
-	}
 
 	// Load the chain
 	mgr, err := tx.state.SynthTxidChain()
@@ -46,28 +41,12 @@ func (tx *DBTransaction) writeSynthChain(blockIndex int64) error {
 		return err
 	}
 
-	// Add all of the synth txids
-	for _, txid := range txids {
-		err = mgr.AddEntry(txid[:])
-		if err != nil {
-			return err
-		}
-	}
-
-	// Update the record
-	err = mgr.UpdateAs(&SyntheticTransactionChain{
-		Index: blockIndex,
-		Count: int64(len(txids)),
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	// Update the chain
+	return mgr.Update(blockIndex, txids)
 }
 
 func (tx *DBTransaction) writeAnchorChain(blockIndex int64, timestamp time.Time) error {
-	// Collect a list of all chain IDs
+	// Collect chain IDs
 	chains := make([][32]byte, 0, len(tx.updates))
 	for id := range tx.updates {
 		chains = append(chains, id)

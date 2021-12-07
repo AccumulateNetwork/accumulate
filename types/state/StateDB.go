@@ -77,9 +77,14 @@ type StateDB struct {
 	logger     log.Logger
 }
 
+func (s *StateDB) logDebug(msg string, keyVals ...interface{}) {
+	if s.logger != nil {
+		s.logger.Debug(msg, keyVals...)
+	}
+}
+
 func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	if s.logger != nil {
-		// TODO Maybe this should be Debug?
 		s.logger.Info(msg, keyVals...)
 	}
 }
@@ -94,7 +99,7 @@ func (s *StateDB) init(debug bool) {
 // Open database to manage the smt and chain states
 func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool, logger log.Logger) (err error) {
 	if logger != nil {
-		s.logger = logger.With("module", "dbMgr")
+		s.logger = logger.With("module", "statedb")
 	}
 
 	dbType := "badger"
@@ -201,7 +206,7 @@ func (s *StateDB) GetSyntheticTxIds(txId []byte) (syntheticTxIds []byte, err err
 func (tx *DBTransaction) AddSynthTx(parentTxId types.Bytes, synthTxId types.Bytes, synthTxObject *Object) {
 	// TODO: Move the transaction related functions to stateTxn at a time where the impact on other branches is minimal
 
-	tx.state.logInfo("AddSynthTx", "txid", logging.AsHex(synthTxId), "entry", logging.AsHex(synthTxObject.Entry))
+	tx.state.logDebug("AddSynthTx", "txid", logging.AsHex(synthTxId), "entry", logging.AsHex(synthTxObject.Entry))
 	tx.dirty = true
 
 	parentHash := parentTxId.AsBytes32()
@@ -216,7 +221,7 @@ func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes
 	if txAccepted != nil {
 		txAcceptedEntry = txAccepted.Entry
 	}
-	tx.state.logInfo("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
+	tx.state.logDebug("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
 	tx.dirty = true
 
 	chainType, _ := binary.Uvarint(txPending.Entry)
@@ -318,7 +323,7 @@ func (s *StateDB) GetSynthTxn(txid [32]byte) (*Object, error) {
 		return nil, fmt.Errorf("failed to get transaction %X: %v", txid, err)
 	}
 
-	s.logInfo("GetSynthTxn", "txid", logging.AsHex(txid), "entry", logging.AsHex(obj.Entry))
+	s.logDebug("GetSynthTxn", "txid", logging.AsHex(txid), "entry", logging.AsHex(obj.Entry))
 	return obj, nil
 }
 
@@ -359,7 +364,7 @@ func (tx *DBTransaction) GetCurrentEntry(chainId []byte) (*Object, error) {
 // may change the state of the KeyBook chain (i.e. a sub/secondary chain) based on the effect
 // of a transaction.  The entry is the state object associated with
 func (tx *DBTransaction) AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
-	tx.state.logInfo("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
+	tx.state.logDebug("AddStateEntry", "chainId", logging.AsHex(chainId), "txHash", logging.AsHex(txHash), "entry", logging.AsHex(object.Entry))
 
 	if txHash == nil {
 		panic("Cannot add state entry without a transaction ID!")
@@ -395,6 +400,20 @@ func (tx *DBTransaction) addStateEntry(chainId *types.Bytes32, txHash *types.Byt
 	updates.stateData = object
 }
 
+func (tx *DBTransaction) WriteSynthTxn(txid []byte, obj *Object) error {
+	data, err := obj.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	var txid32 [32]byte
+	copy(txid32[:], txid)
+
+	tx.state.dbMgr.Key(bucketStagedSynthTx, "", txid).PutBatch(data)
+	tx.state.bptMgr.Bpt.Insert(txid32, sha256.Sum256(data))
+	return nil
+}
+
 func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) error {
 	defer group.Done()
 	//record transactions
@@ -407,15 +426,10 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 			var synthData []byte
 			for _, synthTxInfo := range synthTxInfos {
 				synthData = append(synthData, synthTxInfo.TxId...)
-				synthTxData, err := synthTxInfo.Object.MarshalBinary()
+				err := tx.WriteSynthTxn(synthTxInfo.TxId, synthTxInfo.Object)
 				if err != nil {
 					return err
 				}
-
-				tx.state.dbMgr.Key(bucketStagedSynthTx, "", synthTxInfo.TxId).PutBatch(synthTxData)
-
-				//store the hash of th synthObject in the bpt, will be removed after synth tx is processed
-				tx.state.bptMgr.Bpt.Insert(synthTxInfo.TxId.AsBytes32(), sha256.Sum256(synthTxData))
 			}
 			//store a list of txid to list of synth txid's
 			tx.state.dbMgr.Key(bucketTxToSynthTx, txn.TxId).PutBatch(synthData)
@@ -470,7 +484,7 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 	//add all the transaction states that occurred during this block for this chain (in order of appearance)
 	for _, txn := range currentState.txId {
 		//store the txHash for the chains, they will be mapped back to the above recorded tx's
-		tx.state.logInfo("AddHash", "hash", logging.AsHex(tx))
+		tx.state.logDebug("AddHash", "hash", logging.AsHex(tx))
 		mm.AddHash(managed.Hash((*txn)[:]))
 	}
 
@@ -532,6 +546,13 @@ func (s *StateDB) GetSynthTxnSigs() ([]SyntheticSignature, error) {
 
 func (tx *DBTransaction) writeSynthTxnSigs() error {
 	sigMap := map[[32]byte]*SyntheticSignature{}
+	delMap := map[[32]byte]bool{}
+
+	// Remove any deleted entries
+	for _, txid := range tx.delSynthSigs {
+		tx.state.logInfo("Removing synth txn sig", "txid", logging.AsHex(txid))
+		delMap[txid] = true
+	}
 
 	// Get the current set of signatures
 	sigs, err := tx.state.GetSynthTxnSigs()
@@ -539,16 +560,17 @@ func (tx *DBTransaction) writeSynthTxnSigs() error {
 		return err
 	}
 	for _, sig := range sigs {
-		sigMap[sig.Txid] = &sig
-	}
+		if delMap[sig.Txid] {
+			continue
+		}
 
-	// Remove any deleted entries
-	for _, txid := range tx.delSynthSigs {
-		delete(sigMap, txid)
+		tx.state.logInfo("Keeping synth txn sig", "txid", logging.AsHex(sig.Txid))
+		sigMap[sig.Txid] = &sig
 	}
 
 	// Add new entries
 	for _, sig := range tx.addSynthSigs {
+		tx.state.logInfo("Adding synth txn sig", "txid", logging.AsHex(sig.Txid))
 		sigMap[sig.Txid] = sig
 	}
 
@@ -673,7 +695,7 @@ func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte,
 
 	//return the state of the BPT for the state of the block
 	rh := types.Bytes(tx.state.RootHash()).AsBytes32()
-	tx.state.logInfo("WriteStates", "height", blockHeight, "hash", logging.AsHex(rh))
+	tx.state.logDebug("WriteStates", "height", blockHeight, "hash", logging.AsHex(rh))
 	return tx.state.RootHash(), nil
 }
 

@@ -98,6 +98,9 @@ const (
 	// TxTypeSyntheticDepositTokens deposits tokens into token accounts.
 	TxTypeSyntheticDepositTokens TransactionType = 0x33
 
+	// TxTypeSyntheticAnchor anchors one network to another.
+	TxTypeSyntheticAnchor TransactionType = 0x34
+
 	// TxTypeSyntheticDepositCredits deposits credits into a credit holder.
 	TxTypeSyntheticDepositCredits TransactionType = 0x35
 
@@ -156,6 +159,8 @@ func (t TransactionType) String() string {
 		return "syntheticWriteData"
 	case TxTypeSyntheticDepositTokens:
 		return "syntheticDepositTokens"
+	case TxTypeSyntheticAnchor:
+		return "syntheticAnchor"
 	case TxTypeSyntheticDepositCredits:
 		return "syntheticDepositCredits"
 	case TxTypeSyntheticBurnTokens:

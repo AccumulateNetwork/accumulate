@@ -19,9 +19,9 @@ func (ac *AnchorChainManager) Height() int64 {
 }
 
 func (ac *AnchorChainManager) Record() (*Anchor, error) {
-	anchor := new(Anchor)
-	err := ac.Chain.RecordAs(anchor)
-	return anchor, err
+	record := new(Anchor)
+	err := ac.Chain.RecordAs(record)
+	return record, err
 }
 
 func (ac *AnchorChainManager) Update(index int64, timestamp time.Time, chains [][32]byte) error {
