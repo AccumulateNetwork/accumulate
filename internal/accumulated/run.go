@@ -90,8 +90,8 @@ func (d *Daemon) Start() error {
 
 	dbPath := filepath.Join(d.Config.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
-	d.db = new(state.StateDB)
-	err := d.db.Open(dbPath, false, false, d.Logger)
+	var err error
+	d.db, err = state.NewStateDB().WithLogger(d.Logger).OpenFromFile(dbPath)
 	if err != nil {
 		return fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
