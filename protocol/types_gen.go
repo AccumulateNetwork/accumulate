@@ -933,6 +933,8 @@ func (v *DirectoryQueryResult) BinarySize() int {
 
 	}
 
+	n += encoding.UvarintBinarySize(v.Total)
+
 	return n
 }
 
@@ -1391,6 +1393,8 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 		}
 
 	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Total))
 
 	return buffer.Bytes(), nil
 }
