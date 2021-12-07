@@ -24,15 +24,29 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 			types.ChainTypeDataAccount, st.Sponsor.Header().Type)
 	}
 
-	//cost will return error if there is too much data or no data for the entry
+	//check will return error if there is too much data or no data for the entry
 	_, err = body.Entry.CheckSize()
 	if err != nil {
 		return err
 	}
 
-	//todo: need to deduct credits from page, should this be done by check?
-	_, _ = body.Entry.Cost()
-	//? st.DeductFee(page, cost)
+	//now replace the transaction payload with a segregated witness to the data
+	sw := protocol.SegWitDataEntry{}
+	copy(sw.EntryHash[:], body.Entry.Hash())
+	sw.EntryUrl = st.Sponsor.Header().GetChainUrl()
+
+	segWitPayload, err := sw.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("unable to marshal segwit, %v", err)
+	}
+
+	dataPayload := tx.Transaction
+	tx.Transaction = segWitPayload
+
+	dataAccountWithCache := protocol.NewDataAccountStateCache(
+		st.Sponsor.(*protocol.DataAccount), sw.EntryHash[:], dataPayload)
+
+	st.UpdateData(dataAccountWithCache)
 
 	return nil
 }
