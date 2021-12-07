@@ -78,7 +78,11 @@ func (m *Executor) queryDirectoryByChainId(chainId []byte, start uint64, limit u
 	if start+count > md.Count {
 		count = md.Count - start
 	}
+<<<<<<< HEAD
 	if count > md.Count { // when uint64 0-x is really big number
+=======
+	if count > md.Count {
+>>>>>>> AC-478: Implemented pagination for QueryDirectory
 		count = 0
 	}
 
