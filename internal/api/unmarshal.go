@@ -41,15 +41,14 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 		return nil, err
 	}
 
-	rAPI := new(api.APIDataResponse)
-	rAPI.Type = types.String(typ)
-
 	if rQuery.Code != 0 {
 		data, err := json.Marshal(rQuery.Value)
 		if err != nil {
 			return nil, err
 		}
 
+		rAPI := new(api.APIDataResponse)
+		rAPI.Type = types.String(typ)
 		rAPI.Data = (*json.RawMessage)(&data)
 		return rAPI, nil
 	}
@@ -65,11 +64,17 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 		return nil, err
 	}
 
+	return respondWith(&obj, v, typ)
+}
+
+func respondWith(obj *state.Object, v interface{}, typ string) (*api.APIDataResponse, error) {
 	data, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
 	}
 
+	rAPI := new(api.APIDataResponse)
+	rAPI.Type = types.String(typ)
 	rAPI.MerkleState = new(api.MerkleState)
 	rAPI.MerkleState.Count = obj.Height
 	rAPI.MerkleState.Roots = make([]types.Bytes, len(obj.Roots))
@@ -78,69 +83,6 @@ func unmarshalAs(rQuery tm.ResponseQuery, typ string, as func([]byte) (interface
 	}
 	rAPI.Data = (*json.RawMessage)(&data)
 	return rAPI, nil
-}
-
-func unmarshalADI(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, "adi", func(b []byte) (interface{}, error) {
-		sAdi := new(state.AdiState)
-		err := sAdi.UnmarshalBinary(b)
-		rAdi := new(response.ADI)
-		rAdi.Url = *sAdi.ChainUrl.AsString()
-		rAdi.PublicKey = sAdi.KeyData
-		return rAdi, err
-	})
-}
-
-func unmarshalToken(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, "token", func(b []byte) (interface{}, error) {
-		r := new(protocol.TokenIssuer)
-		err := r.UnmarshalBinary(b)
-		return r, err
-	})
-}
-
-func unmarshalTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, "tokenAccount", func(b []byte) (interface{}, error) {
-		sAccount := new(state.TokenAccount)
-		err := sAccount.UnmarshalBinary(b)
-		ta := new(protocol.TokenAccountCreate)
-		ta.Url = string(sAccount.ChainUrl)
-		ta.TokenUrl = string(sAccount.TokenUrl.String)
-		rAccount := response.NewTokenAccount(ta, sAccount.GetBalance(), sAccount.TxCount)
-		return rAccount, err
-	})
-}
-
-func unmarshalLiteTokenAccount(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, types.ChainTypeLiteTokenAccount.String(), func(b []byte) (interface{}, error) {
-		sAccount := new(protocol.LiteTokenAccount)
-		err := sAccount.UnmarshalBinary(b)
-		rAccount := new(response.LiteTokenAccount)
-		rAccount.TokenAccountCreate = new(protocol.TokenAccountCreate)
-		rAccount.Url = string(sAccount.ChainUrl)
-		rAccount.TokenUrl = string(sAccount.TokenUrl)
-		rAccount.Balance = types.Amount{Int: sAccount.Balance}
-		rAccount.CreditBalance = types.Amount{Int: sAccount.CreditBalance}
-		rAccount.TxCount = sAccount.TxCount
-		rAccount.Nonce = sAccount.Nonce
-		return rAccount, err
-	})
-}
-
-func unmarshalKeyPage(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, types.ChainTypeKeyPage.String(), func(b []byte) (interface{}, error) {
-		r := new(protocol.KeyPage)
-		err := r.UnmarshalBinary(b)
-		return r, err
-	})
-}
-
-func unmarshalKeyBook(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, types.ChainTypeKeyBook.String(), func(b []byte) (interface{}, error) {
-		r := new(protocol.KeyBook)
-		err := r.UnmarshalBinary(b)
-		return r, err
-	})
 }
 
 func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
@@ -291,63 +233,54 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 		return nil, fmt.Errorf("want tx or chain, got %q", typ)
 	}
 
-	obj := state.Object{}
+	obj := new(state.Object)
 	err := obj.UnmarshalBinary(rQuery.Value)
 	if err != nil {
 		return nil, fmt.Errorf("error unmarshaling chain state object %v", err)
 	}
 
-	sChain := new(state.ChainHeader)
-	err = sChain.UnmarshalBinary(obj.Entry)
+	sChain, err := protocol.UnmarshalChain(obj.Entry)
 	if err != nil {
 		return nil, fmt.Errorf("invalid state object: %v", err)
 	}
 
 	if len(expect) > 0 {
-		if err := isExpected(expect, sChain.Type); err != nil {
+		if err := isExpected(expect, sChain.Header().Type); err != nil {
 			return nil, err
 		}
 	}
 
-	switch sChain.Type {
-	case types.ChainTypeIdentity:
-		return unmarshalADI(rQuery)
+	switch sChain := sChain.(type) {
+	case *state.AdiState:
+		rAdi := new(response.ADI)
+		rAdi.Url = *sChain.ChainUrl.AsString()
+		rAdi.PublicKey = sChain.KeyData
+		return respondWith(obj, rAdi, sChain.Type.String())
 
-	case types.ChainTypeTokenIssuer:
-		return unmarshalToken(rQuery)
+	case *state.TokenAccount:
+		ta := new(protocol.TokenAccountCreate)
+		ta.Url = string(sChain.ChainUrl)
+		ta.TokenUrl = string(sChain.TokenUrl.String)
+		rAccount := response.NewTokenAccount(ta, sChain.GetBalance(), sChain.TxCount)
+		return respondWith(obj, rAccount, sChain.Type.String())
 
-	case types.ChainTypeTokenAccount:
-		return unmarshalTokenAccount(rQuery)
+	case *protocol.LiteTokenAccount:
+		rAccount := new(response.LiteTokenAccount)
+		rAccount.TokenAccountCreate = new(protocol.TokenAccountCreate)
+		rAccount.Url = string(sChain.ChainUrl)
+		rAccount.TokenUrl = string(sChain.TokenUrl)
+		rAccount.Balance = types.Amount{Int: sChain.Balance}
+		rAccount.CreditBalance = types.Amount{Int: sChain.CreditBalance}
+		rAccount.TxCount = sChain.TxCount
+		rAccount.Nonce = sChain.Nonce
+		return respondWith(obj, rAccount, sChain.Type.String())
 
-	case types.ChainTypeLiteTokenAccount:
-		return unmarshalLiteTokenAccount(rQuery)
+	case *state.Transaction:
+		return respondWith(obj, sChain, "tx")
 
-	case types.ChainTypeKeyPage:
-		return unmarshalKeyPage(rQuery)
-
-	case types.ChainTypeKeyBook:
-		return unmarshalKeyBook(rQuery)
-
-	case types.ChainTypeTransaction:
-		return unmarshalAs(rQuery, "tx", func(b []byte) (interface{}, error) {
-			r := new(state.Transaction)
-			err := r.UnmarshalBinary(b)
-			return r, err
-		})
+	default:
+		return respondWith(obj, sChain, sChain.Header().Type.String())
 	}
-
-	rAPI := new(api.APIDataResponse)
-	rAPI.Type = types.String(sChain.Type.Name())
-
-	msg := []byte(fmt.Sprintf("{\"state\":\"%x\"}", obj.Entry))
-	rAPI.MerkleState = new(api.MerkleState)
-	rAPI.MerkleState.Count = obj.Height
-	rAPI.MerkleState.Roots = make([]types.Bytes, len(obj.Roots))
-	for i, r := range obj.Roots {
-		rAPI.MerkleState.Roots[i] = r
-	}
-	rAPI.Data = (*json.RawMessage)(&msg)
-	return rAPI, nil
 }
 
 func isExpected(expect []types.ChainType, typ types.ChainType) error {

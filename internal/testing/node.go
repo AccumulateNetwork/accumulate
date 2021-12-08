@@ -112,8 +112,10 @@ func NewBVNN(opts BVNNOptions, cleanup func(func())) (*node.Node, *state.StateDB
 	}
 
 	clientProxy := node.NewLocalClient()
-	mgr, err := chain.NewBlockValidatorExecutor(chain.ExecutorOptions{
+	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
+		SubnetType:      config.BlockValidator,
 		Local:           clientProxy,
+		IsTest:          true,
 		DB:              sdb,
 		Logger:          logger,
 		Key:             pv.Key.PrivKey.Bytes(),
