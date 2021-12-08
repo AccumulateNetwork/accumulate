@@ -1,14 +1,16 @@
 package managed
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // GetRange
 // returns the list of hashes with indexes indicated by range: (begin,end)
-// begin must be before or equal to end.  The hash with index begin and end
-// are included in the hashes returned.  Indexes are zero based, so the
+// begin must be before or equal to end.  The hash with index begin upto but
+// not including end are the hashes returned.  Indexes are zero based, so the
 // first hash in the MerkleState is at 0
-func (m *MerkleManager) GetRange(key []interface{}, begin, end int64) (hashes []Hash, err error) {
-	m.SetKey(key...)
+func (m *MerkleManager) GetRange(begin, end int64) (hashes []Hash, err error) {
 	// We return nothing for ranges that are out of range.
 	if begin < 0 { // begin cannot be negative.  If it is, assume the user meant zero
 		begin = 0
@@ -17,40 +19,33 @@ func (m *MerkleManager) GetRange(key []interface{}, begin, end int64) (hashes []
 	if end-begin > m.MarkFreq/2 {
 		end = begin + m.MarkFreq/2
 	}
-	if m.MS.Count <= begin || 0 > end { // Note count is 1 based, so the index count is out of range
+	if m.MS.Count <= begin || end > 0 { // Note count is 1 based, so the index count is out of range
 		return nil, fmt.Errorf("impossible range provided %d,%d", begin, end) // Return zero begin and/or end are impossible
 	}
-	if end >= m.MS.Count { // If end is past the length of MS then truncate the range to count-1
-		end = m.MS.Count // End isn't included, so it can be equal to the Count
+	if end > m.MS.Count { // If end is past the length of MS then truncate the range to count-1
+		end = m.MS.Count //   End is included, so it can not be equal to the Count
 	}
-	markPoint := m.MarkFreq - 1 // markPoint has the list of hashes just prior to the first mark.
-	if begin > m.MarkFreq-1 {   // If begin is past the first mark, calculate it
-		markPoint = (begin)&(^m.MarkMask) - 1
-		markPoint += m.MarkFreq
-	}
-	s := m.GetState(markPoint) // Get the state of the mark right after the begin index
-	var hl []Hash              // Collect all the hashes of the mark points covering the range of begin-end
-	if s == nil {              // If no state found, then get the highest state of the chain
-		head, err := m.ReadChainHead(key...) //
-		if err != nil {                      // If we have an error, we will just ignore it.
-			return nil, fmt.Errorf("No State found %v:  %v:err", key, err)
+	markPoint := (begin+m.MarkFreq) &
+		^m.MarkMask -
+		1 // Get the mark point just past begin
+	var s *MerkleState
+	if s = m.GetState(markPoint); s == nil {
+		if s, err = m.GetChainState(); err != nil {
+			return nil, errors.New("a chain should always have a state")
 		}
-		hl = append(hl, head.HashList...)
-	} else { // If a mark follows begin, then
-		hl = append(hl, s.HashList...)
-		s = m.GetState(markPoint + m.MarkFreq) // Get the next state
-		if s != nil {
-			hl = append(hl, s.HashList...)
-		} else {
-			head, err := m.ReadChainHead(key...)
-			if err != nil { // If we have an error, we will just ignore it.
-				return nil, fmt.Errorf("No State found %v:  %v:err", key, err)
+	}
+	var hl []Hash // Collect all the hashes of the mark points covering the range of begin-end
+	hl = append(hl, s.HashList...)
+	if end > markPoint {
+		if s = m.GetState(markPoint + m.MarkFreq); s == nil {
+			if s, err = m.GetChainState(); err != nil {
+				return nil, errors.New("a chain should always have a state")
 			}
-			hl = append(hl, head.HashList...)
 		}
 	}
+	hl = append(hl, s.HashList...)
 
-	if len(hl) > 0 && begin != end { // Just check if we are to return anything
+	if len(hl) > 0 && begin != end { //   Just check if we are to return anything
 		first := (begin) & m.MarkMask // Calculate the offset to the beginning of the range
 		last := first + end - begin   // and to the end of the range
 		return hl[first:last], nil    // Return this slice.

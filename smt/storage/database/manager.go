@@ -2,6 +2,7 @@ package database
 
 import (
 	"bytes"
+	"errors"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
@@ -86,6 +87,8 @@ func (m *Manager) Init(databaseTag, filename string, logger storage.Logger) erro
 	case "memory": //                                    memory database indicated
 		m.DB = new(memory.DB)             //                     Allocate the structure
 		_ = m.DB.InitDB(filename, logger) //                     filename is ignored, but must allocate the underlying map
+	default:
+		return errors.New("undefined database type '" + databaseTag + "'")
 	}
 	return nil
 }

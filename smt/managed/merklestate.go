@@ -57,7 +57,7 @@ func (m MerkleState) String() string {
 // references to the structures in the given Merkle State.  This means copying
 // any entries in the Pending slice
 func (m MerkleState) Copy() *MerkleState {
-	m.Pending = append(m.Pending[:0], m.Pending...) // New slice for Pending, but hashes are immutable
+	m.Pending = append([]Hash{}, m.Pending...) // New slice for Pending, but hashes are immutable
 	// Extra paranoid, make the hashes new hashes in pending
 	// (nobody should change a hash, but even if they do the copy will be independent
 	for i, v := range m.Pending {
@@ -65,7 +65,7 @@ func (m MerkleState) Copy() *MerkleState {
 			m.Pending[i] = v.Copy()
 		}
 	}
-	m.HashList = append(m.HashList[:0], m.HashList...) // copy the underlying storage under slice
+	m.HashList = append([]Hash{}, m.HashList...) // copy the underlying storage under slice
 	return &m
 }
 

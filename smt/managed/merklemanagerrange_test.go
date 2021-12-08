@@ -27,10 +27,10 @@ func TestConversions(t *testing.T) {
 }
 
 func TestMerkleManager_GetRange(t *testing.T) {
+	const NumTests = int64(50)
 
-	MarkPower := int64(3)
+	MarkPower := int64(2)
 	MarkFreq := int64(8)
-	NumTests := int64(40)
 
 	dbManager := new(database.Manager)
 	if err := dbManager.Init("memory", "", nil); err != nil {
@@ -82,8 +82,8 @@ func TestMerkleManager_GetRange(t *testing.T) {
 			if lastIndex < 0 {
 				lastIndex = 0
 			}
-			list, err := MM1.GetRange([]interface{}{[]byte{1}}, begin, end)
-			if begin >= 0 && begin < NumTests-1 && end > begin && end > 0 && err != nil {
+			list, err := MM1.GetRange(begin, end)
+			if begin >= 0 && begin < NumTests-1 && end > begin && end > 0 && err == nil {
 				t.Fatalf("shouldn't happen %v", err)
 			}
 			if end > 0 && begin <= NumTests-1 {
@@ -103,8 +103,8 @@ func TestMerkleManager_GetRange(t *testing.T) {
 			if first < 0 {
 				first = 0
 			}
-			if last > MM1.MS.Count {
-				last = MM1.MS.Count
+			if last >= MM1.MS.Count {
+				last = MM1.MS.Count - 1
 			}
 			if first >= MM1.MS.Count || last <= first {
 				continue
