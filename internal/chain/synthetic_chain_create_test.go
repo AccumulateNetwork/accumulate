@@ -15,13 +15,13 @@ import (
 )
 
 func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
-	db := new(state.StateDB)
-	require.NoError(t, db.Open("mem", true, true, nil))
+	db, err := state.NewStateDB().WithDebug().OpenInMemory()
+	require.NoError(t, err)
 
 	fooKey := generateKey()
 	dbTx := db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	_, err := dbTx.Commit(1, time.Unix(0, 0))
+	_, err = dbTx.Commit(1, time.Unix(0, 0))
 	require.NoError(t, err)
 
 	book, err := url.Parse("foo/ssg0")

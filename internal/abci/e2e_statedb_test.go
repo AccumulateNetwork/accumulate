@@ -21,8 +21,8 @@ func TestStateDBConsistency(t *testing.T) {
 	// before the database is closed.
 	t.Cleanup(func() { db.Close() })
 
-	sdb := new(state.StateDB)
-	require.NoError(t, sdb.Load(db, true))
+	sdb, err := state.NewStateDB().WithDebug().LoadKeyValueDB(db)
+	require.NoError(t, err)
 
 	n := createApp(t, sdb, crypto.Address{}, true)
 	n.testLiteTx(10)
@@ -33,8 +33,8 @@ func TestStateDBConsistency(t *testing.T) {
 	n.client.Shutdown()
 
 	// Reopen the database
-	sdb = new(state.StateDB)
-	require.NoError(t, sdb.Load(db, true))
+	sdb, err = state.NewStateDB().WithDebug().LoadKeyValueDB(db)
+	require.NoError(t, err)
 
 	// Block 6 does not make changes so is not saved
 	height2, err := sdb.BlockIndex()

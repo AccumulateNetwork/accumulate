@@ -89,9 +89,7 @@ func (s *StateDB) logInfo(msg string, keyVals ...interface{}) {
 	}
 }
 
-func (s *StateDB) init(debug bool) {
-	s.debug = debug
-
+func (s *StateDB) init() {
 	s.bptMgr = pmt.NewBPTManager(s.dbMgr)
 	managed.NewMerkleManager(s.dbMgr, markPower)
 }
@@ -106,15 +104,20 @@ func (s *StateDB) open(dbType string, dbFilename string, logger log.Logger) (err
 	if err != nil {
 		return err
 	}
-
 	s.merkleMgr, err = managed.NewMerkleManager(s.dbMgr, markPower)
-	return err
+	if err != nil {
+		return err
+	}
+
+	s.init()
+	return nil
 }
 
 func (s *StateDB) Load(db storage.KeyValueDB) (err error) {
 	s.dbMgr = new(database.Manager)
 	s.dbMgr.InitWithDB(db)
 	s.merkleMgr, err = managed.NewMerkleManager(s.dbMgr, markPower)
+	s.init()
 	return err
 }
 
