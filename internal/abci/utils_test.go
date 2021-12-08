@@ -161,6 +161,11 @@ func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
 	return r
 }
 
+func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
+	//	r, err := GetDataByUrl
+	return nil
+}
+
 func (n *fakeNode) GetChainStateByTxId(txid []byte) *api.APIDataResponse {
 	r, err := n.query.GetChainStateByTxId(txid)
 	require.NoError(n.t, err)
@@ -280,6 +285,11 @@ func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {
 
 type e2eDUT struct {
 	*fakeNode
+}
+
+func (n e2eDUT) GetDataByUrl(url string) (*ctypes.ResultABCIQuery, error) {
+	//	return n.query.QueryDataByUrl(url)
+	return nil, nil
 }
 
 func (n e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {
