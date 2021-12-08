@@ -123,6 +123,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		PrintKeyBookCreate()
 		return "", err
 	}
+
 	if len(args) < 2 {
 		PrintKeyPageCreate()
 		return "", fmt.Errorf("invalid number of arguments")
