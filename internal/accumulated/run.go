@@ -105,14 +105,14 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	d.relay, err = relay.NewWith(d.Config.Accumulate.Networks...)
-	if err != nil {
-		return fmt.Errorf("failed to create RPC relay: %v", err)
-	}
-
 	// Create a proxy local client which we will populate with the local client
 	// after the node has been created.
 	clientProxy := node.NewLocalClient()
+
+	d.relay, err = relay.NewWith(clientProxy, d.Config.Accumulate.Networks...)
+	if err != nil {
+		return fmt.Errorf("failed to create RPC relay: %v", err)
+	}
 
 	execOpts := chain.ExecutorOptions{
 		SubnetType:      d.Config.Accumulate.Type,
@@ -171,6 +171,7 @@ func (d *Daemon) Start() error {
 	jrpcOpts.QueueDepth = 100
 	jrpcOpts.QueryV1 = apiv1.NewQuery(d.relay)
 	jrpcOpts.Local = lclient
+	jrpcOpts.Logger = d.Logger
 
 	// Build the list of remote addresses and query clients
 	jrpcOpts.Remote = make([]string, len(d.Config.Accumulate.Networks))

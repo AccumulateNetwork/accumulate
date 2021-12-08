@@ -32,6 +32,6 @@ ssh ec2-user@${HOST} "
     tar xCf ~/.accumulate/bvn config-bvn.tar.gz Node${NODE} --strip-components 1
     tar xCf ~/.accumulate/dn config-dn.tar.gz Node${DN_NODE} --strip-components 1
     export PATH="'"$PATH:$HOME/.local/bin"'"
-    screen -d -m -S accumulated-bvn bash -c 'accumulated run -w ~/.accumulate/bvn 2>&1 | tee ~/.accumulate/logs/acc-bvn-$(date +%Y%m%d%H%M%S).log'
     screen -d -m -S accumulated-dn bash -c 'accumulated run -w ~/.accumulate/dn 2>&1 | tee ~/.accumulate/logs/acc-dn-$(date +%Y%m%d%H%M%S).log'
+    screen -d -m -S accumulated-bvn bash -c 'accumulated run -w ~/.accumulate/bvn 2>&1 | tee ~/.accumulate/logs/acc-bvn-$(date +%Y%m%d%H%M%S).log'
 "

@@ -12,6 +12,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/libs/service"
+	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
@@ -89,7 +91,15 @@ func (r *Relay) Start() error {
 	})
 
 	for _, c := range r.client {
-		err := c.Start()
+		ec, ok := c.(interface {
+			client.EventsClient
+			service.Service
+		})
+		if !ok {
+			continue
+		}
+
+		err := ec.Start()
 		if err != nil {
 			failed = true
 			return err
@@ -99,7 +109,7 @@ func (r *Relay) Start() error {
 		// per TX hash does not work well. Tendermint does not clean up
 		// subscriptions sufficiently well, so old unused channels lead to
 		// blockages.
-		ch, err := c.Subscribe(context.Background(), "acc-relay", "tm.event = 'Tx'")
+		ch, err := ec.Subscribe(context.Background(), "acc-relay", "tm.event = 'Tx'")
 		if err != nil {
 			failed = true
 			return err
@@ -109,10 +119,9 @@ func (r *Relay) Start() error {
 			Chan: reflect.ValueOf(ch),
 		})
 
-		c := c // Do not capture loop var
 		defer func() {
 			if failed {
-				_ = c.Stop()
+				_ = ec.Stop()
 			}
 		}()
 	}
@@ -151,7 +160,15 @@ func (r *Relay) Stop() error {
 	var errs []string
 
 	for _, c := range r.client {
-		err := c.Stop()
+		ec, ok := c.(interface {
+			client.EventsClient
+			service.Service
+		})
+		if !ok {
+			continue
+		}
+
+		err := ec.Stop()
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
