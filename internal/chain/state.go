@@ -386,9 +386,11 @@ func (m *StateManager) Commit() error {
 		case addDataEntry:
 			cache, ok := m.dataStores[*store.chainId]
 			if !ok {
-				return fmt.Errorf("no supporting data for data entry")
+				return fmt.Errorf("no supporting data for data entry on %v",
+					store.record.Header().ChainUrl)
 			}
-			return m.dbTx.AddDataEntry((*types.Bytes32)(store.chainId), cache.entryHash, cache.entryHash, &state.Object{Entry: data})
+			return m.dbTx.AddDataEntry((*types.Bytes32)(store.chainId), m.txHash[:],
+				cache.entryHash, cache.entryHash, &state.Object{Entry: data})
 		default:
 			panic(fmt.Errorf("invalid store kind %d", store.kind))
 		}
