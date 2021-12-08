@@ -20,10 +20,35 @@ import (
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 )
+
+func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
+	params := api2.UrlQuery{
+		Url: url,
+	}
+	res := new(api2.QueryResponse)
+	res.Data = rec
+	if err := Client.RequestV2(context.Background(), "query", &params, res); err != nil {
+		return nil, err
+	}
+	return res.MerkleState, nil
+}
+
+func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
+	params := api2.ChainIdQuery{
+		ChainId: chainId,
+	}
+	res := new(api2.QueryResponse)
+	res.Data = rec
+	if err := Client.RequestV2(context.Background(), "query-chain", &params, res); err != nil {
+		return nil, err
+	}
+	return res.MerkleState, nil
+}
 
 func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
 	//adiActor labelOrPubKeyHex height index
@@ -71,14 +96,36 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
 			ct++
 			ed.KeyPageIndex = uint64(v)
-			if len(args) > 3 {
-				if v, err := strconv.ParseInt(args[2], 10, 64); err == nil {
-					ct++
-					ed.KeyPageHeight = uint64(v)
-				}
-			}
 		}
 	}
+
+	actorRec := new(state.ChainHeader)
+	_, err = getRecord(actor.String(), &actorRec)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+	}
+
+	bookRec := new(protocol.KeyBook)
+	if actorRec.KeyBook == (types.Bytes32{}) {
+		_, err := getRecord(actor.String(), &bookRec)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+		}
+	} else {
+		_, err := getRecordById(actorRec.KeyBook[:], &bookRec)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+		}
+	}
+
+	if ed.KeyPageIndex >= uint64(len(bookRec.Pages)) {
+		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", ed.KeyPageIndex, actor)
+	}
+	ms, err := getRecordById(bookRec.Pages[ed.KeyPageIndex][:], nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[ed.KeyPageIndex][:], err)
+	}
+	ed.KeyPageHeight = ms.Count
 
 	return args[ct:], &ed, privKey, nil
 }
