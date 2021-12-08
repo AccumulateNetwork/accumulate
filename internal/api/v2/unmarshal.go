@@ -18,51 +18,12 @@ func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
 		return nil, nil, fmt.Errorf("invalid state response: %v", err)
 	}
 
-	chain, err := chainFromStateObj(&obj)
+	chain, err := protocol.UnmarshalChain(obj.Entry)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return &obj, chain, nil
-}
-
-func chainFromStateObj(obj *state.Object) (state.Chain, error) {
-
-	var header state.ChainHeader
-	var chain state.Chain
-	err := obj.As(&header)
-	if err != nil {
-		return nil, fmt.Errorf("invalid state response: %v", err)
-	}
-
-	switch header.Type {
-	case types.ChainTypeIdentity:
-		chain = new(state.AdiState)
-	case types.ChainTypeTokenIssuer:
-		chain = new(protocol.TokenIssuer)
-	case types.ChainTypeTokenAccount:
-		chain = new(state.TokenAccount)
-	case types.ChainTypeLiteTokenAccount:
-		chain = new(protocol.LiteTokenAccount)
-	case types.ChainTypeKeyPage:
-		chain = new(protocol.KeyPage)
-	case types.ChainTypeKeyBook:
-		chain = new(protocol.KeyBook)
-	case types.ChainTypeTransaction:
-		chain = new(state.Transaction)
-	case types.ChainTypeDataAccount:
-		chain = new(protocol.DataAccount)
-	case types.ChainTypeLiteDataAccount:
-		chain = new(protocol.LiteDataAccount)
-	default:
-		return nil, fmt.Errorf("unknown chain type %v", header.Type)
-	}
-
-	err = obj.As(chain)
-	if err != nil {
-		return nil, fmt.Errorf("invalid state response: %v", err)
-	}
-	return chain, nil
 }
 
 func unmarshalTxType(b []byte) types.TxType {
