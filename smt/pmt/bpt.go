@@ -7,7 +7,10 @@ import (
 	"sort"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
+
+const debug = false
 
 // BPT
 // Binary Patricia Tree.
@@ -215,6 +218,9 @@ func (b *BPT) insertAtNode(BIdx, bit byte, node *Node, key, hash [32]byte) {
 // Insert
 // Starts the search of the BPT for the location of the key in the BPT
 func (b *BPT) Insert(key, hash [32]byte) { //          The location of a value is determined by the key, and the value
+	if debug {
+		fmt.Printf("BPT insert key=%v value=%X\n", storage.Key(key), hash)
+	}
 	b.insertAtNode(0, 1, b.Root, key, hash) //          in that location is the hash.  We start at byte 0, lowest
 } //                                                   significant bit. (which is masked with a 1)
 
@@ -252,6 +258,9 @@ func (b *BPT) Update() {
 				copy(n.Hash[:], R) //                       No Hash Required
 			default: //                                    The fourth condition never happens, and bad if it does.
 				panic("dead nodes should not exist") //      This is a node without a child somewhere up the tree.
+			}
+			if debug {
+				fmt.Printf("BPT update, node %d -> %X\n", n.ID, n.Hash)
 			}
 			b.Clean(n)        //                           Node has been updated, so it is clean
 			b.Dirty(n.Parent) //                           The Parent is dirty cause it must consider this new state

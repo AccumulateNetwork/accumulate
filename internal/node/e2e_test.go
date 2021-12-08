@@ -13,6 +13,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/api"
+	apiv2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -64,14 +65,20 @@ func (d *e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
 	b, err := tx.Marshal()
-	d.NoError(err)
+	d.Require().NoError(err)
 	_, err = d.client.BroadcastTxAsync(context.Background(), b)
-	d.NoError(err)
+	d.Require().NoError(err)
 }
 
-func (d *e2eDUT) WaitForTxns() {
-	// Is there a better way to do this?
-	time.Sleep(2 * time.Second)
+func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
+	q := apiv2.NewQueryDirect(d.client, apiv2.QuerierOptions{
+		TxMaxWaitTime: 10 * time.Second,
+	})
+
+	for _, txid := range txids {
+		_, err := q.QueryTx(txid, 10*time.Second)
+		d.Require().NoError(err)
+	}
 }
 
 func TestSubscribeAfterClose(t *testing.T) {

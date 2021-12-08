@@ -28,7 +28,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	tx, err := acctesting.CreateFakeSyntheticDepositTx(sponsor, sender)
 	s.Require().NoError(err)
 	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns()
+	s.dut.WaitForTxns(tx.TransactionHash())
 
 	account := new(protocol.LiteTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
@@ -43,6 +43,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	}
 
 	var total int64
+	var txids [][]byte
 	for i := 0; i < 1; i++ {
 		if i > 2 && testing.Short() {
 			break
@@ -60,9 +61,10 @@ func (s *Suite) TestCreateLiteAccount() {
 
 		tx := s.newTx(senderUrl, sender, uint64(i+1), exch)
 		s.dut.SubmitTxn(tx)
+		txids = append(txids, tx.TransactionHash())
 	}
 
-	s.dut.WaitForTxns()
+	s.dut.WaitForTxns(txids...)
 
 	account = new(protocol.LiteTokenAccount)
 	s.getChainAs(senderUrl.String(), account)
