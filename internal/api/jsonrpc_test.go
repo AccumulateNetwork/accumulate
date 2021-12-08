@@ -34,7 +34,7 @@ var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 func TestLoadOnRemote(t *testing.T) {
 	t.Skip("Deprecated, use `accumulated loadtest`")
 
-	txBouncer, err := relay.NewWith(*testnet)
+	txBouncer, err := relay.NewWith(nil, *testnet)
 	if err != nil {
 		t.Fatal(err)
 	}
