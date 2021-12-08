@@ -3,6 +3,7 @@ package abci_test
 import (
 	"crypto/ed25519"
 	"crypto/sha256"
+	"fmt"
 	"testing"
 	"time"
 
@@ -281,6 +282,49 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
 		require.Equal(t, types.String("acc://FooBar/mgr/book1"), r.ManagerKeyBook)
 		require.Equal(t, bookChainId, r.KeyBook)
+
+	})
+
+	t.Run("Data Account data entry", func(t *testing.T) {
+		n := createAppWithMemDB(t, crypto.Address{}, true)
+		adiKey := generateKey()
+		dbTx := n.db.Begin()
+		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
+		dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+
+		n.Batch(func(send func(*transactions.GenTransaction)) {
+			tac := new(protocol.CreateDataAccount)
+			tac.Url = "FooBar/oof"
+			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), tac)
+			require.NoError(t, err)
+			send(tx)
+		})
+
+		r := n.GetDataAccount("FooBar/oof")
+		require.Equal(t, types.ChainTypeDataAccount, r.Type)
+		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
+
+		require.Equal(t, []string{
+			n.ParseUrl("FooBar/ssg0").String(),
+			n.ParseUrl("FooBar/sigspec0").String(),
+			n.ParseUrl("FooBar/oof").String(),
+		}, n.GetDirectory("FooBar"))
+
+		n.Batch(func(send func(*transactions.GenTransaction)) {
+			wd := new(protocol.WriteData)
+			for i := 0; i < 10; i++ {
+				wd.Entry.ExtIds = append(wd.Entry.ExtIds, []byte(fmt.Sprintf("test id %d", i)))
+			}
+
+			wd.Entry.Data = []byte("thequickbrownfoxjumpsoverthelazydog")
+
+			tx, err := transactions.New("FooBar/oof", 1, edSigner(adiKey, 1), wd)
+			require.NoError(t, err)
+			send(tx)
+		})
+
+		r2 := n.GetChainDataByUrl("FooBar/oof")
+		_ = r2
 
 	})
 }
