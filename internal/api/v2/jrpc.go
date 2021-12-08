@@ -155,6 +155,20 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 	}
 }
 
+func (m *JrpcMethods) EnableDebug(local ABCIQueryClient) {
+	q := &queryDirect{client: local}
+
+	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
+		req := new(UrlQuery)
+		err := m.parse(params, req)
+		if err != nil {
+			return err
+		}
+
+		return jrpcFormatQuery(q.QueryUrl(req.Url))
+	}
+}
+
 func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/v1", m.v1.Handler())

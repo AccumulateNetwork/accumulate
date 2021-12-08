@@ -205,6 +205,8 @@ func (d *Daemon) Start() error {
 		return fmt.Errorf("failed to start API: %v", err)
 	}
 
+	jrpc.EnableDebug(lclient)
+
 	// Run JSON-RPC server
 	d.api = &http.Server{Handler: jrpc.NewMux()}
 	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.JSONListenAddress)
