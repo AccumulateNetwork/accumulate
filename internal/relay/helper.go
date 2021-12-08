@@ -5,9 +5,17 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 )
 
-func NewClients(targetList ...string) ([]Client, error) {
+func NewClients(local Client, targetList ...string) ([]Client, error) {
 	clients := []Client{}
 	for _, nameOrIP := range targetList {
+		if nameOrIP == "local" || nameOrIP == "self" {
+			if local == nil {
+				panic("target is local but no local client was provided!")
+			}
+			clients = append(clients, local)
+			continue
+		}
+
 		addr, err := networks.GetRpcAddr(nameOrIP)
 		if err != nil {
 			return nil, err
@@ -22,8 +30,8 @@ func NewClients(targetList ...string) ([]Client, error) {
 	return clients, nil
 }
 
-func NewWith(targetList ...string) (*Relay, error) {
-	clients, err := NewClients(targetList...)
+func NewWith(local Client, targetList ...string) (*Relay, error) {
+	clients, err := NewClients(local, targetList...)
 	if err != nil {
 		return nil, err
 	}
