@@ -22,8 +22,8 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	_, _, gtx, err := testing2.BuildTestSynthDepositGenTx(privKey)
 	require.NoError(t, err)
 
-	db := new(state.StateDB)
-	require.NoError(t, db.Open("mem", true, true, nil))
+	db, err := state.NewStateDB().WithDebug().OpenInMemory()
+	require.NoError(t, err)
 
 	st, err := NewStateManager(db.Begin(), gtx)
 	require.ErrorIs(t, err, storage.ErrNotFound)
