@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"encoding"
 	"errors"
 	"fmt"
 	"reflect"
@@ -82,7 +81,7 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 
 type submittedTx struct {
 	url  *url.URL
-	body encoding.BinaryMarshaler
+	body protocol.TransactionPayload
 }
 
 // LoadString loads a chain by URL and unmarshals it.
@@ -229,7 +228,7 @@ func (m *StateManager) Create(record ...state.Chain) {
 }
 
 // Submit queues a synthetic transaction for submission.
-func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
+func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 	if m.txType.IsSynthetic() {
 		panic("Called StateManager.Submit from a synthetic transaction!")
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks"
@@ -18,6 +19,7 @@ type txBatch []tm.Tx
 // their recipients.
 type dispatcher struct {
 	isDirectory bool
+	isTest      bool
 	localIndex  int
 	local       api.ABCIBroadcastClient
 	bvn         []*http.HTTP
@@ -28,16 +30,17 @@ type dispatcher struct {
 }
 
 // newDispatcher creates a new dispatcher.
-func newDispatcher(opts ExecutorOptions, isDirectory bool) (*dispatcher, error) {
+func newDispatcher(opts ExecutorOptions) (*dispatcher, error) {
 	d := new(dispatcher)
-	d.isDirectory = isDirectory
+	d.isDirectory = opts.SubnetType == config.Directory
+	d.isTest = opts.IsTest
 	d.local = opts.Local
 	d.localIndex = -1
 	d.bvn = make([]*http.HTTP, len(opts.BlockValidators))
 	d.bvnBatches = make([]txBatch, len(opts.BlockValidators))
 
 	// If we're not a directory, make an RPC client for the DN
-	if !isDirectory && opts.Directory != "" {
+	if !d.isDirectory && opts.Directory != "" {
 		// Parse the config entry
 		addr, err := networks.GetRpcAddr(opts.Directory)
 		if err != nil {
@@ -92,7 +95,7 @@ func (d *dispatcher) route(u *url.URL) (batch *txBatch, local bool) {
 		if d.isDirectory {
 			return nil, true
 		}
-		if d.dn == nil {
+		if d.dn == nil && !d.isTest {
 			panic("Directory was not configured")
 		}
 		return &d.dnBatch, false
@@ -164,7 +167,9 @@ func (d *dispatcher) send(ctx context.Context, client *http.HTTP, batch txBatch)
 // Send sends all of the batches.
 func (d *dispatcher) Send(ctx context.Context) error {
 	// Send to the DN
-	d.send(ctx, d.dn, d.dnBatch)
+	if d.dn != nil || !d.isTest {
+		d.send(ctx, d.dn, d.dnBatch)
+	}
 
 	// Send to the BVNs
 	for i := range d.bvn {
