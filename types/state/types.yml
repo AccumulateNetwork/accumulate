@@ -9,14 +9,6 @@ Object:
     slice:
       type: bytes
 
-SyntheticSignatures:
-  fields:
-  - name: Signatures
-    type: slice
-    slice:
-      type: SyntheticSignature
-      marshal-as: reference
-
 # TODO Move these to Protocol
 
 Anchor:
@@ -34,6 +26,8 @@ Anchor:
       type: chain
     - name: Synthetic
       type: chain
+    - name: AnchorTxns
+      type: chainSet
 
 SyntheticSignature:
   fields:
@@ -54,3 +48,10 @@ SyntheticTransactionChain:
       type: varint
     - name: Count
       type: varint
+    - name: Nonce
+      type: varint
+    - name: Signatures
+      type: slice
+      slice:
+        type: SyntheticSignature
+        marshal-as: reference

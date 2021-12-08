@@ -80,9 +80,11 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
-	mgr, err := chain.NewBlockValidatorExecutor(chain.ExecutorOptions{
+	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
+		SubnetType:      config.BlockValidator,
 		Local:           n.client,
 		DB:              n.db,
+		IsTest:          true,
 		Logger:          logger,
 		Key:             bvcKey,
 		BlockValidators: []string{"self"},
@@ -302,6 +304,6 @@ func (n e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
 	n.client.SubmitTx(context.Background(), b)
 }
 
-func (n e2eDUT) WaitForTxns() {
+func (n e2eDUT) WaitForTxns(...[]byte) {
 	n.client.Wait()
 }

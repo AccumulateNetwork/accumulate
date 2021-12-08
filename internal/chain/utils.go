@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
@@ -20,8 +21,8 @@ func isBvnUrl(u *url.URL) bool {
 	return u.Path == "" && strings.HasPrefix(u.Authority, "bvn-")
 }
 
-func nodeUrl(db *state.StateDB, dir bool) (*url.URL, error) {
-	if dir {
+func nodeUrl(db *state.StateDB, typ config.NetworkType) (*url.URL, error) {
+	if typ == config.Directory {
 		return dnUrl(), nil
 	}
 
@@ -32,10 +33,10 @@ func nodeUrl(db *state.StateDB, dir bool) (*url.URL, error) {
 	return bvnUrl(subnet), nil
 }
 
-func anchorChainName(dir, major bool) string {
+func anchorChainName(typ config.NetworkType, major bool) string {
 	parts := []string{"", "", "anchor", "pool"}
 
-	if dir {
+	if typ == config.Directory {
 		parts[0] = "bvn"
 	} else {
 		parts[0] = "dn"

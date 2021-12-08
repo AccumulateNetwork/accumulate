@@ -28,7 +28,7 @@ func TestLiteTokenTransactions(t *testing.T) {
 
 	dbTx := db.Begin()
 	require.NoError(t, acctesting.CreateLiteTokenAccount(dbTx, tmed25519.PrivKey(privKey), 5e4))
-	_, err = dbTx.Commit(1, time.Unix(0, 0))
+	_, err = dbTx.Commit(1, time.Unix(0, 0), nil)
 	require.NoError(t, err)
 
 	sponsorAddr := lite.GenerateAcmeAddress(privKey[32:])
