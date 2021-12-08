@@ -115,6 +115,7 @@ func (d *Daemon) Start() error {
 	clientProxy := node.NewLocalClient()
 
 	execOpts := chain.ExecutorOptions{
+		SubnetType:      d.Config.Accumulate.Type,
 		Local:           clientProxy,
 		DB:              d.db,
 		Logger:          d.Logger,
@@ -122,15 +123,7 @@ func (d *Daemon) Start() error {
 		Directory:       d.Config.Accumulate.Directory,
 		BlockValidators: d.Config.Accumulate.Networks,
 	}
-	var exec *chain.Executor
-	switch d.Config.Accumulate.Type {
-	case config.BlockValidator:
-		exec, err = chain.NewBlockValidatorExecutor(execOpts)
-	case config.Directory:
-		exec, err = chain.NewDirectoryExecutor(execOpts)
-	default:
-		return fmt.Errorf("%q is not a valid Accumulate subnet type", d.Config.Accumulate.Type)
-	}
+	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}

@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -10,13 +11,13 @@ import (
 )
 
 type SyntheticAnchor struct {
-	IsDirectory bool
+	SubnetType config.NetworkType
 }
 
 func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
 
 func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	nodeUrl, err := nodeUrl(st.dbTx.DB(), x.IsDirectory)
+	nodeUrl, err := nodeUrl(st.dbTx.DB(), x.SubnetType)
 	if err != nil {
 		return fmt.Errorf("failed to retrieve subnet ID: %v", err)
 	}
@@ -48,7 +49,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransact
 	}
 
 	chain := new(state.Anchor)
-	chain.ChainUrl = types.String(nodeUrl.JoinPath(anchorChainName(x.IsDirectory, body.Major)).String())
+	chain.ChainUrl = types.String(nodeUrl.JoinPath(anchorChainName(x.SubnetType, body.Major)).String())
 	chain.Index = body.Index
 	chain.Timestamp = body.Timestamp
 	chain.Root = body.Root

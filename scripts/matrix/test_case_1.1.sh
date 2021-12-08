@@ -7,22 +7,20 @@
 #
 # set cli command and see if it exists
 #
-export cli=../cmd/cli/cli
+export cli=../../cmd/cli/cli
 
 if [ ! -f $cli ]; then
 	echo "cli command not found in ../cmd/cli, attempting to build"
         ./build_cli.sh
 	if [ ! -f $cli ]; then
 	        echo "cli command failed to build"
-		exit 0
+		exit 1
 	fi
 fi
 
-# check for command line parameters
-#
 if [ -z $1 ]; then
 	echo "You must pass IP:Port for the server to use"
-	exit 0
+	exit 1
 fi
 
 # call our create id script 100 times
@@ -34,14 +32,13 @@ do
 
    # see if we got an id, if not, exit
 
-   if [ -z $ID ]; then
+   if [ $? -eq 0 ]; then
+      # return the ID
+      echo $ID
+   else
      echo "Account creation failed"
-     exit 0
+     exit 1
    fi
 
-   # return the ID
-
-   echo $ID
-
 done
-
+exit 0

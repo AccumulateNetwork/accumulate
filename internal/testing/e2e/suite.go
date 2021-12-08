@@ -23,7 +23,7 @@ type NewDUT func(*Suite) DUT
 type DUT interface {
 	GetUrl(url string) (*ctypes.ResultABCIQuery, error)
 	SubmitTxn(*transactions.GenTransaction)
-	WaitForTxns()
+	WaitForTxns(...[]byte)
 }
 
 type Suite struct {
@@ -104,7 +104,7 @@ func (s *Suite) deposit(sponsor, recipient tmed25519.PrivKey) {
 	tx, err := testing.CreateFakeSyntheticDepositTx(sponsor, recipient)
 	s.Require().NoError(err)
 	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns()
+	s.dut.WaitForTxns(tx.TransactionHash())
 }
 
 func (s *Suite) createADI(sponsor *url.URL, sponsorKey tmed25519.PrivKey, nonce uint64, adi string, adiKey tmed25519.PrivKey) {
@@ -116,5 +116,5 @@ func (s *Suite) createADI(sponsor *url.URL, sponsorKey tmed25519.PrivKey, nonce 
 
 	tx := s.newTx(sponsor, sponsorKey, nonce, ic)
 	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns()
+	s.dut.WaitForTxns(tx.TransactionHash())
 }
