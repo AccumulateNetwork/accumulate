@@ -49,7 +49,6 @@ const (
 	bucketStagedSynthTx    = bucket("StagedSynthTx") //store the staged synthetic transactions
 	bucketTxToSynthTx      = bucket("TxToSynthTx")   //TXID to synthetic TXID
 	bucketMinorAnchorChain = bucket("MinorAnchorChain")
-	bucketSynthTxnSigs     = bucket("SyntheticTransactionSignatures")
 
 	markPower = int64(8)
 )
@@ -207,7 +206,6 @@ func (tx *DBTransaction) AddSynthTx(parentTxId types.Bytes, synthTxId types.Byte
 	// TODO: Move the transaction related functions to stateTxn at a time where the impact on other branches is minimal
 
 	tx.state.logDebug("AddSynthTx", "txid", logging.AsHex(synthTxId), "entry", logging.AsHex(synthTxObject.Entry))
-	tx.dirty = true
 
 	parentHash := parentTxId.AsBytes32()
 	txMap := tx.transactions.synthTxMap
@@ -222,7 +220,6 @@ func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes
 		txAcceptedEntry = txAccepted.Entry
 	}
 	tx.state.logDebug("AddTransaction", "chainId", logging.AsHex(chainId), "txid", logging.AsHex(txId), "pending", logging.AsHex(txPending.Entry), "accepted", logging.AsHex(txAcceptedEntry))
-	tx.dirty = true
 
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
@@ -380,7 +377,6 @@ func (tx *DBTransaction) UpdateNonce(chainId *types.Bytes32, object *Object) {
 }
 
 func (tx *DBTransaction) addStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
-	tx.dirty = true
 	begin := time.Now()
 
 	tx.state.TimeBucket += float64(time.Since(begin)) * float64(time.Nanosecond) * 1e-9
@@ -408,6 +404,8 @@ func (tx *DBTransaction) WriteSynthTxn(txid []byte, obj *Object) error {
 
 	var txid32 [32]byte
 	copy(txid32[:], txid)
+
+	tx.state.logInfo("Write synth txn", "txid", logging.AsHex(txid))
 
 	tx.state.dbMgr.Key(bucketStagedSynthTx, "", txid).PutBatch(data)
 	tx.state.bptMgr.Bpt.Insert(txid32, sha256.Sum256(data))
@@ -528,20 +526,20 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 }
 
 func (s *StateDB) GetSynthTxnSigs() ([]SyntheticSignature, error) {
-	b, err := s.GetDB().Key(bucketSynthTxnSigs).Get()
-	if errors.Is(err, storage.ErrNotFound) {
-		return nil, nil
-	} else if err != nil {
-		return nil, err
-	}
-
-	sigs := new(SyntheticSignatures)
-	err = sigs.UnmarshalBinary(b)
+	chain, err := s.SynthTxidChain()
 	if err != nil {
 		return nil, err
 	}
 
-	return sigs.Signatures, nil
+	record, err := chain.Record()
+	switch {
+	case err == nil:
+		return record.Signatures, nil
+	case errors.Is(err, storage.ErrNotFound):
+		return nil, nil
+	default:
+		return nil, err
+	}
 }
 
 func (tx *DBTransaction) writeSynthTxnSigs() error {
@@ -550,17 +548,32 @@ func (tx *DBTransaction) writeSynthTxnSigs() error {
 
 	// Remove any deleted entries
 	for _, txid := range tx.delSynthSigs {
-		tx.state.logInfo("Removing synth txn sig", "txid", logging.AsHex(txid))
 		delMap[txid] = true
 	}
 
-	// Get the current set of signatures
-	sigs, err := tx.state.GetSynthTxnSigs()
+	// Load the chain
+	chain, err := tx.state.SynthTxidChain()
 	if err != nil {
 		return err
 	}
+
+	// Get the current set of signatures
+	var sigs []SyntheticSignature
+	chainState, err := chain.Record()
+	switch {
+	case err == nil:
+		sigs = chainState.Signatures
+	case errors.Is(err, storage.ErrNotFound):
+		// Ok
+	default:
+		return err
+	}
+
+	var changeCount int
 	for _, sig := range sigs {
 		if delMap[sig.Txid] {
+			tx.state.logInfo("Removing synth txn sig", "txid", logging.AsHex(sig.Txid))
+			changeCount++
 			continue
 		}
 
@@ -570,8 +583,18 @@ func (tx *DBTransaction) writeSynthTxnSigs() error {
 
 	// Add new entries
 	for _, sig := range tx.addSynthSigs {
+		if sigMap[sig.Txid] != nil {
+			continue
+		}
+
 		tx.state.logInfo("Adding synth txn sig", "txid", logging.AsHex(sig.Txid))
+		changeCount++
 		sigMap[sig.Txid] = sig
+	}
+
+	// If nothing changed, we're done
+	if changeCount == 0 {
+		return nil
 	}
 
 	// Create a sorted array of the transaction IDs
@@ -592,21 +615,9 @@ func (tx *DBTransaction) writeSynthTxnSigs() error {
 		return bytes.Compare(sigs[i].Txid[:], sigs[j].Txid[:]) < 0
 	})
 
-	// Marshal it
-	b, err := (&SyntheticSignatures{Signatures: sigs}).MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	// Store it in SyntheticTransactionSignatures
-	tx.GetDB().Key(bucketSynthTxnSigs).PutBatch(b)
-	hash := sha256.Sum256(b)
-
-	// Add its hash to the BPT
-	var id [32]byte
-	copy(id[:], []byte(bucketSynthTxnSigs))
-	tx.state.bptMgr.Bpt.Insert(id, hash)
-	return nil
+	// Update the chain state
+	chainState.Signatures = sigs
+	return chain.Chain.UpdateAs(chainState)
 }
 
 func (tx *DBTransaction) writeBatches() {
@@ -642,12 +653,14 @@ func (s *StateDB) BlockIndex() (int64, error) {
 }
 
 // Commit will push the data to the database and update the patricia trie
-func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte, error) {
-	//build a list of keys from the map
-	if !tx.dirty {
-		//only attempt to record the block if we have any data.
-		return tx.RootHash(), nil
-	}
+func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time, finalize func() error) ([]byte, error) {
+	// //build a list of keys from the map
+	// if !tx.dirty {
+	// 	//only attempt to record the block if we have any data.
+	// 	return tx.RootHash(), nil
+	// }
+
+	oldRoot := tx.RootHash()
 
 	group := new(sync.WaitGroup)
 	group.Add(1)
@@ -678,14 +691,27 @@ func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time) ([]byte,
 		return nil, fmt.Errorf("failed to write synth chain: %v", err)
 	}
 
-	err = tx.writeAnchorChain(blockHeight, timestamp)
-	if err != nil {
-		return nil, fmt.Errorf("failed to write anchor chain: %v", err)
-	}
+	tx.state.bptMgr.Bpt.Update()
+	newRoot := tx.RootHash()
 
 	group.Wait()
 
-	tx.state.bptMgr.Bpt.Update()
+	// Update the anchor chain, but only if something changed
+	if !bytes.Equal(oldRoot, newRoot) {
+		err = tx.writeAnchorChain(blockHeight, timestamp)
+		if err != nil {
+			return nil, fmt.Errorf("failed to write anchor chain: %v", err)
+		}
+
+		if finalize != nil {
+			err = finalize()
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		tx.state.bptMgr.Bpt.Update()
+	}
 
 	//reset out block update buffer to get ready for the next round
 	tx.state.sync.Add(1)
@@ -737,7 +763,7 @@ func (tx *DBTransaction) commitUpdates(orderedUpdates []types.Bytes32, err error
 }
 
 func (tx *DBTransaction) commitTxWrites() {
-	// Process pending writes
+	// Order the writes - can we skip this?
 	writeOrder := make([]storage.Key, 0, len(tx.writes))
 	for k := range tx.writes {
 		writeOrder = append(writeOrder, k)

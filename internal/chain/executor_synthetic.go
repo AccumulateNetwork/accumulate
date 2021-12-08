@@ -3,10 +3,10 @@ package chain
 import (
 	"context"
 	"crypto/sha256"
-	"encoding"
 	"errors"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -33,22 +33,6 @@ func (m *Executor) synthCount() (uint64, error) {
 	return n, nil
 }
 
-// nextSynthCount returns and increments the number of synthetic transactions
-// sent by this subnet.
-func (m *Executor) nextSynthCount() (uint64, error) {
-	// TODO Replace this with the actual key nonce
-
-	n, err := m.synthCount()
-	if err != nil {
-		return 0, err
-	}
-	n++
-
-	k := storage.ComputeKey("SyntheticTransactionCount")
-	m.dbTx.Write(k, common.Uint64Bytes(n))
-	return n, nil
-}
-
 // addSynthTxns prepares synthetic transactions for signing next block.
 func (m *Executor) addSynthTxns(parentTxId types.Bytes, st *StateManager) error {
 	// Need to pass this to a threaded batcher / dispatcher to do both signing
@@ -57,59 +41,58 @@ func (m *Executor) addSynthTxns(parentTxId types.Bytes, st *StateManager) error 
 		// Generate a synthetic tx and send to the router. Need to track txid to
 		// make sure they get processed.
 
-		tx, err := m.buildSynthTxn(parentTxId, sub.url, sub.body)
+		tx, err := m.buildSynthTxn(sub.url, sub.body)
 		if err != nil {
 			return err
 		}
 
 		txSynthetic := state.NewPendingTransaction(tx)
-		txSyntheticObject := new(state.Object)
-		synthTxData, err := txSynthetic.MarshalBinary()
+		obj := new(state.Object)
+		obj.Entry, err = txSynthetic.MarshalBinary()
 		if err != nil {
 			return err
 		}
 
-		txSyntheticObject.Entry = synthTxData
-		m.dbTx.AddSynthTx(parentTxId, tx.TransactionHash(), txSyntheticObject)
+		m.dbTx.AddSynthTx(parentTxId, tx.TransactionHash(), obj)
 	}
 
 	return nil
 }
 
-func (m *Executor) addAnchorTxn(height int64) ([][]byte, error) {
-	srcUrl, err := nodeUrl(m.DB, m.isDirectory)
+func (m *Executor) addAnchorTxn() error {
+	srcUrl, err := nodeUrl(m.DB, m.SubnetType)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	synth, err := m.DB.SynthTxidChain()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	synthHead, err := synth.Record()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return nil, err
+		return err
 	}
 
 	anchor, err := m.DB.MinorAnchorChain()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	anchorHead, err := anchor.Record()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	switch {
-	case anchorHead.Index == height-1 && len(anchorHead.Chains) > 0:
+	case anchorHead.Index == m.height && len(anchorHead.Chains) > 0:
 		// Modified chains last block, continue
-	case synthHead.Index == height-1:
+	case synthHead.Index == m.height:
 		// Produced synthetic transactions last block, continue
 	default:
 		// Nothing happened last block, so skip creating an anchor txn
-		return nil, nil
+		return nil
 	}
 
 	body := new(protocol.SyntheticAnchor)
@@ -121,50 +104,67 @@ func (m *Executor) addAnchorTxn(height int64) ([][]byte, error) {
 	copy(body.ChainAnchor[:], anchor.Chain.Anchor())
 	copy(body.SynthTxnAnchor[:], synth.Chain.Anchor())
 
-	m.logger.Debug("Creating anchor txn", "root", logging.AsHex(body.Root), "chains", logging.AsHex(body.ChainAnchor), "synth", logging.AsHex(body.SynthTxnAnchor))
+	m.logDebug("Creating anchor txn", "root", logging.AsHex(body.Root), "chains", logging.AsHex(body.ChainAnchor), "synth", logging.AsHex(body.SynthTxnAnchor))
 
 	var txns []*transactions.GenTransaction
-	switch {
-	case m.isDirectory:
+	switch m.SubnetType {
+	case config.Directory:
 		// TODO Send anchors from DN to all BVNs
 
-	case m.Directory != "":
+	case config.BlockValidator:
 		// Send anchor from BVN to DN
-		tx, err := m.buildSynthTxn(make([]byte, 32), dnUrl(), body)
+		tx, err := m.buildSynthTxn(dnUrl(), body)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		txns = append(txns, tx)
-
-	default:
-		// If the Directory is not specified, do not send the anchor TXN
 	}
 
-	var txids [][]byte
-	for _, tx := range txns {
+	txids := make([][32]byte, len(txns))
+	for i, tx := range txns {
+		pending := state.NewPendingTransaction(tx)
 		obj := new(state.Object)
-		obj.Entry, err = state.NewPendingTransaction(tx).MarshalBinary()
+		obj.Entry, err = pending.MarshalBinary()
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		err = m.dbTx.WriteSynthTxn(tx.TransactionHash(), obj)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		txids = append(txids, tx.TransactionHash())
+		copy(txids[i][:], tx.TransactionHash())
 	}
 
-	return txids, nil
+	mgr, err := m.DB.MinorAnchorChain()
+	if err != nil {
+		return err
+	}
+
+	head, err := mgr.Record()
+	if err != nil {
+		return err
+	}
+
+	// We're only updating the head record, we are not adding anything to the chain
+	head.AnchorTxns = txids
+	err = mgr.Chain.UpdateAs(head)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
-func (m *Executor) buildSynthTxn(parentTxid []byte, dest *url.URL, body encoding.BinaryMarshaler) (*transactions.GenTransaction, error) {
+func (m *Executor) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload) (*transactions.GenTransaction, error) {
+	// Marshal the payload
 	data, err := body.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal synthetic transaction payload: %v", err)
 	}
 
+	// Build the transaction
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = dest.String()
@@ -172,18 +172,39 @@ func (m *Executor) buildSynthTxn(parentTxid []byte, dest *url.URL, body encoding
 	tx.SigInfo.KeyPageIndex = 0
 	tx.Transaction = data
 
-	tx.SigInfo.KeyPageHeight = 1
-	tx.SigInfo.Nonce, err = m.nextSynthCount()
+	// Load the synth txn chain
+	chain, err := m.DB.SynthTxidChain()
 	if err != nil {
 		return nil, err
 	}
+
+	// Load the chain state
+	head, err := chain.Record()
+	if errors.Is(err, storage.ErrNotFound) {
+		head = new(state.SyntheticTransactionChain)
+	} else if err != nil {
+		return nil, err
+	}
+
+	// Increment the nonce
+	head.Nonce++
+	tx.SigInfo.Nonce = uint64(head.Nonce)
+
+	// Save the updated chain state
+	err = chain.Chain.UpdateAs(head)
+	if err != nil {
+		return nil, err
+	}
+
+	m.logDebug("Built synth txn", "txid", logging.AsHex(tx.TransactionHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
+	// spew.Dump(tx)
 
 	return tx, nil
 }
 
 // signSynthTxns signs synthetic transactions from the previous block and
 // prepares them to be sent next block.
-func (m *Executor) signSynthTxns(txns [][]byte) error {
+func (m *Executor) signSynthTxns() error {
 	// TODO If the leader fails, will the block happen again or will Tendermint
 	// move to the next block? We need to be sure that synthetic transactions
 	// won't get lost.
@@ -195,13 +216,28 @@ func (m *Executor) signSynthTxns(txns [][]byte) error {
 	}
 
 	// Retrieve transactions from the previous block
-	prevBlockTxns, err := chain.LastBlock(m.height - 1)
+	txns, err := chain.LastBlock(m.height - 1)
 	if err != nil {
 		return err
 	}
 
-	// Transactions from the block were signed first
-	txns = append(prevBlockTxns, txns...)
+	// Check for anchor transactions from the previous block
+	ac, err := m.DB.MinorAnchorChain()
+	if err != nil {
+		return err
+	}
+
+	acHead, err := ac.Record()
+	switch {
+	case err == nil:
+		for _, txn := range acHead.AnchorTxns {
+			txns = append(txns, txn[:])
+		}
+	case errors.Is(err, storage.ErrNotFound):
+		// Ok
+	default:
+		return fmt.Errorf("failed to retrieve anchor txn IDs")
+	}
 
 	// Only proceed if we have transactions to sign
 	if len(txns) == 0 {
@@ -217,7 +253,7 @@ func (m *Executor) signSynthTxns(txns [][]byte) error {
 	// Sign all of the transactions
 	body := new(protocol.SyntheticSignTransactions)
 	for i, txid := range txns {
-		m.logger.Debug("Signing synth txn", "txid", logging.AsHex(txid))
+		m.logDebug("Signing synth txn", "txid", logging.AsHex(txid))
 
 		// For each pending synthetic transaction
 		var synthSig protocol.SyntheticSignature
@@ -240,16 +276,7 @@ func (m *Executor) signSynthTxns(txns [][]byte) error {
 	}
 
 	// Construct the signature transaction
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = protocol.ACME
-	tx.SigInfo.KeyPageIndex = 0
-	tx.Transaction, err = body.MarshalBinary()
-	if err != nil {
-		return err
-	}
-	tx.SigInfo.KeyPageHeight = 1
-	tx.SigInfo.Nonce, err = m.nextSynthCount()
+	tx, err := m.buildSynthTxn(protocol.AcmeUrl(), body)
 	if err != nil {
 		return err
 	}
@@ -269,12 +296,27 @@ func (m *Executor) signSynthTxns(txns [][]byte) error {
 		return err
 	}
 
+	// Only the leader should actually send the transaction
+	if !m.leader {
+		return nil
+	}
+
 	// Send it
-	go m.Local.BroadcastTxAsync(context.Background(), data)
+	go func() {
+		_, err = m.Local.BroadcastTxAsync(context.Background(), data)
+		if err != nil {
+			m.logError("Failed to broadcast synth txn sigs", "error", err)
+		}
+	}()
 	return nil
 }
 
 // sendSynthTxns sends signed synthetic transactions from previous blocks.
+//
+// Note, only the leader actually sends the transaction, but every other node
+// must make the same updates to the database, otherwise consensus will fail,
+// since constructing the synthetic transaction updates the nonce, which changes
+// the BPT, so everyone needs to do that.
 func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 	// Get the signatures from the last block
 	sigs, err := m.DB.GetSynthTxnSigs()
@@ -328,7 +370,7 @@ func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 		}
 
 		// Add it to the batch
-		m.logger.Debug("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()))
+		m.logDebug("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()))
 		m.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
 
 		// Delete the signature

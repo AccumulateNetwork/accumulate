@@ -138,7 +138,7 @@ func TestAnchorChain(t *testing.T) {
 	liteAccount := generateKey()
 	dbTx := n.db.Begin()
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, liteAccount, 5e4))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.IdentityCreate)
@@ -190,7 +190,7 @@ func TestCreateADI(t *testing.T) {
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
 	dbTx := n.db.Begin()
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, liteAccount, 5e4))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	wallet := new(transactions.WalletEntry)
 	wallet.Nonce = 1
@@ -231,7 +231,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		adiKey := generateKey()
 		dbTx := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
-		dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+		dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
 			tac := new(protocol.CreateDataAccount)
@@ -261,7 +261,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateKeyBook(dbTx, "acc://FooBar/foo/book1", "acc://FooBar/foo/page1"))
 		require.NoError(t, acctesting.CreateKeyPage(dbTx, "acc://FooBar/mgr/page1", pageKey.PubKey().Bytes()))
 		require.NoError(t, acctesting.CreateKeyBook(dbTx, "acc://FooBar/mgr/book1", "acc://FooBar/mgr/page1"))
-		dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+		dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
 			cda := new(protocol.CreateDataAccount)
@@ -291,7 +291,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		adiKey := generateKey()
 		dbTx := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
-		dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+		dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
 			tac := new(protocol.TokenAccountCreate)
@@ -321,7 +321,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.NoError(t, acctesting.CreateADI(dbTx, adiKey, "FooBar"))
 		require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/page1", pageKey.PubKey().Bytes()))
 		require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/book1", "foo/page1"))
-		dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+		dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
 			tac := new(protocol.TokenAccountCreate)
@@ -351,7 +351,7 @@ func TestLiteAccountTx(t *testing.T) {
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, alice, 5e4))
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, bob, 0))
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, charlie, 0))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	aliceUrl := lite.GenerateAcmeAddress(alice.PubKey().Bytes())
 	bobUrl := lite.GenerateAcmeAddress(bob.PubKey().Bytes())
@@ -380,7 +380,7 @@ func TestAdiAccountTx(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
 	require.NoError(t, acctesting.CreateADI(dbTx, barKey, "bar"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		tokenTx := api.NewTokenTx("foo/tokens")
@@ -401,7 +401,7 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1e2, false))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		ac := new(protocol.AddCredits)
@@ -424,7 +424,7 @@ func TestCreateKeyPage(t *testing.T) {
 	fooKey, testKey := generateKey(), generateKey()
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		cms := new(protocol.CreateKeyPage)
@@ -452,7 +452,7 @@ func TestCreateKeyBook(t *testing.T) {
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	specUrl := n.ParseUrl("foo/sigspec1")
 	specChainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
@@ -489,7 +489,7 @@ func TestAddKeyPage(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	// Sanity check
 	require.Equal(t, groupChainId, n.GetKeyPage("foo/sigspec1").KeyBook)
@@ -522,7 +522,7 @@ func TestAddKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	newKey := generateKey()
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -548,7 +548,7 @@ func TestUpdateKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	newKey := generateKey()
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -575,7 +575,7 @@ func TestRemoveKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		body := new(protocol.UpdateKeyPage)
@@ -605,7 +605,7 @@ func TestSignatorHeight(t *testing.T) {
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateLiteTokenAccount(dbTx, liteKey, 1))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0))
+	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	getHeight := func(u *url.URL) uint64 {
 		obj, _, err := n.db.Begin().LoadChain(u.ResourceChain())
