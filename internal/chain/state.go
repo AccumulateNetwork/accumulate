@@ -19,6 +19,7 @@ import (
 type StateManager struct {
 	dbTx        *state.DBTransaction
 	stores      map[[32]byte]*storeState
+	dataStores  map[[32]byte]*storeDataEntry
 	chains      map[[32]byte]state.Chain
 	writes      map[storage.Key][]byte
 	submissions []*submittedTx
@@ -48,6 +49,11 @@ type storeState struct {
 	record  state.Chain
 }
 
+type storeDataEntry struct {
+	entryHash []byte
+	dataEntry []byte
+}
+
 // NewStateManager creates a new state manager and loads the transaction's
 // sponsor. If the sponsor is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
@@ -56,6 +62,7 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 	m.dbTx = dbTx
 	m.chains = map[[32]byte]state.Chain{}
 	m.stores = map[[32]byte]*storeState{}
+	m.dataStores = map[[32]byte]*storeDataEntry{}
 	m.writes = map[storage.Key][]byte{}
 	m.txHash = types.Bytes(tx.TransactionHash()).AsBytes32()
 	m.txType = tx.TransactionType()
@@ -222,8 +229,10 @@ func (m *StateManager) UpdateCredits(record state.Chain) {
 //UpdateData will cache a data associated with a DataAccount chain.
 //the cache data will not be stored directly in the state but can be used
 //upstream for storing a chain in the state database.
-func (m *StateManager) UpdateData(record state.Chain) {
+func (m *StateManager) UpdateData(record state.Chain, entryHash []byte, dataEntry []byte) {
 	m.store(record, addDataEntry)
+	u, _ := url.Parse(string(record.Header().ChainUrl))
+	m.dataStores[u.ResourceChain32()] = &storeDataEntry{entryHash: entryHash, dataEntry: dataEntry}
 }
 
 // Create queues a record for a synthetic chain create transaction. Will panic
@@ -375,15 +384,11 @@ func (m *StateManager) Commit() error {
 
 			m.dbTx.UpdateNonce((*types.Bytes32)(store.chainId), &state.Object{Entry: data})
 		case addDataEntry:
-			var cache *protocol.DataAccountStateCache
-			switch store.record.(type) {
-			case *protocol.DataAccountStateCache:
-				cache = store.record.(*protocol.DataAccountStateCache)
-			default:
-				return fmt.Errorf("record %d is not a DataAccountStateCache chain", store.record.Header().Type)
+			cache, ok := m.dataStores[*store.chainId]
+			if !ok {
+				return fmt.Errorf("no supporting data for data entry")
 			}
-
-			return m.dbTx.AddDataEntry((*types.Bytes32)(store.chainId), cache.GetEntryHash(), cache.GetData(), &state.Object{Entry: data})
+			return m.dbTx.AddDataEntry((*types.Bytes32)(store.chainId), cache.entryHash, cache.entryHash, &state.Object{Entry: data})
 		default:
 			panic(fmt.Errorf("invalid store kind %d", store.kind))
 		}

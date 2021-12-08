@@ -40,13 +40,13 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return fmt.Errorf("unable to marshal segwit, %v", err)
 	}
 
-	dataPayload := tx.Transaction
+	dataPayload, err := body.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("error marshaling data entry, %v", err)
+	}
 	tx.Transaction = segWitPayload
 
-	dataAccountWithCache := protocol.NewDataAccountStateCache(
-		st.Sponsor.(*protocol.DataAccount), sw.EntryHash[:], dataPayload)
-
-	st.UpdateData(dataAccountWithCache)
+	st.UpdateData(st.Sponsor, sw.EntryHash[:], dataPayload)
 
 	return nil
 }
