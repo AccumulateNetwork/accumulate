@@ -137,7 +137,7 @@ func responseDirFromProto(protoDir *protocol.DirectoryQueryResult, pagination *Q
 	respDir.Total = protoDir.Total
 	respDir.ExpandedEntries = make([]*QueryResponse, len(protoDir.ExpandedEntries))
 	for i, entry := range protoDir.ExpandedEntries {
-		chain, err := chainFromStateObj(entry)
+		chain, err := protocol.UnmarshalChain(entry.Entry)
 		if err != nil {
 			return nil, err
 		}
