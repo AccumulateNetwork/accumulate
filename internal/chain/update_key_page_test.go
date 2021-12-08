@@ -41,7 +41,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 	require.NoError(t, acctesting.CreateKeyPage(dbtx, "foo/page1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyPage(dbtx, "foo/page2", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(dbtx, "foo/book", "foo/page0", "foo/page1", "foo/page2"))
-	_, err := dbtx.Commit(1, time.Unix(0, 0))
+	_, err := dbtx.Commit(1, time.Unix(0, 0), nil)
 	require.NoError(t, err)
 
 	for _, idx := range []uint64{0, 1, 2} {

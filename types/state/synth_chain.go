@@ -41,11 +41,16 @@ func (sc *SynthChainManager) Update(index int64, txids [][32]byte) error {
 		}
 	}
 
+	// Load the record
+	record, err := sc.Record()
+	if err != nil {
+		return err
+	}
+
 	// Update the record
-	return sc.Chain.UpdateAs(&SyntheticTransactionChain{
-		Index: index,
-		Count: int64(len(txids)),
-	})
+	record.Index = index
+	record.Count = int64(len(txids))
+	return sc.Chain.UpdateAs(record)
 }
 
 // LastBlock returns entries from the last block
