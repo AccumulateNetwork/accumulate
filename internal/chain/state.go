@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"encoding"
 	"errors"
 	"fmt"
 	"reflect"
@@ -90,7 +89,7 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 
 type submittedTx struct {
 	url  *url.URL
-	body encoding.BinaryMarshaler
+	body protocol.TransactionPayload
 }
 
 // LoadString loads a chain by URL and unmarshals it.
@@ -251,7 +250,7 @@ func (m *StateManager) Create(record ...state.Chain) {
 }
 
 // Submit queues a synthetic transaction for submission.
-func (m *StateManager) Submit(url *url.URL, body encoding.BinaryMarshaler) {
+func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 	if m.txType.IsSynthetic() {
 		panic("Called StateManager.Submit from a synthetic transaction!")
 	}
@@ -404,46 +403,7 @@ func (m *StateManager) Commit() error {
 }
 
 func unmarshalRecord(obj *state.Object) (state.Chain, error) {
-	header := new(state.ChainHeader)
-	err := obj.As(header)
-	if err != nil {
-		return nil, err
-	}
-
-	var record state.Chain
-	switch header.Type {
-	case types.ChainTypeTokenIssuer:
-		record = new(protocol.TokenIssuer)
-	case types.ChainTypeIdentity:
-		record = new(state.AdiState)
-	case types.ChainTypeTokenAccount:
-		record = new(state.TokenAccount)
-	case types.ChainTypeLiteTokenAccount:
-		record = new(protocol.LiteTokenAccount)
-	case types.ChainTypeTransactionReference:
-		record = new(state.TxReference)
-	case types.ChainTypeTransaction:
-		record = new(state.Transaction)
-	case types.ChainTypePendingTransaction:
-		record = new(state.PendingTransaction)
-	case types.ChainTypeKeyPage:
-		record = new(protocol.KeyPage)
-	case types.ChainTypeKeyBook:
-		record = new(protocol.KeyBook)
-	case types.ChainTypeDataAccount:
-		record = new(protocol.DataAccount)
-	case types.ChainTypeLiteDataAccount:
-		record = new(protocol.LiteDataAccount)
-	default:
-		return nil, fmt.Errorf("unrecognized chain type %v", header.Type)
-	}
-
-	err = obj.As(record)
-	if err != nil {
-		return nil, err
-	}
-
-	return record, nil
+	return protocol.UnmarshalChain(obj.Entry)
 }
 
 func (s *StateManager) WriteIndex(index state.Index, chain []byte, key interface{}, value []byte) {
