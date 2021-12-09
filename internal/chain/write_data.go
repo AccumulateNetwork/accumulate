@@ -30,7 +30,16 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return err
 	}
 
-	//now replace the transaction payload with a segregated witness to the data
+	// now replace the transaction payload with a segregated witness to the data.
+	// This technique is used to segregate the payload from the stored transaction
+	// by replacing the data payload with a smaller reference to that data via the
+	// entry hash.  While technically, not true segwit since the entry hash is not
+	// signed, the original transaction can be reconstructed by recombining the
+	// signature info stored on the pending chain, the transaction info stored on
+	// the main chain, and the original data payload that resides on the data chain
+	// when the user wishes to validate the signature of the transaction that
+	// produced the data entry
+
 	sw := protocol.SegWitDataEntry{}
 	copy(sw.EntryHash[:], body.Entry.Hash())
 	sw.EntryUrl = st.Sponsor.Header().GetChainUrl()

@@ -200,7 +200,7 @@ func generateKey() tmed25519.PrivKey {
 func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transactions.ED25519Sig, error) {
 	return func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
-		return sig, sig.Sign(1, key, hash)
+		return sig, sig.Sign(nonce, key, hash)
 	}
 }
 

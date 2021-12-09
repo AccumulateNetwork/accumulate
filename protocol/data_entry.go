@@ -11,6 +11,7 @@ import (
 // returns the entry hash given external id's and data associated with an entry
 func ComputeEntryHash(data [][]byte) []byte {
 	smt := managed.MerkleState{}
+	smt.InitSha256()
 	//add the external id's to the merkle tree
 	for i := range data {
 		h := sha256.Sum256(data[i])

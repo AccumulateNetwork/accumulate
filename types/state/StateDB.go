@@ -432,8 +432,6 @@ func (tx *DBTransaction) UpdateNonce(chainId *types.Bytes32, object *Object) {
 
 func (tx *DBTransaction) addDataEntry(chainId *types.Bytes32, txid []byte, entryHash []byte, dataEntry []byte, dataState *Object) {
 	tx.state.mutex.Lock()
-	defer tx.state.mutex.Unlock()
-
 	dataUpdates := tx.dataUpdates[*chainId]
 
 	if dataUpdates == nil {
@@ -446,6 +444,12 @@ func (tx *DBTransaction) addDataEntry(chainId *types.Bytes32, txid []byte, entry
 	}
 
 	dataUpdates.stateData = dataState
+	tx.state.mutex.Unlock()
+
+	//now update the chain state for the data chain
+	txi := types.Bytes32{}
+	txi.FromBytes(txid)
+	tx.addStateEntry(chainId, &txi, dataState)
 }
 
 func (tx *DBTransaction) addStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
@@ -847,7 +851,7 @@ func (tx *DBTransaction) commitUpdates(orderedUpdates []types.Bytes32, err error
 			return err
 		}
 
-		if len(tx.dataUpdates) != 0 {
+		if _, ok := tx.dataUpdates[chainId]; ok {
 			//if this is a data chain, then we'll have data entries we need to store
 			err = tx.writeDataState(&chainId)
 			if err != nil {
