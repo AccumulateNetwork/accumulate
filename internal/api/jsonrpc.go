@@ -647,8 +647,7 @@ func (api *API) Metrics(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	c, err := promapi.NewClient(promapi.Config{
-		// TODO Change this to an AWS Prometheus instance
-		Address: "http://18.119.26.7:9090",
+		Address: api.config.PrometheusServer,
 	})
 	if err != nil {
 		return internalError(err)

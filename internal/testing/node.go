@@ -1,22 +1,14 @@
 package testing
 
 import (
-	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
-	cfg "github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/chain"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/rs/zerolog"
-	"github.com/tendermint/tendermint/privval"
-	"github.com/tendermint/tendermint/rpc/client/local"
+	tmnet "github.com/tendermint/tendermint/libs/net"
 )
 
 var LocalBVN = &networks.Subnet{
@@ -28,131 +20,70 @@ var LocalBVN = &networks.Subnet{
 	},
 }
 
-func NodeInitOptsForNetwork(network *networks.Subnet) (node.InitOptions, error) {
-	listenIP := make([]string, len(network.Nodes))
-	remoteIP := make([]string, len(network.Nodes))
-	config := make([]*cfg.Config, len(network.Nodes))
+func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
+	cfg := config.Default(net, node, netId)        //
+	cfg.Mempool.MaxBatchBytes = 1048576            //
+	cfg.Mempool.CacheSize = 1048576                //
+	cfg.Mempool.Size = 50000                       //
+	cfg.Consensus.CreateEmptyBlocks = false        // Empty blocks are annoying to debug
+	cfg.Consensus.TimeoutCommit = time.Second / 10 // Increase block frequency
+	cfg.Accumulate.Website.Enabled = false         // No need for the website
+	cfg.Instrumentation.Prometheus = false         // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
+	cfg.Accumulate.Network.BvnNames = []string{netId}
+	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}}
+	return cfg
+}
 
-	for i, net := range network.Nodes {
-		listenIP[i] = "tcp://localhost"
+func NodeInitOptsForNetwork(subnet *networks.Subnet) node.InitOptions {
+	listenIP := make([]string, len(subnet.Nodes))
+	remoteIP := make([]string, len(subnet.Nodes))
+	cfg := make([]*config.Config, len(subnet.Nodes))
+
+	for i, net := range subnet.Nodes {
+		listenIP[i] = "localhost"
 		remoteIP[i] = net.IP
+		cfg[i] = DefaultConfig(subnet.Type, net.Type, subnet.Name) // Configure
+	}
 
-		config[i] = cfg.Default(network.Type, net.Type)
-		config[i].Consensus.CreateEmptyBlocks = false
-		config[i].Accumulate.Type = network.Type
-		config[i].Accumulate.Networks = []string{fmt.Sprintf("tcp://%s:%d", remoteIP[0], network.Port)}
+	port, err := tmnet.GetFreePort()
+	if err != nil {
+		panic(err)
 	}
 
 	return node.InitOptions{
-		ShardName: "accumulate.",
-		SubnetID:  network.Name,
-		Port:      network.Port,
-		Config:    config,
-		RemoteIP:  remoteIP,
-		ListenIP:  listenIP,
-	}, nil
+		Port:     port,
+		Config:   cfg,
+		RemoteIP: remoteIP,
+		ListenIP: listenIP,
+	}
 }
 
-type BVNNOptions struct {
+type DaemonOptions struct {
 	Dir       string
 	MemDB     bool
-	LogWriter func(string) io.Writer
-	Logger    func(io.Writer) zerolog.Logger
+	LogWriter func(string) (io.Writer, error)
 }
 
-func NewBVNN(opts BVNNOptions, cleanup func(func())) (*node.Node, *state.StateDB, *privval.FilePV, error) {
-	cfg, err := cfg.Load(opts.Dir)
+func RunDaemon(opts DaemonOptions, cleanup func(func())) (*accumulated.Daemon, error) {
+	// Load the daemon
+	daemon, err := accumulated.Load(opts.Dir, opts.LogWriter)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load config: %v", err)
+		return nil, err
 	}
 
-	var logWriter io.Writer
-	if opts.LogWriter == nil {
-		logWriter, err = logging.NewConsoleWriter(cfg.LogFormat)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-	} else {
-		logWriter = opts.LogWriter(cfg.LogFormat)
-	}
+	// Set test knobs
+	daemon.IsTest = true
+	daemon.UseMemDB = opts.MemDB
 
-	logLevel, logWriter, err := logging.ParseLogLevel(cfg.LogLevel, logWriter)
-
-	var zl zerolog.Logger
-	if opts.Logger == nil {
-		zl = zerolog.New(logWriter)
-	} else {
-		zl = opts.Logger(logWriter)
-	}
-
-	logger, err := logging.NewTendermintLogger(zl, logLevel, false)
+	// Start the daemon
+	err = daemon.Start()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
-		os.Exit(1)
+		return nil, err
 	}
 
-	dbPath := filepath.Join(cfg.RootDir, "valacc.db")
-	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(cfg.Instrumentation.Namespace))
-	sdb := new(state.StateDB)
-	err = sdb.Open(dbPath, opts.MemDB, true, logger)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to open database %s: %v", dbPath, err)
-	}
 	cleanup(func() {
-		_ = sdb.GetDB().Close()
+		_ = daemon.Stop()
 	})
 
-	// read private validator
-	pv, err := privval.LoadFilePV(
-		cfg.PrivValidator.KeyFile(),
-		cfg.PrivValidator.StateFile(),
-	)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to load file PV: %v", err)
-	}
-
-	clientProxy := node.NewLocalClient()
-	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		SubnetType:      config.BlockValidator,
-		Local:           clientProxy,
-		IsTest:          true,
-		DB:              sdb,
-		Logger:          logger,
-		Key:             pv.Key.PrivKey.Bytes(),
-		Directory:       cfg.Accumulate.Directory,
-		BlockValidators: cfg.Accumulate.Networks,
-	})
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create chain manager: %v", err)
-	}
-
-	app, err := abci.NewAccumulator(sdb, pv.Key.PubKey.Address(), mgr, logger)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create ABCI app: %v", err)
-	}
-
-	node, err := node.New(cfg, app, logger)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create node: %v", err)
-	}
-	go func() {
-		<-node.Quit()
-		_ = sdb.GetDB().Close()
-	}()
-	cleanup(func() {
-		_ = node.Stop()
-		node.Wait()
-	})
-
-	lnode, ok := node.Service.(local.NodeService)
-	if !ok {
-		return nil, nil, nil, fmt.Errorf("node is not a local node service!")
-	}
-	lclient, err := local.New(lnode)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to create local node client: %v", err)
-	}
-	clientProxy.Set(lclient)
-
-	return node, sdb, pv, nil
+	return daemon, nil
 }

@@ -3,8 +3,11 @@ package config
 import (
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/pelletier/go-toml"
@@ -26,15 +29,17 @@ const (
 	Follower  NodeType = "follower"
 )
 
-const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=debug;statedb=info;jrpc=debug"
+const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info;statedb=info"
 
-func Default(net NetworkType, node NodeType) *Config {
+func Default(net NetworkType, node NodeType, netId string) *Config {
 	c := new(Config)
-	c.Accumulate.Type = net
+	c.Accumulate.Network.Type = net
+	c.Accumulate.Network.ID = netId
 	c.Accumulate.API.PrometheusServer = "http://18.119.26.7:9090"
 	c.Accumulate.SentryDSN = "https://glet_78c3bf45d009794a4d9b0c990a1f1ed5@gitlab.com/api/v4/error_tracking/collector/29762666"
-	c.Accumulate.WebsiteEnabled = true
+	c.Accumulate.Website.Enabled = true
 	c.Accumulate.API.TxMaxWaitTime = 10 * time.Second
+	c.Accumulate.API.EnableDebugMethods = true
 	switch node {
 	case Validator:
 		c.Config = *tm.DefaultValidatorConfig()
@@ -42,6 +47,8 @@ func Default(net NetworkType, node NodeType) *Config {
 		c.Config = *tm.DefaultConfig()
 	}
 	c.LogLevel = DefaultLogLevels
+	c.Instrumentation.Prometheus = true
+	c.ProxyApp = ""
 	return c
 }
 
@@ -51,28 +58,83 @@ type Config struct {
 }
 
 type Accumulate struct {
-	Type      NetworkType `toml:"type" mapstructure:"type"`
-	Network   string      `toml:"network" mapstructure:"network"`
-	Networks  []string    `toml:"networks" mapstructure:"networks"`
-	API       API         `toml:"api" mapstructure:"api"`
-	Directory string      `toml:"directory" mapstructure:"directory"`
+	SentryDSN string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
 
-	WebsiteEnabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
-	WebsiteListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
-	SentryDSN            string `toml:"sentry-dsn" mapstructure:"sentry-dsn"`
+	Network Network `toml:"network" mapstructure:"network"`
+	API     API     `toml:"api" mapstructure:"api"`
+	Website Website `toml:"website" mapstructure:"website"`
 }
 
-type RPC struct {
-	ListenAddress string `toml:"listen-address" mapstructure:"listen-address"`
+type Network struct {
+	Type      NetworkType         `toml:"type" mapstructure:"type"`
+	ID        string              `toml:"id" mapstructure:"id"`
+	BvnNames  []string            `toml:"bvn-names" mapstructure:"bvn-names"`
+	Addresses map[string][]string `toml:"addresses" mapstructure:"addresses"`
 }
 
 type API struct {
-	TxMaxWaitTime     time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
-	PrometheusServer  string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
-	EnableSubscribeTX bool          `toml:"enable-subscribe-tx" mapstructure:"enable-subscribe-tx"`
-	JSONListenAddress string        `toml:"json-listen-address" mapstructure:"json-listen-address"`
-	RESTListenAddress string        `toml:"rest-listen-address" mapstructure:"rest-listen-address"`
-	DebugJSONRPC      bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
+	TxMaxWaitTime      time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
+	PrometheusServer   string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
+	EnableSubscribeTX  bool          `toml:"enable-subscribe-tx" mapstructure:"enable-subscribe-tx"`
+	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
+	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
+	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`
+}
+
+type Website struct {
+	Enabled       bool   `toml:"website-enabled" mapstructure:"website-enabled"`
+	ListenAddress string `toml:"website-listen-address" mapstructure:"website-listen-address"`
+}
+
+func OffsetPort(addr string, offset int) (string, error) {
+	u, err := url.Parse(addr)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL %q: %v", addr, err)
+	}
+	if u.Scheme == "" {
+		return "", fmt.Errorf("invalid URL %q: has no scheme, so this probably isn't a URL", addr)
+	}
+
+	port, err := strconv.ParseInt(u.Port(), 10, 17)
+	if err != nil {
+		return "", fmt.Errorf("invalid port %q: %v", u.Port(), err)
+	}
+
+	port += int64(offset)
+	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), port)
+	return u.String(), nil
+}
+
+// AddressWithPortOffset gets the first address of the given subnet and applies
+// an offset to the port number.
+func (n *Network) AddressWithPortOffset(subnet string, offset int) string {
+	// Viper always lower-cases map keys
+	subnet = strings.ToLower(subnet)
+
+	addrs := n.Addresses[subnet]
+	if len(addrs) == 0 {
+		panic(fmt.Errorf("invalid configuration: subnet %q has no addresses", subnet))
+	}
+
+	if addrs[0] == "local" {
+		return "local"
+	}
+
+	addr, err := OffsetPort(addrs[0], offset)
+	if err != nil {
+		panic(fmt.Errorf("invalid configuration for subnet %q: %v", subnet, err))
+	}
+
+	return addr
+}
+
+// BvnAddresses fetches addresses of all of the named BVNs and adjusts their port number.
+func (n *Network) BvnAddressesWithPortOffset(offset int) []string {
+	addrs := make([]string, len(n.BvnNames))
+	for i, bvn := range n.BvnNames {
+		addrs[i] = n.AddressWithPortOffset(bvn, offset)
+	}
+	return addrs
 }
 
 func Load(dir string) (*Config, error) {
