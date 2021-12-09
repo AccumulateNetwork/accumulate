@@ -5,6 +5,7 @@ import (
 	"io"
 	"net"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -116,11 +117,21 @@ func startNodes(t *testing.T, nodes []*node.Node) *api.Query {
 
 	for _, n := range nodes {
 		require.NoError(t, n.Start())
-		t.Cleanup(func() {
-			n.Stop()
-			n.Wait()
-		})
 	}
+
+	t.Cleanup(func() {
+		wg := new(sync.WaitGroup)
+		wg.Add(len(nodes))
+		for _, n := range nodes {
+			n := n // Do not capture the loop var
+			go func() {
+				defer wg.Done()
+				_ = n.Stop()
+				n.Wait()
+			}()
+		}
+		wg.Wait()
+	})
 
 	rpc, err := rpc.New(nodes[0].Config.RPC.ListenAddress)
 	require.NoError(t, err)

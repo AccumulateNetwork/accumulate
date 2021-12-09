@@ -24,6 +24,28 @@ func (ac *AnchorChainManager) Record() (*Anchor, error) {
 	return record, err
 }
 
+// AddSystemTxns appends the given transaction IDs to the anchor head, without
+// updating the chain.
+func (ac *AnchorChainManager) AddSystemTxns(txids ...[32]byte) error {
+	if len(txids) == 0 {
+		return nil
+	}
+
+	head, err := ac.Record()
+	if err != nil {
+		return err
+	}
+
+	// We're only updating the head record, we are not adding anything to the chain
+	head.SystemTxns = append(head.SystemTxns, txids...)
+	err = ac.Chain.UpdateAs(head)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (ac *AnchorChainManager) Update(index int64, timestamp time.Time, chains [][32]byte) error {
 	// Sort the chain IDs
 	sort.Slice(chains, func(i, j int) bool {
