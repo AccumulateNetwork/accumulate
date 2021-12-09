@@ -420,16 +420,16 @@ func (s *StateManager) GetIndex(index state.Index, chain []byte, key interface{}
 	return s.dbTx.GetIndex(index, chain, key)
 }
 
-func (m *StateManager) AddDirectoryEntry(u *url.URL) error {
-	return AddDirectoryEntry(m, u)
+func (m *StateManager) AddDirectoryEntry(u ...*url.URL) error {
+	return AddDirectoryEntry(m, u...)
 }
 
 func AddDirectoryEntry(db interface {
 	WriteIndex(index state.Index, chain []byte, key interface{}, value []byte)
 	GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error)
-}, u *url.URL) error {
+}, u ...*url.URL) error {
 	md := new(protocol.DirectoryIndexMetadata)
-	idc := u.IdentityChain()
+	idc := u[0].IdentityChain()
 	b, err := db.GetIndex(state.DirectoryIndex, idc, "Metadata")
 	if err == nil {
 		err = md.UnmarshalBinary(b)
@@ -438,15 +438,17 @@ func AddDirectoryEntry(db interface {
 		return fmt.Errorf("failed to load metadata: %v", err)
 	}
 
-	c := md.Count
-	md.Count++
+	for _, u := range u {
+		db.WriteIndex(state.DirectoryIndex, idc, md.Count, []byte(u.String()))
+		md.Count++
+	}
+
 	b, err = md.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %v", err)
 	}
 
 	db.WriteIndex(state.DirectoryIndex, idc, "Metadata", b)
-	db.WriteIndex(state.DirectoryIndex, idc, c, []byte(u.String()))
 	return nil
 }
 

@@ -59,6 +59,41 @@ func (m *Executor) addSynthTxns(parentTxId types.Bytes, st *StateManager) error 
 	return nil
 }
 
+func (m *Executor) addSystemTxns(txns ...*transactions.GenTransaction) error {
+	if len(txns) == 0 {
+		return nil
+	}
+
+	anchor, err := m.DB.MinorAnchorChain()
+	if err != nil {
+		return err
+	}
+
+	txids := make([][32]byte, len(txns))
+	for i, tx := range txns {
+		pending := state.NewPendingTransaction(tx)
+		obj := new(state.Object)
+		obj.Entry, err = pending.MarshalBinary()
+		if err != nil {
+			return err
+		}
+
+		err = m.dbTx.WriteSynthTxn(tx.TransactionHash(), obj)
+		if err != nil {
+			return err
+		}
+
+		copy(txids[i][:], tx.TransactionHash())
+	}
+
+	err = anchor.AddSystemTxns(txids...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (m *Executor) addAnchorTxn() error {
 	srcUrl, err := nodeUrl(m.DB, m.SubnetType)
 	if err != nil {
@@ -120,41 +155,7 @@ func (m *Executor) addAnchorTxn() error {
 		txns = append(txns, tx)
 	}
 
-	txids := make([][32]byte, len(txns))
-	for i, tx := range txns {
-		pending := state.NewPendingTransaction(tx)
-		obj := new(state.Object)
-		obj.Entry, err = pending.MarshalBinary()
-		if err != nil {
-			return err
-		}
-
-		err = m.dbTx.WriteSynthTxn(tx.TransactionHash(), obj)
-		if err != nil {
-			return err
-		}
-
-		copy(txids[i][:], tx.TransactionHash())
-	}
-
-	mgr, err := m.DB.MinorAnchorChain()
-	if err != nil {
-		return err
-	}
-
-	head, err := mgr.Record()
-	if err != nil {
-		return err
-	}
-
-	// We're only updating the head record, we are not adding anything to the chain
-	head.AnchorTxns = txids
-	err = mgr.Chain.UpdateAs(head)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return m.addSystemTxns(txns...)
 }
 
 func (m *Executor) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload) (*transactions.GenTransaction, error) {
@@ -230,7 +231,7 @@ func (m *Executor) signSynthTxns() error {
 	acHead, err := ac.Record()
 	switch {
 	case err == nil:
-		for _, txn := range acHead.AnchorTxns {
+		for _, txn := range acHead.SystemTxns {
 			txns = append(txns, txn[:])
 		}
 	case errors.Is(err, storage.ErrNotFound):

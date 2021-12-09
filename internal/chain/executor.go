@@ -112,7 +112,7 @@ func (m *Executor) logError(msg string, keyVals ...interface{}) {
 	}
 }
 
-func (m *Executor) Genesis(time time.Time, callback func(st *StateManager)) ([]byte, error) {
+func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error) ([]byte, error) {
 	var err error
 
 	if !m.isGenesis {
@@ -156,7 +156,10 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager)) ([]b
 		return nil, err
 	}
 
-	callback(st)
+	err = callback(st)
+	if err != nil {
+		return nil, err
+	}
 
 	err = st.Commit()
 	if err != nil {
@@ -166,7 +169,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager)) ([]b
 	return m.Commit()
 }
 
-func (m *Executor) InitChain(state []byte) error {
+func (m *Executor) InitChain(data []byte) error {
 	if m.isGenesis {
 		panic("Cannot call InitChain on a genesis txn executor")
 	}
@@ -174,14 +177,14 @@ func (m *Executor) InitChain(state []byte) error {
 	// Load the genesis state (JSON) into an in-memory key-value store
 	src := new(memory.DB)
 	_ = src.InitDB("", nil)
-	err := src.UnmarshalJSON(state)
+	err := src.UnmarshalJSON(data)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal app state: %v", err)
 	}
 
 	// Load the BPT root hash so we can verify the system state
 	var hash [32]byte
-	data, err := src.Get(storage.ComputeKey("BPT", "Root"))
+	data, err = src.Get(storage.ComputeKey("BPT", "Root"))
 	switch {
 	case err == nil:
 		bpt := new(pmt.BPT)
@@ -204,12 +207,18 @@ func (m *Executor) InitChain(state []byte) error {
 	// Load the genesis state into the StateDB
 	err = m.DB.Load(dst, false)
 	if err != nil {
-		return fmt.Errorf("faild to reload state database: %v", err)
+		return fmt.Errorf("failed to reload state database: %v", err)
 	}
 
 	// Make sure the StateDB BPT root hash matches what we found in the genesis state
 	if !bytes.Equal(hash[:], m.DB.RootHash()) {
 		panic("BPT root hash from state DB does not match the app state")
+	}
+
+	// Make sure the subnet ID is set
+	_, err = m.DB.SubnetID()
+	if err != nil {
+		return fmt.Errorf("failed to load subnet ID: %v", err)
 	}
 
 	return nil
@@ -551,9 +560,47 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
 func (m *Executor) Commit() ([]byte, error) {
 	m.wg.Wait()
 
+	subnet, err := m.DB.SubnetID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load subnet ID: %v", err)
+	}
+
 	mdRoot, err := m.dbTx.Commit(m.height, m.time, func() error {
 		// Add a synthetic transaction for the previous block's anchor
-		return m.addAnchorTxn()
+		err := m.addAnchorTxn()
+		if err != nil {
+			return err
+		}
+
+		// Mirror the subnet's ADI, but only immediately after genesis
+		if m.height != 2 || m.IsTest {
+			// TODO Don't skip during testing
+			return nil
+		}
+
+		switch m.SubnetType {
+		case config.Directory:
+			// TODO Mirror DN ADI
+
+		case config.BlockValidator:
+			// Mirror BVN ADI
+			mirror, err := m.mirrorADIs(bvnUrl(subnet))
+			if err != nil {
+				return fmt.Errorf("failed to mirror BVN ADI: %v", err)
+			}
+
+			tx, err := m.buildSynthTxn(dnUrl(), mirror)
+			if err != nil {
+				return fmt.Errorf("failed to build mirror txn: %v", err)
+			}
+
+			err = m.addSystemTxns(tx)
+			if err != nil {
+				return fmt.Errorf("failed to save mirror txn: %v", err)
+			}
+		}
+
+		return nil
 	})
 	if err != nil {
 		return nil, err
