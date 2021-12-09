@@ -222,7 +222,7 @@ func (m *StateManager) UpdateNonce(record state.Chain) {
 
 //UpdateCreditBalance update the credits used for a transaction
 func (m *StateManager) UpdateCreditBalance(record state.Chain) {
-	//todo implement
+	panic("todo: UpdateCredtedBalance needs to be implemented")
 }
 
 //UpdateData will cache a data associated with a DataAccount chain.
