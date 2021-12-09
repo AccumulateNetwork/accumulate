@@ -18,7 +18,7 @@ fi
 # issue the account generate command to the specified server
 
 if [ -z $1 ]; then
-	accid="$($cli account generate -j 2>&1 > /dev/null)"
+	accid="$($cli account generate -j 2>&1)"
 	if [ $? -eq 0 ]; then
            acc=`echo $accid | $j .name | $s 's/\"//g'`
         else
@@ -26,7 +26,7 @@ if [ -z $1 ]; then
 	   exit 1
         fi
 else
-	accid="$($cli account generate -j -s http://$1/v1 2>&1 > /dev/null)"
+	accid="$($cli account generate -j -s http://$1/v1 2>&1)"
         if [ $? -eq 0 ]; then
 	   acc=`echo $accid | $j .name | $s 's/\"//g'`
 	else
@@ -35,7 +35,7 @@ else
         fi
 fi
 
-# return the generated ID 
+# return the generated ID
 
 echo $acc
 exit 0
