@@ -129,7 +129,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	}
 	wg.Wait()
 
-	relay, err := relay.NewWith(rpcAddrs...)
+	relay, err := relay.NewWith(nil, rpcAddrs...)
 	require.NoError(t, err)
 	if bvc0[0].Config.Accumulate.API.EnableSubscribeTX {
 		require.NoError(t, relay.Start())

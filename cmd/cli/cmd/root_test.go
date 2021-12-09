@@ -128,7 +128,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
 	require.NoError(t, err)                                    //
 	require.NoError(t, bvnNode.Start())                        // Launch
 	relayTo := []string{cfg.RPC.ListenAddress}
-	relay, err := relay.NewWith(relayTo...)
+	relay, err := relay.NewWith(nil, relayTo...)
 
 	// Create a local client
 	lnode, ok := bvnNode.Service.(local.NodeService)

@@ -19,7 +19,7 @@ func TestDebugFaucet(t *testing.T) {
 	t.Skip("Skip this test unless you need it to debug something")
 
 	// Networks must be in the same order as they are passed to --relay-to in the node configuration
-	clients, err := relay.NewClients("Arches", "AmericanSamoa", "EastXeons")
+	clients, err := relay.NewClients(nil, "Arches", "AmericanSamoa", "EastXeons")
 	require.NoError(t, err)
 
 	u, err := url.Parse("acc://b5d4ac455c08bedc04a56d8147e9e9c9494c99eb81e9d8c3/ACME")
