@@ -1,8 +1,9 @@
 package state
 
 import (
-	"github.com/AccumulateNetwork/accumulate/types"
 	"time"
+
+	"github.com/AccumulateNetwork/accumulate/types"
 )
 
 type DataChainManager struct {
