@@ -32,27 +32,27 @@ type Subnet struct {
 func (s *Subnet) FullName() string { return s.NetworkName + "." + s.Name }
 
 type Node struct {
-	IP   string
+	IP   string // TODO this can also be a hostname, but renaming it will produce a big PR
 	Type NodeType
 }
 
 var all = Network{}
 var nameCount = map[string]int{}
 
+var Networks = map[string]Network{
+	"TestNet": TestNet,
+	"DevNet":  DevNet,
+}
+
 func init() {
 	// Ensure 'Directory' must be qualified, e.g. 'DevNet.Directory'
 	nameCount["Directory"] = 1
 
-	networks := map[string]Network{
-		"TestNet": TestNet,
-		"DevNet":  DevNet,
-	}
-
-	for _, net := range networks {
+	for _, net := range Networks {
 		for name, sub := range net {
 			nameCount[name]++
 			all[sub.NetworkName+"."+name] = sub
-			sub.Network = networks[sub.NetworkName]
+			sub.Network = Networks[sub.NetworkName]
 
 			if sub.Network == nil {
 				panic(fmt.Sprintf("Subnet %q claims it is part of %q but no such network exists", name, sub.NetworkName))
