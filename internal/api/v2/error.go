@@ -14,7 +14,7 @@ var ErrInvalidUrl = errors.New("invalid URL")
 // General Errors
 const (
 	ErrCodeInternal = -32800 - iota
-	_               // maintain previous numbering
+	ErrCodeDispatch
 	ErrCodeValidation
 	ErrCodeSubmission
 	ErrCodeAccumulate
