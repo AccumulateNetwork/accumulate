@@ -106,13 +106,13 @@ func (m *MerkleManager) GetChainState() (merkleState *MerkleState, err error) {
 // Retrieve the current MerkleState from the given database, and set
 // that state as the MerkleState of this MerkleManager.  Note that the cache
 // will be cleared.
-func (m *MerkleManager) ReadChainHead(key ...interface{}) (ms *MerkleState, err error) {
+func (m *MerkleManager) ReadChainHead() (ms *MerkleState, err error) {
 	ms = new(MerkleState)
 	ms.HashFunction = m.MS.HashFunction
-	state, e := m.Manager.Key(append(key, "Head")...).Get() //                          Get the state for the Merkle Tree
-	if e == nil {                                           //                          If the State exists
+	state, e := m.Manager.Key(append(m.key, "Head")...).Get() //                          Get the state for the Merkle Tree
+	if e == nil {                                             //                          If the State exists
 		if err := ms.UnMarshal(state); err != nil { //                                     set that as the state
-			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", key) // Blow up of the database is bad
+			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", m.key) // Blow up of the database is bad
 		}
 	}
 	return ms, nil
@@ -191,11 +191,11 @@ func (m *MerkleManager) init(DBManager *database.Manager, markPower int64) (err 
 		return fmt.Errorf("A power %d is greater than 2^29, and is unreasonable", markPower)
 	}
 	m.Manager = DBManager // Manager for writing the Merkle states
-	if m.MS == nil {      //                                    Allocate an MS if we don't have one
+	if m.MS == nil {      // Allocate an MS if we don't have one
 		m.MS = new(MerkleState) //
 		m.MS.InitSha256()       //
 	}
-	m.MS, err = m.ReadChainHead(m.key...) //                  Set the MerkleState
+	m.MS, err = m.ReadChainHead() //                       Set the MerkleState
 	if err != nil {
 		return err
 	}
