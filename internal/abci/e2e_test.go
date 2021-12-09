@@ -4,8 +4,6 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
-	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -288,10 +286,6 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 	})
 
-	if (runtime.GOOS == "windows" || runtime.GOOS == "darwin") && os.Getenv("CI") == "true" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
-
 	t.Run("Data Account data entry", func(t *testing.T) {
 		n := createAppWithMemDB(t, crypto.Address{}, true)
 		adiKey := generateKey()
@@ -329,6 +323,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, err)
 			send(tx)
 		})
+		time.Sleep(5 * time.Second)
 	})
 }
 
