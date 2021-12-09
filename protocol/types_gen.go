@@ -162,6 +162,10 @@ type SyntheticDepositCredits struct {
 type SyntheticGenesis struct {
 }
 
+type SyntheticMirror struct {
+	Objects []*state.Object `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
+}
+
 type SyntheticSignTransactions struct {
 	Transactions []SyntheticSignature `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
 }
@@ -271,6 +275,8 @@ func (*SyntheticDepositCredits) GetType() types.TransactionType {
 }
 
 func (*SyntheticGenesis) GetType() types.TransactionType { return types.TxTypeSyntheticGenesis }
+
+func (*SyntheticMirror) GetType() types.TransactionType { return types.TxTypeSyntheticMirror }
 
 func (*SyntheticSignTransactions) GetType() types.TransactionType {
 	return types.TxTypeSyntheticSignTransactions
@@ -709,6 +715,22 @@ func (v *SyntheticDepositCredits) Equal(u *SyntheticDepositCredits) bool {
 }
 
 func (v *SyntheticGenesis) Equal(u *SyntheticGenesis) bool {
+
+	return true
+}
+
+func (v *SyntheticMirror) Equal(u *SyntheticMirror) bool {
+	if !(len(v.Objects) == len(u.Objects)) {
+		return false
+	}
+
+	for i := range v.Objects {
+		v, u := v.Objects[i], u.Objects[i]
+		if !(v.Equal(u)) {
+			return false
+		}
+
+	}
 
 	return true
 }
@@ -1184,6 +1206,21 @@ func (v *SyntheticGenesis) BinarySize() int {
 	var n int
 
 	n += encoding.UvarintBinarySize(types.TxTypeSyntheticGenesis.ID())
+
+	return n
+}
+
+func (v *SyntheticMirror) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeSyntheticMirror.ID())
+
+	n += encoding.UvarintBinarySize(uint64(len(v.Objects)))
+
+	for _, v := range v.Objects {
+		n += v.BinarySize()
+
+	}
 
 	return n
 }
@@ -1683,6 +1720,25 @@ func (v *SyntheticGenesis) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSyntheticGenesis.ID()))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SyntheticMirror) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSyntheticMirror.ID()))
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Objects))))
+	for i, v := range v.Objects {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding Objects[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
+
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -2550,6 +2606,37 @@ func (v *SyntheticGenesis) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	return nil
+}
+
+func (v *SyntheticMirror) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeSyntheticMirror
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	var lenObjects uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Objects: %w", err)
+	} else {
+		lenObjects = x
+	}
+	data = data[encoding.UvarintBinarySize(lenObjects):]
+
+	v.Objects = make([]*state.Object, lenObjects)
+	for i := range v.Objects {
+		x := new(state.Object)
+		if err := x.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Objects[%d]: %w", i, err)
+		}
+		data = data[x.BinarySize():]
+
+		v.Objects[i] = x
+	}
 
 	return nil
 }
