@@ -164,7 +164,7 @@ func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
 }
 
 func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
-	//todo implement query data functionality
+	panic("todo query data functionality not implemented")
 	return nil
 }
 
@@ -290,7 +290,7 @@ type e2eDUT struct {
 }
 
 func (n e2eDUT) GetDataByUrl(url string) (*ctypes.ResultABCIQuery, error) {
-	//todo: implement query data by url
+	panic("todo: query data by url not implemented")
 	return nil, nil
 }
 
