@@ -16,6 +16,16 @@ func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface
 	return jrpcFormatQuery(m.opts.Query.QueryUrl(req.Url))
 }
 
+func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessage) interface{} {
+	req := new(KeyPageIndexQuery)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatResponse(m.opts.Query.QueryKeyPageIndex(req.Url, req.Key))
+}
+
 func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) interface{} {
 	req := new(DirectoryQuery)
 	err := m.parse(params, req)
