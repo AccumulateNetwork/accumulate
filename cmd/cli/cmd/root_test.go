@@ -2,12 +2,10 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	net2 "net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -19,19 +17,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/api"
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/libs/net"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
 type testCase func(t *testing.T, tc *testCmd)
@@ -88,119 +79,27 @@ type testCmd struct {
 	directoryCmd   *exec.Cmd
 	validatorCmd   *exec.Cmd
 	defaultWorkDir string
-	restPort       int
 	jsonRpcPort    int
 }
 
 //NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports
-func NewTestBVNN(t *testing.T, defaultWorkDir string) (int, int) {
+func NewTestBVNN(t *testing.T, defaultWorkDir string) int {
 	t.Helper()
-	opts, err := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
-	require.NoError(t, err)
+
+	// Configure
+	opts := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
 	opts.WorkDir = defaultWorkDir
-	opts.Port, err = net.GetFreePort()
-	require.NoError(t, err)
-	cfg := opts.Config[0]
-	cfg.Mempool.MaxBatchBytes = 1048576
-	cfg.Mempool.CacheSize = 1048576
-	cfg.Mempool.Size = 50000
-	cfg.Accumulate.API.EnableSubscribeTX = false
-	cfg.Accumulate.Networks[0] =
-		fmt.Sprintf("tcp://%s:%d", opts.RemoteIP[0], opts.Port+networks.TmRpcPortOffset)
+	require.NoError(t, node.Init(opts))
 
-	require.NoError(t, node.Init(opts))               // Configure
-	nodeDir := filepath.Join(defaultWorkDir, "Node0") //
-	cfg, err = config.Load(nodeDir)                   // Modify configuration
-	require.NoError(t, err)                           //
-	cfg.Accumulate.WebsiteEnabled = false             // Disable the website
-	cfg.Instrumentation.Prometheus = false            // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	cfg.Consensus.TimeoutCommit = time.Second / 10    // Increase block frequency
-	cfg.Accumulate.API.TxMaxWaitTime = 10 * time.Second
-	cfg.LogLevel = "error;main=info;state=info;statesync=info;accumulate=info;executor=info"
-	require.NoError(t, config.Store(cfg))
-
-	opts2 := acctesting.BVNNOptions{
-		Dir:       nodeDir,
+	// Start
+	_, err := acctesting.RunDaemon(acctesting.DaemonOptions{
+		Dir:       filepath.Join(defaultWorkDir, "Node0"),
 		LogWriter: logging.TestLogWriter(t),
-	}
-
-	bvnNode, _, _, err := acctesting.NewBVNN(opts2, t.Cleanup) // Initialize
-	require.NoError(t, err)                                    //
-	require.NoError(t, bvnNode.Start())                        // Launch
-	relayTo := []string{cfg.RPC.ListenAddress}
-	relay, err := relay.NewWith(nil, relayTo...)
-
-	// Create a local client
-	lnode, ok := bvnNode.Service.(local.NodeService)
-	if !ok {
-		t.Fatalf("node is not a local node service!")
-	}
-	lclient, err := local.New(lnode)
-	if err != nil {
-		t.Fatalf("failed to create local node client: %v", err)
-	}
-
-	// Configure JSON-RPC
-	var jrpcOpts api2.JrpcOptions
-	jrpcOpts.Config = &cfg.Accumulate.API
-	jrpcOpts.QueueDuration = time.Second / 4
-	jrpcOpts.QueueDepth = 100
-	jrpcOpts.QueryV1 = api.NewQuery(relay)
-	jrpcOpts.Local = lclient
-
-	// Build the list of remote addresses and query clients
-	jrpcOpts.Remote = make([]string, len(cfg.Accumulate.Networks))
-	clients := make([]api2.ABCIQueryClient, len(cfg.Accumulate.Networks))
-	for i, net := range cfg.Accumulate.Networks {
-		switch {
-		case net == "self", net == cfg.Accumulate.Network, net == cfg.RPC.ListenAddress:
-			jrpcOpts.Remote[i] = "local"
-			clients[i] = lclient
-
-		default:
-			addr, err := networks.GetRpcAddr(net)
-			if err != nil {
-				t.Fatalf("invalid network name or address: %v", err)
-			}
-
-			jrpcOpts.Remote[i] = addr
-			clients[i], err = rpchttp.New(addr)
-			if err != nil {
-				t.Fatalf("failed to create RPC client: %v", err)
-			}
-		}
-	}
-
-	jrpcOpts.Query = api2.NewQueryDispatch(clients, api2.QuerierOptions{
-		TxMaxWaitTime: cfg.Accumulate.API.TxMaxWaitTime,
-	})
-
-	jrpc, err := api2.NewJrpc(jrpcOpts)
-	if err != nil {
-		t.Fatalf("failed to start API: %v", err)
-	}
-
-	// Run JSON-RPC server
-	s := &http.Server{Handler: jrpc.NewMux()}
-	l, sec, err := listenHttpUrl(cfg.Accumulate.API.JSONListenAddress)
+	}, t.Cleanup)
 	require.NoError(t, err)
-	require.Equal(t, sec, false, "jsonrpc doesn't support https")
-
-	go func() {
-		err := s.Serve(l)
-		if err != nil {
-			t.Logf("JSON-RPC server has been shut down, %v", err)
-		}
-	}()
-
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		s.Shutdown(ctx)
-	})
 
 	time.Sleep(time.Second)
-	return opts.Port + networks.AccRouterJsonPortOffset, opts.Port + networks.AccRouterRestPortOffset
+	return opts.Port + networks.AccRouterJsonPortOffset
 }
 
 func (c *testCmd) initalize(t *testing.T) {
@@ -219,13 +118,12 @@ func (c *testCmd) initalize(t *testing.T) {
 	c.rootCmd = InitRootCmd(initDB(defaultWorkDir, true))
 	c.rootCmd.PersistentPostRun = nil
 
-	c.jsonRpcPort, c.restPort = NewTestBVNN(t, defaultWorkDir)
+	c.jsonRpcPort = NewTestBVNN(t, defaultWorkDir)
 	time.Sleep(2 * time.Second)
 
 	t.Cleanup(func() {
 		os.Remove(defaultWorkDir)
 	})
-
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {

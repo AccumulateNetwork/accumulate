@@ -36,6 +36,7 @@ type ABCIApplicationClient struct {
 
 	done   chan struct{}
 	doneMu *sync.Mutex
+	stop   chan struct{}
 
 	txCh     chan *txStatus
 	txStatus map[[32]byte]*txStatus
@@ -69,6 +70,7 @@ func NewABCIApplicationClient(app <-chan abci.Application, db *state.StateDB, ne
 	c.EventBus = types.NewEventBus()
 	c.done = make(chan struct{})
 	c.doneMu = new(sync.Mutex)
+	c.stop = make(chan struct{})
 	c.txCh = make(chan *txStatus)
 	c.txStatus = map[[32]byte]*txStatus{}
 	c.txPend = map[[32]byte]bool{}
@@ -95,8 +97,9 @@ func (c *ABCIApplicationClient) Shutdown() {
 	default:
 	}
 
-	close(c.txCh)
+	close(c.stop)
 	<-c.done
+	close(c.txCh)
 }
 
 func (c *ABCIApplicationClient) App() abci.Application {
@@ -125,8 +128,12 @@ func (c *ABCIApplicationClient) SubmitTx(ctx context.Context, tx types.Tx) *txSt
 		return nil
 	}
 
-	c.txCh <- st
-	return st
+	select {
+	case <-c.stop:
+		return nil
+	case c.txCh <- st:
+		return st
+	}
 }
 
 func (c *ABCIApplicationClient) didSubmit(tx []byte, txh [32]byte) *txStatus {
@@ -241,10 +248,10 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 	for {
 		// Collect transactions, submit at 1Hz
 		select {
-		case sub, ok := <-c.txCh:
-			if !ok {
-				return
-			}
+		case <-c.stop:
+			return
+
+		case sub := <-c.txCh:
 			queue = append(queue, sub)
 			continue
 
@@ -260,12 +267,13 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		// Collect any queued up sends
 	collect:
 		select {
-		case sub, ok := <-c.txCh:
-			if !ok {
-				return
-			}
+		case <-c.stop:
+			return
+
+		case sub := <-c.txCh:
 			queue = append(queue, sub)
 			goto collect
+
 		default:
 			// Done
 		}

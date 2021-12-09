@@ -4,19 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	stdlog "log"
 	"net/http"
-	"net/url"
 	"os"
-	"path"
-	"strconv"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/config"
 	v1 "github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -39,15 +34,14 @@ type JrpcOptions struct {
 }
 
 type JrpcMethods struct {
-	methods     jsonrpc2.MethodMap
-	opts        JrpcOptions
-	validate    *validator.Validate
-	remoteAddrs []string
-	remote      []jsonrpc.RPCClient
-	localIndex  int
-	exch        chan executeRequest
-	queue       executeQueue
-	logger      log.Logger
+	methods    jsonrpc2.MethodMap
+	opts       JrpcOptions
+	validate   *validator.Validate
+	remote     []jsonrpc.RPCClient
+	localIndex int
+	exch       chan executeRequest
+	queue      executeQueue
+	logger     log.Logger
 
 	// Deprecated: will be removed
 	v1 *v1.API
@@ -81,24 +75,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 	for i, addr := range opts.Remote {
 		switch {
 		case addr != "local":
-			u, err := url.Parse(addr)
-			if err != nil {
-				return nil, err
-			}
-
-			port, err := strconv.ParseUint(u.Port(), 10, 16)
-			if err != nil {
-				return nil, err
-			}
-
-			// TODO Support other ports?
-			port += networks.AccRouterJsonPortOffset - networks.TmRpcPortOffset
-
-			u.Scheme = "http"                // TODO Support HTTPS
-			u.Path = path.Join(u.Path, "v2") // TODO Support other paths?
-			u.Host = fmt.Sprintf("%s:%d", u.Hostname(), port)
-			m.opts.Remote[i] = u.String()
-			m.remote[i] = jsonrpc.NewClient(m.opts.Remote[i])
+			m.remote[i] = jsonrpc.NewClient(addr)
 		case m.localIndex < 0:
 			m.localIndex = i
 		default:
