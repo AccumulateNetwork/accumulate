@@ -44,7 +44,6 @@ type bucket string
 const (
 	bucketEntry            = bucket("StateEntries")
 	bucketDataEntry        = bucket("DataEntries") //map of entry hash to WriteData Entry
-	bucketDataToMain       = bucket("DataToMain")  //map of entry hash back to txid
 	bucketTx               = bucket("Transactions")
 	bucketMainToPending    = bucket("MainToPending") //main TXID to PendingTXID
 	bucketPendingTx        = bucket("PendingTx")     //Store pending transaction
