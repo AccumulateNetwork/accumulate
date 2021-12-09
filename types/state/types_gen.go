@@ -20,7 +20,7 @@ type Anchor struct {
 	Chains      [][32]byte `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 	ChainAnchor [32]byte   `json:"chainAnchor,omitempty" form:"chainAnchor" query:"chainAnchor" validate:"required"`
 	Synthetic   [32]byte   `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
-	AnchorTxns  [][32]byte `json:"anchorTxns,omitempty" form:"anchorTxns" query:"anchorTxns" validate:"required"`
+	SystemTxns  [][32]byte `json:"systemTxns,omitempty" form:"systemTxns" query:"systemTxns" validate:"required"`
 }
 
 type Object struct {
@@ -91,12 +91,12 @@ func (v *Anchor) Equal(u *Anchor) bool {
 		return false
 	}
 
-	if !(len(v.AnchorTxns) == len(u.AnchorTxns)) {
+	if !(len(v.SystemTxns) == len(u.SystemTxns)) {
 		return false
 	}
 
-	for i := range v.AnchorTxns {
-		if v.AnchorTxns[i] != u.AnchorTxns[i] {
+	for i := range v.SystemTxns {
+		if v.SystemTxns[i] != u.SystemTxns[i] {
 			return false
 		}
 	}
@@ -200,7 +200,7 @@ func (v *Anchor) BinarySize() int {
 
 	n += encoding.ChainBinarySize(&v.Synthetic)
 
-	n += encoding.ChainSetBinarySize(v.AnchorTxns)
+	n += encoding.ChainSetBinarySize(v.SystemTxns)
 
 	return n
 }
@@ -283,7 +283,7 @@ func (v *Anchor) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.ChainMarshalBinary(&v.Synthetic))
 
-	buffer.Write(encoding.ChainSetMarshalBinary(v.AnchorTxns))
+	buffer.Write(encoding.ChainSetMarshalBinary(v.SystemTxns))
 
 	return buffer.Bytes(), nil
 }
@@ -402,11 +402,11 @@ func (v *Anchor) UnmarshalBinary(data []byte) error {
 	data = data[encoding.ChainBinarySize(&v.Synthetic):]
 
 	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding AnchorTxns: %w", err)
+		return fmt.Errorf("error decoding SystemTxns: %w", err)
 	} else {
-		v.AnchorTxns = x
+		v.SystemTxns = x
 	}
-	data = data[encoding.ChainSetBinarySize(v.AnchorTxns):]
+	data = data[encoding.ChainSetBinarySize(v.SystemTxns):]
 
 	return nil
 }
@@ -539,7 +539,7 @@ func (v *Anchor) MarshalJSON() ([]byte, error) {
 		Chains      []string  `json:"chains,omitempty"`
 		ChainAnchor string    `json:"chainAnchor,omitempty"`
 		Synthetic   string    `json:"synthetic,omitempty"`
-		AnchorTxns  []string  `json:"anchorTxns,omitempty"`
+		SystemTxns  []string  `json:"systemTxns,omitempty"`
 	}{}
 	u.ChainHeader = v.ChainHeader
 	u.Index = v.Index
@@ -548,7 +548,7 @@ func (v *Anchor) MarshalJSON() ([]byte, error) {
 	u.Chains = encoding.ChainSetToJSON(v.Chains)
 	u.ChainAnchor = encoding.ChainToJSON(v.ChainAnchor)
 	u.Synthetic = encoding.ChainToJSON(v.Synthetic)
-	u.AnchorTxns = encoding.ChainSetToJSON(v.AnchorTxns)
+	u.SystemTxns = encoding.ChainSetToJSON(v.SystemTxns)
 	return json.Marshal(&u)
 }
 
@@ -590,7 +590,7 @@ func (v *Anchor) UnmarshalJSON(data []byte) error {
 		Chains      []string  `json:"chains,omitempty"`
 		ChainAnchor string    `json:"chainAnchor,omitempty"`
 		Synthetic   string    `json:"synthetic,omitempty"`
-		AnchorTxns  []string  `json:"anchorTxns,omitempty"`
+		SystemTxns  []string  `json:"systemTxns,omitempty"`
 	}{}
 	u.ChainHeader = v.ChainHeader
 	u.Index = v.Index
@@ -599,7 +599,7 @@ func (v *Anchor) UnmarshalJSON(data []byte) error {
 	u.Chains = encoding.ChainSetToJSON(v.Chains)
 	u.ChainAnchor = encoding.ChainToJSON(v.ChainAnchor)
 	u.Synthetic = encoding.ChainToJSON(v.Synthetic)
-	u.AnchorTxns = encoding.ChainSetToJSON(v.AnchorTxns)
+	u.SystemTxns = encoding.ChainSetToJSON(v.SystemTxns)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -626,10 +626,10 @@ func (v *Anchor) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Synthetic = x
 	}
-	if x, err := encoding.ChainSetFromJSON(u.AnchorTxns); err != nil {
-		return fmt.Errorf("error decoding AnchorTxns: %w", err)
+	if x, err := encoding.ChainSetFromJSON(u.SystemTxns); err != nil {
+		return fmt.Errorf("error decoding SystemTxns: %w", err)
 	} else {
-		v.AnchorTxns = x
+		v.SystemTxns = x
 	}
 	return nil
 }
