@@ -7,16 +7,22 @@ import (
 	"log"
 	"net"
 	"net/http"
+	stdurl "net/url"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	mock_api "github.com/AccumulateNetwork/accumulate/internal/mock/api"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/golang/mock/gomock"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
+	tmlog "github.com/tendermint/tendermint/libs/log"
 	core "github.com/tendermint/tendermint/rpc/core/types"
 )
 
@@ -47,6 +53,24 @@ func testExecute(t *testing.T, j *JrpcMethods, count int) {
 	}
 }
 
+func makeApiAddr(t *testing.T, addr net.Addr) string {
+	u, err := stdurl.Parse("http://" + addr.String())
+	require.NoError(t, err)
+	port, err := strconv.ParseUint(u.Port(), 10, 16)
+	require.NoError(t, err)
+	port -= networks.AccRouterJsonPortOffset - networks.TmRpcPortOffset
+	u.Host = fmt.Sprintf("localhost:%d", port)
+	return u.String()
+}
+
+func makeLogger(t *testing.T) tmlog.Logger {
+	w := logging.TestLogWriter(t)("plain")
+	zl := zerolog.New(w)
+	tm, err := logging.NewTendermintLogger(zl, "error", false)
+	require.NoError(t, err)
+	return tm
+}
+
 func newJrpcCounter() (*jrpcCounter, http.Handler) {
 	j := new(jrpcCounter)
 	j.calls = map[string]int{}
@@ -68,9 +92,9 @@ func TestDispatchExecute(t *testing.T) {
 	c2, h2 := newJrpcCounter()
 
 	mux := http.NewServeMux()
-	mux.Handle("/h0", h0)
-	mux.Handle("/h1", h1)
-	mux.Handle("/h2", h2)
+	mux.Handle("/h0/v2", h0)
+	mux.Handle("/h1/v2", h1)
+	mux.Handle("/h2/v2", h2)
 
 	s := http.Server{Handler: mux}
 
@@ -79,14 +103,16 @@ func TestDispatchExecute(t *testing.T) {
 	go func() { _ = s.Serve(l) }()
 	t.Cleanup(func() { s.Shutdown(context.Background()) })
 
+	addr := makeApiAddr(t, l.Addr())
 	j, err := NewJrpc(JrpcOptions{
 		Remote: []string{
-			fmt.Sprintf("http://%s/h0", l.Addr().String()),
-			fmt.Sprintf("http://%s/h1", l.Addr().String()),
-			fmt.Sprintf("http://%s/h2", l.Addr().String()),
+			fmt.Sprintf("%s/h0", addr),
+			fmt.Sprintf("%s/h1", addr),
+			fmt.Sprintf("%s/h2", addr),
 		},
 		QueueDuration: time.Millisecond,
 		QueueDepth:    10,
+		Logger:        makeLogger(t),
 	})
 	require.NoError(t, err)
 
@@ -113,9 +139,10 @@ func TestDispatchExecuteQueueDepth(t *testing.T) {
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
 	j, err := NewJrpc(JrpcOptions{
-		Remote:        []string{fmt.Sprintf("http://%s", l.Addr().String())},
+		Remote:        []string{makeApiAddr(t, l.Addr())},
 		QueueDuration: 1e6 * time.Hour, // Forever
 		QueueDepth:    2,
+		Logger:        makeLogger(t),
 	})
 	require.NoError(t, err)
 
@@ -132,9 +159,10 @@ func TestDispatchExecuteQueueDuration(t *testing.T) {
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
 	j, err := NewJrpc(JrpcOptions{
-		Remote:        []string{fmt.Sprintf("http://%s", l.Addr().String())},
+		Remote:        []string{makeApiAddr(t, l.Addr())},
 		QueueDuration: time.Millisecond,
 		QueueDepth:    1e10, // Infinity
+		Logger:        makeLogger(t),
 	})
 	require.NoError(t, err)
 

@@ -36,6 +36,8 @@ func InitRootCmd(database db.DB) *cobra.Command {
 		Short: "CLI for Accumulate Network",
 	}
 
+	cmd.SetOut(os.Stdout)
+
 	defaultServer := os.Getenv("ACC_API")
 	if defaultServer == "" {
 		defaultServer = "https://testnet.accumulatenetwork.io/v1"
