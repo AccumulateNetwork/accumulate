@@ -323,7 +323,9 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, err)
 			send(tx)
 		})
-		time.Sleep(5 * time.Second)
+		time.Sleep(3 * time.Second)
+		r2 := n.GetChainDataByUrl("FooBar/oof")
+		_ = r2
 	})
 }
 
