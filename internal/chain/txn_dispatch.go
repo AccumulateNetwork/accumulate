@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -87,7 +88,7 @@ func (d *dispatcher) Reset(ctx context.Context) {
 // route gets the client for the URL
 func (d *dispatcher) route(u *url.URL) (batch *txBatch, local bool) {
 	// Is it a DN URL?
-	if dnUrl().Equal(u) {
+	if protocol.IsDnUrl(u) {
 		if d.isDirectory {
 			return nil, true
 		}
@@ -98,9 +99,19 @@ func (d *dispatcher) route(u *url.URL) (batch *txBatch, local bool) {
 	}
 
 	// Is it a BVN URL?
-	if isBvnUrl(u) {
-		// For this we need some kind of lookup table that maps subnet to IP
-		panic("Cannot route BVN ADI URLs")
+	if bvn, ok := protocol.ParseBvnUrl(u); ok {
+		for i, id := range d.Network.BvnNames {
+			if strings.EqualFold(bvn, id) {
+				if i == d.localIndex {
+					// Use the local client for local requests
+					return nil, true
+				}
+
+				return &d.bvnBatches[i], false
+			}
+		}
+
+		// Is it OK to just route unknown BVNs normally?
 	}
 
 	// Modulo routing
