@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	accurl "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
@@ -29,7 +31,7 @@ const (
 	Follower  NodeType = "follower"
 )
 
-const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info;statedb=info"
+const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info"
 
 func Default(net NetworkType, node NodeType, netId string) *Config {
 	c := new(Config)
@@ -103,6 +105,14 @@ func OffsetPort(addr string, offset int) (string, error) {
 	port += int64(offset)
 	u.Host = fmt.Sprintf("%s:%d", u.Hostname(), port)
 	return u.String(), nil
+}
+
+func (n *Network) NodeUrl() *accurl.URL {
+	if n.Type == Directory {
+		return protocol.DnUrl()
+	}
+
+	return protocol.BvnUrl(n.ID)
 }
 
 // AddressWithPortOffset gets the first address of the given subnet and applies
