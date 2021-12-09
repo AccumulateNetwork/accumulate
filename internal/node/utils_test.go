@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulate/config"
@@ -16,8 +17,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
+
 func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, bvnAddrs []string) []*accumulated.Daemon {
 	t.Helper()
+
+	name = reAlphaNum.ReplaceAllString(name, "-")
 
 	IPs := make([]string, count)
 	config := make([]*config.Config, count)
