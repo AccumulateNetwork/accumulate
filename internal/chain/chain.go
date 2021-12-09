@@ -17,6 +17,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	case config.Directory:
 		return newExecutor(opts,
 			SyntheticAnchor{SubnetType: opts.SubnetType},
+			SyntheticMirror{},
 		)
 
 	case config.BlockValidator:
@@ -35,6 +36,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			SyntheticDepositCredits{},
 			SyntheticSignTransactions{},
 			SyntheticAnchor{SubnetType: opts.SubnetType},
+			SyntheticMirror{},
 
 			// TODO Only for TestNet
 			AcmeFaucet{},
