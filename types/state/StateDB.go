@@ -244,10 +244,7 @@ func (tx *DBTransaction) AddSynthTx(parentTxId types.Bytes, synthTxId types.Byte
 	txMap[parentHash] = append(txMap[parentHash], transactionStateInfo{synthTxObject, nil, synthTxId})
 }
 
-// AddDataEntry append the entry to the chain, the subChainId is if the chain upon which
-// the transaction is against touches another chain. One example would be an account type chain
-// may change the state of the KeyBook chain (i.e. a sub/secondary chain) based on the effect
-// of a transaction.  The entry is the state object associated with
+// AddDataEntry append the data entry to the data chain then update the
 func (tx *DBTransaction) AddDataEntry(chainId *types.Bytes32, txid []byte, entryHash []byte, dataEntry []byte, dataState *Object) error {
 	tx.state.logDebug("AddDataEntry", "chainId", logging.AsHex(chainId),
 		"entryHash", logging.AsHex(entryHash), "entry", logging.AsHex(dataEntry))
