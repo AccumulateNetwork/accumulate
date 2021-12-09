@@ -35,7 +35,7 @@ func (c *ChainManager) Height() int64 {
 
 // Record returns the record.
 func (c *ChainManager) Record() (*Object, error) {
-	data, err := c.state.dbMgr.Key(append(c.key, "Record")...).Get()
+	data, err := c.state.dbMgr.Key(c.key, "Record").Get()
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +73,9 @@ func (c *ChainManager) Entries(start int64, end int64) ([][]byte, error) {
 	// multiple times
 	entries := make([][]byte, 0, end-start)
 	for start < end {
+		if err := c.merkle.SetKey(c.key); err != nil {
+			return nil, err
+		}
 		h, err := c.merkle.GetRange(start, end)
 		if err != nil {
 			return nil, err
@@ -132,7 +135,7 @@ func (c *ChainManager) Update(record []byte) error {
 	h := sha256.Sum256(data)
 	c.state.logDebug("Updating chain state", "key", c.key, "hash", logging.AsHex(h))
 
-	c.state.dbMgr.Key(append(c.key, "Record")...).PutBatch(data)
+	c.state.dbMgr.Key(c.key, "Record").PutBatch(data)
 	c.state.bptMgr.Bpt.Insert(storage.ComputeKey(c.key...), h)
 
 	return nil
