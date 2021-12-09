@@ -257,6 +257,74 @@ func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataRe
 	return unmarshalTxReference(r.Response)
 }
 
+// QueryDataSetByUrl returns the data specified by the pagination information on given chain specified by the url
+func (q *Query) QueryDataSetByUrl(url string, start int64, limit int64) (*acmeApi.APIDataResponsePagination, error) {
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeDataSet
+	ru := query.RequestTxHistory{} //change to RequestDataSet{}
+	ru.Start = start
+	ru.Limit = limit
+	ru.ChainId.FromBytes(u.ResourceChain())
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := q.txRelay.Query(qu.RouteId, qd)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Response.Code != 0 {
+		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
+	}
+	thr := query.ResponseTxHistory{} //change to ResponseDataSet{}
+	err = thr.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := acmeApi.APIDataResponsePagination{}
+	ret.Start = start
+	ret.Limit = limit
+	ret.Total = thr.Total
+	//for i := range thr.Transactions {
+	//	txs := thr.Transactions[i]
+	//
+	//	txData := txs.TxState
+	//	txPendingData := txs.TxPendingState
+	//	txSynthTxIds := txs.TxSynthTxIds
+	//	d, err := packTransactionQuery(txs.TxId[:], txData, txPendingData, txSynthTxIds)
+	//	if err != nil {
+	//		return nil, err
+	//	}
+	//	ret.Data = append(ret.Data, d)
+	//}
+
+	return &ret, nil
+}
+
+// QueryDataByEntryHash returns the data specified by the entry hash in a given chain specified by the url
+func (q *Query) QueryDataByEntryHash(url string, entryHash []byte) (*acmeApi.APIDataResponse, error) {
+	return nil, nil
+}
+
+// QueryDataByUrl returns the current data at the head of the data chain
+func (q *Query) QueryDataByUrl(url string) (*acmeApi.APIDataResponse, error) {
+	return nil, nil
+}
+
 // packTransactionQuery
 func packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSynthTxIds []byte) (resp *acmeApi.APIDataResponse, err error) {
 

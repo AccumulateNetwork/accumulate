@@ -165,6 +165,7 @@ func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
 
 func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
 	n.t.Fatalf("todo query data functionality not implemented")
+	//r, err := n.query.GetChainDataByUrl(url)
 	return nil
 }
 
