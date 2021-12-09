@@ -73,7 +73,7 @@ func (c *ChainManager) Entries(start int64, end int64) ([][]byte, error) {
 	// multiple times
 	entries := make([][]byte, 0, end-start)
 	for start < end {
-		h, err := c.merkle.GetRange(c.key, start, end)
+		h, err := c.merkle.GetRange(start, end)
 		if err != nil {
 			return nil, err
 		}
