@@ -49,7 +49,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return fmt.Errorf("unable to marshal segwit, %v", err)
 	}
 
-	dataPayload, err := body.MarshalBinary()
+	dataPayload, err := body.Entry.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("error marshaling data entry, %v", err)
 	}
