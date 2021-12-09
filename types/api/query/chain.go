@@ -12,6 +12,11 @@ type RequestByUrl struct {
 	Url types.String
 }
 
+type RequestByUrlAndKey struct {
+	RequestByUrl
+	Key string
+}
+
 type RequestDirectory struct {
 	RequestByUrl
 	Start        uint64
@@ -32,6 +37,40 @@ func (r *RequestByUrl) UnmarshalBinary(data []byte) (err error) {
 		}
 	}()
 	return r.Url.UnmarshalBinary(data)
+}
+
+func (*RequestByUrlAndKey) Type() types.QueryType { return types.QueryTypeKeyPageIndices }
+
+func (r *RequestByUrlAndKey) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+	binary, err := r.Url.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+	buffer.Write(binary)
+	buffer.Write(encoding.StringMarshalBinary(r.Key))
+	return buffer.Bytes(), nil
+}
+
+func (r *RequestByUrlAndKey) UnmarshalBinary(data []byte) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("error unmarshaling RequestByUrlAndKey data %v", r)
+		}
+	}()
+	err = r.Url.UnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+	data = data[r.Url.Size(nil):]
+
+	if key, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Key: %w", err)
+	} else {
+		r.Key = key
+	}
+
+	return err
 }
 
 func (*RequestDirectory) Type() types.QueryType { return types.QueryTypeDirectoryUrl }

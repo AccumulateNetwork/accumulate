@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -357,4 +358,24 @@ func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagin
 		respDataSet.DataEntries = append(respDataSet.DataEntries, de)
 	}
 	return respDataSet, nil
+}
+
+func (q *queryDirect) QueryKeyPageIndex(s, key string) (*ResponseKeyPageIndex, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
+	}
+
+	req := new(query.RequestByUrlAndKey)
+	req.Url = types.String(u.String())
+	req.Key = key
+	_, v, err := q.query(req)
+	if err != nil {
+		return nil, err
+	}
+	res := new(ResponseKeyPageIndex)
+	if err = json.Unmarshal(v, res); err != nil {
+		return nil, err
+	}
+	return res, nil
 }

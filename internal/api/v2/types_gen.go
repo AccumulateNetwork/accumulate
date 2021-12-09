@@ -62,6 +62,11 @@ type KeyPage struct {
 	Index  uint64 `json:"index,omitempty" form:"index" query:"index"`
 }
 
+type KeyPageIndexQuery struct {
+	UrlQuery
+	Key string `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+}
+
 type MerkleState struct {
 	Count uint64   `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 	Roots [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
@@ -103,6 +108,12 @@ type QueryResponse struct {
 	Sig            []byte       `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
 	Status         interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	SyntheticTxids [][32]byte   `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
+}
+
+type ResponseKeyPageIndex struct {
+	KeyBook string `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
+	KeyPage string `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	Index   int    `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 }
 
 type Signer struct {
