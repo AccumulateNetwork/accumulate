@@ -59,6 +59,11 @@ type DataAccount struct {
 	state.ChainHeader
 }
 
+type DataEntry struct {
+	ExtIds [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
+	Data   []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+}
+
 type DirectoryIndexMetadata struct {
 	Count uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
 }
@@ -124,6 +129,11 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
+type SegWitDataEntry struct {
+	EntryUrl  string   `json:"entryUrl,omitempty" form:"entryUrl" query:"entryUrl" validate:"required,acc-url"`
+	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+}
+
 type SyntheticAnchor struct {
 	Source         string     `json:"source,omitempty" form:"source" query:"source" validate:"required,acc-url"`
 	Major          bool       `json:"major,omitempty" form:"major" query:"major" validate:"required"`
@@ -186,12 +196,12 @@ type UpdateKeyPage struct {
 }
 
 type WriteData struct {
-	Data []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Entry DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
 type WriteDataTo struct {
-	Recipient string `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required,acc-url"`
-	Data      []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Recipient string    `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required,acc-url"`
+	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
 func NewDataAccount() *DataAccount {
@@ -247,6 +257,8 @@ func (*CreateToken) GetType() types.TransactionType { return types.TxTypeCreateT
 func (*IdentityCreate) GetType() types.TransactionType { return types.TxTypeCreateIdentity }
 
 func (*IssueTokens) GetType() types.TransactionType { return types.TxTypeIssueTokens }
+
+func (*SegWitDataEntry) GetType() types.TransactionType { return types.TxTypeSegWitDataEntry }
 
 func (*SyntheticAnchor) GetType() types.TransactionType { return types.TxTypeSyntheticAnchor }
 
@@ -390,6 +402,26 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 
 func (v *DataAccount) Equal(u *DataAccount) bool {
 	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	return true
+}
+
+func (v *DataEntry) Equal(u *DataEntry) bool {
+	if !(len(v.ExtIds) == len(u.ExtIds)) {
+		return false
+	}
+
+	for i := range v.ExtIds {
+		v, u := v.ExtIds[i], u.ExtIds[i]
+		if !(bytes.Equal(v, u)) {
+			return false
+		}
+
+	}
+
+	if !(bytes.Equal(v.Data, u.Data)) {
 		return false
 	}
 
@@ -582,6 +614,18 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	return true
 }
 
+func (v *SegWitDataEntry) Equal(u *SegWitDataEntry) bool {
+	if !(v.EntryUrl == u.EntryUrl) {
+		return false
+	}
+
+	if !(v.EntryHash == u.EntryHash) {
+		return false
+	}
+
+	return true
+}
+
 func (v *SyntheticAnchor) Equal(u *SyntheticAnchor) bool {
 	if !(v.Source == u.Source) {
 		return false
@@ -762,7 +806,7 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 }
 
 func (v *WriteData) Equal(u *WriteData) bool {
-	if !(bytes.Equal(v.Data, u.Data)) {
+	if !(v.Entry.Equal(&u.Entry)) {
 		return false
 	}
 
@@ -774,7 +818,7 @@ func (v *WriteDataTo) Equal(u *WriteDataTo) bool {
 		return false
 	}
 
-	if !(bytes.Equal(v.Data, u.Data)) {
+	if !(v.Entry.Equal(&u.Entry)) {
 		return false
 	}
 
@@ -889,6 +933,21 @@ func (v *DataAccount) BinarySize() int {
 	v.Type = types.ChainTypeDataAccount
 
 	n += v.ChainHeader.GetHeaderSize()
+
+	return n
+}
+
+func (v *DataEntry) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(uint64(len(v.ExtIds)))
+
+	for _, v := range v.ExtIds {
+		n += encoding.BytesBinarySize(v)
+
+	}
+
+	n += encoding.BytesBinarySize(v.Data)
 
 	return n
 }
@@ -1042,6 +1101,18 @@ func (v *MetricsRequest) BinarySize() int {
 	n += encoding.StringBinarySize(v.Metric)
 
 	n += encoding.DurationBinarySize(v.Duration)
+
+	return n
+}
+
+func (v *SegWitDataEntry) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeSegWitDataEntry.ID())
+
+	n += encoding.StringBinarySize(v.EntryUrl)
+
+	n += encoding.ChainBinarySize(&v.EntryHash)
 
 	return n
 }
@@ -1204,7 +1275,7 @@ func (v *WriteData) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(types.TxTypeWriteData.ID())
 
-	n += encoding.BytesBinarySize(v.Data)
+	n += v.Entry.BinarySize()
 
 	return n
 }
@@ -1216,7 +1287,7 @@ func (v *WriteDataTo) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Recipient)
 
-	n += encoding.BytesBinarySize(v.Data)
+	n += v.Entry.BinarySize()
 
 	return n
 }
@@ -1337,6 +1408,21 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *DataEntry) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.ExtIds))))
+	for i, v := range v.ExtIds {
+		_ = i
+		buffer.Write(encoding.BytesMarshalBinary(v))
+
+	}
+
+	buffer.Write(encoding.BytesMarshalBinary(v.Data))
 
 	return buffer.Bytes(), nil
 }
@@ -1514,6 +1600,18 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (v *SegWitDataEntry) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSegWitDataEntry.ID()))
+
+	buffer.Write(encoding.StringMarshalBinary(v.EntryUrl))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
+
+	return buffer.Bytes(), nil
+}
+
 func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -1687,7 +1785,11 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeWriteData.ID()))
 
-	buffer.Write(encoding.BytesMarshalBinary(v.Data))
+	if b, err := v.Entry.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Entry: %w", err)
+	} else {
+		buffer.Write(b)
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -1699,7 +1801,11 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Recipient))
 
-	buffer.Write(encoding.BytesMarshalBinary(v.Data))
+	if b, err := v.Entry.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Entry: %w", err)
+	} else {
+		buffer.Write(b)
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -1931,6 +2037,36 @@ func (v *DataAccount) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
+
+	return nil
+}
+
+func (v *DataEntry) UnmarshalBinary(data []byte) error {
+	var lenExtIds uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ExtIds: %w", err)
+	} else {
+		lenExtIds = x
+	}
+	data = data[encoding.UvarintBinarySize(lenExtIds):]
+
+	v.ExtIds = make([][]byte, lenExtIds)
+	for i := range v.ExtIds {
+		if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding ExtIds[%d]: %w", i, err)
+		} else {
+			v.ExtIds[i] = x
+		}
+		data = data[encoding.BytesBinarySize(v.ExtIds[i]):]
+
+	}
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
+	}
+	data = data[encoding.BytesBinarySize(v.Data):]
 
 	return nil
 }
@@ -2227,6 +2363,32 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 		v.Duration = x
 	}
 	data = data[encoding.DurationBinarySize(v.Duration):]
+
+	return nil
+}
+
+func (v *SegWitDataEntry) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeSegWitDataEntry
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding EntryUrl: %w", err)
+	} else {
+		v.EntryUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.EntryUrl):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
+	data = data[encoding.ChainBinarySize(&v.EntryHash):]
 
 	return nil
 }
@@ -2571,12 +2733,10 @@ func (v *WriteData) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
-	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
+	if err := v.Entry.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
 	}
-	data = data[encoding.BytesBinarySize(v.Data):]
+	data = data[v.Entry.BinarySize():]
 
 	return nil
 }
@@ -2597,12 +2757,10 @@ func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Recipient):]
 
-	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
+	if err := v.Entry.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
 	}
-	data = data[encoding.BytesBinarySize(v.Data):]
+	data = data[v.Entry.BinarySize():]
 
 	return nil
 }
@@ -2624,6 +2782,19 @@ func (v *CreateKeyBook) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Url = v.Url
 	u.Pages = encoding.ChainSetToJSON(v.Pages)
+	return json.Marshal(&u)
+}
+
+func (v *DataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ExtIds []*string `json:"extIds,omitempty"`
+		Data   *string   `json:"data,omitempty"`
+	}{}
+	u.ExtIds = make([]*string, len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Data = encoding.BytesToJSON(v.Data)
 	return json.Marshal(&u)
 }
 
@@ -2686,6 +2857,16 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Metric = v.Metric
 	u.Duration = encoding.DurationToJSON(v.Duration)
+	return json.Marshal(&u)
+}
+
+func (v *SegWitDataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		EntryUrl  string `json:"entryUrl,omitempty"`
+		EntryHash string `json:"entryHash,omitempty"`
+	}{}
+	u.EntryUrl = v.EntryUrl
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	return json.Marshal(&u)
 }
 
@@ -2763,24 +2944,6 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *WriteData) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Data *string `json:"data,omitempty"`
-	}{}
-	u.Data = encoding.BytesToJSON(v.Data)
-	return json.Marshal(&u)
-}
-
-func (v *WriteDataTo) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Recipient string  `json:"recipient,omitempty"`
-		Data      *string `json:"data,omitempty"`
-	}{}
-	u.Recipient = v.Recipient
-	u.Data = encoding.BytesToJSON(v.Data)
-	return json.Marshal(&u)
-}
-
 func (v *ChainParams) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Data     *string `json:"data,omitempty"`
@@ -2815,6 +2978,35 @@ func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Pages: %w", err)
 	} else {
 		v.Pages = x
+	}
+	return nil
+}
+
+func (v *DataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ExtIds []*string `json:"extIds,omitempty"`
+		Data   *string   `json:"data,omitempty"`
+	}{}
+	u.ExtIds = make([]*string, len(v.ExtIds))
+	for i, x := range v.ExtIds {
+		u.ExtIds[i] = encoding.BytesToJSON(x)
+	}
+	u.Data = encoding.BytesToJSON(v.Data)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ExtIds = make([][]byte, len(u.ExtIds))
+	for i, x := range u.ExtIds {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding ExtIds[%d]: %w", i, err)
+		} else {
+			v.ExtIds[i] = x
+		}
+	}
+	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
+		return fmt.Errorf("error decoding Data: %w", err)
+	} else {
+		v.Data = x
 	}
 	return nil
 }
@@ -2932,6 +3124,25 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Duration: %w", err)
 	} else {
 		v.Duration = x
+	}
+	return nil
+}
+
+func (v *SegWitDataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		EntryUrl  string `json:"entryUrl,omitempty"`
+		EntryHash string `json:"entryHash,omitempty"`
+	}{}
+	u.EntryUrl = v.EntryUrl
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.EntryUrl = u.EntryUrl
+	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
 	}
 	return nil
 }
@@ -3087,41 +3298,6 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding NewKey: %w", err)
 	} else {
 		v.NewKey = x
-	}
-	return nil
-}
-
-func (v *WriteData) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Data *string `json:"data,omitempty"`
-	}{}
-	u.Data = encoding.BytesToJSON(v.Data)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
-	}
-	return nil
-}
-
-func (v *WriteDataTo) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Recipient string  `json:"recipient,omitempty"`
-		Data      *string `json:"data,omitempty"`
-	}{}
-	u.Recipient = v.Recipient
-	u.Data = encoding.BytesToJSON(v.Data)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Recipient = u.Recipient
-	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
 	}
 	return nil
 }
