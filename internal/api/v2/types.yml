@@ -136,6 +136,16 @@ UrlQuery:
     type: string
     is-url: true
 
+KeyPageIndexQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+  - UrlQuery
+  fields:
+    - name: Key
+      type: string
+
+
 TxHistoryQuery:
   non-binary: true
   incomparable: true
@@ -239,7 +249,6 @@ TxResponse:
   - name: Delivered
     type: bool
 
-
 DataEntry:
   fields:
     - name: ExtIds
@@ -288,3 +297,14 @@ DataEntrySetQueryResponse:
       type: uvarint
     - name: Total
       type: uvarint
+
+ResponseKeyPageIndex:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: KeyBook
+      type: string
+    - name: KeyPage
+      type: string
+    - name: Index
+      type: int
