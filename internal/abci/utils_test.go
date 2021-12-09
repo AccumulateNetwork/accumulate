@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -37,6 +38,8 @@ import (
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
+
+var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
 	db := new(state.StateDB)
@@ -80,6 +83,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
+	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
 		Local:  n.client,
 		DB:     n.db,
@@ -88,8 +92,8 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 		Key:    bvcKey,
 		Network: config.Network{
 			Type:     config.BlockValidator,
-			ID:       t.Name(),
-			BvnNames: []string{t.Name()},
+			ID:       subnet,
+			BvnNames: []string{subnet},
 		},
 	})
 	require.NoError(t, err)
@@ -112,7 +116,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	kv := new(memory.DB)
 	_ = kv.InitDB("", nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
-		SubnetID:    t.Name(),
+		SubnetID:    subnet,
 		NetworkType: config.BlockValidator,
 		GenesisTime: time.Now(),
 		Validators: []tmtypes.GenesisValidator{
@@ -126,7 +130,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       t.Name(),
+		ChainId:       subnet,
 		AppStateBytes: state,
 	})
 
