@@ -43,6 +43,7 @@ type bucket string
 
 const (
 	bucketEntry            = bucket("StateEntries")
+	bucketDataEntry        = bucket("DataEntries") //map of entry hash to WriteData Entry
 	bucketTx               = bucket("Transactions")
 	bucketMainToPending    = bucket("MainToPending") //main TXID to PendingTXID
 	bucketPendingTx        = bucket("PendingTx")     //Store pending transaction
@@ -57,6 +58,18 @@ const (
 
 func (b bucket) String() string { return string(b) }
 func (b bucket) Bytes() []byte  { return []byte(b) }
+
+type dataBlock struct {
+	TxId      []byte //TxId is the reference to the transaction that created the data entry
+	EntryHash []byte //EntryHash is the merkle root of the data entry
+	Data      []byte //Data is the marshaled protocol.DataEntry
+}
+
+type dataBlockUpdates struct {
+	bucket    bucket
+	entries   []dataBlock
+	stateData *Object //the data chain state
+}
 
 type blockUpdates struct {
 	bucket    bucket
@@ -163,6 +176,25 @@ func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) ([]types
 	return resultHashes, mgr.Height(), nil
 }
 
+//GetDataChainRange get the entryHashes in a given range
+func (s *StateDB) GetDataChainRange(chainId []byte, start int64, end int64) ([]types.Bytes32, int64, error) {
+	mgr, err := s.ManageChain(bucketDataEntry, chainId)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	h, err := mgr.Entries(start, end)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	resultHashes := make([]types.Bytes32, len(h))
+	for i, h := range h {
+		copy(resultHashes[i][:], h)
+	}
+	return resultHashes, mgr.Height(), nil
+}
+
 //GetTx get the transaction by transaction ID
 func (s *StateDB) GetTx(txId []byte) (tx []byte, err error) {
 	tx, err = s.dbMgr.Key(bucketTx, txId).Get()
@@ -212,6 +244,24 @@ func (tx *DBTransaction) AddSynthTx(parentTxId types.Bytes, synthTxId types.Byte
 	txMap[parentHash] = append(txMap[parentHash], transactionStateInfo{synthTxObject, nil, synthTxId})
 }
 
+// AddDataEntry append the data entry to the data chain then update the
+func (tx *DBTransaction) AddDataEntry(chainId *types.Bytes32, txid []byte, entryHash []byte, dataEntry []byte, dataState *Object) error {
+	tx.state.logDebug("AddDataEntry", "chainId", logging.AsHex(chainId),
+		"entryHash", logging.AsHex(entryHash), "entry", logging.AsHex(dataEntry))
+
+	if len(entryHash) != 32 {
+		return fmt.Errorf("cannot add data entry without an entry hash!")
+	}
+
+	if dataEntry == nil {
+		return fmt.Errorf("cannot add data entry without an entry!")
+	}
+
+	tx.addDataEntry(chainId, txid, entryHash, dataEntry, dataState)
+
+	return nil
+}
+
 // AddTransaction queues (pending) transaction signatures and (optionally) an
 // accepted transaction for storage to their respective chains.
 func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes, txPending, txAccepted *Object) error {
@@ -224,7 +274,7 @@ func (tx *DBTransaction) AddTransaction(chainId *types.Bytes32, txId types.Bytes
 	chainType, _ := binary.Uvarint(txPending.Entry)
 	if types.ChainType(chainType) != types.ChainTypePendingTransaction {
 		return fmt.Errorf("expecting pending transaction chain type of %s, but received %s",
-			types.ChainTypePendingTransaction.Name(), types.TxType(chainType).Name())
+			types.ChainTypePendingTransaction.Name(), types.ChainType(chainType).Name())
 	}
 
 	if txAccepted != nil {
@@ -376,6 +426,28 @@ func (tx *DBTransaction) UpdateNonce(chainId *types.Bytes32, object *Object) {
 	tx.addStateEntry(chainId, nil, object)
 }
 
+func (tx *DBTransaction) addDataEntry(chainId *types.Bytes32, txid []byte, entryHash []byte, dataEntry []byte, dataState *Object) {
+	tx.state.mutex.Lock()
+	dataUpdates := tx.dataUpdates[*chainId]
+
+	if dataUpdates == nil {
+		dataUpdates = new(dataBlockUpdates)
+		tx.dataUpdates[*chainId] = dataUpdates
+	}
+
+	if entryHash != nil {
+		dataUpdates.entries = append(dataUpdates.entries, dataBlock{txid, entryHash[:], dataEntry})
+	}
+
+	dataUpdates.stateData = dataState
+	tx.state.mutex.Unlock()
+
+	//now update the chain state for the data chain
+	txi := types.Bytes32{}
+	txi.FromBytes(txid)
+	tx.addStateEntry(chainId, &txi, dataState)
+}
+
 func (tx *DBTransaction) addStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *Object) {
 	begin := time.Now()
 
@@ -482,7 +554,7 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 	//add all the transaction states that occurred during this block for this chain (in order of appearance)
 	for _, txn := range currentState.txId {
 		//store the txHash for the chains, they will be mapped back to the above recorded tx's
-		tx.state.logDebug("AddHash", "hash", logging.AsHex(tx))
+		tx.state.logDebug("AddHash", "hash", logging.AsHex(txn))
 		mm.AddHash(managed.Hash((*txn)[:]))
 	}
 
@@ -522,6 +594,33 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 	//	s.bptMgr.Bpt.Insert(chainId, *mdRoot)
 	//}
 
+	return nil
+}
+
+func (tx *DBTransaction) writeDataState(chainId *types.Bytes32) error {
+	mgr, err := tx.state.ManageChain(bucketDataEntry, chainId[:])
+	if err != nil {
+		return err
+	}
+
+	dataEntries := tx.dataUpdates[*chainId]
+
+	if dataEntries == nil {
+		return fmt.Errorf("not a data chain %x, no data was stored", chainId[:])
+	}
+
+	//add all the data entries that occurred during this block for this chain (in order of appearance)
+	for _, entry := range dataEntries.entries {
+		//store the entry hash for the data
+		tx.state.logDebug("AddHash", "hash", logging.AsHex(entry.EntryHash))
+		mgr.AddEntry(entry.EntryHash)
+		tx.GetDB().Key(bucketEntry, chainId.Bytes(), entry.EntryHash).PutBatch(entry.Data)
+	}
+
+	// The bpt stores the root of the data merkle state
+	anchor := types.Bytes32{}
+	anchor.FromBytes(mgr.Anchor())
+	tx.state.bptMgr.Bpt.Insert(storage.ComputeKey(bucketDataEntry, chainId), anchor)
 	return nil
 }
 
@@ -748,6 +847,14 @@ func (tx *DBTransaction) commitUpdates(orderedUpdates []types.Bytes32, err error
 			return err
 		}
 
+		if _, ok := tx.dataUpdates[chainId]; ok {
+			//if this is a data chain, then we'll have data entries we need to store
+			err = tx.writeDataState(&chainId)
+			if err != nil {
+				return err
+			}
+		}
+
 		//TODO: figure out how to do this with new way state is derived
 		//if len(currentState.pendingTx) != 0 {
 		//	mdRoot := v.PendingChain.MS.GetMDRoot()
@@ -783,6 +890,7 @@ func (s *StateDB) RootHash() []byte {
 
 func (tx *DBTransaction) cleanupTx() {
 	tx.updates = make(map[types.Bytes32]*blockUpdates)
+	tx.dataUpdates = make(map[types.Bytes32]*dataBlockUpdates)
 
 	// The compiler optimizes this into a constant-time operation
 	for k := range tx.writes {
