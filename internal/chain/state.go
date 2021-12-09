@@ -389,7 +389,7 @@ func (m *StateManager) Commit() error {
 					store.record.Header().ChainUrl)
 			}
 			return m.dbTx.AddDataEntry((*types.Bytes32)(store.chainId), m.txHash[:],
-				cache.entryHash, cache.entryHash, &state.Object{Entry: data})
+				cache.entryHash, cache.dataEntry, &state.Object{Entry: data})
 		default:
 			panic(fmt.Errorf("invalid store kind %d", store.kind))
 		}

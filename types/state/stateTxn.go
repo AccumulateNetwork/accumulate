@@ -21,6 +21,7 @@ func (s *StateDB) Begin() *DBTransaction {
 		state: s,
 	}
 	dbTx.updates = make(map[types.Bytes32]*blockUpdates)
+	dbTx.dataUpdates = make(map[types.Bytes32]*dataBlockUpdates)
 	dbTx.writes = map[storage.Key][]byte{}
 	dbTx.transactions.reset()
 	return dbTx
