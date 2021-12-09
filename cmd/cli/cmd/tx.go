@@ -121,7 +121,7 @@ func GetTX(hash string) (string, error) {
 	defer func() { Client.Timeout = t }()
 
 	if TxWait > 0 {
-		Client.Timeout = TxWait * 11 / 10
+		Client.Timeout = TxWait * 2
 	}
 
 	res, err := getTX(txid, TxWait)
@@ -143,7 +143,7 @@ func GetTX(hash string) (string, error) {
 	}
 
 	if TxWaitSynth > 0 {
-		Client.Timeout = TxWaitSynth * 11 / 10
+		Client.Timeout = TxWaitSynth * 2
 	}
 
 	errg := new(errgroup.Group)
@@ -160,6 +160,9 @@ func GetTX(hash string) (string, error) {
 				return err
 			}
 
+			if WantJsonOutput {
+				out += "\n"
+			}
 			out += o
 			return nil
 		})
