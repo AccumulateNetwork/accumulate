@@ -364,3 +364,45 @@ SyntheticMirror:
         type: state.Object
         pointer: true
         marshal-as: reference
+
+RequestDataEntry:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+
+RequestDataEntryHash:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: EntryHash
+      type: chain
+
+RequestDataEntrySet:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: Start
+      type: uvarint
+    - name: Limit
+      type: uvarint
+
+ResponseDataEntry:
+  fields:
+    - name: EntryHash
+      type: chain
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
+
+ResponseDataEntrySet:
+  fields:
+    - name: DataEntries
+      type: slice
+      slice:
+        type: ResponseDataEntry
+        marshal-as: reference
+    - name: Total
+      type: uvarint

@@ -129,6 +129,31 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
+type RequestDataEntry struct {
+	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+}
+
+type RequestDataEntryHash struct {
+	Url       string   `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+}
+
+type RequestDataEntrySet struct {
+	Url   string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Start uint64 `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Limit uint64 `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+}
+
+type ResponseDataEntry struct {
+	EntryHash [32]byte  `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+}
+
+type ResponseDataEntrySet struct {
+	DataEntries []ResponseDataEntry `json:"dataEntries,omitempty" form:"dataEntries" query:"dataEntries" validate:"required"`
+	Total       uint64              `json:"total,omitempty" form:"total" query:"total" validate:"required"`
+}
+
 type SegWitDataEntry struct {
 	EntryUrl  string   `json:"entryUrl,omitempty" form:"entryUrl" query:"entryUrl" validate:"required,acc-url"`
 	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
@@ -614,6 +639,74 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 	}
 
 	if !(v.Duration == u.Duration) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestDataEntry) Equal(u *RequestDataEntry) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestDataEntryHash) Equal(u *RequestDataEntryHash) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(v.EntryHash == u.EntryHash) {
+		return false
+	}
+
+	return true
+}
+
+func (v *RequestDataEntrySet) Equal(u *RequestDataEntrySet) bool {
+	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(v.Start == u.Start) {
+		return false
+	}
+
+	if !(v.Limit == u.Limit) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ResponseDataEntry) Equal(u *ResponseDataEntry) bool {
+	if !(v.EntryHash == u.EntryHash) {
+		return false
+	}
+
+	if !(v.Entry.Equal(&u.Entry)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ResponseDataEntrySet) Equal(u *ResponseDataEntrySet) bool {
+	if !(len(v.DataEntries) == len(u.DataEntries)) {
+		return false
+	}
+
+	for i := range v.DataEntries {
+		v, u := v.DataEntries[i], u.DataEntries[i]
+		if !(v.Equal(&u)) {
+			return false
+		}
+
+	}
+
+	if !(v.Total == u.Total) {
 		return false
 	}
 
@@ -1127,6 +1220,61 @@ func (v *MetricsRequest) BinarySize() int {
 	return n
 }
 
+func (v *RequestDataEntry) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.Url)
+
+	return n
+}
+
+func (v *RequestDataEntryHash) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.Url)
+
+	n += encoding.ChainBinarySize(&v.EntryHash)
+
+	return n
+}
+
+func (v *RequestDataEntrySet) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.Url)
+
+	n += encoding.UvarintBinarySize(v.Start)
+
+	n += encoding.UvarintBinarySize(v.Limit)
+
+	return n
+}
+
+func (v *ResponseDataEntry) BinarySize() int {
+	var n int
+
+	n += encoding.ChainBinarySize(&v.EntryHash)
+
+	n += v.Entry.BinarySize()
+
+	return n
+}
+
+func (v *ResponseDataEntrySet) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(uint64(len(v.DataEntries)))
+
+	for _, v := range v.DataEntries {
+		n += v.BinarySize()
+
+	}
+
+	n += encoding.UvarintBinarySize(v.Total)
+
+	return n
+}
+
 func (v *SegWitDataEntry) BinarySize() int {
 	var n int
 
@@ -1633,6 +1781,69 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Metric))
 
 	buffer.Write(encoding.DurationMarshalBinary(v.Duration))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *RequestDataEntryHash) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.Url))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Start))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Limit))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *ResponseDataEntry) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
+
+	if b, err := v.Entry.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Entry: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *ResponseDataEntrySet) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.DataEntries))))
+	for i, v := range v.DataEntries {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding DataEntries[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
+
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Total))
 
 	return buffer.Bytes(), nil
 }
@@ -2423,6 +2634,104 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *RequestDataEntry) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[encoding.StringBinarySize(v.Url):]
+
+	return nil
+}
+
+func (v *RequestDataEntryHash) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[encoding.StringBinarySize(v.Url):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
+	data = data[encoding.ChainBinarySize(&v.EntryHash):]
+
+	return nil
+}
+
+func (v *RequestDataEntrySet) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Url: %w", err)
+	} else {
+		v.Url = x
+	}
+	data = data[encoding.StringBinarySize(v.Url):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Start: %w", err)
+	} else {
+		v.Start = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Start):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Limit: %w", err)
+	} else {
+		v.Limit = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Limit):]
+
+	return nil
+}
+
+func (v *ResponseDataEntry) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
+	data = data[encoding.ChainBinarySize(&v.EntryHash):]
+
+	if err := v.Entry.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
+	}
+	data = data[v.Entry.BinarySize():]
+
+	return nil
+}
+
+func (v *ResponseDataEntrySet) UnmarshalBinary(data []byte) error {
+	var lenDataEntries uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding DataEntries: %w", err)
+	} else {
+		lenDataEntries = x
+	}
+	data = data[encoding.UvarintBinarySize(lenDataEntries):]
+
+	v.DataEntries = make([]ResponseDataEntry, lenDataEntries)
+	for i := range v.DataEntries {
+		if err := v.DataEntries[i].UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding DataEntries[%d]: %w", i, err)
+		}
+		data = data[v.DataEntries[i].BinarySize():]
+
+	}
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Total: %w", err)
+	} else {
+		v.Total = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Total):]
+
+	return nil
+}
+
 func (v *SegWitDataEntry) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeSegWitDataEntry
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
@@ -2947,6 +3256,26 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *RequestDataEntryHash) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url       string `json:"url,omitempty"`
+		EntryHash string `json:"entryHash,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	return json.Marshal(&u)
+}
+
+func (v *ResponseDataEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		EntryHash string    `json:"entryHash,omitempty"`
+		Entry     DataEntry `json:"entry,omitempty"`
+	}{}
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.Entry = v.Entry
+	return json.Marshal(&u)
+}
+
 func (v *SegWitDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		EntryUrl  string `json:"entryUrl,omitempty"`
@@ -3212,6 +3541,44 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Duration = x
 	}
+	return nil
+}
+
+func (v *RequestDataEntryHash) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url       string `json:"url,omitempty"`
+		EntryHash string `json:"entryHash,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
+	return nil
+}
+
+func (v *ResponseDataEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		EntryHash string    `json:"entryHash,omitempty"`
+		Entry     DataEntry `json:"entry,omitempty"`
+	}{}
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.Entry = v.Entry
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
+	v.Entry = u.Entry
 	return nil
 }
 
