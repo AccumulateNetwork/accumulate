@@ -318,7 +318,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 			wd.Entry.Data = []byte("thequickbrownfoxjumpsoverthelazydog")
 
-			tx, err := transactions.New("FooBar/oof", 1, edSigner(adiKey, 1), wd)
+			tx, err := transactions.New("FooBar/oof", 1, edSigner(adiKey, 2), wd)
 			require.NoError(t, err)
 			send(tx)
 		})
