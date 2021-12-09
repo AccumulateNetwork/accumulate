@@ -114,15 +114,16 @@ func (s *StateDB) Open(dbFilename string, useMemDB bool, debug bool, logger log.
 		s.logger = logger.With("module", "statedb")
 	}
 
-	dbType := "badger"
+	var dbType, logName string
 	if useMemDB {
-		dbType = "memory"
+		dbType, logName = "memory", "memdb"
+	} else {
+		dbType, logName = "badger", "badger"
 	}
 
 	if logger != nil {
-		logger = logger.With("module", dbType)
+		logger = logger.With("module", logName)
 	}
-
 	s.dbMgr, err = database.NewDBManager(dbType, dbFilename, logger)
 	if err != nil {
 		return err

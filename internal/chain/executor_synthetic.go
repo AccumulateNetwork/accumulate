@@ -95,7 +95,7 @@ func (m *Executor) addSystemTxns(txns ...*transactions.GenTransaction) error {
 }
 
 func (m *Executor) addAnchorTxn() error {
-	srcUrl, err := nodeUrl(m.DB, m.SubnetType)
+	srcUrl, err := nodeUrl(m.DB, m.Network.Type)
 	if err != nil {
 		return err
 	}
@@ -142,7 +142,7 @@ func (m *Executor) addAnchorTxn() error {
 	m.logDebug("Creating anchor txn", "root", logging.AsHex(body.Root), "chains", logging.AsHex(body.ChainAnchor), "synth", logging.AsHex(body.SynthTxnAnchor))
 
 	var txns []*transactions.GenTransaction
-	switch m.SubnetType {
+	switch m.Network.Type {
 	case config.Directory:
 		// TODO Send anchors from DN to all BVNs
 

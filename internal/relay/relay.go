@@ -13,7 +13,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
@@ -91,25 +90,20 @@ func (r *Relay) Start() error {
 	})
 
 	for _, c := range r.client {
-		ec, ok := c.(interface {
-			client.EventsClient
-			service.Service
-		})
-		if !ok {
-			continue
-		}
-
-		err := ec.Start()
-		if err != nil {
-			failed = true
-			return err
+		svc, _ := c.(service.Service)
+		if svc != nil {
+			err := svc.Start()
+			if err != nil {
+				failed = true
+				return err
+			}
 		}
 
 		// Subscribing to all transactions is messy, but making one subscription
 		// per TX hash does not work well. Tendermint does not clean up
 		// subscriptions sufficiently well, so old unused channels lead to
 		// blockages.
-		ch, err := ec.Subscribe(context.Background(), "acc-relay", "tm.event = 'Tx'")
+		ch, err := c.Subscribe(context.Background(), "acc-relay", "tm.event = 'Tx'")
 		if err != nil {
 			failed = true
 			return err
@@ -120,8 +114,8 @@ func (r *Relay) Start() error {
 		})
 
 		defer func() {
-			if failed {
-				_ = ec.Stop()
+			if failed && svc != nil {
+				_ = svc.Stop()
 			}
 		}()
 	}
@@ -160,15 +154,12 @@ func (r *Relay) Stop() error {
 	var errs []string
 
 	for _, c := range r.client {
-		ec, ok := c.(interface {
-			client.EventsClient
-			service.Service
-		})
+		svc, ok := c.(service.Service)
 		if !ok {
 			continue
 		}
 
-		err := ec.Stop()
+		err := svc.Stop()
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -272,7 +263,7 @@ func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedSt
 				fmt.Printf("Send TX %X\n", sha256.Sum256(tx))
 			}
 			bs.Status[i].NetworkId = txb.networkId
-			batches[i].BroadcastTxSync(context.Background(), tx)
+			_, _ = batches[i].BroadcastTxSync(context.Background(), tx)
 		}
 	}
 

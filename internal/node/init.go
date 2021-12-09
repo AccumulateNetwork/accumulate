@@ -23,8 +23,6 @@ const nodeDirPerm = 0755
 
 type InitOptions struct {
 	WorkDir    string
-	ShardName  string
-	SubnetID   string
 	Port       int
 	GenesisDoc *types.GenesisDoc
 	Config     []*cfg.Config
@@ -45,13 +43,14 @@ func Init(opts InitOptions) (err error) {
 	fmt.Println("Tendermint Initialize")
 
 	config := opts.Config
+	subnetID := config[0].Accumulate.Network.ID
 	genVals := make([]types.GenesisValidator, 0, len(config))
 
 	var networkType cfg.NetworkType
 	for i, config := range config {
 		if i == 0 {
-			networkType = config.Accumulate.Type
-		} else if config.Accumulate.Type != networkType {
+			networkType = config.Accumulate.Network.Type
+		} else if config.Accumulate.Network.Type != networkType {
 			return errors.New("Cannot initialize multiple networks at once")
 		}
 
@@ -59,12 +58,10 @@ func Init(opts InitOptions) (err error) {
 		nodeDir := path.Join(opts.WorkDir, nodeDirName)
 		config.SetRoot(nodeDir)
 
-		config.ProxyApp = ""
-		config.P2P.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmP2pPortOffset)
-		config.RPC.ListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
-		config.RPC.GRPCListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
+		config.P2P.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmP2pPortOffset)
+		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
+		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+networks.TmPrometheusPortOffset)
-		config.Instrumentation.Prometheus = true
 
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
@@ -76,7 +73,7 @@ func Init(opts InitOptions) (err error) {
 			return fmt.Errorf("failed to create data dir: %v", err)
 		}
 
-		if err := initFilesWithConfig(config, &opts.SubnetID); err != nil {
+		if err := initFilesWithConfig(config, &subnetID); err != nil {
 			return err
 		}
 
@@ -110,8 +107,8 @@ func Init(opts InitOptions) (err error) {
 		db := new(memory.DB)
 		_ = db.InitDB("", nil)
 		root, err := genesis.Init(db, genesis.InitOpts{
-			SubnetID:    opts.SubnetID,
-			NetworkType: config[0].Accumulate.Type,
+			SubnetID:    subnetID,
+			NetworkType: config[0].Accumulate.Network.Type,
 			GenesisTime: genTime,
 			Validators:  genVals,
 		})
@@ -122,7 +119,7 @@ func Init(opts InitOptions) (err error) {
 		}
 
 		genDoc = &types.GenesisDoc{
-			ChainID:         opts.SubnetID,
+			ChainID:         subnetID,
 			GenesisTime:     genTime,
 			InitialHeight:   2,
 			Validators:      genVals,
@@ -172,11 +169,10 @@ func Init(opts InitOptions) (err error) {
 			config.P2P.AddrBookStrict = true
 			config.P2P.AllowDuplicateIP = false
 		}
-		config.Moniker = fmt.Sprintf("Node%d", i)
+		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.ID, i)
 
-		config.Accumulate.WebsiteListenAddress = fmt.Sprintf("%s:8080", opts.ListenIP[i])
-		config.Accumulate.API.JSONListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
-		config.Accumulate.API.RESTListenAddress = fmt.Sprintf("%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterRestPortOffset)
+		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
+		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
 
 		err := cfg.Store(config)
 		if err != nil {
