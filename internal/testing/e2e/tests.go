@@ -44,13 +44,13 @@ func (s *Suite) TestCreateLiteAccount() {
 
 	var total int64
 	var txids [][]byte
-	for i := 0; i < 1; i++ {
+	for i := 0; i < 10; i++ {
 		if i > 2 && testing.Short() {
 			break
 		}
 
 		exch := apitypes.NewTokenTx(types.String(senderUrl.String()))
-		for i := 0; i < 1; i++ {
+		for i := 0; i < 10; i++ {
 			if i > 2 && testing.Short() {
 				break
 			}
