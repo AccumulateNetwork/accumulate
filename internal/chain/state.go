@@ -220,8 +220,8 @@ func (m *StateManager) UpdateNonce(record state.Chain) {
 	m.store(record, updateNonce)
 }
 
-//UpdateCredits update the credits used for a transaction
-func (m *StateManager) UpdateCredits(record state.Chain) {
+//UpdateCreditBalance update the credits used for a transaction
+func (m *StateManager) UpdateCreditBalance(record state.Chain) {
 	//todo implement
 }
 

@@ -164,7 +164,7 @@ func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
 }
 
 func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
-	//	r, err := GetDataByUrl
+	//todo implement query data functionality
 	return nil
 }
 
@@ -290,7 +290,7 @@ type e2eDUT struct {
 }
 
 func (n e2eDUT) GetDataByUrl(url string) (*ctypes.ResultABCIQuery, error) {
-	//	return n.query.QueryDataByUrl(url)
+	//todo: implement query data by url
 	return nil, nil
 }
 

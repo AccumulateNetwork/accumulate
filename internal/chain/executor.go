@@ -362,8 +362,8 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	//if !page.DebitCredits(uint64(cost)) {
 	//	return nil, fmt.Errorf("insufficent credits for the transaction")
 	//}
+	//
 	//st.UpdateCreditBalance(page)
-
 	st.UpdateNonce(page)
 	return st, nil
 }

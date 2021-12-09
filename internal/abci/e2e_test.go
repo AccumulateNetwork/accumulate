@@ -322,10 +322,6 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, err)
 			send(tx)
 		})
-
-		r2 := n.GetChainDataByUrl("FooBar/oof")
-		_ = r2
-
 	})
 }
 
