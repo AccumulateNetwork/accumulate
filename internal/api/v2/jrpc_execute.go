@@ -271,22 +271,37 @@ loop:
 	}
 
 	for i, rq := range batches {
-		if len(rq) == 0 {
-			continue
+		var res jsonrpc.RPCResponses
+		var err error
+		switch len(rq) {
+		case 0:
+			// Nothing to do
+		case 1:
+			// Send single (Tendermint JSON-RPC behaves badly)
+			m.logDebug("Sending call", "remote", m.opts.Remote[i])
+			r, e := m.remote[i].Call(rq[0].Method, rq[0].Params)
+			res, err = jsonrpc.RPCResponses{r}, e
+		default:
+			// Send batch
+			m.logDebug("Sending call batch", "remote", m.opts.Remote[i])
+			res, err = m.remote[i].CallBatch(rq)
 		}
-
-		// Send batch
-		res, err := m.remote[i].CallBatch(rq)
 
 		// Forward results
 		for j := range rq {
 			ex := lup[rq[j]]
 			switch {
 			case err != nil:
+				m.logError("Execute batch failed", "error", err, "remote", m.opts.Remote[i])
 				ex.result = internalError(err)
 			case res[j].Error != nil:
 				err := res[j].Error
-				ex.result = jsonrpc2.NewError(jsonrpc2.ErrorCode(err.Code), err.Message, err.Data)
+				code := jsonrpc2.ErrorCode(err.Code)
+				if code.IsReserved() {
+					ex.result = jsonrpc2.NewError(ErrCodeDispatch, err.Message, err)
+				} else {
+					ex.result = jsonrpc2.NewError(code, err.Message, err.Data)
+				}
 			default:
 				ex.result = res[j].Result
 			}
