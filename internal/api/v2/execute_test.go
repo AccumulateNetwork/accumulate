@@ -64,7 +64,7 @@ func makeApiAddr(t *testing.T, addr net.Addr) string {
 }
 
 func makeLogger(t *testing.T) tmlog.Logger {
-	w := logging.TestLogWriter(t)("plain")
+	w, _ := logging.TestLogWriter(t)("plain")
 	zl := zerolog.New(w)
 	tm, err := logging.NewTendermintLogger(zl, "error", false)
 	require.NoError(t, err)

@@ -25,8 +25,8 @@ func NewTest(t *testing.T, q *Query) *API {
 	t.Helper()
 	port := GetFreePort(t)
 	config := &cfg.API{
-		JSONListenAddress: fmt.Sprintf("localhost:%d", port),
-		RESTListenAddress: fmt.Sprintf("localhost:%d", port+1),
+		ListenAddress:    fmt.Sprintf("localhost:%d", port),
+		PrometheusServer: "http://18.119.26.7:9090",
 	}
 	v, err := protocol.NewValidator()
 	require.NoError(t, err)

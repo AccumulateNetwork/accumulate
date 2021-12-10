@@ -13,15 +13,14 @@ func TestPersistence(t *testing.T) {
 	require.NoError(t, os.Mkdir(filepath.Join(dir, "config"), 0777))
 
 	// Create
-	cfg := Default(BlockValidator, Follower)
+	cfg := Default(BlockValidator, Follower, t.Name())
 	cfg.SetRoot(dir)
-	cfg.Accumulate.API.JSONListenAddress = "api-json-listen"
-	cfg.Accumulate.API.RESTListenAddress = "api-rest-listen"
+	cfg.Accumulate.API.ListenAddress = "api-listen"
 
 	// Slice values are unmarshalled as empty. This avoids issues with empty
 	// slice != nil.
 	cfg.StateSync.RPCServers = []string{}
-	cfg.Accumulate.Networks = []string{}
+	cfg.Accumulate.Network.BvnNames = []string{}
 
 	// Store
 	require.NoError(t, Store(cfg))

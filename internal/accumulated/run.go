@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
+	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
@@ -34,26 +34,34 @@ type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
+	done  chan struct{}
 	db    *state.StateDB
 	node  *node.Node
 	relay *relay.Relay
+	query *apiv1.Query
 	api   *http.Server
+	pv    *privval.FilePV
+	jrpc  *api.JrpcMethods
+
+	// knobs for tests
+	IsTest   bool
+	UseMemDB bool
 }
 
 func Load(dir string, newWriter func(string) (io.Writer, error)) (*Daemon, error) {
 	var daemon Daemon
+
 	var err error
 	daemon.Config, err = config.Load(dir)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %v", err)
 	}
 
-	var logWriter io.Writer
 	if newWriter == nil {
-		logWriter = os.Stderr
-	} else {
-		logWriter, err = newWriter(daemon.Config.LogFormat)
+		newWriter = logging.NewConsoleWriter
 	}
+
+	logWriter, err := newWriter(daemon.Config.LogFormat)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize log writer: %v", err)
 	}
@@ -71,7 +79,27 @@ func Load(dir string, newWriter func(string) (io.Writer, error)) (*Daemon, error
 	return &daemon, nil
 }
 
-func (d *Daemon) Start() error {
+func (d *Daemon) Key() crypto.PrivKey {
+	return d.pv.Key.PrivKey
+}
+
+func (d *Daemon) Query_TESTONLY() *apiv1.Query    { return d.query }
+func (d *Daemon) DB_TESTONLY() *state.StateDB     { return d.db }
+func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
+func (d *Daemon) Jrpc_TESTONLY() *api.JrpcMethods { return d.jrpc }
+
+func (d *Daemon) Start() (err error) {
+	if d.done != nil {
+		return fmt.Errorf("already started")
+	}
+	d.done = make(chan struct{})
+
+	defer func() {
+		if err != nil {
+			close(d.done)
+		}
+	}()
+
 	if d.Config.Accumulate.SentryDSN != "" {
 		opts := sentry.ClientOptions{
 			Dsn:           d.Config.Accumulate.SentryDSN,
@@ -91,13 +119,20 @@ func (d *Daemon) Start() error {
 	dbPath := filepath.Join(d.Config.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
 	d.db = new(state.StateDB)
-	err := d.db.Open(dbPath, false, false, d.Logger)
+	err = d.db.Open(dbPath, d.UseMemDB, false, d.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
 
+	// Close the database if start fails (mostly for tests)
+	defer func() {
+		if err != nil {
+			_ = d.db.GetDB().Close()
+		}
+	}()
+
 	// read private validator
-	pv, err := privval.LoadFilePV(
+	d.pv, err = privval.LoadFilePV(
 		d.Config.PrivValidator.KeyFile(),
 		d.Config.PrivValidator.StateFile(),
 	)
@@ -109,26 +144,27 @@ func (d *Daemon) Start() error {
 	// after the node has been created.
 	clientProxy := node.NewLocalClient()
 
-	d.relay, err = relay.NewWith(clientProxy, d.Config.Accumulate.Networks...)
+	bvnAddrs := d.Config.Accumulate.Network.BvnAddressesWithPortOffset(networks.TmRpcPortOffset)
+	d.relay, err = relay.NewWith(clientProxy, bvnAddrs...)
 	if err != nil {
 		return fmt.Errorf("failed to create RPC relay: %v", err)
 	}
+	d.query = apiv1.NewQuery(d.relay)
 
 	execOpts := chain.ExecutorOptions{
-		SubnetType:      d.Config.Accumulate.Type,
-		Local:           clientProxy,
-		DB:              d.db,
-		Logger:          d.Logger,
-		Key:             pv.Key.PrivKey.Bytes(),
-		Directory:       d.Config.Accumulate.Directory,
-		BlockValidators: d.Config.Accumulate.Networks,
+		Local:   clientProxy,
+		DB:      d.db,
+		Logger:  d.Logger,
+		Key:     d.Key().Bytes(),
+		Network: d.Config.Accumulate.Network,
+		IsTest:  d.IsTest,
 	}
 	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
-	app, err := abci.NewAccumulator(d.db, pv.Key.PubKey.Address(), exec, d.Logger)
+	app, err := abci.NewAccumulator(d.db, d.Key().PubKey().Address(), exec, d.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize ACBI app: %v", err)
 	}
@@ -153,6 +189,14 @@ func (d *Daemon) Start() error {
 		}
 	}
 
+	// Stop the node if start fails (mostly for tests)
+	defer func() {
+		if err != nil {
+			_ = d.node.Stop()
+			d.node.Wait()
+		}
+	}()
+
 	// Create a local client
 	lnode, ok := d.node.Service.(local.NodeService)
 	if !ok {
@@ -164,31 +208,38 @@ func (d *Daemon) Start() error {
 	}
 	clientProxy.Set(lclient)
 
+	// ===============================
+
 	// Configure JSON-RPC
 	var jrpcOpts api.JrpcOptions
 	jrpcOpts.Config = &d.Config.Accumulate.API
 	jrpcOpts.QueueDuration = time.Second / 4
 	jrpcOpts.QueueDepth = 100
-	jrpcOpts.QueryV1 = apiv1.NewQuery(d.relay)
+	jrpcOpts.QueryV1 = d.query
 	jrpcOpts.Local = lclient
 	jrpcOpts.Logger = d.Logger
 
 	// Build the list of remote addresses and query clients
-	jrpcOpts.Remote = make([]string, len(d.Config.Accumulate.Networks))
-	clients := make([]api.ABCIQueryClient, len(d.Config.Accumulate.Networks))
-	for i, net := range d.Config.Accumulate.Networks {
+	jrpcOpts.Remote = d.Config.Accumulate.Network.BvnAddressesWithPortOffset(0)
+	clients := make([]api.ABCIQueryClient, len(jrpcOpts.Remote))
+	for i, addr := range jrpcOpts.Remote {
 		switch {
-		case net == "self", net == d.Config.Accumulate.Network, net == d.Config.RPC.ListenAddress:
+		case d.Config.Accumulate.Network.BvnNames[i] == d.Config.Accumulate.Network.ID:
 			jrpcOpts.Remote[i] = "local"
 			clients[i] = lclient
 
 		default:
-			addr, err := networks.GetRpcAddr(net)
+			jrpcOpts.Remote[i], err = config.OffsetPort(addr, networks.AccRouterJsonPortOffset)
 			if err != nil {
-				return fmt.Errorf("invalid network name or address: %v", err)
+				return fmt.Errorf("invalid BVN address: %v", err)
+			}
+			jrpcOpts.Remote[i] += "/v2"
+
+			addr, err = config.OffsetPort(addr, networks.TmRpcPortOffset)
+			if err != nil {
+				return fmt.Errorf("invalid BVN address: %v", err)
 			}
 
-			jrpcOpts.Remote[i] = addr
 			clients[i], err = rpchttp.New(addr)
 			if err != nil {
 				return fmt.Errorf("failed to create RPC client: %v", err)
@@ -196,20 +247,25 @@ func (d *Daemon) Start() error {
 		}
 	}
 
+	// Create the querier for JSON-RPC
 	jrpcOpts.Query = api.NewQueryDispatch(clients, api.QuerierOptions{
 		TxMaxWaitTime: d.Config.Accumulate.API.TxMaxWaitTime,
 	})
 
-	jrpc, err := api.NewJrpc(jrpcOpts)
+	// Create the JSON-RPC handler
+	d.jrpc, err = api.NewJrpc(jrpcOpts)
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
 	}
 
-	jrpc.EnableDebug(lclient)
+	// Enable debug methods
+	if d.Config.Accumulate.API.EnableDebugMethods {
+		d.jrpc.EnableDebug(lclient)
+	}
 
 	// Run JSON-RPC server
-	d.api = &http.Server{Handler: jrpc.NewMux()}
-	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.JSONListenAddress)
+	d.api = &http.Server{Handler: d.jrpc.NewMux()}
+	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to start JSON-RPC: %v", err)
 	}
@@ -221,6 +277,37 @@ func (d *Daemon) Start() error {
 		err := d.api.Serve(l)
 		if err != nil {
 			d.Logger.Error("JSON-RPC server", "err", err)
+		}
+	}()
+
+	// Clean up once the node is stopped (mostly for tests)
+	go func() {
+		defer close(d.done)
+
+		d.node.Wait()
+
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
+		defer cancel()
+
+		if d.node.Config.Accumulate.API.EnableSubscribeTX {
+			err := d.relay.Stop()
+			if err != nil {
+				d.Logger.Error("Error stopping relay", "module", "relay", "error", err)
+			}
+		}
+
+		err := d.api.Shutdown(ctx)
+		if err != nil {
+			d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
+		}
+
+		err = d.db.GetDB().Close()
+		if err != nil {
+			module := "badger"
+			if d.UseMemDB {
+				module = "memdb"
+			}
+			d.Logger.Error("Error closing database", "module", module, "error", err)
 		}
 	}()
 
@@ -258,21 +345,11 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 }
 
 func (d *Daemon) Stop() error {
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
-	defer cancel()
-
-	var errs []error
-	errs = append(errs, d.node.Stop())
-	if d.node.Config.Accumulate.API.EnableSubscribeTX {
-		errs = append(errs, d.relay.Stop())
+	err := d.node.Stop()
+	if err != nil {
+		return err
 	}
-	errs = append(errs, d.api.Shutdown(ctx))
-	errs = append(errs, d.db.GetDB().Close())
 
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
+	<-d.done
 	return nil
 }
