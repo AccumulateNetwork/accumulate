@@ -346,7 +346,6 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		//now test query by entry hash.
-
 		r3 := n.GetChainDataByEntryHash("FooBar/oof", wd.Entry.Hash())
 
 		if r3.Data == nil {
