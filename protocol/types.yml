@@ -381,8 +381,11 @@ RequestDataEntrySet:
       is-url: true
     - name: Start
       type: uvarint
-    - name: Limit
+    - name: Count
       type: uvarint
+    - name: ExpandChains
+      type: bool
+      optional: true
 
 ResponseDataEntry:
   fields:
