@@ -346,6 +346,24 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		//now test query by entry hash.
+
+		r3 := n.GetChainDataByEntryHash("FooBar/oof", wd.Entry.Hash())
+
+		if r3.Data == nil {
+			t.Fatalf("no dta returned")
+		}
+
+		rde2 := protocol.ResponseDataEntry{}
+
+		err = rde2.UnmarshalJSON(*r3.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !rde.Entry.Equal(&rde2.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
 	})
 }
 

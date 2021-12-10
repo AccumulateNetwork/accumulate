@@ -170,13 +170,13 @@ func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
 }
 
 func (n *fakeNode) GetChainDataByEntryHash(url string, entryHash []byte) *api.APIDataResponse {
-	r, err := n.query.QueryDataByEntryHash(url, entryHash)
+	r, err := n.query.GetDataByEntryHash(url, entryHash)
 	require.NoError(n.t, err)
 	return r
 }
 
 func (n *fakeNode) GetChainDataSet(url string, start uint64, limit uint64) *api.APIDataResponsePagination {
-	r, err := n.query.QueryDataSetByUrl(url, start, limit)
+	r, err := n.query.GetDataSetByUrl(url, start, limit)
 	require.NoError(n.t, err)
 	return r
 }

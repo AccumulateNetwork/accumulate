@@ -260,14 +260,12 @@ DataEntryQuery:
       optional: true
 
 DataEntrySetQuery:
-  fields:
-    - name: Url
-      type: string
-      is-url: true
-    - name: Start
-      type: uvarint
-    - name: Count
-      type: uvarint
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - UrlQuery
+    - QueryPagination
+    - QueryOptions
 
 DataEntryQueryResponse:
   fields:
