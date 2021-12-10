@@ -176,8 +176,34 @@ func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) ([]types
 	return resultHashes, mgr.Height(), nil
 }
 
-//GetDataChainRange get the entryHashes in a given range
-func (s *StateDB) GetDataChainRange(chainId []byte, start int64, end int64) ([]types.Bytes32, int64, error) {
+//GetChainDataByEntryHash retures the entry in the data chain by entry hash
+func (s *StateDB) GetChainDataByEntryHash(chainId []byte, entryHash []byte) ([]byte, []byte, error) {
+	data, err := s.dbMgr.Key(bucketDataEntry, chainId, entryHash).Get()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return entryHash, data, nil
+}
+
+//GetChainData retures the latest entry in the data chain
+func (s *StateDB) GetChainData(chainId []byte) ([]byte, []byte, error) {
+	mgr, err := s.ManageChain(bucketDataEntry, chainId)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	currHeight := mgr.Height()
+	entryHash, err := mgr.Entry(currHeight)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return s.GetChainDataByEntryHash(chainId, entryHash)
+}
+
+//GetChainDataRange get the entryHashes in a given range
+func (s *StateDB) GetChainDataRange(chainId []byte, start int64, end int64) ([]types.Bytes32, int64, error) {
 	mgr, err := s.ManageChain(bucketDataEntry, chainId)
 	if err != nil {
 		return nil, 0, err
