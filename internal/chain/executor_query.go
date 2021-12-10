@@ -112,8 +112,62 @@ func (m *Executor) queryByTxId(txid []byte) (*query.ResponseByTxId, error) {
 		return nil, fmt.Errorf("%w: error in query for synthetic txid txid %X", storage.ErrNotFound, txid)
 	}
 
-	qr.TxId.FromBytes(txid)
+	err = qr.TxId.FromBytes(txid)
+	if err != nil {
+		return nil, fmt.Errorf("txid in query cannot be converted, %v", err)
+	}
 
+	return &qr, nil
+}
+
+func (m *Executor) queryDataByUrl(u *url.URL) (*protocol.ResponseDataEntry, error) {
+	qr := protocol.ResponseDataEntry{}
+
+	entryHash, entry, err := m.DB.GetChainData(u.ResourceChain())
+	if err != nil {
+		return nil, err
+	}
+
+	copy(qr.EntryHash[:], entryHash)
+	err = qr.Entry.UnmarshalBinary(entry)
+	if err != nil {
+		return nil, err
+	}
+	return &qr, nil
+}
+
+func (m *Executor) queryDataByEntryHash(u *url.URL, entryHash []byte) (*protocol.ResponseDataEntry, error) {
+	qr := protocol.ResponseDataEntry{}
+
+	entryHash, entry, err := m.DB.GetChainDataByEntryHash(u.ResourceChain(), entryHash)
+	if err != nil {
+		return nil, err
+	}
+
+	copy(qr.EntryHash[:], entryHash)
+	err = qr.Entry.UnmarshalBinary(entry)
+	if err != nil {
+		return nil, err
+	}
+	return &qr, nil
+}
+
+func (m *Executor) queryDataSet(u *url.URL, start int64, limit int64) (*protocol.ResponseDataEntrySet, error) {
+	qr := protocol.ResponseDataEntrySet{}
+
+	entryHashes, height, err := m.DB.GetChainDataRange(u.ResourceChain(), start, start+limit)
+	if err != nil {
+		return nil, err
+	}
+
+	qr.Total = uint64(height)
+	for i := range entryHashes {
+		entry, err := m.queryDataByEntryHash(u, entryHashes[i][:])
+		if err != nil {
+			return nil, err
+		}
+		qr.DataEntries = append(qr.DataEntries, *entry)
+	}
 	return &qr, nil
 }
 
@@ -222,6 +276,71 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		v, err = obj.MarshalBinary()
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, chr.ChainId)}
+		}
+	case types.QueryTypeDataUrl:
+		chr := protocol.RequestDataEntry{}
+		err := chr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
+		}
+		u, err := url.Parse(chr.Url)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
+		}
+
+		ret, err := m.queryDataByUrl(u)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeDataUrlError, Message: err}
+		}
+
+		k = []byte("data")
+		v, err = ret.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err}
+		}
+	case types.QueryTypeDataEntry:
+
+		chr := protocol.RequestDataEntryHash{}
+		err := chr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
+		}
+		u, err := url.Parse(chr.Url)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
+		}
+
+		ret, err := m.queryDataByEntryHash(u, chr.EntryHash[:])
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeDataEntryHashError, Message: err}
+		}
+
+		k = []byte("data")
+		v, err = ret.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err}
+		}
+
+	case types.QueryTypeDataSet:
+		chr := protocol.RequestDataEntrySet{}
+		err := chr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
+		}
+		u, err := url.Parse(chr.Url)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
+		}
+
+		ret, err := m.queryDataSet(u, int64(chr.Start), int64(chr.Limit))
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeDataEntryHashError, Message: err}
+		}
+
+		k = []byte("dataSet")
+		v, err = ret.MarshalBinary()
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err}
 		}
 	default:
 		return nil, nil, &protocol.Error{Code: protocol.CodeInvalidQueryType, Message: fmt.Errorf("unable to query for type, %s (%d)", q.Type.Name(), q.Type.AsUint64())}
