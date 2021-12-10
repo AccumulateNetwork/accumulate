@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -267,4 +268,31 @@ func (q *queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiR
 	}
 
 	return res, nil
+}
+
+func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, error) {
+	queryHead := true
+	empty := [32]byte{}
+	if len(entryHash) != 32 || bytes.Compare(entryHash, empty[:]) == 0 {
+		queryHead = false
+	}
+
+	req := new(protocol.RequestDataEntry)
+	if queryHead {
+		copy(req.EntryHash[:], entryHash)
+	}
+	k, v, err := q.query(req)
+	if err != nil {
+		return nil, err
+	}
+	if k != "chain" {
+		return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
+	}
+
+	obj, chain, err := unmarshalState(v)
+	if err != nil {
+		return nil, err
+	}
+
+	return packStateResponse(obj, chain)
 }

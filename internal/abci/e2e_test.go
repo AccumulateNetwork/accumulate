@@ -311,8 +311,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			n.ParseUrl("FooBar/oof").String(),
 		}, n.GetDirectory("FooBar"))
 
+		wd := new(protocol.WriteData)
 		n.Batch(func(send func(*transactions.GenTransaction)) {
-			wd := new(protocol.WriteData)
 			for i := 0; i < 10; i++ {
 				wd.Entry.ExtIds = append(wd.Entry.ExtIds, []byte(fmt.Sprintf("test id %d", i)))
 			}
@@ -324,8 +324,28 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			send(tx)
 		})
 		time.Sleep(3 * time.Second)
+		// Test getting the data by URL
 		r2 := n.GetChainDataByUrl("FooBar/oof")
-		_ = r2
+		if r2 == nil {
+			t.Fatalf("error getting chain data by URL")
+		}
+
+		if r2.Data == nil {
+			t.Fatalf("no dta returned")
+		}
+
+		rde := protocol.ResponseDataEntry{}
+
+		err := rde.UnmarshalJSON(*r2.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !rde.Entry.Equal(&wd.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry hash.
 	})
 }
 

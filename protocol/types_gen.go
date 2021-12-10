@@ -130,12 +130,8 @@ type MetricsResponse struct {
 }
 
 type RequestDataEntry struct {
-	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-}
-
-type RequestDataEntryHash struct {
 	Url       string   `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash"`
 }
 
 type RequestDataEntrySet struct {
@@ -646,14 +642,6 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 }
 
 func (v *RequestDataEntry) Equal(u *RequestDataEntry) bool {
-	if !(v.Url == u.Url) {
-		return false
-	}
-
-	return true
-}
-
-func (v *RequestDataEntryHash) Equal(u *RequestDataEntryHash) bool {
 	if !(v.Url == u.Url) {
 		return false
 	}
@@ -1225,14 +1213,6 @@ func (v *RequestDataEntry) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Url)
 
-	return n
-}
-
-func (v *RequestDataEntryHash) BinarySize() int {
-	var n int
-
-	n += encoding.StringBinarySize(v.Url)
-
 	n += encoding.ChainBinarySize(&v.EntryHash)
 
 	return n
@@ -1786,14 +1766,6 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 }
 
 func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
-
-	buffer.Write(encoding.StringMarshalBinary(v.Url))
-
-	return buffer.Bytes(), nil
-}
-
-func (v *RequestDataEntryHash) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
@@ -2642,17 +2614,6 @@ func (v *RequestDataEntry) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Url):]
 
-	return nil
-}
-
-func (v *RequestDataEntryHash) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Url: %w", err)
-	} else {
-		v.Url = x
-	}
-	data = data[encoding.StringBinarySize(v.Url):]
-
 	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
 	} else {
@@ -3256,7 +3217,7 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *RequestDataEntryHash) MarshalJSON() ([]byte, error) {
+func (v *RequestDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url       string `json:"url,omitempty"`
 		EntryHash string `json:"entryHash,omitempty"`
@@ -3544,7 +3505,7 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *RequestDataEntryHash) UnmarshalJSON(data []byte) error {
+func (v *RequestDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url       string `json:"url,omitempty"`
 		EntryHash string `json:"entryHash,omitempty"`

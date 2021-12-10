@@ -194,7 +194,7 @@ func (s *StateDB) GetChainData(chainId []byte) ([]byte, []byte, error) {
 	}
 
 	currHeight := mgr.Height()
-	entryHash, err := mgr.Entry(currHeight)
+	entryHash, err := mgr.Entry(currHeight - 1)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -640,7 +640,7 @@ func (tx *DBTransaction) writeDataState(chainId *types.Bytes32) error {
 		//store the entry hash for the data
 		tx.state.logDebug("AddHash", "hash", logging.AsHex(entry.EntryHash))
 		mgr.AddEntry(entry.EntryHash)
-		tx.GetDB().Key(bucketEntry, chainId.Bytes(), entry.EntryHash).PutBatch(entry.Data)
+		tx.GetDB().Key(bucketDataEntry, chainId.Bytes(), entry.EntryHash).PutBatch(entry.Data)
 	}
 
 	// The bpt stores the root of the data merkle state
