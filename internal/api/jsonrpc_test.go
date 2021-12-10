@@ -4,15 +4,12 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"testing"
 	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -26,80 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
-
-var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
-var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
-var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
-
-func TestLoadOnRemote(t *testing.T) {
-	t.Skip("Deprecated, use `accumulated loadtest`")
-
-	txBouncer, err := relay.NewWith(nil, *testnet)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = txBouncer.Start()
-	require.NoError(t, err)
-	defer func() { require.NoError(t, txBouncer.Stop()) }()
-
-	query := NewQuery(txBouncer)
-	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
-
-	addrList, err := acctesting.RunLoadTest(query, privateKeySponsor, *loadWalletCount, *loadTxCount)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	time.Sleep(10000 * time.Millisecond)
-
-	queryTokenUrl := addrList[1]
-
-	resp, err := query.GetChainStateByUrl(queryTokenUrl)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	output, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(output))
-
-	jsonapi := NewTest(t, query)
-	_ = jsonapi
-
-	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
-	gParams, err := json.Marshal(params)
-	theData := jsonapi.GetData(context.Background(), gParams)
-	theJsonData, err := json.Marshal(theData)
-	if err != nil {
-		t.Fatal(err)
-	}
-	println(string(theJsonData))
-
-	resp, err = query.GetChainStateByUrl(queryTokenUrl)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	output, err = json.Marshal(resp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(output))
-	for _, v := range addrList[1:] {
-		resp, err := query.GetChainStateByUrl(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		output, err := json.Marshal(resp)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fmt.Printf("%s : %s\n", v, string(output))
-	}
-}
 
 func TestJsonRpcLiteToken(t *testing.T) {
 	switch {
@@ -116,7 +39,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	kpSponsor := ed25519.NewKeyFromSeed(pv.Key.PrivKey.Bytes()[:32])
 
-	addrList, err := acctesting.RunLoadTest(query, kpSponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, kpSponsor, 10, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,10 +137,6 @@ func TestFaucet(t *testing.T) {
 	switch {
 	case testing.Short():
 		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
-		t.Skip("This test is flaky in macOS CI")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -321,10 +240,6 @@ func TestTransactionHistory(t *testing.T) {
 	switch {
 	case testing.Short():
 		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
-		t.Skip("This test is flaky in macOS CI")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -396,10 +311,6 @@ func TestTransactionHistory(t *testing.T) {
 }
 
 func TestFaucetTransactionHistory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
-
 	if testing.Short() {
 		t.Skip("Skipping test in short mode")
 	}
@@ -465,8 +376,6 @@ func TestQueryNotFound(t *testing.T) {
 	switch {
 	case testing.Short():
 		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
 	}
 
 	//make a client, and also spin up the router grpc
@@ -487,10 +396,6 @@ func TestQueryNotFound(t *testing.T) {
 }
 
 func TestQueryWrongType(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Fails on windows (Tendermint cleanup issue)")
-	}
-
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	_, _, query := startBVC(t, dir)
@@ -516,10 +421,6 @@ func TestQueryWrongType(t *testing.T) {
 }
 
 func TestGetTxId(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Fails on windows (Tendermint cleanup issue)")
-	}
-
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	_, _, query := startBVC(t, dir)
@@ -552,10 +453,6 @@ func TestGetTxId(t *testing.T) {
 }
 
 func TestDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Fails on windows (Tendermint cleanup issue)")
-	}
-
 	dir := t.TempDir()
 	db, _, query := startBVC(t, dir)
 	japi := NewTest(t, query)
@@ -587,10 +484,6 @@ func TestFaucetReplay(t *testing.T) {
 	switch {
 	case testing.Short():
 		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
-		t.Skip("This test is flaky in macOS CI")
 	}
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)

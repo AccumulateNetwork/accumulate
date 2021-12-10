@@ -1,7 +1,6 @@
 package debug_test
 
 import (
-	"os"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulate/internal/api"
@@ -12,10 +11,6 @@ import (
 )
 
 func TestDebugFaucet(t *testing.T) {
-	if os.Getenv("CI") == "true" {
-		t.Skip("This is a test made for debugging. It is not intended for use except for as a debugging tool.")
-	}
-
 	t.Skip("Skip this test unless you need it to debug something")
 
 	// Networks must be in the same order as they are passed to --relay-to in the node configuration

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
-	"os"
-	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -33,14 +31,6 @@ import (
 )
 
 func TestEndToEnd(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
-
-	if os.Getenv("CI") == "true" {
-		t.Skip("This test consistently fails in CI")
-	}
-
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 
 		// Restart the nodes for every test
@@ -82,10 +72,6 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 }
 
 func TestSubscribeAfterClose(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
-
 	nodes, _ := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, []string{"127.0.30.1"})
 	node := nodes[0]
 	require.NoError(t, node.Start())
@@ -103,10 +89,6 @@ func TestSubscribeAfterClose(t *testing.T) {
 }
 
 func TestFaucetMultiNetwork(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
-
 	bvc0, _ := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	bvc1, _ := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	bvc2, _ := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
