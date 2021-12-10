@@ -36,21 +36,27 @@ func (m *MerkleManager) AddHash(hash Hash) {
 	}
 
 	m.dbKey("Element", m.MS.Count).PutBatch(hash)
-
-	if (m.MS.Count)&m.MarkMask == m.MarkFreq-1 { // Is this the end of the Mark set, i.e. 0, ..., m.MarkFreq-1
+	switch (m.MS.Count + 1) & m.MarkMask {
+	case 0: // Is this the end of the Mark set, i.e. 0, ..., m.MarkFreq-1
 		m.MS.AddToMerkleTree(hash)                      // Add the hash to the Merkle Tree
 		if MSState, err := m.MS.Marshal(); err != nil { // Get the current state
 			panic(fmt.Sprintf("could not marshal MerkleState: %v", err))
 		} else {
 			m.dbKey("States", m.GetElementCount()-1).PutBatch(MSState) // Save Merkle State at n*MarkFreq-1
 		}
-	} else {
+		if err := m.WriteChainHead(); err != nil {
+			panic(fmt.Sprintf("error writing chain head: %v", err))
+		}
+	case 1: //                              After MarkFreq elements are written
+		m.MS.HashList = m.MS.HashList[:0] // then clear the HashList
+		fallthrough                       // then fall through as normal
+	default:
 		m.MS.AddToMerkleTree(hash) // 0 to m.MarkFeq-2, always add to the merkle tree
+		if err := m.WriteChainHead(); err != nil {
+			panic(fmt.Sprintf("error writing chain head: %v", err))
+		}
 	}
 
-	if err := m.WriteChainHead(); err != nil {
-		panic(fmt.Sprintf("could not marshal MerkleState: %v", err))
-	}
 }
 
 // GetElementIndex
@@ -109,9 +115,9 @@ func (m *MerkleManager) GetChainState() (merkleState *MerkleState, err error) {
 func (m *MerkleManager) ReadChainHead() (ms *MerkleState, err error) {
 	ms = new(MerkleState)
 	ms.HashFunction = m.MS.HashFunction
-	state, e := m.Manager.Key(append(m.key, "Head")...).Get() //                          Get the state for the Merkle Tree
-	if e == nil {                                             //                          If the State exists
-		if err := ms.UnMarshal(state); err != nil { //                                     set that as the state
+	state, e := m.Manager.Key(append(m.key, "Head")...).Get() //                        Get the state for the Merkle Tree
+	if e == nil {                                             //                        If the State exists
+		if err := ms.UnMarshal(state); err != nil { //                                      set that as the state
 			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", m.key) // Blow up of the database is bad
 		}
 	}

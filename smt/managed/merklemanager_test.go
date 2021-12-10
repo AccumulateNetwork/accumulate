@@ -23,7 +23,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	require.NoError(t, err, "should be able to set base key")
 	err = m.WriteChainHead()
 	require.NoError(t, err, "should be able to write to the chain head")
-	head, err := m.ReadChainHead("try")
+	head, err := m.ReadChainHead()
 	require.NoError(t, err, "should be able to read the chain head")
 	require.True(t, head.Equal(m.MS), "chainstate should be loadable")
 
