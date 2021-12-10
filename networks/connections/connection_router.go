@@ -1,8 +1,11 @@
-package connmgr
+package connections
 
 import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/tendermint/tendermint/rpc/client/http"
+	"github.com/tendermint/tendermint/rpc/client/local"
 	"strings"
 	"sync/atomic"
 )
@@ -13,12 +16,18 @@ var dnNameMap = map[string]bool{
 	"acme": true,
 }
 
+type ConnectionRouter interface {
+	AcquireRoute(url string, allowFollower bool) (Route, error)
+	AcquireBroadcastClient() api.ABCIBroadcastClient
+}
+
 type connectionRouter struct {
-	bvnGroup      nodeGroup
-	dirGroup      nodeGroup
-	followerGroup nodeGroup
-	otherGroup    nodeGroup
-	bvnNameMap    map[string]bool
+	bvnGroup    nodeGroup
+	dnGroup     nodeGroup
+	flGroup     nodeGroup
+	otherGroup  nodeGroup
+	bvnNameMap  map[string]bool
+	localClient *local.Local
 }
 
 type nodeGroup struct {
@@ -26,15 +35,37 @@ type nodeGroup struct {
 	next  uint32
 }
 
-func newConnectionRouter(bvNodes []*nodeContext, dirNodes []*nodeContext, followerNodes []*nodeContext) *connectionRouter {
-	cr := new(connectionRouter)
-	cr.bvnGroup = nodeGroup{nodes: bvNodes}
-	cr.dirGroup = nodeGroup{nodes: dirNodes}
-	cr.followerGroup = nodeGroup{nodes: followerNodes}
-	otherNodes := append(append(cr.bvnGroup.nodes, cr.followerGroup.nodes...)) // TODO Allow also DNs?
+type Route interface {
+	GetSubnetName() string
+	GetNetworkGroup() NetworkGroup
+	GetRpcHttpClient() *http.HTTP
+	GetQueryClient() api.ABCIQueryClient
+	GetBroadcastClient() api.ABCIBroadcastClient
+}
+
+func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
+	cr := &connectionRouter{
+		bvnNameMap:  createBvnNameMap(connMgr.getBVNContextList()),
+		bvnGroup:    nodeGroup{nodes: connMgr.getBVNContextList()},
+		dnGroup:     nodeGroup{nodes: connMgr.getDNContextList()},
+		flGroup:     nodeGroup{nodes: connMgr.getFNContextList()},
+		localClient: connMgr.GetLocalClient(),
+	}
+	otherNodes := append(append(cr.bvnGroup.nodes, cr.flGroup.nodes...)) // TODO Allow also DNs?
 	cr.otherGroup = nodeGroup{nodes: otherNodes}
-	cr.bvnNameMap = createBvnNameMap(bvNodes)
 	return cr
+}
+
+func (cr *connectionRouter) AcquireRoute(adiUrl string, allowFollower bool) (Route, error) {
+	nodeCtx, err := cr.selectNodeContext(adiUrl, allowFollower)
+	if err != nil {
+		return nil, errorCouldNotSelectNode(adiUrl, err)
+	}
+	return nodeCtx, err
+}
+
+func (cr *connectionRouter) AcquireBroadcastClient() api.ABCIBroadcastClient {
+	return cr.localClient
 }
 
 func (cr *connectionRouter) selectNodeContext(adiUrl string, allowFollower bool) (*nodeContext, error) {
@@ -45,9 +76,9 @@ func (cr *connectionRouter) selectNodeContext(adiUrl string, allowFollower bool)
 
 	switch {
 	case cr.isBvnUrl(url.Hostname()):
-		return cr.lookupNode(url.Hostname(), cr.bvnGroup)
+		return cr.lookupBvnNode(url.Hostname(), cr.bvnGroup)
 	case cr.isDnUrl(url.Hostname()):
-		return cr.lookupNode(url.Hostname(), cr.dirGroup)
+		return cr.lookupDirNode(cr.dnGroup)
 	case allowFollower:
 		return cr.selectNode(cr.otherGroup), nil
 	default:
@@ -56,7 +87,6 @@ func (cr *connectionRouter) selectNodeContext(adiUrl string, allowFollower bool)
 }
 
 func (cr *connectionRouter) isBvnUrl(hostname string) bool {
-	// TODO check if hostname is already lowercase
 	return cr.bvnNameMap[strings.ToLower(hostname)]
 }
 
@@ -65,7 +95,7 @@ func (cr *connectionRouter) isDnUrl(hostname string) bool {
 	return dnNameMap[hostnameLower]
 }
 
-func (cr *connectionRouter) lookupNode(hostname string, group nodeGroup) (*nodeContext, error) {
+func (cr *connectionRouter) lookupBvnNode(hostname string, group nodeGroup) (*nodeContext, error) {
 	for _, node := range group.nodes {
 		if strings.EqualFold(hostname, node.subnetName) {
 			return node, nil
@@ -74,6 +104,14 @@ func (cr *connectionRouter) lookupNode(hostname string, group nodeGroup) (*nodeC
 
 	// This state is not yet possible because we collected the names, but perhaps when the code starts changing and nodes are disabled/off-boarded
 	return nil, bvnNotFound(hostname)
+}
+
+func (cr *connectionRouter) lookupDirNode(group nodeGroup) (*nodeContext, error) {
+	if len(group.nodes) > 0 {
+		return group.nodes[0], nil
+	}
+
+	return nil, dnNotFound()
 }
 
 func (cr *connectionRouter) selectNode(group nodeGroup) *nodeContext {

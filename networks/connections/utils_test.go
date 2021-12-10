@@ -1,4 +1,4 @@
-package connmgr_test
+package connections_test
 
 import (
 	"fmt"

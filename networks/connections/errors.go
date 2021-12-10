@@ -1,4 +1,4 @@
-package connmgr
+package connections
 
 import (
 	"errors"
@@ -13,4 +13,7 @@ func errorCouldNotSelectNode(url string, err error) error {
 
 func bvnNotFound(bvnName string) error {
 	return fmt.Errorf("bvn %s could not be found", bvnName)
+}
+func dnNotFound() error {
+	return fmt.Errorf("no directory node could not be found")
 }

@@ -1,61 +1,32 @@
-package connmgr
+package connections
 
 import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/rpc/client/http"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"net"
-)
-
-type NodeStatus int
-
-const (
-	Up           NodeStatus = iota // Healthy & ready to go
-	Down                           // Not reachable
-	OutOfService                   // Reachable but not ready to go (IE. still syncing up)
-)
-
-type NetworkGroup int
-
-const (
-	Local NetworkGroup = iota
-	SameSubnet
-	OtherSubnet
+	"net/url"
 )
 
 type ConnectionManager interface {
-	AcquireRpcClient(url string, allowFollower bool) (*http.HTTP, error)
-	AcquireQueryClient(url string) (api.ABCIQueryClient, error)
-	AcquireBroadcastClient() api.ABCIBroadcastClient
+	getBVNContextList() []*nodeContext
+	getDNContextList() []*nodeContext
+	getFNContextList() []*nodeContext
+	GetLocalClient() *local.Local
 }
 
 type connectionManager struct {
 	networkCfg          *config.Network
 	nodeService         local.NodeService
 	nodeToSubnetNameMap map[string]string
-	bvNodeCtxList       []*nodeContext
-	dirNodeCtxList      []*nodeContext
-	followerNodeCtxList []*nodeContext
+	bvnCtxList          []*nodeContext
+	dnCtxList           []*nodeContext
+	fnCtxList           []*nodeContext
 	localClient         *local.Local
-	connRouter          *connectionRouter
 	logger              log.Logger
-}
-
-type nodeContext struct {
-	subnetName    string
-	address       string
-	netType       config.NetworkType
-	nodeType      config.NodeType
-	networkGroup  NetworkGroup
-	resolvedIPs   []net.IP
-	metrics       nodeMetrics
-	queryClient   api.ABCIQueryClient
-	rpcHttpClient *http.HTTP
 }
 
 type nodeMetrics struct {
@@ -72,27 +43,22 @@ func NewConnectionManager(networkCfg *config.Network, nodeService local.NodeServ
 	cm.loadNodeNetworkMap()
 	cm.buildNodeInventory()
 	err := cm.createClients()
-	cm.connRouter = newConnectionRouter(cm.bvNodeCtxList, cm.dirNodeCtxList, cm.followerNodeCtxList)
 	return cm, err
 }
 
-func (cm *connectionManager) AcquireRpcClient(url string, allowFollower bool) (*http.HTTP, error) { // TODO Do we ever need a RPC client connection to a follower?
-	ctx, err := cm.connRouter.selectNodeContext(url, allowFollower)
-	if err != nil {
-		return nil, errorCouldNotSelectNode(url, err)
-	}
-	return ctx.rpcHttpClient, nil
+func (cm *connectionManager) getBVNContextList() []*nodeContext {
+	return cm.bvnCtxList
 }
 
-func (cm *connectionManager) AcquireQueryClient(url string) (api.ABCIQueryClient, error) {
-	ctx, err := cm.connRouter.selectNodeContext(url, true)
-	if err != nil {
-		return nil, errorCouldNotSelectNode(url, err)
-	}
-	return ctx.queryClient, nil
+func (cm *connectionManager) getDNContextList() []*nodeContext {
+	return cm.dnCtxList
 }
 
-func (cm *connectionManager) AcquireBroadcastClient() api.ABCIBroadcastClient {
+func (cm *connectionManager) getFNContextList() []*nodeContext {
+	return cm.fnCtxList
+}
+
+func (cm *connectionManager) GetLocalClient() *local.Local {
 	return cm.localClient
 }
 
@@ -118,12 +84,12 @@ func (cm *connectionManager) buildNodeInventory() {
 		case config.Validator:
 			switch ctx.netType {
 			case config.BlockValidator:
-				cm.bvNodeCtxList = append(cm.bvNodeCtxList, ctx)
+				cm.bvnCtxList = append(cm.bvnCtxList, ctx)
 			case config.Directory:
-				cm.dirNodeCtxList = append(cm.dirNodeCtxList, ctx)
+				cm.dnCtxList = append(cm.dnCtxList, ctx)
 			}
 		case config.Follower:
-			cm.followerNodeCtxList = append(cm.followerNodeCtxList, ctx)
+			cm.fnCtxList = append(cm.fnCtxList, ctx)
 		}
 	}
 }
@@ -132,6 +98,9 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 	ctx := &nodeContext{subnetName: subnetName, address: address}
 	ctx.networkGroup = cm.determineNetworkGroup(subnetName, address)
 	ctx.netType, ctx.nodeType = determineTypes(address, subnetName, cm.networkCfg)
+	if ctx.networkGroup == Local {
+		ctx.localClient = cm.localClient
+	}
 
 	var err error
 	ctx.resolvedIPs, err = resolveIPs(address)
@@ -143,9 +112,9 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 
 func (cm *connectionManager) determineNetworkGroup(subnetName string, address string) NetworkGroup {
 	switch {
-	case cm.networkCfg.ID == subnetName:
+	case subnetName == cm.networkCfg.ID && address == cm.networkCfg.SelfAddress:
 		return Local
-	case cm.nodeToSubnetNameMap[address] == subnetName:
+	case subnetName == cm.networkCfg.ID:
 		return SameSubnet
 	default:
 		return OtherSubnet
@@ -176,7 +145,7 @@ func (cm *connectionManager) createClients() error {
 	}
 	cm.localClient = lclClient
 
-	for _, ctx := range cm.bvNodeCtxList {
+	for _, ctx := range cm.bvnCtxList {
 		err := cm.createRpcClient(ctx)
 		if err != nil {
 			return err
@@ -185,8 +154,9 @@ func (cm *connectionManager) createClients() error {
 		if err != nil {
 			return err
 		}
+		ctx.localClient = lclClient
 	}
-	for _, ctx := range cm.dirNodeCtxList {
+	for _, ctx := range cm.dnCtxList {
 		err := cm.createRpcClient(ctx)
 		if err != nil {
 			return err
@@ -195,8 +165,9 @@ func (cm *connectionManager) createClients() error {
 		if err != nil {
 			return err
 		}
+		ctx.localClient = lclClient
 	}
-	for _, ctx := range cm.followerNodeCtxList {
+	for _, ctx := range cm.fnCtxList {
 		err := cm.createRpcClient(ctx)
 		if err != nil {
 			return err
@@ -205,6 +176,7 @@ func (cm *connectionManager) createClients() error {
 		if err != nil {
 			return err
 		}
+		ctx.localClient = lclClient
 	}
 	return nil
 }
@@ -214,8 +186,7 @@ func (cm *connectionManager) createAbciClients(ctx *nodeContext) error {
 	case Local:
 		ctx.queryClient = cm.localClient
 	default:
-		address := "http://" + ctx.address + ":34000" // FIXME
-		offsetAddr, err := config.OffsetPort(address, networks.TmRpcPortOffset)
+		offsetAddr, err := config.OffsetPort(ctx.address, networks.TmRpcPortOffset)
 		if err != nil {
 			return fmt.Errorf("invalid BVN address: %v", err)
 		}
@@ -231,7 +202,7 @@ func (cm *connectionManager) createAbciClients(ctx *nodeContext) error {
 func (cm *connectionManager) createRpcClient(ctx *nodeContext) error {
 	// RPC HTTP client
 	var err error
-	ctx.rpcHttpClient, err = http.New(ctx.address)
+	ctx.rpcHttpClient, err = rpchttp.New(ctx.address)
 	if err != nil {
 		return fmt.Errorf("could not create client for block validator %q node %q: %v",
 			ctx.subnetName, ctx.address, err)
@@ -245,11 +216,18 @@ func resolveIPs(address string) ([]net.IP, error) {
 		return []net.IP{ip}, nil
 	}
 
+	var hostname string
+	nodeUrl, err := url.Parse(address)
+	if err == nil {
+		hostname = nodeUrl.Hostname()
+	} else {
+		hostname = address
+	}
+
 	/* TODO
 	consider using DNS resolver with DNSSEC support like go-resolver and query directly to a DNS server list that supports this, like 1.1.1.1
 	*/
-	var err error
-	ipList, err := net.LookupIP(address)
+	ipList, err := net.LookupIP(hostname)
 	if err != nil {
 		return nil, fmt.Errorf("error doing DNS lookup for %s: %w", address, err)
 	}
