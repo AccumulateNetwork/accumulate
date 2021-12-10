@@ -1,6 +1,7 @@
 # Executable (mac, linux)
 accumulated
 cli
+go_build_accumulated_init
 # unignore directories
 !*/
 

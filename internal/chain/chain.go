@@ -17,6 +17,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	case config.Directory:
 		return newExecutor(opts,
 			SyntheticAnchor{SubnetType: opts.SubnetType},
+			SyntheticMirror{},
 		)
 
 	case config.BlockValidator:
@@ -29,11 +30,13 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			CreateKeyPage{},
 			CreateKeyBook{},
 			UpdateKeyPage{},
+			WriteData{},
 			SyntheticCreateChain{},
 			SyntheticTokenDeposit{},
 			SyntheticDepositCredits{},
 			SyntheticSignTransactions{},
 			SyntheticAnchor{SubnetType: opts.SubnetType},
+			SyntheticMirror{},
 
 			// TODO Only for TestNet
 			AcmeFaucet{},
@@ -62,7 +65,7 @@ func NewGenesisExecutor(db *state.StateDB, typ config.NetworkType) (*Executor, e
 // TxExecutor executes a specific type of transaction.
 type TxExecutor interface {
 	// Type is the transaction type the executor can execute.
-	Type() types.TxType
+	Type() types.TransactionType
 
 	// Validate fully validates and executes the transaction.
 	Validate(*StateManager, *transactions.GenTransaction) error

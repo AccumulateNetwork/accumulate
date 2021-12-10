@@ -42,7 +42,7 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 		return nil, err
 	}
 
-	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) {
+	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) error {
 		acme := new(protocol.TokenIssuer)
 		acme.Type = types.ChainTypeTokenIssuer
 		acme.ChainUrl = types.String(protocol.AcmeUrl().String())
@@ -88,5 +88,6 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 		}
 
 		st.Update(adi, book, page)
+		return st.AddDirectoryEntry(uAdi, uBook, uPage)
 	})
 }
