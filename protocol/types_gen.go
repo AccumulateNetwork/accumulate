@@ -135,9 +135,10 @@ type RequestDataEntry struct {
 }
 
 type RequestDataEntrySet struct {
-	Url   string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	Start uint64 `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Limit uint64 `json:"limit,omitempty" form:"limit" query:"limit" validate:"required"`
+	Url          string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Start        uint64 `json:"start,omitempty" form:"start" query:"start" validate:"required"`
+	Count        uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	ExpandChains bool   `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
 }
 
 type ResponseDataEntry struct {
@@ -662,7 +663,11 @@ func (v *RequestDataEntrySet) Equal(u *RequestDataEntrySet) bool {
 		return false
 	}
 
-	if !(v.Limit == u.Limit) {
+	if !(v.Count == u.Count) {
+		return false
+	}
+
+	if !(v.ExpandChains == u.ExpandChains) {
 		return false
 	}
 
@@ -1225,7 +1230,9 @@ func (v *RequestDataEntrySet) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(v.Start)
 
-	n += encoding.UvarintBinarySize(v.Limit)
+	n += encoding.UvarintBinarySize(v.Count)
+
+	n += encoding.BoolBinarySize(v.ExpandChains)
 
 	return n
 }
@@ -1782,7 +1789,9 @@ func (v *RequestDataEntrySet) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Start))
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.Limit))
+	buffer.Write(encoding.UvarintMarshalBinary(v.Count))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.ExpandChains))
 
 	return buffer.Bytes(), nil
 }
@@ -2640,11 +2649,18 @@ func (v *RequestDataEntrySet) UnmarshalBinary(data []byte) error {
 	data = data[encoding.UvarintBinarySize(v.Start):]
 
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Limit: %w", err)
+		return fmt.Errorf("error decoding Count: %w", err)
 	} else {
-		v.Limit = x
+		v.Count = x
 	}
-	data = data[encoding.UvarintBinarySize(v.Limit):]
+	data = data[encoding.UvarintBinarySize(v.Count):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ExpandChains: %w", err)
+	} else {
+		v.ExpandChains = x
+	}
+	data = data[encoding.BoolBinarySize(v.ExpandChains):]
 
 	return nil
 }
