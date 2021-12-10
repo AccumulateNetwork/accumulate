@@ -258,7 +258,7 @@ func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataRe
 }
 
 // QueryDataSetByUrl returns the data specified by the pagination information on given chain specified by the url
-func (q *Query) QueryDataSetByUrl(url string, start int64, limit int64) (*acmeApi.APIDataResponsePagination, error) {
+func (q *Query) QueryDataSetByUrl(url string, start uint64, limit uint64) (*acmeApi.APIDataResponsePagination, error) {
 	u, err := url2.Parse(url)
 	if err != nil {
 		return nil, err
@@ -267,10 +267,10 @@ func (q *Query) QueryDataSetByUrl(url string, start int64, limit int64) (*acmeAp
 	qu := query.Query{}
 	qu.RouteId = u.Routing()
 	qu.Type = types.QueryTypeDataSet
-	ru := query.RequestTxHistory{} //change to RequestDataSet{}
+	ru := protocol.RequestDataEntrySet{} //change to RequestDataSet{}
 	ru.Start = start
 	ru.Limit = limit
-	ru.ChainId.FromBytes(u.ResourceChain())
+	ru.Url = u.String()
 	qu.Content, err = ru.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -289,40 +289,156 @@ func (q *Query) QueryDataSetByUrl(url string, start int64, limit int64) (*acmeAp
 	if res.Response.Code != 0 {
 		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
 	}
-	thr := query.ResponseTxHistory{} //change to ResponseDataSet{}
+	thr := protocol.ResponseDataEntrySet{}
 	err = thr.UnmarshalBinary(res.Response.Value)
 	if err != nil {
 		return nil, err
 	}
 
 	ret := acmeApi.APIDataResponsePagination{}
-	ret.Start = start
-	ret.Limit = limit
-	ret.Total = thr.Total
-	//for i := range thr.Transactions {
-	//	txs := thr.Transactions[i]
-	//
-	//	txData := txs.TxState
-	//	txPendingData := txs.TxPendingState
-	//	txSynthTxIds := txs.TxSynthTxIds
-	//	d, err := packTransactionQuery(txs.TxId[:], txData, txPendingData, txSynthTxIds)
-	//	if err != nil {
-	//		return nil, err
-	//	}
-	//	ret.Data = append(ret.Data, d)
-	//}
+	ret.Start = int64(start)
+	ret.Limit = int64(limit)
+	ret.Total = int64(thr.Total)
+	for i := range thr.DataEntries {
+		entry := thr.DataEntries[i]
+		dr := acmeApi.APIDataResponse{}
+		d, err := json.Marshal(&entry)
+		if err != nil {
+			return nil, err
+		}
+		dr.Data = &json.RawMessage{}
+		*dr.Data = d
+		dr.Sponsor = types.String(u.String())
+		dr.Type = "dataEntry"
+
+		//todo: the following are unknown, but can be derived via another query, is that appropriate?
+		//dr.TxId = ??
+		//dr.Sig = ??
+		//dr.MerkleState = ??
+		//dr.KeyPage??
+		//dr.Status = ??
+
+		ret.Data = append(ret.Data, &dr)
+	}
 
 	return &ret, nil
 }
 
 // QueryDataByEntryHash returns the data specified by the entry hash in a given chain specified by the url
 func (q *Query) QueryDataByEntryHash(url string, entryHash []byte) (*acmeApi.APIDataResponse, error) {
-	return nil, nil
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeDataEntry
+	ru := protocol.RequestDataEntryHash{}
+	ru.Url = u.String()
+	copy(ru.EntryHash[:], entryHash)
+
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := q.txRelay.Query(qu.RouteId, qd)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Response.Code != 0 {
+		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
+	}
+	thr := protocol.ResponseDataEntry{}
+	err = thr.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	dr := acmeApi.APIDataResponse{}
+	d, err := thr.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	dr.Data = &json.RawMessage{}
+	*dr.Data = d
+	dr.Sponsor = types.String(u.String())
+	dr.Type = "dataEntry"
+
+	//todo: the following are unknown, but can be derived via another query, is that appropriate?
+	//dr.TxId = ??
+	//dr.Sig = ??
+	//dr.MerkleState = ??
+	//dr.KeyPage??
+	//dr.Status = ??
+
+	return &dr, nil
 }
 
 // QueryDataByUrl returns the current data at the head of the data chain
 func (q *Query) QueryDataByUrl(url string) (*acmeApi.APIDataResponse, error) {
-	return nil, nil
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeDataUrl
+	ru := protocol.RequestDataEntry{}
+	ru.Url = u.String()
+
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := q.txRelay.Query(qu.RouteId, qd)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Response.Code != 0 {
+		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
+	}
+	thr := protocol.ResponseDataEntry{}
+	err = thr.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	dr := acmeApi.APIDataResponse{}
+	d, err := thr.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	dr.Data = &json.RawMessage{}
+	*dr.Data = d
+	dr.Sponsor = types.String(u.String())
+	dr.Type = "dataEntry"
+
+	//todo: the following are unknown, but can be derived via another query, is that appropriate?
+	//dr.TxId = ??
+	//dr.Sig = ??
+	//dr.MerkleState = ??
+	//dr.KeyPage??
+	//dr.Status = ??
+
+	return &dr, nil
 }
 
 // packTransactionQuery
