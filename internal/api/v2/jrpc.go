@@ -127,6 +127,8 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		"query-chain":      m.QueryChain,
 		"query-tx":         m.QueryTx,
 		"query-tx-history": m.QueryTxHistory,
+		"query-data":       m.QueryData,
+		"query-data-set":   m.QueryDataSet,
 
 		// Execute
 		"execute":              m.Execute,

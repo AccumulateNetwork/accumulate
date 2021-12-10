@@ -164,9 +164,21 @@ func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
 }
 
 func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
-	n.t.Fatalf("todo query data functionality not implemented")
-	//r, err := n.query.GetChainDataByUrl(url)
-	return nil
+	r, err := n.query.QueryDataByUrl(url)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainDataByEntryHash(url string, entryHash []byte) *api.APIDataResponse {
+	r, err := n.query.QueryDataByEntryHash(url, entryHash)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainDataSet(url string, start uint64, limit uint64) *api.APIDataResponsePagination {
+	r, err := n.query.QueryDataSetByUrl(url, start, limit)
+	require.NoError(n.t, err)
+	return r
 }
 
 func (n *fakeNode) GetChainStateByTxId(txid []byte) *api.APIDataResponse {
