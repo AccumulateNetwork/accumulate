@@ -7,12 +7,18 @@ import (
 
 // GetRange
 // returns the list of hashes with indexes indicated by range: (begin,end)
-// begin must be before or equal to end.  The hash with index begin upto but
-// not including end are the hashes returned.  Indexes are zero based, so the
+// begin must be before or equal to end.  The hash with index begin upto
+// but not including end are the hashes returned.  Indexes are zero based, so the
 // first hash in the MerkleState is at 0
-func (m *MerkleManager) GetRange(begin, end int64) (hashes []Hash, err error) {
+func (m *MerkleManager) GetRange(key []interface{}, begin, end int64) (hashes []Hash, err error) {
 	// We return nothing for ranges that are out of range.
+	oldKey := m.key
+	defer func() { m.key = oldKey }()
+	m.key = key
+
 	ec := m.GetElementCount()
+
+	// end++  Increment to include end in results, comment out to leave it out.
 
 	if end < begin || begin >= ec || begin < 0 {
 		return nil, fmt.Errorf("impossible range %d,%d for chain length %d",

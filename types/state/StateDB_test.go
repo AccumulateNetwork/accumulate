@@ -20,15 +20,12 @@ func TestStateDB_GetChainRange(t *testing.T) {
 
 	id := []byte(t.Name())
 	require.NoError(t, s.merkleMgr.SetKey(id))
-	err := s.merkleMgr.SetKey(id)
-	require.NoError(t, err, "should always be able to set a key")
+
 	const N = 10
 	for i := byte(0); i < N; i++ {
 		h := sha256.Sum256([]byte{i})
 		s.merkleMgr.AddHash(h[:])
 	}
-
-	s.merkleMgr.Manager.EndBatch()
 
 	const start, end = 1, 6
 	hashes, count, err := s.GetChainRange(id, start, end)
