@@ -271,6 +271,12 @@ func (q *queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiR
 }
 
 func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, error) {
+
+	qr, err := q.QueryUrl(url)
+	if err != nil {
+		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
+	}
+
 	req := new(query.RequestDataEntry)
 	req.Url = url
 
@@ -283,18 +289,20 @@ func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, e
 	if err != nil {
 		return nil, err
 	}
-	if k != "chain" {
+	if k != "data" {
 		return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
 	}
 
-	//need to unmarshal as Data Chain, perhaps need to pull chain state as well.
-	obj, chain, err := unmarshalState(v)
+	//do I need to do anything with v?
+	rde := protocol.ResponseDataEntry{}
+	err = rde.UnmarshalBinary(v)
 	if err != nil {
 		return nil, err
 	}
 
-	//need to pack as
-	return packStateResponse(obj, chain)
+	qr.Type = "dataEntry"
+	qr.Data = rde
+	return qr, nil
 }
 
 func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts *QueryOptions) (*QueryMultiResponse, error) {
@@ -310,6 +318,8 @@ func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts
 	if k != "data" {
 		return nil, fmt.Errorf("unknown response type: want data, got %q", k)
 	}
+
+	_ = v
 
 	//need to unmarshal as Data Chain, perhaps need to pull chain state as well.
 	//obj, chain, err := unmarshalState(v)
