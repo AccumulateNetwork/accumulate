@@ -44,7 +44,7 @@ func (m *MerkleManager) AddHash(hash Hash) {
 		} else {
 			m.dbKey("States", m.GetElementCount()-1).PutBatch(MSState) // Save Merkle State at n*MarkFreq-1
 		}
-		if err := m.WriteChainHead(); err != nil {
+		if err := m.WriteChainHead(m.key...); err != nil {
 			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	case 1: //                              After MarkFreq elements are written
@@ -52,7 +52,7 @@ func (m *MerkleManager) AddHash(hash Hash) {
 		fallthrough                       // then fall through as normal
 	default:
 		m.MS.AddToMerkleTree(hash) // 0 to m.MarkFeq-2, always add to the merkle tree
-		if err := m.WriteChainHead(); err != nil {
+		if err := m.WriteChainHead(m.key...); err != nil {
 			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	}
@@ -76,7 +76,7 @@ func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
 // MerkleState, the ChainID should be set
 func (m *MerkleManager) SetKey(key ...interface{}) (err error) {
 	m.key = key
-	m.MS, err = m.ReadChainHead()
+	m.MS, err = m.ReadChainHead(m.key...)
 	return err
 }
 
@@ -84,22 +84,22 @@ func (m *MerkleManager) SetKey(key ...interface{}) (err error) {
 // Save the current MerkleState as the head of the chain.  This does not flush
 // the database, because all chains in an application need have their head of
 // chain updated as one atomic transaction to prevent messing up the database
-func (m *MerkleManager) WriteChainHead() error {
+func (m *MerkleManager) WriteChainHead(key ...interface{}) error {
 	state, err := m.MS.Marshal()
 	if err != nil {
 		return err
 	}
-	m.Manager.Key(append(m.key, "Head")...).PutBatch(state)
+	m.Manager.Key(append(key, "Head")...).PutBatch(state)
 	return nil
 }
 
 // GetChainState
-// Reads the highest state of the chain stored to the database.  Returns nil
+// Reads the highest state of the chain stored to the database.  Returns nilTestCli
 // if no state has been recorded for a chain
-func (m *MerkleManager) GetChainState() (merkleState *MerkleState, err error) {
+func (m *MerkleManager) GetChainState(key ...interface{}) (merkleState *MerkleState, err error) {
 	merkleState = new(MerkleState)
 	merkleState.InitSha256()
-	state, err := m.Manager.Key(append(m.key, "Head")...).Get()
+	state, err := m.Manager.Key(append(key, "Head")...).Get()
 	if err == nil {
 		if err := merkleState.UnMarshal(state); err != nil {
 			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", m.key)
@@ -112,11 +112,11 @@ func (m *MerkleManager) GetChainState() (merkleState *MerkleState, err error) {
 // Retrieve the current MerkleState from the given database, and set
 // that state as the MerkleState of this MerkleManager.  Note that the cache
 // will be cleared.
-func (m *MerkleManager) ReadChainHead() (ms *MerkleState, err error) {
+func (m *MerkleManager) ReadChainHead(key ...interface{}) (ms *MerkleState, err error) {
 	ms = new(MerkleState)
 	ms.HashFunction = m.MS.HashFunction
-	state, e := m.Manager.Key(append(m.key, "Head")...).Get() //                        Get the state for the Merkle Tree
-	if e == nil {                                             //                        If the State exists
+	state, e := m.Manager.Key(append(key, "Head")...).Get() //                        Get the state for the Merkle Tree
+	if e == nil {                                           //                        If the State exists
 		if err := ms.UnMarshal(state); err != nil { //                                      set that as the state
 			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", m.key) // Blow up of the database is bad
 		}
