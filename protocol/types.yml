@@ -370,14 +370,9 @@ RequestDataEntry:
     - name: Url
       type: string
       is-url: true
-
-RequestDataEntryHash:
-  fields:
-    - name: Url
-      type: string
-      is-url: true
     - name: EntryHash
       type: chain
+      optional: true
 
 RequestDataEntrySet:
   fields:

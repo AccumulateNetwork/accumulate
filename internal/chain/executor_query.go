@@ -277,20 +277,29 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, chr.ChainId)}
 		}
-	case types.QueryTypeDataUrl:
+	case types.QueryTypeData:
 		chr := protocol.RequestDataEntry{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
+
 		u, err := url.Parse(chr.Url)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
 
-		ret, err := m.queryDataByUrl(u)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeDataUrlError, Message: err}
+		var ret *protocol.ResponseDataEntry
+		if chr.EntryHash == [32]byte{} {
+			ret, err = m.queryDataByEntryHash(u, chr.EntryHash[:])
+			if err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeDataEntryHashError, Message: err}
+			}
+		} else {
+			ret, err = m.queryDataByUrl(u)
+			if err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeDataUrlError, Message: err}
+			}
 		}
 
 		k = []byte("data")
@@ -298,29 +307,6 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err}
 		}
-	case types.QueryTypeDataEntry:
-
-		chr := protocol.RequestDataEntryHash{}
-		err := chr.UnmarshalBinary(q.Content)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
-		}
-		u, err := url.Parse(chr.Url)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
-		}
-
-		ret, err := m.queryDataByEntryHash(u, chr.EntryHash[:])
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeDataEntryHashError, Message: err}
-		}
-
-		k = []byte("data")
-		v, err = ret.MarshalBinary()
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err}
-		}
-
 	case types.QueryTypeDataSet:
 		chr := protocol.RequestDataEntrySet{}
 		err := chr.UnmarshalBinary(q.Content)

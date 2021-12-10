@@ -10,10 +10,8 @@ const (
 	QueryTypeTxId         // Query tx and pending chains By TxId
 	QueryTypeTxHistory    // Query transaction history
 	QueryTypeDirectoryUrl // Query directory by URL
-	QueryTypeDataUrl      // Query data chain by URL
+	QueryTypeData         // Query a specific data entry using the url and optional entry hash
 	QueryTypeDataSet      // Query a set of data given pagination parameters for a given URL
-	QueryTypeDataEntry    // Query a specific data entry on a given data chain using the entry hash
-
 )
 
 // Enum value maps for QueryType.
@@ -25,9 +23,8 @@ var (
 		QueryTypeTxId:         "QueryTypeTxId",
 		QueryTypeTxHistory:    "QueryTypeTxHistory",
 		QueryTypeDirectoryUrl: "QueryTypeDirectoryUrl",
-		QueryTypeDataUrl:      "QueryTypeDataUrl",
+		QueryTypeData:         "QueryTypeData",
 		QueryTypeDataSet:      "QueryTypeDataSet",
-		QueryTypeDataEntry:    "QueryTypeDataEntry",
 	}
 	QueryTypeValue = map[string]QueryType{
 		"QueryTypeUnknown":      QueryTypeUnknown,
@@ -36,9 +33,8 @@ var (
 		"QueryTypeTxId":         QueryTypeTxId,
 		"QueryTypeTxHistory":    QueryTypeTxHistory,
 		"QueryTypeDirectoryUrl": QueryTypeDirectoryUrl,
-		"QueryTypeDataUrl":      QueryTypeDataUrl,
+		"QueryTypeData":         QueryTypeData,
 		"QueryTypeDataSet":      QueryTypeDataSet,
-		"QueryTypeDataEntry":    QueryTypeDataEntry,
 	}
 )
 
