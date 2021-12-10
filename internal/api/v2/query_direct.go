@@ -271,16 +271,14 @@ func (q *queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiR
 }
 
 func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, error) {
-	queryHead := true
-	empty := [32]byte{}
-	if len(entryHash) != 32 || bytes.Compare(entryHash, empty[:]) == 0 {
-		queryHead = false
-	}
+	req := new(query.RequestDataEntry)
+	req.Url = url
 
-	req := new(protocol.RequestDataEntry)
-	if queryHead {
+	//test if we have an entry hash that is not zero.
+	if len(entryHash) == 32 && bytes.Compare(entryHash, req.EntryHash[:]) != 0 {
 		copy(req.EntryHash[:], entryHash)
 	}
+
 	k, v, err := q.query(req)
 	if err != nil {
 		return nil, err
@@ -289,10 +287,35 @@ func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, e
 		return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
 	}
 
+	//need to unmarshal as Data Chain, perhaps need to pull chain state as well.
 	obj, chain, err := unmarshalState(v)
 	if err != nil {
 		return nil, err
 	}
 
+	//need to pack as
 	return packStateResponse(obj, chain)
+}
+
+func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts *QueryOptions) (*QueryMultiResponse, error) {
+	req := new(query.RequestDataEntrySet)
+	req.Url = url
+	req.Start = pagination.Start
+	req.Limit = pagination.Count
+
+	k, v, err := q.query(req)
+	if err != nil {
+		return nil, err
+	}
+	if k != "data" {
+		return nil, fmt.Errorf("unknown response type: want data, got %q", k)
+	}
+
+	//need to unmarshal as Data Chain, perhaps need to pull chain state as well.
+	//obj, chain, err := unmarshalState(v)
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	return nil, nil
 }

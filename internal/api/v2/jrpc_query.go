@@ -98,7 +98,7 @@ func (m *JrpcMethods) QueryDataSet(_ context.Context, params json.RawMessage) in
 		return validatorError(errors.New("count must be greater than 0"))
 	}
 
-	res, err := m.opts.Query.QueryTxHistory(req.Url, int64(req.Start), int64(req.Count))
+	res, err := m.opts.Query.QueryDataSet(req.Url, &req.QueryPagination, &req.QueryOptions)
 	if err != nil {
 		return accumulateError(err)
 	}

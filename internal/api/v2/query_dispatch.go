@@ -102,3 +102,21 @@ func (q *queryDispatch) QueryTxHistory(url string, start, count int64) (*QueryMu
 
 	return q.direct(r).QueryTxHistory(url, start, count)
 }
+
+func (q *queryDispatch) QueryData(url string, entryHash []byte) (*QueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryData(url, entryHash)
+}
+
+func (q *queryDispatch) QueryDataSet(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryMultiResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryDataSet(url, pagination, queryOptions)
+}
