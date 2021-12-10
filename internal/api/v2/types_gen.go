@@ -31,9 +31,9 @@ type DataEntryQueryResponse struct {
 }
 
 type DataEntrySetQuery struct {
-	Url   string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	Start uint64 `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Count uint64 `json:"count,omitempty" form:"count" query:"count" validate:"required"`
+	UrlQuery
+	QueryPagination
+	QueryOptions
 }
 
 type DataEntrySetQueryResponse struct {
@@ -196,22 +196,6 @@ func (v *DataEntryQueryResponse) Equal(u *DataEntryQueryResponse) bool {
 	return true
 }
 
-func (v *DataEntrySetQuery) Equal(u *DataEntrySetQuery) bool {
-	if !(v.Url == u.Url) {
-		return false
-	}
-
-	if !(v.Start == u.Start) {
-		return false
-	}
-
-	if !(v.Count == u.Count) {
-		return false
-	}
-
-	return true
-}
-
 func (v *DataEntrySetQueryResponse) Equal(u *DataEntrySetQueryResponse) bool {
 	if !(len(v.DataEntries) == len(u.DataEntries)) {
 		return false
@@ -275,18 +259,6 @@ func (v *DataEntryQueryResponse) BinarySize() int {
 	return n
 }
 
-func (v *DataEntrySetQuery) BinarySize() int {
-	var n int
-
-	n += encoding.StringBinarySize(v.Url)
-
-	n += encoding.UvarintBinarySize(v.Start)
-
-	n += encoding.UvarintBinarySize(v.Count)
-
-	return n
-}
-
 func (v *DataEntrySetQueryResponse) BinarySize() int {
 	var n int
 
@@ -341,18 +313,6 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-
-	return buffer.Bytes(), nil
-}
-
-func (v *DataEntrySetQuery) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
-
-	buffer.Write(encoding.StringMarshalBinary(v.Url))
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.Start))
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.Count))
 
 	return buffer.Bytes(), nil
 }
@@ -440,31 +400,6 @@ func (v *DataEntryQueryResponse) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("error decoding Entry: %w", err)
 	}
 	data = data[v.Entry.BinarySize():]
-
-	return nil
-}
-
-func (v *DataEntrySetQuery) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Url: %w", err)
-	} else {
-		v.Url = x
-	}
-	data = data[encoding.StringBinarySize(v.Url):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Start: %w", err)
-	} else {
-		v.Start = x
-	}
-	data = data[encoding.UvarintBinarySize(v.Start):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Count: %w", err)
-	} else {
-		v.Count = x
-	}
-	data = data[encoding.UvarintBinarySize(v.Count):]
 
 	return nil
 }
