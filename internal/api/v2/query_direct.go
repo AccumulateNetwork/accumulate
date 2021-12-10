@@ -309,13 +309,14 @@ func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts
 	req := new(query.RequestDataEntrySet)
 	req.Url = url
 	req.Start = pagination.Start
-	req.Limit = pagination.Count
+	req.Count = pagination.Count
+	req.ExpandChains = opts.ExpandChains
 
 	k, v, err := q.query(req)
 	if err != nil {
 		return nil, err
 	}
-	if k != "data" {
+	if k != "dataSet" {
 		return nil, fmt.Errorf("unknown response type: want data, got %q", k)
 	}
 
@@ -326,6 +327,19 @@ func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts
 	//if err != nil {
 	//	return nil, err
 	//}
+	des := new(protocol.ResponseDataEntrySet)
+	err = des.UnmarshalBinary(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+	//respDir, err := responseDirFromProto(protoDir, pagination)
+	//if err != nil {
+	//	return nil, err
+	//}
+	//des.
 
+	res := new(QueryResponse)
+	res.Type = "dataSet"
+	res.Data = des //respDir
 	return nil, nil
 }

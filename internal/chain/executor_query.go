@@ -152,7 +152,7 @@ func (m *Executor) queryDataByEntryHash(u *url.URL, entryHash []byte) (*protocol
 	return &qr, nil
 }
 
-func (m *Executor) queryDataSet(u *url.URL, start int64, limit int64) (*protocol.ResponseDataEntrySet, error) {
+func (m *Executor) queryDataSet(u *url.URL, start int64, limit int64, expand bool) (*protocol.ResponseDataEntrySet, error) {
 	qr := protocol.ResponseDataEntrySet{}
 
 	entryHashes, height, err := m.DB.GetChainDataRange(u.ResourceChain(), start, start+limit)
@@ -162,11 +162,15 @@ func (m *Executor) queryDataSet(u *url.URL, start int64, limit int64) (*protocol
 
 	qr.Total = uint64(height)
 	for i := range entryHashes {
-		entry, err := m.queryDataByEntryHash(u, entryHashes[i][:])
-		if err != nil {
-			return nil, err
+		if expand {
+			entry, err := m.queryDataByEntryHash(u, entryHashes[i][:])
+			if err != nil {
+				return nil, err
+			}
+			qr.DataEntries = append(qr.DataEntries, *entry)
+		} else {
+			qr.DataEntries = append(qr.DataEntries, protocol.ResponseDataEntry{EntryHash: entryHashes[i]})
 		}
-		qr.DataEntries = append(qr.DataEntries, *entry)
 	}
 	return &qr, nil
 }
@@ -278,7 +282,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("%v, on Chain %x", err, chr.ChainId)}
 		}
 	case types.QueryTypeData:
-		chr := protocol.RequestDataEntry{}
+		chr := query.RequestDataEntry{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
@@ -308,7 +312,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err}
 		}
 	case types.QueryTypeDataSet:
-		chr := protocol.RequestDataEntrySet{}
+		chr := query.RequestDataEntrySet{}
 		err := chr.UnmarshalBinary(q.Content)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
@@ -318,7 +322,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
 
-		ret, err := m.queryDataSet(u, int64(chr.Start), int64(chr.Limit))
+		ret, err := m.queryDataSet(u, int64(chr.Start), int64(chr.Count), chr.ExpandChains)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeDataEntryHashError, Message: err}
 		}
