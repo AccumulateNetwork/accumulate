@@ -32,7 +32,6 @@ type Executor struct {
 
 	executors  map[types.TxType]TxExecutor
 	dispatcher *dispatcher
-	isGenesis  bool
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -47,13 +46,13 @@ type Executor struct {
 var _ abci.Chain = (*Executor)(nil)
 
 type ExecutorOptions struct {
-	DB              *state.StateDB
-	Logger          log.Logger
-	Key             ed25519.PrivateKey
-	Local           api.ABCIBroadcastClient
-	SubnetType      config.NetworkType
-	Directory       string
-	BlockValidators []string
+	DB      *state.StateDB
+	Logger  log.Logger
+	Key     ed25519.PrivateKey
+	Local   api.ABCIBroadcastClient
+	Network config.Network
+
+	isGenesis bool
 
 	// TODO Remove once tests support running the DN
 	IsTest bool
@@ -70,10 +69,12 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 		m.logger = opts.Logger.With("module", "executor")
 	}
 
-	var err error
-	m.dispatcher, err = newDispatcher(opts)
-	if err != nil {
-		return nil, err
+	if !m.isGenesis {
+		var err error
+		m.dispatcher, err = newDispatcher(opts)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for _, x := range executors {
@@ -578,7 +579,7 @@ func (m *Executor) Commit() ([]byte, error) {
 			return nil
 		}
 
-		switch m.SubnetType {
+		switch m.Network.Type {
 		case config.Directory:
 			// TODO Mirror DN ADI
 

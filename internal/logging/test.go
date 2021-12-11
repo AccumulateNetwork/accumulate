@@ -26,8 +26,8 @@ func (l *TestLogger) Write(b []byte) (int, error) {
 	return len(b), nil
 }
 
-func TestLogWriter(t testing.TB) func(string) io.Writer {
-	return func(format string) io.Writer {
+func TestLogWriter(t testing.TB) func(string) (io.Writer, error) {
+	return func(format string) (io.Writer, error) {
 		var w io.Writer = &TestLogger{Test: t}
 		switch strings.ToLower(format) {
 		case log.LogFormatPlain, log.LogFormatText:
@@ -39,7 +39,7 @@ func TestLogWriter(t testing.TB) func(string) io.Writer {
 			t.Fatalf("Unsupported log format: %s", format)
 		}
 
-		return w
+		return w, nil
 	}
 }
 
