@@ -24,6 +24,7 @@ func (m *JrpcMethods) Metrics(_ context.Context, params json.RawMessage) interfa
 		Address: m.opts.Config.PrometheusServer,
 	})
 	if err != nil {
+		m.logError("Metrics query failed", "error", err, "server", m.opts.Config.PrometheusServer)
 		return internalError(err)
 	}
 	papi := prometheus.NewAPI(c)

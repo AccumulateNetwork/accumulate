@@ -34,7 +34,7 @@ var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
 func TestLoadOnRemote(t *testing.T) {
 	t.Skip("Deprecated, use `accumulated loadtest`")
 
-	txBouncer, err := relay.NewWith(*testnet)
+	txBouncer, err := relay.NewWith(nil, *testnet)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,18 +111,16 @@ func TestJsonRpcLiteToken(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, pv, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
-	kpSponsor := ed25519.NewKeyFromSeed(pv.Key.PrivKey.Bytes()[:32])
+	kpSponsor := ed25519.NewKeyFromSeed(daemon.Key().Bytes()[:32])
 
 	addrList, err := acctesting.RunLoadTest(query, kpSponsor, *loadWalletCount, *loadTxCount)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	//wait 3 seconds for the transaction to process for the block to complete.
-	time.Sleep(time.Second)
 
 	queryTokenUrl := addrList[1]
 	resp, err := query.GetTokenAccount(queryTokenUrl)
@@ -222,7 +220,8 @@ func TestFaucet(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, _, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
@@ -329,7 +328,8 @@ func TestTransactionHistory(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, _, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 
 	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
@@ -409,7 +409,8 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	params, err := json.Marshal(&req)
 	require.NoError(t, err)
 
-	_, _, query := startBVC(t, t.TempDir())
+	daemon := startBVC(t, t.TempDir())
+	query := daemon.Query_TESTONLY()
 	jsonapi := NewTest(t, query)
 	res := jsonapi.Faucet(context.Background(), params)
 	if err, ok := res.(error); ok {
@@ -443,7 +444,8 @@ func TestMetrics(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, _, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
 	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
@@ -471,7 +473,8 @@ func TestQueryNotFound(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, _, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "acc://1cddf368ef9ba2a1ea914291e0201ebaf376130a6c05caf3/ACME"})
@@ -493,7 +496,8 @@ func TestQueryWrongType(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, _, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
 	_, origin, _ := ed25519.GenerateKey(nil)
@@ -522,7 +526,8 @@ func TestGetTxId(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, _, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
 	_, origin, _ := ed25519.GenerateKey(nil)
@@ -557,11 +562,12 @@ func TestDirectory(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	db, _, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
 	_, adiKey, _ := ed25519.GenerateKey(nil)
-	dbTx := db.Begin()
+	dbTx := daemon.DB_TESTONLY().Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, tmed25519.PrivKey(adiKey), "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
 	_, err := dbTx.Commit(2, time.Unix(0, 0), nil)
@@ -607,7 +613,8 @@ func TestFaucetReplay(t *testing.T) {
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
-	_, _, query := startBVC(t, dir)
+	daemon := startBVC(t, dir)
+	query := daemon.Query_TESTONLY()
 
 	jsonapi := NewTest(t, query)
 	res, err := jsonapi.BroadcastTx(false, gtx)
@@ -626,7 +633,8 @@ func TestFaucetReplay(t *testing.T) {
 	require.Equal(t, "1000000000", ta.Balance.String(), "incorrect balance after faucet transaction")
 
 	// Replay - see https://github.com/tendermint/tendermint/issues/7185
-	res, err = jsonapi.BroadcastTx(false, gtx)
+	_, err = jsonapi.BroadcastTx(false, gtx)
 	require.IsType(t, jsonrpc2.Error{}, err)
-	require.Equal(t, jsonrpc2.ErrorCode(ErrCodeDuplicateTxn), err.(jsonrpc2.Error).Code)
+	jerr := err.(jsonrpc2.Error)
+	require.Equal(t, jsonrpc2.ErrorCode(ErrCodeDuplicateTxn), jerr.Code, jerr.Message)
 }

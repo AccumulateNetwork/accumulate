@@ -12,6 +12,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
@@ -89,10 +90,13 @@ func (r *Relay) Start() error {
 	})
 
 	for _, c := range r.client {
-		err := c.Start()
-		if err != nil {
-			failed = true
-			return err
+		svc, _ := c.(service.Service)
+		if svc != nil {
+			err := svc.Start()
+			if err != nil {
+				failed = true
+				return err
+			}
 		}
 
 		// Subscribing to all transactions is messy, but making one subscription
@@ -109,10 +113,9 @@ func (r *Relay) Start() error {
 			Chan: reflect.ValueOf(ch),
 		})
 
-		c := c // Do not capture loop var
 		defer func() {
-			if failed {
-				_ = c.Stop()
+			if failed && svc != nil {
+				_ = svc.Stop()
 			}
 		}()
 	}
@@ -151,7 +154,12 @@ func (r *Relay) Stop() error {
 	var errs []string
 
 	for _, c := range r.client {
-		err := c.Stop()
+		svc, ok := c.(service.Service)
+		if !ok {
+			continue
+		}
+
+		err := svc.Stop()
 		if err != nil {
 			errs = append(errs, err.Error())
 		}
@@ -255,7 +263,7 @@ func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedSt
 				fmt.Printf("Send TX %X\n", sha256.Sum256(tx))
 			}
 			bs.Status[i].NetworkId = txb.networkId
-			batches[i].BroadcastTxSync(context.Background(), tx)
+			_, _ = batches[i].BroadcastTxSync(context.Background(), tx)
 		}
 	}
 
