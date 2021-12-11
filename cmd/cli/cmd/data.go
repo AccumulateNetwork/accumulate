@@ -22,14 +22,14 @@ var dataCmd = &cobra.Command{
 		switch args[0] {
 		case "get":
 			switch len(args) {
-			case 3:
-				fallthrough
-			case 4:
-				out, err = GetDataEntry(args[1], args[2:])
-			case 5:
-				out, err = GetDataEntrySet(args[1], args[2:])
-			default:
+			case 1:
 				PrintDataGet()
+			case 2:
+				out, err = GetDataEntry(args[1], []string{})
+			case 3:
+				out, err = GetDataEntry(args[1], args[2:])
+			default:
+				out, err = GetDataEntrySet(args[1], args[2:])
 			}
 		case "create":
 			if len(args) > 2 {
@@ -235,6 +235,10 @@ func WriteData(accountUrl string, args []string) (string, error) {
 				return "", fmt.Errorf("extid is neither hex nor quoted string, %v", err)
 			}
 		} else {
+			err = json.Unmarshal([]byte(args[i]), data)
+			if err != nil {
+				return "", err
+			}
 			copy(data, args[i])
 		}
 		if i == len(args)-1 {
