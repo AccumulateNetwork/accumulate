@@ -407,12 +407,12 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 }
 
 func (s *StateManager) WriteIndex(index state.Index, chain []byte, key interface{}, value []byte) {
-	k := storage.ComputeKey(string(index), chain, key)
+	k := storage.MakeKey(string(index), chain, key)
 	s.writes[k] = value
 }
 
 func (s *StateManager) GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error) {
-	k := storage.ComputeKey(string(index), chain, key)
+	k := storage.MakeKey(string(index), chain, key)
 	w, ok := s.writes[k]
 	if ok {
 		return w, nil

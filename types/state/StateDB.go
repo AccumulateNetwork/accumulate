@@ -198,7 +198,7 @@ func (s *StateDB) GetDataChainRange(chainId []byte, start int64, end int64) ([]t
 
 //GetTx get the transaction by transaction ID
 func (s *StateDB) GetTx(txId []byte) (tx []byte, err error) {
-	tx, err = s.dbMgr.Key(bucketTx, txId).Get()
+	tx, err = s.dbMgr.Get(storage.MakeKey(bucketTx, txId))
 	if err != nil {
 		return nil, err
 	}
@@ -209,11 +209,11 @@ func (s *StateDB) GetTx(txId []byte) (tx []byte, err error) {
 //GetPendingTx get the pending transactions by primary transaction ID
 func (s *StateDB) GetPendingTx(txId []byte) (pendingTx []byte, err error) {
 
-	pendingTxId, err := s.dbMgr.Key(bucketMainToPending, txId).Get()
+	pendingTxId, err := s.dbMgr.Get(storage.MakeKey(bucketMainToPending, txId))
 	if err != nil {
 		return nil, err
 	}
-	pendingTx, err = s.dbMgr.Key(bucketPendingTx, pendingTxId).Get()
+	pendingTx, err = s.dbMgr.Get(storage.MakeKey(bucketPendingTx, pendingTxId))
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (s *StateDB) GetPendingTx(txId []byte) (pendingTx []byte, err error) {
 // GetSyntheticTxIds get the transaction id list by the transaction ID that spawned the synthetic transactions
 func (s *StateDB) GetSyntheticTxIds(txId []byte) (syntheticTxIds []byte, err error) {
 
-	syntheticTxIds, err = s.dbMgr.Key(bucketTxToSynthTx, txId).Get()
+	syntheticTxIds, err = s.dbMgr.Get(storage.MakeKey(bucketTxToSynthTx, txId))
 	if err != nil {
 		//this is not a significant error. Synthetic transactions don't usually have other synth tx's.
 		//TODO: Fixme, this isn't an error
@@ -309,7 +309,7 @@ func (s *StateDB) GetPersistentEntry(chainId []byte, verify bool) (*Object, erro
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data, err := s.dbMgr.Key("StateEntries", chainId).Get()
+	data, err := s.dbMgr.Get(storage.MakeKey("StateEntries", chainId))
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, fmt.Errorf("%w: no state defined for %X", storage.ErrNotFound, chainId)
 	}
@@ -335,7 +335,7 @@ func (s *StateDB) getObject(keys ...interface{}) (*Object, error) {
 		return nil, fmt.Errorf("database has not been initialized")
 	}
 
-	data, err := s.dbMgr.Key(keys...).Get()
+	data, err := s.dbMgr.Get(storage.MakeKey(keys...))
 	if err != nil {
 		return nil, err
 	}
@@ -480,7 +480,7 @@ func (tx *DBTransaction) WriteSynthTxn(txid []byte, obj *Object) error {
 
 	tx.state.logInfo("Write synth txn", "txid", logging.AsHex(txid))
 
-	tx.state.dbMgr.Key(bucketStagedSynthTx, "", txid).PutBatch(data)
+	tx.state.dbMgr.PutBatch(storage.MakeKey(bucketStagedSynthTx, "", txid), data)
 	tx.state.bptMgr.Bpt.Insert(txid32, sha256.Sum256(data))
 	return nil
 }
@@ -503,12 +503,12 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 				}
 			}
 			//store a list of txid to list of synth txid's
-			tx.state.dbMgr.Key(bucketTxToSynthTx, txn.TxId).PutBatch(synthData)
+			tx.state.dbMgr.PutBatch(storage.MakeKey(bucketTxToSynthTx, txn.TxId), synthData)
 		}
 
 		mutex.Lock()
 		//store the transaction in the transaction bucket by txid
-		tx.state.dbMgr.Key(bucketTx, txn.TxId).PutBatch(data)
+		tx.state.dbMgr.PutBatch(storage.MakeKey(bucketTx, txn.TxId), data)
 		//insert the hash of the tx object in the BPT
 		tx.state.bptMgr.Bpt.Insert(txHash, sha256.Sum256(data))
 		mutex.Unlock()
@@ -524,10 +524,10 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 		mutex.Lock()
 		//Store the mapping of the Transaction hash to the pending transaction hash which can be used for
 		// validation so we can find the pending transaction
-		tx.state.dbMgr.Key("MainToPending", txn.TxId).PutBatch(pendingHash[:])
+		tx.state.dbMgr.PutBatch(storage.MakeKey("MainToPending", txn.TxId), pendingHash[:])
 
 		//store the pending transaction by the pending tx hash
-		tx.state.dbMgr.Key(bucketPendingTx, pendingHash[:]).PutBatch(data)
+		tx.state.dbMgr.PutBatch(storage.MakeKey(bucketPendingTx, pendingHash[:]), data)
 		mutex.Unlock()
 	}
 
@@ -537,7 +537,7 @@ func (tx *DBTransaction) writeTxs(mutex *sync.Mutex, group *sync.WaitGroup) erro
 func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mutex, mm *managed.MerkleManager, chainId types.Bytes32) error {
 	defer group.Done()
 
-	err := tx.state.merkleMgr.SetKey(chainId[:])
+	err := tx.state.merkleMgr.SetKey(storage.MakeKey(chainId[:]))
 	if err != nil {
 		return err
 	}
@@ -579,7 +579,7 @@ func (tx *DBTransaction) writeChainState(group *sync.WaitGroup, mutex *sync.Mute
 		}
 
 		mutex.Lock()
-		tx.GetDB().Key(bucketEntry, chainId.Bytes()).PutBatch(chainStateObject)
+		tx.GetDB().PutBatch(storage.MakeKey(bucketEntry, chainId.Bytes()), chainStateObject)
 		// The bpt stores the hash of the ChainState object hash.
 		tx.state.bptMgr.Bpt.Insert(chainId, sha256.Sum256(chainStateObject))
 		mutex.Unlock()
@@ -615,13 +615,13 @@ func (tx *DBTransaction) writeDataState(chainId *types.Bytes32) error {
 		//store the entry hash for the data
 		tx.state.logDebug("AddHash", "hash", logging.AsHex(entry.EntryHash))
 		mgr.AddEntry(entry.EntryHash)
-		tx.GetDB().Key(bucketEntry, chainId.Bytes(), entry.EntryHash).PutBatch(entry.Data)
+		tx.GetDB().PutBatch(storage.MakeKey(bucketEntry, chainId.Bytes(), entry.EntryHash), entry.Data)
 	}
 
 	// The bpt stores the root of the data merkle state
 	anchor := types.Bytes32{}
 	anchor.FromBytes(mgr.Anchor())
-	tx.state.bptMgr.Bpt.Insert(storage.ComputeKey(bucketDataEntry, chainId), anchor)
+	tx.state.bptMgr.Bpt.Insert(storage.MakeKey(bucketDataEntry, chainId), anchor)
 	return nil
 }
 
@@ -727,7 +727,7 @@ func (tx *DBTransaction) writeBatches() {
 }
 
 func (s *StateDB) SubnetID() (string, error) {
-	b, err := s.GetDB().Key("SubnetID").Get()
+	b, err := s.GetDB().Get(storage.MakeKey("SubnetID"))
 	if err != nil {
 		return "", err
 	}
@@ -880,7 +880,7 @@ func (tx *DBTransaction) commitTxWrites() {
 		return bytes.Compare(writeOrder[i][:], writeOrder[j][:]) < 0
 	})
 	for _, k := range writeOrder {
-		tx.state.GetDB().Key(k).PutBatch(tx.writes[k])
+		tx.state.GetDB().PutBatch(storage.MakeKey(k), tx.writes[k])
 	}
 }
 

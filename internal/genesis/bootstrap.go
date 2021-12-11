@@ -35,7 +35,7 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 		return nil, err
 	}
 
-	_ = kvdb.Put(storage.ComputeKey("SubnetID"), []byte(opts.SubnetID))
+	_ = kvdb.Put(storage.MakeKey("SubnetID"), []byte(opts.SubnetID))
 
 	exec, err := chain.NewGenesisExecutor(db, opts.NetworkType)
 	if err != nil {
