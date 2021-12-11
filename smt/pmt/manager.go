@@ -1,8 +1,12 @@
 package pmt
 
 import (
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 )
+
+var kBpt = storage.MakeKey("BPT")
+var kBptRoot = kBpt.Append("Root")
 
 type Manager struct {
 	DBManager *database.Manager
@@ -15,13 +19,13 @@ type Manager struct {
 // Get a new BPTManager which keeps the BPT on disk.  If the BPT is on
 // disk, then it can be reloaded as needed.
 func NewBPTManager(dbManager *database.Manager) *Manager { // Return a new BPTManager
-	manager := new(Manager)                       //            Allocate the struct
-	manager.DBManager = dbManager                 //            populate with pointer to the database manager
-	manager.Bpt = NewBPT()                        //            Allocate a new BPT
-	manager.Bpt.manager = manager                 //            Allow the Bpt to call back to the manager for db access
-	manager.LoadedBB = make(map[[32]byte]*Node)   //            Allocate an initial map
-	data, e := dbManager.Key("BPT", "Root").Get() //            Get the BPT settings from disk
-	if e == nil {                                 //            If nothing is found, well this is a fresh instance
+	manager := new(Manager)                     //            Allocate the struct
+	manager.DBManager = dbManager               //            populate with pointer to the database manager
+	manager.Bpt = NewBPT()                      //            Allocate a new BPT
+	manager.Bpt.manager = manager               //            Allow the Bpt to call back to the manager for db access
+	manager.LoadedBB = make(map[[32]byte]*Node) //            Allocate an initial map
+	data, e := dbManager.Get(kBptRoot)          //            Get the BPT settings from disk
+	if e == nil {                               //            If nothing is found, well this is a fresh instance
 		manager.Bpt.UnMarshal(data)        //                 But if data is found, then unmarshal
 		manager.LoadNode(manager.Bpt.Root) //                 and load up the root data for the BPT
 	} //
@@ -44,7 +48,7 @@ func (m *Manager) LoadNode(node *Node) *Node {
 		panic("load should not be called on a node that is not a border node") // panic -- should not occur
 	}
 	if n := m.LoadedBB[node.BBKey]; n == nil { //                                 If the Byte Block isn't loaded
-		data, e := m.DBManager.Key("BPT", node.BBKey[:]).Get() //                      Get the Byte Block
+		data, e := m.DBManager.Get(kBpt.Append(node.BBKey[:])) //                      Get the Byte Block
 		if e != nil {
 			return nil
 		}
@@ -59,11 +63,11 @@ func (m *Manager) LoadNode(node *Node) *Node {
 // FlushNode
 // Flushes the Byte Block to disk
 func (m *Manager) FlushNode(node *Node) { //   Flush a Byte Block
-	data := m.Bpt.MarshalByteBlock(node)                 //
-	m.DBManager.Key("BPT", node.BBKey[:]).PutBatch(data) //
+	data := m.Bpt.MarshalByteBlock(node)                   //
+	m.DBManager.PutBatch(kBpt.Append(node.BBKey[:]), data) //
 	if node.Height == 0 {
 		data = m.Bpt.Marshal()
-		m.DBManager.Key("BPT", "Root").PutBatch(data)
+		m.DBManager.PutBatch(kBptRoot, data)
 	}
 }
 

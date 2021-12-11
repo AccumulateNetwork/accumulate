@@ -35,7 +35,7 @@ func (SyntheticMirror) Validate(st *StateManager, tx *transactions.GenTransactio
 		}
 
 		// TODO Save the merkle state somewhere?
-		fmt.Printf("Mirrored %q\n", record.Header().ChainUrl)
+		st.logDebug("Mirroring", "url", record.Header().ChainUrl)
 		st.Update(record)
 	}
 

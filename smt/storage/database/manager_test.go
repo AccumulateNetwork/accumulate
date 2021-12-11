@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/rand"
 )
@@ -58,7 +59,7 @@ func writeAndReadBatch(t *testing.T, dbManager *Manager) {
 	// Buckets are "a" "b" and "c"
 
 	type ent struct { // Keep a history
-		Key   KeyRef
+		Key   storage.Key
 		Value []byte
 	}
 	var submissions []ent // Every key/value submitted goes here, in order
@@ -66,22 +67,22 @@ func writeAndReadBatch(t *testing.T, dbManager *Manager) {
 		key := randSHA()   // Generate next key
 		value := randSHA() // Generate next value
 
-		submissions = append(submissions, ent{Key: dbManager.Key("a", key), Value: value[:]}) // Keep a history
-		dbManager.Key("a", key[:]).PutBatch(value[:])                                         // Put into the database
+		submissions = append(submissions, ent{Key: storage.MakeKey("a", key), Value: value[:]}) // Keep a history
+		dbManager.PutBatch(storage.MakeKey("a", key[:]), value[:])                              // Put into the database
 	}
 
 	// Now this is the actual test
 	for i := byte(0); i < cnt; i++ {
 		add()
 		for i, pair := range submissions {
-			require.NotNil(t, dbManager.txCache[pair.Key.K], "Entry %d missing", i)
-			require.Equal(t, pair.Value[:], dbManager.txCache[pair.Key.K], "Entry %d has wrong value", i)
+			require.NotNil(t, dbManager.txCache[pair.Key], "Entry %d missing", i)
+			require.Equal(t, pair.Value[:], dbManager.txCache[pair.Key], "Entry %d has wrong value", i)
 		}
 	}
 
 	dbManager.EndBatch()
 	for i, pair := range submissions {
-		DBValue, e := dbManager.DB.Get(pair.Key.K)
+		DBValue, e := dbManager.DB.Get(pair.Key)
 		require.Nil(t, e, "Get Failed")
 		require.NotNil(t, DBValue, "Entry %d missing", i)
 		require.Equal(t, pair.Value[:], DBValue, "Entry %d has wrong value", i)
@@ -93,14 +94,14 @@ func writeAndRead(t *testing.T, dbManager *Manager) {
 	d1 := []byte{1, 2, 3}
 	d2 := []byte{2, 3, 4}
 	d3 := []byte{3, 4, 5}
-	_ = dbManager.Key("a", "", "horse").Put(d1)
-	_ = dbManager.Key("b", "", "horse").Put(d2)
-	_ = dbManager.Key("c", "", "horse").Put(d3)
-	v1, e1 := dbManager.Key("a", "", "horse").Get()
+	_ = dbManager.Put(storage.MakeKey("a", "", "horse"), d1)
+	_ = dbManager.Put(storage.MakeKey("b", "", "horse"), d2)
+	_ = dbManager.Put(storage.MakeKey("c", "", "horse"), d3)
+	v1, e1 := dbManager.Get(storage.MakeKey("a", "", "horse"))
 	require.Nil(t, e1, "could not retrieve value")
-	v2, e2 := dbManager.Key("b", "", "horse").Get()
+	v2, e2 := dbManager.Get(storage.MakeKey("b", "", "horse"))
 	require.Nil(t, e2, "could not retrieve value")
-	v3, e3 := dbManager.Key("c", "", "horse").Get()
+	v3, e3 := dbManager.Get(storage.MakeKey("c", "", "horse"))
 	require.Nil(t, e3, "could not retrieve value")
 
 	if !bytes.Equal(d1, v1) || !bytes.Equal(d2, v2) || !bytes.Equal(d3, v3) {
@@ -108,14 +109,14 @@ func writeAndRead(t *testing.T, dbManager *Manager) {
 	}
 
 	for i := 0; i < 10; i++ {
-		dbManager.Key("a", "", common.Int64Bytes(int64(i))).PutBatch([]byte(fmt.Sprint(i)))
+		dbManager.PutBatch(storage.MakeKey("a", "", common.Int64Bytes(int64(i))), []byte(fmt.Sprint(i)))
 	}
 
 	dbManager.EndBatch()
 
 	// Sort that I can read all thousand entries
 	for i := 0; i < 10; i++ {
-		value, e := dbManager.Key("a", "", common.Int64Bytes(int64(i))).Get()
+		value, e := dbManager.Get(storage.MakeKey("a", "", common.Int64Bytes(int64(i))))
 		require.Nil(t, e, "could not retrieve value")
 		eValue := []byte(fmt.Sprint(i))
 

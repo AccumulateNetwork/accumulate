@@ -528,8 +528,8 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 		}
 		return string(data), nil
 	} else {
-		switch res.Type {
-		case "liteTokenAccount":
+		switch string(res.Type) {
+		case types.ChainTypeLiteTokenAccount.String():
 			ata := response.LiteTokenAccount{}
 			err := json.Unmarshal(*res.Data, &ata)
 			if err != nil {
@@ -549,7 +549,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 
 			return out, nil
-		case "tokenAccount":
+		case types.ChainTypeTokenAccount.String():
 			ata := response.TokenAccount{}
 			err := json.Unmarshal(*res.Data, &ata)
 			if err != nil {
@@ -567,7 +567,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBookUrl)
 
 			return out, nil
-		case "adi":
+		case types.ChainTypeIdentity.String():
 			adi := response.ADI{}
 			err := json.Unmarshal(*res.Data, &adi)
 			if err != nil {
@@ -604,7 +604,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%v (%s)\n", s, chainType)
 			}
 			return out, nil
-		case "keyBook":
+		case types.ChainTypeKeyBook.String():
 			//workaround for protocol unmarshaling bug
 			var ssg struct {
 				Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
@@ -647,7 +647,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%d\t\t:\t%s\n", i+1, s)
 			}
 			return out, nil
-		case "keyPage":
+		case types.ChainTypeKeyPage.String():
 			ss := protocol.KeyPage{}
 			err := json.Unmarshal(*res.Data, &ss)
 			if err != nil {
@@ -664,7 +664,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 			}
 			return out, nil
-		case "withdrawTokens":
+		case types.TxTypeWithdrawTokens.String():
 			tx := response.TokenTx{}
 			err := json.Unmarshal(*res.Data, &tx)
 			if err != nil {
@@ -685,7 +685,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 
 			out += printGeneralTransactionParameters(res)
 			return out, nil
-		case "syntheticDepositTokens":
+		case types.TxTypeSyntheticDepositTokens.String():
 			deposit := synthetic.TokenTransactionDeposit{}
 			err := json.Unmarshal(*res.Data, &deposit)
 

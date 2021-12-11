@@ -79,15 +79,15 @@ cli page get keytest/page2 &> /dev/null || die "Cannot find keytest/page2"
 success
 
 section "Add a key to page 1 using a key from page 1"
-wait-for cli-tx page key add keytest/page1 keytest-1-0 1 1 keytest-1-1
+wait-for cli-tx page key add keytest/page1 keytest-1-0 1 keytest-1-1
 success
 
 section "Add a key to page 2 using a key from page 1"
-wait-for cli-tx page key add keytest/page2 keytest-1-0 1 2 keytest-2-1
+wait-for cli-tx page key add keytest/page2 keytest-1-0 1 keytest-2-1
 success
 
 section "Create an ADI Token Account"
-wait-for cli-tx account create keytest keytest-0-0 0 1 keytest/tokens ACME keytest/book
+wait-for cli-tx account create keytest keytest-0-0 0 keytest/tokens ACME keytest/book
 cli account get keytest/tokens &> /dev/null && success || die "Cannot find keytest/tokens"
 
 section "Send tokens from the lite token account to the ADI token account"
@@ -96,7 +96,7 @@ BALANCE=$(cli -j account get keytest/tokens | jq -r .data.balance)
 [ "$BALANCE" -eq 500000000 ] && success || die "${LITE} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
 
 section "Add credits to the ADI's key page 0"
-wait-for cli-tx credits keytest/tokens keytest-0-0 0 1 keytest/page0 125
+wait-for cli-tx credits keytest/tokens keytest-0-0 0 keytest/page0 125
 BALANCE=$(cli -j page get keytest/page0 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 125 ] && success || die "keytest/page0 should have 125 credits but has ${BALANCE}"
 
