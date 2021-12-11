@@ -797,7 +797,10 @@ func (tx *DBTransaction) Commit(blockHeight int64, timestamp time.Time, finalize
 	group.Wait()
 
 	// Update the anchor chain, but only if something changed
-	if !bytes.Equal(oldRoot, newRoot) {
+	//
+	// Also update if the block height is 2 - this is a hack to make sure we
+	// mirror properly, even if no records have changed
+	if blockHeight == 2 || !bytes.Equal(oldRoot, newRoot) {
 		err = tx.writeAnchorChain(blockHeight, timestamp)
 		if err != nil {
 			return nil, fmt.Errorf("failed to write anchor chain: %v", err)
