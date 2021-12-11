@@ -95,7 +95,7 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 
 	var res api.QueryResponse
 
-	data, err := json.Marshal(params)
+	data, err := json.Marshal(&params)
 	jsondata := json.RawMessage(data)
 	if err != nil {
 		return "", err
