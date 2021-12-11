@@ -97,7 +97,8 @@ func (cr *connectionRouter) isDnUrl(hostname string) bool {
 
 func (cr *connectionRouter) lookupBvnNode(hostname string, group nodeGroup) (*nodeContext, error) {
 	for _, node := range group.nodes {
-		if strings.EqualFold(hostname, node.subnetName) {
+		if strings.HasPrefix(hostname, "bvn-") && strings.EqualFold(hostname[4:], node.subnetName) ||
+			strings.EqualFold("bvn-"+hostname, node.subnetName) {
 			return node, nil
 		}
 	}
@@ -132,7 +133,11 @@ func createBvnNameMap(nodes []*nodeContext) map[string]bool {
 	bvnMap := make(map[string]bool)
 	for _, node := range nodes {
 		if node.netType == config.BlockValidator && node.nodeType == config.Validator {
-			bvnMap[strings.ToLower(node.subnetName)] = true
+			bvnName := strings.ToLower(node.subnetName)
+			if !strings.HasPrefix(bvnName, "bvn-") {
+				bvnName = "bvn-" + bvnName
+			}
+			bvnMap[bvnName] = true
 		}
 	}
 	return bvnMap

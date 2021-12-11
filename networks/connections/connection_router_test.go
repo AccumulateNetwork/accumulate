@@ -28,14 +28,14 @@ func TestConnectionRouter(t *testing.T) {
 	broadcastClient := connRouter.AcquireBroadcastClient()
 	t.Logf("Broadcast client: %v", broadcastClient)
 
-	route, err := connRouter.AcquireRoute("acc://"+networkCfg.ID+"/foo", false)
+	route, err := connRouter.AcquireRoute("acc://bvn-"+networkCfg.ID+"/foo", false)
 	require.NoError(t, err)
 	t.Logf("Local client: %v", route)
 	assert.Equal(t, connections.Local, route.GetNetworkGroup())
 	assert.NotNil(t, route.GetBroadcastClient())
 
 	otherBvn := networkCfg.BvnNames[1]
-	otherClient, err := connRouter.AcquireRoute("acc://"+otherBvn+"/foo", false)
+	otherClient, err := connRouter.AcquireRoute("acc://bvn-"+otherBvn+"/foo", false)
 	require.NoError(t, err)
 	t.Logf("Other client: %v", otherClient)
 	assert.Equal(t, connections.OtherSubnet, otherClient.GetNetworkGroup())
@@ -54,12 +54,12 @@ func TestConnectionRouter(t *testing.T) {
 	require.NoError(t, err)
 	t.Logf("Query client 2: %v", queryClient2)
 
-	queryClientLocalBvn, err := connRouter.AcquireRoute("acc://"+networkCfg.ID+"/foo", true)
+	queryClientLocalBvn, err := connRouter.AcquireRoute("acc://bvn-"+networkCfg.ID+"/foo", true)
 	require.NoError(t, err)
 	t.Logf("Query local BVN: %v", queryClientLocalBvn)
 	assert.NotNil(t, queryClientLocalBvn.GetQueryClient())
 
-	queryClientOtherBvn, err := connRouter.AcquireRoute("acc://"+otherBvn+"/foo", true)
+	queryClientOtherBvn, err := connRouter.AcquireRoute("acc://bvn-"+otherBvn+"/foo", true)
 	require.NoError(t, err)
 	t.Logf("Query other BVN: %v", queryClientOtherBvn)
 	assert.NotNil(t, queryClientOtherBvn.GetQueryClient())
