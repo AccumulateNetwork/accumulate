@@ -40,7 +40,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 		cState, e2 := m.GetChainState(m.key...)
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
 		States = append(States, m.MS.Copy())
-		require.True(t, cState.Equal(m.MS), "should be the last state of the chain written")
+		require.Truef(t, cState.Equal(m.MS), "should be the last state of the chain written (%d)", i)
 	}
 }
 
