@@ -258,7 +258,7 @@ func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataRe
 }
 
 // GetDataSetByUrl returns the data specified by the pagination information on given chain specified by the url
-func (q *Query) GetDataSetByUrl(url string, start uint64, limit uint64) (*acmeApi.APIDataResponsePagination, error) {
+func (q *Query) GetDataSetByUrl(url string, start uint64, limit uint64, expand bool) (*acmeApi.APIDataResponsePagination, error) {
 	u, err := url2.Parse(url)
 	if err != nil {
 		return nil, err
@@ -270,6 +270,7 @@ func (q *Query) GetDataSetByUrl(url string, start uint64, limit uint64) (*acmeAp
 	ru := protocol.RequestDataEntrySet{} //change to RequestDataSet{}
 	ru.Start = start
 	ru.Count = limit
+	ru.ExpandChains = expand
 	ru.Url = u.String()
 	qu.Content, err = ru.MarshalBinary()
 	if err != nil {
@@ -423,7 +424,6 @@ func (q *Query) QueryDataByUrl(url string) (*acmeApi.APIDataResponse, error) {
 		return nil, err
 	}
 
-	dr := acmeApi.APIDataResponse{}
 	d, err := thr.MarshalJSON()
 	if err != nil {
 		return nil, err
@@ -431,8 +431,8 @@ func (q *Query) QueryDataByUrl(url string) (*acmeApi.APIDataResponse, error) {
 
 	dataChainState.Data = &json.RawMessage{}
 	*dataChainState.Data = d
-	dr.Type = "dataEntry"
-	return &dr, nil
+	dataChainState.Type = "dataEntry"
+	return dataChainState, nil
 }
 
 // packTransactionQuery
