@@ -39,7 +39,7 @@ func testCase1_1(t *testing.T, tc *testCmd) {
 func testCase3_1(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("account create acc://RedWagon red1 acc://RedWagon/acct acc://acme acc://RedWagon/ssg0")
+	commandLine := fmt.Sprintf("account create token acc://RedWagon red1 acc://RedWagon/acct acc://acme acc://RedWagon/ssg0")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
@@ -52,7 +52,7 @@ func testCase3_1(t *testing.T, tc *testCmd) {
 func testCase3_2(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("account create acc://RedWagon red1 acmeacct2 acc://acme acc://RedWagon/ssg0")
+	commandLine := fmt.Sprintf("account create token acc://RedWagon red1 acmeacct2 acc://acme acc://RedWagon/ssg0")
 	r, err := tc.execute(t, commandLine)
 	require.Error(t, err)
 
@@ -65,7 +65,7 @@ func testCase3_2(t *testing.T, tc *testCmd) {
 func testCase3_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("account create acc://RedWagon red1 acc://RedWagon/acmeacct acc://factoid acc://RedWagon/ssg0")
+	commandLine := fmt.Sprintf("account create token acc://RedWagon red1 acc://RedWagon/acmeacct acc://factoid acc://RedWagon/ssg0")
 	r, err := tc.execute(t, commandLine)
 	require.Error(t, err)
 

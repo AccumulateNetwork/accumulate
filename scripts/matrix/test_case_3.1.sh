@@ -66,7 +66,7 @@ if [ $? -ne 0 ]; then
 fi
 
 sleep 2.5
-$cli account create acc://t31acct t31key acc://t31acct/myacmeacct acc://ACME acc://t31acct/ssg0 -s http://$1/v1
+$cli account create token acc://t31acct t31key acc://t31acct/myacmeacct acc://ACME acc://t31acct/ssg0 -s http://$1/v1
 if [ $? -ne 0 ]; then
 	echo "cli account create failed"
 	exit 1

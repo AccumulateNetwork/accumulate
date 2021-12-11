@@ -330,6 +330,40 @@ type ActionResponse struct {
 	Mempool   types.String  `json:"mempool"`
 }
 
+type ActionDataResponse struct {
+	EntryHash types.Bytes32 `json:"entryHash"`
+	ActionResponse
+}
+
+func ActionResponseFromData(r *api2.TxResponse, entryHash []byte) *ActionDataResponse {
+	ar := &ActionDataResponse{}
+	ar.EntryHash.FromBytes(entryHash)
+	ar.ActionResponse = *ActionResponseFrom(r)
+	return ar
+}
+
+func (a *ActionDataResponse) Print() (string, error) {
+	var out string
+	if WantJsonOutput {
+		ok := a.Code == "0" || a.Code == ""
+		if ok {
+			a.Code = "ok"
+		}
+		b, err := json.Marshal(a)
+		if err != nil {
+			return "", err
+		}
+		out = string(b)
+	} else {
+		s, err := a.ActionResponse.Print()
+		if err != nil {
+			return "", err
+		}
+		out = fmt.Sprintf("\n\tEntry Hash\t\t:%x\n%s", a.EntryHash[:], s[1:])
+	}
+	return out, nil
+}
+
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 	return &ActionResponse{
 		Txid:  types.Bytes(r.Txid).AsBytes32(),
