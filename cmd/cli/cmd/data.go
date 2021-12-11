@@ -235,10 +235,6 @@ func WriteData(accountUrl string, args []string) (string, error) {
 			//clip the padding
 			data = data[:n]
 		} else {
-			err = json.Unmarshal([]byte(args[i]), data)
-			if err != nil {
-				return "", err
-			}
 			copy(data, args[i])
 		}
 		if i == len(args)-1 {
