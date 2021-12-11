@@ -30,11 +30,16 @@ func testCase2_9(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	commandLine := fmt.Sprintf("data write acc://RedWagon/DataAccount red1 badc0de9 deadbeef \"thequickbrownfoxjumpsoverthelazydog\"")
-	_, err := tc.execute(t, commandLine)
+	_, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
-	//if this doesn't fail, then adi is created
-	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount")
+	//now read back the response
+	commandLine = fmt.Sprintf("data get acc://RedWagon/DataAccount")
+	_, err = tc.executeTx(t, commandLine)
+	require.NoError(t, err)
+
+	//now read it back as a set
+	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount 0 1")
 	require.NoError(t, err)
 }
 
