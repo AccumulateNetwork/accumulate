@@ -15,6 +15,7 @@ import (
 	cfg "github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
@@ -89,29 +90,22 @@ func initNode(*cobra.Command, []string) {
 	subnet, err := networks.Resolve(flagInit.Net)
 	checkf(err, "--network")
 
-	// Build the relay list
-	var relayTo []string
-	switch subnet.Type {
-	case cfg.Directory:
-		relayTo = []string{subnet.FullName()}
-
-	case cfg.BlockValidator:
-		index := map[string]int{}
-		for _, s := range subnet.Network {
-			if s.Type != cfg.BlockValidator {
-				continue
-			}
-
-			name := s.FullName()
-			// TODO Set to "self" if s == subnet
-
-			relayTo = append(relayTo, name)
-			index[name] = s.Index
+	bvnNames := make([]string, 0, len(subnet.Network))
+	addresses := map[string][]string{}
+	index := map[string]int{}
+	for _, s := range subnet.Network {
+		if s.Type == cfg.BlockValidator {
+			bvnNames = append(bvnNames, s.Name)
+			index[s.Name] = s.Index
 		}
-		sort.Slice(relayTo, func(i, j int) bool {
-			return index[relayTo[i]] < index[relayTo[j]]
-		})
+
+		for _, n := range s.Nodes {
+			addresses[s.Name] = append(addresses[s.Name], fmt.Sprintf("http://%s:%d", n.IP, s.Port))
+		}
 	}
+	sort.Slice(bvnNames, func(i, j int) bool {
+		return index[bvnNames[i]] < index[bvnNames[j]]
+	})
 
 	fmt.Printf("Building config for %s (%s)\n", subnet.Name, subnet.NetworkName)
 
@@ -122,29 +116,26 @@ func initNode(*cobra.Command, []string) {
 	for i, node := range subnet.Nodes {
 		listenIP[i] = "tcp://0.0.0.0"
 		remoteIP[i] = node.IP
-		config[i] = cfg.Default(subnet.Type, node.Type)
+		config[i] = cfg.Default(subnet.Type, node.Type, subnet.Name)
 
 		if flagInit.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
 		}
 
 		if flagInit.NoWebsite {
-			config[i].Accumulate.WebsiteEnabled = false
+			config[i].Accumulate.Website.Enabled = false
 		}
 
-		config[i].Accumulate.Network = subnet.FullName()
-		config[i].Accumulate.Networks = relayTo
-		config[i].Accumulate.Directory = subnet.Directory
+		config[i].Accumulate.Network.BvnNames = bvnNames
+		config[i].Accumulate.Network.Addresses = addresses
 	}
 
 	check(node.Init(node.InitOptions{
-		WorkDir:   flagMain.WorkDir,
-		ShardName: "accumulate.",
-		SubnetID:  subnet.Name,
-		Port:      subnet.Port,
-		Config:    config,
-		RemoteIP:  remoteIP,
-		ListenIP:  listenIP,
+		WorkDir:  flagMain.WorkDir,
+		Port:     subnet.Port,
+		Config:   config,
+		RemoteIP: remoteIP,
+		ListenIP: listenIP,
 	}))
 }
 
@@ -194,13 +185,11 @@ func initFollower(cmd *cobra.Command, _ []string) {
 		peers[i] = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, n.IP, subnet.Port)
 	}
 
-	config := config.Default(subnet.Type, cfg.Follower)
+	config := config.Default(subnet.Type, cfg.Follower, subnet.Name)
 	config.P2P.PersistentPeers = strings.Join(peers, ",")
 
 	check(node.Init(node.InitOptions{
 		WorkDir:    flagMain.WorkDir,
-		ShardName:  "accumulate.",
-		SubnetID:   subnet.Name,
 		Port:       port,
 		GenesisDoc: genDoc,
 		Config:     []*cfg.Config{config},
@@ -240,6 +229,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	}
 
 	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
+	addresses := make(map[string][]string, flagInitDevnet.NumBvns+1)
 	dnConfig := make([]*cfg.Config, count)
 	dnIPs := make([]string, count)
 	for i := 0; i < count; i++ {
@@ -248,12 +238,14 @@ func initDevNet(cmd *cobra.Command, args []string) {
 			nodeType = cfg.Follower
 		}
 		dnConfig[i], dnIPs[i] = initDevNetNode(baseIP, cfg.Directory, nodeType, 0)
+		addresses[protocol.Directory] = append(addresses[protocol.Directory], fmt.Sprintf("http://%s:%d", dnIPs[i], flagInitDevnet.BasePort))
 	}
 
 	bvnConfig := make([][]*cfg.Config, flagInitDevnet.NumBvns)
 	bvnIPs := make([][]string, flagInitDevnet.NumBvns)
 	bvns := make([]string, flagInitDevnet.NumBvns)
 	for bvn := range bvnConfig {
+		bvns[bvn] = fmt.Sprintf("BVN%d", bvn)
 		bvnConfig[bvn] = make([]*cfg.Config, count)
 		bvnIPs[bvn] = make([]string, count)
 		for i := 0; i < count; i++ {
@@ -262,58 +254,55 @@ func initDevNet(cmd *cobra.Command, args []string) {
 				nodeType = cfg.Follower
 			}
 			bvnConfig[bvn][i], bvnIPs[bvn][i] = initDevNetNode(baseIP, cfg.BlockValidator, nodeType, bvn)
-			bvnConfig[bvn][i].Accumulate.Directory = fmt.Sprintf("%s:%d", dnIPs[0], flagInitDevnet.BasePort+networks.TmRpcPortOffset)
+			addresses[bvns[bvn]] = append(addresses[bvns[bvn]], fmt.Sprintf("http://%s:%d", bvnIPs[bvn][i], flagInitDevnet.BasePort))
 		}
-		bvns[bvn] = fmt.Sprintf("%s:%d", bvnIPs[bvn][0], flagInitDevnet.BasePort+networks.TmRpcPortOffset)
 	}
 
 	for _, c := range dnConfig {
-		c.Accumulate.Networks = bvns
+		c.Accumulate.Network.BvnNames = bvns
+		c.Accumulate.Network.Addresses = addresses
 	}
 	for _, c := range bvnConfig {
 		for _, c := range c {
-			c.Accumulate.Networks = bvns
+			c.Accumulate.Network.BvnNames = bvns
+			c.Accumulate.Network.Addresses = addresses
 		}
 	}
 
 	check(node.Init(node.InitOptions{
-		WorkDir:   filepath.Join(flagMain.WorkDir, "dn"),
-		ShardName: dnConfig[0].Accumulate.Network,
-		SubnetID:  dnConfig[0].Accumulate.Network,
-		Port:      flagInitDevnet.BasePort,
-		Config:    dnConfig,
-		RemoteIP:  dnIPs,
-		ListenIP:  dnIPs,
+		WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
+		Port:     flagInitDevnet.BasePort,
+		Config:   dnConfig,
+		RemoteIP: dnIPs,
+		ListenIP: dnIPs,
 	}))
 	for bvn := range bvnConfig {
 		bvnConfig, bvnIPs := bvnConfig[bvn], bvnIPs[bvn]
 		check(node.Init(node.InitOptions{
-			WorkDir:   filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
-			ShardName: bvnConfig[0].Accumulate.Network,
-			SubnetID:  bvnConfig[0].Accumulate.Network,
-			Port:      flagInitDevnet.BasePort,
-			Config:    bvnConfig,
-			RemoteIP:  bvnIPs,
-			ListenIP:  bvnIPs,
+			WorkDir:  filepath.Join(flagMain.WorkDir, fmt.Sprintf("bvn%d", bvn)),
+			Port:     flagInitDevnet.BasePort,
+			Config:   bvnConfig,
+			RemoteIP: bvnIPs,
+			ListenIP: bvnIPs,
 		}))
 	}
 }
 
 func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeType, bvn int) (*cfg.Config, string) {
 	ip := nextIP(baseIP)
-	config := cfg.Default(netType, nodeType)
+	var config *cfg.Config
 	if netType == cfg.Directory {
-		config.Accumulate.Network = flagInitDevnet.Name + ".Directory"
+		config = cfg.Default(netType, nodeType, protocol.Directory)
 	} else {
-		config.Accumulate.Network = fmt.Sprintf("%s.BVN%d", flagInitDevnet.Name, bvn)
+		config = cfg.Default(netType, nodeType, fmt.Sprintf("BVN%d", bvn))
 	}
 
 	if flagInit.NoEmptyBlocks {
 		config.Consensus.CreateEmptyBlocks = false
 	}
 	if flagInit.NoWebsite {
-		config.Accumulate.WebsiteEnabled = false
+		config.Accumulate.Website.Enabled = false
 	}
 
-	return config, fmt.Sprintf("tcp://%s", ip)
+	return config, ip.String()
 }
