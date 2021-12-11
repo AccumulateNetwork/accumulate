@@ -20,7 +20,7 @@ import (
 
 // synthCount returns the number of synthetic transactions sent by this subnet.
 func (m *Executor) synthCount() (uint64, error) {
-	k := storage.ComputeKey("SyntheticTransactionCount")
+	k := storage.MakeKey("SyntheticTransactionCount")
 	b, err := m.dbTx.Read(k)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return 0, err
@@ -59,12 +59,42 @@ func (m *Executor) addSynthTxns(parentTxId types.Bytes, st *StateManager) error 
 	return nil
 }
 
-func (m *Executor) addAnchorTxn() error {
-	srcUrl, err := nodeUrl(m.DB, m.SubnetType)
+func (m *Executor) addSystemTxns(txns ...*transactions.GenTransaction) error {
+	if len(txns) == 0 {
+		return nil
+	}
+
+	anchor, err := m.DB.MinorAnchorChain()
 	if err != nil {
 		return err
 	}
 
+	txids := make([][32]byte, len(txns))
+	for i, tx := range txns {
+		pending := state.NewPendingTransaction(tx)
+		obj := new(state.Object)
+		obj.Entry, err = pending.MarshalBinary()
+		if err != nil {
+			return err
+		}
+
+		err = m.dbTx.WriteSynthTxn(tx.TransactionHash(), obj)
+		if err != nil {
+			return err
+		}
+
+		copy(txids[i][:], tx.TransactionHash())
+	}
+
+	err = anchor.AddSystemTxns(txids...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *Executor) addAnchorTxn() error {
 	synth, err := m.DB.SynthTxidChain()
 	if err != nil {
 		return err
@@ -96,7 +126,7 @@ func (m *Executor) addAnchorTxn() error {
 	}
 
 	body := new(protocol.SyntheticAnchor)
-	body.Source = srcUrl.String()
+	body.Source = m.Network.NodeUrl().String()
 	body.Index = m.height
 	body.Timestamp = m.time
 	copy(body.Root[:], m.DB.RootHash())
@@ -107,54 +137,27 @@ func (m *Executor) addAnchorTxn() error {
 	m.logDebug("Creating anchor txn", "root", logging.AsHex(body.Root), "chains", logging.AsHex(body.ChainAnchor), "synth", logging.AsHex(body.SynthTxnAnchor))
 
 	var txns []*transactions.GenTransaction
-	switch m.SubnetType {
+	switch m.Network.Type {
 	case config.Directory:
-		// TODO Send anchors from DN to all BVNs
+		// Send anchors from DN to all BVNs
+		for _, bvn := range m.Network.BvnNames {
+			tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), body)
+			if err != nil {
+				return err
+			}
+			txns = append(txns, tx)
+		}
 
 	case config.BlockValidator:
 		// Send anchor from BVN to DN
-		tx, err := m.buildSynthTxn(dnUrl(), body)
+		tx, err := m.buildSynthTxn(protocol.DnUrl(), body)
 		if err != nil {
 			return err
 		}
 		txns = append(txns, tx)
 	}
 
-	txids := make([][32]byte, len(txns))
-	for i, tx := range txns {
-		pending := state.NewPendingTransaction(tx)
-		obj := new(state.Object)
-		obj.Entry, err = pending.MarshalBinary()
-		if err != nil {
-			return err
-		}
-
-		err = m.dbTx.WriteSynthTxn(tx.TransactionHash(), obj)
-		if err != nil {
-			return err
-		}
-
-		copy(txids[i][:], tx.TransactionHash())
-	}
-
-	mgr, err := m.DB.MinorAnchorChain()
-	if err != nil {
-		return err
-	}
-
-	head, err := mgr.Record()
-	if err != nil {
-		return err
-	}
-
-	// We're only updating the head record, we are not adding anything to the chain
-	head.AnchorTxns = txids
-	err = mgr.Chain.UpdateAs(head)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return m.addSystemTxns(txns...)
 }
 
 func (m *Executor) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload) (*transactions.GenTransaction, error) {
@@ -197,7 +200,6 @@ func (m *Executor) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload
 	}
 
 	m.logDebug("Built synth txn", "txid", logging.AsHex(tx.TransactionHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
-	// spew.Dump(tx)
 
 	return tx, nil
 }
@@ -230,7 +232,11 @@ func (m *Executor) signSynthTxns() error {
 	acHead, err := ac.Record()
 	switch {
 	case err == nil:
-		for _, txn := range acHead.AnchorTxns {
+		for _, txn := range acHead.SystemTxns {
+			// Copy the variable. Otherwise we end up with a pointer to the loop
+			// variable, which means we get multiple copies of the pointer, but
+			// they all point to the same thing.
+			txn := txn
 			txns = append(txns, txn[:])
 		}
 	case errors.Is(err, storage.ErrNotFound):
@@ -276,7 +282,7 @@ func (m *Executor) signSynthTxns() error {
 	}
 
 	// Construct the signature transaction
-	tx, err := m.buildSynthTxn(protocol.AcmeUrl(), body)
+	tx, err := m.buildSynthTxn(m.Network.NodeUrl(), body)
 	if err != nil {
 		return err
 	}

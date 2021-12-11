@@ -20,13 +20,17 @@ func (h Hex) MarshalJSON() ([]byte, error) {
 func AsHex(v interface{}) Hex {
 	switch v := v.(type) {
 	case []byte:
-		return Hex(v)
+		u := make(Hex, len(v))
+		copy(u, v)
+		return u
 	case [32]byte:
 		return Hex(v[:])
 	case string:
 		return Hex(v)
 	case types.Bytes:
-		return Hex(v)
+		u := make(Hex, len(v))
+		copy(u, v)
+		return u
 	case types.Bytes32:
 		return Hex(v[:])
 	case types.String:
@@ -35,7 +39,9 @@ func AsHex(v interface{}) Hex {
 		if v == nil {
 			return Hex(nil)
 		}
-		return Hex(*v)
+		u := make(Hex, len(*v))
+		copy(u, *v)
+		return u
 	case *types.Bytes32:
 		if v == nil {
 			return Hex(nil)

@@ -7,14 +7,13 @@ import (
 	"net"
 	"os"
 	"runtime"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	apiv2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
@@ -44,11 +43,10 @@ func TestEndToEnd(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 
 		// Restart the nodes for every test
-		nodes, dbs := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, nil)
-		query := startNodes(s.T(), nodes)
-		client, err := local.New(nodes[0].Service.(local.NodeService))
+		nodes := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, nil)
+		client, err := local.New(nodes[0].Node_TESTONLY().Service.(local.NodeService))
 		require.NoError(s.T(), err)
-		return &e2eDUT{s, dbs[0], query, client}
+		return &e2eDUT{s, nodes[0].DB_TESTONLY(), nodes[0].Query_TESTONLY(), client}
 	}))
 }
 
@@ -86,13 +84,10 @@ func TestSubscribeAfterClose(t *testing.T) {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
 
-	nodes, _ := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, []string{"127.0.30.1"})
-	node := nodes[0]
-	require.NoError(t, node.Start())
-	require.NoError(t, node.Stop())
-	node.Wait()
+	daemon := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, []string{"127.0.30.1"})[0]
+	require.NoError(t, daemon.Stop())
 
-	client, err := local.New(node.Service.(local.NodeService))
+	client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
 	require.NoError(t, err)
 	_, err = client.Subscribe(context.Background(), t.Name(), "tm.event = 'Tx'")
 	require.EqualError(t, err, "node was stopped")
@@ -107,29 +102,15 @@ func TestFaucetMultiNetwork(t *testing.T) {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
 
-	bvc0, _ := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc1, _ := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc2, _ := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc0 := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc1 := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc2 := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	rpcAddrs := make([]string, 0, 3)
-	wg := new(sync.WaitGroup)
-	for _, bvc := range [][]*node.Node{bvc0, bvc1, bvc2} {
+	for _, bvc := range [][]*accumulated.Daemon{bvc0, bvc1, bvc2} {
 		rpcAddrs = append(rpcAddrs, bvc[0].Config.RPC.ListenAddress)
-		for _, n := range bvc {
-			n := n
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				require.NoError(t, n.Start())
-				t.Cleanup(func() {
-					n.Stop()
-					n.Wait()
-				})
-			}()
-		}
 	}
-	wg.Wait()
 
-	relay, err := relay.NewWith(rpcAddrs...)
+	relay, err := relay.NewWith(nil, rpcAddrs...)
 	require.NoError(t, err)
 	if bvc0[0].Config.Accumulate.API.EnableSubscribeTX {
 		require.NoError(t, relay.Start())
@@ -151,8 +132,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	port, err := tmnet.GetFreePort()
 	require.NoError(t, err)
 	jsonapi, err := api.New(&config.API{
-		JSONListenAddress: fmt.Sprintf("tcp://localhost:%d", port),
-		RESTListenAddress: fmt.Sprintf("tcp://localhost:%d", port+1),
+		ListenAddress: fmt.Sprintf("tcp://localhost:%d", port),
 	}, query)
 	require.NoError(t, err)
 	res := jsonapi.Faucet(context.Background(), params)
