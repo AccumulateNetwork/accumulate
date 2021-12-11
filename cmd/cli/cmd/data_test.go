@@ -29,8 +29,8 @@ func testCase2_8(t *testing.T, tc *testCmd) {
 func testCase2_9(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("data write acc://RedWagon/DataAccount red1 badc0de deadbeef \"thequickbrownfoxjumpsoverthelazydog\"")
-	_, err := tc.executeTx(t, commandLine)
+	commandLine := fmt.Sprintf("data write acc://RedWagon/DataAccount red1 badc0de9 deadbeef \"thequickbrownfoxjumpsoverthelazydog\"")
+	_, err := tc.execute(t, commandLine)
 	require.NoError(t, err)
 
 	//if this doesn't fail, then adi is created
