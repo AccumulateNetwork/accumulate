@@ -133,6 +133,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		// Execute
 		"execute":              m.Execute,
 		"create-adi":           m.ExecuteWith(func() PL { return new(protocol.IdentityCreate) }),
+		"create-data-account":  m.ExecuteWith(func() PL { return new(protocol.CreateDataAccount) }),
 		"create-key-book":      m.ExecuteWith(func() PL { return new(protocol.CreateKeyBook) }),
 		"create-key-page":      m.ExecuteWith(func() PL { return new(protocol.CreateKeyPage) }),
 		"create-token":         m.ExecuteWith(func() PL { return new(protocol.CreateToken) }),
@@ -140,6 +141,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		"send-tokens":          m.ExecuteWith(func() PL { return new(api.TokenTx) }, "From", "To"),
 		"add-credits":          m.ExecuteWith(func() PL { return new(protocol.AddCredits) }),
 		"update-key-page":      m.ExecuteWith(func() PL { return new(protocol.UpdateKeyPage) }),
+		"write-data":           m.ExecuteWith(func() PL { return new(protocol.WriteData) }),
 	}
 
 	return m, nil

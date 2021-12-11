@@ -269,7 +269,7 @@ func (q *Query) GetDataSetByUrl(url string, start uint64, limit uint64) (*acmeAp
 	qu.Type = types.QueryTypeDataSet
 	ru := protocol.RequestDataEntrySet{} //change to RequestDataSet{}
 	ru.Start = start
-	ru.Limit = limit
+	ru.Count = limit
 	ru.Url = u.String()
 	qu.Content, err = ru.MarshalBinary()
 	if err != nil {
