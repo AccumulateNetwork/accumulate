@@ -42,6 +42,10 @@ func testCase2_9(t *testing.T, tc *testCmd) {
 	//now read it back as a set
 	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount 0 1")
 	require.NoError(t, err)
+
+	//now read it back as a expanded set
+	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount 0 1 expand")
+	require.NoError(t, err)
 }
 
 //liteAccounts is the predictable test accounts for the unit tests.
