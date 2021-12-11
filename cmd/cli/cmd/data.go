@@ -96,12 +96,11 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 	var res api.QueryResponse
 
 	data, err := json.Marshal(&params)
-	jsondata := json.RawMessage(data)
 	if err != nil {
 		return "", err
 	}
 
-	err = Client.RequestV2(context.Background(), "query-data", jsondata, &res)
+	err = Client.RequestV2(context.Background(), "query-data", json.RawMessage(data), &res)
 	if err != nil {
 		return "", err
 	}
@@ -135,13 +134,12 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 	params.Count = uint64(v)
 
 	var res api.QueryResponse
-	data, err := json.Marshal(params)
-	jsondata := json.RawMessage(data)
+	data, err := json.Marshal(&params)
 	if err != nil {
 		return "", err
 	}
 
-	err = Client.RequestV2(context.Background(), "query-data-set", jsondata, &res)
+	err = Client.RequestV2(context.Background(), "query-data-set", json.RawMessage(data), &res)
 	if err != nil {
 		return "", err
 	}

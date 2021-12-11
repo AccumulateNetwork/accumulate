@@ -112,7 +112,7 @@ func (q *queryDispatch) QueryData(url string, entryHash []byte) (*QueryResponse,
 	return q.direct(r).QueryData(url, entryHash)
 }
 
-func (q *queryDispatch) QueryDataSet(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryMultiResponse, error) {
+func (q *queryDispatch) QueryDataSet(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err

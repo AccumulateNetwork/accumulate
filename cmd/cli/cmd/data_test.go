@@ -36,7 +36,7 @@ func testCase2_9(t *testing.T, tc *testCmd) {
 
 	//now read back the response
 	commandLine = fmt.Sprintf("data get acc://RedWagon/DataAccount")
-	_, err = tc.executeTx(t, commandLine)
+	_, err = tc.execute(t, commandLine)
 	require.NoError(t, err)
 
 	//now read it back as a set

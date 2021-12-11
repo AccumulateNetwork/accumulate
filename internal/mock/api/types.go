@@ -70,10 +70,10 @@ func (mr *MockQuerierMockRecorder) QueryData(url, entryHash interface{}) *gomock
 }
 
 // QueryDataSet mocks base method.
-func (m *MockQuerier) QueryDataSet(url string, pagination *api.QueryPagination, opts *api.QueryOptions) (*api.QueryMultiResponse, error) {
+func (m *MockQuerier) QueryDataSet(url string, pagination *api.QueryPagination, opts *api.QueryOptions) (*api.QueryResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryDataSet", url, pagination, opts)
-	ret0, _ := ret[0].(*api.QueryMultiResponse)
+	ret0, _ := ret[0].(*api.QueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
