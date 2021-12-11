@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 	"github.com/stretchr/testify/require"
 )
@@ -19,11 +20,11 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	require.NoError(t, e1, "should be able to open a database")
 	m, e2 := NewMerkleManager(dbm, 8)
 	require.NoError(t, e2, "should be able to open a database")
-	err := m.SetKey("try")
+	err := m.SetKey(storage.MakeKey("try"))
 	require.NoError(t, err, "should be able to set base key")
-	err = m.WriteChainHead(m.key...)
+	err = m.WriteChainHead(m.key)
 	require.NoError(t, err, "should be able to write to the chain head")
-	head, err := m.ReadChainHead(m.key...)
+	head, err := m.ReadChainHead(m.key)
 	require.NoError(t, err, "should be able to read the chain head")
 	require.True(t, head.Equal(m.MS), "chainstate should be loadable")
 
@@ -37,7 +38,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 		err = ms.UnMarshal(mState)
 		require.NoError(t, err, "must be able to unmarshal a MerkleState")
 		require.True(t, ms.Equal(m.MS), " should get the same state back")
-		cState, e2 := m.GetChainState(m.key...)
+		cState, e2 := m.GetChainState(m.key)
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
 		States = append(States, m.MS.Copy())
 		require.Truef(t, cState.Equal(m.MS), "should be the last state of the chain written (%d)", i)
@@ -88,7 +89,7 @@ func TestIndexing2(t *testing.T) {
 		t.Fatal("didn't create a Merkle Manager")
 	}
 
-	if err := MM1.SetKey(Chain[:]); err != nil {
+	if err := MM1.SetKey(storage.MakeKey(Chain[:])); err != nil {
 		t.Fatal(err)
 	}
 
@@ -96,7 +97,7 @@ func TestIndexing2(t *testing.T) {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
 		MM1.AddHash(dataHash[:])
-		dataI, e := MM1.Manager.Key(Chain, "ElementIndex", dataHash).Get()
+		dataI, e := MM1.Manager.Get(storage.MakeKey(Chain, "ElementIndex", dataHash))
 		if e != nil {
 			t.Fatalf("error")
 		}
@@ -104,7 +105,7 @@ func TestIndexing2(t *testing.T) {
 		if di != int64(i) {
 			t.Fatalf("didn't get the right index. got %d expected %d", di, i)
 		}
-		d, e2 := MM1.Manager.Key(Chain, "Element", i).Get()
+		d, e2 := MM1.Manager.Get(storage.MakeKey(Chain, "Element", i))
 		if e2 != nil || !bytes.Equal(d, dataHash[:]) {
 			t.Fatalf("didn't get the data back. got %d expected %d", d, data)
 		}
