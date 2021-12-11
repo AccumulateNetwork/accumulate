@@ -33,8 +33,17 @@ var accountCmd = &cobra.Command{
 					PrintAccountGet()
 				}
 			case "create":
-				if len(args) > 3 {
-					out, err = CreateAccount(args[1], args[2:])
+				if len(args) > 4 {
+					switch args[1] {
+					case "token":
+						out, err = CreateAccount(args[2], args[3:])
+					case "data":
+						out, err = CreateDataAccount(args[2], args[3:])
+					default:
+						fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
+						//this will be removed in future release and replaced with usage: PrintAccountCreate()
+						out, err = CreateAccount(args[1], args[2:])
+					}
 				} else {
 					fmt.Println("Usage:")
 					PrintAccountCreate()
@@ -45,10 +54,6 @@ var accountCmd = &cobra.Command{
 				} else {
 					fmt.Println("Usage:")
 					PrintAccountQr()
-				}
-			case "token":
-				{
-
 				}
 			case "generate":
 				out, err = GenerateAccount()
@@ -89,7 +94,8 @@ func PrintAccountRestore() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBook]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBookUrl]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create data [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new data account url]  [keyBookUrl]	Create a data account under an ADI")
 }
 
 func PrintAccountImport() {
