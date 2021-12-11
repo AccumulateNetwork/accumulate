@@ -43,7 +43,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		for begin := int64(-1); begin < NumTests+1; begin++ {
 			for end := begin - 1; end < NumTests+2; end++ {
 
-				hashes, err := mm.GetRange(mm.key, begin, end)
+				hashes, err := mm.GetRange([]interface{}{"try"}, begin, end)
 
 				if begin < 0 || begin > end || begin >= NumTests {
 					require.Errorf(t, err, "should not allow range [%d,%d]", begin, end)

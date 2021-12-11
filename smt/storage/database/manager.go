@@ -3,6 +3,7 @@ package database
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
@@ -10,6 +11,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 )
+
+const debugKeys = false
 
 // Manager
 // The Manager as implemented cannot be accessed concurrently over go routines
@@ -124,6 +127,9 @@ func (k KeyRef) Put(value []byte) error {
 // first check the cache before it checks the DB.
 // Returns storage.ErrNotFound if not found.
 func (k KeyRef) Get() ([]byte, error) {
+	if debugKeys {
+		fmt.Printf("Get %v\n", k.K)
+	}
 	k.M.cacheMu.RLock()
 	defer k.M.cacheMu.RUnlock()
 	if v, ok := k.M.txCache[k.K]; ok {
@@ -138,6 +144,9 @@ func (k KeyRef) Get() ([]byte, error) {
 }
 
 func (k KeyRef) PutBatch(value []byte) {
+	if debugKeys {
+		fmt.Printf("Put %v => %X\n", k.K, value)
+	}
 	k.M.cacheMu.Lock()
 	defer k.M.cacheMu.Unlock()
 	// Save a copy. Otherwise the caller could change it, and that would change
