@@ -533,10 +533,6 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 		return transactionError(err)
 	}
 
-	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
-		return invalidTxnTypeError(fmt.Errorf("transaction type is %s and not a token transaction", resp.Type))
-	}
-
 	return resp
 }
 
