@@ -53,7 +53,7 @@ var dataCmd = &cobra.Command{
 func PrintDataGet() {
 	fmt.Println("  accumulate data get [DataAccountURL]			  Get existing Key Page by URL")
 	fmt.Println("  accumulate data get [DataAccountURL] [EntryHash]  Get data entry by entryHash in hex")
-	fmt.Println("  accumulate data get [DataAccountURL] [start index] [count]  Get a set of data entries starting from start and going to start+count")
+	fmt.Println("  accumulate data get [DataAccountURL] [start index] [count] expand(optional) Get a set of data entries starting from start and going to start+count, if \"expand\" is specified, data entries will also be provided")
 	//./cli data get acc://actor/dataAccount
 	//./cli data get acc://actor/dataAccount entryHash
 	//./cli data get acc://actor/dataAccount start limit
@@ -114,8 +114,8 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	if len(args) != 2 {
-		return "", fmt.Errorf("expecting the start index and count parameters")
+	if len(args) > 3 || len(args) < 2 {
+		return "", fmt.Errorf("expecting the start index and count parameters with optional expand")
 	}
 
 	params := api.DataEntrySetQuery{}
@@ -132,6 +132,12 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid count argument %s, %v", args[1], err)
 	}
 	params.Count = uint64(v)
+
+	if len(args) > 2 {
+		if args[2] == "expand" {
+			params.ExpandChains = true
+		}
+	}
 
 	var res api.QueryResponse
 	data, err := json.Marshal(&params)
