@@ -49,9 +49,7 @@ func (p *Program) Start(s service.Service) error {
 	}
 
 	var logWriter func(string) (io.Writer, error)
-	if service.Interactive() {
-		logWriter = logging.NewConsoleWriter
-	} else {
+	if !service.Interactive() {
 		logWriter = func(format string) (io.Writer, error) {
 			return logging.NewServiceLogger(s, format)
 		}
