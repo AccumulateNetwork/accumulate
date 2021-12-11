@@ -38,7 +38,7 @@ func GetElementState(
 	// currentState is the state we are going to modify until it is the state we want
 	currentIndex := elementIndex & (manager.MarkMask ^ -1) // Find the mark previous to element (current if at mark)
 	if currentIndex == 0 {                                 // Get that state
-		currentState = manager.GetState(0)
+		currentState, _ = manager.GetAnyState(0)
 	} else {
 		currentState = manager.GetState(currentIndex - 1)
 	}
