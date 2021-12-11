@@ -72,3 +72,21 @@ func (c *LocalClient) BroadcastTxSync(ctx context.Context, tx tm.Tx) (*core.Resu
 	}
 	return c.client.BroadcastTxSync(ctx, tx)
 }
+
+// BroadcastTxSync implements client.ABCIClient.BroadcastTxSync. Returns
+// ErrNotInitialized if Set has not been called.
+func (c *LocalClient) Tx(ctx context.Context, hash []byte, prove bool) (*core.ResultTx, error) {
+	if c.client == nil {
+		return nil, ErrNotInitialized
+	}
+	return c.client.Tx(ctx, hash, prove)
+}
+
+// Subscribe implements client.EventsClient.Subscribe. Returns
+// ErrNotInitialized if Set has not been called.
+func (c *LocalClient) Subscribe(ctx context.Context, subscriber, query string, outCapacity ...int) (out <-chan core.ResultEvent, err error) {
+	if c.client == nil {
+		return nil, ErrNotInitialized
+	}
+	return c.client.Subscribe(ctx, subscriber, query, outCapacity...)
+}

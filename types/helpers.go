@@ -471,7 +471,7 @@ func (s *Amount) UnmarshalJSON(data []byte) error {
 type AtomicBool int32
 
 func (a *AtomicBool) Store(x bool) {
-	var v int = 0
+	var v = 0
 	if x {
 		v = 1
 	}

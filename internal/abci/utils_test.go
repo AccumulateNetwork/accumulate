@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -38,6 +39,8 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
+var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
+
 func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
 	db := new(state.StateDB)
 	err := db.Open("memory", true, true, nil)
@@ -53,7 +56,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	n.t = t
 	n.db = db
 
-	logWriter := logging.TestLogWriter(t)("plain")
+	logWriter, _ := logging.TestLogWriter(t)("plain")
 	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
 	zl := zerolog.New(logWriter)
 
@@ -80,14 +83,18 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
+	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		SubnetType:      config.BlockValidator,
-		Local:           n.client,
-		DB:              n.db,
-		IsTest:          true,
-		Logger:          logger,
-		Key:             bvcKey,
-		BlockValidators: []string{"self"},
+		Local:  n.client,
+		DB:     n.db,
+		IsTest: true,
+		Logger: logger,
+		Key:    bvcKey,
+		Network: config.Network{
+			Type:     config.BlockValidator,
+			ID:       subnet,
+			BvnNames: []string{subnet},
+		},
 	})
 	require.NoError(t, err)
 
@@ -109,7 +116,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	kv := new(memory.DB)
 	_ = kv.InitDB("", nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
-		SubnetID:    t.Name(),
+		SubnetID:    subnet,
 		NetworkType: config.BlockValidator,
 		GenesisTime: time.Now(),
 		Validators: []tmtypes.GenesisValidator{
@@ -123,7 +130,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       t.Name(),
+		ChainId:       subnet,
 		AppStateBytes: state,
 	})
 
@@ -163,6 +170,11 @@ func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
 	return r
 }
 
+func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
+	n.t.Fatalf("todo query data functionality not implemented")
+	return nil
+}
+
 func (n *fakeNode) GetChainStateByTxId(txid []byte) *api.APIDataResponse {
 	r, err := n.query.GetChainStateByTxId(txid)
 	require.NoError(n.t, err)
@@ -195,7 +207,7 @@ func generateKey() tmed25519.PrivKey {
 func edSigner(key tmed25519.PrivKey, nonce uint64) func(hash []byte) (*transactions.ED25519Sig, error) {
 	return func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
-		return sig, sig.Sign(1, key, hash)
+		return sig, sig.Sign(nonce, key, hash)
 	}
 }
 
@@ -282,6 +294,11 @@ func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {
 
 type e2eDUT struct {
 	*fakeNode
+}
+
+func (n e2eDUT) GetDataByUrl(url string) (*ctypes.ResultABCIQuery, error) {
+	n.t.Fatalf("todo: query data by url not implemented")
+	return nil, nil
 }
 
 func (n e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {

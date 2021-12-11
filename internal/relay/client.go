@@ -4,19 +4,24 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tendermint/tendermint/libs/service"
+	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
+	"github.com/tendermint/tendermint/types"
 )
 
 type Client interface {
-	service.Service
-	client.ABCIClient
-	client.EventsClient
+	// client.ABCIClient
+	ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*ctypes.ResultABCIQuery, error)
+	BroadcastTxAsync(context.Context, types.Tx) (*ctypes.ResultBroadcastTx, error)
+	BroadcastTxSync(context.Context, types.Tx) (*ctypes.ResultBroadcastTx, error)
 
-	// From client.SignClient
+	// client.SignClient
 	Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.ResultTx, error)
+
+	// client.EventsClient
+	Subscribe(ctx context.Context, subscriber, query string, outCapacity ...int) (out <-chan ctypes.ResultEvent, err error)
 }
 
 type Batchable interface {

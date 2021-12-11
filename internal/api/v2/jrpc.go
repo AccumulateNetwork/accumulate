@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
+	stdlog "log"
 	"net/http"
 	"os"
 	"time"
@@ -16,6 +16,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/ybbus/jsonrpc/v2"
 )
 
@@ -26,6 +27,7 @@ type JrpcOptions struct {
 	Remote        []string
 	QueueDuration time.Duration
 	QueueDepth    int
+	Logger        log.Logger
 
 	// Deprecated: will be removed when API v1 is removed
 	QueryV1 *v1.Query
@@ -39,6 +41,7 @@ type JrpcMethods struct {
 	localIndex int
 	exch       chan executeRequest
 	queue      executeQueue
+	logger     log.Logger
 
 	// Deprecated: will be removed
 	v1 *v1.API
@@ -54,6 +57,10 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 	m.queue.leader = make(chan struct{}, 1)
 	m.queue.leader <- struct{}{}
 	m.queue.enqueue = make(chan *executeRequest)
+
+	if opts.Logger != nil {
+		m.logger = opts.Logger.With("module", "jrpc")
+	}
 
 	m.validate, err = protocol.NewValidator()
 	if err != nil {
@@ -113,10 +120,36 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 	return m, nil
 }
 
+func (m *JrpcMethods) logDebug(msg string, keyVals ...interface{}) {
+	if m.logger != nil {
+		m.logger.Debug(msg, keyVals...)
+	}
+}
+
+func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
+	if m.logger != nil {
+		m.logger.Error(msg, keyVals...)
+	}
+}
+
+func (m *JrpcMethods) EnableDebug(local ABCIQueryClient) {
+	q := &queryDirect{client: local}
+
+	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
+		req := new(UrlQuery)
+		err := m.parse(params, req)
+		if err != nil {
+			return err
+		}
+
+		return jrpcFormatQuery(q.QueryUrl(req.Url))
+	}
+}
+
 func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.Handle("/v1", m.v1.Handler())
-	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, log.New(os.Stdout, "", 0)))
+	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
 	return mux
 }
 

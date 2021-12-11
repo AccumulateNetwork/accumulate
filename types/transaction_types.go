@@ -21,7 +21,7 @@ const (
 	txSynthetic = TxTypeSyntheticSignTransactions
 
 	// txMax is the last defined transaction type.
-	txMax = TxTypeSyntheticGenesis
+	txMax = TxTypeSegWitDataEntry
 )
 
 // User transactions
@@ -110,6 +110,13 @@ const (
 
 	// TxTypeSyntheticGenesis initializes system chains.
 	TxTypeSyntheticGenesis TransactionType = 0x37
+
+	// TxTypeSyntheticMirror mirrors records from one network to another.
+	TxTypeSyntheticMirror TransactionType = 0x38
+
+	// TxTypeSegWitDataEntry is a surrogate transaction segregated witness for
+	// a WriteData transaction
+	TxTypeSegWitDataEntry TransactionType = 0x39
 )
 
 // IsSynthetic returns true if the transaction type is synthetic.
@@ -167,6 +174,10 @@ func (t TransactionType) String() string {
 		return "syntheticBurnTokens"
 	case TxTypeSyntheticGenesis:
 		return "syntheticGenesis"
+	case TxTypeSyntheticMirror:
+		return "syntheticMirror"
+	case TxTypeSegWitDataEntry:
+		return "segWitDataEntry"
 	default:
 		return fmt.Sprintf("TransactionType:%d", t)
 	}
