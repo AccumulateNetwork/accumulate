@@ -34,8 +34,8 @@ type ChainParams struct {
 
 type CreateDataAccount struct {
 	Url               string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	KeyBookUrl        string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"required,acc-url"`
-	ManagerKeyBookUrl string `json:"managerKeyBookUrl,omitempty" form:"managerKeyBookUrl" query:"managerKeyBookUrl" validate:"required,acc-url"`
+	KeyBookUrl        string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
+	ManagerKeyBookUrl string `json:"managerKeyBookUrl,omitempty" form:"managerKeyBookUrl" query:"managerKeyBookUrl" validate:"acc-url"`
 }
 
 type CreateKeyBook struct {

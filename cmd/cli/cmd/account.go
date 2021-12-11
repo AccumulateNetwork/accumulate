@@ -46,6 +46,10 @@ var accountCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintAccountQr()
 				}
+			case "token":
+				{
+
+				}
 			case "generate":
 				out, err = GenerateAccount()
 			case "list":
@@ -144,7 +148,6 @@ func QrAccount(s string) (string, error) {
 
 //account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
 func CreateAccount(url string, args []string) (string, error) {
-
 	actor, err := url2.Parse(url)
 	if err != nil {
 		PrintAccountCreate()
