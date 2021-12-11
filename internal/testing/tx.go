@@ -10,8 +10,49 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
 	querytypes "github.com/AccumulateNetwork/accumulate/types/api/query"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 )
+
+func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
+	var txid32 [32]byte
+	copy(txid32[:], txid)
+	notFound := fmt.Sprintf("tx (%X) not found", txid)
+
+	start := time.Now()
+	var r *coretypes.ResultTx
+	var err error
+	for {
+		r, err = query.GetTx(routing, txid32)
+		if err == nil {
+			break
+		}
+
+		if !strings.Contains(err.Error(), notFound) {
+			return err
+		}
+
+		if time.Since(start) > 10*time.Second {
+			return fmt.Errorf("tx (%X) not found: timed out", txid)
+		}
+	}
+
+	tx := new(transactions.GenTransaction)
+	_, err = tx.UnMarshal(r.Tx)
+	if err != nil {
+		return err
+	}
+
+	resp, err := query.QueryByTxId(tx.TransactionHash())
+	if err != nil {
+		return err
+	}
+	if resp.Response.Code != 0 {
+		return fmt.Errorf("query failed with code %d: %s", resp.Response.Code, resp.Response.Info)
+	}
+
+	return WaitForSynthTxnsV1(query, resp)
+}
 
 func WaitForTxV1(query *api.Query, txResp *apitypes.APIDataResponse) error {
 	var data struct{ Txid string }
@@ -45,8 +86,12 @@ func WaitForTxidV1(query *api.Query, txid []byte) error {
 		return fmt.Errorf("query failed with code %d: %s", resp.Response.Code, resp.Response.Info)
 	}
 
+	return WaitForSynthTxnsV1(query, resp)
+}
+
+func WaitForSynthTxnsV1(query *api.Query, resp *coretypes.ResultABCIQuery) error {
 	res := new(querytypes.ResponseByTxId)
-	err = res.UnmarshalBinary(resp.Response.Value)
+	err := res.UnmarshalBinary(resp.Response.Value)
 	if err != nil {
 		return fmt.Errorf("invalid TX response: %v", err)
 	}

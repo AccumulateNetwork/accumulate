@@ -45,105 +45,98 @@ func (k Key) MarshalJSON() ([]byte, error) {
 	return json.Marshal(k.String())
 }
 
-func ComputeKey(keys ...interface{}) Key {
-	// Allow pre-computed keys
-	if len(keys) == 1 {
-		k, ok := keys[0].(Key)
-		if ok {
-			return k
+func (k Key) Append(key ...interface{}) Key {
+	// If k is the zero value, don't stringify it
+	var s string
+	if debugKeys && k != (Key{}) {
+		s = k.String()
+	}
+
+	for _, key := range key {
+		bytes, printv := convert(key)
+		b := make([]byte, KeyLength+len(bytes))
+		copy(b, k[:])
+		copy(b[KeyLength:], bytes)
+		k = sha256.Sum256(b)
+
+		if debugKeys {
+			if printv {
+				s += fmt.Sprintf(".%v", key)
+			} else {
+				s += fmt.Sprintf(".%X", bytes)
+			}
 		}
 	}
 
-	n := -1
-	bkeys := make([][]byte, len(keys))
-	printv := make([]bool, len(keys))
-	for i, key := range keys {
-		switch key := key.(type) {
-		case nil:
-			bkeys[i] = []byte{}
-		case []byte:
-			bkeys[i] = key
-		case [32]byte:
-			bkeys[i] = key[:]
-		case types.Bytes:
-			bkeys[i] = key
-		case types.Bytes32:
-			bkeys[i] = key[:]
-		case string:
-			bkeys[i] = []byte(key)
-			printv[i] = true
-		case types.String:
-			bkeys[i] = []byte(key)
-			printv[i] = true
-		case interface{ Bytes() []byte }:
-			bkeys[i] = key.Bytes()
-		case uint:
-			bkeys[i] = common.Uint64Bytes(uint64(key))
-			printv[i] = true
-		case uint8:
-			bkeys[i] = common.Uint64Bytes(uint64(key))
-			printv[i] = true
-		case uint16:
-			bkeys[i] = common.Uint64Bytes(uint64(key))
-			printv[i] = true
-		case uint32:
-			bkeys[i] = common.Uint64Bytes(uint64(key))
-			printv[i] = true
-		case uint64:
-			bkeys[i] = common.Uint64Bytes(key)
-			printv[i] = true
-		case int:
-			bkeys[i] = common.Int64Bytes(int64(key))
-			printv[i] = true
-		case int8:
-			bkeys[i] = common.Int64Bytes(int64(key))
-			printv[i] = true
-		case int16:
-			bkeys[i] = common.Int64Bytes(int64(key))
-			printv[i] = true
-		case int32:
-			bkeys[i] = common.Int64Bytes(int64(key))
-			printv[i] = true
-		case int64:
-			bkeys[i] = common.Int64Bytes(key)
-			printv[i] = true
-		default:
-			panic(fmt.Errorf("cannot use %T as a key", key))
-		}
-
-		n += len(bkeys[i]) + 1
-	}
-
-	composite := make([]byte, 0, n)
-	for i, k := range bkeys {
-		if i > 0 {
-			composite = append(composite, '.')
-		}
-		composite = append(composite, k...)
-	}
-
-	h := sha256.Sum256(composite)
 	if !debugKeys {
-		return h
+		return k
 	}
 
-	var str string
-	for i := range bkeys {
-		if i > 0 {
-			str += "."
-		}
-		if printv[i] {
-			str += fmt.Sprint(keys[i])
-		} else {
-			str += fmt.Sprintf("%X", bkeys[i])
-		}
+	// If k was originally the zero value, remove the leading dot
+	if len(s) > 0 && s[0] == '.' {
+		s = s[1:]
 	}
 
 	debugKeyMu.Lock()
-	debugKeyMap[h] = str
+	debugKeyMap[k] = s
 	debugKeyMu.Unlock()
 
-	fmt.Printf("Key %s => %X\n", str, h)
+	fmt.Printf("Key %s => %X\n", s, k[:])
+	return k
+}
 
-	return h
+func convert(key interface{}) (bytes []byte, printVal bool) {
+	switch key := key.(type) {
+	case nil:
+		return []byte{}, false
+	case []byte:
+		return key, false
+	case [32]byte:
+		return key[:], false
+	case types.Bytes:
+		return key, false
+	case types.Bytes32:
+		return key[:], false
+	case string:
+		return []byte(key), true
+	case types.String:
+		return []byte(key), true
+	case interface{ Bytes() []byte }:
+		return key.Bytes(), false
+	case uint:
+		return common.Uint64Bytes(uint64(key)), true
+	case uint8:
+		return common.Uint64Bytes(uint64(key)), true
+	case uint16:
+		return common.Uint64Bytes(uint64(key)), true
+	case uint32:
+		return common.Uint64Bytes(uint64(key)), true
+	case uint64:
+		return common.Uint64Bytes(key), true
+	case int:
+		return common.Int64Bytes(int64(key)), true
+	case int8:
+		return common.Int64Bytes(int64(key)), true
+	case int16:
+		return common.Int64Bytes(int64(key)), true
+	case int32:
+		return common.Int64Bytes(int64(key)), true
+	case int64:
+		return common.Int64Bytes(key), true
+	default:
+		panic(fmt.Errorf("cannot use %T as a key", key))
+	}
+}
+
+func MakeKey(keys ...interface{}) Key {
+	if len(keys) == 0 {
+		return Key{}
+	}
+
+	// If the first value is a Key, append to that
+	k, ok := keys[0].(Key)
+	if ok {
+		return k.Append(keys[1:]...)
+	}
+	return (Key{}).Append(keys...)
 }

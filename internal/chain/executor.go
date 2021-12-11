@@ -32,7 +32,6 @@ type Executor struct {
 
 	executors  map[types.TxType]TxExecutor
 	dispatcher *dispatcher
-	isGenesis  bool
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -47,13 +46,13 @@ type Executor struct {
 var _ abci.Chain = (*Executor)(nil)
 
 type ExecutorOptions struct {
-	DB              *state.StateDB
-	Logger          log.Logger
-	Key             ed25519.PrivateKey
-	Local           api.ABCIBroadcastClient
-	SubnetType      config.NetworkType
-	Directory       string
-	BlockValidators []string
+	DB      *state.StateDB
+	Logger  log.Logger
+	Key     ed25519.PrivateKey
+	Local   api.ABCIBroadcastClient
+	Network config.Network
+
+	isGenesis bool
 
 	// TODO Remove once tests support running the DN
 	IsTest bool
@@ -70,10 +69,12 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 		m.logger = opts.Logger.With("module", "executor")
 	}
 
-	var err error
-	m.dispatcher, err = newDispatcher(opts)
-	if err != nil {
-		return nil, err
+	if !m.isGenesis {
+		var err error
+		m.dispatcher, err = newDispatcher(opts)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	for _, x := range executors {
@@ -137,6 +138,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
+	st.logger = m.logger
 
 	txPending := state.NewPendingTransaction(tx)
 	txAccepted, txPending := state.NewTransaction(txPending)
@@ -184,7 +186,7 @@ func (m *Executor) InitChain(data []byte) error {
 
 	// Load the BPT root hash so we can verify the system state
 	var hash [32]byte
-	data, err = src.Get(storage.ComputeKey("BPT", "Root"))
+	data, err = src.Get(storage.MakeKey("BPT", "Root"))
 	switch {
 	case err == nil:
 		bpt := new(pmt.BPT)
@@ -301,6 +303,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	} else if err != nil {
 		return nil, err
 	}
+	st.logger = m.logger
 
 	if txt.IsSynthetic() {
 		return st, m.checkSynthetic(st, tx)
@@ -578,28 +581,41 @@ func (m *Executor) Commit() ([]byte, error) {
 			return nil
 		}
 
-		switch m.SubnetType {
+		var txns []*transactions.GenTransaction
+		switch m.Network.Type {
 		case config.Directory:
-			// TODO Mirror DN ADI
-
-		case config.BlockValidator:
-			// Mirror BVN ADI
-			mirror, err := m.mirrorADIs(bvnUrl(subnet))
+			// Mirror DN ADI
+			mirror, err := m.mirrorADIs(protocol.DnUrl())
 			if err != nil {
 				return fmt.Errorf("failed to mirror BVN ADI: %v", err)
 			}
 
-			tx, err := m.buildSynthTxn(dnUrl(), mirror)
+			for _, bvn := range m.Network.BvnNames {
+				tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), mirror)
+				if err != nil {
+					return err
+				}
+				txns = append(txns, tx)
+			}
+
+		case config.BlockValidator:
+			// Mirror BVN ADI
+			mirror, err := m.mirrorADIs(protocol.BvnUrl(subnet))
+			if err != nil {
+				return fmt.Errorf("failed to mirror BVN ADI: %v", err)
+			}
+
+			tx, err := m.buildSynthTxn(protocol.DnUrl(), mirror)
 			if err != nil {
 				return fmt.Errorf("failed to build mirror txn: %v", err)
 			}
-
-			err = m.addSystemTxns(tx)
-			if err != nil {
-				return fmt.Errorf("failed to save mirror txn: %v", err)
-			}
+			txns = append(txns, tx)
 		}
 
+		err = m.addSystemTxns(txns...)
+		if err != nil {
+			return fmt.Errorf("failed to save mirror txn: %v", err)
+		}
 		return nil
 	})
 	if err != nil {

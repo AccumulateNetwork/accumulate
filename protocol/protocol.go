@@ -14,9 +14,15 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
-const ACME = "ACME"
+const (
+	// ACME is the name of the ACME token.
+	ACME = "ACME"
 
-// AcmeUrl returns `acc://ACME`
+	// Directory is the subnet ID of the DN.
+	Directory = "Directory"
+)
+
+// AcmeUrl returns `acc://ACME`.
 func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}
 }
@@ -62,10 +68,11 @@ func LiteAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	authority := url.URL{Authority: tokenUrl.Authority}
 
-	if err := IsValidAdiUrl(&authority); err != nil {
-		return nil, errors.New("invalid adi in token URL")
+	if !AcmeUrl().Equal(tokenUrl) {
+		if err := IsValidAdiUrl(tokenUrl.Identity()); err != nil {
+			return nil, errors.New("invalid adi in token URL")
+		}
 	}
 	if tokenUrl.Path == "" && !bytes.EqualFold([]byte(tokenUrl.Authority), []byte("acme")) {
 		return nil, errors.New("must have a path in token URL")
@@ -130,6 +137,17 @@ func ParseLiteAddress(u *url.URL) ([]byte, *url.URL, error) {
 var reDigits10 = regexp.MustCompile("^[0-9]+$")
 var reDigits16 = regexp.MustCompile("^[0-9a-fA-F]+$")
 
+// IsValidAdiUrl returns an error if the URL is not valid for an ADI.
+//
+// An ADI URL:
+// 1) Must be valid UTF-8.
+// 2) Authority must not include a port number.
+// 3) Must have a (non-empty) hostname.
+// 4) Hostname must not include dots (cannot be a domain).
+// 5) Hostname must not be a number.
+// 6) Hostname must not be 48 hexidecimal digits.
+// 7) Must not have a path, query, or fragment.
+// 8) Must not be a reserved URL, such as ACME, DN, or BVN-*
 func IsValidAdiUrl(u *url.URL) error {
 	var errs []string
 
@@ -161,6 +179,10 @@ func IsValidAdiUrl(u *url.URL) error {
 		errs = append(errs, "fragment is not empty")
 	}
 
+	if IsReserved(u) {
+		errs = append(errs, fmt.Sprintf("%q is a reserved URL", u))
+	}
+
 	for _, r := range u.Hostname() {
 		if unicode.In(r, unicode.Letter, unicode.Number) {
 			continue
@@ -184,4 +206,35 @@ func IsValidAdiUrl(u *url.URL) error {
 		return nil
 	}
 	return errors.New(strings.Join(errs, ", "))
+}
+
+// IsReserved checks if the given URL is reserved.
+func IsReserved(u *url.URL) bool {
+	_, ok := ParseBvnUrl(u)
+	return ok || IsDnUrl(u)
+}
+
+// DnUrl returns `acc://dn`.
+func DnUrl() *url.URL {
+	return &url.URL{Authority: "dn"}
+}
+
+// BvnUrl returns `acc://bvn-${subnet}`.
+func BvnUrl(subnet string) *url.URL {
+	return &url.URL{Authority: "bvn-" + subnet}
+}
+
+// IsDnUrl checks if the URL belongs to the DN.
+func IsDnUrl(u *url.URL) bool {
+	u = u.Identity()
+	return DnUrl().Equal(u) || AcmeUrl().Equal(u)
+}
+
+// ParseBvnUrl extracts the BVN subnet name from a BVN URL, if the URL is a
+// valid BVN URL.
+func ParseBvnUrl(u *url.URL) (string, bool) {
+	if !strings.HasPrefix(u.Authority, "bvn-") {
+		return "", false
+	}
+	return u.Authority[4:], true
 }

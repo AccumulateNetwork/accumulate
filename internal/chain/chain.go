@@ -13,10 +13,11 @@ import (
 
 // NewNodeExecutor creates a new Executor for a node.
 func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
-	switch opts.SubnetType {
+	switch opts.Network.Type {
 	case config.Directory:
 		return newExecutor(opts,
-			SyntheticAnchor{SubnetType: opts.SubnetType},
+			SyntheticSignTransactions{},
+			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
 		)
 
@@ -35,7 +36,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			SyntheticTokenDeposit{},
 			SyntheticDepositCredits{},
 			SyntheticSignTransactions{},
-			SyntheticAnchor{SubnetType: opts.SubnetType},
+			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
 
 			// TODO Only for TestNet
@@ -43,23 +44,18 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 		)
 
 	default:
-		return nil, fmt.Errorf("invalid subnet type %v", opts.SubnetType)
+		return nil, fmt.Errorf("invalid subnet type %v", opts.Network.Type)
 	}
 }
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
 func NewGenesisExecutor(db *state.StateDB, typ config.NetworkType) (*Executor, error) {
-	m, err := newExecutor(ExecutorOptions{
-		DB:         db,
-		SubnetType: typ,
+	return newExecutor(ExecutorOptions{
+		DB:        db,
+		Network:   config.Network{Type: typ},
+		isGenesis: true,
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	m.isGenesis = true
-	return m, nil
 }
 
 // TxExecutor executes a specific type of transaction.
