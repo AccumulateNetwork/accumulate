@@ -182,8 +182,8 @@ func (n *fakeNode) GetChainDataByEntryHash(url string, entryHash []byte) *api.AP
 	return r
 }
 
-func (n *fakeNode) GetChainDataSet(url string, start uint64, limit uint64) *api.APIDataResponsePagination {
-	r, err := n.query.GetDataSetByUrl(url, start, limit)
+func (n *fakeNode) GetChainDataSet(url string, start uint64, limit uint64, expand bool) *api.APIDataResponsePagination {
+	r, err := n.query.GetDataSetByUrl(url, start, limit, expand)
 	require.NoError(n.t, err)
 	return r
 }
