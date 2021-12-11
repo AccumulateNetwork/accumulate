@@ -185,7 +185,7 @@ func (m *Executor) InitChain(data []byte) error {
 
 	// Load the BPT root hash so we can verify the system state
 	var hash [32]byte
-	data, err = src.Get(storage.ComputeKey("BPT", "Root"))
+	data, err = src.Get(storage.MakeKey("BPT", "Root"))
 	switch {
 	case err == nil:
 		bpt := new(pmt.BPT)
