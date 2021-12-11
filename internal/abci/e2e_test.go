@@ -331,7 +331,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		if r2.Data == nil {
-			t.Fatalf("no dta returned")
+			t.Fatalf("no data returned")
 		}
 
 		rde := protocol.ResponseDataEntry{}
@@ -349,7 +349,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		r3 := n.GetChainDataByEntryHash("FooBar/oof", wd.Entry.Hash())
 
 		if r3.Data == nil {
-			t.Fatalf("no dta returned")
+			t.Fatalf("no data returned")
 		}
 
 		rde2 := protocol.ResponseDataEntry{}
@@ -360,6 +360,26 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		}
 
 		if !rde.Entry.Equal(&rde2.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry set
+		r4 := n.GetChainDataSet("FooBar/oof", 0, 1, true)
+
+		if r4.Data == nil {
+			t.Fatalf("no data returned")
+		}
+
+		if len(r4.Data) != 1 {
+			t.Fatalf("insufficent data return from set query")
+		}
+		rde3 := protocol.ResponseDataEntry{}
+		err = rde3.UnmarshalJSON(*r4.Data[0].Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !rde.Entry.Equal(&rde3.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 

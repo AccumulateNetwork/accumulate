@@ -294,7 +294,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		}
 
 		var ret *protocol.ResponseDataEntry
-		if chr.EntryHash == [32]byte{} {
+		if chr.EntryHash != [32]byte{} {
 			ret, err = m.queryDataByEntryHash(u, chr.EntryHash[:])
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeDataEntryHashError, Message: err}
