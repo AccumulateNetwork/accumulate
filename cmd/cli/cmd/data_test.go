@@ -1,5 +1,43 @@
 package cmd
 
+import (
+	"fmt"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func init() {
+	testMatrix.addTest(testCase2_8)
+	testMatrix.addTest(testCase2_9)
+}
+
+//testCase2_8
+//Create an adi data account
+func testCase2_8(t *testing.T, tc *testCmd) {
+	t.Helper()
+
+	commandLine := fmt.Sprintf("data create acc://RedWagon red1 acc://RedWagon/DataAccount")
+	_, err := tc.executeTx(t, commandLine)
+	require.NoError(t, err)
+
+	//if this doesn't fail, then adi is created
+	_, err = tc.execute(t, "adi directory acc://RedWagon")
+	require.NoError(t, err)
+}
+
+func testCase2_9(t *testing.T, tc *testCmd) {
+	t.Helper()
+
+	commandLine := fmt.Sprintf("data write acc://RedWagon/DataAccount red1 badc0de deadbeef \"thequickbrownfoxjumpsoverthelazydog\"")
+	_, err := tc.executeTx(t, commandLine)
+	require.NoError(t, err)
+
+	//if this doesn't fail, then adi is created
+	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount")
+	require.NoError(t, err)
+}
+
 //liteAccounts is the predictable test accounts for the unit tests.
 var liteAccounts = []string{
 	"acc://61c185c8c6c929d6ad00aa5529ca880808718258c1bb69df/ACME", "acc://8861d93730671aad03bc144532d5d0b6d422a8c93cb68940/ACME",
