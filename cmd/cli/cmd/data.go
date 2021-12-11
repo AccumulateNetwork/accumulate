@@ -39,7 +39,7 @@ var dataCmd = &cobra.Command{
 			}
 		case "write":
 			if len(args) > 2 {
-				out, err = CreateDataAccount(args[1], args[2:])
+				out, err = WriteData(args[1], args[2:])
 			} else {
 				PrintDataWrite()
 			}
@@ -232,7 +232,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 			//attempt to hex decode it
 			_, err := hex.Decode(data, []byte(args[i]))
 			if err != nil {
-				return "", fmt.Errorf("extid is neither hex nor quoted string")
+				return "", fmt.Errorf("extid is neither hex nor quoted string, %v", err)
 			}
 		} else {
 			copy(data, args[i])
