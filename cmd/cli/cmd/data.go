@@ -238,13 +238,13 @@ func WriteData(accountUrl string, args []string) (string, error) {
 			copy(data, args[i])
 		}
 		if i == len(args)-1 {
-			wd.Entry.ExtIds = append(wd.Entry.ExtIds, data)
-		} else {
 			wd.Entry.Data = data
+		} else {
+			wd.Entry.ExtIds = append(wd.Entry.ExtIds, data)
 		}
 	}
 
-	data, err := json.Marshal(wd)
+	data, err := json.Marshal(&wd)
 	if err != nil {
 		return "", err
 	}
