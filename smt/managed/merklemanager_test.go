@@ -37,10 +37,10 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 		err = ms.UnMarshal(mState)
 		require.NoError(t, err, "must be able to unmarshal a MerkleState")
 		require.True(t, ms.Equal(m.MS), " should get the same state back")
-		cState, e2 := m.GetChainState()
+		cState, e2 := m.GetChainState("try")
 		require.NoErrorf(t, e2, "chain should always have a chain state %d", i)
 		States = append(States, m.MS.Copy())
-		require.True(t, cState.Equal(m.MS), "should be the last state of the chain written")
+		require.Truef(t, cState.Equal(m.MS), "should be the last state of the chain written (%d)", i)
 	}
 }
 
