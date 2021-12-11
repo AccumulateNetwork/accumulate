@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +36,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		require.NoError(t, err, "should create db")
 		mm, err := NewMerkleManager(db, 2)
 		require.NoError(t, err, "should create MerkleManager")
-		err = mm.SetKey("try")
+		err = mm.SetKey(storage.MakeKey("try"))
 		require.NoError(t, err, "should be able to set a key")
 		for i := int64(0); i < NumTests; i++ {
 			mm.AddHash(rh.NextList())
@@ -43,7 +44,7 @@ func TestMerkleManager_GetRange(t *testing.T) {
 		for begin := int64(-1); begin < NumTests+1; begin++ {
 			for end := begin - 1; end < NumTests+2; end++ {
 
-				hashes, err := mm.GetRange([]interface{}{"try"}, begin, end)
+				hashes, err := mm.GetRange(mm.key, begin, end)
 
 				if begin < 0 || begin > end || begin >= NumTests {
 					require.Errorf(t, err, "should not allow range [%d,%d]", begin, end)
