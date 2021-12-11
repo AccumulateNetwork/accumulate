@@ -20,7 +20,7 @@ import (
 
 // synthCount returns the number of synthetic transactions sent by this subnet.
 func (m *Executor) synthCount() (uint64, error) {
-	k := storage.ComputeKey("SyntheticTransactionCount")
+	k := storage.MakeKey("SyntheticTransactionCount")
 	b, err := m.dbTx.Read(k)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return 0, err
