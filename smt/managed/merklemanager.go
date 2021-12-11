@@ -265,9 +265,9 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 
 	nextMarkIdx := element&(^m.MarkMask) - 1 + m.MarkFreq // Calculate the following mark point
 	var nextMark *MerkleState                             //
-	if nextMarkIdx >= m.GetElementCount() {               // If past the end of the chain, then
-		if nextMark, err = m.GetChainState(); err != nil { //   read the chain state instead
-			return nil, err //                                 Should be in the database
+	if nextMarkIdx >= m.GetElementCount() {               //           If past the end of the chain, then
+		if nextMark, err = m.GetChainState(m.key...); err != nil { //      read the chain state instead
+			return nil, err //                                           Should be in the database
 		}
 	} else {
 		if nextMark = m.GetState(nextMarkIdx); nextMark == nil { // Read the mark point

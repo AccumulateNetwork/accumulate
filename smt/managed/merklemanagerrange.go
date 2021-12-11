@@ -41,7 +41,7 @@ func (m *MerkleManager) GetRange(key []interface{}, begin, end int64) (hashes []
 		if s = m.GetState(markPoint - 1); s != nil {
 			hl = append(hl, s.HashList...)
 		} else {
-			s, err = m.GetChainState()
+			s, err = m.GetChainState(m.key...)
 			if err != nil {
 				return nil, errors.New("a chain should always have a chain state")
 			}
