@@ -305,7 +305,12 @@ func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, e
 	return qr, nil
 }
 
-func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts *QueryOptions) (*QueryMultiResponse, error) {
+func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts *QueryOptions) (*QueryResponse, error) {
+	qr, err := q.QueryUrl(url)
+	if err != nil {
+		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
+	}
+
 	req := new(query.RequestDataEntrySet)
 	req.Url = url
 	req.Start = pagination.Start
@@ -320,26 +325,34 @@ func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts
 		return nil, fmt.Errorf("unknown response type: want data, got %q", k)
 	}
 
-	_ = v
-
-	//need to unmarshal as Data Chain, perhaps need to pull chain state as well.
-	//obj, chain, err := unmarshalState(v)
-	//if err != nil {
-	//	return nil, err
-	//}
 	des := new(protocol.ResponseDataEntrySet)
 	err = des.UnmarshalBinary(v)
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
 	}
-	//respDir, err := responseDirFromProto(protoDir, pagination)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//des.
+	desResponse, err := responseDataSetFromProto(des, pagination)
+	if err != nil {
+		return nil, err
+	}
 
-	res := new(QueryResponse)
-	res.Type = "dataSet"
-	res.Data = des //respDir
-	return nil, nil
+	qr.Type = "dataSet"
+	qr.Data = desResponse
+	return qr, nil
+}
+
+//responseDataSetFromProto map the response structs to protocol structs, maybe someday they should be the same thing
+func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagination *QueryPagination) (*DataEntrySetQueryResponse, error) {
+	respDataSet := new(DataEntrySetQueryResponse)
+	respDataSet.Start = pagination.Start
+	respDataSet.Count = pagination.Count
+	respDataSet.Total = protoDataSet.Total
+	for _, entry := range protoDataSet.DataEntries {
+		de := DataEntryQueryResponse{}
+		de.EntryHash = entry.EntryHash
+		de.Entry.Data = entry.Entry.Data
+		for _, eh := range entry.Entry.ExtIds {
+			de.Entry.ExtIds = append(de.Entry.ExtIds, eh)
+		}
+	}
+	return respDataSet, nil
 }
