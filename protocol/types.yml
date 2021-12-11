@@ -217,9 +217,11 @@ CreateDataAccount:
     - name: KeyBookUrl
       type: string
       is-url: true
+      optional: true
     - name: ManagerKeyBookUrl
       type: string
       is-url: true
+      optional: true
 
 SegWitDataEntry:
   kind: tx
