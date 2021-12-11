@@ -301,7 +301,7 @@ func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, e
 	}
 
 	qr.Type = "dataEntry"
-	qr.Data = rde
+	qr.Data = &rde
 	return qr, nil
 }
 

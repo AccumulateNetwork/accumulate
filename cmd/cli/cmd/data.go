@@ -230,10 +230,12 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		data := make([]byte, len(args[i]))
 		if args[i][0:1] != "\"" {
 			//attempt to hex decode it
-			_, err := hex.Decode(data, []byte(args[i]))
+			n, err := hex.Decode(data, []byte(args[i]))
 			if err != nil {
 				return "", fmt.Errorf("extid is neither hex nor quoted string, %v", err)
 			}
+			//clip the padding
+			data = data[:n]
 		} else {
 			err = json.Unmarshal([]byte(args[i]), data)
 			if err != nil {
