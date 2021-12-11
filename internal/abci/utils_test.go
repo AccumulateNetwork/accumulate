@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -38,6 +39,8 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
+var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
+
 func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
 	db := new(state.StateDB)
 	err := db.Open("memory", true, true, nil)
@@ -53,7 +56,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	n.t = t
 	n.db = db
 
-	logWriter := logging.TestLogWriter(t)("plain")
+	logWriter, _ := logging.TestLogWriter(t)("plain")
 	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
 	zl := zerolog.New(logWriter)
 
@@ -80,14 +83,18 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
+	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		SubnetType:      config.BlockValidator,
-		Local:           n.client,
-		DB:              n.db,
-		IsTest:          true,
-		Logger:          logger,
-		Key:             bvcKey,
-		BlockValidators: []string{"self"},
+		Local:  n.client,
+		DB:     n.db,
+		IsTest: true,
+		Logger: logger,
+		Key:    bvcKey,
+		Network: config.Network{
+			Type:     config.BlockValidator,
+			ID:       subnet,
+			BvnNames: []string{subnet},
+		},
 	})
 	require.NoError(t, err)
 
@@ -109,7 +116,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	kv := new(memory.DB)
 	_ = kv.InitDB("", nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
-		SubnetID:    t.Name(),
+		SubnetID:    subnet,
 		NetworkType: config.BlockValidator,
 		GenesisTime: time.Now(),
 		Validators: []tmtypes.GenesisValidator{
@@ -123,7 +130,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       t.Name(),
+		ChainId:       subnet,
 		AppStateBytes: state,
 	})
 
