@@ -12,9 +12,9 @@ import (
 // first hash in the MerkleState is at 0
 func (m *MerkleManager) GetRange(key []interface{}, begin, end int64) (hashes []Hash, err error) {
 	// We return nothing for ranges that are out of range.
-	oldKey := m.key
-	defer func() { m.key = oldKey }()
-	m.key = key
+	if err := m.SetKey(key...); err != nil {
+		return nil, err
+	}
 
 	ec := m.GetElementCount()
 
