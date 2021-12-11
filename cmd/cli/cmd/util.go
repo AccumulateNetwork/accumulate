@@ -464,7 +464,7 @@ func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
 }
 
 func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
-	if WantJsonOutput {
+	if WantJsonOutput || v2.Type == "dataEntry" || v2.Type == "dataSet" {
 		data, err := json.Marshal(v2)
 		if err != nil {
 			return "", err
