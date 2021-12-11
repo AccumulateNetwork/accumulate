@@ -2,13 +2,15 @@ package chain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/rpc/client/http"
+	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"golang.org/x/sync/errgroup"
 )
@@ -18,10 +20,9 @@ type txBatch []tm.Tx
 // dispatcher is responsible for dispatching outgoing synthetic transactions to
 // their recipients.
 type dispatcher struct {
-	isDirectory bool
-	isTest      bool
+	ExecutorOptions
 	localIndex  int
-	local       api.ABCIBroadcastClient
+	isDirectory bool
 	bvn         []*http.HTTP
 	bvnBatches  []txBatch
 	dn          *http.HTTP
@@ -32,46 +33,41 @@ type dispatcher struct {
 // newDispatcher creates a new dispatcher.
 func newDispatcher(opts ExecutorOptions) (*dispatcher, error) {
 	d := new(dispatcher)
-	d.isDirectory = opts.SubnetType == config.Directory
-	d.isTest = opts.IsTest
-	d.local = opts.Local
+	d.ExecutorOptions = opts
+	d.isDirectory = opts.Network.Type == config.Directory
 	d.localIndex = -1
-	d.bvn = make([]*http.HTTP, len(opts.BlockValidators))
-	d.bvnBatches = make([]txBatch, len(opts.BlockValidators))
+	d.bvn = make([]*http.HTTP, len(opts.Network.BvnNames))
+	d.bvnBatches = make([]txBatch, len(opts.Network.BvnNames))
 
 	// If we're not a directory, make an RPC client for the DN
-	if !d.isDirectory && opts.Directory != "" {
-		// Parse the config entry
-		addr, err := networks.GetRpcAddr(opts.Directory)
-		if err != nil {
-			return nil, fmt.Errorf("could not resolve directory %q: %v", opts.Directory, err)
-		}
+	if !d.isDirectory && !d.IsTest {
+		// Get the address of a directory node
+		addr := opts.Network.AddressWithPortOffset(protocol.Directory, networks.TmRpcPortOffset)
 
 		// Make the client
+		var err error
 		d.dn, err = http.New(addr)
 		if err != nil {
-			return nil, fmt.Errorf("could not create client for directory %q: %v", opts.Directory, err)
+			return nil, fmt.Errorf("could not create client for directory %q: %v", addr, err)
 		}
 	}
 
 	// Make a client for all of the BVNs
-	for i, bv := range opts.BlockValidators {
+	for i, id := range opts.Network.BvnNames {
 		// Use the local client for ourself
-		if bv == "self" || bv == "local" {
+		if id == opts.Network.ID {
 			d.localIndex = i
 			continue
 		}
 
-		// Parse the config entry
-		addr, err := networks.GetRpcAddr(bv)
-		if err != nil {
-			return nil, fmt.Errorf("could not resolve block validator %q: %v", bv, err)
-		}
+		// Get the BVN address
+		addr := opts.Network.AddressWithPortOffset(id, networks.TmRpcPortOffset)
 
 		// Make the client
+		var err error
 		d.bvn[i], err = http.New(addr)
 		if err != nil {
-			return nil, fmt.Errorf("could not create client for block validator %q: %v", bv, err)
+			return nil, fmt.Errorf("could not create client for block validator %q: %v", id, err)
 		}
 	}
 
@@ -95,7 +91,7 @@ func (d *dispatcher) route(u *url.URL) (batch *txBatch, local bool) {
 		if d.isDirectory {
 			return nil, true
 		}
-		if d.dn == nil && !d.isTest {
+		if d.dn == nil && !d.IsTest {
 			panic("Directory was not configured")
 		}
 		return &d.dnBatch, false
@@ -130,7 +126,7 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
 	d.errg.Go(func() error {
-		_, err := d.local.BroadcastTxAsync(ctx, tx)
+		_, err := d.Local.BroadcastTxAsync(ctx, tx)
 		return err
 	})
 }
@@ -145,7 +141,7 @@ func (d *dispatcher) send(ctx context.Context, client *http.HTTP, batch txBatch)
 		// you don't give it more than one request.
 		d.errg.Go(func() error {
 			_, err := client.BroadcastTxAsync(ctx, batch[0])
-			return err
+			return d.checkError(err)
 		})
 
 	default:
@@ -159,15 +155,41 @@ func (d *dispatcher) send(ctx context.Context, client *http.HTTP, batch txBatch)
 				}
 			}
 			_, err := b.Send(ctx)
-			return err
+			return d.checkError(err)
 		})
 	}
+}
+
+var errTxInCache = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+
+// checkError returns nil if the error can be ignored.
+func (*dispatcher) checkError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// TODO This may be unnecessary once this issue is fixed:
+	// https://github.com/tendermint/tendermint/issues/7185.
+
+	// Is the error "tx already exists in cache"?
+	if err.Error() == tm.ErrTxInCache.Error() {
+		return nil
+	}
+
+	// Or RPC error "tx already exists in cache"?
+	var rpcErr *jrpc.RPCError
+	if errors.As(err, &rpcErr) && *rpcErr == *errTxInCache {
+		return nil
+	}
+
+	// It's a real error
+	return err
 }
 
 // Send sends all of the batches.
 func (d *dispatcher) Send(ctx context.Context) error {
 	// Send to the DN
-	if d.dn != nil || !d.isTest {
+	if d.dn != nil || !d.IsTest {
 		d.send(ctx, d.dn, d.dnBatch)
 	}
 

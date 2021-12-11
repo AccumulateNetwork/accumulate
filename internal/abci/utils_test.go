@@ -53,7 +53,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	n.t = t
 	n.db = db
 
-	logWriter := logging.TestLogWriter(t)("plain")
+	logWriter, _ := logging.TestLogWriter(t)("plain")
 	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
 	zl := zerolog.New(logWriter)
 
@@ -81,13 +81,16 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	n.query = accapi.NewQuery(relay)
 
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		SubnetType:      config.BlockValidator,
-		Local:           n.client,
-		DB:              n.db,
-		IsTest:          true,
-		Logger:          logger,
-		Key:             bvcKey,
-		BlockValidators: []string{"self"},
+		Local:  n.client,
+		DB:     n.db,
+		IsTest: true,
+		Logger: logger,
+		Key:    bvcKey,
+		Network: config.Network{
+			Type:     config.BlockValidator,
+			ID:       t.Name(),
+			BvnNames: []string{t.Name()},
+		},
 	})
 	require.NoError(t, err)
 

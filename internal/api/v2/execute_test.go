@@ -7,9 +7,7 @@ import (
 	"log"
 	"net"
 	"net/http"
-	stdurl "net/url"
 	"os"
-	"strconv"
 	"testing"
 	"time"
 
@@ -17,7 +15,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	mock_api "github.com/AccumulateNetwork/accumulate/internal/mock/api"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/golang/mock/gomock"
 	"github.com/rs/zerolog"
@@ -53,18 +50,8 @@ func testExecute(t *testing.T, j *JrpcMethods, count int) {
 	}
 }
 
-func makeApiAddr(t *testing.T, addr net.Addr) string {
-	u, err := stdurl.Parse("http://" + addr.String())
-	require.NoError(t, err)
-	port, err := strconv.ParseUint(u.Port(), 10, 16)
-	require.NoError(t, err)
-	port -= networks.AccRouterJsonPortOffset - networks.TmRpcPortOffset
-	u.Host = fmt.Sprintf("localhost:%d", port)
-	return u.String()
-}
-
 func makeLogger(t *testing.T) tmlog.Logger {
-	w := logging.TestLogWriter(t)("plain")
+	w, _ := logging.TestLogWriter(t)("plain")
 	zl := zerolog.New(w)
 	tm, err := logging.NewTendermintLogger(zl, "error", false)
 	require.NoError(t, err)
@@ -92,23 +79,22 @@ func TestDispatchExecute(t *testing.T) {
 	c2, h2 := newJrpcCounter()
 
 	mux := http.NewServeMux()
-	mux.Handle("/h0/v2", h0)
-	mux.Handle("/h1/v2", h1)
-	mux.Handle("/h2/v2", h2)
+	mux.Handle("/h0", h0)
+	mux.Handle("/h1", h1)
+	mux.Handle("/h2", h2)
 
 	s := http.Server{Handler: mux}
 
 	l, err := net.Listen("tcp", fmt.Sprintf("localhost:"))
 	require.NoError(t, err)
-	go func() { _ = s.Serve(l) }()
-	t.Cleanup(func() { s.Shutdown(context.Background()) })
+	go func() { err = s.Serve(l); require.ErrorIs(t, http.ErrServerClosed, err) }()
+	defer func() { s.Shutdown(context.Background()) }()
 
-	addr := makeApiAddr(t, l.Addr())
 	j, err := NewJrpc(JrpcOptions{
 		Remote: []string{
-			fmt.Sprintf("%s/h0", addr),
-			fmt.Sprintf("%s/h1", addr),
-			fmt.Sprintf("%s/h2", addr),
+			fmt.Sprintf("http://%s/h0", l.Addr()),
+			fmt.Sprintf("http://%s/h1", l.Addr()),
+			fmt.Sprintf("http://%s/h2", l.Addr()),
 		},
 		QueueDuration: time.Millisecond,
 		QueueDepth:    10,
@@ -139,7 +125,7 @@ func TestDispatchExecuteQueueDepth(t *testing.T) {
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
 	j, err := NewJrpc(JrpcOptions{
-		Remote:        []string{makeApiAddr(t, l.Addr())},
+		Remote:        []string{fmt.Sprintf("http://%s", l.Addr())},
 		QueueDuration: 1e6 * time.Hour, // Forever
 		QueueDepth:    2,
 		Logger:        makeLogger(t),
@@ -159,7 +145,7 @@ func TestDispatchExecuteQueueDuration(t *testing.T) {
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
 	j, err := NewJrpc(JrpcOptions{
-		Remote:        []string{makeApiAddr(t, l.Addr())},
+		Remote:        []string{fmt.Sprintf("http://%s", l.Addr())},
 		QueueDuration: time.Millisecond,
 		QueueDepth:    1e10, // Infinity
 		Logger:        makeLogger(t),

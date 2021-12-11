@@ -14,9 +14,15 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
-const ACME = "ACME"
+const (
+	// ACME is the name of the ACME token.
+	ACME = "ACME"
 
-// AcmeUrl returns `acc://ACME`
+	// Directory is the subnet ID of the DN.
+	Directory = "Directory"
+)
+
+// AcmeUrl returns `acc://ACME`.
 func AcmeUrl() *url.URL {
 	return &url.URL{Authority: ACME}
 }
