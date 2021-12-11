@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	web "github.com/AccumulateNetwork/accumulate/internal/web/static"
 	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
@@ -60,13 +61,13 @@ func (n *Node) Start() error {
 		return err
 	}
 
-	if n.Config.Accumulate.WebsiteEnabled {
-		u, err := url.Parse(n.Config.Accumulate.WebsiteListenAddress)
+	if n.Config.Accumulate.Website.Enabled {
+		u, err := url.Parse(n.Config.Accumulate.Website.ListenAddress)
 		if err != nil {
 			return fmt.Errorf("invalid website listen address: %v", err)
 		}
-		if u.Scheme != "tcp" {
-			return fmt.Errorf("invalid website listen address: expected scheme tcp, got %q", u.Scheme)
+		if u.Scheme != "http" {
+			return fmt.Errorf("invalid website listen address: expected scheme http, got %q", u.Scheme)
 		}
 
 		website := http.Server{Addr: u.Host, Handler: http.FileServer(http.FS(web.FS))}
@@ -102,10 +103,16 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 }
 
 func (n *Node) waitForRPC() error {
-	for _, bvc := range n.Config.Accumulate.Networks {
-		addr, err := networks.GetRpcAddr(bvc)
-		if err != nil {
-			return err
+	net := &n.Config.Accumulate.Network
+	var names []string
+	if net.Addresses[protocol.Directory] != nil {
+		names = append(names, protocol.Directory)
+	}
+	names = append(names, n.Config.Accumulate.Network.BvnNames...)
+	for _, name := range names {
+		addr := net.AddressWithPortOffset(name, networks.TmRpcPortOffset)
+		if addr == "local" {
+			continue
 		}
 
 		client, err := rpcclient.New(addr)

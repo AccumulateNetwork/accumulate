@@ -1,8 +1,10 @@
 package managed
 
 import (
+	"bytes"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 	"github.com/stretchr/testify/require"
 )
@@ -27,100 +29,39 @@ func TestConversions(t *testing.T) {
 }
 
 func TestMerkleManager_GetRange(t *testing.T) {
+	for NumTests := int64(50); NumTests < 64; NumTests++ {
 
-	MarkPower := int64(3)
-	MarkFreq := int64(8)
-	NumTests := int64(40)
-
-	dbManager := new(database.Manager)
-	if err := dbManager.Init("memory", "", nil); err != nil {
-		t.Fatal(err)
-	}
-
-	MM1, err := NewMerkleManager(dbManager, MarkPower)
-	MM1.MS.InitSha256()
-	if err != nil {
-		t.Fatal("didn't create a Merkle Manager")
-	}
-
-	if err := MM1.SetKey([]byte{1}); err != nil {
-		t.Fatalf("Error setting chain ID: %v", err)
-	}
-
-	for i := int64(0); i < NumTests; i++ {
-		h := i2b(i)
-		MM1.AddHash(h)
-		iCnt, err := MM1.GetElementIndex(h[:])
-		require.NoError(t, err, "failed to get the index of a hash")
-		require.True(t, i == iCnt, "should get back what we set")
-
-	}
-	/*
-		MM1.SetChainID([]byte{2})
-		for i := NumTests; i < NumTests*2; i++ {
-			MM1.AddHash(i2b(i))
+		var rh RandHash
+		db, err := database.NewDBManager("memory", "", nil)
+		require.NoError(t, err, "should create db")
+		mm, err := NewMerkleManager(db, 2)
+		require.NoError(t, err, "should create MerkleManager")
+		err = mm.SetKey(storage.MakeKey("try"))
+		require.NoError(t, err, "should be able to set a key")
+		for i := int64(0); i < NumTests; i++ {
+			mm.AddHash(rh.NextList())
 		}
-	*/
+		for begin := int64(-1); begin < NumTests+1; begin++ {
+			for end := begin - 1; end < NumTests+2; end++ {
 
-	MM1.Manager.EndBatch()
+				hashes, err := mm.GetRange(mm.key, begin, end)
 
-	for i := int64(0); i < MarkFreq*2; i++ {
-		for j := int64(0); j < NumTests+1; j++ {
-			begin := j
-			end := j + i
-			firstIndex := j
-			if j < 0 {
-				firstIndex = 0
-			}
-			if firstIndex >= NumTests {
-				firstIndex = NumTests - 1
-			}
-			lastIndex := end
-			if j+i >= NumTests {
-				lastIndex = NumTests - 1
-			}
-			if lastIndex < 0 {
-				lastIndex = 0
-			}
-			list, err := MM1.GetRange([]interface{}{[]byte{1}}, begin, end)
-			if begin >= 0 && begin < NumTests-1 && end > begin && end > 0 && err != nil {
-				t.Fatalf("shouldn't happen %v", err)
-			}
-			if end > 0 && begin <= NumTests-1 {
-				limit := lastIndex - firstIndex
-				if limit > MarkFreq/2 {
-					limit = MarkFreq / 2
-				}
-			} else {
-				if len(list) != 0 {
-					t.Fatalf("length of response is wrong for (%d,%d)=>(%d,%d) got %d expected 0",
-						begin, end, firstIndex, lastIndex, len(list))
+				if begin < 0 || begin > end || begin >= NumTests {
+					require.Errorf(t, err, "should not allow range [%d,%d]", begin, end)
+				} else {
+					require.NoErrorf(t, err, "should have a range for [%d,%d]", begin, end)
+					e := end
+					if e > NumTests {
+						e = NumTests
+					}
+					require.Truef(t, len(hashes) == int(e-begin),
+						"returned the wrong length for [%d,%d] %d", begin, end, len(hashes))
+					for k, h := range rh.List[begin:e] {
+						require.Truef(t, bytes.Equal(hashes[k], h),
+							"[%d,%d]returned wrong values", begin, end)
+					}
 				}
 			}
-
-			first := begin
-			last := end
-			if first < 0 {
-				first = 0
-			}
-			if last > MM1.MS.Count {
-				last = MM1.MS.Count
-			}
-			if first >= MM1.MS.Count || last <= first {
-				continue
-			}
-
-			for i, v := range list {
-				if first != b2i(v) {
-					t.Fatalf("wrong value. Got %x=>%d range(%d-%d)[%d] expected %d",
-						v[:4], b2i(v),
-						begin, end,
-						i,
-						begin+int64(i))
-				}
-				first++
-			}
-
 		}
 	}
 }
