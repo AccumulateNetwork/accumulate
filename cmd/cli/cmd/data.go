@@ -31,12 +31,6 @@ var dataCmd = &cobra.Command{
 			default:
 				out, err = GetDataEntrySet(args[1], args[2:])
 			}
-		case "create":
-			if len(args) > 2 {
-				out, err = CreateDataAccount(args[1], args[2:])
-			} else {
-				PrintDataAccountCreate()
-			}
 		case "write":
 			if len(args) > 2 {
 				out, err = WriteData(args[1], args[2:])
@@ -61,8 +55,8 @@ func PrintDataGet() {
 
 func PrintDataAccountCreate() {
 	//./cli data create acc://actor key idx height acc://actor/dataAccount acc://actor/keyBook (optional)
-	fmt.Println("  accumulate data create [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate data create acc://actor signingKeyName acc://actor/dataAccount acc://actor/ssg0")
+	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
+	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/ssg0")
 }
 
 func PrintDataWrite() {
@@ -230,6 +224,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 
 	wd := protocol.WriteData{}
+
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))
 		if args[i][0:1] != "\"" {
@@ -272,5 +267,5 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		return PrintJsonRpcError(err)
 	}
 
-	return ActionResponseFrom(&res).Print()
+	return ActionResponseFromData(&res, wd.Entry.Hash()).Print()
 }

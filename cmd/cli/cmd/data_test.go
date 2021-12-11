@@ -17,7 +17,7 @@ func init() {
 func testCase2_8(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("data create acc://RedWagon red1 acc://RedWagon/DataAccount")
+	commandLine := fmt.Sprintf("account create data acc://RedWagon red1 acc://RedWagon/DataAccount")
 	_, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
