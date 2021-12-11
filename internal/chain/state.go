@@ -13,18 +13,21 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 type StateManager struct {
 	dbTx        *state.DBTransaction
 	stores      map[[32]byte]*storeState
+	dataStores  map[[32]byte]*storeDataEntry
 	chains      map[[32]byte]state.Chain
 	writes      map[storage.Key][]byte
 	submissions []*submittedTx
 	storeCount  int
 	txHash      types.Bytes32
-	txType      types.TxType
+	txType      types.TransactionType
 	synthSigs   []*state.SyntheticSignature
+	logger      log.Logger
 
 	Sponsor        state.Chain
 	SponsorUrl     *url.URL
@@ -37,6 +40,7 @@ const (
 	createRecord storeKind = iota + 1
 	updateRecord
 	updateNonce
+	addDataEntry
 )
 
 type storeState struct {
@@ -44,6 +48,11 @@ type storeState struct {
 	order   int
 	chainId *[32]byte
 	record  state.Chain
+}
+
+type storeDataEntry struct {
+	entryHash []byte
+	dataEntry []byte
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
@@ -54,6 +63,7 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 	m.dbTx = dbTx
 	m.chains = map[[32]byte]state.Chain{}
 	m.stores = map[[32]byte]*storeState{}
+	m.dataStores = map[[32]byte]*storeDataEntry{}
 	m.writes = map[storage.Key][]byte{}
 	m.txHash = types.Bytes(tx.TransactionHash()).AsBytes32()
 	m.txType = tx.TransactionType()
@@ -82,6 +92,12 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 type submittedTx struct {
 	url  *url.URL
 	body protocol.TransactionPayload
+}
+
+func (m *StateManager) logDebug(msg string, keyVals ...interface{}) {
+	if m.logger != nil {
+		m.logger.Debug(msg, keyVals...)
+	}
 }
 
 // LoadString loads a chain by URL and unmarshals it.
@@ -210,6 +226,20 @@ func (m *StateManager) Update(record ...state.Chain) {
 
 func (m *StateManager) UpdateNonce(record state.Chain) {
 	m.store(record, updateNonce)
+}
+
+//UpdateCreditBalance update the credits used for a transaction
+func (m *StateManager) UpdateCreditBalance(record state.Chain) {
+	panic("todo: UpdateCredtedBalance needs to be implemented")
+}
+
+//UpdateData will cache a data associated with a DataAccount chain.
+//the cache data will not be stored directly in the state but can be used
+//upstream for storing a chain in the state database.
+func (m *StateManager) UpdateData(record state.Chain, entryHash []byte, dataEntry []byte) {
+	m.store(record, addDataEntry)
+	u, _ := url.Parse(string(record.Header().ChainUrl))
+	m.dataStores[u.ResourceChain32()] = &storeDataEntry{entryHash: entryHash, dataEntry: dataEntry}
 }
 
 // Create queues a record for a synthetic chain create transaction. Will panic
@@ -360,7 +390,14 @@ func (m *StateManager) Commit() error {
 			}
 
 			m.dbTx.UpdateNonce((*types.Bytes32)(store.chainId), &state.Object{Entry: data})
-
+		case addDataEntry:
+			cache, ok := m.dataStores[*store.chainId]
+			if !ok {
+				return fmt.Errorf("no supporting data for data entry on %v",
+					store.record.Header().ChainUrl)
+			}
+			return m.dbTx.AddDataEntry((*types.Bytes32)(store.chainId), m.txHash[:],
+				cache.entryHash, cache.dataEntry, &state.Object{Entry: data})
 		default:
 			panic(fmt.Errorf("invalid store kind %d", store.kind))
 		}
@@ -378,12 +415,12 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 }
 
 func (s *StateManager) WriteIndex(index state.Index, chain []byte, key interface{}, value []byte) {
-	k := storage.ComputeKey(string(index), chain, key)
+	k := storage.MakeKey(string(index), chain, key)
 	s.writes[k] = value
 }
 
 func (s *StateManager) GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error) {
-	k := storage.ComputeKey(string(index), chain, key)
+	k := storage.MakeKey(string(index), chain, key)
 	w, ok := s.writes[k]
 	if ok {
 		return w, nil
@@ -391,16 +428,16 @@ func (s *StateManager) GetIndex(index state.Index, chain []byte, key interface{}
 	return s.dbTx.GetIndex(index, chain, key)
 }
 
-func (m *StateManager) AddDirectoryEntry(u *url.URL) error {
-	return AddDirectoryEntry(m, u)
+func (m *StateManager) AddDirectoryEntry(u ...*url.URL) error {
+	return AddDirectoryEntry(m, u...)
 }
 
 func AddDirectoryEntry(db interface {
 	WriteIndex(index state.Index, chain []byte, key interface{}, value []byte)
 	GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error)
-}, u *url.URL) error {
+}, u ...*url.URL) error {
 	md := new(protocol.DirectoryIndexMetadata)
-	idc := u.IdentityChain()
+	idc := u[0].IdentityChain()
 	b, err := db.GetIndex(state.DirectoryIndex, idc, "Metadata")
 	if err == nil {
 		err = md.UnmarshalBinary(b)
@@ -409,15 +446,17 @@ func AddDirectoryEntry(db interface {
 		return fmt.Errorf("failed to load metadata: %v", err)
 	}
 
-	c := md.Count
-	md.Count++
+	for _, u := range u {
+		db.WriteIndex(state.DirectoryIndex, idc, md.Count, []byte(u.String()))
+		md.Count++
+	}
+
 	b, err = md.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal metadata: %v", err)
 	}
 
 	db.WriteIndex(state.DirectoryIndex, idc, "Metadata", b)
-	db.WriteIndex(state.DirectoryIndex, idc, c, []byte(u.String()))
 	return nil
 }
 

@@ -211,21 +211,40 @@ LiteDataAccount:
 CreateDataAccount:
   kind: tx
   fields:
-  - name: Url
-    type: string
-    is-url: true
-  - name: KeyBookUrl
-    type: string
-    is-url: true
-  - name: ManagerKeyBookUrl
-    type: string
-    is-url: true
+    - name: Url
+      type: string
+      is-url: true
+    - name: KeyBookUrl
+      type: string
+      is-url: true
+    - name: ManagerKeyBookUrl
+      type: string
+      is-url: true
+
+SegWitDataEntry:
+  kind: tx
+  fields:
+    - name: EntryUrl
+      type: string
+      is-url: true
+    - name: EntryHash
+      type: chain
+
+DataEntry:
+  fields:
+    - name: ExtIds
+      type: slice
+      slice:
+        type: bytes
+    - name: Data
+      type: bytes
 
 WriteData:
   kind: tx
   fields:
-  - name: Data
-    type: bytes
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
 
 WriteDataTo:
   kind: tx
@@ -233,8 +252,9 @@ WriteDataTo:
   - name: Recipient
     type: string
     is-url: true
-  - name: Data
-    type: bytes
+  - name: Entry
+    type: DataEntry
+    marshal-as: reference
 
 IssueTokens:
   kind: tx
@@ -334,3 +354,13 @@ SyntheticAnchor:
       type: chain
     - name: Chains
       type: chainSet
+
+SyntheticMirror:
+  kind: tx
+  fields:
+    - name: Objects
+      type: slice
+      slice:
+        type: state.Object
+        pointer: true
+        marshal-as: reference

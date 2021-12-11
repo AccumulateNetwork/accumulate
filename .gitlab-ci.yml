@@ -143,7 +143,7 @@ validate:
   extends: .validate
   script:
   - apt-get -y update && apt-get -y install jq
-  - ./scripts/validate.sh
+  - ./scripts/ci/validate.sh
 
 validate matrix 1/6:
    extends: .validate

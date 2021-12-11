@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
@@ -51,15 +50,6 @@ func (m *Manager) ClearCache() {
 }
 
 var AppIDMutex sync.Mutex // Creating new AppIDs has to be atomic
-
-func (m *Manager) getInt64(keys ...interface{}) (int64, error) {
-	b, err := m.Key(keys...).Get()
-	if err != nil {
-		return 0, err
-	}
-	v, _ := common.BytesInt64(b)
-	return v, nil
-}
 
 // NewDBManager
 // Create and initialize a new database manager
@@ -107,32 +97,23 @@ func (m *Manager) Close() error {
 	return m.DB.Close()
 }
 
-func (m *Manager) Key(keys ...interface{}) KeyRef {
-	return KeyRef{m, storage.ComputeKey(keys...)}
-}
-
-type KeyRef struct {
-	M *Manager
-	K storage.Key
-}
-
 // Put
 // Add a []byte value into the underlying database
-func (k KeyRef) Put(value []byte) error {
-	return k.M.DB.Put(k.K, value)
+func (m *Manager) Put(key storage.Key, value []byte) error {
+	return m.DB.Put(key, value)
 }
 
 // Get
 // Retrieve []byte value from the underlying database. Note that this Get will
 // first check the cache before it checks the DB.
 // Returns storage.ErrNotFound if not found.
-func (k KeyRef) Get() ([]byte, error) {
+func (m *Manager) Get(key storage.Key) ([]byte, error) {
 	if debugKeys {
-		fmt.Printf("Get %v\n", k.K)
+		fmt.Printf("Get %v\n", key)
 	}
-	k.M.cacheMu.RLock()
-	defer k.M.cacheMu.RUnlock()
-	if v, ok := k.M.txCache[k.K]; ok {
+	m.cacheMu.RLock()
+	defer m.cacheMu.RUnlock()
+	if v, ok := m.txCache[key]; ok {
 		// Return a copy. Otherwise the caller could change it, and that would
 		// change what's in the cache.
 		u := make([]byte, len(v))
@@ -140,20 +121,20 @@ func (k KeyRef) Get() ([]byte, error) {
 		return u, nil
 	}
 	// Assume the DB implementation correctly implements the interface
-	return k.M.DB.Get(k.K)
+	return m.DB.Get(key)
 }
 
-func (k KeyRef) PutBatch(value []byte) {
+func (m *Manager) PutBatch(key storage.Key, value []byte) {
 	if debugKeys {
-		fmt.Printf("Put %v => %X\n", k.K, value)
+		fmt.Printf("Put %v => %X\n", key, value)
 	}
-	k.M.cacheMu.Lock()
-	defer k.M.cacheMu.Unlock()
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
 	// Save a copy. Otherwise the caller could change it, and that would change
 	// what's in the cache.
 	u := make([]byte, len(value))
 	copy(u, value)
-	k.M.txCache[k.K] = u
+	m.txCache[key] = u
 }
 
 // EndBatch

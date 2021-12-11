@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -11,7 +10,7 @@ import (
 
 type WriteData struct{}
 
-func (WriteData) Type() types.TxType { return types.TxTypeWriteData }
+func (WriteData) Type() types.TransactionType { return types.TxTypeWriteData }
 
 func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	body := new(protocol.WriteData)
@@ -20,5 +19,45 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	return errors.New("not implemented") // TODO
+	if st.Sponsor.Header().Type != types.ChainTypeDataAccount {
+		return fmt.Errorf("sponsor is not a data account: want %v, got %v",
+			types.ChainTypeDataAccount, st.Sponsor.Header().Type)
+	}
+
+	//check will return error if there is too much data or no data for the entry
+	_, err = body.Entry.CheckSize()
+	if err != nil {
+		return err
+	}
+
+	// now replace the transaction payload with a segregated witness to the data.
+	// This technique is used to segregate the payload from the stored transaction
+	// by replacing the data payload with a smaller reference to that data via the
+	// entry hash.  While technically, not true segwit since the entry hash is not
+	// signed, the original transaction can be reconstructed by recombining the
+	// signature info stored on the pending chain, the transaction info stored on
+	// the main chain, and the original data payload that resides on the data chain
+	// when the user wishes to validate the signature of the transaction that
+	// produced the data entry
+
+	sw := protocol.SegWitDataEntry{}
+	copy(sw.EntryHash[:], body.Entry.Hash())
+	sw.EntryUrl = st.Sponsor.Header().GetChainUrl()
+
+	segWitPayload, err := sw.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("unable to marshal segwit, %v", err)
+	}
+
+	dataPayload, err := body.Entry.MarshalBinary()
+	if err != nil {
+		return fmt.Errorf("error marshaling data entry, %v", err)
+	}
+
+	//now replace the original data entry payload with the new segwit payload
+	tx.Transaction = segWitPayload
+
+	st.UpdateData(st.Sponsor, sw.EntryHash[:], dataPayload)
+
+	return nil
 }

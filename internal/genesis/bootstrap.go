@@ -1,6 +1,7 @@
 package genesis
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
@@ -35,14 +36,14 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 		return nil, err
 	}
 
-	_ = kvdb.Put(storage.ComputeKey("SubnetID"), []byte(opts.SubnetID))
+	_ = kvdb.Put(storage.MakeKey("SubnetID"), []byte(opts.SubnetID))
 
 	exec, err := chain.NewGenesisExecutor(db, opts.NetworkType)
 	if err != nil {
 		return nil, err
 	}
 
-	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) {
+	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) error {
 		acme := new(protocol.TokenIssuer)
 		acme.Type = types.ChainTypeTokenIssuer
 		acme.ChainUrl = types.String(protocol.AcmeUrl().String())
@@ -53,10 +54,15 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 		var uAdi *url.URL
 		switch opts.NetworkType {
 		case config.Directory:
-			uAdi = mustParseUrl("dn")
+			uAdi = protocol.DnUrl()
 
 		case config.BlockValidator:
-			uAdi = mustParseUrl("bvn-" + opts.SubnetID)
+			// Test with `${ID}` not `bvn-${ID}` because the latter will fail
+			// with "bvn-${ID} is reserved"
+			if err := protocol.IsValidAdiUrl(&url.URL{Authority: opts.SubnetID}); err != nil {
+				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.SubnetID, err))
+			}
+			uAdi = protocol.BvnUrl(opts.SubnetID)
 
 			lite := protocol.NewLiteTokenAccount()
 			lite.ChainUrl = types.String(protocol.FaucetWallet.Addr)
@@ -88,5 +94,6 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 		}
 
 		st.Update(adi, book, page)
+		return st.AddDirectoryEntry(uAdi, uBook, uPage)
 	})
 }

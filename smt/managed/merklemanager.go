@@ -12,16 +12,12 @@ import (
 )
 
 type MerkleManager struct {
-	key       []interface{}     // ChainID (some operations require this)
+	key       storage.Key       // ChainID (some operations require this)
 	Manager   *database.Manager // AppID based Manager
 	MS        *MerkleState      // MerkleState managed by MerkleManager
 	MarkPower int64             // log2 of the MarkFreq
 	MarkFreq  int64             // The count between Marks
 	MarkMask  int64             // The binary mask to detect Mark boundaries
-}
-
-func (m *MerkleManager) dbKey(key ...interface{}) database.KeyRef {
-	return m.Manager.Key(append(m.key, key...)...)
 }
 
 // AddHash
@@ -30,21 +26,21 @@ func (m *MerkleManager) AddHash(hash Hash) {
 	hash = hash.Copy()                       // Just to make sure hash doesn't get changed
 	_, err := m.GetElementIndex(hash)        // See if this element is a duplicate
 	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
-		m.dbKey("ElementIndex", hash).PutBatch(common.Int64Bytes(m.MS.Count)) // Keep its index
+		m.Manager.PutBatch(m.key.Append("ElementIndex", hash), common.Int64Bytes(m.MS.Count)) // Keep its index
 	} else if err != nil {
 		panic(err) // TODO Panics are bad, but I don't want to change the signature now
 	}
 
-	m.dbKey("Element", m.MS.Count).PutBatch(hash)
+	m.Manager.PutBatch(m.key.Append("Element", m.MS.Count), hash)
 	switch (m.MS.Count + 1) & m.MarkMask {
 	case 0: // Is this the end of the Mark set, i.e. 0, ..., m.MarkFreq-1
 		m.MS.AddToMerkleTree(hash)                      // Add the hash to the Merkle Tree
 		if MSState, err := m.MS.Marshal(); err != nil { // Get the current state
 			panic(fmt.Sprintf("could not marshal MerkleState: %v", err))
 		} else {
-			m.dbKey("States", m.GetElementCount()-1).PutBatch(MSState) // Save Merkle State at n*MarkFreq-1
+			m.Manager.PutBatch(m.key.Append("States", m.GetElementCount()-1), MSState) // Save Merkle State at n*MarkFreq-1
 		}
-		if err := m.WriteChainHead(m.key...); err != nil {
+		if err := m.WriteChainHead(m.key); err != nil {
 			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	case 1: //                              After MarkFreq elements are written
@@ -52,7 +48,7 @@ func (m *MerkleManager) AddHash(hash Hash) {
 		fallthrough                       // then fall through as normal
 	default:
 		m.MS.AddToMerkleTree(hash) // 0 to m.MarkFeq-2, always add to the merkle tree
-		if err := m.WriteChainHead(m.key...); err != nil {
+		if err := m.WriteChainHead(m.key); err != nil {
 			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	}
@@ -62,7 +58,7 @@ func (m *MerkleManager) AddHash(hash Hash) {
 // GetElementIndex
 // Get an Element of a Merkle Tree from the database
 func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
-	data, err := m.dbKey("ElementIndex", hash).Get()
+	data, err := m.Manager.Get(m.key.Append("ElementIndex", hash))
 	if err != nil {
 		return 0, err
 	}
@@ -74,9 +70,9 @@ func (m *MerkleManager) GetElementIndex(hash []byte) (i int64, err error) {
 // adds the chainID to the MerkleManager for storing some chain specific key
 // value pairs where the key is an index.  Before any hash is added to a
 // MerkleState, the ChainID should be set
-func (m *MerkleManager) SetKey(key ...interface{}) (err error) {
+func (m *MerkleManager) SetKey(key storage.Key) (err error) {
 	m.key = key
-	m.MS, err = m.ReadChainHead(m.key...)
+	m.MS, err = m.ReadChainHead(m.key)
 	return err
 }
 
@@ -84,22 +80,22 @@ func (m *MerkleManager) SetKey(key ...interface{}) (err error) {
 // Save the current MerkleState as the head of the chain.  This does not flush
 // the database, because all chains in an application need have their head of
 // chain updated as one atomic transaction to prevent messing up the database
-func (m *MerkleManager) WriteChainHead(key ...interface{}) error {
+func (m *MerkleManager) WriteChainHead(key storage.Key) error {
 	state, err := m.MS.Marshal()
 	if err != nil {
 		return err
 	}
-	m.Manager.Key(append(key, "Head")...).PutBatch(state)
+	m.Manager.PutBatch(key.Append("Head"), state)
 	return nil
 }
 
 // GetChainState
 // Reads the highest state of the chain stored to the database.  Returns nilTestCli
 // if no state has been recorded for a chain
-func (m *MerkleManager) GetChainState(key ...interface{}) (merkleState *MerkleState, err error) {
+func (m *MerkleManager) GetChainState(key storage.Key) (merkleState *MerkleState, err error) {
 	merkleState = new(MerkleState)
 	merkleState.InitSha256()
-	state, err := m.Manager.Key(append(key, "Head")...).Get()
+	state, err := m.Manager.Get(key.Append("Head"))
 	if err == nil {
 		if err := merkleState.UnMarshal(state); err != nil {
 			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", m.key)
@@ -112,13 +108,13 @@ func (m *MerkleManager) GetChainState(key ...interface{}) (merkleState *MerkleSt
 // Retrieve the current MerkleState from the given database, and set
 // that state as the MerkleState of this MerkleManager.  Note that the cache
 // will be cleared.
-func (m *MerkleManager) ReadChainHead(key ...interface{}) (ms *MerkleState, err error) {
+func (m *MerkleManager) ReadChainHead(key storage.Key) (ms *MerkleState, err error) {
 	ms = new(MerkleState)
 	ms.HashFunction = m.MS.HashFunction
-	state, e := m.Manager.Key(append(key, "Head")...).Get() //                        Get the state for the Merkle Tree
-	if e == nil {                                           //                        If the State exists
-		if err := ms.UnMarshal(state); err != nil { //                                      set that as the state
-			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", m.key) // Blow up of the database is bad
+	state, e := m.Manager.Get(key.Append("Head")) //   Get the state for the Merkle Tree
+	if e == nil {                                 //   If the State exists
+		if err := ms.UnMarshal(state); err != nil { //     Set that as our state
+			return nil, fmt.Errorf("database is corrupt; failed to unmarshal %v", key) // Blow up of the database is bad
 		}
 	}
 	return ms, nil
@@ -164,14 +160,14 @@ func NewMerkleManager(
 
 // ManageChain returns a copy of the manager with the key set to the given
 // value.
-func (m *MerkleManager) ManageChain(key ...interface{}) (*MerkleManager, error) {
+func (m *MerkleManager) ManageChain(key storage.Key) (*MerkleManager, error) {
 	n := new(MerkleManager)
 	err := n.init(m.Manager, m.MarkPower)
 	if err != nil {
 		return nil, err
 	}
 
-	err = n.SetKey(key...)
+	err = n.SetKey(key)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +197,7 @@ func (m *MerkleManager) init(DBManager *database.Manager, markPower int64) (err 
 		m.MS = new(MerkleState) //
 		m.MS.InitSha256()       //
 	}
-	m.MS, err = m.ReadChainHead() //                       Set the MerkleState
+	m.MS, err = m.ReadChainHead(m.key) //                  Set the MerkleState
 	if err != nil {
 		return err
 	}
@@ -230,9 +226,9 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 		return ms
 	}
 
-	data, e := m.dbKey("States", element).Get() // Get the data at this height
-	if e != nil {                               // If nil, there is no state saved
-		return nil //                                 return nil, as no state exists
+	data, e := m.Manager.Get(m.key.Append("States", element)) // Get the data at this height
+	if e != nil {                                             // If nil, there is no state saved
+		return nil //                                                   return nil, as no state exists
 	}
 	ms := new(MerkleState)                     //                                 Get a fresh new MerkleState
 	ms.InitSha256()                            //                                 Initialize hash function
@@ -266,7 +262,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 	nextMarkIdx := element&(^m.MarkMask) - 1 + m.MarkFreq // Calculate the following mark point
 	var nextMark *MerkleState                             //
 	if nextMarkIdx >= m.GetElementCount() {               //           If past the end of the chain, then
-		if nextMark, err = m.GetChainState(m.key...); err != nil { //      read the chain state instead
+		if nextMark, err = m.GetChainState(m.key); err != nil { //      read the chain state instead
 			return nil, err //                                           Should be in the database
 		}
 	} else {
@@ -288,7 +284,7 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 
 // Get the nth leaf node
 func (m *MerkleManager) Get(element int64) (Hash, error) {
-	data, err := m.dbKey("Element", element).Get()
+	data, err := m.Manager.Get(m.key.Append("Element", element))
 	if err != nil {
 		return nil, err
 	}
@@ -299,7 +295,7 @@ func (m *MerkleManager) Get(element int64) (Hash, error) {
 // GetNext
 // Get the next hash to be added to a state at this height
 func (m *MerkleManager) GetNext(element int64) (hash Hash) {
-	data, err := m.dbKey("NextElement", element).Get()
+	data, err := m.Manager.Get(m.key.Append("NextElement", element))
 	if err != nil {
 		return nil
 	}

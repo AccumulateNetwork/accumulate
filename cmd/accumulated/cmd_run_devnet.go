@@ -25,8 +25,14 @@ var cmdRunDevnet = &cobra.Command{
 	Args:  cobra.NoArgs,
 }
 
+var flagRunDevnet = struct {
+	Except []string
+}{}
+
 func init() {
 	cmdRun.AddCommand(cmdRunDevnet)
+
+	cmdRunDevnet.Flags().StringArrayVarP(&flagRunDevnet.Except, "except", "x", nil, "Nodes that should not be launched, e.g. bvn0.0")
 }
 
 var colors = []*color.Color{
@@ -41,6 +47,11 @@ var colors = []*color.Color{
 var fallbackColor = color.New(color.FgHiBlack)
 
 func runDevNet(*cobra.Command, []string) {
+	skip := map[string]bool{}
+	for _, id := range flagRunDevnet.Except {
+		skip[id] = true
+	}
+
 	type Node struct {
 		Subnet string
 		Number int
@@ -78,6 +89,10 @@ func runDevNet(*cobra.Command, []string) {
 	done := new(sync.WaitGroup)
 
 	for _, node := range nodes {
+		if skip[fmt.Sprintf("%s.%d", node.Subnet, node.Number)] {
+			continue
+		}
+
 		// Load the node
 		dir := filepath.Join(dir, node.Subnet, fmt.Sprintf("Node%d", node.Number))
 		daemon, err := accumulated.Load(dir, func(format string) (io.Writer, error) {
