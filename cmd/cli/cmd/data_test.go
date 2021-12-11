@@ -29,7 +29,8 @@ func testCase2_8(t *testing.T, tc *testCmd) {
 func testCase2_9(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("data write acc://RedWagon/DataAccount red1 badc0de9 deadbeef \"thequickbrownfoxjumpsoverthelazydog\"")
+	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
+	commandLine := fmt.Sprintf("data write acc://RedWagon/DataAccount red1 badc0de9 deadbeef cafef00dbabe8badf00d")
 	_, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
