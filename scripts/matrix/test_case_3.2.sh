@@ -60,7 +60,7 @@ echo $key
 # create account without adi account
 
 sleep 2.5
-$cli account create toke acc://t32acct t32key acc://t32acct/myacmeacct acc://ACME acc://t32acct/ssg0 -s http://$1/v1
+$cli account create token acc://t32acct t32key acc://t32acct/myacmeacct acc://ACME acc://t32acct/ssg0 -s http://$1/v1
 if [ $? -eq 0 ]; then
 	echo "cli account create passed and should have failed"
 	exit 1
