@@ -21,7 +21,6 @@ func GetHash(i int) Hash {
 
 func TestReceipt(t *testing.T) {
 	const testMerkleTreeSize = 7
-	t.SkipNow()
 	// Create a memory based database
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "", nil)
@@ -75,7 +74,7 @@ func TestReceipt(t *testing.T) {
 
 func TestReceiptAll(t *testing.T) {
 	const testMerkleTreeSize = 500
-	t.SkipNow()
+
 	// Create a memory based database
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "", nil)
@@ -220,7 +219,7 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 }
 
 func TestBadgerReceipts(t *testing.T) {
-	t.SkipNow()
+
 	manager, dir := GetManager(2, true, "", t)
 	defer func() {
 		_ = os.RemoveAll(dir)
@@ -234,7 +233,7 @@ func TestBadgerReceipts(t *testing.T) {
 var badgerReceiptsBig = flag.Bool("badger-receipts-big", false, "Run TestBadgerReceiptsBig")
 
 func TestBadgerReceiptsBig(t *testing.T) {
-	t.SkipNow()
+
 	if !*badgerReceiptsBig {
 		t.Skip("This test takes a long time to run")
 	}
