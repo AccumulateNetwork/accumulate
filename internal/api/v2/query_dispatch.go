@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -28,22 +29,61 @@ func (q *queryDispatch) routing(s string) (uint64, error) {
 	return u.Routing(), nil
 }
 
-func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error)) ([]*QueryResponse, error) {
-	res := make([]*QueryResponse, 0, 1)
-	for _, c := range q.clients {
-		r, err := query(&queryDirect{q.QuerierOptions, c})
-		if err == nil {
-			res = append(res, r)
-		} else if !errors.Is(err, storage.ErrNotFound) {
-			return nil, err
+func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error)) (*QueryResponse, error) {
+	resCh := make(chan *QueryResponse) // Result channel
+	errCh := make(chan error)          // Error channel
+	doneCh := make(chan struct{})      // Completion channel
+	wg := new(sync.WaitGroup)          // Wait for completion
+	wg.Add(len(q.clients))             //
+
+	// Mark complete on return
+	defer close(doneCh)
+
+	go func() {
+		// Wait for all queries to complete
+		wg.Wait()
+
+		// If all queries are done and no error or result has been produced, the
+		// record must not exist
+		select {
+		case errCh <- storage.ErrNotFound:
+		case <-doneCh:
 		}
+	}()
+
+	// Create a request for each client in a separate goroutine
+	for _, c := range q.clients {
+		go func(c ABCIQueryClient) {
+			// Mark complete on return
+			defer wg.Done()
+
+			res, err := query(&queryDirect{q.QuerierOptions, c})
+			switch {
+			case err == nil:
+				select {
+				case resCh <- res:
+					// Send the result
+				case <-doneCh:
+					// A result or error has already been sent
+				}
+			case !errors.Is(err, storage.ErrNotFound):
+				select {
+				case errCh <- err:
+					// Send the error
+				case <-doneCh:
+					// A result or error has already been sent
+				}
+			}
+		}(c)
 	}
 
-	if len(res) == 0 {
-		return nil, storage.ErrNotFound
+	// Wait for an error or a result
+	select {
+	case res := <-resCh:
+		return res, nil
+	case err := <-errCh:
+		return nil, err
 	}
-
-	return res, nil
 }
 
 func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
@@ -63,11 +103,7 @@ func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 		return nil, err
 	}
 
-	if len(res) > 1 {
-		return nil, fmt.Errorf("found chain %X on multiple networks", id)
-	}
-
-	return res[0], nil
+	return res, nil
 }
 
 func (q *queryDispatch) QueryDirectory(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryResponse, error) {
@@ -87,11 +123,7 @@ func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, 
 		return nil, err
 	}
 
-	if len(res) > 1 {
-		return nil, fmt.Errorf("found TX %X on multiple networks", id)
-	}
-
-	return res[0], nil
+	return res, nil
 }
 
 func (q *queryDispatch) QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error) {

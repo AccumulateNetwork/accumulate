@@ -200,7 +200,6 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 				return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
 			}
 			dir.ExpandedEntries = entries
-			dir.Entries = nil
 		}
 
 		k = []byte("directory")
