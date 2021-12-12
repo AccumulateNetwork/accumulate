@@ -13,7 +13,7 @@ import (
 func (s *Suite) TestGenesis() {
 	s.Run("ACME", func() {
 		acme := new(protocol.TokenIssuer)
-		s.getChainAs(protocol.AcmeUrl().String(), acme)
+		s.dut.GetRecordAs(protocol.AcmeUrl().String(), acme)
 		s.Assert().Equal(protocol.AcmeUrl().String(), string(acme.ChainUrl))
 		s.Assert().Equal(protocol.ACME, string(acme.Symbol))
 	})
@@ -31,7 +31,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	s.dut.WaitForTxns(tx.TransactionHash())
 
 	account := new(protocol.LiteTokenAccount)
-	s.getChainAs(senderUrl.String(), account)
+	s.dut.GetRecordAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx), account.Balance.Int64())
 
 	recipients := make([]*url.URL, 10)
@@ -67,6 +67,6 @@ func (s *Suite) TestCreateLiteAccount() {
 	s.dut.WaitForTxns(txids...)
 
 	account = new(protocol.LiteTokenAccount)
-	s.getChainAs(senderUrl.String(), account)
+	s.dut.GetRecordAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx-total), account.Balance.Int64())
 }
