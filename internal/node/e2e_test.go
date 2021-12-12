@@ -28,7 +28,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	tmnet "github.com/tendermint/tendermint/libs/net"
 	"github.com/tendermint/tendermint/rpc/client/local"
-	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
 func TestEndToEnd(t *testing.T) {
@@ -57,8 +56,23 @@ type e2eDUT struct {
 	client *local.Local
 }
 
-func (d *e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {
-	return d.query.QueryByUrl(url)
+func (d *e2eDUT) getObj(url string) *state.Object {
+	r, err := d.query.QueryByUrl(url)
+	d.Require().NoError(err)
+	d.Require().Zero(r.Response.Code, "Query failed: %v", r.Response.Info)
+
+	obj := new(state.Object)
+	d.Require().Equal([]byte("chain"), r.Response.Key)
+	d.Require().NoError(obj.UnmarshalBinary(r.Response.Value))
+	return obj
+}
+
+func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
+	d.Require().NoError(d.getObj(url).As(target))
+}
+
+func (d *e2eDUT) GetRecordHeight(url string) uint64 {
+	return d.getObj(url).Height
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
