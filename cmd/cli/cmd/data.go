@@ -227,16 +227,15 @@ func WriteData(accountUrl string, args []string) (string, error) {
 
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))
-		if args[i][0:1] != "\"" {
-			//attempt to hex decode it
-			n, err := hex.Decode(data, []byte(args[i]))
-			if err != nil {
-				return "", fmt.Errorf("extid is neither hex nor quoted string, %v", err)
-			}
+
+		//attempt to hex decode it
+		n, err := hex.Decode(data, []byte(args[i]))
+		if err != nil {
+			//if it is not a hex string, then just store the data as-is
+			copy(data, args[i])
+		} else {
 			//clip the padding
 			data = data[:n]
-		} else {
-			copy(data, args[i])
 		}
 		if i == len(args)-1 {
 			wd.Entry.Data = data
