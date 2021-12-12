@@ -322,7 +322,7 @@ func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts
 		return nil, err
 	}
 	if k != "dataSet" {
-		return nil, fmt.Errorf("unknown response type: want data, got %q", k)
+		return nil, fmt.Errorf("unknown response type: want dataSet, got %q", k)
 	}
 
 	des := new(protocol.ResponseDataEntrySet)
