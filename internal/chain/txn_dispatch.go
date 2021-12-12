@@ -138,7 +138,7 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
 	d.errg.Go(func() error {
 		_, err := d.Local.BroadcastTxAsync(ctx, tx)
-		return err
+		return d.checkError(err)
 	})
 }
 
