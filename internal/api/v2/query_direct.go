@@ -354,6 +354,7 @@ func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagin
 		for _, eh := range entry.Entry.ExtIds {
 			de.Entry.ExtIds = append(de.Entry.ExtIds, eh)
 		}
+		respDataSet.DataEntries = append(respDataSet.DataEntries, de)
 	}
 	return respDataSet, nil
 }
