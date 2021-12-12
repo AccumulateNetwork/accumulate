@@ -43,14 +43,15 @@ func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
 	if res.Response.Code == protocol.CodeNotFound {
 		return "", nil, storage.ErrNotFound
 	}
-	protoError := new(protocol.Error)
-	protoError.Code = protocol.ErrorCode(res.Response.Code)
+
+	perr := new(protocol.Error)
+	perr.Code = protocol.ErrorCode(res.Response.Code)
 	if res.Response.Info != "" {
-		protoError.Message = errors.New(res.Response.Info)
+		perr.Message = errors.New(res.Response.Info)
 	} else {
-		protoError.Message = errors.New(res.Response.Log)
+		perr.Message = errors.New(res.Response.Log)
 	}
-	return "", nil, nil
+	return "", nil, perr
 }
 
 func (q *queryDirect) QueryUrl(s string) (*QueryResponse, error) {
