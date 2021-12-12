@@ -290,7 +290,7 @@ func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, e
 		return nil, err
 	}
 	if k != "data" {
-		return nil, fmt.Errorf("unknown response type: want chain, got %q", k)
+		return nil, fmt.Errorf("unknown response type: want data, got %q", k)
 	}
 
 	//do I need to do anything with v?
