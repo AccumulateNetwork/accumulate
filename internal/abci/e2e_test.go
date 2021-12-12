@@ -323,7 +323,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, err)
 			send(tx)
 		})
+
+		// Without the sleep, this test fails on Windows and macOS
 		time.Sleep(3 * time.Second)
+
 		// Test getting the data by URL
 		r2 := n.GetChainDataByUrl("FooBar/oof")
 		if r2 == nil {

@@ -19,6 +19,12 @@ var dataCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
+		if len(args) == 0 {
+			PrintData()
+			printOutput(cmd, out, err)
+			return
+		}
+
 		switch args[0] {
 		case "get":
 			switch len(args) {
