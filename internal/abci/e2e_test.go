@@ -31,7 +31,7 @@ func TestEndToEndSuite(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, true)
-		return e2eDUT{n}
+		return &e2eDUT{s, n}
 	}))
 }
 

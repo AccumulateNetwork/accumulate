@@ -1,7 +1,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -11,17 +10,12 @@ import (
 )
 
 func packStateResponse(obj *state.Object, chain state.Chain) (*QueryResponse, error) {
-	b, err := json.Marshal(chain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal state: %v", err)
-	}
-
 	res := new(QueryResponse)
 	res.Type = chain.Header().Type.Name()
 	res.MerkleState = new(MerkleState)
 	res.MerkleState.Count = obj.Height
 	res.MerkleState.Roots = obj.Roots
-	res.Data = (*json.RawMessage)(&b)
+	res.Data = chain
 	return res, nil
 }
 
