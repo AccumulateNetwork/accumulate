@@ -295,7 +295,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	st, err := NewStateManager(m.dbTx, tx)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
-		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens:
+		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens, types.TxTypeSyntheticDepositCredits:
 			// TX does not require a sponsor - it may create the sponsor
 		default:
 			return nil, fmt.Errorf("sponsor not found: %v", err)

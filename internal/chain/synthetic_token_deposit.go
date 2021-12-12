@@ -13,7 +13,7 @@ import (
 
 type SyntheticTokenDeposit struct{}
 
-func (SyntheticTokenDeposit) Type() types.TxType {
+func (SyntheticTokenDeposit) Type() types.TransactionType {
 	return types.TxTypeSyntheticDepositTokens
 }
 
