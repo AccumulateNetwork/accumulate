@@ -1,6 +1,8 @@
 package api
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 func (m *JrpcMethods) parse(params json.RawMessage, target interface{}, validateFields ...string) error {
 	err := json.Unmarshal(params, target)

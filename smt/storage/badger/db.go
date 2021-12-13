@@ -11,6 +11,15 @@ import (
 	"github.com/dgraph-io/badger"
 )
 
+// TruncateBadger controls whether Badger is configured to truncate corrupted
+// data. Especially on Windows, if the node is terminated abruptly, setting this
+// may be necessary to recovering the state of the system.
+//
+// However, Accumulate is not robust against this kind of interruption. If the
+// node is terminated abruptly and restarted with this flag, some functions may
+// break, such as synthetic transactions and anchoring.
+var TruncateBadger = false
+
 type DB struct {
 	DBOpen   types.AtomicBool
 	DBHome   string
@@ -37,8 +46,14 @@ func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 		return errors.New("failed to create home directory")
 	}
 	d.DBHome = filepath
+
 	// Open Badger
 	opts := badger.DefaultOptions(d.DBHome)
+
+	if TruncateBadger {
+		opts = opts.WithTruncate(true)
+	}
+
 	if logger != nil {
 		opts = opts.WithLogger(badgerLogger{logger})
 	}
