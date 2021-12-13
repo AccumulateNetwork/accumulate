@@ -34,9 +34,9 @@ const (
 	// synthetic chain create transaction.
 	TxTypeCreateTokenAccount TransactionType = 0x02
 
-	// TxTypeWithdrawTokens transfers tokens between token accounts, which
-	// produces a synthetic deposit tokens transaction.
-	TxTypeWithdrawTokens TransactionType = 0x03
+	// TxTypeSendTokens transfers tokens between token accounts, which produces
+	// a synthetic deposit tokens transaction.
+	TxTypeSendTokens TransactionType = 0x03
 
 	// TxTypeCreateDataAccount creates an ADI Data Account, which produces a
 	// synthetic chain create transaction.
@@ -134,8 +134,8 @@ func (t TransactionType) String() string {
 		return "createIdentity"
 	case TxTypeCreateTokenAccount:
 		return "createTokenAccount"
-	case TxTypeWithdrawTokens:
-		return "withdrawTokens"
+	case TxTypeSendTokens:
+		return "sendTokens"
 	case TxTypeCreateDataAccount:
 		return "createDataAccount"
 	case TxTypeWriteData:
