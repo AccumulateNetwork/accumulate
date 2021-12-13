@@ -104,7 +104,12 @@ func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
 		if m.Pending[i] == nil && m2.Pending[i] != nil {
 			return false
 		}
-
+		if m.Pending[len(m.Pending)-1] == nil {
+			m.Pending = m.Pending[:len(m.Pending)-1]
+		}
+		if m2.Pending[len(m2.Pending)-1] == nil {
+			m2.Pending = m2.Pending[:len(m.Pending)-1]
+		}
 		// Each element of Pending must be equal
 		if cnt&1 == 1 && !bytes.Equal(m.Pending[i], m2.Pending[i]) {
 			return false

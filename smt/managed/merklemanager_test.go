@@ -50,7 +50,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 	var randHash RandHash
 	dbm, e1 := database.NewDBManager("memory", "", nil)
 	require.NoError(t, e1, "should be able to open a database")
-	m, e2 := NewMerkleManager(dbm, 8)
+	m, e2 := NewMerkleManager(dbm, 2)
 	require.NoError(t, e2, "should be able to open a database")
 	var States []*MerkleState
 	for i := 0; i < testnum; i++ {
@@ -62,6 +62,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 		if err != nil {
 			state, err = m.GetAnyState(i)
 		}
+		require.Truef(t, state.Count == i+1, "state count %d does not match %d", state.Count, i)
 		require.NoErrorf(t, err, "%d all elements should have a state: %v", i, err)
 		if !state.Equal(States[i]) {
 			fmt.Println("i=", i)
