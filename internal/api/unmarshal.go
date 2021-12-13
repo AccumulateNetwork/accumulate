@@ -101,7 +101,7 @@ func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error)
 }
 
 func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
-	tx := api.TokenTx{}
+	tx := api.SendTokens{}
 	err := tx.UnmarshalBinary(txPayload)
 	if err != nil {
 		return nil, accumulateError(err)
@@ -119,8 +119,8 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 		j := i * 32
 		synthTxId := txSynthTxIds[j : j+32]
 		txStatus := response.TokenTxOutputStatus{}
-		txStatus.TokenTxOutput.URL = v.URL
-		txStatus.TokenTxOutput.Amount = v.Amount
+		txStatus.TokenRecipient.URL = v.URL
+		txStatus.TokenRecipient.Amount = v.Amount
 		txStatus.SyntheticTxId = synthTxId
 
 		txResp.ToAccount = append(txResp.ToAccount, txStatus)
@@ -131,7 +131,7 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 		return nil, err
 	}
 	resp := api.APIDataResponse{}
-	resp.Type = types.String(types.TxTypeWithdrawTokens.Name())
+	resp.Type = types.String(types.TxTypeSendTokens.Name())
 	resp.Data = new(json.RawMessage)
 	*resp.Data = data
 	resp.Sponsor = tx.From.String
@@ -176,7 +176,7 @@ func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte,
 
 	txType, _ := common.BytesUint64(txPayload)
 	switch types.TxType(txType) {
-	case types.TxTypeWithdrawTokens:
+	case types.TxTypeSendTokens:
 		resp, err = unmarshalTokenTx(txPayload, txId, txSynthTxIds)
 	case types.TxTypeSyntheticDepositTokens:
 		resp, err = unmarshalSynthTokenDeposit(txPayload, txId, txSynthTxIds)

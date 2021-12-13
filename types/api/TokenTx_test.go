@@ -19,7 +19,7 @@ func TestTokenTransaction(t *testing.T) {
 		t.Fatalf("Error marshalling TokenTransaction %v", err)
 	}
 
-	tt2 := TokenTx{}
+	tt2 := SendTokens{}
 	err = json.Unmarshal(data, &tt2)
 
 	if err != nil {
@@ -30,7 +30,7 @@ func TestTokenTransaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tt2 = TokenTx{}
+	tt2 = SendTokens{}
 	err = tt2.UnmarshalBinary(data)
 	if err != nil {
 		t.Fatal(err)

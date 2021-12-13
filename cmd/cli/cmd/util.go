@@ -698,7 +698,7 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 				out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 			}
 			return out, nil
-		case types.TxTypeWithdrawTokens.String():
+		case types.TxTypeSendTokens.String():
 			tx := response.TokenTx{}
 			err := json.Unmarshal(*res.Data, &tx)
 			if err != nil {
