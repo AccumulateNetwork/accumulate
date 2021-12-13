@@ -26,6 +26,7 @@ import (
 	"github.com/prometheus/common/model"
 	abci "github.com/tendermint/tendermint/abci/types"
 	jrpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	tmtypes "github.com/tendermint/tendermint/types"
 )
 
 type API struct {
@@ -449,8 +450,8 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeap
 	resolved, err := resp.ResolveTransactionResponse(txInfo)
 	if err != nil {
 		var rpcErr *jrpctypes.RPCError
-		if errors.As(err, &rpcErr) && rpcErr.Data == "tx already exists in cache" {
-			return nil, jsonrpc2.NewError(ErrCodeDuplicateTxn, "tx already exists in cache", formatTransactionData(tx))
+		if errors.As(err, &rpcErr) && rpcErr.Data == tmtypes.ErrTxInCache.Error() || errors.Is(err, tmtypes.ErrTxInCache) {
+			return nil, jsonrpc2.NewError(ErrCodeDuplicateTxn, tmtypes.ErrTxInCache.Error(), formatTransactionData(tx))
 		}
 		return nil, jsonrpc2.NewError(ErrCodeInternal, err.Error(), formatTransactionData(tx))
 	}

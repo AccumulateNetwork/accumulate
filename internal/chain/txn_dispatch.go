@@ -2,6 +2,7 @@ package chain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/config"
@@ -9,6 +10,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/rpc/client/http"
+	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"golang.org/x/sync/errgroup"
 )
@@ -139,7 +141,7 @@ func (d *dispatcher) send(ctx context.Context, client *http.HTTP, batch txBatch)
 		// you don't give it more than one request.
 		d.errg.Go(func() error {
 			_, err := client.BroadcastTxAsync(ctx, batch[0])
-			return err
+			return d.checkError(err)
 		})
 
 	default:
@@ -153,9 +155,35 @@ func (d *dispatcher) send(ctx context.Context, client *http.HTTP, batch txBatch)
 				}
 			}
 			_, err := b.Send(ctx)
-			return err
+			return d.checkError(err)
 		})
 	}
+}
+
+var errTxInCache = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+
+// checkError returns nil if the error can be ignored.
+func (*dispatcher) checkError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	// TODO This may be unnecessary once this issue is fixed:
+	// https://github.com/tendermint/tendermint/issues/7185.
+
+	// Is the error "tx already exists in cache"?
+	if err.Error() == tm.ErrTxInCache.Error() {
+		return nil
+	}
+
+	// Or RPC error "tx already exists in cache"?
+	var rpcErr *jrpc.RPCError
+	if errors.As(err, &rpcErr) && *rpcErr == *errTxInCache {
+		return nil
+	}
+
+	// It's a real error
+	return err
 }
 
 // Send sends all of the batches.

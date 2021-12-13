@@ -33,7 +33,7 @@ type Subnet struct {
 func (s *Subnet) FullName() string { return s.NetworkName + "." + s.Name }
 
 type Node struct {
-	IP   string // TODO this can also be a hostname so "remote" will be a better nane, but renaming it will produce a big PR
+	IP   string
 	Type config.NodeType
 }
 

@@ -51,8 +51,8 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 // the genesis state.
 func NewGenesisExecutor(db *state.StateDB, typ config.NetworkType) (*Executor, error) {
 	return newExecutor(ExecutorOptions{
-		DB:      db,
-		Network: config.Network{Type: typ},
+		DB:        db,
+		Network:   config.Network{Type: typ},
 		isGenesis: true,
 	})
 }

@@ -122,9 +122,6 @@ func TestJsonRpcLiteToken(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//wait 3 seconds for the transaction to process for the block to complete.
-	time.Sleep(time.Second)
-
 	queryTokenUrl := addrList[1]
 	resp, err := query.GetTokenAccount(queryTokenUrl)
 	if err != nil {
@@ -636,7 +633,8 @@ func TestFaucetReplay(t *testing.T) {
 	require.Equal(t, "1000000000", ta.Balance.String(), "incorrect balance after faucet transaction")
 
 	// Replay - see https://github.com/tendermint/tendermint/issues/7185
-	res, err = jsonapi.BroadcastTx(false, gtx)
+	_, err = jsonapi.BroadcastTx(false, gtx)
 	require.IsType(t, jsonrpc2.Error{}, err)
-	require.Equal(t, jsonrpc2.ErrorCode(ErrCodeDuplicateTxn), err.(jsonrpc2.Error).Code)
+	jerr := err.(jsonrpc2.Error)
+	require.Equal(t, jsonrpc2.ErrorCode(ErrCodeDuplicateTxn), jerr.Code, jerr.Message)
 }

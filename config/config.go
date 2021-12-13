@@ -66,11 +66,11 @@ type Accumulate struct {
 }
 
 type Network struct {
-	Type        NetworkType         `toml:"type" mapstructure:"type"`
-	ID          string              `toml:"id" mapstructure:"id"`
-	SelfAddress string              `toml:"self-address" mapstructure:"self-address"`
-	BvnNames    []string            `toml:"bvn-names" mapstructure:"bvn-names"`
-	Addresses   map[string][]string `toml:"addresses" mapstructure:"addresses"`
+	Type      NetworkType         `toml:"type" mapstructure:"type"`
+	ID        string              `toml:"id" mapstructure:"id"`
+	SelfAddress string            `toml:"self-address" mapstructure:"self-address"`
+	BvnNames  []string            `toml:"bvn-names" mapstructure:"bvn-names"`
+	Addresses map[string][]string `toml:"addresses" mapstructure:"addresses"`
 }
 
 type API struct {

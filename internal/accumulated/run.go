@@ -182,13 +182,6 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to start node: %v", err)
 	}
 
-	if d.Config.Accumulate.API.EnableSubscribeTX {
-		err = d.relay.Start()
-		if err != nil {
-			return fmt.Errorf("failed to start RPC relay: %v", err)
-		}
-	}
-
 	// Stop the node if start fails (mostly for tests)
 	defer func() {
 		if err != nil {
@@ -208,7 +201,12 @@ func (d *Daemon) Start() (err error) {
 	}
 	clientProxy.Set(lclient)
 
-	// ===============================
+	if d.Config.Accumulate.API.EnableSubscribeTX {
+		err = d.relay.Start()
+		if err != nil {
+			return fmt.Errorf("failed to start RPC relay: %v", err)
+		}
+	}
 
 	// Configure JSON-RPC
 	var jrpcOpts api.JrpcOptions

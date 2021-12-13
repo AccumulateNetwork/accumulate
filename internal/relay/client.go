@@ -19,6 +19,9 @@ type Client interface {
 
 	// client.SignClient
 	Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.ResultTx, error)
+
+	// client.EventsClient
+	Subscribe(ctx context.Context, subscriber, query string, outCapacity ...int) (out <-chan ctypes.ResultEvent, err error)
 }
 
 type Batchable interface {
