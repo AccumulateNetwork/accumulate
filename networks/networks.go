@@ -23,7 +23,6 @@ type Subnet struct {
 	Index       int
 	Type        config.NetworkType
 	Port        int
-	Directory   string
 	Nodes       []Node
 	NetworkName string
 
@@ -113,10 +112,10 @@ var DevNet = Network{
 		Type:        config.Directory,
 		Port:        34000,
 		Nodes: []Node{
-			{"0.zion.devnet.accumulatenetwork.io", config.Validator},
-			{"1.zion.devnet.accumulatenetwork.io", config.Follower},
-			{"0.yellowstone.devnet.accumulatenetwork.io", config.Validator},
-			{"1.yellowstone.devnet.accumulatenetwork.io", config.Follower},
+			{"172.31.4.106", config.Validator},  // Zion 0
+			{"172.31.11.185", config.Follower},  // Zion 1
+			{"172.31.11.104", config.Validator}, // Yellowstone 0
+			{"172.31.13.8", config.Follower},    // Yellowstone 1
 		},
 	},
 	"Zion": {
@@ -125,10 +124,9 @@ var DevNet = Network{
 		Index:       0,
 		Type:        config.BlockValidator,
 		Port:        33000,
-		Directory:   "tcp://localhost:34000",
 		Nodes: []Node{
-			{"0.zion.devnet.accumulatenetwork.io", config.Validator},
-			{"1.zion.devnet.accumulatenetwork.io", config.Validator},
+			{"172.31.4.106", config.Validator},
+			{"172.31.11.185", config.Validator},
 		},
 	},
 	"Yellowstone": {
@@ -137,10 +135,9 @@ var DevNet = Network{
 		Index:       1,
 		Type:        config.BlockValidator,
 		Port:        33000,
-		Directory:   "tcp://localhost:34000",
 		Nodes: []Node{
-			{"0.yellowstone.devnet.accumulatenetwork.io", config.Validator},
-			{"1.yellowstone.devnet.accumulatenetwork.io", config.Validator},
+			{"172.31.11.104", config.Validator},
+			{"172.31.13.8", config.Validator},
 		},
 	},
 }
