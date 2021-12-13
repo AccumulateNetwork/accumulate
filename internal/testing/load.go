@@ -127,7 +127,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
 	from := types.String(lite.GenerateAcmeAddress(sponsor.Public().(ed25519.PublicKey)))
 
-	tokenTx := apitypes.TokenTx{}
+	tokenTx := apitypes.SendTokens{}
 
 	tokenTx.From = types.UrlChain{String: from}
 	tokenTx.AddToAccount(types.String(destAddr), amount)

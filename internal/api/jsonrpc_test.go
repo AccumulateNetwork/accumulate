@@ -434,7 +434,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 2)
 	require.Equal(t, types.String(types.TxTypeSyntheticGenesis.Name()), resp.Data[0].Type)
-	require.Equal(t, types.String(types.TxTypeWithdrawTokens.Name()), resp.Data[1].Type)
+	require.Equal(t, types.String(types.TxTypeSendTokens.Name()), resp.Data[1].Type)
 }
 
 func TestMetrics(t *testing.T) {
@@ -601,7 +601,7 @@ func TestFaucetReplay(t *testing.T) {
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 	destAccount := lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
-	tx := acmeapi.TokenTx{}
+	tx := acmeapi.SendTokens{}
 	tx.From.String = types.String(protocol.FaucetWallet.Addr)
 	tx.AddToAccount(types.String(destAccount), 1000000000)
 

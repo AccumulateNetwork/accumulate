@@ -45,7 +45,7 @@ func createToken(tokenUrl string) (string, error) {
 }
 
 func createTokenTx(url string) (string, error) {
-	tx := &TokenTx{}
+	tx := &SendTokens{}
 	tx.From.String = types.String(url + "/MyAcmeTokens")
 	amt := uint64(1234)
 	tx.AddToAccount("redwagon/AcmeAccount", amt)
