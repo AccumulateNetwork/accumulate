@@ -325,6 +325,9 @@ func run(_ *cobra.Command, args []string) {
 		if typ.Kind == "chain" {
 			fmt.Fprintf(w, "\tu.ChainHeader = v.ChainHeader\n")
 		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\tu.%s = v.%[1]s\n", e)
+		}
 		for _, f := range typ.Fields {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
 		}
@@ -344,6 +347,9 @@ func run(_ *cobra.Command, args []string) {
 		if typ.Kind == "chain" {
 			fmt.Fprintf(w, "\tu.ChainHeader = v.ChainHeader\n")
 		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\tu.%s = v.%[1]s\n", e)
+		}
 		for _, f := range typ.Fields {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
 		}
@@ -352,6 +358,9 @@ func run(_ *cobra.Command, args []string) {
 
 		if typ.Kind == "chain" {
 			fmt.Fprintf(w, "\tv.ChainHeader = u.ChainHeader\n")
+		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\tv.%s = u.%[1]s\n", e)
 		}
 		for _, f := range typ.Fields {
 			valueFromJson(w, f, "v."+f.Name, "u."+f.Name, f.Name)

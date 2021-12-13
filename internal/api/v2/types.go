@@ -20,6 +20,7 @@ type Querier interface {
 	QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error)
 	QueryData(url string, entryHash []byte) (*QueryResponse, error)
 	QueryDataSet(url string, pagination *QueryPagination, opts *QueryOptions) (*QueryResponse, error)
+	QueryKeyPageIndex(url string, key []byte) (*QueryResponse, error)
 }
 
 // ABCIQueryClient is a subset of from TM/rpc/client.ABCIClient for sending

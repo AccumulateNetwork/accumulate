@@ -95,6 +95,15 @@ func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
 	return q.direct(r).QueryUrl(url)
 }
 
+func (q *queryDispatch) QueryKeyPageIndex(url string, key []byte) (*QueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryKeyPageIndex(url, key)
+}
+
 func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 	res, err := q.queryAll(func(q *queryDirect) (*QueryResponse, error) {
 		return q.QueryChain(id)
