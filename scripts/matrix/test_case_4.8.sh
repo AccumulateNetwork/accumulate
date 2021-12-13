@@ -118,13 +118,13 @@ if [ $? -ne 0 ]; then
 fi
 
 sleep 2.5
-$cli account create acc://t48acct t48key acc://t48acct/myacmeacct acc://ACME acc://t48acct/book48 -s http://$1/v1 -j
+$cli account create token acc://t48acct t48key acc://t48acct/myacmeacct acc://ACME acc://t48acct/book48 -s http://$1/v1 -j
 if [ $? -ne 0 ]; then
 	echo "cli account create failed"
 	exit 1
 fi
 sleep 2.5
-$cli account create acc://t48acct2 t48key2 acc://t48acct2/myacmeacct2 acc://ACME acc://t48acct2/ssg0 -s http://$1/v1 -j
+$cli account create token acc://t48acct2 t48key2 acc://t48acct2/myacmeacct2 acc://ACME acc://t48acct2/ssg0 -s http://$1/v1 -j
 if [ $? -ne 0 ]; then
 	echo "cli account create failed"
 	exit 1
