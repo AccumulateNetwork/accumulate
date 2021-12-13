@@ -254,11 +254,11 @@ func CreateTX(sender string, args []string) (string, error) {
 	amount := args[1]
 
 	//fmt.Println(hex.EncodeToString(pk))
-	tokentx := new(acmeapi.TokenTx)
+	tokentx := new(acmeapi.SendTokens)
 	tokentx.From = types.UrlChain{String: types.String(u.String())}
 
-	to := []*acmeapi.TokenTxOutput{}
-	r := &acmeapi.TokenTxOutput{}
+	to := []*acmeapi.TokenRecipient{}
+	r := &acmeapi.TokenRecipient{}
 
 	amt, err := strconv.ParseFloat(amount, 64)
 	r.Amount = uint64(amt * 1e8)

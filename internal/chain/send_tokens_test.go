@@ -44,7 +44,7 @@ func TestLiteTokenTransactions(t *testing.T) {
 	st, err := NewStateManager(db.Begin(), gtx)
 	require.NoError(t, err)
 
-	err = WithdrawTokens{}.Validate(st, gtx)
+	err = SendTokens{}.Validate(st, gtx)
 	require.NoError(t, err)
 
 	//pull the chains again
