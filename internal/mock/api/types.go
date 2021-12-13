@@ -100,18 +100,18 @@ func (mr *MockQuerierMockRecorder) QueryDirectory(url, pagination, opts interfac
 }
 
 // QueryKeyPageIndex mocks base method.
-func (m *MockQuerier) QueryKeyPageIndex(s, key string) (*api.ResponseKeyPageIndex, error) {
+func (m *MockQuerier) QueryKeyPageIndex(url string, key []byte) (*api.QueryResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryKeyPageIndex", s, key)
-	ret0, _ := ret[0].(*api.ResponseKeyPageIndex)
+	ret := m.ctrl.Call(m, "QueryKeyPageIndex", url, key)
+	ret0, _ := ret[0].(*api.QueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // QueryKeyPageIndex indicates an expected call of QueryKeyPageIndex.
-func (mr *MockQuerierMockRecorder) QueryKeyPageIndex(s, key interface{}) *gomock.Call {
+func (mr *MockQuerierMockRecorder) QueryKeyPageIndex(url, key interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryKeyPageIndex", reflect.TypeOf((*MockQuerier)(nil).QueryKeyPageIndex), s, key)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryKeyPageIndex", reflect.TypeOf((*MockQuerier)(nil).QueryKeyPageIndex), url, key)
 }
 
 // QueryTx mocks base method.

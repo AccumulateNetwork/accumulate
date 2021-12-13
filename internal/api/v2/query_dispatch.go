@@ -95,7 +95,7 @@ func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
 	return q.direct(r).QueryUrl(url)
 }
 
-func (q *queryDispatch) QueryKeyPageIndex(url, key string) (*ResponseKeyPageIndex, error) {
+func (q *queryDispatch) QueryKeyPageIndex(url string, key []byte) (*QueryResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err

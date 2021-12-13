@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/spf13/cobra"
 )
 
@@ -23,6 +26,13 @@ var getCmd = &cobra.Command{
 			case "chain":
 				if len(args) > 1 {
 					GetByChainId([]byte(args[1]))
+				} else {
+					fmt.Println("Usage:")
+					PrintGet()
+				}
+			case "key":
+				if len(args) > 2 {
+					out, err = GetKey(args[1], args[2])
 				} else {
 					fmt.Println("Usage:")
 					PrintGet()
@@ -79,6 +89,32 @@ func Get(url string) (string, error) {
 	params.URL = types.String(url)
 
 	if err := Client.Request(context.Background(), "get", params, &res); err != nil {
+		return PrintJsonRpcError(err)
+	}
+
+	str, err := json.Marshal(res)
+	if err != nil {
+		return "", err
+	}
+
+	return string(str), nil
+}
+
+func GetKey(url, key string) (string, error) {
+	var res api2.QueryResponse
+	res.Data = new(query.ResponseKeyPageIndex)
+
+	keyb, err := hex.DecodeString(key)
+	if err != nil {
+		return "", err
+	}
+
+	params := new(api2.KeyPageIndexQuery)
+	params.Url = url
+	params.Key = keyb
+
+	err = Client.RequestV2(context.Background(), "query-key-index", &params, &res)
+	if err != nil {
 		return PrintJsonRpcError(err)
 	}
 
