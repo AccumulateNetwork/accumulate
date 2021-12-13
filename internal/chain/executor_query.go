@@ -328,6 +328,62 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 
 		k = []byte("dataSet")
 		v, err = ret.MarshalBinary()
+	case types.QueryTypeKeyPageIndex:
+		chr := query.RequestKeyPageIndex{}
+		err := chr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
+		}
+		u, err := url.Parse(chr.Url)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
+		}
+		obj, err := m.queryByChainId(u.ResourceChain())
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
+		}
+		chainHeader := new(state.ChainHeader)
+		if err = obj.As(chainHeader); err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("inavid object error")}
+		}
+		if chainHeader.Type != types.ChainTypeKeyBook {
+			obj, err = m.queryByChainId(chainHeader.KeyBook.Bytes())
+			if err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
+			}
+			if err := obj.As(chainHeader); err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("inavid object error")}
+			}
+		}
+		k = []byte("key-page-index")
+		var found bool
+		keyBook := new(protocol.KeyBook)
+		if err = obj.As(keyBook); err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("invalid object error")}
+		}
+		response := query.ResponseKeyPageIndex{
+			KeyBook: keyBook.GetChainUrl(),
+		}
+		for index, page := range keyBook.Pages {
+			pageObject, err := m.queryByChainId(page[:])
+			if err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
+			}
+			keyPage := new(protocol.KeyPage)
+			if err = pageObject.As(keyPage); err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("invalid object error")}
+			}
+			if keyPage.FindKey([]byte(chr.Key)) != nil {
+				response.KeyPage = keyPage.GetChainUrl()
+				response.Index = uint64(index)
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, nil, &protocol.Error{Code: protocol.CodeNotFound, Message: fmt.Errorf("key %s not found in keypage url %s", chr.Key, chr.Url)}
+		}
+		v, err = response.MarshalBinary()
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err}
 		}

@@ -358,3 +358,32 @@ func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagin
 	}
 	return respDataSet, nil
 }
+
+func (q *queryDirect) QueryKeyPageIndex(s string, key []byte) (*QueryResponse, error) {
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
+	}
+
+	req := new(query.RequestKeyPageIndex)
+	req.Url = u.String()
+	req.Key = key
+	k, v, err := q.query(req)
+	if err != nil {
+		return nil, err
+	}
+	if k != "key-page-index" {
+		return nil, fmt.Errorf("unknown response type: want key-page-index, got %q", k)
+	}
+
+	qr := new(query.ResponseKeyPageIndex)
+	err = qr.UnmarshalBinary(v)
+	if err != nil {
+		return nil, err
+	}
+
+	res := new(QueryResponse)
+	res.Data = qr
+	res.Type = "key-page-index"
+	return res, nil
+}

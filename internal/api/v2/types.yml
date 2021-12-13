@@ -136,6 +136,16 @@ UrlQuery:
     type: string
     is-url: true
 
+KeyPageIndexQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+  - UrlQuery
+  fields:
+  - name: Key
+    type: bytes
+
+
 TxHistoryQuery:
   non-binary: true
   incomparable: true
@@ -238,7 +248,6 @@ TxResponse:
     type: string
   - name: Delivered
     type: bool
-
 
 DataEntry:
   fields:

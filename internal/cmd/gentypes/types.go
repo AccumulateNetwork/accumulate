@@ -250,6 +250,9 @@ func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
 			fmt.Fprintf(w, "\t\tstate.ChainHeader\n")
 		}
 	}
+	for _, e := range typ.Embeddings {
+		fmt.Fprintf(w, "\t\t%s\n", e)
+	}
 	for _, f := range typ.Fields {
 		lcName := strings.ToLower(f.Name[:1]) + f.Name[1:]
 		typ := jsonType(f)

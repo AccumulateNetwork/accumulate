@@ -12,6 +12,7 @@ const (
 	QueryTypeDirectoryUrl // Query directory by URL
 	QueryTypeData         // Query a specific data entry using the url and optional entry hash
 	QueryTypeDataSet      // Query a set of data given pagination parameters for a given URL
+	QueryTypeKeyPageIndex // Query key page index
 )
 
 // Enum value maps for QueryType.
@@ -25,6 +26,7 @@ var (
 		QueryTypeDirectoryUrl: "QueryTypeDirectoryUrl",
 		QueryTypeData:         "QueryTypeData",
 		QueryTypeDataSet:      "QueryTypeDataSet",
+		QueryTypeKeyPageIndex: "QueryTypeKeyPageIndex",
 	}
 	QueryTypeValue = map[string]QueryType{
 		"QueryTypeUnknown":      QueryTypeUnknown,
@@ -35,6 +37,7 @@ var (
 		"QueryTypeDirectoryUrl": QueryTypeDirectoryUrl,
 		"QueryTypeData":         QueryTypeData,
 		"QueryTypeDataSet":      QueryTypeDataSet,
+		"QueryTypeKeyPageIndex": QueryTypeKeyPageIndex,
 	}
 )
 
