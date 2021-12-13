@@ -3,6 +3,7 @@ package accumulated
 import (
 	"context"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"io"
 	"net"
 	"net/http"
@@ -26,7 +27,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
@@ -140,6 +140,10 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
+	// Create a connection manager & router
+	connMgr := connections.NewConnectionManager(&d.Config.Accumulate.Network, d.Logger)
+	connRouter := connections.NewConnectionRouter(connMgr)
+
 	// Create a proxy local client which we will populate with the local client
 	// after the node has been created.
 	clientProxy := node.NewLocalClient()
@@ -152,12 +156,14 @@ func (d *Daemon) Start() (err error) {
 	d.query = apiv1.NewQuery(d.relay)
 
 	execOpts := chain.ExecutorOptions{
-		Local:   clientProxy,
-		DB:      d.db,
-		Logger:  d.Logger,
-		Key:     d.Key().Bytes(),
-		Network: d.Config.Accumulate.Network,
-		IsTest:  d.IsTest,
+		Local:            clientProxy,
+		ConnectionMgr:    connMgr,
+		ConnectionRouter: connRouter,
+		DB:               d.db,
+		Logger:           d.Logger,
+		Key:              d.Key().Bytes(),
+		Network:          d.Config.Accumulate.Network,
+		IsTest:           d.IsTest,
 	}
 	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {
@@ -195,11 +201,18 @@ func (d *Daemon) Start() (err error) {
 	if !ok {
 		return fmt.Errorf("node is not a local node service!")
 	}
-	lclient, err := local.New(lnode)
+
+	// Create a local client
+	lclClient, err := local.New(lnode)
 	if err != nil {
 		return fmt.Errorf("failed to create local node client: %v", err)
 	}
-	clientProxy.Set(lclient)
+	connInitializer := connMgr.(connections.ConnectionInitializer)
+	err = connInitializer.CreateClients(lclClient)
+	if err != nil {
+		return fmt.Errorf("failed to initialize connection manager: %v", err)
+	}
+	clientProxy.Set(lclClient)
 
 	if d.Config.Accumulate.API.EnableSubscribeTX {
 		err = d.relay.Start()
@@ -214,39 +227,11 @@ func (d *Daemon) Start() (err error) {
 	jrpcOpts.QueueDuration = time.Second / 4
 	jrpcOpts.QueueDepth = 100
 	jrpcOpts.QueryV1 = d.query
-	jrpcOpts.Local = lclient
+	jrpcOpts.ConnectionRouter = connRouter
 	jrpcOpts.Logger = d.Logger
 
-	// Build the list of remote addresses and query clients
-	jrpcOpts.Remote = d.Config.Accumulate.Network.BvnAddressesWithPortOffset(0)
-	clients := make([]api.ABCIQueryClient, len(jrpcOpts.Remote))
-	for i, addr := range jrpcOpts.Remote {
-		switch {
-		case d.Config.Accumulate.Network.BvnNames[i] == d.Config.Accumulate.Network.ID:
-			jrpcOpts.Remote[i] = "local"
-			clients[i] = lclient
-
-		default:
-			jrpcOpts.Remote[i], err = config.OffsetPort(addr, networks.AccRouterJsonPortOffset)
-			if err != nil {
-				return fmt.Errorf("invalid BVN address: %v", err)
-			}
-			jrpcOpts.Remote[i] += "/v2"
-
-			addr, err = config.OffsetPort(addr, networks.TmRpcPortOffset)
-			if err != nil {
-				return fmt.Errorf("invalid BVN address: %v", err)
-			}
-
-			clients[i], err = rpchttp.New(addr)
-			if err != nil {
-				return fmt.Errorf("failed to create RPC client: %v", err)
-			}
-		}
-	}
-
 	// Create the querier for JSON-RPC
-	jrpcOpts.Query = api.NewQueryDispatch(clients, api.QuerierOptions{
+	jrpcOpts.Query = api.NewQueryDispatch(connRouter, api.QuerierOptions{
 		TxMaxWaitTime: d.Config.Accumulate.API.TxMaxWaitTime,
 	})
 
@@ -258,7 +243,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Enable debug methods
 	if d.Config.Accumulate.API.EnableDebugMethods {
-		d.jrpc.EnableDebug(lclient)
+		d.jrpc.EnableDebug()
 	}
 
 	// Run JSON-RPC server

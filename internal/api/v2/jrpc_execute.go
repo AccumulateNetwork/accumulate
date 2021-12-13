@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -92,7 +93,7 @@ type executeQueue struct {
 
 // executeRequest captures the state of an execute requests.
 type executeRequest struct {
-	remote int
+	route  connections.Route
 	params json.RawMessage
 	result interface{}
 	done   chan struct{}
@@ -106,17 +107,19 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 
 	// Route the request
-	i := int(u.Routing() % uint64(len(m.opts.Remote)))
-	if i == m.localIndex {
-		// We have a local node and the routing number is local, so process the
-		// request and broadcast it locally
+	route, err := m.opts.ConnectionRouter.AcquireRoute(u.String(), true)
+	if err != nil {
+		return accumulateError(err)
+	}
+	switch route.GetNetworkGroup() {
+	case connections.Local:
 		return m.executeLocal(ctx, req, payload)
 	}
 
 	// Prepare the request for dispatch to a remote BVC
 	req.Payload = payload
 	ex := new(executeRequest)
-	ex.remote = i
+	ex.route = route
 	ex.params, err = req.MarshalJSON()
 	if err != nil {
 		return accumulateError(err)
@@ -178,10 +181,11 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 	// BroadcastTxSync return different types, and the latter does not have any
 	// methods, so they have to be handled separately.
 
+	lclClient := m.lclRoute.GetRpcHttpClient()
 	switch {
 	case req.CheckOnly:
 		// Check the TX
-		r, err := m.opts.Local.CheckTx(ctx, txb)
+		r, err := lclClient.CheckTx(ctx, txb)
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -208,7 +212,7 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 
 	default:
 		// Broadcast the TX
-		r, err := m.opts.Local.BroadcastTxSync(ctx, txb)
+		r, err := lclClient.BroadcastTxSync(ctx, txb)
 		if err != nil {
 			return accumulateError(err)
 		}
@@ -260,17 +264,20 @@ loop:
 
 	// Construct batches
 	lup := map[*jsonrpc.RPCRequest]*executeRequest{}
-	batches := make([]jsonrpc.RPCRequests, len(m.remote))
+	batches := make(map[connections.Route]jsonrpc.RPCRequests)
 	for _, ex := range queue {
 		rq := &jsonrpc.RPCRequest{
 			Method: "execute",
 			Params: ex.params,
 		}
 		lup[rq] = ex
-		batches[ex.remote] = append(batches[ex.remote], rq)
+		batches[ex.route] = append(batches[ex.route], rq)
 	}
 
-	for i, rq := range batches {
+	for route, rq := range batches {
+		var client jsonrpc.RPCClient
+		client = route.GetRpcHttpClient()
+		jsonRpcXlient := client.(*jsonrpc.RPCClient)
 		var res jsonrpc.RPCResponses
 		var err error
 		switch len(rq) {
@@ -278,8 +285,8 @@ loop:
 			// Nothing to do
 		case 1:
 			// Send single (Tendermint JSON-RPC behaves badly)
-			m.logDebug("Sending call", "remote", m.opts.Remote[i])
-			r, e := m.remote[i].Call(rq[0].Method, rq[0].Params)
+			m.logDebug("Sending call", "remote", client.String()) // TODO check if this logs the URL
+			r, e := client.Call(rq[0].Method, rq[0].Params)
 			res, err = jsonrpc.RPCResponses{r}, e
 		default:
 			// Send batch

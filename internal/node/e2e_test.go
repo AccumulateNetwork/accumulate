@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"net"
 	"os"
 	"runtime"
@@ -41,20 +42,22 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
+		connMgr := connections.NewConnectionManager(&d.Config.Accumulate.Network, d.Logger)
+		connRouter := connections.NewConnectionRouter(connMgr)
 
 		// Restart the nodes for every test
 		nodes := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, nil)
 		client, err := local.New(nodes[0].Node_TESTONLY().Service.(local.NodeService))
 		require.NoError(s.T(), err)
-		return &e2eDUT{s, nodes[0].DB_TESTONLY(), nodes[0].Query_TESTONLY(), client}
+		return &e2eDUT{s, nodes[0].DB_TESTONLY(), nodes[0].Query_TESTONLY(), connRouter}
 	}))
 }
 
 type e2eDUT struct {
 	*e2e.Suite
-	db     *state.StateDB
-	query  *api.Query
-	client *local.Local
+	db    *state.StateDB
+	query *api.Query
+	connections.ConnectionRouter
 }
 
 func (d *e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {
@@ -64,12 +67,13 @@ func (d *e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {
 func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
 	b, err := tx.Marshal()
 	d.Require().NoError(err)
-	_, err = d.client.BroadcastTxAsync(context.Background(), b)
+	_, err = d.ConnectionRouter.AcquireBroadcastClient().BroadcastTxAsync(context.Background(), b)
 	d.Require().NoError(err)
 }
 
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
-	q := apiv2.NewQueryDirect(d.client, apiv2.QuerierOptions{
+	lclRoute, _ := d.ConnectionRouter.AcquireLocalRoute()
+	q := apiv2.NewQueryDirect(lclRoute, apiv2.QuerierOptions{
 		TxMaxWaitTime: 10 * time.Second,
 	})
 

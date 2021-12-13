@@ -3,7 +3,6 @@ package connections
 import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"strings"
@@ -17,8 +16,10 @@ var dnNameMap = map[string]bool{
 }
 
 type ConnectionRouter interface {
-	AcquireRoute(url string, allowFollower bool) (Route, error)
-	AcquireBroadcastClient() api.ABCIBroadcastClient
+	AcquireRoute(url string, allowFollower bool) (Route, error) // TODO: Check if we should take url.URL instead of string
+	AcquireLocalRoute() (Route, error)
+	AcquireAll() ([]Route, error)
+	AcquireBroadcastClient() ABCIBroadcastClient
 }
 
 type connectionRouter struct {
@@ -39,8 +40,9 @@ type Route interface {
 	GetSubnetName() string
 	GetNetworkGroup() NetworkGroup
 	GetRpcHttpClient() *http.HTTP
-	GetQueryClient() api.ABCIQueryClient
-	GetBroadcastClient() api.ABCIBroadcastClient
+	GetQueryClient() ABCIQueryClient
+	GetBroadcastClient() ABCIBroadcastClient
+	IsDirectoryNode() bool
 }
 
 func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
@@ -64,7 +66,39 @@ func (cr *connectionRouter) AcquireRoute(adiUrl string, allowFollower bool) (Rou
 	return nodeCtx, err
 }
 
-func (cr *connectionRouter) AcquireBroadcastClient() api.ABCIBroadcastClient {
+func (cr *connectionRouter) AcquireLocalRoute() (Route, error) {
+	for _, nodeCtx := range cr.bvnGroup.nodes {
+		if nodeCtx.networkGroup == Local {
+			return nodeCtx, nil
+		}
+	}
+	for _, nodeCtx := range cr.dnGroup.nodes {
+		if nodeCtx.networkGroup == Local {
+			return nodeCtx, nil
+		}
+	}
+	for _, nodeCtx := range cr.flGroup.nodes {
+		if nodeCtx.networkGroup == Local {
+			return nodeCtx, nil
+		}
+	}
+	return nil, LocaNodeNotFound
+}
+
+func (cr *connectionRouter) AcquireAll() ([]Route, error) {
+	routes := make([]Route, 0)
+	for _, route := range cr.otherGroup.nodes {
+		if route.IsHealthy() {
+			routes = append(routes, route)
+		}
+	}
+	if len(routes) == 0 {
+		return nil, NoHealthyNodes
+	}
+	return routes, nil
+}
+
+func (cr *connectionRouter) AcquireBroadcastClient() ABCIBroadcastClient {
 	return cr.localClient
 }
 
@@ -80,9 +114,9 @@ func (cr *connectionRouter) selectNodeContext(adiUrl string, allowFollower bool)
 	case cr.isDnUrl(url.Hostname()):
 		return cr.lookupDirNode(cr.dnGroup)
 	case allowFollower:
-		return cr.selectNode(cr.otherGroup), nil
+		return cr.selectNode(cr.otherGroup)
 	default:
-		return cr.selectNode(cr.bvnGroup), nil
+		return cr.selectNode(cr.bvnGroup)
 	}
 }
 
@@ -96,10 +130,13 @@ func (cr *connectionRouter) isDnUrl(hostname string) bool {
 }
 
 func (cr *connectionRouter) lookupBvnNode(hostname string, group nodeGroup) (*nodeContext, error) {
-	for _, node := range group.nodes {
-		if strings.HasPrefix(hostname, "bvn-") && strings.EqualFold(hostname[4:], node.subnetName) ||
-			strings.EqualFold("bvn-"+hostname, node.subnetName) {
-			return node, nil
+	for _, nodeCtx := range group.nodes {
+		if strings.HasPrefix(hostname, "bvn-") && strings.EqualFold(hostname[4:], nodeCtx.subnetName) ||
+			strings.EqualFold("bvn-"+hostname, nodeCtx.subnetName) {
+			if !nodeCtx.IsHealthy() {
+				return nil, bvnNotHealthy(nodeCtx.address, nodeCtx.lastError)
+			}
+			return nodeCtx, nil
 		}
 	}
 
@@ -109,24 +146,39 @@ func (cr *connectionRouter) lookupBvnNode(hostname string, group nodeGroup) (*no
 
 func (cr *connectionRouter) lookupDirNode(group nodeGroup) (*nodeContext, error) {
 	if len(group.nodes) > 0 {
-		return group.nodes[0], nil
+		nodeCtx := group.nodes[0]
+		if !nodeCtx.IsHealthy() {
+			return nil, dnNotHealthy(nodeCtx.address, nodeCtx.lastError)
+		}
+		return nodeCtx, nil
 	}
 
 	return nil, dnNotFound()
 }
 
-func (cr *connectionRouter) selectNode(group nodeGroup) *nodeContext {
+func (cr *connectionRouter) selectNode(group nodeGroup) (*nodeContext, error) {
 	// If we only have one node we don't have to route
 	if len(group.nodes) == 1 {
-		return group.nodes[0]
+		nodeCtx := group.nodes[0]
+		if !nodeCtx.IsHealthy() {
+			return nil, errorNodeNotHealthy(nodeCtx.subnetName, nodeCtx.address, nodeCtx.lastError)
+		}
+		return nodeCtx, nil
 	}
 
-	/* Apply round-robin on the nodes within the group
-	This part is going to be smarter in the future to filter out unhealthy nodes and maybe determine the nodes load
-	*/
-	next := atomic.AddUint32(&group.next, 1)
-	return group.nodes[int(next-1)%len(group.nodes)]
+	// Loop in case we get one or more unhealthy nodes
+	for i := 0; i < len(group.nodes); i++ {
 
+		/* Apply round-robin on the nodes within the group
+		This part is going to be smarter in the future to filter out unhealthy nodes and maybe determine the nodes load
+		*/
+		next := atomic.AddUint32(&group.next, 1)
+		nodeCtx := group.nodes[int(next-1)%len(group.nodes)]
+		if nodeCtx.IsHealthy() {
+			return nodeCtx, nil
+		}
+	}
+	return nil, NoHealthyNodes
 }
 
 func createBvnNameMap(nodes []*nodeContext) map[string]bool {

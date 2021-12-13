@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -15,7 +16,7 @@ import (
 
 type queryDirect struct {
 	QuerierOptions
-	client ABCIQueryClient
+	connRoute connections.Route
 }
 
 func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
@@ -32,7 +33,7 @@ func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	res, err := q.client.ABCIQuery(context.Background(), "/abci_query", b)
+	res, err := q.connRoute.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", b)
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to send request: %v", err)
 	}

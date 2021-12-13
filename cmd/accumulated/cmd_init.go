@@ -91,6 +91,7 @@ func initNode(*cobra.Command, []string) {
 	checkf(err, "--network")
 
 	bvnNames := make([]string, 0, len(subnet.Network))
+	selfAddresses := make([]string, len(subnet.Nodes))
 	addresses := map[string][]string{}
 	index := map[string]int{}
 	for _, s := range subnet.Network {
@@ -99,8 +100,12 @@ func initNode(*cobra.Command, []string) {
 			index[s.Name] = s.Index
 		}
 
-		for _, n := range s.Nodes {
-			addresses[s.Name] = append(addresses[s.Name], fmt.Sprintf("http://%s:%d", n.IP, s.Port))
+		for i, n := range s.Nodes {
+			address := fmt.Sprintf("http://%s:%d", n.IP, s.Port)
+			addresses[s.Name] = append(addresses[s.Name], address)
+			if s.Name == subnet.Name && n.Type == cfg.Validator {
+				selfAddresses[i] = address
+			}
 		}
 	}
 	sort.Slice(bvnNames, func(i, j int) bool {
@@ -127,6 +132,7 @@ func initNode(*cobra.Command, []string) {
 		}
 
 		config[i].Accumulate.Network.BvnNames = bvnNames
+		config[i].Accumulate.Network.SelfAddress = selfAddresses[i]
 		config[i].Accumulate.Network.Addresses = addresses
 	}
 

@@ -2,7 +2,6 @@ package connections
 
 import (
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"net"
@@ -32,9 +31,10 @@ type nodeContext struct {
 	networkGroup  NetworkGroup
 	resolvedIPs   []net.IP
 	metrics       nodeMetrics
-	queryClient   api.ABCIQueryClient
+	queryClient   ABCIQueryClient
 	rpcHttpClient *rpchttp.HTTP
 	localClient   *local.Local
+	lastError     error
 }
 
 func (n nodeContext) GetSubnetName() string {
@@ -45,14 +45,32 @@ func (n nodeContext) GetNetworkGroup() NetworkGroup {
 	return n.networkGroup
 }
 
+func (n nodeContext) IsDirectoryNode() bool {
+	return n.netType == config.Directory && n.nodeType == config.Validator
+}
+
 func (n nodeContext) GetRpcHttpClient() *rpchttp.HTTP {
 	return n.rpcHttpClient
 }
 
-func (n nodeContext) GetQueryClient() api.ABCIQueryClient {
+func (n nodeContext) GetQueryClient() ABCIQueryClient {
 	return n.queryClient
 }
 
-func (n nodeContext) GetBroadcastClient() api.ABCIBroadcastClient {
+func (n nodeContext) GetBroadcastClient() ABCIBroadcastClient {
 	return n.localClient
+}
+
+func (n nodeContext) IsHealthy() bool {
+	return n.metrics.status == Up
+}
+
+func (n nodeContext) ReportError(err error) {
+	n.metrics.status = OutOfService // TODO refine err to status
+	n.lastError = err
+}
+
+func (n nodeContext) ReportErrorStatus(status NodeStatus, err error) {
+	n.metrics.status = status
+	n.lastError = err
 }

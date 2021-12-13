@@ -8,12 +8,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
@@ -46,14 +46,16 @@ type Executor struct {
 var _ abci.Chain = (*Executor)(nil)
 
 type ExecutorOptions struct {
-	DB      *state.StateDB
-	Logger  log.Logger
-	Key     ed25519.PrivateKey
-	Local   api.ABCIBroadcastClient
+	DB               *state.StateDB
+	Logger           log.Logger
+	Key              ed25519.PrivateKey
+	ConnectionMgr    connections.ConnectionManager
+	ConnectionRouter connections.ConnectionRouter
+	Local            connections.ABCIBroadcastClient
+
 	Network config.Network
 
 	isGenesis bool
-
 	// TODO Remove once tests support running the DN
 	IsTest bool
 }

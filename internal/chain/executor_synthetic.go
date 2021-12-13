@@ -372,7 +372,10 @@ func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 
 		// Add it to the batch
 		m.logDebug("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()))
-		m.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
+		err = m.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
+		if err != nil {
+			return nil, fmt.Errorf("sending synth txn failed for actor %s and tx %s: %v", u.String(), logging.AsHex(tx.TransactionHash()), err)
+		}
 
 		// Delete the signature
 		m.dbTx.DeleteSynthTxnSig(sig.Txid)

@@ -3,12 +3,10 @@ package chain
 import (
 	"context"
 	"errors"
-	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
@@ -23,10 +21,7 @@ type dispatcher struct {
 	ExecutorOptions
 	localIndex  int
 	isDirectory bool
-	bvn         []*http.HTTP
-	bvnBatches  []txBatch
-	dn          *http.HTTP
-	dnBatch     txBatch
+	batches     map[connections.Route]txBatch
 	errg        *errgroup.Group
 }
 
@@ -36,91 +31,31 @@ func newDispatcher(opts ExecutorOptions) (*dispatcher, error) {
 	d.ExecutorOptions = opts
 	d.isDirectory = opts.Network.Type == config.Directory
 	d.localIndex = -1
-	d.bvn = make([]*http.HTTP, len(opts.Network.BvnNames))
-	d.bvnBatches = make([]txBatch, len(opts.Network.BvnNames))
-
-	// If we're not a directory, make an RPC client for the DN
-	if !d.isDirectory && !d.IsTest {
-		// Get the address of a directory node
-		addr := opts.Network.AddressWithPortOffset(protocol.Directory, networks.TmRpcPortOffset)
-
-		// Make the client
-		var err error
-		d.dn, err = http.New(addr)
-		if err != nil {
-			return nil, fmt.Errorf("could not create client for directory %q: %v", addr, err)
-		}
-	}
-
-	// Make a client for all of the BVNs
-	for i, id := range opts.Network.BvnNames {
-		// Use the local client for ourself
-		if id == opts.Network.ID {
-			d.localIndex = i
-			continue
-		}
-
-		// Get the BVN address
-		addr := opts.Network.AddressWithPortOffset(id, networks.TmRpcPortOffset)
-
-		// Make the client
-		var err error
-		d.bvn[i], err = http.New(addr)
-		if err != nil {
-			return nil, fmt.Errorf("could not create client for block validator %q: %v", id, err)
-		}
-	}
-
+	d.batches = make(map[connections.Route]txBatch)
 	return d, nil
 }
 
 // Reset creates new RPC client batches.
 func (d *dispatcher) Reset(ctx context.Context) {
 	d.errg = new(errgroup.Group)
-
-	d.dnBatch = d.dnBatch[:0]
-	for i, bv := range d.bvnBatches {
-		d.bvnBatches[i] = bv[:0]
+	for key := range d.batches {
+		delete(d.batches, key)
 	}
-}
-
-// route gets the client for the URL
-func (d *dispatcher) route(u *url.URL) (batch *txBatch, local bool) {
-	// Is it a DN URL?
-	if dnUrl().Equal(u) {
-		if d.isDirectory {
-			return nil, true
-		}
-		if d.dn == nil && !d.IsTest {
-			panic("Directory was not configured")
-		}
-		return &d.dnBatch, false
-	}
-
-	// Is it a BVN URL?
-	if isBvnUrl(u) {
-		// For this we need some kind of lookup table that maps subnet to IP
-		panic("Cannot route BVN ADI URLs")
-	}
-
-	// Modulo routing
-	i := u.Routing() % uint64(len(d.bvn))
-	if i == uint64(d.localIndex) {
-		// Use the local client for local requests
-		return nil, true
-	}
-	return &d.bvnBatches[i], false
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
-func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte) {
-	batch, local := d.route(u)
-	if local {
-		d.BroadcastTxAsyncLocal(ctx, tx)
-		return
+func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte) error {
+	route, batch, err := d.getRouteAndBatch(u)
+	if err != nil {
+		return err
 	}
+	switch route.GetNetworkGroup() {
+	case connections.Local:
+		d.BroadcastTxAsyncLocal(ctx, tx)
 
+	}
 	*batch = append(*batch, tx)
+	return nil
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
@@ -188,16 +123,30 @@ func (*dispatcher) checkError(err error) error {
 
 // Send sends all of the batches.
 func (d *dispatcher) Send(ctx context.Context) error {
-	// Send to the DN
-	if d.dn != nil || !d.IsTest {
-		d.send(ctx, d.dn, d.dnBatch)
-	}
-
-	// Send to the BVNs
-	for i := range d.bvn {
-		d.send(ctx, d.bvn[i], d.bvnBatches[i])
+	for route, batch := range d.batches {
+		if !route.IsDirectoryNode() || !d.IsTest { // TODO is this correct? The old condition "if d.dn != nil || !d.IsTest " seems wrong
+			d.send(ctx, route.GetRpcHttpClient(), batch)
+		}
 	}
 
 	// Wait for everyone to finish
 	return d.errg.Wait()
+}
+
+func (d *dispatcher) getRouteAndBatch(u *url.URL) (connections.Route, *txBatch, error) {
+	route, err := d.ConnectionRouter.AcquireRoute(u.String(), false)
+	if err != nil {
+		return nil, nil, err
+	}
+	if route.GetNetworkGroup() == connections.Local {
+		return route, nil, nil
+	}
+
+	var batch txBatch
+	batch = d.batches[route]
+	if batch == nil {
+		batch = batch[:0]
+		d.batches[route] = batch
+	}
+	return route, &batch, nil
 }

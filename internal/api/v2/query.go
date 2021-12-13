@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -16,10 +17,10 @@ type QuerierOptions struct {
 	TxMaxWaitTime time.Duration
 }
 
-func NewQueryDirect(c ABCIQueryClient, opts QuerierOptions) Querier {
-	return &queryDirect{opts, c}
+func NewQueryDirect(connRoute connections.Route, opts QuerierOptions) Querier {
+	return &queryDirect{opts, connRoute}
 }
 
-func NewQueryDispatch(c []ABCIQueryClient, opts QuerierOptions) Querier {
-	return &queryDispatch{opts, c}
+func NewQueryDispatch(connRtr connections.ConnectionRouter, opts QuerierOptions) Querier {
+	return &queryDispatch{opts, connRtr}
 }

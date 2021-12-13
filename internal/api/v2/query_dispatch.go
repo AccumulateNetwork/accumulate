@@ -3,35 +3,34 @@ package api
 import (
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
 type queryDispatch struct {
 	QuerierOptions
-	clients []ABCIQueryClient
+	connRouter connections.ConnectionRouter
 }
 
-func (q *queryDispatch) direct(i uint64) *queryDirect {
-	i = i % uint64(len(q.clients))
-	return &queryDirect{q.QuerierOptions, q.clients[i]}
-}
-
-func (q *queryDispatch) routing(s string) (uint64, error) {
-	u, err := url.Parse(s)
+func (q *queryDispatch) direct(accUrl string) (*queryDirect, error) {
+	route, err := q.connRouter.AcquireRoute(accUrl, true)
 	if err != nil {
-		return 0, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
+		return nil, err
 	}
-
-	return u.Routing(), nil
+	return &queryDirect{q.QuerierOptions, route}, nil
 }
 
 func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error)) ([]*QueryResponse, error) {
 	res := make([]*QueryResponse, 0, 1)
-	for _, c := range q.clients {
-		r, err := query(&queryDirect{q.QuerierOptions, c})
+	allRoutes, err := q.connRouter.AcquireAll()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, route := range allRoutes {
+		r, err := query(&queryDirect{q.QuerierOptions, route})
 		if err == nil {
 			res = append(res, r)
 		} else if !errors.Is(err, storage.ErrNotFound) {
@@ -47,12 +46,11 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error
 }
 
 func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
-	r, err := q.routing(url)
+	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err
 	}
-
-	return q.direct(r).QueryUrl(url)
+	return direct.QueryUrl(url)
 }
 
 func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
@@ -71,12 +69,12 @@ func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 }
 
 func (q *queryDispatch) QueryDirectory(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryResponse, error) {
-	r, err := q.routing(url)
+	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QueryDirectory(url, pagination, queryOptions)
+	return direct.QueryDirectory(url, pagination, queryOptions)
 }
 
 func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, error) {
@@ -95,10 +93,10 @@ func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, 
 }
 
 func (q *queryDispatch) QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error) {
-	r, err := q.routing(url)
+	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QueryTxHistory(url, start, count)
+	return direct.QueryTxHistory(url, start, count)
 }
