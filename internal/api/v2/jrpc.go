@@ -115,7 +115,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		"create-key-page":      m.ExecuteWith(func() PL { return new(protocol.CreateKeyPage) }),
 		"create-token":         m.ExecuteWith(func() PL { return new(protocol.CreateToken) }),
 		"create-token-account": m.ExecuteWith(func() PL { return new(protocol.TokenAccountCreate) }),
-		"send-tokens":          m.ExecuteWith(func() PL { return new(api.TokenTx) }, "From", "To"),
+		"send-tokens":          m.ExecuteWith(func() PL { return new(api.SendTokens) }, "From", "To"),
 		"add-credits":          m.ExecuteWith(func() PL { return new(protocol.AddCredits) }),
 		"update-key-page":      m.ExecuteWith(func() PL { return new(protocol.UpdateKeyPage) }),
 		"write-data":           m.ExecuteWith(func() PL { return new(protocol.WriteData) }),
