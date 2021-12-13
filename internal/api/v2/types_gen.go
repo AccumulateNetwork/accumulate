@@ -64,7 +64,7 @@ type KeyPage struct {
 
 type KeyPageIndexQuery struct {
 	UrlQuery
-	Key string `json:"key,omitempty" form:"key" query:"key" validate:"required"`
+	Key []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
 }
 
 type MerkleState struct {
@@ -108,12 +108,6 @@ type QueryResponse struct {
 	Sig            []byte       `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
 	Status         interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	SyntheticTxids [][32]byte   `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
-}
-
-type ResponseKeyPageIndex struct {
-	KeyBook string `json:"keyBook,omitempty" form:"keyBook" query:"keyBook" validate:"required"`
-	KeyPage string `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	Index   int    `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 }
 
 type Signer struct {
@@ -498,6 +492,16 @@ func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		UrlQuery
+		Key *string `json:"key,omitempty"`
+	}{}
+	u.UrlQuery = v.UrlQuery
+	u.Key = encoding.BytesToJSON(v.Key)
+	return json.Marshal(&u)
+}
+
 func (v *MerkleState) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Count uint64    `json:"count,omitempty"`
@@ -693,6 +697,25 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 		v.EntryHash = x
 	}
 	v.Entry = u.Entry
+	return nil
+}
+
+func (v *KeyPageIndexQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		UrlQuery
+		Key *string `json:"key,omitempty"`
+	}{}
+	u.UrlQuery = v.UrlQuery
+	u.Key = encoding.BytesToJSON(v.Key)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery = u.UrlQuery
+	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
+		return fmt.Errorf("error decoding Key: %w", err)
+	} else {
+		v.Key = x
+	}
 	return nil
 }
 
