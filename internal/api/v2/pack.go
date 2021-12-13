@@ -44,7 +44,7 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 	}
 
 	switch payload := payload.(type) {
-	case *api.TokenTx:
+	case *api.SendTokens:
 		if len(res.SyntheticTxids) != len(payload.To) {
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
