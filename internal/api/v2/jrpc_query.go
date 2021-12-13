@@ -70,3 +70,38 @@ func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) 
 
 	return res
 }
+
+func (m *JrpcMethods) QueryData(_ context.Context, params json.RawMessage) interface{} {
+	req := new(DataEntryQuery)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	res, err := m.opts.Query.QueryData(req.Url, req.EntryHash[:])
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return res
+}
+
+func (m *JrpcMethods) QueryDataSet(_ context.Context, params json.RawMessage) interface{} {
+	req := new(DataEntrySetQuery)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	// If the user wants nothing, give them nothing
+	if req.Count == 0 {
+		return validatorError(errors.New("count must be greater than 0"))
+	}
+
+	res, err := m.opts.Query.QueryDataSet(req.Url, &req.QueryPagination, &req.QueryOptions)
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return res
+}

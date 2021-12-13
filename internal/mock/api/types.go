@@ -54,6 +54,36 @@ func (mr *MockQuerierMockRecorder) QueryChain(id interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryChain", reflect.TypeOf((*MockQuerier)(nil).QueryChain), id)
 }
 
+// QueryData mocks base method.
+func (m *MockQuerier) QueryData(url string, entryHash []byte) (*api.QueryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryData", url, entryHash)
+	ret0, _ := ret[0].(*api.QueryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryData indicates an expected call of QueryData.
+func (mr *MockQuerierMockRecorder) QueryData(url, entryHash interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryData", reflect.TypeOf((*MockQuerier)(nil).QueryData), url, entryHash)
+}
+
+// QueryDataSet mocks base method.
+func (m *MockQuerier) QueryDataSet(url string, pagination *api.QueryPagination, opts *api.QueryOptions) (*api.QueryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryDataSet", url, pagination, opts)
+	ret0, _ := ret[0].(*api.QueryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryDataSet indicates an expected call of QueryDataSet.
+func (mr *MockQuerierMockRecorder) QueryDataSet(url, pagination, opts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryDataSet", reflect.TypeOf((*MockQuerier)(nil).QueryDataSet), url, pagination, opts)
+}
+
 // QueryDirectory mocks base method.
 func (m *MockQuerier) QueryDirectory(url string, pagination *api.QueryPagination, opts *api.QueryOptions) (*api.QueryResponse, error) {
 	m.ctrl.T.Helper()

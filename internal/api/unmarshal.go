@@ -200,6 +200,14 @@ func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte,
 		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticGenesis))
 	case types.TxTypeAcmeFaucet:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.AcmeFaucet))
+	case types.TxTypeSegWitDataEntry:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.SegWitDataEntry))
+	case types.TxTypeWriteData:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.WriteData))
+	case types.TxTypeWriteDataTo:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.WriteDataTo))
+	case types.TxTypeSyntheticWriteData:
+		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticWriteData))
 	default:
 		err = fmt.Errorf("unable to extract transaction info for type %s : %x", types.TxType(txType).Name(), txPayload)
 	}

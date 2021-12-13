@@ -87,7 +87,7 @@ wait-for cli-tx page key add keytest/page2 keytest-1-0 1 keytest-2-1
 success
 
 section "Create an ADI Token Account"
-wait-for cli-tx account create keytest keytest-0-0 0 keytest/tokens ACME keytest/book
+wait-for cli-tx account create token keytest keytest-0-0 0 keytest/tokens ACME keytest/book
 cli account get keytest/tokens &> /dev/null && success || die "Cannot find keytest/tokens"
 
 section "Send tokens from the lite token account to the ADI token account"

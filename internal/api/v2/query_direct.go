@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -268,4 +269,92 @@ func (q *queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiR
 	}
 
 	return res, nil
+}
+
+func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, error) {
+
+	qr, err := q.QueryUrl(url)
+	if err != nil {
+		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
+	}
+
+	req := new(query.RequestDataEntry)
+	req.Url = url
+
+	//test if we have an entry hash that is not zero.
+	if len(entryHash) == 32 && bytes.Compare(entryHash, req.EntryHash[:]) != 0 {
+		copy(req.EntryHash[:], entryHash)
+	}
+
+	k, v, err := q.query(req)
+	if err != nil {
+		return nil, err
+	}
+	if k != "data" {
+		return nil, fmt.Errorf("unknown response type: want data, got %q", k)
+	}
+
+	//do I need to do anything with v?
+	rde := protocol.ResponseDataEntry{}
+	err = rde.UnmarshalBinary(v)
+	if err != nil {
+		return nil, err
+	}
+
+	qr.Type = "dataEntry"
+	qr.Data = &rde
+	return qr, nil
+}
+
+func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts *QueryOptions) (*QueryResponse, error) {
+	qr, err := q.QueryUrl(url)
+	if err != nil {
+		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
+	}
+
+	req := new(query.RequestDataEntrySet)
+	req.Url = url
+	req.Start = pagination.Start
+	req.Count = pagination.Count
+	req.ExpandChains = opts.ExpandChains
+
+	k, v, err := q.query(req)
+	if err != nil {
+		return nil, err
+	}
+	if k != "dataSet" {
+		return nil, fmt.Errorf("unknown response type: want dataSet, got %q", k)
+	}
+
+	des := new(protocol.ResponseDataEntrySet)
+	err = des.UnmarshalBinary(v)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response: %v", err)
+	}
+	desResponse, err := responseDataSetFromProto(des, pagination)
+	if err != nil {
+		return nil, err
+	}
+
+	qr.Type = "dataSet"
+	qr.Data = desResponse
+	return qr, nil
+}
+
+//responseDataSetFromProto map the response structs to protocol structs, maybe someday they should be the same thing
+func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagination *QueryPagination) (*DataEntrySetQueryResponse, error) {
+	respDataSet := new(DataEntrySetQueryResponse)
+	respDataSet.Start = pagination.Start
+	respDataSet.Count = pagination.Count
+	respDataSet.Total = protoDataSet.Total
+	for _, entry := range protoDataSet.DataEntries {
+		de := DataEntryQueryResponse{}
+		de.EntryHash = entry.EntryHash
+		de.Entry.Data = entry.Entry.Data
+		for _, eh := range entry.Entry.ExtIds {
+			de.Entry.ExtIds = append(de.Entry.ExtIds, eh)
+		}
+		respDataSet.DataEntries = append(respDataSet.DataEntries, de)
+	}
+	return respDataSet, nil
 }

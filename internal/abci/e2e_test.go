@@ -311,8 +311,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			n.ParseUrl("FooBar/oof").String(),
 		}, n.GetDirectory("FooBar"))
 
+		wd := new(protocol.WriteData)
 		n.Batch(func(send func(*transactions.GenTransaction)) {
-			wd := new(protocol.WriteData)
 			for i := 0; i < 10; i++ {
 				wd.Entry.ExtIds = append(wd.Entry.ExtIds, []byte(fmt.Sprintf("test id %d", i)))
 			}
@@ -323,7 +323,69 @@ func TestCreateAdiDataAccount(t *testing.T) {
 			require.NoError(t, err)
 			send(tx)
 		})
-		time.Sleep(5 * time.Second)
+
+		// Without the sleep, this test fails on Windows and macOS
+		time.Sleep(3 * time.Second)
+
+		// Test getting the data by URL
+		r2 := n.GetChainDataByUrl("FooBar/oof")
+		if r2 == nil {
+			t.Fatalf("error getting chain data by URL")
+		}
+
+		if r2.Data == nil {
+			t.Fatalf("no data returned")
+		}
+
+		rde := protocol.ResponseDataEntry{}
+
+		err := rde.UnmarshalJSON(*r2.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !rde.Entry.Equal(&wd.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry hash.
+		r3 := n.GetChainDataByEntryHash("FooBar/oof", wd.Entry.Hash())
+
+		if r3.Data == nil {
+			t.Fatalf("no data returned")
+		}
+
+		rde2 := protocol.ResponseDataEntry{}
+
+		err = rde2.UnmarshalJSON(*r3.Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !rde.Entry.Equal(&rde2.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
+		//now test query by entry set
+		r4 := n.GetChainDataSet("FooBar/oof", 0, 1, true)
+
+		if r4.Data == nil {
+			t.Fatalf("no data returned")
+		}
+
+		if len(r4.Data) != 1 {
+			t.Fatalf("insufficent data return from set query")
+		}
+		rde3 := protocol.ResponseDataEntry{}
+		err = rde3.UnmarshalJSON(*r4.Data[0].Data)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if !rde.Entry.Equal(&rde3.Entry) {
+			t.Fatalf("data query does not match what was entered")
+		}
+
 	})
 }
 
