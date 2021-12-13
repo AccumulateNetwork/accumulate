@@ -52,7 +52,14 @@ func (m *MerkleManager) AddHash(hash Hash) {
 			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	}
+}
 
+// EndBlock
+// End a block, which writes all pending key/values to the database.
+// Returns the Merkle Dag Root for the merkle tree
+func (m *MerkleManager) EndBlock() (MDRoot Hash) {
+	m.Manager.EndBatch()
+	return m.MS.GetMDRoot()
 }
 
 // GetElementIndex
@@ -270,14 +277,14 @@ func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) 
 			return nil, errors.New("mark not found in the database")
 		}
 	}
-	for i, v := range nextMark.HashList { //                  Now iterate and add to the currentState until the
-		if int64(i) > element { //                               loop adds the element
+	for _, v := range nextMark.HashList { // Now iterate and add to the currentState
+		if element+1 == currentState.Count { //   until the loop adds the element
 			break
 		}
 		currentState.AddToMerkleTree(v)
 	}
-	if int64(len(currentState.HashList)) == m.MarkFreq { //   States that progress from the previous mark to the end
-		currentState.HashList = currentState.HashList[:0] //     of the mark do not have any elements in their HashList
+	if currentState.Count&m.MarkMask == 0 { //              If we progress out of the mark set,
+		currentState.HashList = currentState.HashList[:0] //   start over collecting hashes.
 	}
 	return currentState, nil
 }
