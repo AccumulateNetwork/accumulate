@@ -77,7 +77,7 @@ func testCase4_4(t *testing.T, tc *testCmd) {
 func testCase4_5(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	commandLine := fmt.Sprintf("account create acc://RedWagon red1 acc://RedWagon/acct2 acc://ACME acc://RedWagon/book")
+	commandLine := fmt.Sprintf("account create token acc://RedWagon red1 acc://RedWagon/acct2 acc://ACME acc://RedWagon/book")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 
