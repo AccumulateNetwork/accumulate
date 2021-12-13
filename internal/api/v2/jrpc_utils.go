@@ -31,11 +31,3 @@ func jrpcFormatQuery(res *QueryResponse, err error) interface{} {
 
 	return res
 }
-
-func jrpcFormatResponse(res *ResponseKeyPageIndex, err error) interface{} {
-	if err != nil {
-		return accumulateError(err)
-	}
-
-	return res
-}

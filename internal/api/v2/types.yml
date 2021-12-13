@@ -142,8 +142,8 @@ KeyPageIndexQuery:
   embeddings:
   - UrlQuery
   fields:
-    - name: Key
-      type: string
+  - name: Key
+    type: bytes
 
 
 TxHistoryQuery:
@@ -297,14 +297,3 @@ DataEntrySetQueryResponse:
       type: uvarint
     - name: Total
       type: uvarint
-
-ResponseKeyPageIndex:
-  non-binary: true
-  incomparable: true
-  fields:
-    - name: KeyBook
-      type: string
-    - name: KeyPage
-      type: string
-    - name: Index
-      type: int

@@ -1,0 +1,17 @@
+RequestKeyPageIndex:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: Key
+      type: bytes
+
+ResponseKeyPageIndex:
+  fields:
+    - name: KeyBook
+      type: string
+    - name: KeyPage
+      type: string
+    - name: Index
+      type: uvarint
+      keep-empty: true
