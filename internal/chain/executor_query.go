@@ -3,11 +3,9 @@ package chain
 import (
 	"encoding"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -330,10 +328,13 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 
 		k = []byte("dataSet")
 		v, err = ret.MarshalBinary()
-	}
-	case types.QueryTypeKeyPageIndices:
-		chr := query.RequestByUrlAndKey{}
-		u, err := url.Parse(*chr.Url.AsString())
+	case types.QueryTypeKeyPageIndex:
+		chr := query.RequestKeyPageIndex{}
+		err := chr.UnmarshalBinary(q.Content)
+		if err != nil {
+			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
+		}
+		u, err := url.Parse(chr.Url)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
@@ -360,7 +361,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err = obj.As(keyBook); err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("invalid object error")}
 		}
-		response := api.ResponseKeyPageIndex{
+		response := query.ResponseKeyPageIndex{
 			KeyBook: keyBook.GetChainUrl(),
 		}
 		for index, page := range keyBook.Pages {
@@ -374,7 +375,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			}
 			if keyPage.FindKey([]byte(chr.Key)) != nil {
 				response.KeyPage = keyPage.GetChainUrl()
-				response.Index = index
+				response.Index = uint64(index)
 				found = true
 				break
 			}
@@ -382,7 +383,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if !found {
 			return nil, nil, &protocol.Error{Code: protocol.CodeNotFound, Message: fmt.Errorf("key %s not found in keypage url %s", chr.Key, chr.Url)}
 		}
-		v, err = json.Marshal(response)
+		v, err = response.MarshalBinary()
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err}
 		}

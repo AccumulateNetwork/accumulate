@@ -23,7 +23,7 @@ func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessag
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryKeyPageIndex(req.Url, req.Key))
+	return jrpcFormatQuery(m.opts.Query.QueryKeyPageIndex(req.Url, req.Key))
 }
 
 func (m *JrpcMethods) QueryDirectory(_ context.Context, params json.RawMessage) interface{} {
