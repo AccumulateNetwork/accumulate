@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -25,14 +26,18 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
+	tmnet "github.com/tendermint/tendermint/libs/net"
+	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
 type Daemon struct {
-	Config *config.Config
-	Logger tmlog.Logger
+	Config   *config.Config
+	Logger   tmlog.Logger
+	Listen   string
+	Protocol string
 
 	done  chan struct{}
 	db    *state.StateDB
@@ -115,6 +120,21 @@ func (d *Daemon) Start() (err error) {
 		}
 		defer sentry.Flush(2 * time.Second)
 	}
+
+	// Socket file will be in Root testing diriectory
+	// example: "unix:///var/folders/n_/nt3v2wh154q3vg13cwdx0_280000gn/T/TestUnixListener3912664411/001/Node0/test.sock"
+	testDir := d.Config.BaseConfig.RootDir
+	sockPath := filepath.Join(testDir, "test.sock")
+
+	tmpSock := "unix:///tmp/accum." + tmrand.Str(6) + ".sock"
+
+	d.Config.RPC.ListenAddress = fmt.Sprintf("unix://%s", sockPath)
+	d.Config.Accumulate.API.ListenAddress = tmpSock
+	d.Listen = fmt.Sprintf("unix://%s", sockPath)
+	d.Protocol = "unix"
+
+	defer os.Remove(tmpSock)
+	defer os.Remove(sockPath)
 
 	dbPath := filepath.Join(d.Config.RootDir, "valacc.db")
 	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
@@ -263,14 +283,17 @@ func (d *Daemon) Start() (err error) {
 
 	// Run JSON-RPC server
 	d.api = &http.Server{Handler: d.jrpc.NewMux()}
-	l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
+	//l, secure, err := listenHttpUrl(d.Config.Accumulate.API.ListenAddress)
+	//if err != nil {
+	//		return fmt.Errorf("failed to start JSON-RPC: %v", err)
+	//	}
+	//	if secure {
+	//		return fmt.Errorf("failed to start JSON-RPC: HTTPS is not supported")
+	//	}
+	l, err := listenTCPorUnix(d.Config.Accumulate.API.ListenAddress)
 	if err != nil {
 		return fmt.Errorf("failed to start JSON-RPC: %v", err)
 	}
-	if secure {
-		return fmt.Errorf("failed to start JSON-RPC: HTTPS is not supported")
-	}
-
 	go func() {
 		err := d.api.Serve(l)
 		if err != nil {
@@ -340,6 +363,19 @@ func listenHttpUrl(s string) (net.Listener, bool, error) {
 	}
 
 	return l, secure, nil
+}
+
+// listenTCPorUnix will listen on a TCP or a Unix socket.
+// Using tmnet.ProtocolAndAddress to get the protocol and address path
+// works with either TCP or Unix listeners
+func listenTCPorUnix(s string) (net.Listener, error) {
+	protocol, address := tmnet.ProtocolAndAddress(s)
+	l, err := net.Listen(protocol, address)
+	if err != nil {
+		return nil, err
+	}
+
+	return l, nil
 }
 
 func (d *Daemon) Stop() error {

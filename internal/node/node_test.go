@@ -68,6 +68,37 @@ func TestNodeLifecycle(t *testing.T) {
 	}
 }
 
+func TestUnixListener(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
+	}
+
+	// Configure
+	opts := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
+	opts.WorkDir = t.TempDir()
+	require.NoError(t, node.Init(opts))
+
+	// Start
+	nodeDir := filepath.Join(opts.WorkDir, "Node0")
+	daemon, err := acctesting.RunDaemon(acctesting.DaemonOptions{
+		Dir:       nodeDir,
+		LogWriter: logging.TestLogWriter(t),
+	}, t.Cleanup)
+
+	// Testing UnixListener on All listener addr
+	opts.ListenIP[0] = daemon.Config.RPC.ListenAddress
+	opts.RemoteIP[0] = daemon.Config.RPC.ListenAddress
+
+	opts.Config[0].Config.RPC.ListenAddress = daemon.Config.RPC.ListenAddress
+	opts.Config[0].Accumulate.API.ListenAddress = daemon.Config.RPC.ListenAddress
+
+	require.NoError(t, err)
+	daemon.Start()
+	t.Log(daemon.Config.RPC.ListenAddress)
+	require.NoError(t, daemon.Stop())
+
+}
+
 func getFreePort(t *testing.T) int {
 	t.Helper()
 	port, err := tmnet.GetFreePort()
