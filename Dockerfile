@@ -10,7 +10,5 @@ FROM alpine:3
 # Copy binary
 COPY --from=build /root/accumulated /bin
 
-WORKDIR /root
-
 ENTRYPOINT ["accumulated"]
-CMD ["run"]
+CMD ["run", "--work-dir", "/node"]
