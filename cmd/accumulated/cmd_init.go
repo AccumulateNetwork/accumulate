@@ -20,6 +20,7 @@ import (
 	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 	"golang.org/x/term"
@@ -67,7 +68,8 @@ var flagInitDevnet struct {
 	BasePort      int
 	BaseIP        string
 	Docker        bool
-	ComposeOnly   bool
+	UseVolumes    bool
+	Compose       bool
 }
 
 func init() {
@@ -92,7 +94,8 @@ func init() {
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
-	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.ComposeOnly, "compose-only", false, "Only write the Docker Compose file, do not write the configuration files")
+	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
+	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 }
 
 func initNode(*cobra.Command, []string) {
@@ -243,7 +246,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		fatalf("--network is not applicable to devnet")
 	}
 
-	if flagInitDevnet.ComposeOnly {
+	if flagInitDevnet.Compose {
 		flagInitDevnet.Docker = true
 	}
 
@@ -272,7 +275,10 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	}
 
 	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
-	services := make([]dc.ServiceConfig, 0, 1+count*(flagInitDevnet.NumBvns+1))
+	compose := new(dc.Config)
+	compose.Version = "3"
+	compose.Services = make([]dc.ServiceConfig, 0, 1+count*(flagInitDevnet.NumBvns+1))
+	compose.Volumes = make(map[string]dc.VolumeConfig, 1+count*(flagInitDevnet.NumBvns+1))
 
 	addresses := make(map[string][]string, flagInitDevnet.NumBvns+1)
 	dnConfig := make([]*cfg.Config, count)
@@ -283,10 +289,8 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		if i > flagInitDevnet.NumValidators {
 			nodeType = cfg.Follower
 		}
-		var svc dc.ServiceConfig
-		dnConfig[i], dnRemote[i], dnListen[i], svc = initDevNetNode(baseIP, cfg.Directory, nodeType, 0, i)
+		dnConfig[i], dnRemote[i], dnListen[i] = initDevNetNode(baseIP, cfg.Directory, nodeType, 0, i, compose)
 		addresses[protocol.Directory] = append(addresses[protocol.Directory], fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort))
-		services = append(services, svc)
 	}
 
 	bvnConfig := make([][]*cfg.Config, flagInitDevnet.NumBvns)
@@ -303,10 +307,8 @@ func initDevNet(cmd *cobra.Command, args []string) {
 			if i > flagInitDevnet.NumValidators {
 				nodeType = cfg.Follower
 			}
-			var svc dc.ServiceConfig
-			bvnConfig[bvn][i], bvnRemote[bvn][i], bvnListen[bvn][i], svc = initDevNetNode(baseIP, cfg.BlockValidator, nodeType, bvn, i)
+			bvnConfig[bvn][i], bvnRemote[bvn][i], bvnListen[bvn][i] = initDevNetNode(baseIP, cfg.BlockValidator, nodeType, bvn, i, compose)
 			addresses[bvns[bvn]] = append(addresses[bvns[bvn]], fmt.Sprintf("http://%s:%d", bvnRemote[bvn][i], flagInitDevnet.BasePort))
-			services = append(services, svc)
 		}
 	}
 
@@ -325,7 +327,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		nodeReset()
 	}
 
-	if !flagInitDevnet.ComposeOnly {
+	if !flagInitDevnet.Compose {
 		check(node.Init(node.InitOptions{
 			WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
 			Port:     flagInitDevnet.BasePort,
@@ -345,26 +347,47 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	if !flagInitDevnet.Docker {
+	if !flagInitDevnet.Compose {
 		return
 	}
 
 	var svc dc.ServiceConfig
 	api := fmt.Sprintf("http://%s:%d/v1", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
-	svc.Name = "scripts"
+	svc.Name = "tools"
+	svc.ContainerName = "devnet-init"
 	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/cli:latest"
 	svc.Environment = map[string]*string{"ACC_API": &api}
-	svc.Volumes = []dc.ServiceVolumeConfig{{Type: "bind", Source: ".", Target: "/node"}}
-	services = append(services, svc)
 
-	compose := new(dc.Config)
-	compose.Version = "3"
-	compose.Services = services
+	svc.Command = dc.ShellCommand{"accumulated", "init", "devnet", "-w", "/nodes", "--docker"}
+	cmd.Flags().Visit(func(flag *pflag.Flag) {
+		switch flag.Name {
+		case "work-dir", "docker", "compose", "reset":
+			return
+		}
 
-	services[0].Ports = make([]dc.ServicePortConfig, networks.MaxPortOffset+1)
-	for i := range services[0].Ports {
+		s := fmt.Sprintf("--%s=%v", flag.Name, flag.Value)
+		svc.Command = append(svc.Command, s)
+	})
+
+	if flagInitDevnet.UseVolumes {
+		svc.Volumes = make([]dc.ServiceVolumeConfig, len(compose.Services))
+		for i, node := range compose.Services {
+			bits := strings.SplitN(node.Name, "-", 2)
+			svc.Volumes[i] = dc.ServiceVolumeConfig{Type: "volume", Source: node.Name, Target: path.Join("/nodes", bits[0], "Node"+bits[1])}
+		}
+	} else {
+		svc.Volumes = []dc.ServiceVolumeConfig{
+			{Type: "bind", Source: ".", Target: "/nodes"},
+		}
+	}
+
+	compose.Services = append(compose.Services, svc)
+
+	dn0svc := compose.Services[0]
+	dn0svc.Ports = make([]dc.ServicePortConfig, networks.MaxPortOffset+1)
+	for i := range dn0svc.Ports {
 		port := uint32(flagInitDevnet.BasePort + i)
-		services[0].Ports[i] = dc.ServicePortConfig{
+		dn0svc.Ports[i] = dc.ServicePortConfig{
 			Mode: "host", Protocol: "tcp", Target: port, Published: port,
 		}
 	}
@@ -377,7 +400,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	check(err)
 }
 
-func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int) (config *cfg.Config, remote, listen string, svc dc.ServiceConfig) {
+func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote, listen string) {
 	if netType == cfg.Directory {
 		config = cfg.Default(netType, nodeType, protocol.Directory)
 	} else {
@@ -393,19 +416,33 @@ func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeTyp
 
 	if !flagInitDevnet.Docker {
 		ip := nextIP(baseIP).String()
-		return config, ip, ip, dc.ServiceConfig{}
+		return config, ip, ip
 	}
 
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:latest"
-	svc.Volumes = make([]dc.ServiceVolumeConfig, 1)
-
+	var name, dir string
 	if netType == cfg.Directory {
-		svc.Name = fmt.Sprintf("dn-%d", node)
-		svc.Volumes[0] = dc.ServiceVolumeConfig{Type: "bind", Source: fmt.Sprintf("./dn/Node%d", node), Target: "/node"}
+		name, dir = fmt.Sprintf("dn-%d", node), fmt.Sprintf("./dn/Node%d", node)
 	} else {
-		svc.Name = fmt.Sprintf("bvn%d-%d", bvn, node)
-		svc.Volumes[0] = dc.ServiceVolumeConfig{Type: "bind", Source: fmt.Sprintf("./bvn%d/Node%d", bvn, node), Target: "/node"}
+		name, dir = fmt.Sprintf("bvn%d-%d", bvn, node), fmt.Sprintf("./bvn%d/Node%d", bvn, node)
 	}
 
-	return config, svc.Name, "0.0.0.0", svc
+	var svc dc.ServiceConfig
+	svc.Name = name
+	svc.ContainerName = "devnet-" + name
+	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:latest"
+	svc.DependsOn = []string{"tools"}
+
+	if flagInitDevnet.UseVolumes {
+		svc.Volumes = []dc.ServiceVolumeConfig{
+			{Type: "volume", Source: name, Target: "/node"},
+		}
+		compose.Volumes[name] = dc.VolumeConfig{}
+	} else {
+		svc.Volumes = []dc.ServiceVolumeConfig{
+			{Type: "bind", Source: dir, Target: "/node"},
+		}
+	}
+
+	compose.Services = append(compose.Services, svc)
+	return config, svc.Name, "0.0.0.0"
 }
