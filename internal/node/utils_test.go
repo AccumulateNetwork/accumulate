@@ -19,7 +19,7 @@ import (
 
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
-func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, bvnAddrs []string) []*accumulated.Daemon {
+func initNodes(t *testing.T, name string, baseIP string, basePort int, count int, bvnAddrs []string) []*accumulated.Daemon {
 	t.Helper()
 
 	name = reAlphaNum.ReplaceAllString(name, "-")
@@ -57,6 +57,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		Config:   config,
 		RemoteIP: IPs,
 		ListenIP: IPs,
+	//	ListenAddr: IPs[0],
 	}))
 
 	daemons := make([]*accumulated.Daemon, count)

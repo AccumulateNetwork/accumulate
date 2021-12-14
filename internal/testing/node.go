@@ -2,6 +2,7 @@ package testing
 
 import (
 	"io"
+	"net"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
@@ -37,14 +38,26 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 func NodeInitOptsForNetwork(subnet *networks.Subnet) node.InitOptions {
 	listenIP := make([]string, len(subnet.Nodes))
 	remoteIP := make([]string, len(subnet.Nodes))
+	var listener string
 	cfg := make([]*config.Config, len(subnet.Nodes))
 
 	for i, net := range subnet.Nodes {
-		listenIP[i] = "localhost"
-		remoteIP[i] = net.IP
+		listener = "unix:///tmp/accumulate.sock"
+		listenIP[i] = listener
+		remoteIP[i] = listener
 		cfg[i] = DefaultConfig(subnet.Type, net.Type, subnet.Name) // Configure
 	}
-
+	var la *net.UnixAddr
+	la = &net.UnixAddr{
+		Name: listener,
+		Net:  "unix",
+	}
+	ks, err := net.ListenUnix("unix", la)
+	if err != nil {
+		panic(err)
+	}
+	ks.SyscallConn()
+	
 	port, err := tmnet.GetFreePort()
 	if err != nil {
 		panic(err)
@@ -55,6 +68,7 @@ func NodeInitOptsForNetwork(subnet *networks.Subnet) node.InitOptions {
 		Config:   cfg,
 		RemoteIP: remoteIP,
 		ListenIP: listenIP,
+		ListenAddr: la,
 	}
 }
 
@@ -70,11 +84,9 @@ func RunDaemon(opts DaemonOptions, cleanup func(func())) (*accumulated.Daemon, e
 	if err != nil {
 		return nil, err
 	}
-
 	// Set test knobs
 	daemon.IsTest = true
 	daemon.UseMemDB = opts.MemDB
-
 	// Start the daemon
 	err = daemon.Start()
 	if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path"
 
@@ -28,6 +29,7 @@ type InitOptions struct {
 	Config     []*cfg.Config
 	RemoteIP   []string
 	ListenIP   []string
+	ListenAddr *net.UnixAddr
 }
 
 // Init creates the initial configuration for a set of nodes, using
@@ -62,7 +64,7 @@ func Init(opts InitOptions) (err error) {
 		config.RPC.ListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcPortOffset)
 		config.RPC.GRPCListenAddress = fmt.Sprintf("tcp://%s:%d", opts.ListenIP[i], opts.Port+networks.TmRpcGrpcPortOffset)
 		config.Instrumentation.PrometheusListenAddr = fmt.Sprintf(":%d", opts.Port+networks.TmPrometheusPortOffset)
-
+		
 		err = os.MkdirAll(path.Join(nodeDir, "config"), nodeDirPerm)
 		if err != nil {
 			return fmt.Errorf("failed to create config dir: %v", err)
@@ -173,6 +175,7 @@ func Init(opts InitOptions) (err error) {
 
 		config.Accumulate.Website.ListenAddress = fmt.Sprintf("http://%s:8080", opts.ListenIP[i])
 		config.Accumulate.API.ListenAddress = fmt.Sprintf("http://%s:%d", opts.ListenIP[i], opts.Port+networks.AccRouterJsonPortOffset)
+	//	config.Accumulate.API.ListenAddress = fmt.Sprintf("unix://%s", opts.ListenAddr)
 
 		err := cfg.Store(config)
 		if err != nil {

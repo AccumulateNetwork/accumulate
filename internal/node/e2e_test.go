@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net"
+	//"net"
 	"os"
 	"runtime"
 	"testing"
@@ -42,7 +42,7 @@ func TestEndToEnd(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 
 		// Restart the nodes for every test
-		nodes := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, nil)
+		nodes := initNodes(s.T(), s.T().Name(), "127.0.25.1", 3000, 3, nil)
 		client, err := local.New(nodes[0].Node_TESTONLY().Service.(local.NodeService))
 		require.NoError(s.T(), err)
 		return &e2eDUT{s, nodes[0].DB_TESTONLY(), nodes[0].Query_TESTONLY(), client}
@@ -98,7 +98,7 @@ func TestSubscribeAfterClose(t *testing.T) {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
 
-	daemon := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, []string{"127.0.30.1"})[0]
+	daemon := initNodes(t, t.Name(), "127.0.30.1", 3000, 1, []string{"127.0.30.1"})[0]
 	require.NoError(t, daemon.Stop())
 
 	client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
@@ -116,9 +116,9 @@ func TestFaucetMultiNetwork(t *testing.T) {
 		t.Skip("This test does not work well on Windows or macOS")
 	}
 
-	bvc0 := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc1 := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc2 := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc0 := initNodes(t, "BVC0", "127.0.26.1", 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc1 := initNodes(t, "BVC1", "127.0.27.1", 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc2 := initNodes(t, "BVC2", "127.0.28.1", 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	rpcAddrs := make([]string, 0, 3)
 	for _, bvc := range [][]*accumulated.Daemon{bvc0, bvc1, bvc2} {
 		rpcAddrs = append(rpcAddrs, bvc[0].Config.RPC.ListenAddress)
