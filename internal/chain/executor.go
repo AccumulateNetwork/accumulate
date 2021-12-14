@@ -251,7 +251,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	// synth transaction will be picked up.
 
 	// Reset dispatcher
-	m.dispatcher.Reset(context.Background())
+	m.dispatcher.Reset()
 
 	// Sign synthetic transactions produced by the previous block
 	err := m.signSynthTxns()

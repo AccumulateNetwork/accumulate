@@ -3,8 +3,8 @@ package connections
 import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
+	"github.com/ybbus/jsonrpc/v2"
 	"strings"
 	"sync/atomic"
 )
@@ -16,10 +16,9 @@ var dnNameMap = map[string]bool{
 }
 
 type ConnectionRouter interface {
-	AcquireRoute(url string, allowFollower bool) (Route, error) // TODO: Check if we should take url.URL instead of string
-	AcquireLocalRoute() (Route, error)
-	AcquireAll() ([]Route, error)
-	AcquireBroadcastClient() ABCIBroadcastClient
+	SelectRoute(url string, allowFollower bool) (Route, error) // TODO: Check if we should take url.URL instead of string
+	GetLocalRoute() (Route, error)
+	GetAll() ([]Route, error)
 }
 
 type connectionRouter struct {
@@ -36,13 +35,18 @@ type nodeGroup struct {
 	next  uint32
 }
 
-type Route interface {
+type LocalRoute interface {
 	GetSubnetName() string
-	GetNetworkGroup() NetworkGroup
-	GetRpcHttpClient() *http.HTTP
+	GetJsonRpcClient() jsonrpc.RPCClient
 	GetQueryClient() ABCIQueryClient
 	GetBroadcastClient() ABCIBroadcastClient
 	IsDirectoryNode() bool
+}
+
+type Route interface {
+	LocalRoute
+	GetNetworkGroup() NetworkGroup
+	GetBatchBroadcastClient() BatchABCIBroadcastClient
 }
 
 func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
@@ -58,7 +62,7 @@ func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
 	return cr
 }
 
-func (cr *connectionRouter) AcquireRoute(adiUrl string, allowFollower bool) (Route, error) {
+func (cr *connectionRouter) SelectRoute(adiUrl string, allowFollower bool) (Route, error) {
 	nodeCtx, err := cr.selectNodeContext(adiUrl, allowFollower)
 	if err != nil {
 		return nil, errorCouldNotSelectNode(adiUrl, err)
@@ -66,7 +70,7 @@ func (cr *connectionRouter) AcquireRoute(adiUrl string, allowFollower bool) (Rou
 	return nodeCtx, err
 }
 
-func (cr *connectionRouter) AcquireLocalRoute() (Route, error) {
+func (cr *connectionRouter) GetLocalRoute() (Route, error) {
 	for _, nodeCtx := range cr.bvnGroup.nodes {
 		if nodeCtx.networkGroup == Local {
 			return nodeCtx, nil
@@ -85,7 +89,7 @@ func (cr *connectionRouter) AcquireLocalRoute() (Route, error) {
 	return nil, LocaNodeNotFound
 }
 
-func (cr *connectionRouter) AcquireAll() ([]Route, error) {
+func (cr *connectionRouter) GetAll() ([]Route, error) {
 	routes := make([]Route, 0)
 	for _, route := range cr.otherGroup.nodes {
 		if route.IsHealthy() {
@@ -98,20 +102,16 @@ func (cr *connectionRouter) AcquireAll() ([]Route, error) {
 	return routes, nil
 }
 
-func (cr *connectionRouter) AcquireBroadcastClient() ABCIBroadcastClient {
-	return cr.localClient
-}
-
 func (cr *connectionRouter) selectNodeContext(adiUrl string, allowFollower bool) (*nodeContext, error) {
 	url, err := url.Parse(adiUrl)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
 	}
-
+	hostnameLower := strings.ToLower(url.Hostname())
 	switch {
-	case cr.isBvnUrl(url.Hostname()):
-		return cr.lookupBvnNode(url.Hostname(), cr.bvnGroup)
-	case cr.isDnUrl(url.Hostname()):
+	case cr.isBvnUrl(hostnameLower):
+		return cr.lookupBvnNode(hostnameLower, cr.bvnGroup)
+	case cr.isDnUrl(hostnameLower):
 		return cr.lookupDirNode(cr.dnGroup)
 	case allowFollower:
 		return cr.selectNode(cr.otherGroup)
@@ -121,18 +121,17 @@ func (cr *connectionRouter) selectNodeContext(adiUrl string, allowFollower bool)
 }
 
 func (cr *connectionRouter) isBvnUrl(hostname string) bool {
-	return cr.bvnNameMap[strings.ToLower(hostname)]
+	return cr.bvnNameMap[hostname]
 }
 
 func (cr *connectionRouter) isDnUrl(hostname string) bool {
-	hostnameLower := strings.ToLower(hostname)
-	return dnNameMap[hostnameLower]
+	return dnNameMap[hostname]
 }
 
 func (cr *connectionRouter) lookupBvnNode(hostname string, group nodeGroup) (*nodeContext, error) {
 	for _, nodeCtx := range group.nodes {
 		if strings.HasPrefix(hostname, "bvn-") && strings.EqualFold(hostname[4:], nodeCtx.subnetName) ||
-			strings.EqualFold("bvn-"+hostname, nodeCtx.subnetName) {
+			strings.EqualFold(hostname, nodeCtx.subnetName) {
 			if !nodeCtx.IsHealthy() {
 				return nil, bvnNotHealthy(nodeCtx.address, nodeCtx.lastError)
 			}

@@ -53,7 +53,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 	m.queue.leader <- struct{}{}
 	m.queue.enqueue = make(chan *executeRequest)
 
-	m.lclRoute, err = m.opts.ConnectionRouter.AcquireLocalRoute()
+	m.lclRoute, err = m.opts.ConnectionRouter.GetLocalRoute()
 	if err != nil {
 		return nil, err
 	}

@@ -107,7 +107,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 
 	// Route the request
-	route, err := m.opts.ConnectionRouter.AcquireRoute(u.String(), true)
+	route, err := m.opts.ConnectionRouter.SelectRoute(u.String(), true)
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -181,7 +181,7 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 	// BroadcastTxSync return different types, and the latter does not have any
 	// methods, so they have to be handled separately.
 
-	lclClient := m.lclRoute.GetRpcHttpClient()
+	lclClient := m.lclRoute.GetBroadcastClient()
 	switch {
 	case req.CheckOnly:
 		// Check the TX
@@ -276,8 +276,7 @@ loop:
 
 	for route, rq := range batches {
 		var client jsonrpc.RPCClient
-		client = route.GetRpcHttpClient()
-		jsonRpcXlient := client.(*jsonrpc.RPCClient)
+		client = route.GetJsonRpcClient()
 		var res jsonrpc.RPCResponses
 		var err error
 		switch len(rq) {
@@ -285,13 +284,13 @@ loop:
 			// Nothing to do
 		case 1:
 			// Send single (Tendermint JSON-RPC behaves badly)
-			m.logDebug("Sending call", "remote", client.String()) // TODO check if this logs the URL
+			// FIXME m.logDebug("Sending call", "remote", client.String()) // TODO check if this logs the URL
 			r, e := client.Call(rq[0].Method, rq[0].Params)
 			res, err = jsonrpc.RPCResponses{r}, e
 		default:
 			// Send batch
-			m.logDebug("Sending call batch", "remote", m.opts.Remote[i])
-			res, err = m.remote[i].CallBatch(rq)
+			// FIXME m.logDebug("Sending call batch", "remote", m.opts.Remote[i])
+			res, err = client.CallBatch(rq)
 		}
 
 		// Forward results
@@ -299,7 +298,7 @@ loop:
 			ex := lup[rq[j]]
 			switch {
 			case err != nil:
-				m.logError("Execute batch failed", "error", err, "remote", m.opts.Remote[i])
+				// FIXME m.logError("Execute batch failed", "error", err, "remote", m.opts.Remote[i])
 				ex.result = internalError(err)
 			case res[j].Error != nil:
 				err := res[j].Error

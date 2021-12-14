@@ -7,8 +7,10 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
+	"github.com/ybbus/jsonrpc/v2"
 	"net"
 	"net/url"
+	"strings"
 )
 
 type ConnectionManager interface {
@@ -99,9 +101,6 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 	nodeCtx := &nodeContext{subnetName: subnetName, address: address}
 	nodeCtx.networkGroup = cm.determineNetworkGroup(subnetName, address)
 	nodeCtx.netType, nodeCtx.nodeType = determineTypes(address, subnetName, cm.networkCfg)
-	if nodeCtx.networkGroup == Local {
-		nodeCtx.localClient = cm.localClient
-	}
 
 	var err error
 	nodeCtx.resolvedIPs, err = resolveIPs(address)
@@ -113,7 +112,7 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 
 func (cm *connectionManager) determineNetworkGroup(subnetName string, address string) NetworkGroup {
 	switch {
-	case subnetName == cm.networkCfg.ID && address == cm.networkCfg.SelfAddress:
+	case strings.EqualFold(subnetName, cm.networkCfg.ID) && strings.EqualFold(address, cm.networkCfg.SelfAddress):
 		return Local
 	case subnetName == cm.networkCfg.ID:
 		return SameSubnet
@@ -125,7 +124,7 @@ func (cm *connectionManager) determineNetworkGroup(subnetName string, address st
 func determineTypes(address string, subnetName string, netCfg *config.Network) (config.NetworkType, config.NodeType) {
 	var networkType config.NetworkType
 	for _, bvnName := range netCfg.BvnNames {
-		if bvnName == subnetName {
+		if strings.EqualFold(bvnName, subnetName) {
 			networkType = config.BlockValidator
 		}
 	}
@@ -142,7 +141,7 @@ func (cm *connectionManager) CreateClients(lclClient *local.Local) error {
 	cm.localClient = lclClient
 
 	for _, nodeCtx := range cm.bvnCtxList {
-		err := cm.createRpcClient(nodeCtx)
+		err := cm.createJsonRpcClient(nodeCtx)
 		if err != nil {
 			return err
 		}
@@ -150,10 +149,9 @@ func (cm *connectionManager) CreateClients(lclClient *local.Local) error {
 		if err != nil {
 			return err
 		}
-		nodeCtx.localClient = lclClient
 	}
 	for _, nodeCtx := range cm.dnCtxList {
-		err := cm.createRpcClient(nodeCtx)
+		err := cm.createJsonRpcClient(nodeCtx)
 		if err != nil {
 			return err
 		}
@@ -161,10 +159,9 @@ func (cm *connectionManager) CreateClients(lclClient *local.Local) error {
 		if err != nil {
 			return err
 		}
-		nodeCtx.localClient = lclClient
 	}
 	for _, nodeCtx := range cm.fnCtxList {
-		err := cm.createRpcClient(nodeCtx)
+		err := cm.createJsonRpcClient(nodeCtx)
 		if err != nil {
 			return err
 		}
@@ -172,7 +169,6 @@ func (cm *connectionManager) CreateClients(lclClient *local.Local) error {
 		if err != nil {
 			return err
 		}
-		nodeCtx.localClient = lclClient
 	}
 	return nil
 }
@@ -181,36 +177,31 @@ func (cm *connectionManager) createAbciClients(nodeCtx *nodeContext) error {
 	switch nodeCtx.networkGroup {
 	case Local:
 		nodeCtx.queryClient = cm.localClient
+		nodeCtx.broadcastClient = cm.localClient
 	default:
 		offsetAddr, err := config.OffsetPort(nodeCtx.address, networks.TmRpcPortOffset)
 		if err != nil {
 			return fmt.Errorf("invalid BVN address: %v", err)
 		}
-
-		nodeCtx.queryClient, err = rpchttp.New(offsetAddr)
+		client, err := rpchttp.New(offsetAddr)
 		if err != nil {
 			return fmt.Errorf("failed to create RPC client: %v", err)
 		}
 
-		/** TODO handle:
-		jrpcOpts.Remote[i], err = config.OffsetPort(addr, networks.AccRouterJsonPortOffset)
-		if err != nil {
-			return fmt.Errorf("invalid BVN address: %v", err)
-		}
-		jrpcOpts.Remote[i] += "/v2"
-		*/
+		nodeCtx.queryClient = client
+		nodeCtx.broadcastClient = client
 	}
 	return nil
 }
 
-func (cm *connectionManager) createRpcClient(nodeCtx *nodeContext) error {
+func (cm *connectionManager) createJsonRpcClient(nodeCtx *nodeContext) error {
 	// RPC HTTP client
-	var err error
-	nodeCtx.rpcHttpClient, err = rpchttp.New(nodeCtx.address + "/v2")
+	offsetAddr, err := config.OffsetPort(nodeCtx.address, networks.AccRouterJsonPortOffset)
 	if err != nil {
-		return fmt.Errorf("could not create client for subnet %q node %q: %v",
-			nodeCtx.subnetName, nodeCtx.address, err)
+		return fmt.Errorf("invalid BVN address: %v", err)
 	}
+
+	nodeCtx.jsonRpcClient = jsonrpc.NewClient(offsetAddr)
 	return nil
 }
 

@@ -2,6 +2,7 @@ package testing
 
 import (
 	"io"
+	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
@@ -31,6 +32,9 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 	cfg.Instrumentation.Prometheus = false         // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.BvnNames = []string{netId}
 	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}}
+	if strings.EqualFold(cfg.Accumulate.Network.ID, netId) {
+		cfg.Accumulate.Network.SelfAddress = cfg.Accumulate.Network.Addresses[netId][0]
+	}
 	return cfg
 }
 

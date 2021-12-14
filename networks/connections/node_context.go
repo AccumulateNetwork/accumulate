@@ -2,8 +2,7 @@ package connections
 
 import (
 	"github.com/AccumulateNetwork/accumulate/config"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/rpc/client/local"
+	"github.com/ybbus/jsonrpc/v2"
 	"net"
 )
 
@@ -24,17 +23,18 @@ const (
 )
 
 type nodeContext struct {
-	subnetName    string
-	address       string
-	netType       config.NetworkType
-	nodeType      config.NodeType
-	networkGroup  NetworkGroup
-	resolvedIPs   []net.IP
-	metrics       nodeMetrics
-	queryClient   ABCIQueryClient
-	rpcHttpClient *rpchttp.HTTP
-	localClient   *local.Local
-	lastError     error
+	subnetName           string
+	address              string
+	netType              config.NetworkType
+	nodeType             config.NodeType
+	networkGroup         NetworkGroup
+	resolvedIPs          []net.IP
+	metrics              nodeMetrics
+	queryClient          ABCIQueryClient
+	broadcastClient      ABCIBroadcastClient
+	batchBroadcastClient BatchABCIBroadcastClient
+	jsonRpcClient        jsonrpc.RPCClient
+	lastError            error
 }
 
 func (n nodeContext) GetSubnetName() string {
@@ -49,8 +49,8 @@ func (n nodeContext) IsDirectoryNode() bool {
 	return n.netType == config.Directory && n.nodeType == config.Validator
 }
 
-func (n nodeContext) GetRpcHttpClient() *rpchttp.HTTP {
-	return n.rpcHttpClient
+func (n nodeContext) GetJsonRpcClient() jsonrpc.RPCClient {
+	return n.jsonRpcClient
 }
 
 func (n nodeContext) GetQueryClient() ABCIQueryClient {
@@ -58,7 +58,11 @@ func (n nodeContext) GetQueryClient() ABCIQueryClient {
 }
 
 func (n nodeContext) GetBroadcastClient() ABCIBroadcastClient {
-	return n.localClient
+	return n.broadcastClient
+}
+
+func (n nodeContext) GetBatchBroadcastClient() BatchABCIBroadcastClient {
+	return n.batchBroadcastClient
 }
 
 func (n nodeContext) IsHealthy() bool {

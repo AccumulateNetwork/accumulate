@@ -72,7 +72,7 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
 }
 
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
-	lclRoute, _ := d.ConnectionRouter.AcquireLocalRoute()
+	lclRoute, _ := d.ConnectionRouter.GetLocalRoute()
 	q := apiv2.NewQueryDirect(lclRoute, apiv2.QuerierOptions{
 		TxMaxWaitTime: 10 * time.Second,
 	})

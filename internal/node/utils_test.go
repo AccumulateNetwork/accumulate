@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulate/config"
@@ -41,6 +42,9 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 				bvn := fmt.Sprintf("BVN%d", i)
 				net.BvnNames[i] = bvn
 				net.Addresses[bvn] = []string{fmt.Sprintf("http://%s:%d", addr, basePort)}
+				if strings.EqualFold(net.ID, bvn) {
+					net.SelfAddress = net.Addresses[bvn][0]
+				}
 			}
 		}
 	}

@@ -46,6 +46,10 @@ type Daemon struct {
 	// knobs for tests
 	IsTest   bool
 	UseMemDB bool
+
+	// Connection & router accessible for tests
+	ConnMgr    connections.ConnectionManager
+	ConnRouter connections.ConnectionRouter
 }
 
 func Load(dir string, newWriter func(string) (io.Writer, error)) (*Daemon, error) {
@@ -141,8 +145,8 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	// Create a connection manager & router
-	connMgr := connections.NewConnectionManager(&d.Config.Accumulate.Network, d.Logger)
-	connRouter := connections.NewConnectionRouter(connMgr)
+	d.ConnMgr = connections.NewConnectionManager(&d.Config.Accumulate.Network, d.Logger)
+	d.ConnRouter = connections.NewConnectionRouter(d.ConnMgr)
 
 	// Create a proxy local client which we will populate with the local client
 	// after the node has been created.
@@ -157,8 +161,8 @@ func (d *Daemon) Start() (err error) {
 
 	execOpts := chain.ExecutorOptions{
 		Local:            clientProxy,
-		ConnectionMgr:    connMgr,
-		ConnectionRouter: connRouter,
+		ConnectionMgr:    d.ConnMgr,
+		ConnectionRouter: d.ConnRouter,
 		DB:               d.db,
 		Logger:           d.Logger,
 		Key:              d.Key().Bytes(),
@@ -207,7 +211,7 @@ func (d *Daemon) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to create local node client: %v", err)
 	}
-	connInitializer := connMgr.(connections.ConnectionInitializer)
+	connInitializer := d.ConnMgr.(connections.ConnectionInitializer)
 	err = connInitializer.CreateClients(lclClient)
 	if err != nil {
 		return fmt.Errorf("failed to initialize connection manager: %v", err)
@@ -227,11 +231,11 @@ func (d *Daemon) Start() (err error) {
 	jrpcOpts.QueueDuration = time.Second / 4
 	jrpcOpts.QueueDepth = 100
 	jrpcOpts.QueryV1 = d.query
-	jrpcOpts.ConnectionRouter = connRouter
+	jrpcOpts.ConnectionRouter = d.ConnRouter
 	jrpcOpts.Logger = d.Logger
 
 	// Create the querier for JSON-RPC
-	jrpcOpts.Query = api.NewQueryDispatch(connRouter, api.QuerierOptions{
+	jrpcOpts.Query = api.NewQueryDispatch(d.ConnRouter, api.QuerierOptions{
 		TxMaxWaitTime: d.Config.Accumulate.API.TxMaxWaitTime,
 	})
 

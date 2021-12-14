@@ -7,7 +7,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/tendermint/tendermint/rpc/client/http"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"golang.org/x/sync/errgroup"
@@ -36,7 +35,7 @@ func newDispatcher(opts ExecutorOptions) (*dispatcher, error) {
 }
 
 // Reset creates new RPC client batches.
-func (d *dispatcher) Reset(ctx context.Context) {
+func (d *dispatcher) Reset() {
 	d.errg = new(errgroup.Group)
 	for key := range d.batches {
 		delete(d.batches, key)
@@ -66,7 +65,7 @@ func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
 	})
 }
 
-func (d *dispatcher) send(ctx context.Context, client *http.HTTP, batch txBatch) {
+func (d *dispatcher) send(ctx context.Context, client connections.BatchABCIBroadcastClient, batch txBatch) {
 	switch len(batch) {
 	case 0:
 		// Nothing to do
@@ -125,7 +124,7 @@ func (*dispatcher) checkError(err error) error {
 func (d *dispatcher) Send(ctx context.Context) error {
 	for route, batch := range d.batches {
 		if !route.IsDirectoryNode() || !d.IsTest { // TODO is this correct? The old condition "if d.dn != nil || !d.IsTest " seems wrong
-			d.send(ctx, route.GetRpcHttpClient(), batch)
+			d.send(ctx, route.GetBatchBroadcastClient(), batch)
 		}
 	}
 
@@ -134,7 +133,7 @@ func (d *dispatcher) Send(ctx context.Context) error {
 }
 
 func (d *dispatcher) getRouteAndBatch(u *url.URL) (connections.Route, *txBatch, error) {
-	route, err := d.ConnectionRouter.AcquireRoute(u.String(), false)
+	route, err := d.ConnectionRouter.SelectRoute(u.String(), false)
 	if err != nil {
 		return nil, nil, err
 	}

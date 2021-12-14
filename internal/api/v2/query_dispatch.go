@@ -15,7 +15,7 @@ type queryDispatch struct {
 }
 
 func (q *queryDispatch) direct(accUrl string) (*queryDirect, error) {
-	route, err := q.connRouter.AcquireRoute(accUrl, true)
+	route, err := q.connRouter.SelectRoute(accUrl, true)
 	if err != nil {
 		return nil, err
 	}
@@ -24,7 +24,7 @@ func (q *queryDispatch) direct(accUrl string) (*queryDirect, error) {
 
 func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error)) ([]*QueryResponse, error) {
 	res := make([]*QueryResponse, 0, 1)
-	allRoutes, err := q.connRouter.AcquireAll()
+	allRoutes, err := q.connRouter.GetAll()
 	if err != nil {
 		return nil, err
 	}
