@@ -108,7 +108,10 @@ func TestReceiptAll(t *testing.T) {
 					t.Fatal("Failed to generate receipt", i, j)
 				}
 				if !r.Validate() {
-					t.Fatal("Receipt fails for element ", i, " anchor ", j)
+					a, _ := manager.GetAnyState(int64(j))
+					PrintState("failed 111", 0, a, nil)
+					fmt.Println(r.String())
+					t.Fatal("Receipt fails for element ", i, " anchor ", int64(j))
 				}
 			}
 		}
