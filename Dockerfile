@@ -8,7 +8,7 @@ RUN CGO_ENABLED=0 make
 FROM alpine:3
 
 # Copy binary
-COPY --from=build /root/accumulated /bin
+COPY --from=build /root/accumulated /bin/
 
 ENTRYPOINT ["accumulated"]
 CMD ["run", "--work-dir", "/node"]
