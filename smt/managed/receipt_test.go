@@ -27,7 +27,7 @@ func TestReceipt(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "", nil)
 	// Create a MerkleManager for the memory database
-	manager, err := NewMerkleManager(dbManager, 4)
+	manager, err := NewMerkleManager(dbManager, 2)
 	if err != nil {
 		t.Fatalf("did not create a merkle manager: %v", err)
 	}
