@@ -272,6 +272,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		for _, c := range c {
 			c.Accumulate.Network.BvnNames = bvns
 			c.Accumulate.Network.Addresses = addresses
+			c.Accumulate.Network.SelfAddress = addresses[c.Accumulate.Network.ID][0]
 		}
 	}
 
