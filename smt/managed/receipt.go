@@ -37,16 +37,16 @@ func (r *Receipt) AddAHash(
 			// If we find a nil spot, then we found where the hash will go.  To keep
 			// the accounting square, we won't add it ourselves, but will let the Merkle Tree
 			// library do the deed.  That keeps the Merkle Tree State square.
-			fmt.Printf("AddAHash\n Currentstate: %s\n", CurrentState.String())
+			cnt := CurrentState.Count
+			s, _ := m.GetAnyState(cnt - 1)
 			CurrentState.AddToMerkleTree(original)
 			if j == Height { // If we combine with our proof height, the NEXT combination will be
 				Right = true // from the right.
 			}
 
-			cnt := CurrentState.Count
-			s, _ := m.GetAnyState(cnt - 1)
+			cnt = CurrentState.Count
+			s, _ = m.GetAnyState(cnt - 1)
 			if !s.Equal(CurrentState) {
-				fmt.Printf("AddAHash\n State: %s\n Currentstate: %s\n", s.String(), CurrentState.String())
 				panic("Not right!")
 			}
 
@@ -169,8 +169,12 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
 	if elementIndex&1 > 0 { // Odd hashes combine from the left.
 		Right = false //        Guessed wrong, so set to left.
 	}
-	var idx int64
+	var idx = elementIndex
 	for {
+		last := len(currentState.Pending) - 1
+		if currentState.Pending[last] != nil {
+			currentState.Pending = append(currentState.Pending, nil)
+		}
 		switch {
 		case idx == anchorIndex+1: // idx is past the anchorIndex
 			receipt.ComputeDag(anchorState, height, Right)
@@ -179,10 +183,14 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
 			nextMark = nextMark + int64(math.Pow(2, float64(height)))
 			currentState = manager.GetState(nextMark - 1)
 			hash, _ := manager.Get(idx)
-			receipt.AddAHash(manager, currentState, height, Right, hash)
+			PrintState("Receipt line 192 prior to AddAHash", height, currentState, hash)
+			height = receipt.AddAHash(manager, currentState, height, Right, hash)
+			PrintState("Receipt line 192 after to AddAHash", height, currentState, hash)
 		default:
 			hash, _ := manager.Get(idx)
-			receipt.AddAHash(manager, currentState, height, Right, hash)
+			PrintState("Receipt line 197 prior to AddAHash", height, currentState, hash)
+			height = receipt.AddAHash(manager, currentState, height, Right, hash)
+			PrintState("Receipt line 197 after to AddAHash", height, currentState, hash)
 			idx++
 		}
 	}
@@ -241,4 +249,20 @@ func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
 		nr.Nodes = append(nr.Nodes, n)
 	}
 	return nr, nil
+}
+
+// PrintState
+// Print the state at this time.
+func PrintState(title string, height int, state1 *MerkleState, hash1 Hash) {
+	fmt.Println("===============", title, "===============")
+	if state1 != nil {
+		fmt.Printf("%s\n", state1.String())
+		if hash1 != nil {
+			state1.Trim()
+			hash := state1.Pending[len(state1.Pending)-1]
+			L := Sha256(append(hash, hash1...))
+			R := Sha256(append(hash1, hash...))
+			fmt.Printf("AddHash %10x  L %10x R %10x\n", hash1, L, R)
+		}
+	}
 }

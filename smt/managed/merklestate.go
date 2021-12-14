@@ -79,6 +79,14 @@ func (m *MerkleState) PadPending() {
 	}
 }
 
+// Trim
+// Remove any trailing nils from Pending hashes
+func (m *MerkleState) Trim() {
+	for len(m.Pending) > 0 && m.Pending[len(m.Pending)-1] == nil {
+		m.Pending = m.Pending[:len(m.Pending)-1]
+	}
+}
+
 // Equal
 // Compares one MerkleState to another, and returns true if they are the same
 func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
@@ -94,27 +102,22 @@ func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
 		return false
 	}
 
-	// The Count drives what is compared, so even if one or the other Pending has a trailing nil, it won't
-	// matter; the bit won't be set.  (A trailing nil is possible as a side effect of an odd number of elements
-	// in the merkle tree).
-	cnt := m.Count             // Only check that we have entries in Pending that have a bit set in the Count.
-	for i := 0; cnt > 0; i++ { // When cnt goes to zero, we are done, even if a nil might exist in the Pending array
-		// If the Merkle State has a nil, m2 must have a nil.  If we later compare m to m2 and m2 has a nil,
-		// we will panic. That's okay, because we catch it and declare them unequal.
-		if m.Pending[i] == nil && m2.Pending[i] != nil {
+	for i, v := range m.Pending { // First check if all non nil elements of m.Pending == m2.Pending
+		if v == nil && len(m2.Pending) <= i { // If m1 has trailing nils where m mas nils, that's okay
+			continue
+		}
+		if v != nil && len(m2.Pending) <= i { // If m1 has trailing nils where m has values, not okay
 			return false
 		}
-		if m.Pending[len(m.Pending)-1] == nil {
-			m.Pending = m.Pending[:len(m.Pending)-1]
-		}
-		if m2.Pending[len(m2.Pending)-1] == nil {
-			m2.Pending = m2.Pending[:len(m.Pending)-1]
-		}
-		// Each element of Pending must be equal
-		if cnt&1 == 1 && !bytes.Equal(m.Pending[i], m2.Pending[i]) {
+		if !bytes.Equal(v, m2.Pending[i]) { //  all values in both lists need to be equal
 			return false
 		}
-		cnt = cnt >> 1 // Shift a bit out of Count; When cnt is zero, we are done.
+	}
+	idx := len(m2.Pending)     // Index of the last entry of m2.Pending
+	for len(m.Pending) < idx { // Check that if m.Pending is shorter, that all of m1's extra entries are nil
+		if m2.Pending[idx-1] != nil {
+			return false
+		}
 	}
 
 	// Each must have the same number of elements in the HashList
