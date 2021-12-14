@@ -138,7 +138,7 @@ func (m *DB) Get(key storage.Key) (value []byte, err error) {
 	if !ok {
 		return nil, storage.ErrNotFound
 	}
-	return v, nil
+	return append([]byte{}, v...), nil
 }
 
 // Put
@@ -149,7 +149,7 @@ func (m *DB) Put(key storage.Key, value []byte) error {
 	if !m.Ready() {
 		return errors.New("database is not open")
 	}
-	m.entries[key] = value
+	m.entries[key] = append([]byte{}, value...)
 	return nil
 }
 
