@@ -35,7 +35,7 @@ type MerkleState struct {
 // convert the MerkleState to a human readable string
 func (m MerkleState) String() string {
 	var b bytes.Buffer
-	b.WriteString(fmt.Sprintf("%20s %d %x\n", "Count", m.Count, m.Count))
+	b.WriteString(fmt.Sprintf("%20s %d\n", "Count", m.Count))
 	b.WriteString(fmt.Sprintf("%20s %d\n", "Pending[] length:", len(m.Pending)))
 	for i, v := range m.Pending {
 		vp := "nil"
@@ -256,7 +256,7 @@ func (m *MerkleState) GetMDRoot() (MDRoot Hash) {
 	}
 	for _, v := range m.Pending {
 		if MDRoot == nil { // Pick up the first hash in m.MerkleState no matter what.
-			MDRoot = v // If a nil is assigned over a nil, no harm no foul.  Fewer cases to test this way.
+			MDRoot = v.Copy() // If a nil is assigned over a nil, no harm no foul.  Fewer cases to test this way.
 		} else if v != nil { // If MDRoot isn't nil and v isn't nil, combine them.
 			MDRoot = v.Combine(m.HashFunction, MDRoot) // v is on the left, MDRoot candidate is on the right, for a new MDRoot
 		}
