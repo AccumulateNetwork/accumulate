@@ -4,14 +4,13 @@ stages:
 - deploy
 - validate
 
-variables:
-  GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
-
-default:
+.go:
   cache:
     key: go-mod-cache
     paths:
     - .go-mod-cache
+  variables:
+    GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
   before_script:
   - |
     function build-daemon {
@@ -28,6 +27,7 @@ default:
 
 .test:
   stage: test
+  extends: .go
   needs: []
   tags: [docker, linux]
   script:
@@ -53,8 +53,22 @@ git describe:
     reports:
       dotenv: git.env
 
+build images:
+  stage: build
+  needs: []
+  tags: [docker, linux]
+  image: docker
+  services: ['docker:dind']
+  script:
+  - docker build -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
+  - docker build -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  - docker push ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
+  - docker push ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
+
 build:
   stage: build
+  extends: .go
   needs: [git describe]
   tags: [docker, linux]
   image: golang:1.17
@@ -71,6 +85,7 @@ build:
 
 configure:
   stage: build
+  extends: .go
   needs: [git describe]
   tags: [docker, linux]
   image: golang:1.17
@@ -130,6 +145,7 @@ deploy 4/4:
 
 .validate:
   stage: validate
+  extends: .go
   only: [develop] # only run on the main branch
   needs: [deploy 1/4, deploy 2/4, deploy 3/4, deploy 4/4]
   tags: [docker, linux]
@@ -138,6 +154,24 @@ deploy 4/4:
     ACC_API: https://devnet.accumulatenetwork.io/v1
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
+
+validate docker:
+  stage: validate
+  needs: ['build images']
+  tags: [docker, linux]
+  image: docker
+  services: ['docker:dind']
+  variables:
+    # set mnemonic for predictable addresses
+    MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
+  script:
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  - docker run --rm -v ${PWD}/nodes:/nodes -e MNEMONIC="${MNEMONIC}" ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} init devnet -w /nodes --docker
+  - cd nodes
+  - apk add --no-cache docker-compose
+  - docker-compose up -d
+  - docker-compose run --rm scripts /scripts/ci/validate.sh
+  - docker-compose down
 
 validate:
   extends: .validate
