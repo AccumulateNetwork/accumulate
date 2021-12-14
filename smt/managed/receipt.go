@@ -3,6 +3,7 @@ package managed
 import (
 	"bytes"
 	"fmt"
+	"math"
 )
 
 type Node struct {
@@ -21,106 +22,6 @@ type Receipt struct {
 	Nodes        []*Node // Apply these hashes to create an anchor
 }
 
-// GetElementState
-// Looks through the Merkle Tree, and finds the state just before the element has been added to the
-// Merkle Tree, and the height in the Pending list of the derivative of the element.
-// Returns a nil for the merkleState if the element is not in the Merkle Tree
-func GetElementState(
-	manager *MerkleManager, //                       Parameters
-	element Hash,
-	elementIndex int64,
-) (
-	currentState, nextMark *MerkleState, //          Return values
-	height int,
-	nextMarkIndex int64) {
-	// currentState is the state we are going to modify until it is the state we want
-	previousMarkIndex := elementIndex & ^manager.MarkMask // Find the mark previous to element (current if at mark)
-	if previousMarkIndex == 0 {                           // Get that state
-		currentState = new(MerkleState)
-	} else {
-		currentState = manager.GetState(previousMarkIndex - 1)
-	}
-	currentState.InitSha256()                                //   Use sha256
-	nextMarkIndex = previousMarkIndex + manager.MarkFreq - 1 //   Next mark has the list of elements to add
-	nextMark = manager.GetState(nextMarkIndex)               //   Get that NextMark state. Now bracket element, search
-	if nextMark == nil {                                     //   If there is no state at the next mark,
-		nextMark = manager.MS.Copy() //                         then just use the last state of the Merkle Tree
-	}
-	for i, v1 := range nextMark.HashList { //                Go through the pending elements
-		nextMarkIndex = int64(i)         //                   Return location in this HashList for next step
-		currentState.AddToMerkleTree(v1) //                   Otherwise, just add value to merkle tree and keep looking
-
-		if bytes.Equal(v1, element) { //                   If the element is found
-			return currentState, nextMark, height, int64(i) // Return location so following code can reuse it
-		}
-
-	}
-	panic("the element must be a member of the NextMark.HashList")
-}
-
-// AdvanceToMark
-// Advance the currentState (from any element) to the next Mark.
-// Receipt is updated, where our proof is expected to be at height in the currentState
-// If advancing to the next mark would take the currentState past the AnchorState, then
-// AdvanceToMark only advances to the anchorState and returns true.
-//
-// Returns true (that currentState is now the anchorState) or false
-func (r *Receipt) AdvanceToMark(
-	manager *MerkleManager,
-	currentState, nextMark, anchorState *MerkleState,
-	height int,
-	markIndex int64,
-) (
-	atAnchor bool,
-	newHeight int) {
-
-	// Add all the hashes that remain in the HashList of the next Mark to the current state.
-	// The result will be a current state that is at the next mark.
-	for i, v := range nextMark.HashList[markIndex:] {
-		if currentState.Count == anchorState.Count { //           Sort to see if reached the anchor state
-			return true, height //                                 If at the anchor, signal currentState is at the anchor
-		}
-		if i == 0 && //                                           If adding the first hash of the hash list
-			currentState.Count&1 == 1 { //                         And at an odd number of elements in the Merkle Tree
-			height = r.AddAHash(manager, currentState, height, false, v) // In that case, the hash will come from the left
-		} else { //                                                    Otherwise
-			height = r.AddAHash(manager, currentState, height, true, v) //  the hash will come from the right
-		}
-	}
-	// If reaching the next mark doesn't reach the anchor state, signal that the search continues
-	return false, height
-}
-
-// AdvanceMarkToMark
-// Once the currentState is at a Mark, it can be advanced directly to the next Mark.
-// The next Mark is a mark at a 2^n step forward through the elements. These states
-// can be combined directly without processing all the intermediate elements.
-//
-// Returns true (that the currentState is now the anchorState) or false
-func (r *Receipt) AdvanceMarkToMark(manager *MerkleManager, anchorState, currentState *MerkleState, height int) (
-	atAnchor bool, newHeight int) {
-	// If the anchorState is between the currentState and the next MarkState, then none of the pending
-	// entries in the AnchorState will contribute to the receipt, so we can build our proof from the
-	// anchorStep directly.
-	if currentState.Count+manager.MarkFreq >= anchorState.Count {
-		currentState = anchorState.Copy()
-		return true, height
-	}
-	// Set the currentState to the state just before the next mark.  None of the intermediate elements
-	// will contribute to the receipt, so they don't heave to be evaluated.  But the next element
-	// right before the mark does contribute.
-	currentState = manager.GetState(currentState.Count + manager.MarkFreq - 1)
-	// markNext is the next element to be added to the Merkle Tree.  It WILL carry into height, so
-	// we have to use AddAHash to add its contribution to the receipt.
-	markNext := manager.GetNext(currentState.Count + manager.MarkFreq - 1) // Get the the next element
-	height = r.AddAHash(manager, currentState, height, true, markNext)     // Record its impact on the receipt
-	// Handle the special case where the Mark we jump to == the AnchorState
-	if currentState.Count == anchorState.Count {
-		return true, height
-	}
-	return false, height
-}
-
 func (r *Receipt) AddAHash(
 	m *MerkleManager,
 	CurrentState *MerkleState,
@@ -129,13 +30,14 @@ func (r *Receipt) AddAHash(
 	v1 Hash,
 ) (
 	height int) {
-	original := v1
+	original := v1.Copy()
 	CurrentState.PadPending() // Pending always has to end in a nil to ensure we handle the "carry" case
 	for j, v2 := range CurrentState.Pending {
 		if v2 == nil {
 			// If we find a nil spot, then we found where the hash will go.  To keep
 			// the accounting square, we won't add it ourselves, but will let the Merkle Tree
 			// library do the deed.  That keeps the Merkle Tree State square.
+			fmt.Printf("AddAHash\n Currentstate: %s\n", CurrentState.String())
 			CurrentState.AddToMerkleTree(original)
 			if j == Height { // If we combine with our proof height, the NEXT combination will be
 				Right = true // from the right.
@@ -144,7 +46,7 @@ func (r *Receipt) AddAHash(
 			cnt := CurrentState.Count
 			s, _ := m.GetAnyState(cnt - 1)
 			if !s.Equal(CurrentState) {
-				fmt.Printf("AddAHash\n  %s\n%s\n", s.String(), CurrentState.String())
+				fmt.Printf("AddAHash\n State: %s\n Currentstate: %s\n", s.String(), CurrentState.String())
 				panic("Not right!")
 			}
 
@@ -156,9 +58,9 @@ func (r *Receipt) AddAHash(
 			r.Nodes = append(r.Nodes, node)
 			node.Right = Right
 			if Right {
-				node.Hash = v1
+				node.Hash = v1.Copy()
 			} else {
-				node.Hash = v2
+				node.Hash = v2.Copy()
 			}
 			//fmt.Printf("Height %3d %x\n", Height, node.Hash)
 			// v1 becomes HashOf(pending[j]+v1)
@@ -166,7 +68,7 @@ func (r *Receipt) AddAHash(
 			Right = false // The Anchor hashes on the left are now added to the Anchor
 		}
 		// v1 becomes HashOf(pending[j]+v1)
-		v1 = CurrentState.HashFunction(append(v2[:], v1[:]...))
+		v1 = CurrentState.HashFunction(append(v2, v1...))
 	}
 	panic("failed to add the hash to the current state")
 }
@@ -247,48 +149,48 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
 		return nil
 	}
 
-	// Get the merkle state at the point where the anchor has been added to the Merkle tree.
-	// Note that getting the ElementState occurs one state BEFORE the anchor was added, so
-	// we will have to add the anchor
-	anchorState, _ := manager.GetAnyState(anchorIndex)
-
-	// Get the state just before the element is added to the merkle tree
-	currentState, nextMark, height, nextMarkIndex := GetElementState(manager, element, elementIndex)
 	// Allocate our receipt and record our element
 	receipt := new(Receipt)             // Allocate a receipt
 	receipt.Element = element           // Add the element to the receipt
 	receipt.Anchor = anchor             // Add the anchor hash to the receipt
 	receipt.ElementIndex = elementIndex // Merkle Tree indexes
 	receipt.AnchorIndex = anchorIndex   // Merkle Tree indexes
-	// If the current state is the anchor state, then we are done.
-	if currentState.Count == anchorState.Count {
-		receipt.ComputeDag(anchorState, height, true) // Compute the DAG and return
-		return receipt
+
+	if elementIndex == 0 { //      If this is the first element in the Merkle Tree, we are already done.
+		receipt.MDRoot = element // A Merkle Tree of one element has a root of the element itself.
+		return receipt           // And we are done!
 	}
 
-	var MDRoot bool // Advance the current state to the first Mark at or past the current State
-	MDRoot, height = receipt.AdvanceToMark(manager, currentState, nextMark, anchorState, height, nextMarkIndex)
-	if MDRoot { // If we advanced the current state and the result is the Anchor State, then we are done
-		receipt.ComputeDag(anchorState, height, true)
-		return receipt
+	height := 0
+	anchorState, _ := manager.GetAnyState(anchorIndex)
+	currentState, _ := manager.GetAnyState(elementIndex - 1)
+	nextMark := elementIndex & ^manager.MarkMask + manager.MarkFreq
+	Right := true           // Even hashes combine from the right (Guess Right)
+	if elementIndex&1 > 0 { // Odd hashes combine from the left.
+		Right = false //        Guessed wrong, so set to left.
 	}
-
-	cnt := currentState.Count
-	s, _ := manager.GetAnyState(cnt - 1)
-	if !s.Equal(currentState) {
-		panic("Not right!")
-	}
-
-	for { // Push the Current State from mark to mark, at ever higher powers of 2 until we reach the anchor state
-		if MDRoot, height = receipt.AdvanceMarkToMark(manager, currentState, anchorState, height); MDRoot == true {
-			receipt.ComputeDag(currentState, height, true) // We reach the anchor state, we are done
+	var idx int64
+	for {
+		switch {
+		case idx == anchorIndex+1: // idx is past the anchorIndex
+			receipt.ComputeDag(anchorState, height, Right)
 			return receipt
+		case idx == nextMark: // This is the first index of the next Mark Set
+			nextMark = nextMark + int64(math.Pow(2, float64(height)))
+			currentState = manager.GetState(nextMark - 1)
+			hash, _ := manager.Get(idx)
+			receipt.AddAHash(manager, currentState, height, Right, hash)
+		default:
+			hash, _ := manager.Get(idx)
+			receipt.AddAHash(manager, currentState, height, Right, hash)
+			idx++
 		}
 	}
 }
 
-// Receipt
-// Take a receipt and validate that the
+// Validate
+// Take a receipt and validate that the element hash progresses to the
+// Merkle Dag Root hash (MDRoot) in the receipt
 func (r Receipt) Validate() bool {
 	MDRoot := r.Element // To begin with, we start with the object as the MDRoot
 	// Now apply all the path hashes to the MDRoot
