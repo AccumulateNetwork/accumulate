@@ -71,8 +71,8 @@ func TestValidate(t *testing.T) {
 
 	t.Run("Lite Account Credits", func(t *testing.T) {
 		executeTx(t, japi, "add-credits", true, execParams{
-			Sponsor: liteUrl.String(),
-			Key:     liteKey,
+			Origin: liteUrl.String(),
+			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: liteUrl.String(),
 				Amount:    100,
@@ -93,8 +93,8 @@ func TestValidate(t *testing.T) {
 		adiKey = newKey([]byte(t.Name()))
 
 		executeTx(t, japi, "create-adi", true, execParams{
-			Sponsor: liteUrl.String(),
-			Key:     liteKey,
+			Origin: liteUrl.String(),
+			Key:    liteKey,
 			Payload: &IdentityCreate{
 				Url:         adiName,
 				PublicKey:   adiKey[32:],
