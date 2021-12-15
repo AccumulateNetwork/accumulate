@@ -27,7 +27,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmnet "github.com/tendermint/tendermint/libs/net"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/privval"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
@@ -126,14 +125,10 @@ func (d *Daemon) Start() (err error) {
 	testDir := d.Config.BaseConfig.RootDir
 	sockPath := filepath.Join(testDir, "test.sock")
 
-	tmpSock := "unix:///tmp/accum." + tmrand.Str(6) + ".sock"
-
 	d.Config.RPC.ListenAddress = fmt.Sprintf("unix://%s", sockPath)
-	d.Config.Accumulate.API.ListenAddress = tmpSock
 	d.Listen = fmt.Sprintf("unix://%s", sockPath)
 	d.Protocol = "unix"
 
-	defer os.Remove(tmpSock)
 	defer os.Remove(sockPath)
 
 	dbPath := filepath.Join(d.Config.RootDir, "valacc.db")

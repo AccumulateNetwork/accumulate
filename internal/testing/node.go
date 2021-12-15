@@ -43,8 +43,8 @@ func NodeInitOptsForNetwork(subnet *networks.Subnet) node.InitOptions {
 
 	for i, net := range subnet.Nodes {
 		listener = "unix:///tmp/accumulate.sock"
-		listenIP[i] = listener
-		remoteIP[i] = listener
+		listenIP[i] = "localhost"
+		remoteIP[i] = net.IP
 		cfg[i] = DefaultConfig(subnet.Type, net.Type, subnet.Name) // Configure
 	}
 	var la *net.UnixAddr
@@ -57,17 +57,17 @@ func NodeInitOptsForNetwork(subnet *networks.Subnet) node.InitOptions {
 		panic(err)
 	}
 	ks.SyscallConn()
-	
+
 	port, err := tmnet.GetFreePort()
 	if err != nil {
 		panic(err)
 	}
 
 	return node.InitOptions{
-		Port:     port,
-		Config:   cfg,
-		RemoteIP: remoteIP,
-		ListenIP: listenIP,
+		Port:       port,
+		Config:     cfg,
+		RemoteIP:   remoteIP,
+		ListenIP:   listenIP,
 		ListenAddr: la,
 	}
 }

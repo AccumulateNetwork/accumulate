@@ -29,7 +29,7 @@ func TestNodeLifecycle(t *testing.T) {
 	opts := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
 	opts.WorkDir = t.TempDir()
 	require.NoError(t, node.Init(opts))
-t.Log(opts.ListenAddr)
+	t.Log(opts.ListenAddr)
 	// Start
 	nodeDir := filepath.Join(opts.WorkDir, "Node0")
 	daemon, err := acctesting.RunDaemon(acctesting.DaemonOptions{

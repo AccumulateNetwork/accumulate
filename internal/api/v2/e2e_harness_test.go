@@ -32,7 +32,7 @@ import (
 
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
-func startAccumulate(t *testing.T, baseIP string, bvns, validators, basePort int) []*accumulated.Daemon {
+func startAccumulate(t *testing.T, baseIP net.IP, bvns, validators, basePort int) []*accumulated.Daemon {
 	names := make([]string, bvns)
 	addrs := make(map[string][]string, bvns)
 	IPs := make([][]string, bvns)
@@ -47,7 +47,7 @@ func startAccumulate(t *testing.T, baseIP string, bvns, validators, basePort int
 		for val := 0; val < validators; val++ {
 			ip := make(net.IP, len(baseIP))
 			copy(ip, baseIP)
-		//	baseIP[15]++
+			baseIP[15]++
 			IPs[bvn][val] = ip.String()
 			addrs[names[bvn]][val] = fmt.Sprintf("http://%v:%d", ip, basePort)
 		}
@@ -68,7 +68,6 @@ func startAccumulate(t *testing.T, baseIP string, bvns, validators, basePort int
 			Config:   config[bvn],
 			RemoteIP: IPs[bvn],
 			ListenIP: IPs[bvn],
-			ListenAddr: baseIP,
 		}))
 
 		for val := 0; val < validators; val++ {

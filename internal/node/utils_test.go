@@ -57,7 +57,7 @@ func initNodes(t *testing.T, name string, baseIP string, basePort int, count int
 		Config:   config,
 		RemoteIP: IPs,
 		ListenIP: IPs,
-	//	ListenAddr: IPs[0],
+		//	ListenAddr: IPs[0],
 	}))
 
 	daemons := make([]*accumulated.Daemon, count)
