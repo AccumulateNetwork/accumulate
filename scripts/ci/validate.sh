@@ -43,8 +43,10 @@ function success {
 }
 
 section "Setup"
-go install ./cmd/cli
-export PATH="${PATH}:$(go env GOPATH)/bin"
+if ! which cli > /dev/null ; then
+    go install ./cmd/cli
+    export PATH="${PATH}:$(go env GOPATH)/bin"
+fi
 [ -z "${MNEMONIC}" ] || cli key import mnemonic ${MNEMONIC}
 echo
 
