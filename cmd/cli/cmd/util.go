@@ -639,26 +639,19 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			}
 			return out, nil
 		case types.ChainTypeKeyBook.String():
-			//workaround for protocol unmarshaling bug
-			var ssg struct {
-				Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
-				ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-				SigSpecId []byte          `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
-				SigSpecs  []types.Bytes32 `json:"sigSpecs"`
-			}
-
-			err := json.Unmarshal(*res.Data, &ssg)
+			var book protocol.KeyBook
+			err := json.Unmarshal(*res.Data, &book)
 			if err != nil {
 				return "", err
 			}
 
-			u, err := url2.Parse(*ssg.ChainUrl.AsString())
+			u, err := url2.Parse(*book.ChainUrl.AsString())
 			if err != nil {
 				return "", err
 			}
 			var out string
 			out += fmt.Sprintf("\n\tHeight\t\tKey Page Url\n")
-			for i, v := range ssg.SigSpecs {
+			for i, v := range book.Pages {
 				//enable this code when testnet updated to a version > 0.2.1.
 				//data, err := GetByChainId(v[:])
 				//keypage := "unknown"

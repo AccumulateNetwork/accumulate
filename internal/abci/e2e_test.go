@@ -248,8 +248,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
 
 		require.Equal(t, []string{
-			n.ParseUrl("FooBar/ssg0").String(),
-			n.ParseUrl("FooBar/sigspec0").String(),
+			n.ParseUrl("FooBar/book0").String(),
+			n.ParseUrl("FooBar/page0").String(),
 			n.ParseUrl("FooBar/oof").String(),
 		}, n.GetDirectory("FooBar"))
 	})
@@ -306,8 +306,8 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
 
 		require.Equal(t, []string{
-			n.ParseUrl("FooBar/ssg0").String(),
-			n.ParseUrl("FooBar/sigspec0").String(),
+			n.ParseUrl("FooBar/book0").String(),
+			n.ParseUrl("FooBar/page0").String(),
 			n.ParseUrl("FooBar/oof").String(),
 		}, n.GetDirectory("FooBar"))
 
@@ -412,8 +412,8 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
 
 		require.Equal(t, []string{
-			n.ParseUrl("FooBar/ssg0").String(),
-			n.ParseUrl("FooBar/sigspec0").String(),
+			n.ParseUrl("FooBar/book0").String(),
+			n.ParseUrl("FooBar/page0").String(),
 			n.ParseUrl("FooBar/Baz").String(),
 		}, n.GetDirectory("FooBar"))
 	})
@@ -510,14 +510,14 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		ac := new(protocol.AddCredits)
 		ac.Amount = 55
-		ac.Recipient = "foo/sigspec0"
+		ac.Recipient = "foo/page0"
 
 		tx, err := transactions.New("foo/tokens", 1, edSigner(fooKey, 1), ac)
 		require.NoError(t, err)
 		send(tx)
 	})
 
-	ks := n.GetKeyPage("foo/sigspec0")
+	ks := n.GetKeyPage("foo/page0")
 	acct := n.GetTokenAccount("foo/tokens")
 	require.Equal(t, int64(55), ks.CreditBalance.Int64())
 	require.Equal(t, int64(protocol.AcmePrecision*1e2-protocol.AcmePrecision/protocol.CreditsPerFiatUnit*55), acct.Balance.Int64())
@@ -555,18 +555,18 @@ func TestCreateKeyBook(t *testing.T) {
 	fooKey, testKey := generateKey(), generateKey()
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/page1", testKey.PubKey().Bytes()))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
-	specUrl := n.ParseUrl("foo/sigspec1")
+	specUrl := n.ParseUrl("foo/page1")
 	specChainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
 
-	groupUrl := n.ParseUrl("foo/ssg1")
+	groupUrl := n.ParseUrl("foo/book1")
 	groupChainId := types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		csg := new(protocol.CreateKeyBook)
-		csg.Url = "foo/ssg1"
+		csg.Url = "foo/book1"
 		csg.Pages = append(csg.Pages, specChainId)
 
 		tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), csg)
@@ -574,11 +574,11 @@ func TestCreateKeyBook(t *testing.T) {
 		send(tx)
 	})
 
-	group := n.GetKeyBook("foo/ssg1")
+	group := n.GetKeyBook("foo/book1")
 	require.Len(t, group.Pages, 1)
 	require.Equal(t, specChainId, types.Bytes32(group.Pages[0]))
 
-	spec := n.GetKeyPage("foo/sigspec1")
+	spec := n.GetKeyPage("foo/page1")
 	require.Equal(t, spec.KeyBook, groupChainId)
 }
 
@@ -586,31 +586,31 @@ func TestAddKeyPage(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
-	u := n.ParseUrl("foo/ssg1")
+	u := n.ParseUrl("foo/book1")
 	groupChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/page1", testKey1.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/book1", "foo/page1"))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	// Sanity check
-	require.Equal(t, groupChainId, n.GetKeyPage("foo/sigspec1").KeyBook)
+	require.Equal(t, groupChainId, n.GetKeyPage("foo/page1").KeyBook)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		cms := new(protocol.CreateKeyPage)
-		cms.Url = "foo/sigspec2"
+		cms.Url = "foo/page2"
 		cms.Keys = append(cms.Keys, &protocol.KeySpecParams{
 			PublicKey: testKey2.PubKey().Bytes(),
 		})
 
-		tx, err := transactions.New("foo/ssg1", 2, edSigner(testKey1, 1), cms)
+		tx, err := transactions.New("foo/book1", 2, edSigner(testKey1, 1), cms)
 		require.NoError(t, err)
 		send(tx)
 	})
 
-	spec := n.GetKeyPage("foo/sigspec2")
+	spec := n.GetKeyPage("foo/page2")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
 	require.Equal(t, groupChainId, spec.KeyBook)
@@ -624,8 +624,8 @@ func TestAddKey(t *testing.T) {
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/page1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/book1", "foo/page1"))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	newKey := generateKey()
@@ -634,12 +634,12 @@ func TestAddKey(t *testing.T) {
 		body.Operation = protocol.AddKey
 		body.NewKey = newKey.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/sigspec1", 2, edSigner(testKey, 1), body)
+		tx, err := transactions.New("foo/page1", 2, edSigner(testKey, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
 
-	spec := n.GetKeyPage("foo/sigspec1")
+	spec := n.GetKeyPage("foo/page1")
 	require.Len(t, spec.Keys, 2)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[1].PublicKey)
 }
@@ -650,8 +650,8 @@ func TestUpdateKey(t *testing.T) {
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/page1", testKey.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/book1", "foo/page1"))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	newKey := generateKey()
@@ -661,12 +661,12 @@ func TestUpdateKey(t *testing.T) {
 		body.Key = testKey.PubKey().Bytes()
 		body.NewKey = newKey.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/sigspec1", 2, edSigner(testKey, 1), body)
+		tx, err := transactions.New("foo/page1", 2, edSigner(testKey, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
 
-	spec := n.GetKeyPage("foo/sigspec1")
+	spec := n.GetKeyPage("foo/page1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
@@ -677,8 +677,8 @@ func TestRemoveKey(t *testing.T) {
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
-	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/sigspec1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
-	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/ssg1", "foo/sigspec1"))
+	require.NoError(t, acctesting.CreateKeyPage(dbTx, "foo/page1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
+	require.NoError(t, acctesting.CreateKeyBook(dbTx, "foo/book1", "foo/page1"))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -686,12 +686,12 @@ func TestRemoveKey(t *testing.T) {
 		body.Operation = protocol.RemoveKey
 		body.Key = testKey1.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/sigspec1", 2, edSigner(testKey2, 1), body)
+		tx, err := transactions.New("foo/page1", 2, edSigner(testKey2, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
 
-	spec := n.GetKeyPage("foo/sigspec1")
+	spec := n.GetKeyPage("foo/page1")
 	require.Len(t, spec.Keys, 1)
 	require.Equal(t, testKey2.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
