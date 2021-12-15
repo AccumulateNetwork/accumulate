@@ -56,6 +56,45 @@ func jsonType(field *Field) string {
 	return ""
 }
 
+func formatField(w *bytes.Buffer, field *Field, varName string, forJson bool) {
+	var typ string
+
+	if forJson {
+		typ = jsonType(field)
+	}
+	if typ == "" {
+		typ = resolveType(field, false)
+	}
+
+	fmt.Fprintf(w, "\t%s %s `", varName, typ)
+	defer fmt.Fprint(w, "`\n")
+
+	lcName := strings.ToLower(varName[:1]) + varName[1:]
+	if field.KeepEmpty {
+		fmt.Fprintf(w, `json:"%s"`, lcName)
+	} else {
+		fmt.Fprintf(w, `json:"%s,omitempty"`, lcName)
+	}
+
+	if forJson {
+		return
+	}
+
+	fmt.Fprintf(w, ` form:"%s"`, lcName)
+	fmt.Fprintf(w, ` query:"%s"`, lcName)
+
+	var validate []string
+	if !field.Optional {
+		validate = append(validate, "required")
+	}
+	if field.IsUrl {
+		validate = append(validate, "acc-url")
+	}
+	if len(validate) > 0 {
+		fmt.Fprintf(w, ` validate:"%s"`, strings.Join(validate, ","))
+	}
+}
+
 func areEqual(w *bytes.Buffer, field *Field, varName, otherName string) error {
 	var expr string
 	switch field.Type {
@@ -254,15 +293,9 @@ func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
 		fmt.Fprintf(w, "\t\t%s\n", e)
 	}
 	for _, f := range typ.Fields {
-		lcName := strings.ToLower(f.Name[:1]) + f.Name[1:]
-		typ := jsonType(f)
-		if typ == "" {
-			typ = resolveType(f, false)
-		}
-		if f.KeepEmpty {
-			fmt.Fprintf(w, "\t\t%s %s `json:\"%s\"`\n", f.Name, typ, lcName)
-		} else {
-			fmt.Fprintf(w, "\t\t%s %s `json:\"%s,omitempty\"`\n", f.Name, typ, lcName)
+		formatField(w, f, f.Name, true)
+		if f.Alternative != "" {
+			formatField(w, f, f.Alternative, true)
 		}
 	}
 	fmt.Fprintf(w, "\t}{}\n")
