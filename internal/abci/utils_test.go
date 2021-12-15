@@ -294,9 +294,9 @@ func (n *fakeNode) GetADI(url string) *state.AdiState {
 }
 
 func (n *fakeNode) GetKeyBook(url string) *protocol.KeyBook {
-	ssg := new(protocol.KeyBook)
-	n.GetChainAs(url, ssg)
-	return ssg
+	book := new(protocol.KeyBook)
+	n.GetChainAs(url, book)
+	return book
 }
 
 func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {

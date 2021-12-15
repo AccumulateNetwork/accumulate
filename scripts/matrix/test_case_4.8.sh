@@ -1,4 +1,4 @@
-#!/bin/bash 
+#!/bin/bash
 #
 # test case 4.8
 #
@@ -42,7 +42,7 @@ echo $ID2
 
 sleep .5
 
-# call cli faucet 
+# call cli faucet
 
 TxID=`./cli_faucet.sh $ID $1`
 if [ $? -ne 0 ]; then
@@ -124,7 +124,7 @@ if [ $? -ne 0 ]; then
 	exit 1
 fi
 sleep 2.5
-$cli account create token acc://t48acct2 t48key2 acc://t48acct2/myacmeacct2 acc://ACME acc://t48acct2/ssg0 -s http://$1/v1 -j
+$cli account create token acc://t48acct2 t48key2 acc://t48acct2/myacmeacct2 acc://ACME acc://t48acct2/book0 -s http://$1/v1 -j
 if [ $? -ne 0 ]; then
 	echo "cli account create failed"
 	exit 1

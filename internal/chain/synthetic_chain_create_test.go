@@ -24,7 +24,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	_, err := dbTx.Commit(1, time.Unix(0, 0), nil)
 	require.NoError(t, err)
 
-	book, err := url.Parse("foo/ssg0")
+	book, err := url.Parse("foo/book0")
 	require.NoError(t, err)
 
 	account := state.NewTokenAccount("foo/bar/baz", "ACME")
