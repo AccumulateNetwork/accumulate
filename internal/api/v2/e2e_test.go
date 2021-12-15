@@ -134,8 +134,8 @@ func TestValidate(t *testing.T) {
 	dataAccountUrl := adiName + "/dataAccount"
 	t.Run("Create Data Account", func(t *testing.T) {
 		executeTx(t, japi, "create-data-account", true, execParams{
-			Sponsor: adiName,
-			Key:     adiKey,
+			Origin: adiName,
+			Key:    adiKey,
 			Payload: &CreateDataAccount{
 				Url: dataAccountUrl,
 			},
@@ -153,8 +153,8 @@ func TestValidate(t *testing.T) {
 			PublicKey: adiKey,
 		})
 		executeTx(t, japi, "create-key-page", true, execParams{
-			Sponsor: adiName,
-			Key:     adiKey,
+			Origin: adiName,
+			Key:    adiKey,
 			Payload: &CreateKeyPage{
 				Url:  keyPageUrl,
 				Keys: keys,
@@ -172,8 +172,8 @@ func TestValidate(t *testing.T) {
 		pageChainId := types.Bytes(pageUrl.ResourceChain()).AsBytes32()
 		page = append(page, pageChainId)
 		executeTx(t, japi, "create-key-book", true, execParams{
-			Sponsor: adiName,
-			Key:     adiKey,
+			Origin: adiName,
+			Key:    adiKey,
 			Payload: &CreateKeyBook{
 				Url:   keyBookUrl,
 				Pages: page,
@@ -188,8 +188,8 @@ func TestValidate(t *testing.T) {
 	tokenAccountUrl := adiName + "/account"
 	t.Run("Create Token Account", func(t *testing.T) {
 		executeTx(t, japi, "create-token-account", true, execParams{
-			Sponsor: adiName,
-			Key:     adiKey,
+			Origin: adiName,
+			Key:    adiKey,
 			Payload: &TokenAccountCreate{
 				Url:        tokenAccountUrl,
 				TokenUrl:   tokenUrl,
