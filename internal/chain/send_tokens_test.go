@@ -49,11 +49,11 @@ func TestLiteTokenTransactions(t *testing.T) {
 
 	//pull the chains again
 	tas := new(protocol.LiteTokenAccount)
-	require.NoError(t, st.LoadAs(st.SponsorChainId, tas))
+	require.NoError(t, st.LoadAs(st.OriginChainId, tas))
 	require.Equal(t, tokenUrl, types.String(tas.TokenUrl), "token url of state doesn't match expected")
 	require.Equal(t, uint64(2), tas.TxCount, "expected a token transaction count of 2")
 
-	refUrl := st.SponsorUrl.JoinPath(fmt.Sprint(tas.TxCount - 1))
+	refUrl := st.OriginUrl.JoinPath(fmt.Sprint(tas.TxCount - 1))
 	txRef := new(state.TxReference)
 	require.NoError(t, st.LoadUrlAs(refUrl, txRef))
 	require.Equal(t, types.String(refUrl.String()), txRef.ChainUrl, "chain header expected transaction reference")

@@ -404,7 +404,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) (*acmeapi.API
 	tx.Transaction = payload
 
 	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = string(req.Tx.Sponsor)
+	tx.SigInfo.URL = string(req.Tx.Origin)
 	tx.SigInfo.Nonce = req.Tx.Signer.Nonce
 	tx.SigInfo.KeyPageHeight = req.Tx.KeyPage.Height
 	tx.SigInfo.KeyPageIndex = req.Tx.KeyPage.Index

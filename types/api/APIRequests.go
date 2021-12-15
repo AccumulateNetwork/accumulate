@@ -27,7 +27,7 @@ type APIRequestRaw struct {
 // concatenation of ( sha256(Signer.URL) | Data | Timestamp ).  The txid is the sha256(ledger)
 // and the signature is ed25519( ledger )
 type APIRequestRawTx struct {
-	Sponsor types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
+	Origin  types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"` // retain 'sponsor' for backwards compatability
 	Data    *json.RawMessage   `json:"data" form:"data" query:"data" validate:"required"`
 	Signer  *Signer            `json:"signer" form:"signer" query:"signer" validate:"required"`
 	Sig     types.Bytes64      `json:"sig" form:"sig" query:"sig" validate:"required"`
@@ -72,7 +72,7 @@ type APIDataResponse struct {
 	Type        types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,tx,keyPage,keyBook,assignKeyPage,addCredits,directory,version"`
 	MerkleState *MerkleState       `json:"merkleState,omitempty" form:"merkleState" query:"merkleState"`
 	Data        *json.RawMessage   `json:"data" form:"data" query:"data"`
-	Sponsor     types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"`
+	Origin      types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"` // retain 'sponsor' for backwards compatability
 	KeyPage     *APIRequestKeyPage `json:"keyPage" form:"keyPage" query:"keyPage" validate:"required"`
 	TxId        *types.Bytes       `json:"txid" form:"txid" query:"txid"`
 	//the following are optional available only if pending chain has not been purged
