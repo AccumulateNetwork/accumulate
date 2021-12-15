@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
@@ -34,9 +35,9 @@ type ABCIApplicationClient struct {
 	nextHeight func() int64
 	onError    func(err error)
 
-	done   chan struct{}
-	doneMu *sync.Mutex
-	stop   chan struct{}
+	stop    chan struct{}
+	stopped *sync.WaitGroup
+	didStop int32
 
 	txCh     chan *txStatus
 	txStatus map[[32]byte]*txStatus
@@ -68,10 +69,9 @@ func NewABCIApplicationClient(app <-chan abci.Application, db *state.StateDB, ne
 	c.nextHeight = nextHeight
 	c.onError = onError
 	c.EventBus = types.NewEventBus()
-	c.done = make(chan struct{})
-	c.doneMu = new(sync.Mutex)
 	c.stop = make(chan struct{})
 	c.txCh = make(chan *txStatus)
+	c.stopped = new(sync.WaitGroup)
 	c.txStatus = map[[32]byte]*txStatus{}
 	c.txPend = map[[32]byte]bool{}
 	c.txMu = new(sync.RWMutex)
@@ -88,17 +88,12 @@ func NewABCIApplicationClient(app <-chan abci.Application, db *state.StateDB, ne
 }
 
 func (c *ABCIApplicationClient) Shutdown() {
-	c.doneMu.Lock()
-	defer c.doneMu.Unlock()
-
-	select {
-	case <-c.done:
+	if !atomic.CompareAndSwapInt32(&c.didStop, 0, 1) {
 		return
-	default:
 	}
 
 	close(c.stop)
-	<-c.done
+	c.stopped.Wait()
 	close(c.txCh)
 }
 
@@ -127,6 +122,9 @@ func (c *ABCIApplicationClient) SubmitTx(ctx context.Context, tx types.Tx) *txSt
 	if st == nil {
 		return nil
 	}
+
+	c.stopped.Add(1)
+	defer c.stopped.Done()
 
 	select {
 	case <-c.stop:
@@ -221,7 +219,8 @@ func (c *ABCIApplicationClient) addSynthTxns(blockIndex int64) {
 
 // execute accepts incoming transactions and queues them up for the next block
 func (c *ABCIApplicationClient) execute(interval time.Duration) {
-	defer close(c.done)
+	c.stopped.Add(1)
+	defer c.stopped.Done()
 
 	var queue []*txStatus
 	var hadTxnLastTime bool
