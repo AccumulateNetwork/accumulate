@@ -29,9 +29,9 @@ type StateManager struct {
 	synthSigs   []*state.SyntheticSignature
 	logger      log.Logger
 
-	Sponsor        state.Chain
-	SponsorUrl     *url.URL
-	SponsorChainId [32]byte
+	Origin        state.Chain
+	OriginUrl     *url.URL
+	OriginChainId [32]byte
 }
 
 type storeKind int
@@ -56,7 +56,7 @@ type storeDataEntry struct {
 }
 
 // NewStateManager creates a new state manager and loads the transaction's
-// sponsor. If the sponsor is not found, NewStateManager returns a valid state
+// origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
 func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction) (*StateManager, error) {
 	m := new(StateManager)
@@ -68,23 +68,23 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 	m.txHash = types.Bytes(tx.TransactionHash()).AsBytes32()
 	m.txType = tx.TransactionType()
 
-	// The sponsor URL must be valid
+	// The origin URL must be valid
 	var err error
-	m.SponsorUrl, err = url.Parse(tx.SigInfo.URL)
+	m.OriginUrl, err = url.Parse(tx.SigInfo.URL)
 	if err != nil {
 		return nil, err
 	}
 
-	// Find the sponsor
-	copy(m.SponsorChainId[:], m.SponsorUrl.ResourceChain())
-	m.Sponsor, err = m.Load(m.SponsorChainId)
+	// Find the origin
+	copy(m.OriginChainId[:], m.OriginUrl.ResourceChain())
+	m.Origin, err = m.Load(m.OriginChainId)
 	if err == nil {
 		return m, nil
 	}
 
-	// If the sponsor doesn't exist, that might be OK
+	// If the origin doesn't exist, that might be OK
 	if errors.Is(err, storage.ErrNotFound) {
-		return m, fmt.Errorf("sponsor %q %w", m.SponsorUrl, err)
+		return m, fmt.Errorf("invalid origin record: %q %w", m.OriginUrl, storage.ErrNotFound)
 	}
 	return nil, err
 }
