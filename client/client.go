@@ -27,7 +27,7 @@ func NewAPIClient() *APIClient {
 }
 
 // Request makes request to API server
-func (c *APIClient) Request(ctx context.Context,
+func (c *APIClient) RequestV1(ctx context.Context,
 	method string, params, result interface{}) error {
 
 	if c.DebugRequest {
