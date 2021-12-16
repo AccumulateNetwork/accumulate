@@ -1,11 +1,7 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -152,34 +148,18 @@ func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
 		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
 	}
 
-	idc := &protocol.IdentityCreate{}
+	idc := protocol.IdentityCreate{}
 	idc.Url = u.Authority
 	idc.PublicKey = pubKey
 	idc.KeyBookName = book
 	idc.KeyPageName = page
 
-	data, err := json.Marshal(idc)
+	res, err := dispatchTxRequest("create-adi", &idc, actor, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	dataBinary, err := idc.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, actor, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res api2.TxResponse
-	if err := Client.RequestV2(context.Background(), "create-adi", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	ar := ActionResponseFrom(&res)
+	ar := ActionResponseFrom(res)
 	out, err := ar.Print()
 	if err != nil {
 		return "", err

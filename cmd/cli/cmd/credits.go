@@ -1,10 +1,7 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"strconv"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
@@ -59,31 +56,14 @@ func AddCredits(actor string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
-	var res api2.TxResponse
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2.String()
 	credits.Amount = uint64(amt)
 
-	data, err := json.Marshal(credits)
+	res, err := dispatchTxRequest("add-credits", &credits, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
-
-	dataBinary, err := credits.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, u, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	if err := Client.RequestV2(context.Background(), "add-credits", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFrom(&res).Print()
+	return ActionResponseFrom(res).Print()
 }
