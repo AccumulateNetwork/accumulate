@@ -2,14 +2,12 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/mdp/qrterminal"
@@ -195,36 +193,16 @@ func CreateAccount(url string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid token type %v", err)
 	}
 
-	tac := &protocol.TokenAccountCreate{}
+	tac := protocol.TokenAccountCreate{}
 	tac.Url = accountUrl.String()
 	tac.TokenUrl = tok.String()
 	tac.KeyBookUrl = keybook
 
-	binaryData, err := tac.MarshalBinary()
+	res, err := dispatchTxRequest("create-token-account", &tac, actor, si, privKey)
 	if err != nil {
 		return "", err
 	}
-
-	jsonData, err := json.Marshal(&tac)
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-
-	params, err := prepareGenTxV2(jsonData, binaryData, actor, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res api2.TxResponse
-	if err := Client.RequestV2(context.Background(), "create-token-account", params, &res); err != nil {
-		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
-		return "", err
-	}
-
-	ar := ActionResponseFrom(&res)
-	return ar.Print()
+	return ActionResponseFrom(res).Print()
 }
 
 func GenerateAccount() (string, error) {

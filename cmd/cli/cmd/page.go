@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 
@@ -120,10 +118,10 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		return "", fmt.Errorf("page url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, pageUrl.Authority)
 	}
 
-	css := protocol.CreateKeyPage{}
+	ckp := protocol.CreateKeyPage{}
 	ksp := make([]*protocol.KeySpecParams, len(keyLabels))
-	css.Url = newUrl.String()
-	css.Keys = ksp
+	ckp.Url = newUrl.String()
+	ckp.Keys = ksp
 	for i := range keyLabels {
 		ksp := protocol.KeySpecParams{}
 
@@ -138,31 +136,16 @@ func CreateKeyPage(page string, args []string) (string, error) {
 			ksp.PublicKey = pk[32:]
 		}
 
-		css.Keys[i] = &ksp
+		ckp.Keys[i] = &ksp
 	}
 
-	data, err := json.Marshal(css)
+	res, err := dispatchTxRequest("create-key-page", &ckp, pageUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	dataBinary, err := css.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
+	return ActionResponseFrom(res).Print()
 
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, pageUrl, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res api2.TxResponse
-	if err := Client.RequestV2(context.Background(), "create-key-page", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFrom(&res).Print()
 }
 
 func resolveKey(key string) ([]byte, error) {
@@ -227,32 +210,11 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 
 	ukp.Key = oldKey[:]
 	ukp.NewKey = newKey[:]
+
 	res, err := dispatchTxRequest("update-key-page", &ukp, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
-	return ActionResponseFrom(res).Print()
 
-	//
-	//data, err := json.Marshal(&ukp)
-	//if err != nil {
-	//	return "", err
-	//}
-	//
-	//dataBinary, err := ukp.MarshalBinary()
-	//if err != nil {
-	//	return "", err
-	//}
-	//
-	//nonce := nonceFromTimeNow()
-	//params, err := prepareGenTxV2(data, dataBinary, u, si, privKey, nonce)
-	//if err != nil {
-	//	return "", err
-	//}
-	//
-	//var res api2.TxResponse
-	//if err := Client.RequestV2(context.Background(), "update-key-page", params, &res); err != nil {
-	//	return PrintJsonRpcError(err)
-	//}
-	//return ActionResponseFrom(res).Print()
+	return ActionResponseFrom(res).Print()
 }

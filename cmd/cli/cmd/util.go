@@ -228,8 +228,14 @@ func dispatchTxRequest(action string, payload interface{}, actor *url2.URL, si *
 		return nil, err
 	}
 
+	data, err = json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+
 	var res api2.TxResponse
-	if err := Client.RequestV2(context.Background(), action, params, &res); err != nil {
+	if err := Client.RequestV2(context.Background(), action, json.RawMessage(data), &res); err != nil {
+		_, err := PrintJsonRpcError(err)
 		return nil, err
 	}
 

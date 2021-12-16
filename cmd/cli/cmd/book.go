@@ -2,8 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
-	"encoding/json"
 	"fmt"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
@@ -109,8 +107,8 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		return "", fmt.Errorf("book url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, bookUrl.Authority)
 	}
 
-	ssg := protocol.CreateKeyBook{}
-	ssg.Url = newUrl.String()
+	keyBook := protocol.CreateKeyBook{}
+	keyBook.Url = newUrl.String()
 
 	var chainId types.Bytes32
 	pageUrls := args[1:]
@@ -120,31 +118,14 @@ func CreateKeyBook(book string, args []string) (string, error) {
 			return "", fmt.Errorf("invalid page url %s, %v", pageUrls[i], err)
 		}
 		chainId.FromBytes(u2.ResourceChain())
-		ssg.Pages = append(ssg.Pages, chainId)
+		keyBook.Pages = append(keyBook.Pages, chainId)
 	}
 
-	data, err := json.Marshal(&ssg)
+	res, err := dispatchTxRequest("create-key-book", &keyBook, bookUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}
-
-	dataBinary, err := ssg.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, bookUrl, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res api2.TxResponse
-	if err := Client.RequestV2(context.Background(), "create-key-book", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFrom(&res).Print()
+	return ActionResponseFrom(res).Print()
 }
 
 func GetKeyPageInBook(book string, keyLabel string) (*protocol.KeyPage, int, error) {

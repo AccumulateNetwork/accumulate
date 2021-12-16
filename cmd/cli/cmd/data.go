@@ -159,7 +159,7 @@ func CreateDataAccount(actorUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privkey, err := prepareSigner(actor, args)
+	args, si, privKey, err := prepareSigner(actor, args)
 	if err != nil {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
@@ -189,29 +189,11 @@ func CreateDataAccount(actorUrl string, args []string) (string, error) {
 	cda.Url = accountUrl.String()
 	cda.KeyBookUrl = keybook
 
-	data, err := json.Marshal(cda)
+	res, err := dispatchTxRequest("create-data-account", &cda, actor, si, privKey)
 	if err != nil {
 		return "", err
 	}
-
-	dataBinary, err := cda.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, actor, si, privkey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res api.TxResponse
-
-	if err := Client.RequestV2(context.Background(), "create-data-account", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFrom(&res).Print()
+	return ActionResponseFrom(res).Print()
 }
 
 func WriteData(accountUrl string, args []string) (string, error) {
@@ -220,7 +202,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	args, si, privkey, err := prepareSigner(actor, args)
+	args, si, privKey, err := prepareSigner(actor, args)
 	if err != nil {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
@@ -250,27 +232,10 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	data, err := json.Marshal(&wd)
+	res, err := dispatchTxRequest("write-data", &wd, actor, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	dataBinary, err := wd.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, actor, si, privkey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res api.TxResponse
-
-	if err := Client.RequestV2(context.Background(), "write-data", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFromData(&res, wd.Entry.Hash()).Print()
+	return ActionResponseFrom(res).Print()
 }
