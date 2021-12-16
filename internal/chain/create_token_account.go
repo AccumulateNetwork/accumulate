@@ -32,13 +32,13 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransac
 	}
 	// TODO Make sure tokenUrl is a real kind of token
 
-	if !accountUrl.Identity().Equal(st.SponsorUrl) {
-		return fmt.Errorf("%q cannot sponsor %q", st.SponsorUrl, accountUrl)
+	if !accountUrl.Identity().Equal(st.OriginUrl) {
+		return fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, accountUrl)
 	}
 
 	account := state.NewTokenAccount(accountUrl.String(), tokenUrl.String())
 	if body.KeyBookUrl == "" {
-		account.KeyBook = st.Sponsor.Header().KeyBook
+		account.KeyBook = st.Origin.Header().KeyBook
 	} else {
 		keyBookUrl, err := url.Parse(body.KeyBookUrl)
 		if err != nil {
