@@ -146,11 +146,11 @@ func TestValidate(t *testing.T) {
 	})
 
 	keyPageUrl := adiName + "/page1"
-	var pageKey ed25519.PrivateKey
+	//var pageKey ed25519.PrivateKey
 	t.Run("Create Key Page", func(t *testing.T) {
 		var keys []*KeySpecParams
 		keys = append(keys, &KeySpecParams{
-			PublicKey: pageKey,
+			PublicKey: adiKey,
 		})
 		executeTx(t, japi, "create-key-page", true, execParams{
 			Sponsor: adiName,
@@ -202,12 +202,12 @@ func TestValidate(t *testing.T) {
 	})
 
 	t.Run("Query Key Index", func(t *testing.T) {
-		keyIndex := query2.ResponseKeyPageIndex{}
+		keyIndex := &query2.ResponseKeyPageIndex{}
 		queryAs(t, japi, "query-key-index", &api.KeyPageIndexQuery{
 			UrlQuery: api.UrlQuery{
 				Url: keyPageUrl,
 			},
-			Key: pageKey,
+			Key: adiKey,
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
 	})
