@@ -88,62 +88,8 @@ func TestReceiptAll(t *testing.T) {
 		mdRoots = append(mdRoots, manager.MS.GetMDRoot()) // Collect a MDRoot
 	}
 
-	var l2, l3, l4 [][]byte
-	for i := 0; i+1 < testMerkleTreeSize; i += 2 {
-		l2 = append(l2, Sha256(append(rh.List[i], rh.List[i+1]...)))
-	}
-	for i := 0; i+1 < len(l2); i += 2 {
-		l3 = append(l3, Sha256(append(l2[i], l2[i+1]...)))
-	}
-	for i := 0; i+1 < len(l3); i += 2 {
-		l4 = append(l4, Sha256(append(l3[i], l3[i+1]...)))
-	}
-
-	for _, v := range rh.List {
-		fmt.Printf("%2s%3x", "", v[:2])
-	}
-	println()
-	for _, v := range l2 {
-		fmt.Printf("%13s%3x", "", v[:2])
-	}
-	println()
-	for _, v := range l3 {
-		fmt.Printf("%13s%3x%9s", "", v[:2], "")
-	}
-	println()
-	for _, v := range l4 {
-		fmt.Printf("%3x", v[:2])
-	}
-	println()
-	for _, v := range mdRoots {
-		fmt.Printf("%2s%3x", "", v[:2])
-	}
-	println()
-
-	for _, v := range rh.List {
-		fmt.Printf("%2s%3v", "", v[:2])
-	}
-	println()
-	for _, v := range l2 {
-		fmt.Printf("%13s%3v", "", v[:2])
-	}
-	println()
-	for _, v := range l3 {
-		fmt.Printf("%13s%3v%9s", "", v[:2], "")
-	}
-	println()
-	for _, v := range l4 {
-		fmt.Printf("%3v", v[:2])
-	}
-	println()
-	for _, v := range mdRoots {
-		fmt.Printf("%2s%3v", "", v[:2])
-	}
-	println()
-
 	for i := 0; i < testMerkleTreeSize; i++ {
 		for j := 4; j < testMerkleTreeSize; j++ {
-			println("---------------- i ", i, " j ", j, "---------------------")
 			element := rh.Next()
 			if i >= 0 && i < testMerkleTreeSize {
 				element = rh.List[i]
@@ -165,9 +111,6 @@ func TestReceiptAll(t *testing.T) {
 					t.Fatal("Failed to generate receipt", i, j)
 				}
 				if !r.Validate() {
-					a, _ := manager.GetAnyState(int64(j))
-					PrintState("failed 111", 0, a, nil)
-					fmt.Println(r.String())
 					t.Fatal("Receipt fails for element ", i, " anchor ", int64(j))
 				}
 			}
@@ -207,17 +150,10 @@ func GetManager(MarkPower int64, temp bool, databaseName string, t *testing.T) (
 
 func PopulateDatabase(manager *MerkleManager, treeSize int64) {
 	// populate the database
-	start := time.Now()
 	startCount := manager.MS.Count
 	for i := startCount; i < treeSize; i++ {
 		v := GetHash(int(i))
 		manager.AddHash(v)
-		if i%100000 == 0 {
-			seconds := time.Now().Sub(start).Seconds() + 1
-			fmt.Println(
-				"Entries added ", humanize.Comma(i),
-				" at ", (i-startCount)/int64(seconds), " per second.")
-		}
 	}
 }
 
@@ -324,9 +260,6 @@ func TestReceipt_Combine(t *testing.T) {
 			state, _ := m1.GetAnyState(j)
 			mdRoot := state.GetMDRoot()
 
-			println(r.String())
-			fmt.Printf("mdRoot %x\n", mdRoot)
-			fmt.Printf("state %s\n", state.String())
 			require.Truef(t, bytes.Equal(r.MDRoot, mdRoot), "m1 MDRoot not right %d %d", i, j)
 			element, _ = m2.Get(i)
 			anchor, _ = m2.Get(j)
@@ -349,12 +282,9 @@ func TestReceipt_Combine(t *testing.T) {
 				r2 := GetReceipt(m2, element, anchor)
 				require.Truef(t, r2.Validate(), "receipt failed %d %d", i, j, k)
 				require.NotNilf(t, r2, "test case i %d j %d k %d failed to create r2", i, j, k)
-				fmt.Println("r1", i, j, k, "\n", r1.String())
-				fmt.Println("r2", i, j, k, "\n", r2.String())
 				r3, err := r1.Combine(r2)
 				require.NoErrorf(t, err, "no error expected combining receipts %d %d %d", i, j, k)
 				require.Truef(t, r3.Validate(), "combined receipt failed. %d %d %d", i, j, k)
-				fmt.Println("r3", i, j, k, "\n", r3.String())
 			}
 		}
 	}

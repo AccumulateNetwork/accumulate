@@ -66,7 +66,6 @@ func (r *Receipt) AddAHash(
 }
 
 func (r *Receipt) ComputeDag(currentState *MerkleState, height int, right bool) {
-	fmt.Printf("ComputeDag State\n %s\n", currentState.String())
 	var MDRoot Hash
 	for i, v := range currentState.Pending {
 		if v == nil { // if v is nil, there is nothing to do regardless. Note i cannot == Height
@@ -200,28 +199,18 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
 	currentState, idx = getNextState(manager, anchorIndex, nextMark-1)
 
 	for {
-		fmt.Printf("nextMark %d idx %d anchorIndex %d\n",
-			nextMark, idx, anchorIndex)
-		fmt.Println("+++++++++++++++++++\n+++++++ Anchor\n",
-			receipt.String(),
-			"++++++ currentState",
-			currentState.String(),
-			"+++++++++++++++++++++++++++")
-
 		switch {
 		case idx == anchorIndex:
-			fmt.Println("idx == AnchorIndex")
+
 			hash, _ := manager.Get(idx)
 			height, Right = receipt.AddAHash(manager, currentState, height, Right, hash)
 			receipt.ComputeDag(anchorState, height, Right)
 			return receipt
 		case idx > anchorIndex:
-			fmt.Println("idx > AnchorIndex")
 			receipt.ComputeDag(anchorState, height, Right)
 			return receipt
 		default:
 			hash, _ := manager.Get(idx)
-			fmt.Printf("default: hash: %x\n", hash[:2])
 			height, Right = receipt.AddAHash(manager, currentState, height, Right, hash)
 			nextMark = nextMark + int64(math.Pow(2, float64(height)))
 			currentState, idx = getNextState(manager, anchorIndex, nextMark-1)
@@ -272,7 +261,6 @@ func (r Receipt) Copy() *Receipt {
 // Note that both this receipt and the root receipt are expected to be good.
 func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
 	if !bytes.Equal(r.MDRoot, rm.Element) {
-		fmt.Println("r\n\n", r.String(), "rm\n", rm.String())
 		return nil, fmt.Errorf("receipts cannot be combined. "+
 			"anchor %x doesn't match root merkle tree %x", r.Anchor, rm.Element)
 	}
@@ -287,7 +275,7 @@ func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
 // PrintState
 // Print the state at this time.
 func PrintState(title string, height int, state1 *MerkleState, hash1 Hash) {
-	fmt.Println("===============", title, "===============")
+	fmt.Println("===============", title, "height: ", height, " ===============")
 	if state1 != nil {
 		fmt.Printf("%s\n", state1.String())
 		if hash1 != nil {
