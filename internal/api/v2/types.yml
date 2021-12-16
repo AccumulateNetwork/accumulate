@@ -10,8 +10,9 @@ QueryResponse:
       marshal-as: reference
     - name: Data
       type: any
-    - name: Sponsor
+    - name: Origin
       type: string
+      alternative: Sponsor
     - name: KeyPage
       type: KeyPage
       pointer: true
@@ -220,9 +221,10 @@ TxRequest:
   - name: CheckOnly
     type: bool
     optional: true
-  - name: Sponsor
+  - name: Origin
     type: string
     is-url: true
+    alternative: Sponsor
   - name: Signer
     type: Signer
     marshal-as: reference

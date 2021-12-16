@@ -134,7 +134,7 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 	resp.Type = types.String(types.TxTypeSendTokens.Name())
 	resp.Data = new(json.RawMessage)
 	*resp.Data = data
-	resp.Sponsor = tx.From.String
+	resp.Origin = tx.From.String
 	return &resp, err
 }
 
@@ -150,7 +150,7 @@ func unmarshalSynthTokenDeposit(txPayload []byte, _ types.Bytes, txSynthTxIds ty
 		return nil, err
 	}
 
-	resp.Sponsor = tx.FromUrl
+	resp.Origin = tx.FromUrl
 	return resp, err
 }
 
@@ -215,8 +215,8 @@ func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte,
 		return nil, err
 	}
 
-	if resp.Sponsor == "" {
-		resp.Sponsor = types.String(sigInfo.URL)
+	if resp.Origin == "" {
+		resp.Origin = types.String(sigInfo.URL)
 	}
 	return resp, err
 }
