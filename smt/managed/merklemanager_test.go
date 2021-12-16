@@ -14,7 +14,7 @@ import (
 )
 
 func TestMerkleManager_GetChainState(t *testing.T) {
-	const testnum = 100
+	const numTests = 100
 	var randHash RandHash
 	dbm, e1 := database.NewDBManager("memory", "", nil)
 	require.NoError(t, e1, "should be able to open a database")
@@ -29,7 +29,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	require.True(t, head.Equal(m.MS), "chainstate should be loadable")
 
 	var States []*MerkleState
-	for i := 0; i < testnum; i++ {
+	for i := 0; i < numTests; i++ {
 		m.AddHash(randHash.Next())
 		m.Manager.EndBatch()
 		mState, err := m.MS.Marshal()
