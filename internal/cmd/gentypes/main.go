@@ -27,14 +27,15 @@ type Record struct {
 }
 
 type Field struct {
-	Name      string
-	Type      string
-	MarshalAs string `yaml:"marshal-as"`
-	Slice     *Field
-	Pointer   bool
-	Optional  bool
-	IsUrl     bool `yaml:"is-url"`
-	KeepEmpty bool `yaml:"keep-empty"`
+	Name        string
+	Type        string
+	MarshalAs   string `yaml:"marshal-as"`
+	Slice       *Field
+	Pointer     bool
+	Optional    bool
+	IsUrl       bool `yaml:"is-url"`
+	KeepEmpty   bool `yaml:"keep-empty"`
+	Alternative string
 }
 
 var flags struct {
@@ -175,26 +176,7 @@ func run(_ *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\t\t%s\n", e)
 		}
 		for _, field := range typ.Fields {
-			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
-			fmt.Fprintf(w, "\t%s %s `", field.Name, resolveType(field, false))
-			if field.KeepEmpty {
-				fmt.Fprintf(w, `json:"%[1]s" form:"%[1]s" query:"%[1]s"`, lcName)
-			} else {
-				fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
-			}
-
-			var validate []string
-			if !field.Optional {
-				validate = append(validate, "required")
-			}
-			if field.IsUrl {
-				validate = append(validate, "acc-url")
-			}
-			if len(validate) > 0 {
-				fmt.Fprintf(w, ` validate:"%s"`, strings.Join(validate, ","))
-			}
-
-			fmt.Fprint(w, "`\n")
+			formatField(w, field, field.Name, false)
 		}
 		fmt.Fprintf(w, "}\n\n")
 	}
@@ -330,6 +312,9 @@ func run(_ *cobra.Command, args []string) {
 		}
 		for _, f := range typ.Fields {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
+			if f.Alternative != "" {
+				valueToJson(w, f, "u."+f.Alternative, "v."+f.Name)
+			}
 		}
 
 		fmt.Fprintf(w, "\treturn json.Marshal(&u)\t")
@@ -352,6 +337,9 @@ func run(_ *cobra.Command, args []string) {
 		}
 		for _, f := range typ.Fields {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
+			if f.Alternative != "" {
+				valueToJson(w, f, "u."+f.Alternative, "v."+f.Name)
+			}
 		}
 
 		fmt.Fprintf(w, "\tif err := json.Unmarshal(data, &u); err != nil {\n\t\treturn err\n\t}\n")
@@ -363,7 +351,17 @@ func run(_ *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\tv.%s = u.%[1]s\n", e)
 		}
 		for _, f := range typ.Fields {
+			if f.Alternative == "" {
+				valueFromJson(w, f, "v."+f.Name, "u."+f.Name, f.Name)
+				continue
+			}
+
+			fmt.Fprintf(w, "\tvar zero%s %s\n", f.Name, resolveType(f, false))
+			fmt.Fprintf(w, "\tif u.%s != zero%[1]s {\n", f.Name)
 			valueFromJson(w, f, "v."+f.Name, "u."+f.Name, f.Name)
+			fmt.Fprintf(w, "\t} else {\n")
+			valueFromJson(w, f, "v."+f.Name, "u."+f.Alternative, f.Name)
+			fmt.Fprintf(w, "\t}\n")
 		}
 
 		fmt.Fprintf(w, "\treturn nil\t")
