@@ -12,45 +12,45 @@ import (
 
 const MaxTokenTxOutputs = 100
 
-type TokenTx struct {
-	Hash types.Bytes32    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
-	From types.UrlChain   `json:"from" form:"from" query:"from" validate:"required"`
-	To   []*TokenTxOutput `json:"to" form:"to" query:"to" validate:"required"`
-	Meta json.RawMessage  `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
+type SendTokens struct {
+	Hash types.Bytes32     `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	From types.UrlChain    `json:"from" form:"from" query:"from" validate:"required"`
+	To   []*TokenRecipient `json:"to" form:"to" query:"to" validate:"required"`
+	Meta json.RawMessage   `json:"meta,omitempty" form:"meta" query:"meta" validate:"required"`
 }
 
 type TokenTxRequest struct {
 	Hash types.Bytes32 `json:"hash" form:"hash" query:"hash" validate:"required"`
 }
 
-//TokenTxOutput is the structure for the output.  Only handles 64 bit amounts at this time.
-type TokenTxOutput struct {
+//TokenRecipient is the structure for the output.  Only handles 64 bit amounts at this time.
+type TokenRecipient struct {
 	URL    types.UrlChain `json:"url" form:"url" query:"url" validate:"required"`
 	Amount uint64         `json:"amount" form:"amount" query:"amount" validate:"gt=0"`
 }
 
-func NewTokenTx(from types.String, to ...*TokenTxOutput) *TokenTx {
-	tx := &TokenTx{}
+func NewTokenTx(from types.String, to ...*TokenRecipient) *SendTokens {
+	tx := &SendTokens{}
 	tx.From = types.UrlChain{String: from}
 	tx.To = to
 	return tx
 }
 
-func NewTokenTxOutput(url types.String, amount uint64) *TokenTxOutput {
-	txo := new(TokenTxOutput)
+func NewTokenTxOutput(url types.String, amount uint64) *TokenRecipient {
+	txo := new(TokenRecipient)
 	txo.URL = types.UrlChain{String: url}
 	txo.Amount = amount
 	return txo
 }
 
-func (*TokenTx) GetType() types.TxType { return types.TxTypeWithdrawTokens }
+func (*SendTokens) GetType() types.TxType { return types.TxTypeSendTokens }
 
-func (t *TokenTx) AddToAccount(toUrl types.String, amt uint64) {
-	txOut := TokenTxOutput{types.UrlChain{String: toUrl}, amt}
+func (t *SendTokens) AddToAccount(toUrl types.String, amt uint64) {
+	txOut := TokenRecipient{types.UrlChain{String: toUrl}, amt}
 	t.To = append(t.To, &txOut)
 }
 
-func (t *TokenTx) SetMetadata(md *json.RawMessage) error {
+func (t *SendTokens) SetMetadata(md *json.RawMessage) error {
 	if md == nil {
 		return fmt.Errorf("invalid metadata")
 	}
@@ -61,7 +61,7 @@ func (t *TokenTx) SetMetadata(md *json.RawMessage) error {
 // Equal
 // returns true if t == t2, otherwise return false.  Comparing t with t2, if
 // any runtime error occurs we return false
-func (t *TokenTx) Equal(t2 *TokenTx) (ret bool) {
+func (t *SendTokens) Equal(t2 *SendTokens) (ret bool) {
 	defer func() { //                      ret will default to false, so if any error occurs
 	}() //                                 we will return false as long as we catch any errors
 	if t.From != t2.From { //  Make sure accountURLs are the same
@@ -80,10 +80,10 @@ func (t *TokenTx) Equal(t2 *TokenTx) (ret bool) {
 }
 
 // MarshalBinary serialize the token transaction
-func (t *TokenTx) MarshalBinary() ([]byte, error) {
+func (t *SendTokens) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	buffer.Write(common.Uint64Bytes(types.TxTypeWithdrawTokens.ID()))
+	buffer.Write(common.Uint64Bytes(types.TxTypeSendTokens.ID()))
 
 	data, err := t.From.MarshalBinary()
 	if err != nil {
@@ -120,7 +120,7 @@ func (t *TokenTx) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary deserialize the token transaction
-func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
+func (t *SendTokens) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			err = fmt.Errorf("error marshaling TokenTx State %v", r)
@@ -129,7 +129,7 @@ func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
 
 	txType, data := common.BytesUint64(data) // get the type
 
-	if txType != types.TxTypeWithdrawTokens.ID() {
+	if txType != types.TxTypeSendTokens.ID() {
 		return fmt.Errorf("invalid transaction type, expecting TokenTx")
 	}
 
@@ -144,10 +144,10 @@ func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
 	if toLen > MaxTokenTxOutputs || toLen < 1 {
 		return fmt.Errorf("invalid number of outputs for transaction")
 	}
-	t.To = make([]*TokenTxOutput, toLen)
+	t.To = make([]*TokenRecipient, toLen)
 	i := 0
 	for j := uint64(0); j < toLen; j++ {
-		txOut := &TokenTxOutput{}
+		txOut := &TokenRecipient{}
 		err := txOut.UnmarshalBinary(data[i:])
 		if err != nil {
 			return fmt.Errorf("unable to unmarshal token tx output for index %d", j)
@@ -170,14 +170,14 @@ func (t *TokenTx) UnmarshalBinary(data []byte) (err error) {
 }
 
 // Size return the size of the Token Tx output
-func (t *TokenTxOutput) Size() int {
+func (t *TokenRecipient) Size() int {
 	var buf [16]byte
 	count := binary.PutUvarint(buf[:], t.Amount)
 	return t.URL.Size(nil) + count
 }
 
 // Equal returns true if t = t2
-func (t *TokenTxOutput) Equal(t2 *TokenTxOutput) bool {
+func (t *TokenRecipient) Equal(t2 *TokenRecipient) bool {
 	defer func() { //                      ret will default to false, so if any error occurs
 	}() //                                 we will return false as long as we catch any errors
 
@@ -192,7 +192,7 @@ func (t *TokenTxOutput) Equal(t2 *TokenTxOutput) bool {
 }
 
 // MarshalBinary serialize the token tx output
-func (t *TokenTxOutput) MarshalBinary() ([]byte, error) {
+func (t *TokenRecipient) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	data, err := t.URL.MarshalBinary()
@@ -208,7 +208,7 @@ func (t *TokenTxOutput) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary deserialize the token tx output
-func (t *TokenTxOutput) UnmarshalBinary(data []byte) (err error) {
+func (t *TokenRecipient) UnmarshalBinary(data []byte) (err error) {
 	defer func() {
 		if rErr := recover(); rErr != nil {
 			err = fmt.Errorf("error unmarshaling token tx output %v", rErr)

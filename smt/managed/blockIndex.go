@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
 // BlockIndex
@@ -59,19 +60,19 @@ func EndBlock(manager *MerkleManager, cID []byte, blockIndex uint64) error {
 	bIdx[31] += 2        //
 	b := new(BlockIndex) // allocate a block index
 
-	err := manager.SetKey(cID[:])
+	err := manager.SetKey(storage.MakeKey(cID[:]))
 	if err != nil {
 		return err
 	}
 	b.MainIndex = uint64(manager.MS.Count)
 
-	err = manager.SetKey(pID[:])
+	err = manager.SetKey(storage.MakeKey(pID[:]))
 	if err != nil {
 		return err
 	}
 	b.PendingIndex = uint64(manager.MS.Count)
 
-	err = manager.SetKey(bIdx[:])
+	err = manager.SetKey(storage.MakeKey(bIdx[:]))
 	if err != nil {
 		return err
 	}
@@ -80,7 +81,7 @@ func EndBlock(manager *MerkleManager, cID []byte, blockIndex uint64) error {
 	data := b.Marshal()
 	blkIdxHash := manager.MS.HashFunction(data)
 	manager.AddHash(blkIdxHash)
-	manager.Manager.Key(blkIdxHash).PutBatch(data)
+	manager.Manager.PutBatch(storage.MakeKey(blkIdxHash), data)
 
 	return nil
 }

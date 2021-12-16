@@ -136,6 +136,16 @@ UrlQuery:
     type: string
     is-url: true
 
+KeyPageIndexQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+  - UrlQuery
+  fields:
+  - name: Key
+    type: bytes
+
+
 TxHistoryQuery:
   non-binary: true
   incomparable: true
@@ -238,3 +248,52 @@ TxResponse:
     type: string
   - name: Delivered
     type: bool
+
+DataEntry:
+  fields:
+    - name: ExtIds
+      type: slice
+      slice:
+        type: bytes
+    - name: Data
+      type: bytes
+
+
+DataEntryQuery:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: EntryHash
+      type: chain
+      optional: true
+
+DataEntrySetQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+    - UrlQuery
+    - QueryPagination
+    - QueryOptions
+
+DataEntryQueryResponse:
+  fields:
+    - name: EntryHash
+      type: chain
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
+
+DataEntrySetQueryResponse:
+  fields:
+    - name: DataEntries
+      type: slice
+      slice:
+        type: DataEntryQueryResponse
+        marshal-as: reference
+    - name: Start
+      type: uvarint
+    - name: Count
+      type: uvarint
+    - name: Total
+      type: uvarint

@@ -22,7 +22,12 @@ func init() {
 	privKey := ed25519.NewKeyFromSeed(seed[:])
 	pubKey := privKey.Public().(ed25519.PublicKey)
 
+	var err error
+	FaucetUrl, err = LiteAddress(pubKey, AcmeUrl().String())
+	if err != nil {
+		panic(err)
+	}
+
 	FaucetWallet.PrivateKey = privKey
-	FaucetUrl, _ = LiteAddress(pubKey, AcmeUrl().String())
 	FaucetWallet.Addr = FaucetUrl.String()
 }

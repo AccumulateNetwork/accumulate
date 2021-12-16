@@ -68,7 +68,7 @@ fi
 # create account with invalid URL
 
 sleep 2.5
-$cli account create acc://t33acct t33key acc:://t33acct/myacmeacct acc://ACME acc://t33acct/ssg0 -s http://$1/v1
+$cli account create token acc://t33acct t33key acc:://t33acct/myacmeacct acc://ACME acc://t33acct/ssg0 -s http://$1/v1
 if [ $? -eq 0 ]; then
 	echo "cli account create passed and it should have failed"
 	exit 1

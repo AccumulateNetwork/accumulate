@@ -11,25 +11,21 @@ import (
 )
 
 type SyntheticAnchor struct {
-	SubnetType config.NetworkType
+	Network *config.Network
 }
 
 func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
 
 func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	nodeUrl, err := nodeUrl(st.dbTx.DB(), x.SubnetType)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve subnet ID: %v", err)
-	}
-
 	// Verify that the sponsor is the node
+	nodeUrl := x.Network.NodeUrl()
 	if !st.SponsorUrl.Equal(nodeUrl) {
 		return fmt.Errorf("invalid sponsor: %q != %q", st.SponsorUrl, nodeUrl)
 	}
 
 	// Unpack the payload
 	body := new(protocol.SyntheticAnchor)
-	err = tx.As(body)
+	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)
 	}
@@ -49,7 +45,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransact
 	}
 
 	chain := new(state.Anchor)
-	chain.ChainUrl = types.String(nodeUrl.JoinPath(anchorChainName(x.SubnetType, body.Major)).String())
+	chain.ChainUrl = types.String(nodeUrl.JoinPath(anchorChainName(x.Network.Type, body.Major)).String())
 	chain.Index = body.Index
 	chain.Timestamp = body.Timestamp
 	chain.Root = body.Root

@@ -8,12 +8,10 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/suite"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	"golang.org/x/exp/rand"
 )
 
@@ -21,7 +19,8 @@ type NewDUT func(*Suite) DUT
 
 // DUT are the parameters needed to test the Device Under Test.
 type DUT interface {
-	GetUrl(url string) (*ctypes.ResultABCIQuery, error)
+	GetRecordAs(url string, target state.Chain)
+	GetRecordHeight(url string) uint64
 	SubmitTxn(*transactions.GenTransaction)
 	WaitForTxns(...[]byte)
 }
@@ -62,30 +61,16 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 
 func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body encoding.BinaryMarshaler) *transactions.GenTransaction {
 	s.T().Helper()
-	abci, err := s.dut.GetUrl(sponsor.String())
-	s.Require().NoError(err)
-	s.Require().Zero(abci.Response.Code)
-	s.Require().Equal([]byte("chain"), abci.Response.Key)
-	qr := new(query.ResponseByChainId)
-	s.Require().NoError(qr.UnmarshalBinary(abci.Response.Value))
-
-	tx, err := transactions.New(sponsor.String(), qr.Height, func(hash []byte) (*transactions.ED25519Sig, error) {
+	tx, err := transactions.NewWith(&transactions.SignatureInfo{
+		URL:           sponsor.String(),
+		KeyPageHeight: s.dut.GetRecordHeight(sponsor.String()),
+		Nonce:         nonce,
+	}, func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
 		return sig, sig.Sign(nonce, key, hash)
 	}, body)
 	s.Require().NoError(err)
 	return tx
-}
-
-func (s *Suite) getChainAs(url string, obj encoding.BinaryUnmarshaler) {
-	s.T().Helper()
-	r, err := s.dut.GetUrl(url)
-
-	s.Require().NoError(err)
-	s.Require().Zero(r.Response.Code, "Query failed: %v", r.Response.Info)
-	so := state.Object{}
-	s.Require().NoError(so.UnmarshalBinary(r.Response.Value))
-	s.Require().NoError(obj.UnmarshalBinary(so.Entry))
 }
 
 func (s *Suite) parseUrl(str string) *url.URL {

@@ -14,6 +14,8 @@ const (
 	AccRouterJsonPortOffset = 4
 	// AccRouterRestPortOffset = 5
 	TmPrometheusPortOffset = 6
+
+	MaxPortOffset = TmPrometheusPortOffset
 )
 
 type Network map[string]*Subnet

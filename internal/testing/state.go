@@ -46,6 +46,7 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.Transaction = depData
 	tx.SigInfo.URL = *recipientAdi.AsString()
+	tx.SigInfo.KeyPageHeight = 1
 	tx.ChainID = types.GetChainIdFromChainPath(recipientAdi.AsString())[:]
 	tx.Routing = types.GetAddressFromIdentity(recipientAdi.AsString())
 

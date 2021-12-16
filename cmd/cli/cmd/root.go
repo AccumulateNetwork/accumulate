@@ -55,6 +55,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(adiCmd)
 	cmd.AddCommand(bookCmd)
 	cmd.AddCommand(creditsCmd)
+	cmd.AddCommand(dataCmd)
 	cmd.AddCommand(getCmd)
 	cmd.AddCommand(keyCmd)
 	cmd.AddCommand(pageCmd)

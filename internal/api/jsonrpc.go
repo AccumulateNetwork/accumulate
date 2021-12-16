@@ -533,16 +533,12 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 		return transactionError(err)
 	}
 
-	if resp.Type != "tokenTx" && resp.Type != "syntheticTokenDeposit" {
-		return invalidTxnTypeError(fmt.Errorf("transaction type is %s and not a token transaction", resp.Type))
-	}
-
 	return resp
 }
 
 // createTokenTx creates Token Tx
 func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interface{} {
-	data := &acmeapi.TokenTx{}
+	data := &acmeapi.SendTokens{}
 	req, payload, err := api.prepareCreate(params, data, "From", "To")
 	if err != nil {
 		return validatorError(err)
@@ -587,7 +583,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return jsonrpc2.NewError(ErrCodeNotAcmeAccount, "Invalid token account", fmt.Errorf("%q is not an ACME account", u))
 	}
 
-	tx := acmeapi.TokenTx{}
+	tx := acmeapi.SendTokens{}
 	tx.From.String = types.String(protocol.FaucetWallet.Addr)
 	tx.AddToAccount(destAccount, 1000000000)
 

@@ -23,8 +23,8 @@ const (
 	// FeeCreateTokenAccount $0.25
 	FeeCreateTokenAccount Fee = 2500
 
-	// FeeWithdrawTokens $0.03
-	FeeWithdrawTokens Fee = 300
+	// FeeSendTokens $0.03
+	FeeSendTokens Fee = 300
 
 	// FeeCreateDataAccount $.25
 	FeeCreateDataAccount Fee = 2500
@@ -38,13 +38,13 @@ const (
 	// FeeCreateToken $50.00
 	FeeCreateToken Fee = 500000
 
-	// FeeIssueTokens equiv. to token withdrawal @ $0.03
+	// FeeIssueTokens equiv. to token send @ $0.03
 	FeeIssueTokens Fee = 300
 
 	// FeeAcmeFaucet free
 	FeeAcmeFaucet Fee = 0
 
-	// FeeBurnTokens equiv. to token withdrawal
+	// FeeBurnTokens equiv. to token send
 	FeeBurnTokens Fee = 300
 
 	// FeeCreateKeyPage $1.00
@@ -76,8 +76,8 @@ func ComputeFee(tx *transactions.GenTransaction) (int, error) {
 		return FeeCreateIdentity.AsInt(), nil
 	case types.TxTypeCreateTokenAccount:
 		return FeeCreateTokenAccount.AsInt(), nil
-	case types.TxTypeWithdrawTokens:
-		return FeeWithdrawTokens.AsInt(), nil
+	case types.TxTypeSendTokens:
+		return FeeSendTokens.AsInt(), nil
 	case types.TxTypeCreateDataAccount:
 		return FeeCreateDataAccount.AsInt(), nil
 	case types.TxTypeWriteData:

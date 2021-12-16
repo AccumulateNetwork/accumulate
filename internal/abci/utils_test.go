@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"regexp"
 	"testing"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -34,9 +36,10 @@ import (
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
-	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
+
+var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
 	db := new(state.StateDB)
@@ -80,6 +83,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
+	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
 		Local:  n.client,
 		DB:     n.db,
@@ -88,8 +92,8 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 		Key:    bvcKey,
 		Network: config.Network{
 			Type:     config.BlockValidator,
-			ID:       t.Name(),
-			BvnNames: []string{t.Name()},
+			ID:       subnet,
+			BvnNames: []string{subnet},
 		},
 	})
 	require.NoError(t, err)
@@ -112,7 +116,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	kv := new(memory.DB)
 	_ = kv.InitDB("", nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
-		SubnetID:    t.Name(),
+		SubnetID:    subnet,
 		NetworkType: config.BlockValidator,
 		GenesisTime: time.Now(),
 		Validators: []tmtypes.GenesisValidator{
@@ -126,7 +130,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       t.Name(),
+		ChainId:       subnet,
 		AppStateBytes: state,
 	})
 
@@ -167,8 +171,21 @@ func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
 }
 
 func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
-	n.t.Fatalf("todo query data functionality not implemented")
-	return nil
+	r, err := n.query.QueryDataByUrl(url)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainDataByEntryHash(url string, entryHash []byte) *api.APIDataResponse {
+	r, err := n.query.GetDataByEntryHash(url, entryHash)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainDataSet(url string, start uint64, limit uint64, expand bool) *api.APIDataResponsePagination {
+	r, err := n.query.GetDataSetByUrl(url, start, limit, expand)
+	require.NoError(n.t, err)
+	return r
 }
 
 func (n *fakeNode) GetChainStateByTxId(txid []byte) *api.APIDataResponse {
@@ -289,24 +306,35 @@ func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {
 }
 
 type e2eDUT struct {
+	*e2e.Suite
 	*fakeNode
 }
 
-func (n e2eDUT) GetDataByUrl(url string) (*ctypes.ResultABCIQuery, error) {
-	n.t.Fatalf("todo: query data by url not implemented")
-	return nil, nil
+func (d *e2eDUT) getObj(url string) *state.Object {
+	r, err := d.query.QueryByUrl(url)
+	d.Require().NoError(err)
+	d.Require().Zero(r.Response.Code, "Query failed: %v", r.Response.Info)
+
+	obj := new(state.Object)
+	d.Require().Equal([]byte("chain"), r.Response.Key)
+	d.Require().NoError(obj.UnmarshalBinary(r.Response.Value))
+	return obj
 }
 
-func (n e2eDUT) GetUrl(url string) (*ctypes.ResultABCIQuery, error) {
-	return n.query.QueryByUrl(url)
+func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
+	d.Require().NoError(d.getObj(url).As(target))
 }
 
-func (n e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
+func (d *e2eDUT) GetRecordHeight(url string) uint64 {
+	return d.getObj(url).Height
+}
+
+func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
 	b, err := tx.Marshal()
-	require.NoError(n.t, err)
-	n.client.SubmitTx(context.Background(), b)
+	d.Require().NoError(err)
+	d.client.SubmitTx(context.Background(), b)
 }
 
-func (n e2eDUT) WaitForTxns(...[]byte) {
-	n.client.Wait()
+func (d *e2eDUT) WaitForTxns(...[]byte) {
+	d.client.Wait()
 }

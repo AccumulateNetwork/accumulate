@@ -13,6 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 type StateManager struct {
@@ -26,6 +27,7 @@ type StateManager struct {
 	txHash      types.Bytes32
 	txType      types.TransactionType
 	synthSigs   []*state.SyntheticSignature
+	logger      log.Logger
 
 	Sponsor        state.Chain
 	SponsorUrl     *url.URL
@@ -90,6 +92,12 @@ func NewStateManager(dbTx *state.DBTransaction, tx *transactions.GenTransaction)
 type submittedTx struct {
 	url  *url.URL
 	body protocol.TransactionPayload
+}
+
+func (m *StateManager) logDebug(msg string, keyVals ...interface{}) {
+	if m.logger != nil {
+		m.logger.Debug(msg, keyVals...)
+	}
 }
 
 // LoadString loads a chain by URL and unmarshals it.
@@ -407,12 +415,12 @@ func unmarshalRecord(obj *state.Object) (state.Chain, error) {
 }
 
 func (s *StateManager) WriteIndex(index state.Index, chain []byte, key interface{}, value []byte) {
-	k := storage.ComputeKey(string(index), chain, key)
+	k := storage.MakeKey(string(index), chain, key)
 	s.writes[k] = value
 }
 
 func (s *StateManager) GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error) {
-	k := storage.ComputeKey(string(index), chain, key)
+	k := storage.MakeKey(string(index), chain, key)
 	w, ok := s.writes[k]
 	if ok {
 		return w, nil

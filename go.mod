@@ -12,6 +12,7 @@ require (
 	github.com/dgraph-io/badger v1.6.2
 	github.com/dgraph-io/badger/v3 v3.2011.1
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
+	github.com/docker/cli v20.10.12+incompatible
 	github.com/dustin/go-humanize v1.0.0
 	github.com/fatih/color v1.13.0
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
@@ -30,6 +31,7 @@ require (
 	github.com/rs/zerolog v1.24.0
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/cobra v1.2.1
+	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.8.1
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.0
@@ -40,6 +42,7 @@ require (
 	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97
 	golang.org/x/exp v0.0.0-20200331195152-e8c3332aa8e5
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/sys v0.0.0-20211117180635-dee7805ff2e1
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.7

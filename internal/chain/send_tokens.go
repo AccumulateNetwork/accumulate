@@ -13,12 +13,12 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
-type WithdrawTokens struct{}
+type SendTokens struct{}
 
-func (WithdrawTokens) Type() types.TxType { return types.TxTypeWithdrawTokens }
+func (SendTokens) Type() types.TxType { return types.TxTypeSendTokens }
 
-func (WithdrawTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	body := new(api.TokenTx)
+func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+	body := new(api.SendTokens)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)

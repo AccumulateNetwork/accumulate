@@ -16,14 +16,15 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	switch opts.Network.Type {
 	case config.Directory:
 		return newExecutor(opts,
-			SyntheticAnchor{SubnetType: opts.Network.Type},
+			SyntheticSignTransactions{},
+			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
 		)
 
 	case config.BlockValidator:
 		return newExecutor(opts,
 			CreateIdentity{},
-			WithdrawTokens{},
+			SendTokens{},
 			CreateTokenAccount{},
 			CreateDataAccount{},
 			AddCredits{},
@@ -35,7 +36,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			SyntheticTokenDeposit{},
 			SyntheticDepositCredits{},
 			SyntheticSignTransactions{},
-			SyntheticAnchor{SubnetType: opts.Network.Type},
+			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
 
 			// TODO Only for TestNet

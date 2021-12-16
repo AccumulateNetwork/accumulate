@@ -29,6 +29,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error
 		return nil, err
 	}
 
+	// TODO implement wait from develop
 	for _, route := range allRoutes {
 		r, err := query(&queryDirect{q.QuerierOptions, route})
 		if err == nil {
@@ -53,6 +54,15 @@ func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
 	return direct.QueryUrl(url)
 }
 
+func (q *queryDispatch) QueryKeyPageIndex(url string, key []byte) (*QueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryKeyPageIndex(url, key)
+}
+
 func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 	res, err := q.queryAll(func(q *queryDirect) (*QueryResponse, error) {
 		return q.QueryChain(id)
@@ -61,11 +71,7 @@ func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 		return nil, err
 	}
 
-	if len(res) > 1 {
-		return nil, fmt.Errorf("found chain %X on multiple networks", id)
-	}
-
-	return res[0], nil
+	return res, nil
 }
 
 func (q *queryDispatch) QueryDirectory(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryResponse, error) {
@@ -85,11 +91,7 @@ func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, 
 		return nil, err
 	}
 
-	if len(res) > 1 {
-		return nil, fmt.Errorf("found TX %X on multiple networks", id)
-	}
-
-	return res[0], nil
+	return res, nil
 }
 
 func (q *queryDispatch) QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error) {
@@ -99,4 +101,22 @@ func (q *queryDispatch) QueryTxHistory(url string, start, count int64) (*QueryMu
 	}
 
 	return direct.QueryTxHistory(url, start, count)
+}
+
+func (q *queryDispatch) QueryData(url string, entryHash []byte) (*QueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryData(url, entryHash)
+}
+
+func (q *queryDispatch) QueryDataSet(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryDataSet(url, pagination, queryOptions)
 }
