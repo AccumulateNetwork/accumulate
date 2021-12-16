@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulate/types"
+	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"net"
 	"os"
 	"runtime"
@@ -128,4 +130,86 @@ func TestValidate(t *testing.T) {
 		}{liteUrl.String(), 10}, r)
 		require.Len(t, r.Items, 3)
 	})
+
+	dataAccountUrl := adiName + "/dataAccount"
+	t.Run("Create Data Account", func(t *testing.T) {
+		executeTx(t, japi, "create-data-account", true, execParams{
+			Sponsor: adiName,
+			Key:     adiKey,
+			Payload: &CreateDataAccount{
+				Url: dataAccountUrl,
+			},
+		})
+		dataAccount := NewDataAccount()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
+		assert.Equal(t, dataAccountUrl, string(dataAccount.ChainUrl))
+	})
+
+	keyPageUrl := adiName + "/page1"
+	var pageKey ed25519.PrivateKey
+	t.Run("Create Key Page", func(t *testing.T) {
+		var keys []*KeySpecParams
+		keys = append(keys, &KeySpecParams{
+			PublicKey: pageKey,
+		})
+		executeTx(t, japi, "create-key-page", true, execParams{
+			Sponsor: adiName,
+			Key:     adiKey,
+			Payload: &CreateKeyPage{
+				Url:  keyPageUrl,
+				Keys: keys,
+			},
+		})
+		keyPage := NewKeyPage()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
+		assert.Equal(t, keyPageUrl, string(keyPage.ChainUrl))
+	})
+
+	keyBookUrl := adiName + "/book1"
+	t.Run("Create Key Book", func(t *testing.T) {
+		var page [][32]byte
+		pageUrl := makeUrl(t, keyPageUrl)
+		pageChainId := types.Bytes(pageUrl.ResourceChain()).AsBytes32()
+		page = append(page, pageChainId)
+		executeTx(t, japi, "create-key-book", true, execParams{
+			Sponsor: adiName,
+			Key:     adiKey,
+			Payload: &CreateKeyBook{
+				Url:   keyBookUrl,
+				Pages: page,
+			},
+		})
+		keyBook := NewKeyBook()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
+		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
+	})
+
+	tokenUrl := "acc://ACME"
+	tokenAccountUrl := adiName + "/account"
+	t.Run("Create Token Account", func(t *testing.T) {
+		executeTx(t, japi, "create-token-account", true, execParams{
+			Sponsor: adiName,
+			Key:     adiKey,
+			Payload: &TokenAccountCreate{
+				Url:        tokenAccountUrl,
+				TokenUrl:   tokenUrl,
+				KeyBookUrl: keyBookUrl,
+			},
+		})
+		tokenAccount := NewLiteTokenAccount()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
+		assert.Equal(t, tokenAccountUrl, string(tokenAccount.ChainUrl))
+	})
+
+	t.Run("Query Key Index", func(t *testing.T) {
+		keyIndex := query2.ResponseKeyPageIndex{}
+		queryAs(t, japi, "query-key-index", &api.KeyPageIndexQuery{
+			UrlQuery: api.UrlQuery{
+				Url: keyPageUrl,
+			},
+			Key: pageKey,
+		}, keyIndex)
+		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
+	})
+
 }
