@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -82,17 +84,17 @@ func GetAdiDirectory(actor string) (string, error) {
 		return "", err
 	}
 
-	var res acmeapi.APIDataResponse
+	var res api2.QueryResponse
 
-	params := acmeapi.APIRequestURL{}
+	params := api2.UrlQuery{}
 
-	params.URL = types.String(u.String())
+	params.Url = u.String()
 
-	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
+	if err := Client.RequestV2(context.Background(), "get-directory", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	return PrintQueryResponse(&res)
+	return PrintQueryResponseV2(&res)
 }
 
 func PrintADI() {
@@ -104,16 +106,16 @@ func PrintADI() {
 
 func GetADI(url string) (string, error) {
 
-	var res acmeapi.APIDataResponse
+	var res api2.QueryResponse
 
 	params := acmeapi.APIRequestURL{}
 	params.URL = types.String(url)
 
-	if err := Client.Request(context.Background(), "adi", params, &res); err != nil {
+	if err := Client.RequestV2(context.Background(), "adi", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	return PrintQueryResponse(&res)
+	return PrintQueryResponseV2(&res)
 }
 
 func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
@@ -185,21 +187,17 @@ func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, actor, si, privKey, nonce)
 	if err != nil {
 		return "", err
 	}
 
-	var res acmeapi.APIDataResponse
-	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
+	var res api2.TxResponse
+	if err := Client.RequestV2(context.Background(), "create-adi", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling create adi result, %v", err)
-	}
+	ar := ActionResponseFrom(&res)
 	out, err := ar.Print()
 	if err != nil {
 		return "", err
