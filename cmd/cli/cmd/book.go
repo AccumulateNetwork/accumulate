@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -70,35 +72,32 @@ func GetAndPrintKeyBook(url string) (string, error) {
 		return "", fmt.Errorf("error retrieving key book for %s", url)
 	}
 
-	res := acmeapi.APIDataResponse{}
-	err = json.Unmarshal([]byte(str), &res)
+	res := api2.QueryResponse{}
+	err = json.Unmarshal(str, &res)
 	if err != nil {
 		return "", err
 	}
-	return PrintQueryResponse(&res)
+	return PrintQueryResponseV2(&res)
 }
 
 func GetKeyBook(url string) ([]byte, *protocol.KeyBook, error) {
-	s, err := GetUrl(url, "sig-spec-group")
+	s, err := GetUrl(url, "query")
 	if err != nil {
 		return nil, nil, err
 	}
 
-	res := acmeapi.APIDataResponse{}
+	res := api2.QueryResponse{}
 	err = json.Unmarshal(s, &res)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	//added for compatibility with v1
-	//data := strings.ReplaceAll(string(*res.Data), "keyBook", "sigSpecGroup")
-	ssg := protocol.KeyBook{}
-	err = json.Unmarshal(*res.Data, &ssg)
-	if err != nil {
-		return nil, nil, err
+	v, ok := res.Data.(protocol.KeyBook)
+	if !ok {
+		return nil, nil, fmt.Errorf("returned data is not a key book for %v", url)
 	}
 
-	return s, &ssg, nil
+	return s, &v, nil
 }
 
 // CreateKeyBook create a new key page
