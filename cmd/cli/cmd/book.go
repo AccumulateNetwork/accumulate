@@ -11,7 +11,6 @@ import (
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -67,27 +66,16 @@ func PrintKeyBook() {
 }
 
 func GetAndPrintKeyBook(url string) (string, error) {
-	str, _, err := GetKeyBook(url)
+	res, _, err := GetKeyBook(url)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving key book for %s", url)
 	}
 
-	res := api2.QueryResponse{}
-	err = json.Unmarshal(str, &res)
-	if err != nil {
-		return "", err
-	}
-	return PrintQueryResponseV2(&res)
+	return PrintQueryResponseV2(res)
 }
 
-func GetKeyBook(url string) ([]byte, *protocol.KeyBook, error) {
-	s, err := GetUrl(url, "query")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	res := api2.QueryResponse{}
-	err = json.Unmarshal(s, &res)
+func GetKeyBook(url string) (*api2.QueryResponse, *protocol.KeyBook, error) {
+	res, err := GetUrl(url)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -97,12 +85,11 @@ func GetKeyBook(url string) ([]byte, *protocol.KeyBook, error) {
 		return nil, nil, fmt.Errorf("returned data is not a key book for %v", url)
 	}
 
-	return s, &v, nil
+	return res, &v, nil
 }
 
 // CreateKeyBook create a new key page
 func CreateKeyBook(book string, args []string) (string, error) {
-
 	bookUrl, err := url2.Parse(book)
 	if err != nil {
 		return "", err
@@ -147,22 +134,17 @@ func CreateKeyBook(book string, args []string) (string, error) {
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, bookUrl, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, bookUrl, si, privKey, nonce)
 	if err != nil {
 		return "", err
 	}
 
-	var res acmeapi.APIDataResponse
-	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
+	var res api2.TxResponse
+	if err := Client.RequestV2(context.Background(), "create-key-book", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling create key book result")
-	}
-	return ar.Print()
+	return ActionResponseFrom(&res).Print()
 }
 
 func GetKeyPageInBook(book string, keyLabel string) (*protocol.KeyPage, int, error) {
@@ -189,13 +171,12 @@ func GetKeyPageInBook(book string, keyLabel string) (*protocol.KeyPage, int, err
 		if err != nil {
 			return nil, 0, err
 		}
-		if *s.Type.AsString() != types.ChainTypeKeyPage.Name() {
+		if s.Type != types.ChainTypeKeyPage.String() {
 			return nil, 0, fmt.Errorf("expecting key page, received %s", s.Type)
 		}
-		ss := protocol.KeyPage{}
-		err = ss.UnmarshalBinary(*s.Data)
-		if err != nil {
-			return nil, 0, err
+		ss, ok := s.Data.(protocol.KeyPage)
+		if !ok {
+			return nil, 0, fmt.Errorf("returned chain is not a key page type")
 		}
 
 		for j := range ss.Keys {

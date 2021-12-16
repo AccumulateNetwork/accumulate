@@ -8,8 +8,6 @@ import (
 	"log"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/spf13/cobra"
 )
@@ -59,45 +57,35 @@ func PrintGet() {
 	//fmt.Println("  accumulate get [transaction id] 		Get data by Accumulate transaction id")
 }
 
-func GetByChainId(chainId []byte) (*acmeapi.APIDataResponse, error) {
-	var res interface{}
-	//var str []byte
+func GetByChainId(chainId []byte) (*api2.QueryResponse, error) {
+	var res api2.QueryResponse
+	res.Data = new(query.ResponseByChainId)
 
-	params := acmeapi.APIRequestChainId{}
+	params := api2.ChainIdQuery{}
 	params.ChainId = chainId
 
-	str1, err1 := json.Marshal(&params)
-	if err1 != nil {
-		return nil, err1
+	data, err := json.Marshal(&params)
+	if err != nil {
+		return nil, err
 	}
 
-	fmt.Println(string(str1))
-
-	if err := Client.Request(context.Background(), "chain", params, &res); err != nil {
+	if err := Client.RequestV2(context.Background(), "query-chain", json.RawMessage(data), &res); err != nil {
 		log.Fatal(err)
 	}
 
-	resp := res.(acmeapi.APIDataResponse)
-
-	return &resp, nil
+	return &res, nil
 }
 
 func Get(url string) (string, error) {
-	var res interface{}
-
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(url)
-
-	if err := Client.Request(context.Background(), "get", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	str, err := json.Marshal(res)
+	res, err := GetUrl(url)
 	if err != nil {
 		return "", err
 	}
-
-	return string(str), nil
+	data, err := json.Marshal(res.Data)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
 }
 
 func GetKey(url, key string) (string, error) {
