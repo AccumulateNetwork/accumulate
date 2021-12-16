@@ -9,10 +9,9 @@ import (
 	"io/ioutil"
 	"log"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 )
@@ -118,16 +117,17 @@ func PrintAccount() {
 }
 
 func GetAccount(url string) (string, error) {
-	var res acmeapi.APIDataResponse
+	var res api2.QueryResponse
 
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(url)
+	params := api2.UrlQuery{}
 
-	if err := Client.Request(context.Background(), "token-account", params, &res); err != nil {
+	params.Url = url
+
+	if err := Client.RequestV2(context.Background(), "query", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	return PrintQueryResponse(&res)
+	return PrintQueryResponseV2(&res)
 }
 
 func QrAccount(s string) (string, error) {
@@ -217,23 +217,18 @@ func CreateAccount(url string, args []string) (string, error) {
 
 	nonce := nonceFromTimeNow()
 
-	params, err := prepareGenTx(jsonData, binaryData, actor, si, privKey, nonce)
+	params, err := prepareGenTxV2(jsonData, binaryData, actor, si, privKey, nonce)
 	if err != nil {
 		return "", err
 	}
 
-	var res acmeapi.APIDataResponse
-	if err := Client.Request(context.Background(), "token-account-create", params, &res); err != nil {
+	var res api2.TxResponse
+	if err := Client.RequestV2(context.Background(), "create-token-account", params, &res); err != nil {
 		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
 		return "", err
 	}
 
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling account create result")
-	}
-
+	ar := ActionResponseFrom(&res)
 	return ar.Print()
 }
 
