@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"os"
 	"path"
 
@@ -22,12 +23,13 @@ import (
 const nodeDirPerm = 0755
 
 type InitOptions struct {
-	WorkDir    string
-	Port       int
-	GenesisDoc *types.GenesisDoc
-	Config     []*cfg.Config
-	RemoteIP   []string
-	ListenIP   []string
+	WorkDir          string
+	Port             int
+	GenesisDoc       *types.GenesisDoc
+	Config           []*cfg.Config
+	RemoteIP         []string
+	ListenIP         []string
+	ConnectionRouter *connections.ConnectionRouter
 }
 
 // Init creates the initial configuration for a set of nodes, using

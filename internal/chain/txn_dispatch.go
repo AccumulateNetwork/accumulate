@@ -51,9 +51,9 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 	switch route.GetNetworkGroup() {
 	case connections.Local:
 		d.BroadcastTxAsyncLocal(ctx, tx)
-
+	default:
+		*batch = append(*batch, tx)
 	}
-	*batch = append(*batch, tx)
 	return nil
 }
 
@@ -141,10 +141,9 @@ func (d *dispatcher) getRouteAndBatch(u *url.URL) (connections.Route, *txBatch, 
 		return route, nil, nil
 	}
 
-	var batch txBatch
-	batch = d.batches[route]
+	batch := d.batches[route]
 	if batch == nil {
-		batch = batch[:0]
+		batch = make(txBatch, 0)
 		d.batches[route] = batch
 	}
 	return route, &batch, nil

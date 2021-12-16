@@ -25,7 +25,7 @@ type ConnectionInitializer interface {
 }
 
 type connectionManager struct {
-	networkCfg          *config.Network
+	accConfig           *config.Accumulate
 	nodeToSubnetNameMap map[string]string
 	bvnCtxList          []*nodeContext
 	dnCtxList           []*nodeContext
@@ -40,9 +40,9 @@ type nodeMetrics struct {
 	// TODO add metrics that can be useful for the router to determine whether it should put or should avoid putting put more load on a BVN
 }
 
-func NewConnectionManager(networkCfg *config.Network, logger log.Logger) ConnectionManager {
+func NewConnectionManager(accConfig *config.Accumulate, logger log.Logger) ConnectionManager {
 	cm := new(connectionManager)
-	cm.networkCfg = networkCfg
+	cm.accConfig = accConfig
 	cm.logger = logger
 	cm.loadNodeNetworkMap()
 	cm.buildNodeInventory()
@@ -67,7 +67,7 @@ func (cm *connectionManager) GetLocalClient() *local.Local {
 
 func (cm *connectionManager) loadNodeNetworkMap() {
 	cm.nodeToSubnetNameMap = make(map[string]string)
-	for subnetName, addresses := range cm.networkCfg.Addresses {
+	for subnetName, addresses := range cm.accConfig.Network.Addresses {
 		for _, address := range addresses {
 			cm.nodeToSubnetNameMap[address] = subnetName
 		}
@@ -100,7 +100,7 @@ func (cm *connectionManager) buildNodeInventory() {
 func (cm *connectionManager) buildNodeContext(address string, subnetName string) (*nodeContext, error) {
 	nodeCtx := &nodeContext{subnetName: subnetName, address: address}
 	nodeCtx.networkGroup = cm.determineNetworkGroup(subnetName, address)
-	nodeCtx.netType, nodeCtx.nodeType = determineTypes(address, subnetName, cm.networkCfg)
+	nodeCtx.netType, nodeCtx.nodeType = determineTypes(address, subnetName, cm.accConfig.Network)
 
 	var err error
 	nodeCtx.resolvedIPs, err = resolveIPs(address)
@@ -112,16 +112,17 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 
 func (cm *connectionManager) determineNetworkGroup(subnetName string, address string) NetworkGroup {
 	switch {
-	case strings.EqualFold(subnetName, cm.networkCfg.ID) && strings.EqualFold(address, cm.networkCfg.SelfAddress):
+	case (strings.EqualFold(subnetName, cm.accConfig.Network.ID) && strings.EqualFold(address, cm.accConfig.Network.SelfAddress)) ||
+		strings.EqualFold(address, "local") || strings.EqualFold(address, "self"):
 		return Local
-	case subnetName == cm.networkCfg.ID:
+	case subnetName == cm.accConfig.Network.ID:
 		return SameSubnet
 	default:
 		return OtherSubnet
 	}
 }
 
-func determineTypes(address string, subnetName string, netCfg *config.Network) (config.NetworkType, config.NodeType) {
+func determineTypes(address string, subnetName string, netCfg config.Network) (config.NetworkType, config.NodeType) {
 	var networkType config.NetworkType
 	for _, bvnName := range netCfg.BvnNames {
 		if strings.EqualFold(bvnName, subnetName) {
@@ -196,12 +197,18 @@ func (cm *connectionManager) createAbciClients(nodeCtx *nodeContext) error {
 
 func (cm *connectionManager) createJsonRpcClient(nodeCtx *nodeContext) error {
 	// RPC HTTP client
-	offsetAddr, err := config.OffsetPort(nodeCtx.address, networks.AccRouterJsonPortOffset)
-	if err != nil {
-		return fmt.Errorf("invalid BVN address: %v", err)
+	var address string
+	if strings.EqualFold(nodeCtx.address, "local") || strings.EqualFold(nodeCtx.address, "self") {
+		address = cm.accConfig.API.ListenAddress
+	} else {
+		var err error
+		address, err = config.OffsetPort(nodeCtx.address, networks.AccRouterJsonPortOffset)
+		if err != nil {
+			return fmt.Errorf("invalid BVN address: %v", err)
+		}
 	}
 
-	nodeCtx.jsonRpcClient = jsonrpc.NewClient(offsetAddr)
+	nodeCtx.jsonRpcClient = jsonrpc.NewClient(address)
 	return nil
 }
 

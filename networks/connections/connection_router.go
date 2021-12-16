@@ -19,6 +19,7 @@ type ConnectionRouter interface {
 	SelectRoute(url string, allowFollower bool) (Route, error) // TODO: Check if we should take url.URL instead of string
 	GetLocalRoute() (Route, error)
 	GetAll() ([]Route, error)
+	GetAllBVNs() ([]Route, error)
 }
 
 type connectionRouter struct {
@@ -92,6 +93,19 @@ func (cr *connectionRouter) GetLocalRoute() (Route, error) {
 func (cr *connectionRouter) GetAll() ([]Route, error) {
 	routes := make([]Route, 0)
 	for _, route := range cr.otherGroup.nodes {
+		if route.IsHealthy() {
+			routes = append(routes, route)
+		}
+	}
+	if len(routes) == 0 {
+		return nil, NoHealthyNodes
+	}
+	return routes, nil
+}
+
+func (cr *connectionRouter) GetAllBVNs() ([]Route, error) {
+	routes := make([]Route, 0)
+	for _, route := range cr.bvnGroup.nodes {
 		if route.IsHealthy() {
 			routes = append(routes, route)
 		}

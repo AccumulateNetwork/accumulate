@@ -21,6 +21,15 @@ var LocalBVN = &networks.Subnet{
 	},
 }
 
+var LocalDN = &networks.Subnet{
+	Name: "Local",
+	Type: config.BlockValidator,
+	Port: 35650,
+	Nodes: []networks.Node{
+		{IP: "127.0.1.1", Type: config.Validator},
+	},
+}
+
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(net, node, netId)        //
 	cfg.Mempool.MaxBatchBytes = 1048576            //
@@ -31,7 +40,7 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 	cfg.Accumulate.Website.Enabled = false         // No need for the website
 	cfg.Instrumentation.Prometheus = false         // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.BvnNames = []string{netId}
-	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}}
+	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}, "directory": {"http://127.0.1.1:26656"}}
 	if strings.EqualFold(cfg.Accumulate.Network.ID, netId) {
 		cfg.Accumulate.Network.SelfAddress = cfg.Accumulate.Network.Addresses[netId][0]
 	}

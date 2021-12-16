@@ -86,7 +86,7 @@ type testCmd struct {
 func NewTestBVNN(t *testing.T, defaultWorkDir string) int {
 	t.Helper()
 
-	// Configure
+	// Configure BVN
 	opts := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
 	opts.WorkDir = defaultWorkDir
 	require.NoError(t, node.Init(opts))

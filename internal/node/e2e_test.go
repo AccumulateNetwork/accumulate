@@ -41,22 +41,21 @@ func TestEndToEnd(t *testing.T) {
 	}
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
-		connMgr := connections.NewConnectionManager(&d.Config.Accumulate.Network, d.Logger)
-		connRouter := connections.NewConnectionRouter(connMgr)
-
 		// Restart the nodes for every test
 		nodes := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, nil)
-		client, err := local.New(nodes[0].Node_TESTONLY().Service.(local.NodeService))
+		bvn0 := nodes[0]
+		client, err := local.New(bvn0.Node_TESTONLY().Service.(local.NodeService))
 		require.NoError(s.T(), err)
-		return &e2eDUT{s, nodes[0].DB_TESTONLY(), nodes[0].Query_TESTONLY(), connRouter}
+		return &e2eDUT{s, bvn0.DB_TESTONLY(), bvn0.Query_TESTONLY(), client, bvn0.ConnRouter}
 	}))
 }
 
 type e2eDUT struct {
 	*e2e.Suite
-	db    *state.StateDB
-	query *api.Query
-	connections.ConnectionRouter
+	db         *state.StateDB
+	query      *api.Query
+	client     *local.Local
+	connRouter connections.ConnectionRouter
 }
 
 func (d *e2eDUT) getObj(url string) *state.Object {
@@ -81,13 +80,14 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
 	b, err := tx.Marshal()
 	d.Require().NoError(err)
-	_, err = d.ConnectionRouter.AcquireBroadcastClient().BroadcastTxAsync(context.Background(), b)
+	_, err = d.client.BroadcastTxAsync(context.Background(), b)
 	d.Require().NoError(err)
 }
 
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
-	lclRoute, _ := d.ConnectionRouter.GetLocalRoute()
-	q := apiv2.NewQueryDirect(lclRoute, apiv2.QuerierOptions{
+	route, err := d.connRouter.GetLocalRoute()
+	d.Require().NoError(err)
+	q := apiv2.NewQueryDirect(route, apiv2.QuerierOptions{
 		TxMaxWaitTime: 10 * time.Second,
 	})
 

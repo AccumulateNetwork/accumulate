@@ -91,11 +91,6 @@ func TestDispatchExecute(t *testing.T) {
 	defer func() { s.Shutdown(context.Background()) }()
 
 	j, err := NewJrpc(JrpcOptions{
-		Remote: []string{
-			fmt.Sprintf("http://%s/h0", l.Addr()),
-			fmt.Sprintf("http://%s/h1", l.Addr()),
-			fmt.Sprintf("http://%s/h2", l.Addr()),
-		},
 		QueueDuration: time.Millisecond,
 		QueueDepth:    10,
 		Logger:        makeLogger(t),
@@ -125,7 +120,6 @@ func TestDispatchExecuteQueueDepth(t *testing.T) {
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
 	j, err := NewJrpc(JrpcOptions{
-		Remote:        []string{fmt.Sprintf("http://%s", l.Addr())},
 		QueueDuration: 1e6 * time.Hour, // Forever
 		QueueDepth:    2,
 		Logger:        makeLogger(t),
@@ -145,7 +139,6 @@ func TestDispatchExecuteQueueDuration(t *testing.T) {
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
 
 	j, err := NewJrpc(JrpcOptions{
-		Remote:        []string{fmt.Sprintf("http://%s", l.Addr())},
 		QueueDuration: time.Millisecond,
 		QueueDepth:    1e10, // Infinity
 		Logger:        makeLogger(t),
@@ -171,9 +164,9 @@ func TestExecuteCheckOnly(t *testing.T) {
 		defer ctrl.Finish()
 
 		local := mock_api.NewMockABCIBroadcastClient(ctrl)
+		connRouter := mock_api.NewMockConnectionRouter(local)
 		j, err := NewJrpc(JrpcOptions{
-			Remote: []string{"local"},
-			Local:  local,
+			ConnectionRouter: connRouter,
 		})
 		require.NoError(t, err)
 
@@ -191,9 +184,9 @@ func TestExecuteCheckOnly(t *testing.T) {
 		defer ctrl.Finish()
 
 		local := mock_api.NewMockABCIBroadcastClient(ctrl)
+		connRouter := mock_api.NewMockConnectionRouter(local)
 		j, err := NewJrpc(JrpcOptions{
-			Remote: []string{"local"},
-			Local:  local,
+			ConnectionRouter: connRouter,
 		})
 		require.NoError(t, err)
 

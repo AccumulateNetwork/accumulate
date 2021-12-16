@@ -6,6 +6,9 @@ package mock_api
 
 import (
 	context "context"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
+	"github.com/tendermint/tendermint/rpc/client/http"
+	"github.com/ybbus/jsonrpc/v2"
 	reflect "reflect"
 	time "time"
 
@@ -203,6 +206,67 @@ type MockABCIBroadcastClient struct {
 	recorder *MockABCIBroadcastClientMockRecorder
 }
 
+func (m *MockABCIBroadcastClient) NewBatch() *http.BatchHTTP {
+	return nil
+}
+
+// MockConnectionRouter is a mock of ConnectionRouter interface.
+type MockConnectionRouter struct {
+	route    MockRoute
+	recorder *MockConnectionRouterMockRecorder
+}
+
+// MockConnectionRouter is a mock of ConnectionRouter interface.
+type MockRoute struct {
+	broadcaseClient *MockABCIBroadcastClient
+	subnetName      string
+	networkGroup    connections.NetworkGroup
+}
+
+func (m MockRoute) GetSubnetName() string {
+	return m.subnetName
+}
+
+func (m MockRoute) GetJsonRpcClient() jsonrpc.RPCClient {
+	return nil
+}
+
+func (m MockRoute) GetQueryClient() connections.ABCIQueryClient {
+	return nil
+}
+
+func (m MockRoute) GetBroadcastClient() connections.ABCIBroadcastClient {
+	return m.broadcaseClient
+}
+
+func (m MockRoute) IsDirectoryNode() bool {
+	return false
+}
+
+func (m MockRoute) GetNetworkGroup() connections.NetworkGroup {
+	return m.networkGroup
+}
+
+func (m MockRoute) GetBatchBroadcastClient() connections.BatchABCIBroadcastClient {
+	return m.broadcaseClient
+}
+
+func (m *MockConnectionRouter) SelectRoute(url string, allowFollower bool) (connections.Route, error) {
+	return m.route, nil
+}
+
+func (m *MockConnectionRouter) GetLocalRoute() (connections.Route, error) {
+	return m.route, nil
+}
+
+func (m *MockConnectionRouter) GetAll() ([]connections.Route, error) {
+	return []connections.Route{m.route}, nil
+}
+
+func (m *MockConnectionRouter) GetAllBVNs() ([]connections.Route, error) {
+	return []connections.Route{m.route}, nil
+}
+
 // MockABCIBroadcastClientMockRecorder is the mock recorder for MockABCIBroadcastClient.
 type MockABCIBroadcastClientMockRecorder struct {
 	mock *MockABCIBroadcastClient
@@ -212,6 +276,21 @@ type MockABCIBroadcastClientMockRecorder struct {
 func NewMockABCIBroadcastClient(ctrl *gomock.Controller) *MockABCIBroadcastClient {
 	mock := &MockABCIBroadcastClient{ctrl: ctrl}
 	mock.recorder = &MockABCIBroadcastClientMockRecorder{mock}
+	return mock
+}
+
+// MockAonnectionRouterMockRecorder is the mock recorder for MockConnectionRouter.
+type MockConnectionRouterMockRecorder struct {
+	mock *MockConnectionRouter
+}
+
+func NewMockConnectionRouter(client *MockABCIBroadcastClient) *MockConnectionRouter {
+	mock := &MockConnectionRouter{route: MockRoute{
+		broadcaseClient: client,
+		subnetName:      "testnet",
+		networkGroup:    connections.Local,
+	}}
+	mock.recorder = &MockConnectionRouterMockRecorder{mock}
 	return mock
 }
 

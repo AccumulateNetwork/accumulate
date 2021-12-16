@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	mock_api "github.com/AccumulateNetwork/accumulate/internal/mock/api"
+	"github.com/golang/mock/gomock"
 	"os"
 	"regexp"
 	"testing"
@@ -74,6 +76,10 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 		require.NoError(t, err)
 	}
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	local := mock_api.NewMockABCIBroadcastClient(ctrl)
+	// TODO ABCIApplicationClient ?
 	n.client = acctesting.NewABCIApplicationClient(appChan, db, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
@@ -85,16 +91,17 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 
 	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		Local:  n.client,
-		DB:     n.db,
-		IsTest: true,
-		Logger: logger,
-		Key:    bvcKey,
+		DB:               n.db,
+		Logger:           logger,
+		Key:              bvcKey,
+		ConnectionRouter: mock_api.NewMockConnectionRouter(local),
+		Local:            n.client,
 		Network: config.Network{
 			Type:     config.BlockValidator,
 			ID:       subnet,
 			BvnNames: []string{subnet},
 		},
+		IsTest: true,
 	})
 	require.NoError(t, err)
 
