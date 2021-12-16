@@ -75,26 +75,83 @@ func TestReceipt(t *testing.T) {
 }
 
 func TestReceiptAll(t *testing.T) {
-	const testMerkleTreeSize = 500
+	const testMerkleTreeSize = 50
 
-	// Create a memory based database
-	dbManager := new(database.Manager)
-	_ = dbManager.Init("memory", "", nil)
-	// Create a MerkleManager for the memory database
-	manager, err := NewMerkleManager(dbManager, 4)
-	if err != nil {
-		t.Fatalf("did not create a merkle manager: %v", err)
+	db, _ := database.NewDBManager("memory", "", nil) // create an in memory database and
+	manager, _ := NewMerkleManager(db, 4)             // MerkleManager
+
+	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
+	var rh RandHash                            // A source of random hashes
+	var mdRoots [][]byte                       // Collect all the MDRoots for each hash added
+	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
+		manager.AddHash(rh.NextList())                    // Add a hash
+		mdRoots = append(mdRoots, manager.MS.GetMDRoot()) // Collect a MDRoot
 	}
-	// populate the database
+
+	var l2, l3, l4 [][]byte
+	for i := 0; i+1 < testMerkleTreeSize; i += 2 {
+		l2 = append(l2, Sha256(append(rh.List[i], rh.List[i+1]...)))
+	}
+	for i := 0; i+1 < len(l2); i += 2 {
+		l3 = append(l3, Sha256(append(l2[i], l2[i+1]...)))
+	}
+	for i := 0; i+1 < len(l3); i += 2 {
+		l4 = append(l4, Sha256(append(l3[i], l3[i+1]...)))
+	}
+
+	for _, v := range rh.List {
+		fmt.Printf("%2s%3x", "", v[:2])
+	}
+	println()
+	for _, v := range l2 {
+		fmt.Printf("%13s%3x", "", v[:2])
+	}
+	println()
+	for _, v := range l3 {
+		fmt.Printf("%13s%3x%9s", "", v[:2], "")
+	}
+	println()
+	for _, v := range l4 {
+		fmt.Printf("%3x", v[:2])
+	}
+	println()
+	for _, v := range mdRoots {
+		fmt.Printf("%2s%3x", "", v[:2])
+	}
+	println()
+
+	for _, v := range rh.List {
+		fmt.Printf("%2s%3v", "", v[:2])
+	}
+	println()
+	for _, v := range l2 {
+		fmt.Printf("%13s%3v", "", v[:2])
+	}
+	println()
+	for _, v := range l3 {
+		fmt.Printf("%13s%3v%9s", "", v[:2], "")
+	}
+	println()
+	for _, v := range l4 {
+		fmt.Printf("%3v", v[:2])
+	}
+	println()
+	for _, v := range mdRoots {
+		fmt.Printf("%2s%3v", "", v[:2])
+	}
+	println()
+
 	for i := 0; i < testMerkleTreeSize; i++ {
-		v := GetHash(i)
-		manager.AddHash(v)
-	}
-
-	for i := -10; i < testMerkleTreeSize+10; i++ {
-		for j := -10; j < testMerkleTreeSize+10; j++ {
-			element := GetHash(i)
-			anchor := GetHash(j)
+		for j := 4; j < testMerkleTreeSize; j++ {
+			println("---------------- i ", i, " j ", j, "---------------------")
+			element := rh.Next()
+			if i >= 0 && i < testMerkleTreeSize {
+				element = rh.List[i]
+			}
+			anchor := rh.Next()
+			if j >= 0 && j < testMerkleTreeSize {
+				anchor = rh.List[j]
+			}
 
 			r := GetReceipt(manager, element, anchor)
 			if i < 0 || i >= testMerkleTreeSize || //       If i is out of range
@@ -302,4 +359,28 @@ func TestReceipt_Combine(t *testing.T) {
 		}
 	}
 
+}
+
+func TestReceipt_AddAHash(t *testing.T) {
+	const numTests = int64(10)
+
+	var rh RandHash
+	var height int
+
+	db, _ := database.NewDBManager("memory", "", nil)
+	mm, _ := NewMerkleManager(db, 1)
+	cState := new(MerkleState)
+	cState.InitSha256()
+	r := new(Receipt)
+	right := false
+
+	for i := int64(0); i < numTests; i++ {
+		mm.AddHash(rh.NextList())
+	}
+
+	for i := int64(0); i < numTests; i++ {
+		height, right = r.AddAHash(mm, cState, height, right, rh.List[i])
+	}
+	r.ComputeDag(cState, height, right)
+	r.Validate()
 }
