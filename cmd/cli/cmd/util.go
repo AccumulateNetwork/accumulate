@@ -162,7 +162,7 @@ func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si 
 	params.Tx.Signer = &acmeapi.Signer{}
 	params.Tx.Signer.PublicKey.FromBytes(privKey[32:])
 	params.Tx.Signer.Nonce = nonce
-	params.Tx.Sponsor = types.String(actor.String())
+	params.Tx.Origin = types.String(actor.String())
 	params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
 	params.Tx.KeyPage.Height = si.KeyPageHeight
 	params.Tx.KeyPage.Index = si.KeyPageIndex
@@ -194,7 +194,7 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *tran
 	params.Payload = json.RawMessage(jsonPayload)
 	params.Signer.PublicKey = privKey[32:]
 	params.Signer.Nonce = nonce
-	params.Sponsor = actor.String()
+	params.Origin = actor.String()
 	params.KeyPage.Height = si.KeyPageHeight
 	params.KeyPage.Index = si.KeyPageIndex
 
@@ -486,7 +486,7 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.TxId.AsBytes32())
-	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Sponsor)
+	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig.Bytes())
 	if res.Signer != nil {
 		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
@@ -516,7 +516,7 @@ func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
 			v1.MerkleState.Roots[i] = r
 		}
 	}
-	v1.Sponsor = types.String(v2.Sponsor)
+	v1.Origin = types.String(v2.Origin)
 	if v2.KeyPage != nil {
 		v1.KeyPage = new(acmeapi.APIRequestKeyPage)
 		v1.KeyPage.Height = v2.KeyPage.Height

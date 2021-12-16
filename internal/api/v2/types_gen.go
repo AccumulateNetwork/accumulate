@@ -101,7 +101,7 @@ type QueryResponse struct {
 	Type           string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	MerkleState    *MerkleState `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
 	Data           interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	Sponsor        string       `json:"sponsor,omitempty" form:"sponsor" query:"sponsor" validate:"required"`
+	Origin         string       `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 	KeyPage        *KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	Txid           []byte       `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 	Signer         *Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
@@ -133,7 +133,7 @@ type TxHistoryQuery struct {
 
 type TxRequest struct {
 	CheckOnly bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
-	Sponsor   string      `json:"sponsor,omitempty" form:"sponsor" query:"sponsor" validate:"required,acc-url"`
+	Origin    string      `json:"origin,omitempty" form:"origin" query:"origin" validate:"required,acc-url"`
 	Signer    Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Signature []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	KeyPage   KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
@@ -530,6 +530,7 @@ func (v *QueryResponse) MarshalJSON() ([]byte, error) {
 		Type           string       `json:"type,omitempty"`
 		MerkleState    *MerkleState `json:"merkleState,omitempty"`
 		Data           interface{}  `json:"data,omitempty"`
+		Origin         string       `json:"origin,omitempty"`
 		Sponsor        string       `json:"sponsor,omitempty"`
 		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
 		Txid           *string      `json:"txid,omitempty"`
@@ -541,7 +542,8 @@ func (v *QueryResponse) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type
 	u.MerkleState = v.MerkleState
 	u.Data = v.Data
-	u.Sponsor = v.Sponsor
+	u.Origin = v.Origin
+	u.Sponsor = v.Origin
 	u.KeyPage = v.KeyPage
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Signer = v.Signer
@@ -576,6 +578,7 @@ func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
 		CheckOnly bool        `json:"checkOnly,omitempty"`
+		Origin    string      `json:"origin,omitempty"`
 		Sponsor   string      `json:"sponsor,omitempty"`
 		Signer    Signer      `json:"signer,omitempty"`
 		Signature *string     `json:"signature,omitempty"`
@@ -583,7 +586,8 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 		Payload   interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
-	u.Sponsor = v.Sponsor
+	u.Origin = v.Origin
+	u.Sponsor = v.Origin
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
@@ -768,6 +772,7 @@ func (v *QueryResponse) UnmarshalJSON(data []byte) error {
 		Type           string       `json:"type,omitempty"`
 		MerkleState    *MerkleState `json:"merkleState,omitempty"`
 		Data           interface{}  `json:"data,omitempty"`
+		Origin         string       `json:"origin,omitempty"`
 		Sponsor        string       `json:"sponsor,omitempty"`
 		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
 		Txid           *string      `json:"txid,omitempty"`
@@ -779,7 +784,8 @@ func (v *QueryResponse) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type
 	u.MerkleState = v.MerkleState
 	u.Data = v.Data
-	u.Sponsor = v.Sponsor
+	u.Origin = v.Origin
+	u.Sponsor = v.Origin
 	u.KeyPage = v.KeyPage
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Signer = v.Signer
@@ -792,7 +798,12 @@ func (v *QueryResponse) UnmarshalJSON(data []byte) error {
 	v.Type = u.Type
 	v.MerkleState = u.MerkleState
 	v.Data = u.Data
-	v.Sponsor = u.Sponsor
+	var zeroOrigin string
+	if u.Origin != zeroOrigin {
+		v.Origin = u.Origin
+	} else {
+		v.Origin = u.Sponsor
+	}
 	v.KeyPage = u.KeyPage
 	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
 		return fmt.Errorf("error decoding Txid: %w", err)
@@ -858,6 +869,7 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
 		CheckOnly bool        `json:"checkOnly,omitempty"`
+		Origin    string      `json:"origin,omitempty"`
 		Sponsor   string      `json:"sponsor,omitempty"`
 		Signer    Signer      `json:"signer,omitempty"`
 		Signature *string     `json:"signature,omitempty"`
@@ -865,7 +877,8 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		Payload   interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
-	u.Sponsor = v.Sponsor
+	u.Origin = v.Origin
+	u.Sponsor = v.Origin
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
@@ -874,7 +887,12 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.CheckOnly = u.CheckOnly
-	v.Sponsor = u.Sponsor
+	var zeroOrigin string
+	if u.Origin != zeroOrigin {
+		v.Origin = u.Origin
+	} else {
+		v.Origin = u.Sponsor
+	}
 	v.Signer = u.Signer
 	if x, err := encoding.BytesFromJSON(u.Signature); err != nil {
 		return fmt.Errorf("error decoding Signature: %w", err)
