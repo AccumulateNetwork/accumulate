@@ -9,8 +9,6 @@ import (
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/spf13/cobra"
 )
@@ -78,23 +76,12 @@ func PrintAdiDirectory() {
 }
 
 func GetAdiDirectory(actor string) (string, error) {
-
-	u, err := url2.Parse(actor)
+	res, err := GetUrl(actor)
 	if err != nil {
 		return "", err
 	}
 
-	var res api2.QueryResponse
-
-	params := api2.UrlQuery{}
-
-	params.Url = u.String()
-
-	if err := Client.RequestV2(context.Background(), "get-directory", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return PrintQueryResponseV2(&res)
+	return PrintQueryResponseV2(res)
 }
 
 func PrintADI() {
@@ -105,17 +92,12 @@ func PrintADI() {
 }
 
 func GetADI(url string) (string, error) {
-
-	var res api2.QueryResponse
-
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(url)
-
-	if err := Client.RequestV2(context.Background(), "adi", params, &res); err != nil {
-		return PrintJsonRpcError(err)
+	res, err := GetUrl(url)
+	if err != nil {
+		return "", err
 	}
 
-	return PrintQueryResponseV2(&res)
+	return PrintQueryResponseV2(res)
 }
 
 func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {

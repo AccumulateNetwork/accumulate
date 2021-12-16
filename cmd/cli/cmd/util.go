@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding"
 	"encoding/json"
@@ -148,36 +147,6 @@ func signGenTx(binaryPayload []byte, actor *url2.URL, si *transactions.Signature
 	return ed, nil
 }
 
-func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*acmeapi.APIRequestRaw, error) {
-	ed, err := signGenTx(binaryPayload, actor, si, privKey, nonce)
-	if err != nil {
-		return nil, err
-	}
-
-	params := &acmeapi.APIRequestRaw{}
-	params.Tx = &acmeapi.APIRequestRawTx{}
-
-	params.Tx.Data = &json.RawMessage{}
-	*params.Tx.Data = jsonPayload
-	params.Tx.Signer = &acmeapi.Signer{}
-	params.Tx.Signer.PublicKey.FromBytes(privKey[32:])
-	params.Tx.Signer.Nonce = nonce
-	params.Tx.Origin = types.String(actor.String())
-	params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
-	params.Tx.KeyPage.Height = si.KeyPageHeight
-	params.Tx.KeyPage.Index = si.KeyPageIndex
-
-	params.Tx.Sig = types.Bytes64{}
-
-	params.Tx.Sig.FromBytes(ed.GetSignature())
-	//The public key needs to be used to verify the signature, however,
-	//to pass verification, the validator will hash the key and check the
-	//sig spec group to make sure this key belongs to the identity.
-	params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
-
-	return params, err
-}
-
 func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
 	ed, err := signGenTx(binaryPayload, actor, si, privKey, nonce)
 	if err != nil {
@@ -219,83 +188,30 @@ func IsLiteAccount(url string) bool {
 	return protocol.IsValidAdiUrl(u2) != nil
 }
 
-func GetUrl(url string, method string) ([]byte, error) {
-
-	var res interface{}
-	var str []byte
+func GetUrl(url string) (*api2.QueryResponse, error) {
+	var res api2.QueryResponse
 
 	u, err := url2.Parse(url)
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(u.String())
+	params := api2.UrlQuery{}
+	params.Url = u.String()
 
-	if err := Client.Request(context.Background(), method, params, &res); err != nil {
-		ret, err := PrintJsonRpcError(err)
-		return []byte(ret), err
-	}
-
-	str, err = json.Marshal(res)
+	data, err := json.Marshal(&params)
 	if err != nil {
 		return nil, err
 	}
 
-	return str, nil
+	if err := Client.RequestV2(context.Background(), "query", json.RawMessage(data), &res); err != nil {
+		ret, err := PrintJsonRpcError(err)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%v", ret)
+	}
+
+	return &res, nil
 }
 
-type KeyPageStore struct {
-	PrivKeys []types.Bytes `json:"privKeys"`
-}
-
-type KeyBookStore struct {
-	KeyPageList []string `json:"keyPages"`
-}
-
-type AccountKeyBookStore struct {
-	KeyBook KeyBookStore `json:"keyBook"`
-}
-
-//
-//func (a *AdiStore) MarshalBinary() ([]byte, error) {
-//	var buf bytes.Buffer
-//
-//	buf.Write(common.Uint64Bytes(uint64(len(a.tokenAccounts))))
-//	for i := range a.tokenAccounts {
-//		buf.Write(common.SliceBytes([]byte(a.tokenAccounts[i])))
-//	}
-//
-//	buf.Write(common.Uint64Bytes(uint64(len(a.keyBooks))))
-//	for i := range a.keyBooks {
-//		buf.Write(common.SliceBytes([]byte(a.keyBooks[i])))
-//	}
-//
-//	return buf.Bytes(), nil
-//}
-//
-//func (a *AdiStore) UnmarshalBinary(data []byte) (err error) {
-//	defer func() {
-//		if rErr := recover(); rErr != nil {
-//			err = fmt.Errorf("insufficent data to unmarshal AdiStore %v", rErr)
-//		}
-//	}()
-//
-//	var s []byte
-//	l, data := common.BytesUint64(data)
-//	for i := uint64(0); i < l; i++ {
-//		s, data = common.BytesSlice(data)
-//		a.tokenAccounts[i] = string(s)
-//	}
-//
-//	l, data = common.BytesUint64(data)
-//	for i := uint64(0); i < l; i++ {
-//		s, data = common.BytesSlice(data)
-//		a.keyBooks[i] = string(s)
-//	}
-//
-//	return nil
-//}
-
-func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte) (interface{}, error) {
-	json.Marshal(payload)
-
+func dispatchTxRequest(action string, payload interface{}, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -307,17 +223,17 @@ func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *tr
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, actor, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
 
-	var res interface{}
-	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
+	var res api2.TxResponse
+	if err := Client.RequestV2(context.Background(), action, params, &res); err != nil {
 		return nil, err
 	}
 
-	return res, nil
+	return &res, nil
 }
 
 type ActionResponse struct {
@@ -745,31 +661,40 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 }
 
 func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
-	var res acmeapi.APIDataResponse
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(adi)
-	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	dqr := protocol.DirectoryQueryResult{}
-	err := json.Unmarshal(*res.Data, &dqr)
+	res, err := GetByChainId(chainId)
 	if err != nil {
 		return "", err
 	}
-
-	for _, s := range dqr.Entries {
-		u, err := url2.Parse(s)
-		if err != nil {
-			continue
-		}
-
-		if bytes.Equal(u.ResourceChain(), chainId) {
-			return s, nil
-		}
-	}
-
-	return fmt.Sprintf("unresolvable chain %x", chainId), nil
+	return res.Origin, nil
+	//var res api2.DirectoryQueryResult
+	//params := api2.DirectoryQuery{}
+	//params.Url = adi
+	//params.ExpandChains = false
+	//params.Start = 0
+	//params.Count = 1
+	//if err := Client.RequestV2(context.Background(), "query-directory", params, &res); err != nil {
+	//	return PrintJsonRpcError(err)
+	//}
+	//params.Url = adi
+	//params.ExpandChains = false
+	//params.Start = 0
+	//params.Count = res.Total
+	//if err := Client.RequestV2(context.Background(), "query-directory", params, &res); err != nil {
+	//	return PrintJsonRpcError(err)
+	//}
+	//
+	//for _, s := range res.Entries {
+	//	u, err := url2.Parse(s)
+	//	if err != nil {
+	//		continue
+	//	}
+	//
+	//	if bytes.Equal(u.ResourceChain(), chainId) {
+	//		return s, nil
+	//	}
+	//}
+	//
+	//return fmt.Sprintf("unresolvable chain %x", chainId), nil
 }
 
 func nonceFromTimeNow() uint64 {

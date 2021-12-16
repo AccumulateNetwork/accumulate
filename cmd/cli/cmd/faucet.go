@@ -4,10 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -33,22 +32,24 @@ func PrintFaucet() {
 }
 
 func Faucet(url string) (string, error) {
+	var res api2.TxResponse
+	params := api2.UrlQuery{}
 
-	var res acmeapi.APIDataResponse
-	params := acmeapi.APIRequestURL{}
 	u, err := url2.Parse(url)
 	if err != nil {
 		return "", err
 	}
-	params.URL = types.String(u.String())
 
-	if err := Client.Request(context.Background(), "faucet", params, &res); err != nil {
+	params.Url = u.String()
+
+	data, err := json.Marshal(&params)
+	if err != nil {
+		return "", err
+	}
+	if err := Client.RequestV2(context.Background(), "faucet", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling create adi result")
-	}
-	return ar.Print()
+
+	return ActionResponseFrom(&res).Print()
+
 }

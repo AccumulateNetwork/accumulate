@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -76,56 +76,41 @@ func PrintPage() {
 }
 
 func GetAndPrintKeyPage(url string) (string, error) {
-	str, _, err := GetKeyPage(url)
+	res, _, err := GetKeyPage(url)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving key page for %s, %v", url, err)
 	}
 
-	res := acmeapi.APIDataResponse{}
-	err = json.Unmarshal(str, &res)
-	if err != nil {
-		return "", err
-	}
-	return PrintQueryResponse(&res)
+	return PrintQueryResponseV2(res)
 }
 
-func GetKeyPage(url string) ([]byte, *protocol.KeyPage, error) {
-	s, err := GetUrl(url, "sig-spec")
+func GetKeyPage(url string) (*api2.QueryResponse, *protocol.KeyPage, error) {
+	res, err := GetUrl(url)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	res := acmeapi.APIDataResponse{}
-	err = json.Unmarshal(s, &res)
-	if err != nil {
-		return nil, nil, err
+	kp, ok := res.Data.(protocol.KeyPage)
+	if !ok {
+		return nil, nil, fmt.Errorf("url query is not a key page")
 	}
 
-	ss := protocol.KeyPage{}
-	err = json.Unmarshal(*res.Data, &ss)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return s, &ss, nil
+	return res, &kp, nil
 }
 
 // CreateKeyPage create a new key page
 func CreateKeyPage(page string, args []string) (string, error) {
 	pageUrl, err := url2.Parse(page)
 	if err != nil {
-		PrintKeyPageCreate()
 		return "", err
 	}
 
 	args, si, privKey, err := prepareSigner(pageUrl, args)
 	if err != nil {
-		PrintKeyBookCreate()
 		return "", err
 	}
 
 	if len(args) < 2 {
-		PrintKeyPageCreate()
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 	newUrl, err := url2.Parse(args[0])
@@ -158,34 +143,26 @@ func CreateKeyPage(page string, args []string) (string, error) {
 
 	data, err := json.Marshal(css)
 	if err != nil {
-		PrintKeyPageCreate()
 		return "", err
 	}
 
 	dataBinary, err := css.MarshalBinary()
 	if err != nil {
-		PrintKeyPageCreate()
 		return "", err
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, pageUrl, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, pageUrl, si, privKey, nonce)
 	if err != nil {
-		PrintKeyPageCreate()
 		return "", err
 	}
 
-	var res acmeapi.APIDataResponse
-	if err := Client.Request(context.Background(), "create-sig-spec", params, &res); err != nil {
+	var res api2.TxResponse
+	if err := Client.RequestV2(context.Background(), "create-key-page", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling create adi result, %v", err)
-	}
-	return ar.Print()
+	return ActionResponseFrom(&res).Print()
 }
 
 func resolveKey(key string) ([]byte, error) {
@@ -201,7 +178,6 @@ func resolveKey(key string) ([]byte, error) {
 }
 
 func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string) (string, error) {
-
 	u, err := url2.Parse(actorUrl)
 	if err != nil {
 		return "", err
@@ -209,7 +185,6 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 
 	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
-		PrintKeyUpdate()
 		return "", err
 	}
 
@@ -222,68 +197,62 @@ func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string)
 	switch op {
 	case protocol.UpdateKey:
 		if len(args) < 2 {
-			PrintKeyUpdate()
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		oldKey, err = resolveKey(args[0])
 		if err != nil {
-			PrintKeyUpdate()
 			return "", err
 		}
 		newKey, err = resolveKey(args[1])
 		if err != nil {
-			PrintKeyUpdate()
 			return "", err
 		}
 	case protocol.AddKey:
 		if len(args) < 1 {
-			PrintKeyUpdate()
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		newKey, err = resolveKey(args[0])
 		if err != nil {
-			PrintKeyUpdate()
 			return "", err
 		}
 	case protocol.RemoveKey:
 		if len(args) < 1 {
-			PrintKeyUpdate()
 			return "", fmt.Errorf("invalid number of arguments")
 		}
 		oldKey, err = resolveKey(args[0])
 		if err != nil {
-			PrintKeyUpdate()
 			return "", err
 		}
 	}
 
 	ukp.Key = oldKey[:]
 	ukp.NewKey = newKey[:]
-	data, err := json.Marshal(&ukp)
+	res, err := dispatchTxRequest("update-key-page", &ukp, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
+	return ActionResponseFrom(res).Print()
 
-	dataBinary, err := ukp.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, u, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res acmeapi.APIDataResponse
-	if err := Client.Request(context.Background(), "update-key-page", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling create adi result, %v", err)
-	}
-	return ar.Print()
+	//
+	//data, err := json.Marshal(&ukp)
+	//if err != nil {
+	//	return "", err
+	//}
+	//
+	//dataBinary, err := ukp.MarshalBinary()
+	//if err != nil {
+	//	return "", err
+	//}
+	//
+	//nonce := nonceFromTimeNow()
+	//params, err := prepareGenTxV2(data, dataBinary, u, si, privKey, nonce)
+	//if err != nil {
+	//	return "", err
+	//}
+	//
+	//var res api2.TxResponse
+	//if err := Client.RequestV2(context.Background(), "update-key-page", params, &res); err != nil {
+	//	return PrintJsonRpcError(err)
+	//}
+	//return ActionResponseFrom(res).Print()
 }

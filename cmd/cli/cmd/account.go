@@ -117,17 +117,12 @@ func PrintAccount() {
 }
 
 func GetAccount(url string) (string, error) {
-	var res api2.QueryResponse
-
-	params := api2.UrlQuery{}
-
-	params.Url = url
-
-	if err := Client.RequestV2(context.Background(), "query", params, &res); err != nil {
-		return PrintJsonRpcError(err)
+	res, err := GetUrl(url)
+	if err != nil {
+		return "", err
 	}
 
-	return PrintQueryResponseV2(&res)
+	return PrintQueryResponseV2(res)
 }
 
 func QrAccount(s string) (string, error) {
@@ -152,7 +147,7 @@ func QrAccount(s string) (string, error) {
 	return string(r), err
 }
 
-//account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
+//CreateAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
 func CreateAccount(url string, args []string) (string, error) {
 	actor, err := url2.Parse(url)
 	if err != nil {
