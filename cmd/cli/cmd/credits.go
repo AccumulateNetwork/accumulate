@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"strconv"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -35,7 +35,6 @@ func PrintCredits() {
 }
 
 func AddCredits(actor string, args []string) (string, error) {
-
 	u, err := url2.Parse(actor)
 	if err != nil {
 		PrintCredits()
@@ -60,7 +59,7 @@ func AddCredits(actor string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
-	var res acmeapi.APIDataResponse
+	var res api2.TxResponse
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2.String()
@@ -77,26 +76,14 @@ func AddCredits(actor string, args []string) (string, error) {
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, u, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, u, si, privKey, nonce)
 	if err != nil {
 		return "", err
 	}
 
-	if err := Client.Request(context.Background(), "add-credits", params, &res); err != nil {
+	if err := Client.RequestV2(context.Background(), "add-credits", params, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		resData, err := json.Marshal(&res)
-		var out string
-		if err != nil {
-			out = fmt.Sprintf("%v", err)
-		} else {
-			out = string(resData)
-		}
-		return "", fmt.Errorf("error unmarshalling add credits result %s", out)
-	}
-	return ar.Print()
+	return ActionResponseFrom(&res).Print()
 }
