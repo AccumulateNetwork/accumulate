@@ -26,8 +26,8 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 	}
 
 	//only the ADI can create the data account associated with the ADI
-	if !dataAccountUrl.Identity().Equal(st.SponsorUrl) {
-		return fmt.Errorf("%q cannot sponsor %q", st.SponsorUrl, dataAccountUrl)
+	if !dataAccountUrl.Identity().Equal(st.OriginUrl) {
+		return fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, dataAccountUrl)
 	}
 
 	//create the data account
@@ -45,7 +45,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 
 	//setup key book associated with account
 	if body.KeyBookUrl == "" {
-		account.KeyBook = st.Sponsor.Header().KeyBook
+		account.KeyBook = st.Origin.Header().KeyBook
 	} else {
 		keyBookUrl, err := url.Parse(body.KeyBookUrl)
 		if err != nil {

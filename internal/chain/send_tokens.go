@@ -25,7 +25,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	if body.From.String != types.String(tx.SigInfo.URL) {
-		return fmt.Errorf("withdraw address and transaction sponsor do not match")
+		return fmt.Errorf("withdraw address and transaction origin record do not match")
 	}
 
 	recipients := make([]*url.URL, len(body.To))
@@ -37,13 +37,13 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	var account tokenChain
-	switch sponsor := st.Sponsor.(type) {
+	switch origin := st.Origin.(type) {
 	case *state.TokenAccount:
-		account = sponsor
+		account = origin
 	case *protocol.LiteTokenAccount:
-		account = sponsor
+		account = origin
 	default:
-		return fmt.Errorf("invalid sponsor: want %v or %v, got %v", types.ChainTypeTokenAccount, types.ChainTypeLiteTokenAccount, st.Sponsor.Header().Type)
+		return fmt.Errorf("invalid origin record: want %v or %v, got %v", types.ChainTypeTokenAccount, types.ChainTypeLiteTokenAccount, st.Origin.Header().Type)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
@@ -66,7 +66,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	token := types.String(tokenUrl.String())
 	txid := types.Bytes(tx.TransactionHash())
 	for i, u := range recipients {
-		from := types.String(st.SponsorUrl.String())
+		from := types.String(st.OriginUrl.String())
 		to := types.String(u.String())
 		deposit := synthetic.NewTokenTransactionDeposit(txid[:], from, to)
 		err = deposit.SetDeposit(token, new(big.Int).SetUint64(body.To[i].Amount))
@@ -78,14 +78,14 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	if !account.DebitTokens(&total.Int) {
-		return fmt.Errorf("%q balance is insufficient", st.SponsorUrl)
+		return fmt.Errorf("%q balance is insufficient", st.OriginUrl)
 	}
 	st.Update(account)
 
 	txHash := txid.AsBytes32()
 	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
 	//This will reference the txid to keep the history
-	refUrl := st.SponsorUrl.JoinPath(fmt.Sprint(account.NextTx()))
+	refUrl := st.OriginUrl.JoinPath(fmt.Sprint(account.NextTx()))
 	txr := state.NewTxReference(refUrl.String(), txHash[:])
 	st.Update(txr)
 
