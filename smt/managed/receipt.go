@@ -29,7 +29,7 @@ func (r *Receipt) AddAHash(
 	Right bool,
 	v1 Hash,
 ) (
-	height int) {
+	height int, right bool) {
 	original := v1.Copy()
 	CurrentState.PadPending() // Pending always has to end in a nil to ensure we handle the "carry" case
 	for j, v2 := range CurrentState.Pending {
@@ -37,20 +37,12 @@ func (r *Receipt) AddAHash(
 			// If we find a nil spot, then we found where the hash will go.  To keep
 			// the accounting square, we won't add it ourselves, but will let the Merkle Tree
 			// library do the deed.  That keeps the Merkle Tree State square.
-			cnt := CurrentState.Count
-			s, _ := m.GetAnyState(cnt - 1)
 			CurrentState.AddToMerkleTree(original)
 			if j == Height { // If we combine with our proof height, the NEXT combination will be
 				Right = true // from the right.
 			}
 
-			cnt = CurrentState.Count
-			s, _ = m.GetAnyState(cnt - 1)
-			if !s.Equal(CurrentState) {
-				panic("Not right!")
-			}
-
-			return Height
+			return Height, Right
 		}
 		// If this is the creation of a higher derivative of object, put it in our path
 		if j == Height {
@@ -116,13 +108,13 @@ func (r *Receipt) ComputeDag(currentState *MerkleState, height int, right bool) 
 // Convert the receipt to a string
 func (r *Receipt) String() string {
 	var b bytes.Buffer
-	b.WriteString(fmt.Sprintf("\nObject      %x\n", r.Element))    // Element of proof
-	b.WriteString(fmt.Sprintf("ObjectIndex %d\n", r.ElementIndex)) // Element of proof
-	b.WriteString(fmt.Sprintf("Anchor      %x\n", r.Anchor))       // Anchor point in the Merkle Tree
-	b.WriteString(fmt.Sprintf("AnchorIndex %d\n", r.AnchorIndex))  // Anchor point in the Merkle Tree
-	b.WriteString(fmt.Sprintf("MDRoot      %x\n", r.MDRoot))       // MDRoot result of evaluating the receipt path
-	working := r.Element                                           // Calculate the receipt path; for debugging print the
-	for i, v := range r.Nodes {                                    // intermediate hashes
+	b.WriteString(fmt.Sprintf("\nElement      %x\n", r.Element))    // Element of proof
+	b.WriteString(fmt.Sprintf("ElementIndex %d\n", r.ElementIndex)) // Element of proof
+	b.WriteString(fmt.Sprintf("Anchor       %x\n", r.Anchor))       // Anchor point in the Merkle Tree
+	b.WriteString(fmt.Sprintf("AnchorIndex  %d\n", r.AnchorIndex))  // Anchor point in the Merkle Tree
+	b.WriteString(fmt.Sprintf("MDRoot       %x\n", r.MDRoot))       // MDRoot result of evaluating the receipt path
+	working := r.Element                                            // Calculate the receipt path; for debugging print the
+	for i, v := range r.Nodes {                                     // intermediate hashes
 		r := "L"
 		if v.Right {
 			r = "R"
@@ -135,6 +127,19 @@ func (r *Receipt) String() string {
 	return b.String()
 }
 
+// getNextState
+// Return the state at th idx, or the last state if idx isn't on the chain
+// Note the state returned is the one just before the target (because we may
+// wish to add the entry that brings us to the target.
+func getNextState(m *MerkleManager, limit, idx int64) (*MerkleState, int64) {
+	if idx > limit {
+		s, _ := m.GetAnyState(limit - 1)
+		return s, limit
+	}
+	s, _ := m.GetAnyState(idx - 1)
+	return s, idx
+}
+
 // GetReceipt
 // Given a merkle tree and two elements, produce a proof that the element was used to derive the DAG at the anchor
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
@@ -145,7 +150,9 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
 	if e1 != nil || e2 != nil {                             // Both the element and the anchor must be in the Merkle Tree
 		return nil
 	}
-	if elementIndex > anchorIndex { // The element must be at the anchorIndex or before
+	if elementIndex > anchorIndex ||
+		elementIndex < 0 ||
+		elementIndex > manager.GetElementCount() { // The element must be at the anchorIndex or before
 		return nil
 	}
 
@@ -156,42 +163,68 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) *Receipt {
 	receipt.ElementIndex = elementIndex // Merkle Tree indexes
 	receipt.AnchorIndex = anchorIndex   // Merkle Tree indexes
 
-	if elementIndex == 0 { //      If this is the first element in the Merkle Tree, we are already done.
+	if elementIndex == 0 && anchorIndex == 0 { //      If this is the first element in the Merkle Tree, we are already done.
 		receipt.MDRoot = element // A Merkle Tree of one element has a root of the element itself.
 		return receipt           // And we are done!
 	}
 
 	height := 0
 	anchorState, _ := manager.GetAnyState(anchorIndex)
-	currentState, _ := manager.GetAnyState(elementIndex - 1)
+	currentState, err := manager.GetAnyState(elementIndex - 1)
+	if err != nil {
+		currentState = new(MerkleState)
+		currentState.InitSha256()
+	}
 	nextMark := elementIndex & ^manager.MarkMask + manager.MarkFreq
 	Right := true           // Even hashes combine from the right (Guess Right)
 	if elementIndex&1 > 0 { // Odd hashes combine from the left.
 		Right = false //        Guessed wrong, so set to left.
 	}
-	var idx = elementIndex
-	for {
-		last := len(currentState.Pending) - 1
-		if currentState.Pending[last] != nil {
-			currentState.Pending = append(currentState.Pending, nil)
-		}
+
+	// The CurrentState is always one element behind, because we need to add
+	// the elements to the receipt
+	var idx int64
+	for idx = elementIndex; idx < nextMark-1; idx++ { // Create the receipt upto the next mark
+		currentState.Pad() // Pad the pending list with a nil entry. Trim() will remove it.
 		switch {
-		case idx == anchorIndex+1: // idx is past the anchorIndex
-			receipt.ComputeDag(anchorState, height, Right)
+		case idx == anchorIndex:
+			height, Right = receipt.AddAHash(manager, currentState, height, Right, anchor)
+			receipt.ComputeDag(currentState, height, Right)
 			return receipt
-		case idx == nextMark: // This is the first index of the next Mark Set
-			nextMark = nextMark + int64(math.Pow(2, float64(height)))
-			currentState = manager.GetState(nextMark - 1)
-			hash, _ := manager.Get(idx)
-			PrintState("Receipt line 192 prior to AddAHash", height, currentState, hash)
-			height = receipt.AddAHash(manager, currentState, height, Right, hash)
-			PrintState("Receipt line 192 after to AddAHash", height, currentState, hash)
 		default:
 			hash, _ := manager.Get(idx)
-			PrintState("Receipt line 197 prior to AddAHash", height, currentState, hash)
-			height = receipt.AddAHash(manager, currentState, height, Right, hash)
-			PrintState("Receipt line 197 after to AddAHash", height, currentState, hash)
-			idx++
+			height, Right = receipt.AddAHash(manager, currentState, height, Right, hash)
+		}
+	}
+
+	currentState, idx = getNextState(manager, anchorIndex, nextMark-1)
+
+	for {
+		fmt.Printf("nextMark %d idx %d anchorIndex %d\n",
+			nextMark, idx, anchorIndex)
+		fmt.Println("+++++++++++++++++++\n+++++++ Anchor\n",
+			receipt.String(),
+			"++++++ currentState",
+			currentState.String(),
+			"+++++++++++++++++++++++++++")
+
+		switch {
+		case idx == anchorIndex:
+			fmt.Println("idx == AnchorIndex")
+			hash, _ := manager.Get(idx)
+			height, Right = receipt.AddAHash(manager, currentState, height, Right, hash)
+			receipt.ComputeDag(anchorState, height, Right)
+			return receipt
+		case idx > anchorIndex:
+			fmt.Println("idx > AnchorIndex")
+			receipt.ComputeDag(anchorState, height, Right)
+			return receipt
+		default:
+			hash, _ := manager.Get(idx)
+			fmt.Printf("default: hash: %x\n", hash[:2])
+			height, Right = receipt.AddAHash(manager, currentState, height, Right, hash)
+			nextMark = nextMark + int64(math.Pow(2, float64(height)))
+			currentState, idx = getNextState(manager, anchorIndex, nextMark-1)
 		}
 	}
 }
