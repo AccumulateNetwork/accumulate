@@ -100,7 +100,7 @@ applications and use cases with the blockchain technology:
           linearly
         * Tendermint capacity is about 1000 to 10,000 tps per BVC
         * State required to validate a chain is preserved on-chain; syncing with a chain for building or accessing the
-          current state of the blockchain is nearly instant.
+          current state of the blockchain is nearly instant
         * Maintaining the data and history of the blockchain is maintained on validator nodes separate from data nodes
           for accessing the past state of the blockchain
     * URLs
