@@ -87,6 +87,17 @@ func (m *MerkleState) Trim() {
 	}
 }
 
+// Pad
+// Add a til to the end of the Pending list if one isn't there.
+// We need to be able to add an element to Pending if needed while
+// building receipts
+func (m *MerkleState) Pad() {
+
+	if len(m.Pending) == 0 || m.Pending[len(m.Pending)-1] != nil {
+		m.Pending = append(m.Pending, nil)
+	}
+}
+
 // Equal
 // Compares one MerkleState to another, and returns true if they are the same
 func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
@@ -118,6 +129,7 @@ func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
 		if m2.Pending[idx-1] != nil {
 			return false
 		}
+		idx--
 	}
 
 	// Each must have the same number of elements in the HashList
