@@ -65,7 +65,7 @@ func createRequest(t *testing.T, adiUrl string, kp *ed25519.PrivKey, message str
 	req.Tx.Data = &raw
 	req.Tx.Signer = &Signer{}
 	req.Tx.Signer.Nonce = uint64(time.Now().Unix())
-	req.Tx.Sponsor = types.String(adiUrl)
+	req.Tx.Origin = types.String(adiUrl)
 	req.Tx.KeyPage = &APIRequestKeyPage{}
 	req.Tx.KeyPage.Height = 1
 	copy(req.Tx.Signer.PublicKey[:], kp.PubKey().Bytes())
