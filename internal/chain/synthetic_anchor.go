@@ -17,10 +17,10 @@ type SyntheticAnchor struct {
 func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
 
 func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	// Verify that the sponsor is the node
+	// Verify that the origin is the node
 	nodeUrl := x.Network.NodeUrl()
-	if !st.SponsorUrl.Equal(nodeUrl) {
-		return fmt.Errorf("invalid sponsor: %q != %q", st.SponsorUrl, nodeUrl)
+	if !st.OriginUrl.Equal(nodeUrl) {
+		return fmt.Errorf("invalid origin record: %q != %q", st.OriginUrl, nodeUrl)
 	}
 
 	// Unpack the payload
