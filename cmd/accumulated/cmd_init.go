@@ -126,7 +126,7 @@ func initNode(*cobra.Command, []string) {
 	config := make([]*cfg.Config, len(subnet.Nodes))
 
 	for i, node := range subnet.Nodes {
-		listenIP[i] = "tcp://0.0.0.0"
+		listenIP[i] = "0.0.0.0"
 		remoteIP[i] = node.IP
 		config[i] = cfg.Default(subnet.Type, node.Type, subnet.Name)
 
