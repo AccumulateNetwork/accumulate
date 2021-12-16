@@ -96,6 +96,12 @@ func makeLiteUrl(t *testing.T, key ed25519.PrivateKey, tok string) *url.URL {
 	return u
 }
 
+func makeUrl(t *testing.T, s string) *url.URL {
+	u, err := url.Parse(s)
+	require.NoError(t, err)
+	return u
+}
+
 func callApi(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) interface{} {
 	t.Helper()
 
