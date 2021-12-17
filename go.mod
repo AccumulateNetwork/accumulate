@@ -46,8 +46,10 @@ require (
 	golang.org/x/term v0.0.0-20210927222741-03fcf44c2211
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/tools v0.1.7
+	google.golang.org/genproto v0.0.0-20210602131652-f16073e35f0c
 	gopkg.in/ini.v1 v1.63.2 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
+	gotest.tools/gotestsum v1.7.0
 )
 
 replace github.com/tendermint/tendermint v0.35.0-rc1 => github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20211104230238-906615e51028
