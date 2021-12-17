@@ -237,5 +237,5 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	return ActionResponseFrom(res).Print()
+	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }
