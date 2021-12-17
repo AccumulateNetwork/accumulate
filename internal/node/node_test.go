@@ -17,14 +17,8 @@ import (
 )
 
 func TestNodeLifecycle(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
-
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
+	acctesting.SkipLong(t)
+	
 	// Configure
 	opts := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
 	opts.WorkDir = t.TempDir()
