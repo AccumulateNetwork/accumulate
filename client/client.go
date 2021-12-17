@@ -3,10 +3,8 @@ package client
 import (
 	"context"
 	"fmt"
-	"path"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
@@ -39,16 +37,16 @@ func (c *APIClient) RequestV1(ctx context.Context,
 // RequestV2 makes request to API server (version 2)
 func (c *APIClient) RequestV2(ctx context.Context,
 	method string, params, result interface{}) error {
-	serverUrl, err := url.Parse(c.Server)
-	if err != nil {
-		return err
-	}
+	/*	serverUrl, err := url.Parse(c.Server)
+		if err != nil {
+			return err
+		}
 
-	serverUrl.Path = path.Join(serverUrl.Path, "..", "v2")
-	server := serverUrl.String()
-
+		serverUrl.Path = path.Join(serverUrl.Path, "..", "v2")
+		server := serverUrl.String()
+	*/
 	if c.DebugRequest {
-		fmt.Println("accumulated:", server)
+		fmt.Println("accumulated:", c.Server)
 	}
-	return c.Client.Request(ctx, server, method, params, result)
+	return c.Client.Request(ctx, c.Server, method, params, result)
 }
