@@ -146,7 +146,7 @@ func GetKeyPageInBook(book string, keyLabel string) (*protocol.KeyPage, int, err
 
 	for i := range kb.Pages {
 		v := kb.Pages[i]
-		//we have a match so go fetch the ssg
+		//we have a match so go fetch the key book
 		s, err := GetByChainId(v[:])
 		if err != nil {
 			return nil, 0, err
