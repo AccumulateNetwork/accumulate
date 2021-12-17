@@ -91,8 +91,8 @@ func PrintAccountRestore() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBookUrl]	Create a token account for an ADI")
-	fmt.Println("  accumulate account create data [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new data account url]  [keyBookUrl]	Create a data account under an ADI")
+	fmt.Println("  accumulate account create token [origin adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBookUrl]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create data [origin adi] [signing key name] [key index (optional)] [key height (optional)] [new data account url]  [keyBookUrl]	Create a data account under an ADI")
 }
 
 func PrintAccountImport() {
@@ -146,14 +146,14 @@ func QrAccount(s string) (string, error) {
 }
 
 //CreateAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
-func CreateAccount(url string, args []string) (string, error) {
-	actor, err := url2.Parse(url)
+func CreateAccount(origin string, args []string) (string, error) {
+	u, err := url2.Parse(origin)
 	if err != nil {
 		PrintAccountCreate()
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(actor, args)
+	args, si, privKey, err := prepareSigner(u, args)
 	if len(args) < 3 {
 		PrintAccountCreate()
 		return "", fmt.Errorf("insufficient number of command line arguments")
@@ -164,8 +164,8 @@ func CreateAccount(url string, args []string) (string, error) {
 		PrintAccountCreate()
 		return "", fmt.Errorf("invalid account url %s", args[0])
 	}
-	if actor.Authority != accountUrl.Authority {
-		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, actor.Authority)
+	if u.Authority != accountUrl.Authority {
+		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, u.Authority)
 	}
 	tok, err := url2.Parse(args[1])
 	if err != nil {
@@ -198,7 +198,7 @@ func CreateAccount(url string, args []string) (string, error) {
 	tac.TokenUrl = tok.String()
 	tac.KeyBookUrl = keybook
 
-	res, err := dispatchTxRequest("create-token-account", &tac, actor, si, privKey)
+	res, err := dispatchTxRequest("create-token-account", &tac, u, si, privKey)
 	if err != nil {
 		return "", err
 	}

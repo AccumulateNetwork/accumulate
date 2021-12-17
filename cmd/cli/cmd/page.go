@@ -55,7 +55,7 @@ func PrintKeyPageGet() {
 }
 
 func PrintKeyPageCreate() {
-	fmt.Println("  accumulate page create [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [new key page url] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys")
+	fmt.Println("  accumulate page create [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [new key page url] [public key 1] ... [public key hex or name n + 1] Create new key page with 1 to N+1 public keys")
 	fmt.Println("\t\t example usage: accumulate key page create acc://RedWagon redKey5 acc://RedWagon/RedPage1 redKey1 redKey2 redKey3")
 }
 func PrintKeyUpdate() {
@@ -160,8 +160,8 @@ func resolveKey(key string) ([]byte, error) {
 	return ret, err
 }
 
-func KeyPageUpdate(actorUrl string, op protocol.KeyPageOperation, args []string) (string, error) {
-	u, err := url2.Parse(actorUrl)
+func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (string, error) {
+	u, err := url2.Parse(origin)
 	if err != nil {
 		return "", err
 	}

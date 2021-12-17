@@ -49,8 +49,8 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	return res.MerkleState, nil
 }
 
-func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
-	//adiActor labelOrPubKeyHex height index
+func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
+	//adiOrigin labelOrPubKeyHex height index
 	var privKey []byte
 	var err error
 
@@ -60,14 +60,14 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	}
 
 	ed := transactions.SignatureInfo{}
-	ed.URL = actor.String()
+	ed.URL = origin.String()
 	ed.KeyPageHeight = 1
 	ed.KeyPageIndex = 0
 
-	if IsLiteAccount(actor.String()) == true {
-		privKey, err = LookupByLabel(actor.String()) //LookupByAnon(actor.String())
+	if IsLiteAccount(origin.String()) == true {
+		privKey, err = LookupByLabel(origin.String())
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", actor.String(), err)
+			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", origin.String(), err)
 		}
 		return args, &ed, privKey, nil
 	}
@@ -98,27 +98,27 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 		}
 	}
 
-	actorRec := new(state.ChainHeader)
-	_, err = getRecord(actor.String(), &actorRec)
+	originRec := new(state.ChainHeader)
+	_, err = getRecord(origin.String(), &originRec)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
 	}
 
 	bookRec := new(protocol.KeyBook)
-	if actorRec.KeyBook == (types.Bytes32{}) {
-		_, err := getRecord(actor.String(), &bookRec)
+	if originRec.KeyBook == (types.Bytes32{}) {
+		_, err := getRecord(origin.String(), &bookRec)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
 		}
 	} else {
-		_, err := getRecordById(actorRec.KeyBook[:], &bookRec)
+		_, err := getRecordById(originRec.KeyBook[:], &bookRec)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
 		}
 	}
 
 	if ed.KeyPageIndex >= uint64(len(bookRec.Pages)) {
-		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", ed.KeyPageIndex, actor)
+		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", ed.KeyPageIndex, origin)
 	}
 	ms, err := getRecordById(bookRec.Pages[ed.KeyPageIndex][:], nil)
 	if err != nil {
@@ -129,12 +129,12 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	return args[ct:], &ed, privKey, nil
 }
 
-func signGenTx(binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+func signGenTx(binaryPayload []byte, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 	gtx := new(transactions.GenTransaction)
 	gtx.Transaction = binaryPayload
 
-	gtx.ChainID = actor.ResourceChain()
-	gtx.Routing = actor.Routing()
+	gtx.ChainID = origin.ResourceChain()
+	gtx.Routing = origin.Routing()
 
 	si.Nonce = nonce
 	gtx.SigInfo = si
@@ -147,8 +147,8 @@ func signGenTx(binaryPayload []byte, actor *url2.URL, si *transactions.Signature
 	return ed, nil
 }
 
-func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(binaryPayload, actor, si, privKey, nonce)
+func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+	ed, err := signGenTx(binaryPayload, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +163,7 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *tran
 	params.Payload = json.RawMessage(jsonPayload)
 	params.Signer.PublicKey = privKey[32:]
 	params.Signer.Nonce = nonce
-	params.Origin = actor.String()
+	params.Origin = origin.String()
 	params.KeyPage.Height = si.KeyPageHeight
 	params.KeyPage.Index = si.KeyPageIndex
 
@@ -211,7 +211,7 @@ func GetUrl(url string) (*api2.QueryResponse, error) {
 	return &res, nil
 }
 
-func dispatchTxRequest(action string, payload interface{}, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload interface{}, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -223,7 +223,7 @@ func dispatchTxRequest(action string, payload interface{}, actor *url2.URL, si *
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, actor, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}

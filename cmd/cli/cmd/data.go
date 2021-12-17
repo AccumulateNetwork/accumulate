@@ -61,8 +61,8 @@ func PrintDataGet() {
 
 func PrintDataAccountCreate() {
 	//./cli data create acc://actor key idx height acc://actor/dataAccount acc://actor/keyBook (optional)
-	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/ssg0")
+	fmt.Println("  accumulate account create data [origin adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
+	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/keybook0")
 }
 
 func PrintDataWrite() {
@@ -153,13 +153,13 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 	return PrintQueryResponseV2(&res)
 }
 
-func CreateDataAccount(actorUrl string, args []string) (string, error) {
-	actor, err := url.Parse(actorUrl)
+func CreateDataAccount(origin string, args []string) (string, error) {
+	u, err := url.Parse(origin)
 	if err != nil {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(actor, args)
+	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
@@ -172,8 +172,8 @@ func CreateDataAccount(actorUrl string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid account url %s", args[0])
 	}
-	if actor.Authority != accountUrl.Authority {
-		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, actor.Authority)
+	if u.Authority != accountUrl.Authority {
+		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, u.Authority)
 	}
 
 	var keybook string
@@ -189,7 +189,7 @@ func CreateDataAccount(actorUrl string, args []string) (string, error) {
 	cda.Url = accountUrl.String()
 	cda.KeyBookUrl = keybook
 
-	res, err := dispatchTxRequest("create-data-account", &cda, actor, si, privKey)
+	res, err := dispatchTxRequest("create-data-account", &cda, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
@@ -197,12 +197,12 @@ func CreateDataAccount(actorUrl string, args []string) (string, error) {
 }
 
 func WriteData(accountUrl string, args []string) (string, error) {
-	actor, err := url.Parse(accountUrl)
+	u, err := url.Parse(accountUrl)
 	if err != nil {
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(actor, args)
+	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
@@ -232,7 +232,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	res, err := dispatchTxRequest("write-data", &wd, actor, si, privKey)
+	res, err := dispatchTxRequest("write-data", &wd, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
