@@ -3,7 +3,6 @@ package api_test
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -200,9 +199,7 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 	adiUrl := "greentractor"
 
 	message, err := createTokenTx(adiUrl)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	params := createRequest(t, adiUrl, &kp, message)
 
 	validate, err := protocol.NewValidator()
@@ -210,20 +207,15 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 
 	req := &APIRequestRaw{}
 	// unmarshal req
-	if err = json.Unmarshal(params, &req); err != nil {
-		t.Fatal(err)
-	}
+	err = json.Unmarshal(params, &req)
+	require.NoError(t, err)
 
 	// validate request
-	if err = validate.Struct(req); err != nil {
-		t.Fatal(err)
-	}
+	err = validate.Struct(req)
+	require.NoError(t, err)
 
-	//tx, err := json.MarshalIndent(&req,"", "  ")
 	tx, err := json.Marshal(&req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	fmt.Printf("%s", string(tx))
+	t.Logf("%s", tx)
 }
