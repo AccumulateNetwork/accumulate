@@ -52,8 +52,8 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 			return fmt.Errorf("invalid key book URL: %v", err)
 		}
 
-		ssg := new(protocol.KeyBook)
-		err = st.LoadUrlAs(keyBookUrl, ssg)
+		book := new(protocol.KeyBook)
+		err = st.LoadUrlAs(keyBookUrl, book)
 		if err != nil {
 			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}

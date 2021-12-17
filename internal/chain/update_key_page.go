@@ -46,16 +46,16 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 	}
 
-	var ssg *protocol.KeyBook
+	var book *protocol.KeyBook
 	var priority = -1
 	if page.KeyBook != (types.Bytes32{}) {
-		ssg = new(protocol.KeyBook)
-		err = st.LoadAs(page.KeyBook, ssg)
+		book = new(protocol.KeyBook)
+		err = st.LoadAs(page.KeyBook, book)
 		if err != nil {
 			return fmt.Errorf("invalid key book: %v", err)
 		}
 
-		for i, p := range ssg.Pages {
+		for i, p := range book.Pages {
 			if p == st.OriginChainId {
 				priority = i
 			}

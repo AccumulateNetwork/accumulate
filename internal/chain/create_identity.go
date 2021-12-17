@@ -40,15 +40,15 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction
 	}
 
 	var pageUrl, bookUrl *url.URL
-	if body.KeyPageName == "" {
-		pageUrl = identityUrl.JoinPath("sigspec0")
-	} else {
-		pageUrl = identityUrl.JoinPath(body.KeyPageName)
-	}
 	if body.KeyBookName == "" {
-		bookUrl = identityUrl.JoinPath("ssg0")
+		return fmt.Errorf("missing key book name")
 	} else {
 		bookUrl = identityUrl.JoinPath(body.KeyBookName)
+	}
+	if body.KeyPageName == "" {
+		return fmt.Errorf("missing key page name")
+	} else {
+		pageUrl = identityUrl.JoinPath(body.KeyPageName)
 	}
 
 	keySpec := new(protocol.KeySpec)

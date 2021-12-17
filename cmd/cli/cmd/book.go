@@ -90,15 +90,13 @@ func GetKeyBook(url string) ([]byte, *protocol.KeyBook, error) {
 		return nil, nil, err
 	}
 
-	//added for compatibility with v1
-	//data := strings.ReplaceAll(string(*res.Data), "keyBook", "sigSpecGroup")
-	ssg := protocol.KeyBook{}
-	err = json.Unmarshal(*res.Data, &ssg)
+	book := protocol.KeyBook{}
+	err = json.Unmarshal(*res.Data, &book)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return s, &ssg, nil
+	return s, &book, nil
 }
 
 // CreateKeyBook create a new key page
@@ -123,8 +121,8 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		return "", fmt.Errorf("book url to create (%s) doesn't match the authority adi (%s)", newUrl.Authority, bookUrl.Authority)
 	}
 
-	ssg := protocol.CreateKeyBook{}
-	ssg.Url = newUrl.String()
+	bookTx := protocol.CreateKeyBook{}
+	bookTx.Url = newUrl.String()
 
 	var chainId types.Bytes32
 	pageUrls := args[1:]
@@ -134,15 +132,15 @@ func CreateKeyBook(book string, args []string) (string, error) {
 			return "", fmt.Errorf("invalid page url %s, %v", pageUrls[i], err)
 		}
 		chainId.FromBytes(u2.ResourceChain())
-		ssg.Pages = append(ssg.Pages, chainId)
+		bookTx.Pages = append(bookTx.Pages, chainId)
 	}
 
-	data, err := json.Marshal(&ssg)
+	data, err := json.Marshal(&bookTx)
 	if err != nil {
 		return "", err
 	}
 
-	dataBinary, err := ssg.MarshalBinary()
+	dataBinary, err := bookTx.MarshalBinary()
 	if err != nil {
 		return "", err
 	}
@@ -185,7 +183,7 @@ func GetKeyPageInBook(book string, keyLabel string) (*protocol.KeyPage, int, err
 
 	for i := range kb.Pages {
 		v := kb.Pages[i]
-		//we have a match so go fetch the ssg
+		//we have a match so go fetch the key book
 		s, err := GetByChainId(v[:])
 		if err != nil {
 			return nil, 0, err
