@@ -47,7 +47,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if recvUrl.Routing() == tx.Routing {
-			// If the recipient and the sponsor have the same routing number,
+			// If the recipient and the origin have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to
 			// locate the recipient chain means it doesn't exist.
 			return fmt.Errorf("invalid recipient: not found")
@@ -57,11 +57,11 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	var account tokenChain
-	switch sponsor := st.Sponsor.(type) {
+	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
-		account = sponsor
+		account = origin
 	case *state.TokenAccount:
-		account = sponsor
+		account = origin
 	default:
 		return fmt.Errorf("not an account: %q", tx.SigInfo.URL)
 	}
