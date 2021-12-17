@@ -59,8 +59,8 @@ func PrintADIGet() {
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [actor-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
-	fmt.Println("  accumulate adi create [actor-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
+	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
+	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
 func PrintADIImport() {
@@ -71,8 +71,8 @@ func PrintAdiDirectory() {
 	fmt.Println("  accumulate adi directory [url] 		Get directory of URL's associated with an ADI")
 }
 
-func GetAdiDirectory(actor string) (string, error) {
-	res, err := GetUrl(actor)
+func GetAdiDirectory(origin string) (string, error) {
+	res, err := GetUrl(origin)
 	if err != nil {
 		return "", err
 	}
@@ -96,12 +96,12 @@ func GetADI(url string) (string, error) {
 	return PrintQueryResponseV2(res)
 }
 
-func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
+func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	var si *transactions.SignatureInfo
 	var privKey []byte
 	var err error
 
-	args, si, privKey, err = prepareSigner(actor, args)
+	args, si, privKey, err = prepareSigner(origin, args)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +154,7 @@ func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
 	idc.KeyBookName = book
 	idc.KeyPageName = page
 
-	res, err := dispatchTxRequest("create-adi", &idc, actor, si, privKey)
+	res, err := dispatchTxRequest("create-adi", &idc, origin, si, privKey)
 	if err != nil {
 		return "", err
 	}
@@ -175,9 +175,9 @@ func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
 }
 
 // NewADI create a new ADI from a sponsored account.
-func NewADI(actor string, params []string) (string, error) {
+func NewADI(origin string, params []string) (string, error) {
 
-	u, err := url2.Parse(actor)
+	u, err := url2.Parse(origin)
 	if err != nil {
 		return "", err
 	}
