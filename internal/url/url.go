@@ -112,7 +112,7 @@ func (u *URL) RawString() string {
 // Hostname returns the hostname from the authority component.
 func (u *URL) Hostname() string {
 	s, _ := splitColon(u.Authority)
-	return strings.ToLower(s)
+	return s
 }
 
 // Port returns the port from the authority component.
@@ -207,12 +207,4 @@ func (u *URL) JoinPath(s ...string) *URL {
 	v := *u
 	v.Path = path.Join(append([]string{u.Path}, s...)...)
 	return &v
-}
-
-func (u *URL) IsBvnURL() bool {
-	return strings.HasPrefix(u.Hostname(), "bvn-")
-}
-
-func (u *URL) IsDnURL() bool {
-	return u.Hostname() == "dn"
 }

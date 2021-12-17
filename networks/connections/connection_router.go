@@ -2,6 +2,7 @@ package connections
 
 import (
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"github.com/ybbus/jsonrpc/v2"
 	"strings"
@@ -116,11 +117,10 @@ func (cr *connectionRouter) GetAllBVNs() ([]Route, error) {
 }
 
 func (cr *connectionRouter) selectNodeContext(adiUrl *url.URL, allowFollower bool) (*nodeContext, error) {
-	hostname := adiUrl.Hostname()
 	switch {
-	case adiUrl.IsBvnURL() && cr.isBvnExists(hostname):
-		return cr.lookupBvnNode(hostname, cr.bvnGroup)
-	case adiUrl.IsDnURL() && cr.isDnExists(hostname):
+	case protocol.IsBvnUrl(adiUrl) && cr.isBvnExists(adiUrl.Hostname()):
+		return cr.lookupBvnNode(adiUrl.Hostname(), cr.bvnGroup)
+	case protocol.IsDnUrl(adiUrl) && cr.isDnExists(protocol.DnUrl().Hostname()): // This will also route ACME to the DN
 		return cr.lookupDirNode(cr.dnGroup)
 	case allowFollower:
 		return cr.selectNode(cr.otherGroup)
@@ -130,16 +130,16 @@ func (cr *connectionRouter) selectNodeContext(adiUrl *url.URL, allowFollower boo
 }
 
 func (cr *connectionRouter) isBvnExists(hostname string) bool {
-	return cr.bvnNameMap[hostname]
+	return cr.bvnNameMap[strings.ToLower(hostname)]
 }
 
 func (cr *connectionRouter) isDnExists(hostname string) bool {
-	return dnNameMap[hostname]
+	return dnNameMap[strings.ToLower(hostname)]
 }
 
 func (cr *connectionRouter) lookupBvnNode(hostname string, group nodeGroup) (*nodeContext, error) {
 	for _, nodeCtx := range group.nodes {
-		if hostname[4:] == nodeCtx.subnetName || hostname == nodeCtx.subnetName {
+		if strings.EqualFold(hostname[4:], nodeCtx.subnetName) || strings.EqualFold(hostname, nodeCtx.subnetName) {
 			if !nodeCtx.IsHealthy() {
 				return nil, bvnNotHealthy(nodeCtx.address, nodeCtx.lastError)
 			}

@@ -230,6 +230,11 @@ func IsDnUrl(u *url.URL) bool {
 	return DnUrl().Equal(u) || AcmeUrl().Equal(u)
 }
 
+// IsBvnUrl checks if the URL belongs to a BVN.
+func IsBvnUrl(u *url.URL) bool {
+	return strings.HasPrefix(u.Hostname(), "bvn-")
+}
+
 // ParseBvnUrl extracts the BVN subnet name from a BVN URL, if the URL is a
 // valid BVN URL.
 func ParseBvnUrl(u *url.URL) (string, bool) {
