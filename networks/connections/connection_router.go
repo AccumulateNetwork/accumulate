@@ -1,7 +1,6 @@
 package connections
 
 import (
-	"fmt"
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"github.com/ybbus/jsonrpc/v2"
@@ -16,7 +15,7 @@ var dnNameMap = map[string]bool{
 }
 
 type ConnectionRouter interface {
-	SelectRoute(url string, allowFollower bool) (Route, error) // TODO: Check if we should take url.URL instead of string
+	SelectRoute(url *url.URL, allowFollower bool) (Route, error)
 	GetLocalRoute() (Route, error)
 	GetAll() ([]Route, error)
 	GetAllBVNs() ([]Route, error)
@@ -63,7 +62,7 @@ func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
 	return cr
 }
 
-func (cr *connectionRouter) SelectRoute(adiUrl string, allowFollower bool) (Route, error) {
+func (cr *connectionRouter) SelectRoute(adiUrl *url.URL, allowFollower bool) (Route, error) {
 	nodeCtx, err := cr.selectNodeContext(adiUrl, allowFollower)
 	if err != nil {
 		return nil, errorCouldNotSelectNode(adiUrl, err)
@@ -116,16 +115,12 @@ func (cr *connectionRouter) GetAllBVNs() ([]Route, error) {
 	return routes, nil
 }
 
-func (cr *connectionRouter) selectNodeContext(adiUrl string, allowFollower bool) (*nodeContext, error) {
-	url, err := url.Parse(adiUrl)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
-	}
-	hostnameLower := strings.ToLower(url.Hostname())
+func (cr *connectionRouter) selectNodeContext(adiUrl *url.URL, allowFollower bool) (*nodeContext, error) {
+	hostname := adiUrl.Hostname()
 	switch {
-	case cr.isBvnUrl(hostnameLower):
-		return cr.lookupBvnNode(hostnameLower, cr.bvnGroup)
-	case cr.isDnUrl(hostnameLower):
+	case adiUrl.IsBvnURL() && cr.isBvnExists(hostname):
+		return cr.lookupBvnNode(hostname, cr.bvnGroup)
+	case adiUrl.IsDnURL() && cr.isDnExists(hostname):
 		return cr.lookupDirNode(cr.dnGroup)
 	case allowFollower:
 		return cr.selectNode(cr.otherGroup)
@@ -134,18 +129,17 @@ func (cr *connectionRouter) selectNodeContext(adiUrl string, allowFollower bool)
 	}
 }
 
-func (cr *connectionRouter) isBvnUrl(hostname string) bool {
+func (cr *connectionRouter) isBvnExists(hostname string) bool {
 	return cr.bvnNameMap[hostname]
 }
 
-func (cr *connectionRouter) isDnUrl(hostname string) bool {
+func (cr *connectionRouter) isDnExists(hostname string) bool {
 	return dnNameMap[hostname]
 }
 
 func (cr *connectionRouter) lookupBvnNode(hostname string, group nodeGroup) (*nodeContext, error) {
 	for _, nodeCtx := range group.nodes {
-		if strings.HasPrefix(hostname, "bvn-") && strings.EqualFold(hostname[4:], nodeCtx.subnetName) ||
-			strings.EqualFold(hostname, nodeCtx.subnetName) {
+		if hostname[4:] == nodeCtx.subnetName || hostname == nodeCtx.subnetName {
 			if !nodeCtx.IsHealthy() {
 				return nil, bvnNotHealthy(nodeCtx.address, nodeCtx.lastError)
 			}

@@ -6,6 +6,7 @@ package mock_api
 
 import (
 	context "context"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/ybbus/jsonrpc/v2"
@@ -251,7 +252,7 @@ func (m MockRoute) GetBatchBroadcastClient() connections.BatchABCIBroadcastClien
 	return m.broadcaseClient
 }
 
-func (m *MockConnectionRouter) SelectRoute(url string, allowFollower bool) (connections.Route, error) {
+func (m *MockConnectionRouter) SelectRoute(adiUrl *url.URL, allowFollower bool) (connections.Route, error) {
 	return m.route, nil
 }
 

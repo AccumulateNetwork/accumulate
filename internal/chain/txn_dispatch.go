@@ -133,7 +133,7 @@ func (d *dispatcher) Send(ctx context.Context) error {
 }
 
 func (d *dispatcher) getRouteAndBatch(u *url.URL) (connections.Route, *txBatch, error) {
-	route, err := d.ConnectionRouter.SelectRoute(u.String(), false)
+	route, err := d.ConnectionRouter.SelectRoute(u, false)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -3,14 +3,15 @@ package connections
 import (
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
 var ErrInvalidUrl = errors.New("invalid URL")
 var NoHealthyNodes = errors.New("no health nodes available")
 var LocaNodeNotFound = errors.New("no local node was found")
 
-func errorCouldNotSelectNode(url string, err error) error {
-	return fmt.Errorf("error while slecting node for url %s: %v", url, err)
+func errorCouldNotSelectNode(url *url.URL, err error) error {
+	return fmt.Errorf("error while slecting node for url %s: %v", url.String(), err)
 }
 
 func bvnNotFound(bvnName string) error {

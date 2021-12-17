@@ -69,7 +69,7 @@ func (cm *connectionManager) loadNodeNetworkMap() {
 	cm.nodeToSubnetNameMap = make(map[string]string)
 	for subnetName, addresses := range cm.accConfig.Network.Addresses {
 		for _, address := range addresses {
-			cm.nodeToSubnetNameMap[address] = subnetName
+			cm.nodeToSubnetNameMap[address] = strings.ToLower(subnetName)
 		}
 	}
 }

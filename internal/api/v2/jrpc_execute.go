@@ -107,7 +107,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 
 	// Route the request
-	route, err := m.opts.ConnectionRouter.SelectRoute(u.String(), true)
+	route, err := m.opts.ConnectionRouter.SelectRoute(u, true)
 	if err != nil {
 		return accumulateError(err)
 	}

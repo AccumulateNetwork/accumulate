@@ -6,6 +6,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"github.com/rs/zerolog"
@@ -26,13 +27,13 @@ func TestConnectionRouter(t *testing.T) {
 	broadcastClient := localRoute
 	t.Logf("Broadcast client: %v", broadcastClient)
 
-	route, err := connRouter.SelectRoute("acc://bvn-"+selfId+"/foo", false)
+	route, err := connRouter.SelectRoute(toURL(t, "acc://bvn-"+selfId+"/foo"), false)
 	require.NoError(t, err)
 	t.Logf("Local client: %v", route)
 	assert.Equal(t, connections.Local, route.GetNetworkGroup())
 	assert.NotNil(t, route.GetBroadcastClient())
 
-	otherClient, err := connRouter.SelectRoute("acc://bvn-"+otherId+"/foo", false)
+	otherClient, err := connRouter.SelectRoute(toURL(t, "acc://bvn-"+otherId+"/foo"), false)
 	require.NoError(t, err)
 	t.Logf("Other client: %v", otherClient)
 	assert.Equal(t, connections.OtherSubnet, otherClient.GetNetworkGroup())
@@ -42,24 +43,30 @@ func TestConnectionRouter(t *testing.T) {
 		t.Logf("DN client: %v", dnClient)
 		assert.NotNil(t, dnClient.GetJsonRpcClient())
 	*/
-	queryClient1, err := connRouter.SelectRoute("acc://RedWagon/foo", true)
+	queryClient1, err := connRouter.SelectRoute(toURL(t, "acc://RedWagon/foo"), true)
 	require.NoError(t, err)
 	t.Logf("Query client 1: %v", queryClient1)
 	assert.NotNil(t, queryClient1.GetQueryClient())
 
-	queryClient2, err := connRouter.SelectRoute("acc://RedWagon/foo", true)
+	queryClient2, err := connRouter.SelectRoute(toURL(t, "acc://RedWagon/foo"), true)
 	require.NoError(t, err)
 	t.Logf("Query client 2: %v", queryClient2)
 
-	queryClientLocalBvn, err := connRouter.SelectRoute("acc://bvn-"+selfId+"/foo", true)
+	queryClientLocalBvn, err := connRouter.SelectRoute(toURL(t, "acc://bvn-"+selfId+"/foo"), true)
 	require.NoError(t, err)
 	t.Logf("Query local BVN: %v", queryClientLocalBvn)
 	assert.NotNil(t, queryClientLocalBvn.GetQueryClient())
 
-	queryClientOtherBvn, err := connRouter.SelectRoute("acc://bvn-"+otherId+"/foo", true)
+	queryClientOtherBvn, err := connRouter.SelectRoute(toURL(t, "acc://bvn-"+otherId+"/foo"), true)
 	require.NoError(t, err)
 	t.Logf("Query other BVN: %v", queryClientOtherBvn)
 	assert.NotNil(t, queryClientOtherBvn.GetQueryClient())
+}
+
+func toURL(t *testing.T, urlString string) *url.URL {
+	url, err := url.Parse(urlString)
+	require.NoError(t, err)
+	return url
 }
 
 func mockLocalNode(t *testing.T) (*node.Node, connections.ConnectionRouter) {

@@ -2,6 +2,8 @@ package api
 
 import (
 	"errors"
+	"fmt"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"sync"
 	"time"
@@ -15,7 +17,11 @@ type queryDispatch struct {
 }
 
 func (q *queryDispatch) direct(accUrl string) (*queryDirect, error) {
-	route, err := q.connRouter.SelectRoute(accUrl, true)
+	url, err := url.Parse(accUrl)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
+	}
+	route, err := q.connRouter.SelectRoute(url, true)
 	if err != nil {
 		return nil, err
 	}
