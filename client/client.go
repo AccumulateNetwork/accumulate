@@ -26,14 +26,24 @@ func NewAPIClient() *APIClient {
 	return c
 }
 
-// RequestV1 Request makes request to API server
+// RequestV1 Deprecated - Request makes request to API server
 func (c *APIClient) RequestV1(ctx context.Context,
 	method string, params, result interface{}) error {
 
+	if c.DebugRequest {
+		fmt.Println("accumulated:", c.Server)
+	}
+	return c.Client.Request(ctx, c.Server, method, params, result)
+}
+
+// RequestV2 makes request to API server (version 2)
+func (c *APIClient) RequestV2(ctx context.Context,
+	method string, params, result interface{}) error {
 	serverUrl, err := url.Parse(c.Server)
 	if err != nil {
 		return err
 	}
+
 	serverUrl.Path = path.Join(serverUrl.Path, "..", "v2")
 	server := serverUrl.String()
 
@@ -41,14 +51,4 @@ func (c *APIClient) RequestV1(ctx context.Context,
 		fmt.Println("accumulated:", server)
 	}
 	return c.Client.Request(ctx, server, method, params, result)
-}
-
-// RequestV2 makes request to API server (version 2)
-func (c *APIClient) RequestV2(ctx context.Context,
-	method string, params, result interface{}) error {
-
-	if c.DebugRequest {
-		fmt.Println("accumulated:", c.Server)
-	}
-	return c.Client.Request(ctx, c.Server, method, params, result)
 }
