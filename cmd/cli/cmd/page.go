@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/spf13/cobra"
