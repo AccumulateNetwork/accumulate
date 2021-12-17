@@ -28,6 +28,7 @@ func TestProofADI(t *testing.T) {
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.IdentityCreate)
 		adi.Url = "RoadRunner"
+		adi.KeyBookName = "book0"
 		adi.KeyPageName = "page0"
 		adi.PublicKey = keyHash[:]
 
