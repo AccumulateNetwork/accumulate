@@ -2,6 +2,7 @@ package logging
 
 import (
 	"fmt"
+	"runtime/debug"
 
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/libs/log"
@@ -27,11 +28,22 @@ func NewTendermintLogger(zl zerolog.Logger, level string, trace bool) (log.Logge
 	return &TendermintZeroLogger{zl, trace}, nil
 }
 
+func (l *TendermintZeroLogger) recover() {
+	r := recover()
+	if r == nil {
+		return
+	}
+
+	l.Zerolog.Error().Err(fmt.Errorf("%v", r)).Str("stack", string(debug.Stack())).Msg("Panicked while logging")
+}
+
 func (l *TendermintZeroLogger) Info(msg string, keyVals ...interface{}) {
+	defer l.recover()
 	l.Zerolog.Info().Fields(getLogFields(keyVals...)).Msg(msg)
 }
 
 func (l *TendermintZeroLogger) Error(msg string, keyVals ...interface{}) {
+	defer l.recover()
 	e := l.Zerolog.Error()
 	if l.Trace {
 		e = e.Stack()
@@ -41,6 +53,7 @@ func (l *TendermintZeroLogger) Error(msg string, keyVals ...interface{}) {
 }
 
 func (l *TendermintZeroLogger) Debug(msg string, keyVals ...interface{}) {
+	defer l.recover()
 	l.Zerolog.Debug().Fields(getLogFields(keyVals...)).Msg(msg)
 }
 
