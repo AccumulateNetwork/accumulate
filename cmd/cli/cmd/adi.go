@@ -1,8 +1,12 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -27,8 +31,8 @@ var adiCmd = &cobra.Command{
 			case "list":
 				out, err = ListADIs()
 			case "directory":
-				if len(args) > 1 {
-					out, err = GetAdiDirectory(args[1])
+				if len(args) > 3 {
+					out, err = GetAdiDirectory(args[1], args[2], args[3])
 					if err != nil {
 						PrintAdiDirectory()
 					}
@@ -68,16 +72,47 @@ func PrintADIImport() {
 }
 
 func PrintAdiDirectory() {
-	fmt.Println("  accumulate adi directory [url] 		Get directory of URL's associated with an ADI")
+	fmt.Println("  accumulate adi directory [url] [start] [count]		Get directory of URL's associated with an ADI with starting index and number of directories to receive")
 }
 
-func GetAdiDirectory(origin string) (string, error) {
-	res, err := GetUrl(origin)
+func GetAdiDirectory(origin string, start string, count string) (string, error) {
+	var res api2.QueryResponse
+
+	u, err := url2.Parse(origin)
+
+	st, err := strconv.ParseInt(start, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid start value")
+	}
+
+	ct, err := strconv.ParseInt(count, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid count value")
+	}
+	if ct < 1 {
+		return "", fmt.Errorf("count must be greater than zero")
+	}
+
+	params := api2.DirectoryQuery{}
+	params.Url = u.String()
+	params.Start = uint64(st)
+	params.Count = uint64(ct)
+	params.ExpandChains = true
+
+	data, err := json.Marshal(&params)
 	if err != nil {
 		return "", err
 	}
 
-	return PrintQueryResponseV2(res)
+	if err := Client.RequestV2(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
+		ret, err := PrintJsonRpcError(err)
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("%v", ret)
+	}
+
+	return PrintQueryResponseV2(&res)
 }
 
 func PrintADI() {

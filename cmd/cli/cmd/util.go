@@ -331,7 +331,7 @@ func (a *ActionResponse) Print() (string, error) {
 		}
 		out = string(b)
 	} else {
-		out += fmt.Sprintf("\n\tTransaction Identifier\t:\t%x\n", a.Txid)
+		out += fmt.Sprintf("\n\tTransaction Id\t\t:\t%x\n", a.Txid)
 		out += fmt.Sprintf("\tTendermint Reference\t:\t%x\n", a.Hash)
 		if !ok {
 			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
@@ -389,12 +389,14 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 }
 
 var (
-	ApiToString = map[string]string{
-		"liteTokenAccount": "lite account",
-		"tokenAccount":     "ADI token account",
-		"adi":              "ADI",
-		"keyBook":          "Key Book",
-		"keyPage":          "Key Page",
+	ApiToString = map[types.ChainType]string{
+		types.ChainTypeLiteTokenAccount: "Lite Account",
+		types.ChainTypeTokenAccount:     "ADI Token Account",
+		types.ChainTypeIdentity:         "ADI",
+		types.ChainTypeKeyBook:          "Key Book",
+		types.ChainTypeKeyPage:          "Key Page",
+		types.ChainTypeDataAccount:      "Data Chain",
+		types.ChainTypeLiteDataAccount:  "Lite Data Chain",
 	}
 )
 
@@ -459,11 +461,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 	switch string(res.Type) {
 	case types.ChainTypeLiteTokenAccount.String():
 		ata := protocol.LiteTokenAccount{}
-		d, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		err = json.Unmarshal(d, &ata)
+		err := UnmarshalQuery(res.Data, &ata)
 		if err != nil {
 			return "", err
 		}
@@ -483,14 +481,11 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.ChainTypeTokenAccount.String():
 		ata := state.TokenAccount{}
-		d, err := json.Marshal(res.Data)
+		err := UnmarshalQuery(res.Data, &ata)
 		if err != nil {
 			return "", err
 		}
-		err = json.Unmarshal(d, &ata)
-		if err != nil {
-			return "", err
-		}
+
 		amt, err := formatAmount(*ata.TokenUrl.String.AsString(), &ata.Balance)
 		if err != nil {
 			amt = "unknown"
@@ -508,11 +503,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.ChainTypeIdentity.String():
 		adi := state.AdiState{}
-		d, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		err = json.Unmarshal(d, &adi)
+		err := UnmarshalQuery(res.Data, &adi)
 		if err != nil {
 			return "", err
 		}
@@ -529,38 +520,32 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case "directory":
 		dqr := api2.DirectoryQueryResult{}
-		d, err := json.Marshal(res.Data)
+		err := UnmarshalQuery(res.Data, &dqr)
 		if err != nil {
 			return "", err
 		}
-		err = json.Unmarshal(d, &dqr)
-		if err != nil {
-			return "", err
-		}
+
 		var out string
-		out += fmt.Sprintf("\n\tADI Entries\n")
-		for _, s := range dqr.Entries {
-			q, err := GetUrl(s)
+		out += fmt.Sprintf("\n\tADI Entries: start = %d, count = %d, total = %d\n", dqr.Start, dqr.Count, dqr.Total)
+		for _, s := range dqr.ExpandedEntries {
+			header := state.ChainHeader{}
+			err = UnmarshalQuery(s.Data, &header)
 			if err != nil {
 				return "", err
 			}
 
-			chainType := "unknown"
+			chainDesc := "unknown"
 			if err == nil {
-				if v, ok := ApiToString[q.Type]; ok {
-					chainType = v
+				if v, ok := ApiToString[header.Type]; ok {
+					chainDesc = v
 				}
 			}
-			out += fmt.Sprintf("\t%v (%s)\n", s, chainType)
+			out += fmt.Sprintf("\t%v (%s)\n", header.ChainUrl, chainDesc)
 		}
 		return out, nil
 	case types.ChainTypeKeyBook.String():
 		book := protocol.KeyBook{}
-		d, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		err = json.Unmarshal(d, &book)
+		err := UnmarshalQuery(res.Data, &book)
 		if err != nil {
 			return "", err
 		}
@@ -593,11 +578,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.TxTypeSendTokens.String():
 		tx := response.TokenTx{}
-		d, err := json.Marshal(res.Data)
-		if err != nil {
-			return "", err
-		}
-		err = json.Unmarshal(d, &tx)
+		err := UnmarshalQuery(res.Data, &tx)
 		if err != nil {
 			return "", err
 		}
@@ -618,14 +599,11 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.TxTypeSyntheticDepositTokens.String():
 		deposit := synthetic.TokenTransactionDeposit{}
-		d, err := json.Marshal(res.Data)
+		err := UnmarshalQuery(res.Data, &deposit)
 		if err != nil {
 			return "", err
 		}
-		err = json.Unmarshal(d, &deposit)
-		if err != nil {
-			return "", err
-		}
+
 		out := "\n"
 		amt, err := formatAmount(*deposit.TokenUrl.AsString(), &deposit.DepositAmount.Int)
 		if err != nil {
@@ -638,14 +616,11 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.TxTypeCreateIdentity.String():
 		id := protocol.IdentityCreate{}
-		d, err := json.Marshal(res.Data)
+		err := UnmarshalQuery(res.Data, &id)
 		if err != nil {
 			return "", err
 		}
-		err = json.Unmarshal(d, &id)
-		if err != nil {
-			return "", err
-		}
+
 		out := "\n"
 		out += fmt.Sprintf("ADI url \t\t:\tacc://%s\n", id.Url)
 		out += fmt.Sprintf("Key Book \t\t:\tacc://%s/%s\n", id.Url, id.KeyBookName)
