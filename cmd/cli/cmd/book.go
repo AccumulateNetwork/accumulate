@@ -77,6 +77,10 @@ func GetKeyBook(url string) (*api2.QueryResponse, *protocol.KeyBook, error) {
 		return nil, nil, err
 	}
 
+	if res.Type != types.ChainTypeKeyBook.String() {
+		return nil, nil, fmt.Errorf("expecting key book but received %v", res.Type)
+	}
+
 	kb := protocol.KeyBook{}
 	err = UnmarshalQuery(res.Data, &kb)
 	if err != nil {

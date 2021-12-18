@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/types"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
@@ -86,6 +87,10 @@ func GetKeyPage(url string) (*api2.QueryResponse, *protocol.KeyPage, error) {
 	res, err := GetUrl(url)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if res.Type != types.ChainTypeKeyPage.String() {
+		return nil, nil, fmt.Errorf("expecting key page but received %v", res.Type)
 	}
 
 	kp := protocol.KeyPage{}
