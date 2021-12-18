@@ -40,6 +40,10 @@ var dataCmd = &cobra.Command{
 		case "write":
 			if len(args) > 2 {
 				out, err = WriteData(args[1], args[2:])
+				if err != nil {
+					fmt.Println("Usage:")
+					PrintDataWrite()
+				}
 			} else {
 				PrintDataWrite()
 			}
@@ -204,7 +208,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 
 	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
-		return "", fmt.Errorf("insufficient number of command line arguments")
+		return "", err
 	}
 
 	if len(args) < 1 {
