@@ -18,7 +18,7 @@ import (
 
 func TestNodeLifecycle(t *testing.T) {
 	acctesting.SkipLong(t)
-	
+
 	// Configure
 	opts := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
 	opts.WorkDir = t.TempDir()
