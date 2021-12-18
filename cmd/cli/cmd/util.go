@@ -49,7 +49,6 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 }
 
 func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
-	//adiOrigin labelOrPubKeyHex height index
 	var privKey []byte
 	var err error
 
