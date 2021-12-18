@@ -88,11 +88,11 @@ func GetKeyPage(url string) (*api2.QueryResponse, *protocol.KeyPage, error) {
 		return nil, nil, err
 	}
 
-	kp, ok := res.Data.(protocol.KeyPage)
-	if !ok {
-		return nil, nil, fmt.Errorf("url query is not a key page")
+	kp := protocol.KeyPage{}
+	err = UnmarshalQuery(res.Data, &kp)
+	if err != nil {
+		return nil, nil, err
 	}
-
 	return res, &kp, nil
 }
 
