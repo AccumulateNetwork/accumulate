@@ -16,7 +16,6 @@ import (
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -534,7 +533,7 @@ func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 
 			return out, nil
 		case types.ChainTypeIdentity.String():
-			adi := response.ADI{}
+			adi := state.AdiState{}
 			d, err := json.Marshal(res.Data)
 			if err != nil {
 				return "", err
@@ -544,9 +543,14 @@ func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 				return "", err
 			}
 
+			kb, err := resolveKeyBookChainId(adi.KeyBook[:])
+			if err != nil {
+				return "", fmt.Errorf("cannot resolve keybook for adi query")
+			}
+
 			var out string
-			out += fmt.Sprintf("\n\tADI Url\t\t:\t%v\n", adi.Url)
-			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", adi.KeyBookName)
+			out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.ChainUrl)
+			out += fmt.Sprintf("\tKey Book url\t:\t%s\n", kb)
 
 			return out, nil
 		case "directory":
@@ -562,16 +566,14 @@ func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 			var out string
 			out += fmt.Sprintf("\n\tADI Entries\n")
 			for _, s := range dqr.Entries {
-				data, err := Get(s)
+				q, err := GetUrl(s)
 				if err != nil {
 					return "", err
 				}
-				r := acmeapi.APIDataResponse{}
-				err = json.Unmarshal([]byte(data), &r)
 
 				chainType := "unknown"
 				if err == nil {
-					if v, ok := ApiToString[*r.Type.AsString()]; ok {
+					if v, ok := ApiToString[q.Type]; ok {
 						chainType = v
 					}
 				}
@@ -589,29 +591,10 @@ func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 				return "", err
 			}
 
-			u, err := url2.Parse(*book.ChainUrl.AsString())
-			if err != nil {
-				return "", err
-			}
 			var out string
 			out += fmt.Sprintf("\n\tHeight\t\tKey Page Url\n")
 			for i, v := range book.Pages {
-				//enable this code when testnet updated to a version > 0.2.1.
-				//data, err := GetByChainId(v[:])
-				//keypage := "unknown"
-				//
-				//if err == nil {
-				//	r := acmeapi.APIDataResponse{}
-				//	err = json.Unmarshal(*data.Data, &r)
-				//	if err == nil {
-				//		ss := protocol.KeyPage{}
-				//		err = json.Unmarshal(*r.Data, &ss)
-				//		keypage = *ss.ChainUrl.AsString()
-				//	}
-				//}
-				//out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, keypage)
-				//hack to resolve the keypage url given the chainid
-				s, err := resolveKeyPageUrl(u.Authority, v[:])
+				s, err := resolveKeyPageUrl(v[:])
 				if err != nil {
 					return "", err
 				}
@@ -710,41 +693,26 @@ func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 	}
 }
 
-func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
+func resolveKeyBookChainId(chainId []byte) (string, error) {
+	kb, err := GetByChainId(chainId)
+	book := protocol.KeyBook{}
+	d, err := json.Marshal(kb.Data)
+	if err != nil {
+		return "", err
+	}
+	err = json.Unmarshal(d, &book)
+	if err != nil {
+		return "", err
+	}
+	return *book.ChainUrl.AsString(), nil
+}
+
+func resolveKeyPageUrl(chainId []byte) (string, error) {
 	res, err := GetByChainId(chainId)
 	if err != nil {
 		return "", err
 	}
 	return res.Origin, nil
-	//var res api2.DirectoryQueryResult
-	//params := api2.DirectoryQuery{}
-	//params.Url = adi
-	//params.ExpandChains = false
-	//params.Start = 0
-	//params.Count = 1
-	//if err := Client.RequestV2(context.Background(), "query-directory", params, &res); err != nil {
-	//	return PrintJsonRpcError(err)
-	//}
-	//params.Url = adi
-	//params.ExpandChains = false
-	//params.Start = 0
-	//params.Count = res.Total
-	//if err := Client.RequestV2(context.Background(), "query-directory", params, &res); err != nil {
-	//	return PrintJsonRpcError(err)
-	//}
-	//
-	//for _, s := range res.Entries {
-	//	u, err := url2.Parse(s)
-	//	if err != nil {
-	//		continue
-	//	}
-	//
-	//	if bytes.Equal(u.ResourceChain(), chainId) {
-	//		return s, nil
-	//	}
-	//}
-	//
-	//return fmt.Sprintf("unresolvable chain %x", chainId), nil
 }
 
 func nonceFromTimeNow() uint64 {
