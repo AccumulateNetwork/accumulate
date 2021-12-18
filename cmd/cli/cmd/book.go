@@ -77,12 +77,12 @@ func GetKeyBook(url string) (*api2.QueryResponse, *protocol.KeyBook, error) {
 		return nil, nil, err
 	}
 
-	v, ok := res.Data.(protocol.KeyBook)
-	if !ok {
-		return nil, nil, fmt.Errorf("returned data is not a key book for %v", url)
+	kb := protocol.KeyBook{}
+	err = UnmarshalQuery(res.Data, &kb)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	return res, &v, nil
+	return res, &kb, nil
 }
 
 // CreateKeyBook create a new key page
