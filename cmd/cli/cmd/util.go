@@ -512,11 +512,6 @@ func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 				return "", err
 			}
 
-			//ata, ok := res.Data.(protocol.LiteTokenAccount)
-			//if !ok {
-			//	return "", fmt.Errorf("response is not a LiteTokenAccount")
-			//}
-
 			amt, err := formatAmount(ata.TokenUrl, &ata.Balance)
 			if err != nil {
 				amt = "unknown"
