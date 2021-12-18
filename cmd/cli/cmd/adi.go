@@ -76,8 +76,6 @@ func PrintAdiDirectory() {
 }
 
 func GetAdiDirectory(origin string, start string, count string) (string, error) {
-	var res api2.QueryResponse
-
 	u, err := url2.Parse(origin)
 
 	st, err := strconv.ParseInt(start, 10, 64)
@@ -104,6 +102,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", err
 	}
 
+	var res api2.QueryResponse
 	if err := Client.RequestV2(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
 		ret, err := PrintJsonRpcError(err)
 		if err != nil {
