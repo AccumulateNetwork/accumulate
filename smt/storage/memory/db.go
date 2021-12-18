@@ -3,7 +3,6 @@ package memory
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"sort"
 	"sync"
 
@@ -35,7 +34,7 @@ func (m *DB) Ready() bool {
 func (m *DB) EndBatch(txCache map[storage.Key][]byte) error {
 	m.mutex.Lock()
 	if !m.Ready() {
-		return errors.New("database is not open")
+		return storage.ErrNotOpen
 	}
 	defer m.mutex.Unlock()
 	for k, v := range txCache {
@@ -131,7 +130,7 @@ func (m *DB) Get(key storage.Key) (value []byte, err error) {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if !m.Ready() {
-		return nil, errors.New("database is not open")
+		return nil, storage.ErrNotOpen
 	}
 
 	v, ok := m.entries[key]
@@ -147,7 +146,7 @@ func (m *DB) Put(key storage.Key, value []byte) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	if !m.Ready() {
-		return errors.New("database is not open")
+		return storage.ErrNotOpen
 	}
 	m.entries[key] = value
 	return nil
