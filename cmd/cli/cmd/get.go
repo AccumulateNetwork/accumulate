@@ -59,7 +59,6 @@ func PrintGet() {
 
 func GetByChainId(chainId []byte) (*api2.QueryResponse, error) {
 	var res api2.QueryResponse
-	res.Data = new(query.ResponseByChainId)
 
 	params := api2.ChainIdQuery{}
 	params.ChainId = chainId
