@@ -383,14 +383,8 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
-	r := acmeapi.APIDataResponse{}
-	err = json.Unmarshal([]byte(tokenData), &r)
-	if err != nil {
-		return "", err
-	}
-
 	t := protocol.TokenIssuer{}
-	err = json.Unmarshal(*r.Data, &t)
+	err = json.Unmarshal([]byte(tokenData), &t)
 	if err != nil {
 		return "", err
 	}
@@ -405,13 +399,13 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
 }
 
-func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
+func printGeneralTransactionParameters(res *api2.QueryResponse) string {
 	out := fmt.Sprintf("---\n")
-	out += fmt.Sprintf("  - Transaction           : %x\n", res.TxId.AsBytes32())
+	out += fmt.Sprintf("  - Transaction           : %x\n", res.Txid)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
-	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig.Bytes())
+	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig)
 	if res.Signer != nil {
-		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
+		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey)
 		out += fmt.Sprintf("  - Signer Nonce          : %d\n", res.Signer.Nonce)
 	}
 	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
@@ -427,45 +421,45 @@ func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
 		}
 		return string(data), nil
 	}
+	//
+	//v1 := new(acmeapi.APIDataResponse)
+	//v1.Type = types.String(v2.Type)
+	//if v2.MerkleState != nil {
+	//	v1.MerkleState = new(acmeapi.MerkleState)
+	//	v1.MerkleState.Count = v2.MerkleState.Count
+	//	v1.MerkleState.Roots = make([]types.Bytes, len(v2.MerkleState.Roots))
+	//	for i, r := range v2.MerkleState.Roots {
+	//		v1.MerkleState.Roots[i] = r
+	//	}
+	//}
+	//v1.Origin = types.String(v2.Origin)
+	//if v2.KeyPage != nil {
+	//	v1.KeyPage = new(acmeapi.APIRequestKeyPage)
+	//	v1.KeyPage.Height = v2.KeyPage.Height
+	//	v1.KeyPage.Index = v2.KeyPage.Index
+	//}
+	//v1.TxId = (*types.Bytes)(&v2.Txid)
+	//if v2.Signer != nil {
+	//	v1.Signer = new(acmeapi.Signer)
+	//	v1.Signer.PublicKey = types.Bytes(v2.Signer.PublicKey).AsBytes32()
+	//	v1.Signer.Nonce = v2.Signer.Nonce
+	//}
+	//sig := types.Bytes(v2.Sig).AsBytes64()
+	//v1.Sig = &sig
+	//
+	//b, err := json.Marshal(v2.Data)
+	//if err != nil {
+	//	return "", err
+	//}
+	//v1.Data = (*json.RawMessage)(&b)
+	//
+	//b, err = json.Marshal(v2.Status)
+	//if err != nil {
+	//	return "", err
+	//}
+	//v1.Status = (*json.RawMessage)(&b)
 
-	v1 := new(acmeapi.APIDataResponse)
-	v1.Type = types.String(v2.Type)
-	if v2.MerkleState != nil {
-		v1.MerkleState = new(acmeapi.MerkleState)
-		v1.MerkleState.Count = v2.MerkleState.Count
-		v1.MerkleState.Roots = make([]types.Bytes, len(v2.MerkleState.Roots))
-		for i, r := range v2.MerkleState.Roots {
-			v1.MerkleState.Roots[i] = r
-		}
-	}
-	v1.Origin = types.String(v2.Origin)
-	if v2.KeyPage != nil {
-		v1.KeyPage = new(acmeapi.APIRequestKeyPage)
-		v1.KeyPage.Height = v2.KeyPage.Height
-		v1.KeyPage.Index = v2.KeyPage.Index
-	}
-	v1.TxId = (*types.Bytes)(&v2.Txid)
-	if v2.Signer != nil {
-		v1.Signer = new(acmeapi.Signer)
-		v1.Signer.PublicKey = types.Bytes(v2.Signer.PublicKey).AsBytes32()
-		v1.Signer.Nonce = v2.Signer.Nonce
-	}
-	sig := types.Bytes(v2.Sig).AsBytes64()
-	v1.Sig = &sig
-
-	b, err := json.Marshal(v2.Data)
-	if err != nil {
-		return "", err
-	}
-	v1.Data = (*json.RawMessage)(&b)
-
-	b, err = json.Marshal(v2.Status)
-	if err != nil {
-		return "", err
-	}
-	v1.Status = (*json.RawMessage)(&b)
-
-	out, err := PrintQueryResponse(v1)
+	out, err := PrintQueryResponse(v2)
 	if err != nil {
 		return "", err
 	}
@@ -476,7 +470,7 @@ func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
 	return out, nil
 }
 
-func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
+func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 	if WantJsonOutput {
 		data, err := json.Marshal(res)
 		if err != nil {
@@ -486,19 +480,28 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 	} else {
 		switch string(res.Type) {
 		case types.ChainTypeLiteTokenAccount.String():
-			ata := response.LiteTokenAccount{}
-			err := json.Unmarshal(*res.Data, &ata)
+			ata := protocol.LiteTokenAccount{}
+			d, err := json.Marshal(res.Data)
+			if err != nil {
+				return "", err
+			}
+			err = json.Unmarshal(d, &ata)
 			if err != nil {
 				return "", err
 			}
 
-			amt, err := formatAmount(ata.TokenUrl, &ata.Balance.Int)
+			//ata, ok := res.Data.(protocol.LiteTokenAccount)
+			//if !ok {
+			//	return "", fmt.Errorf("response is not a LiteTokenAccount")
+			//}
+
+			amt, err := formatAmount(ata.TokenUrl, &ata.Balance)
 			if err != nil {
 				amt = "unknown"
 			}
 
 			var out string
-			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
+			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
 			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 			out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 			out += fmt.Sprintf("\tCredits\t\t:\t%s\n", ata.CreditBalance.String())
@@ -506,26 +509,37 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 
 			return out, nil
 		case types.ChainTypeTokenAccount.String():
-			ata := response.TokenAccount{}
-			err := json.Unmarshal(*res.Data, &ata)
+			ata := state.TokenAccount{}
+			d, err := json.Marshal(res.Data)
 			if err != nil {
 				return "", err
 			}
-
-			amt, err := formatAmount(ata.TokenUrl, &ata.Balance.Int)
+			err = json.Unmarshal(d, &ata)
+			if err != nil {
+				return "", err
+			}
+			amt, err := formatAmount(*ata.TokenUrl.String.AsString(), &ata.Balance)
 			if err != nil {
 				amt = "unknown"
 			}
+			kbr, err := GetByChainId(ata.KeyBook[:])
+			if err != nil {
+				return "", fmt.Errorf("cannot resolve keybook for token account query")
+			}
 			var out string
-			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
+			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
 			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 			out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBookUrl)
+			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", kbr.Origin)
 
 			return out, nil
 		case types.ChainTypeIdentity.String():
 			adi := response.ADI{}
-			err := json.Unmarshal(*res.Data, &adi)
+			d, err := json.Marshal(res.Data)
+			if err != nil {
+				return "", err
+			}
+			err = json.Unmarshal(d, &adi)
 			if err != nil {
 				return "", err
 			}
@@ -536,8 +550,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 
 			return out, nil
 		case "directory":
-			dqr := protocol.DirectoryQueryResult{}
-			err := json.Unmarshal(*res.Data, &dqr)
+			dqr := api2.DirectoryQueryResult{}
+			d, err := json.Marshal(res.Data)
+			if err != nil {
+				return "", err
+			}
+			err = json.Unmarshal(d, &dqr)
 			if err != nil {
 				return "", err
 			}
@@ -561,8 +579,12 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			}
 			return out, nil
 		case types.ChainTypeKeyBook.String():
-			var book protocol.KeyBook
-			err := json.Unmarshal(*res.Data, &book)
+			book := protocol.KeyBook{}
+			d, err := json.Marshal(res.Data)
+			if err != nil {
+				return "", err
+			}
+			err = json.Unmarshal(d, &book)
 			if err != nil {
 				return "", err
 			}
@@ -597,10 +619,9 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			}
 			return out, nil
 		case types.ChainTypeKeyPage.String():
-			ss := protocol.KeyPage{}
-			err := json.Unmarshal(*res.Data, &ss)
-			if err != nil {
-				return "", err
+			ss, ok := res.Data.(protocol.KeyPage)
+			if !ok {
+				return "", fmt.Errorf("response type is not a key page")
 			}
 
 			out := fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
@@ -615,9 +636,13 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			return out, nil
 		case types.TxTypeSendTokens.String():
 			tx := response.TokenTx{}
-			err := json.Unmarshal(*res.Data, &tx)
+			d, err := json.Marshal(res.Data)
 			if err != nil {
-				return "", fmt.Errorf("cannot extract token transaction data from request")
+				return "", err
+			}
+			err = json.Unmarshal(d, &tx)
+			if err != nil {
+				return "", err
 			}
 
 			var out string
@@ -636,12 +661,14 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			return out, nil
 		case types.TxTypeSyntheticDepositTokens.String():
 			deposit := synthetic.TokenTransactionDeposit{}
-			err := json.Unmarshal(*res.Data, &deposit)
-
+			d, err := json.Marshal(res.Data)
 			if err != nil {
 				return "", err
 			}
-
+			err = json.Unmarshal(d, &deposit)
+			if err != nil {
+				return "", err
+			}
 			out := "\n"
 			amt, err := formatAmount(*deposit.TokenUrl.AsString(), &deposit.DepositAmount.Int)
 			if err != nil {
@@ -649,6 +676,30 @@ func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
 			}
 			out += fmt.Sprintf("Receive %s from %s to %s\n", amt, *deposit.FromUrl.AsString(),
 				*deposit.ToUrl.AsString())
+
+			out += printGeneralTransactionParameters(res)
+			return out, nil
+		case types.TxTypeCreateIdentity.String():
+			id := protocol.IdentityCreate{}
+			d, err := json.Marshal(res.Data)
+			if err != nil {
+				return "", err
+			}
+			err = json.Unmarshal(d, &id)
+			if err != nil {
+				return "", err
+			}
+			out := "\n"
+			out += fmt.Sprintf("ADI url \t\t:\tacc://%s\n", id.Url)
+			out += fmt.Sprintf("Key Book \t\t:\tacc://%s/%s\n", id.Url, id.KeyBookName)
+			out += fmt.Sprintf("Key Page \t\t:\tacc://%s/%s\n", id.Url, id.KeyPageName)
+
+			keyName, err := FindLabelFromPubKey(id.PublicKey)
+			if err != nil {
+				out += fmt.Sprintf("Public Key \t:\t%x\n", id.PublicKey)
+			} else {
+				out += fmt.Sprintf("Public Key (name) \t:\t%x (%s)\n", id.PublicKey, keyName)
+			}
 
 			out += printGeneralTransactionParameters(res)
 			return out, nil
