@@ -121,7 +121,7 @@ func (c *testCmd) initalize(t *testing.T) {
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
-	fullCommand := fmt.Sprintf("-j -s http://127.0.0.1:%v/v1 %s",
+	fullCommand := fmt.Sprintf("-j -s http://127.0.0.1:%v/v2 %s",
 		c.jsonRpcPort, cmdLine)
 	args := strings.Split(fullCommand, " ")
 
