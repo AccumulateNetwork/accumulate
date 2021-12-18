@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"log"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
@@ -23,7 +24,19 @@ var getCmd = &cobra.Command{
 			switch args[0] {
 			case "chain":
 				if len(args) > 1 {
-					GetByChainId([]byte(args[1]))
+					chainId := types.Bytes32{}
+					err = chainId.FromString(args[1])
+					if err == nil {
+						var q *api2.QueryResponse
+						q, err = GetByChainId(chainId[:])
+						if err == nil {
+							var data []byte
+							data, err = json.Marshal(q)
+							if err == nil {
+								out = string(data)
+							}
+						}
+					}
 				} else {
 					fmt.Println("Usage:")
 					PrintGet()
