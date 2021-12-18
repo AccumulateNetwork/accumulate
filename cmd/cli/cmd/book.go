@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"fmt"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
@@ -129,47 +128,4 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		return "", err
 	}
 	return ActionResponseFrom(res).Print()
-}
-
-func GetKeyPageInBook(book string, keyLabel string) (*protocol.KeyPage, int, error) {
-
-	b, err := url2.Parse(book)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	privKey, err := LookupByLabel(keyLabel)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	_, kb, err := GetKeyBook(b.String())
-	if err != nil {
-		return nil, 0, err
-	}
-
-	for i := range kb.Pages {
-		v := kb.Pages[i]
-		//we have a match so go fetch the key book
-		s, err := GetByChainId(v[:])
-		if err != nil {
-			return nil, 0, err
-		}
-		if s.Type != types.ChainTypeKeyPage.String() {
-			return nil, 0, fmt.Errorf("expecting key page, received %s", s.Type)
-		}
-		ss, ok := s.Data.(protocol.KeyPage)
-		if !ok {
-			return nil, 0, fmt.Errorf("returned chain is not a key page type")
-		}
-
-		for j := range ss.Keys {
-			_, err := LookupByPubKey(ss.Keys[j].PublicKey)
-			if err == nil && bytes.Equal(privKey[32:], v[:]) {
-				return &ss, j, nil
-			}
-		}
-	}
-
-	return nil, 0, fmt.Errorf("key page not found in book %s for key name %s", book, keyLabel)
 }
