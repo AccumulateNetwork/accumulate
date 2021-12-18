@@ -4,12 +4,15 @@ import (
 	"errors"
 )
 
-// ErrNotFound is returned by KeyValueDB.Get if the key is not found
+// ErrNotFound is returned by KeyValueDB.Get if the key is not found.
 var ErrNotFound = errors.New("not found")
+
+// ErrNotOpen is returned by KeyValueDB.Get, .Put, and .Close if the database is
+// not open.
+var ErrNotOpen = errors.New("not open")
 
 type KeyValueDB interface {
 	Close() error                                // Returns an error if the close fails
-	Ready() bool                                 // Returns true if the database is ready for reads/writes
 	InitDB(filepath string, logger Logger) error // Sets up the database, returns error if it fails
 	Get(key Key) (value []byte, err error)       // Get key from database, returns ErrNotFound if the key is not found
 	Put(key Key, value []byte) error             // Put the value in the database, throws an error if fails
