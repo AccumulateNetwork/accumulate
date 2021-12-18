@@ -187,6 +187,29 @@ func IsLiteAccount(url string) bool {
 	return protocol.IsValidAdiUrl(u2) != nil
 }
 
+func UnmarshalQuery(src interface{}, dst interface{}) error {
+	d, err := json.Marshal(src)
+	if err != nil {
+		return err
+	}
+
+	err = json.Unmarshal(d, dst)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetUrlAs(url string, as interface{}) error {
+	res, err := GetUrl(url)
+	if err != nil {
+		return err
+	}
+
+	return UnmarshalQuery(res, as)
+}
+
 func GetUrl(url string) (*api2.QueryResponse, error) {
 	var res api2.QueryResponse
 
@@ -692,19 +715,24 @@ func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 		}
 	}
 }
+func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
+	kb, err := GetByChainId(chainId)
+	header := state.ChainHeader{}
+	err = UnmarshalQuery(kb.Data, &header)
+	if err != nil {
+		return nil, err
+	}
+	return &header, nil
+}
 
 func resolveKeyBookChainId(chainId []byte) (string, error) {
 	kb, err := GetByChainId(chainId)
 	book := protocol.KeyBook{}
-	d, err := json.Marshal(kb.Data)
+	err = UnmarshalQuery(kb.Data, &book)
 	if err != nil {
 		return "", err
 	}
-	err = json.Unmarshal(d, &book)
-	if err != nil {
-		return "", err
-	}
-	return *book.ChainUrl.AsString(), nil
+	return book.GetChainUrl(), nil
 }
 
 func resolveKeyPageUrl(chainId []byte) (string, error) {
@@ -712,7 +740,12 @@ func resolveKeyPageUrl(chainId []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return res.Origin, nil
+	kp := protocol.KeyPage{}
+	err = UnmarshalQuery(res.Data, &kp)
+	if err != nil {
+		return "", err
+	}
+	return kp.GetChainUrl(), nil
 }
 
 func nonceFromTimeNow() uint64 {
