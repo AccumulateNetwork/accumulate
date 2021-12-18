@@ -10,6 +10,7 @@ import (
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 )
@@ -118,6 +119,11 @@ func GetAccount(url string) (string, error) {
 	res, err := GetUrl(url)
 	if err != nil {
 		return "", err
+	}
+
+	if res.Type != types.ChainTypeTokenAccount.String() && res.Type != types.ChainTypeLiteTokenAccount.String() &&
+		res.Type != types.ChainTypeDataAccount.String() && res.Type != types.ChainTypeLiteDataAccount.String() {
+		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
 	}
 
 	return PrintQueryResponseV2(res)
