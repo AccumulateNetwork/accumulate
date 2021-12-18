@@ -9,6 +9,7 @@ import (
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/spf13/cobra"
 )
@@ -125,6 +126,10 @@ func GetADI(url string) (string, error) {
 	res, err := GetUrl(url)
 	if err != nil {
 		return "", err
+	}
+
+	if res.Type != types.ChainTypeIdentity.String() {
+		return "", fmt.Errorf("expecting ADI chain but received %v", res.Type)
 	}
 
 	return PrintQueryResponseV2(res)
