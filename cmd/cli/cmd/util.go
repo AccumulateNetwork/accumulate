@@ -615,21 +615,21 @@ func PrintQueryResponse(res *api2.QueryResponse) (string, error) {
 			}
 
 			var out string
-			out += fmt.Sprintf("\n\tHeight\t\tKey Page Url\n")
+			out += fmt.Sprintf("\n\tPage Index\t\tKey Page Url\n")
 			for i, v := range book.Pages {
 				s, err := resolveKeyPageUrl(v[:])
 				if err != nil {
 					return "", err
 				}
-				out += fmt.Sprintf("\t%d\t\t:\t%s\n", i+1, s)
+				out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, s)
 			}
 			return out, nil
 		case types.ChainTypeKeyPage.String():
-			ss, ok := res.Data.(protocol.KeyPage)
-			if !ok {
-				return "", fmt.Errorf("response type is not a key page")
+			ss := protocol.KeyPage{}
+			err := UnmarshalQuery(res.Data, &ss)
+			if err != nil {
+				return "", err
 			}
-
 			out := fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 			for i, k := range ss.Keys {
 				keyName := ""
