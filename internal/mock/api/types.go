@@ -8,6 +8,7 @@ import (
 	context "context"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/ybbus/jsonrpc/v2"
 	reflect "reflect"
@@ -253,6 +254,9 @@ func (m MockRoute) GetBatchBroadcastClient() connections.BatchABCIBroadcastClien
 }
 
 func (m *MockConnectionRouter) SelectRoute(adiUrl *url.URL, allowFollower bool) (connections.Route, error) {
+	if protocol.IsDnUrl(adiUrl) {
+		return nil, nil
+	}
 	return m.route, nil
 }
 
