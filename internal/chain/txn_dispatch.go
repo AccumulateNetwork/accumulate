@@ -123,17 +123,11 @@ func (*dispatcher) checkError(err error) error {
 // Send sends all of the batches.
 func (d *dispatcher) Send(ctx context.Context) error {
 	for route, batch := range d.batches {
-		if route.IsDirectoryNode() && d.IsTest {
-			// FIXME this part is a hack because we don't support running the DN in test. We should refrain from adding production code to accommodate tests as much as possible because it can create exploits.
-			bvns, err := d.ConnectionRouter.GetAllBVNs()
-			if err != nil {
-				return err
-			}
-			client := bvns[0].GetBatchBroadcastClient()
-			d.send(ctx, client, batch)
-		} else {
-			d.send(ctx, route.GetBatchBroadcastClient(), batch)
+		if route.IsDirectoryNode() && d.IsTest { // Routing to a DN is not supported in the test env, skip it
+			continue
 		}
+
+		d.send(ctx, route.GetBatchBroadcastClient(), batch)
 	}
 
 	// Wait for everyone to finish
