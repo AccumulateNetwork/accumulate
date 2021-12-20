@@ -64,8 +64,8 @@ func TestReceipt(t *testing.T) {
 	element := GetHash(0)
 	anchor := GetHash(3)
 
-	r := GetReceipt(manager, element, anchor)
-	if r == nil {
+	r, err1 := GetReceipt(manager, element, anchor)
+	if err1 != nil {
 		t.Fatal("Failed to generate receipt")
 	}
 	fmt.Println(r.String())
@@ -78,18 +78,20 @@ func TestReceiptAll(t *testing.T) {
 	const testMerkleTreeSize = 50
 
 	db, _ := database.NewDBManager("memory", "", nil) // create an in memory database and
-	manager, _ := NewMerkleManager(db, 4)             // MerkleManager
+	manager, _ := NewMerkleManager(db, 2)             // MerkleManager
 
 	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
 	var rh RandHash                            // A source of random hashes
 	var mdRoots [][]byte                       // Collect all the MDRoots for each hash added
 	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
-		manager.AddHash(rh.NextList())                    // Add a hash
-		mdRoots = append(mdRoots, manager.MS.GetMDRoot()) // Collect a MDRoot
+		manager.AddHash(rh.NextList())                            // Add a hash
+		mdRoots = append(mdRoots, AM.Adh(manager.MS.GetMDRoot())) // Collect a MDRoot
 	}
+	AM.SetLock(true)
 
-	for i := 0; i < testMerkleTreeSize; i++ {
-		for j := 4; j < testMerkleTreeSize; j++ {
+	for i := -0; i < testMerkleTreeSize; i++ {
+		for j := 0; j < testMerkleTreeSize; j++ {
+			fmt.Println("--------------i,j ", i, ",", j, " ---------------")
 			element := rh.Next()
 			if i >= 0 && i < testMerkleTreeSize {
 				element = rh.List[i]
@@ -99,7 +101,8 @@ func TestReceiptAll(t *testing.T) {
 				anchor = rh.List[j]
 			}
 
-			r := GetReceipt(manager, element, anchor)
+			r, err := GetReceipt(manager, element, anchor)
+			require.Nilf(t, err, "Failed to get a receipt: %v", err)
 			if i < 0 || i >= testMerkleTreeSize || //       If i is out of range
 				j < 0 || j >= testMerkleTreeSize || //        Or j is out of range
 				j < i { //                                    Or if the anchor is before the element
@@ -111,8 +114,10 @@ func TestReceiptAll(t *testing.T) {
 					t.Fatal("Failed to generate receipt", i, j)
 				}
 				if !r.Validate() {
-					t.Fatal("Receipt fails for element ", i, " anchor ", int64(j))
+					t.Fatal(fmt.Sprintf("Receipt fails for element/anchor [%d %d]", i, int64(j)))
 				}
+				require.Truef(t, bytes.Equal(r.MDRoot, mdRoots[j]),
+					"Anchors should match %d %d got %x expected %x", i, j, r.MDRoot[:4], mdRoots[j][:4])
 			}
 		}
 	}
@@ -171,7 +176,7 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 				element := GetHash(i)
 				anchor := GetHash(j)
 
-				r := GetReceipt(manager, element, anchor)
+				r, _ := GetReceipt(manager, element, anchor)
 				if i < 0 || i >= int(manager.MS.Count) || //       If (i) is out of range
 					j < 0 || j >= int(manager.MS.Count) || //        Or j is out of range
 					j < i { //                                    Or if the anchor is before the element
@@ -256,14 +261,14 @@ func TestReceipt_Combine(t *testing.T) {
 		for j := i; j < testCnt; j++ {
 			element, _ := m1.Get(i)
 			anchor, _ := m1.Get(j)
-			r := GetReceipt(m1, element, anchor)
+			r, _ := GetReceipt(m1, element, anchor)
 			state, _ := m1.GetAnyState(j)
 			mdRoot := state.GetMDRoot()
 
 			require.Truef(t, bytes.Equal(r.MDRoot, mdRoot), "m1 MDRoot not right %d %d", i, j)
 			element, _ = m2.Get(i)
 			anchor, _ = m2.Get(j)
-			r = GetReceipt(m2, element, anchor)
+			r, _ = GetReceipt(m2, element, anchor)
 			state, _ = m2.GetAnyState(j)
 			mdRoot = state.GetMDRoot()
 			require.Truef(t, bytes.Equal(r.MDRoot, mdRoot), "m2 MDRoot not right %d %d", i, j)
@@ -273,13 +278,13 @@ func TestReceipt_Combine(t *testing.T) {
 		for j := i + 1; j < testCnt; j++ {
 			element, _ := m1.Get(i)
 			anchor, _ := m1.Get(j)
-			r1 := GetReceipt(m1, element, anchor)
+			r1, _ := GetReceipt(m1, element, anchor)
 			require.Truef(t, r1.Validate(), "receipt failed %d %d", i, j)
 			require.NotNilf(t, r1, "test case i %d j %d failed to create r1", i, j)
 			for k := j; k < testCnt; k++ {
 				element, _ = m2.Get(j)
 				anchor, _ = m2.Get(k)
-				r2 := GetReceipt(m2, element, anchor)
+				r2, _ := GetReceipt(m2, element, anchor)
 				require.Truef(t, r2.Validate(), "receipt failed %d %d", i, j, k)
 				require.NotNilf(t, r2, "test case i %d j %d k %d failed to create r2", i, j, k)
 				r3, err := r1.Combine(r2)
@@ -291,26 +296,78 @@ func TestReceipt_Combine(t *testing.T) {
 
 }
 
-func TestReceipt_AddAHash(t *testing.T) {
-	const numTests = int64(10)
+func TestReceipt_PrintChart(t *testing.T) {
 
-	var rh RandHash
-	var height int
-
-	db, _ := database.NewDBManager("memory", "", nil)
-	mm, _ := NewMerkleManager(db, 1)
-	cState := new(MerkleState)
-	cState.InitSha256()
-	r := new(Receipt)
-	right := false
-
-	for i := int64(0); i < numTests; i++ {
-		mm.AddHash(rh.NextList())
+	for i := 0; i < 20; i++ {
+		fmt.Printf("%3d ", i)
 	}
-
-	for i := int64(0); i < numTests; i++ {
-		height, right = r.AddAHash(mm, cState, height, right, rh.List[i])
+	fmt.Println()
+	for i := 0; i < 20; i++ {
+		d := "R"
+		if i&1 == 1 {
+			d = "L"
+		}
+		fmt.Printf("%3s ", d)
 	}
-	r.ComputeDag(cState, height, right)
-	r.Validate()
+	println()
+
+	for i := 0; i < 20; i++ {
+		d := ""
+		if i&1 == 1 {
+			d = "R"
+			if (i>>1)&1 == 1 {
+				d = "L"
+			}
+		}
+		fmt.Printf("%3s ", d)
+	}
+	println()
+
+	for i := 0; i < 20; i++ {
+		d := ""
+		if i&1 == 1 {
+			if (i>>1)&1 == 1 {
+				d = "R"
+				if (i>>2)&1 == 1 {
+					d = "L"
+				}
+			}
+		}
+		fmt.Printf("%3s ", d)
+	}
+	println()
+	for i := 0; i < 20; i++ {
+		d := ""
+		if i&1 == 1 {
+			if (i>>1)&1 == 1 {
+				if (i>>2)&1 == 1 {
+					d = "R"
+					if (i>>3)&1 == 1 {
+						d = "L"
+					}
+				}
+			}
+		}
+		fmt.Printf("%3s ", d)
+	}
+	println()
+
+	for i := 0; i < 20; i++ {
+		d := ""
+		if i&1 == 1 {
+			if (i>>1)&1 == 1 {
+				if (i>>2)&1 == 1 {
+					if (i>>3)&1 == 1 {
+						d = "R"
+						if (i>>4)&1 == 1 {
+							d = "L"
+						}
+					}
+				}
+			}
+		}
+		fmt.Printf("%3s ", d)
+	}
+	println()
+
 }
