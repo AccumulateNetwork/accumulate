@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
+	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -140,11 +141,11 @@ func (d *dispatcher) Send(ctx context.Context) error {
 
 func (d *dispatcher) getRouteAndBatch(u *url.URL) (connections.Route, *txBatch, error) {
 	route, err := d.ConnectionRouter.SelectRoute(u, false)
+	if route == nil && d.IsTest && strings.Contains(err.Error(), "no directory node could not be found") { // TODO remove hacks to accommodate testing code
+		return nil, nil, nil
+	}
 	if err != nil {
 		return nil, nil, err
-	}
-	if route == nil && d.IsTest { // TODO remove hacks to accommodate testing code
-		return nil, nil, nil
 	}
 
 	if route.GetNetworkGroup() == connections.Local {

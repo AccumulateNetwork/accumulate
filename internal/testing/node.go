@@ -31,7 +31,7 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 	cfg.Accumulate.Website.Enabled = false         // No need for the website
 	cfg.Instrumentation.Prometheus = false         // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
 	cfg.Accumulate.Network.BvnNames = []string{netId}
-	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}, "directory": {"http://127.0.1.1:26656"}}
+	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}}
 	if strings.EqualFold(cfg.Accumulate.Network.ID, netId) {
 		cfg.Accumulate.Network.SelfAddress = cfg.Accumulate.Network.Addresses[netId][0]
 	}
