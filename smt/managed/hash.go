@@ -47,7 +47,9 @@ func (h Hash) Equal(g Hash) bool { return bytes.Equal(h, g) }
 // Combine
 // Hash this hash (the left hash) with the given right hash to produce a new hash
 func (h Hash) Combine(hf func(data []byte) Hash, right Hash) Hash {
-	return hf(append(h.Copy(), right[:]...)) // Process the left side, i.e. v from this position in c.MD
+	AM.Chk(AM.Adh(h))
+	AM.Chk(AM.Adh(right))
+	return AM.Chk(AM.Adh(hf(append(h.Copy(), right[:]...)))) // Process the left side, i.e. v from this position in c.MD
 }
 
 func Sha256(b []byte) Hash {
