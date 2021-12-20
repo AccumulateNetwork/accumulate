@@ -70,6 +70,23 @@ func init() {
 }
 
 var TestNet = Network{
+	protocol.Directory: {
+		Name:        protocol.Directory,
+		NetworkName: "TestNet",
+		Type:        config.Directory,
+		Port:        34000,
+		Nodes: []Node{
+			{"0.bvn0.testnet.accumulatenetwork.io", config.Validator}, // 0-0
+			{"1.bvn0.testnet.accumulatenetwork.io", config.Follower},  // 0-1
+			{"2.bvn0.testnet.accumulatenetwork.io", config.Follower},  // 0-2
+			{"0.bvn1.testnet.accumulatenetwork.io", config.Validator}, // 1-0
+			{"1.bvn1.testnet.accumulatenetwork.io", config.Follower},  // 1-1
+			{"2.bvn1.testnet.accumulatenetwork.io", config.Follower},  // 1-2
+			{"0.bvn2.testnet.accumulatenetwork.io", config.Validator}, // 2-0
+			{"1.bvn2.testnet.accumulatenetwork.io", config.Follower},  // 2-1
+			{"2.bvn2.testnet.accumulatenetwork.io", config.Follower},  // 2-2
+		},
+	},
 	"BVC0": {
 		Name:        "BVC0",
 		NetworkName: "TestNet",
