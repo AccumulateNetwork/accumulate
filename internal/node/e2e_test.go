@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"net"
-	"os"
-	"runtime"
 	"testing"
 	"time"
 
@@ -32,13 +30,9 @@ import (
 )
 
 func TestEndToEnd(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
-
-	if os.Getenv("CI") == "true" {
-		t.Skip("This test consistently fails in CI")
-	}
+	acctesting.SkipCI(t, "flaky")
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Restart the nodes for every test
@@ -98,9 +92,8 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 }
 
 func TestSubscribeAfterClose(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky")
 
 	daemon := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, []string{"127.0.30.1"})[0]
 	require.NoError(t, daemon.Stop())
@@ -116,9 +109,8 @@ func TestSubscribeAfterClose(t *testing.T) {
 }
 
 func TestFaucetMultiNetwork(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky")
 
 	bvc0 := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	bvc1 := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})

@@ -1,14 +1,11 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/spf13/cobra"
 )
 
@@ -30,13 +27,12 @@ var creditsCmd = &cobra.Command{
 }
 
 func PrintCredits() {
-	fmt.Println("  accumulate credits [actor lite account] [lite account or key page url] [amount] 		Send credits using a lite account or adi key page to another lite account or adi key page")
-	fmt.Println("  accumulate credits [actor url] [actor key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite account or adi key page")
+	fmt.Println("  accumulate credits [origin lite account] [lite account or key page url] [amount] 		Send credits using a lite account or adi key page to another lite account or adi key page")
+	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite account or adi key page")
 }
 
-func AddCredits(actor string, args []string) (string, error) {
-
-	u, err := url2.Parse(actor)
+func AddCredits(origin string, args []string) (string, error) {
+	u, err := url2.Parse(origin)
 	if err != nil {
 		PrintCredits()
 		return "", err
@@ -60,43 +56,14 @@ func AddCredits(actor string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
-	var res acmeapi.APIDataResponse
 
 	credits := protocol.AddCredits{}
 	credits.Recipient = u2.String()
 	credits.Amount = uint64(amt)
 
-	data, err := json.Marshal(credits)
+	res, err := dispatchTxRequest("add-credits", &credits, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
-
-	dataBinary, err := credits.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, u, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	if err := Client.Request(context.Background(), "add-credits", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		resData, err := json.Marshal(&res)
-		var out string
-		if err != nil {
-			out = fmt.Sprintf("%v", err)
-		} else {
-			out = string(resData)
-		}
-		return "", fmt.Errorf("error unmarshalling add credits result %s", out)
-	}
-	return ar.Print()
+	return ActionResponseFrom(res).Print()
 }

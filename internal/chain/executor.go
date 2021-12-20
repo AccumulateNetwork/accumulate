@@ -318,7 +318,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 
 	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
 		if (origin.Header().KeyBook == types.Bytes32{}) {
-			return nil, fmt.Errorf("origin record has not been assigned to an SSG")
+			return nil, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
 		err := st.LoadAs(origin.Header().KeyBook, book)
 		if err != nil {

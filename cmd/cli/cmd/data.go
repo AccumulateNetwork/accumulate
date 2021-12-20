@@ -40,6 +40,10 @@ var dataCmd = &cobra.Command{
 		case "write":
 			if len(args) > 2 {
 				out, err = WriteData(args[1], args[2:])
+				if err != nil {
+					fmt.Println("Usage:")
+					PrintDataWrite()
+				}
 			} else {
 				PrintDataWrite()
 			}
@@ -62,11 +66,11 @@ func PrintDataGet() {
 func PrintDataAccountCreate() {
 	//./cli data create acc://actor key idx height acc://actor/dataAccount acc://actor/keyBook (optional)
 	fmt.Println("  accumulate account create data [actor adi url] [signing key name] [key index (optional)] [key height (optional)] [adi data account url] [key book (optional)] Create new data account")
-	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/ssg0")
+	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName acc://actor/dataAccount acc://actor/book0")
 }
 
 func PrintDataWrite() {
-	fmt.Println("./cli data write [data account url] [signingKey] [extid_0 optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+	fmt.Println("./cli data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
 }
 
 func PrintData() {
@@ -153,13 +157,13 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 	return PrintQueryResponseV2(&res)
 }
 
-func CreateDataAccount(actorUrl string, args []string) (string, error) {
-	actor, err := url.Parse(actorUrl)
+func CreateDataAccount(origin string, args []string) (string, error) {
+	u, err := url.Parse(origin)
 	if err != nil {
 		return "", err
 	}
 
-	args, si, privkey, err := prepareSigner(actor, args)
+	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
 		return "", fmt.Errorf("insufficient number of command line arguments")
 	}
@@ -172,8 +176,8 @@ func CreateDataAccount(actorUrl string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid account url %s", args[0])
 	}
-	if actor.Authority != accountUrl.Authority {
-		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, actor.Authority)
+	if u.Authority != accountUrl.Authority {
+		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, u.Authority)
 	}
 
 	var keybook string
@@ -189,40 +193,22 @@ func CreateDataAccount(actorUrl string, args []string) (string, error) {
 	cda.Url = accountUrl.String()
 	cda.KeyBookUrl = keybook
 
-	data, err := json.Marshal(cda)
+	res, err := dispatchTxRequest("create-data-account", &cda, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
-
-	dataBinary, err := cda.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, actor, si, privkey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res api.TxResponse
-
-	if err := Client.RequestV2(context.Background(), "create-data-account", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFrom(&res).Print()
+	return ActionResponseFrom(res).Print()
 }
 
 func WriteData(accountUrl string, args []string) (string, error) {
-	actor, err := url.Parse(accountUrl)
+	u, err := url.Parse(accountUrl)
 	if err != nil {
 		return "", err
 	}
 
-	args, si, privkey, err := prepareSigner(actor, args)
+	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
-		return "", fmt.Errorf("insufficient number of command line arguments")
+		return "", err
 	}
 
 	if len(args) < 1 {
@@ -250,27 +236,10 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	data, err := json.Marshal(&wd)
+	res, err := dispatchTxRequest("write-data", &wd, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	dataBinary, err := wd.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, actor, si, privkey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res api.TxResponse
-
-	if err := Client.RequestV2(context.Background(), "write-data", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFromData(&res, wd.Entry.Hash()).Print()
+	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }

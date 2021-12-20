@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"encoding"
 	"encoding/json"
@@ -17,7 +16,6 @@ import (
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -50,8 +48,7 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	return res.MerkleState, nil
 }
 
-func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
-	//adiActor labelOrPubKeyHex height index
+func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
 	var privKey []byte
 	var err error
 
@@ -61,14 +58,14 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	}
 
 	ed := transactions.SignatureInfo{}
-	ed.URL = actor.String()
+	ed.URL = origin.String()
 	ed.KeyPageHeight = 1
 	ed.KeyPageIndex = 0
 
-	if IsLiteAccount(actor.String()) == true {
-		privKey, err = LookupByLabel(actor.String()) //LookupByAnon(actor.String())
+	if IsLiteAccount(origin.String()) == true {
+		privKey, err = LookupByLabel(origin.String())
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", actor.String(), err)
+			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", origin.String(), err)
 		}
 		return args, &ed, privKey, nil
 	}
@@ -99,27 +96,27 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 		}
 	}
 
-	actorRec := new(state.ChainHeader)
-	_, err = getRecord(actor.String(), &actorRec)
+	originRec := new(state.ChainHeader)
+	_, err = getRecord(origin.String(), &originRec)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
 	}
 
 	bookRec := new(protocol.KeyBook)
-	if actorRec.KeyBook == (types.Bytes32{}) {
-		_, err := getRecord(actor.String(), &bookRec)
+	if originRec.KeyBook == (types.Bytes32{}) {
+		_, err := getRecord(origin.String(), &bookRec)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
 		}
 	} else {
-		_, err := getRecordById(actorRec.KeyBook[:], &bookRec)
+		_, err := getRecordById(originRec.KeyBook[:], &bookRec)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", actor, err)
+			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
 		}
 	}
 
 	if ed.KeyPageIndex >= uint64(len(bookRec.Pages)) {
-		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", ed.KeyPageIndex, actor)
+		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", ed.KeyPageIndex, origin)
 	}
 	ms, err := getRecordById(bookRec.Pages[ed.KeyPageIndex][:], nil)
 	if err != nil {
@@ -130,12 +127,12 @@ func prepareSigner(actor *url2.URL, args []string) ([]string, *transactions.Sign
 	return args[ct:], &ed, privKey, nil
 }
 
-func signGenTx(binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+func signGenTx(binaryPayload []byte, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 	gtx := new(transactions.GenTransaction)
 	gtx.Transaction = binaryPayload
 
-	gtx.ChainID = actor.ResourceChain()
-	gtx.Routing = actor.Routing()
+	gtx.ChainID = origin.ResourceChain()
+	gtx.Routing = origin.Routing()
 
 	si.Nonce = nonce
 	gtx.SigInfo = si
@@ -148,38 +145,8 @@ func signGenTx(binaryPayload []byte, actor *url2.URL, si *transactions.Signature
 	return ed, nil
 }
 
-func prepareGenTx(jsonPayload []byte, binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*acmeapi.APIRequestRaw, error) {
-	ed, err := signGenTx(binaryPayload, actor, si, privKey, nonce)
-	if err != nil {
-		return nil, err
-	}
-
-	params := &acmeapi.APIRequestRaw{}
-	params.Tx = &acmeapi.APIRequestRawTx{}
-
-	params.Tx.Data = &json.RawMessage{}
-	*params.Tx.Data = jsonPayload
-	params.Tx.Signer = &acmeapi.Signer{}
-	params.Tx.Signer.PublicKey.FromBytes(privKey[32:])
-	params.Tx.Signer.Nonce = nonce
-	params.Tx.Origin = types.String(actor.String())
-	params.Tx.KeyPage = &acmeapi.APIRequestKeyPage{}
-	params.Tx.KeyPage.Height = si.KeyPageHeight
-	params.Tx.KeyPage.Index = si.KeyPageIndex
-
-	params.Tx.Sig = types.Bytes64{}
-
-	params.Tx.Sig.FromBytes(ed.GetSignature())
-	//The public key needs to be used to verify the signature, however,
-	//to pass verification, the validator will hash the key and check the
-	//sig spec group to make sure this key belongs to the identity.
-	params.Tx.Signer.PublicKey.FromBytes(ed.GetPublicKey())
-
-	return params, err
-}
-
-func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(binaryPayload, actor, si, privKey, nonce)
+func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+	ed, err := signGenTx(binaryPayload, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -194,7 +161,7 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, actor *url2.URL, si *tran
 	params.Payload = json.RawMessage(jsonPayload)
 	params.Signer.PublicKey = privKey[32:]
 	params.Signer.Nonce = nonce
-	params.Origin = actor.String()
+	params.Origin = origin.String()
 	params.KeyPage.Height = si.KeyPageHeight
 	params.KeyPage.Index = si.KeyPageIndex
 
@@ -219,83 +186,53 @@ func IsLiteAccount(url string) bool {
 	return protocol.IsValidAdiUrl(u2) != nil
 }
 
-func GetUrl(url string, method string) ([]byte, error) {
-
-	var res interface{}
-	var str []byte
-
-	u, err := url2.Parse(url)
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(u.String())
-
-	if err := Client.Request(context.Background(), method, params, &res); err != nil {
-		ret, err := PrintJsonRpcError(err)
-		return []byte(ret), err
+func UnmarshalQuery(src interface{}, dst interface{}) error {
+	d, err := json.Marshal(src)
+	if err != nil {
+		return err
 	}
 
-	str, err = json.Marshal(res)
+	err = json.Unmarshal(d, dst)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func GetUrlAs(url string, as interface{}) error {
+	res, err := GetUrl(url)
+	if err != nil {
+		return err
+	}
+
+	return UnmarshalQuery(res, as)
+}
+
+func GetUrl(url string) (*api2.QueryResponse, error) {
+	var res api2.QueryResponse
+
+	u, err := url2.Parse(url)
+	params := api2.UrlQuery{}
+	params.Url = u.String()
+
+	data, err := json.Marshal(&params)
 	if err != nil {
 		return nil, err
 	}
 
-	return str, nil
+	if err := Client.RequestV2(context.Background(), "query", json.RawMessage(data), &res); err != nil {
+		ret, err := PrintJsonRpcError(err)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%v", ret)
+	}
+
+	return &res, nil
 }
 
-type KeyPageStore struct {
-	PrivKeys []types.Bytes `json:"privKeys"`
-}
-
-type KeyBookStore struct {
-	KeyPageList []string `json:"keyPages"`
-}
-
-type AccountKeyBookStore struct {
-	KeyBook KeyBookStore `json:"keyBook"`
-}
-
-//
-//func (a *AdiStore) MarshalBinary() ([]byte, error) {
-//	var buf bytes.Buffer
-//
-//	buf.Write(common.Uint64Bytes(uint64(len(a.tokenAccounts))))
-//	for i := range a.tokenAccounts {
-//		buf.Write(common.SliceBytes([]byte(a.tokenAccounts[i])))
-//	}
-//
-//	buf.Write(common.Uint64Bytes(uint64(len(a.keyBooks))))
-//	for i := range a.keyBooks {
-//		buf.Write(common.SliceBytes([]byte(a.keyBooks[i])))
-//	}
-//
-//	return buf.Bytes(), nil
-//}
-//
-//func (a *AdiStore) UnmarshalBinary(data []byte) (err error) {
-//	defer func() {
-//		if rErr := recover(); rErr != nil {
-//			err = fmt.Errorf("insufficent data to unmarshal AdiStore %v", rErr)
-//		}
-//	}()
-//
-//	var s []byte
-//	l, data := common.BytesUint64(data)
-//	for i := uint64(0); i < l; i++ {
-//		s, data = common.BytesSlice(data)
-//		a.tokenAccounts[i] = string(s)
-//	}
-//
-//	l, data = common.BytesUint64(data)
-//	for i := uint64(0); i < l; i++ {
-//		s, data = common.BytesSlice(data)
-//		a.keyBooks[i] = string(s)
-//	}
-//
-//	return nil
-//}
-
-func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *transactions.SignatureInfo, privKey []byte) (interface{}, error) {
-	json.Marshal(payload)
-
+func dispatchTxRequest(action string, payload interface{}, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
@@ -307,17 +244,23 @@ func dispatchRequest(action string, payload interface{}, actor *url2.URL, si *tr
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
 
-	var res interface{}
-	if err := Client.Request(context.Background(), "create-sig-spec-group", params, &res); err != nil {
+	data, err = json.Marshal(params)
+	if err != nil {
 		return nil, err
 	}
 
-	return res, nil
+	var res api2.TxResponse
+	if err := Client.RequestV2(context.Background(), action, json.RawMessage(data), &res); err != nil {
+		_, err := PrintJsonRpcError(err)
+		return nil, err
+	}
+
+	return &res, nil
 }
 
 type ActionResponse struct {
@@ -387,7 +330,7 @@ func (a *ActionResponse) Print() (string, error) {
 		}
 		out = string(b)
 	} else {
-		out += fmt.Sprintf("\n\tTransaction Identifier\t:\t%x\n", a.Txid)
+		out += fmt.Sprintf("\n\tTransaction Id\t\t:\t%x\n", a.Txid)
 		out += fmt.Sprintf("\tTendermint Reference\t:\t%x\n", a.Hash)
 		if !ok {
 			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
@@ -445,12 +388,14 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 }
 
 var (
-	ApiToString = map[string]string{
-		"liteTokenAccount": "lite account",
-		"tokenAccount":     "ADI token account",
-		"adi":              "ADI",
-		"keyBook":          "Key Book",
-		"keyPage":          "Key Page",
+	ApiToString = map[types.ChainType]string{
+		types.ChainTypeLiteTokenAccount: "Lite Account",
+		types.ChainTypeTokenAccount:     "ADI Token Account",
+		types.ChainTypeIdentity:         "ADI",
+		types.ChainTypeKeyBook:          "Key Book",
+		types.ChainTypeKeyPage:          "Key Page",
+		types.ChainTypeDataAccount:      "Data Chain",
+		types.ChainTypeLiteDataAccount:  "Lite Data Chain",
 	}
 )
 
@@ -461,14 +406,8 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
-	r := acmeapi.APIDataResponse{}
-	err = json.Unmarshal([]byte(tokenData), &r)
-	if err != nil {
-		return "", err
-	}
-
 	t := protocol.TokenIssuer{}
-	err = json.Unmarshal(*r.Data, &t)
+	err = json.Unmarshal([]byte(tokenData), &t)
 	if err != nil {
 		return "", err
 	}
@@ -483,13 +422,13 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
 }
 
-func printGeneralTransactionParameters(res *acmeapi.APIDataResponse) string {
+func printGeneralTransactionParameters(res *api2.QueryResponse) string {
 	out := fmt.Sprintf("---\n")
-	out += fmt.Sprintf("  - Transaction           : %x\n", res.TxId.AsBytes32())
+	out += fmt.Sprintf("  - Transaction           : %x\n", res.Txid)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
-	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig.Bytes())
+	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig)
 	if res.Signer != nil {
-		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey.Bytes())
+		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey)
 		out += fmt.Sprintf("  - Signer Nonce          : %d\n", res.Signer.Nonce)
 	}
 	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
@@ -506,44 +445,7 @@ func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
 		return string(data), nil
 	}
 
-	v1 := new(acmeapi.APIDataResponse)
-	v1.Type = types.String(v2.Type)
-	if v2.MerkleState != nil {
-		v1.MerkleState = new(acmeapi.MerkleState)
-		v1.MerkleState.Count = v2.MerkleState.Count
-		v1.MerkleState.Roots = make([]types.Bytes, len(v2.MerkleState.Roots))
-		for i, r := range v2.MerkleState.Roots {
-			v1.MerkleState.Roots[i] = r
-		}
-	}
-	v1.Origin = types.String(v2.Origin)
-	if v2.KeyPage != nil {
-		v1.KeyPage = new(acmeapi.APIRequestKeyPage)
-		v1.KeyPage.Height = v2.KeyPage.Height
-		v1.KeyPage.Index = v2.KeyPage.Index
-	}
-	v1.TxId = (*types.Bytes)(&v2.Txid)
-	if v2.Signer != nil {
-		v1.Signer = new(acmeapi.Signer)
-		v1.Signer.PublicKey = types.Bytes(v2.Signer.PublicKey).AsBytes32()
-		v1.Signer.Nonce = v2.Signer.Nonce
-	}
-	sig := types.Bytes(v2.Sig).AsBytes64()
-	v1.Sig = &sig
-
-	b, err := json.Marshal(v2.Data)
-	if err != nil {
-		return "", err
-	}
-	v1.Data = (*json.RawMessage)(&b)
-
-	b, err = json.Marshal(v2.Status)
-	if err != nil {
-		return "", err
-	}
-	v1.Status = (*json.RawMessage)(&b)
-
-	out, err := PrintQueryResponse(v1)
+	out, err := outputForHumans(v2)
 	if err != nil {
 		return "", err
 	}
@@ -554,222 +456,221 @@ func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
 	return out, nil
 }
 
-func PrintQueryResponse(res *acmeapi.APIDataResponse) (string, error) {
-	if WantJsonOutput {
-		data, err := json.Marshal(res)
+func outputForHumans(res *api2.QueryResponse) (string, error) {
+	switch string(res.Type) {
+	case types.ChainTypeLiteTokenAccount.String():
+		ata := protocol.LiteTokenAccount{}
+		err := UnmarshalQuery(res.Data, &ata)
 		if err != nil {
 			return "", err
 		}
-		return string(data), nil
-	} else {
-		switch string(res.Type) {
-		case types.ChainTypeLiteTokenAccount.String():
-			ata := response.LiteTokenAccount{}
-			err := json.Unmarshal(*res.Data, &ata)
-			if err != nil {
-				return "", err
-			}
 
-			amt, err := formatAmount(ata.TokenUrl, &ata.Balance.Int)
-			if err != nil {
-				amt = "unknown"
-			}
-
-			var out string
-			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
-			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
-			out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-			out += fmt.Sprintf("\tCredits\t\t:\t%s\n", ata.CreditBalance.String())
-			out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
-
-			return out, nil
-		case types.ChainTypeTokenAccount.String():
-			ata := response.TokenAccount{}
-			err := json.Unmarshal(*res.Data, &ata)
-			if err != nil {
-				return "", err
-			}
-
-			amt, err := formatAmount(ata.TokenUrl, &ata.Balance.Int)
-			if err != nil {
-				amt = "unknown"
-			}
-			var out string
-			out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.Url)
-			out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
-			out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBookUrl)
-
-			return out, nil
-		case types.ChainTypeIdentity.String():
-			adi := response.ADI{}
-			err := json.Unmarshal(*res.Data, &adi)
-			if err != nil {
-				return "", err
-			}
-
-			var out string
-			out += fmt.Sprintf("\n\tADI Url\t\t:\t%v\n", adi.Url)
-			out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", adi.KeyBookName)
-
-			return out, nil
-		case "directory":
-			dqr := protocol.DirectoryQueryResult{}
-			err := json.Unmarshal(*res.Data, &dqr)
-			if err != nil {
-				return "", err
-			}
-			var out string
-			out += fmt.Sprintf("\n\tADI Entries\n")
-			for _, s := range dqr.Entries {
-				data, err := Get(s)
-				if err != nil {
-					return "", err
-				}
-				r := acmeapi.APIDataResponse{}
-				err = json.Unmarshal([]byte(data), &r)
-
-				chainType := "unknown"
-				if err == nil {
-					if v, ok := ApiToString[*r.Type.AsString()]; ok {
-						chainType = v
-					}
-				}
-				out += fmt.Sprintf("\t%v (%s)\n", s, chainType)
-			}
-			return out, nil
-		case types.ChainTypeKeyBook.String():
-			//workaround for protocol unmarshaling bug
-			var ssg struct {
-				Type      types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
-				ChainUrl  types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-				SigSpecId []byte          `json:"sigSpecId"` //this is the chain id for the sig spec for the chain
-				SigSpecs  []types.Bytes32 `json:"sigSpecs"`
-			}
-
-			err := json.Unmarshal(*res.Data, &ssg)
-			if err != nil {
-				return "", err
-			}
-
-			u, err := url2.Parse(*ssg.ChainUrl.AsString())
-			if err != nil {
-				return "", err
-			}
-			var out string
-			out += fmt.Sprintf("\n\tHeight\t\tKey Page Url\n")
-			for i, v := range ssg.SigSpecs {
-				//enable this code when testnet updated to a version > 0.2.1.
-				//data, err := GetByChainId(v[:])
-				//keypage := "unknown"
-				//
-				//if err == nil {
-				//	r := acmeapi.APIDataResponse{}
-				//	err = json.Unmarshal(*data.Data, &r)
-				//	if err == nil {
-				//		ss := protocol.KeyPage{}
-				//		err = json.Unmarshal(*r.Data, &ss)
-				//		keypage = *ss.ChainUrl.AsString()
-				//	}
-				//}
-				//out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, keypage)
-				//hack to resolve the keypage url given the chainid
-				s, err := resolveKeyPageUrl(u.Authority, v[:])
-				if err != nil {
-					return "", err
-				}
-				out += fmt.Sprintf("\t%d\t\t:\t%s\n", i+1, s)
-			}
-			return out, nil
-		case types.ChainTypeKeyPage.String():
-			ss := protocol.KeyPage{}
-			err := json.Unmarshal(*res.Data, &ss)
-			if err != nil {
-				return "", err
-			}
-
-			out := fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
-			for i, k := range ss.Keys {
-				keyName := ""
-				name, err := FindLabelFromPubKey(k.PublicKey)
-				if err == nil {
-					keyName = name
-				}
-				out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
-			}
-			return out, nil
-		case types.TxTypeSendTokens.String():
-			tx := response.TokenTx{}
-			err := json.Unmarshal(*res.Data, &tx)
-			if err != nil {
-				return "", fmt.Errorf("cannot extract token transaction data from request")
-			}
-
-			var out string
-			for i := range tx.ToAccount {
-				bi := big.Int{}
-				bi.SetInt64(int64(tx.ToAccount[i].Amount))
-				amt, err := formatAmount("acc://ACME", &bi)
-				if err != nil {
-					amt = "unknown"
-				}
-				out += fmt.Sprintf("Send %s from %s to %s\n", amt, *tx.From.AsString(), tx.ToAccount[i].URL.String)
-				out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.ToAccount[i].SyntheticTxId)
-			}
-
-			out += printGeneralTransactionParameters(res)
-			return out, nil
-		case types.TxTypeSyntheticDepositTokens.String():
-			deposit := synthetic.TokenTransactionDeposit{}
-			err := json.Unmarshal(*res.Data, &deposit)
-
-			if err != nil {
-				return "", err
-			}
-
-			out := "\n"
-			amt, err := formatAmount(*deposit.TokenUrl.AsString(), &deposit.DepositAmount.Int)
-			if err != nil {
-				amt = "unknown"
-			}
-			out += fmt.Sprintf("Receive %s from %s to %s\n", amt, *deposit.FromUrl.AsString(),
-				*deposit.ToUrl.AsString())
-
-			out += printGeneralTransactionParameters(res)
-			return out, nil
-
-		default:
-			return "", fmt.Errorf("unknown response type %q", res.Type)
+		amt, err := formatAmount(ata.TokenUrl, &ata.Balance)
+		if err != nil {
+			amt = "unknown"
 		}
+
+		var out string
+		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
+		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
+		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
+		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", ata.CreditBalance.String())
+		out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
+
+		return out, nil
+	case types.ChainTypeTokenAccount.String():
+		ata := state.TokenAccount{}
+		err := UnmarshalQuery(res.Data, &ata)
+		if err != nil {
+			return "", err
+		}
+
+		amt, err := formatAmount(*ata.TokenUrl.String.AsString(), &ata.Balance)
+		if err != nil {
+			amt = "unknown"
+		}
+		kbr, err := GetByChainId(ata.KeyBook[:])
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve keybook for token account query")
+		}
+		var out string
+		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
+		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
+		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
+		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", kbr.Origin)
+
+		return out, nil
+	case types.ChainTypeIdentity.String():
+		adi := state.AdiState{}
+		err := UnmarshalQuery(res.Data, &adi)
+		if err != nil {
+			return "", err
+		}
+
+		kb, err := resolveKeyBookChainId(adi.KeyBook[:])
+		if err != nil {
+			return "", fmt.Errorf("cannot resolve keybook for adi query")
+		}
+
+		var out string
+		out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.ChainUrl)
+		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", kb)
+
+		return out, nil
+	case "directory":
+		dqr := api2.DirectoryQueryResult{}
+		err := UnmarshalQuery(res.Data, &dqr)
+		if err != nil {
+			return "", err
+		}
+
+		var out string
+		out += fmt.Sprintf("\n\tADI Entries: start = %d, count = %d, total = %d\n", dqr.Start, dqr.Count, dqr.Total)
+		for _, s := range dqr.ExpandedEntries {
+			header := state.ChainHeader{}
+			err = UnmarshalQuery(s.Data, &header)
+			if err != nil {
+				return "", err
+			}
+
+			chainDesc := "unknown"
+			if err == nil {
+				if v, ok := ApiToString[header.Type]; ok {
+					chainDesc = v
+				}
+			}
+			out += fmt.Sprintf("\t%v (%s)\n", header.ChainUrl, chainDesc)
+		}
+		return out, nil
+	case types.ChainTypeKeyBook.String():
+		book := protocol.KeyBook{}
+		err := UnmarshalQuery(res.Data, &book)
+		if err != nil {
+			return "", err
+		}
+
+		var out string
+		out += fmt.Sprintf("\n\tPage Index\t\tKey Page Url\n")
+		for i, v := range book.Pages {
+			s, err := resolveKeyPageUrl(v[:])
+			if err != nil {
+				return "", err
+			}
+			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, s)
+		}
+		return out, nil
+	case types.ChainTypeKeyPage.String():
+		ss := protocol.KeyPage{}
+		err := UnmarshalQuery(res.Data, &ss)
+		if err != nil {
+			return "", err
+		}
+		out := fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+		for i, k := range ss.Keys {
+			keyName := ""
+			name, err := FindLabelFromPubKey(k.PublicKey)
+			if err == nil {
+				keyName = name
+			}
+			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
+		}
+		return out, nil
+	case types.TxTypeSendTokens.String():
+		tx := response.TokenTx{}
+		err := UnmarshalQuery(res.Data, &tx)
+		if err != nil {
+			return "", err
+		}
+
+		var out string
+		for i := range tx.ToAccount {
+			bi := big.Int{}
+			bi.SetInt64(int64(tx.ToAccount[i].Amount))
+			amt, err := formatAmount("acc://ACME", &bi)
+			if err != nil {
+				amt = "unknown"
+			}
+			out += fmt.Sprintf("Send %s from %s to %s\n", amt, *tx.From.AsString(), tx.ToAccount[i].URL.String)
+			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.ToAccount[i].SyntheticTxId)
+		}
+
+		out += printGeneralTransactionParameters(res)
+		return out, nil
+	case types.TxTypeSyntheticDepositTokens.String():
+		deposit := synthetic.TokenTransactionDeposit{}
+		err := UnmarshalQuery(res.Data, &deposit)
+		if err != nil {
+			return "", err
+		}
+
+		out := "\n"
+		amt, err := formatAmount(*deposit.TokenUrl.AsString(), &deposit.DepositAmount.Int)
+		if err != nil {
+			amt = "unknown"
+		}
+		out += fmt.Sprintf("Receive %s from %s to %s\n", amt, *deposit.FromUrl.AsString(),
+			*deposit.ToUrl.AsString())
+
+		out += printGeneralTransactionParameters(res)
+		return out, nil
+	case types.TxTypeCreateIdentity.String():
+		id := protocol.IdentityCreate{}
+		err := UnmarshalQuery(res.Data, &id)
+		if err != nil {
+			return "", err
+		}
+
+		out := "\n"
+		out += fmt.Sprintf("ADI url \t\t:\tacc://%s\n", id.Url)
+		out += fmt.Sprintf("Key Book \t\t:\tacc://%s/%s\n", id.Url, id.KeyBookName)
+		out += fmt.Sprintf("Key Page \t\t:\tacc://%s/%s\n", id.Url, id.KeyPageName)
+
+		keyName, err := FindLabelFromPubKey(id.PublicKey)
+		if err != nil {
+			out += fmt.Sprintf("Public Key \t:\t%x\n", id.PublicKey)
+		} else {
+			out += fmt.Sprintf("Public Key (name) \t:\t%x (%s)\n", id.PublicKey, keyName)
+		}
+
+		out += printGeneralTransactionParameters(res)
+		return out, nil
+
+	default:
+		return "", fmt.Errorf("unknown response type %q", res.Type)
 	}
 }
 
-func resolveKeyPageUrl(adi string, chainId []byte) (string, error) {
-	var res acmeapi.APIDataResponse
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(adi)
-	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
-		return PrintJsonRpcError(err)
+func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
+	kb, err := GetByChainId(chainId)
+	header := state.ChainHeader{}
+	err = UnmarshalQuery(kb.Data, &header)
+	if err != nil {
+		return nil, err
 	}
+	return &header, nil
+}
 
-	dqr := protocol.DirectoryQueryResult{}
-	err := json.Unmarshal(*res.Data, &dqr)
+func resolveKeyBookChainId(chainId []byte) (string, error) {
+	kb, err := GetByChainId(chainId)
+	book := protocol.KeyBook{}
+	err = UnmarshalQuery(kb.Data, &book)
 	if err != nil {
 		return "", err
 	}
+	return book.GetChainUrl(), nil
+}
 
-	for _, s := range dqr.Entries {
-		u, err := url2.Parse(s)
-		if err != nil {
-			continue
-		}
-
-		if bytes.Equal(u.ResourceChain(), chainId) {
-			return s, nil
-		}
+func resolveKeyPageUrl(chainId []byte) (string, error) {
+	res, err := GetByChainId(chainId)
+	if err != nil {
+		return "", err
 	}
-
-	return fmt.Sprintf("unresolvable chain %x", chainId), nil
+	kp := protocol.KeyPage{}
+	err = UnmarshalQuery(res.Data, &kp)
+	if err != nil {
+		return "", err
+	}
+	return kp.GetChainUrl(), nil
 }
 
 func nonceFromTimeNow() uint64 {

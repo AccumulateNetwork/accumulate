@@ -96,24 +96,24 @@ func CreateADI(db DB, key ed25519.PrivKey, urlStr types.String) error {
 		return err
 	}
 
-	sigSpecUrl := identityUrl.JoinPath("sigspec0")
-	ssgUrl := identityUrl.JoinPath("ssg0")
+	pageUrl := identityUrl.JoinPath("page0")
+	bookUrl := identityUrl.JoinPath("book0")
 
 	ss := new(protocol.KeySpec)
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewKeyPage()
-	mss.ChainUrl = types.String(sigSpecUrl.String())
+	mss.ChainUrl = types.String(pageUrl.String())
 	mss.Keys = append(mss.Keys, ss)
 
-	ssg := protocol.NewKeyBook()
-	ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
-	ssg.Pages = append(ssg.Pages, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
+	book := protocol.NewKeyBook()
+	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
+	book.Pages = append(book.Pages, types.Bytes(pageUrl.ResourceChain()).AsBytes32())
 
 	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
-	adi.KeyBook = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
+	adi.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
 
-	return WriteStates(db, adi, ssg, mss)
+	return WriteStates(db, adi, book, mss)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
@@ -122,7 +122,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		return err
 	}
 	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
-	sigSpecId := u.Identity().JoinPath("ssg0").ResourceChain() // assume the sig spec is adi/ssg0
+	bookId := u.Identity().JoinPath("book0").ResourceChain() // assume the book is adi/book0
 
 	var chain state.Chain
 	if lite {
@@ -134,7 +134,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		chain = account
 	} else {
 		account := state.NewTokenAccount(u.String(), tokenUrl)
-		account.KeyBook = types.Bytes(sigSpecId).AsBytes32()
+		account.KeyBook = types.Bytes(bookId).AsBytes32()
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		account.TxCount++
 		chain = account
@@ -167,7 +167,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...ed25519.PubKey) error {
 	return WriteStates(db, mss)
 }
 
-func CreateKeyBook(db DB, urlStr types.String, sigSpecUrls ...string) error {
+func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 	groupUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -175,10 +175,10 @@ func CreateKeyBook(db DB, urlStr types.String, sigSpecUrls ...string) error {
 
 	group := protocol.NewKeyBook()
 	group.ChainUrl = types.String(groupUrl.String())
-	group.Pages = make([][32]byte, len(sigSpecUrls))
+	group.Pages = make([][32]byte, len(pageUrls))
 	states := []state.Chain{group}
 
-	for i, s := range sigSpecUrls {
+	for i, s := range pageUrls {
 		specUrl, err := url.Parse(s)
 		if err != nil {
 			return err
@@ -194,7 +194,7 @@ func CreateKeyBook(db DB, urlStr types.String, sigSpecUrls ...string) error {
 		}
 
 		if (spec.KeyBook != types.Bytes32{}) {
-			return fmt.Errorf("%q is already attached to an SSG", s)
+			return fmt.Errorf("%q is already attached to a key book", s)
 		}
 
 		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
