@@ -4,6 +4,11 @@ stages:
 - deploy
 - validate
 
+variables:
+  AWS_ECR_PUBLIC: public.ecr.aws/k4z4t6h4
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_ECR_PRIVATE: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+
 .go:
   cache:
     key: go-mod-cache
@@ -29,6 +34,7 @@ stages:
   stage: test
   extends: .go
   needs: []
+  except: [schedules]
   tags: [docker, linux]
   artifacts:
     when: always
@@ -60,6 +66,7 @@ git describe:
 build images:
   stage: build
   needs: []
+  except: [schedules]
   tags: [docker, linux]
   image: docker
   services: ['docker:dind']
@@ -74,6 +81,7 @@ build:
   stage: build
   extends: .go
   needs: [git describe]
+  except: [schedules]
   tags: [docker, linux]
   image: golang:1.17
   script:
@@ -87,10 +95,41 @@ build:
     paths:
     - accumulated-*
 
+aws-ecr-credentials:
+  stage: build
+  needs: []
+  only: [deploy-aws-ecr] # [schedules, web]
+  image: registry.gitlab.com/gitlab-org/cloud-deploy/aws-ecs:latest
+  script: echo AWS_ECR_PW=$(aws ecr-public get-login-password --region ${AWS_DEFAULT_REGION})  >> aws.env
+  artifacts:
+    reports:
+      dotenv: git.env
+
+deploy-aws-ecr:
+  stage: deploy
+  needs: [aws-ecr-credentials]
+  only: [deploy-aws-ecr] # [schedules, web]
+  tags: [docker, linux]
+  image: docker
+  services: ['docker:dind']
+  script:
+  # Login
+  - echo $AWS_ECR_PW | docker login --username AWS --password-stdin ${AWS_ECR_PUBLIC}
+  - echo $AWS_ECR_PW | docker login --username AWS --password-stdin ${AWS_ECR_PRIVATE}
+  # Pull from GitLab
+  - docker pull ${CI_REGISTRY_IMAGE}/accumulated:latest
+  # Push to ECR (public)
+  - docker tag ${CI_REGISTRY_IMAGE}/accumulated:latest ${AWS_ECR_PUBLIC}/accumulate/accumulated:latest
+  - docker push ${AWS_ECR_PUBLIC}/accumulate/accumulated:latest
+  # Push to ECR (private)
+  - docker tag ${CI_REGISTRY_IMAGE}/accumulated:latest ${AWS_ECR_PRIVATE}/accumulate/accumulated:latest
+  - docker push ${AWS_ECR_PRIVATE}/accumulate/accumulated:latest
+
 configure:
   stage: build
   extends: .go
   needs: [git describe]
+  except: [schedules]
   tags: [docker, linux]
   image: golang:1.17
   script:
