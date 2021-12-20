@@ -299,14 +299,33 @@ func (m *MerkleManager) Get(element int64) (Hash, error) {
 	return Hash(data).Copy(), nil
 }
 
-// GetNext
-// Get the next hash to be added to a state at this height
-func (m *MerkleManager) GetNext(element int64) (hash Hash) {
-	data, err := m.Manager.Get(m.key.Append("NextElement", element))
-	if err != nil {
-		return nil
+// GetIntermediate
+// Return the last two hashes that were combined to create the local
+// Merkle Root at the given index.  The element provided must be an
+// even power of two >= 2.
+func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right []byte, err error) {
+	hash, e := m.Get(element) // Get the element at this height
+	if e != nil {             // Error out if we can't
+		return nil, nil, e //
+	} //
+	s, e2 := m.GetAnyState(element - 1) // Get the state before the state we want
+	if e2 != nil {                      // If the element doesn't exist, that's a problem
+		return nil, nil, e2 //
+	} //
+	s.HashFunction = m.MS.HashFunction // Get the hash function
+	s.PadPending()                     // Pad Pending with a nil to remove corner cases
+	for i, v := range s.Pending {      // Adding the hash is like incrementing a variable
+		if v == nil { //               Look for an empty slot; should not encounter one
+			return nil, nil, fmt.Errorf("should not encounter a nil at %d height %d", element, height)
+		}
+		if i+1 == int(height) { // Found the height
+			Left = v.Copy()         // Get the left and right
+			Right = hash.Copy()     //
+			return Left, Right, nil // return them
+		}
+		hash = v.Combine(s.HashFunction, hash) // If this slot isn't empty, combine the hash with the slot
 	}
-	return Hash(data).Copy()
+	return nil, nil, fmt.Errorf("no values found at height %d", height)
 }
 
 // AddHashString
