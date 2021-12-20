@@ -24,85 +24,7 @@ type Receipt struct {
 	Nodes        []*Node // Apply these hashes to create an anchor
 
 	// None of the following is persisted.
-	height       int            // Track the height in the Merkle Tree during builds
-	right        bool           // Track if the next element comes from the left or right
-	manager      *MerkleManager // The Merkle Tree Manager from which we are building a receipt
-	currentState *MerkleState   // The state we are walking through as we build the receipt
-	anchorState  *MerkleState   // The state from which we will ultimately build the anchor
-}
-
-// AddANode
-// Adds a hash step to the receipt. Takes two hashes, an option for the left
-// path and an option for the right path, and the bool for which way to go.
-// If the direction is known, both hashes do not have to be provided.
-func (r *Receipt) AddANode(left, right Hash) {
-	node := new(Node)
-	r.Nodes = append(r.Nodes, node)
-	node.Right = r.right
-	if r.right {
-		AM.Chk(right)
-		node.Hash = right.Copy()
-	} else {
-		AM.Chk(left)
-		node.Hash = left.Copy()
-	}
-	r.right = false
-}
-
-func (r *Receipt) AddAHash(v1 Hash) {
-	original := v1.Copy()
-	r.currentState.PadPending() // Pending always has to end in a nil to ensure we handle the "carry" case
-	for j, v2 := range r.currentState.Pending {
-		if v2 == nil {
-			// If we find a nil spot, then we found where the hash will go.  To keep
-			// the accounting square, we won't add it ourselves, but will let the Merkle Tree
-			// library do the deed.  That keeps the Merkle Tree State square.
-			r.currentState.AddToMerkleTree(original)
-			if j == r.height { // If we combine with our proof height, the NEXT combination will be
-				r.MDRoot = original
-				r.right = true // from the right.
-			}
-			return
-		}
-		// If this is the creation of a higher derivative of object, put it in our path
-		if j == r.height {
-			r.AddANode(v2, v1)
-			r.height++      // The Anchor will now move up one level in the Merkle Tree
-			r.right = false // The Anchor hashes on the left are now added to the Anchor
-		}
-		// v1 becomes HashOf(pending[j]+v1)
-		v1 = r.currentState.HashFunction(append(v2, v1...))
-	}
-	panic("failed to add the hash to the current state")
-}
-
-// ComputeDag
-// Creates the Merkle Dag Root MDRoot
-func (r *Receipt) ComputeDag() {
-	var MDRoot Hash
-	r.right = true
-
-	for i, v := range r.currentState.Pending {
-		if v == nil { // if v is nil, there is nothing to do regardless. Note i cannot == Height
-			continue // because the previous code tracks Height such that there is always a value.
-		}
-		if MDRoot == nil { // Find the first non nil in pending
-			MDRoot = AM.Chk(v)
-			if i == r.height {
-				r.right = false
-			}
-			continue
-		}
-		if i >= r.height { // At this point, we have a hash in the MDRoot, and we are
-			r.AddANode(v, MDRoot)
-			r.right = false
-		}
-		r.MDRoot = v.Combine(r.manager.MS.HashFunction, MDRoot)
-	}
-	// We are testing MDRoot, but it can't be nil
-	if r.MDRoot == nil {
-		panic("MDRoot was nil, and this should not be possible.")
-	}
+	manager *MerkleManager // The Merkle Tree Manager from which we are building a receipt
 }
 
 // String
@@ -126,65 +48,6 @@ func (r *Receipt) String() string {
 		b.WriteString(fmt.Sprintf(" %10d Apply %s %x working: %x \n", i, r, v.Hash, working))
 	}
 	return b.String()
-}
-
-// getNextState
-// Return the state at th idx, or the last state if idx isn't on the chain
-// Note the state returned is the one just before the target (because we may
-// wish to add the entry that brings us to the target.
-func getNextState(m *MerkleManager, limit, idx int64) (*MerkleState, int64) {
-	if idx >= limit {
-		s, _ := m.GetAnyState(limit)
-		return s, limit
-	}
-	s, _ := m.GetAnyState(idx)
-	return s, idx
-}
-
-// BuildReceipt
-// Do the actual lift to build a receipt
-func (r *Receipt) BuildReceipt() (err error) {
-
-	nextMark := r.ElementIndex & ^r.manager.MarkMask + r.manager.MarkFreq - 2
-
-	var idx int64
-	for idx = r.ElementIndex; idx <= nextMark; idx++ { // Create the r upto the next mark
-		r.currentState.Pad() // Pad the pending list with a nil entry. Trim() will remove it.
-		switch {
-		case idx == r.AnchorIndex:
-			hash, _ := r.manager.Get(idx)
-			r.AddAHash(hash)
-			r.ComputeDag()
-			return nil
-		default:
-			hash, _ := r.manager.Get(idx)
-			r.AddAHash(hash)
-		}
-	}
-
-	r.currentState, idx = getNextState(r.manager, r.AnchorIndex, nextMark+1)
-
-	for {
-		switch {
-		case idx == r.AnchorIndex:
-			r.currentState, idx = getNextState(r.manager, r.AnchorIndex, nextMark)
-			r.ComputeDag()
-			return nil
-		case idx > r.AnchorIndex:
-			r.ComputeDag()
-			return nil
-		default:
-			_, hRight, err := r.manager.GetIntermediate(idx, int64(r.height))
-			if err != nil {
-				return err
-			}
-			AM.Chk(hRight)
-			r.AddANode(nil, hRight)
-			r.height++
-			nextMark = nextMark + int64(math.Pow(2, float64(r.height)))
-			idx = nextMark
-		}
-	}
 }
 
 // Validate
@@ -241,22 +104,6 @@ func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
 	return nr, nil
 }
 
-// PrintState
-// Print the state at this time.
-func PrintState(title string, height int, state1 *MerkleState, hash1 Hash) {
-	fmt.Println("===============", title, "height: ", height, " ===============")
-	if state1 != nil {
-		fmt.Printf("%s\n", state1.String())
-		if hash1 != nil {
-			state1.Trim()
-			hash := state1.Pending[len(state1.Pending)-1]
-			L := Sha256(append(hash, hash1...))
-			R := Sha256(append(hash1, hash...))
-			fmt.Printf("AddHash %10x  L %10x R %10x\n", hash1, L, R)
-		}
-	}
-}
-
 // GetReceipt
 // Given a merkle tree and two elements, produce a proof that the element was used to derive the DAG at the anchor
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
@@ -285,18 +132,56 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, 
 		return r, nil      // And we are done!
 	}
 
-	if r.anchorState, err = r.manager.GetAnyState(r.AnchorIndex); err != nil {
-		return nil, err
-	}
-	if r.ElementIndex == 0 {
-		r.currentState = new(MerkleState)
-	} else if r.currentState, err = r.manager.GetAnyState(r.ElementIndex - 1); err != nil { // Need to combine our element
-		return nil, err // with the currentState, so the currentState we need is the one before the element.
-	}
-	r.currentState.InitSha256()
-
 	if err := r.BuildReceipt(); err != nil {
 		return nil, err
 	}
 	return r, nil
+}
+
+func (r *Receipt) BuildReceipt() error {
+	height := int64(0)
+	r.MDRoot = r.Element
+	for idx := r.ElementIndex; idx < r.AnchorIndex; {
+		var hash Hash
+		var right bool
+		if (idx>>height)&1 == 1 {
+			state, _ := r.manager.GetAnyState(idx - 1)
+			hash = state.Pending[height]
+			right = false
+			r.MDRoot = hash.Combine(r.manager.MS.HashFunction, r.MDRoot)
+		} else {
+			next := int64(math.Pow(2, float64(height))) + idx
+			if next > r.AnchorIndex {
+				break
+			}
+			_, hRight, _ := r.manager.GetIntermediate(next, height+1)
+			right = true
+			hash = hRight
+			idx += next
+			r.MDRoot = r.MDRoot.Combine(r.manager.MS.HashFunction, hash)
+		}
+		height++
+		node := new(Node)
+		node.Right = right
+		node.Hash = hash
+		r.Nodes = append(r.Nodes, node)
+	}
+
+	if r.AnchorIndex&1 == 0 {
+		state, _ := r.manager.GetAnyState(r.AnchorIndex)
+		state.Trim()
+		node := new(Node)
+		var hash Hash
+		for _, v := range state.Pending {
+			if v != nil {
+				hash = v
+				break
+			}
+		}
+		node.Hash = hash
+		node.Right = true
+		r.Nodes = append(r.Nodes, node)
+		r.MDRoot = r.MDRoot.Combine(r.manager.MS.HashFunction, hash)
+	}
+	return nil
 }
