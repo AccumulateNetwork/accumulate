@@ -165,7 +165,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 
 	args, si, privKey, err := prepareSigner(u, args)
 	if err != nil {
-		return "", fmt.Errorf("insufficient number of command line arguments")
+		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
 
 	if len(args) < 1 {
