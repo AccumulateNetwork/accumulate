@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"github.com/pingcap/errors"
 	"net"
 	"os"
 	"runtime"
@@ -210,6 +211,52 @@ func TestValidate(t *testing.T) {
 			Key: adiKey,
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
+	})
+
+}
+
+func TestTokenTransfer(t *testing.T) {
+	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+		t.Skip("This test does not work well on Windows or macOS")
+	}
+
+	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 2, 2, 3000)
+	japi := daemons[0].Jrpc_TESTONLY()
+
+	var aliceKey ed25519.PrivateKey
+	var aliceUrl *url.URL
+	t.Run("Faucet", func(t *testing.T) {
+		aliceKey = newKey([]byte(t.Name()))
+		aliceUrl = makeLiteUrl(t, aliceKey, ACME)
+
+		xr := new(api.TxResponse)
+		callApi(t, japi, "faucet", &AcmeFaucet{Url: aliceUrl.String()}, xr)
+		require.Zero(t, xr.Code, xr.Message)
+		txWait(t, japi, xr.Txid)
+
+		account := NewLiteTokenAccount()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: aliceUrl.String()}, account)
+		assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
+	})
+
+	var bobKey ed25519.PrivateKey
+	var bobUrl *url.URL
+	t.Run("Send Token", func(t *testing.T) {
+		bobKey = newKey([]byte(t.Name()))
+		bobUrl = makeLiteUrl(t, bobKey, ACME)
+
+		res := executeTx(t, japi, "add-credits", true, execParams{
+			Origin: aliceUrl.String(),
+			Key:    aliceKey,
+			Payload: &AddCredits{
+				Recipient: bobUrl.String(),
+				Amount:    100,
+			},
+		})
+
+		account := NewLiteTokenAccount()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: bobUrl.String()}, account)
+		assert.Equal(t, int64(5), account.Balance.Int64())
 	})
 
 }
