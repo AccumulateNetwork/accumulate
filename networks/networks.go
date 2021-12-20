@@ -39,7 +39,6 @@ type Node struct {
 	Type config.NodeType
 }
 
-var networks map[string]Network
 var all = Network{}
 var nameCount = map[string]int{}
 
@@ -47,7 +46,7 @@ func init() {
 	// Ensure 'Directory' must be qualified, e.g. 'DevNet.Directory'
 	nameCount[protocol.Directory] = 1
 
-	networks = map[string]Network{
+	networks := map[string]Network{
 		"TestNet": TestNet,
 		"DevNet":  DevNet,
 	}

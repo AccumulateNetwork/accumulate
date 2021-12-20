@@ -21,15 +21,6 @@ var LocalBVN = &networks.Subnet{
 	},
 }
 
-var LocalDN = &networks.Subnet{
-	Name: "Local",
-	Type: config.BlockValidator,
-	Port: 35650,
-	Nodes: []networks.Node{
-		{IP: "127.0.1.1", Type: config.Validator},
-	},
-}
-
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(net, node, netId)        //
 	cfg.Mempool.MaxBatchBytes = 1048576            //

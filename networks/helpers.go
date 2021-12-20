@@ -32,12 +32,3 @@ func Resolve(name string) (*Subnet, error) {
 	}
 	return nil, fmt.Errorf("%q is not the name of a subnet", name)
 }
-
-func SubnetsForNetwork(networkName string) []*Subnet {
-	network := networks[networkName]
-	var ret []*Subnet
-	for _, subnet := range network {
-		ret = append(ret, subnet)
-	}
-	return ret
-}
