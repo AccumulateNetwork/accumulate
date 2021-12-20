@@ -3,6 +3,7 @@ package state
 import (
 	"crypto/sha256"
 	"encoding"
+	"errors"
 	"fmt"
 	"math/bits"
 
@@ -68,6 +69,10 @@ func (c *ChainManager) Entry(height int64) ([]byte, error) {
 func (c *ChainManager) Entries(start int64, end int64) ([][]byte, error) {
 	if end > c.Height() {
 		end = c.Height()
+	}
+
+	if end < start {
+		return nil, errors.New("invalid range: start is greater than end")
 	}
 
 	// GetRange will not cross mark point boundaries, so we may need to call it
