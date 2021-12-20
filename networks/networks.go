@@ -87,8 +87,8 @@ var TestNet = Network{
 			{"2.bvn2.testnet.accumulatenetwork.io", config.Follower},  // 2-2
 		},
 	},
-	"BVC0": {
-		Name:        "BVC0",
+	"BVN0": {
+		Name:        "BVN0",
 		NetworkName: "TestNet",
 		Type:        config.BlockValidator,
 		Port:        33000,
@@ -98,8 +98,8 @@ var TestNet = Network{
 			{"2.bvn0.testnet.accumulatenetwork.io", config.Validator},
 		},
 	},
-	"BVC1": {
-		Name:        "BVC1",
+	"BVN1": {
+		Name:        "BVN1",
 		NetworkName: "TestNet",
 		Type:        config.BlockValidator,
 		Port:        33000,
@@ -109,8 +109,8 @@ var TestNet = Network{
 			{"2.bvn1.testnet.accumulatenetwork.io", config.Validator},
 		},
 	},
-	"BVC2": {
-		Name:        "BVC2",
+	"BVN2": {
+		Name:        "BVN2",
 		NetworkName: "TestNet",
 		Type:        config.BlockValidator,
 		Port:        33000,
