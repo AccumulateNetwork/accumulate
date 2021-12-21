@@ -138,33 +138,43 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, 
 	return r, nil
 }
 
+/*
+0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18  19
+R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L
+R   .   L       R   .   L       R   .   L       R   .   L       R   .   L
+R   .   .   .   L               R   .   .   .   L               R
+R   .   .   .   .   .   .   .   L
+R   .   .       .
+*/
+
 func (r *Receipt) BuildReceipt() error {
-	height := int64(0)
+	height := int64(1)
 	r.MDRoot = r.Element
 
+	stay := true // If we don't increment, then we shift to the left.
+
+	// The path from a hash added to the merkle tree to the anchor
+	// starts at the element index and goes to the anchor index.
+	// Some indexes have multiple hashes as hashes cascade
 	for idx := r.ElementIndex; idx <= r.AnchorIndex; {
 		if idx&1 == 0 {
 			idx++
-			height++
-		} else if height == 0 {
-			height++
+			stay = false
 		} else {
 			lHash, rHash, err := r.manager.GetIntermediate(idx, height)
 			if err != nil {
 				next := int64(math.Pow(2, float64(height-1)))
 				idx += next
+				stay = false
 				continue
 			}
-			node := new(Node)
 			r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash)
-			if idx == r.ElementIndex && height == 1 {
-				node.Right = false
-				node.Hash = lHash
+			if stay {
+				r.Nodes = append(r.Nodes, &Node{Hash: lHash, Right: false})
 			} else {
-				node.Right = true
-				node.Hash = rHash
+				r.Nodes = append(r.Nodes, &Node{Hash: rHash, Right: true})
 			}
-			r.Nodes = append(r.Nodes, node)
+			stay = true
 			height++
 		}
 	}
@@ -173,28 +183,39 @@ func (r *Receipt) BuildReceipt() error {
 		r.MDRoot = r.Element
 		return nil
 	}
-
+	stay = false
 	state, _ := r.manager.GetAnyState(r.AnchorIndex)
 	state.Trim()
 
-	if r.AnchorIndex&1 == 1 && r.AnchorIndex == r.ElementIndex {
+	if r.AnchorIndex&1 == 1 && r.AnchorIndex == r.ElementIndex && height == 1 {
 		r.MDRoot = state.Pending[len(state.Pending)-1].Copy()
+		// } else if r.AnchorIndex == r.ElementIndex {
 	} else {
 		var hash, last Hash
+		if r.AnchorIndex == r.ElementIndex {
+			stay = true
+		}
 		for i, v := range state.Pending {
 			if hash == nil {
-				hash = v
+				hash = v.Copy()
+				if height-1 == int64(i) {
+					stay = true
+				}
 				continue
 			}
 			if v != nil {
-				last = hash
+				last = hash.Copy()
 				hash = v.Combine(r.manager.MS.HashFunction, hash)
-			}
-			if int64(i) >= height-1 {
-				node := new(Node)
-				node.Right = true
-				node.Hash = last
-				r.Nodes = append(r.Nodes, node)
+
+				if stay {
+					if height <= int64(i) {
+						r.Nodes = append(r.Nodes, &Node{Hash: v, Right: false})
+					}
+					height++
+				} else if int64(i) >= height-1 {
+					r.Nodes = append(r.Nodes, &Node{Hash: last, Right: true})
+					stay = true
+				}
 			}
 		}
 		r.MDRoot = hash
