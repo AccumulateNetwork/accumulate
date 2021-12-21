@@ -20,7 +20,7 @@ var versionCmd = &cobra.Command{
 func GetVersion() (string, error) {
 	var res interface{}
 
-	if err := Client.Request(context.Background(), "version", nil, &res); err != nil {
+	if err := Client.RequestV2(context.Background(), "version", nil, &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 

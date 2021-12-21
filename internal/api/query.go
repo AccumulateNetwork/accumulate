@@ -257,6 +257,184 @@ func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataRe
 	return unmarshalTxReference(r.Response)
 }
 
+// GetDataSetByUrl returns the data specified by the pagination information on given chain specified by the url
+func (q *Query) GetDataSetByUrl(url string, start uint64, limit uint64, expand bool) (*acmeApi.APIDataResponsePagination, error) {
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeDataSet
+	ru := protocol.RequestDataEntrySet{} //change to RequestDataSet{}
+	ru.Start = start
+	ru.Count = limit
+	ru.ExpandChains = expand
+	ru.Url = u.String()
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := q.txRelay.Query(qu.RouteId, qd)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Response.Code != 0 {
+		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
+	}
+	thr := protocol.ResponseDataEntrySet{}
+	err = thr.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	//pull the data chain state to use as a template for the responses
+	dataChainState, err := q.GetChainStateByUrl(url)
+	if err != nil {
+		return nil, fmt.Errorf("error obtaining data chain state, %v", err)
+	}
+
+	//build the pagination response
+	ret := acmeApi.APIDataResponsePagination{}
+	ret.Start = int64(start)
+	ret.Limit = int64(limit)
+	ret.Total = int64(thr.Total)
+
+	for i := range thr.DataEntries {
+		entry := thr.DataEntries[i]
+		dr := acmeApi.APIDataResponse{}
+		dr = *dataChainState
+
+		d, err := json.Marshal(&entry)
+		if err != nil {
+			return nil, err
+		}
+		dr.Data = &json.RawMessage{}
+		*dr.Data = d
+		dr.Type = "dataEntry"
+
+		ret.Data = append(ret.Data, &dr)
+	}
+
+	return &ret, nil
+}
+
+// GetDataByEntryHash returns the data specified by the entry hash in a given chain specified by the url
+func (q *Query) GetDataByEntryHash(url string, entryHash []byte) (*acmeApi.APIDataResponse, error) {
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	dataChainState, err := q.GetChainStateByUrl(url)
+	if err != nil {
+		return nil, fmt.Errorf("error obtaining data chain state, %v", err)
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeData
+	ru := protocol.RequestDataEntry{}
+	ru.Url = u.String()
+	copy(ru.EntryHash[:], entryHash)
+
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := q.txRelay.Query(qu.RouteId, qd)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Response.Code != 0 {
+		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
+	}
+	thr := protocol.ResponseDataEntry{}
+	err = thr.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	d, err := thr.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	dataChainState.Data = &json.RawMessage{}
+	*dataChainState.Data = d
+	dataChainState.Type = "dataEntry"
+
+	return dataChainState, nil
+}
+
+// QueryDataByUrl returns the current data at the head of the data chain
+func (q *Query) QueryDataByUrl(url string) (*acmeApi.APIDataResponse, error) {
+	u, err := url2.Parse(url)
+	if err != nil {
+		return nil, err
+	}
+
+	dataChainState, err := q.GetChainStateByUrl(url)
+	if err != nil {
+		return nil, fmt.Errorf("error obtaining data chain state, %v", err)
+	}
+
+	qu := query.Query{}
+	qu.RouteId = u.Routing()
+	qu.Type = types.QueryTypeData
+	ru := protocol.RequestDataEntry{}
+	ru.Url = u.String()
+
+	qu.Content, err = ru.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	qd, err := qu.MarshalBinary()
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := q.txRelay.Query(qu.RouteId, qd)
+	if err != nil {
+		return nil, err
+	}
+
+	if res.Response.Code != 0 {
+		return nil, fmt.Errorf("query failed with code %d: %q", res.Response.Code, res.Response.Info)
+	}
+	thr := protocol.ResponseDataEntry{}
+	err = thr.UnmarshalBinary(res.Response.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	d, err := thr.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+
+	dataChainState.Data = &json.RawMessage{}
+	*dataChainState.Data = d
+	dataChainState.Type = "dataEntry"
+	return dataChainState, nil
+}
+
 // packTransactionQuery
 func packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSynthTxIds []byte) (resp *acmeApi.APIDataResponse, err error) {
 

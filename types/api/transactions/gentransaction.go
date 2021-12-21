@@ -138,7 +138,7 @@ func (t *GenTransaction) SetRoutingChainID() error { //
 	}
 	u, err := url.Parse(t.SigInfo.URL)
 	if err != nil {
-		return fmt.Errorf("invalid sponsor: %w", err)
+		return fmt.Errorf("invalid origin record: %w", err)
 	}
 	// TODO this should use u.Routing()
 	h := u.IdentityChain()                                               // Hash the identity

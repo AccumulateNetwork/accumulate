@@ -15,8 +15,8 @@ type CreateKeyBook struct{}
 func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
 func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	if _, ok := st.Sponsor.(*state.AdiState); !ok {
-		return fmt.Errorf("invalid sponsor: want chain type %v, got %v", types.ChainTypeIdentity, st.Sponsor.Header().Type)
+	if _, ok := st.Origin.(*state.AdiState); !ok {
+		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeIdentity, st.Origin.Header().Type)
 	}
 
 	body := new(protocol.CreateKeyBook)
@@ -34,8 +34,8 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 		return fmt.Errorf("invalid target URL: %v", err)
 	}
 
-	if !sgUrl.Identity().Equal(st.SponsorUrl) {
-		return fmt.Errorf("%q does not belong to %q", sgUrl, st.SponsorUrl)
+	if !sgUrl.Identity().Equal(st.OriginUrl) {
+		return fmt.Errorf("%q does not belong to %q", sgUrl, st.OriginUrl)
 	}
 
 	entries := make([]*protocol.KeyPage, len(body.Pages))
@@ -52,12 +52,12 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 			return fmt.Errorf("invalid sig spec state: bad URL: %v", err)
 		}
 
-		if !u.Identity().Equal(st.SponsorUrl) {
-			return fmt.Errorf("%q does not belong to %q", u, st.SponsorUrl)
+		if !u.Identity().Equal(st.OriginUrl) {
+			return fmt.Errorf("%q does not belong to %q", u, st.OriginUrl)
 		}
 
 		if (entry.KeyBook != types.Bytes32{}) {
-			return fmt.Errorf("%q has already been assigned to an SSG", u)
+			return fmt.Errorf("%q has already been assigned to a key book", u)
 		}
 
 		entries[i] = entry
@@ -65,10 +65,10 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 
 	scc := new(protocol.SyntheticCreateChain)
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
-	st.Submit(st.SponsorUrl, scc)
+	st.Submit(st.OriginUrl, scc)
 
-	ssg := protocol.NewKeyBook()
-	ssg.ChainUrl = types.String(sgUrl.String())
+	book := protocol.NewKeyBook()
+	book.ChainUrl = types.String(sgUrl.String())
 
 	groupChainId := types.Bytes(sgUrl.ResourceChain()).AsBytes32()
 	for _, spec := range entries {
@@ -79,7 +79,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 
 		specChainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		ssg.Pages = append(ssg.Pages, specChainId)
+		book.Pages = append(book.Pages, specChainId)
 		spec.KeyBook = groupChainId
 		err = scc.Update(spec)
 		if err != nil {
@@ -87,7 +87,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 	}
 
-	err = scc.Create(ssg)
+	err = scc.Create(book)
 	if err != nil {
 		return fmt.Errorf("failed to marshal state: %v", err)
 	}

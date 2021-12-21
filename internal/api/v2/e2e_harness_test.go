@@ -96,6 +96,12 @@ func makeLiteUrl(t *testing.T, key ed25519.PrivateKey, tok string) *url.URL {
 	return u
 }
 
+func makeUrl(t *testing.T, s string) *url.URL {
+	u, err := url.Parse(s)
+	require.NoError(t, err)
+	return u
+}
+
 func callApi(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) interface{} {
 	t.Helper()
 
@@ -129,7 +135,7 @@ func queryAs(t *testing.T, japi *api.JrpcMethods, method string, params, result 
 }
 
 type execParams struct {
-	Sponsor   string
+	Origin    string
 	Key       ed25519.PrivateKey
 	PageIndex uint64
 	Payload   protocol.TransactionPayload
@@ -147,11 +153,11 @@ func recode(t *testing.T, from, to interface{}) {
 func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, params execParams) *api.TxResponse {
 	t.Helper()
 
-	qr := query(t, japi, "query", &api.UrlQuery{Url: params.Sponsor})
+	qr := query(t, japi, "query", &api.UrlQuery{Url: params.Origin})
 	now := time.Now()
 	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
 	tx, err := transactions.NewWith(&transactions.SignatureInfo{
-		URL:           params.Sponsor,
+		URL:           params.Origin,
 		KeyPageIndex:  params.PageIndex,
 		KeyPageHeight: qr.MerkleState.Count,
 		Nonce:         nonce,
@@ -162,7 +168,7 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	require.NoError(t, err)
 
 	req := new(api.TxRequest)
-	req.Sponsor = params.Sponsor
+	req.Origin = params.Origin
 	req.Signer.PublicKey = params.Key[32:]
 	req.Signer.Nonce = nonce
 	req.Signature = tx.Signature[0].Signature
@@ -214,7 +220,7 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
 	d.Require().NotEmpty(tx.Signature, "Transaction has no signatures")
 	pl := new(api.TxRequest)
-	pl.Sponsor = tx.SigInfo.URL
+	pl.Origin = tx.SigInfo.URL
 	pl.Signer.Nonce = tx.SigInfo.Nonce
 	pl.Signer.PublicKey = tx.Signature[0].PublicKey
 	pl.Signature = tx.Signature[0].Signature

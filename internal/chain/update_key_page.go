@@ -22,9 +22,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	page, ok := st.Sponsor.(*protocol.KeyPage)
+	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return fmt.Errorf("invalid sponsor: want chain type %v, got %v", types.ChainTypeKeyPage, st.Sponsor.Header().Type)
+		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeKeyPage, st.Origin.Header().Type)
 	}
 
 	// We're changing the height of the key page, so reset all the nonces
@@ -46,27 +46,27 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 	}
 
-	var ssg *protocol.KeyBook
+	var book *protocol.KeyBook
 	var priority = -1
 	if page.KeyBook != (types.Bytes32{}) {
-		ssg = new(protocol.KeyBook)
-		err = st.LoadAs(page.KeyBook, ssg)
+		book = new(protocol.KeyBook)
+		err = st.LoadAs(page.KeyBook, book)
 		if err != nil {
 			return fmt.Errorf("invalid key book: %v", err)
 		}
 
-		for i, p := range ssg.Pages {
-			if p == st.SponsorChainId {
+		for i, p := range book.Pages {
+			if p == st.OriginChainId {
 				priority = i
 			}
 		}
 		if priority < 0 {
-			return fmt.Errorf("cannot find %q in key book with ID %X", st.SponsorUrl, page.KeyBook)
+			return fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
 		}
 
 		// 0 is the highest priority, followed by 1, etc
 		if tx.SigInfo.KeyPageIndex > uint64(priority) {
-			return fmt.Errorf("cannot modify %q with a lower priority key page", st.SponsorUrl)
+			return fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
 		}
 	}
 

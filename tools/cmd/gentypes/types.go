@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+
+	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 )
 
-func resolveType(field *Field, forNew bool) string {
+func resolveType(field *typegen.Field, forNew bool) string {
 	switch field.Type {
 	case "bytes":
 		return "[]byte"
@@ -37,7 +39,7 @@ func resolveType(field *Field, forNew bool) string {
 	return typ
 }
 
-func jsonType(field *Field) string {
+func jsonType(field *typegen.Field) string {
 	switch field.Type {
 	case "bytes":
 		return "*string"
@@ -56,7 +58,46 @@ func jsonType(field *Field) string {
 	return ""
 }
 
-func areEqual(w *bytes.Buffer, field *Field, varName, otherName string) error {
+func formatField(w *bytes.Buffer, field *typegen.Field, varName string, forJson bool) {
+	var typ string
+
+	if forJson {
+		typ = jsonType(field)
+	}
+	if typ == "" {
+		typ = resolveType(field, false)
+	}
+
+	fmt.Fprintf(w, "\t%s %s `", varName, typ)
+	defer fmt.Fprint(w, "`\n")
+
+	lcName := strings.ToLower(varName[:1]) + varName[1:]
+	if field.KeepEmpty {
+		fmt.Fprintf(w, `json:"%s"`, lcName)
+	} else {
+		fmt.Fprintf(w, `json:"%s,omitempty"`, lcName)
+	}
+
+	if forJson {
+		return
+	}
+
+	fmt.Fprintf(w, ` form:"%s"`, lcName)
+	fmt.Fprintf(w, ` query:"%s"`, lcName)
+
+	var validate []string
+	if !field.Optional {
+		validate = append(validate, "required")
+	}
+	if field.IsUrl {
+		validate = append(validate, "acc-url")
+	}
+	if len(validate) > 0 {
+		fmt.Fprintf(w, ` validate:"%s"`, strings.Join(validate, ","))
+	}
+}
+
+func areEqual(w *bytes.Buffer, field *typegen.Field, varName, otherName string) error {
 	var expr string
 	switch field.Type {
 	case "bool", "string", "chain", "uvarint", "varint", "duration", "time":
@@ -114,7 +155,7 @@ func areEqual(w *bytes.Buffer, field *Field, varName, otherName string) error {
 	return nil
 }
 
-func binarySize(w *bytes.Buffer, field *Field, varName string) error {
+func binarySize(w *bytes.Buffer, field *typegen.Field, varName string) error {
 	var expr string
 	switch field.Type {
 	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
@@ -147,7 +188,7 @@ func binarySize(w *bytes.Buffer, field *Field, varName string) error {
 	return nil
 }
 
-func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) error {
+func binaryMarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName string, errArgs ...string) error {
 	var expr string
 	var canErr bool
 	switch field.Type {
@@ -187,7 +228,7 @@ func binaryMarshalValue(w *bytes.Buffer, field *Field, varName, errName string, 
 	return nil
 }
 
-func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string, errArgs ...string) error {
+func binaryUnmarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName string, errArgs ...string) error {
 	var expr, size, sliceName string
 	var inPlace bool
 	switch field.Type {
@@ -241,7 +282,7 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *Field, varName, errName string
 	return nil
 }
 
-func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
+func jsonVar(w *bytes.Buffer, typ *typegen.Type, varName string) {
 	fmt.Fprintf(w, "\t%s := struct{\n", varName)
 	if typ.Kind == "chain" {
 		if flags.IsState {
@@ -250,22 +291,19 @@ func jsonVar(w *bytes.Buffer, typ *Record, varName string) {
 			fmt.Fprintf(w, "\t\tstate.ChainHeader\n")
 		}
 	}
+	for _, e := range typ.Embeddings {
+		fmt.Fprintf(w, "\t\t%s\n", e)
+	}
 	for _, f := range typ.Fields {
-		lcName := strings.ToLower(f.Name[:1]) + f.Name[1:]
-		typ := jsonType(f)
-		if typ == "" {
-			typ = resolveType(f, false)
-		}
-		if f.KeepEmpty {
-			fmt.Fprintf(w, "\t\t%s %s `json:\"%s\"`\n", f.Name, typ, lcName)
-		} else {
-			fmt.Fprintf(w, "\t\t%s %s `json:\"%s,omitempty\"`\n", f.Name, typ, lcName)
+		formatField(w, f, f.Name, true)
+		if f.Alternative != "" {
+			formatField(w, f, f.Alternative, true)
 		}
 	}
 	fmt.Fprintf(w, "\t}{}\n")
 }
 
-func valueToJson(w *bytes.Buffer, field *Field, tgtName, srcName string) {
+func valueToJson(w *bytes.Buffer, field *typegen.Field, tgtName, srcName string) {
 	switch field.Type {
 	case "bytes", "chain", "chainSet", "duration":
 		fmt.Fprintf(w, "\t%s = %s(%s)\n", tgtName, methodName(field.Type, "ToJSON"), srcName)
@@ -287,7 +325,7 @@ func valueToJson(w *bytes.Buffer, field *Field, tgtName, srcName string) {
 	fmt.Fprintf(w, "\t%s = %s\n", tgtName, srcName)
 }
 
-func valueFromJson(w *bytes.Buffer, field *Field, tgtName, srcName, errName string, errArgs ...string) {
+func valueFromJson(w *bytes.Buffer, field *typegen.Field, tgtName, srcName, errName string, errArgs ...string) {
 	err := fieldError("decoding", errName, errArgs...)
 	switch field.Type {
 	case "bytes", "chain", "chainSet", "duration":

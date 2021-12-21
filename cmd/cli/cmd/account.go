@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"bytes"
-	"context"
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
@@ -12,7 +11,6 @@ import (
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/mdp/qrterminal"
 	"github.com/spf13/cobra"
 )
@@ -33,8 +31,17 @@ var accountCmd = &cobra.Command{
 					PrintAccountGet()
 				}
 			case "create":
-				if len(args) > 3 {
-					out, err = CreateAccount(args[1], args[2:])
+				if len(args) > 4 {
+					switch args[1] {
+					case "token":
+						out, err = CreateAccount(args[2], args[3:])
+					case "data":
+						out, err = CreateDataAccount(args[2], args[3:])
+					default:
+						fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
+						//this will be removed in future release and replaced with usage: PrintAccountCreate()
+						out, err = CreateAccount(args[1], args[2:])
+					}
 				} else {
 					fmt.Println("Usage:")
 					PrintAccountCreate()
@@ -85,7 +92,8 @@ func PrintAccountRestore() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBook]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create token [origin adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBookUrl]	Create a token account for an ADI")
+	fmt.Println("  accumulate account create data [origin adi] [signing key name] [key index (optional)] [key height (optional)] [new data account url]  [keyBookUrl]	Create a data account under an ADI")
 }
 
 func PrintAccountImport() {
@@ -108,16 +116,17 @@ func PrintAccount() {
 }
 
 func GetAccount(url string) (string, error) {
-	var res acmeapi.APIDataResponse
-
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(url)
-
-	if err := Client.Request(context.Background(), "token-account", params, &res); err != nil {
-		return PrintJsonRpcError(err)
+	res, err := GetUrl(url)
+	if err != nil {
+		return "", err
 	}
 
-	return PrintQueryResponse(&res)
+	if res.Type != types.ChainTypeTokenAccount.String() && res.Type != types.ChainTypeLiteTokenAccount.String() &&
+		res.Type != types.ChainTypeDataAccount.String() && res.Type != types.ChainTypeLiteDataAccount.String() {
+		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
+	}
+
+	return PrintQueryResponseV2(res)
 }
 
 func QrAccount(s string) (string, error) {
@@ -142,16 +151,15 @@ func QrAccount(s string) (string, error) {
 	return string(r), err
 }
 
-//account create adiActor labelOrPubKeyHex height index tokenUrl keyBookUrl
-func CreateAccount(url string, args []string) (string, error) {
-
-	actor, err := url2.Parse(url)
+//CreateAccount account create url labelOrPubKeyHex height index tokenUrl keyBookUrl
+func CreateAccount(origin string, args []string) (string, error) {
+	u, err := url2.Parse(origin)
 	if err != nil {
 		PrintAccountCreate()
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(actor, args)
+	args, si, privKey, err := prepareSigner(u, args)
 	if len(args) < 3 {
 		PrintAccountCreate()
 		return "", fmt.Errorf("insufficient number of command line arguments")
@@ -162,8 +170,8 @@ func CreateAccount(url string, args []string) (string, error) {
 		PrintAccountCreate()
 		return "", fmt.Errorf("invalid account url %s", args[0])
 	}
-	if actor.Authority != accountUrl.Authority {
-		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, actor.Authority)
+	if u.Authority != accountUrl.Authority {
+		return "", fmt.Errorf("account url to create (%s) doesn't match the authority adi (%s)", accountUrl.Authority, u.Authority)
 	}
 	tok, err := url2.Parse(args[1])
 	if err != nil {
@@ -191,41 +199,16 @@ func CreateAccount(url string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid token type %v", err)
 	}
 
-	tac := &protocol.TokenAccountCreate{}
+	tac := protocol.TokenAccountCreate{}
 	tac.Url = accountUrl.String()
 	tac.TokenUrl = tok.String()
 	tac.KeyBookUrl = keybook
 
-	binaryData, err := tac.MarshalBinary()
+	res, err := dispatchTxRequest("create-token-account", &tac, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
-
-	jsonData, err := json.Marshal(&tac)
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-
-	params, err := prepareGenTx(jsonData, binaryData, actor, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res acmeapi.APIDataResponse
-	if err := Client.Request(context.Background(), "token-account-create", params, &res); err != nil {
-		//todo: if we fail, then we need to remove the adi from storage or keep it and try again later...
-		return "", err
-	}
-
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling account create result")
-	}
-
-	return ar.Print()
+	return ActionResponseFrom(res).Print()
 }
 
 func GenerateAccount() (string, error) {

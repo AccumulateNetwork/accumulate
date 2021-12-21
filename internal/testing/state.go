@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
 
@@ -8,11 +9,11 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/AccumulateNetwork/accumulate/types/synthetic"
-	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmcrypto "github.com/tendermint/tendermint/crypto"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 type DB interface {
@@ -25,9 +26,9 @@ type DB interface {
 // Token multiplier
 const TokenMx = 100000000
 
-func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transactions.GenTransaction, error) {
-	sponsorAdi := types.String(lite.GenerateAcmeAddress(sponsor.PubKey().Bytes()))
-	recipientAdi := types.String(lite.GenerateAcmeAddress(recipient.PubKey().Bytes()))
+func CreateFakeSyntheticDepositTx(sponsor, recipient tmed25519.PrivKey) (*transactions.GenTransaction, error) {
+	sponsorAdi := types.String(AcmeLiteAddressTmPriv(sponsor).String())
+	recipientAdi := types.String(AcmeLiteAddressTmPriv(recipient).String())
 
 	//create a fake synthetic deposit for faucet.
 	fakeTxid := sha256.Sum256([]byte("fake txid"))
@@ -62,8 +63,8 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	return tx, nil
 }
 
-func CreateLiteTokenAccount(db DB, key ed25519.PrivKey, tokens float64) error {
-	url := types.String(lite.GenerateAcmeAddress(key.PubKey().Bytes()))
+func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
+	url := types.String(AcmeLiteAddressTmPriv(key).String())
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
@@ -89,31 +90,31 @@ func WriteStates(db DB, chains ...state.Chain) error {
 	return nil
 }
 
-func CreateADI(db DB, key ed25519.PrivKey, urlStr types.String) error {
+func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	keyHash := sha256.Sum256(key.PubKey().Bytes())
 	identityUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
 	}
 
-	sigSpecUrl := identityUrl.JoinPath("sigspec0")
-	ssgUrl := identityUrl.JoinPath("ssg0")
+	pageUrl := identityUrl.JoinPath("page0")
+	bookUrl := identityUrl.JoinPath("book0")
 
 	ss := new(protocol.KeySpec)
 	ss.PublicKey = keyHash[:]
 
 	mss := protocol.NewKeyPage()
-	mss.ChainUrl = types.String(sigSpecUrl.String())
+	mss.ChainUrl = types.String(pageUrl.String())
 	mss.Keys = append(mss.Keys, ss)
 
-	ssg := protocol.NewKeyBook()
-	ssg.ChainUrl = types.String(ssgUrl.String()) // TODO Allow override
-	ssg.Pages = append(ssg.Pages, types.Bytes(sigSpecUrl.ResourceChain()).AsBytes32())
+	book := protocol.NewKeyBook()
+	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
+	book.Pages = append(book.Pages, types.Bytes(pageUrl.ResourceChain()).AsBytes32())
 
 	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
-	adi.KeyBook = types.Bytes(ssgUrl.ResourceChain()).AsBytes32()
+	adi.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
 
-	return WriteStates(db, adi, ssg, mss)
+	return WriteStates(db, adi, book, mss)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {
@@ -122,7 +123,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		return err
 	}
 	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
-	sigSpecId := u.Identity().JoinPath("ssg0").ResourceChain() // assume the sig spec is adi/ssg0
+	bookId := u.Identity().JoinPath("book0").ResourceChain() // assume the book is adi/book0
 
 	var chain state.Chain
 	if lite {
@@ -134,7 +135,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		chain = account
 	} else {
 		account := state.NewTokenAccount(u.String(), tokenUrl)
-		account.KeyBook = types.Bytes(sigSpecId).AsBytes32()
+		account.KeyBook = types.Bytes(bookId).AsBytes32()
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		account.TxCount++
 		chain = account
@@ -149,7 +150,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	return nil
 }
 
-func CreateKeyPage(db DB, urlStr types.String, keys ...ed25519.PubKey) error {
+func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -167,7 +168,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...ed25519.PubKey) error {
 	return WriteStates(db, mss)
 }
 
-func CreateKeyBook(db DB, urlStr types.String, sigSpecUrls ...string) error {
+func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 	groupUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -175,10 +176,10 @@ func CreateKeyBook(db DB, urlStr types.String, sigSpecUrls ...string) error {
 
 	group := protocol.NewKeyBook()
 	group.ChainUrl = types.String(groupUrl.String())
-	group.Pages = make([][32]byte, len(sigSpecUrls))
+	group.Pages = make([][32]byte, len(pageUrls))
 	states := []state.Chain{group}
 
-	for i, s := range sigSpecUrls {
+	for i, s := range pageUrls {
 		specUrl, err := url.Parse(s)
 		if err != nil {
 			return err
@@ -194,7 +195,7 @@ func CreateKeyBook(db DB, urlStr types.String, sigSpecUrls ...string) error {
 		}
 
 		if (spec.KeyBook != types.Bytes32{}) {
-			return fmt.Errorf("%q is already attached to an SSG", s)
+			return fmt.Errorf("%q is already attached to a key book", s)
 		}
 
 		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
@@ -202,4 +203,35 @@ func CreateKeyBook(db DB, urlStr types.String, sigSpecUrls ...string) error {
 	}
 
 	return WriteStates(db, states...)
+}
+
+// AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING
+// USE ONLY.
+func AcmeLiteAddress(pubKey []byte) *url.URL {
+	u, err := protocol.LiteAddress(pubKey, protocol.ACME)
+	if err != nil {
+		// LiteAddress should only return an error if the token URL is invalid,
+		// so this should never return an error. But ignoring errors is a great
+		// way to get bugs.
+		panic(err)
+	}
+	return u
+}
+
+func AcmeLiteAddressTmPriv(key tmcrypto.PrivKey) *url.URL {
+	return AcmeLiteAddress(key.PubKey().Bytes())
+}
+
+func AcmeLiteAddressStdPriv(key ed25519.PrivateKey) *url.URL {
+	return AcmeLiteAddress(key[32:])
+}
+
+func NewWalletEntry() *transactions.WalletEntry {
+	wallet := new(transactions.WalletEntry)
+
+	wallet.Nonce = 1 // Put the private key for the origin
+	_, wallet.PrivateKey, _ = ed25519.GenerateKey(nil)
+	wallet.Addr = AcmeLiteAddressStdPriv(wallet.PrivateKey).String() // Generate the origin address
+
+	return wallet
 }

@@ -34,8 +34,8 @@ func unmarshalTxType(b []byte) types.TxType {
 func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 	var payload protocol.TransactionPayload
 	switch typ := unmarshalTxType(b); typ {
-	case types.TxTypeWithdrawTokens:
-		payload = new(api.TokenTx)
+	case types.TxTypeSendTokens:
+		payload = new(api.SendTokens)
 	case types.TxTypeSyntheticDepositTokens:
 		payload = new(synthetic.TokenTransactionDeposit)
 	case types.TxTypeCreateIdentity:
@@ -60,6 +60,10 @@ func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 		payload = new(protocol.SyntheticGenesis)
 	case types.TxTypeAcmeFaucet:
 		payload = new(protocol.AcmeFaucet)
+	case types.TxTypeCreateDataAccount:
+		payload = new(protocol.CreateDataAccount)
+	case types.TxTypeWriteData:
+		payload = new(protocol.WriteData)
 	default:
 		return nil, fmt.Errorf("unknown TX type %v", typ)
 	}

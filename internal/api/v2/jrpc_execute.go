@@ -25,29 +25,36 @@ func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) inter
 	return m.execute(ctx, req, payload)
 }
 
+func (m *JrpcMethods) ExecuteCreateIdentity(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.IdentityCreate))
+}
+
 func (m *JrpcMethods) ExecuteWith(newParams func() protocol.TransactionPayload, validateFields ...string) jsonrpc2.MethodFunc {
 	return func(ctx context.Context, params json.RawMessage) interface{} {
-		var raw json.RawMessage
-		req := new(TxRequest)
-		req.Payload = &raw
-		err := m.parse(params, req)
-		if err != nil {
-			return err
-		}
-
-		payload := newParams()
-		err = m.parse(raw, payload, validateFields...)
-		if err != nil {
-			return err
-		}
-
-		b, err := payload.MarshalBinary()
-		if err != nil {
-			return accumulateError(err)
-		}
-
-		return m.execute(ctx, req, b)
+		return m.executeWith(ctx, params, newParams(), validateFields...)
 	}
+}
+
+func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionPayload, validateFields ...string) interface{} {
+	var raw json.RawMessage
+	req := new(TxRequest)
+	req.Payload = &raw
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	err = m.parse(raw, payload, validateFields...)
+	if err != nil {
+		return err
+	}
+
+	b, err := payload.MarshalBinary()
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return m.execute(ctx, req, b)
 }
 
 func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interface{} {
@@ -76,7 +83,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	}
 
 	txrq := new(TxRequest)
-	txrq.Sponsor = tx.SigInfo.URL
+	txrq.Origin = tx.SigInfo.URL
 	txrq.Signer.Nonce = tx.SigInfo.Nonce
 	txrq.Signer.PublicKey = tx.Signature[0].PublicKey
 	txrq.KeyPage.Height = tx.SigInfo.KeyPageHeight
@@ -100,7 +107,7 @@ type executeRequest struct {
 
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
-	u, err := url.Parse(req.Sponsor)
+	u, err := url.Parse(req.Origin)
 	if err != nil {
 		return validatorError(err)
 	}
@@ -158,7 +165,7 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 	tx.Transaction = payload
 
 	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = req.Sponsor
+	tx.SigInfo.URL = req.Origin
 	tx.SigInfo.Nonce = req.Signer.Nonce
 	tx.SigInfo.KeyPageHeight = req.KeyPage.Height
 	tx.SigInfo.KeyPageIndex = req.KeyPage.Index

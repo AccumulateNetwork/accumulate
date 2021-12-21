@@ -24,7 +24,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	case config.BlockValidator:
 		return newExecutor(opts,
 			CreateIdentity{},
-			WithdrawTokens{},
+			SendTokens{},
 			CreateTokenAccount{},
 			CreateDataAccount{},
 			AddCredits{},

@@ -296,9 +296,9 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
 		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens:
-			// TX does not require a sponsor - it may create the sponsor
+			// TX does not require an origin - it may create the origin
 		default:
-			return nil, fmt.Errorf("sponsor not found: %v", err)
+			return nil, fmt.Errorf("origin record not found: %v", err)
 		}
 	} else if err != nil {
 		return nil, err
@@ -310,26 +310,26 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	}
 
 	book := new(protocol.KeyBook)
-	switch sponsor := st.Sponsor.(type) {
+	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
-		return st, m.checkLite(st, tx, sponsor)
+		return st, m.checkLite(st, tx, origin)
 
 	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
-		if (sponsor.Header().KeyBook == types.Bytes32{}) {
-			return nil, fmt.Errorf("sponsor has not been assigned to an SSG")
+		if (origin.Header().KeyBook == types.Bytes32{}) {
+			return nil, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
-		err := st.LoadAs(sponsor.Header().KeyBook, book)
+		err := st.LoadAs(origin.Header().KeyBook, book)
 		if err != nil {
 			return nil, fmt.Errorf("invalid KeyBook: %v", err)
 		}
 
 	case *protocol.KeyBook:
-		book = sponsor
+		book = origin
 
 	default:
-		// The TX sponsor cannot be a transaction
+		// The TX origin cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, fmt.Errorf("invalid sponsor: chain type %v cannot sponsor transactions", sponsor.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: chain type %v cannot be the origininator of transactions", origin.Header().Type)
 	}
 
 	if tx.SigInfo.KeyPageIndex >= uint64(len(book.Pages)) {
@@ -394,7 +394,7 @@ func (m *Executor) checkLite(st *StateManager, tx *transactions.GenTransaction, 
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
 		// into the database.
-		return fmt.Errorf("invalid sponsor URL: %v", err)
+		return fmt.Errorf("invalid origin record URL: %v", err)
 	}
 
 	urlKH, _, err := protocol.ParseLiteAddress(u)
@@ -407,7 +407,7 @@ func (m *Executor) checkLite(st *StateManager, tx *transactions.GenTransaction, 
 	for i, sig := range tx.Signature {
 		sigKH := sha256.Sum256(sig.PublicKey)
 		if !bytes.Equal(urlKH, sigKH[:20]) {
-			return fmt.Errorf("signature %d's public key does not match the sponsor", i)
+			return fmt.Errorf("signature %d's public key does not match the origin record", i)
 		}
 
 		switch {

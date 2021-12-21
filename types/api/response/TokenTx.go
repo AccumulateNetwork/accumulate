@@ -25,7 +25,7 @@ type TokenTx struct {
 
 type TokenTxOutputStatus struct {
 	SyntheticTxId types.Bytes `json:"txid"`
-	api.TokenTxOutput
+	api.TokenRecipient
 }
 
 func (t *TokenTxOutputStatus) MarshalBinary() ([]byte, error) {
@@ -36,7 +36,7 @@ func (t *TokenTxOutputStatus) MarshalBinary() ([]byte, error) {
 	}
 	buffer.Write(data)
 
-	data, err = t.TokenTxOutput.MarshalBinary()
+	data, err = t.TokenRecipient.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func (t *TokenTxOutputStatus) UnmarshalBinary(data []byte) (err error) {
 	}
 	i := t.SyntheticTxId.Size(nil)
 
-	err = t.TokenTxOutput.UnmarshalBinary(data[i:])
+	err = t.TokenRecipient.UnmarshalBinary(data[i:])
 	if err != nil {
 		return fmt.Errorf("unable to unmarshal AccountUrl from TokenTxAccountStatus, %v", err)
 	}

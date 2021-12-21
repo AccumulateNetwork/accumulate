@@ -2,7 +2,7 @@
 #
 # test case 3.2
 #
-# create an adi token account 
+# create an adi token account
 # server IP:Port needed unless defaulting to localhost
 #
 # set cli command and see if it exists
@@ -28,7 +28,7 @@ if [ $? -ne 0 ]; then
 fi
 echo $ID
 
-# call cli faucet 
+# call cli faucet
 
 TxID=`./cli_faucet.sh $ID $1`
 
@@ -60,7 +60,7 @@ echo $key
 # create account without adi account
 
 sleep 2.5
-$cli account create acc://t32acct t32key acc://t32acct/myacmeacct acc://ACME acc://t32acct/ssg0 -s http://$1/v1
+$cli account create token acc://t32acct t32key acc://t32acct/myacmeacct acc://ACME acc://t32acct/book0 -s http://$1/v1
 if [ $? -eq 0 ]; then
 	echo "cli account create passed and should have failed"
 	exit 1

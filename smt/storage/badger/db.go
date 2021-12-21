@@ -5,16 +5,27 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/dgraph-io/badger"
 )
 
+// TruncateBadger controls whether Badger is configured to truncate corrupted
+// data. Especially on Windows, if the node is terminated abruptly, setting this
+// may be necessary to recovering the state of the system.
+//
+// However, Accumulate is not robust against this kind of interruption. If the
+// node is terminated abruptly and restarted with this flag, some functions may
+// break, such as synthetic transactions and anchoring.
+var TruncateBadger = false
+
 type DB struct {
-	DBOpen   types.AtomicBool
-	DBHome   string
+	ready    bool
+	readyMu  *sync.RWMutex
 	badgerDB *badger.DB
+	logger   storage.Logger
 }
 
 var _ storage.KeyValueDB = (*DB)(nil)
@@ -22,7 +33,13 @@ var _ storage.KeyValueDB = (*DB)(nil)
 // Close
 // Close the underlying database
 func (d *DB) Close() error {
-	defer d.DBOpen.Store(false)
+	if l, err := d.lock(true); err != nil {
+		return err
+	} else {
+		defer l.Unlock()
+	}
+
+	d.ready = false
 	return d.badgerDB.Close()
 }
 
@@ -36,31 +53,84 @@ func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 	if err != nil {
 		return errors.New("failed to create home directory")
 	}
-	d.DBHome = filepath
-	// Open Badger
-	opts := badger.DefaultOptions(d.DBHome)
+
+	opts := badger.DefaultOptions(filepath)
+
+	// Truncate corrupted data
+	if TruncateBadger {
+		opts = opts.WithTruncate(true)
+	}
+
+	// Add logger
 	if logger != nil {
 		opts = opts.WithLogger(badgerLogger{logger})
 	}
+
+	// Open Badger
 	d.badgerDB, err = badger.Open(opts)
-	if err != nil { // Panic if we can't open Badger
+	if err != nil {
 		return err
 	}
-	d.DBOpen.Store(true)
+
+	d.logger = logger
+	d.ready = true
+	d.readyMu = new(sync.RWMutex)
+
+	// Run GC every hour
+	go d.gc()
+
 	return nil
 }
 
-func (d *DB) Ready() bool {
-	return d.DBOpen.Load()
+func (d *DB) gc() {
+	for {
+		// GC every hour
+		time.Sleep(time.Hour)
+
+		// Still open?
+		l, err := d.lock(false)
+		if err != nil {
+			return
+		}
+
+		// Run GC if 50% space could be reclaimed
+		err = d.badgerDB.RunValueLogGC(0.5)
+		if d.logger != nil && err != nil && !errors.Is(err, badger.ErrNoRewrite) {
+			d.logger.Error("Badger GC failed", "error", err)
+		}
+
+		// Release the lock
+		l.Unlock()
+	}
+}
+
+// lock acquires a lock on the ready mutex and checks for readiness. This
+// prevents race conditions between Get/Put and Close, which can cause panics.
+func (d *DB) lock(closing bool) (sync.Locker, error) {
+	var l sync.Locker = d.readyMu
+	if !closing {
+		l = d.readyMu.RLocker()
+	}
+
+	l.Lock()
+	if !d.ready {
+		l.Unlock()
+		return nil, storage.ErrNotOpen
+	}
+
+	return l, nil
 }
 
 // Get
 // Look in the given bucket, and return the key found.  Returns nil if no value
 // is found for the given key
 func (d *DB) Get(key storage.Key) (value []byte, err error) {
-	if !d.Ready() {
-		return nil, errors.New("database is not open")
+	if l, err := d.lock(false); err != nil {
+		return nil, err
+	} else {
+		defer l.Unlock()
 	}
+
 	err = d.badgerDB.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(key[:])
 		if err != nil {
@@ -90,9 +160,12 @@ func (d *DB) Get(key storage.Key) (value []byte, err error) {
 // Put a key/value in the database.  We return an error if there was a problem
 // writing the key/value pair to the database.
 func (d *DB) Put(key storage.Key, value []byte) error {
-	if !d.Ready() {
-		return errors.New("database is not open")
+	if l, err := d.lock(false); err != nil {
+		return err
+	} else {
+		defer l.Unlock()
 	}
+
 	// Update the key/value in the database
 	err := d.badgerDB.Update(func(txn *badger.Txn) error {
 		err := txn.Set(key[:], value)

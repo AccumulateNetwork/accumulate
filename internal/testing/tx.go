@@ -17,7 +17,6 @@ import (
 func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
 	var txid32 [32]byte
 	copy(txid32[:], txid)
-	notFound := fmt.Sprintf("tx (%X) not found", txid)
 
 	start := time.Now()
 	var r *coretypes.ResultTx
@@ -28,13 +27,19 @@ func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
 			break
 		}
 
-		if !strings.Contains(err.Error(), notFound) {
+		if !strings.Contains(err.Error(), "not found") {
 			return err
 		}
 
 		if time.Since(start) > 10*time.Second {
 			return fmt.Errorf("tx (%X) not found: timed out", txid)
 		}
+
+		time.Sleep(time.Second / 10)
+	}
+
+	if r.TxResult.Code != 0 {
+		return fmt.Errorf("txn failed with code %d: %s", r.TxResult.Code, r.TxResult.Log)
 	}
 
 	tx := new(transactions.GenTransaction)
@@ -43,15 +48,7 @@ func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
 		return err
 	}
 
-	resp, err := query.QueryByTxId(tx.TransactionHash())
-	if err != nil {
-		return err
-	}
-	if resp.Response.Code != 0 {
-		return fmt.Errorf("query failed with code %d: %s", resp.Response.Code, resp.Response.Info)
-	}
-
-	return WaitForSynthTxnsV1(query, resp)
+	return WaitForTxidV1(query, tx.TransactionHash())
 }
 
 func WaitForTxV1(query *api.Query, txResp *apitypes.APIDataResponse) error {
@@ -70,6 +67,7 @@ func WaitForTxV1(query *api.Query, txResp *apitypes.APIDataResponse) error {
 }
 
 func WaitForTxidV1(query *api.Query, txid []byte) error {
+	start := time.Now()
 	var resp *coretypes.ResultABCIQuery
 	var err error
 	for {
@@ -77,9 +75,15 @@ func WaitForTxidV1(query *api.Query, txid []byte) error {
 		if err == nil {
 			break
 		}
+
 		if !strings.Contains(err.Error(), "not found") {
 			return err
 		}
+
+		if time.Since(start) > 10*time.Second {
+			return fmt.Errorf("tx (%X) not found: timed out", txid)
+		}
+
 		time.Sleep(time.Second / 10)
 	}
 	if resp.Response.Code != 0 {
