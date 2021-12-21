@@ -6,11 +6,13 @@ package mock_api
 
 import (
 	context "context"
+	"fmt"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/ybbus/jsonrpc/v2"
+	"net"
 	reflect "reflect"
 	time "time"
 
@@ -290,12 +292,16 @@ type MockConnectionRouterMockRecorder struct {
 	mock *MockConnectionRouter
 }
 
-func NewMockConnectionRouter(broadcastClient *MockABCIBroadcastClient) *MockConnectionRouter {
+func NewMockConnectionRouter(broadcastClient *MockABCIBroadcastClient, localRpcClientAddr net.Addr) *MockConnectionRouter {
+	var client jsonrpc.RPCClient
+	if localRpcClientAddr != nil {
+		client = jsonrpc.NewClient(fmt.Sprintf("http://%s", localRpcClientAddr))
+	}
 	mock := &MockConnectionRouter{route: MockRoute{
 		broadcastClient: broadcastClient,
 		subnetName:      "testnet",
 		networkGroup:    connections.OtherSubnet,
-		client:          jsonrpc.NewClient("http://localhost"),
+		client:          client,
 	}}
 	mock.recorder = &MockConnectionRouterMockRecorder{mock}
 	return mock

@@ -93,7 +93,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 		DB:               n.db,
 		Logger:           logger,
 		Key:              bvcKey,
-		ConnectionRouter: mock_api.NewMockConnectionRouter(local),
+		ConnectionRouter: mock_api.NewMockConnectionRouter(local, nil),
 		Local:            n.client,
 		Network: config.Network{
 			Type:     config.BlockValidator,

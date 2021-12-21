@@ -79,10 +79,7 @@ func TestDispatchExecuteQueueDepth(t *testing.T) {
 	require.NoError(t, err)
 	go func() { _ = s.Serve(l) }()
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	local := mock_api.NewMockABCIBroadcastClient(ctrl)
-	connRouter := mock_api.NewMockConnectionRouter(local)
+	connRouter := mock_api.NewMockConnectionRouter(nil, l.Addr())
 
 	j, err := NewJrpc(JrpcOptions{
 		QueueDuration:    1e6 * time.Hour, // Forever
@@ -103,10 +100,7 @@ func TestDispatchExecuteQueueDuration(t *testing.T) {
 	require.NoError(t, err)
 	go func() { _ = s.Serve(l) }()
 	t.Cleanup(func() { _ = s.Shutdown(context.Background()) })
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	local := mock_api.NewMockABCIBroadcastClient(ctrl)
-	connRouter := mock_api.NewMockConnectionRouter(local)
+	connRouter := mock_api.NewMockConnectionRouter(nil, l.Addr())
 
 	j, err := NewJrpc(JrpcOptions{
 		QueueDuration:    time.Millisecond,
@@ -135,7 +129,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		defer ctrl.Finish()
 
 		local := mock_api.NewMockABCIBroadcastClient(ctrl)
-		connRouter := mock_api.NewMockConnectionRouter(local)
+		connRouter := mock_api.NewMockConnectionRouter(local, nil)
 		j, err := NewJrpc(JrpcOptions{
 			ConnectionRouter: connRouter,
 		})
@@ -154,7 +148,7 @@ func TestExecuteCheckOnly(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 		local := mock_api.NewMockABCIBroadcastClient(ctrl)
-		connRouter := mock_api.NewMockConnectionRouter(local)
+		connRouter := mock_api.NewMockConnectionRouter(local, nil)
 
 		j, err := NewJrpc(JrpcOptions{
 			ConnectionRouter: connRouter,
