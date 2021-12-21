@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
@@ -15,5 +16,9 @@ func (m *JrpcMethods) Querier() Querier {
 }
 
 func (m *JrpcMethods) GetMethod(name string) jsonrpc2.MethodFunc {
-	return m.methods[name]
+	method := m.methods[name]
+	if method == nil {
+		panic(fmt.Errorf("method %q not found", name))
+	}
+	return method
 }
