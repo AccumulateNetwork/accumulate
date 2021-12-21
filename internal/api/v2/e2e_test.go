@@ -214,35 +214,16 @@ func TestTokenTransfer(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
 
 	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 2, 2, 3000)
-	japi := daemons[0].Jrpc_TESTONLY()
 
 	var aliceKey ed25519.PrivateKey
 	var aliceUrl *url.URL
-	t.Run("Faucet", func(t *testing.T) {
-		aliceKey = newKey([]byte(t.Name()))
-		aliceUrl = makeLiteUrl(t, aliceKey, ACME)
-
-		t.Skip()
-		xr := new(api.TxResponse)
-		callApi(t, japi, "faucet", &AcmeFaucet{Url: aliceUrl.String()}, xr)
-		require.Zero(t, xr.Code, xr.Message)
-		txWait(t, japi, xr.Txid)
-
-		account := NewLiteTokenAccount()
-		queryAs(t, japi, "query", &api.UrlQuery{Url: aliceUrl.String()}, account)
-		assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
-	})
-
 	var bobKey ed25519.PrivateKey
 	var bobUrl *url.URL
 	t.Run("Send Token", func(t *testing.T) {
 		bobKey = newKey([]byte(t.Name()))
 		bobUrl = makeLiteUrl(t, bobKey, ACME)
-
-		// xr := new(api.TxResponse)
-		// callApi(t, japi, "faucet", &AcmeFaucet{Url: bobUrl.String()}, xr)
-		// require.Zero(t, xr.Code, xr.Message)
-		// txWait(t, japi, xr.Txid)
+		aliceKey = newKey([]byte(t.Name()))
+		aliceUrl = makeLiteUrl(t, aliceKey, ACME)
 
 		var to []*acmeapi.TokenRecipient
 		to = append(to, &acmeapi.TokenRecipient{
