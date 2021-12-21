@@ -8,25 +8,20 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
-type SyntheticTokenDeposit struct{}
+type SyntheticDepositTokens struct{}
 
-func (SyntheticTokenDeposit) Type() types.TxType {
+func (SyntheticDepositTokens) Type() types.TxType {
 	return types.TxTypeSyntheticDepositTokens
 }
 
-func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	// *big.Int, tokenChain, *url.URL
-	body := new(synthetic.TokenTransactionDeposit)
+	body := new(protocol.SyntheticDepositTokens)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)
-	}
-
-	if body.ToUrl != types.String(tx.SigInfo.URL) {
-		return fmt.Errorf("deposit destination does not match transaction origin record")
 	}
 
 	accountUrl, err := url.Parse(tx.SigInfo.URL)
@@ -34,7 +29,7 @@ func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTran
 		return fmt.Errorf("invalid recipient URL: %v", err)
 	}
 
-	tokenUrl, err := url.Parse(*body.TokenUrl.AsString())
+	tokenUrl, err := url.Parse(body.Token)
 	if err != nil {
 		return fmt.Errorf("invalid token URL: %v", err)
 	}
@@ -63,7 +58,7 @@ func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTran
 		account = lite
 	}
 
-	if !account.CreditTokens(&body.DepositAmount.Int) {
+	if !account.CreditTokens(&body.Amount) {
 		return fmt.Errorf("unable to add deposit balance to account")
 	}
 	st.Update(account)
