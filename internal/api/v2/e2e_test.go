@@ -206,3 +206,33 @@ func TestValidate(t *testing.T) {
 	})
 
 }
+
+func TestFaucetMultiNetwork(t *testing.T) {
+	acctesting.SkipCI(t, "flaky")
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
+
+	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 3, 2, 3000)
+	japi := daemons[0].Jrpc_TESTONLY()
+
+	var liteKey ed25519.PrivateKey
+	var liteUrl *url.URL
+	t.Run("FaucetMultiNetwork", func(t *testing.T) {
+		liteKey = newKey([]byte(t.Name()))
+		liteUrl = makeLiteUrl(t, liteKey, ACME)
+
+		xr := new(api.TxResponse)
+		callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl.String()}, xr)
+		require.Zero(t, xr.Code, xr.Message)
+		txWait(t, japi, xr.Txid)
+
+		// Wait for synthetic TX to settle
+		time.Sleep(time.Second)
+
+		for i := 0; i < len(daemons); i++ {
+			account := NewLiteTokenAccount()
+			queryAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
+			assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
+		}
+	})
+}

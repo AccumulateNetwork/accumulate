@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"

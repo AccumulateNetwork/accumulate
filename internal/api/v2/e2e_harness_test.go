@@ -51,12 +51,17 @@ func startAccumulate(t *testing.T, baseIP net.IP, bvns, validators, basePort int
 			IPs[bvn][val] = ip.String()
 			addrs[names[bvn]][val] = fmt.Sprintf("http://%v:%d", ip, basePort)
 		}
+	}
 
+	for bvn := 0; bvn < bvns; bvn++ {
 		config[bvn] = make([]*cfg.Config, validators)
 		for val := 0; val < validators; val++ {
-			config[bvn][val] = acctesting.DefaultConfig(cfg.BlockValidator, cfg.Validator, names[bvn])
-			config[bvn][val].Accumulate.Network.BvnNames = names
-			config[bvn][val].Accumulate.Network.Addresses = addrs
+			bvnName := names[bvn]
+			config[bvn][val] = acctesting.DefaultConfig(cfg.BlockValidator, cfg.Validator, bvnName)
+			net := &config[bvn][val].Accumulate.Network
+			net.BvnNames = names
+			net.Addresses = addrs
+			net.SelfAddress = addrs[bvnName][0]
 		}
 	}
 

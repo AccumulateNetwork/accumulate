@@ -124,3 +124,7 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 	}
 	return res
 }
+
+func (m *JrpcMethods) Querier() Querier {
+	return m.opts.Query
+}

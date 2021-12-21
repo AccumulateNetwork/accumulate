@@ -11,10 +11,6 @@ func (m *JrpcMethods) DoExecute(ctx context.Context, req *TxRequest, payload []b
 	return m.execute(ctx, req, payload)
 }
 
-func (m *JrpcMethods) Querier() Querier {
-	return m.opts.Query
-}
-
 func (m *JrpcMethods) GetMethod(name string) jsonrpc2.MethodFunc {
 	method := m.methods[name]
 	if method == nil {

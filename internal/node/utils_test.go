@@ -40,7 +40,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		net := &config[i].Accumulate.Network
 		if bvnAddrs == nil {
 			net.BvnNames = []string{name}
-		} else {
+		} else if net.BvnNames != nil {
 			net.BvnNames = make([]string, len(bvnAddrs))
 			net.Addresses = make(map[string][]string, len(bvnAddrs))
 			for i, addr := range bvnAddrs {
