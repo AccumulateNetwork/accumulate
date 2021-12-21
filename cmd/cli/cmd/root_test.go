@@ -31,14 +31,8 @@ type testMatrixTests []testCase
 var testMatrix testMatrixTests
 
 func TestCli(t *testing.T) {
-	switch {
-	case testing.Short():
-		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
-		t.Skip("This test is flaky in macOS CI")
-	}
+	acctesting.SkipLong(t)
+	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	tc := &testCmd{}
 	tc.initalize(t)
@@ -127,7 +121,7 @@ func (c *testCmd) initalize(t *testing.T) {
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
-	fullCommand := fmt.Sprintf("-j -s http://127.0.0.1:%v/v1 %s",
+	fullCommand := fmt.Sprintf("-j -s http://127.0.0.1:%v/v2 %s",
 		c.jsonRpcPort, cmdLine)
 	args := strings.Split(fullCommand, " ")
 
