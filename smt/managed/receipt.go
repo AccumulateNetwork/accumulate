@@ -146,6 +146,8 @@ func (r *Receipt) BuildReceipt() error {
 		if idx&1 == 0 {
 			idx++
 			height++
+		} else if height == 0 {
+			height++
 		} else {
 			lHash, rHash, err := r.manager.GetIntermediate(idx, height)
 			if err != nil {
@@ -155,7 +157,7 @@ func (r *Receipt) BuildReceipt() error {
 			}
 			node := new(Node)
 			r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash)
-			if height == 0 {
+			if idx == r.ElementIndex && height == 1 {
 				node.Right = false
 				node.Hash = lHash
 			} else {
@@ -172,16 +174,12 @@ func (r *Receipt) BuildReceipt() error {
 		return nil
 	}
 
+	state, _ := r.manager.GetAnyState(r.AnchorIndex)
+	state.Trim()
+
 	if r.AnchorIndex&1 == 1 && r.AnchorIndex == r.ElementIndex {
-		lHash, rHash, _ := r.manager.GetIntermediate(r.AnchorIndex, 1)
-		node := new(Node)
-		node.Right = false
-		node.Hash = lHash
-		r.Nodes = append(r.Nodes, node)
-		r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash)
+		r.MDRoot = state.Pending[len(state.Pending)-1].Copy()
 	} else {
-		state, _ := r.manager.GetAnyState(r.AnchorIndex)
-		state.Trim()
 		var hash, last Hash
 		for i, v := range state.Pending {
 			if hash == nil {
