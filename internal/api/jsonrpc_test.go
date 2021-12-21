@@ -30,10 +30,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
-	kpSponsor := ed25519.NewKeyFromSeed(daemon.Key().Bytes()[:32])
-
-	addrList, err := acctesting.RunLoadTest(query, kpSponsor, 10, 10)
+	addrList, err := acctesting.RunLoadTest(query, 10, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -381,8 +378,7 @@ func TestQueryWrongType(t *testing.T) {
 	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
-	_, origin, _ := ed25519.GenerateKey(nil)
-	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	err = acctesting.SendTxSync(query, tx)
@@ -407,8 +403,7 @@ func TestGetTxId(t *testing.T) {
 	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
-	_, origin, _ := ed25519.GenerateKey(nil)
-	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	err = acctesting.SendTxSync(query, tx)
@@ -467,12 +462,11 @@ func TestFaucetReplay(t *testing.T) {
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 	destAccount := acctesting.AcmeLiteAddressStdPriv(kpSponsor).String()
-	tx := acmeapi.SendTokens{}
-	tx.From.String = types.String(protocol.FaucetWallet.Addr)
-	tx.AddToAccount(types.String(destAccount), 1000000000)
+	tx := protocol.SendTokens{}
+	tx.AddRecipient(acctesting.MustParseUrl(destAccount), 1000000000)
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	gtx, err := transactions.New(*tx.From.AsString(), 1, func(hash []byte) (*transactions.ED25519Sig, error) {
+	gtx, err := transactions.New(protocol.FaucetWallet.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 		return protocol.FaucetWallet.Sign(hash), nil
 	}, &tx)
 	require.NoError(t, err)

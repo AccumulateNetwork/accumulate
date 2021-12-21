@@ -7,10 +7,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
 type SendTokens struct{}
@@ -18,19 +16,15 @@ type SendTokens struct{}
 func (SendTokens) Type() types.TxType { return types.TxTypeSendTokens }
 
 func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	body := new(api.SendTokens)
+	body := new(protocol.SendTokens)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	if body.From.String != types.String(tx.SigInfo.URL) {
-		return fmt.Errorf("withdraw address and transaction origin record do not match")
-	}
-
 	recipients := make([]*url.URL, len(body.To))
 	for i, to := range body.To {
-		recipients[i], err = url.Parse(*to.URL.AsString())
+		recipients[i], err = url.Parse(to.Url)
 		if err != nil {
 			return fmt.Errorf("invalid destination URL: %v", err)
 		}
@@ -63,17 +57,12 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 		return fmt.Errorf("insufficient balance")
 	}
 
-	token := types.String(tokenUrl.String())
 	txid := types.Bytes(tx.TransactionHash())
 	for i, u := range recipients {
-		from := types.String(st.OriginUrl.String())
-		to := types.String(u.String())
-		deposit := synthetic.NewTokenTransactionDeposit(txid[:], from, to)
-		err = deposit.SetDeposit(token, new(big.Int).SetUint64(body.To[i].Amount))
-		if err != nil {
-			return fmt.Errorf("invalid deposit: %v", err)
-		}
-
+		deposit := new(protocol.SyntheticDepositTokens)
+		copy(deposit.Cause[:], tx.TransactionHash())
+		deposit.Token = tokenUrl.String()
+		deposit.Amount = *new(big.Int).SetUint64(body.To[i].Amount)
 		st.Submit(u, deposit)
 	}
 

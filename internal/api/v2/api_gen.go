@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
@@ -97,7 +96,7 @@ func (m *JrpcMethods) ExecuteCreateTokenAccount(ctx context.Context, params json
 }
 
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(api.SendTokens), "From", "To")
+	return m.executeWith(ctx, params, new(protocol.SendTokens), "From", "To")
 }
 
 func (m *JrpcMethods) ExecuteUpdateKeyPage(ctx context.Context, params json.RawMessage) interface{} {

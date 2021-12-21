@@ -11,7 +11,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,11 +34,10 @@ func TestEndToEndSuite(t *testing.T) {
 func BenchmarkFaucetAndLiteTx(b *testing.B) {
 	n := createAppWithMemDB(b, crypto.Address{}, true)
 
-	sponsor := generateKey()
 	recipient := generateKey()
 
 	n.Batch(func(send func(*Tx)) {
-		tx, err := acctesting.CreateFakeSyntheticDepositTx(sponsor, recipient)
+		tx, err := acctesting.CreateFakeSyntheticDepositTx(recipient)
 		require.NoError(b, err)
 		send(tx)
 	})
@@ -54,8 +52,8 @@ func BenchmarkFaucetAndLiteTx(b *testing.B) {
 	b.ResetTimer()
 	n.Batch(func(send func(*Tx)) {
 		for i := 0; i < b.N; i++ {
-			exch := api.NewTokenTx(types.String(origin.Addr))
-			exch.AddToAccount(types.String(rwallet.Addr), 1000)
+			exch := new(protocol.SendTokens)
+			exch.AddRecipient(n.ParseUrl(rwallet.Addr), 1000)
 			tx, err := transactions.New(origin.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 				return origin.Sign(hash), nil
 			}, exch)
@@ -76,8 +74,7 @@ func TestCreateLiteAccount(t *testing.T) {
 }
 
 func (n *fakeNode) testLiteTx(count int) (string, map[string]int64) {
-	sponsor := generateKey()
-	_, recipient, gtx, err := acctesting.BuildTestSynthDepositGenTx(sponsor.Bytes())
+	_, recipient, gtx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(n.t, err)
 
 	origin := acctesting.NewWalletEntry()
@@ -100,8 +97,8 @@ func (n *fakeNode) testLiteTx(count int) (string, map[string]int64) {
 			recipient := recipients[rand.Intn(len(recipients))]
 			balance[recipient.Addr] += 1000
 
-			exch := api.NewTokenTx(types.String(origin.Addr))
-			exch.AddToAccount(types.String(recipient.Addr), 1000)
+			exch := new(protocol.SendTokens)
+			exch.AddRecipient(n.ParseUrl(recipient.Addr), 1000)
 			tx, err := transactions.New(origin.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 				return origin.Sign(hash), nil
 			}, exch)
@@ -459,11 +456,11 @@ func TestLiteAccountTx(t *testing.T) {
 	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie).String()
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		tokenTx := api.NewTokenTx(types.String(aliceUrl))
-		tokenTx.AddToAccount(types.String(bobUrl), 1000)
-		tokenTx.AddToAccount(types.String(charlieUrl), 2000)
+		exch := new(protocol.SendTokens)
+		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), 1000)
+		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), 2000)
 
-		tx, err := transactions.New(aliceUrl, 2, edSigner(alice, 1), tokenTx)
+		tx, err := transactions.New(aliceUrl, 2, edSigner(alice, 1), exch)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -484,10 +481,10 @@ func TestAdiAccountTx(t *testing.T) {
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		tokenTx := api.NewTokenTx("foo/tokens")
-		tokenTx.AddToAccount("bar/tokens", 68)
+		exch := new(protocol.SendTokens)
+		exch.AddRecipient(n.ParseUrl("bar/tokens"), 68)
 
-		tx, err := transactions.New("foo/tokens", 1, edSigner(fooKey, 1), tokenTx)
+		tx, err := transactions.New("foo/tokens", 1, edSigner(fooKey, 1), exch)
 		require.NoError(t, err)
 		send(tx)
 	})
