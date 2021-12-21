@@ -239,8 +239,7 @@ func CreateTX(sender string, args []string) (string, error) {
 	args, si, pk, err := prepareSigner(u, args)
 
 	if len(args) < 2 {
-		PrintTXCreate()
-		return "", fmt.Errorf("invalid number of arguments for tx create")
+		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
 
 	u2, err := url.Parse(args[0])
