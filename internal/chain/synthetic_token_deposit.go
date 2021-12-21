@@ -26,7 +26,7 @@ func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTran
 	}
 
 	if body.ToUrl != types.String(tx.SigInfo.URL) {
-		return fmt.Errorf("deposit destination does not match TX sponsor")
+		return fmt.Errorf("deposit destination does not match transaction origin record")
 	}
 
 	accountUrl, err := url.Parse(tx.SigInfo.URL)
@@ -40,14 +40,14 @@ func (SyntheticTokenDeposit) Validate(st *StateManager, tx *transactions.GenTran
 	}
 
 	var account tokenChain
-	if st.Sponsor != nil {
-		switch sponsor := st.Sponsor.(type) {
+	if st.Origin != nil {
+		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
-			account = sponsor
+			account = origin
 		case *state.TokenAccount:
-			account = sponsor
+			account = origin
 		default:
-			return fmt.Errorf("invalid sponsor: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, sponsor.Header().Type)
+			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, origin.Header().Type)
 		}
 	} else if keyHash, tok, err := protocol.ParseLiteAddress(accountUrl); err != nil {
 		return fmt.Errorf("invalid lite token account URL: %v", err)

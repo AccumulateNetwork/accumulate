@@ -3,7 +3,6 @@ package api_test
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
@@ -45,7 +44,7 @@ func createToken(tokenUrl string) (string, error) {
 }
 
 func createTokenTx(url string) (string, error) {
-	tx := &TokenTx{}
+	tx := &SendTokens{}
 	tx.From.String = types.String(url + "/MyAcmeTokens")
 	amt := uint64(1234)
 	tx.AddToAccount("redwagon/AcmeAccount", amt)
@@ -65,7 +64,7 @@ func createRequest(t *testing.T, adiUrl string, kp *ed25519.PrivKey, message str
 	req.Tx.Data = &raw
 	req.Tx.Signer = &Signer{}
 	req.Tx.Signer.Nonce = uint64(time.Now().Unix())
-	req.Tx.Sponsor = types.String(adiUrl)
+	req.Tx.Origin = types.String(adiUrl)
 	req.Tx.KeyPage = &APIRequestKeyPage{}
 	req.Tx.KeyPage.Height = 1
 	copy(req.Tx.Signer.PublicKey[:], kp.PubKey().Bytes())
@@ -200,9 +199,7 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 	adiUrl := "greentractor"
 
 	message, err := createTokenTx(adiUrl)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	params := createRequest(t, adiUrl, &kp, message)
 
 	validate, err := protocol.NewValidator()
@@ -210,20 +207,15 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 
 	req := &APIRequestRaw{}
 	// unmarshal req
-	if err = json.Unmarshal(params, &req); err != nil {
-		t.Fatal(err)
-	}
+	err = json.Unmarshal(params, &req)
+	require.NoError(t, err)
 
 	// validate request
-	if err = validate.Struct(req); err != nil {
-		t.Fatal(err)
-	}
+	err = validate.Struct(req)
+	require.NoError(t, err)
 
-	//tx, err := json.MarshalIndent(&req,"", "  ")
 	tx, err := json.Marshal(&req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	fmt.Printf("%s", string(tx))
+	t.Logf("%s", tx)
 }

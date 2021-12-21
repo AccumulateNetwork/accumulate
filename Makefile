@@ -10,8 +10,11 @@ COMMIT = github.com/AccumulateNetwork/accumulate.Commit=$(GIT_COMMIT)
 
 LDFLAGS = '-X "$(VERSION)" -X "$(COMMIT)"'
 
-build: tags
+build:
 	go build $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/accumulated
 
-install: tags
+install:
 	go install -ldflags $(LDFLAGS) ./cmd/accumulated
+
+cli:
+	go build $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/cli

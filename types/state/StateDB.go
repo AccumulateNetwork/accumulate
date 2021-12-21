@@ -177,8 +177,34 @@ func (s *StateDB) GetChainRange(chainId []byte, start int64, end int64) ([]types
 	return resultHashes, mgr.Height(), nil
 }
 
-//GetDataChainRange get the entryHashes in a given range
-func (s *StateDB) GetDataChainRange(chainId []byte, start int64, end int64) ([]types.Bytes32, int64, error) {
+//GetChainDataByEntryHash retures the entry in the data chain by entry hash
+func (s *StateDB) GetChainDataByEntryHash(chainId []byte, entryHash []byte) ([]byte, []byte, error) {
+	data, err := s.dbMgr.Get(storage.MakeKey(bucketDataEntry, chainId, entryHash))
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return entryHash, data, nil
+}
+
+//GetChainData retures the latest entry in the data chain
+func (s *StateDB) GetChainData(chainId []byte) ([]byte, []byte, error) {
+	mgr, err := s.ManageChain(bucketDataEntry, chainId)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	currHeight := mgr.Height()
+	entryHash, err := mgr.Entry(currHeight - 1)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return s.GetChainDataByEntryHash(chainId, entryHash)
+}
+
+//GetChainDataRange get the entryHashes in a given range
+func (s *StateDB) GetChainDataRange(chainId []byte, start int64, end int64) ([]types.Bytes32, int64, error) {
 	mgr, err := s.ManageChain(bucketDataEntry, chainId)
 	if err != nil {
 		return nil, 0, err
@@ -615,7 +641,7 @@ func (tx *DBTransaction) writeDataState(chainId *types.Bytes32) error {
 		//store the entry hash for the data
 		tx.state.logDebug("AddHash", "hash", logging.AsHex(entry.EntryHash))
 		mgr.AddEntry(entry.EntryHash)
-		tx.GetDB().PutBatch(storage.MakeKey(bucketEntry, chainId.Bytes(), entry.EntryHash), entry.Data)
+		tx.GetDB().PutBatch(storage.MakeKey(bucketDataEntry, chainId.Bytes(), entry.EntryHash), entry.Data)
 	}
 
 	// The bpt stores the root of the data merkle state

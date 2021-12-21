@@ -12,9 +12,9 @@
   - Recipient must be an account (ADI or Lite)
 - **Create Signature Specification**
   - Create a Signature Specification
-  - Sponsored by an ADI or SSG
+  - Sponsored by an ADI or key book
   - When sponsored by an ADI, creates an unbound SS
-  - When sponsored by an SSG, creates an SS bound to that SSG
+  - When sponsored by an key book, creates an SS bound to that key book
 - **Create Signature Specification Group**
   - Create a Signature Specification Group
   - Sponsored by an ADI
