@@ -30,9 +30,13 @@ stages:
   extends: .go
   needs: []
   tags: [docker, linux]
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
   script:
   - go build -v ./...
-  - go test -v -cpu=4 -count=1 ./...
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -cpu 4 ./...
 
 test 1/2:
   extends: .test
