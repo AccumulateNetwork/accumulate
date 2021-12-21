@@ -90,7 +90,7 @@ func TestReceiptAll(t *testing.T) {
 	AM.SetLock(true)
 
 	for i := 0; i < testMerkleTreeSize; i++ {
-		for j := 2; j < testMerkleTreeSize; j++ {
+		for j := 1; j < testMerkleTreeSize; j++ {
 			fmt.Println("--------------i,j ", i, ",", j, " ---------------")
 			element := rh.Next()
 			if i >= 0 && i < testMerkleTreeSize {
