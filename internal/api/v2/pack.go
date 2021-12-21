@@ -4,9 +4,7 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
 func packStateResponse(obj *state.Object, chain state.Chain) (*QueryResponse, error) {
@@ -44,26 +42,26 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 	}
 
 	switch payload := payload.(type) {
-	case *api.SendTokens:
+	case *protocol.SendTokens:
 		if len(res.SyntheticTxids) != len(payload.To) {
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
 
 		res.Origin = tx.SigInfo.URL
 		data := new(TokenSend)
-		data.From = *payload.From.AsString()
+		data.From = main.SigInfo.URL
 		data.To = make([]TokenDeposit, len(payload.To))
 		for i, to := range payload.To {
-			data.To[i].Url = *to.URL.AsString()
+			data.To[i].Url = to.Url
 			data.To[i].Amount = to.Amount
 			data.To[i].Txid = synth[i*32 : (i+1)*32]
 		}
 
-		res.Origin = *payload.From.AsString()
+		res.Origin = main.SigInfo.URL
 		res.Data = data
 
-	case *synthetic.TokenTransactionDeposit:
-		res.Origin = *payload.FromUrl.AsString()
+	case *protocol.SyntheticDepositTokens:
+		res.Origin = main.SigInfo.URL
 		res.Data = payload
 
 	default:

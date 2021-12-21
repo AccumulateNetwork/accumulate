@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -11,7 +12,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
@@ -24,19 +24,16 @@ type DB interface {
 }
 
 // Token multiplier
-const TokenMx = 100000000
+const TokenMx = protocol.AcmePrecision
 
-func CreateFakeSyntheticDepositTx(sponsor, recipient tmed25519.PrivKey) (*transactions.GenTransaction, error) {
-	sponsorAdi := types.String(AcmeLiteAddressTmPriv(sponsor).String())
+func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.GenTransaction, error) {
 	recipientAdi := types.String(AcmeLiteAddressTmPriv(recipient).String())
 
 	//create a fake synthetic deposit for faucet.
-	fakeTxid := sha256.Sum256([]byte("fake txid"))
-	// NewTokenTransactionDeposit(txId types.Bytes, from *types.String, to *types.String)
-	deposit := synthetic.NewTokenTransactionDeposit(fakeTxid[:], sponsorAdi, recipientAdi)
-	amtToDeposit := int64(50000)                           //deposit 50k tokens
-	deposit.DepositAmount.SetInt64(amtToDeposit * TokenMx) // assume 8 decimal places
-	deposit.TokenUrl = types.String(protocol.AcmeUrl().String())
+	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Cause = sha256.Sum256([]byte("fake txid"))
+	deposit.Token = protocol.ACME
+	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
 
 	depData, err := deposit.MarshalBinary()
 	if err != nil {

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	. "github.com/AccumulateNetwork/accumulate/types/api"
@@ -43,11 +44,10 @@ func createToken(tokenUrl string) (string, error) {
 	return string(ret), nil
 }
 
-func createTokenTx(url string) (string, error) {
-	tx := &SendTokens{}
-	tx.From.String = types.String(url + "/MyAcmeTokens")
+func createTokenTx() (string, error) {
+	tx := &protocol.SendTokens{}
 	amt := uint64(1234)
-	tx.AddToAccount("redwagon/AcmeAccount", amt)
+	tx.AddRecipient(&url.URL{Authority: "redwagon", Path: "/AcmeAccount"}, amt)
 	ret, err := json.Marshal(&tx)
 	return string(ret), err
 }
@@ -198,7 +198,7 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 
 	adiUrl := "greentractor"
 
-	message, err := createTokenTx(adiUrl)
+	message, err := createTokenTx()
 	require.NoError(t, err)
 	params := createRequest(t, adiUrl, &kp, message)
 
