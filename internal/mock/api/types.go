@@ -220,9 +220,10 @@ type MockConnectionRouter struct {
 
 // MockConnectionRouter is a mock of ConnectionRouter interface.
 type MockRoute struct {
-	broadcaseClient *MockABCIBroadcastClient
+	broadcastClient *MockABCIBroadcastClient
 	subnetName      string
 	networkGroup    connections.NetworkGroup
+	client          jsonrpc.RPCClient
 }
 
 func (m MockRoute) GetSubnetName() string {
@@ -230,7 +231,7 @@ func (m MockRoute) GetSubnetName() string {
 }
 
 func (m MockRoute) GetJsonRpcClient() jsonrpc.RPCClient {
-	return nil
+	return m.client
 }
 
 func (m MockRoute) GetQueryClient() connections.ABCIQueryClient {
@@ -238,7 +239,7 @@ func (m MockRoute) GetQueryClient() connections.ABCIQueryClient {
 }
 
 func (m MockRoute) GetBroadcastClient() connections.ABCIBroadcastClient {
-	return m.broadcaseClient
+	return m.broadcastClient
 }
 
 func (m MockRoute) IsDirectoryNode() bool {
@@ -250,7 +251,7 @@ func (m MockRoute) GetNetworkGroup() connections.NetworkGroup {
 }
 
 func (m MockRoute) GetBatchBroadcastClient() connections.BatchABCIBroadcastClient {
-	return m.broadcaseClient
+	return m.broadcastClient
 }
 
 func (m *MockConnectionRouter) SelectRoute(adiUrl *url.URL, allowFollower bool) (connections.Route, error) {
@@ -289,11 +290,12 @@ type MockConnectionRouterMockRecorder struct {
 	mock *MockConnectionRouter
 }
 
-func NewMockConnectionRouter(client *MockABCIBroadcastClient) *MockConnectionRouter {
+func NewMockConnectionRouter(broadcastClient *MockABCIBroadcastClient) *MockConnectionRouter {
 	mock := &MockConnectionRouter{route: MockRoute{
-		broadcaseClient: client,
+		broadcastClient: broadcastClient,
 		subnetName:      "testnet",
-		networkGroup:    connections.Local,
+		networkGroup:    connections.OtherSubnet,
+		client:          jsonrpc.NewClient("http://localhost"),
 	}}
 	mock.recorder = &MockConnectionRouterMockRecorder{mock}
 	return mock

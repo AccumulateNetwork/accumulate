@@ -79,7 +79,6 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	local := mock_api.NewMockABCIBroadcastClient(ctrl)
-	// TODO ABCIApplicationClient ?
 	n.client = acctesting.NewABCIApplicationClient(appChan, db, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
