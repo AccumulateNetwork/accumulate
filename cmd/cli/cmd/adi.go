@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/spf13/cobra"
 )
@@ -31,8 +32,8 @@ var adiCmd = &cobra.Command{
 			case "list":
 				out, err = ListADIs()
 			case "directory":
-				if len(args) > 1 {
-					out, err = GetAdiDirectory(args[1])
+				if len(args) > 3 {
+					out, err = GetAdiDirectory(args[1], args[2], args[3])
 					if err != nil {
 						PrintAdiDirectory()
 					}
@@ -63,8 +64,8 @@ func PrintADIGet() {
 }
 
 func PrintADICreate() {
-	fmt.Println("  accumulate adi create [actor-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
-	fmt.Println("  accumulate adi create [actor-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
+	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
+	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
 }
 
 func PrintADIImport() {
@@ -72,27 +73,46 @@ func PrintADIImport() {
 }
 
 func PrintAdiDirectory() {
-	fmt.Println("  accumulate adi directory [url] 		Get directory of URL's associated with an ADI")
+	fmt.Println("  accumulate adi directory [url] [start] [count]		Get directory of URL's associated with an ADI with starting index and number of directories to receive")
 }
 
-func GetAdiDirectory(actor string) (string, error) {
+func GetAdiDirectory(origin string, start string, count string) (string, error) {
+	u, err := url2.Parse(origin)
 
-	u, err := url2.Parse(actor)
+	st, err := strconv.ParseInt(start, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid start value")
+	}
+
+	ct, err := strconv.ParseInt(count, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid count value")
+	}
+	if ct < 1 {
+		return "", fmt.Errorf("count must be greater than zero")
+	}
+
+	params := api2.DirectoryQuery{}
+	params.Url = u.String()
+	params.Start = uint64(st)
+	params.Count = uint64(ct)
+	params.ExpandChains = true
+
+	data, err := json.Marshal(&params)
 	if err != nil {
 		return "", err
 	}
 
-	var res acmeapi.APIDataResponse
-
-	params := acmeapi.APIRequestURL{}
-
-	params.URL = types.String(u.String())
-
-	if err := Client.Request(context.Background(), "get-directory", params, &res); err != nil {
-		return PrintJsonRpcError(err)
+	var res api2.QueryResponse
+	if err := Client.RequestV2(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
+		ret, err := PrintJsonRpcError(err)
+		if err != nil {
+			return "", err
+		}
+		return "", fmt.Errorf("%v", ret)
 	}
 
-	return PrintQueryResponse(&res)
+	return PrintQueryResponseV2(&res)
 }
 
 func PrintADI() {
@@ -103,25 +123,24 @@ func PrintADI() {
 }
 
 func GetADI(url string) (string, error) {
-
-	var res acmeapi.APIDataResponse
-
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(url)
-
-	if err := Client.Request(context.Background(), "adi", params, &res); err != nil {
-		return PrintJsonRpcError(err)
+	res, err := GetUrl(url)
+	if err != nil {
+		return "", err
 	}
 
-	return PrintQueryResponse(&res)
+	if res.Type != types.ChainTypeIdentity.String() {
+		return "", fmt.Errorf("expecting ADI chain but received %v", res.Type)
+	}
+
+	return PrintQueryResponseV2(res)
 }
 
-func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
+func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	var si *transactions.SignatureInfo
 	var privKey []byte
 	var err error
 
-	args, si, privKey, err = prepareSigner(actor, args)
+	args, si, privKey, err = prepareSigner(origin, args)
 	if err != nil {
 		return "", err
 	}
@@ -172,38 +191,18 @@ func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
 		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
 	}
 
-	idc := &protocol.IdentityCreate{}
+	idc := protocol.IdentityCreate{}
 	idc.Url = u.Authority
 	idc.PublicKey = pubKey
 	idc.KeyBookName = book
 	idc.KeyPageName = page
 
-	data, err := json.Marshal(idc)
+	res, err := dispatchTxRequest("create-adi", &idc, origin, si, privKey)
 	if err != nil {
 		return "", err
 	}
 
-	dataBinary, err := idc.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTx(data, dataBinary, actor, si, privKey, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	var res acmeapi.APIDataResponse
-	if err := Client.Request(context.Background(), "adi-create", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	ar := ActionResponse{}
-	err = json.Unmarshal(*res.Data, &ar)
-	if err != nil {
-		return "", fmt.Errorf("error unmarshalling create adi result, %v", err)
-	}
+	ar := ActionResponseFrom(res)
 	out, err := ar.Print()
 	if err != nil {
 		return "", err
@@ -219,9 +218,9 @@ func NewADIFromADISigner(actor *url2.URL, args []string) (string, error) {
 }
 
 // NewADI create a new ADI from a sponsored account.
-func NewADI(actor string, params []string) (string, error) {
+func NewADI(origin string, params []string) (string, error) {
 
-	u, err := url2.Parse(actor)
+	u, err := url2.Parse(origin)
 	if err != nil {
 		return "", err
 	}

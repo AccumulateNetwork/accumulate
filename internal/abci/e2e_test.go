@@ -1,19 +1,16 @@
 package abci_test
 
 import (
-	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
 	"testing"
 	"time"
 
-	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/assert"
@@ -47,12 +44,12 @@ func BenchmarkFaucetAndLiteTx(b *testing.B) {
 		send(tx)
 	})
 
-	origin := accapi.NewWalletEntry()
+	origin := acctesting.NewWalletEntry()
 	origin.Nonce = 1
 	origin.PrivateKey = recipient.Bytes()
-	origin.Addr = lite.GenerateAcmeAddress(recipient.PubKey().Address())
+	origin.Addr = acctesting.AcmeLiteAddressTmPriv(recipient).String()
 
-	rwallet := accapi.NewWalletEntry()
+	rwallet := acctesting.NewWalletEntry()
 
 	b.ResetTimer()
 	n.Batch(func(send func(*Tx)) {
@@ -83,14 +80,14 @@ func (n *fakeNode) testLiteTx(count int) (string, map[string]int64) {
 	_, recipient, gtx, err := acctesting.BuildTestSynthDepositGenTx(sponsor.Bytes())
 	require.NoError(n.t, err)
 
-	origin := accapi.NewWalletEntry()
+	origin := acctesting.NewWalletEntry()
 	origin.Nonce = 1
 	origin.PrivateKey = recipient
-	origin.Addr = lite.GenerateAcmeAddress(recipient.Public().(ed25519.PublicKey))
+	origin.Addr = acctesting.AcmeLiteAddressStdPriv(recipient).String()
 
 	recipients := make([]*transactions.WalletEntry, 10)
 	for i := range recipients {
-		recipients[i] = accapi.NewWalletEntry()
+		recipients[i] = acctesting.NewWalletEntry()
 	}
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -119,7 +116,7 @@ func (n *fakeNode) testLiteTx(count int) (string, map[string]int64) {
 func TestFaucet(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	alice := generateKey()
-	aliceUrl := lite.GenerateAcmeAddress(alice.PubKey().Bytes())
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice).String()
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		body := new(protocol.AcmeFaucet)
@@ -147,7 +144,7 @@ func TestAnchorChain(t *testing.T) {
 		adi.KeyBookName = "book"
 		adi.KeyPageName = "page"
 
-		sponsorUrl := lite.GenerateAcmeAddress(liteAccount.PubKey().Bytes())
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		tx, err := transactions.New(sponsorUrl, 1, edSigner(liteAccount, 1), adi)
 		require.NoError(t, err)
 
@@ -196,7 +193,7 @@ func TestCreateADI(t *testing.T) {
 	wallet := new(transactions.WalletEntry)
 	wallet.Nonce = 1
 	wallet.PrivateKey = liteAccount.Bytes()
-	wallet.Addr = lite.GenerateAcmeAddress(liteAccount.PubKey().Bytes())
+	wallet.Addr = acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.IdentityCreate)
@@ -205,7 +202,7 @@ func TestCreateADI(t *testing.T) {
 		adi.KeyBookName = "foo-book"
 		adi.KeyPageName = "bar-page"
 
-		sponsorUrl := lite.GenerateAcmeAddress(liteAccount.PubKey().Bytes())
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 		tx, err := transactions.New(sponsorUrl, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 			return wallet.Sign(hash), nil
 		}, adi)
@@ -457,9 +454,9 @@ func TestLiteAccountTx(t *testing.T) {
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, charlie, 0))
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
-	aliceUrl := lite.GenerateAcmeAddress(alice.PubKey().Bytes())
-	bobUrl := lite.GenerateAcmeAddress(bob.PubKey().Bytes())
-	charlieUrl := lite.GenerateAcmeAddress(charlie.PubKey().Bytes())
+	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice).String()
+	bobUrl := acctesting.AcmeLiteAddressTmPriv(bob).String()
+	charlieUrl := acctesting.AcmeLiteAddressTmPriv(charlie).String()
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		tokenTx := api.NewTokenTx(types.String(aliceUrl))

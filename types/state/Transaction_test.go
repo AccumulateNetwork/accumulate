@@ -5,7 +5,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -17,7 +17,7 @@ func TestTransactionState(t *testing.T) {
 	nts1.From = types.UrlChain{String: "RedWagon/myAccount"}
 	nts1.AddToAccount("BlueWagon/account", uint64(100*100000000))
 
-	we := accapi.NewWalletEntry()
+	we := acctesting.NewWalletEntry()
 	trans := new(transactions.GenTransaction)
 	trans.SigInfo = new(transactions.SignatureInfo)
 	trans.SigInfo.URL = we.Addr

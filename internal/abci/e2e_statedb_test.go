@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
@@ -12,6 +13,8 @@ import (
 )
 
 func TestStateDBConsistency(t *testing.T) {
+	acctesting.SkipPlatformCI(t, "darwin", "flaky")
+
 	dir := t.TempDir()
 	db := new(badger.DB)
 	err := db.InitDB(filepath.Join(dir, "valacc.db"), nil)

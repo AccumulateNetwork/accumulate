@@ -11,8 +11,6 @@ import (
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -181,6 +179,7 @@ func GetTX(hash string) (string, error) {
 
 func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 
+	var res api2.QueryMultiResponse
 	start, err := strconv.Atoi(s)
 	if err != nil {
 		return "", err
@@ -195,20 +194,17 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 		return "", err
 	}
 
-	var res acmeapi.APIDataResponsePagination
-
-	params := new(acmeapi.APIRequestURLPagination)
-	params.URL = types.String(u.String())
-	params.Start = int64(start)
-	params.Limit = int64(end)
+	params := new(api2.TxHistoryQuery)
+	params.UrlQuery.Url = u.String()
+	params.QueryPagination.Start = uint64(start)
+	params.QueryPagination.Count = uint64(end)
 
 	data, err := json.Marshal(params)
-	jsondata := json.RawMessage(data)
 	if err != nil {
 		return "", err
 	}
 
-	if err := Client.Request(context.Background(), "token-account-history", jsondata, &res); err != nil {
+	if err := Client.RequestV2(context.Background(), "query-tx-history", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
@@ -221,20 +217,20 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 	}
 
 	var out string
-	for i := range res.Data {
-		s, err := PrintQueryResponse(res.Data[i])
+	out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+	for i := range res.Items {
+		s, err := PrintQueryResponseV2(res.Items[i])
 		if err != nil {
 			return "", err
 		}
 		out += s
 	}
+
 	return out, err
 }
 
 func CreateTX(sender string, args []string) (string, error) {
 	//sender string, receiver string, amount string
-	var res api2.TxResponse
-	var err error
 	u, err := url.Parse(sender)
 	if err != nil {
 		return "", err
@@ -243,8 +239,7 @@ func CreateTX(sender string, args []string) (string, error) {
 	args, si, pk, err := prepareSigner(u, args)
 
 	if len(args) < 2 {
-		PrintTXCreate()
-		return "", fmt.Errorf("invalid number of arguments for tx create")
+		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
 
 	u2, err := url.Parse(args[0])
@@ -253,38 +248,18 @@ func CreateTX(sender string, args []string) (string, error) {
 	}
 	amount := args[1]
 
-	//fmt.Println(hex.EncodeToString(pk))
-	tokentx := new(acmeapi.SendTokens)
-	tokentx.From = types.UrlChain{String: types.String(u.String())}
-
-	to := []*acmeapi.TokenRecipient{}
-	r := &acmeapi.TokenRecipient{}
+	tokenSend := new(api2.TokenSend)
+	tokenSend.From = u.String()
 
 	amt, err := strconv.ParseFloat(amount, 64)
+	r := api2.TokenDeposit{}
 	r.Amount = uint64(amt * 1e8)
-	r.URL.String = types.String(u2.String())
-	to = append(to, r)
-	tokentx.To = to
+	r.Url = u2.String()
+	tokenSend.To = append(tokenSend.To, r)
 
-	data, err := json.Marshal(tokentx)
+	res, err := dispatchTxRequest("send-tokens", &tokenSend, u, si, pk)
 	if err != nil {
 		return "", err
 	}
-
-	dataBinary, err := tokentx.MarshalBinary()
-	if err != nil {
-		return "", err
-	}
-
-	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, u, si, pk, nonce)
-	if err != nil {
-		return "", err
-	}
-
-	if err := Client.RequestV2(context.Background(), "send-tokens", params, &res); err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	return ActionResponseFrom(&res).Print()
+	return ActionResponseFrom(res).Print()
 }
