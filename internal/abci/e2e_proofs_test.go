@@ -8,7 +8,6 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
@@ -28,10 +27,11 @@ func TestProofADI(t *testing.T) {
 	n.Batch(func(send func(*Tx)) {
 		adi := new(protocol.IdentityCreate)
 		adi.Url = "RoadRunner"
+		adi.KeyBookName = "book0"
 		adi.KeyPageName = "page0"
 		adi.PublicKey = keyHash[:]
 
-		sponsorUrl := lite.GenerateAcmeAddress(liteKey.PubKey().Bytes())
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
 		tx, err := transactions.New(sponsorUrl, 1, edSigner(liteKey, 1), adi)
 		require.NoError(t, err)
 

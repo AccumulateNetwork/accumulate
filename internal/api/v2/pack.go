@@ -44,12 +44,12 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 	}
 
 	switch payload := payload.(type) {
-	case *api.TokenTx:
+	case *api.SendTokens:
 		if len(res.SyntheticTxids) != len(payload.To) {
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
 
-		res.Sponsor = tx.SigInfo.URL
+		res.Origin = tx.SigInfo.URL
 		data := new(TokenSend)
 		data.From = *payload.From.AsString()
 		data.To = make([]TokenDeposit, len(payload.To))
@@ -59,15 +59,15 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 			data.To[i].Txid = synth[i*32 : (i+1)*32]
 		}
 
-		res.Sponsor = *payload.From.AsString()
+		res.Origin = *payload.From.AsString()
 		res.Data = data
 
 	case *synthetic.TokenTransactionDeposit:
-		res.Sponsor = *payload.FromUrl.AsString()
+		res.Origin = *payload.FromUrl.AsString()
 		res.Data = payload
 
 	default:
-		res.Sponsor = tx.SigInfo.URL
+		res.Origin = tx.SigInfo.URL
 		res.Data = payload
 	}
 

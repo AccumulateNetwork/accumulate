@@ -3,39 +3,13 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"go/format"
-	"go/parser"
-	"go/token"
 	"os"
-	"os/exec"
-	"sort"
 	"strings"
 
+	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
-
-type Record struct {
-	name         string
-	Kind         string
-	TxType       string `yaml:"tx-type"`
-	ChainType    string `yaml:"chain-type"`
-	NonBinary    bool   `yaml:"non-binary"`
-	Incomparable bool   `yaml:"incomparable"`
-	Fields       []*Field
-	Embeddings   []string `yaml:"embeddings"`
-}
-
-type Field struct {
-	Name      string
-	Type      string
-	MarshalAs string `yaml:"marshal-as"`
-	Slice     *Field
-	Pointer   bool
-	Optional  bool
-	IsUrl     bool `yaml:"is-url"`
-	KeepEmpty bool `yaml:"keep-empty"`
-}
 
 var flags struct {
 	Package string
@@ -74,36 +48,19 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-func readTypes(file string) []*Record {
+func readTypes(file string) typegen.Types {
 	f, err := os.Open(file)
 	check(err)
 	defer f.Close()
 
-	var v map[string]*Record
+	var types map[string]*typegen.Type
+
 	dec := yaml.NewDecoder(f)
 	dec.KnownFields(true)
-	err = dec.Decode(&v)
+	err = dec.Decode(&types)
 	check(err)
 
-	r := make([]*Record, 0, len(v))
-	for name, rec := range v {
-		rec.name = name
-		r = append(r, rec)
-	}
-
-	sort.Slice(r, func(i, j int) bool {
-		return r[i].name < r[j].name
-	})
-
-	for _, typ := range r {
-		for _, f := range typ.Fields {
-			if f.Slice != nil {
-				f.Slice.Name = f.Name
-			}
-		}
-	}
-
-	return r
+	return typegen.TypesFrom(types)
 }
 
 func methodName(typ, name string) string {
@@ -115,27 +72,13 @@ func fieldError(op, name string, args ...string) string {
 	return fmt.Sprintf("fmt.Errorf(\"error %s %s: %%w\", %s)", op, name, strings.Join(args, ","))
 }
 
-func needsCustomJSON(typ *Record) bool {
+func needsCustomJSON(typ *typegen.Type) bool {
 	for _, f := range typ.Fields {
 		if jsonType(f) != "" {
 			return true
 		}
 	}
 	return false
-}
-
-func (typ *Record) txType() string {
-	if typ.TxType != "" {
-		return "types.TxType" + typ.TxType
-	}
-	return "types.TxType" + typ.name
-}
-
-func (typ *Record) chainType() string {
-	if typ.ChainType != "" {
-		return "types.ChainType" + typ.ChainType
-	}
-	return "types.ChainType" + typ.name
 }
 
 func run(_ *cobra.Command, args []string) {
@@ -159,7 +102,7 @@ func run(_ *cobra.Command, args []string) {
 	types := readTypes(args[0])
 
 	for _, typ := range types {
-		fmt.Fprintf(w, "type %s struct {\n", typ.name)
+		fmt.Fprintf(w, "type %s struct {\n", typ.Name)
 		if typ.Kind == "chain" {
 			if flags.IsState {
 				fmt.Fprintf(w, "\nChainHeader\n")
@@ -169,32 +112,13 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		if len(typ.Embeddings) > 0 && !typ.NonBinary {
-			check(fmt.Errorf("type %q: embedding is not supported for binary-marshalled types", typ.name))
+			check(fmt.Errorf("type %q: embedding is not supported for binary-marshalled types", typ.Name))
 		}
 		for _, e := range typ.Embeddings {
 			fmt.Fprintf(w, "\t\t%s\n", e)
 		}
 		for _, field := range typ.Fields {
-			lcName := strings.ToLower(field.Name[:1]) + field.Name[1:]
-			fmt.Fprintf(w, "\t%s %s `", field.Name, resolveType(field, false))
-			if field.KeepEmpty {
-				fmt.Fprintf(w, `json:"%[1]s" form:"%[1]s" query:"%[1]s"`, lcName)
-			} else {
-				fmt.Fprintf(w, `json:"%[1]s,omitempty" form:"%[1]s" query:"%[1]s"`, lcName)
-			}
-
-			var validate []string
-			if !field.Optional {
-				validate = append(validate, "required")
-			}
-			if field.IsUrl {
-				validate = append(validate, "acc-url")
-			}
-			if len(validate) > 0 {
-				fmt.Fprintf(w, ` validate:"%s"`, strings.Join(validate, ","))
-			}
-
-			fmt.Fprint(w, "`\n")
+			formatField(w, field, field.Name, false)
 		}
 		fmt.Fprintf(w, "}\n\n")
 	}
@@ -207,14 +131,14 @@ func run(_ *cobra.Command, args []string) {
 			v := new(%[1]s)
 			v.Type = %s
 			return v
-		}`+"\n\n", typ.name, typ.chainType())
+		}`+"\n\n", typ.Name, typ.GoChainType())
 	}
 
 	for _, typ := range types {
 		if typ.Kind != "tx" {
 			continue
 		}
-		fmt.Fprintf(w, "func (*%s) GetType() types.TransactionType { return %s }\n\n", typ.name, typ.txType())
+		fmt.Fprintf(w, "func (*%s) GetType() types.TransactionType { return %s }\n\n", typ.Name, typ.GoTxType())
 	}
 
 	for _, typ := range types {
@@ -222,7 +146,7 @@ func run(_ *cobra.Command, args []string) {
 			continue
 		}
 
-		fmt.Fprintf(w, "func (v *%s) Equal(u *%[1]s) bool {\n", typ.name)
+		fmt.Fprintf(w, "func (v *%s) Equal(u *%[1]s) bool {\n", typ.Name)
 
 		if typ.Kind == "chain" {
 			fmt.Fprintf(w, "\tif !v.ChainHeader.Equal(&u.ChainHeader) { return false }\n\n")
@@ -230,7 +154,7 @@ func run(_ *cobra.Command, args []string) {
 
 		for _, field := range typ.Fields {
 			err := areEqual(w, field, "v."+field.Name, "u."+field.Name)
-			checkf(err, "building Equal for %q", typ.name)
+			checkf(err, "building Equal for %q", typ.Name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn true\n}\n\n")
@@ -241,20 +165,20 @@ func run(_ *cobra.Command, args []string) {
 			continue
 		}
 
-		fmt.Fprintf(w, "func (v *%s) BinarySize() int {\n", typ.name)
+		fmt.Fprintf(w, "func (v *%s) BinarySize() int {\n", typ.Name)
 		fmt.Fprintf(w, "\tvar n int\n\n")
 
 		switch typ.Kind {
 		case "tx":
-			fmt.Fprintf(w, "\nn += encoding.UvarintBinarySize(%s.ID())\n\n", typ.txType())
+			fmt.Fprintf(w, "\nn += encoding.UvarintBinarySize(%s.ID())\n\n", typ.GoTxType())
 		case "chain":
-			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = %s\n", typ.chainType())
+			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = %s\n", typ.GoChainType())
 			fmt.Fprintf(w, "\nn += v.ChainHeader.GetHeaderSize()\n\n")
 		}
 
 		for _, field := range typ.Fields {
 			err := binarySize(w, field, "v."+field.Name)
-			checkf(err, "building BinarySize for %q", typ.name)
+			checkf(err, "building BinarySize for %q", typ.Name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn n\n}\n\n")
@@ -265,21 +189,21 @@ func run(_ *cobra.Command, args []string) {
 			continue
 		}
 
-		fmt.Fprintf(w, "func (v *%s) MarshalBinary() ([]byte, error) {\n", typ.name)
+		fmt.Fprintf(w, "func (v *%s) MarshalBinary() ([]byte, error) {\n", typ.Name)
 		fmt.Fprintf(w, "\tvar buffer bytes.Buffer\n\n")
 
 		switch typ.Kind {
 		case "tx":
-			fmt.Fprintf(w, "\tbuffer.Write(encoding.UvarintMarshalBinary(%s.ID()))\n\n", typ.txType())
+			fmt.Fprintf(w, "\tbuffer.Write(encoding.UvarintMarshalBinary(%s.ID()))\n\n", typ.GoTxType())
 		case "chain":
-			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = %s\n\n", typ.chainType())
+			fmt.Fprintf(w, "\t// Enforce sanity\n\tv.Type = %s\n\n", typ.GoChainType())
 			err := fieldError("encoding", "header")
 			fmt.Fprintf(w, "\tif b, err := v.ChainHeader.MarshalBinary(); err != nil { return nil, %s } else { buffer.Write(b) }\n", err)
 		}
 
 		for _, field := range typ.Fields {
 			err := binaryMarshalValue(w, field, "v."+field.Name, field.Name)
-			checkf(err, "building MarshalBinary for %q", typ.name)
+			checkf(err, "building MarshalBinary for %q", typ.Name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn buffer.Bytes(), nil\n}\n\n")
@@ -290,25 +214,25 @@ func run(_ *cobra.Command, args []string) {
 			continue
 		}
 
-		fmt.Fprintf(w, "func (v *%s) UnmarshalBinary(data []byte) error {\n", typ.name)
+		fmt.Fprintf(w, "func (v *%s) UnmarshalBinary(data []byte) error {\n", typ.Name)
 
 		switch typ.Kind {
 		case "tx":
 			err := fieldError("decoding", "TX type")
-			fmt.Fprintf(w, "\ttyp := %s\n", typ.txType())
+			fmt.Fprintf(w, "\ttyp := %s\n", typ.GoTxType())
 			fmt.Fprintf(w, "\tif v, err := encoding.UvarintUnmarshalBinary(data); err != nil { return %s } else if v != uint64(typ) { return fmt.Errorf(\"invalid TX type: want %%v, got %%v\", typ, types.TransactionType(v)) }\n", err)
 			fmt.Fprintf(w, "\tdata = data[encoding.UvarintBinarySize(uint64(typ)):]\n\n")
 
 		case "chain":
 			err := fieldError("decoding", "header")
-			fmt.Fprintf(w, "\ttyp := %s\n", typ.chainType())
+			fmt.Fprintf(w, "\ttyp := %s\n", typ.GoChainType())
 			fmt.Fprintf(w, "\tif err := v.ChainHeader.UnmarshalBinary(data); err != nil { return %s } else if v.Type != typ { return fmt.Errorf(\"invalid chain type: want %%v, got %%v\", typ, v.Type) }\n", err)
 			fmt.Fprintf(w, "\tdata = data[v.GetHeaderSize():]\n\n")
 		}
 
 		for _, field := range typ.Fields {
 			err := binaryUnmarshalValue(w, field, "v."+field.Name, field.Name)
-			checkf(err, "building UnmarshalBinary for %q", typ.name)
+			checkf(err, "building UnmarshalBinary for %q", typ.Name)
 		}
 
 		fmt.Fprintf(w, "\n\treturn nil\n}\n\n")
@@ -319,14 +243,20 @@ func run(_ *cobra.Command, args []string) {
 			continue
 		}
 
-		fmt.Fprintf(w, "func (v *%s) MarshalJSON() ([]byte, error) {\n", typ.name)
+		fmt.Fprintf(w, "func (v *%s) MarshalJSON() ([]byte, error) {\n", typ.Name)
 		jsonVar(w, typ, "u")
 
 		if typ.Kind == "chain" {
 			fmt.Fprintf(w, "\tu.ChainHeader = v.ChainHeader\n")
 		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\tu.%s = v.%[1]s\n", e)
+		}
 		for _, f := range typ.Fields {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
+			if f.Alternative != "" {
+				valueToJson(w, f, "u."+f.Alternative, "v."+f.Name)
+			}
 		}
 
 		fmt.Fprintf(w, "\treturn json.Marshal(&u)\t")
@@ -338,14 +268,20 @@ func run(_ *cobra.Command, args []string) {
 			continue
 		}
 
-		fmt.Fprintf(w, "func (v *%s) UnmarshalJSON(data []byte) error {\t", typ.name)
+		fmt.Fprintf(w, "func (v *%s) UnmarshalJSON(data []byte) error {\t", typ.Name)
 		jsonVar(w, typ, "u")
 
 		if typ.Kind == "chain" {
 			fmt.Fprintf(w, "\tu.ChainHeader = v.ChainHeader\n")
 		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\tu.%s = v.%[1]s\n", e)
+		}
 		for _, f := range typ.Fields {
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
+			if f.Alternative != "" {
+				valueToJson(w, f, "u."+f.Alternative, "v."+f.Name)
+			}
 		}
 
 		fmt.Fprintf(w, "\tif err := json.Unmarshal(data, &u); err != nil {\n\t\treturn err\n\t}\n")
@@ -353,30 +289,26 @@ func run(_ *cobra.Command, args []string) {
 		if typ.Kind == "chain" {
 			fmt.Fprintf(w, "\tv.ChainHeader = u.ChainHeader\n")
 		}
+		for _, e := range typ.Embeddings {
+			fmt.Fprintf(w, "\tv.%s = u.%[1]s\n", e)
+		}
 		for _, f := range typ.Fields {
+			if f.Alternative == "" {
+				valueFromJson(w, f, "v."+f.Name, "u."+f.Name, f.Name)
+				continue
+			}
+
+			fmt.Fprintf(w, "\tvar zero%s %s\n", f.Name, resolveType(f, false))
+			fmt.Fprintf(w, "\tif u.%s != zero%[1]s {\n", f.Name)
 			valueFromJson(w, f, "v."+f.Name, "u."+f.Name, f.Name)
+			fmt.Fprintf(w, "\t} else {\n")
+			valueFromJson(w, f, "v."+f.Name, "u."+f.Alternative, f.Name)
+			fmt.Fprintf(w, "\t}\n")
 		}
 
 		fmt.Fprintf(w, "\treturn nil\t")
 		fmt.Fprintf(w, "}\n\n")
 	}
 
-	f, err := os.Create(flags.Out)
-	check(err)
-	defer f.Close()
-
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, flags.Out, w, parser.ParseComments)
-	if err != nil {
-		// If parsing fails, write out the unformatted code. Without this,
-		// debugging the generator is a pain.
-		_, _ = w.WriteTo(f)
-	}
-	check(err)
-
-	err = format.Node(f, fset, file)
-	check(err)
-
-	err = exec.Command("go", "run", "golang.org/x/tools/cmd/goimports", "-w", flags.Out).Run()
-	check(err)
+	typegen.GoFmt(flags.Out, w)
 }

@@ -171,8 +171,21 @@ func (n *fakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
 }
 
 func (n *fakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
-	n.t.Fatalf("todo query data functionality not implemented")
-	return nil
+	r, err := n.query.QueryDataByUrl(url)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainDataByEntryHash(url string, entryHash []byte) *api.APIDataResponse {
+	r, err := n.query.GetDataByEntryHash(url, entryHash)
+	require.NoError(n.t, err)
+	return r
+}
+
+func (n *fakeNode) GetChainDataSet(url string, start uint64, limit uint64, expand bool) *api.APIDataResponsePagination {
+	r, err := n.query.GetDataSetByUrl(url, start, limit, expand)
+	require.NoError(n.t, err)
+	return r
 }
 
 func (n *fakeNode) GetChainStateByTxId(txid []byte) *api.APIDataResponse {
@@ -281,9 +294,9 @@ func (n *fakeNode) GetADI(url string) *state.AdiState {
 }
 
 func (n *fakeNode) GetKeyBook(url string) *protocol.KeyBook {
-	ssg := new(protocol.KeyBook)
-	n.GetChainAs(url, ssg)
-	return ssg
+	book := new(protocol.KeyBook)
+	n.GetChainAs(url, book)
+	return book
 }
 
 func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {
