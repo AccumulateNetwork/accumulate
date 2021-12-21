@@ -75,7 +75,7 @@ func TestReceipt(t *testing.T) {
 }
 
 func TestReceiptAll(t *testing.T) {
-	const testMerkleTreeSize = 50
+	const testMerkleTreeSize = 100
 
 	db, _ := database.NewDBManager("memory", "", nil) // create an in memory database and
 	manager, _ := NewMerkleManager(db, 2)             // MerkleManager
@@ -84,14 +84,13 @@ func TestReceiptAll(t *testing.T) {
 	var rh RandHash                            // A source of random hashes
 	var mdRoots [][]byte                       // Collect all the MDRoots for each hash added
 	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
-		manager.AddHash(rh.NextList())                            // Add a hash
-		mdRoots = append(mdRoots, AM.Adh(manager.MS.GetMDRoot())) // Collect a MDRoot
+		manager.AddHash(rh.NextList())                    // Add a hash
+		mdRoots = append(mdRoots, manager.MS.GetMDRoot()) // Collect a MDRoot
 	}
-	AM.SetLock(true)
 
 	for i := 0; i < testMerkleTreeSize; i++ {
-		for j := 1; j < testMerkleTreeSize; j++ {
-			fmt.Println("--------------i,j ", i, ",", j, " ---------------")
+		for j := 0; j < testMerkleTreeSize; j++ {
+			//fmt.Println("--------------i,j ", i, ",", j, " ---------------")
 			element := rh.Next()
 			if i >= 0 && i < testMerkleTreeSize {
 				element = rh.List[i]
@@ -235,7 +234,7 @@ func TestBadgerReceipts(t *testing.T) {
 }
 
 func TestReceipt_Combine(t *testing.T) {
-	testCnt := int64(100)
+	testCnt := int64(50)
 	var m1Roots, m2Roots []Hash
 	var rh RandHash
 	var m1, m2 *MerkleManager
