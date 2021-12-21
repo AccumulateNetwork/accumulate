@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/api"
 	"strconv"
 	"time"
 
@@ -248,16 +250,12 @@ func CreateTX(sender string, args []string) (string, error) {
 	}
 	amount := args[1]
 
-	tokenSend := new(api2.TokenSend)
-	tokenSend.From = u.String()
-
 	amt, err := strconv.ParseFloat(amount, 64)
-	r := api2.TokenDeposit{}
-	r.Amount = uint64(amt * 1e8)
-	r.Url = u2.String()
-	tokenSend.To = append(tokenSend.To, r)
 
-	res, err := dispatchTxRequest("send-tokens", &tokenSend, u, si, pk)
+	tokenSend := api.NewTokenTx(types.String(u.String()),
+		api.NewTokenTxOutput(types.String(u2.String()), uint64(amt*1e8)))
+
+	res, err := dispatchTxRequest("send-tokens", tokenSend, u, si, pk)
 	if err != nil {
 		return "", err
 	}

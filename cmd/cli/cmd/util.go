@@ -489,15 +489,16 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		if err != nil {
 			amt = "unknown"
 		}
-		kbr, err := GetByChainId(ata.KeyBook[:])
+		kbr, err := resolveKeyBookUrl(ata.KeyBook[:])
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve keybook for token account query")
 		}
+
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
-		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
+		out += fmt.Sprintf("\tToken Url\t:\t%s\n", *ata.TokenUrl.String.AsString())
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", kbr.Origin)
+		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", kbr)
 
 		return out, nil
 	case types.ChainTypeIdentity.String():
@@ -507,7 +508,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 			return "", err
 		}
 
-		kb, err := resolveKeyBookChainId(adi.KeyBook[:])
+		kb, err := resolveKeyBookUrl(adi.KeyBook[:])
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve keybook for adi query")
 		}
@@ -650,7 +651,7 @@ func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
 	return &header, nil
 }
 
-func resolveKeyBookChainId(chainId []byte) (string, error) {
+func resolveKeyBookUrl(chainId []byte) (string, error) {
 	kb, err := GetByChainId(chainId)
 	book := protocol.KeyBook{}
 	err = UnmarshalQuery(kb.Data, &book)
