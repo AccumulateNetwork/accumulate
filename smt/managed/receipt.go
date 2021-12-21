@@ -141,47 +141,66 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, 
 func (r *Receipt) BuildReceipt() error {
 	height := int64(0)
 	r.MDRoot = r.Element
-	for idx := r.ElementIndex; idx < r.AnchorIndex; {
-		var hash Hash
-		var right bool
-		if (idx>>height)&1 == 1 {
-			state, _ := r.manager.GetAnyState(idx - 1)
-			hash = state.Pending[height]
-			right = false
-			r.MDRoot = hash.Combine(r.manager.MS.HashFunction, r.MDRoot)
+
+	for idx := r.ElementIndex; idx <= r.AnchorIndex; {
+		if idx&1 == 0 {
+			idx++
+			height++
 		} else {
-			next := int64(math.Pow(2, float64(height))) + idx
-			if next > r.AnchorIndex {
-				break
+			lHash, rHash, err := r.manager.GetIntermediate(idx, height)
+			if err != nil {
+				next := int64(math.Pow(2, float64(height-1)))
+				idx += next
+				continue
 			}
-			_, hRight, _ := r.manager.GetIntermediate(next, height+1)
-			right = true
-			hash = hRight
-			idx += next
-			r.MDRoot = r.MDRoot.Combine(r.manager.MS.HashFunction, hash)
+			node := new(Node)
+			r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash)
+			if height == 0 {
+				node.Right = false
+				node.Hash = lHash
+			} else {
+				node.Right = true
+				node.Hash = rHash
+			}
+			r.Nodes = append(r.Nodes, node)
+			height++
 		}
-		height++
-		node := new(Node)
-		node.Right = right
-		node.Hash = hash
-		r.Nodes = append(r.Nodes, node)
 	}
 
-	if r.AnchorIndex&1 == 0 {
+	if r.AnchorIndex == 0 {
+		r.MDRoot = r.Element
+		return nil
+	}
+
+	if r.AnchorIndex&1 == 1 && r.AnchorIndex == r.ElementIndex {
+		lHash, rHash, _ := r.manager.GetIntermediate(r.AnchorIndex, 1)
+		node := new(Node)
+		node.Right = false
+		node.Hash = lHash
+		r.Nodes = append(r.Nodes, node)
+		r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash)
+	} else {
 		state, _ := r.manager.GetAnyState(r.AnchorIndex)
 		state.Trim()
-		node := new(Node)
-		var hash Hash
-		for _, v := range state.Pending {
-			if v != nil {
+		var hash, last Hash
+		for i, v := range state.Pending {
+			if hash == nil {
 				hash = v
-				break
+				continue
+			}
+			if v != nil {
+				last = hash
+				hash = v.Combine(r.manager.MS.HashFunction, hash)
+			}
+			if int64(i) >= height-1 {
+				node := new(Node)
+				node.Right = true
+				node.Hash = last
+				r.Nodes = append(r.Nodes, node)
 			}
 		}
-		node.Hash = hash
-		node.Right = true
-		r.Nodes = append(r.Nodes, node)
-		r.MDRoot = r.MDRoot.Combine(r.manager.MS.HashFunction, hash)
+		r.MDRoot = hash
 	}
+
 	return nil
 }
