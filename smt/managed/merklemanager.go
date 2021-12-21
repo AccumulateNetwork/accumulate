@@ -303,7 +303,7 @@ func (m *MerkleManager) Get(element int64) (Hash, error) {
 // Return the last two hashes that were combined to create the local
 // Merkle Root at the given index.  The element provided must be an
 // even power of two >= 2.
-func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right []byte, err error) {
+func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right Hash, err error) {
 	hash, e := m.Get(element) // Get the element at this height
 	if e != nil {             // Error out if we can't
 		return nil, nil, e //
