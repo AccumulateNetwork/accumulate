@@ -119,8 +119,8 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 		// Make sure the key book actually exists
 		if record.Header().KeyBook != (types.Bytes32{}) {
-			ssg := new(protocol.KeyBook)
-			err = st.LoadAs(record.Header().KeyBook, ssg)
+			book := new(protocol.KeyBook)
+			err = st.LoadAs(record.Header().KeyBook, book)
 			if err != nil {
 				return fmt.Errorf("invalid key book for %q: %v", u, err)
 			}

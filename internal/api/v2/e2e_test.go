@@ -5,15 +5,16 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"net"
-	"os"
-	"runtime"
 	"testing"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	. "github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,13 +22,9 @@ import (
 )
 
 func TestEndToEnd(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
-
-	if os.Getenv("CI") == "true" {
-		t.Skip("This test consistently fails in CI")
-	}
+	acctesting.SkipCI(t, "flaky")
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
 
 	baseIP := net.ParseIP("127.1.25.1")
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
@@ -37,9 +34,8 @@ func TestEndToEnd(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
 
 	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 2, 2, 3000)
 	japi := daemons[0].Jrpc_TESTONLY()
@@ -71,8 +67,8 @@ func TestValidate(t *testing.T) {
 
 	t.Run("Lite Account Credits", func(t *testing.T) {
 		executeTx(t, japi, "add-credits", true, execParams{
-			Sponsor: liteUrl.String(),
-			Key:     liteKey,
+			Origin: liteUrl.String(),
+			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: liteUrl.String(),
 				Amount:    100,
@@ -93,8 +89,8 @@ func TestValidate(t *testing.T) {
 		adiKey = newKey([]byte(t.Name()))
 
 		executeTx(t, japi, "create-adi", true, execParams{
-			Sponsor: liteUrl.String(),
-			Key:     liteKey,
+			Origin: liteUrl.String(),
+			Key:    liteKey,
 			Payload: &IdentityCreate{
 				Url:         adiName,
 				PublicKey:   adiKey[32:],
@@ -128,4 +124,85 @@ func TestValidate(t *testing.T) {
 		}{liteUrl.String(), 10}, r)
 		require.Len(t, r.Items, 3)
 	})
+
+	dataAccountUrl := adiName + "/dataAccount"
+	t.Run("Create Data Account", func(t *testing.T) {
+		executeTx(t, japi, "create-data-account", true, execParams{
+			Origin: adiName,
+			Key:    adiKey,
+			Payload: &CreateDataAccount{
+				Url: dataAccountUrl,
+			},
+		})
+		dataAccount := NewDataAccount()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
+		assert.Equal(t, dataAccountUrl, string(dataAccount.ChainUrl))
+	})
+
+	keyPageUrl := adiName + "/page1"
+	t.Run("Create Key Page", func(t *testing.T) {
+		var keys []*KeySpecParams
+		keys = append(keys, &KeySpecParams{
+			PublicKey: adiKey,
+		})
+		executeTx(t, japi, "create-key-page", true, execParams{
+			Origin: adiName,
+			Key:    adiKey,
+			Payload: &CreateKeyPage{
+				Url:  keyPageUrl,
+				Keys: keys,
+			},
+		})
+		keyPage := NewKeyPage()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
+		assert.Equal(t, keyPageUrl, string(keyPage.ChainUrl))
+	})
+
+	keyBookUrl := adiName + "/book1"
+	t.Run("Create Key Book", func(t *testing.T) {
+		var page [][32]byte
+		pageUrl := makeUrl(t, keyPageUrl)
+		pageChainId := types.Bytes(pageUrl.ResourceChain()).AsBytes32()
+		page = append(page, pageChainId)
+		executeTx(t, japi, "create-key-book", true, execParams{
+			Origin: adiName,
+			Key:    adiKey,
+			Payload: &CreateKeyBook{
+				Url:   keyBookUrl,
+				Pages: page,
+			},
+		})
+		keyBook := NewKeyBook()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
+		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
+	})
+
+	tokenUrl := "acc://ACME"
+	tokenAccountUrl := adiName + "/account"
+	t.Run("Create Token Account", func(t *testing.T) {
+		executeTx(t, japi, "create-token-account", true, execParams{
+			Origin: adiName,
+			Key:    adiKey,
+			Payload: &TokenAccountCreate{
+				Url:        tokenAccountUrl,
+				TokenUrl:   tokenUrl,
+				KeyBookUrl: keyBookUrl,
+			},
+		})
+		tokenAccount := NewLiteTokenAccount()
+		queryAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
+		assert.Equal(t, tokenAccountUrl, string(tokenAccount.ChainUrl))
+	})
+
+	t.Run("Query Key Index", func(t *testing.T) {
+		keyIndex := &query2.ResponseKeyPageIndex{}
+		queryAs(t, japi, "query-key-index", &api.KeyPageIndexQuery{
+			UrlQuery: api.UrlQuery{
+				Url: keyPageUrl,
+			},
+			Key: adiKey,
+		}, keyIndex)
+		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
+	})
+
 }

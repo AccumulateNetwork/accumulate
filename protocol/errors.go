@@ -46,6 +46,10 @@ const (
 	CodeInvalidTxnError ErrorCode = 22
 	//CodeAddTxnError is returned when adding txn to state db fails
 	CodeAddTxnError ErrorCode = 23
+	//CodeDataUrlError is returned when a url passed to a data query fails
+	CodeDataUrlError ErrorCode = 24
+	//CodeDataEntryHashError is returned when an entry hash query fails on a data chain
+	CodeDataEntryHashError ErrorCode = 24
 )
 
 type Error struct {

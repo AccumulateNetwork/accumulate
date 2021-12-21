@@ -40,7 +40,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 
 	defaultServer := os.Getenv("ACC_API")
 	if defaultServer == "" {
-		defaultServer = "https://testnet.accumulatenetwork.io/v1"
+		defaultServer = "https://testnet.accumulatenetwork.io/v2"
 	}
 
 	flags := cmd.PersistentFlags()
@@ -55,6 +55,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(adiCmd)
 	cmd.AddCommand(bookCmd)
 	cmd.AddCommand(creditsCmd)
+	cmd.AddCommand(dataCmd)
 	cmd.AddCommand(getCmd)
 	cmd.AddCommand(keyCmd)
 	cmd.AddCommand(pageCmd)

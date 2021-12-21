@@ -95,6 +95,15 @@ func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
 	return q.direct(r).QueryUrl(url)
 }
 
+func (q *queryDispatch) QueryKeyPageIndex(url string, key []byte) (*QueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryKeyPageIndex(url, key)
+}
+
 func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 	res, err := q.queryAll(func(q *queryDirect) (*QueryResponse, error) {
 		return q.QueryChain(id)
@@ -106,7 +115,7 @@ func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
 	return res, nil
 }
 
-func (q *queryDispatch) QueryDirectory(url string, pagination *QueryPagination, queryOptions *QueryOptions) (*QueryResponse, error) {
+func (q *queryDispatch) QueryDirectory(url string, pagination QueryPagination, queryOptions QueryOptions) (*QueryResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
@@ -126,11 +135,29 @@ func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, 
 	return res, nil
 }
 
-func (q *queryDispatch) QueryTxHistory(url string, start, count int64) (*QueryMultiResponse, error) {
+func (q *queryDispatch) QueryTxHistory(url string, start, count uint64) (*QueryMultiResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
 	}
 
 	return q.direct(r).QueryTxHistory(url, start, count)
+}
+
+func (q *queryDispatch) QueryData(url string, entryHash [32]byte) (*QueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryData(url, entryHash)
+}
+
+func (q *queryDispatch) QueryDataSet(url string, pagination QueryPagination, queryOptions QueryOptions) (*QueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryDataSet(url, pagination, queryOptions)
 }
