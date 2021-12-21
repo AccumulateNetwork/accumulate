@@ -5,12 +5,11 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"net"
-	"os"
-	"runtime"
 	"testing"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -25,13 +24,9 @@ import (
 )
 
 func TestEndToEnd(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
-
-	if os.Getenv("CI") == "true" {
-		t.Skip("This test consistently fails in CI")
-	}
+	acctesting.SkipCI(t, "flaky")
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
 
 	baseIP := net.ParseIP("127.1.25.1")
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
@@ -41,9 +36,8 @@ func TestEndToEnd(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
 
 	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 2, 2, 3000)
 	japi := daemons[0].Jrpc_TESTONLY()
@@ -148,7 +142,6 @@ func TestValidate(t *testing.T) {
 	})
 
 	keyPageUrl := adiName + "/page1"
-	//var pageKey ed25519.PrivateKey
 	t.Run("Create Key Page", func(t *testing.T) {
 		var keys []*KeySpecParams
 		keys = append(keys, &KeySpecParams{
