@@ -25,29 +25,36 @@ func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) inter
 	return m.execute(ctx, req, payload)
 }
 
+func (m *JrpcMethods) ExecuteCreateIdentity(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.IdentityCreate))
+}
+
 func (m *JrpcMethods) ExecuteWith(newParams func() protocol.TransactionPayload, validateFields ...string) jsonrpc2.MethodFunc {
 	return func(ctx context.Context, params json.RawMessage) interface{} {
-		var raw json.RawMessage
-		req := new(TxRequest)
-		req.Payload = &raw
-		err := m.parse(params, req)
-		if err != nil {
-			return err
-		}
-
-		payload := newParams()
-		err = m.parse(raw, payload, validateFields...)
-		if err != nil {
-			return err
-		}
-
-		b, err := payload.MarshalBinary()
-		if err != nil {
-			return accumulateError(err)
-		}
-
-		return m.execute(ctx, req, b)
+		return m.executeWith(ctx, params, newParams(), validateFields...)
 	}
+}
+
+func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionPayload, validateFields ...string) interface{} {
+	var raw json.RawMessage
+	req := new(TxRequest)
+	req.Payload = &raw
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	err = m.parse(raw, payload, validateFields...)
+	if err != nil {
+		return err
+	}
+
+	b, err := payload.MarshalBinary()
+	if err != nil {
+		return accumulateError(err)
+	}
+
+	return m.execute(ctx, req, b)
 }
 
 func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interface{} {
