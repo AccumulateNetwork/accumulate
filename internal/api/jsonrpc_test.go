@@ -13,7 +13,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
@@ -138,7 +137,7 @@ func TestFaucet(t *testing.T) {
 
 	req := &api.APIRequestURL{}
 	req.Wait = true
-	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(acctesting.AcmeLiteAddressStdPriv(kpSponsor).String())
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -238,7 +237,7 @@ func TestTransactionHistory(t *testing.T) {
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
-	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(acctesting.AcmeLiteAddressStdPriv(kpSponsor).String())
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -300,7 +299,7 @@ func TestTransactionHistory(t *testing.T) {
 
 func TestFaucetTransactionHistory(t *testing.T) {
 	req := &api.APIRequestURL{}
-	req.URL = types.String(lite.GenerateAcmeAddress(ed25519.PublicKey{}))
+	req.URL = types.String(acctesting.AcmeLiteAddress(ed25519.PublicKey{}).String())
 	params, err := json.Marshal(&req)
 	require.NoError(t, err)
 
@@ -467,7 +466,7 @@ func TestFaucetReplay(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
-	destAccount := lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
+	destAccount := acctesting.AcmeLiteAddressStdPriv(kpSponsor).String()
 	tx := acmeapi.SendTokens{}
 	tx.From.String = types.String(protocol.FaucetWallet.Addr)
 	tx.AddToAccount(types.String(destAccount), 1000000000)
