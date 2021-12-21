@@ -3,11 +3,9 @@ package managed
 import (
 	"crypto/sha256"
 	"fmt"
-	"sync"
 )
 
 type AllowedMap struct {
-	mutex  sync.Mutex
 	hashes map[[32]byte]int
 	lock   bool
 }
@@ -17,13 +15,9 @@ type AllowedMap struct {
 // inline anywhere a Hash is used.  We hash our input so anything
 // can be put in the map, not just hashes.
 func (a AllowedMap) Chk(hash []byte) []byte {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
 	var key = sha256.Sum256(hash)
 	if !a.lock {
-		a.mutex.Unlock()
 		a.Adh(hash)
-		a.mutex.Lock()
 	}
 	if _, ok := a.hashes[key]; !ok {
 		panic(fmt.Sprintf("not a valid hash: %x", hash))
@@ -36,8 +30,6 @@ func (a AllowedMap) Chk(hash []byte) []byte {
 // Add a hash to a map so it can be allowed to be used latter.  Passes
 // back the same hash so it can be used inline.
 func (a *AllowedMap) Adh(hash []byte) []byte {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
 	if a.hashes == nil {
 		a.hashes = make(map[[32]byte]int)
 	}
@@ -51,7 +43,5 @@ func (a *AllowedMap) Adh(hash []byte) []byte {
 // SetLock
 // Lock the AllowedMap to ignore more additions to the set
 func (a *AllowedMap) SetLock(bool) {
-	a.mutex.Lock()
-	defer a.mutex.Unlock()
 	a.lock = true
 }
