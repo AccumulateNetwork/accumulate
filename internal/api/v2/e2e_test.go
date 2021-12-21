@@ -210,9 +210,8 @@ func TestValidate(t *testing.T) {
 }
 
 func TestTokenTransfer(t *testing.T) {
-	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
-		t.Skip("This test does not work well on Windows or macOS")
-	}
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
 
 	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 2, 2, 3000)
 	japi := daemons[0].Jrpc_TESTONLY()
