@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
+	"math"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -97,7 +98,7 @@ func (q *queryDirect) QueryUrl(s string) (*QueryResponse, error) {
 	}
 }
 
-func (q *queryDirect) QueryDirectory(s string, pagination *QueryPagination, opts *QueryOptions) (*QueryResponse, error) {
+func (q *queryDirect) QueryDirectory(s string, pagination QueryPagination, opts QueryOptions) (*QueryResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
@@ -132,7 +133,7 @@ func (q *queryDirect) QueryDirectory(s string, pagination *QueryPagination, opts
 	return res, nil
 }
 
-func responseDirFromProto(protoDir *protocol.DirectoryQueryResult, pagination *QueryPagination) (*DirectoryQueryResult, error) {
+func responseDirFromProto(protoDir *protocol.DirectoryQueryResult, pagination QueryPagination) (*DirectoryQueryResult, error) {
 	respDir := new(DirectoryQueryResult)
 	respDir.Entries = protoDir.Entries
 	respDir.Start = pagination.Start
@@ -228,16 +229,29 @@ query:
 	return packTxResponse(res.TxId, res.TxSynthTxIds, main, pend, pl)
 }
 
-func (q *queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiResponse, error) {
+func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*QueryMultiResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
 	}
 
+	if count == 0 {
+		// TODO Return an empty array plus the total count?
+		return nil, validatorError(errors.New("count must be greater than 0"))
+	}
+
+	if start > math.MaxInt64 {
+		return nil, errors.New("start is too large")
+	}
+
+	if count > math.MaxInt64 {
+		return nil, errors.New("count is too large")
+	}
+
 	req := new(query.RequestTxHistory)
+	req.Start = int64(start)
+	req.Limit = int64(count)
 	copy(req.ChainId[:], u.ResourceChain())
-	req.Start = start
-	req.Limit = count
 	k, v, err := q.query(req)
 	if err != nil {
 		return nil, err
@@ -254,8 +268,8 @@ func (q *queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiR
 
 	res := new(QueryMultiResponse)
 	res.Items = make([]*QueryResponse, len(txh.Transactions))
-	res.Start = uint64(start)
-	res.Count = uint64(count)
+	res.Start = start
+	res.Count = count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
 		main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)
@@ -272,7 +286,7 @@ func (q *queryDirect) QueryTxHistory(s string, start, count int64) (*QueryMultiR
 	return res, nil
 }
 
-func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, error) {
+func (q *queryDirect) QueryData(url string, entryHash [32]byte) (*QueryResponse, error) {
 
 	qr, err := q.QueryUrl(url)
 	if err != nil {
@@ -281,12 +295,7 @@ func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, e
 
 	req := new(query.RequestDataEntry)
 	req.Url = url
-
-	//test if we have an entry hash that is not zero.
-	if len(entryHash) == 32 && bytes.Compare(entryHash, req.EntryHash[:]) != 0 {
-		copy(req.EntryHash[:], entryHash)
-	}
-
+	req.EntryHash = entryHash
 	k, v, err := q.query(req)
 	if err != nil {
 		return nil, err
@@ -307,10 +316,15 @@ func (q *queryDirect) QueryData(url string, entryHash []byte) (*QueryResponse, e
 	return qr, nil
 }
 
-func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts *QueryOptions) (*QueryResponse, error) {
+func (q *queryDirect) QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*QueryResponse, error) {
 	qr, err := q.QueryUrl(url)
 	if err != nil {
 		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
+	}
+
+	if pagination.Count == 0 {
+		// TODO Return an empty array plus the total count?
+		return nil, validatorError(errors.New("count must be greater than 0"))
 	}
 
 	req := new(query.RequestDataEntrySet)
@@ -343,7 +357,7 @@ func (q *queryDirect) QueryDataSet(url string, pagination *QueryPagination, opts
 }
 
 //responseDataSetFromProto map the response structs to protocol structs, maybe someday they should be the same thing
-func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagination *QueryPagination) (*DataEntrySetQueryResponse, error) {
+func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagination QueryPagination) (*DataEntrySetQueryResponse, error) {
 	respDataSet := new(DataEntrySetQueryResponse)
 	respDataSet.Start = pagination.Start
 	respDataSet.Count = pagination.Count

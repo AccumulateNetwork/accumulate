@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/dgraph-io/badger"
@@ -75,7 +76,32 @@ func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 	d.ready = true
 	d.readyMu = new(sync.RWMutex)
 
+	// Run GC every hour
+	go d.gc()
+
 	return nil
+}
+
+func (d *DB) gc() {
+	for {
+		// GC every hour
+		time.Sleep(time.Hour)
+
+		// Still open?
+		l, err := d.lock(false)
+		if err != nil {
+			return
+		}
+
+		// Run GC if 50% space could be reclaimed
+		err = d.badgerDB.RunValueLogGC(0.5)
+		if d.logger != nil && err != nil && !errors.Is(err, badger.ErrNoRewrite) {
+			d.logger.Error("Badger GC failed", "error", err)
+		}
+
+		// Release the lock
+		l.Unlock()
+	}
 }
 
 // lock acquires a lock on the ready mutex and checks for readiness. This

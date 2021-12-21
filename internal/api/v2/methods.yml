@@ -1,0 +1,126 @@
+Version:
+  rpc: version
+  output: QueryResponse with VersionResponse
+
+Metrics:
+  rpc: metrics
+  input: MetricsQuery
+  output: QueryResponse with MetricsResponse
+
+Faucet:
+  rpc: faucet
+  input: protocol.AcmeFaucet
+  output: TxResponse
+
+Query:
+  kind: query
+  rpc: query
+  input: UrlQuery
+  output: QueryResponse with record or tx payload
+  call: QueryUrl
+  call-params: [Url]
+
+QueryDirectory:
+  kind: query
+  rpc: query-directory
+  input: DirectoryQuery
+  output: QueryResponse with DirectoryQueryResult
+  call-params: [Url, QueryPagination, QueryOptions]
+
+QueryChain:
+  kind: query
+  rpc: query-chain
+  input: ChainIdQuery
+  output: QueryResponse with record
+  call-params: [ChainId]
+
+QueryTx:
+  kind: query
+  rpc: query-tx
+  input: TxnQuery
+  output: QueryResponse with tx payload
+  call-params: [Txid, Wait]
+
+QueryTxHistory:
+  kind: query
+  rpc: query-tx-history
+  input: TxHistoryQuery
+  output: QueryMultiResponse with transactions
+  call-params: [Url, Start, Count]
+
+QueryData:
+  kind: query
+  rpc: query-data
+  input: DataEntryQuery
+  output: QueryResponse with protocol.ResponseDataEntry
+  call-params: [Url, EntryHash]
+
+QueryDataSet:
+  kind: query
+  rpc: query-data-set
+  input: DataEntrySetQuery
+  output: QueryResponse with protocol.ResponseDataEntrySet
+  call-params: [Url, QueryPagination, QueryOptions]
+
+QueryKeyPageIndex:
+  kind: query
+  rpc: query-key-index
+  input: KeyPageIndexQuery
+  output: QueryResponse with query.ResponseKeyPageIndex
+  call-params: [Url, Key]
+
+Execute:
+  rpc: execute
+  input: TxRequest
+  output: TxResponse
+
+ExecuteCreateAdi:
+  kind: execute
+  rpc: create-adi
+  input: protocol.IdentityCreate
+
+ExecuteCreateDataAccount:
+  kind: execute
+  rpc: create-data-account
+  input: protocol.CreateDataAccount
+
+ExecuteCreateKeyBook:
+  kind: execute
+  rpc: create-key-book
+  input: protocol.CreateKeyBook
+
+ExecuteCreateKeyPage:
+  kind: execute
+  rpc: create-key-page
+  input: protocol.CreateKeyPage
+
+ExecuteCreateToken:
+  kind: execute
+  rpc: create-token
+  input: protocol.CreateToken
+
+ExecuteCreateTokenAccount:
+  kind: execute
+  rpc: create-token-account
+  input: protocol.TokenAccountCreate
+
+ExecuteSendTokens:
+  kind: execute
+  rpc: send-tokens
+  input: api.SendTokens
+  validate: [From, To]
+
+ExecuteAddCredits:
+  kind: execute
+  rpc: add-credits
+  input: protocol.AddCredits
+
+ExecuteUpdateKeyPage:
+  kind: execute
+  rpc: update-key-page
+  input: protocol.UpdateKeyPage
+
+ExecuteWriteData:
+  kind: execute
+  rpc: write-data
+  input: protocol.WriteData

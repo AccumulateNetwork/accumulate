@@ -11,7 +11,6 @@ import (
 	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
@@ -31,14 +30,14 @@ func TestLiteTokenTransactions(t *testing.T) {
 	_, err = dbTx.Commit(1, time.Unix(0, 0), nil)
 	require.NoError(t, err)
 
-	sponsorAddr := lite.GenerateAcmeAddress(privKey[32:])
+	sponsorAddr := acctesting.AcmeLiteAddressStdPriv(privKey).String()
 	liteChain, err := db.GetPersistentEntry(types.GetChainIdFromChainPath(&sponsorAddr).Bytes(), false)
 	require.NoError(t, err)
 	liteAcct := new(protocol.LiteTokenAccount)
 	require.NoError(t, liteChain.As(liteAcct))
 
 	//now move some tokens around
-	destAddr := lite.GenerateAcmeAddress(destPrivKey[32:])
+	destAddr := acctesting.AcmeLiteAddressStdPriv(destPrivKey).String()
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 
 	st, err := NewStateManager(db.Begin(), gtx)
