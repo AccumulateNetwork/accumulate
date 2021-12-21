@@ -3,11 +3,10 @@ package chain
 import (
 	"context"
 	"errors"
-	"github.com/AccumulateNetwork/accumulate/networks/connections"
-	"strings"
-
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"golang.org/x/sync/errgroup"
@@ -140,10 +139,11 @@ func (d *dispatcher) Send(ctx context.Context) error {
 }
 
 func (d *dispatcher) getRouteAndBatch(u *url.URL) (connections.Route, *txBatch, error) {
-	route, err := d.ConnectionRouter.SelectRoute(u, false)
-	if route == nil && d.IsTest && strings.Contains(err.Error(), "no directory node could not be found") { // TODO remove hacks to accommodate testing code
+	if d.IsTest && protocol.IsDnUrl(u) { // TODO remove hacks to accommodate testing code
 		return nil, nil, nil
 	}
+
+	route, err := d.ConnectionRouter.SelectRoute(u, false)
 	if err != nil {
 		return nil, nil, err
 	}

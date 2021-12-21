@@ -112,9 +112,9 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 
-	bvc0 := initNodes(t, "BVC0", net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc1 := initNodes(t, "BVC1", net.ParseIP("127.0.27.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
-	bvc2 := initNodes(t, "BVC2", net.ParseIP("127.0.28.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc0 := initNodes(t, "BVN0", net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"}) // test_utils assumes BVN%d not BVC%d
+	bvc1 := initNodes(t, "BVN1", net.ParseIP("127.0.27.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc2 := initNodes(t, "BVN2", net.ParseIP("127.0.28.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
 	rpcAddrs := make([]string, 0, 3)
 	for _, bvc := range [][]*accumulated.Daemon{bvc0, bvc1, bvc2} {
 		rpcAddrs = append(rpcAddrs, bvc[0].Config.RPC.ListenAddress)
@@ -150,7 +150,8 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	case jsonrpc2.Error:
 		require.NoError(t, r)
 	case *apitypes.APIDataResponse:
-		require.NoError(t, acctesting.WaitForTxV1(query, r))
+		err := acctesting.WaitForTxV1(query, r)
+		require.NoError(t, err)
 	default:
 		require.IsType(t, (*apitypes.APIDataResponse)(nil), r)
 	}

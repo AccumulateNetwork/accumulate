@@ -29,6 +29,7 @@ type connectionRouter struct {
 	otherGroup  nodeGroup
 	bvnNameMap  map[string]bool
 	localClient *local.Local
+	isTest      bool
 }
 
 type nodeGroup struct {
@@ -50,13 +51,14 @@ type Route interface {
 	GetBatchBroadcastClient() BatchABCIBroadcastClient
 }
 
-func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
+func NewConnectionRouter(connMgr ConnectionManager, test bool) ConnectionRouter {
 	cr := &connectionRouter{
 		bvnNameMap:  createBvnNameMap(connMgr.getBVNContextList()),
 		bvnGroup:    nodeGroup{nodes: connMgr.getBVNContextList()},
 		dnGroup:     nodeGroup{nodes: connMgr.getDNContextList()},
 		flGroup:     nodeGroup{nodes: connMgr.getFNContextList()},
 		localClient: connMgr.GetLocalClient(),
+		isTest:      test,
 	}
 	otherNodes := append(append(cr.bvnGroup.nodes, cr.flGroup.nodes...)) // TODO Allow also DNs?
 	cr.otherGroup = nodeGroup{nodes: otherNodes}
@@ -64,6 +66,10 @@ func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
 }
 
 func (cr *connectionRouter) SelectRoute(adiUrl *url.URL, allowFollower bool) (Route, error) {
+	if cr.isTest && protocol.IsDnUrl(adiUrl) { // TODO remove hacks to accommodate testing code
+		return cr.GetLocalRoute()
+	}
+
 	nodeCtx, err := cr.selectNodeContext(adiUrl, allowFollower)
 	if err != nil {
 		return nil, errorCouldNotSelectNode(adiUrl, err)
@@ -159,7 +165,6 @@ func (cr *connectionRouter) lookupDirNode(group nodeGroup) (*nodeContext, error)
 		}
 		return nodeCtx, nil
 	}
-
 	return nil, dnNotFound()
 }
 

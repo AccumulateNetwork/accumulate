@@ -146,7 +146,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Create a connection manager & router
 	d.ConnMgr = connections.NewConnectionManager(&d.Config.Accumulate, d.Logger)
-	d.ConnRouter = connections.NewConnectionRouter(d.ConnMgr)
+	d.ConnRouter = connections.NewConnectionRouter(d.ConnMgr, d.IsTest)
 
 	// Create a proxy local client which we will populate with the local client
 	// after the node has been created.
