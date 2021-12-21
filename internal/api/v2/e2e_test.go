@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
-	"github.com/pingcap/errors"
 	"net"
 	"os"
 	"runtime"
@@ -14,8 +13,10 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	. "github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/assert"
@@ -229,6 +230,7 @@ func TestTokenTransfer(t *testing.T) {
 		aliceKey = newKey([]byte(t.Name()))
 		aliceUrl = makeLiteUrl(t, aliceKey, ACME)
 
+		t.Skip()
 		xr := new(api.TxResponse)
 		callApi(t, japi, "faucet", &AcmeFaucet{Url: aliceUrl.String()}, xr)
 		require.Zero(t, xr.Code, xr.Message)
@@ -245,18 +247,36 @@ func TestTokenTransfer(t *testing.T) {
 		bobKey = newKey([]byte(t.Name()))
 		bobUrl = makeLiteUrl(t, bobKey, ACME)
 
-		res := executeTx(t, japi, "add-credits", true, execParams{
-			Origin: aliceUrl.String(),
-			Key:    aliceKey,
-			Payload: &AddCredits{
-				Recipient: bobUrl.String(),
-				Amount:    100,
-			},
-		})
+		// xr := new(api.TxResponse)
+		// callApi(t, japi, "faucet", &AcmeFaucet{Url: bobUrl.String()}, xr)
+		// require.Zero(t, xr.Code, xr.Message)
+		// txWait(t, japi, xr.Txid)
 
-		account := NewLiteTokenAccount()
-		queryAs(t, japi, "query", &api.UrlQuery{Url: bobUrl.String()}, account)
-		assert.Equal(t, int64(5), account.Balance.Int64())
+		var to []*acmeapi.TokenRecipient
+		to = append(to, &acmeapi.TokenRecipient{
+			URL: types.UrlChain{
+				String: types.String(aliceUrl.String()),
+			},
+			Amount: uint64(100),
+		})
+		txParams := execParams{
+			Origin: bobUrl.String(),
+			Key:    bobKey,
+			Payload: &acmeapi.SendTokens{
+				From: types.UrlChain{
+					String: types.String(bobUrl.String()),
+				},
+				To: to,
+			},
+		}
+
+		// Ensure we see the not found error code regardless of which
+		// node on which BVN the transaction is sent to
+		for i, daemon := range daemons {
+			japi := daemon.Jrpc_TESTONLY()
+			res := executeTxFail(t, japi, "send-tokens", 1, txParams)
+			assert.Equal(t, uint64(protocol.CodeNotFound), res.Code, "Node %d (BVN %d) returned the wrong error code", i, i/2)
+		}
 	})
 
 }
