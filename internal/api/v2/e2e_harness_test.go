@@ -186,6 +186,36 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	return r
 }
 
+func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height uint64, params execParams) *api.TxResponse {
+	t.Helper()
+
+	now := time.Now()
+	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
+	tx, err := transactions.NewWith(&transactions.SignatureInfo{
+		URL:           params.Origin,
+		KeyPageIndex:  params.PageIndex,
+		KeyPageHeight: height,
+		Nonce:         nonce,
+	}, func(hash []byte) (*transactions.ED25519Sig, error) {
+		sig := new(transactions.ED25519Sig)
+		return sig, sig.Sign(nonce, params.Key, hash)
+	}, params.Payload)
+	require.NoError(t, err)
+
+	req := new(api.TxRequest)
+	req.Origin = params.Origin
+	req.Signer.PublicKey = params.Key[32:]
+	req.Signer.Nonce = nonce
+	req.Signature = tx.Signature[0].Signature
+	req.KeyPage.Index = params.PageIndex
+	req.KeyPage.Height = height
+	req.Payload = params.Payload
+
+	r := new(api.TxResponse)
+	callApi(t, japi, method, req, r)
+	return r
+}
+
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
 
