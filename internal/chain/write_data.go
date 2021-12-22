@@ -41,6 +41,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 	// produced the data entry
 
 	sw := protocol.SegWitDataEntry{}
+	copy(sw.Cause[:], tx.TransactionHash())
 	copy(sw.EntryHash[:], body.Entry.Hash())
 	sw.EntryUrl = st.Origin.Header().GetChainUrl()
 
