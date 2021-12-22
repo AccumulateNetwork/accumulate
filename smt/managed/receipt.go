@@ -73,7 +73,7 @@ func (r *Receipt) Validate() bool {
 
 // Copy
 // Make a copy of this receipt
-func (r Receipt) Copy() *Receipt {
+func (r *Receipt) Copy() *Receipt {
 	nr := new(Receipt)
 	nr.Element = append([]byte{}, r.Element...)
 	nr.Anchor = append([]byte{}, r.Anchor...)
