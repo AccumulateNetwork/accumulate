@@ -6,9 +6,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
 func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
@@ -35,9 +33,9 @@ func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
 	var payload protocol.TransactionPayload
 	switch typ := unmarshalTxType(b); typ {
 	case types.TxTypeSendTokens:
-		payload = new(api.SendTokens)
+		payload = new(protocol.SendTokens)
 	case types.TxTypeSyntheticDepositTokens:
-		payload = new(synthetic.TokenTransactionDeposit)
+		payload = new(protocol.SyntheticDepositTokens)
 	case types.TxTypeCreateIdentity:
 		payload = new(protocol.IdentityCreate)
 	case types.TxTypeCreateToken:
