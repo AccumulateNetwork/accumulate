@@ -250,7 +250,10 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		case <-c.stop:
 			return
 
-		case sub := <-c.txCh:
+		case sub, ok := <-c.txCh:
+			if !ok {
+				return
+			}
 			queue = append(queue, sub)
 			continue
 
@@ -269,7 +272,10 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		case <-c.stop:
 			return
 
-		case sub := <-c.txCh:
+		case sub, ok := <-c.txCh:
+			if !ok {
+				return
+			}
 			queue = append(queue, sub)
 			goto collect
 
