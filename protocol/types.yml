@@ -226,6 +226,8 @@ CreateDataAccount:
 SegWitDataEntry:
   kind: tx
   fields:
+    - name: Cause
+      type: chain
     - name: EntryUrl
       type: string
       is-url: true
@@ -276,12 +278,16 @@ BurnTokens:
 SyntheticWriteData:
   kind: tx
   fields:
+  - name: Cause
+    type: chain
   - name: Data
     type: bytes
 
 SyntheticBurnTokens:
   kind: tx
   fields:
+    - name: Cause
+      type: chain
     - name: Amount
       type: bigint
 
@@ -406,3 +412,40 @@ ResponseDataEntrySet:
         marshal-as: reference
     - name: Total
       type: uvarint
+
+SendTokens:
+  kind: tx
+  fields:
+    - name: Hash
+      type: chain
+      optional: true
+    - name: Meta
+      type: rawJson
+      optional: true
+    - name: To
+      type: slice
+      slice:
+        type: TokenRecipient
+        marshal-as: reference
+        pointer: true
+
+TokenRecipient:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: Amount
+      type: uvarint
+
+SyntheticDepositTokens:
+  kind: tx
+  fields:
+    - name: Cause
+      type: chain
+    - name: Token
+      type: string
+      is-url: true
+    - name: Amount
+      type: bigint
+    # - name: Metadata
+    #   type: rawJson

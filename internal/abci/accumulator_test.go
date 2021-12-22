@@ -56,10 +56,7 @@ func (s *AccumulatorTestSuite) TestCheckTx() {
 
 	s.Run("Passes valid TX to chain", func() {
 		//build a valid transaction
-		_, origin, _ := ed25519.GenerateKey(nil)
-		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(origin)
-		_ = destAddress
-		_ = destPrivKey
+		_, _, tx, err := testing2.BuildTestSynthDepositGenTx()
 
 		s.Require().NoError(err)
 
@@ -105,10 +102,7 @@ func (s *AccumulatorTestSuite) TestDeliverTx() {
 
 	s.Run("Passes valid TX to chain", func() {
 		//build a valid transaction
-		_, origin, _ := ed25519.GenerateKey(nil)
-		destAddress, destPrivKey, tx, err := testing2.BuildTestSynthDepositGenTx(origin)
-		_ = destAddress
-		_ = destPrivKey
+		_, _, tx, err := testing2.BuildTestSynthDepositGenTx()
 
 		s.Require().NoError(err)
 
