@@ -52,7 +52,14 @@ func (m *MerkleManager) AddHash(hash Hash) {
 			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	}
+}
 
+// EndBlock
+// End a block, which writes all pending key/values to the database.
+// Returns the Merkle Dag Root for the merkle tree
+func (m *MerkleManager) EndBlock() (MDRoot Hash) {
+	m.Manager.EndBatch()
+	return m.MS.GetMDRoot()
 }
 
 // GetElementIndex
@@ -242,44 +249,45 @@ func (m *MerkleManager) GetState(element int64) *MerkleState {
 // We only store the state at MarkPoints.  This function computes a missing
 // state even if one isn't stored for a particular element.
 func (m *MerkleManager) GetAnyState(element int64) (ms *MerkleState, err error) {
-	if ms = m.GetState(element); ms != nil { //              Shoot for broke. Return a state if it is in the db
+	if ms = m.GetState(element); ms != nil { //          Shoot for broke. Return a state if it is in the db
 		return ms, nil
 	}
-	if element >= m.GetElementCount() { //                   Check to make sure element is not outside bounds
+	if element >= m.GetElementCount() { //               Check to make sure element is not outside bounds
 		return nil, errors.New("element out of range")
 	}
-	previousMarkIdx := element&(^m.MarkMask) - 1 //          Calculate the index of the prior markpoint
-	currentState := m.GetState(previousMarkIdx)  //           Use state at the prior mark point to compute what we need
-	if previousMarkIdx < 0 {
-		currentState = new(MerkleState)
-		currentState.InitSha256()
+	MIPrev := element&(^m.MarkMask) - 1 //               Calculate the index of the prior markpoint
+	cState := m.GetState(MIPrev)        //               Use state at the prior mark point to compute what we need
+	if MIPrev < 0 {
+		cState = new(MerkleState)
+		cState.InitSha256()
 	}
-	if currentState == nil { //           Should be in the database.
-		return nil, errors.New("should have a state for all elements(1)")
+	if cState == nil { //                                Should be in the database.
+		return nil, errors.New( //                        Report error if it isn't in the database'
+			"should have a state for all elements(1)")
 	}
-	currentState.HashList = currentState.HashList[:0] //     element is past the previous mark, so clear the HashList
+	cState.HashList = cState.HashList[:0] //             element is past the previous mark, so clear the HashList
 
-	nextMarkIdx := element&(^m.MarkMask) - 1 + m.MarkFreq // Calculate the following mark point
-	var nextMark *MerkleState                             //
-	if nextMarkIdx >= m.GetElementCount() {               //           If past the end of the chain, then
-		if nextMark, err = m.GetChainState(m.key); err != nil { //      read the chain state instead
-			return nil, err //                                           Should be in the database
+	MINext := element&(^m.MarkMask) - 1 + m.MarkFreq //            Calculate the following mark point
+	var NMark *MerkleState                           //
+	if MINext >= m.GetElementCount() {               //             If past the end of the chain, then
+		if NMark, err = m.GetChainState(m.key); err != nil { //        read the chain state instead
+			return nil, err //                                        Should be in the database
 		}
 	} else {
-		if nextMark = m.GetState(nextMarkIdx); nextMark == nil { // Read the mark point
+		if NMark = m.GetState(MINext); NMark == nil { //             Read the mark point
 			return nil, errors.New("mark not found in the database")
 		}
 	}
-	for i, v := range nextMark.HashList { //                  Now iterate and add to the currentState until the
-		if int64(i) > element { //                               loop adds the element
+	for _, v := range NMark.HashList { //                           Now iterate and add to the cState
+		if element+1 == cState.Count { //                              until the loop adds the element
 			break
 		}
-		currentState.AddToMerkleTree(v)
+		cState.AddToMerkleTree(v)
 	}
-	if int64(len(currentState.HashList)) == m.MarkFreq { //   States that progress from the previous mark to the end
-		currentState.HashList = currentState.HashList[:0] //     of the mark do not have any elements in their HashList
+	if cState.Count&m.MarkMask == 0 { //                           If we progress out of the mark set,
+		cState.HashList = cState.HashList[:0] //                       start over collecting hashes.
 	}
-	return currentState, nil
+	return cState, nil
 }
 
 // Get the nth leaf node
@@ -292,14 +300,33 @@ func (m *MerkleManager) Get(element int64) (Hash, error) {
 	return Hash(data).Copy(), nil
 }
 
-// GetNext
-// Get the next hash to be added to a state at this height
-func (m *MerkleManager) GetNext(element int64) (hash Hash) {
-	data, err := m.Manager.Get(m.key.Append("NextElement", element))
-	if err != nil {
-		return nil
+// GetIntermediate
+// Return the last two hashes that were combined to create the local
+// Merkle Root at the given index.  The element provided must be odd,
+// and the Pending List must be fully populated up to height specified.
+func (m *MerkleManager) GetIntermediate(element, height int64) (Left, Right Hash, err error) {
+	hash, e := m.Get(element) // Get the element at this height
+	if e != nil {             // Error out if we can't
+		return nil, nil, e //
+	} //
+	s, e2 := m.GetAnyState(element - 1) // Get the state before the state we want
+	if e2 != nil {                      // If the element doesn't exist, that's a problem
+		return nil, nil, e2 //
+	} //
+	s.HashFunction = m.MS.HashFunction // Get the hash function
+	s.PadPending()                     // Pad Pending with a nil to remove corner cases
+	for i, v := range s.Pending {      // Adding the hash is like incrementing a variable
+		if v == nil { //               Look for an empty slot; should not encounter one
+			return nil, nil, fmt.Errorf("should not encounter a nil at %d height %d", element, height)
+		}
+		if i+1 == int(height) { // Found the height
+			Left = v.Copy()         // Get the left and right
+			Right = hash.Copy()     //
+			return Left, Right, nil // return them
+		}
+		hash = v.Combine(s.HashFunction, hash) // If this slot isn't empty, combine the hash with the slot
 	}
-	return Hash(data).Copy()
+	return nil, nil, fmt.Errorf("no values found at height %d", height)
 }
 
 // AddHashString
