@@ -12,8 +12,10 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	. "github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
+	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/assert"
@@ -203,6 +205,51 @@ func TestValidate(t *testing.T) {
 			Key: adiKey,
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
+	})
+
+}
+
+func TestTokenTransfer(t *testing.T) {
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
+
+	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 2, 2, 3000)
+
+	var aliceKey ed25519.PrivateKey
+	var aliceUrl *url.URL
+	var bobKey ed25519.PrivateKey
+	var bobUrl *url.URL
+	t.Run("Send Token", func(t *testing.T) {
+		bobKey = newKey([]byte(t.Name()))
+		bobUrl = makeLiteUrl(t, bobKey, ACME)
+		aliceKey = newKey([]byte(t.Name()))
+		aliceUrl = makeLiteUrl(t, aliceKey, ACME)
+
+		var to []*acmeapi.TokenRecipient
+		to = append(to, &acmeapi.TokenRecipient{
+			URL: types.UrlChain{
+				String: types.String(aliceUrl.String()),
+			},
+			Amount: uint64(100),
+		})
+		txParams := execParams{
+			Origin: bobUrl.String(),
+			Key:    bobKey,
+			Payload: &acmeapi.SendTokens{
+				From: types.UrlChain{
+					String: types.String(bobUrl.String()),
+				},
+				To: to,
+			},
+		}
+
+		// Ensure we see the not found error code regardless of which
+		// node on which BVN the transaction is sent to
+		for i, daemon := range daemons {
+			japi := daemon.Jrpc_TESTONLY()
+			res := executeTxFail(t, japi, "send-tokens", 1, txParams)
+			assert.Equal(t, uint64(protocol.CodeNotFound), res.Code, "Node %d (BVN %d) returned the wrong error code", i, i/2)
+		}
 	})
 
 }
