@@ -231,13 +231,13 @@ func GetUrl(url string) (*api2.QueryResponse, error) {
 	return &res, nil
 }
 
-func dispatchTxRequest(action string, payload interface{}, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	dataBinary, err := payload.(encoding.BinaryMarshaler).MarshalBinary()
+	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
