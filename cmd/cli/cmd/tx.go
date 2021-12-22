@@ -11,8 +11,7 @@ import (
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -248,14 +247,18 @@ func CreateTX(sender string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid receiver url %s, %v", args[0], err)
 	}
+
 	amount := args[1]
-
 	amt, err := strconv.ParseFloat(amount, 64)
+	if err != nil {
+		return "", fmt.Errorf("invalid amount %q: %v", amount, err)
+	}
 
-	tokenSend := api.NewTokenTx(types.String(u.String()),
-		api.NewTokenTxOutput(types.String(u2.String()), uint64(amt*1e8)))
+	// TODO Fetch the precision instead of hard-coding it
+	send := new(protocol.SendTokens)
+	send.AddRecipient(u2, uint64(amt*protocol.AcmePrecision))
 
-	res, err := dispatchTxRequest("send-tokens", tokenSend, u, si, pk)
+	res, err := dispatchTxRequest("send-tokens", send, u, si, pk)
 	if err != nil {
 		return "", err
 	}

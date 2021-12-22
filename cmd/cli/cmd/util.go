@@ -19,7 +19,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 )
@@ -232,13 +231,13 @@ func GetUrl(url string) (*api2.QueryResponse, error) {
 	return &res, nil
 }
 
-func dispatchTxRequest(action string, payload interface{}, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	dataBinary, err := payload.(encoding.BinaryMarshaler).MarshalBinary()
+	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -591,26 +590,25 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 			if err != nil {
 				amt = "unknown"
 			}
-			out += fmt.Sprintf("Send %s from %s to %s\n", amt, *tx.From.AsString(), tx.ToAccount[i].URL.String)
+			out += fmt.Sprintf("Send %s from %s to %s\n", amt, *tx.From.AsString(), tx.ToAccount[i].URL)
 			out += fmt.Sprintf("  - Synthetic Transaction : %x\n", tx.ToAccount[i].SyntheticTxId)
 		}
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
 	case types.TxTypeSyntheticDepositTokens.String():
-		deposit := synthetic.TokenTransactionDeposit{}
+		deposit := new(protocol.SyntheticDepositTokens)
 		err := UnmarshalQuery(res.Data, &deposit)
 		if err != nil {
 			return "", err
 		}
 
 		out := "\n"
-		amt, err := formatAmount(*deposit.TokenUrl.AsString(), &deposit.DepositAmount.Int)
+		amt, err := formatAmount(deposit.Token, &deposit.Amount)
 		if err != nil {
 			amt = "unknown"
 		}
-		out += fmt.Sprintf("Receive %s from %s to %s\n", amt, *deposit.FromUrl.AsString(),
-			*deposit.ToUrl.AsString())
+		out += fmt.Sprintf("Receive %s to %s (cause: %X)\n", amt, res.Origin, deposit.Cause)
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil

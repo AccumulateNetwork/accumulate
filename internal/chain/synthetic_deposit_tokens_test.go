@@ -1,7 +1,6 @@
 package chain_test
 
 import (
-	"crypto/ed25519"
 	"fmt"
 	"testing"
 
@@ -17,9 +16,7 @@ import (
 func TestSynthTokenDeposit_Lite(t *testing.T) {
 	tokenUrl := protocol.AcmeUrl().String()
 
-	_, privKey, _ := ed25519.GenerateKey(nil)
-
-	_, _, gtx, err := testing2.BuildTestSynthDepositGenTx(privKey)
+	_, _, gtx, err := testing2.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	db := new(state.StateDB)
@@ -28,7 +25,7 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	st, err := NewStateManager(db.Begin(), gtx)
 	require.ErrorIs(t, err, storage.ErrNotFound)
 
-	err = SyntheticTokenDeposit{}.Validate(st, gtx)
+	err = SyntheticDepositTokens{}.Validate(st, gtx)
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account

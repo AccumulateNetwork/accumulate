@@ -1,8 +1,8 @@
 package managed
 
 import (
+	"bytes"
 	"crypto/sha256"
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -11,8 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 	"github.com/dustin/go-humanize"
+	"github.com/stretchr/testify/require"
 )
 
 func GetHash(i int) Hash {
@@ -25,7 +27,7 @@ func TestReceipt(t *testing.T) {
 	dbManager := new(database.Manager)
 	_ = dbManager.Init("memory", "", nil)
 	// Create a MerkleManager for the memory database
-	manager, err := NewMerkleManager(dbManager, 4)
+	manager, err := NewMerkleManager(dbManager, 2)
 	if err != nil {
 		t.Fatalf("did not create a merkle manager: %v", err)
 	}
@@ -62,8 +64,8 @@ func TestReceipt(t *testing.T) {
 	element := GetHash(0)
 	anchor := GetHash(3)
 
-	r := GetReceipt(manager, element, anchor)
-	if r == nil {
+	r, err1 := GetReceipt(manager, element, anchor)
+	if err1 != nil {
 		t.Fatal("Failed to generate receipt")
 	}
 	fmt.Println(r.String())
@@ -73,28 +75,35 @@ func TestReceipt(t *testing.T) {
 }
 
 func TestReceiptAll(t *testing.T) {
-	const testMerkleTreeSize = 500
+	cnt := 0
+	const testMerkleTreeSize = 150
 
-	// Create a memory based database
-	dbManager := new(database.Manager)
-	_ = dbManager.Init("memory", "", nil)
-	// Create a MerkleManager for the memory database
-	manager, err := NewMerkleManager(dbManager, 4)
-	if err != nil {
-		t.Fatalf("did not create a merkle manager: %v", err)
+	db, _ := database.NewDBManager("memory", "", nil) // create an in memory database and
+	manager, _ := NewMerkleManager(db, 2)             // MerkleManager
+
+	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
+	var rh RandHash                            // A source of random hashes
+	var mdRoots [][]byte                       // Collect all the MDRoots for each hash added
+	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
+		manager.AddHash(rh.NextList())                    // Add a hash
+		mdRoots = append(mdRoots, manager.MS.GetMDRoot()) // Collect a MDRoot
 	}
-	// populate the database
+
 	for i := 0; i < testMerkleTreeSize; i++ {
-		v := GetHash(i)
-		manager.AddHash(v)
-	}
+		for j := 0; j < testMerkleTreeSize; j++ {
+			//fmt.Println("--------------i,j ", i, ",", j, " ---------------")
+			element := rh.Next()
+			if i >= 0 && i < testMerkleTreeSize {
+				element = rh.List[i]
+			}
+			anchor := rh.Next()
+			if j >= 0 && j < testMerkleTreeSize {
+				anchor = rh.List[j]
+			}
 
-	for i := -10; i < testMerkleTreeSize+10; i++ {
-		for j := -10; j < testMerkleTreeSize+10; j++ {
-			element := GetHash(i)
-			anchor := GetHash(j)
+			cnt++
+			r, err := GetReceipt(manager, element, anchor)
 
-			r := GetReceipt(manager, element, anchor)
 			if i < 0 || i >= testMerkleTreeSize || //       If i is out of range
 				j < 0 || j >= testMerkleTreeSize || //        Or j is out of range
 				j < i { //                                    Or if the anchor is before the element
@@ -102,20 +111,24 @@ func TestReceiptAll(t *testing.T) {
 					t.Fatal("Should not be able to generate a receipt")
 				}
 			} else {
+				require.Nilf(t, err, "Failed to get a receipt: %v", err)
 				if r == nil {
 					t.Fatal("Failed to generate receipt", i, j)
 				}
 				if !r.Validate() {
-					t.Fatal("Receipt fails for element ", i, " anchor ", j)
+					t.Errorf("Receipt fails for element/anchor [%d %d]\n", i, int64(j))
 				}
+				//require.Truef(t, bytes.Equal(r.MDRoot, mdRoots[j]),
+				//	"Anchors should match %d %d got %x expected %x", i, j, r.MDRoot[:4], mdRoots[j][:4])
 			}
 		}
 	}
+	fmt.Println("Ran ", cnt, " tests")
 }
 
 // GetManager
 // Get a manager, and build it with the given MarkPower.  If temp == true
-func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (manager *MerkleManager, dir string) {
+func GetManager(MarkPower int64, temp bool, databaseName string, t *testing.T) (manager *MerkleManager, dir string) {
 
 	// Create a memory based database
 	dbManager := new(database.Manager)
@@ -136,7 +149,7 @@ func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (ma
 
 	// Create a MerkleManager for the memory database
 	var err error
-	manager, err = NewMerkleManager(dbManager, 2)
+	manager, err = NewMerkleManager(dbManager, MarkPower)
 	if err != nil {
 		t.Fatalf("did not create a merkle manager: %v", err)
 	}
@@ -145,17 +158,10 @@ func GetManager(MarkPower int, temp bool, databaseName string, t *testing.T) (ma
 
 func PopulateDatabase(manager *MerkleManager, treeSize int64) {
 	// populate the database
-	start := time.Now()
 	startCount := manager.MS.Count
 	for i := startCount; i < treeSize; i++ {
 		v := GetHash(int(i))
 		manager.AddHash(v)
-		if i%100000 == 0 {
-			seconds := time.Now().Sub(start).Seconds() + 1
-			fmt.Println(
-				"Entries added ", humanize.Comma(i),
-				" at ", (i-startCount)/int64(seconds), " per second.")
-		}
 	}
 }
 
@@ -173,8 +179,8 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 				element := GetHash(i)
 				anchor := GetHash(j)
 
-				r := GetReceipt(manager, element, anchor)
-				if i < 0 || i >= int(manager.MS.Count) || //       If i is out of range
+				r, _ := GetReceipt(manager, element, anchor)
+				if i < 0 || i >= int(manager.MS.Count) || //       If (i) is out of range
 					j < 0 || j >= int(manager.MS.Count) || //        Or j is out of range
 					j < i { //                                    Or if the anchor is before the element
 					if r != nil { //                            then you should not be able to generate a receipt
@@ -230,19 +236,65 @@ func TestBadgerReceipts(t *testing.T) {
 
 }
 
-var badgerReceiptsBig = flag.Bool("badger-receipts-big", false, "Run TestBadgerReceiptsBig")
+func TestReceipt_Combine(t *testing.T) {
+	testCnt := int64(50)
+	var m1Roots, m2Roots []Hash
+	var rh RandHash
+	var m1, m2 *MerkleManager
+	db, err := database.NewDBManager("memory", "", nil)
+	require.NoError(t, err, "should be able to create a new database manager")
+	m1, err = NewMerkleManager(db, 2)
+	require.NoError(t, err, "should be able to create a new merkle tree manager")
+	err = m1.SetKey(storage.MakeKey("m1"))
+	require.NoError(t, err, "should be able to set a key")
+	m2, err = NewMerkleManager(db, 2)
+	require.NoError(t, err, "should be able to create a new merkle tree manager")
+	err = m2.SetKey(storage.MakeKey("m2"))
+	require.NoError(t, err, "should be able to set a key")
 
-func TestBadgerReceiptsBig(t *testing.T) {
-
-	if !*badgerReceiptsBig {
-		t.Skip("This test takes a long time to run")
+	for i := int64(0); i < testCnt; i++ {
+		m1.AddHash(rh.NextList())
+		root1 := m1.EndBlock()
+		m1Roots = append(m1Roots, root1)
+		m2.AddHash(root1)
+		root2 := m2.EndBlock()
+		m2Roots = append(m2Roots, root2)
 	}
+	for i := int64(0); i < testCnt; i++ {
+		for j := i; j < testCnt; j++ {
+			element, _ := m1.Get(i)
+			anchor, _ := m1.Get(j)
+			r, _ := GetReceipt(m1, element, anchor)
+			state, _ := m1.GetAnyState(j)
+			mdRoot := state.GetMDRoot()
 
-	// Don't remove the database (it's not temp)
-	manager, _ := GetManager(2, false, "40million", t)
-
-	PopulateDatabase(manager, 1000000*40) // Create a 40 million element Merkle Tree
-
-	GenerateReceipts(manager, 1500000, t)
+			require.Truef(t, bytes.Equal(r.MDRoot, mdRoot), "m1 MDRoot not right %d %d", i, j)
+			element, _ = m2.Get(i)
+			anchor, _ = m2.Get(j)
+			r, _ = GetReceipt(m2, element, anchor)
+			state, _ = m2.GetAnyState(j)
+			mdRoot = state.GetMDRoot()
+			require.Truef(t, bytes.Equal(r.MDRoot, mdRoot), "m2 MDRoot not right %d %d", i, j)
+		}
+	}
+	for i := int64(0); i < testCnt; i++ {
+		for j := i + 1; j < testCnt; j++ {
+			element, _ := m1.Get(i)
+			anchor, _ := m1.Get(j)
+			r1, _ := GetReceipt(m1, element, anchor)
+			require.Truef(t, r1.Validate(), "receipt failed %d %d", i, j)
+			require.NotNilf(t, r1, "test case i %d j %d failed to create r1", i, j)
+			for k := j; k < testCnt; k++ {
+				element, _ = m2.Get(j)
+				anchor, _ = m2.Get(k)
+				r2, _ := GetReceipt(m2, element, anchor)
+				require.Truef(t, r2.Validate(), "receipt failed %d %d", i, j, k)
+				require.NotNilf(t, r2, "test case i %d j %d k %d failed to create r2", i, j, k)
+				r3, err := r1.Combine(r2)
+				require.NoErrorf(t, err, "no error expected combining receipts %d %d %d", i, j, k)
+				require.Truef(t, r3.Validate(), "combined receipt failed. %d %d %d", i, j, k)
+			}
+		}
+	}
 
 }

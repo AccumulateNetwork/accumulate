@@ -12,6 +12,8 @@ func resolveType(field *typegen.Field, forNew bool) string {
 	switch field.Type {
 	case "bytes":
 		return "[]byte"
+	case "rawJson":
+		return "json.RawMessage"
 	case "bigint":
 		return "big.Int"
 	case "uvarint":
@@ -102,7 +104,7 @@ func areEqual(w *bytes.Buffer, field *typegen.Field, varName, otherName string) 
 	switch field.Type {
 	case "bool", "string", "chain", "uvarint", "varint", "duration", "time":
 		expr = "%s == %s"
-	case "bytes":
+	case "bytes", "rawJson":
 		expr = "bytes.Equal(%s, %s)"
 	case "bigint":
 		if field.Pointer {
@@ -156,12 +158,17 @@ func areEqual(w *bytes.Buffer, field *typegen.Field, varName, otherName string) 
 }
 
 func binarySize(w *bytes.Buffer, field *typegen.Field, varName string) error {
+	typ := field.Type
+
 	var expr string
-	switch field.Type {
+	switch typ {
+	case "rawJson":
+		typ = "bytes"
+		fallthrough
 	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-		expr = methodName(field.Type, "BinarySize") + "(%s)"
+		expr = methodName(typ, "BinarySize") + "(%s)"
 	case "bigint", "chain":
-		expr = methodName(field.Type, "BinarySize") + "(&%s)"
+		expr = methodName(typ, "BinarySize") + "(&%s)"
 	case "slice":
 		expr = "encoding.UvarintBinarySize(uint64(len(%s)))"
 	default:
@@ -174,7 +181,7 @@ func binarySize(w *bytes.Buffer, field *typegen.Field, varName string) error {
 	expr = fmt.Sprintf(expr, varName)
 	fmt.Fprintf(w, "\tn += %s\n\n", expr)
 
-	if field.Type != "slice" {
+	if typ != "slice" {
 		fmt.Fprintf(w, "\n")
 		return nil
 	}
@@ -189,13 +196,18 @@ func binarySize(w *bytes.Buffer, field *typegen.Field, varName string) error {
 }
 
 func binaryMarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName string, errArgs ...string) error {
+	typ := field.Type
+
 	var expr string
 	var canErr bool
-	switch field.Type {
+	switch typ {
+	case "rawJson":
+		typ = "bytes"
+		fallthrough
 	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-		expr, canErr = methodName(field.Type, "MarshalBinary")+"(%s)", false
+		expr, canErr = methodName(typ, "MarshalBinary")+"(%s)", false
 	case "bigint", "chain":
-		expr, canErr = methodName(field.Type, "MarshalBinary")+"(&%s)", false
+		expr, canErr = methodName(typ, "MarshalBinary")+"(&%s)", false
 	case "slice":
 		expr, canErr = "encoding.UvarintMarshalBinary(uint64(len(%s)))", false
 	default:
@@ -213,7 +225,7 @@ func binaryMarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName 
 		fmt.Fprintf(w, "\tbuffer.Write(%s)\n", expr)
 	}
 
-	if field.Type != "slice" {
+	if typ != "slice" {
 		fmt.Fprintf(w, "\n")
 		return nil
 	}
@@ -229,13 +241,18 @@ func binaryMarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName 
 }
 
 func binaryUnmarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName string, errArgs ...string) error {
+	typ := field.Type
+
 	var expr, size, sliceName string
 	var inPlace bool
-	switch field.Type {
+	switch typ {
+	case "rawJson":
+		typ = "bytes"
+		fallthrough
 	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-		expr, size, inPlace = methodName(field.Type, "UnmarshalBinary")+"(data)", methodName(field.Type, "BinarySize")+"(%s)", false
+		expr, size, inPlace = methodName(typ, "UnmarshalBinary")+"(data)", methodName(typ, "BinarySize")+"(%s)", false
 	case "bigint", "chain":
-		expr, size, inPlace = methodName(field.Type, "UnmarshalBinary")+"(data)", methodName(field.Type, "BinarySize")+"(&%s)", false
+		expr, size, inPlace = methodName(typ, "UnmarshalBinary")+"(data)", methodName(typ, "BinarySize")+"(&%s)", false
 	case "slice":
 		sliceName, varName = varName, "len"+field.Name
 		fmt.Fprintf(w, "var %s uint64\n", varName)
@@ -252,14 +269,14 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errNam
 	if inPlace {
 		expr = fmt.Sprintf(expr, varName)
 		fmt.Fprintf(w, "\tif err := %s; err != nil { return %s }\n", expr, err)
-	} else if field.Type == "bigint" {
+	} else if typ == "bigint" {
 		fmt.Fprintf(w, "\tif x, err := %s; err != nil { return %s } else { %s.Set(x) }\n", expr, err, varName)
 	} else {
 		fmt.Fprintf(w, "\tif x, err := %s; err != nil { return %s } else { %s = x }\n", expr, err, varName)
 	}
 	fmt.Fprintf(w, "\tdata = data[%s:]\n\n", size)
 
-	if field.Type != "slice" {
+	if typ != "slice" {
 		return nil
 	}
 

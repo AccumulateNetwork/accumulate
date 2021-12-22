@@ -5,9 +5,7 @@ import (
 	"encoding"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/suite"
@@ -71,35 +69,4 @@ func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, bod
 	}, body)
 	s.Require().NoError(err)
 	return tx
-}
-
-func (s *Suite) parseUrl(str string) *url.URL {
-	u, err := url.Parse(str)
-	s.Require().NoError(err)
-	return u
-}
-
-func (s *Suite) liteUrl(key tmed25519.PrivKey) *url.URL {
-	u, err := protocol.LiteAddress(key.PubKey().Bytes(), protocol.ACME)
-	s.Require().NoError(err)
-	return u
-}
-
-func (s *Suite) deposit(sponsor, recipient tmed25519.PrivKey) {
-	tx, err := testing.CreateFakeSyntheticDepositTx(sponsor, recipient)
-	s.Require().NoError(err)
-	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.TransactionHash())
-}
-
-func (s *Suite) createADI(sponsor *url.URL, sponsorKey tmed25519.PrivKey, nonce uint64, adi string, adiKey tmed25519.PrivKey) {
-	ic := new(protocol.IdentityCreate)
-	ic.Url = adi
-	ic.PublicKey = adiKey.PubKey().Bytes()
-	ic.KeyBookName = "key0"
-	ic.KeyPageName = "key0-0"
-
-	tx := s.newTx(sponsor, sponsorKey, nonce, ic)
-	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.TransactionHash())
 }

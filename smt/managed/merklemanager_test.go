@@ -14,7 +14,7 @@ import (
 )
 
 func TestMerkleManager_GetChainState(t *testing.T) {
-	const testnum = 100
+	const numTests = 100
 	var randHash RandHash
 	dbm, e1 := database.NewDBManager("memory", "", nil)
 	require.NoError(t, e1, "should be able to open a database")
@@ -29,7 +29,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	require.True(t, head.Equal(m.MS), "chainstate should be loadable")
 
 	var States []*MerkleState
-	for i := 0; i < testnum; i++ {
+	for i := 0; i < numTests; i++ {
 		m.AddHash(randHash.Next())
 		m.Manager.EndBatch()
 		mState, err := m.MS.Marshal()
@@ -50,7 +50,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 	var randHash RandHash
 	dbm, e1 := database.NewDBManager("memory", "", nil)
 	require.NoError(t, e1, "should be able to open a database")
-	m, e2 := NewMerkleManager(dbm, 8)
+	m, e2 := NewMerkleManager(dbm, 2)
 	require.NoError(t, e2, "should be able to open a database")
 	var States []*MerkleState
 	for i := 0; i < testnum; i++ {
@@ -62,6 +62,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 		if err != nil {
 			state, err = m.GetAnyState(i)
 		}
+		require.Truef(t, state.Count == i+1, "state count %d does not match %d", state.Count, i)
 		require.NoErrorf(t, err, "%d all elements should have a state: %v", i, err)
 		if !state.Equal(States[i]) {
 			fmt.Println("i=", i)
@@ -168,4 +169,105 @@ func TestMerkleManager(t *testing.T) {
 		}
 
 	}
+}
+
+func GenerateTestData(prt bool) [10][]Hash {
+	spaces := func(i int) {
+		n := int(math.Pow(2, float64(i+1))) - 1
+		for i := 0; i < n; i++ {
+			print("          ")
+		}
+	}
+	var rp RandHash
+	var hashes [10][]Hash
+	row := 0
+	for i := 0; i < 20; i++ {
+		v := rp.Next()
+		hashes[row] = append(hashes[row], v)
+	}
+
+	if !prt {
+		return hashes
+	}
+
+	// Print the first row
+	for _, v := range hashes[0] {
+		fmt.Printf("%3v ", v[:2])
+	}
+	fmt.Println()
+	for len(hashes[row]) > 1 {
+		for i := 0; i+1 < len(hashes[row]); i += 2 {
+			v := hashes[row][i].Combine(GetSha256(), hashes[row][i+1])
+			hashes[row+1] = append(hashes[row+1], v)
+			spaces(row)
+			fmt.Printf("%3v ", v[:2])
+		}
+		row++
+		println()
+	}
+	ms := new(MerkleState)
+	ms.InitSha256()
+	for _, v := range hashes[0] {
+		ms.AddToMerkleTree(v)
+		mdr := ms.GetMDRoot()
+		fmt.Printf("%3v ", mdr[:2])
+	}
+	println("\n")
+
+	for _, v := range hashes[0] {
+		fmt.Printf("%x  ", v[:4])
+	}
+	fmt.Println()
+	row = 0
+	for len(hashes[row]) > 1 {
+		for i := 0; i+1 < len(hashes[row]); i += 2 {
+			v := hashes[row][i].Combine(GetSha256(), hashes[row][i+1])
+			hashes[row+1][(i+1)/2] = v
+			spaces(row)
+			fmt.Printf("%x  ", v[:4])
+		}
+		row++
+		println()
+	}
+	ms = new(MerkleState)
+	ms.InitSha256()
+	for _, v := range hashes[0] {
+		ms.AddToMerkleTree(v)
+		mdr := ms.GetMDRoot()
+		fmt.Printf("%x  ", mdr[:4])
+	}
+	println()
+
+	return hashes
+}
+
+func TestMerkleManager_GetIntermediate(t *testing.T) {
+	db, _ := database.NewDBManager("memory", "", nil)
+	m, _ := NewMerkleManager(db, 4)
+	m.MS.InitSha256()
+
+	hashes := GenerateTestData(true)
+
+	var r RandHash
+
+	for col := int64(0); col < 20; col++ {
+		m.AddHash(r.NextList())
+		m.MS.PadPending()
+		if col&1 == 1 {
+			s, _ := m.GetAnyState(col - 1)
+			s.PadPending()
+			s.InitSha256()
+			for row := int64(1); s.Pending[row-1] != nil; row++ {
+				left, right, err := m.GetIntermediate(col, row)
+				require.Nil(t, err, err)
+				factor := int64(math.Pow(2, float64(row)))
+				fmt.Printf("Row %d Col %d Left %x + Right %x == %x == Result %x\n",
+					row, col, left[:4], right[:4],
+					Hash(left).Combine(s.HashFunction, right)[:4],
+					hashes[row][col/factor][:4])
+				require.True(t, bytes.Equal(Hash(left).Combine(m.MS.HashFunction, right), hashes[row][col/factor]), "should be equal")
+			}
+		}
+	}
+
 }
