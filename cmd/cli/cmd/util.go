@@ -353,6 +353,13 @@ func (a *ActionResponse) Print() (string, error) {
 	return "", errors.New(out)
 }
 
+type JsonRpcError struct {
+	Msg string
+	Err jsonrpc2.Error
+}
+
+func (e *JsonRpcError) Error() string { return e.Msg }
+
 func PrintJsonRpcError(err error) (string, error) {
 	var e jsonrpc2.Error
 	switch err := err.(type) {
@@ -367,20 +374,20 @@ func PrintJsonRpcError(err error) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return "", errors.New(string(out))
+		return "", &JsonRpcError{Err: e, Msg: string(out)}
 	} else {
 		var out string
 		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
 		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
 		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
-		return "", errors.New(out)
+		return "", &JsonRpcError{Err: e, Msg: out}
 	}
 }
 
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
 		cmd.PrintErrf("Error: %v\n", err)
-		DidError = true
+		DidError = err
 	} else {
 		cmd.Println(out)
 	}
