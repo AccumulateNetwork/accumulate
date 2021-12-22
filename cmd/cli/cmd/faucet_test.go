@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	api2 "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/stretchr/testify/require"
@@ -17,11 +18,18 @@ func init() {
 func testCase5_1(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	var beenFauceted []bool
+	beenFauceted := make([]bool, len(liteAccounts))
 	//test to see if things have already been fauceted...
 	for i := range liteAccounts {
-		bal, _ := testGetBalance(t, tc, liteAccounts[i])
-		beenFauceted = append(beenFauceted, bal == "1000000000")
+		bal, err := testGetBalance(t, tc, liteAccounts[i])
+		if err == nil {
+			beenFauceted[i] = bal == "1000000000"
+			continue
+		}
+
+		jerr := new(JsonRpcError)
+		require.ErrorAs(t, err, &jerr)
+		require.Equal(t, api.ErrCodeNotFound, int(jerr.Err.Code))
 	}
 
 	var results []string
