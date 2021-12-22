@@ -75,7 +75,8 @@ func TestReceipt(t *testing.T) {
 }
 
 func TestReceiptAll(t *testing.T) {
-	const testMerkleTreeSize = 100
+	cnt := 0
+	const testMerkleTreeSize = 150
 
 	db, _ := database.NewDBManager("memory", "", nil) // create an in memory database and
 	manager, _ := NewMerkleManager(db, 2)             // MerkleManager
@@ -100,6 +101,7 @@ func TestReceiptAll(t *testing.T) {
 				anchor = rh.List[j]
 			}
 
+			cnt++
 			r, err := GetReceipt(manager, element, anchor)
 
 			if i < 0 || i >= testMerkleTreeSize || //       If i is out of range
@@ -121,6 +123,7 @@ func TestReceiptAll(t *testing.T) {
 			}
 		}
 	}
+	fmt.Println("Ran ", cnt, " tests")
 }
 
 // GetManager
