@@ -295,28 +295,3 @@ func TestReceipt_Combine(t *testing.T) {
 	}
 
 }
-
-func TestReceipt_PrintChart(t *testing.T) {
-
-	for i := uint(0); i < 20; i++ {
-		fmt.Printf("%3d ", i)
-	}
-	println()
-	for level := uint(0); level < 5; level++ {
-
-		for i := uint(1); i < 21; i++ {
-			mask := ^(^uint(0) << level)
-			d := " "
-			if i&mask == 0 {
-				d = "L"
-				if (i>>level)&1 == 1 {
-					d = "R"
-				}
-			}
-			fmt.Printf("%3s ", d)
-		}
-		println()
-	}
-	println()
-
-}

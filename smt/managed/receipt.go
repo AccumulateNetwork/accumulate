@@ -13,6 +13,13 @@ type Node struct {
 	Hash  Hash
 }
 
+func (n *Node) Copy() *Node {
+	node := new(Node)
+	node.Right = n.Right
+	node.Hash = n.Hash.Copy()
+	return n
+}
+
 // Receipt
 // Struct builds the Merkle Tree path component of a Merkle Tree Proof.
 type Receipt struct {
@@ -79,8 +86,7 @@ func (r Receipt) Copy() *Receipt {
 	nr.Anchor = append([]byte{}, r.Anchor...)
 	nr.MDRoot = append([]byte{}, r.MDRoot...)
 	for _, n := range r.Nodes {
-		node := Node{Right: n.Right, Hash: append([]byte{}, n.Hash...)}
-		nr.Nodes = append(nr.Nodes, &node)
+		nr.Nodes = append(nr.Nodes, n.Copy())
 	}
 	return nr
 }
@@ -96,10 +102,10 @@ func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
 		return nil, fmt.Errorf("receipts cannot be combined. "+
 			"anchor %x doesn't match root merkle tree %x", r.Anchor, rm.Element)
 	}
-	nr := r.Copy()
-	nr.MDRoot = rm.MDRoot
-	for _, n := range rm.Nodes {
-		nr.Nodes = append(nr.Nodes, n)
+	nr := r.Copy()               // Make a copy of the first Receipt
+	nr.MDRoot = rm.MDRoot        // The MDRoot will be the one from the appended receipt
+	for _, n := range rm.Nodes { // Make a copy and append the Nodes of the appended receipt
+		nr.Nodes = append(nr.Nodes, n.Copy())
 	}
 	return nr, nil
 }
@@ -138,46 +144,41 @@ func GetReceipt(manager *MerkleManager, element Hash, anchor Hash) (r *Receipt, 
 	return r, nil
 }
 
-/*
-0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18  19
-R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L
-R   .   L       R   .   L       R   .   L       R   .   L       R   .   L
-R   .   .   .   L               R   .   .   .   L               R
-R   .   .   .   .   .   .   .   L
-R   .   .       .
-*/
-
+// BuildReceipt
+// takes the values collected by GetReceipt and flushes out the data structures
+// in the Receipt to represent a fully populated version.
 func (r *Receipt) BuildReceipt() error {
-	height := int64(1)
-	r.MDRoot = r.Element
-
-	stay := true // If we don't increment, then we shift to the left.
+	height := int64(1)   // Start the height at 1, because the element isn't part
+	r.MDRoot = r.Element // of the nodes collected.  To begin with, the element is the Merkle Dag Root
+	stay := true         // stay represents the fact that the proof is already in this column
 
 	// The path from a hash added to the merkle tree to the anchor
 	// starts at the element index and goes to the anchor index.
 	// Some indexes have multiple hashes as hashes cascade
-	for idx := r.ElementIndex; idx <= r.AnchorIndex; {
-		if idx&1 == 0 {
-			idx++
-			stay = false
-		} else {
-			lHash, rHash, err := r.manager.GetIntermediate(idx, height)
-			if err != nil {
-				next := int64(math.Pow(2, float64(height-1)))
-				idx += next
-				stay = false
+	for idx := r.ElementIndex; idx <= r.AnchorIndex; { // Range over all the elements
+		if idx&1 == 0 { // Handle the even cases. Merkle Trees add elements at 0, and combine elements at odd numbers
+			idx++        // No point in handling the first hash, so move to the next column
+			stay = false // The proof is lagging in the previous column.
+		} else { // The Odd cases hold summary hashes
+			lHash, rHash, err := r.manager.GetIntermediate(idx, height) // Get the previous hight left/right hashes
+			if err != nil {                                             // Error means end of the column has been reached
+				next := int64(math.Pow(2, float64(height-1))) //            Move to the next column 2^(height-1) columns
+				idx += next                                   //
+				stay = false                                  //            Changing columns
 				continue
 			}
-			r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash)
-			if stay {
-				r.Nodes = append(r.Nodes, &Node{Hash: lHash, Right: false})
-			} else {
-				r.Nodes = append(r.Nodes, &Node{Hash: rHash, Right: true})
+			r.MDRoot = lHash.Combine(r.manager.MS.HashFunction, rHash) // We don't have to calculate the MDRoot, but it
+			if stay {                                                  //   helps debugging.  Check if still in column
+				r.Nodes = append(r.Nodes, &Node{Hash: lHash, Right: false}) // If so, combine from left
+			} else { //                                                     Otherwise
+				r.Nodes = append(r.Nodes, &Node{Hash: rHash, Right: true}) //  combine from right
 			}
-			stay = true
-			height++
+			stay = true // By default assume a stay in the column
+			height++    // and increment the height.
 		}
 	}
+
+	// At this point, we have reached the height of
 
 	if r.AnchorIndex == 0 {
 		r.MDRoot = r.Element
@@ -192,9 +193,6 @@ func (r *Receipt) BuildReceipt() error {
 		// } else if r.AnchorIndex == r.ElementIndex {
 	} else {
 		var hash, last Hash
-		if r.AnchorIndex == r.ElementIndex {
-			stay = true
-		}
 		for i, v := range state.Pending {
 			if hash == nil {
 				hash = v.Copy()
@@ -208,7 +206,7 @@ func (r *Receipt) BuildReceipt() error {
 				hash = v.Combine(r.manager.MS.HashFunction, hash)
 
 				if stay {
-					if height <= int64(i) {
+					if int64(i) >= height {
 						r.Nodes = append(r.Nodes, &Node{Hash: v, Right: false})
 					}
 					height++
