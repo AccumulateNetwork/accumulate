@@ -298,7 +298,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens:
 			// TX does not require an origin - it may create the origin
 		default:
-			return nil, fmt.Errorf("origin record not found: %v", err)
+			return nil, fmt.Errorf("origin record not found: %w", err)
 		}
 	} else if err != nil {
 		return nil, err
@@ -432,6 +432,9 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) *protocol.Error {
 	}
 
 	st, err := m.check(tx)
+	if errors.Is(err, storage.ErrNotFound) {
+		return &protocol.Error{Code: protocol.CodeNotFound, Message: err}
+	}
 	if err != nil {
 		return &protocol.Error{Code: protocol.CodeCheckTxError, Message: err}
 	}

@@ -15,7 +15,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	tm "github.com/tendermint/tendermint/abci/types"
 )
 
@@ -100,14 +99,15 @@ func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error)
 	})
 }
 
-func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
-	tx := api.SendTokens{}
+func unmarshalTokenTx(sigInfo *transactions.SignatureInfo, txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
+	tx := protocol.SendTokens{}
 	err := tx.UnmarshalBinary(txPayload)
 	if err != nil {
 		return nil, accumulateError(err)
 	}
+
 	txResp := response.TokenTx{}
-	txResp.From = tx.From.String
+	txResp.From = types.String(sigInfo.URL)
 	txResp.TxId = txId
 
 	if len(txSynthTxIds)/32 != len(tx.To) {
@@ -119,7 +119,7 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 		j := i * 32
 		synthTxId := txSynthTxIds[j : j+32]
 		txStatus := response.TokenTxOutputStatus{}
-		txStatus.TokenRecipient.URL = v.URL
+		txStatus.URL = types.String(v.Url)
 		txStatus.TokenRecipient.Amount = v.Amount
 		txStatus.SyntheticTxId = synthTxId
 
@@ -130,28 +130,11 @@ func unmarshalTokenTx(txPayload []byte, txId types.Bytes, txSynthTxIds types.Byt
 	if err != nil {
 		return nil, err
 	}
+
 	resp := api.APIDataResponse{}
 	resp.Type = types.String(types.TxTypeSendTokens.Name())
-	resp.Data = new(json.RawMessage)
-	*resp.Data = data
-	resp.Origin = tx.From.String
+	resp.Data = (*json.RawMessage)(&data)
 	return &resp, err
-}
-
-//unmarshalSynthTokenDeposit will unpack the synthetic token deposit and pack it into the response
-func unmarshalSynthTokenDeposit(txPayload []byte, _ types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
-	if len(txSynthTxIds) != 0 {
-		return nil, fmt.Errorf("there should be no synthetic transaction associated with this transaction")
-	}
-
-	tx := new(synthetic.TokenTransactionDeposit)
-	resp, err := unmarshalTxAs(txPayload, tx)
-	if err != nil {
-		return nil, err
-	}
-
-	resp.Origin = tx.FromUrl
-	return resp, err
 }
 
 func unmarshalTxAs(payload []byte, v protocol.TransactionPayload) (*api.APIDataResponse, error) {
@@ -177,9 +160,9 @@ func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte,
 	txType, _ := common.BytesUint64(txPayload)
 	switch types.TxType(txType) {
 	case types.TxTypeSendTokens:
-		resp, err = unmarshalTokenTx(txPayload, txId, txSynthTxIds)
+		resp, err = unmarshalTokenTx(sigInfo, txPayload, txId, txSynthTxIds)
 	case types.TxTypeSyntheticDepositTokens:
-		resp, err = unmarshalSynthTokenDeposit(txPayload, txId, txSynthTxIds)
+		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticDepositTokens))
 	case types.TxTypeCreateIdentity:
 		resp, err = unmarshalTxAs(txPayload, new(protocol.IdentityCreate))
 	case types.TxTypeCreateTokenAccount:
@@ -215,9 +198,7 @@ func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte,
 		return nil, err
 	}
 
-	if resp.Origin == "" {
-		resp.Origin = types.String(sigInfo.URL)
-	}
+	resp.Origin = types.String(sigInfo.URL)
 	return resp, err
 }
 

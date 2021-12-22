@@ -9,7 +9,7 @@ Metrics:
 
 Faucet:
   rpc: faucet
-  input: protocol.AcmeFaucet
+  input: AcmeFaucet
   output: TxResponse
 
 Query:
@@ -77,50 +77,50 @@ Execute:
 ExecuteCreateAdi:
   kind: execute
   rpc: create-adi
-  input: protocol.IdentityCreate
+  input: IdentityCreate
 
 ExecuteCreateDataAccount:
   kind: execute
   rpc: create-data-account
-  input: protocol.CreateDataAccount
+  input: CreateDataAccount
 
 ExecuteCreateKeyBook:
   kind: execute
   rpc: create-key-book
-  input: protocol.CreateKeyBook
+  input: CreateKeyBook
 
 ExecuteCreateKeyPage:
   kind: execute
   rpc: create-key-page
-  input: protocol.CreateKeyPage
+  input: CreateKeyPage
 
 ExecuteCreateToken:
   kind: execute
   rpc: create-token
-  input: protocol.CreateToken
+  input: CreateToken
 
 ExecuteCreateTokenAccount:
   kind: execute
   rpc: create-token-account
-  input: protocol.TokenAccountCreate
+  input: TokenAccountCreate
 
 ExecuteSendTokens:
   kind: execute
   rpc: send-tokens
-  input: api.SendTokens
+  input: SendTokens
   validate: [From, To]
 
 ExecuteAddCredits:
   kind: execute
   rpc: add-credits
-  input: protocol.AddCredits
+  input: AddCredits
 
 ExecuteUpdateKeyPage:
   kind: execute
   rpc: update-key-page
-  input: protocol.UpdateKeyPage
+  input: UpdateKeyPage
 
 ExecuteWriteData:
   kind: execute
   rpc: write-data
-  input: protocol.WriteData
+  input: WriteData

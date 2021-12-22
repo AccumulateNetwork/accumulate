@@ -87,7 +87,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
-	sdc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	copy(sdc.Cause[:], tx.TransactionHash())
 	sdc.Amount = body.Amount
 	st.Submit(recvUrl, sdc)
 

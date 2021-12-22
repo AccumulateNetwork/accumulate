@@ -33,7 +33,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			UpdateKeyPage{},
 			WriteData{},
 			SyntheticCreateChain{},
-			SyntheticTokenDeposit{},
+			SyntheticDepositTokens{},
 			SyntheticDepositCredits{},
 			SyntheticSignTransactions{},
 			SyntheticAnchor{Network: &opts.Network},
