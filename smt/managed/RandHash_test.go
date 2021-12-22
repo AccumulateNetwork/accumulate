@@ -1,6 +1,10 @@
 package managed
 
-import "crypto/sha256"
+import (
+	"crypto/sha256"
+	"fmt"
+	"testing"
+)
 
 // RandHash
 // Creates a deterministic stream of hashes.  We need this all over our tests
@@ -55,5 +59,69 @@ func (n *RandHash) NextList() []byte {
                                                                       d9a71d2c                                                                        574ae276
                                                                                                                                                       9dc338e0
 66687aad  1bd70ade  adcff944  851e6d6c  285693b4  51ff81ba  61c3b3f6  d9a71d2c  4e031d86  ae6e0bc4  e60693cc  d42c6e20  6f70b0c7  a6154564  cbfc3b80  9dc338e0  2acdab55  22d133dd  62902a20  15362c17
+*/
 
+// TestReceipt_PrintChart
+// produces the chart below (without the periods)t *testing.T) {
+
+func TestReceipt_PrintChart(t *testing.T) {
+	for i := uint(0); i < 20; i++ {
+		fmt.Printf("%3d ", i)
+	}
+	println()
+	for level := uint(0); level < 5; level++ {
+		d := " "
+		for i := uint(1); i < 21; i++ {
+			mask := ^(^uint(0) << level)
+			if d == "R" || d == "." {
+				d = "."
+			} else {
+				d = " "
+			}
+			if i&mask == 0 {
+				d = "L"
+				if (i>>level)&1 == 1 {
+					d = "R"
+				}
+			}
+			fmt.Printf("%3s ", d)
+		}
+		println()
+	}
+	println()
+
+}
+
+/*
+
+  0   1   2   3   4   5   6   7   8   9  10  11  12  13  14  15  16  17  18  19
+  R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L   R   L
+      R   .   L       R   .   L       R   .   L       R   .   L       R   .   L
+              R   .   .   .   L               R   .   .   .   L               R
+                              R   .   .   .   .   .   .   .   L
+                                                              R   .   .   .   .
+
+This chart maps the nodes in a Merkle Tree where nodes are labeled "R" to denote
+that they are combined with the "L" to the Right of that node, even if separated
+by '.', A Node labeled "L" is combined with the node ro its right and labeled
+"R". So given:
+         R   .    .   L
+                      X
+Node X (be it an R Node or an L Node) is produced by combining R with L.
+
+In MerkleState.Pending, each list is terminated by an R entry in the column.
+Note that blanks reflect nils (or entries past the end of Pending).  Dots
+also represent the value of R to the left.
+
+R   .   .   L
+
+The above dots represent R in the pending list in the columns with the dots
+between the R and the L nodes.
+
+
+Note that in the code, X is specified by an element index and a height.  What
+is returned uses Left and Right from the perspective of X.  So R is the node
+on the left, and L is the node on the right, looking at these nodes from X.
+
+func (*MerkleManager) GetIntermediate(element, height int64) (Left,Right Hash, err error)
 */
