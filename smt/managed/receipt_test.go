@@ -116,7 +116,7 @@ func TestReceiptAll(t *testing.T) {
 					t.Fatal("Failed to generate receipt", i, j)
 				}
 				if !r.Validate() {
-					fmt.Printf("Receipt fails for element/anchor [%d %d]\n", i, int64(j))
+					t.Errorf("Receipt fails for element/anchor [%d %d]\n", i, int64(j))
 				}
 				//require.Truef(t, bytes.Equal(r.MDRoot, mdRoots[j]),
 				//	"Anchors should match %d %d got %x expected %x", i, j, r.MDRoot[:4], mdRoots[j][:4])
