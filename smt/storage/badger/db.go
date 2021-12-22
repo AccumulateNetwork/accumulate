@@ -49,7 +49,7 @@ func (d *DB) Close() error {
 // an new, empty database.
 func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 	// Make sure all directories exist
-	err := os.MkdirAll(filepath, 0777)
+	err := os.MkdirAll(filepath, 0700)
 	if err != nil {
 		return errors.New("failed to create home directory")
 	}
