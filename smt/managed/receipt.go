@@ -53,7 +53,7 @@ func (r *Receipt) String() string {
 // Validate
 // Take a receipt and validate that the element hash progresses to the
 // Merkle Dag Root hash (MDRoot) in the receipt
-func (r Receipt) Validate() bool {
+func (r *Receipt) Validate() bool {
 	MDRoot := r.Element // To begin with, we start with the object as the MDRoot
 	// Now apply all the path hashes to the MDRoot
 	for _, node := range r.Nodes {
