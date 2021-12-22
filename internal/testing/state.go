@@ -1,18 +1,19 @@
 package testing
 
 import (
+	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
-	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmcrypto "github.com/tendermint/tendermint/crypto"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 type DB interface {
@@ -23,19 +24,16 @@ type DB interface {
 }
 
 // Token multiplier
-const TokenMx = 100000000
+const TokenMx = protocol.AcmePrecision
 
-func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transactions.GenTransaction, error) {
-	sponsorAdi := types.String(lite.GenerateAcmeAddress(sponsor.PubKey().Bytes()))
-	recipientAdi := types.String(lite.GenerateAcmeAddress(recipient.PubKey().Bytes()))
+func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.GenTransaction, error) {
+	recipientAdi := types.String(AcmeLiteAddressTmPriv(recipient).String())
 
 	//create a fake synthetic deposit for faucet.
-	fakeTxid := sha256.Sum256([]byte("fake txid"))
-	// NewTokenTransactionDeposit(txId types.Bytes, from *types.String, to *types.String)
-	deposit := synthetic.NewTokenTransactionDeposit(fakeTxid[:], sponsorAdi, recipientAdi)
-	amtToDeposit := int64(50000)                           //deposit 50k tokens
-	deposit.DepositAmount.SetInt64(amtToDeposit * TokenMx) // assume 8 decimal places
-	deposit.TokenUrl = types.String(protocol.AcmeUrl().String())
+	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Cause = sha256.Sum256([]byte("fake txid"))
+	deposit.Token = protocol.ACME
+	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
 
 	depData, err := deposit.MarshalBinary()
 	if err != nil {
@@ -62,8 +60,8 @@ func CreateFakeSyntheticDepositTx(sponsor, recipient ed25519.PrivKey) (*transact
 	return tx, nil
 }
 
-func CreateLiteTokenAccount(db DB, key ed25519.PrivKey, tokens float64) error {
-	url := types.String(lite.GenerateAcmeAddress(key.PubKey().Bytes()))
+func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
+	url := types.String(AcmeLiteAddressTmPriv(key).String())
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
 }
 
@@ -89,7 +87,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 	return nil
 }
 
-func CreateADI(db DB, key ed25519.PrivKey, urlStr types.String) error {
+func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	keyHash := sha256.Sum256(key.PubKey().Bytes())
 	identityUrl, err := url.Parse(*urlStr.AsString())
 	if err != nil {
@@ -149,7 +147,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	return nil
 }
 
-func CreateKeyPage(db DB, urlStr types.String, keys ...ed25519.PubKey) error {
+func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
 		return err
@@ -202,4 +200,35 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 	}
 
 	return WriteStates(db, states...)
+}
+
+// AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING
+// USE ONLY.
+func AcmeLiteAddress(pubKey []byte) *url.URL {
+	u, err := protocol.LiteAddress(pubKey, protocol.ACME)
+	if err != nil {
+		// LiteAddress should only return an error if the token URL is invalid,
+		// so this should never return an error. But ignoring errors is a great
+		// way to get bugs.
+		panic(err)
+	}
+	return u
+}
+
+func AcmeLiteAddressTmPriv(key tmcrypto.PrivKey) *url.URL {
+	return AcmeLiteAddress(key.PubKey().Bytes())
+}
+
+func AcmeLiteAddressStdPriv(key ed25519.PrivateKey) *url.URL {
+	return AcmeLiteAddress(key[32:])
+}
+
+func NewWalletEntry() *transactions.WalletEntry {
+	wallet := new(transactions.WalletEntry)
+
+	wallet.Nonce = 1 // Put the private key for the origin
+	_, wallet.PrivateKey, _ = ed25519.GenerateKey(nil)
+	wallet.Addr = AcmeLiteAddressStdPriv(wallet.PrivateKey).String() // Generate the origin address
+
+	return wallet
 }

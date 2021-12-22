@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 )
 
 const (
@@ -24,8 +24,9 @@ type TokenTx struct {
 }
 
 type TokenTxOutputStatus struct {
-	SyntheticTxId types.Bytes `json:"txid"`
-	api.TokenRecipient
+	SyntheticTxId types.Bytes  `json:"txid"`
+	URL           types.String `json:"url"`
+	protocol.TokenRecipient
 }
 
 func (t *TokenTxOutputStatus) MarshalBinary() ([]byte, error) {

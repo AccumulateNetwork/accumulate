@@ -13,7 +13,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
@@ -31,10 +30,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
-	kpSponsor := ed25519.NewKeyFromSeed(daemon.Key().Bytes()[:32])
-
-	addrList, err := acctesting.RunLoadTest(query, kpSponsor, 10, 10)
+	addrList, err := acctesting.RunLoadTest(query, 10, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,7 +134,7 @@ func TestFaucet(t *testing.T) {
 
 	req := &api.APIRequestURL{}
 	req.Wait = true
-	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(acctesting.AcmeLiteAddressStdPriv(kpSponsor).String())
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -238,7 +234,7 @@ func TestTransactionHistory(t *testing.T) {
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
-	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(acctesting.AcmeLiteAddressStdPriv(kpSponsor).String())
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -300,7 +296,7 @@ func TestTransactionHistory(t *testing.T) {
 
 func TestFaucetTransactionHistory(t *testing.T) {
 	req := &api.APIRequestURL{}
-	req.URL = types.String(lite.GenerateAcmeAddress(ed25519.PublicKey{}))
+	req.URL = types.String(acctesting.AcmeLiteAddress(ed25519.PublicKey{}).String())
 	params, err := json.Marshal(&req)
 	require.NoError(t, err)
 
@@ -382,8 +378,7 @@ func TestQueryWrongType(t *testing.T) {
 	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
-	_, origin, _ := ed25519.GenerateKey(nil)
-	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	err = acctesting.SendTxSync(query, tx)
@@ -408,8 +403,7 @@ func TestGetTxId(t *testing.T) {
 	query := daemon.Query_TESTONLY()
 	japi := NewTest(t, query)
 
-	_, origin, _ := ed25519.GenerateKey(nil)
-	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	err = acctesting.SendTxSync(query, tx)
@@ -467,13 +461,12 @@ func TestFaucetReplay(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
-	destAccount := lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
-	tx := acmeapi.SendTokens{}
-	tx.From.String = types.String(protocol.FaucetWallet.Addr)
-	tx.AddToAccount(types.String(destAccount), 1000000000)
+	destAccount := acctesting.AcmeLiteAddressStdPriv(kpSponsor).String()
+	tx := protocol.SendTokens{}
+	tx.AddRecipient(acctesting.MustParseUrl(destAccount), 1000000000)
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	gtx, err := transactions.New(*tx.From.AsString(), 1, func(hash []byte) (*transactions.ED25519Sig, error) {
+	gtx, err := transactions.New(protocol.FaucetWallet.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 		return protocol.FaucetWallet.Sign(hash), nil
 	}, &tx)
 	require.NoError(t, err)
