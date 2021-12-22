@@ -61,7 +61,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 	fmt.Println(string(output))
 
 	// now use the JSON rpc api's to get the data
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
@@ -189,7 +189,7 @@ func TestFaucet(t *testing.T) {
 		t.Fatalf("expecting error code that is non zero")
 	}
 
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	res := jsonapi.Faucet(context.Background(), params)
 	require.IsType(t, (*api.APIDataResponse)(nil), res)
@@ -241,7 +241,7 @@ func TestTransactionHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	res := jsonapi.Faucet(context.Background(), params)
 	data, err := json.Marshal(res)
@@ -302,7 +302,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 
 	daemon := startBVC(t, t.TempDir())
 	query := daemon.Query_TESTONLY()
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 	res := jsonapi.Faucet(context.Background(), params)
 	if err, ok := res.(error); ok {
 		require.NoError(t, err)
@@ -335,7 +335,7 @@ func TestMetrics(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
 	require.NoError(t, err)
@@ -357,7 +357,7 @@ func TestQueryNotFound(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "acc://1cddf368ef9ba2a1ea914291e0201ebaf376130a6c05caf3/ACME"})
 	require.NoError(t, err)
@@ -376,7 +376,7 @@ func TestQueryWrongType(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
@@ -401,7 +401,7 @@ func TestGetTxId(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
@@ -432,7 +432,7 @@ func TestDirectory(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	_, adiKey, _ := ed25519.GenerateKey(nil)
 	dbTx := daemon.DB_TESTONLY().Begin()
@@ -476,7 +476,7 @@ func TestFaucetReplay(t *testing.T) {
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
 
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 	res, err := jsonapi.BroadcastTx(false, gtx)
 	require.NoError(t, err)
 	require.NoError(t, acctesting.WaitForTxV1(query, res))
