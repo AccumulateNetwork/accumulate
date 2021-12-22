@@ -88,7 +88,7 @@ func (m *MerkleState) Trim() {
 }
 
 // Pad
-// Add a til to the end of the Pending list if one isn't there.
+// Add a nil to the end of the Pending list if one isn't there.
 // We need to be able to add an element to Pending if needed while
 // building receipts
 func (m *MerkleState) Pad() {
