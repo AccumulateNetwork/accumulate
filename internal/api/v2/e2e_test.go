@@ -15,7 +15,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	. "github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/assert"
@@ -225,20 +224,15 @@ func TestTokenTransfer(t *testing.T) {
 		aliceKey = newKey([]byte(t.Name()))
 		aliceUrl = makeLiteUrl(t, aliceKey, ACME)
 
-		var to []*acmeapi.TokenRecipient
-		to = append(to, &acmeapi.TokenRecipient{
-			URL: types.UrlChain{
-				String: types.String(aliceUrl.String()),
-			},
+		var to []*protocol.TokenRecipient
+		to = append(to, &protocol.TokenRecipient{
+			Url:    aliceUrl.String(),
 			Amount: uint64(100),
 		})
 		txParams := execParams{
 			Origin: bobUrl.String(),
 			Key:    bobKey,
-			Payload: &acmeapi.SendTokens{
-				From: types.UrlChain{
-					String: types.String(bobUrl.String()),
-				},
+			Payload: &protocol.SendTokens{
 				To: to,
 			},
 		}
