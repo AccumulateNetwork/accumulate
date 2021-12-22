@@ -69,10 +69,10 @@ func (r *Receipt) Validate() bool {
 		if node.Right {
 			// If this hash comes from the right, apply it that way
 			MDRoot = MDRoot.Combine(Sha256, hash)
-		} else {
-			// If this hash comes from the left, apply it that way
-			MDRoot = hash.Combine(Sha256, MDRoot)
+			continue
 		}
+		// If this hash comes from the left, apply it that way
+		MDRoot = hash.Combine(Sha256, MDRoot)
 	}
 	// In the end, MDRoot should be the same hash the receipt expects.
 	return MDRoot.Equal(r.MDRoot)
@@ -152,12 +152,17 @@ func (r *Receipt) BuildReceipt() error {
 	r.MDRoot = r.Element // of the nodes collected.  To begin with, the element is the Merkle Dag Root
 	stay := true         // stay represents the fact that the proof is already in this column
 
-	// The path from a hash added to the merkle tree to the anchor
+	// The path from a intermediateHash added to the merkle tree to the anchor
 	// starts at the element index and goes to the anchor index.
-	// Some indexes have multiple hashes as hashes cascade
+	// Some indexes have multiple hashes as hashes cascade.  Other
+	// indexes are skipped, as they summarized by values in sub
+	// merkle trees on the way to the anchor index.
+	//
+	// This for loop adds the hashes leading up to the highest
+	// sub Merkle Tree between the element index and the anchor index
 	for idx := r.ElementIndex; idx <= r.AnchorIndex; { // Range over all the elements
 		if idx&1 == 0 { // Handle the even cases. Merkle Trees add elements at 0, and combine elements at odd numbers
-			idx++        // No point in handling the first hash, so move to the next column
+			idx++        // No point in handling the first intermediateHash, so move to the next column
 			stay = false // The proof is lagging in the previous column.
 		} else { // The Odd cases hold summary hashes
 			lHash, rHash, err := r.manager.GetIntermediate(idx, height) // Get the previous hight left/right hashes
@@ -178,46 +183,48 @@ func (r *Receipt) BuildReceipt() error {
 		}
 	}
 
-	// At this point, we have reached the height of
+	// At this point, we have reached the highest sub Merkle Tree root.
+	// All we have to do is calculate the set of intermediate hashes that
+	// will be combined with the current state of the receipt to match
+	// the Merkle Dag Root at the Anchor Index
 
-	if r.AnchorIndex == 0 {
-		r.MDRoot = r.Element
-		return nil
+	if r.AnchorIndex == 0 { // Special case the first entry in a Merkle Tree
+		r.MDRoot = r.Element // whose Merkle Dag Root is just the first element
+		return nil           // added to the merkle tree
 	}
-	stay = false
-	state, _ := r.manager.GetAnyState(r.AnchorIndex)
-	state.Trim()
 
-	if r.AnchorIndex&1 == 1 && r.AnchorIndex == r.ElementIndex && height == 1 {
-		r.MDRoot = state.Pending[len(state.Pending)-1].Copy()
-		// } else if r.AnchorIndex == r.ElementIndex {
-	} else {
-		var hash, last Hash
-		for i, v := range state.Pending {
-			if hash == nil {
-				hash = v.Copy()
-				if height-1 == int64(i) {
-					stay = true
-				}
-				continue
-			}
-			if v != nil {
-				last = hash.Copy()
-				hash = v.Combine(r.manager.MS.HashFunction, hash)
+	stay = false                                     // Indicate no elements for the first index have been added
+	state, _ := r.manager.GetAnyState(r.AnchorIndex) // Get the state at the Anchor Index
+	state.Trim()                                     // If Pending has any trailing nils, remove them.
 
-				if stay {
-					if int64(i) >= height {
-						r.Nodes = append(r.Nodes, &Node{Hash: v, Right: false})
-					}
-					height++
-				} else if int64(i) >= height-1 {
-					r.Nodes = append(r.Nodes, &Node{Hash: last, Right: true})
-					stay = true
-				}
-			}
+	var intermediateHash, lastIH Hash // The intermediateHash tracks the combining of hashes as we go. The
+	for i, v := range state.Pending { // last hash computed is the last intermediate Hash used in an anchor
+		if v == nil { //                  Skip in Pending until a value is found
+			continue
 		}
-		r.MDRoot = hash
+		if intermediateHash == nil { //   If no computations have been started,
+			intermediateHash = v.Copy() //   just move the value from pending over
+			if height-1 == int64(i) {   // If height is just above entry in pending
+				stay = true //                consider processing to continue
+			}
+			continue
+		}
+		lastIH = intermediateHash.Copy()                                          // compute a new intermediate hash
+		intermediateHash = v.Combine(r.manager.MS.HashFunction, intermediateHash) // Combine Pending with intermediate
+		if int64(i) < height-1 {                                                  // If not to the proof height, skip
+			continue //                                                                 adding to the receipt
+		}
+		if stay { //                                                     If in the same column
+			if int64(i) >= height { //                                    And the proof is at this hight or higher
+				r.Nodes = append(r.Nodes, &Node{Hash: v, Right: false}) // Add to the receipt
+			}
+			continue
+		}
+		r.Nodes = append(r.Nodes, &Node{Hash: lastIH, Right: true}) // First time in this column, so add to receipt
+		stay = true                                                 // Indicate processing the same column now.
+
 	}
+	r.MDRoot = intermediateHash // The Merkle Dag Root is the last intermediate Hash produced.
 
 	return nil
 }
