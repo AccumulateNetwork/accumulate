@@ -60,7 +60,7 @@ func (r *Receipt) String() string {
 // Validate
 // Take a receipt and validate that the element hash progresses to the
 // Merkle Dag Root hash (MDRoot) in the receipt
-func (r Receipt) Validate() bool {
+func (r *Receipt) Validate() bool {
 	MDRoot := r.Element // To begin with, we start with the object as the MDRoot
 	// Now apply all the path hashes to the MDRoot
 	for _, node := range r.Nodes {
@@ -80,7 +80,7 @@ func (r Receipt) Validate() bool {
 
 // Copy
 // Make a copy of this receipt
-func (r Receipt) Copy() *Receipt {
+func (r *Receipt) Copy() *Receipt {
 	nr := new(Receipt)
 	nr.Element = append([]byte{}, r.Element...)
 	nr.Anchor = append([]byte{}, r.Anchor...)
