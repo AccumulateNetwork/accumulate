@@ -60,7 +60,7 @@ func (m *JrpcMethods) {{.Name}}(_ context.Context, params json.RawMessage) inter
 }
 {{else if eq .Kind "execute"}}
 func (m *JrpcMethods) {{.Name}}(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new({{.Input}}){{range .Validate}}, "{{.}}"{{end}})
+	return m.executeWith(ctx, params, new(protocol.{{.Input}}){{range .Validate}}, "{{.}}"{{end}})
 }
 {{end}}
 {{end}}

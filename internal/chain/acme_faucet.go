@@ -10,7 +10,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
 type AcmeFaucet struct{}
@@ -72,14 +71,15 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	st.Update(faucet)
 
 	// Submit a synthetic deposit token TX
-	txid := types.Bytes(tx.TransactionHash())
 	amount := new(big.Int).SetUint64(10 * protocol.AcmePrecision)
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], types.String(protocol.FaucetUrl.String()), types.String(u.String()))
-	err = deposit.SetDeposit(protocol.ACME, amount)
-	if err != nil {
-		return fmt.Errorf("invalid deposit: %v", err)
-	}
+	deposit := new(protocol.SyntheticDepositTokens)
+	copy(deposit.Cause[:], tx.TransactionHash())
+	deposit.Token = protocol.ACME
+	deposit.Amount = *amount
 	st.Submit(u, deposit)
+
+	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], types.String(protocol.FaucetUrl.String()), types.String(u.String()))
+	// err = deposit.SetDeposit(protocol.ACME, amount)
 
 	return nil
 }
