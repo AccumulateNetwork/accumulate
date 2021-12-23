@@ -45,7 +45,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 			return fmt.Errorf("invalid key page url : %s", page)
 		}
 		entry := new(protocol.KeyPage)
-		err = st.LoadAs(u.ResourceChain32(), entry)
+		err = st.LoadUrlAs(u, entry)
 		if err != nil {
 			return fmt.Errorf("failed to fetch sig spec: %v", err)
 		}
