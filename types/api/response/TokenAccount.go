@@ -8,13 +8,13 @@ import (
 )
 
 type TokenAccount struct {
-	*protocol.TokenAccountCreate
+	*protocol.CreateTokenAccount
 	Balance types.Amount `json:"balance" form:"balance" query:"balance"`
 }
 
-func NewTokenAccount(account *protocol.TokenAccountCreate, bal *big.Int) *TokenAccount {
+func NewTokenAccount(account *protocol.CreateTokenAccount, bal *big.Int) *TokenAccount {
 	acct := &TokenAccount{}
-	acct.TokenAccountCreate = account
+	acct.CreateTokenAccount = account
 	acct.Balance.Set(bal)
 	return acct
 }

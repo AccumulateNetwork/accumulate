@@ -618,7 +618,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		out += printGeneralTransactionParameters(res)
 		return out, nil
 	case types.TxTypeCreateIdentity.String():
-		id := protocol.IdentityCreate{}
+		id := protocol.CreateIdentity{}
 		err := UnmarshalQuery(res.Data, &id)
 		if err != nil {
 			return "", err

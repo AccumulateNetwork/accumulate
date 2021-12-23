@@ -309,7 +309,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 // createADI creates ADI
 func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.IdentityCreate{}
+	data := &protocol.CreateIdentity{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
@@ -497,7 +497,7 @@ func formatTransactionData(tx *transactions.GenTransaction) interface{} {
 
 // createTokenAccount creates Token Account
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.TokenAccountCreate{}
+	data := &protocol.CreateTokenAccount{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
