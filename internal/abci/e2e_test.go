@@ -136,7 +136,7 @@ func TestAnchorChain(t *testing.T) {
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*Tx)) {
-		adi := new(protocol.IdentityCreate)
+		adi := new(protocol.CreateIdentity)
 		adi.Url = "RoadRunner"
 		adi.KeyBookName = "book"
 		adi.KeyPageName = "page"
@@ -193,7 +193,7 @@ func TestCreateADI(t *testing.T) {
 	wallet.Addr = acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 
 	n.Batch(func(send func(*Tx)) {
-		adi := new(protocol.IdentityCreate)
+		adi := new(protocol.CreateIdentity)
 		adi.Url = "RoadRunner"
 		adi.PublicKey = keyHash[:]
 		adi.KeyBookName = "foo-book"
@@ -392,7 +392,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
-			tac := new(protocol.TokenAccountCreate)
+			tac := new(protocol.CreateTokenAccount)
 			tac.Url = "FooBar/Baz"
 			tac.TokenUrl = protocol.AcmeUrl().String()
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), tac)
@@ -422,7 +422,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
-			tac := new(protocol.TokenAccountCreate)
+			tac := new(protocol.CreateTokenAccount)
 			tac.Url = "FooBar/Baz"
 			tac.TokenUrl = protocol.AcmeUrl().String()
 			tac.KeyBookUrl = "foo/book1"
@@ -713,7 +713,7 @@ func TestSignatorHeight(t *testing.T) {
 	liteHeight := getHeight(liteUrl)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		adi := new(protocol.IdentityCreate)
+		adi := new(protocol.CreateIdentity)
 		adi.Url = "foo"
 		adi.PublicKey = fooKey.PubKey().Bytes()
 		adi.KeyBookName = "book"
@@ -729,7 +729,7 @@ func TestSignatorHeight(t *testing.T) {
 	keyPageHeight := getHeight(keyPageUrl)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		tac := new(protocol.TokenAccountCreate)
+		tac := new(protocol.CreateTokenAccount)
 		tac.Url = tokenUrl.String()
 		tac.TokenUrl = protocol.AcmeUrl().String()
 		tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), tac)
