@@ -161,8 +161,7 @@ func CreateAccount(origin string, args []string) (string, error) {
 
 	args, si, privKey, err := prepareSigner(u, args)
 	if len(args) < 3 {
-		PrintAccountCreate()
-		return "", fmt.Errorf("insufficient number of command line arguments")
+		return "", err
 	}
 
 	accountUrl, err := url2.Parse(args[0])
