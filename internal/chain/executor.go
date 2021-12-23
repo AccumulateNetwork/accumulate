@@ -15,6 +15,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -337,13 +338,17 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	}
 
 	page := new(protocol.KeyPage)
-	err = st.LoadAs(book.Pages[tx.SigInfo.KeyPageIndex], page)
+	pageUrl, err := url.Parse(book.Pages[tx.SigInfo.KeyPageIndex])
+	if err != nil {
+		return nil, fmt.Errorf("invalid key page URL : %s", book.Pages[tx.SigInfo.KeyPageIndex])
+	}
+	err = st.LoadAs(pageUrl.ResourceChain32(), page)
 	if err != nil {
 		return nil, fmt.Errorf("invalid sig spec: %v", err)
 	}
 
 	// TODO check height
-	height, err := st.GetHeight(book.Pages[tx.SigInfo.KeyPageIndex])
+	height, err := st.GetHeight(pageUrl.ResourceChain32())
 	if err != nil {
 		return nil, err
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -56,7 +57,11 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 
 		for i, p := range book.Pages {
-			if p == st.OriginChainId {
+			u, err := url.Parse(p)
+			if err != nil {
+				return fmt.Errorf("invalid key page url : %s", p)
+			}
+			if u.ResourceChain32() == st.OriginChainId {
 				priority = i
 			}
 		}
