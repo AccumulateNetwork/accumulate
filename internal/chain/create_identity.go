@@ -16,7 +16,7 @@ func (CreateIdentity) Type() types.TxType { return types.TxTypeCreateIdentity }
 
 func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	// *protocol.IdentityCreate, *url.URL, state.Chain
-	body := new(protocol.IdentityCreate)
+	body := new(protocol.CreateIdentity)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)

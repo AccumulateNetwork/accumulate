@@ -72,7 +72,7 @@ func (m *JrpcMethods) ExecuteAddCredits(ctx context.Context, params json.RawMess
 }
 
 func (m *JrpcMethods) ExecuteCreateAdi(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.IdentityCreate))
+	return m.executeWith(ctx, params, new(protocol.CreateIdentity))
 }
 
 func (m *JrpcMethods) ExecuteCreateDataAccount(ctx context.Context, params json.RawMessage) interface{} {
@@ -92,7 +92,7 @@ func (m *JrpcMethods) ExecuteCreateToken(ctx context.Context, params json.RawMes
 }
 
 func (m *JrpcMethods) ExecuteCreateTokenAccount(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.TokenAccountCreate))
+	return m.executeWith(ctx, params, new(protocol.CreateTokenAccount))
 }
 
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {

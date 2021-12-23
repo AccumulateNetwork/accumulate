@@ -191,7 +191,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", fmt.Errorf("invalid adi url %s, %v", adiUrl, err)
 	}
 
-	idc := protocol.IdentityCreate{}
+	idc := protocol.CreateIdentity{}
 	idc.Url = u.Authority
 	idc.PublicKey = pubKey
 	idc.KeyBookName = book
