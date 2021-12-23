@@ -243,3 +243,18 @@ func ParseBvnUrl(u *url.URL) (string, bool) {
 	}
 	return u.Authority[4:], true
 }
+
+// BvnNameFromSubnetName formats a BVN subnet name from the configuration to a valid URL hostname.
+func BvnNameFromSubnetName(subnetName string) string {
+	bvnName := strings.ToLower(subnetName)
+
+	// When the subnet already has a prefix ie bvn-123 it's already valid for use, but when it's ie "Zion" the hostname will become bvn-zion (URL acc://bvn-zion)
+	if !strings.HasPrefix(bvnName, "bvn-") {
+		bvnName = "bvn-" + bvnName
+	}
+	return bvnName
+}
+
+func BuildNodeUrl(hostname string) (*url.URL, error) {
+	return url.Parse("acc://" + strings.ToLower(hostname))
+}

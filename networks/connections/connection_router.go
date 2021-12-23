@@ -5,6 +5,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"github.com/ybbus/jsonrpc/v2"
+	"log"
+	"math"
 	"strings"
 	"sync/atomic"
 )
@@ -23,18 +25,20 @@ type ConnectionRouter interface {
 }
 
 type connectionRouter struct {
-	bvnGroup    nodeGroup
-	dnGroup     nodeGroup
-	flGroup     nodeGroup
-	otherGroup  nodeGroup
-	bvnNameMap  map[string]bool
-	localClient *local.Local
-	isTest      bool
+	bvnNames     []string
+	bvnGroupMap  map[string]nodeGroup
+	dnGroup      nodeGroup
+	flGroup      nodeGroup
+	localNodeCtx *nodeContext
+	localClient  *local.Local
+	isTest       bool
 }
 
+// Node group is just a list of nodeContext items and an int field for round-robin routing
 type nodeGroup struct {
-	nodes []*nodeContext
-	next  uint32
+	nodes   []*nodeContext
+	next    uint32
+	nodeUrl *url.URL
 }
 
 type LocalRoute interface {
@@ -52,16 +56,16 @@ type Route interface {
 }
 
 func NewConnectionRouter(connMgr ConnectionManager, test bool) ConnectionRouter {
+	bvnGroupMap := createBvnGroupMap(connMgr.getBVNContextMap())
 	cr := &connectionRouter{
-		bvnNameMap:  createBvnNameMap(connMgr.getBVNContextList()),
-		bvnGroup:    nodeGroup{nodes: connMgr.getBVNContextList()},
-		dnGroup:     nodeGroup{nodes: connMgr.getDNContextList()},
-		flGroup:     nodeGroup{nodes: connMgr.getFNContextList()},
-		localClient: connMgr.GetLocalClient(),
-		isTest:      test,
+		bvnNames:     createKeyList(bvnGroupMap),
+		bvnGroupMap:  bvnGroupMap,
+		dnGroup:      nodeGroup{nodes: connMgr.getDNContextList()},
+		flGroup:      nodeGroup{nodes: connMgr.getFNContextList()},
+		localNodeCtx: connMgr.GetLocalNodeContext(),
+		localClient:  connMgr.GetLocalClient(),
+		isTest:       test,
 	}
-	otherNodes := append(append(cr.bvnGroup.nodes, cr.flGroup.nodes...)) // TODO Allow also DNs?
-	cr.otherGroup = nodeGroup{nodes: otherNodes}
 	return cr
 }
 
@@ -78,31 +82,29 @@ func (cr *connectionRouter) SelectRoute(adiUrl *url.URL, allowFollower bool) (Ro
 }
 
 func (cr *connectionRouter) GetLocalRoute() (Route, error) {
-	for _, nodeCtx := range cr.bvnGroup.nodes {
-		if nodeCtx.networkGroup == Local {
-			return nodeCtx, nil
-		}
+	if cr.localNodeCtx == nil {
+		return nil, LocaNodeNotFound
 	}
-	for _, nodeCtx := range cr.dnGroup.nodes {
-		if nodeCtx.networkGroup == Local {
-			return nodeCtx, nil
-		}
+	if !cr.localNodeCtx.IsHealthy() {
+		return nil, LocaNodeNotHealthy
 	}
-	for _, nodeCtx := range cr.flGroup.nodes {
-		if nodeCtx.networkGroup == Local {
-			return nodeCtx, nil
-		}
-	}
-	return nil, LocaNodeNotFound
+	return cr.localNodeCtx, nil
 }
 
+// GetAll is not currently in use, but could be used to verify the health of a seed list in the future, otherwise this can be pruned
 func (cr *connectionRouter) GetAll() ([]Route, error) {
-	routes := make([]Route, 0)
-	for _, route := range cr.otherGroup.nodes {
+	routes, _ := cr.GetAllBVNs()
+	for _, route := range cr.dnGroup.nodes {
 		if route.IsHealthy() {
 			routes = append(routes, route)
 		}
 	}
+	for _, route := range cr.flGroup.nodes {
+		if route.IsHealthy() {
+			routes = append(routes, route)
+		}
+	}
+
 	if len(routes) == 0 {
 		return nil, NoHealthyNodes
 	}
@@ -111,9 +113,11 @@ func (cr *connectionRouter) GetAll() ([]Route, error) {
 
 func (cr *connectionRouter) GetAllBVNs() ([]Route, error) {
 	routes := make([]Route, 0)
-	for _, route := range cr.bvnGroup.nodes {
-		if route.IsHealthy() {
-			routes = append(routes, route)
+	for _, group := range cr.bvnGroupMap {
+		for _, route := range group.nodes {
+			if route.IsHealthy() {
+				routes = append(routes, route)
+			}
 		}
 	}
 	if len(routes) == 0 {
@@ -124,42 +128,42 @@ func (cr *connectionRouter) GetAllBVNs() ([]Route, error) {
 
 func (cr *connectionRouter) selectNodeContext(adiUrl *url.URL, allowFollower bool) (*nodeContext, error) {
 	switch {
-	case protocol.IsBvnUrl(adiUrl) && cr.isBvnExists(adiUrl.Hostname()):
-		return cr.lookupBvnNode(adiUrl.Hostname(), cr.bvnGroup)
-	case protocol.IsDnUrl(adiUrl) && cr.isDnExists(protocol.DnUrl().Hostname()): // This will also route ACME to the DN
-		return cr.lookupDirNode(cr.dnGroup)
-	case allowFollower:
-		return cr.selectNode(cr.otherGroup)
+	case protocol.IsBvnUrl(adiUrl):
+		return cr.lookupBvnNode(adiUrl)
+	case protocol.IsDnUrl(adiUrl):
+		return cr.selectDirNode()
 	default:
-		return cr.selectNode(cr.bvnGroup)
+		return cr.selectBvnNode(adiUrl, allowFollower)
 	}
 }
 
 func (cr *connectionRouter) isBvnExists(hostname string) bool {
-	return cr.bvnNameMap[strings.ToLower(hostname)]
+	_, ok := cr.bvnGroupMap[hostname]
+	return ok
 }
 
 func (cr *connectionRouter) isDnExists(hostname string) bool {
 	return dnNameMap[strings.ToLower(hostname)]
 }
 
-func (cr *connectionRouter) lookupBvnNode(hostname string, group nodeGroup) (*nodeContext, error) {
-	for _, nodeCtx := range group.nodes {
-		if strings.EqualFold(hostname[4:], nodeCtx.subnetName) || strings.EqualFold(hostname, nodeCtx.subnetName) {
-			if !nodeCtx.IsHealthy() {
-				return nil, bvnNotHealthy(nodeCtx.address, nodeCtx.lastError)
-			}
+func (cr *connectionRouter) lookupBvnNode(adiUrl *url.URL) (*nodeContext, error) {
+	bvnName := strings.ToLower(adiUrl.Hostname())
+	bvnGroup, ok := cr.bvnGroupMap[bvnName]
+	if !ok {
+		return nil, bvnNotFound(adiUrl.String())
+	}
+	for _, nodeCtx := range bvnGroup.nodes {
+		if nodeCtx.IsHealthy() {
 			return nodeCtx, nil
 		}
 	}
 
-	// This state is not yet possible because we collected the names, but perhaps when the code starts changing and nodes are disabled/off-boarded
-	return nil, bvnNotFound(hostname)
+	return nil, NoHealthyNodes
 }
 
-func (cr *connectionRouter) lookupDirNode(group nodeGroup) (*nodeContext, error) {
-	if len(group.nodes) > 0 {
-		nodeCtx := group.nodes[0]
+func (cr *connectionRouter) selectDirNode() (*nodeContext, error) {
+	if cr.isDnExists(protocol.DnUrl().Hostname()) && len(cr.dnGroup.nodes) > 0 {
+		nodeCtx := cr.dnGroup.nodes[0] // TODO follower support?
 		if !nodeCtx.IsHealthy() {
 			return nil, dnNotHealthy(nodeCtx.address, nodeCtx.lastError)
 		}
@@ -168,10 +172,13 @@ func (cr *connectionRouter) lookupDirNode(group nodeGroup) (*nodeContext, error)
 	return nil, dnNotFound()
 }
 
-func (cr *connectionRouter) selectNode(group nodeGroup) (*nodeContext, error) {
+func (cr *connectionRouter) selectBvnNode(adiUrl *url.URL, allowFollower bool) (*nodeContext, error) {
+	bvnGroup := cr.selectBvnGroup(adiUrl)
+
+	nodeCnt := len(bvnGroup.nodes)
 	// If we only have one node we don't have to route
-	if len(group.nodes) == 1 {
-		nodeCtx := group.nodes[0]
+	if nodeCnt == 1 {
+		nodeCtx := bvnGroup.nodes[0]
 		if !nodeCtx.IsHealthy() {
 			return nil, errorNodeNotHealthy(nodeCtx.subnetName, nodeCtx.address, nodeCtx.lastError)
 		}
@@ -179,30 +186,52 @@ func (cr *connectionRouter) selectNode(group nodeGroup) (*nodeContext, error) {
 	}
 
 	// Loop in case we get one or more unhealthy nodes
-	for i := 0; i < len(group.nodes); i++ {
-
-		/* Apply round-robin on the nodes within the group
-		This part is going to be smarter in the future to filter out unhealthy nodes and maybe determine the nodes load
-		*/
-		next := atomic.AddUint32(&group.next, 1)
-		nodeCtx := group.nodes[int(next-1)%len(group.nodes)]
-		if nodeCtx.IsHealthy() {
+	for i := 0; i < nodeCnt; i++ {
+		// Apply round-robin on the nodes within the group
+		next := atomic.AddUint32(&bvnGroup.next, 1)
+		nodeCtx := bvnGroup.nodes[int(next-1)%nodeCnt]
+		if nodeCtx.IsHealthy() && (allowFollower || nodeCtx.nodeType == config.Validator) { // TODO Can BVN subnets also contain followers?
+			log.Println("   ==> selected address " + nodeCtx.address) // TODO remove after debug
 			return nodeCtx, nil
 		}
 	}
 	return nil, NoHealthyNodes
 }
 
-func createBvnNameMap(nodes []*nodeContext) map[string]bool {
-	bvnMap := make(map[string]bool)
-	for _, node := range nodes {
-		if node.netType == config.BlockValidator && node.nodeType == config.Validator {
-			bvnName := strings.ToLower(node.subnetName)
-			if !strings.HasPrefix(bvnName, "bvn-") {
-				bvnName = "bvn-" + bvnName
-			}
-			bvnMap[bvnName] = true
+func (cr *connectionRouter) selectBvnGroup(adiUrl *url.URL) nodeGroup {
+	// Create a fixed route which is based on the subnet name (rather than the order of them in the configuration)
+	adiRoutingNr := adiUrl.Routing()
+	var bvnGroup nodeGroup
+	bvnRoutingDelta := ^uint64(0)
+	for _, bvn := range cr.bvnGroupMap {
+		routingDelta := uint64(math.Abs(float64(bvn.nodeUrl.Routing() ^ adiRoutingNr)))
+		if routingDelta < bvnRoutingDelta {
+			bvnGroup = bvn
+			bvnRoutingDelta = routingDelta
+		}
+	}
+	log.Printf("=====> selected %s for ADI %s\n", bvnGroup.nodeUrl.String(), adiUrl.String()) // TODO remove after debug
+	return bvnGroup
+}
+
+func createBvnGroupMap(nodes map[string][]*nodeContext) map[string]nodeGroup {
+	bvnMap := make(map[string]nodeGroup)
+	for bvnName, nodeCtxList := range nodes {
+		nodeUrl, _ := protocol.BuildNodeUrl(bvnName)
+		bvnMap[bvnName] = nodeGroup{
+			nodes:   nodeCtxList,
+			next:    0,
+			nodeUrl: nodeUrl,
 		}
 	}
 	return bvnMap
+
+}
+
+func createKeyList(groupMap map[string]nodeGroup) []string {
+	keys := make([]string, 0, len(groupMap))
+	for k := range groupMap {
+		keys = append(keys, k)
+	}
+	return keys
 }

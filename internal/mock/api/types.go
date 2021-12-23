@@ -295,7 +295,7 @@ type MockConnectionRouterMockRecorder struct {
 func NewMockConnectionRouter(broadcastClient *MockABCIBroadcastClient, localRpcClientAddr net.Addr) *MockConnectionRouter {
 	var client jsonrpc.RPCClient
 	if localRpcClientAddr != nil {
-		client = jsonrpc.NewClient(fmt.Sprintf("http://%s", localRpcClientAddr))
+		client = jsonrpc.NewClient(fmt.Sprintf("http://%s/v2", localRpcClientAddr))
 	}
 	mock := &MockConnectionRouter{route: MockRoute{
 		broadcastClient: broadcastClient,

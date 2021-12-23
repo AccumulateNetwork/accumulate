@@ -7,8 +7,9 @@ import (
 )
 
 var ErrInvalidUrl = errors.New("invalid URL")
-var NoHealthyNodes = errors.New("no health nodes available")
+var NoHealthyNodes = errors.New("no healthy nodes available")
 var LocaNodeNotFound = errors.New("no local node was found")
+var LocaNodeNotHealthy = errors.New("the local node was found to be unhealthy")
 
 func errorCouldNotSelectNode(url *url.URL, err error) error {
 	return fmt.Errorf("error while slecting node for url %s: %v", url.String(), err)

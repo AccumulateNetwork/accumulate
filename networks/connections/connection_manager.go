@@ -3,20 +3,22 @@ package connections
 import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"github.com/ybbus/jsonrpc/v2"
 	"net"
-	"net/url"
 	"strings"
 )
 
 type ConnectionManager interface {
-	getBVNContextList() []*nodeContext
+	getBVNContextMap() map[string][]*nodeContext
 	getDNContextList() []*nodeContext
 	getFNContextList() []*nodeContext
+	GetLocalNodeContext() *nodeContext
 	GetLocalClient() *local.Local
 }
 
@@ -25,13 +27,13 @@ type ConnectionInitializer interface {
 }
 
 type connectionManager struct {
-	accConfig           *config.Accumulate
-	nodeToSubnetNameMap map[string]string
-	bvnCtxList          []*nodeContext
-	dnCtxList           []*nodeContext
-	fnCtxList           []*nodeContext
-	localClient         *local.Local
-	logger              log.Logger
+	accConfig    *config.Accumulate
+	bvnCtxMap    map[string][]*nodeContext
+	dnCtxList    []*nodeContext
+	fnCtxList    []*nodeContext
+	localNodeCtx *nodeContext
+	localClient  *local.Local
+	logger       log.Logger
 }
 
 type nodeMetrics struct {
@@ -44,13 +46,12 @@ func NewConnectionManager(accConfig *config.Accumulate, logger log.Logger) Conne
 	cm := new(connectionManager)
 	cm.accConfig = accConfig
 	cm.logger = logger
-	cm.loadNodeNetworkMap()
 	cm.buildNodeInventory()
 	return cm
 }
 
-func (cm *connectionManager) getBVNContextList() []*nodeContext {
-	return cm.bvnCtxList
+func (cm *connectionManager) getBVNContextMap() map[string][]*nodeContext {
+	return cm.bvnCtxMap
 }
 
 func (cm *connectionManager) getDNContextList() []*nodeContext {
@@ -61,38 +62,48 @@ func (cm *connectionManager) getFNContextList() []*nodeContext {
 	return cm.fnCtxList
 }
 
+func (cm *connectionManager) GetLocalNodeContext() *nodeContext {
+	return cm.localNodeCtx
+}
+
 func (cm *connectionManager) GetLocalClient() *local.Local {
 	return cm.localClient
 }
 
-func (cm *connectionManager) loadNodeNetworkMap() {
-	cm.nodeToSubnetNameMap = make(map[string]string)
+func (cm *connectionManager) buildNodeInventory() {
+	cm.bvnCtxMap = make(map[string][]*nodeContext)
+
 	for subnetName, addresses := range cm.accConfig.Network.Addresses {
 		for _, address := range addresses {
-			cm.nodeToSubnetNameMap[address] = strings.ToLower(subnetName)
-		}
-	}
-}
-
-func (cm *connectionManager) buildNodeInventory() {
-	for address, subnetName := range cm.nodeToSubnetNameMap {
-		ctx, err := cm.buildNodeContext(address, subnetName)
-		if err != nil {
-			cm.logger.Error("error building node context for node %s on net %s with type %s: %w, ignoring node...",
-				ctx.address, ctx.subnetName, ctx.nodeType, err)
-			continue
-		}
-
-		switch ctx.nodeType {
-		case config.Validator:
-			switch ctx.netType {
-			case config.BlockValidator:
-				cm.bvnCtxList = append(cm.bvnCtxList, ctx)
-			case config.Directory:
-				cm.dnCtxList = append(cm.dnCtxList, ctx)
+			nodeCtx, err := cm.buildNodeContext(address, subnetName)
+			if err != nil {
+				cm.logger.Error("error building node context for node %s on net %s with type %s: %w, ignoring node...",
+					nodeCtx.address, nodeCtx.subnetName, nodeCtx.nodeType, err)
+				continue
 			}
-		case config.Follower:
-			cm.fnCtxList = append(cm.fnCtxList, ctx)
+
+			switch nodeCtx.nodeType {
+			case config.Validator:
+				switch nodeCtx.netType {
+				case config.BlockValidator:
+					bvnName := protocol.BvnNameFromSubnetName(subnetName)
+					nodeList, ok := cm.bvnCtxMap[bvnName]
+					if !ok {
+						nodeList := make([]*nodeContext, 1)
+						nodeList[0] = nodeCtx
+						cm.bvnCtxMap[bvnName] = nodeList
+					} else {
+						cm.bvnCtxMap[bvnName] = append(nodeList, nodeCtx)
+					}
+				case config.Directory:
+					cm.dnCtxList = append(cm.dnCtxList, nodeCtx)
+				}
+			case config.Follower:
+				cm.fnCtxList = append(cm.fnCtxList, nodeCtx)
+			}
+			if nodeCtx.networkGroup == Local {
+				cm.localNodeCtx = nodeCtx
+			}
 		}
 	}
 }
@@ -100,8 +111,7 @@ func (cm *connectionManager) buildNodeInventory() {
 func (cm *connectionManager) buildNodeContext(address string, subnetName string) (*nodeContext, error) {
 	nodeCtx := &nodeContext{subnetName: subnetName, address: address}
 	nodeCtx.networkGroup = cm.determineNetworkGroup(subnetName, address)
-	nodeCtx.netType, nodeCtx.nodeType = determineTypes(address, subnetName, cm.accConfig.Network)
-
+	nodeCtx.netType, nodeCtx.nodeType = determineTypes(subnetName, cm.accConfig.Network)
 	var err error
 	nodeCtx.resolvedIPs, err = resolveIPs(address)
 	if err != nil {
@@ -122,7 +132,7 @@ func (cm *connectionManager) determineNetworkGroup(subnetName string, address st
 	}
 }
 
-func determineTypes(address string, subnetName string, netCfg config.Network) (config.NetworkType, config.NodeType) {
+func determineTypes(subnetName string, netCfg config.Network) (config.NetworkType, config.NodeType) {
 	var networkType config.NetworkType
 	for _, bvnName := range netCfg.BvnNames {
 		if strings.EqualFold(bvnName, subnetName) {
@@ -141,14 +151,16 @@ func determineTypes(address string, subnetName string, netCfg config.Network) (c
 func (cm *connectionManager) CreateClients(lclClient *local.Local) error {
 	cm.localClient = lclClient
 
-	for _, nodeCtx := range cm.bvnCtxList {
-		err := cm.createJsonRpcClient(nodeCtx)
-		if err != nil {
-			return err
-		}
-		err = cm.createAbciClients(nodeCtx)
-		if err != nil {
-			return err
+	for _, nodeCtxList := range cm.bvnCtxMap {
+		for _, nodeCtx := range nodeCtxList {
+			err := cm.createJsonRpcClient(nodeCtx)
+			if err != nil {
+				return err
+			}
+			err = cm.createAbciClients(nodeCtx)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	for _, nodeCtx := range cm.dnCtxList {
@@ -208,7 +220,7 @@ func (cm *connectionManager) createJsonRpcClient(nodeCtx *nodeContext) error {
 		}
 	}
 
-	nodeCtx.jsonRpcClient = jsonrpc.NewClient(address)
+	nodeCtx.jsonRpcClient = jsonrpc.NewClient(address + "/v2")
 	return nil
 }
 

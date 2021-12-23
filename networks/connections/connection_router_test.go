@@ -48,7 +48,7 @@ func TestConnectionRouter(t *testing.T) {
 	t.Logf("Query client 1: %v", queryClient1)
 	assert.NotNil(t, queryClient1.GetQueryClient())
 
-	queryClient2, err := connRouter.SelectRoute(toURL(t, "acc://RedWagon/foo"), true)
+	queryClient2, err := connRouter.SelectRoute(toURL(t, "acc://RedWagon2345/foo"), true)
 	require.NoError(t, err)
 	t.Logf("Query client 2: %v", queryClient2)
 

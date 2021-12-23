@@ -114,7 +114,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 
 	// Route the request
-	route, err := m.opts.ConnectionRouter.SelectRoute(u, true)
+	route, err := m.opts.ConnectionRouter.SelectRoute(u, false) // TODO allow query follower?
 	if err != nil {
 		return accumulateError(err)
 	}
