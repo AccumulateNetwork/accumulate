@@ -35,7 +35,7 @@ if [ -z $2 ]; then
 	if [ $? -eq 0 ]; then
        	   ID=`echo $IDt | $j .txid`
 	else
-	   echo "cli faucet failed"
+	   echo "accumulate faucet failed"
 	   exit 1
 	fi
 else
@@ -43,7 +43,7 @@ else
         if [ $? -eq 0 ]; then
 	   ID=`echo $IDt | $j .txid`
         else
-	   echo "cli faucet failed"
+	   echo "accumulate faucet failed"
 	   exit 1
         fi
 fi
