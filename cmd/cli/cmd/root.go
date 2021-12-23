@@ -27,7 +27,7 @@ var currentUser = func() *user.User {
 	return usr
 }()
 
-var DidError bool
+var DidError error
 
 func InitRootCmd(database db.DB) *cobra.Command {
 	Db = database
@@ -67,7 +67,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(faucetCmd)
 
 	cmd.PersistentPostRun = func(*cobra.Command, []string) {
-		if DidError {
+		if DidError != nil {
 			os.Exit(1)
 		}
 	}
