@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/client"
-	"github.com/AccumulateNetwork/accumulate/cmd/cli/db"
+	"github.com/AccumulateNetwork/accumulate/cmd/accumulate/db"
 	"github.com/spf13/cobra"
 )
 

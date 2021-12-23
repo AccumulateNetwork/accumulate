@@ -7,7 +7,7 @@
 #
 # set cli command and see if it exists
 #
-export cli=../../cmd/cli/cli
+export cli=../../cmd/accumulate/accumulate
 
 if [ -z $1 ]; then
 	echo "must supply host:port"
