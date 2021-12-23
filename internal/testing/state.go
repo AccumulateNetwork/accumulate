@@ -106,7 +106,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
-	book.Pages = append(book.Pages, types.Bytes(pageUrl.ResourceChain()).AsBytes32())
+	book.Pages = append(book.Pages, pageUrl.String())
 
 	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
 	adi.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
@@ -173,7 +173,7 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 
 	group := protocol.NewKeyBook()
 	group.ChainUrl = types.String(groupUrl.String())
-	group.Pages = make([][32]byte, len(pageUrls))
+	group.Pages = pageUrls
 	states := []state.Chain{group}
 
 	for i, s := range pageUrls {
@@ -183,7 +183,7 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 		}
 
 		chainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
-		group.Pages[i] = chainId
+		group.Pages[i] = specUrl.String()
 
 		spec := new(protocol.KeyPage)
 		_, err = db.LoadChainAs(chainId[:], spec)
