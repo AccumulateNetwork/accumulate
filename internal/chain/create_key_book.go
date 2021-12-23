@@ -39,17 +39,15 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 	}
 
 	entries := make([]*protocol.KeyPage, len(body.Pages))
-	for i, chainId := range body.Pages {
+	for i, page := range body.Pages {
+		u, err := url.Parse(page)
+		if err != nil {
+			return fmt.Errorf("invalid key page url : %s", page)
+		}
 		entry := new(protocol.KeyPage)
-		err = st.LoadAs(chainId, entry)
+		err = st.LoadAs(u.ResourceChain32(), entry)
 		if err != nil {
 			return fmt.Errorf("failed to fetch sig spec: %v", err)
-		}
-
-		u, err := entry.ParseUrl()
-		if err != nil {
-			// This should not happen. Only valid URLs should be stored.
-			return fmt.Errorf("invalid sig spec state: bad URL: %v", err)
 		}
 
 		if !u.Identity().Equal(st.OriginUrl) {
@@ -78,8 +76,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 			return fmt.Errorf("invalid sig spec state: bad URL: %v", err)
 		}
 
-		specChainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		book.Pages = append(book.Pages, specChainId)
+		book.Pages = append(book.Pages, u.String())
 		spec.KeyBook = groupChainId
 		err = scc.Update(spec)
 		if err != nil {

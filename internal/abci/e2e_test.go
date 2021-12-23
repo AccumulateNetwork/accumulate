@@ -553,7 +553,6 @@ func TestCreateKeyBook(t *testing.T) {
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	specUrl := n.ParseUrl("foo/page1")
-	specChainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
 
 	groupUrl := n.ParseUrl("foo/book1")
 	groupChainId := types.Bytes(groupUrl.ResourceChain()).AsBytes32()
@@ -561,7 +560,7 @@ func TestCreateKeyBook(t *testing.T) {
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		csg := new(protocol.CreateKeyBook)
 		csg.Url = "foo/book1"
-		csg.Pages = append(csg.Pages, specChainId)
+		csg.Pages = append(csg.Pages, specUrl.String())
 
 		tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), csg)
 		require.NoError(t, err)
@@ -570,7 +569,7 @@ func TestCreateKeyBook(t *testing.T) {
 
 	group := n.GetKeyBook("foo/book1")
 	require.Len(t, group.Pages, 1)
-	require.Equal(t, specChainId, types.Bytes32(group.Pages[0]))
+	require.Equal(t, specUrl.String(), group.Pages[0])
 
 	spec := n.GetKeyPage("foo/page1")
 	require.Equal(t, spec.KeyBook, groupChainId)

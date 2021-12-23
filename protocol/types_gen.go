@@ -39,8 +39,8 @@ type CreateDataAccount struct {
 }
 
 type CreateKeyBook struct {
-	Url   string     `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	Pages [][32]byte `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
+	Url   string   `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Pages []string `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
 }
 
 type CreateKeyPage struct {
@@ -88,7 +88,7 @@ type IssueTokens struct {
 
 type KeyBook struct {
 	state.ChainHeader
-	Pages [][32]byte `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
+	Pages []string `json:"pages,omitempty" form:"pages" query:"pages" validate:"required"`
 }
 
 type KeyPage struct {
@@ -406,9 +406,11 @@ func (v *CreateKeyBook) Equal(u *CreateKeyBook) bool {
 	}
 
 	for i := range v.Pages {
-		if v.Pages[i] != u.Pages[i] {
+		v, u := v.Pages[i], u.Pages[i]
+		if !(v == u) {
 			return false
 		}
+
 	}
 
 	return true
@@ -564,9 +566,11 @@ func (v *KeyBook) Equal(u *KeyBook) bool {
 	}
 
 	for i := range v.Pages {
-		if v.Pages[i] != u.Pages[i] {
+		v, u := v.Pages[i], u.Pages[i]
+		if !(v == u) {
 			return false
 		}
+
 	}
 
 	return true
@@ -1086,7 +1090,12 @@ func (v *CreateKeyBook) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Url)
 
-	n += encoding.ChainSetBinarySize(v.Pages)
+	n += encoding.UvarintBinarySize(uint64(len(v.Pages)))
+
+	for _, v := range v.Pages {
+		n += encoding.StringBinarySize(v)
+
+	}
 
 	return n
 }
@@ -1216,7 +1225,12 @@ func (v *KeyBook) BinarySize() int {
 
 	n += v.ChainHeader.GetHeaderSize()
 
-	n += encoding.ChainSetBinarySize(v.Pages)
+	n += encoding.UvarintBinarySize(uint64(len(v.Pages)))
+
+	for _, v := range v.Pages {
+		n += encoding.StringBinarySize(v)
+
+	}
 
 	return n
 }
@@ -1666,7 +1680,12 @@ func (v *CreateKeyBook) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
-	buffer.Write(encoding.ChainSetMarshalBinary(v.Pages))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Pages))))
+	for i, v := range v.Pages {
+		_ = i
+		buffer.Write(encoding.StringMarshalBinary(v))
+
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -1811,7 +1830,12 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(encoding.ChainSetMarshalBinary(v.Pages))
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Pages))))
+	for i, v := range v.Pages {
+		_ = i
+		buffer.Write(encoding.StringMarshalBinary(v))
+
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -2381,12 +2405,24 @@ func (v *CreateKeyBook) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Url):]
 
-	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+	var lenPages uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Pages: %w", err)
 	} else {
-		v.Pages = x
+		lenPages = x
 	}
-	data = data[encoding.ChainSetBinarySize(v.Pages):]
+	data = data[encoding.UvarintBinarySize(lenPages):]
+
+	v.Pages = make([]string, lenPages)
+	for i := range v.Pages {
+		if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Pages[%d]: %w", i, err)
+		} else {
+			v.Pages[i] = x
+		}
+		data = data[encoding.StringBinarySize(v.Pages[i]):]
+
+	}
 
 	return nil
 }
@@ -2646,12 +2682,24 @@ func (v *KeyBook) UnmarshalBinary(data []byte) error {
 	}
 	data = data[v.GetHeaderSize():]
 
-	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+	var lenPages uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Pages: %w", err)
 	} else {
-		v.Pages = x
+		lenPages = x
 	}
-	data = data[encoding.ChainSetBinarySize(v.Pages):]
+	data = data[encoding.UvarintBinarySize(lenPages):]
+
+	v.Pages = make([]string, lenPages)
+	for i := range v.Pages {
+		if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Pages[%d]: %w", i, err)
+		} else {
+			v.Pages[i] = x
+		}
+		data = data[encoding.StringBinarySize(v.Pages[i]):]
+
+	}
 
 	return nil
 }
@@ -3457,16 +3505,6 @@ func (v *ChainParams) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *CreateKeyBook) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Url   string   `json:"url,omitempty"`
-		Pages []string `json:"pages,omitempty"`
-	}{}
-	u.Url = v.Url
-	u.Pages = encoding.ChainSetToJSON(v.Pages)
-	return json.Marshal(&u)
-}
-
 func (v *DataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		ExtIds []*string `json:"extIds,omitempty"`
@@ -3491,16 +3529,6 @@ func (v *IdentityCreate) MarshalJSON() ([]byte, error) {
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookName = v.KeyBookName
 	u.KeyPageName = v.KeyPageName
-	return json.Marshal(&u)
-}
-
-func (v *KeyBook) MarshalJSON() ([]byte, error) {
-	u := struct {
-		state.ChainHeader
-		Pages []string `json:"pages,omitempty"`
-	}{}
-	u.ChainHeader = v.ChainHeader
-	u.Pages = encoding.ChainSetToJSON(v.Pages)
 	return json.Marshal(&u)
 }
 
@@ -3703,25 +3731,6 @@ func (v *ChainParams) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *CreateKeyBook) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Url   string   `json:"url,omitempty"`
-		Pages []string `json:"pages,omitempty"`
-	}{}
-	u.Url = v.Url
-	u.Pages = encoding.ChainSetToJSON(v.Pages)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Url = u.Url
-	if x, err := encoding.ChainSetFromJSON(u.Pages); err != nil {
-		return fmt.Errorf("error decoding Pages: %w", err)
-	} else {
-		v.Pages = x
-	}
-	return nil
-}
-
 func (v *DataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		ExtIds []*string `json:"extIds,omitempty"`
@@ -3773,25 +3782,6 @@ func (v *IdentityCreate) UnmarshalJSON(data []byte) error {
 	}
 	v.KeyBookName = u.KeyBookName
 	v.KeyPageName = u.KeyPageName
-	return nil
-}
-
-func (v *KeyBook) UnmarshalJSON(data []byte) error {
-	u := struct {
-		state.ChainHeader
-		Pages []string `json:"pages,omitempty"`
-	}{}
-	u.ChainHeader = v.ChainHeader
-	u.Pages = encoding.ChainSetToJSON(v.Pages)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.ChainHeader = u.ChainHeader
-	if x, err := encoding.ChainSetFromJSON(u.Pages); err != nil {
-		return fmt.Errorf("error decoding Pages: %w", err)
-	} else {
-		v.Pages = x
-	}
 	return nil
 }
 
