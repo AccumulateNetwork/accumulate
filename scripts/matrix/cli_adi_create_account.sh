@@ -18,7 +18,7 @@ if [ -z $s ]; then
 fi
 
 if [ -z $cli ]; then
-	cli=../../cmd/cli/cli
+	cli=../../cmd/accumulate/accumulate
 fi
 
 # if lite account, account name, and key name not entered on the command line, prompt and exit 
@@ -35,7 +35,7 @@ keyn="$($cli adi create $1 $2 $3 -s http://$4/v1 -j 2>&1 > /dev/null)"
 if [ $? -eq 0 ]; then
 	key=`echo $keyn | $j .hash | $s 's/\"//g'`
 else
-	echo "cli adi create failed"
+	echo "accumulate adi create failed"
 	exit 1
 fi
 
