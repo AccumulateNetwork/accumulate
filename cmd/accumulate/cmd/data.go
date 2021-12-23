@@ -104,7 +104,7 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	err = Client.RequestV2(context.Background(), "query-data", json.RawMessage(data), &res)
+	err = Client.Request(context.Background(), "query-data", json.RawMessage(data), &res)
 	if err != nil {
 		return "", err
 	}
@@ -149,7 +149,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	err = Client.RequestV2(context.Background(), "query-data-set", json.RawMessage(data), &res)
+	err = Client.Request(context.Background(), "query-data-set", json.RawMessage(data), &res)
 	if err != nil {
 		return "", err
 	}

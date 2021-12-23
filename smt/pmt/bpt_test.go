@@ -402,8 +402,11 @@ func walk(bpt *BPT, node *Node) {
 	}
 }
 
+// Just gives data about distributions in the BPT
 func TestBPTByteSizes(t *testing.T) {
-	t.Skip("Just gives data about distributions in the BPT.")
+	if true {
+		return
+	}
 
 	bpt := LoadBptCnt(37, 100000)
 	println("walking")
