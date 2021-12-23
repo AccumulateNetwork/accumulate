@@ -30,7 +30,7 @@ func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
 	}
 	res := new(api2.QueryResponse)
 	res.Data = rec
-	if err := Client.RequestV2(context.Background(), "query", &params, res); err != nil {
+	if err := Client.Request(context.Background(), "query", &params, res); err != nil {
 		return nil, err
 	}
 	return res.MerkleState, nil
@@ -42,7 +42,7 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	}
 	res := new(api2.QueryResponse)
 	res.Data = rec
-	if err := Client.RequestV2(context.Background(), "query-chain", &params, res); err != nil {
+	if err := Client.Request(context.Background(), "query-chain", &params, res); err != nil {
 		return nil, err
 	}
 	return res.MerkleState, nil
@@ -222,7 +222,7 @@ func GetUrl(url string) (*api2.QueryResponse, error) {
 		return nil, err
 	}
 
-	if err := Client.RequestV2(context.Background(), "query", json.RawMessage(data), &res); err != nil {
+	if err := Client.Request(context.Background(), "query", json.RawMessage(data), &res); err != nil {
 		ret, err := PrintJsonRpcError(err)
 		if err != nil {
 			return nil, err
@@ -233,13 +233,13 @@ func GetUrl(url string) (*api2.QueryResponse, error) {
 	return &res, nil
 }
 
-func dispatchTxRequest(action string, payload interface{}, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	dataBinary, err := payload.(encoding.BinaryMarshaler).MarshalBinary()
+	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -256,7 +256,7 @@ func dispatchTxRequest(action string, payload interface{}, origin *url2.URL, si 
 	}
 
 	var res api2.TxResponse
-	if err := Client.RequestV2(context.Background(), action, json.RawMessage(data), &res); err != nil {
+	if err := Client.Request(context.Background(), action, json.RawMessage(data), &res); err != nil {
 		_, err := PrintJsonRpcError(err)
 		return nil, err
 	}
@@ -355,6 +355,13 @@ func (a *ActionResponse) Print() (string, error) {
 	return "", errors.New(out)
 }
 
+type JsonRpcError struct {
+	Msg string
+	Err jsonrpc2.Error
+}
+
+func (e *JsonRpcError) Error() string { return e.Msg }
+
 func PrintJsonRpcError(err error) (string, error) {
 	var e jsonrpc2.Error
 	switch err := err.(type) {
@@ -369,20 +376,20 @@ func PrintJsonRpcError(err error) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return "", errors.New(string(out))
+		return "", &JsonRpcError{Err: e, Msg: string(out)}
 	} else {
 		var out string
 		out += fmt.Sprintf("\n\tMessage\t\t:\t%v\n", e.Message)
 		out += fmt.Sprintf("\tError Code\t:\t%v\n", e.Code)
 		out += fmt.Sprintf("\tDetail\t\t:\t%s\n", e.Data)
-		return "", errors.New(out)
+		return "", &JsonRpcError{Err: e, Msg: out}
 	}
 }
 
 func printOutput(cmd *cobra.Command, out string, err error) {
 	if err != nil {
 		cmd.PrintErrf("Error: %v\n", err)
-		DidError = true
+		DidError = err
 	} else {
 		cmd.Println(out)
 	}
@@ -490,15 +497,16 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		if err != nil {
 			amt = "unknown"
 		}
-		kbr, err := GetByChainId(ata.KeyBook[:])
+		kbr, err := resolveKeyBookUrl(ata.KeyBook[:])
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve keybook for token account query")
 		}
+
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
-		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
+		out += fmt.Sprintf("\tToken Url\t:\t%s\n", *ata.TokenUrl.String.AsString())
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", kbr.Origin)
+		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", kbr)
 
 		return out, nil
 	case types.ChainTypeIdentity.String():
@@ -508,7 +516,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 			return "", err
 		}
 
-		kb, err := resolveKeyBookChainId(adi.KeyBook[:])
+		kb, err := resolveKeyBookUrl(adi.KeyBook[:])
 		if err != nil {
 			return "", fmt.Errorf("cannot resolve keybook for adi query")
 		}
@@ -646,7 +654,7 @@ func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
 	return &header, nil
 }
 
-func resolveKeyBookChainId(chainId []byte) (string, error) {
+func resolveKeyBookUrl(chainId []byte) (string, error) {
 	kb, err := GetByChainId(chainId)
 	book := protocol.KeyBook{}
 	err = UnmarshalQuery(kb.Data, &book)

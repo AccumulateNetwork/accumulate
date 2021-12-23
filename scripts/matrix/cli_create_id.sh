@@ -22,7 +22,7 @@ if [ -z $1 ]; then
 	if [ $? -eq 0 ]; then
            acc=`echo $accid | $j .name | $s 's/\"//g'`
         else
-	   echo "cli account generate failed"
+	   echo "accumulate account generate failed"
 	   exit 1
         fi
 else
@@ -30,7 +30,7 @@ else
         if [ $? -eq 0 ]; then
 	   acc=`echo $accid | $j .name | $s 's/\"//g'`
 	else
-	   echo "cli account generate failed"
+	   echo "accumulate account generate failed"
 	   exit 1
         fi
 fi

@@ -24,18 +24,8 @@ func NewAPIClient() *APIClient {
 	return c
 }
 
-// RequestV1 Deprecated : Request makes request to API server
-func (c *APIClient) RequestV1(ctx context.Context,
-	method string, params, result interface{}) error {
-
-	if c.DebugRequest {
-		fmt.Println("accumulated:", c.Server)
-	}
-	return c.Client.Request(ctx, c.Server, method, params, result)
-}
-
-// RequestV2 makes request to API server (version 2)
-func (c *APIClient) RequestV2(ctx context.Context,
+// Request makes request to API server (version 2)
+func (c *APIClient) Request(ctx context.Context,
 	method string, params, result interface{}) error {
 
 	if c.DebugRequest {

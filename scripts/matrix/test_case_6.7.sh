@@ -7,13 +7,13 @@
 #
 # set cli command and see if it exists
 #
-export cli=../../cmd/cli/cli
+export cli=../../cmd/accumulate/accumulate
 
 if [ ! -f $cli ]; then
-        echo "cli command not found in ../../cmd/cli, attempting to build"
+        echo "accumulate command not found in ../../cmd/accumulate, attempting to build"
         ./build_cli.sh
         if [ ! -f $cli ]; then
-           echo "cli command failed to build"
+           echo "accumulate command failed to build"
            exit 1
         fi
 fi
@@ -22,12 +22,12 @@ fi
 
 id1=`cli_create_id.sh $1`
 if [ $? -ne 0 ]; then
-	echo "cli create id failed"
+	echo "accumulate create id failed"
 	exit 1
 fi
 id2=`cli_create_id.sh $1`
 if [ $? -ne 0 ]; then
-	echo "cli create id failed"
+	echo "accumulate create id failed"
 	exit 1
 fi
 
@@ -36,7 +36,7 @@ fi
 ./cli_xfer_tokens.sh $id1 $id2 $3 $4
 
 if [ $? -ne 0 ]; then
-	echo "cli xfer tokens failed"
+	echo "accumulate xfer tokens failed"
 	exit 1
 fi
 exit 0
