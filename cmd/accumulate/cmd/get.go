@@ -81,7 +81,7 @@ func GetByChainId(chainId []byte) (*api2.QueryResponse, error) {
 		return nil, err
 	}
 
-	if err := Client.RequestV2(context.Background(), "query-chain", json.RawMessage(data), &res); err != nil {
+	if err := Client.Request(context.Background(), "query-chain", json.RawMessage(data), &res); err != nil {
 		log.Fatal(err)
 	}
 
@@ -113,7 +113,7 @@ func GetKey(url, key string) (string, error) {
 	params.Url = url
 	params.Key = keyb
 
-	err = Client.RequestV2(context.Background(), "query-key-index", &params, &res)
+	err = Client.Request(context.Background(), "query-key-index", &params, &res)
 	if err != nil {
 		return PrintJsonRpcError(err)
 	}

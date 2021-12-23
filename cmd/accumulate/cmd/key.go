@@ -89,11 +89,11 @@ var keyCmd = &cobra.Command{
 }
 
 type KeyResponse struct {
-	Label      types.String `json:"name"`
-	PrivateKey types.Bytes  `json:"privateKey"`
-	PublicKey  types.Bytes  `json:"publicKey"`
-	Seed       types.Bytes  `json:"seed"`
-	Mnemonic   types.Bytes  `json:"mnemonic"`
+	Label      types.String `json:"name,omitempty"`
+	PrivateKey types.Bytes  `json:"privateKey,omitempty"`
+	PublicKey  types.Bytes  `json:"publicKey,omitempty"`
+	Seed       types.Bytes  `json:"seed,omitempty"`
+	Mnemonic   types.String `json:"mnemonic,omitempty"`
 }
 
 func PrintKeyPublic() {
@@ -444,17 +444,38 @@ func ExportKeys() (out string, err error) {
 		return "", err
 	}
 
-	for _, v := range b.KeyValueList {
+	if WantJsonOutput {
+		out += "{\"keys\":["
+	}
+	for i, v := range b.KeyValueList {
 		label, err := FindLabelFromPubKey(v.Key)
 		if err != nil {
-			out += fmt.Sprintf("Error: Cannot find label for public key %x\n", v.Key)
+			if WantJsonOutput {
+				if i != 0 {
+					out += ","
+				}
+				out += fmt.Sprintf("{\"error\":\"cannot find data for for key %x\"}", v.Key)
+			} else {
+				out += fmt.Sprintf("Error: Cannot find data for key %x\n", v.Key)
+			}
 		} else {
 			str, err := ExportKey(label)
 			if err != nil {
 				out += fmt.Sprintf("invalid key for key name %s (error %v)\n", label, err)
 			} else {
+				if WantJsonOutput && i != 0 {
+					out += ","
+				}
 				out += str
 			}
+		}
+	}
+	if WantJsonOutput {
+		out += "]}"
+		var b bytes.Buffer
+		err := json.Indent(&b, []byte(out), "", "    ")
+		if err == nil {
+			out = b.String()
 		}
 	}
 	return out, nil
@@ -485,7 +506,7 @@ func ExportMnemonic() (string, error) {
 	}
 	if WantJsonOutput {
 		a := KeyResponse{}
-		a.Mnemonic = phrase
+		a.Mnemonic = types.String(phrase)
 		dump, err := json.Marshal(&a)
 		if err != nil {
 			return "", err

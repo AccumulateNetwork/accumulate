@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
-	"net"
 	"testing"
 	"time"
 
@@ -24,20 +23,24 @@ import (
 func TestEndToEnd(t *testing.T) {
 	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
+	acctesting.SkipPlatform(t, "darwin", "flaky")
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	baseIP := net.ParseIP("127.1.25.1")
+	// Reuse the same IPs for each test
+	ips := acctesting.GetIPs(2)
+
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
-		daemons := startAccumulate(t, baseIP, 1, 2, 3000)
+		daemons := startAccumulate(t, ips, 1, 2, 3000)
 		return &e2eDUT{s, daemons}
 	}))
 }
 
 func TestValidate(t *testing.T) {
 	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
+	acctesting.SkipPlatform(t, "darwin", "flaky")
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 2, 2, 3000)
+	daemons := startAccumulate(t, acctesting.GetIPs(4), 2, 2, 3000)
 	japi := daemons[0].Jrpc_TESTONLY()
 
 	t.Run("Not found", func(t *testing.T) {
@@ -208,9 +211,10 @@ func TestValidate(t *testing.T) {
 
 func TestTokenTransfer(t *testing.T) {
 	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
+	acctesting.SkipPlatform(t, "darwin", "flaky")
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 2, 2, 3000)
+	daemons := startAccumulate(t, acctesting.GetIPs(4), 2, 2, 3000)
 
 	var aliceKey ed25519.PrivateKey
 	var aliceUrl *url.URL
