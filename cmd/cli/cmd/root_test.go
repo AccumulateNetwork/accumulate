@@ -73,15 +73,17 @@ type testCmd struct {
 	directoryCmd   *exec.Cmd
 	validatorCmd   *exec.Cmd
 	defaultWorkDir string
+	jsonRpcAddr    string
 	jsonRpcPort    int
 }
 
 //NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports
-func NewTestBVNN(t *testing.T, defaultWorkDir string) int {
+func NewTestBVNN(t *testing.T, defaultWorkDir string) (string, int) {
 	t.Helper()
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Configure
-	opts := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
+	opts := acctesting.NodeInitOptsForLocalNetwork(t.Name(), acctesting.GetIP())
 	opts.WorkDir = defaultWorkDir
 	require.NoError(t, node.Init(opts))
 
@@ -93,7 +95,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) int {
 	require.NoError(t, err)
 
 	time.Sleep(time.Second)
-	return opts.Port + networks.AccRouterJsonPortOffset
+	return opts.RemoteIP[0], opts.Port + networks.AccRouterJsonPortOffset
 }
 
 func (c *testCmd) initalize(t *testing.T) {
@@ -112,7 +114,7 @@ func (c *testCmd) initalize(t *testing.T) {
 	c.rootCmd = InitRootCmd(initDB(defaultWorkDir, true))
 	c.rootCmd.PersistentPostRun = nil
 
-	c.jsonRpcPort = NewTestBVNN(t, defaultWorkDir)
+	c.jsonRpcAddr, c.jsonRpcPort = NewTestBVNN(t, defaultWorkDir)
 	time.Sleep(2 * time.Second)
 
 	t.Cleanup(func() {
@@ -121,8 +123,8 @@ func (c *testCmd) initalize(t *testing.T) {
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
-	fullCommand := fmt.Sprintf("-j -s http://127.0.0.1:%v/v2 %s",
-		c.jsonRpcPort, cmdLine)
+	fullCommand := fmt.Sprintf("-j -s http://%s:%v/v2 %s",
+		c.jsonRpcAddr, c.jsonRpcPort, cmdLine)
 	args := strings.Split(fullCommand, " ")
 
 	e := bytes.NewBufferString("")
@@ -130,7 +132,11 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	c.rootCmd.SetErr(e)
 	c.rootCmd.SetOut(b)
 	c.rootCmd.SetArgs(args)
+	DidError = nil
 	c.rootCmd.Execute()
+	if DidError != nil {
+		return "", DidError
+	}
 
 	errPrint, err := ioutil.ReadAll(e)
 	if err != nil {
