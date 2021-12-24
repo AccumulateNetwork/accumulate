@@ -217,6 +217,12 @@ type SyntheticWriteData struct {
 	Data  []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 }
 
+type TokenAccount struct {
+	state.ChainHeader
+	TokenUrl string  `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
+	Balance  big.Int `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
+}
+
 type TokenAccountCreate struct {
 	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 	TokenUrl   string `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
@@ -277,6 +283,12 @@ func NewLiteDataAccount() *LiteDataAccount {
 func NewLiteTokenAccount() *LiteTokenAccount {
 	v := new(LiteTokenAccount)
 	v.Type = types.ChainTypeLiteTokenAccount
+	return v
+}
+
+func NewTokenAccount() *TokenAccount {
+	v := new(TokenAccount)
+	v.Type = types.ChainTypeTokenAccount
 	return v
 }
 
@@ -939,6 +951,22 @@ func (v *SyntheticWriteData) Equal(u *SyntheticWriteData) bool {
 	return true
 }
 
+func (v *TokenAccount) Equal(u *TokenAccount) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.TokenUrl == u.TokenUrl) {
+		return false
+	}
+
+	if !(v.Balance.Cmp(&u.Balance) == 0) {
+		return false
+	}
+
+	return true
+}
+
 func (v *TokenAccountCreate) Equal(u *TokenAccountCreate) bool {
 	if !(v.Url == u.Url) {
 		return false
@@ -1522,6 +1550,21 @@ func (v *SyntheticWriteData) BinarySize() int {
 	n += encoding.ChainBinarySize(&v.Cause)
 
 	n += encoding.BytesBinarySize(v.Data)
+
+	return n
+}
+
+func (v *TokenAccount) BinarySize() int {
+	var n int
+
+	// Enforce sanity
+	v.Type = types.ChainTypeTokenAccount
+
+	n += v.ChainHeader.GetHeaderSize()
+
+	n += encoding.StringBinarySize(v.TokenUrl)
+
+	n += encoding.BigintBinarySize(&v.Balance)
 
 	return n
 }
@@ -2154,6 +2197,24 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.ChainMarshalBinary(&v.Cause))
 
 	buffer.Write(encoding.BytesMarshalBinary(v.Data))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TokenAccount) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	// Enforce sanity
+	v.Type = types.ChainTypeTokenAccount
+
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+	buffer.Write(encoding.StringMarshalBinary(v.TokenUrl))
+
+	buffer.Write(encoding.BigintMarshalBinary(&v.Balance))
 
 	return buffer.Bytes(), nil
 }
@@ -3287,6 +3348,32 @@ func (v *SyntheticWriteData) UnmarshalBinary(data []byte) error {
 		v.Data = x
 	}
 	data = data[encoding.BytesBinarySize(v.Data):]
+
+	return nil
+}
+
+func (v *TokenAccount) UnmarshalBinary(data []byte) error {
+	typ := types.ChainTypeTokenAccount
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding header: %w", err)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+	}
+	data = data[v.GetHeaderSize():]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TokenUrl: %w", err)
+	} else {
+		v.TokenUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.TokenUrl):]
+
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Balance: %w", err)
+	} else {
+		v.Balance.Set(x)
+	}
+	data = data[encoding.BigintBinarySize(&v.Balance):]
 
 	return nil
 }

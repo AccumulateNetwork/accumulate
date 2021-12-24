@@ -403,7 +403,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		r := n.GetTokenAccount("FooBar/Baz")
 		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
-		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
+		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 
 		require.Equal(t, []string{
 			n.ParseUrl("FooBar/book0").String(),
@@ -437,7 +437,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		r := n.GetTokenAccount("FooBar/Baz")
 		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
-		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
+		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 		require.Equal(t, bookChainId, r.KeyBook)
 	})
 }
