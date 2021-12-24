@@ -485,13 +485,13 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 
 		return out, nil
 	case types.ChainTypeTokenAccount.String():
-		ata := state.TokenAccount{}
+		ata := protocol.TokenAccount{}
 		err := UnmarshalQuery(res.Data, &ata)
 		if err != nil {
 			return "", err
 		}
 
-		amt, err := formatAmount(*ata.TokenUrl.String.AsString(), &ata.Balance)
+		amt, err := formatAmount(ata.TokenUrl, &ata.Balance)
 		if err != nil {
 			amt = "unknown"
 		}
@@ -502,7 +502,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
-		out += fmt.Sprintf("\tToken Url\t:\t%s\n", *ata.TokenUrl.String.AsString())
+		out += fmt.Sprintf("\tToken Url\t:\t%s\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
 		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", kbr)
 
