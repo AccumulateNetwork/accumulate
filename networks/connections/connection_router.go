@@ -6,7 +6,6 @@ import (
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"github.com/ybbus/jsonrpc/v2"
 	"log"
-	"math"
 	"strings"
 	"sync/atomic"
 )
@@ -114,11 +113,11 @@ func (cr *connectionRouter) GetAll() ([]Route, error) {
 func (cr *connectionRouter) GetAllBVNs() ([]Route, error) {
 	routes := make([]Route, 0)
 	for _, group := range cr.bvnGroupMap {
-		for _, route := range group.nodes {
-			if route.IsHealthy() {
-				routes = append(routes, route)
-			}
+		bvn, err := cr.selectNodeFromGroup(group, false)
+		if err != nil {
+			return nil, err
 		}
+		routes = append(routes, bvn)
 	}
 	if len(routes) == 0 {
 		return nil, NoHealthyNodes
@@ -175,6 +174,10 @@ func (cr *connectionRouter) selectDirNode() (*nodeContext, error) {
 func (cr *connectionRouter) selectBvnNode(adiUrl *url.URL, allowFollower bool) (*nodeContext, error) {
 	bvnGroup := cr.selectBvnGroup(adiUrl)
 
+	return cr.selectNodeFromGroup(bvnGroup, allowFollower)
+}
+
+func (cr *connectionRouter) selectNodeFromGroup(bvnGroup nodeGroup, allowFollower bool) (*nodeContext, error) {
 	nodeCnt := len(bvnGroup.nodes)
 	// If we only have one node we don't have to route
 	if nodeCnt == 1 {
@@ -202,12 +205,13 @@ func (cr *connectionRouter) selectBvnGroup(adiUrl *url.URL) nodeGroup {
 	// Create a fixed route which is based on the subnet name (rather than the order of them in the configuration)
 	adiRoutingNr := adiUrl.Routing()
 	var bvnGroup nodeGroup
-	bvnRoutingDelta := ^uint64(0)
+	highestRoutingNr := uint64(0)
 	for _, bvn := range cr.bvnGroupMap {
-		routingDelta := uint64(math.Abs(float64(bvn.nodeUrl.Routing() ^ adiRoutingNr)))
-		if routingDelta < bvnRoutingDelta {
+		// XOR every node url with the ADI URL, the node with the highest value wins.
+		mergedRoutingNr := bvn.nodeUrl.Routing() ^ adiRoutingNr
+		if mergedRoutingNr > highestRoutingNr {
 			bvnGroup = bvn
-			bvnRoutingDelta = routingDelta
+			highestRoutingNr = mergedRoutingNr
 		}
 	}
 	log.Printf("=====> selected %s for ADI %s\n", bvnGroup.nodeUrl.String(), adiUrl.String()) // TODO remove after debug

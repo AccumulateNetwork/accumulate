@@ -220,6 +220,10 @@ type MockConnectionRouter struct {
 	recorder *MockConnectionRouterMockRecorder
 }
 
+func (m *MockConnectionRouter) GetLocalSubnetRoutes() ([]connections.Route, error) {
+	panic("implement me")
+}
+
 // MockConnectionRouter is a mock of ConnectionRouter interface.
 type MockRoute struct {
 	broadcastClient *MockABCIBroadcastClient

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
+	"log"
 	"sync"
 	"time"
 
@@ -33,7 +34,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error
 	errCh := make(chan error)          // Error channel
 	doneCh := make(chan struct{})      // Completion channel
 
-	allRoutes, err := q.connRouter.GetAllBVNs() // TODO Only BVNs or really all?
+	allRoutes, err := q.connRouter.GetAllBVNs()
 	if err != nil {
 		return nil, err
 	}
@@ -56,12 +57,15 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error
 	}()
 
 	// Create a request for each client in a separate goroutine
-	for _, route := range allRoutes {
+	for i, route := range allRoutes {
+		finalRoute := route
+		finalIndex := i
 		go func() {
 			// Mark complete on return
 			defer wg.Done()
 
-			res, err := query(&queryDirect{q.QuerierOptions, route})
+			res, err := query(&queryDirect{q.QuerierOptions, finalRoute})
+			log.Printf("-=> Query #%d to %s result %v", finalIndex, finalRoute.GetSubnetName(), err) // TODO remove after debug
 			switch {
 			case err == nil:
 				select {

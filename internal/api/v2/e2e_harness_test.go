@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net"
 	"path"
 	"path/filepath"
@@ -193,11 +194,13 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
-
+	log.Printf("==> Querying tx %v\n", txid) // TODO remove after debug
 	txr := query(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
 	for _, txid := range txr.SyntheticTxids {
+		log.Printf("==> Querying SyntheticTxids %v\n", txid) // TODO remove after debug
 		query(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
 	}
+	log.Println("==> Querying done")
 }
 
 type e2eDUT struct {

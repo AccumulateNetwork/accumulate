@@ -125,7 +125,7 @@ func (cm *connectionManager) determineNetworkGroup(subnetName string, address st
 	case (strings.EqualFold(subnetName, cm.accConfig.Network.ID) && strings.EqualFold(address, cm.accConfig.Network.SelfAddress)) ||
 		strings.EqualFold(address, "local") || strings.EqualFold(address, "self"):
 		return Local
-	case subnetName == cm.accConfig.Network.ID:
+	case strings.EqualFold(subnetName, cm.accConfig.Network.ID):
 		return SameSubnet
 	default:
 		return OtherSubnet

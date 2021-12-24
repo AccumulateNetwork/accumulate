@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
@@ -377,6 +378,7 @@ func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 
 		// Add it to the batch
 		m.logDebug("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()))
+		log.Printf("==> Sending synth txn %v\n", logging.AsHex(tx.TransactionHash()))
 		err = m.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
 		if err != nil {
 			return nil, fmt.Errorf("sending synth txn failed for actor %s and tx %s: %v", u.String(), logging.AsHex(tx.TransactionHash()), err)

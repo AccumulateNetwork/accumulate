@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
+	"log"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -292,11 +293,13 @@ loop:
 		case 1:
 			// Send single (Tendermint JSON-RPC behaves badly)
 			// FIXME m.logDebug("Sending call", "remote", client.String()) // TODO check if this logs the URL
+			log.Printf("=====> Sending call remote method %s with params %s\n", rq[0].Method, rq[0].Params) // TODO remove after debug
 			r, e := client.Call(rq[0].Method, rq[0].Params)
 			res, err = jsonrpc.RPCResponses{r}, e
 		default:
 			// Send batch
 			// FIXME m.logDebug("Sending call batch", "remote", m.opts.Remote[i])
+			log.Printf("=====> Sending call batch remote %v\n", rq) // TODO remove after debug
 			res, err = client.CallBatch(rq)
 		}
 
