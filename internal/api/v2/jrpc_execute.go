@@ -308,8 +308,10 @@ loop:
 			ex := lup[rq[j]]
 			switch {
 			case err != nil:
-				// FIXME m.logError("Execute batch failed", "error", err, "remote", m.opts.Remote[i])
+				m.logError("Execute batch failed", "error", err, "remote", route.GetSubnetName())
+				route.ReportError(err)
 				ex.result = internalError(err)
+				// TODO Retry to other route?
 			case res[j].Error != nil:
 				err := res[j].Error
 				code := jsonrpc2.ErrorCode(err.Code)

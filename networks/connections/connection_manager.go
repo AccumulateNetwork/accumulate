@@ -1,18 +1,23 @@
 package connections
 
 import (
+	"context"
 	"fmt"
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"github.com/ybbus/jsonrpc/v2"
 	"net"
+	neturl "net/url"
 	"strings"
+	"time"
 )
+
+const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml?
 
 type ConnectionManager interface {
 	getBVNContextMap() map[string][]*nodeContext
@@ -36,9 +41,32 @@ type connectionManager struct {
 	logger       log.Logger
 }
 
+func (cm *connectionManager) doHealthCheckOnNode(nc *nodeContext) {
+	// Try to get the version using the jsonRpcClient
+	/*	FIXME this call does not work.  Maybe only on v1?
+		_, err := nc.jsonRpcClient.Call("version")
+		if err != nil {
+			nc.ReportError(err)
+			return
+		}
+	*/
+
+	// Try to query Tendermint with something it should not find
+	qryRes, err := nc.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", bytes.HexBytes{0})
+	if err != nil || qryRes.Response.Code != 1 { // TODO is response code 1 always "request is not an Accumulate Query"?
+		nc.ReportError(err)
+		cm.logger.Info("ABCIQuery response: %v", qryRes.Response)
+		return
+	}
+
+	/*	FIXME this call does not work Maybe only on v1?
+		res, err := nc.jsonRpcClient.Call("metrics", &protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
+		cm.logger.Info("TPS response: %v", res.Result)
+	*/
+}
+
 type nodeMetrics struct {
-	status    NodeStatus
-	latencyMS uint32
+	status NodeStatus
 	// TODO add metrics that can be useful for the router to determine whether it should put or should avoid putting put more load on a BVN
 }
 
@@ -109,7 +137,10 @@ func (cm *connectionManager) buildNodeInventory() {
 }
 
 func (cm *connectionManager) buildNodeContext(address string, subnetName string) (*nodeContext, error) {
-	nodeCtx := &nodeContext{subnetName: subnetName, address: address}
+	nodeCtx := &nodeContext{subnetName: subnetName,
+		address: address,
+		connMgr: cm,
+		metrics: nodeMetrics{status: Unknown}}
 	nodeCtx.networkGroup = cm.determineNetworkGroup(subnetName, address)
 	nodeCtx.netType, nodeCtx.nodeType = determineTypes(subnetName, cm.accConfig.Network)
 	var err error
@@ -225,17 +256,17 @@ func (cm *connectionManager) createJsonRpcClient(nodeCtx *nodeContext) error {
 }
 
 func resolveIPs(address string) ([]net.IP, error) {
-	ip := net.ParseIP(address)
-	if ip != nil {
-		return []net.IP{ip}, nil
-	}
-
 	var hostname string
-	nodeUrl, err := url.Parse(address)
+	nodeUrl, err := neturl.Parse(address)
 	if err == nil {
 		hostname = nodeUrl.Hostname()
 	} else {
 		hostname = address
+	}
+
+	ip := net.ParseIP(hostname)
+	if ip != nil {
+		return []net.IP{ip}, nil
 	}
 
 	/* TODO

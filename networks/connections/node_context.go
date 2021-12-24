@@ -4,6 +4,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/ybbus/jsonrpc/v2"
 	"net"
+	"time"
 )
 
 type NodeStatus int
@@ -12,6 +13,7 @@ const (
 	Up           NodeStatus = iota // Healthy & ready to go
 	Down                           // Not reachable
 	OutOfService                   // Reachable but not ready to go (IE. still syncing up)
+	Unknown                        // Not checked yet
 )
 
 type NetworkGroup int
@@ -25,6 +27,7 @@ const (
 type nodeContext struct {
 	subnetName           string
 	address              string
+	connMgr              *connectionManager
 	netType              config.NetworkType
 	nodeType             config.NodeType
 	networkGroup         NetworkGroup
@@ -35,46 +38,64 @@ type nodeContext struct {
 	batchBroadcastClient BatchABCIBroadcastClient
 	jsonRpcClient        jsonrpc.RPCClient
 	lastError            error
+	lastErrorExpiryTime  time.Time
 }
 
-func (n nodeContext) GetSubnetName() string {
-	return n.subnetName
+func (nc *nodeContext) GetSubnetName() string {
+	return nc.subnetName
 }
 
-func (n nodeContext) GetNetworkGroup() NetworkGroup {
-	return n.networkGroup
+func (nc *nodeContext) GetNetworkGroup() NetworkGroup {
+	return nc.networkGroup
 }
 
-func (n nodeContext) IsDirectoryNode() bool {
-	return n.netType == config.Directory && n.nodeType == config.Validator
+func (nc *nodeContext) IsDirectoryNode() bool {
+	return nc.netType == config.Directory && nc.nodeType == config.Validator
 }
 
-func (n nodeContext) GetJsonRpcClient() jsonrpc.RPCClient {
-	return n.jsonRpcClient
+func (nc *nodeContext) GetJsonRpcClient() jsonrpc.RPCClient {
+	return nc.jsonRpcClient
 }
 
-func (n nodeContext) GetQueryClient() ABCIQueryClient {
-	return n.queryClient
+func (nc *nodeContext) GetQueryClient() ABCIQueryClient {
+	return nc.queryClient
 }
 
-func (n nodeContext) GetBroadcastClient() ABCIBroadcastClient {
-	return n.broadcastClient
+func (nc *nodeContext) GetBroadcastClient() ABCIBroadcastClient {
+	return nc.broadcastClient
 }
 
-func (n nodeContext) GetBatchBroadcastClient() BatchABCIBroadcastClient {
-	return n.batchBroadcastClient
+func (nc *nodeContext) GetBatchBroadcastClient() BatchABCIBroadcastClient {
+	return nc.batchBroadcastClient
 }
 
-func (n nodeContext) IsHealthy() bool {
-	return n.metrics.status == Up
+func (nc *nodeContext) IsHealthy() bool {
+	switch nc.metrics.status {
+	case Up:
+		return true
+	case Unknown:
+		nc.connMgr.doHealthCheckOnNode(nc)
+		if nc.metrics.status == Up {
+			return true
+		}
+	default:
+		now := time.Now()
+		if now.After(nc.lastErrorExpiryTime) {
+			nc.lastErrorExpiryTime = now.Add(UnhealthyNodeCheckInterval) // avoid double doHealthCheckOnNode calls
+			go nc.connMgr.doHealthCheckOnNode(nc)
+		}
+	}
+	return false
 }
 
-func (n nodeContext) ReportError(err error) {
-	n.metrics.status = OutOfService // TODO refine err to status
-	n.lastError = err
+func (nc *nodeContext) ReportError(err error) {
+	nc.metrics.status = OutOfService
+	// TODO refine err to status, OutOfService means the node is alive & kicking, but not able to handle request (ie still loading DB or syncing up)
+	nc.lastErrorExpiryTime = time.Now().Add(UnhealthyNodeCheckInterval)
 }
 
-func (n nodeContext) ReportErrorStatus(status NodeStatus, err error) {
-	n.metrics.status = status
-	n.lastError = err
+func (nc *nodeContext) ReportErrorStatus(status NodeStatus, err error) {
+	nc.metrics.status = status
+	nc.lastError = err
+	nc.lastErrorExpiryTime = time.Now().Add(UnhealthyNodeCheckInterval)
 }

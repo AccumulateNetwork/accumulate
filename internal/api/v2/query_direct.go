@@ -36,6 +36,8 @@ func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
 
 	res, err := q.connRoute.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", b)
 	if err != nil {
+		q.connRoute.ReportError(err)
+		// TODO Retry to other route?
 		return "", nil, fmt.Errorf("failed to send request: %v", err)
 	}
 

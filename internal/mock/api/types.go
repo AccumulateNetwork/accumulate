@@ -232,6 +232,14 @@ type MockRoute struct {
 	client          jsonrpc.RPCClient
 }
 
+func (m MockRoute) ReportError(err error) {
+	panic("implement me")
+}
+
+func (m MockRoute) ReportErrorStatus(status connections.NodeStatus, err error) {
+	panic("implement me")
+}
+
 func (m MockRoute) GetSubnetName() string {
 	return m.subnetName
 }

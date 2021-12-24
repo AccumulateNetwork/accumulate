@@ -52,6 +52,8 @@ type Route interface {
 	LocalRoute
 	GetNetworkGroup() NetworkGroup
 	GetBatchBroadcastClient() BatchABCIBroadcastClient
+	ReportError(err error)
+	ReportErrorStatus(status NodeStatus, err error)
 }
 
 func NewConnectionRouter(connMgr ConnectionManager, test bool) ConnectionRouter {
@@ -193,7 +195,7 @@ func (cr *connectionRouter) selectNodeFromGroup(bvnGroup nodeGroup, allowFollowe
 		// Apply round-robin on the nodes within the group
 		next := atomic.AddUint32(&bvnGroup.next, 1)
 		nodeCtx := bvnGroup.nodes[int(next-1)%nodeCnt]
-		if nodeCtx.IsHealthy() && (allowFollower || nodeCtx.nodeType == config.Validator) { // TODO Can BVN subnets also contain followers?
+		if nodeCtx.IsHealthy() && (allowFollower || nodeCtx.nodeType == config.Validator) { // TODO Can BVN subnets also contain followers? (In networks.go on the DN has that)
 			log.Println("   ==> selected address " + nodeCtx.address) // TODO remove after debug
 			return nodeCtx, nil
 		}
