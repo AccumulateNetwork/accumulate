@@ -246,11 +246,11 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 		rAdi.PublicKey = sChain.KeyData
 		return respondWith(obj, rAdi, sChain.Type.String())
 
-	case *state.TokenAccount:
+	case *protocol.TokenAccount:
 		ta := new(protocol.TokenAccountCreate)
 		ta.Url = string(sChain.ChainUrl)
-		ta.TokenUrl = string(sChain.TokenUrl.String)
-		rAccount := response.NewTokenAccount(ta, sChain.GetBalance(), sChain.TxCount)
+		ta.TokenUrl = sChain.TokenUrl
+		rAccount := response.NewTokenAccount(ta, sChain.GetBalance())
 		return respondWith(obj, rAccount, sChain.Type.String())
 
 	case *protocol.LiteTokenAccount:
