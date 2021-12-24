@@ -131,10 +131,9 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account.TxCount++
 		chain = account
 	} else {
-		account := state.NewTokenAccount(u.String(), tokenUrl)
+		account := protocol.NewTokenAccountByUrls(u.String(), tokenUrl)
 		account.KeyBook = types.Bytes(bookId).AsBytes32()
 		account.Balance.SetInt64(int64(tokens * TokenMx))
-		account.TxCount++
 		chain = account
 	}
 

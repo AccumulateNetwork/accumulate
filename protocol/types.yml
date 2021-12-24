@@ -27,6 +27,15 @@ LiteTokenAccount:
     - name: CreditBalance
       type: bigint
 
+TokenAccount:
+  kind: chain
+  fields:
+    - name: TokenUrl
+      type: string
+      is-url: true
+    - name: Balance
+      type: bigint
+
 SyntheticCreateChain:
   kind: tx
   fields:

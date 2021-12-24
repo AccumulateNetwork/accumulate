@@ -39,7 +39,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.GenTra
 		switch origin := st.Origin.(type) {
 		case *protocol.LiteTokenAccount:
 			account = origin
-		case *state.TokenAccount:
+		case *protocol.TokenAccount:
 			account = origin
 		default:
 			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, origin.Header().Type)
