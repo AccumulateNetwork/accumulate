@@ -61,7 +61,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
-	book.Pages = append(book.Pages, types.Bytes(pageUrl.ResourceChain()).AsBytes32())
+	book.Pages = append(book.Pages, pageUrl.String())
 
 	identity := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, body.PublicKey)
 	identity.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
