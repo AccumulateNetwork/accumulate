@@ -171,7 +171,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	case *protocol.LiteTokenAccount:
 		return st, m.checkLite(st, tx, origin)
 
-	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
+	case *state.AdiState, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
 		if (origin.Header().KeyBook == types.Bytes32{}) {
 			return nil, fmt.Errorf("sponsor has not been assigned to a key book")
 		}

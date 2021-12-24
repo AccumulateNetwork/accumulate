@@ -1,4 +1,4 @@
-package state
+package protocol
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ func TestTokenBalanceState(t *testing.T) {
 	tokenUrl := "MyADI/MyTokenType"
 
 	accountUrl := "MyADI/MyTokens"
-	token := NewTokenAccount(accountUrl, tokenUrl)
+	token := NewTokenAccountByUrls(accountUrl, tokenUrl)
 
 	fmt.Println(token.GetBalance())
 
@@ -91,7 +91,7 @@ func TestTokenBalanceState(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	token2 := NewTokenAccount("blah", "blah")
+	token2 := NewTokenAccountByUrls("blah", "blah")
 	err = token2.UnmarshalBinary(tokenBytes)
 
 	if err != nil {

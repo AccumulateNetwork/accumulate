@@ -275,8 +275,8 @@ func (n *fakeNode) GetDataAccount(url string) *protocol.DataAccount {
 	return acct
 }
 
-func (n *fakeNode) GetTokenAccount(url string) *state.TokenAccount {
-	acct := new(state.TokenAccount)
+func (n *fakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
+	acct := protocol.NewTokenAccount()
 	n.GetChainAs(url, acct)
 	return acct
 }
