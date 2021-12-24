@@ -14,7 +14,7 @@ func NewChain(typ types.ChainType) (state.Chain, error) {
 	case types.ChainTypeTokenIssuer:
 		return new(TokenIssuer), nil
 	case types.ChainTypeTokenAccount:
-		return new(state.TokenAccount), nil
+		return new(TokenAccount), nil
 	case types.ChainTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
 	case types.ChainTypeTransactionReference:

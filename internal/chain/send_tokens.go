@@ -32,7 +32,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 
 	var account tokenChain
 	switch origin := st.Origin.(type) {
-	case *state.TokenAccount:
+	case *protocol.TokenAccount:
 		account = origin
 	case *protocol.LiteTokenAccount:
 		account = origin
