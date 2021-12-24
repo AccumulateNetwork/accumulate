@@ -59,7 +59,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 			return fmt.Errorf("invalid origin record URL: %v", err)
 		}
 
-		group.Pages = append(group.Pages, types.Bytes(msUrl.ResourceChain()).AsBytes32())
+		group.Pages = append(group.Pages, msUrl.String())
 		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 
 		err = scc.Update(group)

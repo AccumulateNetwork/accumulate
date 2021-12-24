@@ -113,7 +113,10 @@ KeyBook:
   kind: chain
   fields:
     - name: Pages
-      type: chainSet
+      type: slice
+      slice:
+        type: string
+        is-url: true
 
 CreateKeyBook:
   kind: tx
@@ -122,7 +125,10 @@ CreateKeyBook:
       type: string
       is-url: true
     - name: Pages
-      type: chainSet
+      type: slice
+      slice:
+        type: string
+        is-url: true
 
 IdentityCreate:
   kind: tx

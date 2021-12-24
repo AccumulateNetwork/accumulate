@@ -13,6 +13,7 @@ import (
 	"time"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -117,7 +118,8 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 	if ed.KeyPageIndex >= uint64(len(bookRec.Pages)) {
 		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", ed.KeyPageIndex, origin)
 	}
-	ms, err := getRecordById(bookRec.Pages[ed.KeyPageIndex][:], nil)
+	u, err := url.Parse(bookRec.Pages[ed.KeyPageIndex])
+	ms, err := getRecordById(u.ResourceChain(), nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[ed.KeyPageIndex][:], err)
 	}
@@ -559,11 +561,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		var out string
 		out += fmt.Sprintf("\n\tPage Index\t\tKey Page Url\n")
 		for i, v := range book.Pages {
-			s, err := resolveKeyPageUrl(v[:])
-			if err != nil {
-				return "", err
-			}
-			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, s)
+			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, v)
 		}
 		return out, nil
 	case types.ChainTypeKeyPage.String():
