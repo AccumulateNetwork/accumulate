@@ -16,6 +16,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
@@ -42,19 +43,24 @@ import (
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
-	db := new(state.StateDB)
-	err := db.Open("memory", true, true, nil)
+	db, err := database.Open("", true, nil)
 	require.NoError(t, err)
-
 	return createApp(t, db, addr, doGenesis)
 }
 
-func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis bool) *fakeNode {
+func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenesis bool) *fakeNode {
 	_, bvcKey, _ := ed25519.GenerateKey(rand)
 
 	n := new(fakeNode)
 	n.t = t
 	n.db = db
+
+	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
+	n.network = &config.Network{
+		Type:     config.BlockValidator,
+		ID:       subnet,
+		BvnNames: []string{subnet},
+	}
 
 	logWriter, _ := logging.TestLogWriter(t)("plain")
 	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
@@ -69,12 +75,14 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
 
-	n.height, err = db.BlockIndex()
-	if !errors.Is(err, storage.ErrNotFound) {
-		require.NoError(t, err)
-	}
+	batch := db.Begin()
+	defer batch.Discard()
 
-	n.client = acctesting.NewABCIApplicationClient(appChan, db, n.NextHeight, func(err error) {
+	root := new(state.Anchor)
+	require.NoError(t, batch.Record(n.network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root))
+	n.height = root.Index
+
+	n.client = acctesting.NewFakeTendermint(appChan, db, n.network, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
 	}, 100*time.Millisecond)
@@ -83,23 +91,23 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
 
-	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		Local:  n.client,
-		DB:     n.db,
-		IsTest: true,
-		Logger: logger,
-		Key:    bvcKey,
-		Network: config.Network{
-			Type:     config.BlockValidator,
-			ID:       subnet,
-			BvnNames: []string{subnet},
-		},
+		Local:   n.client,
+		DB:      n.db,
+		IsTest:  true,
+		Logger:  logger,
+		Key:     bvcKey,
+		Network: *n.network,
 	})
 	require.NoError(t, err)
 
-	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
-	require.NoError(t, err)
+	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
+		Chain:   mgr,
+		DB:      db,
+		Logger:  logger,
+		Network: *n.network,
+		Address: addr,
+	})
 	appChan <- n.app
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		require.NoError(t, err)
@@ -116,8 +124,7 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	kv := new(memory.DB)
 	_ = kv.InitDB("", nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
-		SubnetID:    subnet,
-		NetworkType: config.BlockValidator,
+		Network:     *n.network,
 		GenesisTime: time.Now(),
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: tmed25519.PrivKey(bvcKey).PubKey()},
@@ -138,12 +145,13 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 }
 
 type fakeNode struct {
-	t      testing.TB
-	db     *state.StateDB
-	app    abcitypes.Application
-	client *acctesting.ABCIApplicationClient
-	query  *accapi.Query
-	height int64
+	t       testing.TB
+	db      *database.Database
+	network *config.Network
+	app     abcitypes.Application
+	client  *acctesting.FakeTendermint
+	query   *accapi.Query
+	height  int64
 }
 
 func (n *fakeNode) NextHeight() int64 {
@@ -231,23 +239,25 @@ func (n *fakeNode) ParseUrl(s string) *url.URL {
 }
 
 func (n *fakeNode) GetDirectory(adi string) []string {
+	batch := n.db.Begin()
+	defer batch.Discard()
+
 	u := n.ParseUrl(adi)
+	record := batch.Record(u)
 	require.True(n.t, u.Identity().Equal(u))
 
 	md := new(protocol.DirectoryIndexMetadata)
-	idc := u.IdentityChain()
-	b, err := n.db.GetIndex(state.DirectoryIndex, idc, "Metadata")
+	err := record.Index("Directory", "Metadata").GetAs(md)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil
 	}
 	require.NoError(n.t, err)
-	require.NoError(n.t, md.UnmarshalBinary(b))
 
 	chains := make([]string, md.Count)
 	for i := range chains {
-		b, err := n.db.GetIndex(state.DirectoryIndex, idc, uint64(i))
+		data, err := record.Index("Directory", uint64(i)).Get()
 		require.NoError(n.t, err)
-		chains[i] = string(b)
+		chains[i] = string(data)
 	}
 	return chains
 }

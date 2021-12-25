@@ -13,6 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
@@ -31,21 +32,24 @@ type Executor struct {
 
 	executors  map[types.TxType]TxExecutor
 	dispatcher *dispatcher
+	logger     log.Logger
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
 	chainWG map[uint64]*sync.WaitGroup
-	leader  bool
-	height  int64
-	dbTx    *state.DBTransaction
-	time    time.Time
-	logger  log.Logger
+
+	blockLeader bool
+	blockIndex  int64
+	blockTime   time.Time
+	blockBatch  *database.Batch
+	blockMeta   DeliverMetadata
+	delivered   int
 }
 
 var _ abci.Chain = (*Executor)(nil)
 
 type ExecutorOptions struct {
-	DB      *state.StateDB
+	DB      *database.Database
 	Logger  log.Logger
 	Key     ed25519.PrivateKey
 	Local   api.ABCIBroadcastClient
@@ -83,14 +87,22 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 		m.executors[x.Type()] = x
 	}
 
-	height, err := m.DB.BlockIndex()
-	if errors.Is(err, storage.ErrNotFound) {
+	batch := m.DB.Begin()
+	defer batch.Discard()
+
+	var height int64
+	root := new(state.Anchor)
+	err := batch.Record(m.Network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	switch {
+	case err == nil:
+		height = root.Index
+	case errors.Is(err, storage.ErrNotFound):
 		height = 0
-	} else if err != nil {
+	default:
 		return nil, err
 	}
 
-	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(m.DB.RootHash()))
+	m.logInfo("Loaded", "height", height, "hash", logging.AsHex(batch.RootHash()))
 	return m, nil
 }
 
@@ -119,8 +131,9 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 		panic("Cannot call Genesis on a node txn executor")
 	}
 
-	m.height = 1
-	m.time = time
+	m.blockIndex = 1
+	m.blockTime = time
+	m.blockBatch = m.DB.Begin()
 
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
@@ -130,8 +143,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 		return nil, err
 	}
 
-	m.dbTx = m.DB.Begin()
-	st, err := NewStateManager(m.dbTx, tx)
+	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), tx)
 	if err == nil {
 		return nil, errors.New("already initialized")
 	} else if !errors.Is(err, storage.ErrNotFound) {
@@ -141,18 +153,9 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 
 	txPending := state.NewPendingTransaction(tx)
 	txAccepted, txPending := state.NewTransaction(txPending)
-	dataAccepted, err := txAccepted.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	txPending.Status = json.RawMessage("{\"code\":\"0\"}")
-	dataPending, err := txPending.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
 
-	chainId := protocol.AcmeUrl().ResourceChain32()
-	err = m.dbTx.AddTransaction((*types.Bytes32)(&chainId), tx.TransactionHash(), &state.Object{Entry: dataPending}, &state.Object{Entry: dataAccepted})
+	status := json.RawMessage("{\"code\":\"0\"}")
+	err = m.blockBatch.Transaction(tx.TransactionHash()).Put(txAccepted, status, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +165,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 		return nil, err
 	}
 
-	err = st.Commit()
+	m.blockMeta, err = st.Commit()
 	if err != nil {
 		return nil, err
 	}
@@ -185,11 +188,10 @@ func (m *Executor) InitChain(data []byte) error {
 
 	// Load the BPT root hash so we can verify the system state
 	var hash [32]byte
-	data, err = src.Get(storage.MakeKey("BPT", "Root"))
+	data, err = src.Begin().Get(storage.MakeKey("BPT", "Root"))
 	switch {
 	case err == nil:
-		bpt := new(pmt.BPT)
-		bpt.Root = new(pmt.Node)
+		bpt := pmt.NewBPT()
 		bpt.UnMarshal(data)
 		hash = bpt.Root.Hash
 	case errors.Is(err, storage.ErrNotFound):
@@ -199,27 +201,20 @@ func (m *Executor) InitChain(data []byte) error {
 	}
 
 	// Dump the genesis state into the key-value store
-	dst := m.DB.GetDB().DB
-	err = dst.EndBatch(src.Export())
+	batch := m.DB.Begin()
+	batch.Import(src)
+	err = batch.Commit()
 	if err != nil {
 		return fmt.Errorf("failed to load app state into database: %v", err)
 	}
 
-	// Load the genesis state into the StateDB
-	err = m.DB.Load(dst, false)
-	if err != nil {
-		return fmt.Errorf("failed to reload state database: %v", err)
-	}
+	// Recreate the batch to reload the BPT
+	batch = m.DB.Begin()
+	defer batch.Discard()
 
-	// Make sure the StateDB BPT root hash matches what we found in the genesis state
-	if !bytes.Equal(hash[:], m.DB.RootHash()) {
-		panic("BPT root hash from state DB does not match the app state")
-	}
-
-	// Make sure the subnet ID is set
-	_, err = m.DB.SubnetID()
-	if err != nil {
-		return fmt.Errorf("failed to load subnet ID: %v", err)
+	// Make sure the database BPT root hash matches what we found in the genesis state
+	if !bytes.Equal(hash[:], batch.RootHash()) {
+		panic(fmt.Errorf("BPT root hash from state DB does not match the app state\nWant: %X\nGot:  %X", hash[:], batch.RootHash()))
 	}
 
 	return nil
@@ -229,11 +224,13 @@ func (m *Executor) InitChain(data []byte) error {
 func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockResponse, error) {
 	m.logDebug("Begin block", "height", req.Height, "leader", req.IsLeader, "time", req.Time)
 
-	m.leader = req.IsLeader
-	m.height = req.Height
-	m.time = req.Time
 	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
-	m.dbTx = m.DB.Begin()
+	m.blockLeader = req.IsLeader
+	m.blockIndex = req.Height
+	m.blockTime = req.Time
+	m.blockBatch = m.DB.Begin()
+	m.blockMeta = DeliverMetadata{}
+	m.delivered = 0
 
 	// In order for other BVCs to be able to validate the synthetic transaction,
 	// a wrapped signed version must be resubmitted to this BVC network and the
@@ -284,66 +281,136 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
 func (m *Executor) Commit() ([]byte, error) {
 	m.wg.Wait()
 
-	subnet, err := m.DB.SubnetID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load subnet ID: %v", err)
-	}
+	// Discard changes if commit fails
+	defer m.blockBatch.Discard()
 
-	mdRoot, err := m.dbTx.Commit(m.height, m.time, func() error {
-		// Add a synthetic transaction for the previous block's anchor
-		err := m.addAnchorTxn()
-		if err != nil {
-			return err
-		}
-
-		// Mirror the subnet's ADI, but only immediately after genesis
-		if m.height != 2 || m.IsTest {
-			// TODO Don't skip during testing
-			return nil
-		}
-
-		var txns []*transactions.GenTransaction
-		switch m.Network.Type {
-		case config.Directory:
-			// Mirror DN ADI
-			mirror, err := m.mirrorADIs(protocol.DnUrl())
-			if err != nil {
-				return fmt.Errorf("failed to mirror BVN ADI: %v", err)
-			}
-
-			for _, bvn := range m.Network.BvnNames {
-				tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), mirror)
-				if err != nil {
-					return err
-				}
-				txns = append(txns, tx)
-			}
-
-		case config.BlockValidator:
-			// Mirror BVN ADI
-			mirror, err := m.mirrorADIs(protocol.BvnUrl(subnet))
-			if err != nil {
-				return fmt.Errorf("failed to mirror BVN ADI: %v", err)
-			}
-
-			tx, err := m.buildSynthTxn(protocol.DnUrl(), mirror)
-			if err != nil {
-				return fmt.Errorf("failed to build mirror txn: %v", err)
-			}
-			txns = append(txns, tx)
-		}
-
-		err = m.addSystemTxns(txns...)
-		if err != nil {
-			return fmt.Errorf("failed to save mirror txn: %v", err)
-		}
-		return nil
-	})
+	// Commit
+	err := m.doCommit()
 	if err != nil {
 		return nil, err
 	}
 
-	m.logInfo("Committed", "db_time", m.DB.TimeBucket)
-	m.DB.TimeBucket = 0
-	return mdRoot, nil
+	err = m.blockBatch.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	m.logInfo("Committed")
+
+	// Get BPT root from a clean batch
+	batch := m.DB.Begin()
+	defer batch.Discard()
+	return batch.RootHash(), nil
+}
+
+func (m *Executor) doCommit() error {
+	rootUrl := m.Network.NodeUrl().JoinPath(protocol.MinorRoot)
+	root := m.blockBatch.Record(rootUrl)
+
+	// Load the state of minor root
+	rootState := state.NewAnchor()
+	err := root.GetStateAs(rootState)
+	switch {
+	case err == nil:
+		// Make sure the block index is increasing
+		if rootState.Index >= m.blockIndex {
+			panic(fmt.Errorf("Current height is %d but the next block height is %d!", rootState.Index, m.blockIndex))
+		}
+
+	case m.isGenesis && errors.Is(err, storage.ErrNotFound):
+		// OK
+
+	default:
+		return err
+	}
+	// Load the main chain of the minor root
+	rootChain, err := root.Chain(protocol.Main)
+	if err != nil {
+		return err
+	}
+
+	// Add an anchor to the root chain for every updated record
+	chains := make([][32]byte, 0, len(m.blockMeta.Updated))
+	for _, u := range m.blockMeta.Updated {
+		chains = append(chains, u.ResourceChain32())
+		recordChain, err := m.blockBatch.Record(u).Chain(protocol.Main)
+		if err != nil {
+			return err
+		}
+
+		err = rootChain.AddEntry(recordChain.Anchor())
+		if err != nil {
+			return err
+		}
+	}
+
+	// Update the root state
+	rootState.Index = m.blockIndex
+	rootState.Timestamp = m.blockTime
+	rootState.Chains = chains
+	rootState.SystemTxns = nil
+	err = root.PutState(rootState)
+	if err != nil {
+		return err
+	}
+
+	// Load the state of the synth list
+	synthUrl := m.Network.NodeUrl().JoinPath(protocol.Synthetic)
+	synth := m.blockBatch.Record(synthUrl)
+	synthState := state.NewSyntheticTransactionChain()
+	err = synth.GetStateAs(synthState)
+	if err != nil {
+		return err
+	}
+
+	// Update synth chain
+	synthState.Index = m.blockIndex
+	synthState.Count = int64(len(m.blockMeta.Submitted))
+	synth.PutState(synthState)
+
+	if !m.isGenesis {
+		// Add a synthetic transaction for the previous block's anchor
+		err = m.addAnchorTxn()
+		if err != nil {
+			return err
+		}
+	}
+
+	// Mirror the subnet's ADI, but only immediately after genesis
+	if m.blockIndex != 2 || m.IsTest {
+		// TODO Don't skip during testing
+		return nil
+	}
+
+	// Mirror subnet ADI
+	mirror, err := m.mirrorADIs(m.Network.NodeUrl())
+	if err != nil {
+		return fmt.Errorf("failed to mirror subnet ADI: %v", err)
+	}
+
+	var txns []*transactions.GenTransaction
+	switch m.Network.Type {
+	case config.Directory:
+		for _, bvn := range m.Network.BvnNames {
+			tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), mirror)
+			if err != nil {
+				return err
+			}
+			txns = append(txns, tx)
+		}
+
+	case config.BlockValidator:
+		tx, err := m.buildSynthTxn(protocol.DnUrl(), mirror)
+		if err != nil {
+			return fmt.Errorf("failed to build mirror txn: %v", err)
+		}
+		txns = append(txns, tx)
+	}
+
+	err = m.addSystemTxns(txns...)
+	if err != nil {
+		return fmt.Errorf("failed to save mirror txn: %v", err)
+	}
+
+	return nil
 }
