@@ -4,15 +4,15 @@ FROM golang:1.17 as build
 WORKDIR /root
 COPY . .
 ENV CGO_ENABLED 0
-RUN make && make cli
+RUN make && make accumulate
 
 FROM alpine:3
 
 # Copy binary
-COPY --from=build /root/cli /root/accumulated /bin/
+COPY --from=build /root/accumulate /root/accumulated /bin/
 
 RUN apk add --no-cache bash jq curl
 WORKDIR /scripts
 COPY scripts .
 
-CMD ["cli"]
+CMD ["accumulate"]
