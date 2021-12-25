@@ -7,6 +7,7 @@ import (
 	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -16,12 +17,7 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
 
-type DB interface {
-	LoadChainAs(chainId []byte, chain state.Chain) (*state.Object, error)
-	AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object)
-	WriteIndex(index state.Index, chain []byte, key interface{}, value []byte)
-	GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error)
-}
+type DB = *database.Batch
 
 // Token multiplier
 const TokenMx = protocol.AcmePrecision
@@ -67,21 +63,21 @@ func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error 
 
 func WriteStates(db DB, chains ...state.Chain) error {
 	for _, c := range chains {
-		b, err := c.MarshalBinary()
-		if err != nil {
-			return err
-		}
-
 		u, err := c.Header().ParseUrl()
 		if err != nil {
 			return err
 		}
 
-		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		db.AddStateEntry(&chainId, &types.Bytes32{}, &state.Object{Entry: b})
+		err = db.Record(u).PutState(c)
+		if err != nil {
+			return err
+		}
 
-		if !u.Identity().Equal(u) {
-			chain.AddDirectoryEntry(db, u)
+		err = chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
+			return db.Record(u).Index(key...)
+		})
+		if err != nil {
+			return err
 		}
 	}
 	return nil
@@ -119,7 +115,6 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	if err != nil {
 		return err
 	}
-	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
 	var chain state.Chain
 	if lite {
@@ -136,13 +131,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		chain = account
 	}
 
-	data, err := chain.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	db.AddStateEntry(&acctChainId, &types.Bytes32{}, &state.Object{Entry: data})
-	return nil
+	return db.Record(u).PutState(chain)
 }
 
 func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
@@ -180,11 +169,10 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 			return err
 		}
 
-		chainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
 		group.Pages[i] = specUrl.String()
 
 		spec := new(protocol.KeyPage)
-		_, err = db.LoadChainAs(chainId[:], spec)
+		err = db.Record(specUrl).GetStateAs(spec)
 		if err != nil {
 			return err
 		}

@@ -10,7 +10,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type SyntheticCreateChain struct{}
@@ -33,7 +32,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 	// Do basic validation and add everything to the state manager
 	urls := make([]*url.URL, len(body.Chains))
 	for i, cc := range body.Chains {
-		record, err := unmarshalRecord(&state.Object{Entry: cc.Data})
+		record, err := protocol.UnmarshalChain(cc.Data)
 		if err != nil {
 			return fmt.Errorf("invalid chain payload: %v", err)
 		}
