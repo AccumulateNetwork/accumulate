@@ -16,5 +16,5 @@ build:
 install:
 	go install -ldflags $(LDFLAGS) ./cmd/accumulated
 
-cli:
-	go build $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/cli
+accumulate:
+	go build $(BUILDFLAGS) -ldflags $(LDFLAGS) ./cmd/accumulate
