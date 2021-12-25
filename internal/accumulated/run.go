@@ -16,11 +16,11 @@ import (
 	apiv1 "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
@@ -35,7 +35,7 @@ type Daemon struct {
 	Logger tmlog.Logger
 
 	done  chan struct{}
-	db    *state.StateDB
+	db    *database.Database
 	node  *node.Node
 	relay *relay.Relay
 	query *apiv1.Query
@@ -84,7 +84,7 @@ func (d *Daemon) Key() crypto.PrivKey {
 }
 
 func (d *Daemon) Query_TESTONLY() *apiv1.Query    { return d.query }
-func (d *Daemon) DB_TESTONLY() *state.StateDB     { return d.db }
+func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
 func (d *Daemon) Jrpc_TESTONLY() *api.JrpcMethods { return d.jrpc }
 
@@ -117,9 +117,7 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	dbPath := filepath.Join(d.Config.RootDir, "valacc.db")
-	//ToDo: FIX:::  bvcId := sha256.Sum256([]byte(config.Instrumentation.Namespace))
-	d.db = new(state.StateDB)
-	err = d.db.Open(dbPath, d.UseMemDB, false, d.Logger)
+	d.db, err = database.Open(dbPath, d.UseMemDB, d.Logger)
 	if err != nil {
 		return fmt.Errorf("failed to open database %s: %v", dbPath, err)
 	}
@@ -127,7 +125,7 @@ func (d *Daemon) Start() (err error) {
 	// Close the database if start fails (mostly for tests)
 	defer func() {
 		if err != nil {
-			_ = d.db.GetDB().Close()
+			_ = d.db.Close()
 		}
 	}()
 
@@ -164,10 +162,13 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to initialize chain executor: %v", err)
 	}
 
-	app, err := abci.NewAccumulator(d.db, d.Key().PubKey().Address(), exec, d.Logger)
-	if err != nil {
-		return fmt.Errorf("failed to initialize ACBI app: %v", err)
-	}
+	app := abci.NewAccumulator(abci.AccumulatorOptions{
+		DB:      d.db,
+		Address: d.Key().PubKey().Address(),
+		Chain:   exec,
+		Logger:  d.Logger,
+		Network: d.Config.Accumulate.Network,
+	})
 
 	// Create node
 	d.node, err = node.New(d.Config, app, d.Logger)
@@ -299,7 +300,7 @@ func (d *Daemon) Start() (err error) {
 			d.Logger.Error("Error stopping API", "module", "jrpc", "error", err)
 		}
 
-		err = d.db.GetDB().Close()
+		err = d.db.Close()
 		if err != nil {
 			module := "badger"
 			if d.UseMemDB {

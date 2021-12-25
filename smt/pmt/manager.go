@@ -2,14 +2,13 @@ package pmt
 
 import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 )
 
 var kBpt = storage.MakeKey("BPT")
 var kBptRoot = kBpt.Append("Root")
 
 type Manager struct {
-	DBManager *database.Manager
+	DBManager storage.KeyValueTxn
 	Dirty     []*Node
 	Bpt       *BPT
 	LoadedBB  map[[32]byte]*Node
@@ -18,7 +17,7 @@ type Manager struct {
 // NewBPTManager
 // Get a new BPTManager which keeps the BPT on disk.  If the BPT is on
 // disk, then it can be reloaded as needed.
-func NewBPTManager(dbManager *database.Manager) *Manager { // Return a new BPTManager
+func NewBPTManager(dbManager storage.KeyValueTxn) *Manager { // Return a new BPTManager
 	manager := new(Manager)                     //            Allocate the struct
 	manager.DBManager = dbManager               //            populate with pointer to the database manager
 	manager.Bpt = NewBPT()                      //            Allocate a new BPT
@@ -63,11 +62,11 @@ func (m *Manager) LoadNode(node *Node) *Node {
 // FlushNode
 // Flushes the Byte Block to disk
 func (m *Manager) FlushNode(node *Node) { //   Flush a Byte Block
-	data := m.Bpt.MarshalByteBlock(node)                   //
-	m.DBManager.PutBatch(kBpt.Append(node.BBKey[:]), data) //
+	data := m.Bpt.MarshalByteBlock(node)              //
+	m.DBManager.Put(kBpt.Append(node.BBKey[:]), data) //
 	if node.Height == 0 {
 		data = m.Bpt.Marshal()
-		m.DBManager.PutBatch(kBptRoot, data)
+		m.DBManager.Put(kBptRoot, data)
 	}
 }
 

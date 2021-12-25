@@ -107,13 +107,15 @@ func Init(opts InitOptions) (err error) {
 		db := new(memory.DB)
 		_ = db.InitDB("", nil)
 		root, err := genesis.Init(db, genesis.InitOpts{
-			SubnetID:    subnetID,
-			NetworkType: config[0].Accumulate.Network.Type,
+			Network:     config[0].Accumulate.Network,
 			GenesisTime: genTime,
 			Validators:  genVals,
 		})
+		if err != nil {
+			return err
+		}
 
-		state, _ := db.MarshalJSON()
+		state, err := db.MarshalJSON()
 		if err != nil {
 			return err
 		}

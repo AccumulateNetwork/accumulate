@@ -81,7 +81,7 @@ func EndBlock(manager *MerkleManager, cID []byte, blockIndex uint64) error {
 	data := b.Marshal()
 	blkIdxHash := manager.MS.HashFunction(data)
 	manager.AddHash(blkIdxHash)
-	manager.Manager.PutBatch(storage.MakeKey(blkIdxHash), data)
+	manager.Manager.Put(storage.MakeKey(blkIdxHash), data)
 
 	return nil
 }

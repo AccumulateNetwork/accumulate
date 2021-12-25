@@ -59,14 +59,3 @@ type Chain interface {
 	EndBlock(EndBlockRequest)
 	Commit() ([]byte, error)
 }
-
-type State interface {
-	// SubnetID returns the ID of the subnet
-	SubnetID() (string, error)
-
-	// BlockIndex returns the current block index/height of the chain
-	BlockIndex() (int64, error)
-
-	// RootHash returns the root hash of the chain
-	RootHash() []byte
-}
