@@ -122,3 +122,17 @@ func (e *ED25519Sig) Unmarshal(data []byte) (nextData []byte, err error) {
 	data = data[64:]
 	return data, nil
 }
+
+func (e *ED25519Sig) BinarySize() int {
+	data, _ := e.Marshal()
+	return len(data)
+}
+
+func (e *ED25519Sig) MarshalBinary() ([]byte, error) {
+	return e.Marshal()
+}
+
+func (e *ED25519Sig) UnmarshalBinary(data []byte) error {
+	_, err := e.Unmarshal(data)
+	return err
+}

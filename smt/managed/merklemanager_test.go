@@ -9,16 +9,16 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMerkleManager_GetChainState(t *testing.T) {
 	const numTests = 100
 	var randHash RandHash
-	dbm, e1 := database.NewDBManager("memory", "", nil)
-	require.NoError(t, e1, "should be able to open a database")
-	m, e2 := NewMerkleManager(dbm, 8)
+	store := memory.NewDB()
+	storeTx := store.Begin()
+	m, e2 := NewMerkleManager(storeTx, 8)
 	require.NoError(t, e2, "should be able to open a database")
 	err := m.SetKey(storage.MakeKey("try"))
 	require.NoError(t, err, "should be able to set base key")
@@ -31,7 +31,8 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	var States []*MerkleState
 	for i := 0; i < numTests; i++ {
 		m.AddHash(randHash.Next())
-		m.Manager.EndBatch()
+		require.NoError(t, storeTx.Commit())
+		storeTx = store.Begin()
 		mState, err := m.MS.Marshal()
 		require.NoError(t, err, "must be able to marshal a MerkleState")
 		ms := new(MerkleState)
@@ -48,9 +49,9 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 func TestMerkleManager_GetAnyState(t *testing.T) {
 	const testnum = 100
 	var randHash RandHash
-	dbm, e1 := database.NewDBManager("memory", "", nil)
-	require.NoError(t, e1, "should be able to open a database")
-	m, e2 := NewMerkleManager(dbm, 2)
+	store := memory.NewDB()
+	storeTx := store.Begin()
+	m, e2 := NewMerkleManager(storeTx, 2)
 	require.NoError(t, e2, "should be able to open a database")
 	var States []*MerkleState
 	for i := 0; i < testnum; i++ {
@@ -76,16 +77,14 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 func TestIndexing2(t *testing.T) {
 	const testlen = 1024
 
-	dbManager := new(database.Manager)
-	if err := dbManager.Init("memory", "", nil); err != nil {
-		t.Fatal(err)
-	}
+	store := memory.NewDB()
+	storeTx := store.Begin()
 
 	Chain := sha256.Sum256([]byte("RedWagon/ACME_tokens"))
 	BlkIdx := Chain
 	BlkIdx[30] += 2
 
-	MM1, err := NewMerkleManager(dbManager, 8)
+	MM1, err := NewMerkleManager(storeTx, 8)
 	if err != nil {
 		t.Fatal("didn't create a Merkle Manager")
 	}
@@ -118,17 +117,15 @@ func TestMerkleManager(t *testing.T) {
 
 	const testLen = 1024
 
-	dbManager := new(database.Manager)
-	if err := dbManager.Init("memory", "", nil); err != nil {
-		t.Fatal(err)
-	}
+	store := memory.NewDB()
+	storeTx := store.Begin()
 
 	MarkPower := int64(2)
 	MarkFreq := int64(math.Pow(2, float64(MarkPower)))
 	MarkMask := MarkFreq - 1
 
 	// Set up a MM1 that uses a MarkPower of 2
-	MM1, err := NewMerkleManager(dbManager, MarkPower)
+	MM1, err := NewMerkleManager(storeTx, MarkPower)
 	if err != nil {
 		t.Fatal("did not create a merkle manager")
 	}
@@ -149,7 +146,8 @@ func TestMerkleManager(t *testing.T) {
 		t.Fatal("added elements in merkle tree don't match the number we added")
 	}
 
-	dbManager.EndBatch()
+	require.NoError(t, storeTx.Commit())
+	storeTx = store.Begin()
 
 	// Sort the Indexing
 	for i := int64(0); i < testLen; i++ {
@@ -242,8 +240,9 @@ func GenerateTestData(prt bool) [10][]Hash {
 }
 
 func TestMerkleManager_GetIntermediate(t *testing.T) {
-	db, _ := database.NewDBManager("memory", "", nil)
-	m, _ := NewMerkleManager(db, 4)
+	store := memory.NewDB()
+	storeTx := store.Begin()
+	m, _ := NewMerkleManager(storeTx, 4)
 	m.MS.InitSha256()
 
 	hashes := GenerateTestData(true)

@@ -380,9 +380,15 @@ SyntheticMirror:
     - name: Objects
       type: slice
       slice:
-        type: state.Object
-        pointer: true
+        type: AnchoredRecord
         marshal-as: reference
+
+AnchoredRecord:
+  fields:
+    - name: Record
+      type: bytes
+    - name: Anchor
+      type: chain
 
 RequestDataEntry:
   fields:

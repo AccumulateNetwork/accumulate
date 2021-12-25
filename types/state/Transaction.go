@@ -53,6 +53,21 @@ type Transaction struct {
 	TxState
 }
 
+func (tx *Transaction) Restore() *transactions.GenTransaction {
+	gtx := new(transactions.GenTransaction)
+	gtx.SigInfo = tx.SigInfo
+	gtx.Transaction = *tx.Transaction
+	return gtx
+}
+
+func (tx *Transaction) TxType() types.TransactionType {
+	if tx.Transaction == nil {
+		return types.TxTypeUnknown
+	}
+	transType, _ := common.BytesUint64(*tx.Transaction)
+	return types.TxType(transType)
+}
+
 type PendingTransaction struct {
 	ChainHeader
 	Signature        []*transactions.ED25519Sig

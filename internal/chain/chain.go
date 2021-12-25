@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -50,10 +51,10 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *state.StateDB, typ config.NetworkType) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, network config.Network) (*Executor, error) {
 	return newExecutor(ExecutorOptions{
 		DB:        db,
-		Network:   config.Network{Type: typ},
+		Network:   network,
 		isGenesis: true,
 	})
 }

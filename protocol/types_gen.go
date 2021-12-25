@@ -23,6 +23,11 @@ type AddCredits struct {
 	Amount    uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
+type AnchoredRecord struct {
+	Record []byte   `json:"record,omitempty" form:"record" query:"record" validate:"required"`
+	Anchor [32]byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
+}
+
 type BurnTokens struct {
 	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
@@ -205,7 +210,7 @@ type SyntheticGenesis struct {
 }
 
 type SyntheticMirror struct {
-	Objects []*state.Object `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
+	Objects []AnchoredRecord `json:"objects,omitempty" form:"objects" query:"objects" validate:"required"`
 }
 
 type SyntheticSignTransactions struct {
@@ -366,6 +371,18 @@ func (v *AddCredits) Equal(u *AddCredits) bool {
 	}
 
 	if !(v.Amount == u.Amount) {
+		return false
+	}
+
+	return true
+}
+
+func (v *AnchoredRecord) Equal(u *AnchoredRecord) bool {
+	if !(bytes.Equal(v.Record, u.Record)) {
+		return false
+	}
+
+	if !(v.Anchor == u.Anchor) {
 		return false
 	}
 
@@ -918,7 +935,7 @@ func (v *SyntheticMirror) Equal(u *SyntheticMirror) bool {
 
 	for i := range v.Objects {
 		v, u := v.Objects[i], u.Objects[i]
-		if !(v.Equal(u)) {
+		if !(v.Equal(&u)) {
 			return false
 		}
 
@@ -1073,6 +1090,16 @@ func (v *AddCredits) BinarySize() int {
 	n += encoding.StringBinarySize(v.Recipient)
 
 	n += encoding.UvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *AnchoredRecord) BinarySize() int {
+	var n int
+
+	n += encoding.BytesBinarySize(v.Record)
+
+	n += encoding.ChainBinarySize(&v.Anchor)
 
 	return n
 }
@@ -1678,6 +1705,16 @@ func (v *AddCredits) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Recipient))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.BytesMarshalBinary(v.Record))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.Anchor))
 
 	return buffer.Bytes(), nil
 }
@@ -2376,6 +2413,24 @@ func (v *AddCredits) UnmarshalBinary(data []byte) error {
 		v.Amount = x
 	}
 	data = data[encoding.UvarintBinarySize(v.Amount):]
+
+	return nil
+}
+
+func (v *AnchoredRecord) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Record: %w", err)
+	} else {
+		v.Record = x
+	}
+	data = data[encoding.BytesBinarySize(v.Record):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Anchor: %w", err)
+	} else {
+		v.Anchor = x
+	}
+	data = data[encoding.ChainBinarySize(&v.Anchor):]
 
 	return nil
 }
@@ -3339,15 +3394,13 @@ func (v *SyntheticMirror) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(lenObjects):]
 
-	v.Objects = make([]*state.Object, lenObjects)
+	v.Objects = make([]AnchoredRecord, lenObjects)
 	for i := range v.Objects {
-		x := new(state.Object)
-		if err := x.UnmarshalBinary(data); err != nil {
+		if err := v.Objects[i].UnmarshalBinary(data); err != nil {
 			return fmt.Errorf("error decoding Objects[%d]: %w", i, err)
 		}
-		data = data[x.BinarySize():]
+		data = data[v.Objects[i].BinarySize():]
 
-		v.Objects[i] = x
 	}
 
 	return nil
@@ -3582,6 +3635,16 @@ func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *AnchoredRecord) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Record *string `json:"record,omitempty"`
+		Anchor string  `json:"anchor,omitempty"`
+	}{}
+	u.Record = encoding.BytesToJSON(v.Record)
+	u.Anchor = encoding.ChainToJSON(v.Anchor)
+	return json.Marshal(&u)
+}
+
 func (v *ChainParams) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Data     *string `json:"data,omitempty"`
@@ -3797,6 +3860,29 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	return json.Marshal(&u)
+}
+
+func (v *AnchoredRecord) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Record *string `json:"record,omitempty"`
+		Anchor string  `json:"anchor,omitempty"`
+	}{}
+	u.Record = encoding.BytesToJSON(v.Record)
+	u.Anchor = encoding.ChainToJSON(v.Anchor)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Record); err != nil {
+		return fmt.Errorf("error decoding Record: %w", err)
+	} else {
+		v.Record = x
+	}
+	if x, err := encoding.ChainFromJSON(u.Anchor); err != nil {
+		return fmt.Errorf("error decoding Anchor: %w", err)
+	} else {
+		v.Anchor = x
+	}
+	return nil
 }
 
 func (v *ChainParams) UnmarshalJSON(data []byte) error {

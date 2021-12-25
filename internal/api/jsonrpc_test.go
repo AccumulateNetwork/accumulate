@@ -438,8 +438,7 @@ func TestDirectory(t *testing.T) {
 	dbTx := daemon.DB_TESTONLY().Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, tmed25519.PrivKey(adiKey), "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	_, err := dbTx.Commit(3, time.Unix(0, 0), nil)
-	require.NoError(t, err)
+	require.NoError(t, dbTx.Commit())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})
 	require.NoError(t, err)
