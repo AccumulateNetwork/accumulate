@@ -103,13 +103,13 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 	}
 
 	bookRec := new(protocol.KeyBook)
-	if originRec.KeyBook == (types.Bytes32{}) {
+	if originRec.KeyBook == types.String("") {
 		_, err := getRecord(origin.String(), &bookRec)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
 		}
 	} else {
-		_, err := getRecordById(originRec.KeyBook[:], &bookRec)
+		_, err := getRecord(*originRec.KeyBook.AsString(), &bookRec)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
 		}
@@ -119,6 +119,9 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", ed.KeyPageIndex, origin)
 	}
 	u, err := url.Parse(bookRec.Pages[ed.KeyPageIndex])
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("invalid keypage url %s", bookRec.Pages[ed.KeyPageIndex])
+	}
 	ms, err := getRecordById(u.ResourceChain(), nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[ed.KeyPageIndex][:], err)
@@ -497,16 +500,12 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		if err != nil {
 			amt = "unknown"
 		}
-		kbr, err := resolveKeyBookUrl(ata.KeyBook[:])
-		if err != nil {
-			return "", fmt.Errorf("cannot resolve keybook for token account query")
-		}
 
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
 		out += fmt.Sprintf("\tToken Url\t:\t%s\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", kbr)
+		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook)
 
 		return out, nil
 	case types.ChainTypeIdentity.String():
@@ -516,14 +515,9 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 			return "", err
 		}
 
-		kb, err := resolveKeyBookUrl(adi.KeyBook[:])
-		if err != nil {
-			return "", fmt.Errorf("cannot resolve keybook for adi query")
-		}
-
 		var out string
 		out += fmt.Sprintf("\n\tADI url\t\t:\t%v\n", adi.ChainUrl)
-		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", kb)
+		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
 
 		return out, nil
 	case "directory":

@@ -57,14 +57,14 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction
 	page := protocol.NewKeyPage()
 	page.ChainUrl = types.String(pageUrl.String()) // TODO Allow override
 	page.Keys = append(page.Keys, keySpec)
-	page.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
+	page.KeyBook = types.String(bookUrl.String())
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
 	book.Pages = append(book.Pages, pageUrl.String())
 
 	identity := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, body.PublicKey)
-	identity.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
+	identity.KeyBook = types.String(bookUrl.String())
 
 	st.Create(identity, book, page)
 	return nil

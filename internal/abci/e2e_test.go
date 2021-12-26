@@ -270,13 +270,12 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		u := n.ParseUrl("acc://FooBar/foo/book1")
-		bookChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
 		r := n.GetDataAccount("FooBar/oof")
 		require.Equal(t, types.ChainTypeDataAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
 		require.Equal(t, types.String("acc://FooBar/mgr/book1"), r.ManagerKeyBook)
-		require.Equal(t, bookChainId, r.KeyBook)
+		require.Equal(t, types.String(u.String()), r.KeyBook)
 
 	})
 
@@ -432,13 +431,12 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		})
 
 		u := n.ParseUrl("foo/book1")
-		bookChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
 		r := n.GetTokenAccount("FooBar/Baz")
 		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
-		require.Equal(t, bookChainId, r.KeyBook)
+		require.Equal(t, types.String(u.String()), r.KeyBook)
 	})
 }
 
@@ -539,7 +537,7 @@ func TestCreateKeyPage(t *testing.T) {
 	spec := n.GetKeyPage("foo/keyset1")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, types.Bytes32{}, spec.KeyBook)
+	require.Equal(t, types.String(""), spec.KeyBook)
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
@@ -555,7 +553,6 @@ func TestCreateKeyBook(t *testing.T) {
 	specUrl := n.ParseUrl("foo/page1")
 
 	groupUrl := n.ParseUrl("foo/book1")
-	groupChainId := types.Bytes(groupUrl.ResourceChain()).AsBytes32()
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		csg := new(protocol.CreateKeyBook)
@@ -572,7 +569,7 @@ func TestCreateKeyBook(t *testing.T) {
 	require.Equal(t, specUrl.String(), group.Pages[0])
 
 	spec := n.GetKeyPage("foo/page1")
-	require.Equal(t, spec.KeyBook, groupChainId)
+	require.Equal(t, spec.KeyBook, types.String(groupUrl.String()))
 }
 
 func TestAddKeyPage(t *testing.T) {
@@ -580,7 +577,6 @@ func TestAddKeyPage(t *testing.T) {
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
 	u := n.ParseUrl("foo/book1")
-	groupChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
 	dbTx := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, fooKey, "foo"))
@@ -589,7 +585,7 @@ func TestAddKeyPage(t *testing.T) {
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	// Sanity check
-	require.Equal(t, groupChainId, n.GetKeyPage("foo/page1").KeyBook)
+	require.Equal(t, types.String(u.String()), n.GetKeyPage("foo/page1").KeyBook)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		cms := new(protocol.CreateKeyPage)
@@ -606,7 +602,7 @@ func TestAddKeyPage(t *testing.T) {
 	spec := n.GetKeyPage("foo/page2")
 	require.Len(t, spec.Keys, 1)
 	key := spec.Keys[0]
-	require.Equal(t, groupChainId, spec.KeyBook)
+	require.Equal(t, types.String(u.String()), spec.KeyBook)
 	require.Equal(t, uint64(0), key.Nonce)
 	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }
