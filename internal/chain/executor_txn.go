@@ -173,10 +173,14 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		return st, m.checkLite(st, tx, origin)
 
 	case *state.AdiState, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
-		if (origin.Header().KeyBook == types.Bytes32{}) {
+		if origin.Header().KeyBook == types.String("") {
 			return nil, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
-		err := st.LoadAs(origin.Header().KeyBook, book)
+		u, err := url.Parse(*origin.Header().KeyBook.AsString())
+		if err != nil {
+			return nil, fmt.Errorf("invalid keybook url %s", u.String())
+		}
+		err = st.LoadUrlAs(u, book)
 		if err != nil {
 			return nil, fmt.Errorf("invalid KeyBook: %v", err)
 		}
