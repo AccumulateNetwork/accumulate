@@ -198,7 +198,7 @@ func CreateAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid token type %v", err)
 	}
 
-	tac := protocol.TokenAccountCreate{}
+	tac := protocol.CreateTokenAccount{}
 	tac.Url = accountUrl.String()
 	tac.TokenUrl = tok.String()
 	tac.KeyBookUrl = keybook
