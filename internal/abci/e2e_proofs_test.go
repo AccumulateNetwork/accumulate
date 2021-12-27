@@ -25,7 +25,7 @@ func TestProofADI(t *testing.T) {
 
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {
-		adi := new(protocol.IdentityCreate)
+		adi := new(protocol.CreateIdentity)
 		adi.Url = "RoadRunner"
 		adi.KeyBookName = "book0"
 		adi.KeyPageName = "page0"
@@ -41,7 +41,7 @@ func TestProofADI(t *testing.T) {
 
 	// Create ADI token account
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		tac := new(protocol.TokenAccountCreate)
+		tac := new(protocol.CreateTokenAccount)
 		tac.Url = "RoadRunner/Baz"
 		tac.TokenUrl = protocol.AcmeUrl().String()
 		tx, err := transactions.New("RoadRunner", 1, edSigner(adiKey, 1), tac)
