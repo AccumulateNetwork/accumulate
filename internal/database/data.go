@@ -1,11 +1,14 @@
 package database
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
+// Data manages a data chain.
 type Data struct {
 	batch  *Batch
 	record recordBucket
@@ -17,8 +20,16 @@ func (d *Data) Height() int64 {
 	return d.chain.Height()
 }
 
-// Put writes a new entry.
+// Put adds an entry to the chain.
 func (d *Data) Put(hash []byte, entry *protocol.DataEntry) error {
+	// Check that the entry does already not exist.
+	_, err := d.batch.store.Get(d.record.Data(hash))
+	if err == nil {
+		return fmt.Errorf("data entry with hash %X exsits", hash)
+	} else if !errors.Is(err, storage.ErrNotFound) {
+		return err
+	}
+
 	// Write data entry
 	data, err := entry.MarshalBinary()
 	if err != nil {

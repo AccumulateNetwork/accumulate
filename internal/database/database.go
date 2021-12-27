@@ -11,6 +11,7 @@ import (
 
 const markPower = 8
 
+// Database is an Accumulate database.
 type Database struct {
 	store  storage.KeyValueStore
 	logger log.Logger
@@ -60,6 +61,7 @@ func (d *Database) logInfo(msg string, keyVals ...interface{}) {
 	}
 }
 
+// Close closes the database and the key-value store.
 func (d *Database) Close() error {
 	return d.store.Close()
 }
@@ -82,6 +84,7 @@ func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 	b.bpt.Bpt.Insert(key, hash)
 }
 
+// RootHash returns the root hash of the BPT.
 func (b *Batch) RootHash() []byte {
 	// Make a copy
 	h := b.bpt.Bpt.Root.Hash

@@ -5,13 +5,14 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
-// Chain manages a Merkle Chain.
+// Chain manages a Merkle tree (chain).
 type Chain struct {
 	db     storage.KeyValueTxn
 	key    storage.Key
 	merkle *managed.MerkleManager
 }
 
+// newChain creates a new Chain.
 func newChain(db storage.KeyValueTxn, key storage.Key) (*Chain, error) {
 	m := new(Chain)
 	m.key = key
@@ -40,6 +41,7 @@ func (c *Chain) Entry(height int64) ([]byte, error) {
 	return c.merkle.Get(height)
 }
 
+// Entries returns entries in the given range.
 func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 	if end > c.Height() {
 		end = c.Height()

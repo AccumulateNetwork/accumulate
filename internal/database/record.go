@@ -10,11 +10,13 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
+// Record manages a record.
 type Record struct {
 	batch *Batch
 	key   recordBucket
 }
 
+// GetState loads the record state.
 func (r *Record) GetState() (state.Chain, error) {
 	data, err := r.batch.store.Get(r.key.State())
 	if err != nil {
@@ -29,6 +31,7 @@ func (r *Record) GetState() (state.Chain, error) {
 	return state, nil
 }
 
+// GetStateAs loads the record state and unmarshals into the given value.
 func (r *Record) GetStateAs(state state.Chain) error {
 	data, err := r.batch.store.Get(r.key.State())
 	if err != nil {
@@ -43,6 +46,7 @@ func (r *Record) GetStateAs(state state.Chain) error {
 	return nil
 }
 
+// PutState stores the record state and adds the record to the BPT (as a hash).
 func (r *Record) PutState(state state.Chain) error {
 	if state.Header().ChainUrl == "" {
 		return errors.New("invalid URL: empty")
@@ -82,14 +86,17 @@ func (r *Record) PutState(state state.Chain) error {
 	return nil
 }
 
+// Chain returns a chain manager for the given chain.
 func (r *Record) Chain(name string) (*Chain, error) {
 	return newChain(r.batch.store, r.key.Chain(name))
 }
 
+// Index returns a value that can read or write an index value.
 func (r *Record) Index(key ...interface{}) *Value {
 	return &Value{r.batch, r.key.Index(key...)}
 }
 
+// Data returns a data chain manager for the data chain.
 func (r *Record) Data() (*Data, error) {
 	chain, err := r.Chain(protocol.Data)
 	if err != nil {
