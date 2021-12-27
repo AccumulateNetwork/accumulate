@@ -156,7 +156,7 @@ func TestGenTransaction_TransactionType(t *testing.T) {
 		Data encoding.BinaryMarshaler
 		Type types.TxType
 	}{
-		"ADI": {new(protocol.IdentityCreate), types.TxTypeCreateIdentity},
+		"ADI": {new(protocol.CreateIdentity), types.TxTypeCreateIdentity},
 		// TODO Add all payload types
 	}
 
