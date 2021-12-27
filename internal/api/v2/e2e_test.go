@@ -94,7 +94,7 @@ func TestValidate(t *testing.T) {
 		executeTx(t, japi, "create-adi", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,
-			Payload: &IdentityCreate{
+			Payload: &CreateIdentity{
 				Url:         adiName,
 				PublicKey:   adiKey[32:],
 				KeyBookName: "book",
@@ -185,7 +185,7 @@ func TestValidate(t *testing.T) {
 		executeTx(t, japi, "create-token-account", true, execParams{
 			Origin: adiName,
 			Key:    adiKey,
-			Payload: &TokenAccountCreate{
+			Payload: &CreateTokenAccount{
 				Url:        tokenAccountUrl,
 				TokenUrl:   tokenUrl,
 				KeyBookUrl: keyBookUrl,

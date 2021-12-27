@@ -6,7 +6,7 @@ import (
 )
 
 type LiteTokenAccount struct {
-	*protocol.TokenAccountCreate
+	*protocol.CreateTokenAccount
 	Balance       types.Amount `json:"balance" form:"balance" query:"balance"`
 	TxCount       uint64       `json:"txCount" form:"txCount" query:"txCount"`
 	Nonce         uint64       `json:"nonce" form:"nonce" query:"nonce"`

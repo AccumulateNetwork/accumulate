@@ -16,7 +16,7 @@ import (
 )
 
 func createAdiTx(adiUrl string, pubkey []byte) (string, error) {
-	data := &protocol.IdentityCreate{}
+	data := &protocol.CreateIdentity{}
 
 	data.Url = adiUrl
 	keyhash := sha256.Sum256(pubkey)
@@ -113,7 +113,7 @@ func TestAPIRequest_Adi(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := &protocol.IdentityCreate{}
+	data := &protocol.CreateIdentity{}
 
 	// parse req.tx.data
 	err = mapstructure.Decode(req.Tx.Data, data)
