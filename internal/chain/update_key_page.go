@@ -49,9 +49,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 
 	var book *protocol.KeyBook
 	var priority = -1
-	if page.KeyBook != (types.Bytes32{}) {
+	if page.KeyBook != "" {
 		book = new(protocol.KeyBook)
-		err = st.LoadAs(page.KeyBook, book)
+		u, err := url.Parse(*page.KeyBook.AsString())
+		err = st.LoadUrlAs(u, book)
 		if err != nil {
 			return fmt.Errorf("invalid key book: %v", err)
 		}
