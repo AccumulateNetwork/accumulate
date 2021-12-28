@@ -2,12 +2,10 @@ package chain_test
 
 import (
 	"crypto/ed25519"
-	"fmt"
 	"testing"
 	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/chain"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -26,18 +24,18 @@ func TestLiteTokenTransactions(t *testing.T) {
 	_, destPrivKey, _ := ed25519.GenerateKey(nil)
 
 	dbTx := db.Begin()
-	require.NoError(t, acctesting.CreateLiteTokenAccount(dbTx, tmed25519.PrivKey(privKey), 5e4))
+	require.NoError(t, testing2.CreateLiteTokenAccount(dbTx, tmed25519.PrivKey(privKey), 5e4))
 	_, err = dbTx.Commit(1, time.Unix(0, 0), nil)
 	require.NoError(t, err)
 
-	sponsorAddr := acctesting.AcmeLiteAddressStdPriv(privKey).String()
+	sponsorAddr := testing2.AcmeLiteAddressStdPriv(privKey).String()
 	liteChain, err := db.GetPersistentEntry(types.GetChainIdFromChainPath(&sponsorAddr).Bytes(), false)
 	require.NoError(t, err)
 	liteAcct := new(protocol.LiteTokenAccount)
 	require.NoError(t, liteChain.As(liteAcct))
 
 	//now move some tokens around
-	destAddr := acctesting.AcmeLiteAddressStdPriv(destPrivKey).String()
+	destAddr := testing2.AcmeLiteAddressStdPriv(destPrivKey).String()
 	gtx, err := testing2.BuildTestTokenTxGenTx(privKey, destAddr, 199)
 
 	st, err := NewStateManager(db.Begin(), gtx)
@@ -50,11 +48,6 @@ func TestLiteTokenTransactions(t *testing.T) {
 	tas := new(protocol.LiteTokenAccount)
 	require.NoError(t, st.LoadAs(st.OriginChainId, tas))
 	require.Equal(t, tokenUrl, types.String(tas.TokenUrl), "token url of state doesn't match expected")
-	require.Equal(t, uint64(2), tas.TxCount, "expected a token transaction count of 2")
+	require.Equal(t, uint64(1), tas.TxCount, "expected a token transaction count of 2")
 
-	refUrl := st.OriginUrl.JoinPath(fmt.Sprint(tas.TxCount - 1))
-	txRef := new(state.TxReference)
-	require.NoError(t, st.LoadUrlAs(refUrl, txRef))
-	require.Equal(t, types.String(refUrl.String()), txRef.ChainUrl, "chain header expected transaction reference")
-	require.Equal(t, gtx.TransactionHash(), txRef.TxId[:], "txid doesn't match")
 }

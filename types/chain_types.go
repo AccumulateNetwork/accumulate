@@ -30,9 +30,6 @@ const (
 	// ChainTypeLiteTokenAccount is a Lite Token Account chain.
 	ChainTypeLiteTokenAccount ChainType = 5
 
-	// ChainTypeTransactionReference is a reference to a transaction.
-	ChainTypeTransactionReference ChainType = 6
-
 	// ChainTypeTransaction is a completed transaction.
 	ChainTypeTransaction ChainType = 7
 
@@ -64,7 +61,7 @@ func (t ChainType) ID() uint64 { return uint64(t) }
 // IsTransaction returns true if the chain type is a transaction.
 func (t ChainType) IsTransaction() bool {
 	switch t {
-	case ChainTypeTransaction, ChainTypeTransactionReference, ChainTypePendingTransaction:
+	case ChainTypeTransaction, ChainTypePendingTransaction:
 		return true
 	default:
 		return false
@@ -84,8 +81,6 @@ func (t ChainType) String() string {
 		return "tokenAccount"
 	case ChainTypeLiteTokenAccount:
 		return "liteTokenAccount"
-	case ChainTypeTransactionReference:
-		return "transactionReference"
 	case ChainTypeTransaction:
 		return "transaction"
 	case ChainTypePendingTransaction:
