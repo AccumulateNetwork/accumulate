@@ -73,16 +73,26 @@ func (r *Record) PutState(recordState state.Chain) error {
 		return err
 	}
 
-	chain, err := r.Chain(protocol.Main)
+	mainChain, err := r.Chain(protocol.Main)
 	if err != nil {
 		return err
 	}
 
-	r.batch.store.Put(r.key.State(), stateData)
+	pendChain, err := r.Chain(protocol.Pending)
+	if err != nil {
+		return err
+	}
+
+	// TODO Create an Object like the old state DB had, with support for
+	// multiple chains
 
 	stateHash := sha256.Sum256(stateData)
-	hash := sha256.Sum256(append(stateHash[:], chain.Anchor()...))
-	r.batch.putBpt(r.key.Object(), hash)
+	data := stateHash[:]
+	data = append(data, mainChain.Anchor()...)
+	data = append(data, pendChain.Anchor()...)
+
+	r.batch.store.Put(r.key.State(), stateData)
+	r.batch.putBpt(r.key.Object(), sha256.Sum256(data))
 	return nil
 }
 

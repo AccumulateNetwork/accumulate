@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -72,10 +73,9 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 
 	txt := tx.TransactionType()
 	executor, ok := m.executors[txt]
-	txPending := state.NewPendingTransaction(tx)
 	chainId := types.Bytes(tx.ChainID).AsBytes32()
 	if !ok {
-		return m.recordTransactionError(nil, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())})
+		return m.recordTransactionError(tx, nil, nil, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())})
 	}
 
 	tx.TransactionHash()
@@ -94,14 +94,14 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 
 	st, err := m.check(m.blockBatch, tx)
 	if err != nil {
-		return m.recordTransactionError(nil, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+		return m.recordTransactionError(tx, nil, nil, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
 	err = executor.Validate(st, tx)
 	if err != nil {
-		return m.recordTransactionError(nil, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+		return m.recordTransactionError(tx, nil, nil, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
 	}
 
 	// If we get here, we were successful in validating.  So, we need to
@@ -109,23 +109,24 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 	// validation material (i.e. TxPending).  The body of the transaction
 	// gets put on the main chain, and the validation material gets put on
 	// the pending chain which is purged after about 2 weeks
+	txPending := state.NewPendingTransaction(tx)
 	txAccepted, txPending := state.NewTransaction(txPending)
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 	if err != nil {
-		return m.recordTransactionError(txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return m.recordTransactionError(tx, txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	txPendingObject := new(state.Object)
 	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
-		return m.recordTransactionError(txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return m.recordTransactionError(tx, txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	// Store the tx state
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(tx.TransactionHash()).Put(txAccepted, status, tx.Signature)
+	err = m.putTransaction(tx, txAccepted, txPending, status)
 	if err != nil {
 		return &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
 	}
@@ -133,7 +134,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 	// Store pending state updates, queue state creates for synthetic transactions
 	meta, err := st.Commit()
 	if err != nil {
-		return m.recordTransactionError(txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+		return m.recordTransactionError(tx, txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
 	}
 	m.blockMeta.Deliver.Append(meta)
 
@@ -303,14 +304,56 @@ func (m *Executor) checkLite(st *StateManager, tx *transactions.GenTransaction, 
 	return st.UpdateNonce(account)
 }
 
-func (m *Executor) recordTransactionError(txAccepted *state.Transaction, txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, err *protocol.Error) *protocol.Error {
+func (m *Executor) recordTransactionError(tx *transactions.GenTransaction, txAccepted *state.Transaction, txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, failure *protocol.Error) *protocol.Error {
+	status := &protocol.TransactionStatus{Delivered: true, Code: uint64(failure.Code)}
+	err := m.putTransaction(tx, txAccepted, txPending, status)
+	if err != nil {
+		m.logError("Failed to store transaction", "txid", logging.AsHex(tx.TransactionHash()), "origin", tx.SigInfo.URL, "error", err)
+	}
+	return failure
+}
+
+func (m *Executor) putTransaction(tx *transactions.GenTransaction, txAccepted *state.Transaction, txPending *state.PendingTransaction, status *protocol.TransactionStatus) error {
+	if txPending == nil {
+		txPending = state.NewPendingTransaction(tx)
+	}
 	if txAccepted == nil {
 		txAccepted, txPending = state.NewTransaction(txPending)
 	}
-	status := &protocol.TransactionStatus{Delivered: true, Code: uint64(err.Code)}
-	err1 := m.blockBatch.Transaction(txid).Put(txAccepted, status, nil)
-	if err1 != nil {
-		err = &protocol.Error{Code: protocol.CodeAddTxnError, Message: fmt.Errorf("error adding pending tx (%v) on error %v", err1, err)}
+
+	err := m.blockBatch.Transaction(tx.TransactionHash()).Put(txAccepted, status, tx.Signature)
+	if err != nil {
+		return fmt.Errorf("failed to store transaction: %v", err)
 	}
-	return err
+
+	u, err := url.Parse(tx.SigInfo.URL)
+	if err != nil {
+		return fmt.Errorf("invalid origin record URL: %v", err)
+	}
+
+	record := m.blockBatch.Record(u)
+	chain, err := record.Chain(protocol.Pending)
+	if err != nil {
+		return fmt.Errorf("failed to load pending chain: %v", err)
+	}
+
+	for _, sig := range tx.Signature {
+		txSig := new(protocol.TransactionSignature)
+		copy(txSig.Transaction[:], tx.TransactionHash())
+		txSig.Signature = sig
+
+		data, err := txSig.MarshalBinary()
+		if err != nil {
+			return fmt.Errorf("failed to marshal signature: %v", err)
+		}
+
+		sigId := sha256.Sum256(data)
+		record.Index("Signature", sigId).Put(data)
+		err = chain.AddEntry(sigId[:])
+		if err != nil {
+			return fmt.Errorf("failed to add signature to pending chain: %v", err)
+		}
+	}
+
+	return nil
 }
