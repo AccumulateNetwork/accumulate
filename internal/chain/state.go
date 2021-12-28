@@ -222,6 +222,7 @@ func (m *StateManager) Commit() (DeliverMetadata, error) {
 		scc, ok := sub.body.(*protocol.SyntheticCreateChain)
 		if !ok {
 			meta.Submitted = append(meta.Submitted, sub)
+			continue
 		}
 
 		id := sub.url.Identity()
