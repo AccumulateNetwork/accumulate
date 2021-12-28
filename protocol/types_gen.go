@@ -246,6 +246,12 @@ type TokenRecipient struct {
 	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
+type TransactionStatus struct {
+	Remote    bool   `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
+	Delivered bool   `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Code      uint64 `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+}
+
 type UpdateKeyPage struct {
 	Operation KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
 	Key       []byte           `json:"key,omitempty" form:"key" query:"key"`
@@ -1036,6 +1042,22 @@ func (v *TokenRecipient) Equal(u *TokenRecipient) bool {
 	return true
 }
 
+func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
+	if !(v.Remote == u.Remote) {
+		return false
+	}
+
+	if !(v.Delivered == u.Delivered) {
+		return false
+	}
+
+	if !(v.Code == u.Code) {
+		return false
+	}
+
+	return true
+}
+
 func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 	if !(v.Operation == u.Operation) {
 		return false
@@ -1647,6 +1669,18 @@ func (v *TokenRecipient) BinarySize() int {
 	n += encoding.StringBinarySize(v.Url)
 
 	n += encoding.UvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *TransactionStatus) BinarySize() int {
+	var n int
+
+	n += encoding.BoolBinarySize(v.Remote)
+
+	n += encoding.BoolBinarySize(v.Delivered)
+
+	n += encoding.UvarintBinarySize(v.Code)
 
 	return n
 }
@@ -2320,6 +2354,18 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.BoolMarshalBinary(v.Remote))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.Delivered))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Code))
 
 	return buffer.Bytes(), nil
 }
@@ -3559,6 +3605,31 @@ func (v *TokenRecipient) UnmarshalBinary(data []byte) error {
 		v.Amount = x
 	}
 	data = data[encoding.UvarintBinarySize(v.Amount):]
+
+	return nil
+}
+
+func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Remote: %w", err)
+	} else {
+		v.Remote = x
+	}
+	data = data[encoding.BoolBinarySize(v.Remote):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Delivered: %w", err)
+	} else {
+		v.Delivered = x
+	}
+	data = data[encoding.BoolBinarySize(v.Delivered):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Code: %w", err)
+	} else {
+		v.Code = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Code):]
 
 	return nil
 }

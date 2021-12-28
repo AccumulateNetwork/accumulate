@@ -38,7 +38,8 @@ func (m *Executor) addSynthTxns(parentTxId types.Bytes, submissions []*Submitted
 		txPending := state.NewPendingTransaction(tx)
 		txState, txPending := state.NewTransaction(txPending)
 
-		err = m.blockBatch.Transaction(tx.TransactionHash()).PutState(txState)
+		status := &protocol.TransactionStatus{Remote: true}
+		err = m.blockBatch.Transaction(tx.TransactionHash()).Put(txState, status, nil)
 		if err != nil {
 			return err
 		}
@@ -63,7 +64,8 @@ func (m *Executor) addSystemTxns(txns ...*transactions.GenTransaction) error {
 	for i, tx := range txns {
 		pending := state.NewPendingTransaction(tx)
 		state, pending := state.NewTransaction(pending)
-		err := m.blockBatch.Transaction(tx.TxHash).Put(state, nil, tx.Signature)
+		status := new(protocol.TransactionStatus)
+		err := m.blockBatch.Transaction(tx.TxHash).Put(state, status, tx.Signature)
 		if err != nil {
 			return err
 		}
@@ -112,15 +114,13 @@ func (m *Executor) addAnchorTxn() error {
 		return err
 	}
 
-	switch {
-	case rootHead.Index == m.blockIndex && len(rootHead.Chains) > 0:
-		// Modified chains last block, continue
-	case synthHead.Index == m.blockIndex:
-		// Produced synthetic transactions last block, continue
-	default:
-		// Nothing happened last block, so skip creating an anchor txn
+	if m.blockMeta.Deliver.Empty() {
+		// Don't create an anchor transaction since no records were updated and
+		// no synthetic transactions were produced
 		return nil
 	}
+
+	m.blockBatch.UpdateBpt()
 
 	body := new(protocol.SyntheticAnchor)
 	body.Source = m.Network.NodeUrl().String()
@@ -132,6 +132,10 @@ func (m *Executor) addAnchorTxn() error {
 	copy(body.SynthTxnAnchor[:], synthChain.Anchor())
 
 	m.logDebug("Creating anchor txn", "root", logging.AsHex(body.Root), "chains", logging.AsHex(body.ChainAnchor), "synth", logging.AsHex(body.SynthTxnAnchor))
+
+	for _, id := range body.Chains {
+		m.logDebug("Anchor includes", "id", logging.AsHex(id))
+	}
 
 	var txns []*transactions.GenTransaction
 	switch m.Network.Type {
@@ -227,6 +231,7 @@ func (m *Executor) signSynthTxns() error {
 	if len(txns) == 0 {
 		return nil
 	}
+	m.blockMeta.SynthSigned = len(txns)
 
 	// Sign all of the transactions
 	body := new(protocol.SyntheticSignTransactions)
@@ -347,8 +352,9 @@ func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
 		}
 
 		// Add it to the batch
-		m.logDebug("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()))
+		m.logDebug("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()), "type", tx.Type)
 		m.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
+		m.blockMeta.SynthSent++
 
 		// Delete the signature
 		sent[sig.Txid] = true

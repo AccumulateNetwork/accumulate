@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -42,8 +41,7 @@ type Executor struct {
 	blockIndex  int64
 	blockTime   time.Time
 	blockBatch  *database.Batch
-	blockMeta   DeliverMetadata
-	delivered   int
+	blockMeta   blockMetadata
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -59,6 +57,20 @@ type ExecutorOptions struct {
 
 	// TODO Remove once tests support running the DN
 	IsTest bool
+}
+
+type blockMetadata struct {
+	Deliver     DeliverMetadata
+	Delivered   int
+	SynthSigned int
+	SynthSent   int
+}
+
+func (b *blockMetadata) Empty() bool {
+	return b.Deliver.Empty() &&
+		b.Delivered == 0 &&
+		b.SynthSigned == 0 &&
+		b.SynthSent == 0
 }
 
 func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, error) {
@@ -154,7 +166,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	txPending := state.NewPendingTransaction(tx)
 	txAccepted, txPending := state.NewTransaction(txPending)
 
-	status := json.RawMessage("{\"code\":\"0\"}")
+	status := &protocol.TransactionStatus{Delivered: true}
 	err = m.blockBatch.Transaction(tx.TransactionHash()).Put(txAccepted, status, nil)
 	if err != nil {
 		return nil, err
@@ -165,7 +177,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 		return nil, err
 	}
 
-	m.blockMeta, err = st.Commit()
+	m.blockMeta.Deliver, err = st.Commit()
 	if err != nil {
 		return nil, err
 	}
@@ -229,8 +241,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	m.blockIndex = req.Height
 	m.blockTime = req.Time
 	m.blockBatch = m.DB.Begin()
-	m.blockMeta = DeliverMetadata{}
-	m.delivered = 0
+	m.blockMeta = blockMetadata{}
 
 	// In order for other BVCs to be able to validate the synthetic transaction,
 	// a wrapped signed version must be resubmitted to this BVC network and the
@@ -284,18 +295,24 @@ func (m *Executor) Commit() ([]byte, error) {
 	// Discard changes if commit fails
 	defer m.blockBatch.Discard()
 
-	// Commit
-	err := m.doCommit()
-	if err != nil {
-		return nil, err
-	}
+	if m.blockMeta.Empty() {
+		m.logInfo("Committed empty transaction")
+	} else {
+		m.logInfo("Committing", "height", m.blockIndex, "delivered", m.blockMeta.Delivered, "signed", m.blockMeta.SynthSigned, "sent", m.blockMeta.SynthSent, "updated", len(m.blockMeta.Deliver.Updated), "submitted", len(m.blockMeta.Deliver.Submitted))
+		t := time.Now()
 
-	err = m.blockBatch.Commit()
-	if err != nil {
-		return nil, err
-	}
+		err := m.doCommit()
+		if err != nil {
+			return nil, err
+		}
 
-	m.logInfo("Committed")
+		err = m.blockBatch.Commit()
+		if err != nil {
+			return nil, err
+		}
+
+		m.logInfo("Committed", "height", m.blockIndex, "duration", time.Since(t))
+	}
 
 	// Get BPT root from a clean batch
 	batch := m.DB.Begin()
@@ -330,8 +347,8 @@ func (m *Executor) doCommit() error {
 	}
 
 	// Add an anchor to the root chain for every updated record
-	chains := make([][32]byte, 0, len(m.blockMeta.Updated))
-	for _, u := range m.blockMeta.Updated {
+	chains := make([][32]byte, 0, len(m.blockMeta.Deliver.Updated))
+	for _, u := range m.blockMeta.Deliver.Updated {
 		chains = append(chains, u.ResourceChain32())
 		recordChain, err := m.blockBatch.Record(u).Chain(protocol.Main)
 		if err != nil {
@@ -342,6 +359,8 @@ func (m *Executor) doCommit() error {
 		if err != nil {
 			return err
 		}
+
+		m.logDebug("Updated a chain", "url", u.String(), "id", logging.AsHex(u.ResourceChain()))
 	}
 
 	// Update the root state
@@ -365,15 +384,13 @@ func (m *Executor) doCommit() error {
 
 	// Update synth chain
 	synthState.Index = m.blockIndex
-	synthState.Count = int64(len(m.blockMeta.Submitted))
+	synthState.Count = int64(len(m.blockMeta.Deliver.Submitted))
 	synth.PutState(synthState)
 
-	if !m.isGenesis {
-		// Add a synthetic transaction for the previous block's anchor
-		err = m.addAnchorTxn()
-		if err != nil {
-			return err
-		}
+	// Produce an anchor transaction (if necessary)
+	err = m.addAnchorTxn()
+	if err != nil {
+		return err
 	}
 
 	// Mirror the subnet's ADI, but only immediately after genesis

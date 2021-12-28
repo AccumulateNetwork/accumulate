@@ -466,3 +466,12 @@ SyntheticDepositTokens:
       type: bigint
     # - name: Metadata
     #   type: rawJson
+
+TransactionStatus:
+  fields:
+    - name: Remote
+      type: bool
+    - name: Delivered
+      type: bool
+    - name: Code
+      type: uvarint

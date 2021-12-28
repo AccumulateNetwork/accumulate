@@ -12,6 +12,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
@@ -19,6 +20,7 @@ type InitOpts struct {
 	Network     config.Network
 	Validators  []tmtypes.GenesisValidator
 	GenesisTime time.Time
+	Logger      log.Logger
 }
 
 func mustParseUrl(s string) *url.URL {
@@ -30,9 +32,9 @@ func mustParseUrl(s string) *url.URL {
 }
 
 func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
-	db := database.New(kvdb, nil)
+	db := database.New(kvdb, opts.Logger.With("module", "database"))
 
-	exec, err := chain.NewGenesisExecutor(db, opts.Network)
+	exec, err := chain.NewGenesisExecutor(db, opts.Logger, opts.Network)
 	if err != nil {
 		return nil, err
 	}

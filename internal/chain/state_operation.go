@@ -128,36 +128,30 @@ type updateNonce struct {
 	record state.Chain
 }
 
-func (m *StateManager) UpdateNonce(record state.Chain) {
+func (m *StateManager) UpdateNonce(record state.Chain) error {
 	u, err := record.Header().ParseUrl()
 	if err != nil {
-		// TODO Return error
-		panic(fmt.Errorf("invalid URL: %v", err))
+		return fmt.Errorf("invalid URL: %v", err)
 	}
 
-	m.chains[u.ResourceChain32()] = record
-	m.operations = append(m.operations, &updateNonce{u, record})
-}
-
-func (op *updateNonce) Execute(st *StateManager, meta *DeliverMetadata) error {
 	// Load the previous state of the record
-	rec := st.batch.Record(op.url)
+	rec := m.batch.Record(u)
 	old, err := rec.GetState()
 	if err != nil {
-		return fmt.Errorf("failed to load state for %q", op.record.Header().ChainUrl)
+		return fmt.Errorf("failed to load state for %q", record.Header().ChainUrl)
 	}
 
 	// Check that the nonce is the only thing that changed
-	switch op.record.Header().Type {
+	switch record.Header().Type {
 	case types.ChainTypeLiteTokenAccount:
-		old, new := old.(*protocol.LiteTokenAccount), op.record.(*protocol.LiteTokenAccount)
+		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
 		old.Nonce = new.Nonce
 		if !old.Equal(new) {
 			return fmt.Errorf("attempted to change more than the nonce")
 		}
 
 	case types.ChainTypeKeyPage:
-		old, new := old.(*protocol.KeyPage), op.record.(*protocol.KeyPage)
+		old, new := old.(*protocol.KeyPage), record.(*protocol.KeyPage)
 		for i := 0; i < len(old.Keys) && i < len(new.Keys); i++ {
 			old.Keys[i].Nonce = new.Keys[i].Nonce
 		}
@@ -169,7 +163,13 @@ func (op *updateNonce) Execute(st *StateManager, meta *DeliverMetadata) error {
 		return fmt.Errorf("chain type %d is not a signator", old.Header().Type)
 	}
 
-	return st.updateStateAndChain(rec, op.record, "Pending")
+	m.chains[u.ResourceChain32()] = record
+	m.operations = append(m.operations, &updateNonce{u, record})
+	return nil
+}
+
+func (op *updateNonce) Execute(st *StateManager, meta *DeliverMetadata) error {
+	return st.updateStateAndChain(st.batch.Record(op.url), op.record, "Pending")
 }
 
 type addDataEntry struct {

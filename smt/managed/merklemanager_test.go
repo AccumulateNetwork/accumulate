@@ -31,8 +31,6 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 	var States []*MerkleState
 	for i := 0; i < numTests; i++ {
 		m.AddHash(randHash.Next())
-		require.NoError(t, storeTx.Commit())
-		storeTx = store.Begin()
 		mState, err := m.MS.Marshal()
 		require.NoError(t, err, "must be able to marshal a MerkleState")
 		ms := new(MerkleState)
@@ -145,9 +143,6 @@ func TestMerkleManager(t *testing.T) {
 	if MM1.GetElementCount() != testLen {
 		t.Fatal("added elements in merkle tree don't match the number we added")
 	}
-
-	require.NoError(t, storeTx.Commit())
-	storeTx = store.Begin()
 
 	// Sort the Indexing
 	for i := int64(0); i < testLen; i++ {

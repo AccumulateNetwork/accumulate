@@ -116,8 +116,17 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 	pending.ChainUrl = txState.ChainUrl
 	pending.TransactionState = &txState.TxState
 
-	pending.Status, err = tx.GetStatus()
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+	status, err := tx.GetStatus()
+	if err != nil {
+		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
+	} else if !status.Delivered && status.Remote {
+		// If the transaction is a synthetic transaction produced by this BVN
+		// and has not been delivered, pretend like it doesn't exist
+		return nil, fmt.Errorf("tx %X %w", txid, storage.ErrNotFound)
+	}
+
+	pending.Status, err = status.MarshalBinary()
+	if err != nil {
 		return nil, fmt.Errorf("invalid query from GetTx in state database, %v", err)
 	}
 
@@ -127,12 +136,21 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 	}
 
 	qr := query.ResponseByTxId{}
-	qr.TxState, err = txState.MarshalBinary()
+	txObj := new(state.Object)
+	txObj.Entry, err = txState.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
+	}
+	qr.TxState, err = txObj.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
 	}
 
-	qr.TxPendingState, err = pending.MarshalBinary()
+	txObj.Entry, err = pending.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
+	}
+	qr.TxPendingState, err = txObj.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal tx state: %v", err)
 	}

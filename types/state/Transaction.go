@@ -93,20 +93,19 @@ func (is *Transaction) TransactionHash() *types.Bytes32 {
 }
 
 func (is *Transaction) MarshalBinary() (data []byte, err error) {
-	defer func() {
-		if rerr := recover(); rerr != nil {
-			err = fmt.Errorf("error marshaling transaction state %v", err)
-		}
-	}()
-
 	data, err = is.ChainHeader.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("cannot unmarshal chain header associated with state, %v", err)
 	}
 
 	if is.SigInfo == nil {
-		panic("no SigInfo for state, shouldn't get here")
+		return nil, fmt.Errorf("missing SigInfo")
 	}
+
+	if is.Transaction == nil {
+		return nil, fmt.Errorf("missing Transaction")
+	}
+
 	var si []byte                  // Someplace to marshal the SigInfo
 	si, err = is.SigInfo.Marshal() // Marshal SigInfo
 	if err != nil {                // If we have an error, report it.

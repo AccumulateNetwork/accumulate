@@ -198,6 +198,8 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 func TestBadgerReceipts(t *testing.T) {
 	badger := new(badger.DB)
 	require.NoError(t, badger.InitDB(filepath.Join(t.TempDir(), "badger.db"), nil))
+	defer badger.Close()
+
 	manager, err := NewMerkleManager(badger.Begin(), 2)
 	require.NoError(t, err)
 
@@ -205,14 +207,6 @@ func TestBadgerReceipts(t *testing.T) {
 
 	GenerateReceipts(manager, 1500000, t)
 
-}
-
-// EndBlock
-// End a block, which writes all pending key/values to the database.
-// Returns the Merkle Dag Root for the merkle tree
-func (m *MerkleManager) EndBlock() (MDRoot Hash) {
-	m.Manager.Commit()
-	return m.MS.GetMDRoot()
 }
 
 func TestReceipt_Combine(t *testing.T) {
@@ -233,10 +227,10 @@ func TestReceipt_Combine(t *testing.T) {
 
 	for i := int64(0); i < testCnt; i++ {
 		m1.AddHash(rh.NextList())
-		root1 := m1.EndBlock()
+		root1 := m1.MS.GetMDRoot()
 		m1Roots = append(m1Roots, root1)
 		m2.AddHash(root1)
-		root2 := m2.EndBlock()
+		root2 := m2.MS.GetMDRoot()
 		m2Roots = append(m2Roots, root2)
 	}
 	for i := int64(0); i < testCnt; i++ {

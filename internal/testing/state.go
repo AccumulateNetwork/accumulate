@@ -62,25 +62,35 @@ func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error 
 }
 
 func WriteStates(db DB, chains ...state.Chain) error {
-	for _, c := range chains {
+	txid := sha256.Sum256([]byte("fake txid"))
+	urls := make([]*url.URL, len(chains))
+	for i, c := range chains {
 		u, err := c.Header().ParseUrl()
 		if err != nil {
 			return err
 		}
+		urls[i] = u
 
-		err = db.Record(u).PutState(c)
+		r := db.Record(u)
+		err = r.PutState(c)
 		if err != nil {
 			return err
 		}
 
-		err = chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
-			return db.Record(u).Index(key...)
-		})
+		chain, err := r.Chain(protocol.Main)
+		if err != nil {
+			return err
+		}
+
+		err = chain.AddEntry(txid[:])
 		if err != nil {
 			return err
 		}
 	}
-	return nil
+
+	return chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
+		return db.Record(u).Index(key...)
+	}, urls...)
 }
 
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {

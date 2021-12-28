@@ -246,11 +246,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		require.Equal(t, types.ChainTypeDataAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
 
-		require.Equal(t, []string{
-			n.ParseUrl("FooBar/book0").String(),
-			n.ParseUrl("FooBar/page0").String(),
-			n.ParseUrl("FooBar/oof").String(),
-		}, n.GetDirectory("FooBar"))
+		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 	})
 
 	t.Run("Data Account w/ Custom Key Book and Manager Key Book Url", func(t *testing.T) {
@@ -302,12 +298,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		r := n.GetDataAccount("FooBar/oof")
 		require.Equal(t, types.ChainTypeDataAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
-
-		require.Equal(t, []string{
-			n.ParseUrl("FooBar/book0").String(),
-			n.ParseUrl("FooBar/page0").String(),
-			n.ParseUrl("FooBar/oof").String(),
-		}, n.GetDirectory("FooBar"))
+		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 
 		wd := new(protocol.WriteData)
 		n.Batch(func(send func(*transactions.GenTransaction)) {
@@ -410,6 +401,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 
 		require.Equal(t, []string{
+			n.ParseUrl("FooBar").String(),
 			n.ParseUrl("FooBar/book0").String(),
 			n.ParseUrl("FooBar/page0").String(),
 			n.ParseUrl("FooBar/Baz").String(),

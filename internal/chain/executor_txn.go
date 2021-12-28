@@ -19,6 +19,14 @@ import (
 
 // CheckTx implements ./abci.Chain
 func (m *Executor) CheckTx(tx *transactions.GenTransaction) *protocol.Error {
+	// If the transaction is borked, the transaction type is probably invalid,
+	// so check that first. "Invalid transaction type" is a more useful error
+	// than "invalid signature" if the real error is the transaction got borked.
+	executor, ok := m.executors[types.TxType(tx.TransactionType())]
+	if !ok {
+		return &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))}
+	}
+
 	err := tx.SetRoutingChainID()
 	if err != nil {
 		return &protocol.Error{Code: protocol.CodeRoutingChainId, Message: err}
@@ -35,10 +43,6 @@ func (m *Executor) CheckTx(tx *transactions.GenTransaction) *protocol.Error {
 		return &protocol.Error{Code: protocol.CodeCheckTxError, Message: err}
 	}
 
-	executor, ok := m.executors[types.TxType(tx.TransactionType())]
-	if !ok {
-		return &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", types.TxType(tx.TransactionType()))}
-	}
 	err = executor.Validate(st, tx)
 	if err != nil {
 		return &protocol.Error{Code: protocol.CodeValidateTxnError, Message: err}
@@ -71,7 +75,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 	txPending := state.NewPendingTransaction(tx)
 	chainId := types.Bytes(tx.ChainID).AsBytes32()
 	if !ok {
-		return m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())})
+		return m.recordTransactionError(nil, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())})
 	}
 
 	tx.TransactionHash()
@@ -90,14 +94,14 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 
 	st, err := m.check(m.blockBatch, tx)
 	if err != nil {
-		return m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+		return m.recordTransactionError(nil, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
 	// Validate
 	// TODO result should return a list of chainId's the transaction touched.
 	err = executor.Validate(st, tx)
 	if err != nil {
-		return m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+		return m.recordTransactionError(nil, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
 	}
 
 	// If we get here, we were successful in validating.  So, we need to
@@ -109,18 +113,18 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 	if err != nil {
-		return m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return m.recordTransactionError(txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	txPendingObject := new(state.Object)
 	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
-		return m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return m.recordTransactionError(txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	// Store the tx state
-	status := json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
+	status := &protocol.TransactionStatus{Delivered: true}
 	err = m.blockBatch.Transaction(tx.TransactionHash()).Put(txAccepted, status, tx.Signature)
 	if err != nil {
 		return &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
@@ -129,9 +133,9 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 	// Store pending state updates, queue state creates for synthetic transactions
 	meta, err := st.Commit()
 	if err != nil {
-		return m.recordTransactionError(txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+		return m.recordTransactionError(txAccepted, txPending, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
 	}
-	m.blockMeta.Append(meta)
+	m.blockMeta.Deliver.Append(meta)
 
 	// Process synthetic transactions generated by the validator
 	err = m.addSynthTxns(tx.TransactionHash(), meta.Submitted)
@@ -139,7 +143,7 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 		return &protocol.Error{Code: protocol.CodeSyntheticTxnError, Message: err}
 	}
 
-	m.delivered++
+	m.blockMeta.Delivered++
 	return nil
 }
 
@@ -174,7 +178,11 @@ func (m *Executor) check(batch *database.Batch, tx *transactions.GenTransaction)
 	book := new(protocol.KeyBook)
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
-		return st, m.checkLite(st, tx, origin)
+		err = m.checkLite(st, tx, origin)
+		if err != nil {
+			return nil, err
+		}
+		return st, nil
 
 	case *state.AdiState, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
 		if origin.Header().KeyBook == "" {
@@ -245,7 +253,10 @@ func (m *Executor) check(batch *database.Batch, tx *transactions.GenTransaction)
 	//}
 	//
 	//st.UpdateCreditBalance(page)
-	st.UpdateNonce(page)
+	err = st.UpdateNonce(page)
+	if err != nil {
+		return nil, err
+	}
 	return st, nil
 }
 
@@ -289,14 +300,15 @@ func (m *Executor) checkLite(st *StateManager, tx *transactions.GenTransaction, 
 		}
 	}
 
-	st.UpdateNonce(account)
-	return nil
+	return st.UpdateNonce(account)
 }
 
-func (m *Executor) recordTransactionError(txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, err *protocol.Error) *protocol.Error {
-	txState, txPending := state.NewTransaction(txPending)
-	status := json.RawMessage(fmt.Sprintf("{\"code\":\"1\", \"error\":\"%v\"}", err))
-	err1 := m.blockBatch.Transaction(txid).Put(txState, status, nil)
+func (m *Executor) recordTransactionError(txAccepted *state.Transaction, txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, err *protocol.Error) *protocol.Error {
+	if txAccepted == nil {
+		txAccepted, txPending = state.NewTransaction(txPending)
+	}
+	status := &protocol.TransactionStatus{Delivered: true, Code: uint64(err.Code)}
+	err1 := m.blockBatch.Transaction(txid).Put(txAccepted, status, nil)
 	if err1 != nil {
 		err = &protocol.Error{Code: protocol.CodeAddTxnError, Message: fmt.Errorf("error adding pending tx (%v) on error %v", err1, err)}
 	}
