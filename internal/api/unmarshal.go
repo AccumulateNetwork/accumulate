@@ -156,43 +156,17 @@ func unmarshalTxAs(payload []byte, v protocol.TransactionPayload) (*api.APIDataR
 
 //unmarshalTransaction will unpack the transaction stored on-chain and marshal it into a response
 func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
-
 	txType, _ := common.BytesUint64(txPayload)
-	switch types.TxType(txType) {
-	case types.TxTypeSendTokens:
+	payload, err := protocol.NewTransaction(types.TransactionType(txType))
+	if err != nil {
+		err = fmt.Errorf("unable to unmarshal txn %x: %v", txId, err)
+	}
+
+	switch payload := payload.(type) {
+	case *protocol.SendTokens:
 		resp, err = unmarshalTokenTx(sigInfo, txPayload, txId, txSynthTxIds)
-	case types.TxTypeSyntheticDepositTokens:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticDepositTokens))
-	case types.TxTypeCreateIdentity:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.IdentityCreate))
-	case types.TxTypeCreateTokenAccount:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.TokenAccountCreate))
-	case types.TxTypeCreateKeyPage:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateKeyPage))
-	case types.TxTypeCreateKeyBook:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.CreateKeyBook))
-	case types.TxTypeAddCredits:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.AddCredits))
-	case types.TxTypeUpdateKeyPage:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.UpdateKeyPage))
-	case types.TxTypeSyntheticCreateChain:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticCreateChain))
-	case types.TxTypeSyntheticDepositCredits:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticDepositCredits))
-	case types.TxTypeSyntheticGenesis:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticGenesis))
-	case types.TxTypeAcmeFaucet:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.AcmeFaucet))
-	case types.TxTypeSegWitDataEntry:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.SegWitDataEntry))
-	case types.TxTypeWriteData:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.WriteData))
-	case types.TxTypeWriteDataTo:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.WriteDataTo))
-	case types.TxTypeSyntheticWriteData:
-		resp, err = unmarshalTxAs(txPayload, new(protocol.SyntheticWriteData))
 	default:
-		err = fmt.Errorf("unable to extract transaction info for type %s : %x", types.TxType(txType).Name(), txPayload)
+		resp, err = unmarshalTxAs(txPayload, payload)
 	}
 	if err != nil {
 		return nil, err
@@ -246,16 +220,16 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 		rAdi.PublicKey = sChain.KeyData
 		return respondWith(obj, rAdi, sChain.Type.String())
 
-	case *state.TokenAccount:
-		ta := new(protocol.TokenAccountCreate)
+	case *protocol.TokenAccount:
+		ta := new(protocol.CreateTokenAccount)
 		ta.Url = string(sChain.ChainUrl)
-		ta.TokenUrl = string(sChain.TokenUrl.String)
-		rAccount := response.NewTokenAccount(ta, sChain.GetBalance(), sChain.TxCount)
+		ta.TokenUrl = sChain.TokenUrl
+		rAccount := response.NewTokenAccount(ta, sChain.GetBalance())
 		return respondWith(obj, rAccount, sChain.Type.String())
 
 	case *protocol.LiteTokenAccount:
 		rAccount := new(response.LiteTokenAccount)
-		rAccount.TokenAccountCreate = new(protocol.TokenAccountCreate)
+		rAccount.CreateTokenAccount = new(protocol.CreateTokenAccount)
 		rAccount.Url = string(sChain.ChainUrl)
 		rAccount.TokenUrl = string(sChain.TokenUrl)
 		rAccount.Balance = types.Amount{Int: sChain.Balance}
