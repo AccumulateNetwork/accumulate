@@ -109,7 +109,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	book.Pages = append(book.Pages, pageUrl.String())
 
 	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
-	adi.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
+	adi.KeyBook = types.String(bookUrl.String())
 
 	return WriteStates(db, adi, book, mss)
 }
@@ -120,7 +120,6 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		return err
 	}
 	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
-	bookId := u.Identity().JoinPath("book0").ResourceChain() // assume the book is adi/book0
 
 	var chain state.Chain
 	if lite {
@@ -132,7 +131,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		chain = account
 	} else {
 		account := protocol.NewTokenAccountByUrls(u.String(), tokenUrl)
-		account.KeyBook = types.Bytes(bookId).AsBytes32()
+		account.KeyBook = types.String(u.Identity().JoinPath("book0").String())
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	}
@@ -190,11 +189,11 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 			return err
 		}
 
-		if (spec.KeyBook != types.Bytes32{}) {
+		if spec.KeyBook != "" {
 			return fmt.Errorf("%q is already attached to a key book", s)
 		}
 
-		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+		spec.KeyBook = types.String(groupUrl.String())
 		states = append(states, spec)
 	}
 

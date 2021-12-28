@@ -347,7 +347,11 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("inavid object error")}
 		}
 		if chainHeader.Type != types.ChainTypeKeyBook {
-			obj, err = m.queryByChainId(chainHeader.KeyBook.Bytes())
+			u, err := url.Parse(string(chainHeader.KeyBook))
+			if err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
+			}
+			obj, err = m.queryByChainId(u.ResourceChain())
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
 			}
