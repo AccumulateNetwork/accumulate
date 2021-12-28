@@ -475,3 +475,12 @@ TransactionStatus:
       type: bool
     - name: Code
       type: uvarint
+
+TransactionSignature:
+  fields:
+    - name: Transaction
+      type: chain
+    - name: Signature
+      type: transactions.ED25519Sig
+      pointer: true
+      marshal-as: reference
