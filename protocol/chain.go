@@ -17,8 +17,6 @@ func NewChain(typ types.ChainType) (state.Chain, error) {
 		return new(TokenAccount), nil
 	case types.ChainTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
-	case types.ChainTypeTransactionReference:
-		return new(state.TxReference), nil
 	case types.ChainTypeTransaction:
 		return new(state.Transaction), nil
 	case types.ChainTypePendingTransaction:

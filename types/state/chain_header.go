@@ -22,7 +22,7 @@ type Chain interface {
 type ChainHeader struct {
 	Type           types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
 	ChainUrl       types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	KeyBook        types.Bytes32   `json:"keyBook"`        //this is the chain id for the sig spec for the chain
+	KeyBook        types.String    `json:"keyBook"`        //this is the chain id for the sig spec for the chain
 	ManagerKeyBook types.String    `json:"managerKeyBook"` //this is the manager key book url for the chain
 	// transient
 	url *url.URL
@@ -84,7 +84,7 @@ func (h *ChainHeader) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(common.Uint64Bytes(h.Type.ID()))
 	buffer.Write(common.SliceBytes([]byte(h.ChainUrl)))
-	buffer.Write(common.SliceBytes(h.KeyBook[:]))
+	buffer.Write(common.SliceBytes([]byte(h.KeyBook)))
 	buffer.Write(common.SliceBytes([]byte(h.ManagerKeyBook)))
 
 	return buffer.Bytes(), nil
@@ -105,7 +105,7 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	h.ChainUrl = types.String(u)
 
 	spec, data := common.BytesSlice(data)
-	h.KeyBook.FromBytes(spec)
+	h.KeyBook = types.String(spec)
 
 	mgr, _ := common.BytesSlice(data)
 	h.ManagerKeyBook = types.String(mgr)
