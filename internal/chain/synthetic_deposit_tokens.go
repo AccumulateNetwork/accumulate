@@ -7,7 +7,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type SyntheticDepositTokens struct{}
@@ -62,13 +61,6 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.GenTra
 		return fmt.Errorf("unable to add deposit balance to account")
 	}
 	st.Update(account)
-
-	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
-	//This will reference the txid to keep the history
-	txHash := types.Bytes(tx.TransactionHash()).AsBytes32()
-	refUrl := accountUrl.JoinPath(fmt.Sprint(account.NextTx()))
-	txr := state.NewTxReference(refUrl.String(), txHash[:])
-	st.Update(txr)
 
 	return nil
 }
