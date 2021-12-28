@@ -247,16 +247,6 @@ func (q *Query) GetDirectory(url string) (*acmeApi.APIDataResponse, error) {
 	return rAPI, nil
 }
 
-// GetTransactionReference get the transaction id for a given transaction number
-func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataResponse, error) {
-	r, err := q.QueryByUrl(adiChainPath)
-	if err != nil {
-		return nil, fmt.Errorf("transaction id reference chain query returned error, %v", err)
-	}
-
-	return unmarshalTxReference(r.Response)
-}
-
 // GetDataSetByUrl returns the data specified by the pagination information on given chain specified by the url
 func (q *Query) GetDataSetByUrl(url string, start uint64, limit uint64, expand bool) (*acmeApi.APIDataResponsePagination, error) {
 	u, err := url2.Parse(url)

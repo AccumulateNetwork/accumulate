@@ -50,7 +50,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransac
 			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
 
-		copy(account.KeyBook[:], keyBookUrl.ResourceChain())
+		account.KeyBook = types.String(keyBookUrl.String())
 	}
 
 	st.Create(account)

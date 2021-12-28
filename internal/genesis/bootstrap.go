@@ -76,7 +76,7 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 		uPage := uAdi.JoinPath("validators0")
 
 		adi := state.NewIdentityState(types.String(uAdi.String()))
-		adi.KeyBook = uBook.ResourceChain32()
+		adi.KeyBook = types.String(uBook.String())
 
 		book := protocol.NewKeyBook()
 		book.ChainUrl = types.String(uBook.String())
@@ -84,7 +84,7 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 
 		page := protocol.NewKeyPage()
 		page.ChainUrl = types.String(uPage.String())
-		page.KeyBook = uBook.ResourceChain32()
+		page.KeyBook = types.String(uBook.String())
 
 		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
 		for i, val := range opts.Validators {

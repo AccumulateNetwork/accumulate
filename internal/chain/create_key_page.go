@@ -60,7 +60,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 
 		group.Pages = append(group.Pages, msUrl.String())
-		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+		spec.KeyBook = types.String(groupUrl.String())
 
 		err = scc.Update(group)
 		if err != nil {
