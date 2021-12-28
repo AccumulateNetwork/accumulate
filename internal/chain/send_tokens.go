@@ -8,7 +8,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type SendTokens struct{}
@@ -57,7 +56,6 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 		return fmt.Errorf("insufficient balance")
 	}
 
-	txid := types.Bytes(tx.TransactionHash())
 	for i, u := range recipients {
 		deposit := new(protocol.SyntheticDepositTokens)
 		copy(deposit.Cause[:], tx.TransactionHash())
@@ -70,13 +68,6 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 		return fmt.Errorf("%q balance is insufficient", st.OriginUrl)
 	}
 	st.Update(account)
-
-	txHash := txid.AsBytes32()
-	//create a transaction reference chain acme-xxxxx/0, 1, 2, ... n.
-	//This will reference the txid to keep the history
-	refUrl := st.OriginUrl.JoinPath(fmt.Sprint(account.NextTx()))
-	txr := state.NewTxReference(refUrl.String(), txHash[:])
-	st.Update(txr)
 
 	return nil
 }
