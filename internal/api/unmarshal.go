@@ -84,21 +84,6 @@ func respondWith(obj *state.Object, v interface{}, typ string) (*api.APIDataResp
 	return rAPI, nil
 }
 
-func unmarshalTxReference(rQuery tm.ResponseQuery) (*api.APIDataResponse, error) {
-	return unmarshalAs(rQuery, "txReference", func(b []byte) (interface{}, error) {
-		obj := state.Object{}
-		err := obj.UnmarshalBinary(b)
-		if err != nil {
-			return nil, fmt.Errorf("error unmarshaling Token state object %v", err)
-		}
-
-		txRef := new(state.TxReference)
-		err = txRef.UnmarshalBinary(obj.Entry)
-		txRefResp := response.TxReference{TxId: txRef.TxId}
-		return txRefResp, err
-	})
-}
-
 func unmarshalTokenTx(sigInfo *transactions.SignatureInfo, txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
 	tx := protocol.SendTokens{}
 	err := tx.UnmarshalBinary(txPayload)
