@@ -27,7 +27,7 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	book, err := url.Parse("foo/book0")
 	require.NoError(t, err)
 
-	account := state.NewTokenAccount("foo/bar/baz", "ACME")
+	account := protocol.NewTokenAccountByUrls("foo/bar/baz", "ACME")
 	account.KeyBook = types.Bytes(book.ResourceChain()).AsBytes32()
 	body := new(protocol.SyntheticCreateChain)
 	body.Cause[0] = 1

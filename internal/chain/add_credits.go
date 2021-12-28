@@ -9,7 +9,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type AddCredits struct{}
@@ -60,7 +59,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
 		account = origin
-	case *state.TokenAccount:
+	case *protocol.TokenAccount:
 		account = origin
 	default:
 		return fmt.Errorf("not an account: %q", tx.SigInfo.URL)

@@ -136,7 +136,7 @@ func TestAnchorChain(t *testing.T) {
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	n.Batch(func(send func(*Tx)) {
-		adi := new(protocol.IdentityCreate)
+		adi := new(protocol.CreateIdentity)
 		adi.Url = "RoadRunner"
 		adi.KeyBookName = "book"
 		adi.KeyPageName = "page"
@@ -193,7 +193,7 @@ func TestCreateADI(t *testing.T) {
 	wallet.Addr = acctesting.AcmeLiteAddressTmPriv(liteAccount).String()
 
 	n.Batch(func(send func(*Tx)) {
-		adi := new(protocol.IdentityCreate)
+		adi := new(protocol.CreateIdentity)
 		adi.Url = "RoadRunner"
 		adi.PublicKey = keyHash[:]
 		adi.KeyBookName = "foo-book"
@@ -392,7 +392,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
-			tac := new(protocol.TokenAccountCreate)
+			tac := new(protocol.CreateTokenAccount)
 			tac.Url = "FooBar/Baz"
 			tac.TokenUrl = protocol.AcmeUrl().String()
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), tac)
@@ -403,7 +403,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		r := n.GetTokenAccount("FooBar/Baz")
 		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
-		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
+		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 
 		require.Equal(t, []string{
 			n.ParseUrl("FooBar/book0").String(),
@@ -422,7 +422,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 		n.Batch(func(send func(*transactions.GenTransaction)) {
-			tac := new(protocol.TokenAccountCreate)
+			tac := new(protocol.CreateTokenAccount)
 			tac.Url = "FooBar/Baz"
 			tac.TokenUrl = protocol.AcmeUrl().String()
 			tac.KeyBookUrl = "foo/book1"
@@ -437,7 +437,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		r := n.GetTokenAccount("FooBar/Baz")
 		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
-		require.Equal(t, types.String(protocol.AcmeUrl().String()), r.TokenUrl.String)
+		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 		require.Equal(t, bookChainId, r.KeyBook)
 	})
 }
@@ -553,7 +553,6 @@ func TestCreateKeyBook(t *testing.T) {
 	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
 
 	specUrl := n.ParseUrl("foo/page1")
-	specChainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
 
 	groupUrl := n.ParseUrl("foo/book1")
 	groupChainId := types.Bytes(groupUrl.ResourceChain()).AsBytes32()
@@ -561,7 +560,7 @@ func TestCreateKeyBook(t *testing.T) {
 	n.Batch(func(send func(*transactions.GenTransaction)) {
 		csg := new(protocol.CreateKeyBook)
 		csg.Url = "foo/book1"
-		csg.Pages = append(csg.Pages, specChainId)
+		csg.Pages = append(csg.Pages, specUrl.String())
 
 		tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), csg)
 		require.NoError(t, err)
@@ -570,7 +569,7 @@ func TestCreateKeyBook(t *testing.T) {
 
 	group := n.GetKeyBook("foo/book1")
 	require.Len(t, group.Pages, 1)
-	require.Equal(t, specChainId, types.Bytes32(group.Pages[0]))
+	require.Equal(t, specUrl.String(), group.Pages[0])
 
 	spec := n.GetKeyPage("foo/page1")
 	require.Equal(t, spec.KeyBook, groupChainId)
@@ -714,7 +713,7 @@ func TestSignatorHeight(t *testing.T) {
 	liteHeight := getHeight(liteUrl)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		adi := new(protocol.IdentityCreate)
+		adi := new(protocol.CreateIdentity)
 		adi.Url = "foo"
 		adi.PublicKey = fooKey.PubKey().Bytes()
 		adi.KeyBookName = "book"
@@ -730,7 +729,7 @@ func TestSignatorHeight(t *testing.T) {
 	keyPageHeight := getHeight(keyPageUrl)
 
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		tac := new(protocol.TokenAccountCreate)
+		tac := new(protocol.CreateTokenAccount)
 		tac.Url = tokenUrl.String()
 		tac.TokenUrl = protocol.AcmeUrl().String()
 		tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), tac)
