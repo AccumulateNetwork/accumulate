@@ -33,6 +33,9 @@ const (
 	// Main is the main transaction chain of a record.
 	Main = "Main"
 
+	// Pending is the pending signature chain of a record.
+	Pending = "Pending"
+
 	// Data is the data chain of a record.
 	Data = "Data"
 )
