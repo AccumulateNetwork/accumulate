@@ -1,7 +1,6 @@
 package chain_test
 
 import (
-	"fmt"
 	"testing"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/chain"
@@ -34,12 +33,6 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	require.Equal(t, types.String(gtx.SigInfo.URL), tas.ChainUrl, "invalid chain header")
 	require.Equalf(t, types.ChainTypeLiteTokenAccount, tas.Type, "chain state is not a lite account, it is %s", tas.ChainHeader.Type.Name())
 	require.Equal(t, tokenUrl, tas.TokenUrl, "token url of state doesn't match expected")
-	require.Equal(t, uint64(1), tas.TxCount)
+	require.Equal(t, uint64(0), tas.TxCount)
 
-	//now query the tx reference
-	refUrl := st.OriginUrl.JoinPath(fmt.Sprint(tas.TxCount - 1))
-	txRef := new(state.TxReference)
-	require.NoError(t, st.LoadUrlAs(refUrl, txRef))
-	require.Equal(t, types.String(refUrl.String()), txRef.ChainUrl, "chain header expected transaction reference")
-	require.Equal(t, gtx.TransactionHash(), txRef.TxId[:], "txid doesn't match")
 }
