@@ -97,7 +97,6 @@ func (c *FakeTendermint) Shutdown() {
 
 	close(c.stop)
 	c.stopped.Wait()
-	close(c.txCh)
 }
 
 func (c *FakeTendermint) App() abci.Application {
@@ -248,10 +247,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		case <-c.stop:
 			return
 
-		case sub, ok := <-c.txCh:
-			if !ok {
-				return
-			}
+		case sub := <-c.txCh:
 			queue = append(queue, sub)
 			continue
 
@@ -270,10 +266,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		case <-c.stop:
 			return
 
-		case sub, ok := <-c.txCh:
-			if !ok {
-				return
-			}
+		case sub := <-c.txCh:
 			queue = append(queue, sub)
 			goto collect
 
