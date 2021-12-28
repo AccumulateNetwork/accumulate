@@ -365,7 +365,11 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			KeyBook: keyBook.GetChainUrl(),
 		}
 		for index, page := range keyBook.Pages {
-			pageObject, err := m.queryByChainId(page[:])
+			u, err := url.Parse(page)
+			if err != nil {
+				return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", u.String())}
+			}
+			pageObject, err := m.queryByChainId(u.ResourceChain())
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
 			}

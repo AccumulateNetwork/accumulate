@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -171,7 +172,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	case *protocol.LiteTokenAccount:
 		return st, m.checkLite(st, tx, origin)
 
-	case *state.AdiState, *state.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
+	case *state.AdiState, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
 		if (origin.Header().KeyBook == types.Bytes32{}) {
 			return nil, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
@@ -193,14 +194,18 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 		return nil, fmt.Errorf("invalid sig spec index")
 	}
 
+	u, err := url.Parse(book.Pages[tx.SigInfo.KeyPageIndex])
+	if err != nil {
+		return nil, fmt.Errorf("invalid key page url : %s", book.Pages[tx.SigInfo.KeyPageIndex])
+	}
 	page := new(protocol.KeyPage)
-	err = st.LoadAs(book.Pages[tx.SigInfo.KeyPageIndex], page)
+	err = st.LoadAs(u.ResourceChain32(), page)
 	if err != nil {
 		return nil, fmt.Errorf("invalid sig spec: %v", err)
 	}
 
 	// TODO check height
-	height, err := st.GetHeight(book.Pages[tx.SigInfo.KeyPageIndex])
+	height, err := st.GetHeight(u.ResourceChain32())
 	if err != nil {
 		return nil, err
 	}

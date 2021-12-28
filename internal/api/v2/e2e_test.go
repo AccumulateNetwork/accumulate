@@ -13,7 +13,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	. "github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
 	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/assert"
@@ -95,7 +94,7 @@ func TestValidate(t *testing.T) {
 		executeTx(t, japi, "create-adi", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,
-			Payload: &IdentityCreate{
+			Payload: &CreateIdentity{
 				Url:         adiName,
 				PublicKey:   adiKey[32:],
 				KeyBookName: "book",
@@ -164,10 +163,9 @@ func TestValidate(t *testing.T) {
 
 	keyBookUrl := adiName + "/book1"
 	t.Run("Create Key Book", func(t *testing.T) {
-		var page [][32]byte
+		var page []string
 		pageUrl := makeUrl(t, keyPageUrl)
-		pageChainId := types.Bytes(pageUrl.ResourceChain()).AsBytes32()
-		page = append(page, pageChainId)
+		page = append(page, pageUrl.String())
 		executeTx(t, japi, "create-key-book", true, execParams{
 			Origin: adiName,
 			Key:    adiKey,
@@ -187,7 +185,7 @@ func TestValidate(t *testing.T) {
 		executeTx(t, japi, "create-token-account", true, execParams{
 			Origin: adiName,
 			Key:    adiKey,
-			Payload: &TokenAccountCreate{
+			Payload: &CreateTokenAccount{
 				Url:        tokenAccountUrl,
 				TokenUrl:   tokenUrl,
 				KeyBookUrl: keyBookUrl,

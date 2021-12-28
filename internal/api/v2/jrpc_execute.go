@@ -26,7 +26,7 @@ func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) inter
 }
 
 func (m *JrpcMethods) ExecuteCreateIdentity(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.IdentityCreate))
+	return m.executeWith(ctx, params, new(protocol.CreateIdentity))
 }
 
 func (m *JrpcMethods) ExecuteWith(newParams func() protocol.TransactionPayload, validateFields ...string) jsonrpc2.MethodFunc {

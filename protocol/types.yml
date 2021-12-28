@@ -27,6 +27,15 @@ LiteTokenAccount:
     - name: CreditBalance
       type: bigint
 
+TokenAccount:
+  kind: chain
+  fields:
+    - name: TokenUrl
+      type: string
+      is-url: true
+    - name: Balance
+      type: bigint
+
 SyntheticCreateChain:
   kind: tx
   fields:
@@ -75,7 +84,6 @@ KeySpecParams:
 
 KeyPage:
   kind: chain
-  chain-type: KeyPage
   fields:
     - name: CreditBalance
       type: bigint
@@ -88,7 +96,6 @@ KeyPage:
 
 CreateKeyPage:
   kind: tx
-  tx-type: CreateKeyPage
   fields:
     - name: Url
       type: string
@@ -104,7 +111,10 @@ KeyBook:
   kind: chain
   fields:
     - name: Pages
-      type: chainSet
+      type: slice
+      slice:
+        type: string
+        is-url: true
 
 CreateKeyBook:
   kind: tx
@@ -113,11 +123,13 @@ CreateKeyBook:
       type: string
       is-url: true
     - name: Pages
-      type: chainSet
+      type: slice
+      slice:
+        type: string
+        is-url: true
 
-IdentityCreate:
+CreateIdentity:
   kind: tx
-  tx-type: CreateIdentity
   fields:
     - name: Url
       type: string
@@ -131,9 +143,8 @@ IdentityCreate:
       type: string
       optional: true
 
-TokenAccountCreate:
+CreateTokenAccount:
   kind: tx
-  tx-type: CreateTokenAccount
   fields:
     - name: Url
       type: string
