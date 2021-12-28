@@ -79,8 +79,12 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 	defer batch.Discard()
 
 	root := new(state.Anchor)
-	require.NoError(t, batch.Record(n.network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root))
-	n.height = root.Index
+	err = batch.Record(n.network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	if err == nil {
+		n.height = root.Index
+	} else {
+		require.ErrorIs(t, err, storage.ErrNotFound)
+	}
 
 	n.client = acctesting.NewFakeTendermint(appChan, db, n.network, n.NextHeight, func(err error) {
 		t.Helper()
@@ -126,6 +130,7 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 	_, err = genesis.Init(kv, genesis.InitOpts{
 		Network:     *n.network,
 		GenesisTime: time.Now(),
+		Logger:      logger,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: tmed25519.PrivKey(bvcKey).PubKey()},
 		},

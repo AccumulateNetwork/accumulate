@@ -57,9 +57,6 @@ type txStatus struct {
 	Hash          [32]byte
 	Height        int64
 	Index         uint32
-	DidCheck      chan struct{}
-	DidDeliver    chan struct{}
-	DidCommit     chan struct{}
 	CheckResult   *abci.ResponseCheckTx
 	DeliverResult *abci.ResponseDeliverTx
 	Done          bool
@@ -174,9 +171,6 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	c.txStatus[txh] = st
 	st.Tx = tx
 	st.Hash = txh
-	st.DidCheck = make(chan struct{})
-	st.DidDeliver = make(chan struct{})
-	st.DidCommit = make(chan struct{})
 	c.txActive++
 	return st
 }
@@ -240,9 +234,6 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 				Info: "Canceled",
 				Log:  "Canceled",
 			}
-			close(sub.DidCheck)
-			close(sub.DidDeliver)
-			close(sub.DidCommit)
 			sub.Done = true
 		}
 
@@ -306,19 +297,16 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 			cr := c.app.CheckTx(abci.RequestCheckTx{Tx: sub.Tx})
 			sub.CheckResult = &cr
-			close(sub.DidCheck)
 			if debugTX {
 				fmt.Printf("Checked %X\n", sub.Hash)
 			}
 			if cr.Code != 0 {
 				c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
-				close(sub.DidDeliver)
 				continue
 			}
 
 			dr := c.app.DeliverTx(abci.RequestDeliverTx{Tx: sub.Tx})
 			sub.DeliverResult = &dr
-			close(sub.DidDeliver)
 			if debugTX {
 				fmt.Printf("Delivered %X\n", sub.Hash)
 			}
@@ -341,7 +329,6 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		c.app.Commit()
 
 		for _, sub := range queue {
-			close(sub.DidCommit)
 			sub.Done = true
 			if debugTX {
 				fmt.Printf("Comitted %X\n", sub.Hash)
@@ -431,19 +418,7 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 }
 
 func (c *FakeTendermint) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
-	st := c.SubmitTx(ctx, tx)
-	<-st.DidCommit
-
-	r := new(ctypes.ResultBroadcastTxCommit)
-	r.Hash = st.Hash[:]
-	r.Height = st.Height
-	r.CheckTx = *st.CheckResult
-	if st.CheckResult.Code != 0 {
-		return r, nil
-	}
-
-	r.DeliverTx = *st.DeliverResult
-	return r, nil
+	return nil, errors.New("not supported")
 }
 
 // Stolen from Tendermint
