@@ -29,7 +29,6 @@ stages:
   stage: test
   extends: .go
   needs: []
-  tags: [docker, linux]
   artifacts:
     when: always
     reports:
@@ -49,7 +48,6 @@ test 2/2:
 git describe:
   stage: build
   needs: []
-  tags: [docker, linux]
   script:
   - git fetch --unshallow
   - echo "GIT_DESCRIBE=$(git describe --dirty)" >> git.env
@@ -60,7 +58,7 @@ git describe:
 build images:
   stage: build
   needs: []
-  tags: [docker, linux]
+  tags: [accumulate, docker, linux]
   image: docker
   services: ['docker:dind']
   script:
@@ -74,7 +72,7 @@ build:
   stage: build
   extends: .go
   needs: [git describe]
-  tags: [docker, linux]
+  tags: [accumulate, docker, linux]
   image: golang:1.17
   script:
   - build-daemon linux amd64
@@ -91,7 +89,6 @@ configure:
   stage: build
   extends: .go
   needs: [git describe]
-  tags: [docker, linux]
   image: golang:1.17
   script:
   - |
@@ -113,10 +110,7 @@ configure:
   stage: deploy
   only: [develop] # only run on the main branch
   needs: [configure, test 1/2, test 2/2]
-  tags:
-  - linux
-  - docker
-  - accumulate
+  tags: [accumulate, docker, linux]
   image: ubuntu
   script:
   - apt-get -y update && apt-get -y install ssh
@@ -162,7 +156,6 @@ deploy 4/4:
 validate docker:
   stage: validate
   needs: ['build images']
-  tags: [docker, linux]
   image: docker
   services: ['docker:dind']
   variables:
