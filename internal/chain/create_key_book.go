@@ -54,7 +54,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 			return fmt.Errorf("%q does not belong to %q", u, st.OriginUrl)
 		}
 
-		if (entry.KeyBook != types.Bytes32{}) {
+		if entry.KeyBook != "" {
 			return fmt.Errorf("%q has already been assigned to a key book", u)
 		}
 
@@ -68,7 +68,6 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(sgUrl.String())
 
-	groupChainId := types.Bytes(sgUrl.ResourceChain()).AsBytes32()
 	for _, spec := range entries {
 		u, err := spec.ParseUrl()
 		if err != nil {
@@ -77,7 +76,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 
 		book.Pages = append(book.Pages, u.String())
-		spec.KeyBook = groupChainId
+		spec.KeyBook = types.String(sgUrl.String())
 		err = scc.Update(spec)
 		if err != nil {
 			return fmt.Errorf("failed to marshal state: %v", err)
