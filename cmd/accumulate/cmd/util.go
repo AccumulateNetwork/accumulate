@@ -103,7 +103,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 	}
 
 	bookRec := new(protocol.KeyBook)
-	if originRec.KeyBook == types.String("") {
+	if originRec.KeyBook == "" {
 		_, err := getRecord(origin.String(), &bookRec)
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
