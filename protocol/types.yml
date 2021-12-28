@@ -234,6 +234,18 @@ SegWitDataEntry:
     - name: EntryHash
       type: chain
 
+#LiteDataEntry requires marshaling to be done using the big-endian varint's from Factom
+#LiteDataEntry:
+#  fields:
+#    - name: ChainId
+#      type: lite-chain
+#    - name: ExtIds
+#     type: lite-slice
+#      lite-slice:
+#        type: bytes
+#    - name: Data
+#      type: lite-bytes
+
 DataEntry:
   fields:
     - name: ExtIds
