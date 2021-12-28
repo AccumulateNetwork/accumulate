@@ -77,7 +77,7 @@ Execute:
 ExecuteCreateAdi:
   kind: execute
   rpc: create-adi
-  input: IdentityCreate
+  input: CreateIdentity
 
 ExecuteCreateDataAccount:
   kind: execute
@@ -102,7 +102,7 @@ ExecuteCreateToken:
 ExecuteCreateTokenAccount:
   kind: execute
   rpc: create-token-account
-  input: TokenAccountCreate
+  input: CreateTokenAccount
 
 ExecuteSendTokens:
   kind: execute

@@ -112,15 +112,13 @@ func CreateKeyBook(book string, args []string) (string, error) {
 	keyBook := protocol.CreateKeyBook{}
 	keyBook.Url = newUrl.String()
 
-	var chainId types.Bytes32
 	pageUrls := args[1:]
 	for i := range pageUrls {
 		u2, err := url2.Parse(pageUrls[i])
 		if err != nil {
 			return "", fmt.Errorf("invalid page url %s, %v", pageUrls[i], err)
 		}
-		chainId.FromBytes(u2.ResourceChain())
-		keyBook.Pages = append(keyBook.Pages, chainId)
+		keyBook.Pages = append(keyBook.Pages, u2.String())
 	}
 
 	res, err := dispatchTxRequest("create-key-book", &keyBook, bookUrl, si, privKey)

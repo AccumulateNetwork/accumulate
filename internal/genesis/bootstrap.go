@@ -80,7 +80,7 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 
 		book := protocol.NewKeyBook()
 		book.ChainUrl = types.String(uBook.String())
-		book.Pages = [][32]byte{uPage.ResourceChain32()}
+		book.Pages = []string{uPage.String()}
 
 		page := protocol.NewKeyPage()
 		page.ChainUrl = types.String(uPage.String())
