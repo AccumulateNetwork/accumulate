@@ -23,8 +23,6 @@ func TestRestart(t *testing.T) {
 
 		for j := 0; j < 100; j++ { //                                   Add 100 hashes
 			if j == i {
-				require.NoError(t, storeTx.Commit())
-				storeTx = store.Begin()                        // Flush the cache
 				MM2, _ := NewMerkleManager(storeTx, MarkPower) // Then get the highest state stored
 				if !MM1.Equal(MM2) {                           // MM2 should be the same as MM1
 					t.Fatalf("could not restore MM1 in MM2.  index: %d", j) // are going to be messed up.
@@ -68,6 +66,8 @@ func TestRestartCache(t *testing.T) {
 				require.NoError(t, storeTx.Commit())
 				storeTx = store.Begin()
 				cached = cached[:0] //  Clear the cache
+				MM1, err = NewMerkleManager(storeTx, MarkPower)
+				require.NoError(t, err)
 			}
 
 			if j == i {

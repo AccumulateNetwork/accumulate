@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
@@ -47,11 +46,11 @@ func (r *Record) GetStateAs(state state.Chain) error {
 }
 
 // PutState stores the record state and adds the record to the BPT (as a hash).
-func (r *Record) PutState(state state.Chain) error {
-	if state.Header().ChainUrl == "" {
+func (r *Record) PutState(recordState state.Chain) error {
+	if recordState.Header().ChainUrl == "" {
 		return errors.New("invalid URL: empty")
 	}
-	u, err := state.Header().ParseUrl()
+	u, err := recordState.Header().ParseUrl()
 	if err != nil {
 		return fmt.Errorf("invalid URL: %v", err)
 	}
@@ -59,16 +58,17 @@ func (r *Record) PutState(state state.Chain) error {
 		return fmt.Errorf("invalid URL: %v", err)
 	}
 
-	switch state.Header().Type {
-	case types.ChainTypeLiteTokenAccount, types.ChainTypeLiteDataAccount,
-		types.ChainTypeKeyBook, types.ChainTypeKeyPage:
+	switch recordState.(type) {
+	case *protocol.LiteTokenAccount, *protocol.LiteDataAccount,
+		*protocol.KeyBook, *protocol.KeyPage:
+		// Empty key book is OK
 	default:
-		if state.Header().KeyBook == "" {
+		if recordState.Header().KeyBook == "" {
 			return fmt.Errorf("missing key book")
 		}
 	}
 
-	stateData, err := state.MarshalBinary()
+	stateData, err := recordState.MarshalBinary()
 	if err != nil {
 		return err
 	}

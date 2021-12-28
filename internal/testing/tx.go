@@ -9,6 +9,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	querytypes "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
@@ -66,12 +67,12 @@ func WaitForTxV1(query *api.Query, txResp *apitypes.APIDataResponse) error {
 	return WaitForTxidV1(query, txid)
 }
 
-func WaitForTxidV1(query *api.Query, txid []byte) error {
+func WaitForTxidV1(q *api.Query, txid []byte) error {
 	start := time.Now()
 	var resp *coretypes.ResultABCIQuery
 	var err error
 	for {
-		resp, err = query.QueryByTxId(txid)
+		resp, err = q.QueryByTxId(txid)
 		if err == nil {
 			break
 		}
@@ -89,8 +90,16 @@ func WaitForTxidV1(query *api.Query, txid []byte) error {
 	if resp.Response.Code != 0 {
 		return fmt.Errorf("query failed with code %d: %s", resp.Response.Code, resp.Response.Info)
 	}
+	if string(resp.Response.Key) != "tx" {
+		return fmt.Errorf("wrong type: wanted tx, got %q", resp.Response.Key)
+	}
+	qr := new(query.ResponseByTxId)
+	err = qr.UnmarshalBinary(resp.Response.Value)
+	if err != nil {
+		return fmt.Errorf("invalid response: %v", err)
+	}
 
-	return WaitForSynthTxnsV1(query, resp)
+	return WaitForSynthTxnsV1(q, resp)
 }
 
 func WaitForSynthTxnsV1(query *api.Query, resp *coretypes.ResultABCIQuery) error {

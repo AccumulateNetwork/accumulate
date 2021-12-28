@@ -10,6 +10,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -51,10 +52,11 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *database.Database, network config.Network) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network) (*Executor, error) {
 	return newExecutor(ExecutorOptions{
 		DB:        db,
 		Network:   network,
+		Logger:    logger,
 		isGenesis: true,
 	})
 }

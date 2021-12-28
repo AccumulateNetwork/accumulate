@@ -84,6 +84,12 @@ func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
 	b.bpt.Bpt.Insert(key, hash)
 }
 
+// UpdateBpt updates the Patricia Tree hashes with the values from the updates
+// since the last update.
+func (b *Batch) UpdateBpt() {
+	b.bpt.Bpt.Update()
+}
+
 // RootHash returns the root hash of the BPT.
 func (b *Batch) RootHash() []byte {
 	// Make a copy
@@ -118,7 +124,7 @@ func (b *Batch) Import(db interface{ Export() map[storage.Key][]byte }) {
 // Commit commits pending writes to the key-value store. Attempting to use the
 // Batch after calling Commit will result in a panic.
 func (b *Batch) Commit() error {
-	b.bpt.Bpt.Update()
+	b.UpdateBpt()
 	return b.store.Commit()
 }
 

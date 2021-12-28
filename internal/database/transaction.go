@@ -2,9 +2,9 @@ package database
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -24,7 +24,7 @@ func (t *Transaction) Index(key ...interface{}) *Value {
 // Get loads the transaction state, status, and signatures.
 //
 // See GetState, GetStatus, and GetSignatures.
-func (t *Transaction) Get() (*state.Transaction, json.RawMessage, []*transactions.ED25519Sig, error) {
+func (t *Transaction) Get() (*state.Transaction, *protocol.TransactionStatus, []*transactions.ED25519Sig, error) {
 	state, err := t.GetState()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return nil, nil, nil, err
@@ -51,7 +51,7 @@ func (t *Transaction) Get() (*state.Transaction, json.RawMessage, []*transaction
 // signatures and does not overwrite existing signatures.
 //
 // See PutState, PutStatus, and AddSignatures.
-func (t *Transaction) Put(state *state.Transaction, status json.RawMessage, sigs []*transactions.ED25519Sig) error {
+func (t *Transaction) Put(state *state.Transaction, status *protocol.TransactionStatus, sigs []*transactions.ED25519Sig) error {
 	err := t.PutState(state)
 	if err != nil {
 		return err
@@ -97,18 +97,29 @@ func (t *Transaction) PutState(state *state.Transaction) error {
 }
 
 // GetStatus loads the transaction state.
-func (t *Transaction) GetStatus() (json.RawMessage, error) {
+func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
 	data, err := t.batch.store.Get(t.key.Status())
 	if err != nil {
 		return nil, err
 	}
 
-	return data, nil
+	status := new(protocol.TransactionStatus)
+	err = status.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return status, nil
 }
 
 // PutStatus stores the transaction state.
-func (t *Transaction) PutStatus(status json.RawMessage) error {
-	t.batch.store.Put(t.key.Status(), status)
+func (t *Transaction) PutStatus(status *protocol.TransactionStatus) error {
+	data, err := status.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	t.batch.store.Put(t.key.Status(), data)
 	return nil
 }
 
