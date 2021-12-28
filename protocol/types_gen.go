@@ -11,6 +11,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
@@ -244,6 +245,11 @@ type TokenIssuer struct {
 type TokenRecipient struct {
 	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+}
+
+type TransactionSignature struct {
+	Transaction [32]byte                 `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Signature   *transactions.ED25519Sig `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 }
 
 type TransactionStatus struct {
@@ -1042,6 +1048,18 @@ func (v *TokenRecipient) Equal(u *TokenRecipient) bool {
 	return true
 }
 
+func (v *TransactionSignature) Equal(u *TransactionSignature) bool {
+	if !(v.Transaction == u.Transaction) {
+		return false
+	}
+
+	if !(v.Signature.Equal(u.Signature)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	if !(v.Remote == u.Remote) {
 		return false
@@ -1669,6 +1687,16 @@ func (v *TokenRecipient) BinarySize() int {
 	n += encoding.StringBinarySize(v.Url)
 
 	n += encoding.UvarintBinarySize(v.Amount)
+
+	return n
+}
+
+func (v *TransactionSignature) BinarySize() int {
+	var n int
+
+	n += encoding.ChainBinarySize(&v.Transaction)
+
+	n += v.Signature.BinarySize()
 
 	return n
 }
@@ -2354,6 +2382,20 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Amount))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TransactionSignature) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.Transaction))
+
+	if b, err := v.Signature.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Signature: %w", err)
+	} else {
+		buffer.Write(b)
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -3609,6 +3651,22 @@ func (v *TokenRecipient) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *TransactionSignature) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Transaction: %w", err)
+	} else {
+		v.Transaction = x
+	}
+	data = data[encoding.ChainBinarySize(&v.Transaction):]
+
+	if err := v.Signature.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Signature: %w", err)
+	}
+	data = data[v.Signature.BinarySize():]
+
+	return nil
+}
+
 func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
 	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Remote: %w", err)
@@ -3918,6 +3976,16 @@ func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Data = encoding.BytesToJSON(v.Data)
+	return json.Marshal(&u)
+}
+
+func (v *TransactionSignature) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Transaction string                   `json:"transaction,omitempty"`
+		Signature   *transactions.ED25519Sig `json:"signature,omitempty"`
+	}{}
+	u.Transaction = encoding.ChainToJSON(v.Transaction)
+	u.Signature = v.Signature
 	return json.Marshal(&u)
 }
 
@@ -4362,6 +4430,25 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Data = x
 	}
+	return nil
+}
+
+func (v *TransactionSignature) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Transaction string                   `json:"transaction,omitempty"`
+		Signature   *transactions.ED25519Sig `json:"signature,omitempty"`
+	}{}
+	u.Transaction = encoding.ChainToJSON(v.Transaction)
+	u.Signature = v.Signature
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.Transaction); err != nil {
+		return fmt.Errorf("error decoding Transaction: %w", err)
+	} else {
+		v.Transaction = x
+	}
+	v.Signature = u.Signature
 	return nil
 }
 
