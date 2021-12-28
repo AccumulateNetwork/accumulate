@@ -112,7 +112,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 		default:
 			// Anything else must have a key book
-			if record.Header().KeyBook == types.String("") {
+			if record.Header().KeyBook == "" {
 				return fmt.Errorf("%q does not specify a key book", u)
 			}
 		}
