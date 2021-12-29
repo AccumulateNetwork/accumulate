@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 )
 
 type ChainIdQuery struct {
@@ -98,16 +99,16 @@ type QueryPagination struct {
 }
 
 type QueryResponse struct {
-	Type           string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MerkleState    *MerkleState `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
-	Data           interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	Origin         string       `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	KeyPage        *KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	Txid           []byte       `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Signer         *Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Sig            []byte       `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
-	Status         interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	SyntheticTxids [][32]byte   `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
+	Type           string                      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MerkleState    *MerkleState                `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
+	Data           interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Origin         string                      `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	KeyPage        *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	Txid           []byte                      `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Signer         *Signer                     `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Sig            []byte                      `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
+	Status         *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
 }
 
 type Signer struct {
@@ -527,17 +528,17 @@ func (v *MetricsQuery) MarshalJSON() ([]byte, error) {
 
 func (v *QueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           string       `json:"type,omitempty"`
-		MerkleState    *MerkleState `json:"merkleState,omitempty"`
-		Data           interface{}  `json:"data,omitempty"`
-		Origin         string       `json:"origin,omitempty"`
-		Sponsor        string       `json:"sponsor,omitempty"`
-		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
-		Txid           *string      `json:"txid,omitempty"`
-		Signer         *Signer      `json:"signer,omitempty"`
-		Sig            *string      `json:"sig,omitempty"`
-		Status         interface{}  `json:"status,omitempty"`
-		SyntheticTxids []string     `json:"syntheticTxids,omitempty"`
+		Type           string                      `json:"type,omitempty"`
+		MerkleState    *MerkleState                `json:"merkleState,omitempty"`
+		Data           interface{}                 `json:"data,omitempty"`
+		Origin         string                      `json:"origin,omitempty"`
+		Sponsor        string                      `json:"sponsor,omitempty"`
+		KeyPage        *KeyPage                    `json:"keyPage,omitempty"`
+		Txid           *string                     `json:"txid,omitempty"`
+		Signer         *Signer                     `json:"signer,omitempty"`
+		Sig            *string                     `json:"sig,omitempty"`
+		Status         *protocol.TransactionStatus `json:"status,omitempty"`
+		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MerkleState = v.MerkleState
@@ -769,17 +770,17 @@ func (v *MetricsQuery) UnmarshalJSON(data []byte) error {
 
 func (v *QueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           string       `json:"type,omitempty"`
-		MerkleState    *MerkleState `json:"merkleState,omitempty"`
-		Data           interface{}  `json:"data,omitempty"`
-		Origin         string       `json:"origin,omitempty"`
-		Sponsor        string       `json:"sponsor,omitempty"`
-		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
-		Txid           *string      `json:"txid,omitempty"`
-		Signer         *Signer      `json:"signer,omitempty"`
-		Sig            *string      `json:"sig,omitempty"`
-		Status         interface{}  `json:"status,omitempty"`
-		SyntheticTxids []string     `json:"syntheticTxids,omitempty"`
+		Type           string                      `json:"type,omitempty"`
+		MerkleState    *MerkleState                `json:"merkleState,omitempty"`
+		Data           interface{}                 `json:"data,omitempty"`
+		Origin         string                      `json:"origin,omitempty"`
+		Sponsor        string                      `json:"sponsor,omitempty"`
+		KeyPage        *KeyPage                    `json:"keyPage,omitempty"`
+		Txid           *string                     `json:"txid,omitempty"`
+		Signer         *Signer                     `json:"signer,omitempty"`
+		Sig            *string                     `json:"sig,omitempty"`
+		Status         *protocol.TransactionStatus `json:"status,omitempty"`
+		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MerkleState = v.MerkleState

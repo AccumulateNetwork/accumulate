@@ -22,7 +22,7 @@ func (SyntheticSignTransactions) Validate(st *StateManager, tx *transactions.Gen
 	// Process the signatures
 	for _, entry := range body.Transactions {
 		// Load the pending transaction state
-		state, err := st.LoadSynthTxn(entry.Txid)
+		state, err := st.GetTxnState(entry.Txid)
 		if err != nil {
 			return err
 		}
@@ -43,7 +43,7 @@ func (SyntheticSignTransactions) Validate(st *StateManager, tx *transactions.Gen
 		}
 
 		// Queue the transaction for sending next block
-		st.AddSynthTxnSig(tx.Signature[0].PublicKey, &entry)
+		st.AddSignature(tx.Signature[0].PublicKey, &entry)
 	}
 
 	return nil
