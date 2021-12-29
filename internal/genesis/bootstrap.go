@@ -72,24 +72,25 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		// Create the ledger
 		ledger := protocol.NewInternalLedger()
 		ledger.ChainUrl = types.String(uLedger.String())
+		ledger.KeyBook = types.String(uBook.String())
 		ledger.Synthetic.Nonce = 1
 		records = append(records, ledger)
 
 		// TODO Remove root and synthetic chains?
 
-		// Create the root chains
-		majorRoot, minorRoot := state.NewAnchor(), state.NewAnchor()
-		majorRoot.ChainUrl = types.String(uAdi.JoinPath(protocol.MajorRoot).String())
-		minorRoot.ChainUrl = types.String(uAdi.JoinPath(protocol.MinorRoot).String())
-		majorRoot.KeyBook = types.String(uBook.String())
-		minorRoot.KeyBook = types.String(uBook.String())
-		records = append(records, majorRoot, minorRoot)
+		// // Create the root chains
+		// majorRoot, minorRoot := state.NewAnchor(), state.NewAnchor()
+		// majorRoot.ChainUrl = types.String(uAdi.JoinPath(protocol.MajorRoot).String())
+		// minorRoot.ChainUrl = types.String(uAdi.JoinPath(protocol.MinorRoot).String())
+		// majorRoot.KeyBook = types.String(uBook.String())
+		// minorRoot.KeyBook = types.String(uBook.String())
+		// records = append(records, majorRoot, minorRoot)
 
-		// Create the synthetic transaction chain
-		synthTxn := state.NewSyntheticTransactionChain()
-		synthTxn.ChainUrl = types.String(uAdi.JoinPath(protocol.Synthetic).String())
-		synthTxn.KeyBook = types.String(uBook.String())
-		records = append(records, synthTxn)
+		// // Create the synthetic transaction chain
+		// synthTxn := state.NewSyntheticTransactionChain()
+		// synthTxn.ChainUrl = types.String(uAdi.JoinPath(protocol.Synthetic).String())
+		// synthTxn.KeyBook = types.String(uBook.String())
+		// records = append(records, synthTxn)
 
 		// Create records and directory entries
 		urls := make([]*url.URL, len(records))

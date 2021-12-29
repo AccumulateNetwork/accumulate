@@ -18,7 +18,7 @@ func (m *Executor) addSynthTxns(tx *transactions.GenTransaction, submissions []*
 	txid := types.Bytes(tx.TransactionHash()).AsBytes32()
 
 	synth := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Synthetic))
-	chain, err := synth.Chain(protocol.Main)
+	chain, err := synth.Chain(protocol.MainChain)
 	if err != nil {
 		return err
 	}
@@ -73,15 +73,15 @@ func (m *Executor) addSystemTxns(txns ...*transactions.GenTransaction) error {
 		copy(txids[i][:], tx.TransactionHash())
 	}
 
-	state := new(state.Anchor)
-	root := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.MinorRoot))
-	err := root.GetStateAs(state)
+	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
 	if err != nil {
 		return err
 	}
 
-	state.SystemTxns = append(state.SystemTxns, txids...)
-	err = root.PutState(state)
+	ledgerState.SystemTxns = append(ledgerState.SystemTxns, txids...)
+	err = ledger.PutState(ledgerState)
 	if err != nil {
 		return err
 	}
@@ -90,26 +90,19 @@ func (m *Executor) addSystemTxns(txns ...*transactions.GenTransaction) error {
 }
 
 func (m *Executor) addAnchorTxn() error {
-	root := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.MinorRoot))
-	synth := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Synthetic))
-	rootHead, synthHead := state.NewAnchor(), state.NewSyntheticTransactionChain()
-
-	err := root.GetStateAs(rootHead)
+	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
 	if err != nil {
 		return err
 	}
 
-	err = synth.GetStateAs(synthHead)
+	rootChain, err := ledger.Chain(protocol.MinorRootChain)
 	if err != nil {
 		return err
 	}
 
-	rootChain, err := root.Chain(protocol.Main)
-	if err != nil {
-		return err
-	}
-
-	synthChain, err := synth.Chain(protocol.Main)
+	synthChain, err := ledger.Chain(protocol.MajorRootChain)
 	if err != nil {
 		return err
 	}
@@ -127,7 +120,7 @@ func (m *Executor) addAnchorTxn() error {
 	body.Index = m.blockIndex
 	body.Timestamp = m.blockTime
 	copy(body.Root[:], m.blockBatch.RootHash())
-	body.Chains = rootHead.Chains
+	body.Chains = ledgerState.Chains
 	copy(body.ChainAnchor[:], rootChain.Anchor())
 	copy(body.SynthTxnAnchor[:], synthChain.Anchor())
 

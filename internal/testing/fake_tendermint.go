@@ -194,7 +194,7 @@ func (c *FakeTendermint) addSynthTxns(blockIndex int64) {
 		fmt.Printf("The last block created %d synthetic transactions\n", head.Count)
 	}
 
-	chain, err := synth.Chain(protocol.Main)
+	chain, err := synth.Chain(protocol.MainChain)
 	if err != nil {
 		c.onError(err)
 		return

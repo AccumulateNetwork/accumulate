@@ -31,7 +31,7 @@ const (
 	Follower  NodeType = "follower"
 )
 
-const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info"
+const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info;storage=debug"
 
 func Default(net NetworkType, node NodeType, netId string) *Config {
 	c := new(Config)

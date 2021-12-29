@@ -22,29 +22,29 @@ const (
 	// Directory is the subnet ID of the DN.
 	Directory = "Directory"
 
-	// MinorRoot is the URL path of the subnet's minor root chain.
-	MinorRoot = "minor-root"
-
-	// MajorRoot is the URL path of the subnet's major root chain.
-	MajorRoot = "major-root"
-
-	// Synthetic is the URL path of the subnet's synthetic transaction chain.
-	Synthetic = "synthetic"
-
-	// Main is the main transaction chain of a record.
-	Main = "Main"
-
-	// Pending is the pending signature chain of a record.
-	Pending = "Pending"
-
-	// Data is the data chain of a record.
-	Data = "Data"
-
 	// ValidatorBook is the path to a node's validator key book.
 	ValidatorBook = "validators"
 
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
+
+	// MainChain is the main transaction chain of a record.
+	MainChain = "main"
+
+	// PendingChain is the pending signature chain of a record.
+	PendingChain = "pending"
+
+	// DataChain is the data chain of a record.
+	DataChain = "data"
+
+	// MajorRootChain is the major root chain of a subnet.
+	MajorRootChain = "major-root"
+
+	// MinorRootChain is the minor root chain of a subnet.
+	MinorRootChain = "minor-root"
+
+	// SyntheticChain is the synthetic transaction chain of a subnet.
+	SyntheticChain = "synthetic"
 )
 
 // AcmeUrl returns `acc://ACME`.

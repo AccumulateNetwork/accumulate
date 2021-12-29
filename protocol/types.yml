@@ -467,9 +467,17 @@ TransactionSignature:
 InternalLedger:
   kind: chain
   fields:
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
     - name: Synthetic
       type: SyntheticLedger
       marshal-as: reference
+    - name: Chains
+      type: chainSet
+    - name: SystemTxns
+      type: chainSet
 
 SyntheticLedger:
   fields:

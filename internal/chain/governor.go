@@ -13,7 +13,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/tendermint/tendermint/libs/log"
 )
 
@@ -97,20 +96,19 @@ func (g *governor) DidBeginBlock(isLeader bool) {
 }
 
 func (g *governor) DidCommit(batch *database.Batch, isLeader bool, height int64, time time.Time) error {
-	root := batch.Record(g.Network.NodeUrl().JoinPath(protocol.MinorRoot))
-	rootState := state.NewAnchor()
-	err := root.GetStateAs(rootState)
+	ledger := batch.Record(g.Network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
 	if err != nil {
 		return err
 	}
 
-	rootChain, err := root.Chain(protocol.Main)
+	rootChain, err := ledger.Chain(protocol.MinorRootChain)
 	if err != nil {
 		return err
 	}
 
-	synthUrl := g.Network.NodeUrl().JoinPath(protocol.Synthetic)
-	synthChain, err := batch.Record(synthUrl).Chain(protocol.Main)
+	synthChain, err := ledger.Chain(protocol.SyntheticChain)
 	if err != nil {
 		return err
 	}
@@ -122,7 +120,7 @@ func (g *governor) DidCommit(batch *database.Batch, isLeader bool, height int64,
 		time:           time,
 		rootAnchor:     rootChain.Anchor(),
 		synthAnchor:    synthChain.Anchor(),
-		recordsChanged: rootState.Chains,
+		recordsChanged: ledgerState.Chains,
 	}:
 	case <-g.done:
 	}

@@ -81,7 +81,7 @@ func (m *Executor) mirrorRecord(u *url.URL) (protocol.AnchoredRecord, error) {
 		return arec, fmt.Errorf("failed to load %q: %v", u, err)
 	}
 
-	chain, err := rec.Chain(protocol.Main)
+	chain, err := rec.Chain(protocol.MainChain)
 	if err != nil {
 		return arec, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 	}
@@ -110,7 +110,7 @@ func (m *Executor) synthTxnsLastBlock(blockIndex int64) ([][]byte, error) {
 	}
 
 	// Load the synth txn chain
-	chain, err := synth.Chain(protocol.Main)
+	chain, err := synth.Chain(protocol.MainChain)
 	if err != nil {
 		return nil, err
 	}

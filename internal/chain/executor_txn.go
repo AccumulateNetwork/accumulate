@@ -342,7 +342,7 @@ func (m *Executor) putTransaction(tx *transactions.GenTransaction, txAccepted *s
 	}
 
 	record := m.blockBatch.Record(u)
-	chain, err := record.Chain(protocol.Pending)
+	chain, err := record.Chain(protocol.PendingChain)
 	if err != nil {
 		return fmt.Errorf("failed to load pending chain: %v", err)
 	}

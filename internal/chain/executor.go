@@ -102,11 +102,11 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 	defer batch.Discard()
 
 	var height int64
-	root := new(state.Anchor)
-	err := batch.Record(m.Network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	ledger := protocol.NewInternalLedger()
+	err := batch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger)).GetStateAs(ledger)
 	switch {
 	case err == nil:
-		height = root.Index
+		height = ledger.Index
 	case errors.Is(err, storage.ErrNotFound):
 		height = 0
 	default:
@@ -298,17 +298,16 @@ func (m *Executor) Commit() ([]byte, error) {
 }
 
 func (m *Executor) doCommit() error {
-	rootUrl := m.Network.NodeUrl().JoinPath(protocol.MinorRoot)
-	root := m.blockBatch.Record(rootUrl)
+	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
 
 	// Load the state of minor root
-	rootState := state.NewAnchor()
-	err := root.GetStateAs(rootState)
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
-		if rootState.Index >= m.blockIndex {
-			panic(fmt.Errorf("Current height is %d but the next block height is %d!", rootState.Index, m.blockIndex))
+		if ledgerState.Index >= m.blockIndex {
+			panic(fmt.Errorf("Current height is %d but the next block height is %d!", ledgerState.Index, m.blockIndex))
 		}
 
 	case m.isGenesis && errors.Is(err, storage.ErrNotFound):
@@ -319,7 +318,7 @@ func (m *Executor) doCommit() error {
 	}
 
 	// Load the main chain of the minor root
-	rootChain, err := root.Chain(protocol.Main)
+	rootChain, err := ledger.Chain(protocol.MinorRootChain)
 	if err != nil {
 		return err
 	}
@@ -328,7 +327,7 @@ func (m *Executor) doCommit() error {
 	chains := make([][32]byte, 0, len(m.blockMeta.Deliver.Updated))
 	for _, u := range m.blockMeta.Deliver.Updated {
 		chains = append(chains, u.ResourceChain32())
-		recordChain, err := m.blockBatch.Record(u).Chain(protocol.Main)
+		recordChain, err := m.blockBatch.Record(u).Chain(protocol.MainChain)
 		if err != nil {
 			return err
 		}
@@ -342,11 +341,11 @@ func (m *Executor) doCommit() error {
 	}
 
 	// Update the root state
-	rootState.Index = m.blockIndex
-	rootState.Timestamp = m.blockTime
-	rootState.Chains = chains
-	rootState.SystemTxns = nil
-	err = root.PutState(rootState)
+	ledgerState.Index = m.blockIndex
+	ledgerState.Timestamp = m.blockTime
+	ledgerState.Chains = chains
+	ledgerState.SystemTxns = nil
+	err = ledger.PutState(ledgerState)
 	if err != nil {
 		return err
 	}

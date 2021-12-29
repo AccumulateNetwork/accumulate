@@ -98,7 +98,11 @@ type InternalGenesis struct {
 
 type InternalLedger struct {
 	state.ChainHeader
-	Synthetic SyntheticLedger `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
+	Index      int64           `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Timestamp  time.Time       `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	Synthetic  SyntheticLedger `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
+	Chains     [][32]byte      `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
+	SystemTxns [][32]byte      `json:"systemTxns,omitempty" form:"systemTxns" query:"systemTxns" validate:"required"`
 }
 
 type InternalSendTransactions struct {
@@ -643,8 +647,36 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 		return false
 	}
 
+	if !(v.Index == u.Index) {
+		return false
+	}
+
+	if !(v.Timestamp == u.Timestamp) {
+		return false
+	}
+
 	if !(v.Synthetic.Equal(&u.Synthetic)) {
 		return false
+	}
+
+	if !(len(v.Chains) == len(u.Chains)) {
+		return false
+	}
+
+	for i := range v.Chains {
+		if v.Chains[i] != u.Chains[i] {
+			return false
+		}
+	}
+
+	if !(len(v.SystemTxns) == len(u.SystemTxns)) {
+		return false
+	}
+
+	for i := range v.SystemTxns {
+		if v.SystemTxns[i] != u.SystemTxns[i] {
+			return false
+		}
 	}
 
 	return true
@@ -1400,7 +1432,15 @@ func (v *InternalLedger) BinarySize() int {
 
 	n += v.ChainHeader.GetHeaderSize()
 
+	n += encoding.VarintBinarySize(v.Index)
+
+	n += encoding.TimeBinarySize(v.Timestamp)
+
 	n += v.Synthetic.BinarySize()
+
+	n += encoding.ChainSetBinarySize(v.Chains)
+
+	n += encoding.ChainSetBinarySize(v.SystemTxns)
 
 	return n
 }
@@ -2100,11 +2140,19 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
+	buffer.Write(encoding.VarintMarshalBinary(v.Index))
+
+	buffer.Write(encoding.TimeMarshalBinary(v.Timestamp))
+
 	if b, err := v.Synthetic.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding Synthetic: %w", err)
 	} else {
 		buffer.Write(b)
 	}
+
+	buffer.Write(encoding.ChainSetMarshalBinary(v.Chains))
+
+	buffer.Write(encoding.ChainSetMarshalBinary(v.SystemTxns))
 
 	return buffer.Bytes(), nil
 }
@@ -3086,10 +3134,38 @@ func (v *InternalLedger) UnmarshalBinary(data []byte) error {
 	}
 	data = data[v.GetHeaderSize():]
 
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Index: %w", err)
+	} else {
+		v.Index = x
+	}
+	data = data[encoding.VarintBinarySize(v.Index):]
+
+	if x, err := encoding.TimeUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Timestamp: %w", err)
+	} else {
+		v.Timestamp = x
+	}
+	data = data[encoding.TimeBinarySize(v.Timestamp):]
+
 	if err := v.Synthetic.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Synthetic: %w", err)
 	}
 	data = data[v.Synthetic.BinarySize():]
+
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Chains: %w", err)
+	} else {
+		v.Chains = x
+	}
+	data = data[encoding.ChainSetBinarySize(v.Chains):]
+
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding SystemTxns: %w", err)
+	} else {
+		v.SystemTxns = x
+	}
+	data = data[encoding.ChainSetBinarySize(v.SystemTxns):]
 
 	return nil
 }
@@ -4073,6 +4149,24 @@ func (v *DataEntry) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *InternalLedger) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		Index      int64           `json:"index,omitempty"`
+		Timestamp  time.Time       `json:"timestamp,omitempty"`
+		Synthetic  SyntheticLedger `json:"synthetic,omitempty"`
+		Chains     []string        `json:"chains,omitempty"`
+		SystemTxns []string        `json:"systemTxns,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.Index = v.Index
+	u.Timestamp = v.Timestamp
+	u.Synthetic = v.Synthetic
+	u.Chains = encoding.ChainSetToJSON(v.Chains)
+	u.SystemTxns = encoding.ChainSetToJSON(v.SystemTxns)
+	return json.Marshal(&u)
+}
+
 func (v *InternalTransactionsSent) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transactions []string `json:"transactions,omitempty"`
@@ -4363,6 +4457,41 @@ func (v *DataEntry) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Data: %w", err)
 	} else {
 		v.Data = x
+	}
+	return nil
+}
+
+func (v *InternalLedger) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		Index      int64           `json:"index,omitempty"`
+		Timestamp  time.Time       `json:"timestamp,omitempty"`
+		Synthetic  SyntheticLedger `json:"synthetic,omitempty"`
+		Chains     []string        `json:"chains,omitempty"`
+		SystemTxns []string        `json:"systemTxns,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.Index = v.Index
+	u.Timestamp = v.Timestamp
+	u.Synthetic = v.Synthetic
+	u.Chains = encoding.ChainSetToJSON(v.Chains)
+	u.SystemTxns = encoding.ChainSetToJSON(v.SystemTxns)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	v.Index = u.Index
+	v.Timestamp = u.Timestamp
+	v.Synthetic = u.Synthetic
+	if x, err := encoding.ChainSetFromJSON(u.Chains); err != nil {
+		return fmt.Errorf("error decoding Chains: %w", err)
+	} else {
+		v.Chains = x
+	}
+	if x, err := encoding.ChainSetFromJSON(u.SystemTxns); err != nil {
+		return fmt.Errorf("error decoding SystemTxns: %w", err)
+	} else {
+		v.SystemTxns = x
 	}
 	return nil
 }

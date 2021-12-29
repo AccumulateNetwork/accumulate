@@ -58,7 +58,7 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	}
 
 	// Add Merkle chain info (for records)
-	chain, err := batch.RecordByID(chainId).Chain(protocol.Main)
+	chain, err := batch.RecordByID(chainId).Chain(protocol.MainChain)
 	if err == nil {
 		qr.Height = uint64(chain.Height())
 
@@ -267,7 +267,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 
-		chain, err := batch.RecordByID(txh.ChainId[:]).Chain(protocol.Main)
+		chain, err := batch.RecordByID(txh.ChainId[:]).Chain(protocol.MainChain)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 		}

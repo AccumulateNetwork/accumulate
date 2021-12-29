@@ -114,7 +114,7 @@ func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 		header.ChainUrl = types.String(op.url.String())
 	}
 
-	err = st.updateStateAndChain(rec, op.record, "Main")
+	err = st.updateStateAndChain(rec, op.record, protocol.MainChain)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (op *addDataEntry) Execute(st *stateCache, meta *DeliverMetadata) error {
 	}
 
 	// Add TX to main chain
-	main, err := record.Chain(protocol.Main)
+	main, err := record.Chain(protocol.MainChain)
 	if err != nil {
 		return fmt.Errorf("failed to load main chain of %q: %v", op.url, err)
 	}
