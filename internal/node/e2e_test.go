@@ -11,6 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	apiv2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
@@ -47,7 +48,7 @@ func TestEndToEnd(t *testing.T) {
 
 type e2eDUT struct {
 	*e2e.Suite
-	db     *state.StateDB
+	db     *database.Database
 	query  *api.Query
 	client *local.Local
 }

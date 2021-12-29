@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -18,6 +20,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/getsentry/sentry-go"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -29,45 +32,37 @@ import (
 // a hash tree.
 type Accumulator struct {
 	abci.BaseApplication
+	AccumulatorOptions
+	logger log.Logger
 
-	subnetID string
-	state    State
-	address  crypto.Address
 	txct     int64
 	timer    time.Time
-	chain    Chain
-	logger   log.Logger
 	didPanic bool
 
 	onFatal func(error)
 }
 
+type AccumulatorOptions struct {
+	Chain   Chain
+	DB      *database.Database
+	Logger  log.Logger
+	Network config.Network
+	Address crypto.Address
+}
+
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Logger) (*Accumulator, error) {
-	logger = logger.With("module", "accumulate")
-
+func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
-		state:  db,
-		chain:  chain,
-		logger: logger,
+		AccumulatorOptions: opts,
+		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Network.ID),
 	}
 
-	app.address = make([]byte, len(address))
-	copy(app.address, address)
-
-	var err error
-	app.subnetID, err = db.SubnetID()
-	switch {
-	case err == nil:
-		logger = logger.With("subnet", app.subnetID)
-	case errors.Is(err, storage.ErrNotFound):
-		// OK
-	default:
-		return nil, fmt.Errorf("failed to load chain ID: %v", err)
+	if app.Chain == nil {
+		panic("Chain Validator Node not set!")
 	}
 
-	logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
-	return app, nil
+	app.logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
+	return app
 }
 
 var _ abci.Application = (*Accumulator)(nil)
@@ -117,10 +112,6 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
 
-	if app.chain == nil {
-		panic("Chain Validator Node not set!")
-	}
-
 	// We have two different versions: that of the ABCI application, and that of
 	// the executable. The ABCI application version may affect Tendermint. The
 	// executable version tells us what commit to look at when debugging a crash
@@ -136,10 +127,19 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
-	height, err := app.state.BlockIndex()
-	if errors.Is(err, storage.ErrNotFound) {
+	batch := app.DB.Begin()
+	defer batch.Discard()
+
+	var height int64
+	root := new(state.Anchor)
+	err = batch.Record(app.Network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	switch {
+	case err == nil:
+		height = root.Index
+	case errors.Is(err, storage.ErrNotFound):
+		// InitChain has not been called yet
 		height = 0
-	} else if err != nil {
+	default:
 		height = -1
 		sentry.CaptureException(err)
 	}
@@ -149,7 +149,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  height,
-		LastBlockAppHash: app.state.RootHash(),
+		LastBlockAppHash: batch.RootHash(),
 	}
 }
 
@@ -177,7 +177,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	k, v, customErr := app.chain.Query(qu)
+	k, v, customErr := app.Chain.Query(qu)
 	switch {
 	case customErr == nil:
 		//Ok
@@ -211,33 +211,29 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	_, err := app.state.BlockIndex()
-	if err == nil {
+	batch := app.DB.Begin()
+	root := new(state.Anchor)
+	err := batch.Record(app.Network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	switch {
+	case err == nil:
 		// InitChain already happened
-		return abci.ResponseInitChain{AppHash: app.state.RootHash()}
-	} else if !errors.Is(err, storage.ErrNotFound) {
+		return abci.ResponseInitChain{AppHash: batch.RootHash()}
+	case !errors.Is(err, storage.ErrNotFound):
 		panic(fmt.Errorf("failed to check block index: %v", err))
 	}
 
-	err = app.chain.InitChain(req.AppStateBytes)
+	app.logger.Info("Initializing")
+	err = app.Chain.InitChain(req.AppStateBytes)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
-
-	app.subnetID, err = app.state.SubnetID()
-	if err != nil {
-		panic(fmt.Errorf("failed to load subnet ID: %v", err))
-	}
-
-	app.logger = app.logger.With("subnet", req.ChainId)
-	app.logger.Info("Initializing")
 
 	//register a list of the validators.
 	for _, v := range req.Validators {
 		app.updateValidator(v)
 	}
 
-	return abci.ResponseInitChain{AppHash: app.state.RootHash()}
+	return abci.ResponseInitChain{AppHash: batch.RootHash()}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
@@ -247,8 +243,8 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	var ret abci.ResponseBeginBlock
 
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	_, err := app.chain.BeginBlock(BeginBlockRequest{
-		IsLeader: bytes.Equal(app.address.Bytes(), req.Header.GetProposerAddress()),
+	_, err := app.Chain.BeginBlock(BeginBlockRequest{
+		IsLeader: bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
 		Height:   req.Header.Height,
 		Time:     req.Header.Time,
 	})
@@ -323,7 +319,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	//create a default response
 	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
 
-	customErr := app.chain.CheckTx(sub)
+	customErr := app.Chain.CheckTx(sub)
 
 	if customErr != nil {
 		u2 := sub.SigInfo.URL
@@ -377,7 +373,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	txid := logging.AsHex(sub.TransactionHash())
 
 	//run through the validation node
-	customErr := app.chain.DeliverTx(sub)
+	customErr := app.Chain.DeliverTx(sub)
 
 	if customErr != nil {
 		u2 := sub.SigInfo.URL
@@ -434,7 +430,7 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 
 	//end the current batch of transactions in the Stateful Merkle Tree
 
-	mdRoot, err := app.chain.Commit()
+	mdRoot, err := app.Chain.Commit()
 	resp.Data = mdRoot
 
 	if err != nil {

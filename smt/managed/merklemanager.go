@@ -8,16 +8,15 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
 )
 
 type MerkleManager struct {
-	key       storage.Key       // ChainID (some operations require this)
-	Manager   *database.Manager // AppID based Manager
-	MS        *MerkleState      // MerkleState managed by MerkleManager
-	MarkPower int64             // log2 of the MarkFreq
-	MarkFreq  int64             // The count between Marks
-	MarkMask  int64             // The binary mask to detect Mark boundaries
+	key       storage.Key         // ChainID (some operations require this)
+	Manager   storage.KeyValueTxn // AppID based Manager
+	MS        *MerkleState        // MerkleState managed by MerkleManager
+	MarkPower int64               // log2 of the MarkFreq
+	MarkFreq  int64               // The count between Marks
+	MarkMask  int64               // The binary mask to detect Mark boundaries
 }
 
 // AddHash
@@ -26,19 +25,19 @@ func (m *MerkleManager) AddHash(hash Hash) {
 	hash = hash.Copy()                       // Just to make sure hash doesn't get changed
 	_, err := m.GetElementIndex(hash)        // See if this element is a duplicate
 	if errors.Is(err, storage.ErrNotFound) { // So only if the hash is not yet added to the Merkle Tree
-		m.Manager.PutBatch(m.key.Append("ElementIndex", hash), common.Int64Bytes(m.MS.Count)) // Keep its index
+		m.Manager.Put(m.key.Append("ElementIndex", hash), common.Int64Bytes(m.MS.Count)) // Keep its index
 	} else if err != nil {
 		panic(err) // TODO Panics are bad, but I don't want to change the signature now
 	}
 
-	m.Manager.PutBatch(m.key.Append("Element", m.MS.Count), hash)
+	m.Manager.Put(m.key.Append("Element", m.MS.Count), hash)
 	switch (m.MS.Count + 1) & m.MarkMask {
 	case 0: // Is this the end of the Mark set, i.e. 0, ..., m.MarkFreq-1
 		m.MS.AddToMerkleTree(hash)                      // Add the hash to the Merkle Tree
 		if MSState, err := m.MS.Marshal(); err != nil { // Get the current state
 			panic(fmt.Sprintf("could not marshal MerkleState: %v", err))
 		} else {
-			m.Manager.PutBatch(m.key.Append("States", m.GetElementCount()-1), MSState) // Save Merkle State at n*MarkFreq-1
+			m.Manager.Put(m.key.Append("States", m.GetElementCount()-1), MSState) // Save Merkle State at n*MarkFreq-1
 		}
 		if err := m.WriteChainHead(m.key); err != nil {
 			panic(fmt.Sprintf("error writing chain head: %v", err))
@@ -52,14 +51,6 @@ func (m *MerkleManager) AddHash(hash Hash) {
 			panic(fmt.Sprintf("error writing chain head: %v", err))
 		}
 	}
-}
-
-// EndBlock
-// End a block, which writes all pending key/values to the database.
-// Returns the Merkle Dag Root for the merkle tree
-func (m *MerkleManager) EndBlock() (MDRoot Hash) {
-	m.Manager.EndBatch()
-	return m.MS.GetMDRoot()
 }
 
 // GetElementIndex
@@ -92,7 +83,7 @@ func (m *MerkleManager) WriteChainHead(key storage.Key) error {
 	if err != nil {
 		return err
 	}
-	m.Manager.PutBatch(key.Append("Head"), state)
+	m.Manager.Put(key.Append("Head"), state)
 	return nil
 }
 
@@ -131,9 +122,9 @@ func (m *MerkleManager) ReadChainHead(key storage.Key) (ms *MerkleState, err err
 // Compares the MerkleManager to the given MerkleManager and returns false if
 // the fields in the MerkleManager are different from m2
 func (m *MerkleManager) Equal(m2 *MerkleManager) bool {
-	if !m.Manager.Equal(m2.Manager) {
-		return false
-	}
+	// if !m.Manager.Equal(m2.Manager) {
+	// 	return false
+	// }
 	if !m.MS.Equal(m2.MS) {
 		return false
 	}
@@ -154,7 +145,7 @@ func (m *MerkleManager) Equal(m2 *MerkleManager) bool {
 // The MainChain.Manager handles the persistence for the Merkle Tree under management
 // The markPower is the log 2 frequency used to collect states in the Merkle Tree
 func NewMerkleManager(
-	DBManager *database.Manager, //      database that can be shared with other MerkleManager instances
+	DBManager storage.KeyValueTxn, //      database that can be shared with other MerkleManager instances
 	markPower int64) (*MerkleManager, error) { // log 2 of the frequency of creating marks in the Merkle Tree
 
 	mm := new(MerkleManager)
@@ -194,7 +185,7 @@ func (m *MerkleManager) GetElementCount() (elementCount int64) {
 //
 // This is an internal routine; calling init outside of constructing the first
 // reference to the MerkleManager doesn't make much sense.
-func (m *MerkleManager) init(DBManager *database.Manager, markPower int64) (err error) {
+func (m *MerkleManager) init(DBManager storage.KeyValueTxn, markPower int64) (err error) {
 
 	if markPower >= 20 { // 2^20 is 1,048,576 and is too big for the collection of elements in memory
 		return fmt.Errorf("A power %d is greater than 2^29, and is unreasonable", markPower)

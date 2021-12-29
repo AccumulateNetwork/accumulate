@@ -9,6 +9,8 @@ import (
 
 func NewChain(typ types.ChainType) (state.Chain, error) {
 	switch typ {
+	case types.ChainTypeAnchor:
+		return new(state.Anchor), nil
 	case types.ChainTypeIdentity:
 		return new(state.AdiState), nil
 	case types.ChainTypeTokenIssuer:
@@ -37,13 +39,12 @@ func NewChain(typ types.ChainType) (state.Chain, error) {
 }
 
 func UnmarshalChain(data []byte) (state.Chain, error) {
-	header := new(state.ChainHeader)
-	err := header.UnmarshalBinary(data)
+	typ, err := state.ChainType(data)
 	if err != nil {
 		return nil, err
 	}
 
-	chain, err := NewChain(header.Type)
+	chain, err := NewChain(typ)
 	if err != nil {
 		return nil, err
 	}

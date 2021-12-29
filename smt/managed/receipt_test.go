@@ -4,15 +4,14 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"io/ioutil"
-	"log"
-	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
@@ -24,10 +23,11 @@ func GetHash(i int) Hash {
 func TestReceipt(t *testing.T) {
 	const testMerkleTreeSize = 7
 	// Create a memory based database
-	dbManager := new(database.Manager)
-	_ = dbManager.Init("memory", "", nil)
+	store := memory.NewDB()
+	storeTx := store.Begin()
+
 	// Create a MerkleManager for the memory database
-	manager, err := NewMerkleManager(dbManager, 2)
+	manager, err := NewMerkleManager(storeTx, 2)
 	if err != nil {
 		t.Fatalf("did not create a merkle manager: %v", err)
 	}
@@ -78,8 +78,9 @@ func TestReceiptAll(t *testing.T) {
 	cnt := 0
 	const testMerkleTreeSize = 150
 
-	db, _ := database.NewDBManager("memory", "", nil) // create an in memory database and
-	manager, _ := NewMerkleManager(db, 2)             // MerkleManager
+	store := memory.NewDB()
+	storeTx := store.Begin()
+	manager, _ := NewMerkleManager(storeTx, 2) // MerkleManager
 
 	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
 	var rh RandHash                            // A source of random hashes
@@ -124,36 +125,6 @@ func TestReceiptAll(t *testing.T) {
 		}
 	}
 	fmt.Println("Ran ", cnt, " tests")
-}
-
-// GetManager
-// Get a manager, and build it with the given MarkPower.  If temp == true
-func GetManager(MarkPower int64, temp bool, databaseName string, t *testing.T) (manager *MerkleManager, dir string) {
-
-	// Create a memory based database
-	dbManager := new(database.Manager)
-	if temp {
-		var err error
-		dir, err = ioutil.TempDir("", "badger")
-		if err != nil {
-			log.Fatal(err)
-		}
-		if err = dbManager.Init("badger", dir, nil); err != nil {
-			t.Fatal("Failed to create database: ", err)
-		}
-	} else {
-		if err := dbManager.Init("badger", databaseName, nil); err != nil {
-			t.Fatal("Failed to create database: ", databaseName)
-		}
-	}
-
-	// Create a MerkleManager for the memory database
-	var err error
-	manager, err = NewMerkleManager(dbManager, MarkPower)
-	if err != nil {
-		t.Fatalf("did not create a merkle manager: %v", err)
-	}
-	return manager, dir
 }
 
 func PopulateDatabase(manager *MerkleManager, treeSize int64) {
@@ -225,11 +196,13 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 }
 
 func TestBadgerReceipts(t *testing.T) {
+	badger := new(badger.DB)
+	require.NoError(t, badger.InitDB(filepath.Join(t.TempDir(), "badger.db"), nil))
+	defer badger.Close()
 
-	manager, dir := GetManager(2, true, "", t)
-	defer func() {
-		_ = os.RemoveAll(dir)
-	}()
+	manager, err := NewMerkleManager(badger.Begin(), 2)
+	require.NoError(t, err)
+
 	PopulateDatabase(manager, 1400)
 
 	GenerateReceipts(manager, 1500000, t)
@@ -241,23 +214,23 @@ func TestReceipt_Combine(t *testing.T) {
 	var m1Roots, m2Roots []Hash
 	var rh RandHash
 	var m1, m2 *MerkleManager
-	db, err := database.NewDBManager("memory", "", nil)
-	require.NoError(t, err, "should be able to create a new database manager")
-	m1, err = NewMerkleManager(db, 2)
+	store := memory.NewDB()
+	storeTx := store.Begin()
+	m1, err := NewMerkleManager(storeTx, 2)
 	require.NoError(t, err, "should be able to create a new merkle tree manager")
 	err = m1.SetKey(storage.MakeKey("m1"))
 	require.NoError(t, err, "should be able to set a key")
-	m2, err = NewMerkleManager(db, 2)
+	m2, err = NewMerkleManager(storeTx, 2)
 	require.NoError(t, err, "should be able to create a new merkle tree manager")
 	err = m2.SetKey(storage.MakeKey("m2"))
 	require.NoError(t, err, "should be able to set a key")
 
 	for i := int64(0); i < testCnt; i++ {
 		m1.AddHash(rh.NextList())
-		root1 := m1.EndBlock()
+		root1 := m1.MS.GetMDRoot()
 		m1Roots = append(m1Roots, root1)
 		m2.AddHash(root1)
-		root2 := m2.EndBlock()
+		root2 := m2.MS.GetMDRoot()
 		m2Roots = append(m2Roots, root2)
 	}
 	for i := int64(0); i < testCnt; i++ {

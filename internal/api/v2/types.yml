@@ -26,7 +26,8 @@ QueryResponse:
     - name: Sig
       type: bytes
     - name: Status
-      type: any
+      type: protocol.TransactionStatus
+      pointer: true
     - name: SyntheticTxids
       type: chainSet
 

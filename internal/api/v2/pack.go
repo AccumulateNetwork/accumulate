@@ -69,9 +69,22 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 		res.Data = payload
 	}
 
-	if pend != nil && len(pend.Signature) > 0 {
+	if pend == nil {
+		return res, nil
+	}
+
+	if len(pend.Status) > 0 {
+		status := new(protocol.TransactionStatus)
+		err := status.UnmarshalBinary(pend.Status)
+		if err != nil {
+			return nil, fmt.Errorf("invalid transaction status: %v", err)
+		}
+
+		res.Status = status
+	}
+
+	if len(pend.Signature) > 0 {
 		sig := pend.Signature[0]
-		res.Status = pend.Status
 		res.Signer = new(Signer)
 		res.Signer.PublicKey = sig.PublicKey
 		res.Signer.Nonce = sig.Nonce

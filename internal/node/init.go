@@ -12,6 +12,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	tmcfg "github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/libs/log"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmtime "github.com/tendermint/tendermint/libs/time"
@@ -28,6 +29,7 @@ type InitOptions struct {
 	Config     []*cfg.Config
 	RemoteIP   []string
 	ListenIP   []string
+	Logger     log.Logger
 }
 
 // Init creates the initial configuration for a set of nodes, using
@@ -105,15 +107,18 @@ func Init(opts InitOptions) (err error) {
 		genTime := tmtime.Now()
 
 		db := new(memory.DB)
-		_ = db.InitDB("", nil)
+		_ = db.InitDB("", opts.Logger.With("module", "storage"))
 		root, err := genesis.Init(db, genesis.InitOpts{
-			SubnetID:    subnetID,
-			NetworkType: config[0].Accumulate.Network.Type,
+			Network:     config[0].Accumulate.Network,
 			GenesisTime: genTime,
 			Validators:  genVals,
+			Logger:      opts.Logger,
 		})
+		if err != nil {
+			return err
+		}
 
-		state, _ := db.MarshalJSON()
+		state, err := db.MarshalJSON()
 		if err != nil {
 			return err
 		}
