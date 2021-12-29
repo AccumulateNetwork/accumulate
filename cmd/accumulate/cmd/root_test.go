@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -85,6 +86,7 @@ func NewTestBVNN(t *testing.T, defaultWorkDir string) (string, int) {
 	// Configure
 	opts := acctesting.NodeInitOptsForLocalNetwork(t.Name(), acctesting.GetIP())
 	opts.WorkDir = defaultWorkDir
+	opts.Logger = logging.NewTestLogger(t, "plain", config.DefaultLogLevels, false)
 	require.NoError(t, node.Init(opts))
 
 	// Start

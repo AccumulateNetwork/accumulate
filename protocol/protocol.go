@@ -20,6 +20,24 @@ const (
 
 	// Directory is the subnet ID of the DN.
 	Directory = "Directory"
+
+	// MinorRoot is the URL path of the subnet's minor root chain.
+	MinorRoot = "minor-root"
+
+	// MajorRoot is the URL path of the subnet's major root chain.
+	MajorRoot = "major-root"
+
+	// Synthetic is the URL path of the subnet's synthetic transaction chain.
+	Synthetic = "synthetic"
+
+	// Main is the main transaction chain of a record.
+	Main = "Main"
+
+	// Pending is the pending signature chain of a record.
+	Pending = "Pending"
+
+	// Data is the data chain of a record.
+	Data = "Data"
 )
 
 // AcmeUrl returns `acc://ACME`.

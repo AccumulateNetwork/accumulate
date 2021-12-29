@@ -50,15 +50,10 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return fmt.Errorf("unable to marshal segwit, %v", err)
 	}
 
-	dataPayload, err := body.Entry.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("error marshaling data entry, %v", err)
-	}
-
 	//now replace the original data entry payload with the new segwit payload
 	tx.Transaction = segWitPayload
 
-	st.UpdateData(st.Origin, sw.EntryHash[:], dataPayload)
+	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)
 
 	return nil
 }

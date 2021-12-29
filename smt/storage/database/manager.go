@@ -16,7 +16,7 @@ const debugKeys = false
 // Manager
 // The Manager as implemented cannot be accessed concurrently over go routines
 type Manager struct {
-	DB      storage.KeyValueDB     // Underlying database implementation
+	DB      storage.KeyValueStore  // Underlying database implementation
 	txCache map[storage.Key][]byte // TX Cache:  Holds pending tx for the db
 	cacheMu sync.RWMutex
 }
@@ -86,7 +86,7 @@ func (m *Manager) Init(databaseTag, filename string, logger storage.Logger) erro
 	return nil
 }
 
-func (m *Manager) InitWithDB(db storage.KeyValueDB) {
+func (m *Manager) InitWithDB(db storage.KeyValueStore) {
 	m.init()
 	m.DB = db
 }

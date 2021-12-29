@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -21,6 +22,7 @@ func TestNodeLifecycle(t *testing.T) {
 	// Configure
 	opts := acctesting.NodeInitOptsForLocalNetwork(t.Name(), acctesting.GetIP())
 	opts.WorkDir = t.TempDir()
+	opts.Logger = logging.NewTestLogger(t, "plain", config.DefaultLogLevels, false)
 	require.NoError(t, node.Init(opts))
 
 	// Start
