@@ -309,7 +309,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	resp, err := query.GetTransactionHistory(protocol.FaucetUrl.String(), 0, 10)
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 2)
-	require.Equal(t, types.String(types.TxTypeSyntheticGenesis.Name()), resp.Data[0].Type)
+	require.Equal(t, types.String(types.TxTypeInternalGenesis.Name()), resp.Data[0].Type)
 	require.Equal(t, types.String(types.TxTypeSendTokens.Name()), resp.Data[1].Type)
 }
 

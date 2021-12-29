@@ -106,7 +106,8 @@ func (v *txSignatures) UnmarshalBinary(data []byte) error {
 
 	v.Signatures = make([]*transactions.ED25519Sig, lenSignatures)
 	for i := range v.Signatures {
-		x := new(transactions.ED25519Sig)
+		var x *transactions.ED25519Sig
+		x = new(transactions.ED25519Sig)
 		if err := x.UnmarshalBinary(data); err != nil {
 			return fmt.Errorf("error decoding Signatures[%d]: %w", i, err)
 		}
