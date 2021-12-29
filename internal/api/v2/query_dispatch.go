@@ -135,7 +135,7 @@ func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, 
 	return res, nil
 }
 
-func (q *queryDispatch) QueryTxHistory(url string, start, count uint64) (*QueryMultiResponse, error) {
+func (q *queryDispatch) QueryTxHistory(url string, start, count uint64) (*MultiResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err

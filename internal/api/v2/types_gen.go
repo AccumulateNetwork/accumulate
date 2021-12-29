@@ -81,11 +81,11 @@ type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
 }
 
-type QueryMultiResponse struct {
-	Items []*QueryResponse `json:"items,omitempty" form:"items" query:"items" validate:"required"`
-	Start uint64           `json:"start" form:"start" query:"start" validate:"required"`
-	Count uint64           `json:"count" form:"count" query:"count" validate:"required"`
-	Total uint64           `json:"total" form:"total" query:"total" validate:"required"`
+type MultiResponse struct {
+	Items []interface{} `json:"items,omitempty" form:"items" query:"items" validate:"required"`
+	Start uint64        `json:"start" form:"start" query:"start" validate:"required"`
+	Count uint64        `json:"count" form:"count" query:"count" validate:"required"`
+	Total uint64        `json:"total" form:"total" query:"total" validate:"required"`
 }
 
 type QueryOptions struct {

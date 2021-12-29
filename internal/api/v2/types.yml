@@ -41,16 +41,14 @@ MerkleState:
       slice:
         type: bytes
 
-QueryMultiResponse:
+MultiResponse:
   non-binary: true
   incomparable: true
   fields:
     - name: Items
       type: slice
       slice:
-        type: QueryResponse
-        marshal-as: reference
-        pointer: true
+        type: any
     - name: Start
       type: uvarint
       keep-empty: true

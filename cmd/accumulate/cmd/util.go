@@ -447,8 +447,9 @@ func printGeneralTransactionParameters(res *api2.QueryResponse) string {
 	return out
 }
 
-func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
-	if WantJsonOutput || v2.Type == "dataEntry" || v2.Type == "dataSet" {
+func PrintQueryResponseV2(v2 interface{}) (string, error) {
+	res := v2.(*api2.QueryResponse)
+	if WantJsonOutput || res.Type == "dataEntry" || res.Type == "dataSet" {
 		data, err := json.Marshal(v2)
 		if err != nil {
 			return "", err
@@ -456,12 +457,12 @@ func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
 		return string(data), nil
 	}
 
-	out, err := outputForHumans(v2)
+	out, err := outputForHumans(res)
 	if err != nil {
 		return "", err
 	}
 
-	for i, txid := range v2.SyntheticTxids {
+	for i, txid := range res.SyntheticTxids {
 		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
 	}
 	return out, nil

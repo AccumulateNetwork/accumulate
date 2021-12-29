@@ -227,7 +227,7 @@ query:
 	return packTxResponse(res.TxId, res.TxSynthTxIds, main, pend, pl)
 }
 
-func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*QueryMultiResponse, error) {
+func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*MultiResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
@@ -264,8 +264,8 @@ func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*QueryMulti
 		return nil, fmt.Errorf("invalid response: %v", err)
 	}
 
-	res := new(QueryMultiResponse)
-	res.Items = make([]*QueryResponse, len(txh.Transactions))
+	res := new(MultiResponse)
+	res.Items = make([]interface{}, len(txh.Transactions))
 	res.Start = start
 	res.Count = count
 	res.Total = uint64(txh.Total)

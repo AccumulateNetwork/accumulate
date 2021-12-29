@@ -180,7 +180,7 @@ func GetTX(hash string) (string, error) {
 
 func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 
-	var res api2.QueryMultiResponse
+	var res api2.MultiResponse
 	start, err := strconv.Atoi(s)
 	if err != nil {
 		return "", err

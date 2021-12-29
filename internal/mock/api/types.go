@@ -130,10 +130,10 @@ func (mr *MockQuerierMockRecorder) QueryTx(id, wait interface{}) *gomock.Call {
 }
 
 // QueryTxHistory mocks base method.
-func (m *MockQuerier) QueryTxHistory(url string, start, count uint64) (*api.QueryMultiResponse, error) {
+func (m *MockQuerier) QueryTxHistory(url string, start, count uint64) (*api.MultiResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "QueryTxHistory", url, start, count)
-	ret0, _ := ret[0].(*api.QueryMultiResponse)
+	ret0, _ := ret[0].(*api.MultiResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

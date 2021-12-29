@@ -120,7 +120,7 @@ func TestValidate(t *testing.T) {
 	})
 
 	t.Run("Txn History", func(t *testing.T) {
-		r := new(api.QueryMultiResponse)
+		r := new(api.MultiResponse)
 		callApi(t, japi, "query-tx-history", struct {
 			Url   string
 			Count int
