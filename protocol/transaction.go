@@ -39,8 +39,7 @@ func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
 		return new(AddCredits), nil
 	case types.TxTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
-	case types.TxTypeSyntheticSignTransactions:
-		return new(SyntheticSignTransactions), nil
+
 	case types.TxTypeSyntheticCreateChain:
 		return new(SyntheticCreateChain), nil
 	case types.TxTypeSyntheticWriteData:
@@ -53,12 +52,18 @@ func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
 		return new(SyntheticDepositCredits), nil
 	case types.TxTypeSyntheticBurnTokens:
 		return new(SyntheticBurnTokens), nil
-	case types.TxTypeSyntheticGenesis:
-		return new(SyntheticGenesis), nil
 	case types.TxTypeSyntheticMirror:
 		return new(SyntheticMirror), nil
 	case types.TxTypeSegWitDataEntry:
 		return new(SegWitDataEntry), nil
+
+	case types.TxTypeInternalGenesis:
+		return new(InternalGenesis), nil
+	case types.TxTypeInternalTransactionsSigned:
+		return new(InternalTransactionsSigned), nil
+	case types.TxTypeInternalTransactionsSent:
+		return new(InternalTransactionsSent), nil
+
 	default:
 		return nil, fmt.Errorf("unknown transaction type %v", typ)
 	}
@@ -68,6 +73,7 @@ type TransactionPayload interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
 	GetType() types.TxType
+	BinarySize() int
 }
 
 type SyntheticTransaction interface {

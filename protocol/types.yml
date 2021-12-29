@@ -183,9 +183,6 @@ MetricsResponse:
     - name: Value
       type: any
 
-SyntheticGenesis:
-  kind: tx
-
 DirectoryIndexMetadata:
   fields:
   - name: Count
@@ -335,24 +332,6 @@ TokenIssuer:
       type: string
       is-url: true
 
-SyntheticSignTransactions:
-  kind: tx
-  fields:
-    - name: Transactions
-      type: slice
-      slice:
-        type: SyntheticSignature
-        marshal-as: reference
-
-SyntheticSignature:
-  fields:
-    - name: Txid
-      type: chain
-    - name: Signature
-      type: bytes
-    - name: Nonce
-      type: uvarint
-
 SyntheticAnchor:
   kind: tx
   fields:
@@ -484,3 +463,57 @@ TransactionSignature:
       type: transactions.ED25519Sig
       pointer: true
       marshal-as: reference
+
+InternalLedger:
+  kind: chain
+  fields:
+    - name: Synthetic
+      type: SyntheticLedger
+      marshal-as: reference
+
+SyntheticLedger:
+  fields:
+    - name: Nonce
+      type: uvarint
+    - name: Unsigned
+      type: chainSet
+    - name: Unsent
+      type: chainSet
+
+InternalGenesis:
+  kind: tx
+
+InternalSendTransactions:
+  kind: tx
+  incomparable: true
+  fields:
+    - name: Transactions
+      type: slice
+      slice:
+        type: SendTransaction
+        marshal-as: reference
+
+SendTransaction:
+  incomparable: true
+  fields:
+  - name: Payload
+    type: WrappedTxPayload
+    marshal-as: value
+  - name: Recipient
+    type: string
+    is-url: true
+
+InternalTransactionsSigned:
+  kind: tx
+  fields:
+    - name: Transactions
+      type: slice
+      slice:
+        type: TransactionSignature
+        marshal-as: reference
+
+InternalTransactionsSent:
+  kind: tx
+  fields:
+    - name: Transactions
+      type: chainSet

@@ -1,12 +1,10 @@
 package chain
 
 import (
-	"context"
-	"crypto/sha256"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/abci"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -16,7 +14,9 @@ import (
 )
 
 // addSynthTxns prepares synthetic transactions for signing next block.
-func (m *Executor) addSynthTxns(parentTxId types.Bytes, submissions []*SubmittedTransaction) error {
+func (m *Executor) addSynthTxns(tx *transactions.GenTransaction, submissions []*SubmittedTransaction) error {
+	txid := types.Bytes(tx.TransactionHash()).AsBytes32()
+
 	synth := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Synthetic))
 	chain, err := synth.Chain(protocol.Main)
 	if err != nil {
@@ -30,7 +30,7 @@ func (m *Executor) addSynthTxns(parentTxId types.Bytes, submissions []*Submitted
 		// Generate a synthetic tx and send to the router. Need to track txid to
 		// make sure they get processed.
 
-		tx, err := m.buildSynthTxn(sub.url, sub.body)
+		tx, err := m.buildSynthTxn(sub.Url, sub.Body, m.blockBatch)
 		if err != nil {
 			return err
 		}
@@ -52,7 +52,7 @@ func (m *Executor) addSynthTxns(parentTxId types.Bytes, submissions []*Submitted
 		copy(ids[i][:], tx.TransactionHash())
 	}
 
-	return m.blockBatch.Transaction(parentTxId).AddSyntheticTxns(ids...)
+	return m.blockBatch.Transaction(txid[:]).AddSyntheticTxns(ids...)
 }
 
 func (m *Executor) addSystemTxns(txns ...*transactions.GenTransaction) error {
@@ -142,7 +142,7 @@ func (m *Executor) addAnchorTxn() error {
 	case config.Directory:
 		// Send anchors from DN to all BVNs
 		for _, bvn := range m.Network.BvnNames {
-			tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), body)
+			tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), body, m.blockBatch)
 			if err != nil {
 				return err
 			}
@@ -151,7 +151,7 @@ func (m *Executor) addAnchorTxn() error {
 
 	case config.BlockValidator:
 		// Send anchor from BVN to DN
-		tx, err := m.buildSynthTxn(protocol.DnUrl(), body)
+		tx, err := m.buildSynthTxn(protocol.DnUrl(), body, m.blockBatch)
 		if err != nil {
 			return err
 		}
@@ -161,7 +161,7 @@ func (m *Executor) addAnchorTxn() error {
 	return m.addSystemTxns(txns...)
 }
 
-func (m *Executor) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload) (*transactions.GenTransaction, error) {
+func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload, batch *database.Batch) (*transactions.GenTransaction, error) {
 	// Marshal the payload
 	data, err := body.MarshalBinary()
 	if err != nil {
@@ -176,212 +176,34 @@ func (m *Executor) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload
 	tx.SigInfo.KeyPageIndex = 0
 	tx.Transaction = data
 
-	// Load the chain state
-	synth := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Synthetic))
-	head := state.NewSyntheticTransactionChain()
-	err = synth.GetStateAs(head)
-	if err != nil {
-		return nil, err
+	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.TransactionHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
+
+	if body.GetType().IsInternal() {
+		tx.SigInfo.Nonce = 1
+		return tx, nil
 	}
+
+	ledger := batch.Record(opts.Network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerState := new(protocol.InternalLedger)
+	err = ledger.GetStateAs(ledgerState)
+	if err != nil {
+		// If we can't load the ledger, the node is fubared
+		panic(fmt.Errorf("failed to load the ledger: %v", err))
+	}
+
+	tx.SigInfo.Nonce = ledgerState.Synthetic.Nonce
 
 	// Increment the nonce
-	head.Nonce++
-	tx.SigInfo.Nonce = uint64(head.Nonce)
+	ledgerState.Synthetic.Nonce++
 
-	// Save the updated chain state
-	err = synth.PutState(head)
+	// Append the ID
+	txid := types.Bytes(tx.TransactionHash()).AsBytes32()
+	ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
+
+	err = ledger.PutState(ledgerState)
 	if err != nil {
 		return nil, err
 	}
-
-	m.logDebug("Built synth txn", "txid", logging.AsHex(tx.TransactionHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
 
 	return tx, nil
-}
-
-// signSynthTxns signs synthetic transactions from the previous block and
-// prepares them to be sent next block.
-func (m *Executor) signSynthTxns() error {
-	// TODO If the leader fails, will the block happen again or will Tendermint
-	// move to the next block? We need to be sure that synthetic transactions
-	// won't get lost.
-
-	// Retrieve transactions from the previous block
-	txns, err := m.synthTxnsLastBlock(m.blockIndex - 1)
-	if err != nil {
-		return err
-	}
-
-	// Check for anchor transactions from the previous block
-	root := state.NewAnchor()
-	err = m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
-	if err != nil {
-		return err
-	}
-
-	for _, txn := range root.SystemTxns {
-		// Copy the variable. Otherwise we end up with a pointer to the loop
-		// variable, which means we get multiple copies of the pointer, but
-		// they all point to the same thing.
-		txn := txn
-		txns = append(txns, txn[:])
-	}
-
-	// Only proceed if we have transactions to sign
-	if len(txns) == 0 {
-		return nil
-	}
-	m.blockMeta.SynthSigned = len(txns)
-
-	// Sign all of the transactions
-	body := new(protocol.SyntheticSignTransactions)
-	for _, txid := range txns {
-		// For each pending synthetic transaction
-		var synthSig protocol.SyntheticSignature
-		copy(synthSig.Txid[:], txid)
-
-		// Load the transaction state
-		tx, err := m.blockBatch.Transaction(txid).GetState()
-		if err != nil {
-			return err
-		}
-
-		m.logDebug("Signing synth txn", "txid", logging.AsHex(txid), "type", tx.TxType())
-
-		// Sign it
-		ed := new(transactions.ED25519Sig)
-		ed.PublicKey = m.Key[32:]
-		synthSig.Nonce = tx.SigInfo.Nonce
-		err = ed.Sign(synthSig.Nonce, m.Key, txid[:])
-		if err != nil {
-			return err
-		}
-
-		// Add it to the list
-		synthSig.Signature = ed.Signature
-		body.Transactions = append(body.Transactions, synthSig)
-	}
-
-	// Construct the signature transaction
-	tx, err := m.buildSynthTxn(m.Network.NodeUrl(), body)
-	if err != nil {
-		return err
-	}
-
-	// Sign it
-	ed := new(transactions.ED25519Sig)
-	tx.Signature = append(tx.Signature, ed)
-	ed.PublicKey = m.Key[32:]
-	err = ed.Sign(tx.SigInfo.Nonce, m.Key, tx.TransactionHash())
-	if err != nil {
-		return err
-	}
-
-	// Marshal it
-	data, err := tx.Marshal()
-	if err != nil {
-		return err
-	}
-
-	// Only the leader should actually send the transaction
-	if !m.blockLeader {
-		return nil
-	}
-
-	// Send it
-	go func() {
-		_, err = m.Local.BroadcastTxAsync(context.Background(), data)
-		if err != nil {
-			m.logError("Failed to broadcast synth txn sigs", "error", err)
-		}
-	}()
-	return nil
-}
-
-// sendSynthTxns sends signed synthetic transactions from previous blocks.
-//
-// Note, only the leader actually sends the transaction, but every other node
-// must make the same updates to the database, otherwise consensus will fail,
-// since constructing the synthetic transaction updates the nonce, which changes
-// the BPT, so everyone needs to do that.
-func (m *Executor) sendSynthTxns() ([]abci.SynthTxnReference, error) {
-	synth := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Synthetic))
-	synthState := state.NewSyntheticTransactionChain()
-	err := synth.GetStateAs(synthState)
-	if err != nil {
-		return nil, err
-	}
-
-	// Is there anything to send?
-	if len(synthState.Signatures) == 0 {
-		return nil, nil
-	}
-
-	// Array for synth TXN references
-	refs := make([]abci.SynthTxnReference, 0, len(synthState.Signatures))
-
-	// Process all the transactions
-	sent := map[[32]byte]bool{}
-	for _, sig := range synthState.Signatures {
-		tx, _, sigs, err := m.blockBatch.Transaction(sig.Txid[:]).Get()
-		if err != nil {
-			return nil, err
-		}
-
-		// Convert it back to a transaction
-		gtx := tx.Restore()
-		gtx.Signature = sigs
-
-		// Add the signature
-		gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{
-			Nonce:     sig.Nonce,
-			PublicKey: sig.PublicKey,
-			Signature: sig.Signature,
-		})
-
-		// Marshal the transaction
-		raw, err := gtx.Marshal()
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse the URL
-		u, err := url.Parse(gtx.SigInfo.URL)
-		if err != nil {
-			return nil, err
-		}
-
-		// Add it to the batch
-		m.logDebug("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()), "type", tx.Type)
-		m.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
-		m.blockMeta.SynthSent++
-
-		// Delete the signature
-		sent[sig.Txid] = true
-
-		// Add the synthetic transaction reference
-		var ref abci.SynthTxnReference
-		ref.Type = uint64(gtx.TransactionType())
-		ref.Url = tx.SigInfo.URL
-		ref.TxRef = sha256.Sum256(raw)
-		copy(ref.Hash[:], gtx.TransactionHash())
-		refs = append(refs, ref)
-	}
-
-	sigs := synthState.Signatures
-	synthState.Signatures = make([]state.SyntheticSignature, 0, len(sigs)-len(sent))
-	for _, sig := range sigs {
-		if sent[sig.Txid] {
-			continue
-		}
-
-		synthState.Signatures = append(synthState.Signatures, sig)
-	}
-
-	err = synth.PutState(synthState)
-	if err != nil {
-		return nil, err
-	}
-
-	return refs, nil
 }

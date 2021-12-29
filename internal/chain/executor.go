@@ -2,7 +2,6 @@ package chain
 
 import (
 	"bytes"
-	"context"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
@@ -29,9 +28,9 @@ const chainWGSize = 4
 type Executor struct {
 	ExecutorOptions
 
-	executors  map[types.TxType]TxExecutor
-	dispatcher *dispatcher
-	logger     log.Logger
+	executors map[types.TxType]TxExecutor
+	governor  *governor
+	logger    log.Logger
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -86,7 +85,7 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 
 	if !m.isGenesis {
 		var err error
-		m.dispatcher, err = newDispatcher(opts)
+		m.governor, err = newGovernor(opts)
 		if err != nil {
 			return nil, err
 		}
@@ -136,6 +135,14 @@ func (m *Executor) logError(msg string, keyVals ...interface{}) {
 	}
 }
 
+func (m *Executor) Start() error {
+	return m.governor.Start()
+}
+
+func (m *Executor) Stop() error {
+	return m.governor.Stop()
+}
+
 func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error) ([]byte, error) {
 	var err error
 
@@ -150,7 +157,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = protocol.ACME
-	tx.Transaction, err = new(protocol.SyntheticGenesis).MarshalBinary()
+	tx.Transaction, err = new(protocol.InternalGenesis).MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +168,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
-	st.logger = m.logger
+	st.logger.L = m.logger
 
 	txPending := state.NewPendingTransaction(tx)
 	txAccepted, txPending := state.NewTransaction(txPending)
@@ -243,46 +250,9 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	m.blockBatch = m.DB.Begin()
 	m.blockMeta = blockMetadata{}
 
-	// In order for other BVCs to be able to validate the synthetic transaction,
-	// a wrapped signed version must be resubmitted to this BVC network and the
-	// UNSIGNED version of the transaction along with the Leader address will be
-	// stored in a SynthChain in the SMT on this BVC. The BVCs will validate the
-	// synth transaction against the receipt and EVERYONE will then send out the
-	// wrapped TX along with the proof from the directory chain. If by end block
-	// there are still unprocessed synthetic TX's the current leader takes over,
-	// invalidates the previous leader's signed tx, signs the unprocessed synth
-	// tx, and tries again with the new leader. By EVERYONE submitting the
-	// leader signed synth tx to the designated BVC network it takes advantage
-	// of the flood-fill gossip network tendermint will provide and ensure the
-	// synth transaction will be picked up.
+	m.governor.DidBeginBlock(req.IsLeader)
 
-	// Reset dispatcher
-	m.dispatcher.Reset(context.Background())
-
-	// Sign synthetic transactions produced by the previous block
-	err := m.signSynthTxns()
-	if err != nil {
-		return abci.BeginBlockResponse{}, err
-	}
-
-	// Send synthetic transactions produced in the previous block
-	txns, err := m.sendSynthTxns()
-	if err != nil {
-		return abci.BeginBlockResponse{}, err
-	}
-
-	// Dispatch transactions. Due to Tendermint's locks, this cannot be
-	// synchronous.
-	go func() {
-		err := m.dispatcher.Send(context.Background())
-		if err != nil {
-			m.logger.Error("Failed to dispatch transactions", "error", err)
-		}
-	}()
-
-	return abci.BeginBlockResponse{
-		SynthTxns: txns,
-	}, nil
+	return abci.BeginBlockResponse{}, nil
 }
 
 // EndBlock implements ./abci.Chain
@@ -314,6 +284,13 @@ func (m *Executor) Commit() ([]byte, error) {
 		m.logInfo("Committed", "height", m.blockIndex, "duration", time.Since(t))
 	}
 
+	if !m.isGenesis {
+		err := m.governor.DidCommit(m.blockBatch, m.blockLeader, m.blockIndex, m.blockTime)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Get BPT root from a clean batch
 	batch := m.DB.Begin()
 	defer batch.Discard()
@@ -340,6 +317,7 @@ func (m *Executor) doCommit() error {
 	default:
 		return err
 	}
+
 	// Load the main chain of the minor root
 	rootChain, err := root.Chain(protocol.Main)
 	if err != nil {
@@ -396,7 +374,7 @@ func (m *Executor) doCommit() error {
 	// Mirror the subnet's ADI, but only immediately after genesis
 	if m.blockIndex != 2 || m.IsTest {
 		// TODO Don't skip during testing
-		return nil
+		return err
 	}
 
 	// Mirror subnet ADI
@@ -409,7 +387,7 @@ func (m *Executor) doCommit() error {
 	switch m.Network.Type {
 	case config.Directory:
 		for _, bvn := range m.Network.BvnNames {
-			tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), mirror)
+			tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), mirror, m.blockBatch)
 			if err != nil {
 				return err
 			}
@@ -417,7 +395,7 @@ func (m *Executor) doCommit() error {
 		}
 
 	case config.BlockValidator:
-		tx, err := m.buildSynthTxn(protocol.DnUrl(), mirror)
+		tx, err := m.buildSynthTxn(protocol.DnUrl(), mirror, m.blockBatch)
 		if err != nil {
 			return fmt.Errorf("failed to build mirror txn: %v", err)
 		}

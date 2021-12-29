@@ -44,8 +44,9 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		// Create the ADI
 		uAdi := opts.Network.NodeUrl()
-		uBook := uAdi.JoinPath("validators")
-		uPage := uAdi.JoinPath("validators0")
+		uBook := uAdi.JoinPath(protocol.ValidatorBook)
+		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
+		uLedger := uAdi.JoinPath(protocol.Ledger)
 
 		adi := state.NewIdentityState(types.String(uAdi.String()))
 		adi.KeyBook = types.String(uBook.String())
@@ -67,6 +68,14 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 			spec.PublicKey = val.PubKey.Bytes()
 			page.Keys[i] = spec
 		}
+
+		// Create the ledger
+		ledger := protocol.NewInternalLedger()
+		ledger.ChainUrl = types.String(uLedger.String())
+		ledger.Synthetic.Nonce = 1
+		records = append(records, ledger)
+
+		// TODO Remove root and synthetic chains?
 
 		// Create the root chains
 		majorRoot, minorRoot := state.NewAnchor(), state.NewAnchor()

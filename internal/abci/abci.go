@@ -32,9 +32,7 @@ type BeginBlockRequest struct {
 }
 
 // BeginBlockResponse is the return value of Chain.BeginBlock.
-type BeginBlockResponse struct {
-	SynthTxns []SynthTxnReference
-}
+type BeginBlockResponse struct{}
 
 // SynthTxnReference is a reference to a produced synthetic transaction.
 type SynthTxnReference struct {

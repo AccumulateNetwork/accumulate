@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
+// Well known strings
 const (
 	// ACME is the name of the ACME token.
 	ACME = "ACME"
@@ -38,6 +39,12 @@ const (
 
 	// Data is the data chain of a record.
 	Data = "Data"
+
+	// ValidatorBook is the path to a node's validator key book.
+	ValidatorBook = "validators"
+
+	// Ledger is the path to a node's internal ledger.
+	Ledger = "ledger"
 )
 
 // AcmeUrl returns `acc://ACME`.
