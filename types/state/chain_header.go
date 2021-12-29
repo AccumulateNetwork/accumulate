@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	accenc "github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -78,6 +79,15 @@ func (h *ChainHeader) ParseUrl() (*url.URL, error) {
 	return u, nil
 }
 
+func ChainType(data []byte) (types.ChainType, error) {
+	v, err := accenc.UvarintUnmarshalBinary(data)
+	if err != nil {
+		return 0, err
+	}
+
+	return types.ChainType(v), nil
+}
+
 //MarshalBinary serializes the header
 func (h *ChainHeader) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
@@ -111,25 +121,4 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	h.ManagerKeyBook = types.String(mgr)
 
 	return nil
-}
-
-func (tx *DBTransaction) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
-	state, err := tx.GetCurrentEntry(chainId)
-	if err != nil {
-		return nil, err
-	}
-
-	err = state.As(chain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal chain: %v", err)
-	}
-
-	return state, nil
-}
-
-// LoadChain retrieves and unmarshals the specified chain.
-func (tx *DBTransaction) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
-	chain := new(ChainHeader)
-	obj, err := tx.LoadChainAs(chainId, chain)
-	return obj, chain, err
 }
