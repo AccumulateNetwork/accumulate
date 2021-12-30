@@ -70,7 +70,14 @@ func formatField(w *bytes.Buffer, field *typegen.Field, varName string, forJson 
 		typ = resolveType(field, false)
 	}
 
-	fmt.Fprintf(w, "\t%s %s `", varName, typ)
+	fmt.Fprintf(w, "\t%s %s", varName, typ)
+
+	if field.MarshalAs == "none" {
+		fmt.Fprint(w, "\n")
+		return
+	}
+
+	fmt.Fprintf(w, " `")
 	defer fmt.Fprint(w, "`\n")
 
 	lcName := strings.ToLower(varName[:1]) + varName[1:]
@@ -172,10 +179,12 @@ func binarySize(w *bytes.Buffer, field *typegen.Field, varName string) error {
 	case "slice":
 		expr = "encoding.UvarintBinarySize(uint64(len(%s)))"
 	default:
-		if field.MarshalAs != "reference" && field.MarshalAs != "value" {
+		switch field.MarshalAs {
+		case "reference", "value":
+			expr = "%s.BinarySize()"
+		default:
 			return fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, resolveType(field, false))
 		}
-		expr = "%s.BinarySize()"
 	}
 
 	expr = fmt.Sprintf(expr, varName)
@@ -211,10 +220,12 @@ func binaryMarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName 
 	case "slice":
 		expr, canErr = "encoding.UvarintMarshalBinary(uint64(len(%s)))", false
 	default:
-		if field.MarshalAs != "reference" && field.MarshalAs != "value" {
+		switch field.MarshalAs {
+		case "reference", "value":
+			expr, canErr = "%s.MarshalBinary()", true
+		default:
 			return fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, resolveType(field, false))
 		}
-		expr, canErr = "%s.MarshalBinary()", true
 	}
 
 	expr = fmt.Sprintf(expr, varName)

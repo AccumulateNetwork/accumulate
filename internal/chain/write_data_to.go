@@ -13,7 +13,7 @@ type WriteDataTo struct{}
 
 func (WriteDataTo) Type() types.TxType { return types.TxTypeWriteDataTo }
 
-func (WriteDataTo) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.WriteDataTo)
 	err := tx.As(body)
 	if err != nil {

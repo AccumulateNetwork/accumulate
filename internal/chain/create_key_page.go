@@ -14,7 +14,7 @@ type CreateKeyPage struct{}
 
 func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 
-func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error {
 	var group *protocol.KeyBook
 	switch origin := st.Origin.(type) {
 	case *state.AdiState:
@@ -45,7 +45,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	scc.Cause = types.Bytes(tx.Transaction.Hash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
 	spec := protocol.NewKeyPage()

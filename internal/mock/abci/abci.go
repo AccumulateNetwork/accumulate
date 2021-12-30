@@ -54,7 +54,7 @@ func (mr *MockChainMockRecorder) BeginBlock(arg0 interface{}) *gomock.Call {
 }
 
 // CheckTx mocks base method.
-func (m *MockChain) CheckTx(arg0 *transactions.GenTransaction) *protocol.Error {
+func (m *MockChain) CheckTx(arg0 *transactions.Envelope) *protocol.Error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTx", arg0)
 	ret0, _ := ret[0].(*protocol.Error)
@@ -83,7 +83,7 @@ func (mr *MockChainMockRecorder) Commit() *gomock.Call {
 }
 
 // DeliverTx mocks base method.
-func (m *MockChain) DeliverTx(arg0 *transactions.GenTransaction) *protocol.Error {
+func (m *MockChain) DeliverTx(arg0 *transactions.Envelope) *protocol.Error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeliverTx", arg0)
 	ret0, _ := ret[0].(*protocol.Error)

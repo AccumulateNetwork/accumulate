@@ -69,7 +69,7 @@ func unmarshalTxResponse(mainData, pendData []byte) (*state.Transaction, *state.
 	var payload protocol.TransactionPayload
 	switch {
 	case main != nil:
-		payload, err = unmarshalTxPayload(*main.Transaction)
+		payload, err = unmarshalTxPayload(main.Transaction)
 
 	case pend == nil:
 		// TX state can be nil missing if the transaction is pending. TX pending
@@ -80,7 +80,7 @@ func unmarshalTxResponse(mainData, pendData []byte) (*state.Transaction, *state.
 		return nil, nil, nil, fmt.Errorf("no transaction state for transaction on pending or main chains")
 
 	default: // pend != nil && pend.TransactionState != nil
-		payload, err = unmarshalTxPayload(*pend.TransactionState.Transaction)
+		payload, err = unmarshalTxPayload(pend.TransactionState.Transaction)
 	}
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid TX response: %v", err)

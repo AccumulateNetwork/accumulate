@@ -12,8 +12,8 @@ import (
 )
 
 // addSynthTxns prepares synthetic transactions for signing next block.
-func (m *Executor) addSynthTxns(tx *transactions.GenTransaction, submissions []*SubmittedTransaction) error {
-	txid := types.Bytes(tx.TransactionHash()).AsBytes32()
+func (m *Executor) addSynthTxns(tx *transactions.Envelope, submissions []*SubmittedTransaction) error {
+	txid := types.Bytes(tx.Transaction.Hash()).AsBytes32()
 
 	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
 	chain, err := ledger.Chain(protocol.SyntheticChain)
@@ -37,23 +37,23 @@ func (m *Executor) addSynthTxns(tx *transactions.GenTransaction, submissions []*
 		txState, txPending := state.NewTransaction(txPending)
 
 		status := &protocol.TransactionStatus{Remote: true}
-		err = m.blockBatch.Transaction(tx.TransactionHash()).Put(txState, status, nil)
+		err = m.blockBatch.Transaction(tx.Transaction.Hash()).Put(txState, status, nil)
 		if err != nil {
 			return err
 		}
 
-		err = chain.AddEntry(tx.TransactionHash())
+		err = chain.AddEntry(tx.Transaction.Hash())
 		if err != nil {
 			return err
 		}
 
-		copy(ids[i][:], tx.TransactionHash())
+		copy(ids[i][:], tx.Transaction.Hash())
 	}
 
 	return m.blockBatch.Transaction(txid[:]).AddSyntheticTxns(ids...)
 }
 
-func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload, batch *database.Batch) (*transactions.GenTransaction, error) {
+func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload, batch *database.Batch) (*transactions.Envelope, error) {
 	// Marshal the payload
 	data, err := body.MarshalBinary()
 	if err != nil {
@@ -61,14 +61,13 @@ func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.Transact
 	}
 
 	// Build the transaction
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = dest.String()
-	tx.SigInfo.KeyPageHeight = 1
-	tx.SigInfo.KeyPageIndex = 0
-	tx.Transaction = data
+	env := new(transactions.Envelope)
+	env.Transaction.Origin = dest
+	env.Transaction.KeyPageHeight = 1
+	env.Transaction.KeyPageIndex = 0
+	env.Transaction.Body = data
 
-	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.TransactionHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
+	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.Transaction.Hash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
 
 	ledger := batch.Record(opts.Network.NodeUrl().JoinPath(protocol.Ledger))
 	ledgerState := new(protocol.InternalLedger)
@@ -80,17 +79,17 @@ func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.Transact
 
 	if body.GetType().IsInternal() {
 		// For internal transactions, set the nonce to the height of the next block
-		tx.SigInfo.Nonce = uint64(ledgerState.Index) + 1
-		return tx, nil
+		env.Transaction.Nonce = uint64(ledgerState.Index) + 1
+		return env, nil
 	}
 
-	tx.SigInfo.Nonce = ledgerState.Synthetic.Nonce
+	env.Transaction.Nonce = ledgerState.Synthetic.Nonce
 
 	// Increment the nonce
 	ledgerState.Synthetic.Nonce++
 
 	// Append the ID
-	txid := types.Bytes(tx.TransactionHash()).AsBytes32()
+	txid := types.Bytes(env.Transaction.Hash()).AsBytes32()
 	ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
 
 	err = ledger.PutState(ledgerState)
@@ -98,5 +97,5 @@ func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.Transact
 		return nil, err
 	}
 
-	return tx, nil
+	return env, nil
 }

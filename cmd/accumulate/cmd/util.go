@@ -49,7 +49,7 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
-func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
+func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Header, []byte, error) {
 	var privKey []byte
 	var err error
 
@@ -58,17 +58,17 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	ed := transactions.SignatureInfo{}
-	ed.URL = origin.String()
-	ed.KeyPageHeight = 1
-	ed.KeyPageIndex = 0
+	hdr := transactions.Header{}
+	hdr.Origin = origin
+	hdr.KeyPageHeight = 1
+	hdr.KeyPageIndex = 0
 
 	if IsLiteAccount(origin.String()) == true {
 		privKey, err = LookupByLabel(origin.String())
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", origin.String(), err)
 		}
-		return args, &ed, privKey, nil
+		return args, &hdr, privKey, nil
 	}
 
 	if len(args) > 1 {
@@ -93,7 +93,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 	if len(args) > 2 {
 		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
 			ct++
-			ed.KeyPageIndex = uint64(v)
+			hdr.KeyPageIndex = uint64(v)
 		}
 	}
 
@@ -116,41 +116,38 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 		}
 	}
 
-	if ed.KeyPageIndex >= uint64(len(bookRec.Pages)) {
-		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", ed.KeyPageIndex, origin)
+	if hdr.KeyPageIndex >= uint64(len(bookRec.Pages)) {
+		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", hdr.KeyPageIndex, origin)
 	}
-	u, err := url.Parse(bookRec.Pages[ed.KeyPageIndex])
+	u, err := url.Parse(bookRec.Pages[hdr.KeyPageIndex])
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid keypage url %s", bookRec.Pages[ed.KeyPageIndex])
+		return nil, nil, nil, fmt.Errorf("invalid keypage url %s", bookRec.Pages[hdr.KeyPageIndex])
 	}
 	ms, err := getRecordById(u.ResourceChain(), nil)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[ed.KeyPageIndex][:], err)
+		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[hdr.KeyPageIndex][:], err)
 	}
-	ed.KeyPageHeight = ms.Height
+	hdr.KeyPageHeight = ms.Height
 
-	return args[ct:], &ed, privKey, nil
+	return args[ct:], &hdr, privKey, nil
 }
 
-func signGenTx(binaryPayload []byte, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
-	gtx := new(transactions.GenTransaction)
-	gtx.Transaction = binaryPayload
+func signGenTx(binaryPayload []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+	gtx := new(transactions.Envelope)
+	gtx.Transaction.Body = binaryPayload
 
-	gtx.ChainID = origin.ResourceChain()
-	gtx.Routing = origin.Routing()
-
-	si.Nonce = nonce
-	gtx.SigInfo = si
+	hdr.Nonce = nonce
+	gtx.Transaction.Header = *hdr
 
 	ed := new(transactions.ED25519Sig)
-	err := ed.Sign(nonce, privKey, gtx.TransactionHash())
+	err := ed.Sign(nonce, privKey, gtx.Transaction.Hash())
 	if err != nil {
 		return nil, err
 	}
 	return ed, nil
 }
 
-func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
 	ed, err := signGenTx(binaryPayload, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
@@ -166,7 +163,7 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *tra
 	params.Payload = json.RawMessage(jsonPayload)
 	params.Signer.PublicKey = privKey[32:]
 	params.Signer.Nonce = nonce
-	params.Origin = origin.String()
+	params.Origin = origin
 	params.KeyPage.Height = si.KeyPageHeight
 	params.KeyPage.Index = si.KeyPageIndex
 
@@ -242,7 +239,7 @@ func GetUrl(url string) (*QueryResponse, error) {
 	return &res, nil
 }
 
-func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.SignatureInfo, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
