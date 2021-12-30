@@ -71,6 +71,7 @@ func startAccumulate(t *testing.T, ips []net.IP, bvns, validators, basePort int)
 			Config:   config[bvn],
 			RemoteIP: IPs[bvn],
 			ListenIP: IPs[bvn],
+			Logger:   logging.NewTestLogger(t, "plain", cfg.DefaultLogLevels, false),
 		}))
 
 		for val := 0; val < validators; val++ {

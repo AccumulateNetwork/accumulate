@@ -167,27 +167,12 @@ func TestFaucet(t *testing.T) {
 	stat := query.BatchSend()
 	bs := <-stat
 	res1, err := bs.ResolveTransactionResponse(ti1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res1.Code == 0 {
-		t.Fatalf("expecting error code that is non zero")
-	}
-
-	errorData, err := json.Marshal(res1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(errorData))
+	require.NoError(t, err)
+	require.NotZero(t, res1.Code, "expecting error code that is non zero")
 
 	res2, err := bs.ResolveTransactionResponse(ti2)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res2.Code == 0 {
-		t.Fatalf("expecting error code that is non zero")
-	}
+	require.NoError(t, err)
+	require.NotZero(t, res2.Code, "expecting error code that is non zero")
 
 	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
@@ -438,8 +423,7 @@ func TestDirectory(t *testing.T) {
 	dbTx := daemon.DB_TESTONLY().Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, tmed25519.PrivKey(adiKey), "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	_, err := dbTx.Commit(3, time.Unix(0, 0), nil)
-	require.NoError(t, err)
+	require.NoError(t, dbTx.Commit())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})
 	require.NoError(t, err)

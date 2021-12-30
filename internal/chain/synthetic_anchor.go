@@ -46,6 +46,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransact
 
 	chain := new(state.Anchor)
 	chain.ChainUrl = types.String(nodeUrl.JoinPath(anchorChainName(x.Network.Type, body.Major)).String())
+	chain.KeyBook = types.String(st.nodeUrl.JoinPath("validators").String())
 	chain.Index = body.Index
 	chain.Timestamp = body.Timestamp
 	chain.Root = body.Root

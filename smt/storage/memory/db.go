@@ -8,6 +8,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/batch"
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
@@ -19,7 +20,16 @@ type DB struct {
 	DBOpen  types.AtomicBool
 	entries map[storage.Key][]byte
 	mutex   sync.Mutex
+	logger  storage.Logger
 }
+
+func NewDB() *DB {
+	db := new(DB)
+	_ = db.InitDB("", nil)
+	return db
+}
+
+var _ storage.KeyValueStore = (*DB)(nil)
 
 // Ready
 // Returns true if the database is open and ready to accept reads/writes
@@ -108,7 +118,9 @@ func (m *DB) Close() error {
 // a memory database from a file in the future.
 //
 // An existing memory database will be cleared by calling InitDB
-func (m *DB) InitDB(filename string, _ storage.Logger) error {
+func (m *DB) InitDB(_ string, logger storage.Logger) error {
+	m.logger = logger
+
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 
@@ -150,6 +162,10 @@ func (m *DB) Put(key storage.Key, value []byte) error {
 	}
 	m.entries[key] = append([]byte{}, value...)
 	return nil
+}
+
+func (db *DB) Begin() storage.KeyValueTxn {
+	return batch.New(db, db.logger)
 }
 
 type jsonDB []jsonEntry
