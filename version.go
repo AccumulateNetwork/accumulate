@@ -1,7 +1,5 @@
 package accumulate
 
-//go:generate go run ./tools/cmd/goimports
-
 const unknownVersion = "version unknown"
 
 var Version = unknownVersion
