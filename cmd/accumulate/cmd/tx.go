@@ -86,8 +86,8 @@ func PrintTX() {
 	PrintTXHistoryGet()
 }
 
-func getTX(hash []byte, wait time.Duration) (*api2.QueryResponse, error) {
-	var res api2.QueryResponse
+func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, error) {
+	var res api2.TransactionQueryResponse
 	var err error
 
 	params := new(api2.TxnQuery)
@@ -132,7 +132,7 @@ func GetTX(hash string) (string, error) {
 		return "", err
 	}
 
-	out, err := PrintQueryResponseV2(res)
+	out, err := PrintTransactionQueryResponseV2(res)
 	if err != nil {
 		return "", err
 	}
@@ -154,7 +154,7 @@ func GetTX(hash string) (string, error) {
 				return err
 			}
 
-			o, err := PrintQueryResponseV2(res)
+			o, err := PrintTransactionQueryResponseV2(res)
 			if err != nil {
 				return err
 			}
@@ -220,7 +220,7 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 	var out string
 	out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
 	for i := range res.Items {
-		s, err := PrintQueryResponseV2(res.Items[i])
+		s, err := PrintTransactionQueryResponseV2(res.Items[i])
 		if err != nil {
 			return "", err
 		}

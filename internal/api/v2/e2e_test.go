@@ -106,17 +106,17 @@ func TestValidate(t *testing.T) {
 		queryAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
 		assert.Equal(t, adiName, string(adi.ChainUrl))
 
-		dir := new(api.DirectoryQueryResult)
+		dir := new(api.MultiResponse)
 		queryAs(t, japi, "query-directory", struct {
 			Url          string
 			Count        int
 			ExpandChains bool
 		}{adiName, 10, true}, dir)
-		assert.ElementsMatch(t, []string{
+		assert.ElementsMatch(t, []interface{}{
 			adiName,
 			adiName + "/book",
 			adiName + "/page",
-		}, dir.Entries)
+		}, dir.Items)
 	})
 
 	t.Run("Txn History", func(t *testing.T) {

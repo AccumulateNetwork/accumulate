@@ -28,24 +28,24 @@ func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
 	params := api2.UrlQuery{
 		Url: url,
 	}
-	res := new(api2.QueryResponse)
+	res := new(api2.ChainQueryResponse)
 	res.Data = rec
 	if err := Client.Request(context.Background(), "query", &params, res); err != nil {
 		return nil, err
 	}
-	return res.MerkleState, nil
+	return res.MainChain, nil
 }
 
 func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	params := api2.ChainIdQuery{
 		ChainId: chainId,
 	}
-	res := new(api2.QueryResponse)
+	res := new(api2.ChainQueryResponse)
 	res.Data = rec
 	if err := Client.Request(context.Background(), "query-chain", &params, res); err != nil {
 		return nil, err
 	}
-	return res.MerkleState, nil
+	return res.MainChain, nil
 }
 
 func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
@@ -126,7 +126,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[ed.KeyPageIndex][:], err)
 	}
-	ed.KeyPageHeight = ms.Count
+	ed.KeyPageHeight = ms.Height
 
 	return args[ct:], &ed, privKey, nil
 }
@@ -213,8 +213,8 @@ func GetUrlAs(url string, as interface{}) error {
 	return UnmarshalQuery(res, as)
 }
 
-func GetUrl(url string) (*api2.QueryResponse, error) {
-	var res api2.QueryResponse
+func GetUrl(url string) (*api2.ChainQueryResponse, error) {
+	var res api2.ChainQueryResponse
 
 	u, err := url2.Parse(url)
 	params := api2.UrlQuery{}
@@ -433,22 +433,18 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
 }
 
-func printGeneralTransactionParameters(res *api2.QueryResponse) string {
+func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.Txid)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
-	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig)
-	if res.Signer != nil {
-		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey)
-		out += fmt.Sprintf("  - Signer Nonce          : %d\n", res.Signer.Nonce)
-	}
+	out += fmt.Sprintf("  - Signature             : %x\n", res.Signatures)
 	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
 	out += fmt.Sprintf("===\n")
 	return out
 }
 
-func PrintQueryResponseV2(v2 interface{}) (string, error) {
-	res := v2.(*api2.QueryResponse)
+func PrintChainQueryResponseV2(v2 interface{}) (string, error) {
+	res := v2.(*api2.ChainQueryResponse)
 	if WantJsonOutput || res.Type == "dataEntry" || res.Type == "dataSet" {
 		data, err := json.Marshal(v2)
 		if err != nil {
@@ -468,7 +464,28 @@ func PrintQueryResponseV2(v2 interface{}) (string, error) {
 	return out, nil
 }
 
-func outputForHumans(res *api2.QueryResponse) (string, error) {
+func PrintTransactionQueryResponseV2(v2 interface{}) (string, error) {
+	res := v2.(*api2.TransactionQueryResponse)
+	if WantJsonOutput || res.Type == "dataEntry" || res.Type == "dataSet" {
+		data, err := json.Marshal(v2)
+		if err != nil {
+			return "", err
+		}
+		return string(data), nil
+	}
+
+	out, err := outputForHumansTx(res)
+	if err != nil {
+		return "", err
+	}
+
+	for i, txid := range res.SyntheticTxids {
+		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
+	}
+	return out, nil
+}
+
+func outputForHumans(res *api2.ChainQueryResponse) (string, error) {
 	switch string(res.Type) {
 	case types.ChainTypeLiteTokenAccount.String():
 		ata := protocol.LiteTokenAccount{}
@@ -522,7 +539,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 
 		return out, nil
 	case "directory":
-		dqr := api2.DirectoryQueryResult{}
+		dqr := api2.MultiResponse{}
 		err := UnmarshalQuery(res.Data, &dqr)
 		if err != nil {
 			return "", err
@@ -530,9 +547,10 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 
 		var out string
 		out += fmt.Sprintf("\n\tADI Entries: start = %d, count = %d, total = %d\n", dqr.Start, dqr.Count, dqr.Total)
-		for _, s := range dqr.ExpandedEntries {
+		for _, s := range dqr.OtherItems {
+			ss := s.(api2.ChainQueryResponse)
 			header := state.ChainHeader{}
-			err = UnmarshalQuery(s.Data, &header)
+			err = UnmarshalQuery(ss.Data, &header)
 			if err != nil {
 				return "", err
 			}
@@ -575,6 +593,13 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 		}
 		return out, nil
+	default:
+		return "", fmt.Errorf("unknown response type %q", res.Type)
+	}
+}
+
+func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
+	switch string(res.Type) {
 	case types.TxTypeSendTokens.String():
 		tx := response.TokenTx{}
 		err := UnmarshalQuery(res.Data, &tx)

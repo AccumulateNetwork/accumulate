@@ -1,10 +1,10 @@
-QueryResponse:
+ChainQueryResponse:
   non-binary: true
   incomparable: true
   fields:
     - name: Type
       type: string
-    - name: MerkleState
+    - name: MainChain
       type: MerkleState
       pointer: true
       marshal-as: reference
@@ -29,13 +29,46 @@ QueryResponse:
       type: any
     - name: SyntheticTxids
       type: chainSet
+    - name: ChainId
+      type: bytes
+
+TransactionQueryResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Type
+      type: string
+    - name: MerkleState
+      type: MerkleState
+      pointer: true
+      marshal-as: reference
+    - name: Data
+      type: any
+    - name: Origin
+      type: string
+      alternative: Sponsor
+    - name: KeyPage
+      type: KeyPage
+      pointer: true
+      marshal-as: reference
+    - name: Txid
+      type: bytes
+    - name: Signatures
+      type: slice
+      slice:
+        type: bytes
+    - name: Status
+      type: any
+    - name: SyntheticTxids
+      type: chainSet
 
 MerkleState:
   non-binary: true
   incomparable: true
   fields:
-    - name: Count
+    - name: Height
       type: uvarint
+      alternative: Count
     - name: Roots
       type: slice
       slice:
@@ -58,32 +91,10 @@ MultiResponse:
     - name: Total
       type: uvarint
       keep-empty: true
-
-DirectoryQueryResult:
-  non-binary: true
-  incomparable: true
-  fields:
-  - name: Entries
-    type: slice
-    slice:
-      type: string
-    optional: true
-  - name: ExpandedEntries
-    type: slice
-    slice:
-      type: QueryResponse
-      pointer: true
-      marshal-as: reference
-    optional: true
-  - name: Start
-    type: uvarint
-    keep-empty: true
-  - name: Count
-    type: uvarint
-    keep-empty: true
-  - name: Total
-    type: uvarint
-    keep-empty: true
+    - name: OtherItems
+      type: slice
+      slice:
+        type: any
 
 KeyPage:
   non-binary: true
@@ -283,17 +294,3 @@ DataEntryQueryResponse:
     - name: Entry
       type: DataEntry
       marshal-as: reference
-
-DataEntrySetQueryResponse:
-  fields:
-    - name: DataEntries
-      type: slice
-      slice:
-        type: DataEntryQueryResponse
-        marshal-as: reference
-    - name: Start
-      type: uvarint
-    - name: Count
-      type: uvarint
-    - name: Total
-      type: uvarint

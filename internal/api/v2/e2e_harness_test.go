@@ -123,10 +123,10 @@ func callApi(t *testing.T, japi *api.JrpcMethods, method string, params, result 
 	return result
 }
 
-func query(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.QueryResponse {
+func query(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.ChainQueryResponse {
 	t.Helper()
 
-	r := new(api.QueryResponse)
+	r := new(api.ChainQueryResponse)
 	callApi(t, japi, method, params, r)
 	return r
 }
@@ -162,7 +162,7 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	tx, err := transactions.NewWith(&transactions.SignatureInfo{
 		URL:           params.Origin,
 		KeyPageIndex:  params.PageIndex,
-		KeyPageHeight: qr.MerkleState.Count,
+		KeyPageHeight: qr.MainChain.Height,
 		Nonce:         nonce,
 	}, func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
@@ -176,7 +176,7 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	req.Signer.Nonce = nonce
 	req.Signature = tx.Signature[0].Signature
 	req.KeyPage.Index = params.PageIndex
-	req.KeyPage.Height = qr.MerkleState.Count
+	req.KeyPage.Height = qr.MainChain.Height
 	req.Payload = params.Payload
 
 	r := new(api.TxResponse)
@@ -247,7 +247,7 @@ func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
-	return r.MerkleState.Count
+	return r.MainChain.Height
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {

@@ -15,6 +15,20 @@ type ChainIdQuery struct {
 	ChainId []byte `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
+type ChainQueryResponse struct {
+	Type           string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MainChain      *MerkleState `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
+	Data           interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Origin         string       `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	KeyPage        *KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	Txid           []byte       `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Signer         *Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Sig            []byte       `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
+	Status         interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	SyntheticTxids [][32]byte   `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
+	ChainId        []byte       `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
+}
+
 type DataEntry struct {
 	ExtIds [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
 	Data   []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
@@ -36,25 +50,10 @@ type DataEntrySetQuery struct {
 	QueryOptions
 }
 
-type DataEntrySetQueryResponse struct {
-	DataEntries []DataEntryQueryResponse `json:"dataEntries,omitempty" form:"dataEntries" query:"dataEntries" validate:"required"`
-	Start       uint64                   `json:"start,omitempty" form:"start" query:"start" validate:"required"`
-	Count       uint64                   `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	Total       uint64                   `json:"total,omitempty" form:"total" query:"total" validate:"required"`
-}
-
 type DirectoryQuery struct {
 	UrlQuery
 	QueryPagination
 	QueryOptions
-}
-
-type DirectoryQueryResult struct {
-	Entries         []string         `json:"entries,omitempty" form:"entries" query:"entries"`
-	ExpandedEntries []*QueryResponse `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
-	Start           uint64           `json:"start" form:"start" query:"start" validate:"required"`
-	Count           uint64           `json:"count" form:"count" query:"count" validate:"required"`
-	Total           uint64           `json:"total" form:"total" query:"total" validate:"required"`
 }
 
 type KeyPage struct {
@@ -68,8 +67,8 @@ type KeyPageIndexQuery struct {
 }
 
 type MerkleState struct {
-	Count uint64   `json:"count,omitempty" form:"count" query:"count" validate:"required"`
-	Roots [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
+	Height uint64   `json:"height,omitempty" form:"height" query:"height" validate:"required"`
+	Roots  [][]byte `json:"roots,omitempty" form:"roots" query:"roots" validate:"required"`
 }
 
 type MetricsQuery struct {
@@ -82,10 +81,11 @@ type MetricsResponse struct {
 }
 
 type MultiResponse struct {
-	Items []interface{} `json:"items,omitempty" form:"items" query:"items" validate:"required"`
-	Start uint64        `json:"start" form:"start" query:"start" validate:"required"`
-	Count uint64        `json:"count" form:"count" query:"count" validate:"required"`
-	Total uint64        `json:"total" form:"total" query:"total" validate:"required"`
+	Items      []interface{} `json:"items,omitempty" form:"items" query:"items" validate:"required"`
+	Start      uint64        `json:"start" form:"start" query:"start" validate:"required"`
+	Count      uint64        `json:"count" form:"count" query:"count" validate:"required"`
+	Total      uint64        `json:"total" form:"total" query:"total" validate:"required"`
+	OtherItems []interface{} `json:"otherItems,omitempty" form:"otherItems" query:"otherItems" validate:"required"`
 }
 
 type QueryOptions struct {
@@ -95,19 +95,6 @@ type QueryOptions struct {
 type QueryPagination struct {
 	Start uint64 `json:"start,omitempty" form:"start" query:"start"`
 	Count uint64 `json:"count,omitempty" form:"count" query:"count"`
-}
-
-type QueryResponse struct {
-	Type           string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MerkleState    *MerkleState `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
-	Data           interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	Origin         string       `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	KeyPage        *KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	Txid           []byte       `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Signer         *Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Sig            []byte       `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
-	Status         interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	SyntheticTxids [][32]byte   `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
 }
 
 type Signer struct {
@@ -124,6 +111,18 @@ type TokenDeposit struct {
 type TokenSend struct {
 	From string         `json:"from,omitempty" form:"from" query:"from" validate:"required"`
 	To   []TokenDeposit `json:"to,omitempty" form:"to" query:"to" validate:"required"`
+}
+
+type TransactionQueryResponse struct {
+	Type           string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MerkleState    *MerkleState `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
+	Data           interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Origin         string       `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	KeyPage        *KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	Txid           []byte       `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Signatures     [][]byte     `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	Status         interface{}  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	SyntheticTxids [][32]byte   `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
 }
 
 type TxHistoryQuery struct {
@@ -201,34 +200,6 @@ func (v *DataEntryQueryResponse) Equal(u *DataEntryQueryResponse) bool {
 	return true
 }
 
-func (v *DataEntrySetQueryResponse) Equal(u *DataEntrySetQueryResponse) bool {
-	if !(len(v.DataEntries) == len(u.DataEntries)) {
-		return false
-	}
-
-	for i := range v.DataEntries {
-		v, u := v.DataEntries[i], u.DataEntries[i]
-		if !(v.Equal(&u)) {
-			return false
-		}
-
-	}
-
-	if !(v.Start == u.Start) {
-		return false
-	}
-
-	if !(v.Count == u.Count) {
-		return false
-	}
-
-	if !(v.Total == u.Total) {
-		return false
-	}
-
-	return true
-}
-
 func (v *DataEntry) BinarySize() int {
 	var n int
 
@@ -260,25 +231,6 @@ func (v *DataEntryQueryResponse) BinarySize() int {
 	n += encoding.ChainBinarySize(&v.EntryHash)
 
 	n += v.Entry.BinarySize()
-
-	return n
-}
-
-func (v *DataEntrySetQueryResponse) BinarySize() int {
-	var n int
-
-	n += encoding.UvarintBinarySize(uint64(len(v.DataEntries)))
-
-	for _, v := range v.DataEntries {
-		n += v.BinarySize()
-
-	}
-
-	n += encoding.UvarintBinarySize(v.Start)
-
-	n += encoding.UvarintBinarySize(v.Count)
-
-	n += encoding.UvarintBinarySize(v.Total)
 
 	return n
 }
@@ -318,29 +270,6 @@ func (v *DataEntryQueryResponse) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-
-	return buffer.Bytes(), nil
-}
-
-func (v *DataEntrySetQueryResponse) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
-
-	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.DataEntries))))
-	for i, v := range v.DataEntries {
-		_ = i
-		if b, err := v.MarshalBinary(); err != nil {
-			return nil, fmt.Errorf("error encoding DataEntries[%d]: %w", i, err)
-		} else {
-			buffer.Write(b)
-		}
-
-	}
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.Start))
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.Count))
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.Total))
 
 	return buffer.Bytes(), nil
 }
@@ -409,52 +338,40 @@ func (v *DataEntryQueryResponse) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
-func (v *DataEntrySetQueryResponse) UnmarshalBinary(data []byte) error {
-	var lenDataEntries uint64
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding DataEntries: %w", err)
-	} else {
-		lenDataEntries = x
-	}
-	data = data[encoding.UvarintBinarySize(lenDataEntries):]
-
-	v.DataEntries = make([]DataEntryQueryResponse, lenDataEntries)
-	for i := range v.DataEntries {
-		if err := v.DataEntries[i].UnmarshalBinary(data); err != nil {
-			return fmt.Errorf("error decoding DataEntries[%d]: %w", i, err)
-		}
-		data = data[v.DataEntries[i].BinarySize():]
-
-	}
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Start: %w", err)
-	} else {
-		v.Start = x
-	}
-	data = data[encoding.UvarintBinarySize(v.Start):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Count: %w", err)
-	} else {
-		v.Count = x
-	}
-	data = data[encoding.UvarintBinarySize(v.Count):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Total: %w", err)
-	} else {
-		v.Total = x
-	}
-	data = data[encoding.UvarintBinarySize(v.Total):]
-
-	return nil
-}
-
 func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
 		ChainId *string `json:"chainId,omitempty"`
 	}{}
+	u.ChainId = encoding.BytesToJSON(v.ChainId)
+	return json.Marshal(&u)
+}
+
+func (v *ChainQueryResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type           string       `json:"type,omitempty"`
+		MainChain      *MerkleState `json:"mainChain,omitempty"`
+		Data           interface{}  `json:"data,omitempty"`
+		Origin         string       `json:"origin,omitempty"`
+		Sponsor        string       `json:"sponsor,omitempty"`
+		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
+		Txid           *string      `json:"txid,omitempty"`
+		Signer         *Signer      `json:"signer,omitempty"`
+		Sig            *string      `json:"sig,omitempty"`
+		Status         interface{}  `json:"status,omitempty"`
+		SyntheticTxids []string     `json:"syntheticTxids,omitempty"`
+		ChainId        *string      `json:"chainId,omitempty"`
+	}{}
+	u.Type = v.Type
+	u.MainChain = v.MainChain
+	u.Data = v.Data
+	u.Origin = v.Origin
+	u.Sponsor = v.Origin
+	u.KeyPage = v.KeyPage
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.Signer = v.Signer
+	u.Sig = encoding.BytesToJSON(v.Sig)
+	u.Status = v.Status
+	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	return json.Marshal(&u)
 }
@@ -504,10 +421,12 @@ func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
 
 func (v *MerkleState) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Count uint64    `json:"count,omitempty"`
-		Roots []*string `json:"roots,omitempty"`
+		Height uint64    `json:"height,omitempty"`
+		Count  uint64    `json:"count,omitempty"`
+		Roots  []*string `json:"roots,omitempty"`
 	}{}
-	u.Count = v.Count
+	u.Height = v.Height
+	u.Count = v.Height
 	u.Roots = make([]*string, len(v.Roots))
 	for i, x := range v.Roots {
 		u.Roots[i] = encoding.BytesToJSON(x)
@@ -522,34 +441,6 @@ func (v *MetricsQuery) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Metric = v.Metric
 	u.Duration = encoding.DurationToJSON(v.Duration)
-	return json.Marshal(&u)
-}
-
-func (v *QueryResponse) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Type           string       `json:"type,omitempty"`
-		MerkleState    *MerkleState `json:"merkleState,omitempty"`
-		Data           interface{}  `json:"data,omitempty"`
-		Origin         string       `json:"origin,omitempty"`
-		Sponsor        string       `json:"sponsor,omitempty"`
-		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
-		Txid           *string      `json:"txid,omitempty"`
-		Signer         *Signer      `json:"signer,omitempty"`
-		Sig            *string      `json:"sig,omitempty"`
-		Status         interface{}  `json:"status,omitempty"`
-		SyntheticTxids []string     `json:"syntheticTxids,omitempty"`
-	}{}
-	u.Type = v.Type
-	u.MerkleState = v.MerkleState
-	u.Data = v.Data
-	u.Origin = v.Origin
-	u.Sponsor = v.Origin
-	u.KeyPage = v.KeyPage
-	u.Txid = encoding.BytesToJSON(v.Txid)
-	u.Signer = v.Signer
-	u.Sig = encoding.BytesToJSON(v.Sig)
-	u.Status = v.Status
-	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
 	return json.Marshal(&u)
 }
 
@@ -572,6 +463,35 @@ func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 	u.Url = v.Url
 	u.Amount = v.Amount
 	u.Txid = encoding.BytesToJSON(v.Txid)
+	return json.Marshal(&u)
+}
+
+func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type           string       `json:"type,omitempty"`
+		MerkleState    *MerkleState `json:"merkleState,omitempty"`
+		Data           interface{}  `json:"data,omitempty"`
+		Origin         string       `json:"origin,omitempty"`
+		Sponsor        string       `json:"sponsor,omitempty"`
+		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
+		Txid           *string      `json:"txid,omitempty"`
+		Signatures     []*string    `json:"signatures,omitempty"`
+		Status         interface{}  `json:"status,omitempty"`
+		SyntheticTxids []string     `json:"syntheticTxids,omitempty"`
+	}{}
+	u.Type = v.Type
+	u.MerkleState = v.MerkleState
+	u.Data = v.Data
+	u.Origin = v.Origin
+	u.Sponsor = v.Origin
+	u.KeyPage = v.KeyPage
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.Signatures = make([]*string, len(v.Signatures))
+	for i, x := range v.Signatures {
+		u.Signatures[i] = encoding.BytesToJSON(x)
+	}
+	u.Status = v.Status
+	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
 	return json.Marshal(&u)
 }
 
@@ -628,6 +548,71 @@ func (v *ChainIdQuery) UnmarshalJSON(data []byte) error {
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.ChainId); err != nil {
+		return fmt.Errorf("error decoding ChainId: %w", err)
+	} else {
+		v.ChainId = x
+	}
+	return nil
+}
+
+func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type           string       `json:"type,omitempty"`
+		MainChain      *MerkleState `json:"mainChain,omitempty"`
+		Data           interface{}  `json:"data,omitempty"`
+		Origin         string       `json:"origin,omitempty"`
+		Sponsor        string       `json:"sponsor,omitempty"`
+		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
+		Txid           *string      `json:"txid,omitempty"`
+		Signer         *Signer      `json:"signer,omitempty"`
+		Sig            *string      `json:"sig,omitempty"`
+		Status         interface{}  `json:"status,omitempty"`
+		SyntheticTxids []string     `json:"syntheticTxids,omitempty"`
+		ChainId        *string      `json:"chainId,omitempty"`
+	}{}
+	u.Type = v.Type
+	u.MainChain = v.MainChain
+	u.Data = v.Data
+	u.Origin = v.Origin
+	u.Sponsor = v.Origin
+	u.KeyPage = v.KeyPage
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.Signer = v.Signer
+	u.Sig = encoding.BytesToJSON(v.Sig)
+	u.Status = v.Status
+	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
+	u.ChainId = encoding.BytesToJSON(v.ChainId)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Type = u.Type
+	v.MainChain = u.MainChain
+	v.Data = u.Data
+	var zeroOrigin string
+	if u.Origin != zeroOrigin {
+		v.Origin = u.Origin
+	} else {
+		v.Origin = u.Sponsor
+	}
+	v.KeyPage = u.KeyPage
+	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
+		return fmt.Errorf("error decoding Txid: %w", err)
+	} else {
+		v.Txid = x
+	}
+	v.Signer = u.Signer
+	if x, err := encoding.BytesFromJSON(u.Sig); err != nil {
+		return fmt.Errorf("error decoding Sig: %w", err)
+	} else {
+		v.Sig = x
+	}
+	v.Status = u.Status
+	if x, err := encoding.ChainSetFromJSON(u.SyntheticTxids); err != nil {
+		return fmt.Errorf("error decoding SyntheticTxids: %w", err)
+	} else {
+		v.SyntheticTxids = x
 	}
 	if x, err := encoding.BytesFromJSON(u.ChainId); err != nil {
 		return fmt.Errorf("error decoding ChainId: %w", err)
@@ -725,10 +710,12 @@ func (v *KeyPageIndexQuery) UnmarshalJSON(data []byte) error {
 
 func (v *MerkleState) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Count uint64    `json:"count,omitempty"`
-		Roots []*string `json:"roots,omitempty"`
+		Height uint64    `json:"height,omitempty"`
+		Count  uint64    `json:"count,omitempty"`
+		Roots  []*string `json:"roots,omitempty"`
 	}{}
-	u.Count = v.Count
+	u.Height = v.Height
+	u.Count = v.Height
 	u.Roots = make([]*string, len(v.Roots))
 	for i, x := range v.Roots {
 		u.Roots[i] = encoding.BytesToJSON(x)
@@ -736,7 +723,12 @@ func (v *MerkleState) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Count = u.Count
+	var zeroHeight uint64
+	if u.Height != zeroHeight {
+		v.Height = u.Height
+	} else {
+		v.Height = u.Count
+	}
 	v.Roots = make([][]byte, len(u.Roots))
 	for i, x := range u.Roots {
 		if x, err := encoding.BytesFromJSON(x); err != nil {
@@ -763,64 +755,6 @@ func (v *MetricsQuery) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Duration: %w", err)
 	} else {
 		v.Duration = x
-	}
-	return nil
-}
-
-func (v *QueryResponse) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Type           string       `json:"type,omitempty"`
-		MerkleState    *MerkleState `json:"merkleState,omitempty"`
-		Data           interface{}  `json:"data,omitempty"`
-		Origin         string       `json:"origin,omitempty"`
-		Sponsor        string       `json:"sponsor,omitempty"`
-		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
-		Txid           *string      `json:"txid,omitempty"`
-		Signer         *Signer      `json:"signer,omitempty"`
-		Sig            *string      `json:"sig,omitempty"`
-		Status         interface{}  `json:"status,omitempty"`
-		SyntheticTxids []string     `json:"syntheticTxids,omitempty"`
-	}{}
-	u.Type = v.Type
-	u.MerkleState = v.MerkleState
-	u.Data = v.Data
-	u.Origin = v.Origin
-	u.Sponsor = v.Origin
-	u.KeyPage = v.KeyPage
-	u.Txid = encoding.BytesToJSON(v.Txid)
-	u.Signer = v.Signer
-	u.Sig = encoding.BytesToJSON(v.Sig)
-	u.Status = v.Status
-	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	v.Type = u.Type
-	v.MerkleState = u.MerkleState
-	v.Data = u.Data
-	var zeroOrigin string
-	if u.Origin != zeroOrigin {
-		v.Origin = u.Origin
-	} else {
-		v.Origin = u.Sponsor
-	}
-	v.KeyPage = u.KeyPage
-	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
-		return fmt.Errorf("error decoding Txid: %w", err)
-	} else {
-		v.Txid = x
-	}
-	v.Signer = u.Signer
-	if x, err := encoding.BytesFromJSON(u.Sig); err != nil {
-		return fmt.Errorf("error decoding Sig: %w", err)
-	} else {
-		v.Sig = x
-	}
-	v.Status = u.Status
-	if x, err := encoding.ChainSetFromJSON(u.SyntheticTxids); err != nil {
-		return fmt.Errorf("error decoding SyntheticTxids: %w", err)
-	} else {
-		v.SyntheticTxids = x
 	}
 	return nil
 }
@@ -862,6 +796,67 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Txid: %w", err)
 	} else {
 		v.Txid = x
+	}
+	return nil
+}
+
+func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type           string       `json:"type,omitempty"`
+		MerkleState    *MerkleState `json:"merkleState,omitempty"`
+		Data           interface{}  `json:"data,omitempty"`
+		Origin         string       `json:"origin,omitempty"`
+		Sponsor        string       `json:"sponsor,omitempty"`
+		KeyPage        *KeyPage     `json:"keyPage,omitempty"`
+		Txid           *string      `json:"txid,omitempty"`
+		Signatures     []*string    `json:"signatures,omitempty"`
+		Status         interface{}  `json:"status,omitempty"`
+		SyntheticTxids []string     `json:"syntheticTxids,omitempty"`
+	}{}
+	u.Type = v.Type
+	u.MerkleState = v.MerkleState
+	u.Data = v.Data
+	u.Origin = v.Origin
+	u.Sponsor = v.Origin
+	u.KeyPage = v.KeyPage
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	u.Signatures = make([]*string, len(v.Signatures))
+	for i, x := range v.Signatures {
+		u.Signatures[i] = encoding.BytesToJSON(x)
+	}
+	u.Status = v.Status
+	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Type = u.Type
+	v.MerkleState = u.MerkleState
+	v.Data = u.Data
+	var zeroOrigin string
+	if u.Origin != zeroOrigin {
+		v.Origin = u.Origin
+	} else {
+		v.Origin = u.Sponsor
+	}
+	v.KeyPage = u.KeyPage
+	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
+		return fmt.Errorf("error decoding Txid: %w", err)
+	} else {
+		v.Txid = x
+	}
+	v.Signatures = make([][]byte, len(u.Signatures))
+	for i, x := range u.Signatures {
+		if x, err := encoding.BytesFromJSON(x); err != nil {
+			return fmt.Errorf("error decoding Signatures[%d]: %w", i, err)
+		} else {
+			v.Signatures[i] = x
+		}
+	}
+	v.Status = u.Status
+	if x, err := encoding.ChainSetFromJSON(u.SyntheticTxids); err != nil {
+		return fmt.Errorf("error decoding SyntheticTxids: %w", err)
+	} else {
+		v.SyntheticTxids = x
 	}
 	return nil
 }

@@ -67,10 +67,10 @@ func GetAndPrintKeyBook(url string) (string, error) {
 		return "", fmt.Errorf("error retrieving key book for %s", url)
 	}
 
-	return PrintQueryResponseV2(res)
+	return PrintChainQueryResponseV2(res)
 }
 
-func GetKeyBook(url string) (*api2.QueryResponse, *protocol.KeyBook, error) {
+func GetKeyBook(url string) (*api2.ChainQueryResponse, *protocol.KeyBook, error) {
 	res, err := GetUrl(url)
 	if err != nil {
 		return nil, nil, err

@@ -80,10 +80,10 @@ func GetAndPrintKeyPage(url string) (string, error) {
 		return "", fmt.Errorf("error retrieving key page for %s, %v", url, err)
 	}
 
-	return PrintQueryResponseV2(res)
+	return PrintChainQueryResponseV2(res)
 }
 
-func GetKeyPage(url string) (*api2.QueryResponse, *protocol.KeyPage, error) {
+func GetKeyPage(url string) (*api2.ChainQueryResponse, *protocol.KeyPage, error) {
 	res, err := GetUrl(url)
 	if err != nil {
 		return nil, nil, err
