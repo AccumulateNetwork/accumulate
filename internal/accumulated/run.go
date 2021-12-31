@@ -279,6 +279,9 @@ func (d *Daemon) Start() (err error) {
 		}
 	}()
 
+	// Shut down the node if the disk space gets too low
+	go d.ensureSufficientDiskSpace(dbPath)
+
 	// Clean up once the node is stopped (mostly for tests)
 	go func() {
 		defer close(d.done)
@@ -311,6 +314,29 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	return nil
+}
+
+func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {
+	defer func() { _ = d.node.Stop() }()
+
+	logger := d.Logger.With("module", "disk-monitor")
+
+	for {
+		free, err := diskUsage(dbPath)
+		if err != nil {
+			logger.Error("Failed to get disk size, shutting down", "error", err)
+			return
+		}
+
+		if free < 0.05 {
+			logger.Error("Less than 5% disk space available, shutting down", "free", free)
+			return
+		}
+
+		logger.Info("Disk usage", "free", free)
+
+		time.Sleep(10 * time.Minute)
+	}
 }
 
 // listenHttpUrl takes a string such as `http://localhost:123` and creates a TCP
