@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -28,11 +30,198 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 		v, err := m.queryByTxId(batch, txid)
 		return []byte("tx"), v, err
 
-	default:
+	case u.Fragment == "":
 		// Query by chain URL
 		v, err := m.queryByChainId(batch, u.ResourceChain())
 		return []byte("chain"), v, err
 	}
+
+	fragment := strings.Split(u.Fragment, "/")
+	switch fragment[0] {
+	case "chain":
+		if len(fragment) < 2 {
+			return nil, nil, fmt.Errorf("invalid fragment")
+		}
+
+		chain, err := batch.Record(u).Chain(fragment[1])
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to load chain %q of %q: %v", strings.Join(fragment[1:], "."), u, err)
+		}
+
+		switch len(fragment) {
+		case 2:
+			start, end, err := parseRange(qv)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			res := new(query.ResponseChainRange)
+			res.Start = start
+			res.End = end
+			res.Total = chain.Height()
+			res.Entries, err = chain.Entries(start, end)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to load entries: %v", err)
+			}
+
+			return []byte("chain-range"), res, nil
+
+		case 3:
+			height, entry, err := getChainEntry(chain, fragment[2])
+			if err != nil {
+				return nil, nil, err
+			}
+
+			state, err := chain.State(height)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
+			}
+
+			res := new(query.ResponseChainEntry)
+			res.Height = height
+			res.Entry = entry
+			res.State = make([][]byte, len(state.Pending))
+			for i, h := range state.Pending {
+				res.State[i] = h.Copy()
+			}
+			return []byte("chain-entry"), res, nil
+		}
+
+	case "tx", "txn", "transaction":
+		switch len(fragment) {
+		case 1:
+			start, end, err := parseRange(qv)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			txns, perr := m.queryTxHistoryByChainId(batch, u.ResourceChain(), start, end, protocol.MainChain)
+			if perr != nil {
+				return nil, nil, perr
+			}
+
+			return []byte("tx-history"), txns, nil
+
+		case 2:
+			chain, err := batch.Record(u).Chain(protocol.MainChain)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
+			}
+
+			height, txid, err := getTransaction(chain, fragment[1])
+			if err != nil {
+				return nil, nil, err
+			}
+
+			state, err := chain.State(height)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
+			}
+
+			res, err := m.queryByTxId(batch, txid)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			res.Height = height
+			res.ChainState = make([][]byte, len(state.Pending))
+			for i, h := range state.Pending {
+				res.ChainState[i] = h.Copy()
+			}
+
+			return []byte("tx"), res, nil
+		}
+	}
+
+	return nil, nil, fmt.Errorf("invalid fragment")
+}
+
+func parseRange(qv url.Values) (start, end int64, err error) {
+	if s := qv.Get("from"); s != "" {
+		start, err = strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return 0, 0, fmt.Errorf("invalid start: %v", err)
+		}
+	} else {
+		start = 0
+	}
+
+	if s := qv.Get("from"); s != "" {
+		end, err = strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			return 0, 0, fmt.Errorf("invalid end: %v", err)
+		}
+	} else {
+		end = 10
+	}
+
+	return start, end, nil
+}
+
+func getChainEntry(chain *database.Chain, s string) (int64, []byte, error) {
+	var valid bool
+
+	height, err := strconv.ParseInt(s, 10, 64)
+	if err == nil {
+		valid = true
+		entry, err := chain.Entry(height)
+		if err == nil {
+			return height, entry, nil
+		}
+		if !errors.Is(err, storage.ErrNotFound) {
+			return 0, nil, err
+		}
+	}
+
+	entry, err := hex.DecodeString(s)
+	if err == nil {
+		valid = true
+		height, err := chain.HeightOf(entry)
+		if err == nil {
+			return height, entry, nil
+		}
+		if !errors.Is(err, storage.ErrNotFound) {
+			return 0, nil, err
+		}
+	}
+
+	if valid {
+		return 0, nil, fmt.Errorf("entry %q %w", s, storage.ErrNotFound)
+	}
+	return 0, nil, fmt.Errorf("invalid entry: %q is not a number or a hash", s)
+}
+
+func getTransaction(chain *database.Chain, s string) (int64, []byte, error) {
+	var valid bool
+
+	height, err := strconv.ParseInt(s, 10, 64)
+	if err == nil {
+		valid = true
+		id, err := chain.Entry(height)
+		if err == nil {
+			return height, id, nil
+		}
+		if !errors.Is(err, storage.ErrNotFound) {
+			return 0, nil, err
+		}
+	}
+
+	entry, err := hex.DecodeString(s)
+	if err == nil {
+		valid = true
+		height, err := chain.HeightOf(entry)
+		if err == nil {
+			return height, entry, nil
+		}
+		if !errors.Is(err, storage.ErrNotFound) {
+			return 0, nil, err
+		}
+	}
+
+	if valid {
+		return 0, nil, fmt.Errorf("transaction %q %w", s, storage.ErrNotFound)
+	}
+	return 0, nil, fmt.Errorf("invalid transaction: %q is not a number or a hash", s)
 }
 
 func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query.ResponseByChainId, error) {
@@ -136,6 +325,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 	}
 
 	qr := query.ResponseByTxId{}
+	qr.Height = -1
 	txObj := new(state.Object)
 	txObj.Entry, err = txState.MarshalBinary()
 	if err != nil {
@@ -165,12 +355,35 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	err = qr.TxId.FromBytes(txid)
+	copy(qr.TxId[:], txid)
+	return &qr, nil
+}
+
+func (m *Executor) queryTxHistoryByChainId(batch *database.Batch, id []byte, start, end int64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
+	chain, err := batch.RecordByID(id).Chain(chainName)
 	if err != nil {
-		return nil, fmt.Errorf("txid in query cannot be converted, %v", err)
+		return nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}
 
-	return &qr, nil
+	thr := query.ResponseTxHistory{}
+	thr.Start = start
+	thr.End = end
+	thr.Total = chain.Height()
+
+	txids, err := chain.Entries(start, end)
+	if err != nil {
+		return nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
+	}
+
+	for _, txid := range txids {
+		qr, err := m.queryByTxId(batch, txid)
+		if err != nil {
+			return nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
+		}
+		thr.Transactions = append(thr.Transactions, *qr)
+	}
+
+	return &thr, nil
 }
 
 func (m *Executor) queryDataByUrl(batch *database.Batch, u *url.URL) (*protocol.ResponseDataEntry, error) {
@@ -267,26 +480,11 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 
-		chain, err := batch.RecordByID(txh.ChainId[:]).Chain(protocol.MainChain)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
+		thr, perr := m.queryTxHistoryByChainId(batch, txh.ChainId[:], txh.Start, txh.Start+txh.Limit, protocol.MainChain)
+		if perr != nil {
+			return nil, nil, perr
 		}
 
-		thr := query.ResponseTxHistory{}
-		thr.Total = chain.Height()
-
-		txids, err := chain.Entries(txh.Start, txh.Start+txh.Limit)
-		if err != nil {
-			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
-		}
-
-		for _, txid := range txids {
-			qr, err := m.queryByTxId(batch, txid)
-			if err != nil {
-				return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
-			}
-			thr.Transactions = append(thr.Transactions, *qr)
-		}
 		k = []byte("tx-history")
 		v, err = thr.MarshalBinary()
 		if err != nil {
