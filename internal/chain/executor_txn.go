@@ -78,10 +78,10 @@ func (m *Executor) DeliverTx(tx *transactions.GenTransaction) *protocol.Error {
 		return m.recordTransactionError(tx, nil, nil, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", tx.TransactionType().Name())})
 	}
 
-	if txt.IsInternal() && tx.SigInfo.Nonce != uint64(m.blockIndex) {
-		err := fmt.Errorf("nonce does not match block index, want %d, got %d", m.blockIndex, tx.SigInfo.Nonce)
-		return m.recordTransactionError(tx, nil, nil, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
-	}
+	// if txt.IsInternal() && tx.SigInfo.Nonce != uint64(m.blockIndex) {
+	// 	err := fmt.Errorf("nonce does not match block index, want %d, got %d", m.blockIndex, tx.SigInfo.Nonce)
+	// 	return m.recordTransactionError(tx, nil, nil, &chainId, tx.TransactionHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
+	// }
 
 	m.mu.Lock()
 	group, ok := m.chainWG[tx.Routing%chainWGSize]
