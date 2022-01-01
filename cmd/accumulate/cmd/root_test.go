@@ -65,7 +65,8 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 	//execute the tests
 	for _, f := range testMatrix {
 		name := strings.Split(GetFunctionName(f), ".")
-		t.Run(name[len(name)-1], func(t *testing.T) { f(t, tc) })
+		t.Logf("--- %s ---", name[len(name)-1])
+		f(t, tc)
 	}
 }
 
