@@ -124,7 +124,7 @@ func callApi(t *testing.T, japi *api.JrpcMethods, method string, params, result 
 	return result
 }
 
-func query(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.ChainQueryResponse {
+func queryRecord(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.ChainQueryResponse {
 	t.Helper()
 
 	r := new(api.ChainQueryResponse)
@@ -132,9 +132,17 @@ func query(t *testing.T, japi *api.JrpcMethods, method string, params interface{
 	return r
 }
 
+func queryTxn(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.TransactionQueryResponse {
+	t.Helper()
+
+	r := new(api.TransactionQueryResponse)
+	callApi(t, japi, method, params, r)
+	return r
+}
+
 func queryAs(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) {
 	t.Helper()
-	r := query(t, japi, method, params)
+	r := queryRecord(t, japi, method, params)
 	recode(t, r.Data, result)
 }
 
@@ -157,7 +165,7 @@ func recode(t *testing.T, from, to interface{}) {
 func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, params execParams) *api.TxResponse {
 	t.Helper()
 
-	qr := query(t, japi, "query", &api.UrlQuery{Url: params.Origin})
+	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: params.Origin})
 	now := time.Now()
 	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
 	tx, err := transactions.NewWith(&transactions.SignatureInfo{
@@ -223,9 +231,9 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height ui
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
 
-	txr := query(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
+	txr := queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
 	for _, txid := range txr.SyntheticTxids {
-		query(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
+		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
 	}
 }
 
@@ -241,14 +249,18 @@ func (d *e2eDUT) api() *api.JrpcMethods {
 func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
-	d.Require().IsType(target, r.Data)
-	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(r.Data).Elem())
+	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
+	qr := r.(*api.ChainQueryResponse)
+	d.Require().IsType(target, qr.Data)
+	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(qr.Data).Elem())
 }
 
 func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
-	return r.MainChain.Height
+	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
+	qr := r.(*api.ChainQueryResponse)
+	return qr.MainChain.Height
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {

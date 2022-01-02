@@ -97,7 +97,7 @@ func GetDataEntry(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	var res api.ChainQueryResponse
+	var res QueryResponse
 
 	data, err := json.Marshal(&params)
 	if err != nil {
@@ -143,7 +143,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		}
 	}
 
-	var res api.ChainQueryResponse
+	var res api.MultiResponse
 	data, err := json.Marshal(&params)
 	if err != nil {
 		return "", err
@@ -154,7 +154,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
-	return PrintChainQueryResponseV2(&res)
+	return PrintMultiResponse(&res)
 }
 
 func CreateDataAccount(origin string, args []string) (string, error) {

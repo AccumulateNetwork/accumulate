@@ -10,6 +10,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 )
 
 type ChainIdQuery struct {
@@ -17,17 +18,10 @@ type ChainIdQuery struct {
 }
 
 type ChainQueryResponse struct {
-	Type           string                      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MainChain      *MerkleState                `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
-	Data           interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
-	Origin         string                      `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	KeyPage        *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	Txid           []byte                      `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Signer         *Signer                     `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Sig            []byte                      `json:"sig,omitempty" form:"sig" query:"sig" validate:"required"`
-	Status         *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
-	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
-	ChainId        []byte                      `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
+	Type      string       `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	MainChain *MerkleState `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
+	Data      interface{}  `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	ChainId   []byte       `json:"chainId,omitempty" form:"chainId" query:"chainId" validate:"required"`
 }
 
 type DataEntry struct {
@@ -82,6 +76,7 @@ type MetricsResponse struct {
 }
 
 type MultiResponse struct {
+	Type       string        `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Items      []interface{} `json:"items,omitempty" form:"items" query:"items" validate:"required"`
 	Start      uint64        `json:"start" form:"start" query:"start" validate:"required"`
 	Count      uint64        `json:"count" form:"count" query:"count" validate:"required"`
@@ -116,12 +111,12 @@ type TokenSend struct {
 
 type TransactionQueryResponse struct {
 	Type           string                      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
-	MerkleState    *MerkleState                `json:"merkleState,omitempty" form:"merkleState" query:"merkleState" validate:"required"`
+	MainChain      *MerkleState                `json:"mainChain,omitempty" form:"mainChain" query:"mainChain" validate:"required"`
 	Data           interface{}                 `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	Origin         string                      `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
 	KeyPage        *KeyPage                    `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
 	Txid           []byte                      `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Signatures     [][]byte                    `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
+	Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	Status         *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
 }
@@ -349,30 +344,16 @@ func (v *ChainIdQuery) MarshalJSON() ([]byte, error) {
 
 func (v *ChainQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type           string                      `json:"type,omitempty"`
-		MainChain      *MerkleState                `json:"mainChain,omitempty"`
-		Data           interface{}                 `json:"data,omitempty"`
-		Origin         string                      `json:"origin,omitempty"`
-		Sponsor        string                      `json:"sponsor,omitempty"`
-		KeyPage        *KeyPage                    `json:"keyPage,omitempty"`
-		Txid           *string                     `json:"txid,omitempty"`
-		Signer         *Signer                     `json:"signer,omitempty"`
-		Sig            *string                     `json:"sig,omitempty"`
-		Status         *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
-		ChainId        *string                     `json:"chainId,omitempty"`
+		Type        string       `json:"type,omitempty"`
+		MainChain   *MerkleState `json:"mainChain,omitempty"`
+		MerkleState *MerkleState `json:"merkleState,omitempty"`
+		Data        interface{}  `json:"data,omitempty"`
+		ChainId     *string      `json:"chainId,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
+	u.MerkleState = v.MainChain
 	u.Data = v.Data
-	u.Origin = v.Origin
-	u.Sponsor = v.Origin
-	u.KeyPage = v.KeyPage
-	u.Txid = encoding.BytesToJSON(v.Txid)
-	u.Signer = v.Signer
-	u.Sig = encoding.BytesToJSON(v.Sig)
-	u.Status = v.Status
-	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	return json.Marshal(&u)
 }
@@ -470,27 +451,26 @@ func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Type           string                      `json:"type,omitempty"`
+		MainChain      *MerkleState                `json:"mainChain,omitempty"`
 		MerkleState    *MerkleState                `json:"merkleState,omitempty"`
 		Data           interface{}                 `json:"data,omitempty"`
 		Origin         string                      `json:"origin,omitempty"`
 		Sponsor        string                      `json:"sponsor,omitempty"`
 		KeyPage        *KeyPage                    `json:"keyPage,omitempty"`
 		Txid           *string                     `json:"txid,omitempty"`
-		Signatures     []*string                   `json:"signatures,omitempty"`
+		Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
 		Status         *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
 	}{}
 	u.Type = v.Type
-	u.MerkleState = v.MerkleState
+	u.MainChain = v.MainChain
+	u.MerkleState = v.MainChain
 	u.Data = v.Data
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.KeyPage = v.KeyPage
 	u.Txid = encoding.BytesToJSON(v.Txid)
-	u.Signatures = make([]*string, len(v.Signatures))
-	for i, x := range v.Signatures {
-		u.Signatures[i] = encoding.BytesToJSON(x)
-	}
+	u.Signatures = v.Signatures
 	u.Status = v.Status
 	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
 	return json.Marshal(&u)
@@ -560,61 +540,28 @@ func (v *ChainIdQuery) UnmarshalJSON(data []byte) error {
 
 func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type           string                      `json:"type,omitempty"`
-		MainChain      *MerkleState                `json:"mainChain,omitempty"`
-		Data           interface{}                 `json:"data,omitempty"`
-		Origin         string                      `json:"origin,omitempty"`
-		Sponsor        string                      `json:"sponsor,omitempty"`
-		KeyPage        *KeyPage                    `json:"keyPage,omitempty"`
-		Txid           *string                     `json:"txid,omitempty"`
-		Signer         *Signer                     `json:"signer,omitempty"`
-		Sig            *string                     `json:"sig,omitempty"`
-		Status         *protocol.TransactionStatus `json:"status,omitempty"`
-		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
-		ChainId        *string                     `json:"chainId,omitempty"`
+		Type        string       `json:"type,omitempty"`
+		MainChain   *MerkleState `json:"mainChain,omitempty"`
+		MerkleState *MerkleState `json:"merkleState,omitempty"`
+		Data        interface{}  `json:"data,omitempty"`
+		ChainId     *string      `json:"chainId,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
+	u.MerkleState = v.MainChain
 	u.Data = v.Data
-	u.Origin = v.Origin
-	u.Sponsor = v.Origin
-	u.KeyPage = v.KeyPage
-	u.Txid = encoding.BytesToJSON(v.Txid)
-	u.Signer = v.Signer
-	u.Sig = encoding.BytesToJSON(v.Sig)
-	u.Status = v.Status
-	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Type = u.Type
-	v.MainChain = u.MainChain
+	var zeroMainChain *MerkleState
+	if u.MainChain != zeroMainChain {
+		v.MainChain = u.MainChain
+	} else {
+		v.MainChain = u.MerkleState
+	}
 	v.Data = u.Data
-	var zeroOrigin string
-	if u.Origin != zeroOrigin {
-		v.Origin = u.Origin
-	} else {
-		v.Origin = u.Sponsor
-	}
-	v.KeyPage = u.KeyPage
-	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
-		return fmt.Errorf("error decoding Txid: %w", err)
-	} else {
-		v.Txid = x
-	}
-	v.Signer = u.Signer
-	if x, err := encoding.BytesFromJSON(u.Sig); err != nil {
-		return fmt.Errorf("error decoding Sig: %w", err)
-	} else {
-		v.Sig = x
-	}
-	v.Status = u.Status
-	if x, err := encoding.ChainSetFromJSON(u.SyntheticTxids); err != nil {
-		return fmt.Errorf("error decoding SyntheticTxids: %w", err)
-	} else {
-		v.SyntheticTxids = x
-	}
 	if x, err := encoding.BytesFromJSON(u.ChainId); err != nil {
 		return fmt.Errorf("error decoding ChainId: %w", err)
 	} else {
@@ -804,34 +751,38 @@ func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Type           string                      `json:"type,omitempty"`
+		MainChain      *MerkleState                `json:"mainChain,omitempty"`
 		MerkleState    *MerkleState                `json:"merkleState,omitempty"`
 		Data           interface{}                 `json:"data,omitempty"`
 		Origin         string                      `json:"origin,omitempty"`
 		Sponsor        string                      `json:"sponsor,omitempty"`
 		KeyPage        *KeyPage                    `json:"keyPage,omitempty"`
 		Txid           *string                     `json:"txid,omitempty"`
-		Signatures     []*string                   `json:"signatures,omitempty"`
+		Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
 		Status         *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
 	}{}
 	u.Type = v.Type
-	u.MerkleState = v.MerkleState
+	u.MainChain = v.MainChain
+	u.MerkleState = v.MainChain
 	u.Data = v.Data
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.KeyPage = v.KeyPage
 	u.Txid = encoding.BytesToJSON(v.Txid)
-	u.Signatures = make([]*string, len(v.Signatures))
-	for i, x := range v.Signatures {
-		u.Signatures[i] = encoding.BytesToJSON(x)
-	}
+	u.Signatures = v.Signatures
 	u.Status = v.Status
 	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Type = u.Type
-	v.MerkleState = u.MerkleState
+	var zeroMainChain *MerkleState
+	if u.MainChain != zeroMainChain {
+		v.MainChain = u.MainChain
+	} else {
+		v.MainChain = u.MerkleState
+	}
 	v.Data = u.Data
 	var zeroOrigin string
 	if u.Origin != zeroOrigin {
@@ -845,14 +796,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Txid = x
 	}
-	v.Signatures = make([][]byte, len(u.Signatures))
-	for i, x := range u.Signatures {
-		if x, err := encoding.BytesFromJSON(x); err != nil {
-			return fmt.Errorf("error decoding Signatures[%d]: %w", i, err)
-		} else {
-			v.Signatures[i] = x
-		}
-	}
+	v.Signatures = u.Signatures
 	v.Status = u.Status
 	if x, err := encoding.ChainSetFromJSON(u.SyntheticTxids); err != nil {
 		return fmt.Errorf("error decoding SyntheticTxids: %w", err)

@@ -179,7 +179,6 @@ func GetTX(hash string) (string, error) {
 }
 
 func GetTXHistory(accountUrl string, s string, e string) (string, error) {
-
 	var res api2.MultiResponse
 	start, err := strconv.Atoi(s)
 	if err != nil {
@@ -209,25 +208,7 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 		return PrintJsonRpcError(err)
 	}
 
-	if WantJsonOutput {
-		data, err := json.Marshal(res)
-		if err != nil {
-			return "", err
-		}
-		return string(data), nil
-	}
-
-	var out string
-	out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
-	for i := range res.Items {
-		s, err := PrintTransactionQueryResponseV2(res.Items[i])
-		if err != nil {
-			return "", err
-		}
-		out += s
-	}
-
-	return out, err
+	return PrintMultiResponse(&res)
 }
 
 func CreateTX(sender string, args []string) (string, error) {

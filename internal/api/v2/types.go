@@ -14,13 +14,13 @@ import (
 //go:generate go run github.com/golang/mock/mockgen -source types.go -destination ../../mock/api/types.go
 
 type Querier interface {
-	QueryUrl(url string) (*ChainQueryResponse, error)
-	QueryDirectory(url string, pagination QueryPagination, opts QueryOptions) (*ChainQueryResponse, error)
+	QueryUrl(url string) (interface{}, error)
+	QueryDirectory(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
 	QueryChain(id []byte) (*ChainQueryResponse, error)
 	QueryTx(id []byte, wait time.Duration) (*TransactionQueryResponse, error)
 	QueryTxHistory(url string, start, count uint64) (*MultiResponse, error)
 	QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error)
-	QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*ChainQueryResponse, error)
+	QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
 	QueryKeyPageIndex(url string, key []byte) (*ChainQueryResponse, error)
 }
 

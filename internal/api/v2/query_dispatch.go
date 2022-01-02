@@ -143,7 +143,7 @@ func (q *queryDispatch) queryAllTx(query func(*queryDirect) (*TransactionQueryRe
 	}
 }
 
-func (q *queryDispatch) QueryUrl(url string) (*ChainQueryResponse, error) {
+func (q *queryDispatch) QueryUrl(url string) (interface{}, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
@@ -172,7 +172,7 @@ func (q *queryDispatch) QueryChain(id []byte) (*ChainQueryResponse, error) {
 	return res, nil
 }
 
-func (q *queryDispatch) QueryDirectory(url string, pagination QueryPagination, queryOptions QueryOptions) (*ChainQueryResponse, error) {
+func (q *queryDispatch) QueryDirectory(url string, pagination QueryPagination, queryOptions QueryOptions) (*MultiResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
@@ -210,7 +210,7 @@ func (q *queryDispatch) QueryData(url string, entryHash [32]byte) (*ChainQueryRe
 	return q.direct(r).QueryData(url, entryHash)
 }
 
-func (q *queryDispatch) QueryDataSet(url string, pagination QueryPagination, queryOptions QueryOptions) (*ChainQueryResponse, error) {
+func (q *queryDispatch) QueryDataSet(url string, pagination QueryPagination, queryOptions QueryOptions) (*MultiResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err

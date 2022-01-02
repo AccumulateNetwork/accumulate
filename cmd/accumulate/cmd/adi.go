@@ -103,7 +103,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", err
 	}
 
-	var res api2.ChainQueryResponse
+	var res api2.MultiResponse
 	if err := Client.Request(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
 		ret, err := PrintJsonRpcError(err)
 		if err != nil {
@@ -112,7 +112,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", fmt.Errorf("%v", ret)
 	}
 
-	return PrintChainQueryResponseV2(&res)
+	return PrintMultiResponse(&res)
 }
 
 func PrintADI() {

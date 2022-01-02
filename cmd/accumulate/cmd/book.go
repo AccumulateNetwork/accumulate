@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -70,7 +69,7 @@ func GetAndPrintKeyBook(url string) (string, error) {
 	return PrintChainQueryResponseV2(res)
 }
 
-func GetKeyBook(url string) (*api2.ChainQueryResponse, *protocol.KeyBook, error) {
+func GetKeyBook(url string) (*QueryResponse, *protocol.KeyBook, error) {
 	res, err := GetUrl(url)
 	if err != nil {
 		return nil, nil, err
@@ -81,7 +80,7 @@ func GetKeyBook(url string) (*api2.ChainQueryResponse, *protocol.KeyBook, error)
 	}
 
 	kb := protocol.KeyBook{}
-	err = UnmarshalQuery(res.Data, &kb)
+	err = Remarshal(res.Data, &kb)
 	if err != nil {
 		return nil, nil, err
 	}

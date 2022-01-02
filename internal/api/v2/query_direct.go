@@ -55,7 +55,7 @@ func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
 	return "", nil, perr
 }
 
-func (q *queryDirect) QueryUrl(s string) (*ChainQueryResponse, error) {
+func (q *queryDirect) QueryUrl(s string) (interface{}, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
@@ -89,14 +89,14 @@ func (q *queryDirect) QueryUrl(s string) (*ChainQueryResponse, error) {
 			return nil, err
 		}
 
-		return packTxAsChainResponse(res.TxId, res.TxSynthTxIds, main, pend, pl)
+		return packTxResponse(res.TxId, res.TxSynthTxIds, main, pend, pl)
 
 	default:
 		return nil, fmt.Errorf("unknown response type: want chain or tx, got %q", k)
 	}
 }
 
-func (q *queryDirect) QueryDirectory(s string, pagination QueryPagination, opts QueryOptions) (*ChainQueryResponse, error) {
+func (q *queryDirect) QueryDirectory(s string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
@@ -120,25 +120,24 @@ func (q *queryDirect) QueryDirectory(s string, pagination QueryPagination, opts 
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
 	}
-	respDir, err := responseDirFromProto(protoDir, pagination)
-	if err != nil {
-		return nil, err
-	}
 
-	res := new(ChainQueryResponse)
-	res.Type = "directory"
-	res.Data = respDir
-	return res, nil
+	return responseDirFromProto(protoDir, pagination)
 }
 
-func responseDirFromProto(protoDir *protocol.DirectoryQueryResult, pagination QueryPagination) (*MultiResponse, error) {
-	respDir := new(MultiResponse)
-	respDir.Items = append(respDir.Items, protoDir.Entries)
-	respDir.Start = pagination.Start
-	respDir.Count = pagination.Count
-	respDir.Total = protoDir.Total
-	respDir.OtherItems = make([]interface{}, len(protoDir.ExpandedEntries))
-	for i, entry := range protoDir.ExpandedEntries {
+func responseDirFromProto(src *protocol.DirectoryQueryResult, pagination QueryPagination) (*MultiResponse, error) {
+	dst := new(MultiResponse)
+	dst.Type = "directory"
+	dst.Start = pagination.Start
+	dst.Count = pagination.Count
+	dst.Total = src.Total
+
+	dst.Items = make([]interface{}, len(src.Entries))
+	for i, entry := range src.Entries {
+		dst.Items[i] = entry
+	}
+
+	dst.OtherItems = make([]interface{}, len(src.ExpandedEntries))
+	for i, entry := range src.ExpandedEntries {
 		chain, err := protocol.UnmarshalChain(entry.Entry)
 		if err != nil {
 			return nil, err
@@ -147,9 +146,9 @@ func responseDirFromProto(protoDir *protocol.DirectoryQueryResult, pagination Qu
 		if err != nil {
 			return nil, err
 		}
-		respDir.OtherItems[i] = response
+		dst.OtherItems[i] = response
 	}
-	return respDir, nil
+	return dst, nil
 }
 
 func (q *queryDirect) QueryChain(id []byte) (*ChainQueryResponse, error) {
@@ -265,6 +264,7 @@ func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*MultiRespo
 	}
 
 	res := new(MultiResponse)
+	res.Type = "txHistory"
 	res.Items = make([]interface{}, len(txh.Transactions))
 	res.Start = start
 	res.Count = count
@@ -285,10 +285,13 @@ func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*MultiRespo
 }
 
 func (q *queryDirect) QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error) {
-
-	qr, err := q.QueryUrl(url)
+	r, err := q.QueryUrl(url)
 	if err != nil {
 		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
+	}
+	qr, ok := r.(*ChainQueryResponse)
+	if !ok {
+		return nil, fmt.Errorf("%q is not a record", url)
 	}
 
 	req := new(query.RequestDataEntry)
@@ -314,12 +317,7 @@ func (q *queryDirect) QueryData(url string, entryHash [32]byte) (*ChainQueryResp
 	return qr, nil
 }
 
-func (q *queryDirect) QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*ChainQueryResponse, error) {
-	qr, err := q.QueryUrl(url)
-	if err != nil {
-		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
-	}
-
+func (q *queryDirect) QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New("count must be greater than 0"))
@@ -344,19 +342,13 @@ func (q *queryDirect) QueryDataSet(url string, pagination QueryPagination, opts 
 	if err != nil {
 		return nil, fmt.Errorf("invalid response: %v", err)
 	}
-	desResponse, err := responseDataSetFromProto(des, pagination)
-	if err != nil {
-		return nil, err
-	}
-
-	qr.Type = "dataSet"
-	qr.Data = desResponse
-	return qr, nil
+	return responseDataSetFromProto(des, pagination)
 }
 
 //responseDataSetFromProto map the response structs to protocol structs, maybe someday they should be the same thing
 func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagination QueryPagination) (*MultiResponse, error) {
 	respDataSet := new(MultiResponse)
+	respDataSet.Type = "dataSet"
 	respDataSet.Start = pagination.Start
 	respDataSet.Count = pagination.Count
 	respDataSet.Total = protoDataSet.Total
