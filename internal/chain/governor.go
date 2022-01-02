@@ -137,15 +137,6 @@ func (g *governor) run() {
 	// synth transaction will be picked up.
 
 	for msg := range g.messages {
-		// Reset dispatcher
-		g.dispatcher.Reset(context.Background())
-
-		// The governor must be read-only, so we must not commit the
-		// database transaction or the state cache. If the governor makes
-		// ANY changes, the system will no longer be deterministic.
-		batch := g.DB.Begin()
-		defer batch.Discard()
-
 		switch msg := msg.(type) {
 		case govStop:
 			return
@@ -154,32 +145,46 @@ func (g *governor) run() {
 			// Should we do anything at begin?
 
 		case govDidCommit:
-			// Mirror the subnet's ADI
-			if msg.mirrorAdi {
-				g.sendMirror(batch)
-			}
-
-			// Create an anchor for the block
-			g.sendAnchor(batch, &msg)
-
-			// Load ledger
-			ledger := batch.Record(g.Network.NodeUrl().JoinPath(protocol.Ledger))
-			ledgerState := new(protocol.InternalLedger)
-			err := ledger.GetStateAs(ledgerState)
-			if err != nil {
-				// If we can't load the ledger, the node is fubared
-				panic(fmt.Errorf("failed to load the ledger: %v", err))
-			}
-
-			// Sign and send produced synthetic transactions
-			g.signTransactions(batch, ledgerState)
-			g.sendTransactions(batch, ledgerState)
+			g.runDidCommit(&msg)
 		}
+	}
+}
 
-		err := g.dispatcher.Send(context.Background())
-		if err != nil {
-			g.logger.Error("Failed to dispatch transactions", "error", err)
-		}
+func (g *governor) runDidCommit(msg *govDidCommit) {
+	// The governor must be read-only, so we must not commit the
+	// database transaction or the state cache. If the governor makes
+	// ANY changes, the system will no longer be deterministic.
+	batch := g.DB.Begin()
+	defer batch.Discard()
+
+	// Reset dispatcher
+	g.dispatcher.Reset(context.Background())
+
+	// Mirror the subnet's ADI
+	if msg.mirrorAdi {
+		g.sendMirror(batch)
+	}
+
+	// Create an anchor for the block
+	g.sendAnchor(batch, msg)
+
+	// Load ledger
+	ledger := batch.Record(g.Network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerState := new(protocol.InternalLedger)
+	err := ledger.GetStateAs(ledgerState)
+	if err != nil {
+		// If we can't load the ledger, the node is fubared
+		panic(fmt.Errorf("failed to load the ledger: %v", err))
+	}
+
+	// Sign and send produced synthetic transactions
+	g.signTransactions(batch, ledgerState)
+	g.sendTransactions(batch, ledgerState)
+
+	// Dispatch transactions
+	err = g.dispatcher.Send(context.Background())
+	if err != nil {
+		g.logger.Error("Failed to dispatch transactions", "error", err)
 	}
 }
 
