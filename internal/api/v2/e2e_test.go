@@ -64,7 +64,7 @@ func TestValidate(t *testing.T) {
 		txWait(t, japi, xr.Txid)
 
 		account := NewLiteTokenAccount()
-		queryAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
 		assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
 	})
 
@@ -79,7 +79,7 @@ func TestValidate(t *testing.T) {
 		})
 
 		account := NewLiteTokenAccount()
-		queryAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
 		assert.Equal(t, int64(100), account.CreditBalance.Int64())
 		assert.Equal(t, int64(10*AcmePrecision-AcmePrecision/100), account.Balance.Int64())
 
@@ -103,11 +103,11 @@ func TestValidate(t *testing.T) {
 		})
 
 		adi := new(state.AdiState)
-		queryAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
 		assert.Equal(t, adiName, string(adi.ChainUrl))
 
 		dir := new(api.MultiResponse)
-		queryAs(t, japi, "query-directory", struct {
+		callApi(t, japi, "query-directory", struct {
 			Url          string
 			Count        int
 			ExpandChains bool
@@ -138,7 +138,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 		dataAccount := NewDataAccount()
-		queryAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
 		assert.Equal(t, dataAccountUrl, string(dataAccount.ChainUrl))
 	})
 
@@ -157,7 +157,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 		keyPage := NewKeyPage()
-		queryAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
 		assert.Equal(t, keyPageUrl, string(keyPage.ChainUrl))
 	})
 
@@ -175,7 +175,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 		keyBook := NewKeyBook()
-		queryAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
 		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
 	})
 
@@ -192,13 +192,13 @@ func TestValidate(t *testing.T) {
 			},
 		})
 		tokenAccount := NewLiteTokenAccount()
-		queryAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
 		assert.Equal(t, tokenAccountUrl, string(tokenAccount.ChainUrl))
 	})
 
 	t.Run("Query Key Index", func(t *testing.T) {
 		keyIndex := &query2.ResponseKeyPageIndex{}
-		queryAs(t, japi, "query-key-index", &api.KeyPageIndexQuery{
+		queryRecordAs(t, japi, "query-key-index", &api.KeyPageIndexQuery{
 			UrlQuery: api.UrlQuery{
 				Url: keyPageUrl,
 			},

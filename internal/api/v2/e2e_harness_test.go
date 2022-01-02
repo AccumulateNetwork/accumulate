@@ -140,7 +140,7 @@ func queryTxn(t *testing.T, japi *api.JrpcMethods, method string, params interfa
 	return r
 }
 
-func queryAs(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) {
+func queryRecordAs(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) {
 	t.Helper()
 	r := queryRecord(t, japi, method, params)
 	recode(t, r.Data, result)
