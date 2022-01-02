@@ -11,6 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
+	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
@@ -142,9 +143,9 @@ func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
 	return uint64(chain.Height()), nil
 }
 
-// GetTxnState loads and unmarshals a saved synthetic transaction
-func (c *stateCache) GetTxnState(txid [32]byte) (*state.Transaction, error) {
-	return c.batch.Transaction(txid[:]).GetState()
+// LoadTxn loads and unmarshals a saved transaction
+func (c *stateCache) LoadTxn(txid [32]byte) (*state.Transaction, *protocol.TransactionStatus, []*transactions.ED25519Sig, error) {
+	return c.batch.Transaction(txid[:]).Get()
 }
 
 func (c *stateCache) AddDirectoryEntry(u ...*url.URL) error {

@@ -3,6 +3,7 @@ package chain
 import (
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -44,7 +45,7 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.Ge
 		}
 
 		// Load the transaction
-		txState, err := st.GetTxnState(id)
+		txState, _, txSigs, err := st.LoadTxn(id)
 		if err != nil {
 			return err
 		}
@@ -56,6 +57,12 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.Ge
 		// Validate it
 		if !gtx.ValidateSig() {
 			return fmt.Errorf("invalid signature for txn %X", id)
+		}
+
+		// Skip transactions that are already signed
+		if len(txSigs) > 0 {
+			st.logger.Info("Ignoring signature, synth txn already signed", "txid", logging.AsHex(id), "type", gtx.TransactionType())
+			continue
 		}
 
 		// Write the signature
