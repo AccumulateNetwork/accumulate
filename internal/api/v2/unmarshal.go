@@ -6,9 +6,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 )
 
 func unmarshalState(b []byte) (*state.Object, state.Chain, error) {
@@ -32,43 +30,12 @@ func unmarshalTxType(b []byte) types.TxType {
 }
 
 func unmarshalTxPayload(b []byte) (protocol.TransactionPayload, error) {
-	var payload protocol.TransactionPayload
-	switch typ := unmarshalTxType(b); typ {
-	case types.TxTypeSendTokens:
-		payload = new(api.SendTokens)
-	case types.TxTypeSyntheticDepositTokens:
-		payload = new(synthetic.TokenTransactionDeposit)
-	case types.TxTypeCreateIdentity:
-		payload = new(protocol.IdentityCreate)
-	case types.TxTypeCreateToken:
-		payload = new(protocol.CreateToken)
-	case types.TxTypeCreateTokenAccount:
-		payload = new(protocol.TokenAccountCreate)
-	case types.TxTypeCreateKeyPage:
-		payload = new(protocol.CreateKeyPage)
-	case types.TxTypeCreateKeyBook:
-		payload = new(protocol.CreateKeyBook)
-	case types.TxTypeAddCredits:
-		payload = new(protocol.AddCredits)
-	case types.TxTypeUpdateKeyPage:
-		payload = new(protocol.UpdateKeyPage)
-	case types.TxTypeSyntheticCreateChain:
-		payload = new(protocol.SyntheticCreateChain)
-	case types.TxTypeSyntheticDepositCredits:
-		payload = new(protocol.SyntheticDepositCredits)
-	case types.TxTypeSyntheticGenesis:
-		payload = new(protocol.SyntheticGenesis)
-	case types.TxTypeAcmeFaucet:
-		payload = new(protocol.AcmeFaucet)
-	case types.TxTypeCreateDataAccount:
-		payload = new(protocol.CreateDataAccount)
-	case types.TxTypeWriteData:
-		payload = new(protocol.WriteData)
-	default:
-		return nil, fmt.Errorf("unknown TX type %v", typ)
+	payload, err := protocol.NewTransaction(unmarshalTxType(b))
+	if err != nil {
+		return nil, err
 	}
 
-	err := payload.UnmarshalBinary(b)
+	err = payload.UnmarshalBinary(b)
 	if err != nil {
 		return nil, err
 	}

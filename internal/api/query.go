@@ -247,16 +247,6 @@ func (q *Query) GetDirectory(url string) (*acmeApi.APIDataResponse, error) {
 	return rAPI, nil
 }
 
-// GetTransactionReference get the transaction id for a given transaction number
-func (q *Query) GetTransactionReference(adiChainPath string) (*acmeApi.APIDataResponse, error) {
-	r, err := q.QueryByUrl(adiChainPath)
-	if err != nil {
-		return nil, fmt.Errorf("transaction id reference chain query returned error, %v", err)
-	}
-
-	return unmarshalTxReference(r.Response)
-}
-
 // GetDataSetByUrl returns the data specified by the pagination information on given chain specified by the url
 func (q *Query) GetDataSetByUrl(url string, start uint64, limit uint64, expand bool) (*acmeApi.APIDataResponsePagination, error) {
 	u, err := url2.Parse(url)
@@ -492,10 +482,28 @@ func packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSy
 	resp.KeyPage.Height = txSigInfo.KeyPageHeight
 	resp.KeyPage.Index = txSigInfo.KeyPageIndex
 
+	if txPendingState == nil {
+		return resp, err
+	}
+
+	if len(txPendingState.Status) > 0 {
+		status := new(protocol.TransactionStatus)
+		err := status.UnmarshalBinary(txPendingState.Status)
+		if err != nil {
+			return nil, fmt.Errorf("invalid transaction status: %v", err)
+		}
+
+		data, err := json.Marshal(status)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal transaction status: %v", err)
+		}
+
+		resp.Status = (*json.RawMessage)(&data)
+	}
+
 	//if we have pending data (i.e. signature stuff, populate that too.)
 	if txPendingState != nil && len(txPendingState.Signature) > 0 {
 		//if the pending state still exists
-		resp.Status = &txPendingState.Status
 		resp.Signer = &acmeApi.Signer{}
 		resp.Signer.PublicKey.FromBytes(txPendingState.Signature[0].PublicKey)
 		if len(txPendingState.Signature) == 0 {

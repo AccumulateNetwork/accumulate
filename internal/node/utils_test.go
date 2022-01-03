@@ -19,7 +19,7 @@ import (
 
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
-func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int, bvnAddrs []string) []*accumulated.Daemon {
+func initNodes(t *testing.T, name string, ips []net.IP, basePort int, count int, bvnAddrs []string) []*accumulated.Daemon {
 	t.Helper()
 
 	name = reAlphaNum.ReplaceAllString(name, "-")
@@ -27,10 +27,11 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 	IPs := make([]string, count)
 	config := make([]*config.Config, count)
 
-	for i := range IPs {
-		ip := make(net.IP, len(baseIP))
-		copy(ip, baseIP)
-		ip[15] += byte(i)
+	if len(ips) != count {
+		panic(fmt.Errorf("want %d validators but got %d IPs", count, len(ips)))
+	}
+
+	for i, ip := range ips {
 		IPs[i] = ip.String()
 	}
 
@@ -57,6 +58,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		Config:   config,
 		RemoteIP: IPs,
 		ListenIP: IPs,
+		Logger:   logging.NewTestLogger(t, "plain", cfg.DefaultLogLevels, false),
 	}))
 
 	daemons := make([]*accumulated.Daemon, count)

@@ -8,4 +8,5 @@ import (
 	_ "github.com/golang/mock/mockgen"
 	_ "github.com/rinchsan/gosimports/cmd/gosimports"
 	_ "golang.org/x/tools/cmd/goimports"
+	_ "gotest.tools/gotestsum"
 )

@@ -9,7 +9,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type AddCredits struct{}
@@ -47,7 +46,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if recvUrl.Routing() == tx.Routing {
-			// If the recipient and the sponsor have the same routing number,
+			// If the recipient and the origin have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to
 			// locate the recipient chain means it doesn't exist.
 			return fmt.Errorf("invalid recipient: not found")
@@ -57,11 +56,11 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	var account tokenChain
-	switch sponsor := st.Sponsor.(type) {
+	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
-		account = sponsor
-	case *state.TokenAccount:
-		account = sponsor
+		account = origin
+	case *protocol.TokenAccount:
+		account = origin
 	default:
 		return fmt.Errorf("not an account: %q", tx.SigInfo.URL)
 	}
@@ -87,7 +86,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
-	sdc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	copy(sdc.Cause[:], tx.TransactionHash())
 	sdc.Amount = body.Amount
 	st.Submit(recvUrl, sdc)
 

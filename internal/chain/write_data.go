@@ -19,9 +19,9 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	if st.Sponsor.Header().Type != types.ChainTypeDataAccount {
-		return fmt.Errorf("sponsor is not a data account: want %v, got %v",
-			types.ChainTypeDataAccount, st.Sponsor.Header().Type)
+	if st.Origin.Header().Type != types.ChainTypeDataAccount {
+		return fmt.Errorf("invalid origin record: want %v, got %v",
+			types.ChainTypeDataAccount, st.Origin.Header().Type)
 	}
 
 	//check will return error if there is too much data or no data for the entry
@@ -41,23 +41,19 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 	// produced the data entry
 
 	sw := protocol.SegWitDataEntry{}
+	copy(sw.Cause[:], tx.TransactionHash())
 	copy(sw.EntryHash[:], body.Entry.Hash())
-	sw.EntryUrl = st.Sponsor.Header().GetChainUrl()
+	sw.EntryUrl = st.Origin.Header().GetChainUrl()
 
 	segWitPayload, err := sw.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("unable to marshal segwit, %v", err)
 	}
 
-	dataPayload, err := body.Entry.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("error marshaling data entry, %v", err)
-	}
-
 	//now replace the original data entry payload with the new segwit payload
 	tx.Transaction = segWitPayload
 
-	st.UpdateData(st.Sponsor, sw.EntryHash[:], dataPayload)
+	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)
 
 	return nil
 }

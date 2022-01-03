@@ -33,7 +33,13 @@ jobs:
         run: go build -v ./...
 
       - name: Test
-        run: go test -cpu=4 -count=1 -v ./...
+        run: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -cpu 4 ./...
+
+      - name: Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-report-linux
+          path: report.xml
 
   cli-test:
     name: CLI Integration Test
@@ -116,7 +122,13 @@ jobs:
         run: go build -v ./...
 
       - name: Test
-        run: go test -v ./...
+        run: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -cpu 4 ./...
+
+      - name: Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-report-windows
+          path: report.xml
 
   build-macos:
     name: Build macOS
@@ -147,4 +159,10 @@ jobs:
         run: go build -v ./...
 
       - name: Test
-        run: go test -v ./...
+        run: go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -cpu 4 ./...
+
+      - name: Artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: test-report-macos
+          path: report.xml

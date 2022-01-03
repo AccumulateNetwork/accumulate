@@ -3,12 +3,10 @@ package abci_test
 import (
 	"crypto/sha256"
 	"testing"
-	"time"
 
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
@@ -20,18 +18,19 @@ func TestProofADI(t *testing.T) {
 	// Setup keys and the lite account
 	liteKey, adiKey := generateKey(), generateKey()
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
-	dbTx := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, liteKey, 5e4))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
+	batch := n.db.Begin()
+	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 5e4))
+	require.NoError(t, batch.Commit())
 
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {
-		adi := new(protocol.IdentityCreate)
+		adi := new(protocol.CreateIdentity)
 		adi.Url = "RoadRunner"
+		adi.KeyBookName = "book0"
 		adi.KeyPageName = "page0"
 		adi.PublicKey = keyHash[:]
 
-		sponsorUrl := lite.GenerateAcmeAddress(liteKey.PubKey().Bytes())
+		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
 		tx, err := transactions.New(sponsorUrl, 1, edSigner(liteKey, 1), adi)
 		require.NoError(t, err)
 
@@ -41,7 +40,7 @@ func TestProofADI(t *testing.T) {
 
 	// Create ADI token account
 	n.Batch(func(send func(*transactions.GenTransaction)) {
-		tac := new(protocol.TokenAccountCreate)
+		tac := new(protocol.CreateTokenAccount)
 		tac.Url = "RoadRunner/Baz"
 		tac.TokenUrl = protocol.AcmeUrl().String()
 		tx, err := transactions.New("RoadRunner", 1, edSigner(adiKey, 1), tac)

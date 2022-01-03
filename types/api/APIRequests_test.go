@@ -3,10 +3,10 @@ package api_test
 import (
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	. "github.com/AccumulateNetwork/accumulate/types/api"
@@ -16,7 +16,7 @@ import (
 )
 
 func createAdiTx(adiUrl string, pubkey []byte) (string, error) {
-	data := &protocol.IdentityCreate{}
+	data := &protocol.CreateIdentity{}
 
 	data.Url = adiUrl
 	keyhash := sha256.Sum256(pubkey)
@@ -44,11 +44,10 @@ func createToken(tokenUrl string) (string, error) {
 	return string(ret), nil
 }
 
-func createTokenTx(url string) (string, error) {
-	tx := &SendTokens{}
-	tx.From.String = types.String(url + "/MyAcmeTokens")
+func createTokenTx() (string, error) {
+	tx := &protocol.SendTokens{}
 	amt := uint64(1234)
-	tx.AddToAccount("redwagon/AcmeAccount", amt)
+	tx.AddRecipient(&url.URL{Authority: "redwagon", Path: "/AcmeAccount"}, amt)
 	ret, err := json.Marshal(&tx)
 	return string(ret), err
 }
@@ -65,7 +64,7 @@ func createRequest(t *testing.T, adiUrl string, kp *ed25519.PrivKey, message str
 	req.Tx.Data = &raw
 	req.Tx.Signer = &Signer{}
 	req.Tx.Signer.Nonce = uint64(time.Now().Unix())
-	req.Tx.Sponsor = types.String(adiUrl)
+	req.Tx.Origin = types.String(adiUrl)
 	req.Tx.KeyPage = &APIRequestKeyPage{}
 	req.Tx.KeyPage.Height = 1
 	copy(req.Tx.Signer.PublicKey[:], kp.PubKey().Bytes())
@@ -114,7 +113,7 @@ func TestAPIRequest_Adi(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := &protocol.IdentityCreate{}
+	data := &protocol.CreateIdentity{}
 
 	// parse req.tx.data
 	err = mapstructure.Decode(req.Tx.Data, data)
@@ -199,10 +198,8 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 
 	adiUrl := "greentractor"
 
-	message, err := createTokenTx(adiUrl)
-	if err != nil {
-		t.Fatal(err)
-	}
+	message, err := createTokenTx()
+	require.NoError(t, err)
 	params := createRequest(t, adiUrl, &kp, message)
 
 	validate, err := protocol.NewValidator()
@@ -210,20 +207,15 @@ func TestAPIRequest_TokenTx(t *testing.T) {
 
 	req := &APIRequestRaw{}
 	// unmarshal req
-	if err = json.Unmarshal(params, &req); err != nil {
-		t.Fatal(err)
-	}
+	err = json.Unmarshal(params, &req)
+	require.NoError(t, err)
 
 	// validate request
-	if err = validate.Struct(req); err != nil {
-		t.Fatal(err)
-	}
+	err = validate.Struct(req)
+	require.NoError(t, err)
 
-	//tx, err := json.MarshalIndent(&req,"", "  ")
 	tx, err := json.Marshal(&req)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	fmt.Printf("%s", string(tx))
+	t.Logf("%s", tx)
 }
