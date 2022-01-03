@@ -103,7 +103,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", err
 	}
 
-	var res api2.QueryResponse
+	var res api2.MultiResponse
 	if err := Client.Request(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
 		ret, err := PrintJsonRpcError(err)
 		if err != nil {
@@ -112,7 +112,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 		return "", fmt.Errorf("%v", ret)
 	}
 
-	return PrintQueryResponseV2(&res)
+	return PrintMultiResponse(&res)
 }
 
 func PrintADI() {
@@ -132,7 +132,7 @@ func GetADI(url string) (string, error) {
 		return "", fmt.Errorf("expecting ADI chain but received %v", res.Type)
 	}
 
-	return PrintQueryResponseV2(res)
+	return PrintChainQueryResponseV2(res)
 }
 
 func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
