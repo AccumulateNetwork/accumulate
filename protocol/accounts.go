@@ -6,6 +6,32 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
+func (acct *TokenAccount) CreditTokens(amount *big.Int) bool {
+	if amount == nil || amount.Sign() < 0 {
+		return false
+	}
+
+	acct.Balance.Add(&acct.Balance, amount)
+	return true
+}
+
+func (acct *TokenAccount) CanDebitTokens(amount *big.Int) bool {
+	return amount != nil && acct.Balance.Cmp(amount) >= 0
+}
+
+func (acct *TokenAccount) DebitTokens(amount *big.Int) bool {
+	if !acct.CanDebitTokens(amount) {
+		return false
+	}
+
+	acct.Balance.Sub(&acct.Balance, amount)
+	return true
+}
+
+func (acct *TokenAccount) ParseTokenUrl() (*url.URL, error) {
+	return url.Parse(acct.TokenUrl)
+}
+
 func (ms *KeyPage) CreditCredits(amount uint64) {
 	amt := new(big.Int)
 	amt.SetUint64(amount)
@@ -60,12 +86,6 @@ func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
 
 	acct.CreditBalance.Sub(&acct.CreditBalance, amt)
 	return true
-}
-
-func (acct *LiteTokenAccount) NextTx() uint64 {
-	c := acct.TxCount
-	acct.TxCount++
-	return c
 }
 
 func (acct *LiteTokenAccount) ParseTokenUrl() (*url.URL, error) {

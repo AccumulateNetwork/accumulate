@@ -127,7 +127,6 @@ type LiteTokenAccount struct {
 	state.ChainHeader
 	TokenUrl      string  `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	Balance       big.Int `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
-	TxCount       uint64  `json:"txCount,omitempty" form:"txCount" query:"txCount" validate:"required"`
 	Nonce         uint64  `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
 	CreditBalance big.Int `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
 }
@@ -699,10 +698,6 @@ func (v *LiteTokenAccount) Equal(u *LiteTokenAccount) bool {
 	}
 
 	if !(v.Balance.Cmp(&u.Balance) == 0) {
-		return false
-	}
-
-	if !(v.TxCount == u.TxCount) {
 		return false
 	}
 
@@ -1407,8 +1402,6 @@ func (v *LiteTokenAccount) BinarySize() int {
 
 	n += encoding.BigintBinarySize(&v.Balance)
 
-	n += encoding.UvarintBinarySize(v.TxCount)
-
 	n += encoding.UvarintBinarySize(v.Nonce)
 
 	n += encoding.BigintBinarySize(&v.CreditBalance)
@@ -2071,8 +2064,6 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.TokenUrl))
 
 	buffer.Write(encoding.BigintMarshalBinary(&v.Balance))
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.TxCount))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Nonce))
 
@@ -3049,13 +3040,6 @@ func (v *LiteTokenAccount) UnmarshalBinary(data []byte) error {
 		v.Balance.Set(x)
 	}
 	data = data[encoding.BigintBinarySize(&v.Balance):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding TxCount: %w", err)
-	} else {
-		v.TxCount = x
-	}
-	data = data[encoding.UvarintBinarySize(v.TxCount):]
 
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Nonce: %w", err)
