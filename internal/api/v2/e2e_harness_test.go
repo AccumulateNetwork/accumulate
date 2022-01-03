@@ -124,17 +124,25 @@ func callApi(t *testing.T, japi *api.JrpcMethods, method string, params, result 
 	return result
 }
 
-func query(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.QueryResponse {
+func queryRecord(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.ChainQueryResponse {
 	t.Helper()
 
-	r := new(api.QueryResponse)
+	r := new(api.ChainQueryResponse)
 	callApi(t, japi, method, params, r)
 	return r
 }
 
-func queryAs(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) {
+func queryTxn(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.TransactionQueryResponse {
 	t.Helper()
-	r := query(t, japi, method, params)
+
+	r := new(api.TransactionQueryResponse)
+	callApi(t, japi, method, params, r)
+	return r
+}
+
+func queryRecordAs(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) {
+	t.Helper()
+	r := queryRecord(t, japi, method, params)
 	recode(t, r.Data, result)
 }
 
@@ -157,13 +165,13 @@ func recode(t *testing.T, from, to interface{}) {
 func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, params execParams) *api.TxResponse {
 	t.Helper()
 
-	qr := query(t, japi, "query", &api.UrlQuery{Url: params.Origin})
+	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: params.Origin})
 	now := time.Now()
 	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
 	tx, err := transactions.NewWith(&transactions.SignatureInfo{
 		URL:           params.Origin,
 		KeyPageIndex:  params.PageIndex,
-		KeyPageHeight: qr.MerkleState.Count,
+		KeyPageHeight: qr.MainChain.Height,
 		Nonce:         nonce,
 	}, func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
@@ -177,7 +185,7 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	req.Signer.Nonce = nonce
 	req.Signature = tx.Signature[0].Signature
 	req.KeyPage.Index = params.PageIndex
-	req.KeyPage.Height = qr.MerkleState.Count
+	req.KeyPage.Height = qr.MainChain.Height
 	req.Payload = params.Payload
 
 	r := new(api.TxResponse)
@@ -223,9 +231,9 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height ui
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
 
-	txr := query(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
+	txr := queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
 	for _, txid := range txr.SyntheticTxids {
-		query(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
+		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
 	}
 }
 
@@ -241,14 +249,18 @@ func (d *e2eDUT) api() *api.JrpcMethods {
 func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
-	d.Require().IsType(target, r.Data)
-	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(r.Data).Elem())
+	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
+	qr := r.(*api.ChainQueryResponse)
+	d.Require().IsType(target, qr.Data)
+	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(qr.Data).Elem())
 }
 
 func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
-	return r.MerkleState.Count
+	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
+	qr := r.(*api.ChainQueryResponse)
+	return qr.MainChain.Height
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
