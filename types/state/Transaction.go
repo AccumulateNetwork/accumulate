@@ -1,6 +1,7 @@
 package state
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 
@@ -15,6 +16,11 @@ type TxState struct {
 	SigInfo         *transactions.SignatureInfo
 	Transaction     *types.Bytes `json:"tx,omitempty" form:"tx" query:"tx" validate:"optional"`
 	transactionHash *types.Bytes32
+}
+
+func (tx *TxState) Equal(other *TxState) bool {
+	return tx.SigInfo.Equal(other.SigInfo) &&
+		bytes.Equal(*tx.Transaction, *other.Transaction)
 }
 
 // NewPendingTransaction will create a new pending transaction from a general transaction
@@ -81,6 +87,19 @@ func (tx *PendingTransaction) Restore() *transactions.GenTransaction {
 	gtx.SigInfo = tx.TransactionState.SigInfo
 	gtx.Transaction = *tx.TransactionState.Transaction
 	return gtx
+}
+
+func (tx *PendingTransaction) Equal(other *PendingTransaction) bool {
+	for i := range tx.Signature {
+		if i < len(other.Signature) || !tx.Signature[i].Equal(other.Signature[i]) {
+			return false
+		}
+	}
+
+	return tx.ChainHeader.Equal(&other.ChainHeader) &&
+		len(tx.Signature) == len(other.Signature) &&
+		tx.TransactionState.Equal(other.TransactionState) &&
+		bytes.Equal(tx.Status, other.Status)
 }
 
 func (is *Transaction) TransactionHash() *types.Bytes32 {

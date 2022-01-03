@@ -73,12 +73,12 @@ func (r *Record) PutState(recordState state.Chain) error {
 		return err
 	}
 
-	mainChain, err := r.Chain(protocol.Main)
+	mainChain, err := r.Chain(protocol.MainChain)
 	if err != nil {
 		return err
 	}
 
-	pendChain, err := r.Chain(protocol.Pending)
+	pendChain, err := r.Chain(protocol.PendingChain)
 	if err != nil {
 		return err
 	}
@@ -108,7 +108,7 @@ func (r *Record) Index(key ...interface{}) *Value {
 
 // Data returns a data chain manager for the data chain.
 func (r *Record) Data() (*Data, error) {
-	chain, err := r.Chain(protocol.Data)
+	chain, err := r.Chain(protocol.DataChain)
 	if err != nil {
 		return nil, err
 	}

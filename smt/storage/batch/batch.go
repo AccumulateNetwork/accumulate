@@ -7,7 +7,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
-const debug = 0 // | debugGetValue | debugPutValue
+const debug = 0 // | debugGet | debugGetValue | debugPut | debugPutValue
 
 const (
 	debugGet = 1 << iota
@@ -46,10 +46,11 @@ func (b *Batch) logDebug(msg string, keyVals ...interface{}) {
 }
 
 func (b *Batch) Put(key storage.Key, value []byte) {
-	if debug&debugPutValue != 0 {
-		b.logDebug("Put", "key", key, "value", logging.AsHex(value))
-	} else if debug&debugPut != 0 {
+	if debug&debugPut != 0 {
 		b.logDebug("Put", "key", key)
+	}
+	if debug&debugPutValue != 0 {
+		b.logDebug("Put", "value", logging.AsHex(value))
 	}
 
 	b.mu.Lock()
@@ -66,16 +67,17 @@ func (b *Batch) PutAll(values map[storage.Key][]byte) {
 }
 
 func (b *Batch) Get(key storage.Key) (v []byte, err error) {
+	if debug&debugGet != 0 {
+		b.logDebug("Get", "key", key)
+	}
 	if debug&debugGetValue != 0 {
 		defer func() {
 			if err != nil {
-				b.logDebug("Get", "key", key, "error", err)
+				b.logDebug("Get", "error", err)
 			} else {
-				b.logDebug("Get", "key", key, "value", logging.AsHex(v))
+				b.logDebug("Get", "value", logging.AsHex(v))
 			}
 		}()
-	} else if debug&debugGet != 0 {
-		b.logDebug("Get", "key", key)
 	}
 
 	b.mu.RLock()

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"math/rand"
-	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -219,18 +218,5 @@ func SendTxSync(query *api.Query, tx *transactions.GenTransaction) error {
 	if err != nil {
 		return fmt.Errorf("failed to send TX: %v", err)
 	}
-	<-query.BatchSend()
-
-	select {
-	case txr := <-done:
-		if txr.Result.Code != 0 {
-			return fmt.Errorf(txr.Result.Log)
-		}
-
-		fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
-		return nil
-
-	case <-time.After(1 * time.Minute):
-		return fmt.Errorf("timeout while waiting for TX response")
-	}
+	return WaitForTxnBatch(query)
 }
