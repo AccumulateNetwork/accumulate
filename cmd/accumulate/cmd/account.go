@@ -126,7 +126,7 @@ func GetAccount(url string) (string, error) {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
 	}
 
-	return PrintQueryResponseV2(res)
+	return PrintChainQueryResponseV2(res)
 }
 
 func QrAccount(s string) (string, error) {
