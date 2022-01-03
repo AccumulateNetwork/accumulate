@@ -185,14 +185,16 @@ func Init(opts InitOptions) (err error) {
 		}
 	}
 
+	logMsg := []interface{}{"module", "init"}
 	switch nValidators := len(genVals); nValidators {
 	case 0:
-		fmt.Printf("Successfully initialized %v follower nodes\n", nConfig)
+		logMsg = append(logMsg, "followers", nConfig)
 	case nConfig:
-		fmt.Printf("Successfully initialized %v validator nodes\n", nConfig)
+		logMsg = append(logMsg, "validators", nConfig)
 	default:
-		fmt.Printf("Successfully initialized %v validator and %v follower nodes\n", nValidators, nConfig-nValidators)
+		logMsg = append(logMsg, "validators", nValidators, "followers", nConfig-nValidators)
 	}
+	opts.Logger.Info("Successfully initialized nodes", logMsg...)
 	return nil
 }
 

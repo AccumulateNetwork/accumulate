@@ -43,18 +43,20 @@ func TestValidate(t *testing.T) {
 	daemons := startAccumulate(t, acctesting.GetIPs(4), 2, 2, 3000)
 	japi := daemons[0].Jrpc_TESTONLY()
 
-	t.Run("Not found", func(t *testing.T) {
+	t.Log("Not found")
+	{
 		b, err := json.Marshal(&api.TxnQuery{Txid: make([]byte, 32), Wait: 2 * time.Second})
 		require.NoError(t, err)
 
 		r := japi.GetMethod("query-tx")(context.Background(), b)
 		err, _ = r.(error)
 		require.Error(t, err)
-	})
+	}
 
 	var liteKey ed25519.PrivateKey
 	var liteUrl *url.URL
-	t.Run("Faucet", func(t *testing.T) {
+	t.Log("Faucet")
+	{
 		liteKey = newKey([]byte(t.Name()))
 		liteUrl = makeLiteUrl(t, liteKey, ACME)
 
@@ -66,9 +68,10 @@ func TestValidate(t *testing.T) {
 		account := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
 		assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
-	})
+	}
 
-	t.Run("Lite Account Credits", func(t *testing.T) {
+	t.Log("Lite Account Credits")
+	{
 		executeTx(t, japi, "add-credits", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,
@@ -84,11 +87,12 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, int64(10*AcmePrecision-AcmePrecision/100), account.Balance.Int64())
 
 		queryRecord(t, japi, "query-chain", &api.ChainIdQuery{ChainId: liteUrl.ResourceChain()})
-	})
+	}
 
 	var adiKey ed25519.PrivateKey
 	var adiName = "acc://keytest"
-	t.Run("Create ADI", func(t *testing.T) {
+	t.Log("Create ADI")
+	{
 		adiKey = newKey([]byte(t.Name()))
 
 		executeTx(t, japi, "create-adi", true, execParams{
@@ -117,19 +121,21 @@ func TestValidate(t *testing.T) {
 			adiName + "/book",
 			adiName + "/page",
 		}, dir.Items)
-	})
+	}
 
-	t.Run("Txn History", func(t *testing.T) {
+	t.Log("Txn History")
+	{
 		r := new(api.MultiResponse)
 		callApi(t, japi, "query-tx-history", struct {
 			Url   string
 			Count int
 		}{liteUrl.String(), 10}, r)
 		require.Len(t, r.Items, 3)
-	})
+	}
 
 	dataAccountUrl := adiName + "/dataAccount"
-	t.Run("Create Data Account", func(t *testing.T) {
+	t.Log("Create Data Account")
+	{
 		executeTx(t, japi, "create-data-account", true, execParams{
 			Origin: adiName,
 			Key:    adiKey,
@@ -140,10 +146,11 @@ func TestValidate(t *testing.T) {
 		dataAccount := NewDataAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
 		assert.Equal(t, dataAccountUrl, string(dataAccount.ChainUrl))
-	})
+	}
 
 	keyPageUrl := adiName + "/page1"
-	t.Run("Create Key Page", func(t *testing.T) {
+	t.Log("Create Key Page")
+	{
 		var keys []*KeySpecParams
 		keys = append(keys, &KeySpecParams{
 			PublicKey: adiKey,
@@ -159,10 +166,11 @@ func TestValidate(t *testing.T) {
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
 		assert.Equal(t, keyPageUrl, string(keyPage.ChainUrl))
-	})
+	}
 
 	keyBookUrl := adiName + "/book1"
-	t.Run("Create Key Book", func(t *testing.T) {
+	t.Log("Create Key Book")
+	{
 		var page []string
 		pageUrl := makeUrl(t, keyPageUrl)
 		page = append(page, pageUrl.String())
@@ -177,11 +185,12 @@ func TestValidate(t *testing.T) {
 		keyBook := NewKeyBook()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
 		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
-	})
+	}
 
 	tokenUrl := "acc://ACME"
 	tokenAccountUrl := adiName + "/account"
-	t.Run("Create Token Account", func(t *testing.T) {
+	t.Log("Create Token Account")
+	{
 		executeTx(t, japi, "create-token-account", true, execParams{
 			Origin: adiName,
 			Key:    adiKey,
@@ -194,9 +203,10 @@ func TestValidate(t *testing.T) {
 		tokenAccount := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
 		assert.Equal(t, tokenAccountUrl, string(tokenAccount.ChainUrl))
-	})
+	}
 
-	t.Run("Query Key Index", func(t *testing.T) {
+	t.Log("Query Key Index")
+	{
 		keyIndex := &query2.ResponseKeyPageIndex{}
 		queryRecordAs(t, japi, "query-key-index", &api.KeyPageIndexQuery{
 			UrlQuery: api.UrlQuery{
@@ -205,7 +215,7 @@ func TestValidate(t *testing.T) {
 			Key: adiKey,
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
-	})
+	}
 
 }
 

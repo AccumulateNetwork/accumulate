@@ -243,31 +243,45 @@ func binaryMarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName 
 func binaryUnmarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errName string, errArgs ...string) error {
 	typ := field.Type
 
-	var expr, size, sliceName string
+	var expr, size, init, sliceName string
 	var inPlace bool
 	switch typ {
 	case "rawJson":
 		typ = "bytes"
 		fallthrough
 	case "bool", "bytes", "string", "chainSet", "uvarint", "varint", "duration", "time":
-		expr, size, inPlace = methodName(typ, "UnmarshalBinary")+"(data)", methodName(typ, "BinarySize")+"(%s)", false
+		expr, size = methodName(typ, "UnmarshalBinary")+"(data)", methodName(typ, "BinarySize")+"(%s)"
 	case "bigint", "chain":
-		expr, size, inPlace = methodName(typ, "UnmarshalBinary")+"(data)", methodName(typ, "BinarySize")+"(&%s)", false
+		expr, size = methodName(typ, "UnmarshalBinary")+"(data)", methodName(typ, "BinarySize")+"(&%s)"
 	case "slice":
 		sliceName, varName = varName, "len"+field.Name
 		fmt.Fprintf(w, "var %s uint64\n", varName)
-		expr, size, inPlace = "encoding.UvarintUnmarshalBinary(data)", "encoding.UvarintBinarySize(%s)", false
+		expr, size = "encoding.UvarintUnmarshalBinary(data)", "encoding.UvarintBinarySize(%s)"
 	default:
-		if field.MarshalAs != "reference" && field.MarshalAs != "value" {
+		switch field.MarshalAs {
+		case "reference":
+			if field.Pointer {
+				init = "%s = new(" + resolveType(field, true) + ")"
+			}
+			expr, size, inPlace = varName+".UnmarshalBinary(data)", "%s.BinarySize()", true
+		case "value":
+			expr, size, inPlace = varName+".UnmarshalBinary(data)", "%s.BinarySize()", true
+		default:
 			return fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, resolveType(field, false))
 		}
-		expr, size, inPlace = "%s.UnmarshalBinary(data)", "%s.BinarySize()", true
+
+		if field.UnmarshalWith != "" {
+			expr, inPlace = field.UnmarshalWith+"(data)", false
+		}
+	}
+
+	if init != "" {
+		fmt.Fprintf(w, "\t%s\n", fmt.Sprintf(init, varName))
 	}
 
 	size = fmt.Sprintf(size, varName)
 	err := fieldError("decoding", errName, errArgs...)
 	if inPlace {
-		expr = fmt.Sprintf(expr, varName)
 		fmt.Fprintf(w, "\tif err := %s; err != nil { return %s }\n", expr, err)
 	} else if typ == "bigint" {
 		fmt.Fprintf(w, "\tif x, err := %s; err != nil { return %s } else { %s.Set(x) }\n", expr, err, varName)
@@ -283,7 +297,7 @@ func binaryUnmarshalValue(w *bytes.Buffer, field *typegen.Field, varName, errNam
 	fmt.Fprintf(w, "\t%s = make(%s, %s)\n", sliceName, resolveType(field, false), varName)
 	fmt.Fprintf(w, "\tfor i := range %s {\n", sliceName)
 	if field.Slice.Pointer {
-		fmt.Fprintf(w, "\t\tx := new(%s)\n", resolveType(field.Slice, true))
+		fmt.Fprintf(w, "\t\tvar x %s\n", resolveType(field.Slice, false))
 		err := binaryUnmarshalValue(w, field.Slice, "x", errName+"[%d]", "i")
 		if err != nil {
 			return err

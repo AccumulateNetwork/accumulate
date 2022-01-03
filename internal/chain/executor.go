@@ -2,10 +2,10 @@ package chain
 
 import (
 	"bytes"
-	"context"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -29,9 +30,9 @@ const chainWGSize = 4
 type Executor struct {
 	ExecutorOptions
 
-	executors  map[types.TxType]TxExecutor
-	dispatcher *dispatcher
-	logger     log.Logger
+	executors map[types.TxType]TxExecutor
+	governor  *governor
+	logger    log.Logger
 
 	wg      *sync.WaitGroup
 	mu      *sync.Mutex
@@ -41,7 +42,7 @@ type Executor struct {
 	blockIndex  int64
 	blockTime   time.Time
 	blockBatch  *database.Batch
-	blockMeta   blockMetadata
+	blockMeta   BlockMetadata
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -59,20 +60,6 @@ type ExecutorOptions struct {
 	IsTest bool
 }
 
-type blockMetadata struct {
-	Deliver     DeliverMetadata
-	Delivered   int
-	SynthSigned int
-	SynthSent   int
-}
-
-func (b *blockMetadata) Empty() bool {
-	return b.Deliver.Empty() &&
-		b.Delivered == 0 &&
-		b.SynthSigned == 0 &&
-		b.SynthSent == 0
-}
-
 func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.ExecutorOptions = opts
@@ -85,11 +72,7 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 	}
 
 	if !m.isGenesis {
-		var err error
-		m.dispatcher, err = newDispatcher(opts)
-		if err != nil {
-			return nil, err
-		}
+		m.governor = newGovernor(opts)
 	}
 
 	for _, x := range executors {
@@ -103,11 +86,11 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 	defer batch.Discard()
 
 	var height int64
-	root := new(state.Anchor)
-	err := batch.Record(m.Network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	ledger := protocol.NewInternalLedger()
+	err := batch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger)).GetStateAs(ledger)
 	switch {
 	case err == nil:
-		height = root.Index
+		height = ledger.Index
 	case errors.Is(err, storage.ErrNotFound):
 		height = 0
 	default:
@@ -136,6 +119,14 @@ func (m *Executor) logError(msg string, keyVals ...interface{}) {
 	}
 }
 
+func (m *Executor) Start() error {
+	return m.governor.Start()
+}
+
+func (m *Executor) Stop() error {
+	return m.governor.Stop()
+}
+
 func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error) ([]byte, error) {
 	var err error
 
@@ -150,7 +141,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	tx := new(transactions.GenTransaction)
 	tx.SigInfo = new(transactions.SignatureInfo)
 	tx.SigInfo.URL = protocol.ACME
-	tx.Transaction, err = new(protocol.SyntheticGenesis).MarshalBinary()
+	tx.Transaction, err = new(protocol.InternalGenesis).MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +152,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	} else if !errors.Is(err, storage.ErrNotFound) {
 		return nil, err
 	}
-	st.logger = m.logger
+	st.logger.L = m.logger
 
 	txPending := state.NewPendingTransaction(tx)
 	txAccepted, txPending := state.NewTransaction(txPending)
@@ -177,7 +168,14 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 		return nil, err
 	}
 
+	m.blockMeta.Delivered = 1
 	m.blockMeta.Deliver, err = st.Commit()
+	if err != nil {
+		return nil, err
+	}
+
+	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
+	ledger.Index("Genesis", "BlockMetadata").PutAs(&m.blockMeta)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +183,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	return m.Commit()
 }
 
-func (m *Executor) InitChain(data []byte) error {
+func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) error {
 	if m.isGenesis {
 		panic("Cannot call InitChain on a genesis txn executor")
 	}
@@ -214,7 +212,18 @@ func (m *Executor) InitChain(data []byte) error {
 
 	// Dump the genesis state into the key-value store
 	batch := m.DB.Begin()
+	defer batch.Discard()
 	batch.Import(src)
+
+	// Load the genesis block metadata
+	blockMeta := new(BlockMetadata)
+	ledger := batch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
+	err = ledger.Index("Genesis", "BlockMetadata").GetAs(blockMeta)
+	if err != nil {
+		return fmt.Errorf("failed to load genesis block metadata: %v", err)
+	}
+
+	// Commit the database batch
 	err = batch.Commit()
 	if err != nil {
 		return fmt.Errorf("failed to load app state into database: %v", err)
@@ -229,7 +238,7 @@ func (m *Executor) InitChain(data []byte) error {
 		panic(fmt.Errorf("BPT root hash from state DB does not match the app state\nWant: %X\nGot:  %X", hash[:], batch.RootHash()))
 	}
 
-	return nil
+	return m.governor.DidCommit(batch, true, true, blockIndex, time, blockMeta)
 }
 
 // BeginBlock implements ./abci.Chain
@@ -241,48 +250,11 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	m.blockIndex = req.Height
 	m.blockTime = req.Time
 	m.blockBatch = m.DB.Begin()
-	m.blockMeta = blockMetadata{}
+	m.blockMeta = BlockMetadata{}
 
-	// In order for other BVCs to be able to validate the synthetic transaction,
-	// a wrapped signed version must be resubmitted to this BVC network and the
-	// UNSIGNED version of the transaction along with the Leader address will be
-	// stored in a SynthChain in the SMT on this BVC. The BVCs will validate the
-	// synth transaction against the receipt and EVERYONE will then send out the
-	// wrapped TX along with the proof from the directory chain. If by end block
-	// there are still unprocessed synthetic TX's the current leader takes over,
-	// invalidates the previous leader's signed tx, signs the unprocessed synth
-	// tx, and tries again with the new leader. By EVERYONE submitting the
-	// leader signed synth tx to the designated BVC network it takes advantage
-	// of the flood-fill gossip network tendermint will provide and ensure the
-	// synth transaction will be picked up.
+	m.governor.DidBeginBlock(req.IsLeader, req.Height, req.Time)
 
-	// Reset dispatcher
-	m.dispatcher.Reset(context.Background())
-
-	// Sign synthetic transactions produced by the previous block
-	err := m.signSynthTxns()
-	if err != nil {
-		return abci.BeginBlockResponse{}, err
-	}
-
-	// Send synthetic transactions produced in the previous block
-	txns, err := m.sendSynthTxns()
-	if err != nil {
-		return abci.BeginBlockResponse{}, err
-	}
-
-	// Dispatch transactions. Due to Tendermint's locks, this cannot be
-	// synchronous.
-	go func() {
-		err := m.dispatcher.Send(context.Background())
-		if err != nil {
-			m.logger.Error("Failed to dispatch transactions", "error", err)
-		}
-	}()
-
-	return abci.BeginBlockResponse{
-		SynthTxns: txns,
-	}, nil
+	return abci.BeginBlockResponse{}, nil
 }
 
 // EndBlock implements ./abci.Chain
@@ -294,6 +266,19 @@ func (m *Executor) Commit() ([]byte, error) {
 
 	// Discard changes if commit fails
 	defer m.blockBatch.Discard()
+
+	updatedMap := make(map[string]bool, len(m.blockMeta.Deliver.Updated))
+	updatedSlice := make([]*url.URL, 0, len(m.blockMeta.Deliver.Updated))
+	for _, u := range m.blockMeta.Deliver.Updated {
+		s := strings.ToLower(u.String())
+		if updatedMap[s] {
+			continue
+		}
+
+		updatedSlice = append(updatedSlice, u)
+		updatedMap[s] = true
+	}
+	m.blockMeta.Deliver.Updated = updatedSlice
 
 	if m.blockMeta.Empty() {
 		m.logInfo("Committed empty transaction")
@@ -314,6 +299,13 @@ func (m *Executor) Commit() ([]byte, error) {
 		m.logInfo("Committed", "height", m.blockIndex, "duration", time.Since(t))
 	}
 
+	if !m.isGenesis {
+		err := m.governor.DidCommit(m.blockBatch, m.blockLeader, false, m.blockIndex, m.blockTime, &m.blockMeta)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Get BPT root from a clean batch
 	batch := m.DB.Begin()
 	defer batch.Discard()
@@ -321,17 +313,16 @@ func (m *Executor) Commit() ([]byte, error) {
 }
 
 func (m *Executor) doCommit() error {
-	rootUrl := m.Network.NodeUrl().JoinPath(protocol.MinorRoot)
-	root := m.blockBatch.Record(rootUrl)
+	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
 
 	// Load the state of minor root
-	rootState := state.NewAnchor()
-	err := root.GetStateAs(rootState)
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
-		if rootState.Index >= m.blockIndex {
-			panic(fmt.Errorf("Current height is %d but the next block height is %d!", rootState.Index, m.blockIndex))
+		if ledgerState.Index >= m.blockIndex {
+			panic(fmt.Errorf("Current height is %d but the next block height is %d!", ledgerState.Index, m.blockIndex))
 		}
 
 	case m.isGenesis && errors.Is(err, storage.ErrNotFound):
@@ -340,8 +331,9 @@ func (m *Executor) doCommit() error {
 	default:
 		return err
 	}
+
 	// Load the main chain of the minor root
-	rootChain, err := root.Chain(protocol.Main)
+	rootChain, err := ledger.Chain(protocol.MinorRootChain)
 	if err != nil {
 		return err
 	}
@@ -350,7 +342,7 @@ func (m *Executor) doCommit() error {
 	chains := make([][32]byte, 0, len(m.blockMeta.Deliver.Updated))
 	for _, u := range m.blockMeta.Deliver.Updated {
 		chains = append(chains, u.ResourceChain32())
-		recordChain, err := m.blockBatch.Record(u).Chain(protocol.Main)
+		recordChain, err := m.blockBatch.Record(u).Chain(protocol.MainChain)
 		if err != nil {
 			return err
 		}
@@ -364,70 +356,10 @@ func (m *Executor) doCommit() error {
 	}
 
 	// Update the root state
-	rootState.Index = m.blockIndex
-	rootState.Timestamp = m.blockTime
-	rootState.Chains = chains
-	rootState.SystemTxns = nil
-	err = root.PutState(rootState)
-	if err != nil {
-		return err
-	}
-
-	// Load the state of the synth list
-	synthUrl := m.Network.NodeUrl().JoinPath(protocol.Synthetic)
-	synth := m.blockBatch.Record(synthUrl)
-	synthState := state.NewSyntheticTransactionChain()
-	err = synth.GetStateAs(synthState)
-	if err != nil {
-		return err
-	}
-
-	// Update synth chain
-	synthState.Index = m.blockIndex
-	synthState.Count = int64(len(m.blockMeta.Deliver.Submitted))
-	synth.PutState(synthState)
-
-	// Produce an anchor transaction (if necessary)
-	err = m.addAnchorTxn()
-	if err != nil {
-		return err
-	}
-
-	// Mirror the subnet's ADI, but only immediately after genesis
-	if m.blockIndex != 2 || m.IsTest {
-		// TODO Don't skip during testing
-		return nil
-	}
-
-	// Mirror subnet ADI
-	mirror, err := m.mirrorADIs(m.Network.NodeUrl())
-	if err != nil {
-		return fmt.Errorf("failed to mirror subnet ADI: %v", err)
-	}
-
-	var txns []*transactions.GenTransaction
-	switch m.Network.Type {
-	case config.Directory:
-		for _, bvn := range m.Network.BvnNames {
-			tx, err := m.buildSynthTxn(protocol.BvnUrl(bvn), mirror)
-			if err != nil {
-				return err
-			}
-			txns = append(txns, tx)
-		}
-
-	case config.BlockValidator:
-		tx, err := m.buildSynthTxn(protocol.DnUrl(), mirror)
-		if err != nil {
-			return fmt.Errorf("failed to build mirror txn: %v", err)
-		}
-		txns = append(txns, tx)
-	}
-
-	err = m.addSystemTxns(txns...)
-	if err != nil {
-		return fmt.Errorf("failed to save mirror txn: %v", err)
-	}
-
-	return nil
+	ledgerState.Index = m.blockIndex
+	ledgerState.Timestamp = m.blockTime
+	ledgerState.Records.Chains = chains
+	ledgerState.Synthetic.System = nil
+	ledgerState.Synthetic.Produced = uint64(len(m.blockMeta.Deliver.Submitted))
+	return ledger.PutState(ledgerState)
 }

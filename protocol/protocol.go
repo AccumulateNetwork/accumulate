@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
+// Well known strings
 const (
 	// ACME is the name of the ACME token.
 	ACME = "ACME"
@@ -21,23 +22,29 @@ const (
 	// Directory is the subnet ID of the DN.
 	Directory = "Directory"
 
-	// MinorRoot is the URL path of the subnet's minor root chain.
-	MinorRoot = "minor-root"
+	// ValidatorBook is the path to a node's validator key book.
+	ValidatorBook = "validators"
 
-	// MajorRoot is the URL path of the subnet's major root chain.
-	MajorRoot = "major-root"
+	// Ledger is the path to a node's internal ledger.
+	Ledger = "ledger"
 
-	// Synthetic is the URL path of the subnet's synthetic transaction chain.
-	Synthetic = "synthetic"
+	// MainChain is the main transaction chain of a record.
+	MainChain = "main"
 
-	// Main is the main transaction chain of a record.
-	Main = "Main"
+	// PendingChain is the pending signature chain of a record.
+	PendingChain = "pending"
 
-	// Pending is the pending signature chain of a record.
-	Pending = "Pending"
+	// DataChain is the data chain of a record.
+	DataChain = "data"
 
-	// Data is the data chain of a record.
-	Data = "Data"
+	// MajorRootChain is the major root chain of a subnet.
+	MajorRootChain = "major-root"
+
+	// MinorRootChain is the minor root chain of a subnet.
+	MinorRootChain = "minor-root"
+
+	// SyntheticChain is the synthetic transaction chain of a subnet.
+	SyntheticChain = "synthetic"
 )
 
 // AcmeUrl returns `acc://ACME`.

@@ -6,6 +6,7 @@ package mock_abci
 
 import (
 	reflect "reflect"
+	time "time"
 
 	abci "github.com/AccumulateNetwork/accumulate/internal/abci"
 	protocol "github.com/AccumulateNetwork/accumulate/protocol"
@@ -108,17 +109,17 @@ func (mr *MockChainMockRecorder) EndBlock(arg0 interface{}) *gomock.Call {
 }
 
 // InitChain mocks base method.
-func (m *MockChain) InitChain(state []byte) error {
+func (m *MockChain) InitChain(state []byte, time time.Time, blockIndex int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InitChain", state)
+	ret := m.ctrl.Call(m, "InitChain", state, time, blockIndex)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // InitChain indicates an expected call of InitChain.
-func (mr *MockChainMockRecorder) InitChain(state interface{}) *gomock.Call {
+func (mr *MockChainMockRecorder) InitChain(state, time, blockIndex interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitChain", reflect.TypeOf((*MockChain)(nil).InitChain), state)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitChain", reflect.TypeOf((*MockChain)(nil).InitChain), state, time, blockIndex)
 }
 
 // Query mocks base method.

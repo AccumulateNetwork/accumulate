@@ -97,6 +97,8 @@ func run(_ *cobra.Command, args []string) {
 
 		"github.com/AccumulateNetwork/accumulate/internal/encoding"
 		"github.com/AccumulateNetwork/accumulate/types"
+		"github.com/AccumulateNetwork/accumulate/internal/url"
+		"github.com/AccumulateNetwork/accumulate/protocol"
 	)`+"\n\n")
 
 	types := readTypes(args[0])
