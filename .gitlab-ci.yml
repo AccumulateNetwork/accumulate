@@ -141,8 +141,8 @@ configure:
 
 .deploy:
   stage: deploy
-  only: [develop, release-v0.3] # only run on the main branch
-  needs: [configure] #, test 1/2, test 2/2]
+  only: [develop] # only run on the main branch
+  needs: [configure, test 1/2, test 2/2]
   tags:
   - linux
   - docker
