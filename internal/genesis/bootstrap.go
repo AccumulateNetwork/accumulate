@@ -6,19 +6,21 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
 type InitOpts struct {
-	SubnetID    string
-	NetworkType config.NetworkType
+	Network     config.Network
 	Validators  []tmtypes.GenesisValidator
 	GenesisTime time.Time
+	Logger      log.Logger
 }
 
 func mustParseUrl(s string) *url.URL {
@@ -29,62 +31,36 @@ func mustParseUrl(s string) *url.URL {
 	return u
 }
 
-func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
-	db := new(state.StateDB)
-	err := db.Load(kvdb, false)
-	if err != nil {
-		return nil, err
-	}
+func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
+	db := database.New(kvdb, opts.Logger.With("module", "database"))
 
-	_ = kvdb.Put(storage.MakeKey("SubnetID"), []byte(opts.SubnetID))
-
-	exec, err := chain.NewGenesisExecutor(db, opts.NetworkType)
+	exec, err := chain.NewGenesisExecutor(db, opts.Logger, opts.Network)
 	if err != nil {
 		return nil, err
 	}
 
 	return exec.Genesis(opts.GenesisTime, func(st *chain.StateManager) error {
-		acme := new(protocol.TokenIssuer)
-		acme.Type = types.ChainTypeTokenIssuer
-		acme.ChainUrl = types.String(protocol.AcmeUrl().String())
-		acme.Precision = 8
-		acme.Symbol = "ACME"
-		st.Update(acme)
-
-		var uAdi *url.URL
-		switch opts.NetworkType {
-		case config.Directory:
-			uAdi = protocol.DnUrl()
-
-		case config.BlockValidator:
-			// Test with `${ID}` not `bvn-${ID}` because the latter will fail
-			// with "bvn-${ID} is reserved"
-			if err := protocol.IsValidAdiUrl(&url.URL{Authority: opts.SubnetID}); err != nil {
-				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.SubnetID, err))
-			}
-			uAdi = protocol.BvnUrl(opts.SubnetID)
-
-			lite := protocol.NewLiteTokenAccount()
-			lite.ChainUrl = types.String(protocol.FaucetWallet.Addr)
-			lite.TokenUrl = protocol.AcmeUrl().String()
-			lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
-			st.Update(lite)
-		}
+		var records []state.Chain
 
 		// Create the ADI
-		uBook := uAdi.JoinPath("validators")
-		uPage := uAdi.JoinPath("validators0")
+		uAdi := opts.Network.NodeUrl()
+		uBook := uAdi.JoinPath(protocol.ValidatorBook)
+		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
+		uLedger := uAdi.JoinPath(protocol.Ledger)
 
 		adi := state.NewIdentityState(types.String(uAdi.String()))
-		adi.KeyBook = uBook.ResourceChain32()
+		adi.KeyBook = types.String(uBook.String())
+		records = append(records, adi)
 
 		book := protocol.NewKeyBook()
 		book.ChainUrl = types.String(uBook.String())
-		book.Pages = [][32]byte{uPage.ResourceChain32()}
+		book.Pages = []string{uPage.String()}
+		records = append(records, book)
 
 		page := protocol.NewKeyPage()
 		page.ChainUrl = types.String(uPage.String())
-		page.KeyBook = uBook.ResourceChain32()
+		page.KeyBook = types.String(uBook.String())
+		records = append(records, page)
 
 		page.Keys = make([]*protocol.KeySpec, len(opts.Validators))
 		for i, val := range opts.Validators {
@@ -93,7 +69,62 @@ func Init(kvdb storage.KeyValueDB, opts InitOpts) ([]byte, error) {
 			page.Keys[i] = spec
 		}
 
-		st.Update(adi, book, page)
-		return st.AddDirectoryEntry(uAdi, uBook, uPage)
+		// Create the ledger
+		ledger := protocol.NewInternalLedger()
+		ledger.ChainUrl = types.String(uLedger.String())
+		ledger.KeyBook = types.String(uBook.String())
+		ledger.Synthetic.Nonce = 1
+		records = append(records, ledger)
+
+		// TODO Remove root and synthetic chains?
+
+		// // Create the root chains
+		// majorRoot, minorRoot := state.NewAnchor(), state.NewAnchor()
+		// majorRoot.ChainUrl = types.String(uAdi.JoinPath(protocol.MajorRoot).String())
+		// minorRoot.ChainUrl = types.String(uAdi.JoinPath(protocol.MinorRoot).String())
+		// majorRoot.KeyBook = types.String(uBook.String())
+		// minorRoot.KeyBook = types.String(uBook.String())
+		// records = append(records, majorRoot, minorRoot)
+
+		// // Create the synthetic transaction chain
+		// synthTxn := state.NewSyntheticTransactionChain()
+		// synthTxn.ChainUrl = types.String(uAdi.JoinPath(protocol.Synthetic).String())
+		// synthTxn.KeyBook = types.String(uBook.String())
+		// records = append(records, synthTxn)
+
+		// Create records and directory entries
+		urls := make([]*url.URL, len(records))
+		for i, r := range records {
+			urls[i], _ = r.Header().ParseUrl()
+		}
+
+		acme := new(protocol.TokenIssuer)
+		acme.Type = types.ChainTypeTokenIssuer
+		acme.KeyBook = types.String(uBook.String())
+		acme.ChainUrl = types.String(protocol.AcmeUrl().String())
+		acme.Precision = 8
+		acme.Symbol = "ACME"
+		records = append(records, acme)
+
+		switch opts.Network.Type {
+		case config.Directory:
+			// TODO Move ACME to DN
+
+		case config.BlockValidator:
+			// Test with `${ID}` not `bvn-${ID}` because the latter will fail
+			// with "bvn-${ID} is reserved"
+			if err := protocol.IsValidAdiUrl(&url.URL{Authority: opts.Network.ID}); err != nil {
+				panic(fmt.Errorf("%q is not a valid subnet ID: %v", opts.Network.ID, err))
+			}
+
+			lite := protocol.NewLiteTokenAccount()
+			lite.ChainUrl = types.String(protocol.FaucetWallet.Addr)
+			lite.TokenUrl = protocol.AcmeUrl().String()
+			lite.Balance.SetString("314159265358979323846264338327950288419716939937510582097494459", 10)
+			records = append(records, lite)
+		}
+
+		st.Update(records...)
+		return st.AddDirectoryEntry(urls...)
 	})
 }

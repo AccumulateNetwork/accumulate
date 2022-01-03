@@ -5,10 +5,12 @@ import (
 	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/libs/log"
 )
 
 // NewNodeExecutor creates a new Executor for a node.
@@ -16,28 +18,35 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	switch opts.Network.Type {
 	case config.Directory:
 		return newExecutor(opts,
-			SyntheticSignTransactions{},
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
+
+			InternalSendTransactions{},
+			InternalTransactionsSigned{},
+			InternalTransactionsSent{},
 		)
 
 	case config.BlockValidator:
 		return newExecutor(opts,
-			CreateIdentity{},
-			SendTokens{},
-			CreateTokenAccount{},
-			CreateDataAccount{},
 			AddCredits{},
-			CreateKeyPage{},
+			CreateDataAccount{},
+			CreateIdentity{},
 			CreateKeyBook{},
+			CreateKeyPage{},
+			CreateTokenAccount{},
+			SendTokens{},
 			UpdateKeyPage{},
 			WriteData{},
-			SyntheticCreateChain{},
-			SyntheticTokenDeposit{},
-			SyntheticDepositCredits{},
-			SyntheticSignTransactions{},
+
 			SyntheticAnchor{Network: &opts.Network},
+			SyntheticCreateChain{},
+			SyntheticDepositCredits{},
+			SyntheticDepositTokens{},
 			SyntheticMirror{},
+
+			InternalSendTransactions{},
+			InternalTransactionsSigned{},
+			InternalTransactionsSent{},
 
 			// TODO Only for TestNet
 			AcmeFaucet{},
@@ -50,10 +59,11 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 
 // NewGenesisExecutor creates a transaction executor that can be used to set up
 // the genesis state.
-func NewGenesisExecutor(db *state.StateDB, typ config.NetworkType) (*Executor, error) {
+func NewGenesisExecutor(db *database.Database, logger log.Logger, network config.Network) (*Executor, error) {
 	return newExecutor(ExecutorOptions{
 		DB:        db,
-		Network:   config.Network{Type: typ},
+		Network:   network,
+		Logger:    logger,
 		isGenesis: true,
 	})
 }

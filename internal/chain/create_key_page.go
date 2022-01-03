@@ -16,13 +16,13 @@ func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 
 func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction) error {
 	var group *protocol.KeyBook
-	switch sponsor := st.Sponsor.(type) {
+	switch origin := st.Origin.(type) {
 	case *state.AdiState:
 		// Create an unbound sig spec
 	case *protocol.KeyBook:
-		group = sponsor
+		group = origin
 	default:
-		return fmt.Errorf("invalid sponsor: want chain type %v or %v, got %v", types.ChainTypeIdentity, types.ChainTypeKeyBook, sponsor.Header().Type)
+		return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeIdentity, types.ChainTypeKeyBook, origin.Header().Type)
 	}
 
 	body := new(protocol.CreateKeyPage)
@@ -40,13 +40,13 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		return fmt.Errorf("invalid target URL: %v", err)
 	}
 
-	if !msUrl.Identity().Equal(st.SponsorUrl.Identity()) {
-		return fmt.Errorf("%q does not belong to %q", msUrl, st.SponsorUrl)
+	if !msUrl.Identity().Equal(st.OriginUrl.Identity()) {
+		return fmt.Errorf("%q does not belong to %q", msUrl, st.OriginUrl)
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
 	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
-	st.Submit(st.SponsorUrl, scc)
+	st.Submit(st.OriginUrl, scc)
 
 	spec := protocol.NewKeyPage()
 	spec.ChainUrl = types.String(msUrl.String())
@@ -56,11 +56,11 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		if err != nil {
 			// Failing here would require writing an invalid URL to the state.
 			// But stuff happens, so don't panic.
-			return fmt.Errorf("invalid sponsor URL: %v", err)
+			return fmt.Errorf("invalid origin record URL: %v", err)
 		}
 
-		group.Pages = append(group.Pages, types.Bytes(msUrl.ResourceChain()).AsBytes32())
-		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+		group.Pages = append(group.Pages, msUrl.String())
+		spec.KeyBook = types.String(groupUrl.String())
 
 		err = scc.Update(group)
 		if err != nil {

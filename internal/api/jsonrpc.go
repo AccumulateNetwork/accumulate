@@ -309,7 +309,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 // createADI creates ADI
 func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.IdentityCreate{}
+	data := &protocol.CreateIdentity{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
@@ -404,7 +404,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) (*acmeapi.API
 	tx.Transaction = payload
 
 	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = string(req.Tx.Sponsor)
+	tx.SigInfo.URL = string(req.Tx.Origin)
 	tx.SigInfo.Nonce = req.Tx.Signer.Nonce
 	tx.SigInfo.KeyPageHeight = req.Tx.KeyPage.Height
 	tx.SigInfo.KeyPageIndex = req.Tx.KeyPage.Index
@@ -497,7 +497,7 @@ func formatTransactionData(tx *transactions.GenTransaction) interface{} {
 
 // createTokenAccount creates Token Account
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.TokenAccountCreate{}
+	data := &protocol.CreateTokenAccount{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
@@ -514,9 +514,12 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 
 // getTokenTx returns Token Tx info
 func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{} {
+	type TokenTxRequest struct {
+		Hash types.Bytes32 `json:"hash" form:"hash" query:"hash" validate:"required"`
+	}
 
 	var err error
-	req := &acmeapi.TokenTxRequest{}
+	req := &TokenTxRequest{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return validatorError(err)
@@ -538,7 +541,7 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 
 // createTokenTx creates Token Tx
 func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interface{} {
-	data := &acmeapi.SendTokens{}
+	data := &protocol.SendTokens{}
 	req, payload, err := api.prepareCreate(params, data, "From", "To")
 	if err != nil {
 		return validatorError(err)
@@ -572,7 +575,6 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return validatorError(err)
 	}
 
-	destAccount := types.String(u.String())
 	addr, tok, err := protocol.ParseLiteAddress(u)
 	switch {
 	case err != nil:
@@ -583,9 +585,8 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return jsonrpc2.NewError(ErrCodeNotAcmeAccount, "Invalid token account", fmt.Errorf("%q is not an ACME account", u))
 	}
 
-	tx := acmeapi.SendTokens{}
-	tx.From.String = types.String(protocol.FaucetWallet.Addr)
-	tx.AddToAccount(destAccount, 1000000000)
+	tx := protocol.SendTokens{}
+	tx.AddRecipient(u, 1000000000)
 
 	txData, err := tx.MarshalBinary()
 
@@ -594,13 +595,13 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	gtx.Routing = protocol.FaucetUrl.Routing()
 	gtx.ChainID = protocol.FaucetUrl.ResourceChain()
 	gtx.SigInfo = new(transactions.SignatureInfo)
-	gtx.SigInfo.URL = *tx.From.String.AsString()
+	gtx.SigInfo.URL = protocol.FaucetWallet.Addr
 	gtx.SigInfo.Nonce = protocol.FaucetWallet.Nonce
 	gtx.SigInfo.KeyPageHeight = 1
 	gtx.SigInfo.KeyPageIndex = 0
 	gtx.Transaction = txData
 	if err := gtx.SetRoutingChainID(); err != nil {
-		return jsonrpc2.NewError(ErrCodeBadURL, fmt.Sprintf("bad url generated %s: ", destAccount), err)
+		return jsonrpc2.NewError(ErrCodeBadURL, fmt.Sprintf("bad url generated %s: ", u), err)
 	}
 	dataToSign := gtx.TransactionHash()
 

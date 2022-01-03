@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/batch"
 	"github.com/dgraph-io/badger"
 )
 
@@ -28,7 +29,7 @@ type DB struct {
 	logger   storage.Logger
 }
 
-var _ storage.KeyValueDB = (*DB)(nil)
+var _ storage.KeyValueStore = (*DB)(nil)
 
 // Close
 // Close the underlying database
@@ -49,7 +50,7 @@ func (d *DB) Close() error {
 // an new, empty database.
 func (d *DB) InitDB(filepath string, logger storage.Logger) error {
 	// Make sure all directories exist
-	err := os.MkdirAll(filepath, 0777)
+	err := os.MkdirAll(filepath, 0700)
 	if err != nil {
 		return errors.New("failed to create home directory")
 	}
@@ -207,6 +208,10 @@ func (d *DB) EndBatch(TXCache map[storage.Key][]byte) error {
 	}
 
 	return nil
+}
+
+func (db *DB) Begin() storage.KeyValueTxn {
+	return batch.New(db, db.logger)
 }
 
 type badgerLogger struct {

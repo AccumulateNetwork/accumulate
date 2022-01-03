@@ -13,7 +13,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	v1 "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
@@ -91,37 +90,7 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 		jsonrpc2.DebugMethodFunc = true
 	}
 
-	type PL = protocol.TransactionPayload
-	m.methods = jsonrpc2.MethodMap{
-		// General
-		"version": m.Version,
-		"metrics": m.Metrics,
-		"faucet":  m.Faucet,
-
-		// Query
-		"query":            m.Query,
-		"query-directory":  m.QueryDirectory,
-		"query-chain":      m.QueryChain,
-		"query-tx":         m.QueryTx,
-		"query-tx-history": m.QueryTxHistory,
-		"query-data":       m.QueryData,
-		"query-data-set":   m.QueryDataSet,
-		"query-key-index":  m.QueryKeyPageIndex,
-
-		// Execute
-		"execute":              m.Execute,
-		"create-adi":           m.ExecuteWith(func() PL { return new(protocol.IdentityCreate) }),
-		"create-data-account":  m.ExecuteWith(func() PL { return new(protocol.CreateDataAccount) }),
-		"create-key-book":      m.ExecuteWith(func() PL { return new(protocol.CreateKeyBook) }),
-		"create-key-page":      m.ExecuteWith(func() PL { return new(protocol.CreateKeyPage) }),
-		"create-token":         m.ExecuteWith(func() PL { return new(protocol.CreateToken) }),
-		"create-token-account": m.ExecuteWith(func() PL { return new(protocol.TokenAccountCreate) }),
-		"send-tokens":          m.ExecuteWith(func() PL { return new(api.SendTokens) }, "From", "To"),
-		"add-credits":          m.ExecuteWith(func() PL { return new(protocol.AddCredits) }),
-		"update-key-page":      m.ExecuteWith(func() PL { return new(protocol.UpdateKeyPage) }),
-		"write-data":           m.ExecuteWith(func() PL { return new(protocol.WriteData) }),
-	}
-
+	m.populateMethodTable()
 	return m, nil
 }
 
@@ -147,7 +116,7 @@ func (m *JrpcMethods) EnableDebug(local ABCIQueryClient) {
 			return err
 		}
 
-		return jrpcFormatQuery(q.QueryUrl(req.Url))
+		return jrpcFormatResponse(q.QueryUrl(req.Url))
 	}
 }
 
@@ -159,7 +128,7 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 }
 
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {
-	res := new(QueryResponse)
+	res := new(ChainQueryResponse)
 	res.Type = "version"
 	res.Data = map[string]interface{}{
 		"version":        accumulate.Version,

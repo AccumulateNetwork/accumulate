@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"testing"
 
 	cfg "github.com/AccumulateNetwork/accumulate/config"
@@ -11,23 +10,10 @@ import (
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/require"
-	tmnet "github.com/tendermint/tendermint/libs/net"
 )
 
-func GetFreePort(t *testing.T) int {
+func NewTest(t *testing.T, config *cfg.API, q *Query) *API {
 	t.Helper()
-	port, err := tmnet.GetFreePort()
-	require.NoError(t, err)
-	return port
-}
-
-func NewTest(t *testing.T, q *Query) *API {
-	t.Helper()
-	port := GetFreePort(t)
-	config := &cfg.API{
-		ListenAddress:    fmt.Sprintf("localhost:%d", port),
-		PrometheusServer: "http://18.119.26.7:9090",
-	}
 	v, err := protocol.NewValidator()
 	require.NoError(t, err)
 	return &API{config, v, q}

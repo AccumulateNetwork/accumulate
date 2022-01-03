@@ -23,7 +23,7 @@ func (SyntheticMirror) Validate(st *StateManager, tx *transactions.GenTransactio
 		// TODO Check merkle tree
 
 		// Unmarshal the record
-		record, err := unmarshalRecord(obj)
+		record, err := protocol.UnmarshalChain(obj.Record)
 		if err != nil {
 			return fmt.Errorf("failed to unmarshal record: %v", err)
 		}
@@ -35,7 +35,7 @@ func (SyntheticMirror) Validate(st *StateManager, tx *transactions.GenTransactio
 		}
 
 		// TODO Save the merkle state somewhere?
-		st.logDebug("Mirroring", "url", record.Header().ChainUrl)
+		st.logger.Debug("Mirroring", "url", record.Header().ChainUrl)
 		st.Update(record)
 	}
 

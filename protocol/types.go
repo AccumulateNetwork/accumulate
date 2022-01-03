@@ -8,7 +8,7 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-//go:generate go run ../internal/cmd/gentypes types.yml
+//go:generate go run ../tools/cmd/gentypes types.yml
 
 func NewValidator() (*validator.Validate, error) {
 	v := validator.New()
