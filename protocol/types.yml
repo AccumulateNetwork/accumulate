@@ -535,3 +535,46 @@ InternalTransactionsSent:
   fields:
     - name: Transactions
       type: chainSet
+
+Anchor:
+  kind: chain
+  fields:
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
+    - name: Root
+      type: chain
+    - name: Chains
+      type: chainSet
+    - name: ChainAnchor
+      type: chain
+    - name: Synthetic
+      type: chain
+
+SyntheticSignature:
+  fields:
+  - name: Txid
+    type: chain
+  - name: Signature
+    type: bytes
+  - name: PublicKey
+    type: bytes
+  - name: Nonce
+    type: uvarint
+
+SyntheticTransactionChain:
+  kind: chain
+  chain-type: SyntheticTransactions
+  fields:
+    - name: Index
+      type: varint
+    - name: Count
+      type: varint
+    - name: Nonce
+      type: varint
+    - name: Signatures
+      type: slice
+      slice:
+        type: SyntheticSignature
+        marshal-as: reference
