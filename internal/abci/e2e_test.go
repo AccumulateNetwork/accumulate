@@ -12,7 +12,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -155,24 +154,23 @@ func TestAnchorChain(t *testing.T) {
 	// Get the anchor chain manager
 	batch = n.db.Begin()
 	defer batch.Discard()
-	root := batch.Record(n.network.NodeUrl().JoinPath(protocol.MinorRoot))
+	ledger := batch.Record(n.network.NodeUrl().JoinPath(protocol.Ledger))
 
-	// Extract and verify the anchor chain head
-	head := state.NewAnchor()
-	err := root.GetStateAs(head)
-	require.NoError(t, err)
+	// Extract and verify the anchor chain ledgerState
+	ledgerState := protocol.NewInternalLedger()
+	require.NoError(t, ledger.GetStateAs(ledgerState))
 	require.ElementsMatch(t, [][32]byte{
 		types.Bytes((&url.URL{Authority: "RoadRunner"}).ResourceChain()).AsBytes32(),
 		types.Bytes((&url.URL{Authority: "RoadRunner/book"}).ResourceChain()).AsBytes32(),
 		types.Bytes((&url.URL{Authority: "RoadRunner/page"}).ResourceChain()).AsBytes32(),
-	}, head.Chains)
+	}, ledgerState.Records.Chains)
 
 	// Check each anchor
-	rootChain, err := root.Chain(protocol.Main)
+	rootChain, err := ledger.Chain(protocol.MinorRootChain)
 	require.NoError(t, err)
-	first := rootChain.Height() - int64(len(head.Chains))
-	for i, chain := range head.Chains {
-		mgr, err := batch.RecordByID(chain[:]).Chain(protocol.Main)
+	first := rootChain.Height() - int64(len(ledgerState.Records.Chains))
+	for i, chain := range ledgerState.Records.Chains {
+		mgr, err := batch.RecordByID(chain[:]).Chain(protocol.MainChain)
 		require.NoError(t, err)
 
 		root, err := rootChain.Entry(first + int64(i))
@@ -700,7 +698,7 @@ func TestSignatorHeight(t *testing.T) {
 	getHeight := func(u *url.URL) uint64 {
 		batch := n.db.Begin()
 		defer batch.Discard()
-		chain, err := batch.Record(u).Chain(protocol.Main)
+		chain, err := batch.Record(u).Chain(protocol.MainChain)
 		require.NoError(t, err)
 		return uint64(chain.Height())
 	}

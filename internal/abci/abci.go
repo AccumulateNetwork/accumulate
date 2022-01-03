@@ -32,9 +32,7 @@ type BeginBlockRequest struct {
 }
 
 // BeginBlockResponse is the return value of Chain.BeginBlock.
-type BeginBlockResponse struct {
-	SynthTxns []SynthTxnReference
-}
+type BeginBlockResponse struct{}
 
 // SynthTxnReference is a reference to a produced synthetic transaction.
 type SynthTxnReference struct {
@@ -51,7 +49,7 @@ type EndBlockRequest struct{}
 type Chain interface {
 	Query(*apiQuery.Query) (k, v []byte, err *protocol.Error)
 
-	InitChain(state []byte) error
+	InitChain(state []byte, time time.Time, blockIndex int64) error
 
 	BeginBlock(BeginBlockRequest) (BeginBlockResponse, error)
 	CheckTx(*transactions.GenTransaction) *protocol.Error

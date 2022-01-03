@@ -13,8 +13,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
 	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
@@ -104,8 +104,8 @@ func (c *FakeTendermint) App() abci.Application {
 	return c.app
 }
 
-// Wait until all pending transactions are done
-func (c *FakeTendermint) Wait() {
+// WaitForAll until all pending transactions are done
+func (c *FakeTendermint) WaitForAll() {
 	if debugTX {
 		fmt.Printf("Waiting for transactions\n")
 	}
@@ -117,6 +117,61 @@ func (c *FakeTendermint) Wait() {
 	if debugTX {
 		fmt.Printf("Done waiting\n")
 	}
+}
+
+func (c *FakeTendermint) WaitFor(txid [32]byte, waitSynth bool) error {
+	if debugTX {
+		fmt.Printf("Waiting for transaction %X\n", txid)
+	}
+	c.txMu.RLock()
+	st := c.txStatus[txid]
+	for st == nil || !st.Done {
+		c.txCond.Wait()
+		st = c.txStatus[txid]
+	}
+	c.txMu.RUnlock()
+	if debugTX {
+		fmt.Printf("Done waiting for %X\n", txid)
+	}
+
+	if !waitSynth {
+		return nil
+	}
+
+	var err error
+	reqTx := new(query.RequestByTxId)
+	reqTx.TxId = txid
+	q := new(query.Query)
+	q.Type = reqTx.Type()
+	q.Content, err = reqTx.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	data, err := q.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	r := c.App().Query(abci.RequestQuery{Data: data})
+	if r.Code != 0 {
+		return fmt.Errorf("failed: %v", r)
+	}
+
+	resTx := new(query.ResponseByTxId)
+	err = resTx.UnmarshalBinary(r.Value)
+	if err != nil {
+		return err
+	}
+
+	n := len(resTx.TxSynthTxIds) / 32
+	for i := 0; i < n; i++ {
+		var id [32]byte
+		copy(id[:], resTx.TxSynthTxIds[i*32:])
+		err = c.WaitFor(id, true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
@@ -168,6 +223,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 
 	st = new(txStatus)
 	c.txStatus[txh] = st
+	c.txStatus[txid] = st
 	st.Tx = tx
 	st.Hash = txh
 	c.txActive++
@@ -177,32 +233,32 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 func (c *FakeTendermint) addSynthTxns(blockIndex int64) {
 	batch := c.db.Begin()
 
-	// Load the synth txid chain
-	synth := batch.Record(c.network.NodeUrl().JoinPath(protocol.Synthetic))
-	head := state.NewSyntheticTransactionChain()
-	err := synth.GetStateAs(head)
+	// Load the ledger state
+	ledger := batch.Record(c.network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
 	if err != nil {
 		c.onError(err)
 		return
 	}
 
-	if head.Index != blockIndex {
+	if ledgerState.Index != blockIndex {
 		return
 	}
 
 	if debugTX {
-		fmt.Printf("The last block created %d synthetic transactions\n", head.Count)
+		fmt.Printf("The last block created %d synthetic transactions\n", ledgerState.Synthetic.Produced)
 	}
 
-	chain, err := synth.Chain(protocol.Main)
+	synthChain, err := ledger.Chain(protocol.SyntheticChain)
 	if err != nil {
 		c.onError(err)
 		return
 	}
 
 	// Pull the transaction IDs from the anchor chain
-	height := chain.Height()
-	txns, err := chain.Entries(height-head.Count, height)
+	height := synthChain.Height()
+	txns, err := synthChain.Entries(height-int64(ledgerState.Synthetic.Produced), height)
 	if err != nil {
 		c.onError(err)
 		return
@@ -332,7 +388,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		c.addSynthTxns(height)
 
 		c.txActive -= len(queue)
+		c.txMu.RLock()
 		c.txCond.Broadcast()
+		c.txMu.RUnlock()
 
 		// Remember if this block had transactions
 		hadTxnLastTime = len(queue) > 0
