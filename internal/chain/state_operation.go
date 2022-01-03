@@ -14,7 +14,7 @@ import (
 )
 
 type stateOperation interface {
-	Execute(*StateManager, *DeliverMetadata) error
+	Execute(*stateCache, *DeliverMetadata) error
 }
 
 type createRecord struct {
@@ -25,7 +25,7 @@ type createRecord struct {
 // Create queues a record for a synthetic chain create transaction. Will panic
 // if called by a synthetic transaction. Will panic if the record is a
 // transaction.
-func (m *StateManager) Create(record ...state.Chain) {
+func (m *stateCache) Create(record ...state.Chain) {
 	if m.txType.IsSynthetic() {
 		panic("Called StateManager.Create from a synthetic transaction!")
 	}
@@ -45,7 +45,7 @@ func (m *StateManager) Create(record ...state.Chain) {
 	}
 }
 
-func (op *createRecord) Execute(st *StateManager, meta *DeliverMetadata) error {
+func (op *createRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 	data, err := op.record.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal record: %v", err)
@@ -54,7 +54,7 @@ func (op *createRecord) Execute(st *StateManager, meta *DeliverMetadata) error {
 	scc := new(protocol.SyntheticCreateChain)
 	scc.Cause = st.txHash
 	scc.Chains = []protocol.ChainParams{{Data: data}}
-	st.Submit(op.url, scc)
+	meta.Submitted = append(meta.Submitted, &SubmittedTransaction{op.url, scc})
 	return nil
 }
 
@@ -66,7 +66,7 @@ type updateRecord struct {
 // Update queues a record for storage in the database. The queued update will
 // fail if the record does not already exist, unless it is created by a
 // synthetic transaction, or the record is a transaction.
-func (m *StateManager) Update(record ...state.Chain) {
+func (m *stateCache) Update(record ...state.Chain) {
 	for _, r := range record {
 		u, err := r.Header().ParseUrl()
 		if err != nil {
@@ -79,7 +79,7 @@ func (m *StateManager) Update(record ...state.Chain) {
 	}
 }
 
-func (op *updateRecord) Execute(st *StateManager, meta *DeliverMetadata) error {
+func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 	// Update: update an existing record. Non-synthetic transactions are
 	// not allowed to create records, so we must check if the record
 	// already exists. The record may have been added to the DB
@@ -100,8 +100,8 @@ func (op *updateRecord) Execute(st *StateManager, meta *DeliverMetadata) error {
 		// Non-synthetic transactions are allowed to create transaction
 		// records
 
-	case st.txType.IsSynthetic():
-		// Synthetic transactions are allowed to create records
+	case st.txType.IsSynthetic() || st.txType.IsInternal():
+		// Synthetic and internal transactions are allowed to create records
 
 	default:
 		// Non-synthetic transactions are NOT allowed to create records
@@ -114,12 +114,15 @@ func (op *updateRecord) Execute(st *StateManager, meta *DeliverMetadata) error {
 		header.ChainUrl = types.String(op.url.String())
 	}
 
-	err = st.updateStateAndChain(rec, op.record, "Main")
+	err = st.updateStateAndChain(rec, op.record, protocol.MainChain)
 	if err != nil {
 		return err
 	}
 
-	meta.Updated = append(meta.Updated, op.url)
+	// Do not create anchor entries for the ledger
+	if header.Type != types.ChainTypeInternalLedger {
+		meta.Updated = append(meta.Updated, op.url)
+	}
 	return nil
 }
 
@@ -128,7 +131,7 @@ type updateNonce struct {
 	record state.Chain
 }
 
-func (m *StateManager) UpdateNonce(record state.Chain) error {
+func (m *stateCache) UpdateNonce(record state.Chain) error {
 	u, err := record.Header().ParseUrl()
 	if err != nil {
 		return fmt.Errorf("invalid URL: %v", err)
@@ -168,7 +171,7 @@ func (m *StateManager) UpdateNonce(record state.Chain) error {
 	return nil
 }
 
-func (op *updateNonce) Execute(st *StateManager, meta *DeliverMetadata) error {
+func (op *updateNonce) Execute(st *stateCache, meta *DeliverMetadata) error {
 	return st.updateStateAndChain(st.batch.Record(op.url), op.record, "Pending")
 }
 
@@ -181,7 +184,7 @@ type addDataEntry struct {
 //UpdateData will cache a data associated with a DataAccount chain.
 //the cache data will not be stored directly in the state but can be used
 //upstream for storing a chain in the state database.
-func (m *StateManager) UpdateData(record state.Chain, entryHash []byte, dataEntry *protocol.DataEntry) {
+func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry *protocol.DataEntry) {
 	u, err := record.Header().ParseUrl()
 	if err != nil {
 		// TODO Return error
@@ -192,7 +195,7 @@ func (m *StateManager) UpdateData(record state.Chain, entryHash []byte, dataEntr
 	m.operations = append(m.operations, &addDataEntry{u, entryHash, dataEntry})
 }
 
-func (op *addDataEntry) Execute(st *StateManager, meta *DeliverMetadata) error {
+func (op *addDataEntry) Execute(st *stateCache, meta *DeliverMetadata) error {
 	// Add entry to data chain
 	record := st.batch.Record(op.url)
 	data, err := record.Data()
@@ -206,7 +209,7 @@ func (op *addDataEntry) Execute(st *StateManager, meta *DeliverMetadata) error {
 	}
 
 	// Add TX to main chain
-	main, err := record.Chain(protocol.Main)
+	main, err := record.Chain(protocol.MainChain)
 	if err != nil {
 		return fmt.Errorf("failed to load main chain of %q: %v", op.url, err)
 	}
@@ -220,78 +223,29 @@ func (op *addDataEntry) Execute(st *StateManager, meta *DeliverMetadata) error {
 	return nil
 }
 
-type addSignature struct {
-	txid [32]byte
-	sig  *transactions.ED25519Sig
-}
-
-// AddSignature adds a signature to a transaction
-func (m *StateManager) AddSignature(publicKey []byte, sig *protocol.SyntheticSignature) {
-	m.operations = append(m.operations, &addSignature{
-		txid: sig.Txid,
-		sig: &transactions.ED25519Sig{
-			Nonce:     sig.Nonce,
-			Signature: sig.Signature,
-			PublicKey: publicKey,
-		},
-	})
-}
-
-func (op *addSignature) Execute(st *StateManager, meta *DeliverMetadata) error {
-	tx := st.batch.Transaction(op.txid[:])
-	txState, err := tx.GetState()
-	if err != nil {
-		return err
-	}
-
-	err = tx.AddSignatures(op.sig)
-	if err != nil {
-		return err
-	}
-
-	if !txState.TxType().IsSynthetic() {
-		return nil
-	}
-
-	synth := st.batch.Record(st.nodeUrl.JoinPath(protocol.Synthetic))
-	synthState := state.NewSyntheticTransactionChain()
-	err = synth.GetStateAs(synthState)
-	if err != nil {
-		return err
-	}
-
-	synthState.Signatures = append(synthState.Signatures, state.SyntheticSignature{
-		Txid:      op.txid,
-		PublicKey: op.sig.PublicKey,
-		Signature: op.sig.Signature,
-		Nonce:     op.sig.Nonce,
-	})
-	return synth.PutState(synthState)
-}
-
 type writeIndex struct {
 	index *database.Value
 	put   bool
 	value []byte
 }
 
-func (m *StateManager) RecordIndex(u *url.URL, key ...interface{}) *writeIndex {
-	return m.getIndex(m.batch.Record(u).Index(key...))
+func (c *stateCache) RecordIndex(u *url.URL, key ...interface{}) *writeIndex {
+	return c.getIndex(c.batch.Record(u).Index(key...))
 }
 
-func (m *StateManager) TxnIndex(id []byte, key ...interface{}) *writeIndex {
-	return m.getIndex(m.batch.Transaction(id).Index(key...))
+func (c *stateCache) TxnIndex(id []byte, key ...interface{}) *writeIndex {
+	return c.getIndex(c.batch.Transaction(id).Index(key...))
 }
 
-func (m *StateManager) getIndex(i *database.Value) *writeIndex {
-	op, ok := m.indices[i.Key()]
+func (c *stateCache) getIndex(i *database.Value) *writeIndex {
+	op, ok := c.indices[i.Key()]
 	if ok {
 		return op
 	}
 
 	op = &writeIndex{i, false, nil}
-	m.indices[i.Key()] = op
-	m.operations = append(m.operations, op)
+	c.indices[i.Key()] = op
+	c.operations = append(c.operations, op)
 	return op
 }
 
@@ -306,7 +260,7 @@ func (op *writeIndex) Put(data []byte) {
 	op.value, op.put = data, true
 }
 
-func (op *writeIndex) Execute(st *StateManager, meta *DeliverMetadata) error {
+func (op *writeIndex) Execute(st *stateCache, meta *DeliverMetadata) error {
 	if !op.put {
 		return nil
 	}
@@ -314,12 +268,28 @@ func (op *writeIndex) Execute(st *StateManager, meta *DeliverMetadata) error {
 	return nil
 }
 
+type signTransaction struct {
+	txid      []byte
+	signature *transactions.ED25519Sig
+}
+
+func (m *stateCache) SignTransaction(txid []byte, signature *transactions.ED25519Sig) {
+	m.operations = append(m.operations, &signTransaction{
+		txid:      txid,
+		signature: signature,
+	})
+}
+
+func (op *signTransaction) Execute(st *stateCache, meta *DeliverMetadata) error {
+	return st.batch.Transaction(op.txid).AddSignatures(op.signature)
+}
+
 //UpdateCreditBalance update the credits used for a transaction
-func (m *StateManager) UpdateCreditBalance(record state.Chain) {
+func (m *stateCache) UpdateCreditBalance(record state.Chain) {
 	panic("todo: UpdateCredtedBalance needs to be implemented")
 }
 
-func (m *StateManager) updateStateAndChain(record *database.Record, state state.Chain, name string) error {
+func (m *stateCache) updateStateAndChain(record *database.Record, state state.Chain, name string) error {
 	chain, err := record.Chain(name)
 	if err != nil {
 		return fmt.Errorf("failed to load %s chain of %q: %v", name, state.Header().ChainUrl, err)

@@ -58,7 +58,7 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	}
 
 	// Add Merkle chain info (for records)
-	chain, err := batch.RecordByID(chainId).Chain(protocol.Main)
+	chain, err := batch.RecordByID(chainId).Chain(protocol.MainChain)
 	if err == nil {
 		qr.Height = uint64(chain.Height())
 
@@ -73,7 +73,7 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 }
 
 func (m *Executor) queryDirectoryByChainId(batch *database.Batch, chainId []byte, start uint64, limit uint64) (*protocol.DirectoryQueryResult, error) {
-	md, err := m.loadDirectoryMetadata(batch, chainId)
+	md, err := loadDirectoryMetadata(batch, chainId)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, chainId []byte
 	resp.Entries = make([]string, count)
 
 	for i := uint64(0); i < count; i++ {
-		resp.Entries[i], err = m.loadDirectoryEntry(batch, chainId, start+i)
+		resp.Entries[i], err = loadDirectoryEntry(batch, chainId, start+i)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get entry %d", i)
 		}
@@ -267,7 +267,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
 
-		chain, err := batch.RecordByID(txh.ChainId[:]).Chain(protocol.Main)
+		chain, err := batch.RecordByID(txh.ChainId[:]).Chain(protocol.MainChain)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 		}
