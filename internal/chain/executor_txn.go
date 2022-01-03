@@ -274,6 +274,19 @@ func (m *Executor) checkSynthetic(st *StateManager, tx *transactions.GenTransact
 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
 	//not an impostor. Need to figure out how to do this. Right now we just assume the synth request
 	//sender is legit.
+
+	// TODO Get rid of this hack and actually check the nonce. But first we have
+	// to implement transaction batching.
+	v := st.RecordIndex(m.Network.NodeUrl(), "SeenSynth", tx.TransactionHash())
+	_, err := v.Get()
+	if err == nil {
+		return fmt.Errorf("duplicate synthetic transaction %X", tx.TransactionHash())
+	} else if errors.Is(err, storage.ErrNotFound) {
+		v.Put([]byte{1})
+	} else {
+		return err
+	}
+
 	return nil
 }
 
