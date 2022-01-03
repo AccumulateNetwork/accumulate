@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 )
 
 // TransactionType is the type of a transaction.
@@ -17,11 +19,14 @@ const (
 	// TxTypeUnknown represents an unknown transaction type.
 	TxTypeUnknown TransactionType = 0x00
 
-	// txSynthetic marks the boundary between user and system transactions.
-	txSynthetic = TxTypeSyntheticSignTransactions
+	// txMaxUser is the highest number reserved for user transactions.
+	txMaxUser TransactionType = 0x2F
 
-	// txMax is the last defined transaction type.
-	txMax = TxTypeSegWitDataEntry
+	// txMaxSynthetic is the highest number reserved for synthetic transactions.
+	txMaxSynthetic TransactionType = 0x5F
+
+	// txMaxInternal is the highest number reserved for internal transactions.
+	txMaxInternal TransactionType = 0xFF
 )
 
 // User transactions
@@ -83,12 +88,8 @@ const (
 	TxTypeUpdateKeyPage TransactionType = 0x0F
 )
 
-// System transactions
+// Synthetic transactions
 const (
-	// TxTypeSyntheticCreateChain propagates signatures for synthetic
-	// transactions so they can be submitted to the network.
-	TxTypeSyntheticSignTransactions TransactionType = 0x30
-
 	// TxTypeSyntheticCreateChain creates or updates chains.
 	TxTypeSyntheticCreateChain TransactionType = 0x31
 
@@ -108,9 +109,6 @@ const (
 	// issuable tokens.
 	TxTypeSyntheticBurnTokens TransactionType = 0x36
 
-	// TxTypeSyntheticGenesis initializes system chains.
-	TxTypeSyntheticGenesis TransactionType = 0x37
-
 	// TxTypeSyntheticMirror mirrors records from one network to another.
 	TxTypeSyntheticMirror TransactionType = 0x38
 
@@ -119,8 +117,29 @@ const (
 	TxTypeSegWitDataEntry TransactionType = 0x39
 )
 
+const (
+	// TxTypeInternalGenesis initializes system chains.
+	TxTypeInternalGenesis TransactionType = 0x60
+
+	TxTypeInternalSendTransactions TransactionType = 0x61
+
+	// TxTypeInternalTransactionsSigned notifies the executor of synthetic
+	// transactions that have been signed.
+	TxTypeInternalTransactionsSigned TransactionType = 0x62
+
+	// TxTypeInternalTransactionsSent notifies the executor of synthetic
+	// transactions that have been sent.
+	TxTypeInternalTransactionsSent TransactionType = 0x63
+)
+
+// IsUser returns true if the transaction type is user.
+func (t TransactionType) IsUser() bool { return TxTypeUnknown < t && t <= txMaxUser }
+
 // IsSynthetic returns true if the transaction type is synthetic.
-func (t TransactionType) IsSynthetic() bool { return t >= txSynthetic }
+func (t TransactionType) IsSynthetic() bool { return txMaxUser < t && t <= txMaxSynthetic }
+
+// IsInternal returns true if the transaction type is internal.
+func (t TransactionType) IsInternal() bool { return txMaxSynthetic < t && t <= txMaxInternal }
 
 // ID returns the transaction type ID
 func (t TransactionType) ID() uint64 { return uint64(t) }
@@ -158,8 +177,7 @@ func (t TransactionType) String() string {
 		return "addCredits"
 	case TxTypeUpdateKeyPage:
 		return "updateKeyPage"
-	case TxTypeSyntheticSignTransactions:
-		return "syntheticSignTransactions"
+
 	case TxTypeSyntheticCreateChain:
 		return "syntheticCreateChain"
 	case TxTypeSyntheticWriteData:
@@ -172,12 +190,20 @@ func (t TransactionType) String() string {
 		return "syntheticDepositCredits"
 	case TxTypeSyntheticBurnTokens:
 		return "syntheticBurnTokens"
-	case TxTypeSyntheticGenesis:
-		return "syntheticGenesis"
 	case TxTypeSyntheticMirror:
 		return "syntheticMirror"
 	case TxTypeSegWitDataEntry:
 		return "segWitDataEntry"
+
+	case TxTypeInternalGenesis:
+		return "genesis"
+	case TxTypeInternalSendTransactions:
+		return "sendTransactions"
+	case TxTypeInternalTransactionsSigned:
+		return "transactionsSigned"
+	case TxTypeInternalTransactionsSent:
+		return "transactionsSent"
+
 	default:
 		return fmt.Sprintf("TransactionType:%d", t)
 	}
@@ -190,7 +216,7 @@ func (t TransactionType) Name() string { return t.String() }
 var txByName = map[string]TransactionType{}
 
 func init() {
-	for t := TxTypeUnknown; t < txMax; t++ {
+	for t := TxTypeUnknown; t < txMaxInternal; t++ {
 		txByName[t.String()] = t
 	}
 }
@@ -212,4 +238,22 @@ func (t *TransactionType) UnmarshalJSON(data []byte) error {
 
 func (t TransactionType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())
+}
+
+func (t TransactionType) BinarySize() int {
+	return encoding.UvarintBinarySize(t.ID())
+}
+
+func (t TransactionType) MarshalBinary() ([]byte, error) {
+	return encoding.UvarintMarshalBinary(t.ID()), nil
+}
+
+func (t *TransactionType) UnmarshalBinary(data []byte) error {
+	v, err := encoding.UvarintUnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+	*t = TransactionType(v)
+	return nil
 }

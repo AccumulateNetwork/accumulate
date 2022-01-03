@@ -10,7 +10,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type SyntheticCreateChain struct{}
@@ -33,7 +32,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 	// Do basic validation and add everything to the state manager
 	urls := make([]*url.URL, len(body.Chains))
 	for i, cc := range body.Chains {
-		record, err := unmarshalRecord(&state.Object{Entry: cc.Data})
+		record, err := protocol.UnmarshalChain(cc.Data)
 		if err != nil {
 			return fmt.Errorf("invalid chain payload: %v", err)
 		}
@@ -103,7 +102,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 		switch record.Header().Type {
 		case types.ChainTypeKeyBook:
 			// A key book does not itself have a key book
-			if record.Header().KeyBook != (types.Bytes32{}) {
+			if record.Header().KeyBook != "" {
 				return errors.New("invalid key book: KeyBook is not empty")
 			}
 
@@ -112,15 +111,19 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTrans
 
 		default:
 			// Anything else must have a key book
-			if record.Header().KeyBook == (types.Bytes32{}) {
+			if record.Header().KeyBook == "" {
 				return fmt.Errorf("%q does not specify a key book", u)
 			}
 		}
 
 		// Make sure the key book actually exists
-		if record.Header().KeyBook != (types.Bytes32{}) {
-			ssg := new(protocol.KeyBook)
-			err = st.LoadAs(record.Header().KeyBook, ssg)
+		if record.Header().KeyBook != "" {
+			book := new(protocol.KeyBook)
+			url, err := url.Parse(*record.Header().KeyBook.AsString())
+			if err != nil {
+				return fmt.Errorf("invalid keybook url %s", url.String())
+			}
+			err = st.LoadUrlAs(url, book)
 			if err != nil {
 				return fmt.Errorf("invalid key book for %q: %v", u, err)
 			}

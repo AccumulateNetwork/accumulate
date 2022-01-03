@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	accenc "github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -22,7 +23,7 @@ type Chain interface {
 type ChainHeader struct {
 	Type           types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
 	ChainUrl       types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	KeyBook        types.Bytes32   `json:"keyBook"`        //this is the chain id for the sig spec for the chain
+	KeyBook        types.String    `json:"keyBook"`        //this is the chain id for the sig spec for the chain
 	ManagerKeyBook types.String    `json:"managerKeyBook"` //this is the manager key book url for the chain
 	// transient
 	url *url.URL
@@ -78,13 +79,22 @@ func (h *ChainHeader) ParseUrl() (*url.URL, error) {
 	return u, nil
 }
 
+func ChainType(data []byte) (types.ChainType, error) {
+	v, err := accenc.UvarintUnmarshalBinary(data)
+	if err != nil {
+		return 0, err
+	}
+
+	return types.ChainType(v), nil
+}
+
 //MarshalBinary serializes the header
 func (h *ChainHeader) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	buffer.Write(common.Uint64Bytes(h.Type.ID()))
 	buffer.Write(common.SliceBytes([]byte(h.ChainUrl)))
-	buffer.Write(common.SliceBytes(h.KeyBook[:]))
+	buffer.Write(common.SliceBytes([]byte(h.KeyBook)))
 	buffer.Write(common.SliceBytes([]byte(h.ManagerKeyBook)))
 
 	return buffer.Bytes(), nil
@@ -105,31 +115,10 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	h.ChainUrl = types.String(u)
 
 	spec, data := common.BytesSlice(data)
-	h.KeyBook.FromBytes(spec)
+	h.KeyBook = types.String(spec)
 
 	mgr, _ := common.BytesSlice(data)
 	h.ManagerKeyBook = types.String(mgr)
 
 	return nil
-}
-
-func (tx *DBTransaction) LoadChainAs(chainId []byte, chain Chain) (*Object, error) {
-	state, err := tx.GetCurrentEntry(chainId)
-	if err != nil {
-		return nil, err
-	}
-
-	err = state.As(chain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal chain: %v", err)
-	}
-
-	return state, nil
-}
-
-// LoadChain retrieves and unmarshals the specified chain.
-func (tx *DBTransaction) LoadChain(chainId []byte) (*Object, *ChainHeader, error) {
-	chain := new(ChainHeader)
-	obj, err := tx.LoadChainAs(chainId, chain)
-	return obj, chain, err
 }
