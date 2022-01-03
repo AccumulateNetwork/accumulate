@@ -213,7 +213,6 @@ func TestCreateADI(t *testing.T) {
 
 	r := n.GetADI("RoadRunner")
 	require.Equal(t, types.String("acc://RoadRunner"), r.ChainUrl)
-	require.Equal(t, types.Bytes(keyHash[:]), r.KeyData)
 
 	kg := n.GetKeyBook("RoadRunner/foo-book")
 	require.Len(t, kg.Pages, 1)

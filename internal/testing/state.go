@@ -111,7 +111,8 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
 	book.Pages = append(book.Pages, pageUrl.String())
 
-	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
+	adi := protocol.NewADI()
+	adi.ChainUrl = types.String(identityUrl.String())
 	adi.KeyBook = types.String(bookUrl.String())
 
 	return WriteStates(db, adi, book, mss)

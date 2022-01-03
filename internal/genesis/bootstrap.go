@@ -48,7 +48,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
 		uLedger := uAdi.JoinPath(protocol.Ledger)
 
-		adi := state.NewIdentityState(types.String(uAdi.String()))
+		adi := protocol.NewADI()
+		adi.ChainUrl = types.String(uAdi.String())
 		adi.KeyBook = types.String(uBook.String())
 		records = append(records, adi)
 

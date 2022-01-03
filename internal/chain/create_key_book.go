@@ -7,7 +7,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type CreateKeyBook struct{}
@@ -15,7 +14,7 @@ type CreateKeyBook struct{}
 func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
 func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) error {
-	if _, ok := st.Origin.(*state.AdiState); !ok {
+	if _, ok := st.Origin.(*protocol.ADI); !ok {
 		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeIdentity, st.Origin.Header().Type)
 	}
 
