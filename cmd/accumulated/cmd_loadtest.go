@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
 	"net/url"
@@ -113,9 +112,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 	}
 	defer relay.Stop()
 
-	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
-
-	addrList, err := acctesting.RunLoadTest(query, privateKeySponsor, flagLoadTest.WalletCount, flagLoadTest.TransactionCount)
+	addrList, err := acctesting.RunLoadTest(query, flagLoadTest.WalletCount, flagLoadTest.TransactionCount)
 	check(err)
 
 	// Wait for synthetic transactions to go through

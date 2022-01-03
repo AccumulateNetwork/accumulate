@@ -5,13 +5,18 @@ stages:
 - validate
 
 variables:
-  GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
+  BOLD_RED: '\e[1;31m'
+  NO_COLOR: '\e[0m'
+  SECTION: '\e[0K'
 
-default:
+.go:
+  image: golang:1.17
   cache:
     key: go-mod-cache
     paths:
     - .go-mod-cache
+  variables:
+    GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
   before_script:
   - |
     function build-daemon {
@@ -22,17 +27,23 @@ default:
       [ -z "$GOARCH" ] || BIN=${BIN}-${GOARCH}
       [[ $GOOS == windows ]] && BIN=${BIN}.exe
       export BUILDFLAGS="-o ${BIN}"
-      echo Build $BIN
+      echo -e "${SECTION}section_start:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}Build accumulated for $GOOS $GOARCH"
       make GIT_COMMIT=${CI_COMMIT_SHA} GIT_DESCRIBE=${GIT_DESCRIBE}
+      echo -e "${SECTION}section_end:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}";
     }
 
 .test:
   stage: test
+  extends: .go
   needs: []
   tags: [docker, linux]
+  artifacts:
+    when: always
+    reports:
+      junit: report.xml
   script:
   - go build -v ./...
-  - go test -v -cpu=4 -count=1 ./...
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -cpu 4 ./...
 
 test 1/2:
   extends: .test
@@ -45,7 +56,6 @@ test 2/2:
 git describe:
   stage: build
   needs: []
-  tags: [docker, linux]
   script:
   - git fetch --unshallow
   - echo "GIT_DESCRIBE=$(git describe --dirty)" >> git.env
@@ -53,11 +63,50 @@ git describe:
     reports:
       dotenv: git.env
 
+build images:
+  stage: build
+  needs: []
+  tags: [docker, linux]
+  image: docker
+  services: ['docker:dind']
+  script:
+  - docker build -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
+  - docker build -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  - docker push ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
+  - docker push ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
+
+lint:
+  stage: build
+  extends: .go
+  needs: []
+  script:
+  - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
+
+  - echo -e "${SECTION}section_start:`date +%s`:vet\r${SECTION}Vet"
+  - go vet ./...
+  - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
+
+  - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"
+  - go mod tidy
+  - git diff --quiet go.mod go.sum || die "Go mod files are not tidy. Please run \`go mod tidy\`."
+  - echo -e "${SECTION}section_end:`date +%s`:tidy\r${SECTION}"
+
+  - echo -e "${SECTION}section_start:`date +%s`:generate\r${SECTION}Verify generated files are up to date"
+  - go generate -x ./...
+  - git diff --quiet || die "Generated files are not up to date. Please run \`go generate ./...\`."
+  - echo -e "${SECTION}section_end:`date +%s`:generate\r${SECTION}"
+
+  - echo -e "${SECTION}section_start:`date +%s`:imports\r${SECTION}Verify code is correctly formatted"
+  - go run github.com/rinchsan/gosimports/cmd/gosimports -l */ | tee fmt.log
+  - test -s fmt.log && die "Code is incorrectly formatted. Please run \`gosimports -w .\` (or \`./scripts/imports.sh\`)."
+  - echo -e "${SECTION}section_end:`date +%s`:imports\r${SECTION}"
+
 build:
   stage: build
+  extends: .go
   needs: [git describe]
   tags: [docker, linux]
-  image: golang:1.17
   script:
   - build-daemon linux amd64
   - build-daemon linux arm64
@@ -71,9 +120,9 @@ build:
 
 configure:
   stage: build
+  extends: .go
   needs: [git describe]
   tags: [docker, linux]
-  image: golang:1.17
   script:
   - |
     function init {
@@ -130,14 +179,32 @@ deploy 4/4:
 
 .validate:
   stage: validate
+  extends: .go
   only: [develop] # only run on the main branch
   needs: [deploy 1/4, deploy 2/4, deploy 3/4, deploy 4/4]
   tags: [docker, linux]
-  image: golang:1.17
   variables:
     ACC_API: https://devnet.accumulatenetwork.io/v1
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
+
+validate docker:
+  stage: validate
+  needs: ['build images']
+  tags: [docker, linux]
+  image: docker
+  services: ['docker:dind']
+  variables:
+    # set mnemonic for predictable addresses
+    MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
+  script:
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  - docker run --rm -v ${PWD}/nodes:/nodes ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} accumulated init devnet -w /nodes --docker --compose -b 3 -v 3
+  - cd nodes
+  - apk add --no-cache docker-compose
+  - docker-compose up -d
+  - docker-compose run -e MNEMONIC="${MNEMONIC}" --rm tools /scripts/ci/validate.sh
+  - docker-compose down
 
 validate:
   extends: .validate

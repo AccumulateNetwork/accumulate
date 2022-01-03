@@ -68,7 +68,7 @@ if [ -z $4 ]; then
         if [ $? -eq 0 ]; then
 	   txid=`echo $txid1 | $j .error`
         else
-	   echo "cli tx create failed"
+	   echo "accumulate tx create failed"
 	   exit 1
         fi
 else
@@ -76,7 +76,7 @@ else
         if [ $? -eq 0 ]; then
 	   txid=`echo $txid1 | $j .error`
         else
-	   echo "cli tx create failed"
+	   echo "accumulate tx create failed"
 	   exit 1
         fi
 fi
