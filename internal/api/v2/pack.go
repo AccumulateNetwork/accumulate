@@ -7,17 +7,22 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-func packStateResponse(obj *state.Object, chain state.Chain) (*QueryResponse, error) {
-	res := new(QueryResponse)
+func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryResponse, error) {
+	res := new(ChainQueryResponse)
 	res.Type = chain.Header().Type.Name()
-	res.MerkleState = new(MerkleState)
-	res.MerkleState.Count = obj.Height
-	res.MerkleState.Roots = obj.Roots
+	res.MainChain = new(MerkleState)
+	res.MainChain.Height = obj.Height
+	res.MainChain.Roots = obj.Roots
 	res.Data = chain
+
+	u, err := chain.Header().ParseUrl()
+	if err == nil {
+		res.ChainId = u.ResourceChain()
+	}
 	return res, nil
 }
 
-func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *state.PendingTransaction, payload protocol.TransactionPayload) (*QueryResponse, error) {
+func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *state.PendingTransaction, payload protocol.TransactionPayload) (*TransactionQueryResponse, error) {
 	var tx *state.TxState
 	if main != nil {
 		tx = &main.TxState
@@ -25,7 +30,7 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 		tx = pend.TransactionState
 	}
 
-	res := new(QueryResponse)
+	res := new(TransactionQueryResponse)
 	res.Type = payload.GetType().String()
 	res.Data = payload
 	res.Txid = txid[:]
@@ -73,6 +78,8 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 		return res, nil
 	}
 
+	res.Signatures = pend.Signature
+
 	if len(pend.Status) > 0 {
 		status := new(protocol.TransactionStatus)
 		err := status.UnmarshalBinary(pend.Status)
@@ -81,14 +88,6 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 		}
 
 		res.Status = status
-	}
-
-	if len(pend.Signature) > 0 {
-		sig := pend.Signature[0]
-		res.Signer = new(Signer)
-		res.Signer.PublicKey = sig.PublicKey
-		res.Signer.Nonce = sig.Nonce
-		res.Sig = sig.Signature
 	}
 
 	return res, nil

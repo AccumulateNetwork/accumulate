@@ -21,6 +21,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 )
 
@@ -28,24 +29,24 @@ func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
 	params := api2.UrlQuery{
 		Url: url,
 	}
-	res := new(api2.QueryResponse)
+	res := new(api2.ChainQueryResponse)
 	res.Data = rec
 	if err := Client.Request(context.Background(), "query", &params, res); err != nil {
 		return nil, err
 	}
-	return res.MerkleState, nil
+	return res.MainChain, nil
 }
 
 func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	params := api2.ChainIdQuery{
 		ChainId: chainId,
 	}
-	res := new(api2.QueryResponse)
+	res := new(api2.ChainQueryResponse)
 	res.Data = rec
 	if err := Client.Request(context.Background(), "query-chain", &params, res); err != nil {
 		return nil, err
 	}
-	return res.MerkleState, nil
+	return res.MainChain, nil
 }
 
 func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.SignatureInfo, []byte, error) {
@@ -126,7 +127,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Sig
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[ed.KeyPageIndex][:], err)
 	}
-	ed.KeyPageHeight = ms.Count
+	ed.KeyPageHeight = ms.Height
 
 	return args[ct:], &ed, privKey, nil
 }
@@ -190,31 +191,36 @@ func IsLiteAccount(url string) bool {
 	return protocol.IsValidAdiUrl(u2) != nil
 }
 
-func UnmarshalQuery(src interface{}, dst interface{}) error {
-	d, err := json.Marshal(src)
+// Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.
+func Remarshal(src interface{}, dst interface{}) error {
+	cfg := &mapstructure.DecoderConfig{
+		Result:  &dst,
+		TagName: "json",
+		Squash:  true,
+	}
+	decoder, err := mapstructure.NewDecoder(cfg)
 	if err != nil {
 		return err
 	}
-
-	err = json.Unmarshal(d, dst)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return decoder.Decode(src)
 }
 
-func GetUrlAs(url string, as interface{}) error {
-	res, err := GetUrl(url)
-	if err != nil {
-		return err
-	}
-
-	return UnmarshalQuery(res, as)
+// This is a hack to reduce how much we have to change
+type QueryResponse struct {
+	Type           string                      `json:"type,omitempty"`
+	MainChain      *api2.MerkleState           `json:"mainChain,omitempty"`
+	Data           interface{}                 `json:"data,omitempty"`
+	ChainId        []byte                      `json:"chainId,omitempty"`
+	Origin         string                      `json:"origin,omitempty"`
+	KeyPage        *api2.KeyPage               `json:"keyPage,omitempty"`
+	Txid           []byte                      `json:"txid,omitempty"`
+	Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
+	Status         *protocol.TransactionStatus `json:"status,omitempty"`
+	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty"`
 }
 
-func GetUrl(url string) (*api2.QueryResponse, error) {
-	var res api2.QueryResponse
+func GetUrl(url string) (*QueryResponse, error) {
+	var res QueryResponse
 
 	u, err := url2.Parse(url)
 	params := api2.UrlQuery{}
@@ -433,45 +439,120 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
 }
 
-func printGeneralTransactionParameters(res *api2.QueryResponse) string {
+func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
 	out := fmt.Sprintf("---\n")
 	out += fmt.Sprintf("  - Transaction           : %x\n", res.Txid)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
-	out += fmt.Sprintf("  - Signature             : %x\n", res.Sig)
-	if res.Signer != nil {
-		out += fmt.Sprintf("  - Signer Key            : %x\n", res.Signer.PublicKey)
-		out += fmt.Sprintf("  - Signer Nonce          : %d\n", res.Signer.Nonce)
+	out += fmt.Sprintf("  - Signatures            :\n")
+	for _, sig := range res.Signatures {
+		out += fmt.Sprintf("  -                       : %x (sig) / %x (key)\n", sig.Signature, sig.PublicKey)
 	}
 	out += fmt.Sprintf("  - Key Page              : %d (height) / %d (index)\n", res.KeyPage.Height, res.KeyPage.Index)
 	out += fmt.Sprintf("===\n")
 	return out
 }
 
-func PrintQueryResponseV2(v2 *api2.QueryResponse) (string, error) {
-	if WantJsonOutput || v2.Type == "dataEntry" || v2.Type == "dataSet" {
-		data, err := json.Marshal(v2)
-		if err != nil {
-			return "", err
-		}
-		return string(data), nil
+func PrintJson(v interface{}) (string, error) {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func PrintChainQueryResponseV2(res *QueryResponse) (string, error) {
+	if WantJsonOutput || res.Type == "dataEntry" {
+		return PrintJson(res)
 	}
 
-	out, err := outputForHumans(v2)
+	out, err := outputForHumans(res)
 	if err != nil {
 		return "", err
 	}
 
-	for i, txid := range v2.SyntheticTxids {
+	for i, txid := range res.SyntheticTxids {
 		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
 	}
 	return out, nil
 }
 
-func outputForHumans(res *api2.QueryResponse) (string, error) {
+func PrintTransactionQueryResponseV2(res *api2.TransactionQueryResponse) (string, error) {
+	if WantJsonOutput {
+		return PrintJson(res)
+	}
+
+	out, err := outputForHumansTx(res)
+	if err != nil {
+		return "", err
+	}
+
+	for i, txid := range res.SyntheticTxids {
+		out += fmt.Sprintf("  - Synthetic Transaction %d : %x\n", i, txid)
+	}
+	return out, nil
+}
+
+func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
+	if WantJsonOutput || res.Type == "dataSet" {
+		return PrintJson(res)
+	}
+
+	var out string
+	switch res.Type {
+	case "directory":
+		out += fmt.Sprintf("\n\tADI Entries: start = %d, count = %d, total = %d\n", res.Start, res.Count, res.Total)
+
+		if len(res.OtherItems) == 0 {
+			for _, s := range res.Items {
+				out += fmt.Sprintf("\t%v\n", s)
+			}
+			return out, nil
+		}
+
+		for _, s := range res.OtherItems {
+			qr := new(api2.ChainQueryResponse)
+			header := new(state.ChainHeader)
+			qr.Data = header
+			err := Remarshal(s, qr)
+			if err != nil {
+				return "", err
+			}
+
+			chainDesc := header.Type.Name()
+			if err == nil {
+				if v, ok := ApiToString[header.Type]; ok {
+					chainDesc = v
+				}
+			}
+			out += fmt.Sprintf("\t%v (%s)\n", header.ChainUrl, chainDesc)
+		}
+
+	case "txHistory":
+		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		for i := range res.Items {
+			// Convert the item to a transaction query response
+			txr := new(api2.TransactionQueryResponse)
+			err := Remarshal(res.Items[i], txr)
+			if err != nil {
+				return "", err
+			}
+
+			s, err := PrintTransactionQueryResponseV2(txr)
+			if err != nil {
+				return "", err
+			}
+			out += s
+		}
+	}
+
+	return out, nil
+}
+
+func outputForHumans(res *QueryResponse) (string, error) {
 	switch string(res.Type) {
 	case types.ChainTypeLiteTokenAccount.String():
 		ata := protocol.LiteTokenAccount{}
-		err := UnmarshalQuery(res.Data, &ata)
+		err := Remarshal(res.Data, &ata)
 		if err != nil {
 			return "", err
 		}
@@ -491,7 +572,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.ChainTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
-		err := UnmarshalQuery(res.Data, &ata)
+		err := Remarshal(res.Data, &ata)
 		if err != nil {
 			return "", err
 		}
@@ -510,7 +591,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.ChainTypeIdentity.String():
 		adi := state.AdiState{}
-		err := UnmarshalQuery(res.Data, &adi)
+		err := Remarshal(res.Data, &adi)
 		if err != nil {
 			return "", err
 		}
@@ -520,34 +601,9 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
 
 		return out, nil
-	case "directory":
-		dqr := api2.DirectoryQueryResult{}
-		err := UnmarshalQuery(res.Data, &dqr)
-		if err != nil {
-			return "", err
-		}
-
-		var out string
-		out += fmt.Sprintf("\n\tADI Entries: start = %d, count = %d, total = %d\n", dqr.Start, dqr.Count, dqr.Total)
-		for _, s := range dqr.ExpandedEntries {
-			header := state.ChainHeader{}
-			err = UnmarshalQuery(s.Data, &header)
-			if err != nil {
-				return "", err
-			}
-
-			chainDesc := "unknown"
-			if err == nil {
-				if v, ok := ApiToString[header.Type]; ok {
-					chainDesc = v
-				}
-			}
-			out += fmt.Sprintf("\t%v (%s)\n", header.ChainUrl, chainDesc)
-		}
-		return out, nil
 	case types.ChainTypeKeyBook.String():
 		book := protocol.KeyBook{}
-		err := UnmarshalQuery(res.Data, &book)
+		err := Remarshal(res.Data, &book)
 		if err != nil {
 			return "", err
 		}
@@ -560,7 +616,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.ChainTypeKeyPage.String():
 		ss := protocol.KeyPage{}
-		err := UnmarshalQuery(res.Data, &ss)
+		err := Remarshal(res.Data, &ss)
 		if err != nil {
 			return "", err
 		}
@@ -574,9 +630,16 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 		}
 		return out, nil
+	default:
+		return "", fmt.Errorf("unknown response type %q", res.Type)
+	}
+}
+
+func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
+	switch string(res.Type) {
 	case types.TxTypeSendTokens.String():
 		tx := response.TokenTx{}
-		err := UnmarshalQuery(res.Data, &tx)
+		err := Remarshal(res.Data, &tx)
 		if err != nil {
 			return "", err
 		}
@@ -597,7 +660,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.TxTypeSyntheticDepositTokens.String():
 		deposit := new(protocol.SyntheticDepositTokens)
-		err := UnmarshalQuery(res.Data, &deposit)
+		err := Remarshal(res.Data, &deposit)
 		if err != nil {
 			return "", err
 		}
@@ -613,7 +676,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 		return out, nil
 	case types.TxTypeCreateIdentity.String():
 		id := protocol.CreateIdentity{}
-		err := UnmarshalQuery(res.Data, &id)
+		err := Remarshal(res.Data, &id)
 		if err != nil {
 			return "", err
 		}
@@ -641,7 +704,7 @@ func outputForHumans(res *api2.QueryResponse) (string, error) {
 func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
 	kb, err := GetByChainId(chainId)
 	header := state.ChainHeader{}
-	err = UnmarshalQuery(kb.Data, &header)
+	err = Remarshal(kb.Data, &header)
 	if err != nil {
 		return nil, err
 	}
@@ -651,7 +714,7 @@ func getChainHeaderFromChainId(chainId []byte) (*state.ChainHeader, error) {
 func resolveKeyBookUrl(chainId []byte) (string, error) {
 	kb, err := GetByChainId(chainId)
 	book := protocol.KeyBook{}
-	err = UnmarshalQuery(kb.Data, &book)
+	err = Remarshal(kb.Data, &book)
 	if err != nil {
 		return "", err
 	}
@@ -664,7 +727,7 @@ func resolveKeyPageUrl(chainId []byte) (string, error) {
 		return "", err
 	}
 	kp := protocol.KeyPage{}
-	err = UnmarshalQuery(res.Data, &kp)
+	err = Remarshal(res.Data, &kp)
 	if err != nil {
 		return "", err
 	}
