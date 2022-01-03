@@ -33,6 +33,8 @@ func NewChain(typ types.ChainType) (state.Chain, error) {
 		return new(LiteDataAccount), nil
 	case types.ChainTypeSyntheticTransactions:
 		return new(state.SyntheticTransactionChain), nil
+	case types.ChainTypeInternalLedger:
+		return new(InternalLedger), nil
 	default:
 		return nil, fmt.Errorf("unknown chain type %v", typ)
 	}
