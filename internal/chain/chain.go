@@ -18,28 +18,35 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	switch opts.Network.Type {
 	case config.Directory:
 		return newExecutor(opts,
-			SyntheticSignTransactions{},
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticMirror{},
+
+			InternalSendTransactions{},
+			InternalTransactionsSigned{},
+			InternalTransactionsSent{},
 		)
 
 	case config.BlockValidator:
 		return newExecutor(opts,
-			CreateIdentity{},
-			SendTokens{},
-			CreateTokenAccount{},
-			CreateDataAccount{},
 			AddCredits{},
-			CreateKeyPage{},
+			CreateDataAccount{},
+			CreateIdentity{},
 			CreateKeyBook{},
+			CreateKeyPage{},
+			CreateTokenAccount{},
+			SendTokens{},
 			UpdateKeyPage{},
 			WriteData{},
-			SyntheticCreateChain{},
-			SyntheticDepositTokens{},
-			SyntheticDepositCredits{},
-			SyntheticSignTransactions{},
+
 			SyntheticAnchor{Network: &opts.Network},
+			SyntheticCreateChain{},
+			SyntheticDepositCredits{},
+			SyntheticDepositTokens{},
 			SyntheticMirror{},
+
+			InternalSendTransactions{},
+			InternalTransactionsSigned{},
+			InternalTransactionsSent{},
 
 			// TODO Only for TestNet
 			AcmeFaucet{},

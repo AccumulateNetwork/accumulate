@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
+	"io"
 	"regexp"
 	"testing"
 	"time"
@@ -40,6 +40,8 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
+const logConsole = false
+
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
@@ -62,15 +64,18 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 		BvnNames: []string{subnet},
 	}
 
-	logWriter, _ := logging.TestLogWriter(t)("plain")
-	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
-	zl := zerolog.New(logWriter)
-
-	logger, err := logging.NewTendermintLogger(zl, logLevel, false)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
-		os.Exit(1)
+	var logWriter io.Writer
+	var err error
+	if logConsole {
+		logWriter, err = logging.NewConsoleWriter("plain")
+	} else {
+		logWriter, err = logging.TestLogWriter(t)("plain")
 	}
+	require.NoError(t, err)
+	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
+	require.NoError(t, err)
+	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
+	require.NoError(t, err)
 
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
@@ -78,10 +83,10 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 	batch := db.Begin()
 	defer batch.Discard()
 
-	root := new(state.Anchor)
-	err = batch.Record(n.network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	ledger := protocol.NewInternalLedger()
+	err = batch.Record(n.network.NodeUrl().JoinPath(protocol.Ledger)).GetStateAs(ledger)
 	if err == nil {
-		n.height = root.Index
+		n.height = ledger.Index
 	} else {
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
@@ -117,6 +122,8 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 		require.NoError(t, err)
 	})
 
+	require.NoError(t, mgr.Start())
+	t.Cleanup(func() { _ = mgr.Stop() })
 	t.Cleanup(func() { n.client.Shutdown() })
 
 	if !doGenesis {
@@ -216,13 +223,20 @@ func (n *fakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
 func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
 	n.t.Helper()
 
+	var ids [][32]byte
 	inBlock(func(tx *transactions.GenTransaction) {
+		var id [32]byte
+		copy(id[:], tx.TransactionHash())
+		ids = append(ids, id)
 		b, err := tx.Marshal()
 		require.NoError(n.t, err)
 		n.client.SubmitTx(context.Background(), b)
 	})
 
-	n.client.Wait()
+	// n.client.WaitForAll()
+	for _, id := range ids {
+		n.client.WaitFor(id, true)
+	}
 }
 
 func generateKey() tmed25519.PrivKey {
@@ -350,6 +364,10 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
 	d.client.SubmitTx(context.Background(), b)
 }
 
-func (d *e2eDUT) WaitForTxns(...[]byte) {
-	d.client.Wait()
+func (d *e2eDUT) WaitForTxns(ids ...[]byte) {
+	for _, id := range ids {
+		var id32 [32]byte
+		copy(id32[:], id)
+		d.client.WaitFor(id32, true)
+	}
 }

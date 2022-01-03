@@ -9,7 +9,6 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 )
@@ -30,10 +29,10 @@ func TestStateDBConsistency(t *testing.T) {
 	n := createApp(t, db, crypto.Address{}, true)
 	n.testLiteTx(10)
 
-	rootUrl := n.network.NodeUrl().JoinPath(protocol.MinorRoot)
+	ledger := n.network.NodeUrl().JoinPath(protocol.Ledger)
+	ledger1 := protocol.NewInternalLedger()
 	batch := db.Begin()
-	root := new(state.Anchor)
-	require.NoError(t, batch.Record(rootUrl).GetStateAs(root))
+	require.NoError(t, batch.Record(ledger).GetStateAs(ledger1))
 	rootHash := batch.RootHash()
 	batch.Discard()
 	n.client.Shutdown()
@@ -43,9 +42,9 @@ func TestStateDBConsistency(t *testing.T) {
 
 	// Block 6 does not make changes so is not saved
 	batch = db.Begin()
-	root2 := new(state.Anchor)
-	require.NoError(t, batch.Record(rootUrl).GetStateAs(root2))
-	require.Equal(t, root, root, "Block index does not match after load from disk")
+	ledger2 := protocol.NewInternalLedger()
+	require.NoError(t, batch.Record(ledger).GetStateAs(ledger2))
+	require.Equal(t, ledger1, ledger2, "Ledger does not match after load from disk")
 	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", batch.RootHash()), "Hash does not match after load from disk")
 	batch.Discard()
 

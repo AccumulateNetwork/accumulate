@@ -20,7 +20,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/getsentry/sentry-go"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -131,11 +130,11 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 	defer batch.Discard()
 
 	var height int64
-	root := new(state.Anchor)
-	err = batch.Record(app.Network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	ledger := protocol.NewInternalLedger()
+	err = batch.Record(app.Network.NodeUrl().JoinPath(protocol.Ledger)).GetStateAs(ledger)
 	switch {
 	case err == nil:
-		height = root.Index
+		height = ledger.Index
 	case errors.Is(err, storage.ErrNotFound):
 		// InitChain has not been called yet
 		height = 0
@@ -212,8 +211,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	batch := app.DB.Begin()
-	root := new(state.Anchor)
-	err := batch.Record(app.Network.NodeUrl().JoinPath(protocol.MinorRoot)).GetStateAs(root)
+	_, err := batch.Record(app.Network.NodeUrl().JoinPath(protocol.Ledger)).GetState()
 	switch {
 	case err == nil:
 		// InitChain already happened
@@ -223,7 +221,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 	}
 
 	app.logger.Info("Initializing")
-	err = app.Chain.InitChain(req.AppStateBytes)
+	err = app.Chain.InitChain(req.AppStateBytes, req.Time, req.InitialHeight)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
