@@ -146,7 +146,7 @@ func (m *Manager) EndBatch() {
 		return
 	}
 	if err := m.DB.EndBatch(m.txCache); err != nil {
-		panic("batch failed to persist to the database")
+		panic(fmt.Errorf("batch failed to persist to the database: %v", err))
 	}
 	m.resetCache()
 }
