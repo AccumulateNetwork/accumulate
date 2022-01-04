@@ -11,10 +11,8 @@ type ChainType uint64
 
 const (
 	// ChainTypeUnknown represents an unknown chain type.
-	ChainTypeUnknown = ChainType(iota)
-)
+	ChainTypeUnknown ChainType = 0
 
-const (
 	// ChainTypeAnchor is one or more Merkle DAG anchors.
 	ChainTypeAnchor ChainType = 1
 
@@ -49,6 +47,9 @@ const (
 	ChainTypeLiteDataAccount ChainType = 12
 
 	// ChainTypeSyntheticTransactions is a chain of synthetic transactions.
+	//
+	// Deprecated: synthetic transactions are tracked on an auxiliary chain of
+	// the ledger.
 	ChainTypeSyntheticTransactions ChainType = 13
 
 	// ChainTypeInternalLedger is a ledger that tracks the state of internal
