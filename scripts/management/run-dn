@@ -1,0 +1,3 @@
+#!/bin/bash
+
+accumulated run -w ~/.accumulate/dn 2>&1 | tee ~/.accumulate/logs/acc-dn-$(date +%Y%m%d%H%M%S).log
