@@ -7,7 +7,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type CreateIdentity struct{}
@@ -33,7 +32,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) erro
 	}
 
 	switch st.Origin.(type) {
-	case *protocol.LiteTokenAccount, *state.AdiState:
+	case *protocol.LiteTokenAccount, *protocol.ADI:
 		// OK
 	default:
 		return fmt.Errorf("chain type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
@@ -63,7 +62,8 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) erro
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
 	book.Pages = append(book.Pages, pageUrl.String())
 
-	identity := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, body.PublicKey)
+	identity := protocol.NewADI()
+	identity.ChainUrl = types.String(identityUrl.String())
 	identity.KeyBook = types.String(bookUrl.String())
 
 	st.Create(identity, book, page)

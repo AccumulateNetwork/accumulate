@@ -16,6 +16,10 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
+type ADI struct {
+	state.ChainHeader
+}
+
 type AcmeFaucet struct {
 	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 }
@@ -325,6 +329,12 @@ type WriteDataTo struct {
 	Entry     DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
+func NewADI() *ADI {
+	v := new(ADI)
+	v.Type = types.ChainTypeIdentity
+	return v
+}
+
 func NewAnchor() *Anchor {
 	v := new(Anchor)
 	v.Type = types.ChainTypeAnchor
@@ -446,6 +456,14 @@ func (*UpdateKeyPage) GetType() types.TransactionType { return types.TxTypeUpdat
 func (*WriteData) GetType() types.TransactionType { return types.TxTypeWriteData }
 
 func (*WriteDataTo) GetType() types.TransactionType { return types.TxTypeWriteDataTo }
+
+func (v *ADI) Equal(u *ADI) bool {
+	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	return true
+}
 
 func (v *AcmeFaucet) Equal(u *AcmeFaucet) bool {
 	if !(v.Url == u.Url) {
@@ -1354,6 +1372,17 @@ func (v *WriteDataTo) Equal(u *WriteDataTo) bool {
 	return true
 }
 
+func (v *ADI) BinarySize() int {
+	var n int
+
+	// Enforce sanity
+	v.Type = types.ChainTypeIdentity
+
+	n += v.ChainHeader.GetHeaderSize()
+
+	return n
+}
+
 func (v *AcmeFaucet) BinarySize() int {
 	var n int
 
@@ -2114,6 +2143,21 @@ func (v *WriteDataTo) BinarySize() int {
 	n += v.Entry.BinarySize()
 
 	return n
+}
+
+func (v *ADI) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	// Enforce sanity
+	v.Type = types.ChainTypeIdentity
+
+	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding header: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	return buffer.Bytes(), nil
 }
 
 func (v *AcmeFaucet) MarshalBinary() ([]byte, error) {
@@ -2983,6 +3027,18 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 	}
 
 	return buffer.Bytes(), nil
+}
+
+func (v *ADI) UnmarshalBinary(data []byte) error {
+	typ := types.ChainTypeIdentity
+	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding header: %w", err)
+	} else if v.Type != typ {
+		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+	}
+	data = data[v.GetHeaderSize():]
+
+	return nil
 }
 
 func (v *AcmeFaucet) UnmarshalBinary(data []byte) error {

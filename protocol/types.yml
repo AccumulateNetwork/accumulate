@@ -12,6 +12,11 @@
 # Duration is marshalled as two uvarints: seconds and nanoseconds. A duration of
 # 1 hour and 1 ns is marshalled as (3600, 1).
 
+ADI:
+  kind: chain
+  chain-type: Identity
+  fields: []
+
 LiteTokenAccount:
   kind: chain
   fields:
