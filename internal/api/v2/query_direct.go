@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math"
@@ -89,10 +90,79 @@ func (q *queryDirect) QueryUrl(s string) (interface{}, error) {
 			return nil, err
 		}
 
-		return packTxResponse(res.TxId, res.TxSynthTxIds, main, pend, pl)
+		var ms *MerkleState
+		if res.Height >= 0 || len(res.ChainState) > 0 {
+			ms = new(MerkleState)
+			ms.Height = uint64(res.Height)
+			ms.Roots = res.ChainState
+		}
+
+		return packTxResponse(res.TxId, res.TxSynthTxIds, ms, main, pend, pl)
+
+	case "tx-history":
+		txh := new(query.ResponseTxHistory)
+		err = txh.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		res := new(MultiResponse)
+		res.Items = make([]interface{}, len(txh.Transactions))
+		res.Start = uint64(txh.Start)
+		res.Count = uint64(txh.End - txh.Start)
+		res.Total = uint64(txh.Total)
+		for i, tx := range txh.Transactions {
+			main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)
+			if err != nil {
+				return nil, err
+			}
+
+			res.Items[i], err = packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		return res, nil
+
+	case "chain-range":
+		res := new(query.ResponseChainRange)
+		err := res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		mr := new(MultiResponse)
+		mr.Type = "chainEntrySet"
+		mr.Start = uint64(res.Start)
+		mr.Count = uint64(res.End - res.Start)
+		mr.Total = uint64(res.Total)
+		mr.Items = make([]interface{}, len(res.Entries))
+		for i, entry := range res.Entries {
+			qr := new(ChainQueryResponse)
+			mr.Items[i] = qr
+			qr.Type = "hex"
+			qr.Data = hex.EncodeToString(entry)
+		}
+		return mr, nil
+
+	case "chain-entry":
+		res := new(query.ResponseChainEntry)
+		err := res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		qr := new(ChainQueryResponse)
+		qr.Type = "chainEntry"
+		qr.Data = res
+		qr.MainChain = new(MerkleState)
+		qr.MainChain.Height = uint64(res.Height)
+		qr.MainChain.Roots = res.State
+		return qr, nil
 
 	default:
-		return nil, fmt.Errorf("unknown response type: want chain or tx, got %q", k)
+		return nil, fmt.Errorf("unknown response type %q", k)
 	}
 }
 
@@ -223,7 +293,7 @@ query:
 		return nil, err
 	}
 
-	return packTxResponse(res.TxId, res.TxSynthTxIds, main, pend, pl)
+	return packTxResponse(res.TxId, res.TxSynthTxIds, nil, main, pend, pl)
 }
 
 func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*MultiResponse, error) {
@@ -275,7 +345,7 @@ func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*MultiRespo
 			return nil, err
 		}
 
-		res.Items[i], err = packTxResponse(tx.TxId, tx.TxSynthTxIds, main, pend, pl)
+		res.Items[i], err = packTxResponse(tx.TxId, tx.TxSynthTxIds, nil, main, pend, pl)
 		if err != nil {
 			return nil, err
 		}

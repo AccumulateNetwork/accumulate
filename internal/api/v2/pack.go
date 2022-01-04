@@ -22,7 +22,7 @@ func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryRespons
 	return res, nil
 }
 
-func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *state.PendingTransaction, payload protocol.TransactionPayload) (*TransactionQueryResponse, error) {
+func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Transaction, pend *state.PendingTransaction, payload protocol.TransactionPayload) (*TransactionQueryResponse, error) {
 	var tx *state.TxState
 	if main != nil {
 		tx = &main.TxState
@@ -34,6 +34,7 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 	res.Type = payload.GetType().String()
 	res.Data = payload
 	res.Txid = txid[:]
+	res.MainChain = ms
 	res.KeyPage = new(KeyPage)
 	res.KeyPage.Height = tx.SigInfo.KeyPageHeight
 	res.KeyPage.Index = tx.SigInfo.KeyPageIndex
