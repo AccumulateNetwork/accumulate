@@ -13,7 +13,7 @@ type SyntheticBurnTokens struct{}
 
 func (SyntheticBurnTokens) Type() types.TxType { return types.TxTypeSyntheticBurnTokens }
 
-func (SyntheticBurnTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticBurnTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SyntheticBurnTokens)
 	err := tx.As(body)
 	if err != nil {

@@ -11,6 +11,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	. "github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTransactionState(t *testing.T) {
@@ -18,27 +19,24 @@ func TestTransactionState(t *testing.T) {
 	nts1.AddRecipient(&url.URL{Authority: "BlueWagon", Path: "/account"}, uint64(100*100000000))
 
 	we := acctesting.NewWalletEntry()
-	trans := new(transactions.GenTransaction)
-	trans.SigInfo = new(transactions.SignatureInfo)
-	trans.SigInfo.URL = we.Addr
-	if err := trans.SetRoutingChainID(); err != nil {
-		t.Fatal("could not create the Routing value")
-	}
+	u, err := url.Parse(we.Addr)
+	require.NoError(t, err)
+	trans := new(transactions.Envelope)
+	trans.Transaction.Origin = u
 
-	var err error
-	trans.Transaction, err = nts1.MarshalBinary()
+	trans.Transaction.Body, err = nts1.MarshalBinary()
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	eSig := new(transactions.ED25519Sig)
-	transHash := trans.TransactionHash()
+	transHash := trans.Transaction.Hash()
 
 	if err := eSig.Sign(we.Nonce, we.PrivateKey, transHash); err != nil {
 		t.Errorf("error signing tx %v", err)
 	}
 
-	trans.Signature = append(trans.Signature, eSig)
+	trans.Signatures = append(trans.Signatures, eSig)
 
 	txPendingState := NewPendingTransaction(trans)
 	txPendingState.ChainHeader.SetHeader(types.String("RedWagon/myAccount"), types.ChainTypePendingTransaction)
@@ -63,7 +61,7 @@ func TestTransactionState(t *testing.T) {
 	if txPendingState.TransactionState.Transaction == nil {
 		t.Fatalf("error unmarshaling transaction, it is nil")
 	}
-	if !bytes.Equal(txPendingState2.TransactionState.Transaction.Bytes(), txPendingState.TransactionState.Transaction.Bytes()) {
+	if !bytes.Equal(txPendingState2.TransactionState.Transaction, txPendingState.TransactionState.Transaction) {
 		t.Fatalf("error unmarshalling transaction")
 	}
 	//if bytes.Compare(txPendingState2.Type[:], txPendingState.Type[:]) != 0 {
@@ -104,7 +102,7 @@ func TestTransactionState(t *testing.T) {
 	if txState2.Transaction == nil {
 		t.Fatalf("error unmarshaling transaction, it is nil")
 	}
-	if !bytes.Equal(txState2.Transaction.Bytes(), txState.Transaction.Bytes()) {
+	if !bytes.Equal(txState2.Transaction, txState.Transaction) {
 		t.Fatalf("error unmarshalling transaction")
 	}
 
