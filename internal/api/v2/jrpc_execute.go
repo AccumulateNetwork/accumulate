@@ -65,6 +65,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
 	tx := new(transactions.Envelope)
+	tx.Transaction = new(transactions.Transaction)
 	tx.Transaction.Origin = protocol.FaucetUrl
 	tx.Transaction.Nonce = protocol.FaucetWallet.Nonce
 	tx.Transaction.KeyPageHeight = 1
@@ -157,6 +158,7 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 
 	// Build the TX
 	tx := new(transactions.Envelope)
+	tx.Transaction = new(transactions.Transaction)
 	tx.Transaction.Body = payload
 	tx.Transaction.Origin = req.Origin
 	tx.Transaction.Nonce = req.Signer.Nonce
