@@ -12,7 +12,7 @@ func NewChain(typ types.ChainType) (state.Chain, error) {
 	case types.ChainTypeAnchor:
 		return new(Anchor), nil
 	case types.ChainTypeIdentity:
-		return new(state.AdiState), nil
+		return new(ADI), nil
 	case types.ChainTypeTokenIssuer:
 		return new(TokenIssuer), nil
 	case types.ChainTypeTokenAccount:
