@@ -136,6 +136,7 @@ type KeyPage struct {
 type KeySpec struct {
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Owner     string `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
 }
 
 type KeySpecParams struct {
@@ -290,6 +291,7 @@ type UpdateKeyPage struct {
 	Operation KeyPageOperation `json:"operation,omitempty" form:"operation" query:"operation" validate:"required"`
 	Key       []byte           `json:"key,omitempty" form:"key" query:"key"`
 	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey"`
+	Owner     string           `json:"owner,omitempty" form:"owner" query:"owner"`
 }
 
 type WriteData struct {
@@ -767,6 +769,10 @@ func (v *KeySpec) Equal(u *KeySpec) bool {
 		return false
 	}
 
+	if !(v.Owner == u.Owner) {
+		return false
+	}
+
 	return true
 }
 
@@ -1209,6 +1215,10 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		return false
 	}
 
+	if !(v.Owner == u.Owner) {
+		return false
+	}
+
 	return true
 }
 
@@ -1557,6 +1567,8 @@ func (v *KeySpec) BinarySize() int {
 	n += encoding.BytesBinarySize(v.PublicKey)
 
 	n += encoding.UvarintBinarySize(v.Nonce)
+
+	n += encoding.StringBinarySize(v.Owner)
 
 	return n
 }
@@ -1909,6 +1921,8 @@ func (v *UpdateKeyPage) BinarySize() int {
 	n += encoding.BytesBinarySize(v.Key)
 
 	n += encoding.BytesBinarySize(v.NewKey)
+
+	n += encoding.StringBinarySize(v.Owner)
 
 	return n
 }
@@ -2301,6 +2315,8 @@ func (v *KeySpec) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.PublicKey))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Nonce))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Owner))
 
 	return buffer.Bytes(), nil
 }
@@ -2701,6 +2717,8 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.Key))
 
 	buffer.Write(encoding.BytesMarshalBinary(v.NewKey))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Owner))
 
 	return buffer.Bytes(), nil
 }
@@ -3396,6 +3414,13 @@ func (v *KeySpec) UnmarshalBinary(data []byte) error {
 		v.Nonce = x
 	}
 	data = data[encoding.UvarintBinarySize(v.Nonce):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Owner: %w", err)
+	} else {
+		v.Owner = x
+	}
+	data = data[encoding.StringBinarySize(v.Owner):]
 
 	return nil
 }
@@ -4126,6 +4151,13 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.BytesBinarySize(v.NewKey):]
 
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Owner: %w", err)
+	} else {
+		v.Owner = x
+	}
+	data = data[encoding.StringBinarySize(v.Owner):]
+
 	return nil
 }
 
@@ -4229,9 +4261,11 @@ func (v *KeySpec) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
 		Nonce     uint64  `json:"nonce,omitempty"`
+		Owner     string  `json:"owner,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
+	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
 
@@ -4420,10 +4454,12 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 		Operation KeyPageOperation `json:"operation,omitempty"`
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
+		Owner     string           `json:"owner,omitempty"`
 	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
+	u.Owner = v.Owner
 	return json.Marshal(&u)
 }
 
@@ -4543,9 +4579,11 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
 		Nonce     uint64  `json:"nonce,omitempty"`
+		Owner     string  `json:"owner,omitempty"`
 	}{}
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.Nonce = v.Nonce
+	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -4555,6 +4593,7 @@ func (v *KeySpec) UnmarshalJSON(data []byte) error {
 		v.PublicKey = x
 	}
 	v.Nonce = u.Nonce
+	v.Owner = u.Owner
 	return nil
 }
 
@@ -4925,10 +4964,12 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		Operation KeyPageOperation `json:"operation,omitempty"`
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
+		Owner     string           `json:"owner,omitempty"`
 	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
+	u.Owner = v.Owner
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -4943,5 +4984,6 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	} else {
 		v.NewKey = x
 	}
+	v.Owner = u.Owner
 	return nil
 }

@@ -76,6 +76,8 @@ KeySpec:
       type: bytes
     - name: Nonce
       type: uvarint
+    - name: Owner
+      type: string
 
 KeySpecParams:
   fields:
@@ -167,6 +169,9 @@ UpdateKeyPage:
       optional: true
     - name: NewKey
       type: bytes
+      optional: true
+    - name: Owner
+      type: string
       optional: true
 
 MetricsRequest:
