@@ -17,7 +17,7 @@ Chain validators must satisfy the `TxExecutor` interface:
 ```go
 type TxExecutor interface {
 	Type() types.TxType
-	Validate(*StateManager, *transactions.GenTransaction) error
+	Validate(*StateManager, *transactions.Envelope) error
 }
 ```
 

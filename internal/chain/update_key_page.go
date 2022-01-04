@@ -16,7 +16,7 @@ func (UpdateKeyPage) Type() types.TxType {
 	return types.TxTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.UpdateKeyPage)
 	err := tx.As(body)
 	if err != nil {
@@ -71,7 +71,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 
 		// 0 is the highest priority, followed by 1, etc
-		if tx.SigInfo.KeyPageIndex > uint64(priority) {
+		if tx.Transaction.KeyPageIndex > uint64(priority) {
 			return fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
 		}
 	}
@@ -118,10 +118,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 	return nil
 }
 
-func (UpdateKeyPage) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+func (UpdateKeyPage) CheckTx(st *StateManager, tx *transactions.Envelope) error {
 	return UpdateKeyPage{}.Validate(st, tx)
 }
 
-func (UpdateKeyPage) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+func (UpdateKeyPage) DeliverTx(st *StateManager, tx *transactions.Envelope) error {
 	return UpdateKeyPage{}.Validate(st, tx)
 }

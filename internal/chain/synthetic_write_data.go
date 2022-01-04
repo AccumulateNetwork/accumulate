@@ -13,7 +13,7 @@ type SyntheticWriteData struct{}
 
 func (SyntheticWriteData) Type() types.TxType { return types.TxTypeSyntheticWriteData }
 
-func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SyntheticWriteData)
 	err := tx.As(body)
 	if err != nil {

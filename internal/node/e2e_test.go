@@ -72,8 +72,8 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return d.getObj(url).Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
-	b, err := tx.Marshal()
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
 	_, err = d.client.BroadcastTxAsync(context.Background(), b)
 	d.Require().NoError(err)

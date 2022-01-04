@@ -138,15 +138,14 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	m.blockTime = time
 	m.blockBatch = m.DB.Begin()
 
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = protocol.ACME
-	tx.Transaction, err = new(protocol.InternalGenesis).MarshalBinary()
+	env := new(transactions.Envelope)
+	env.Transaction.Origin = protocol.AcmeUrl()
+	env.Transaction.Body, err = new(protocol.InternalGenesis).MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), tx)
+	st, err := NewStateManager(m.blockBatch, m.Network.NodeUrl(), env)
 	if err == nil {
 		return nil, errors.New("already initialized")
 	} else if !errors.Is(err, storage.ErrNotFound) {
@@ -154,11 +153,11 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	}
 	st.logger.L = m.logger
 
-	txPending := state.NewPendingTransaction(tx)
+	txPending := state.NewPendingTransaction(env)
 	txAccepted, txPending := state.NewTransaction(txPending)
 
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(tx.TransactionHash()).Put(txAccepted, status, nil)
+	err = m.blockBatch.Transaction(env.Transaction.Hash()).Put(txAccepted, status, nil)
 	if err != nil {
 		return nil, err
 	}

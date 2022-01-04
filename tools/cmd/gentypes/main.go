@@ -113,9 +113,6 @@ func run(_ *cobra.Command, args []string) {
 			}
 		}
 
-		if len(typ.Embeddings) > 0 && !typ.NonBinary {
-			check(fmt.Errorf("type %q: embedding is not supported for binary-marshalled types", typ.Name))
-		}
 		for _, e := range typ.Embeddings {
 			fmt.Fprintf(w, "\t\t%s\n", e)
 		}
@@ -126,7 +123,7 @@ func run(_ *cobra.Command, args []string) {
 	}
 
 	for _, typ := range types {
-		if typ.Kind != "chain" {
+		if typ.Kind != "chain" || typ.OmitNewFunc {
 			continue
 		}
 		fmt.Fprintf(w, `func New%s() *%[1]s {
@@ -155,6 +152,9 @@ func run(_ *cobra.Command, args []string) {
 		}
 
 		for _, field := range typ.Fields {
+			if field.MarshalAs == "none" {
+				continue
+			}
 			err := areEqual(w, field, "v."+field.Name, "u."+field.Name)
 			checkf(err, "building Equal for %q", typ.Name)
 		}
@@ -178,7 +178,14 @@ func run(_ *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\nn += v.ChainHeader.GetHeaderSize()\n\n")
 		}
 
+		for _, embed := range typ.Embeddings {
+			fmt.Fprintf(w, "\tn += v.%s.BinarySize()\n\n", embed)
+		}
+
 		for _, field := range typ.Fields {
+			if field.MarshalAs == "none" {
+				continue
+			}
 			err := binarySize(w, field, "v."+field.Name)
 			checkf(err, "building BinarySize for %q", typ.Name)
 		}
@@ -203,7 +210,14 @@ func run(_ *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\tif b, err := v.ChainHeader.MarshalBinary(); err != nil { return nil, %s } else { buffer.Write(b) }\n", err)
 		}
 
+		for _, embed := range typ.Embeddings {
+			fmt.Fprintf(w, "\tif b, err := v.%s.MarshalBinary(); err != nil { return nil, err } else { buffer.Write(b) }\n\n", embed)
+		}
+
 		for _, field := range typ.Fields {
+			if field.MarshalAs == "none" {
+				continue
+			}
 			err := binaryMarshalValue(w, field, "v."+field.Name, field.Name)
 			checkf(err, "building MarshalBinary for %q", typ.Name)
 		}
@@ -232,7 +246,15 @@ func run(_ *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\tdata = data[v.GetHeaderSize():]\n\n")
 		}
 
+		for _, embed := range typ.Embeddings {
+			fmt.Fprintf(w, "\tif err := v.%s.UnmarshalBinary(data); err != nil { return err }\n", embed)
+			fmt.Fprintf(w, "\tdata = data[v.%s.BinarySize():]\n\n", embed)
+		}
+
 		for _, field := range typ.Fields {
+			if field.MarshalAs == "none" {
+				continue
+			}
 			err := binaryUnmarshalValue(w, field, "v."+field.Name, field.Name)
 			checkf(err, "building UnmarshalBinary for %q", typ.Name)
 		}
@@ -255,6 +277,9 @@ func run(_ *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\tu.%s = v.%[1]s\n", e)
 		}
 		for _, f := range typ.Fields {
+			if f.MarshalAs == "none" {
+				continue
+			}
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
 			if f.Alternative != "" {
 				valueToJson(w, f, "u."+f.Alternative, "v."+f.Name)
@@ -280,6 +305,9 @@ func run(_ *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\tu.%s = v.%[1]s\n", e)
 		}
 		for _, f := range typ.Fields {
+			if f.MarshalAs == "none" {
+				continue
+			}
 			valueToJson(w, f, "u."+f.Name, "v."+f.Name)
 			if f.Alternative != "" {
 				valueToJson(w, f, "u."+f.Alternative, "v."+f.Name)
@@ -295,6 +323,9 @@ func run(_ *cobra.Command, args []string) {
 			fmt.Fprintf(w, "\tv.%s = u.%[1]s\n", e)
 		}
 		for _, f := range typ.Fields {
+			if f.MarshalAs == "none" {
+				continue
+			}
 			if f.Alternative == "" {
 				valueFromJson(w, f, "v."+f.Name, "u."+f.Name, f.Name)
 				continue

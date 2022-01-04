@@ -39,7 +39,7 @@ func TestProofADI(t *testing.T) {
 	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/page0").Keys[0].PublicKey)
 
 	// Create ADI token account
-	n.Batch(func(send func(*transactions.GenTransaction)) {
+	n.Batch(func(send func(*transactions.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = "RoadRunner/Baz"
 		tac.TokenUrl = protocol.AcmeUrl().String()

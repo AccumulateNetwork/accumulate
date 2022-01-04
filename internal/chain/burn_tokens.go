@@ -13,7 +13,7 @@ type BurnTokens struct{}
 
 func (BurnTokens) Type() types.TxType { return types.TxTypeBurnTokens }
 
-func (BurnTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.BurnTokens)
 	err := tx.As(body)
 	if err != nil {

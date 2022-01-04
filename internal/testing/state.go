@@ -22,8 +22,8 @@ type DB = *database.Batch
 // Token multiplier
 const TokenMx = protocol.AcmePrecision
 
-func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.GenTransaction, error) {
-	recipientAdi := types.String(AcmeLiteAddressTmPriv(recipient).String())
+func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Envelope, error) {
+	recipientAdi := AcmeLiteAddressTmPriv(recipient)
 
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
@@ -36,23 +36,20 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Ge
 		return nil, err
 	}
 
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.Transaction = depData
-	tx.SigInfo.URL = *recipientAdi.AsString()
-	tx.SigInfo.KeyPageHeight = 1
-	tx.ChainID = types.GetChainIdFromChainPath(recipientAdi.AsString())[:]
-	tx.Routing = types.GetAddressFromIdentity(recipientAdi.AsString())
+	tx := new(transactions.Envelope)
+	tx.Transaction.Body = depData
+	tx.Transaction.Origin = recipientAdi
+	tx.Transaction.KeyPageHeight = 1
 
 	ed := new(transactions.ED25519Sig)
-	tx.SigInfo.Nonce = 1
+	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.SigInfo.Nonce, recipient, tx.TransactionHash())
+	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.Transaction.Hash())
 	if err != nil {
 		return nil, err
 	}
 
-	tx.Signature = append(tx.Signature, ed)
+	tx.Signatures = append(tx.Signatures, ed)
 	return tx, nil
 }
 

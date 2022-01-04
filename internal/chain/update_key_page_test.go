@@ -8,6 +8,7 @@ import (
 	. "github.com/AccumulateNetwork/accumulate/internal/chain"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/require"
@@ -49,8 +50,11 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			body.Key = testKey.PubKey().Bytes()
 			body.NewKey = newKey.PubKey().Bytes()
 
-			tx, err := transactions.NewWith(&transactions.SignatureInfo{
-				URL:          "foo/page1",
+			u, err := url.Parse("foo/page1")
+			require.NoError(t, err)
+
+			tx, err := transactions.NewWith(&transactions.Header{
+				Origin:       u,
 				KeyPageIndex: idx,
 			}, edSigner(testKey, 1), body)
 			require.NoError(t, err)
