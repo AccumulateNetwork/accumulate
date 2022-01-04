@@ -14,7 +14,8 @@ import (
 type Envelope struct {
 	Signatures  []*ED25519Sig `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	TxHash      []byte        `json:"txHash,omitempty" form:"txHash" query:"txHash" validate:"required"`
-	Transaction Transaction   `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	Transaction *Transaction  `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	hash        []byte
 }
 
 type Header struct {
@@ -26,8 +27,8 @@ type Header struct {
 
 type Transaction struct {
 	Header
-	Body   []byte `json:"body,omitempty" form:"body" query:"body" validate:"required"`
-	txHash []byte
+	Body []byte `json:"body,omitempty" form:"body" query:"body" validate:"required"`
+	hash []byte
 }
 
 func (v *Envelope) Equal(u *Envelope) bool {
@@ -47,7 +48,7 @@ func (v *Envelope) Equal(u *Envelope) bool {
 		return false
 	}
 
-	if !(v.Transaction.Equal(&u.Transaction)) {
+	if !(v.Transaction.Equal(u.Transaction)) {
 		return false
 	}
 
@@ -208,6 +209,7 @@ func (v *Envelope) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.BytesBinarySize(v.TxHash):]
 
+	v.Transaction = new(Transaction)
 	if err := v.Transaction.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Transaction: %w", err)
 	}
@@ -267,7 +269,7 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Signatures  []*ED25519Sig `json:"signatures,omitempty"`
 		TxHash      *string       `json:"txHash,omitempty"`
-		Transaction Transaction   `json:"transaction,omitempty"`
+		Transaction *Transaction  `json:"transaction,omitempty"`
 	}{}
 	u.Signatures = v.Signatures
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
@@ -289,7 +291,7 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Signatures  []*ED25519Sig `json:"signatures,omitempty"`
 		TxHash      *string       `json:"txHash,omitempty"`
-		Transaction Transaction   `json:"transaction,omitempty"`
+		Transaction *Transaction  `json:"transaction,omitempty"`
 	}{}
 	u.Signatures = v.Signatures
 	u.TxHash = encoding.BytesToJSON(v.TxHash)
