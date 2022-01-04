@@ -187,7 +187,7 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 		}
 		return st, nil
 
-	case *state.AdiState, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
+	case *protocol.ADI, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount:
 		if origin.Header().KeyBook == "" {
 			return nil, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
