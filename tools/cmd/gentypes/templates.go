@@ -43,7 +43,7 @@ type Field struct {
 	Slice           *Field
 }
 
-func convert(types typegen.Types, pkgName, pkgPath string) *Types {
+func convert(types typegen.DataTypes, pkgName, pkgPath string) *Types {
 	ttypes := new(Types)
 	ttypes.Package = pkgName
 	PackagePath = pkgPath
