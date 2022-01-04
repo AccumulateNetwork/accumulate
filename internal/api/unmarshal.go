@@ -199,10 +199,9 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 	}
 
 	switch sChain := sChain.(type) {
-	case *state.AdiState:
+	case *protocol.ADI:
 		rAdi := new(response.ADI)
 		rAdi.Url = *sChain.ChainUrl.AsString()
-		rAdi.PublicKey = sChain.KeyData
 		return respondWith(obj, rAdi, sChain.Type.String())
 
 	case *protocol.TokenAccount:

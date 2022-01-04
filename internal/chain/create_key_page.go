@@ -7,7 +7,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type CreateKeyPage struct{}
@@ -17,7 +16,7 @@ func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error {
 	var group *protocol.KeyBook
 	switch origin := st.Origin.(type) {
-	case *state.AdiState:
+	case *protocol.ADI:
 		// Create an unbound sig spec
 	case *protocol.KeyBook:
 		group = origin
