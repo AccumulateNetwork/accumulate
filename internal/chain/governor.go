@@ -87,12 +87,12 @@ func (g *governor) DidCommit(batch *database.Batch, isLeader, mirrorAdi bool, he
 	}
 
 	ledger := batch.Record(g.Network.NodeUrl().JoinPath(protocol.Ledger))
-	rootChain, err := ledger.Chain(protocol.MinorRootChain)
+	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	if err != nil {
 		return err
 	}
 
-	synthChain, err := ledger.Chain(protocol.SyntheticChain)
+	synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
 	if err != nil {
 		return err
 	}
@@ -401,7 +401,7 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 		return arec, fmt.Errorf("failed to load %q: %v", u, err)
 	}
 
-	chain, err := rec.Chain(protocol.MainChain)
+	chain, err := rec.ReadChain(protocol.MainChain)
 	if err != nil {
 		return arec, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 	}

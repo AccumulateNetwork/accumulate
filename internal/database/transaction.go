@@ -47,11 +47,22 @@ func (t *Transaction) Get() (*state.Transaction, *protocol.TransactionStatus, []
 	return state, status, signatures, nil
 }
 
-// Put stores the transaction state, status, and signatures. Put appends
-// signatures and does not overwrite existing signatures.
+// Put stores the transaction object metadata, state, status, and signatures.
+// Put appends signatures and does not overwrite existing signatures.
 //
 // See PutState, PutStatus, and AddSignatures.
 func (t *Transaction) Put(state *state.Transaction, status *protocol.TransactionStatus, sigs []*transactions.ED25519Sig) error {
+	// Ensure the object metadata is stored. Transactions don't have chains, so
+	// we don't need to add chain metadata.
+	if _, err := t.batch.store.Get(t.key.Object()); errors.Is(err, storage.ErrNotFound) {
+		meta := new(protocol.ObjectMetadata)
+		meta.Type = protocol.ObjectTypeTransaction
+		err = t.batch.putAs(t.key.Object(), meta)
+		if err != nil {
+			return err
+		}
+	}
+
 	err := t.PutState(state)
 	if err != nil {
 		return err
