@@ -16,7 +16,7 @@ type SyntheticAnchor struct {
 
 func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
 
-func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) error {
 	// Verify that the origin is the node
 	nodeUrl := x.Network.NodeUrl()
 	if !st.OriginUrl.Equal(nodeUrl) {

@@ -26,7 +26,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	tx, err := acctesting.CreateFakeSyntheticDepositTx(sender)
 	s.Require().NoError(err)
 	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.TransactionHash())
+	s.dut.WaitForTxns(tx.Transaction.Hash())
 
 	account := new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
@@ -59,7 +59,7 @@ func (s *Suite) TestCreateLiteAccount() {
 
 		tx := s.newTx(senderUrl, sender, uint64(i+1), exch)
 		s.dut.SubmitTxn(tx)
-		txids = append(txids, tx.TransactionHash())
+		txids = append(txids, tx.Transaction.Hash())
 	}
 
 	s.dut.WaitForTxns(txids...)

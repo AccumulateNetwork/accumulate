@@ -192,8 +192,8 @@ func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
 }
 
 func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
-	gtx := new(transactions.GenTransaction)
-	_, err := gtx.UnMarshal(tx)
+	gtx := new(transactions.Envelope)
+	err := gtx.UnmarshalBinary(tx)
 	if err != nil {
 		c.onError(err)
 		if debugTX {
@@ -203,12 +203,12 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	}
 
 	if debugTX {
-		txt := gtx.TransactionType()
+		txt := gtx.Transaction.Type()
 		fmt.Printf("Submitting %v %X\n", txt, txh)
 	}
 
 	var txid [32]byte
-	copy(txid[:], gtx.TransactionHash())
+	copy(txid[:], gtx.Transaction.Hash())
 
 	c.txMu.Lock()
 	defer c.txMu.Unlock()

@@ -14,7 +14,7 @@ type CreateKeyBook struct{}
 
 func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
-func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) error {
 	if _, ok := st.Origin.(*state.AdiState); !ok {
 		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeIdentity, st.Origin.Header().Type)
 	}
@@ -62,7 +62,7 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.GenTransaction)
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	scc.Cause = types.Bytes(tx.Transaction.Hash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
 	book := protocol.NewKeyBook()
