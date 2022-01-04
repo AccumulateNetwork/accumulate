@@ -136,7 +136,7 @@ func GetADI(url string) (string, error) {
 }
 
 func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
-	var si *transactions.SignatureInfo
+	var si *transactions.Header
 	var privKey []byte
 	var err error
 

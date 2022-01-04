@@ -30,21 +30,16 @@ type storeDataEntry struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, tx *transactions.GenTransaction) (*StateManager, error) {
+func NewStateManager(batch *database.Batch, nodeUrl *url.URL, tx *transactions.Envelope) (*StateManager, error) {
 	m := new(StateManager)
-	txid := types.Bytes(tx.TransactionHash()).AsBytes32()
-	m.stateCache = *newStateCache(nodeUrl, tx.TransactionType(), txid, batch)
-
-	// The origin URL must be valid
-	var err error
-	m.OriginUrl, err = url.Parse(tx.SigInfo.URL)
-	if err != nil {
-		return nil, err
-	}
+	txid := types.Bytes(tx.Transaction.Hash()).AsBytes32()
+	m.stateCache = *newStateCache(nodeUrl, tx.Transaction.Type(), txid, batch)
+	m.OriginUrl = tx.Transaction.Origin
 
 	copy(m.OriginChainId[:], m.OriginUrl.ResourceChain())
 
 	// Find the origin
+	var err error
 	m.Origin, err = m.LoadUrl(m.OriginUrl)
 	if err == nil {
 		return m, nil

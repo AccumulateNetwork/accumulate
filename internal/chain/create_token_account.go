@@ -13,7 +13,7 @@ type CreateTokenAccount struct{}
 
 func (CreateTokenAccount) Type() types.TxType { return types.TxTypeCreateTokenAccount }
 
-func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.CreateTokenAccount)
 	err := tx.As(body)
 	if err != nil {

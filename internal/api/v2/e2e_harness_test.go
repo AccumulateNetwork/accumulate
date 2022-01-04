@@ -165,11 +165,14 @@ func recode(t *testing.T, from, to interface{}) {
 func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, params execParams) *api.TxResponse {
 	t.Helper()
 
+	u, err := url.Parse(params.Origin)
+	require.NoError(t, err)
+
 	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: params.Origin})
 	now := time.Now()
 	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
-	tx, err := transactions.NewWith(&transactions.SignatureInfo{
-		URL:           params.Origin,
+	tx, err := transactions.NewWith(&transactions.Header{
+		Origin:        u,
 		KeyPageIndex:  params.PageIndex,
 		KeyPageHeight: qr.MainChain.Height,
 		Nonce:         nonce,
@@ -180,10 +183,10 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	require.NoError(t, err)
 
 	req := new(api.TxRequest)
-	req.Origin = params.Origin
+	req.Origin = u
 	req.Signer.PublicKey = params.Key[32:]
 	req.Signer.Nonce = nonce
-	req.Signature = tx.Signature[0].Signature
+	req.Signature = tx.Signatures[0].Signature
 	req.KeyPage.Index = params.PageIndex
 	req.KeyPage.Height = qr.MainChain.Height
 	req.Payload = params.Payload
@@ -201,10 +204,13 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height uint64, params execParams) *api.TxResponse {
 	t.Helper()
 
+	u, err := url.Parse(params.Origin)
+	require.NoError(t, err)
+
 	now := time.Now()
 	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
-	tx, err := transactions.NewWith(&transactions.SignatureInfo{
-		URL:           params.Origin,
+	tx, err := transactions.NewWith(&transactions.Header{
+		Origin:        u,
 		KeyPageIndex:  params.PageIndex,
 		KeyPageHeight: height,
 		Nonce:         nonce,
@@ -215,10 +221,10 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height ui
 	require.NoError(t, err)
 
 	req := new(api.TxRequest)
-	req.Origin = params.Origin
+	req.Origin = u
 	req.Signer.PublicKey = params.Key[32:]
 	req.Signer.Nonce = nonce
-	req.Signature = tx.Signature[0].Signature
+	req.Signature = tx.Signatures[0].Signature
 	req.KeyPage.Index = params.PageIndex
 	req.KeyPage.Height = height
 	req.Payload = params.Payload
@@ -263,15 +269,15 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return qr.MainChain.Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
-	d.Require().NotEmpty(tx.Signature, "Transaction has no signatures")
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
 	pl := new(api.TxRequest)
-	pl.Origin = tx.SigInfo.URL
-	pl.Signer.Nonce = tx.SigInfo.Nonce
-	pl.Signer.PublicKey = tx.Signature[0].PublicKey
-	pl.Signature = tx.Signature[0].Signature
-	pl.KeyPage.Index = tx.SigInfo.KeyPageIndex
-	pl.KeyPage.Height = tx.SigInfo.KeyPageHeight
+	pl.Origin = tx.Transaction.Origin
+	pl.Signer.Nonce = tx.Transaction.Nonce
+	pl.Signer.PublicKey = tx.Signatures[0].PublicKey
+	pl.Signature = tx.Signatures[0].Signature
+	pl.KeyPage.Index = tx.Transaction.KeyPageIndex
+	pl.KeyPage.Height = tx.Transaction.KeyPageHeight
 	pl.Payload = tx.Transaction
 
 	data, err := pl.MarshalJSON()
