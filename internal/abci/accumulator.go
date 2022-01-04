@@ -72,8 +72,10 @@ func (app *Accumulator) OnFatal(f func(error)) {
 
 // fatal is called when a fatal error occurs. If fatal is called, all subsequent
 // transactions will fail with CodeDidPanic.
-func (app *Accumulator) fatal(err error) {
-	app.didPanic = true
+func (app *Accumulator) fatal(err error, setDidPanic bool) {
+	if setDidPanic {
+		app.didPanic = true
+	}
 
 	app.logger.Error("Fatal error", "error", err, "stack", debug.Stack())
 	sentry.CaptureException(err)
@@ -81,11 +83,14 @@ func (app *Accumulator) fatal(err error) {
 	if app.onFatal != nil {
 		app.onFatal(err)
 	}
+
+	// Throw the panic back at Tendermint
+	panic(err)
 }
 
 // recover will recover from a panic. If a panic occurs, it is passed to fatal
 // and code is set to CodeDidPanic (unless the pointer is nil).
-func (app *Accumulator) recover(code *uint32) {
+func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 	r := recover()
 	if r == nil {
 		return
@@ -97,7 +102,7 @@ func (app *Accumulator) recover(code *uint32) {
 	} else {
 		err = fmt.Errorf("panicked: %v", r)
 	}
-	app.fatal(err)
+	app.fatal(err, setDidPanic)
 
 	if code != nil {
 		*code = protocol.CodeDidPanic
@@ -106,7 +111,7 @@ func (app *Accumulator) recover(code *uint32) {
 
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
-	defer app.recover(nil)
+	defer app.recover(nil, false)
 
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
 
@@ -155,7 +160,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 //
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
-	defer app.recover(&resQuery.Code)
+	defer app.recover(&resQuery.Code, false)
 
 	if app.didPanic {
 		return abci.ResponseQuery{
@@ -235,7 +240,7 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
-	defer app.recover(nil)
+	defer app.recover(nil, true)
 
 	var ret abci.ResponseBeginBlock
 
@@ -246,7 +251,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 		Time:     req.Header.Time,
 	})
 	if err != nil {
-		app.fatal(err)
+		app.fatal(err, true)
 		return ret
 	}
 
@@ -284,7 +289,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 //
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
-	defer app.recover(&rct.Code)
+	defer app.recover(&rct.Code, true)
 
 	if app.didPanic {
 		return abci.ResponseCheckTx{
@@ -337,7 +342,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 //
 // Verifies the transaction is valid.
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
-	defer app.recover(&rdt.Code)
+	defer app.recover(&rdt.Code, true)
 
 	if app.didPanic {
 		return abci.ResponseDeliverTx{
@@ -385,7 +390,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEndBlock) {
-	defer app.recover(nil)
+	defer app.recover(nil, true)
 
 	// Select our leader who will initiate consensus on dbvc chain.
 	//resp.ConsensusParamUpdates
@@ -413,7 +418,7 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
-	defer app.recover(nil)
+	defer app.recover(nil, true)
 
 	//end the current batch of transactions in the Stateful Merkle Tree
 
@@ -421,7 +426,7 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 	resp.Data = mdRoot
 
 	if err != nil {
-		app.fatal(err)
+		app.fatal(err, true)
 		return
 	}
 
