@@ -587,7 +587,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 
 		return out, nil
 	case types.ChainTypeIdentity.String():
-		adi := state.AdiState{}
+		adi := protocol.ADI{}
 		err := Remarshal(res.Data, &adi)
 		if err != nil {
 			return "", err

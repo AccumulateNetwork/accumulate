@@ -316,8 +316,8 @@ func (n *fakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
 	return acct
 }
 
-func (n *fakeNode) GetADI(url string) *state.AdiState {
-	adi := new(state.AdiState)
+func (n *fakeNode) GetADI(url string) *protocol.ADI {
+	adi := new(protocol.ADI)
 	n.GetChainAs(url, adi)
 	return adi
 }
