@@ -14,7 +14,7 @@ type SendTokens struct{}
 
 func (SendTokens) Type() types.TxType { return types.TxTypeSendTokens }
 
-func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SendTokens)
 	err := tx.As(body)
 	if err != nil {
@@ -58,7 +58,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.GenTransaction) er
 
 	for i, u := range recipients {
 		deposit := new(protocol.SyntheticDepositTokens)
-		copy(deposit.Cause[:], tx.TransactionHash())
+		copy(deposit.Cause[:], tx.Transaction.Hash())
 		deposit.Token = tokenUrl.String()
 		deposit.Amount = *new(big.Int).SetUint64(body.To[i].Amount)
 		st.Submit(u, deposit)

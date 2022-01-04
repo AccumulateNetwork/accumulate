@@ -19,7 +19,7 @@ type NewDUT func(*Suite) DUT
 type DUT interface {
 	GetRecordAs(url string, target state.Chain)
 	GetRecordHeight(url string) uint64
-	SubmitTxn(*transactions.GenTransaction)
+	SubmitTxn(*transactions.Envelope)
 	WaitForTxns(...[]byte)
 }
 
@@ -57,10 +57,10 @@ func (s *Suite) generateTmKey() tmed25519.PrivKey {
 	return tmed25519.PrivKey(s.generateKey())
 }
 
-func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body encoding.BinaryMarshaler) *transactions.GenTransaction {
+func (s *Suite) newTx(sponsor *url.URL, key tmed25519.PrivKey, nonce uint64, body encoding.BinaryMarshaler) *transactions.Envelope {
 	s.T().Helper()
-	tx, err := transactions.NewWith(&transactions.SignatureInfo{
-		URL:           sponsor.String(),
+	tx, err := transactions.NewWith(&transactions.Header{
+		Origin:        sponsor,
 		KeyPageHeight: s.dut.GetRecordHeight(sponsor.String()),
 		Nonce:         nonce,
 	}, func(hash []byte) (*transactions.ED25519Sig, error) {

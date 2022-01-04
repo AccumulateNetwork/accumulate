@@ -150,18 +150,17 @@ func TestFaucet(t *testing.T) {
 	v2 := []byte("nakamoto")
 	tx2 := append(k2, append([]byte("="), v2...)...)
 
-	gtx := transactions.GenTransaction{}
-	gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{})
-	gtx.SigInfo = &transactions.SignatureInfo{}
-	gtx.SigInfo.URL = "fakeUrl"
-	gtx.Transaction = tx1
-	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
+	gtx := transactions.Envelope{}
+	gtx.Signatures = append(gtx.Signatures, &transactions.ED25519Sig{})
+	gtx.Transaction.Origin = &url.URL{Authority: "fakeUrl"}
+	gtx.Transaction.Body = tx1
+	gtx.Signatures[0].Sign(54321, kpSponsor, gtx.Transaction.Hash())
 	//changing the nonce will invalidate the signature.
-	gtx.SigInfo.Nonce = 1234
+	gtx.Transaction.Nonce = 1234
 
 	//intentionally send in a bogus transaction
 	ti1, _ := query.BroadcastTx(&gtx, nil)
-	gtx.Transaction = tx2
+	gtx.Transaction.Body = tx2
 	ti2, _ := query.BroadcastTx(&gtx, nil)
 
 	stat := query.BatchSend()
@@ -397,7 +396,7 @@ func TestGetTxId(t *testing.T) {
 	u, err := url.Parse(*destAddress.AsString())
 	require.NoError(t, err)
 	u.Path = ""
-	u.Query = fmt.Sprintf("txid=%x", tx.TransactionHash())
+	u.Query = fmt.Sprintf("txid=%x", tx.Transaction.Hash())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: types.String(u.String())})
 	require.NoError(t, err)
