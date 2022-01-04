@@ -44,6 +44,5 @@ func TestLiteTokenTransactions(t *testing.T) {
 	tas := new(protocol.LiteTokenAccount)
 	require.NoError(t, st.LoadAs(st.OriginChainId, tas))
 	require.Equal(t, tokenUrl, types.String(tas.TokenUrl), "token url of state doesn't match expected")
-	require.Equal(t, uint64(1), tas.TxCount, "expected a token transaction count of 2")
 
 }
