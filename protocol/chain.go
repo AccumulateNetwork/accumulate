@@ -10,7 +10,7 @@ import (
 func NewChain(typ types.ChainType) (state.Chain, error) {
 	switch typ {
 	case types.ChainTypeAnchor:
-		return new(state.Anchor), nil
+		return new(Anchor), nil
 	case types.ChainTypeIdentity:
 		return new(state.AdiState), nil
 	case types.ChainTypeTokenIssuer:
@@ -32,7 +32,7 @@ func NewChain(typ types.ChainType) (state.Chain, error) {
 	case types.ChainTypeLiteDataAccount:
 		return new(LiteDataAccount), nil
 	case types.ChainTypeSyntheticTransactions:
-		return new(state.SyntheticTransactionChain), nil
+		return new(SyntheticTransactionChain), nil
 	case types.ChainTypeInternalLedger:
 		return new(InternalLedger), nil
 	default:
