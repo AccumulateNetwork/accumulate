@@ -210,7 +210,7 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		var typ types.TransactionType
-		_ = typ.UnmarshalBinary(*tx.Transaction)
+		_ = typ.UnmarshalBinary(tx.Transaction)
 		g.logger.Info("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
 
 		// Sign it
@@ -255,26 +255,19 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		// Convert it back to a transaction
-		tx := pending.Restore()
-		tx.Signature = signatures
+		env := pending.Restore()
+		env.Signatures = signatures
 
 		// Marshal it
-		raw, err := tx.Marshal()
+		raw, err := env.MarshalBinary()
 		if err != nil {
 			g.logger.Error("Failed to marshal pending transaction", "txid", logging.AsHex(id), "error", err)
 			continue
 		}
 
-		// Parse the URL
-		u, err := url.Parse(tx.SigInfo.URL)
-		if err != nil {
-			g.logger.Error("Invalid pending transaction URL", "txid", logging.AsHex(id), "error", err, "url", tx.SigInfo.URL)
-			continue
-		}
-
 		// Send it
-		g.logger.Info("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()))
-		g.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
+		g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.Transaction.Hash()))
+		g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
 		body.Transactions = append(body.Transactions, id)
 	}
 
@@ -447,7 +440,7 @@ func loadDirectoryEntry(batch *database.Batch, chainId []byte, index uint64) (st
 
 func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionPayload) {
 	// Construct the signature transaction
-	tx, err := g.buildSynthTxn(g.Network.NodeUrl().JoinPath(protocol.Ledger), body, batch)
+	env, err := g.buildSynthTxn(g.Network.NodeUrl().JoinPath(protocol.Ledger), body, batch)
 	if err != nil {
 		g.logger.Error("Failed to build internal transaction", "error", err)
 		return
@@ -455,22 +448,22 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 
 	// Sign it
 	ed := new(transactions.ED25519Sig)
-	tx.Signature = append(tx.Signature, ed)
+	env.Signatures = append(env.Signatures, ed)
 	ed.PublicKey = g.Key[32:]
-	err = ed.Sign(tx.SigInfo.Nonce, g.Key, tx.TransactionHash())
+	err = ed.Sign(env.Transaction.Nonce, g.Key, env.Transaction.Hash())
 	if err != nil {
 		g.logger.Error("Failed to sign internal transaction", "error", err)
 		return
 	}
 
 	// Marshal it
-	data, err := tx.Marshal()
+	data, err := env.MarshalBinary()
 	if err != nil {
 		g.logger.Error("Failed to marshal internal transaction", "error", err)
 		return
 	}
 
 	// Send it
-	g.logger.Info("Sending internal txn", "txid", logging.AsHex(tx.TransactionHash()), "type", body.GetType())
+	g.logger.Info("Sending internal txn", "txid", logging.AsHex(env.Transaction.Hash()), "type", body.GetType())
 	g.dispatcher.BroadcastTxAsyncLocal(context.TODO(), data)
 }

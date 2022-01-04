@@ -13,7 +13,7 @@ type InternalTransactionsSigned struct{}
 
 func (InternalTransactionsSigned) Type() types.TxType { return types.TxTypeInternalTransactionsSigned }
 
-func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.InternalTransactionsSigned)
 	err := tx.As(body)
 	if err != nil {
@@ -52,16 +52,16 @@ func (InternalTransactionsSigned) Validate(st *StateManager, tx *transactions.Ge
 
 		// Add the signature
 		gtx := txState.Restore()
-		gtx.Signature = []*transactions.ED25519Sig{sig}
+		gtx.Signatures = []*transactions.ED25519Sig{sig}
 
 		// Validate it
-		if !gtx.ValidateSig() {
+		if !gtx.Verify() {
 			return fmt.Errorf("invalid signature for txn %X", id)
 		}
 
 		// Skip transactions that are already signed
 		if len(txSigs) > 0 {
-			st.logger.Info("Ignoring signature, synth txn already signed", "txid", logging.AsHex(id), "type", gtx.TransactionType())
+			st.logger.Info("Ignoring signature, synth txn already signed", "txid", logging.AsHex(id), "type", gtx.Transaction.Type())
 			continue
 		}
 
