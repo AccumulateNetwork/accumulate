@@ -78,7 +78,6 @@ type creditChain interface {
 
 type tokenChain interface {
 	state.Chain
-	NextTx() uint64
 	ParseTokenUrl() (*url.URL, error)
 	CreditTokens(amount *big.Int) bool
 	CanDebitTokens(amount *big.Int) bool
