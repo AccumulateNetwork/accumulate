@@ -12,7 +12,7 @@ type SyntheticMirror struct{}
 
 func (SyntheticMirror) Type() types.TxType { return types.TxTypeSyntheticMirror }
 
-func (SyntheticMirror) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SyntheticMirror)
 	err := tx.As(body)
 	if err != nil {

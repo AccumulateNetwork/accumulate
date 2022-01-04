@@ -18,7 +18,7 @@ func (SyntheticCreateChain) Type() types.TxType {
 	return types.TxTypeSyntheticCreateChain
 }
 
-func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SyntheticCreateChain)
 	err := tx.As(body)
 	if err != nil {

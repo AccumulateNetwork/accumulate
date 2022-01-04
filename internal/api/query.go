@@ -35,8 +35,8 @@ func NewQuery(txRelay *relay.Relay) *Query {
 	return &q
 }
 
-func (q *Query) BroadcastTx(gtx *transactions.GenTransaction, done chan abci.TxResult) (ti relay.TransactionInfo, err error) {
-	payload, err := gtx.Marshal()
+func (q *Query) BroadcastTx(gtx *transactions.Envelope, done chan abci.TxResult) (ti relay.TransactionInfo, err error) {
+	payload, err := gtx.MarshalBinary()
 	if err != nil {
 		return ti, err
 	}
@@ -48,7 +48,7 @@ func (q *Query) BroadcastTx(gtx *transactions.GenTransaction, done chan abci.TxR
 		}
 	}
 
-	ti = q.txRelay.BatchTx(gtx.Routing, payload)
+	ti = q.txRelay.BatchTx(gtx.Transaction.Origin.Routing(), payload)
 	return ti, nil
 }
 
@@ -442,8 +442,8 @@ func packTransactionQuery(txId []byte, txData []byte, txPendingData []byte, txSy
 		return nil, fmt.Errorf("invalid transaction object for query, %v", txErr)
 	}
 
-	var txStateData *types.Bytes
-	var txSigInfo *transactions.SignatureInfo
+	var txStateData types.Bytes
+	var txSigInfo *transactions.Header
 	if txErr == nil {
 		txState := state.Transaction{}
 		err = txState.UnmarshalBinary(txObject.Entry)
