@@ -20,8 +20,6 @@ LiteTokenAccount:
       is-url: true
     - name: Balance
       type: bigint
-    - name: TxCount
-      type: uvarint
     - name: Nonce
       type: uvarint
     - name: CreditBalance
