@@ -35,7 +35,9 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 		return fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, accountUrl)
 	}
 
-	account := protocol.NewTokenAccountByUrls(accountUrl.String(), tokenUrl.String())
+	account := protocol.NewTokenAccount()
+	account.ChainUrl = types.String(accountUrl.String())
+	account.TokenUrl = tokenUrl.String()
 	if body.KeyBookUrl == "" {
 		account.KeyBook = st.Origin.Header().KeyBook
 	} else {

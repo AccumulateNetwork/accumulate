@@ -209,7 +209,7 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 		ta := new(protocol.CreateTokenAccount)
 		ta.Url = string(sChain.ChainUrl)
 		ta.TokenUrl = sChain.TokenUrl
-		rAccount := response.NewTokenAccount(ta, sChain.GetBalance())
+		rAccount := response.NewTokenAccount(ta, &sChain.Balance)
 		return respondWith(obj, rAccount, sChain.Type.String())
 
 	case *protocol.LiteTokenAccount:
@@ -219,7 +219,6 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 		rAccount.TokenUrl = string(sChain.TokenUrl)
 		rAccount.Balance = types.Amount{Int: sChain.Balance}
 		rAccount.CreditBalance = types.Amount{Int: sChain.CreditBalance}
-		rAccount.TxCount = sChain.TxCount
 		rAccount.Nonce = sChain.Nonce
 		return respondWith(obj, rAccount, sChain.Type.String())
 
