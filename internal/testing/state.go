@@ -37,6 +37,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	}
 
 	tx := new(transactions.Envelope)
+	tx.Transaction = new(transactions.Transaction)
 	tx.Transaction.Body = depData
 	tx.Transaction.Origin = recipientAdi
 	tx.Transaction.KeyPageHeight = 1

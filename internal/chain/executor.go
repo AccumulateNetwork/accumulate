@@ -139,6 +139,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	m.blockBatch = m.DB.Begin()
 
 	env := new(transactions.Envelope)
+	env.Transaction = new(transactions.Transaction)
 	env.Transaction.Origin = protocol.AcmeUrl()
 	env.Transaction.Body, err = new(protocol.InternalGenesis).MarshalBinary()
 	if err != nil {
