@@ -43,7 +43,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 			return nil, nil, fmt.Errorf("invalid fragment")
 		}
 
-		chain, err := batch.Record(u).Chain(fragment[1])
+		chain, err := batch.Record(u).ReadChain(fragment[1])
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to load chain %q of %q: %v", strings.Join(fragment[1:], "."), u, err)
 		}
@@ -103,7 +103,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chain, err := batch.Record(u).Chain(protocol.MainChain)
+			chain, err := batch.Record(u).ReadChain(protocol.MainChain)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}
@@ -247,7 +247,7 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	}
 
 	// Add Merkle chain info (for records)
-	chain, err := batch.RecordByID(chainId).Chain(protocol.MainChain)
+	chain, err := batch.RecordByID(chainId).ReadChain(protocol.MainChain)
 	if err == nil {
 		qr.Height = uint64(chain.Height())
 
@@ -360,7 +360,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 }
 
 func (m *Executor) queryTxHistoryByChainId(batch *database.Batch, id []byte, start, end int64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
-	chain, err := batch.RecordByID(id).Chain(chainName)
+	chain, err := batch.RecordByID(id).ReadChain(chainName)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}

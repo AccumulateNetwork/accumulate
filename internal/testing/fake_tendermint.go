@@ -250,7 +250,7 @@ func (c *FakeTendermint) addSynthTxns(blockIndex int64) {
 		fmt.Printf("The last block created %d synthetic transactions\n", ledgerState.Synthetic.Produced)
 	}
 
-	synthChain, err := ledger.Chain(protocol.SyntheticChain)
+	synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
 	if err != nil {
 		c.onError(err)
 		return

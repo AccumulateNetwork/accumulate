@@ -166,11 +166,11 @@ func TestAnchorChain(t *testing.T) {
 	}, ledgerState.Records.Chains)
 
 	// Check each anchor
-	rootChain, err := ledger.Chain(protocol.MinorRootChain)
+	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	require.NoError(t, err)
 	first := rootChain.Height() - int64(len(ledgerState.Records.Chains))
 	for i, chain := range ledgerState.Records.Chains {
-		mgr, err := batch.RecordByID(chain[:]).Chain(protocol.MainChain)
+		mgr, err := batch.RecordByID(chain[:]).ReadChain(protocol.MainChain)
 		require.NoError(t, err)
 
 		root, err := rootChain.Entry(first + int64(i))
@@ -697,7 +697,7 @@ func TestSignatorHeight(t *testing.T) {
 	getHeight := func(u *url.URL) uint64 {
 		batch := n.db.Begin()
 		defer batch.Discard()
-		chain, err := batch.Record(u).Chain(protocol.MainChain)
+		chain, err := batch.Record(u).ReadChain(protocol.MainChain)
 		require.NoError(t, err)
 		return uint64(chain.Height())
 	}
