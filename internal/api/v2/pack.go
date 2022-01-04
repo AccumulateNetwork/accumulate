@@ -52,9 +52,9 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
 
-		res.Origin = tx.SigInfo.URL
+		res.Origin = tx.SigInfo.Origin.String()
 		data := new(TokenSend)
-		data.From = main.SigInfo.URL
+		data.From = main.SigInfo.Origin.String()
 		data.To = make([]TokenDeposit, len(payload.To))
 		for i, to := range payload.To {
 			data.To[i].Url = to.Url
@@ -62,15 +62,15 @@ func packTxResponse(txid [32]byte, synth []byte, main *state.Transaction, pend *
 			data.To[i].Txid = synth[i*32 : (i+1)*32]
 		}
 
-		res.Origin = main.SigInfo.URL
+		res.Origin = main.SigInfo.Origin.String()
 		res.Data = data
 
 	case *protocol.SyntheticDepositTokens:
-		res.Origin = main.SigInfo.URL
+		res.Origin = main.SigInfo.Origin.String()
 		res.Data = payload
 
 	default:
-		res.Origin = tx.SigInfo.URL
+		res.Origin = tx.SigInfo.Origin.String()
 		res.Data = payload
 	}
 

@@ -15,7 +15,7 @@ type AddCredits struct{}
 
 func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
-func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.AddCredits)
 	err := tx.As(body)
 	if err != nil {
@@ -45,7 +45,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 			return fmt.Errorf("invalid recipient: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeKeyPage, recv.Header().Type)
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
-		if recvUrl.Routing() == tx.Routing {
+		if recvUrl.Routing() == tx.Transaction.Origin.Routing() {
 			// If the recipient and the origin have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to
 			// locate the recipient chain means it doesn't exist.
@@ -62,7 +62,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return fmt.Errorf("not an account: %q", tx.SigInfo.URL)
+		return fmt.Errorf("not an account: %q", tx.Transaction.Origin)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
@@ -80,13 +80,13 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	if !account.DebitTokens(&amount.Int) {
-		return fmt.Errorf("failed to debit %v", tx.SigInfo.URL)
+		return fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
 	}
 	st.Update(account)
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
-	copy(sdc.Cause[:], tx.TransactionHash())
+	copy(sdc.Cause[:], tx.Transaction.Hash())
 	sdc.Amount = body.Amount
 	st.Submit(recvUrl, sdc)
 

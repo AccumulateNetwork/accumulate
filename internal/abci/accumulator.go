@@ -14,7 +14,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	_ "github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -298,13 +297,13 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	txHash := logging.AsHex(h[:])
 
 	//the submission is the format of the Tx input
-	sub := new(transactions.GenTransaction)
+	env := new(transactions.Envelope)
 
 	//unpack the request
-	rem, err := sub.UnMarshal(req.Tx)
+	err := env.UnmarshalBinary(req.Tx)
 
 	//check to see if there was an error decoding the submission
-	if len(rem) != 0 || err != nil {
+	if err != nil {
 		sentry.CaptureException(err)
 		app.logger.Info("Check failed", "tx", txHash, "error", err)
 		//reject it
@@ -312,30 +311,25 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 			Log: "Unable to decode transaction"}
 	}
 
-	txid := logging.AsHex(sub.TransactionHash())
+	txid := logging.AsHex(env.Transaction.Hash())
 
 	//create a default response
-	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
+	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: env.Transaction.Origin.ResourceChain(), Log: "CheckTx"}
 
-	customErr := app.Chain.CheckTx(sub)
+	customErr := app.Chain.CheckTx(env)
 
 	if customErr != nil {
-		u2 := sub.SigInfo.URL
-		u, e2 := url.Parse(sub.SigInfo.URL)
-		if e2 == nil {
-			u2 = u.String()
-		}
 		sentry.CaptureException(customErr)
-		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash, "error", customErr)
+		app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", txHash, "error", customErr)
 		ret.Code = uint32(customErr.Code)
 		ret.GasWanted = 0
 		ret.GasUsed = 0
-		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
+		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), customErr)
 		return ret
 	}
 
 	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
-	app.logger.Debug("Check succeeded", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash)
+	app.logger.Debug("Check succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", txHash)
 	return ret
 }
 
@@ -356,11 +350,11 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	txHash := logging.AsHex(h[:])
 	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: protocol.CodeOK}
 
-	sub := &transactions.GenTransaction{}
+	env := &transactions.Envelope{}
 
 	//unpack the request
 	//how do i detect errors?  This causes segfaults if not tightly checked.
-	_, err := sub.UnMarshal(req.Tx)
+	err := env.UnmarshalBinary(req.Tx)
 	if err != nil {
 		sentry.CaptureException(err)
 		app.logger.Info("Deliver failed", "tx", txHash, "error", err)
@@ -368,29 +362,24 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 			Log: "Unable to decode transaction"}
 	}
 
-	txid := logging.AsHex(sub.TransactionHash())
+	txid := logging.AsHex(env.Transaction.Hash())
 
 	//run through the validation node
-	customErr := app.Chain.DeliverTx(sub)
+	customErr := app.Chain.DeliverTx(env)
 
 	if customErr != nil {
-		u2 := sub.SigInfo.URL
-		u, e2 := url.Parse(sub.SigInfo.URL)
-		if e2 == nil {
-			u2 = u.String()
-		}
 		sentry.CaptureException(customErr)
-		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash, "error", customErr)
+		app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", txHash, "error", customErr)
 		ret.Code = uint32(customErr.Code)
 		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
-		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
+		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", env.Transaction.Origin, env.Transaction.Type().Name(), customErr)
 		return ret
 	}
 
 	//now we need to store the data returned by the validator and feed into accumulator
 	app.txct++
 
-	app.logger.Debug("Deliver succeeded", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash)
+	app.logger.Debug("Deliver succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", txHash)
 	return ret
 }
 

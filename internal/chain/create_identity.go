@@ -14,7 +14,7 @@ type CreateIdentity struct{}
 
 func (CreateIdentity) Type() types.TxType { return types.TxTypeCreateIdentity }
 
-func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) error {
 	// *protocol.IdentityCreate, *url.URL, state.Chain
 	body := new(protocol.CreateIdentity)
 	err := tx.As(body)

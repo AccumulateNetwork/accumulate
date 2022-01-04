@@ -218,8 +218,9 @@ TxRequest:
     type: bool
     optional: true
   - name: Origin
-    type: string
-    is-url: true
+    type: url.URL
+    marshal-as: reference
+    pointer: true
     alternative: Sponsor
   - name: Signer
     type: Signer
