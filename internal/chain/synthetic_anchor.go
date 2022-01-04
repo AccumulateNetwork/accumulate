@@ -7,7 +7,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type SyntheticAnchor struct {
@@ -44,7 +43,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) e
 		}
 	}
 
-	chain := new(state.Anchor)
+	chain := new(protocol.Anchor)
 	chain.ChainUrl = types.String(nodeUrl.JoinPath(anchorChainName(x.Network.Type, body.Major)).String())
 	chain.KeyBook = types.String(st.nodeUrl.JoinPath("validators").String())
 	chain.Index = body.Index
