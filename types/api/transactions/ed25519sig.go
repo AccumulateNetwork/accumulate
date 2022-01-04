@@ -77,20 +77,25 @@ func (e *ED25519Sig) CanVerify(keyHash []byte) bool {
 	return bytes.Compare(keyHash, pubKeyHash[:]) == 0
 }
 
+func (e *ED25519Sig) WellFormed() bool {
+	return len(e.PublicKey) == 32 && len(e.Signature) == 64
+}
+
 // Verify
 // Returns true if the signature matches the message.  Involves a hash of the
 // message.
 func (e *ED25519Sig) Verify(hash []byte) bool {
-	return ed25519.Verify( //                               ed25519 verify signature
-		e.PublicKey, //                                     with the public key of the signature
-		append(common.Uint64Bytes(e.Nonce), hash...), //    Of the nonce+transaction hash
-		e.Signature) //                                     with the signature
+	return e.WellFormed() &&
+		ed25519.Verify( //                               ed25519 verify signature
+			e.PublicKey, //                                     with the public key of the signature
+			append(common.Uint64Bytes(e.Nonce), hash...), //    Of the nonce+transaction hash
+			e.Signature) //                                     with the signature
 }
 
 // Marshal
 // Marshal a signature.  The data can be unmarshaled
 func (e *ED25519Sig) Marshal() (data []byte, err error) {
-	if len(e.PublicKey) != 32 || len(e.Signature) != 64 { //            Double check data sizes
+	if !e.WellFormed() { //            Double check data sizes
 		return nil, fmt.Errorf("poorly formed signature") //            Report error if sizes are wrong
 	} //
 	data = append(data, common.Uint64Bytes(e.Nonce)...) //              Add Nonce

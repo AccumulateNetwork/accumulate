@@ -134,6 +134,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 
 func signGenTx(binaryPayload []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Transaction.Body = binaryPayload
 
 	hdr.Nonce = nonce

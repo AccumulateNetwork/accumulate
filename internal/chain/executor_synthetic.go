@@ -62,6 +62,7 @@ func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.Transact
 
 	// Build the transaction
 	env := new(transactions.Envelope)
+	env.Transaction = new(transactions.Transaction)
 	env.Transaction.Origin = dest
 	env.Transaction.KeyPageHeight = 1
 	env.Transaction.KeyPageIndex = 0
