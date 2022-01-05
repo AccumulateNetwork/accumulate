@@ -28,15 +28,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeKeyPage, st.Origin.Header().Type)
 	}
 
-	// We're changing the height of the key page, so reset all the nonces
-	for _, key := range page.Keys {
-		key.Nonce = 0
-	}
-
 	// Find the old key
 	var oldKey *protocol.KeySpec
-	var index int
-	if len(body.Key) > 0 && body.Operation != protocol.AddKey {
+	index := -1
+	if len(body.Key) > 0 && body.Operation < protocol.AddKey {
 		for i, key := range page.Keys {
 			// We could support (double) SHA-256 but I think it's fine to
 			// require the user to provide an exact match.
@@ -44,6 +39,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 				oldKey, index = key, i
 				break
 			}
+		}
+		if index < 0 {
+			return fmt.Errorf("key not found on the key page")
 		}
 	}
 
@@ -97,23 +95,38 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		oldKey.PublicKey = body.NewKey
 
 	case protocol.RemoveKey:
+		if len(page.Keys) == 1 {
+			return fmt.Errorf("cannot remove the last key") // TODO: allow removal of the last key for all but the first page
+		}
 		if len(body.Key) == 0 {
 			return fmt.Errorf("trying to update a new key but you didn't give me an existing key")
 		}
 		if oldKey == nil {
 			return fmt.Errorf("no matching key found")
 		}
-
 		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 		if len(page.Keys) == 0 && priority == 0 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
+		if page.Threshold > uint64(len(page.Keys)) {
+			page.Threshold = uint64(len(page.Keys))
+		}
+
+		// SetThreshold sets the signature threshold for the Key Page
+	case protocol.SetM:
+		if err := page.SetThreshold(body.Threshold); err != nil {
+			return err
+		}
+
 	default:
 		return fmt.Errorf("invalid operation: %v", body.Operation)
 	}
-
+	// We're changing the height of the key page, so reset all the nonces
+	for _, key := range page.Keys {
+		key.Nonce = 0
+	}
 	st.Update(page)
 	return nil
 }

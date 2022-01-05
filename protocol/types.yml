@@ -90,6 +90,8 @@ KeyPage:
   fields:
     - name: CreditBalance
       type: bigint
+    - name: Threshold
+      type: uvarint
     - name: Keys
       type: slice
       slice:
@@ -170,6 +172,9 @@ UpdateKeyPage:
       optional: true
     - name: NewKey
       type: bytes
+      optional: true
+    - name: Threshold
+      type: uvarint
       optional: true
 
 MetricsRequest:

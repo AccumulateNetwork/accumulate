@@ -10,8 +10,9 @@ type KeyPageOperation uint8
 
 const (
 	UpdateKey KeyPageOperation = iota + 1
-	AddKey
 	RemoveKey
+	AddKey
+	SetM
 )
 
 func KeyPageOperationByName(s string) KeyPageOperation {

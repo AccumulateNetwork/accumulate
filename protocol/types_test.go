@@ -3,6 +3,7 @@ package protocol
 import (
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/stretchr/testify/require"
 )
 
@@ -35,4 +36,10 @@ func TestAccUrlValidator(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestKeyPage_MofN(t *testing.T) {
+	kp := new(KeyPage)
+	var rh managed.RandHash
+	kp.Keys = append(kp.Keys, nil)
 }
