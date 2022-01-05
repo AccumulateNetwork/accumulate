@@ -80,14 +80,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	}
 
 	if body.Owner != "" {
-		ownerBook := new(protocol.KeyBook)
-		u, err := url.Parse(body.Owner)
+		_, err := url.Parse(body.Owner)
 		if err != nil {
 			return fmt.Errorf("invalid key book url : %s", body.Owner)
-		}
-		err = st.LoadUrlAs(u, ownerBook)
-		if err != nil {
-			return fmt.Errorf("invalid key book: %v", err)
 		}
 	}
 
