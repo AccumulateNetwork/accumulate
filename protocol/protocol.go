@@ -47,7 +47,47 @@ const CreditPrecision = 1e2
 // 1.
 const CreditsPerFiatUnit = 1e2 * CreditPrecision
 
-// LiteAddress returns an lite address for the given public key and token URL as
+// LiteDataAddress returns a lite address for the given chain id as
+// `acc://<chain-id-hash-and-checksum>`.
+//
+// The rules for generating the authority of a lite data chain are
+// the same as the address for a Lite Token Account
+func LiteDataAddress(chainId []byte) (*url.URL, error) {
+
+	chainStr := fmt.Sprintf("%x", chainId[:20])
+
+	liteUrl := new(url.URL)
+	checkSum := sha256.Sum256([]byte(chainStr))
+	checkStr := fmt.Sprintf("%x", checkSum[28:])
+	liteUrl.Authority = chainStr + checkStr
+	return liteUrl, nil
+}
+
+// ParseLiteChainAddress extracts the partial chain id from a lite chain URL.
+// Returns `nil, err if the URL does not appear to be a lite token chain
+// URL. Returns an error if the checksum is invalid.
+func ParseLiteChainAddress(u *url.URL) ([]byte, error) {
+	if u.Path != "" || u.Path[0] == '/' || len(u.Path) > 0 {
+		// A chain URL can have no path
+		return nil, errors.New("invalid chain url")
+	}
+
+	b, err := hex.DecodeString(u.Hostname())
+	if err != nil || len(b) != 24 {
+		return nil, errors.New("hostname is not hex or is wrong length")
+	}
+
+	v := *u
+	v.Authority = u.Authority[:40]
+	checkSum := sha256.Sum256([]byte(v.Authority))
+	if !bytes.Equal(b[20:], checkSum[28:]) {
+		return nil, errors.New("invalid checksum")
+	}
+
+	return b[:20], nil
+}
+
+// LiteTokenAddress returns an lite address for the given public key and token URL as
 // `acc://<key-hash-and-checksum>/<token-url>`.
 //
 // Only the first 20 bytes of the public key hash is used. The checksum is the
@@ -63,7 +103,7 @@ const CreditsPerFiatUnit = 1e2 * CreditPrecision
 // The resulting URL is
 //
 //   "acc://aec070645fe53ee3b3763059376134f058cc337226e2a324/ACME"
-func LiteAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
+func LiteTokenAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	tokenUrl, err := url.Parse(tokenUrlStr)
 	if err != nil {
 		return nil, err
@@ -100,10 +140,10 @@ func LiteAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 	return liteUrl, nil
 }
 
-// ParseLiteAddress extracts the key hash and token URL from an lite token
+// ParseLiteTokenAddress extracts the key hash and token URL from an lite token
 // account URL. Returns `nil, nil, nil` if the URL is not an lite token account
 // URL. Returns an error if the checksum is invalid.
-func ParseLiteAddress(u *url.URL) ([]byte, *url.URL, error) {
+func ParseLiteTokenAddress(u *url.URL) ([]byte, *url.URL, error) {
 	if u.Path == "" || u.Path[0] != '/' || len(u.Path) == 1 {
 		// A URL with an empty or invalid path cannot be lite
 		return nil, nil, nil
