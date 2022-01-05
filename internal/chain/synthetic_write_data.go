@@ -11,7 +11,7 @@ import (
 
 type SyntheticWriteData struct{}
 
-func (SyntheticWriteData) Type() types.TxType { return types.TxTypeSyntheticWriteData }
+func (SyntheticWriteData) Type() types.TransactionType { return types.TxTypeSyntheticWriteData }
 
 func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SyntheticWriteData)
@@ -73,9 +73,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 	// when the user wishes to validate the signature of the transaction that
 	// produced the data entry
 
-	//dataPayload will be nil for a lite data account, so need to populate it
 	if haveLiteChain {
-
 		liteChainId, err := protocol.ParseLiteChainAddress(tx.Transaction.Origin)
 		if err != nil {
 			return err
