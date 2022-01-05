@@ -6,6 +6,8 @@ import (
 )
 
 type (
+	// Generator defines an interface the SDK can use  to generate an
+	// transaction from a transaction builder.
 	Generator interface {
 		NewTxn() ClientTxn
 		NewSig() ClientSigner

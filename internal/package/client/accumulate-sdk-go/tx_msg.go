@@ -7,12 +7,9 @@ import (
 )
 
 type (
+	// Msg is the interface from the protocoltransaction that must be  fulfill.
 	Msg interface {
 		protocol.TransactionPayload
-
-		Route() string
-
-		Type() string
 
 		GetSigners() []AccAddress
 	}
@@ -23,6 +20,8 @@ type (
 		ValidateBasic() error
 	}
 
+
+	// Signature interface for setting and return transaction signatures.
 	Signature interface {
 		GetPublicKey() crypto.PubKey
 		GetSignature() []byte

@@ -11,7 +11,7 @@ type Txn struct {
 	Body []byte `json:"body,omitempty" form:"body" query:"body" validate:"required"`
 	txHash []byte
 	TxBody *Envelope
-	SigInfo []*transactions.SignatureInfo
+//	SigInfo []*transactions.SignatureInfo
 }
 
 type Header struct {

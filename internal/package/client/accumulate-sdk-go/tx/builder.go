@@ -53,25 +53,27 @@ func (w *wrapper) GetSignatureV1() ([]signing.SignatureV1, error) {
 
 func (w *wrapper) SetSignature(signatures ...signing.SignatureV1) error {
 	n := len(signatures)
-	signerInfo := make([]*transactions.SignatureInfo, n)
+	signerInfo := make([]signing.SignatureV1, n)
 	rawSig := make([]*transactions.ED25519Sig, n)
 
 	for i, sig := range signatures {
-		signerInfo[i] = &transactions.SignatureInfo{
-			URL: w.txn.Header.Origin.UserInfo,
+		signerInfo[i] = signing.SignatureV1{
+			Data: sig.Data,
 
 		}
 		fmt.Println(sig)
 	}
-	w.setSignatureInfos(signerInfo)
+//	w.setSignatureInfos(signerInfo)
 	w.setSignatures(rawSig)
 
 	return nil
 }
 
+/*
 func (w *wrapper) setSignatureInfos(infos []*transactions.SignatureInfo) {
 	w.txn.SigInfo = infos
 }
+*/
 
 func (w *wrapper) setSignatures(sigs []*transactions.ED25519Sig) {
 	w.txn.TxBody.Signatures = sigs

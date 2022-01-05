@@ -12,22 +12,23 @@ import (
 
 type (
 	// Factory is the interface that wraps the New method.
+	// Factory is a client transaction factory that is made to generate txn and
+	// signing 
 	Factory struct {
 		adi string
 		chainId []byte
 		keyManager sdk.KeyManager
 		txConfig sdk.TxnConfig
-		query QueryData
 	}
 
-	QueryData func(string, []byte) ([]byte, int64, error)
 )
 
+// NewFactory returns to instance of Factory.
 func NewFactory() *Factory {
 	return &Factory{}
 }
 
-
+// TODO Specify BVN or DN chain type
 func (f *Factory) ChainId() []byte {
 	return f.chainId
 }
