@@ -16,8 +16,8 @@ func (n Fee) AsInt() int {
 
 // Fee Schedule
 const (
-	// FeeFailedMaximum $0.25
-	FeeFailedMaximum Fee = 2500
+	// FeeFailedMaximum $0.01
+	FeeFailedMaximum Fee = 100
 
 	// FeeCreateIdentity $5.00 = 50000 credits @ 0.0001 / credit.
 	FeeCreateIdentity Fee = 50000
