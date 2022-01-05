@@ -203,9 +203,9 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING
 // USE ONLY.
 func AcmeLiteAddress(pubKey []byte) *url.URL {
-	u, err := protocol.LiteAddress(pubKey, protocol.ACME)
+	u, err := protocol.LiteTokenAddress(pubKey, protocol.ACME)
 	if err != nil {
-		// LiteAddress should only return an error if the token URL is invalid,
+		// LiteTokenAddress should only return an error if the token URL is invalid,
 		// so this should never return an error. But ignoring errors is a great
 		// way to get bugs.
 		panic(err)
