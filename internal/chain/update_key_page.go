@@ -52,6 +52,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	if page.KeyBook != "" {
 		book = new(protocol.KeyBook)
 		u, err := url.Parse(*page.KeyBook.AsString())
+		if err != nil {
+			return fmt.Errorf("invalid key book url : %s", *page.KeyBook.AsString())
+		}
 		err = st.LoadUrlAs(u, book)
 		if err != nil {
 			return fmt.Errorf("invalid key book: %v", err)
@@ -76,15 +79,25 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		}
 	}
 
+	if body.Owner != "" {
+		_, err := url.Parse(body.Owner)
+		if err != nil {
+			return fmt.Errorf("invalid key book url : %s", body.Owner)
+		}
+	}
+
 	switch body.Operation {
 	case protocol.AddKey:
 		if len(body.Key) > 0 {
 			return fmt.Errorf("trying to add a new key but you gave me an existing key")
 		}
-
-		page.Keys = append(page.Keys, &protocol.KeySpec{
+		key := &protocol.KeySpec{
 			PublicKey: body.NewKey,
-		})
+		}
+		if body.Owner != "" {
+			key.Owner = body.Owner
+		}
+		page.Keys = append(page.Keys, key)
 
 	case protocol.UpdateKey:
 		if len(body.Key) == 0 {
@@ -95,6 +108,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		}
 
 		oldKey.PublicKey = body.NewKey
+		if body.Owner != "" {
+			oldKey.Owner = body.Owner
+		}
 
 	case protocol.RemoveKey:
 		if len(body.Key) == 0 {
