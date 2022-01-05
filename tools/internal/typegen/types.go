@@ -4,10 +4,10 @@ import (
 	"sort"
 )
 
-type Types []*Type
+type DataTypes []*DataType
 
-func TypesFrom(m map[string]*Type) Types {
-	t := Types{}
+func DataTypesFrom(m map[string]*DataType) DataTypes {
+	t := DataTypes{}
 	for name, typ := range m {
 		typ.Name = name
 		t = append(t, typ)
@@ -34,7 +34,7 @@ func TypesFrom(m map[string]*Type) Types {
 	return t
 }
 
-type Type struct {
+type DataType struct {
 	Name         string `yaml:"-"`
 	Kind         string
 	TxType       string `yaml:"tx-type"`
@@ -46,11 +46,11 @@ type Type struct {
 	Embeddings   []string `yaml:"embeddings"`
 }
 
-func (typ *Type) GoTxType() string {
+func (typ *DataType) GoTxType() string {
 	return "types.TxType" + typ.TxType
 }
 
-func (typ *Type) GoChainType() string {
+func (typ *DataType) GoChainType() string {
 	return "types.ChainType" + typ.ChainType
 }
 
