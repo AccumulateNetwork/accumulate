@@ -103,7 +103,6 @@ func BytesMarshalBinary(b []byte) []byte {
 }
 
 func BytesUnmarshalBinary(b []byte) ([]byte, error) {
-	binary.BigEndian.Uint64()
 	l, n := binary.Uvarint(b)
 	if n == 0 {
 		return nil, fmt.Errorf("error decoding length: %w", ErrNotEnoughData)

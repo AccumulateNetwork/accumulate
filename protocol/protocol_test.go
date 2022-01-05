@@ -71,7 +71,7 @@ func TestLiteAddress(t *testing.T) {
 	for name, str := range TokenURLs {
 		t.Run(name, func(t *testing.T) {
 			publicKey := sha256.Sum256([]byte(name))
-			url, err := LiteAddress(publicKey[:], str)
+			url, err := LiteTokenAddress(publicKey[:], str)
 			if name[:4] == "good" {
 				require.NoError(t, err, "%s should be valid", str)
 				fmt.Println(url.String())

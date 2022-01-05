@@ -153,7 +153,7 @@ func (m *Executor) check(tx *transactions.GenTransaction) (*StateManager, error)
 	st, err := NewStateManager(m.dbTx, tx)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
-		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens:
+		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens, types.TxTypeSyntheticWriteData:
 			// TX does not require an origin - it may create the origin
 		default:
 			return nil, fmt.Errorf("origin record not found: %w", err)
@@ -263,7 +263,7 @@ func (m *Executor) checkLite(st *StateManager, tx *transactions.GenTransaction, 
 		return fmt.Errorf("invalid origin record URL: %v", err)
 	}
 
-	urlKH, _, err := protocol.ParseLiteAddress(u)
+	urlKH, _, err := protocol.ParseLiteTokenAddress(u)
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
 		// into the database.

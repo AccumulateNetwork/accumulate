@@ -43,7 +43,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.GenTra
 		default:
 			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, origin.Header().Type)
 		}
-	} else if keyHash, tok, err := protocol.ParseLiteAddress(accountUrl); err != nil {
+	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(accountUrl); err != nil {
 		return fmt.Errorf("invalid lite token account URL: %v", err)
 	} else if keyHash == nil {
 		return fmt.Errorf("could not find token account")

@@ -689,7 +689,7 @@ func TestSignatorHeight(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	liteKey, fooKey := generateKey(), generateKey()
 
-	liteUrl, err := protocol.LiteAddress(liteKey.PubKey().Bytes(), "ACME")
+	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), "ACME")
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)

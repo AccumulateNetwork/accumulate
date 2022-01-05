@@ -124,7 +124,7 @@ func testCase2_7(t *testing.T, tc *testCmd) {
 
 	pubKey, err := pubKeyFromString(fmt.Sprintf("%s", res["publicKey"]))
 	require.NoError(t, err)
-	u, err := protocol.LiteAddress(pubKey, "acc://ACME")
+	u, err := protocol.LiteTokenAddress(pubKey, "acc://ACME")
 	require.NoError(t, err)
 
 	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 %s red2", u.String())

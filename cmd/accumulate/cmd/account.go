@@ -223,7 +223,7 @@ func ListAccounts() (string, error) {
 	}
 	var out string
 	for _, v := range b.KeyValueList {
-		lt, err := protocol.LiteAddress(v.Value, protocol.AcmeUrl().String())
+		lt, err := protocol.LiteTokenAddress(v.Value, protocol.AcmeUrl().String())
 		if err != nil {
 			continue
 		}
@@ -246,7 +246,7 @@ func RestoreAccounts() (out string, err error) {
 		if err != nil {
 			out += fmt.Sprintf("%q is not a valid URL\n", v.Key)
 		}
-		key, _, err := protocol.ParseLiteAddress(u)
+		key, _, err := protocol.ParseLiteTokenAddress(u)
 		if err != nil {
 			out += fmt.Sprintf("%q is not a valid lite account: %v\n", v.Key, err)
 		} else if key == nil {
