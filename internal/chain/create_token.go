@@ -32,8 +32,10 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) error {
 	token := protocol.NewTokenIssuer()
 	token.ChainUrl = types.String(tokenUrl.String())
 	token.Precision = body.Precision
-	token.Symbol = body.Properties
-	token.Properties = body.Properties
+	token.Symbol = body.Symbol
+	if body.Properties != "" {
+		token.Properties = body.Properties
+	}
 
 	st.Create(token)
 	return nil
