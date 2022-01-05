@@ -22,8 +22,8 @@ type DB = *database.Batch
 // Token multiplier
 const TokenMx = protocol.AcmePrecision
 
-func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.GenTransaction, error) {
-	recipientAdi := types.String(AcmeLiteAddressTmPriv(recipient).String())
+func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Envelope, error) {
+	recipientAdi := AcmeLiteAddressTmPriv(recipient)
 
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
@@ -36,23 +36,20 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Ge
 		return nil, err
 	}
 
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.Transaction = depData
-	tx.SigInfo.URL = *recipientAdi.AsString()
-	tx.SigInfo.KeyPageHeight = 1
-	tx.ChainID = types.GetChainIdFromChainPath(recipientAdi.AsString())[:]
-	tx.Routing = types.GetAddressFromIdentity(recipientAdi.AsString())
+	tx := new(transactions.Envelope)
+	tx.Transaction.Body = depData
+	tx.Transaction.Origin = recipientAdi
+	tx.Transaction.KeyPageHeight = 1
 
 	ed := new(transactions.ED25519Sig)
-	tx.SigInfo.Nonce = 1
+	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.SigInfo.Nonce, recipient, tx.TransactionHash())
+	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.Transaction.Hash())
 	if err != nil {
 		return nil, err
 	}
 
-	tx.Signature = append(tx.Signature, ed)
+	tx.Signatures = append(tx.Signatures, ed)
 	return tx, nil
 }
 
@@ -114,7 +111,8 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
 	book.Pages = append(book.Pages, pageUrl.String())
 
-	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
+	adi := protocol.NewADI()
+	adi.ChainUrl = types.String(identityUrl.String())
 	adi.KeyBook = types.String(bookUrl.String())
 
 	return WriteStates(db, adi, book, mss)
@@ -132,10 +130,11 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account.ChainUrl = types.String(u.String())
 		account.TokenUrl = tokenUrl
 		account.Balance.SetInt64(int64(tokens * TokenMx))
-		account.TxCount++
 		chain = account
 	} else {
-		account := protocol.NewTokenAccountByUrls(u.String(), tokenUrl)
+		account := protocol.NewTokenAccount()
+		account.ChainUrl = types.String(u.String())
+		account.TokenUrl = tokenUrl
 		account.KeyBook = types.String(u.Identity().JoinPath("book0").String())
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account

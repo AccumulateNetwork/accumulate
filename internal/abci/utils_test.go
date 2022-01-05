@@ -220,15 +220,15 @@ func (n *fakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
 	return r
 }
 
-func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
+func (n *fakeNode) Batch(inBlock func(func(*transactions.Envelope))) {
 	n.t.Helper()
 
 	var ids [][32]byte
-	inBlock(func(tx *transactions.GenTransaction) {
+	inBlock(func(tx *transactions.Envelope) {
 		var id [32]byte
-		copy(id[:], tx.TransactionHash())
+		copy(id[:], tx.Transaction.Hash())
 		ids = append(ids, id)
-		b, err := tx.Marshal()
+		b, err := tx.MarshalBinary()
 		require.NoError(n.t, err)
 		n.client.SubmitTx(context.Background(), b)
 	})
@@ -316,8 +316,8 @@ func (n *fakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
 	return acct
 }
 
-func (n *fakeNode) GetADI(url string) *state.AdiState {
-	adi := new(state.AdiState)
+func (n *fakeNode) GetADI(url string) *protocol.ADI {
+	adi := new(protocol.ADI)
 	n.GetChainAs(url, adi)
 	return adi
 }
@@ -358,8 +358,8 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return d.getObj(url).Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
-	b, err := tx.Marshal()
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
 	d.client.SubmitTx(context.Background(), b)
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	. "github.com/AccumulateNetwork/accumulate/protocol"
 	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -106,7 +105,7 @@ func TestValidate(t *testing.T) {
 			},
 		})
 
-		adi := new(state.AdiState)
+		adi := new(protocol.ADI)
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: adiName}, adi)
 		assert.Equal(t, adiName, string(adi.ChainUrl))
 

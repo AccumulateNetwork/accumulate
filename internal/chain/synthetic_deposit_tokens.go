@@ -15,17 +15,12 @@ func (SyntheticDepositTokens) Type() types.TxType {
 	return types.TxTypeSyntheticDepositTokens
 }
 
-func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	// *big.Int, tokenChain, *url.URL
 	body := new(protocol.SyntheticDepositTokens)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)
-	}
-
-	accountUrl, err := url.Parse(tx.SigInfo.URL)
-	if err != nil {
-		return fmt.Errorf("invalid recipient URL: %v", err)
 	}
 
 	tokenUrl, err := url.Parse(body.Token)
@@ -43,7 +38,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.GenTra
 		default:
 			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, origin.Header().Type)
 		}
-	} else if keyHash, tok, err := protocol.ParseLiteAddress(accountUrl); err != nil {
+	} else if keyHash, tok, err := protocol.ParseLiteAddress(tx.Transaction.Origin); err != nil {
 		return fmt.Errorf("invalid lite token account URL: %v", err)
 	} else if keyHash == nil {
 		return fmt.Errorf("could not find token account")
@@ -52,7 +47,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.GenTra
 	} else {
 		// Address is lite and the account doesn't exist, so create one
 		lite := protocol.NewLiteTokenAccount()
-		lite.ChainUrl = types.String(accountUrl.String())
+		lite.ChainUrl = types.String(tx.Transaction.Origin.String())
 		lite.TokenUrl = tokenUrl.String()
 		account = lite
 	}

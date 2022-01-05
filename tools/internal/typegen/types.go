@@ -41,6 +41,7 @@ type Type struct {
 	ChainType    string `yaml:"chain-type"`
 	NonBinary    bool   `yaml:"non-binary"`
 	Incomparable bool   `yaml:"incomparable"`
+	OmitNewFunc  bool   `yaml:"omit-new-func"`
 	Fields       []*Field
 	Embeddings   []string `yaml:"embeddings"`
 }

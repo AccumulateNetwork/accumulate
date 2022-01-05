@@ -43,13 +43,13 @@ func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
 		return fmt.Errorf("txn failed with code %d: %s", r.TxResult.Code, r.TxResult.Log)
 	}
 
-	tx := new(transactions.GenTransaction)
-	_, err = tx.UnMarshal(r.Tx)
+	tx := new(transactions.Envelope)
+	err = tx.UnmarshalBinary(r.Tx)
 	if err != nil {
 		return err
 	}
 
-	return WaitForTxidV1(query, tx.TransactionHash())
+	return WaitForTxidV1(query, tx.Transaction.Hash())
 }
 
 func WaitForTxV1(query *api.Query, txResp *apitypes.APIDataResponse) error {

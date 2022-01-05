@@ -1,6 +1,8 @@
 package database
 
 import (
+	"errors"
+
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
@@ -47,6 +49,10 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 		end = c.Height()
 	}
 
+	if end < start {
+		return nil, errors.New("invalid range: start is greater than end")
+	}
+
 	// GetRange will not cross mark point boundaries, so we may need to call it
 	// multiple times
 	entries := make([][]byte, 0, end-start)
@@ -67,8 +73,7 @@ func (c *Chain) Entries(start int64, end int64) ([][]byte, error) {
 
 // State returns the state of the chain at the given height.
 func (c *Chain) State(height int64) (*managed.MerkleState, error) {
-	// TODO MerkleManager.GetState really should return an error
-	return c.merkle.GetState(height), nil
+	return c.merkle.GetAnyState(height)
 }
 
 // HeightOf returns the height of the given entry in the chain.

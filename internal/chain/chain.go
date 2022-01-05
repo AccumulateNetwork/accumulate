@@ -74,7 +74,7 @@ type TxExecutor interface {
 	Type() types.TransactionType
 
 	// Validate fully validates and executes the transaction.
-	Validate(*StateManager, *transactions.GenTransaction) error
+	Validate(*StateManager, *transactions.Envelope) error
 }
 
 type creditChain interface {
@@ -85,7 +85,6 @@ type creditChain interface {
 
 type tokenChain interface {
 	state.Chain
-	NextTx() uint64
 	ParseTokenUrl() (*url.URL, error)
 	CreditTokens(amount *big.Int) bool
 	CanDebitTokens(amount *big.Int) bool

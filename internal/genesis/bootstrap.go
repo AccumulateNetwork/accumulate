@@ -48,7 +48,8 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
 		uLedger := uAdi.JoinPath(protocol.Ledger)
 
-		adi := state.NewIdentityState(types.String(uAdi.String()))
+		adi := protocol.NewADI()
+		adi.ChainUrl = types.String(uAdi.String())
 		adi.KeyBook = types.String(uBook.String())
 		records = append(records, adi)
 
@@ -75,22 +76,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		ledger.KeyBook = types.String(uBook.String())
 		ledger.Synthetic.Nonce = 1
 		records = append(records, ledger)
-
-		// TODO Remove root and synthetic chains?
-
-		// // Create the root chains
-		// majorRoot, minorRoot := state.NewAnchor(), state.NewAnchor()
-		// majorRoot.ChainUrl = types.String(uAdi.JoinPath(protocol.MajorRoot).String())
-		// minorRoot.ChainUrl = types.String(uAdi.JoinPath(protocol.MinorRoot).String())
-		// majorRoot.KeyBook = types.String(uBook.String())
-		// minorRoot.KeyBook = types.String(uBook.String())
-		// records = append(records, majorRoot, minorRoot)
-
-		// // Create the synthetic transaction chain
-		// synthTxn := state.NewSyntheticTransactionChain()
-		// synthTxn.ChainUrl = types.String(uAdi.JoinPath(protocol.Synthetic).String())
-		// synthTxn.KeyBook = types.String(uBook.String())
-		// records = append(records, synthTxn)
 
 		// Create records and directory entries
 		urls := make([]*url.URL, len(records))

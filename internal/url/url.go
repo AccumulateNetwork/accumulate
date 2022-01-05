@@ -28,6 +28,8 @@ type URL struct {
 	Fragment  string
 }
 
+type Values = url.Values
+
 // Parse parses the string as an Accumulate URL. The scheme may be omitted, in
 // which case `acc://` will be added, but if present it must be `acc`. The
 // hostname must be non-empty. RawPath, ForceQuery, and RawFragment are not
@@ -138,7 +140,7 @@ func (u *URL) Password() string {
 
 // QueryValues parses Query and returns the corresponding values. It silently
 // discards malformed value pairs. To check errors use net/url.ParseQuery.
-func (u *URL) QueryValues() url.Values {
+func (u *URL) QueryValues() Values {
 	v, _ := url.ParseQuery(u.Query)
 	return v
 }

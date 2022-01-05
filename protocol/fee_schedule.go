@@ -1,7 +1,6 @@
 package protocol
 
 import (
-	"encoding/binary"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -66,9 +65,9 @@ const (
 	FeeWriteScratchData Fee = 1
 )
 
-func ComputeFee(tx *transactions.GenTransaction) (int, error) {
-	txType, n := binary.Uvarint(tx.Transaction)
-	if n == 0 {
+func ComputeFee(tx *transactions.Envelope) (int, error) {
+	txType := tx.Transaction.Type()
+	if txType == types.TxTypeUnknown {
 		return 0, fmt.Errorf("cannot compute fee with no data defined for transaction")
 	}
 	switch types.TransactionType(txType) {
@@ -81,7 +80,7 @@ func ComputeFee(tx *transactions.GenTransaction) (int, error) {
 	case types.TxTypeCreateDataAccount:
 		return FeeCreateDataAccount.AsInt(), nil
 	case types.TxTypeWriteData:
-		size := len(tx.Transaction) - n
+		size := len(tx.Transaction.Body)
 		if size > WriteDataMax {
 			return 0, fmt.Errorf("data amount exceeds %v byte entry limit", WriteDataMax)
 		}

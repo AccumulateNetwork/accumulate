@@ -12,7 +12,7 @@ type InternalTransactionsSent struct{}
 
 func (InternalTransactionsSent) Type() types.TxType { return types.TxTypeInternalTransactionsSent }
 
-func (InternalTransactionsSent) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (InternalTransactionsSent) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.InternalTransactionsSent)
 	err := tx.As(body)
 	if err != nil {
