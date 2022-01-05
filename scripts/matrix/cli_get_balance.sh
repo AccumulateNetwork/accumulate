@@ -43,7 +43,7 @@ if [ -z $2 ]; then
         if [ $? -eq 0 ]; then
            bal=`echo $balnc | $j .data.balance | $s 's/\"//g'`
         else
-	   echo "cli account get failed"
+	   echo "accumulate account get failed"
 	   exit 1
        fi
 else
@@ -51,7 +51,7 @@ else
         if [ $? -eq 0 ]; then
        	   bal=`echo $balnc | $j .data.balance | $s 's/\"//g'`
         else
-	   echo "cli account get failed"
+	   echo "accumulate account get failed"
 	   exit 1
         fi
 fi

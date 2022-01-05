@@ -13,6 +13,8 @@ package managed
 import (
 	"bytes"
 	"crypto/sha256"
+	"fmt"
+	"math/bits"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 )
@@ -69,39 +71,102 @@ func (h *Hash) UnmarhsalBinary(b []byte) error {
 	return err
 }
 
+type SparseHashList []Hash
+
+func (l SparseHashList) BinarySize(height int64) int {
+	var n int
+	for i, h := range l {
+		// If the bit is not set, skip that entry
+		if height&(1<<i) == 0 {
+			continue
+		}
+
+		n += encoding.BytesBinarySize(h)
+	}
+	return n
+}
+
+func (l SparseHashList) MarshalBinary(height int64) ([]byte, error) {
+	var data []byte
+
+	// For each bit in height
+	for i := 0; height > 0; i++ {
+		if i >= len(l) {
+			return nil, fmt.Errorf("missing hash at [%d]", i)
+		}
+
+		// If the bit is set, record the hash, otherwise ignore it (it is nil)
+		if height&1 > 0 {
+			data = append(data, encoding.BytesMarshalBinary(l[i])...)
+		}
+
+		// Shift height so we can check the next bit
+		height = height >> 1
+	}
+
+	return data, nil
+}
+
+func (l *SparseHashList) UnmarshalBinary(height int64, data []byte) error {
+	// Count the number of bits required to store the height
+	n := bits.Len64(uint64(height))
+
+	// Clear the list and ensure it has sufficient capacity
+	*l = append((*l)[:0], make(SparseHashList, n)...)
+
+	for i := range *l {
+		// If the bit is not set, skip that entry
+		if height&(1<<i) == 0 {
+			continue
+		}
+
+		// If the bit is set, then extract the next hash
+		var err error
+		(*l)[i], err = encoding.BytesUnmarshalBinary(data)
+		if err != nil {
+			return err
+		}
+
+		// Advance data by the hash size
+		data = data[encoding.BytesBinarySize((*l)[i]):]
+	}
+
+	return nil
+}
+
 type HashList []Hash
 
-func (h HashList) BinarySize() int {
-	s := encoding.UvarintBinarySize(uint64(len(h)))
-	for _, h := range h {
+func (l HashList) BinarySize() int {
+	s := encoding.UvarintBinarySize(uint64(len(l)))
+	for _, h := range l {
 		s += h.BinarySize()
 	}
 	return s
 }
 
-func (h HashList) MarshalBinary() ([]byte, error) {
-	b := encoding.UvarintMarshalBinary(uint64(len(h)))
-	for _, h := range h {
+func (l HashList) MarshalBinary() ([]byte, error) {
+	b := encoding.UvarintMarshalBinary(uint64(len(l)))
+	for _, h := range l {
 		c, _ := h.MarshalBinary()
 		b = append(b, c...)
 	}
 	return b, nil
 }
 
-func (h *HashList) UnmarhsalBinary(b []byte) error {
-	l, err := encoding.UvarintUnmarshalBinary(b)
+func (l *HashList) UnmarhsalBinary(b []byte) error {
+	n, err := encoding.UvarintUnmarshalBinary(b)
 	if err != nil {
 		return err
 	}
-	b = b[encoding.UvarintBinarySize(l):]
+	b = b[encoding.UvarintBinarySize(n):]
 
-	*h = make(HashList, l)
-	for i := range *h {
-		err = (*h)[i].UnmarhsalBinary(b)
+	*l = make(HashList, n)
+	for i := range *l {
+		err = (*l)[i].UnmarhsalBinary(b)
 		if err != nil {
 			return err
 		}
-		b = b[(*h)[i].BinarySize():]
+		b = b[(*l)[i].BinarySize():]
 	}
 
 	return nil

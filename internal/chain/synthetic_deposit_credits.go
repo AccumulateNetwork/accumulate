@@ -12,7 +12,7 @@ type SyntheticDepositCredits struct{}
 
 func (SyntheticDepositCredits) Type() types.TxType { return types.TxTypeSyntheticDepositCredits }
 
-func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SyntheticDepositCredits)
 	err := tx.As(body)
 	if err != nil {
@@ -20,15 +20,15 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.GenTr
 	}
 
 	var account creditChain
-	switch sponsor := st.Sponsor.(type) {
+	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
-		account = sponsor
+		account = origin
 
 	case *protocol.KeyPage:
-		account = sponsor
+		account = origin
 
 	default:
-		return fmt.Errorf("invalid sponsor: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeKeyPage, st.Sponsor.Header().Type)
+		return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeKeyPage, st.Origin.Header().Type)
 	}
 
 	account.CreditCredits(body.Amount)

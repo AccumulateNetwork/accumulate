@@ -13,7 +13,7 @@ type CreateDataAccount struct{}
 
 func (CreateDataAccount) Type() types.TransactionType { return types.TxTypeCreateDataAccount }
 
-func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.CreateDataAccount)
 	err := tx.As(body)
 	if err != nil {
@@ -26,8 +26,8 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 	}
 
 	//only the ADI can create the data account associated with the ADI
-	if !dataAccountUrl.Identity().Equal(st.SponsorUrl) {
-		return fmt.Errorf("%q cannot sponsor %q", st.SponsorUrl, dataAccountUrl)
+	if !dataAccountUrl.Identity().Equal(st.OriginUrl) {
+		return fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, dataAccountUrl)
 	}
 
 	//create the data account
@@ -45,19 +45,19 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 
 	//setup key book associated with account
 	if body.KeyBookUrl == "" {
-		account.KeyBook = st.Sponsor.Header().KeyBook
+		account.KeyBook = st.Origin.Header().KeyBook
 	} else {
 		keyBookUrl, err := url.Parse(body.KeyBookUrl)
 		if err != nil {
 			return fmt.Errorf("invalid key book URL: %v", err)
 		}
 
-		ssg := new(protocol.KeyBook)
-		err = st.LoadUrlAs(keyBookUrl, ssg)
+		book := new(protocol.KeyBook)
+		err = st.LoadUrlAs(keyBookUrl, book)
 		if err != nil {
 			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
-		copy(account.KeyBook[:], keyBookUrl.ResourceChain())
+		account.KeyBook = types.String(keyBookUrl.String())
 	}
 
 	st.Create(account)

@@ -3,10 +3,13 @@ package url
 import (
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 )
 
 // ErrMissingHost means that a URL did not include a hostname.
@@ -24,6 +27,8 @@ type URL struct {
 	Query     string
 	Fragment  string
 }
+
+type Values = url.Values
 
 // Parse parses the string as an Accumulate URL. The scheme may be omitted, in
 // which case `acc://` will be added, but if present it must be `acc`. The
@@ -135,7 +140,7 @@ func (u *URL) Password() string {
 
 // QueryValues parses Query and returns the corresponding values. It silently
 // discards malformed value pairs. To check errors use net/url.ParseQuery.
-func (u *URL) QueryValues() url.Values {
+func (u *URL) QueryValues() Values {
 	v, _ := url.ParseQuery(u.Query)
 	return v
 }
@@ -207,4 +212,52 @@ func (u *URL) JoinPath(s ...string) *URL {
 	v := *u
 	v.Path = path.Join(append([]string{u.Path}, s...)...)
 	return &v
+}
+
+// BinarySize returns the number of bytes the URL will marshal to.
+func (u *URL) BinarySize() int {
+	return encoding.StringBinarySize(u.String())
+}
+
+// MarshalBinary marshals the URL to binary.
+func (u *URL) MarshalBinary() ([]byte, error) {
+	return encoding.StringMarshalBinary(u.String()), nil
+}
+
+// UnmarshalBinary unmarshals the URL from binary.
+func (u *URL) UnmarshalBinary(data []byte) error {
+	s, err := encoding.StringUnmarshalBinary(data)
+	if err != nil {
+		return err
+	}
+
+	v, err := Parse(s)
+	if err != nil {
+		return err
+	}
+
+	*u = *v
+	return nil
+}
+
+// MarshalJSON marshals the URL to JSON as a string.
+func (u *URL) MarshalJSON() ([]byte, error) {
+	return json.Marshal(u.String())
+}
+
+// UnmarshalJSON unmarshals the URL from JSON as a string.
+func (u *URL) UnmarshalJSON(data []byte) error {
+	var s string
+	err := json.Unmarshal(data, &s)
+	if err != nil {
+		return err
+	}
+
+	v, err := Parse(s)
+	if err != nil {
+		return err
+	}
+
+	*u = *v
+	return nil
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	querytypes "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
@@ -17,7 +18,6 @@ import (
 func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
 	var txid32 [32]byte
 	copy(txid32[:], txid)
-	notFound := fmt.Sprintf("tx (%X) not found", txid)
 
 	start := time.Now()
 	var r *coretypes.ResultTx
@@ -28,30 +28,28 @@ func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
 			break
 		}
 
-		if !strings.Contains(err.Error(), notFound) {
+		if !strings.Contains(err.Error(), "not found") {
 			return err
 		}
 
 		if time.Since(start) > 10*time.Second {
 			return fmt.Errorf("tx (%X) not found: timed out", txid)
 		}
+
+		time.Sleep(time.Second / 10)
 	}
 
-	tx := new(transactions.GenTransaction)
-	_, err = tx.UnMarshal(r.Tx)
+	if r.TxResult.Code != 0 {
+		return fmt.Errorf("txn failed with code %d: %s", r.TxResult.Code, r.TxResult.Log)
+	}
+
+	tx := new(transactions.Envelope)
+	err = tx.UnmarshalBinary(r.Tx)
 	if err != nil {
 		return err
 	}
 
-	resp, err := query.QueryByTxId(tx.TransactionHash())
-	if err != nil {
-		return err
-	}
-	if resp.Response.Code != 0 {
-		return fmt.Errorf("query failed with code %d: %s", resp.Response.Code, resp.Response.Info)
-	}
-
-	return WaitForSynthTxnsV1(query, resp)
+	return WaitForTxidV1(query, tx.Transaction.Hash())
 }
 
 func WaitForTxV1(query *api.Query, txResp *apitypes.APIDataResponse) error {
@@ -69,24 +67,39 @@ func WaitForTxV1(query *api.Query, txResp *apitypes.APIDataResponse) error {
 	return WaitForTxidV1(query, txid)
 }
 
-func WaitForTxidV1(query *api.Query, txid []byte) error {
+func WaitForTxidV1(q *api.Query, txid []byte) error {
+	start := time.Now()
 	var resp *coretypes.ResultABCIQuery
 	var err error
 	for {
-		resp, err = query.QueryByTxId(txid)
+		resp, err = q.QueryByTxId(txid)
 		if err == nil {
 			break
 		}
+
 		if !strings.Contains(err.Error(), "not found") {
 			return err
 		}
+
+		if time.Since(start) > 10*time.Second {
+			return fmt.Errorf("tx (%X) not found: timed out", txid)
+		}
+
 		time.Sleep(time.Second / 10)
 	}
 	if resp.Response.Code != 0 {
 		return fmt.Errorf("query failed with code %d: %s", resp.Response.Code, resp.Response.Info)
 	}
+	if string(resp.Response.Key) != "tx" {
+		return fmt.Errorf("wrong type: wanted tx, got %q", resp.Response.Key)
+	}
+	qr := new(query.ResponseByTxId)
+	err = qr.UnmarshalBinary(resp.Response.Value)
+	if err != nil {
+		return fmt.Errorf("invalid response: %v", err)
+	}
 
-	return WaitForSynthTxnsV1(query, resp)
+	return WaitForSynthTxnsV1(q, resp)
 }
 
 func WaitForSynthTxnsV1(query *api.Query, resp *coretypes.ResultABCIQuery) error {

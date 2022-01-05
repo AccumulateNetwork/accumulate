@@ -4,20 +4,15 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
-	"flag"
 	"fmt"
-	"os"
-	"runtime"
 	"testing"
 	"time"
 
 	. "github.com/AccumulateNetwork/accumulate/internal/api"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	lite "github.com/AccumulateNetwork/accumulate/types/anonaddress"
 	"github.com/AccumulateNetwork/accumulate/types/api"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
@@ -27,97 +22,15 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
 
-var testnet = flag.String("testnet", "Localhost", "TestNet to load test")
-var loadWalletCount = flag.Int("loadtest-wallet-count", 10, "Number of wallets")
-var loadTxCount = flag.Int("loadtest-tx-count", 10, "Number of transactions")
-
-func TestLoadOnRemote(t *testing.T) {
-	t.Skip("Deprecated, use `accumulated loadtest`")
-
-	txBouncer, err := relay.NewWith(nil, *testnet)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = txBouncer.Start()
-	require.NoError(t, err)
-	defer func() { require.NoError(t, txBouncer.Stop()) }()
-
-	query := NewQuery(txBouncer)
-	_, privateKeySponsor, _ := ed25519.GenerateKey(nil)
-
-	addrList, err := acctesting.RunLoadTest(query, privateKeySponsor, *loadWalletCount, *loadTxCount)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	time.Sleep(10000 * time.Millisecond)
-
-	queryTokenUrl := addrList[1]
-
-	resp, err := query.GetChainStateByUrl(queryTokenUrl)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	output, err := json.Marshal(resp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(output))
-
-	jsonapi := NewTest(t, query)
-	_ = jsonapi
-
-	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
-	gParams, err := json.Marshal(params)
-	theData := jsonapi.GetData(context.Background(), gParams)
-	theJsonData, err := json.Marshal(theData)
-	if err != nil {
-		t.Fatal(err)
-	}
-	println(string(theJsonData))
-
-	resp, err = query.GetChainStateByUrl(queryTokenUrl)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	output, err = json.Marshal(resp)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(output))
-	for _, v := range addrList[1:] {
-		resp, err := query.GetChainStateByUrl(v)
-		if err != nil {
-			t.Fatal(err)
-		}
-		output, err := json.Marshal(resp)
-		if err != nil {
-			t.Fatal(err)
-		}
-		fmt.Printf("%s : %s\n", v, string(output))
-	}
-}
-
 func TestJsonRpcLiteToken(t *testing.T) {
-	switch {
-	case testing.Short():
-		t.Skip("Skipping test in short mode")
-	case os.Getenv("CI") == "true":
-		t.Skip("This test is flaky in CI")
-	}
+	t.Skip("This test is broken due to changes in how nonces are handled")
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
-	kpSponsor := ed25519.NewKeyFromSeed(daemon.Key().Bytes()[:32])
-
-	addrList, err := acctesting.RunLoadTest(query, kpSponsor, *loadWalletCount, *loadTxCount)
+	addrList, err := acctesting.RunLoadTest(query, 10, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +61,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 	fmt.Println(string(output))
 
 	// now use the JSON rpc api's to get the data
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
@@ -209,14 +122,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 }
 
 func TestFaucet(t *testing.T) {
-	switch {
-	case testing.Short():
-		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
-		t.Skip("This test is flaky in macOS CI")
-	}
+	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
@@ -228,7 +134,7 @@ func TestFaucet(t *testing.T) {
 
 	req := &api.APIRequestURL{}
 	req.Wait = true
-	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(acctesting.AcmeLiteAddressStdPriv(kpSponsor).String())
 
 	params, err := json.Marshal(&req)
 	if err != nil {
@@ -244,46 +150,30 @@ func TestFaucet(t *testing.T) {
 	v2 := []byte("nakamoto")
 	tx2 := append(k2, append([]byte("="), v2...)...)
 
-	gtx := transactions.GenTransaction{}
-	gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{})
-	gtx.SigInfo = &transactions.SignatureInfo{}
-	gtx.SigInfo.URL = "fakeUrl"
-	gtx.Transaction = tx1
-	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
+	gtx := transactions.Envelope{}
+	gtx.Signatures = append(gtx.Signatures, &transactions.ED25519Sig{})
+	gtx.Transaction.Origin = &url.URL{Authority: "fakeUrl"}
+	gtx.Transaction.Body = tx1
+	gtx.Signatures[0].Sign(54321, kpSponsor, gtx.Transaction.Hash())
 	//changing the nonce will invalidate the signature.
-	gtx.SigInfo.Nonce = 1234
+	gtx.Transaction.Nonce = 1234
 
 	//intentionally send in a bogus transaction
 	ti1, _ := query.BroadcastTx(&gtx, nil)
-	gtx.Transaction = tx2
+	gtx.Transaction.Body = tx2
 	ti2, _ := query.BroadcastTx(&gtx, nil)
 
 	stat := query.BatchSend()
 	bs := <-stat
 	res1, err := bs.ResolveTransactionResponse(ti1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res1.Code == 0 {
-		t.Fatalf("expecting error code that is non zero")
-	}
-
-	errorData, err := json.Marshal(res1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(errorData))
+	require.NoError(t, err)
+	require.NotZero(t, res1.Code, "expecting error code that is non zero")
 
 	res2, err := bs.ResolveTransactionResponse(ti2)
+	require.NoError(t, err)
+	require.NotZero(t, res2.Code, "expecting error code that is non zero")
 
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res2.Code == 0 {
-		t.Fatalf("expecting error code that is non zero")
-	}
-
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	res := jsonapi.Faucet(context.Background(), params)
 	require.IsType(t, (*api.APIDataResponse)(nil), res)
@@ -317,14 +207,7 @@ func TestFaucet(t *testing.T) {
 }
 
 func TestTransactionHistory(t *testing.T) {
-	switch {
-	case testing.Short():
-		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
-		t.Skip("This test is flaky in macOS CI")
-	}
+	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
@@ -335,14 +218,14 @@ func TestTransactionHistory(t *testing.T) {
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 
 	req := &api.APIRequestURL{}
-	req.URL = types.String(lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey)))
+	req.URL = types.String(acctesting.AcmeLiteAddressStdPriv(kpSponsor).String())
 
 	params, err := json.Marshal(&req)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	res := jsonapi.Faucet(context.Background(), params)
 	data, err := json.Marshal(res)
@@ -396,22 +279,14 @@ func TestTransactionHistory(t *testing.T) {
 }
 
 func TestFaucetTransactionHistory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
-
-	if testing.Short() {
-		t.Skip("Skipping test in short mode")
-	}
-
 	req := &api.APIRequestURL{}
-	req.URL = types.String(lite.GenerateAcmeAddress(ed25519.PublicKey{}))
+	req.URL = types.String(acctesting.AcmeLiteAddress(ed25519.PublicKey{}).String())
 	params, err := json.Marshal(&req)
 	require.NoError(t, err)
 
 	daemon := startBVC(t, t.TempDir())
 	query := daemon.Query_TESTONLY()
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 	res := jsonapi.Faucet(context.Background(), params)
 	if err, ok := res.(error); ok {
 		require.NoError(t, err)
@@ -433,20 +308,18 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	resp, err := query.GetTransactionHistory(protocol.FaucetUrl.String(), 0, 10)
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 2)
-	require.Equal(t, types.String(types.TxTypeSyntheticGenesis.Name()), resp.Data[0].Type)
+	require.Equal(t, types.String(types.TxTypeInternalGenesis.Name()), resp.Data[0].Type)
 	require.Equal(t, types.String(types.TxTypeSendTokens.Name()), resp.Data[1].Type)
 }
 
 func TestMetrics(t *testing.T) {
-	if os.Getenv("CI") == "true" {
-		t.Skip("Depends on an external resource, and thus is not appropriate for CI")
-	}
+	acctesting.SkipCI(t, "depends on an external resource")
 
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
 	require.NoError(t, err)
@@ -464,18 +337,11 @@ func TestMetrics(t *testing.T) {
 }
 
 func TestQueryNotFound(t *testing.T) {
-	switch {
-	case testing.Short():
-		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	}
-
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "acc://1cddf368ef9ba2a1ea914291e0201ebaf376130a6c05caf3/ACME"})
 	require.NoError(t, err)
@@ -490,18 +356,13 @@ func TestQueryNotFound(t *testing.T) {
 }
 
 func TestQueryWrongType(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Fails on windows (Tendermint cleanup issue)")
-	}
-
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
-	_, origin, _ := ed25519.GenerateKey(nil)
-	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	err = acctesting.SendTxSync(query, tx)
@@ -520,18 +381,13 @@ func TestQueryWrongType(t *testing.T) {
 }
 
 func TestGetTxId(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Fails on windows (Tendermint cleanup issue)")
-	}
-
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
-	_, origin, _ := ed25519.GenerateKey(nil)
-	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	err = acctesting.SendTxSync(query, tx)
@@ -540,7 +396,7 @@ func TestGetTxId(t *testing.T) {
 	u, err := url.Parse(*destAddress.AsString())
 	require.NoError(t, err)
 	u.Path = ""
-	u.Query = fmt.Sprintf("txid=%x", tx.TransactionHash())
+	u.Query = fmt.Sprintf("txid=%x", tx.Transaction.Hash())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: types.String(u.String())})
 	require.NoError(t, err)
@@ -557,21 +413,16 @@ func TestGetTxId(t *testing.T) {
 }
 
 func TestDirectory(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Fails on windows (Tendermint cleanup issue)")
-	}
-
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	_, adiKey, _ := ed25519.GenerateKey(nil)
 	dbTx := daemon.DB_TESTONLY().Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, tmed25519.PrivKey(adiKey), "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	_, err := dbTx.Commit(2, time.Unix(0, 0), nil)
-	require.NoError(t, err)
+	require.NoError(t, dbTx.Commit())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})
 	require.NoError(t, err)
@@ -590,23 +441,15 @@ func TestDirectory(t *testing.T) {
 }
 
 func TestFaucetReplay(t *testing.T) {
-	switch {
-	case testing.Short():
-		t.Skip("Skipping test in short mode")
-	case runtime.GOOS == "windows":
-		t.Skip("Tendermint does not close all its open files on shutdown, which causes cleanup to fail")
-	case runtime.GOOS == "darwin" && os.Getenv("CI") == "true":
-		t.Skip("This test is flaky in macOS CI")
-	}
+	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
-	destAccount := lite.GenerateAcmeAddress(kpSponsor.Public().(ed25519.PublicKey))
-	tx := acmeapi.SendTokens{}
-	tx.From.String = types.String(protocol.FaucetWallet.Addr)
-	tx.AddToAccount(types.String(destAccount), 1000000000)
+	destAccount := acctesting.AcmeLiteAddressStdPriv(kpSponsor).String()
+	tx := protocol.SendTokens{}
+	tx.AddRecipient(acctesting.MustParseUrl(destAccount), 1000000000)
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	gtx, err := transactions.New(*tx.From.AsString(), 1, func(hash []byte) (*transactions.ED25519Sig, error) {
+	gtx, err := transactions.New(protocol.FaucetWallet.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 		return protocol.FaucetWallet.Sign(hash), nil
 	}, &tx)
 	require.NoError(t, err)
@@ -616,10 +459,10 @@ func TestFaucetReplay(t *testing.T) {
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
 
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 	res, err := jsonapi.BroadcastTx(false, gtx)
 	require.NoError(t, err)
-	fmt.Printf("%s\n", *res.Data)
+	require.NoError(t, acctesting.WaitForTxV1(query, res))
 
 	// Allow the transaction to settle.
 	time.Sleep(time.Second)

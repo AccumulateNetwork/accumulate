@@ -55,9 +55,17 @@ func accumulateError(err error) jsonrpc2.Error {
 	if errors.Is(err, storage.ErrNotFound) {
 		return jsonrpc2.NewError(ErrCodeNotFound, "Accumulate Error", "Not Found")
 	}
-	if err, ok := err.(*protocol.Error); ok {
-		return jsonrpc2.NewError(jsonrpc2.ErrorCode(ErrCodeProtocolBase+err.Code), "Accumulate Error", err.Message)
+
+	var perr *protocol.Error
+	if errors.As(err, &perr) {
+		return jsonrpc2.NewError(jsonrpc2.ErrorCode(ErrCodeProtocolBase+perr.Code), "Accumulate Error", perr.Message)
 	}
+
+	var jerr jsonrpc2.Error
+	if errors.As(err, &jerr) {
+		return jerr
+	}
+
 	return jsonrpc2.NewError(ErrCodeAccumulate, "Accumulate Error", err)
 }
 

@@ -7,16 +7,15 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type CreateIdentity struct{}
 
 func (CreateIdentity) Type() types.TxType { return types.TxTypeCreateIdentity }
 
-func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) error {
 	// *protocol.IdentityCreate, *url.URL, state.Chain
-	body := new(protocol.IdentityCreate)
+	body := new(protocol.CreateIdentity)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)
@@ -32,23 +31,23 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction
 		return fmt.Errorf("invalid URL: %v", err)
 	}
 
-	switch st.Sponsor.(type) {
-	case *protocol.LiteTokenAccount, *state.AdiState:
+	switch st.Origin.(type) {
+	case *protocol.LiteTokenAccount, *protocol.ADI:
 		// OK
 	default:
-		return fmt.Errorf("chain type %d cannot sponsor ADIs", st.Sponsor.Header().Type)
+		return fmt.Errorf("chain type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
 	}
 
 	var pageUrl, bookUrl *url.URL
-	if body.KeyPageName == "" {
-		pageUrl = identityUrl.JoinPath("sigspec0")
-	} else {
-		pageUrl = identityUrl.JoinPath(body.KeyPageName)
-	}
 	if body.KeyBookName == "" {
-		bookUrl = identityUrl.JoinPath("ssg0")
+		return fmt.Errorf("missing key book name")
 	} else {
 		bookUrl = identityUrl.JoinPath(body.KeyBookName)
+	}
+	if body.KeyPageName == "" {
+		return fmt.Errorf("missing key page name")
+	} else {
+		pageUrl = identityUrl.JoinPath(body.KeyPageName)
 	}
 
 	keySpec := new(protocol.KeySpec)
@@ -57,14 +56,15 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.GenTransaction
 	page := protocol.NewKeyPage()
 	page.ChainUrl = types.String(pageUrl.String()) // TODO Allow override
 	page.Keys = append(page.Keys, keySpec)
-	page.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
+	page.KeyBook = types.String(bookUrl.String())
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
-	book.Pages = append(book.Pages, types.Bytes(pageUrl.ResourceChain()).AsBytes32())
+	book.Pages = append(book.Pages, pageUrl.String())
 
-	identity := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, body.PublicKey)
-	identity.KeyBook = types.Bytes(bookUrl.ResourceChain()).AsBytes32()
+	identity := protocol.NewADI()
+	identity.ChainUrl = types.String(identityUrl.String())
+	identity.KeyBook = types.String(bookUrl.String())
 
 	st.Create(identity, book, page)
 	return nil

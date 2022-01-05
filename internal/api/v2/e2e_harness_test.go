@@ -32,7 +32,11 @@ import (
 
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
-func startAccumulate(t *testing.T, baseIP net.IP, bvns, validators, basePort int) []*accumulated.Daemon {
+func startAccumulate(t *testing.T, ips []net.IP, bvns, validators, basePort int) []*accumulated.Daemon {
+	if len(ips) != bvns*validators {
+		panic(fmt.Errorf("want %d validators each for %d BVNs but got %d IPs", validators, bvns, len(ips)))
+	}
+
 	names := make([]string, bvns)
 	addrs := make(map[string][]string, bvns)
 	IPs := make([][]string, bvns)
@@ -45,9 +49,8 @@ func startAccumulate(t *testing.T, baseIP net.IP, bvns, validators, basePort int
 		IPs[bvn] = make([]string, validators)
 		addrs[names[bvn]] = make([]string, validators)
 		for val := 0; val < validators; val++ {
-			ip := make(net.IP, len(baseIP))
-			copy(ip, baseIP)
-			baseIP[15]++
+			ip := ips[0]
+			ips = ips[1:]
 			IPs[bvn][val] = ip.String()
 			addrs[names[bvn]][val] = fmt.Sprintf("http://%v:%d", ip, basePort)
 		}
@@ -68,6 +71,7 @@ func startAccumulate(t *testing.T, baseIP net.IP, bvns, validators, basePort int
 			Config:   config[bvn],
 			RemoteIP: IPs[bvn],
 			ListenIP: IPs[bvn],
+			Logger:   logging.NewTestLogger(t, "plain", cfg.DefaultLogLevels, false),
 		}))
 
 		for val := 0; val < validators; val++ {
@@ -96,6 +100,12 @@ func makeLiteUrl(t *testing.T, key ed25519.PrivateKey, tok string) *url.URL {
 	return u
 }
 
+func makeUrl(t *testing.T, s string) *url.URL {
+	u, err := url.Parse(s)
+	require.NoError(t, err)
+	return u
+}
+
 func callApi(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) interface{} {
 	t.Helper()
 
@@ -114,22 +124,30 @@ func callApi(t *testing.T, japi *api.JrpcMethods, method string, params, result 
 	return result
 }
 
-func query(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.QueryResponse {
+func queryRecord(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.ChainQueryResponse {
 	t.Helper()
 
-	r := new(api.QueryResponse)
+	r := new(api.ChainQueryResponse)
 	callApi(t, japi, method, params, r)
 	return r
 }
 
-func queryAs(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) {
+func queryTxn(t *testing.T, japi *api.JrpcMethods, method string, params interface{}) *api.TransactionQueryResponse {
 	t.Helper()
-	r := query(t, japi, method, params)
+
+	r := new(api.TransactionQueryResponse)
+	callApi(t, japi, method, params, r)
+	return r
+}
+
+func queryRecordAs(t *testing.T, japi *api.JrpcMethods, method string, params, result interface{}) {
+	t.Helper()
+	r := queryRecord(t, japi, method, params)
 	recode(t, r.Data, result)
 }
 
 type execParams struct {
-	Sponsor   string
+	Origin    string
 	Key       ed25519.PrivateKey
 	PageIndex uint64
 	Payload   protocol.TransactionPayload
@@ -147,13 +165,16 @@ func recode(t *testing.T, from, to interface{}) {
 func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, params execParams) *api.TxResponse {
 	t.Helper()
 
-	qr := query(t, japi, "query", &api.UrlQuery{Url: params.Sponsor})
+	u, err := url.Parse(params.Origin)
+	require.NoError(t, err)
+
+	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: params.Origin})
 	now := time.Now()
 	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
-	tx, err := transactions.NewWith(&transactions.SignatureInfo{
-		URL:           params.Sponsor,
+	tx, err := transactions.NewWith(&transactions.Header{
+		Origin:        u,
 		KeyPageIndex:  params.PageIndex,
-		KeyPageHeight: qr.MerkleState.Count,
+		KeyPageHeight: qr.MainChain.Height,
 		Nonce:         nonce,
 	}, func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
@@ -162,12 +183,12 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	require.NoError(t, err)
 
 	req := new(api.TxRequest)
-	req.Sponsor = params.Sponsor
+	req.Origin = u
 	req.Signer.PublicKey = params.Key[32:]
 	req.Signer.Nonce = nonce
-	req.Signature = tx.Signature[0].Signature
+	req.Signature = tx.Signatures[0].Signature
 	req.KeyPage.Index = params.PageIndex
-	req.KeyPage.Height = qr.MerkleState.Count
+	req.KeyPage.Height = qr.MainChain.Height
 	req.Payload = params.Payload
 
 	r := new(api.TxResponse)
@@ -180,12 +201,45 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	return r
 }
 
+func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height uint64, params execParams) *api.TxResponse {
+	t.Helper()
+
+	u, err := url.Parse(params.Origin)
+	require.NoError(t, err)
+
+	now := time.Now()
+	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
+	tx, err := transactions.NewWith(&transactions.Header{
+		Origin:        u,
+		KeyPageIndex:  params.PageIndex,
+		KeyPageHeight: height,
+		Nonce:         nonce,
+	}, func(hash []byte) (*transactions.ED25519Sig, error) {
+		sig := new(transactions.ED25519Sig)
+		return sig, sig.Sign(nonce, params.Key, hash)
+	}, params.Payload)
+	require.NoError(t, err)
+
+	req := new(api.TxRequest)
+	req.Origin = u
+	req.Signer.PublicKey = params.Key[32:]
+	req.Signer.Nonce = nonce
+	req.Signature = tx.Signatures[0].Signature
+	req.KeyPage.Index = params.PageIndex
+	req.KeyPage.Height = height
+	req.Payload = params.Payload
+
+	r := new(api.TxResponse)
+	callApi(t, japi, method, req, r)
+	return r
+}
+
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
 
-	txr := query(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
+	txr := queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
 	for _, txid := range txr.SyntheticTxids {
-		query(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
+		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
 	}
 }
 
@@ -201,25 +255,29 @@ func (d *e2eDUT) api() *api.JrpcMethods {
 func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
-	d.Require().IsType(target, r.Data)
-	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(r.Data).Elem())
+	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
+	qr := r.(*api.ChainQueryResponse)
+	d.Require().IsType(target, qr.Data)
+	reflect.ValueOf(target).Elem().Set(reflect.ValueOf(qr.Data).Elem())
 }
 
 func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
-	return r.MerkleState.Count
+	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
+	qr := r.(*api.ChainQueryResponse)
+	return qr.MainChain.Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
-	d.Require().NotEmpty(tx.Signature, "Transaction has no signatures")
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
 	pl := new(api.TxRequest)
-	pl.Sponsor = tx.SigInfo.URL
-	pl.Signer.Nonce = tx.SigInfo.Nonce
-	pl.Signer.PublicKey = tx.Signature[0].PublicKey
-	pl.Signature = tx.Signature[0].Signature
-	pl.KeyPage.Index = tx.SigInfo.KeyPageIndex
-	pl.KeyPage.Height = tx.SigInfo.KeyPageHeight
+	pl.Origin = tx.Transaction.Origin
+	pl.Signer.Nonce = tx.Transaction.Nonce
+	pl.Signer.PublicKey = tx.Signatures[0].PublicKey
+	pl.Signature = tx.Signatures[0].Signature
+	pl.KeyPage.Index = tx.Transaction.KeyPageIndex
+	pl.KeyPage.Height = tx.Transaction.KeyPageHeight
 	pl.Payload = tx.Transaction
 
 	data, err := pl.MarshalJSON()

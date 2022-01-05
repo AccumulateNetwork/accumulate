@@ -15,6 +15,7 @@ const (
 )
 
 const debugKeys = false
+const debugPrintKeys = false
 
 var debugKeyMap = map[Key]string{}
 var debugKeyMu = new(sync.RWMutex)
@@ -81,7 +82,9 @@ func (k Key) Append(key ...interface{}) Key {
 	debugKeyMap[k] = s
 	debugKeyMu.Unlock()
 
-	fmt.Printf("Key %s => %X\n", s, k[:])
+	if debugPrintKeys {
+		fmt.Printf("Key %s => %X\n", s, k[:])
+	}
 	return k
 }
 
@@ -103,6 +106,8 @@ func convert(key interface{}) (bytes []byte, printVal bool) {
 		return []byte(key), true
 	case interface{ Bytes() []byte }:
 		return key.Bytes(), false
+	case interface{ ResourceChain() []byte }:
+		return key.ResourceChain(), true
 	case uint:
 		return common.Uint64Bytes(uint64(key)), true
 	case uint8:

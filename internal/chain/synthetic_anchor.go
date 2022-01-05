@@ -7,7 +7,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type SyntheticAnchor struct {
@@ -16,11 +15,11 @@ type SyntheticAnchor struct {
 
 func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
 
-func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	// Verify that the sponsor is the node
+func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) error {
+	// Verify that the origin is the node
 	nodeUrl := x.Network.NodeUrl()
-	if !st.SponsorUrl.Equal(nodeUrl) {
-		return fmt.Errorf("invalid sponsor: %q != %q", st.SponsorUrl, nodeUrl)
+	if !st.OriginUrl.Equal(nodeUrl) {
+		return fmt.Errorf("invalid origin record: %q != %q", st.OriginUrl, nodeUrl)
 	}
 
 	// Unpack the payload
@@ -44,8 +43,9 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.GenTransact
 		}
 	}
 
-	chain := new(state.Anchor)
+	chain := new(protocol.Anchor)
 	chain.ChainUrl = types.String(nodeUrl.JoinPath(anchorChainName(x.Network.Type, body.Major)).String())
+	chain.KeyBook = types.String(st.nodeUrl.JoinPath("validators").String())
 	chain.Index = body.Index
 	chain.Timestamp = body.Timestamp
 	chain.Root = body.Root

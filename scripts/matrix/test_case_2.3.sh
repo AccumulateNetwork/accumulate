@@ -7,7 +7,7 @@
 #
 # set cli command and see if it exists
 #
-export cli=../../cmd/cli/cli
+export cli=../../cmd/accumulate/accumulate
 
 if [ ! -f $cli ]; then
 	echo "cli command not found in ../../cmd/cli, attempting to build"

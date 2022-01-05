@@ -12,6 +12,11 @@
 # Duration is marshalled as two uvarints: seconds and nanoseconds. A duration of
 # 1 hour and 1 ns is marshalled as (3600, 1).
 
+ADI:
+  kind: chain
+  chain-type: Identity
+  fields: []
+
 LiteTokenAccount:
   kind: chain
   fields:
@@ -20,11 +25,18 @@ LiteTokenAccount:
       is-url: true
     - name: Balance
       type: bigint
-    - name: TxCount
-      type: uvarint
     - name: Nonce
       type: uvarint
     - name: CreditBalance
+      type: bigint
+
+TokenAccount:
+  kind: chain
+  fields:
+    - name: TokenUrl
+      type: string
+      is-url: true
+    - name: Balance
       type: bigint
 
 SyntheticCreateChain:
@@ -75,7 +87,6 @@ KeySpecParams:
 
 KeyPage:
   kind: chain
-  chain-type: KeyPage
   fields:
     - name: CreditBalance
       type: bigint
@@ -88,7 +99,6 @@ KeyPage:
 
 CreateKeyPage:
   kind: tx
-  tx-type: CreateKeyPage
   fields:
     - name: Url
       type: string
@@ -104,7 +114,10 @@ KeyBook:
   kind: chain
   fields:
     - name: Pages
-      type: chainSet
+      type: slice
+      slice:
+        type: string
+        is-url: true
 
 CreateKeyBook:
   kind: tx
@@ -113,11 +126,13 @@ CreateKeyBook:
       type: string
       is-url: true
     - name: Pages
-      type: chainSet
+      type: slice
+      slice:
+        type: string
+        is-url: true
 
-IdentityCreate:
+CreateIdentity:
   kind: tx
-  tx-type: CreateIdentity
   fields:
     - name: Url
       type: string
@@ -131,9 +146,8 @@ IdentityCreate:
       type: string
       optional: true
 
-TokenAccountCreate:
+CreateTokenAccount:
   kind: tx
-  tx-type: CreateTokenAccount
   fields:
     - name: Url
       type: string
@@ -171,9 +185,6 @@ MetricsResponse:
   fields:
     - name: Value
       type: any
-
-SyntheticGenesis:
-  kind: tx
 
 DirectoryIndexMetadata:
   fields:
@@ -226,6 +237,8 @@ CreateDataAccount:
 SegWitDataEntry:
   kind: tx
   fields:
+    - name: Cause
+      type: chain
     - name: EntryUrl
       type: string
       is-url: true
@@ -276,12 +289,16 @@ BurnTokens:
 SyntheticWriteData:
   kind: tx
   fields:
+  - name: Cause
+    type: chain
   - name: Data
     type: bytes
 
 SyntheticBurnTokens:
   kind: tx
   fields:
+    - name: Cause
+      type: chain
     - name: Amount
       type: bigint
 
@@ -318,24 +335,6 @@ TokenIssuer:
       type: string
       is-url: true
 
-SyntheticSignTransactions:
-  kind: tx
-  fields:
-    - name: Transactions
-      type: slice
-      slice:
-        type: SyntheticSignature
-        marshal-as: reference
-
-SyntheticSignature:
-  fields:
-    - name: Txid
-      type: chain
-    - name: Signature
-      type: bytes
-    - name: Nonce
-      type: uvarint
-
 SyntheticAnchor:
   kind: tx
   fields:
@@ -363,9 +362,15 @@ SyntheticMirror:
     - name: Objects
       type: slice
       slice:
-        type: state.Object
-        pointer: true
+        type: AnchoredRecord
         marshal-as: reference
+
+AnchoredRecord:
+  fields:
+    - name: Record
+      type: bytes
+    - name: Anchor
+      type: chain
 
 RequestDataEntry:
   fields:
@@ -406,3 +411,173 @@ ResponseDataEntrySet:
         marshal-as: reference
     - name: Total
       type: uvarint
+
+SendTokens:
+  kind: tx
+  fields:
+    - name: Hash
+      type: chain
+      optional: true
+    - name: Meta
+      type: rawJson
+      optional: true
+    - name: To
+      type: slice
+      slice:
+        type: TokenRecipient
+        marshal-as: reference
+        pointer: true
+
+TokenRecipient:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: Amount
+      type: uvarint
+
+SyntheticDepositTokens:
+  kind: tx
+  fields:
+    - name: Cause
+      type: chain
+    - name: Token
+      type: string
+      is-url: true
+    - name: Amount
+      type: bigint
+    # - name: Metadata
+    #   type: rawJson
+
+TransactionStatus:
+  fields:
+    - name: Remote
+      type: bool
+    - name: Delivered
+      type: bool
+    - name: Code
+      type: uvarint
+
+TransactionSignature:
+  fields:
+    - name: Transaction
+      type: chain
+    - name: Signature
+      type: transactions.ED25519Sig
+      pointer: true
+      marshal-as: reference
+
+InternalLedger:
+  kind: chain
+  fields:
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
+    - name: Synthetic
+      type: SyntheticLedger
+      marshal-as: reference
+    - name: Records
+      type: RecordLedger
+      marshal-as: reference
+
+RecordLedger:
+  fields:
+    - name: Chains
+      type: chainSet
+
+SyntheticLedger:
+  fields:
+    - name: Nonce
+      type: uvarint
+    - name: Produced
+      type: uvarint
+    - name: Unsigned
+      type: chainSet
+    - name: Unsent
+      type: chainSet
+    - name: System
+      type: chainSet
+
+InternalGenesis:
+  kind: tx
+
+InternalSendTransactions:
+  kind: tx
+  incomparable: true
+  fields:
+    - name: Transactions
+      type: slice
+      slice:
+        type: SendTransaction
+        marshal-as: reference
+
+SendTransaction:
+  incomparable: true
+  fields:
+  - name: Payload
+    type: TransactionPayload
+    marshal-as: value
+    unmarshal-with: UnmarshalTransaction
+  - name: Recipient
+    type: url.URL
+    marshal-as: reference
+    pointer: true
+
+InternalTransactionsSigned:
+  kind: tx
+  fields:
+    - name: Transactions
+      type: slice
+      slice:
+        type: TransactionSignature
+        marshal-as: reference
+
+InternalTransactionsSent:
+  kind: tx
+  fields:
+    - name: Transactions
+      type: chainSet
+
+Anchor:
+  kind: chain
+  fields:
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
+    - name: Root
+      type: chain
+    - name: Chains
+      type: chainSet
+    - name: ChainAnchor
+      type: chain
+    - name: Synthetic
+      type: chain
+
+SyntheticSignature:
+  fields:
+  - name: Txid
+    type: chain
+  - name: Signature
+    type: bytes
+  - name: PublicKey
+    type: bytes
+  - name: Nonce
+    type: uvarint
+
+SyntheticTransactionChain:
+  kind: chain
+  chain-type: SyntheticTransactions
+  fields:
+    - name: Index
+      type: varint
+    - name: Count
+      type: varint
+    - name: Nonce
+      type: varint
+    - name: Signatures
+      type: slice
+      slice:
+        type: SyntheticSignature
+        marshal-as: reference

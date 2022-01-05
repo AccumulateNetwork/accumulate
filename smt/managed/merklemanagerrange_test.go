@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,9 +32,10 @@ func TestMerkleManager_GetRange(t *testing.T) {
 	for NumTests := int64(50); NumTests < 64; NumTests++ {
 
 		var rh RandHash
-		db, err := database.NewDBManager("memory", "", nil)
-		require.NoError(t, err, "should create db")
-		mm, err := NewMerkleManager(db, 2)
+		store := memory.NewDB()
+		storeTx := store.Begin()
+
+		mm, err := NewMerkleManager(storeTx, 2)
 		require.NoError(t, err, "should create MerkleManager")
 		err = mm.SetKey(storage.MakeKey("try"))
 		require.NoError(t, err, "should be able to set a key")

@@ -9,14 +9,13 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type AddCredits struct{}
 
 func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
-func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.AddCredits)
 	err := tx.As(body)
 	if err != nil {
@@ -46,8 +45,8 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 			return fmt.Errorf("invalid recipient: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeKeyPage, recv.Header().Type)
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
-		if recvUrl.Routing() == tx.Routing {
-			// If the recipient and the sponsor have the same routing number,
+		if recvUrl.Routing() == tx.Transaction.Origin.Routing() {
+			// If the recipient and the origin have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to
 			// locate the recipient chain means it doesn't exist.
 			return fmt.Errorf("invalid recipient: not found")
@@ -57,13 +56,13 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	var account tokenChain
-	switch sponsor := st.Sponsor.(type) {
+	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
-		account = sponsor
-	case *state.TokenAccount:
-		account = sponsor
+		account = origin
+	case *protocol.TokenAccount:
+		account = origin
 	default:
-		return fmt.Errorf("not an account: %q", tx.SigInfo.URL)
+		return fmt.Errorf("not an account: %q", tx.Transaction.Origin)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
@@ -81,13 +80,13 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	}
 
 	if !account.DebitTokens(&amount.Int) {
-		return fmt.Errorf("failed to debit %v", tx.SigInfo.URL)
+		return fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
 	}
 	st.Update(account)
 
 	// Create the synthetic transaction
 	sdc := new(protocol.SyntheticDepositCredits)
-	sdc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	copy(sdc.Cause[:], tx.Transaction.Hash())
 	sdc.Amount = body.Amount
 	st.Submit(recvUrl, sdc)
 
