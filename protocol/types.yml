@@ -216,8 +216,8 @@ DataAccount:
 LiteDataAccount:
   kind: chain
   fields:
-  - name: Data
-    type: bytes
+    - name: Tail
+      type: bytes
 
 CreateDataAccount:
   kind: tx
@@ -295,16 +295,18 @@ IssueTokens:
 BurnTokens:
   kind: tx
   fields:
-  - name: Amount
-    type: bigint
+    - name: Amount
+      type: bigint
 
 SyntheticWriteData:
   kind: tx
   fields:
-  - name: Cause
-    type: chain
-  - name: Data
-    type: bytes
+    - name: Cause
+      type: chain
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
+
 
 SyntheticBurnTokens:
   kind: tx

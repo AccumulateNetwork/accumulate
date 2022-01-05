@@ -46,7 +46,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 
 	case errors.Is(err, storage.ErrNotFound):
 		// If the recipient doesn't exist, ensure it is an ACME lite address
-		addr, tok, err := protocol.ParseLiteAddress(u)
+		addr, tok, err := protocol.ParseLiteTokenAddress(u)
 		switch {
 		case err != nil:
 			return fmt.Errorf("error parsing lite address %q: %v", u, err)

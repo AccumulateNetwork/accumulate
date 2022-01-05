@@ -20,7 +20,7 @@ func (s *Suite) TestGenesis() {
 func (s *Suite) TestCreateLiteAccount() {
 	sender := s.generateTmKey()
 
-	senderUrl, err := protocol.LiteAddress(sender.PubKey().Bytes(), protocol.ACME)
+	senderUrl, err := protocol.LiteTokenAddress(sender.PubKey().Bytes(), protocol.ACME)
 	s.Require().NoError(err)
 
 	tx, err := acctesting.CreateFakeSyntheticDepositTx(sender)
@@ -35,7 +35,7 @@ func (s *Suite) TestCreateLiteAccount() {
 	recipients := make([]*url.URL, 10)
 	for i := range recipients {
 		key := s.generateTmKey()
-		u, err := protocol.LiteAddress(key.PubKey().Bytes(), protocol.ACME)
+		u, err := protocol.LiteTokenAddress(key.PubKey().Bytes(), protocol.ACME)
 		s.Require().NoError(err)
 		recipients[i] = u
 	}
