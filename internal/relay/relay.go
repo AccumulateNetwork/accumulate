@@ -303,7 +303,7 @@ func (r *Relay) SendTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.client[r.GetNetworkId(gtx.Routing)].BroadcastTxAsync(context.Background(), tx)
+	return r.client[r.GetNetworkId(gtx.Transaction.Origin.Routing())].BroadcastTxAsync(context.Background(), tx)
 }
 
 // Query
@@ -316,14 +316,11 @@ func (r *Relay) GetTx(routing uint64, hash []byte) (*ctypes.ResultTx, error) {
 	return r.client[r.GetNetworkId(routing)].Tx(context.Background(), hash, false)
 }
 
-func decodeTX(tx tmtypes.Tx) (*transactions.GenTransaction, error) {
-	gtx := new(transactions.GenTransaction)
-	next, err := gtx.UnMarshal(tx)
+func decodeTX(tx tmtypes.Tx) (*transactions.Envelope, error) {
+	gtx := new(transactions.Envelope)
+	err := gtx.UnmarshalBinary(tx)
 	if err != nil {
 		return nil, err
-	}
-	if len(next) > 0 {
-		return nil, fmt.Errorf("got %d extra byte(s)", len(next))
 	}
 	return gtx, nil
 }

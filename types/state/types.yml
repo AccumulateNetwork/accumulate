@@ -9,49 +9,37 @@ Object:
     slice:
       type: bytes
 
-# TODO Move these to Protocol
+TxState:
+  fields:
+    - name: SigInfo
+      type: transactions.Header
+      marshal-as: reference
+      pointer: true
+    - name: Transaction
+      type: bytes
+    - name: transactionHash
+      type: chain
+      marshal-as: none
 
-Anchor:
+Transaction:
   kind: chain
-  fields:
-    - name: Index
-      type: varint
-    - name: Timestamp
-      type: time
-    - name: Root
-      type: chain
-    - name: Chains
-      type: chainSet
-    - name: ChainAnchor
-      type: chain
-    - name: Synthetic
-      type: chain
-    - name: SystemTxns
-      type: chainSet
+  omit-new-func: true
+  embeddings:
+    - TxState
 
-SyntheticSignature:
-  fields:
-  - name: Txid
-    type: chain
-  - name: Signature
-    type: bytes
-  - name: PublicKey
-    type: bytes
-  - name: Nonce
-    type: uvarint
-
-SyntheticTransactionChain:
+PendingTransaction:
   kind: chain
-  chain-type: SyntheticTransactions
+  omit-new-func: true
   fields:
-    - name: Index
-      type: varint
-    - name: Count
-      type: varint
-    - name: Nonce
-      type: varint
-    - name: Signatures
+    - name: Signature
       type: slice
       slice:
-        type: SyntheticSignature
+        type: transactions.ED25519Sig
         marshal-as: reference
+        pointer: true
+    - name: TransactionState
+      type: TxState
+      marshal-as: reference
+      pointer: true
+    - name: Status
+      type: rawJson
