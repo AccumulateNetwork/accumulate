@@ -9,10 +9,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
 	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
@@ -24,14 +26,17 @@ import (
 
 const debugTX = false
 
-type ABCIApplicationClient struct {
+// FakeTendermint is a test harness that facilitates testing the ABCI
+// application without creating an actual Tendermint node.
+type FakeTendermint struct {
 	*types.EventBus
 
 	CreateEmptyBlocks bool
 
 	appWg      *sync.WaitGroup
 	app        abci.Application
-	db         *state.StateDB
+	db         *database.Database
+	network    *config.Network
 	nextHeight func() int64
 	onError    func(err error)
 
@@ -52,20 +57,18 @@ type txStatus struct {
 	Hash          [32]byte
 	Height        int64
 	Index         uint32
-	DidCheck      chan struct{}
-	DidDeliver    chan struct{}
-	DidCommit     chan struct{}
 	CheckResult   *abci.ResponseCheckTx
 	DeliverResult *abci.ResponseDeliverTx
 	Done          bool
 }
 
-var _ relay.Client = (*ABCIApplicationClient)(nil)
+var _ relay.Client = (*FakeTendermint)(nil)
 
-func NewABCIApplicationClient(app <-chan abci.Application, db *state.StateDB, nextHeight func() int64, onError func(err error), interval time.Duration) *ABCIApplicationClient {
-	c := new(ABCIApplicationClient)
+func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
+	c := new(FakeTendermint)
 	c.appWg = new(sync.WaitGroup)
 	c.db = db
+	c.network = network
 	c.nextHeight = nextHeight
 	c.onError = onError
 	c.EventBus = types.NewEventBus()
@@ -87,23 +90,22 @@ func NewABCIApplicationClient(app <-chan abci.Application, db *state.StateDB, ne
 	return c
 }
 
-func (c *ABCIApplicationClient) Shutdown() {
+func (c *FakeTendermint) Shutdown() {
 	if !atomic.CompareAndSwapInt32(&c.didStop, 0, 1) {
 		return
 	}
 
 	close(c.stop)
 	c.stopped.Wait()
-	close(c.txCh)
 }
 
-func (c *ABCIApplicationClient) App() abci.Application {
+func (c *FakeTendermint) App() abci.Application {
 	c.appWg.Wait()
 	return c.app
 }
 
-// Wait until all pending transactions are done
-func (c *ABCIApplicationClient) Wait() {
+// WaitForAll until all pending transactions are done
+func (c *FakeTendermint) WaitForAll() {
 	if debugTX {
 		fmt.Printf("Waiting for transactions\n")
 	}
@@ -117,7 +119,62 @@ func (c *ABCIApplicationClient) Wait() {
 	}
 }
 
-func (c *ABCIApplicationClient) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
+func (c *FakeTendermint) WaitFor(txid [32]byte, waitSynth bool) error {
+	if debugTX {
+		fmt.Printf("Waiting for transaction %X\n", txid)
+	}
+	c.txMu.RLock()
+	st := c.txStatus[txid]
+	for st == nil || !st.Done {
+		c.txCond.Wait()
+		st = c.txStatus[txid]
+	}
+	c.txMu.RUnlock()
+	if debugTX {
+		fmt.Printf("Done waiting for %X\n", txid)
+	}
+
+	if !waitSynth {
+		return nil
+	}
+
+	var err error
+	reqTx := new(query.RequestByTxId)
+	reqTx.TxId = txid
+	q := new(query.Query)
+	q.Type = reqTx.Type()
+	q.Content, err = reqTx.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	data, err := q.MarshalBinary()
+	if err != nil {
+		return err
+	}
+	r := c.App().Query(abci.RequestQuery{Data: data})
+	if r.Code != 0 {
+		return fmt.Errorf("failed: %v", r)
+	}
+
+	resTx := new(query.ResponseByTxId)
+	err = resTx.UnmarshalBinary(r.Value)
+	if err != nil {
+		return err
+	}
+
+	n := len(resTx.TxSynthTxIds) / 32
+	for i := 0; i < n; i++ {
+		var id [32]byte
+		copy(id[:], resTx.TxSynthTxIds[i*32:])
+		err = c.WaitFor(id, true)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
 	st := c.didSubmit(tx, sha256.Sum256(tx))
 	if st == nil {
 		return nil
@@ -134,9 +191,9 @@ func (c *ABCIApplicationClient) SubmitTx(ctx context.Context, tx types.Tx) *txSt
 	}
 }
 
-func (c *ABCIApplicationClient) didSubmit(tx []byte, txh [32]byte) *txStatus {
-	gtx := new(transactions.GenTransaction)
-	_, err := gtx.UnMarshal(tx)
+func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
+	gtx := new(transactions.Envelope)
+	err := gtx.UnmarshalBinary(tx)
 	if err != nil {
 		c.onError(err)
 		if debugTX {
@@ -146,12 +203,12 @@ func (c *ABCIApplicationClient) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	}
 
 	if debugTX {
-		txt := gtx.TransactionType()
+		txt := gtx.Transaction.Type()
 		fmt.Printf("Submitting %v %X\n", txt, txh)
 	}
 
 	var txid [32]byte
-	copy(txid[:], gtx.TransactionHash())
+	copy(txid[:], gtx.Transaction.Hash())
 
 	c.txMu.Lock()
 	defer c.txMu.Unlock()
@@ -166,43 +223,42 @@ func (c *ABCIApplicationClient) didSubmit(tx []byte, txh [32]byte) *txStatus {
 
 	st = new(txStatus)
 	c.txStatus[txh] = st
+	c.txStatus[txid] = st
 	st.Tx = tx
 	st.Hash = txh
-	st.DidCheck = make(chan struct{})
-	st.DidDeliver = make(chan struct{})
-	st.DidCommit = make(chan struct{})
 	c.txActive++
 	return st
 }
 
-func (c *ABCIApplicationClient) addSynthTxns(blockIndex int64) {
-	// Load the synth txid chain
-	chain, err := c.db.SynthTxidChain()
+func (c *FakeTendermint) addSynthTxns(blockIndex int64) {
+	batch := c.db.Begin()
+
+	// Load the ledger state
+	ledger := batch.Record(c.network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
 	if err != nil {
 		c.onError(err)
 		return
 	}
 
-	head, err := chain.Record()
-	if errors.Is(err, storage.ErrNotFound) {
-		// Nothing to do
-		return
-	} else if err != nil {
-		c.onError(err)
-		return
-	}
-
-	if head.Index != blockIndex {
+	if ledgerState.Index != blockIndex {
 		return
 	}
 
 	if debugTX {
-		fmt.Printf("The last block created %d synthetic transactions\n", head.Count)
+		fmt.Printf("The last block created %d synthetic transactions\n", ledgerState.Synthetic.Produced)
+	}
+
+	synthChain, err := ledger.Chain(protocol.SyntheticChain)
+	if err != nil {
+		c.onError(err)
+		return
 	}
 
 	// Pull the transaction IDs from the anchor chain
-	height := chain.Height()
-	txns, err := chain.Chain.Entries(height-head.Count, height)
+	height := synthChain.Height()
+	txns, err := synthChain.Entries(height-int64(ledgerState.Synthetic.Produced), height)
 	if err != nil {
 		c.onError(err)
 		return
@@ -218,7 +274,7 @@ func (c *ABCIApplicationClient) addSynthTxns(blockIndex int64) {
 }
 
 // execute accepts incoming transactions and queues them up for the next block
-func (c *ABCIApplicationClient) execute(interval time.Duration) {
+func (c *FakeTendermint) execute(interval time.Duration) {
 	c.stopped.Add(1)
 	defer c.stopped.Done()
 
@@ -233,9 +289,6 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 				Info: "Canceled",
 				Log:  "Canceled",
 			}
-			close(sub.DidCheck)
-			close(sub.DidDeliver)
-			close(sub.DidCommit)
 			sub.Done = true
 		}
 
@@ -250,10 +303,7 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		case <-c.stop:
 			return
 
-		case sub, ok := <-c.txCh:
-			if !ok {
-				return
-			}
+		case sub := <-c.txCh:
 			queue = append(queue, sub)
 			continue
 
@@ -272,10 +322,7 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		case <-c.stop:
 			return
 
-		case sub, ok := <-c.txCh:
-			if !ok {
-				return
-			}
+		case sub := <-c.txCh:
 			queue = append(queue, sub)
 			goto collect
 
@@ -299,19 +346,16 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 
 			cr := c.app.CheckTx(abci.RequestCheckTx{Tx: sub.Tx})
 			sub.CheckResult = &cr
-			close(sub.DidCheck)
 			if debugTX {
 				fmt.Printf("Checked %X\n", sub.Hash)
 			}
 			if cr.Code != 0 {
 				c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
-				close(sub.DidDeliver)
 				continue
 			}
 
 			dr := c.app.DeliverTx(abci.RequestDeliverTx{Tx: sub.Tx})
 			sub.DeliverResult = &dr
-			close(sub.DidDeliver)
 			if debugTX {
 				fmt.Printf("Delivered %X\n", sub.Hash)
 			}
@@ -334,7 +378,6 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		c.app.Commit()
 
 		for _, sub := range queue {
-			close(sub.DidCommit)
 			sub.Done = true
 			if debugTX {
 				fmt.Printf("Comitted %X\n", sub.Hash)
@@ -345,7 +388,9 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 		c.addSynthTxns(height)
 
 		c.txActive -= len(queue)
+		c.txMu.RLock()
 		c.txCond.Broadcast()
+		c.txMu.RUnlock()
 
 		// Remember if this block had transactions
 		hadTxnLastTime = len(queue) > 0
@@ -359,7 +404,7 @@ func (c *ABCIApplicationClient) execute(interval time.Duration) {
 	}
 }
 
-func (c *ABCIApplicationClient) Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
+func (c *FakeTendermint) Tx(ctx context.Context, hash []byte, prove bool) (*ctypes.ResultTx, error) {
 	var h [32]byte
 	copy(h[:], hash)
 
@@ -379,32 +424,32 @@ func (c *ABCIApplicationClient) Tx(ctx context.Context, hash []byte, prove bool)
 	}, nil
 }
 
-func (c *ABCIApplicationClient) ABCIInfo(context.Context) (*ctypes.ResultABCIInfo, error) {
+func (c *FakeTendermint) ABCIInfo(context.Context) (*ctypes.ResultABCIInfo, error) {
 	r := c.App().Info(abci.RequestInfo{})
 	return &ctypes.ResultABCIInfo{Response: r}, nil
 }
 
-func (c *ABCIApplicationClient) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*ctypes.ResultABCIQuery, error) {
+func (c *FakeTendermint) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*ctypes.ResultABCIQuery, error) {
 	return c.ABCIQueryWithOptions(ctx, path, data, rpc.DefaultABCIQueryOptions)
 }
 
-func (c *ABCIApplicationClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts rpc.ABCIQueryOptions) (*ctypes.ResultABCIQuery, error) {
+func (c *FakeTendermint) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts rpc.ABCIQueryOptions) (*ctypes.ResultABCIQuery, error) {
 	r := c.App().Query(abci.RequestQuery{Data: data, Path: path, Height: opts.Height, Prove: opts.Prove})
 	return &ctypes.ResultABCIQuery{Response: r}, nil
 }
 
-func (c *ABCIApplicationClient) CheckTx(ctx context.Context, tx types.Tx) (*ctypes.ResultCheckTx, error) {
+func (c *FakeTendermint) CheckTx(ctx context.Context, tx types.Tx) (*ctypes.ResultCheckTx, error) {
 	cr := c.App().CheckTx(abci.RequestCheckTx{Tx: tx})
 	return &ctypes.ResultCheckTx{ResponseCheckTx: cr}, nil
 }
 
-func (c *ABCIApplicationClient) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
+func (c *FakeTendermint) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
 	// Wait for nothing
 	c.SubmitTx(ctx, tx)
 	return &ctypes.ResultBroadcastTx{}, nil
 }
 
-func (c *ABCIApplicationClient) BroadcastTxSync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
+func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTx, error) {
 	cr := c.app.CheckTx(abci.RequestCheckTx{Tx: tx})
 	if cr.Code != 0 {
 		c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
@@ -423,24 +468,12 @@ func (c *ABCIApplicationClient) BroadcastTxSync(ctx context.Context, tx types.Tx
 	}, nil
 }
 
-func (c *ABCIApplicationClient) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
-	st := c.SubmitTx(ctx, tx)
-	<-st.DidCommit
-
-	r := new(ctypes.ResultBroadcastTxCommit)
-	r.Hash = st.Hash[:]
-	r.Height = st.Height
-	r.CheckTx = *st.CheckResult
-	if st.CheckResult.Code != 0 {
-		return r, nil
-	}
-
-	r.DeliverTx = *st.DeliverResult
-	return r, nil
+func (c *FakeTendermint) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
+	return nil, errors.New("not supported")
 }
 
 // Stolen from Tendermint
-func (c *ABCIApplicationClient) Subscribe(ctx context.Context, subscriber, query string, outCapacity ...int) (out <-chan ctypes.ResultEvent, err error) {
+func (c *FakeTendermint) Subscribe(ctx context.Context, subscriber, query string, outCapacity ...int) (out <-chan ctypes.ResultEvent, err error) {
 	q, err := tmquery.New(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse query: %w", err)
@@ -470,7 +503,7 @@ func (c *ABCIApplicationClient) Subscribe(ctx context.Context, subscriber, query
 	return outc, nil
 }
 
-func (c *ABCIApplicationClient) eventsRoutine(
+func (c *FakeTendermint) eventsRoutine(
 	sub types.Subscription,
 	subscriber string,
 	q tmpubsub.Query,
@@ -511,7 +544,7 @@ func (c *ABCIApplicationClient) eventsRoutine(
 }
 
 // Try to resubscribe with exponential backoff.
-func (c *ABCIApplicationClient) resubscribe(subscriber string, q tmpubsub.Query) types.Subscription {
+func (c *FakeTendermint) resubscribe(subscriber string, q tmpubsub.Query) types.Subscription {
 	attempts := 0
 	for {
 		if !c.IsRunning() {
@@ -528,7 +561,7 @@ func (c *ABCIApplicationClient) resubscribe(subscriber string, q tmpubsub.Query)
 	}
 }
 
-func (c *ABCIApplicationClient) Unsubscribe(ctx context.Context, subscriber, query string) error {
+func (c *FakeTendermint) Unsubscribe(ctx context.Context, subscriber, query string) error {
 	args := tmpubsub.UnsubscribeArgs{Subscriber: subscriber}
 	var err error
 	args.Query, err = tmquery.New(query)

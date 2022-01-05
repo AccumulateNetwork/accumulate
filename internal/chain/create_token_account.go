@@ -13,7 +13,7 @@ type CreateTokenAccount struct{}
 
 func (CreateTokenAccount) Type() types.TxType { return types.TxTypeCreateTokenAccount }
 
-func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.CreateTokenAccount)
 	err := tx.As(body)
 	if err != nil {
@@ -35,7 +35,9 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransac
 		return fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, accountUrl)
 	}
 
-	account := protocol.NewTokenAccountByUrls(accountUrl.String(), tokenUrl.String())
+	account := protocol.NewTokenAccount()
+	account.ChainUrl = types.String(accountUrl.String())
+	account.TokenUrl = tokenUrl.String()
 	if body.KeyBookUrl == "" {
 		account.KeyBook = st.Origin.Header().KeyBook
 	} else {

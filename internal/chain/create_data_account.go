@@ -13,7 +13,7 @@ type CreateDataAccount struct{}
 
 func (CreateDataAccount) Type() types.TransactionType { return types.TxTypeCreateDataAccount }
 
-func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.CreateDataAccount)
 	err := tx.As(body)
 	if err != nil {

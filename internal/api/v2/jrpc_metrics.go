@@ -53,7 +53,7 @@ func (m *JrpcMethods) Metrics(_ context.Context, params json.RawMessage) interfa
 		return validatorError(fmt.Errorf("%q is not a valid metric", req.Metric))
 	}
 
-	return &QueryResponse{
+	return &ChainQueryResponse{
 		Type: "metrics",
 		Data: res,
 	}

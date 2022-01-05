@@ -150,44 +150,28 @@ func TestFaucet(t *testing.T) {
 	v2 := []byte("nakamoto")
 	tx2 := append(k2, append([]byte("="), v2...)...)
 
-	gtx := transactions.GenTransaction{}
-	gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{})
-	gtx.SigInfo = &transactions.SignatureInfo{}
-	gtx.SigInfo.URL = "fakeUrl"
-	gtx.Transaction = tx1
-	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
+	gtx := transactions.Envelope{}
+	gtx.Signatures = append(gtx.Signatures, &transactions.ED25519Sig{})
+	gtx.Transaction.Origin = &url.URL{Authority: "fakeUrl"}
+	gtx.Transaction.Body = tx1
+	gtx.Signatures[0].Sign(54321, kpSponsor, gtx.Transaction.Hash())
 	//changing the nonce will invalidate the signature.
-	gtx.SigInfo.Nonce = 1234
+	gtx.Transaction.Nonce = 1234
 
 	//intentionally send in a bogus transaction
 	ti1, _ := query.BroadcastTx(&gtx, nil)
-	gtx.Transaction = tx2
+	gtx.Transaction.Body = tx2
 	ti2, _ := query.BroadcastTx(&gtx, nil)
 
 	stat := query.BatchSend()
 	bs := <-stat
 	res1, err := bs.ResolveTransactionResponse(ti1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res1.Code == 0 {
-		t.Fatalf("expecting error code that is non zero")
-	}
-
-	errorData, err := json.Marshal(res1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(errorData))
+	require.NoError(t, err)
+	require.NotZero(t, res1.Code, "expecting error code that is non zero")
 
 	res2, err := bs.ResolveTransactionResponse(ti2)
-
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res2.Code == 0 {
-		t.Fatalf("expecting error code that is non zero")
-	}
+	require.NoError(t, err)
+	require.NotZero(t, res2.Code, "expecting error code that is non zero")
 
 	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
@@ -324,7 +308,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	resp, err := query.GetTransactionHistory(protocol.FaucetUrl.String(), 0, 10)
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 2)
-	require.Equal(t, types.String(types.TxTypeSyntheticGenesis.Name()), resp.Data[0].Type)
+	require.Equal(t, types.String(types.TxTypeInternalGenesis.Name()), resp.Data[0].Type)
 	require.Equal(t, types.String(types.TxTypeSendTokens.Name()), resp.Data[1].Type)
 }
 
@@ -412,7 +396,7 @@ func TestGetTxId(t *testing.T) {
 	u, err := url.Parse(*destAddress.AsString())
 	require.NoError(t, err)
 	u.Path = ""
-	u.Query = fmt.Sprintf("txid=%x", tx.TransactionHash())
+	u.Query = fmt.Sprintf("txid=%x", tx.Transaction.Hash())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: types.String(u.String())})
 	require.NoError(t, err)
@@ -438,8 +422,7 @@ func TestDirectory(t *testing.T) {
 	dbTx := daemon.DB_TESTONLY().Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, tmed25519.PrivKey(adiKey), "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	_, err := dbTx.Commit(3, time.Unix(0, 0), nil)
-	require.NoError(t, err)
+	require.NoError(t, dbTx.Commit())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})
 	require.NoError(t, err)

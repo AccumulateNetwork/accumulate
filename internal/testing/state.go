@@ -7,6 +7,7 @@ import (
 	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -16,18 +17,13 @@ import (
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 )
 
-type DB interface {
-	LoadChainAs(chainId []byte, chain state.Chain) (*state.Object, error)
-	AddStateEntry(chainId *types.Bytes32, txHash *types.Bytes32, object *state.Object)
-	WriteIndex(index state.Index, chain []byte, key interface{}, value []byte)
-	GetIndex(index state.Index, chain []byte, key interface{}) ([]byte, error)
-}
+type DB = *database.Batch
 
 // Token multiplier
 const TokenMx = protocol.AcmePrecision
 
-func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.GenTransaction, error) {
-	recipientAdi := types.String(AcmeLiteAddressTmPriv(recipient).String())
+func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Envelope, error) {
+	recipientAdi := AcmeLiteAddressTmPriv(recipient)
 
 	//create a fake synthetic deposit for faucet.
 	deposit := new(protocol.SyntheticDepositTokens)
@@ -40,23 +36,20 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Ge
 		return nil, err
 	}
 
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.Transaction = depData
-	tx.SigInfo.URL = *recipientAdi.AsString()
-	tx.SigInfo.KeyPageHeight = 1
-	tx.ChainID = types.GetChainIdFromChainPath(recipientAdi.AsString())[:]
-	tx.Routing = types.GetAddressFromIdentity(recipientAdi.AsString())
+	tx := new(transactions.Envelope)
+	tx.Transaction.Body = depData
+	tx.Transaction.Origin = recipientAdi
+	tx.Transaction.KeyPageHeight = 1
 
 	ed := new(transactions.ED25519Sig)
-	tx.SigInfo.Nonce = 1
+	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.SigInfo.Nonce, recipient, tx.TransactionHash())
+	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.Transaction.Hash())
 	if err != nil {
 		return nil, err
 	}
 
-	tx.Signature = append(tx.Signature, ed)
+	tx.Signatures = append(tx.Signatures, ed)
 	return tx, nil
 }
 
@@ -66,25 +59,35 @@ func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error 
 }
 
 func WriteStates(db DB, chains ...state.Chain) error {
-	for _, c := range chains {
-		b, err := c.MarshalBinary()
-		if err != nil {
-			return err
-		}
-
+	txid := sha256.Sum256([]byte("fake txid"))
+	urls := make([]*url.URL, len(chains))
+	for i, c := range chains {
 		u, err := c.Header().ParseUrl()
 		if err != nil {
 			return err
 		}
+		urls[i] = u
 
-		chainId := types.Bytes(u.ResourceChain()).AsBytes32()
-		db.AddStateEntry(&chainId, &types.Bytes32{}, &state.Object{Entry: b})
+		r := db.Record(u)
+		err = r.PutState(c)
+		if err != nil {
+			return err
+		}
 
-		if !u.Identity().Equal(u) {
-			chain.AddDirectoryEntry(db, u)
+		chain, err := r.Chain(protocol.MainChain)
+		if err != nil {
+			return err
+		}
+
+		err = chain.AddEntry(txid[:])
+		if err != nil {
+			return err
 		}
 	}
-	return nil
+
+	return chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
+		return db.Record(u).Index(key...)
+	}, urls...)
 }
 
 func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
@@ -108,7 +111,8 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
 	book.Pages = append(book.Pages, pageUrl.String())
 
-	adi := state.NewADI(types.String(identityUrl.String()), state.KeyTypeSha256, keyHash[:])
+	adi := protocol.NewADI()
+	adi.ChainUrl = types.String(identityUrl.String())
 	adi.KeyBook = types.String(bookUrl.String())
 
 	return WriteStates(db, adi, book, mss)
@@ -119,7 +123,6 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	if err != nil {
 		return err
 	}
-	acctChainId := types.Bytes(u.ResourceChain()).AsBytes32()
 
 	var chain state.Chain
 	if lite {
@@ -127,22 +130,17 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		account.ChainUrl = types.String(u.String())
 		account.TokenUrl = tokenUrl
 		account.Balance.SetInt64(int64(tokens * TokenMx))
-		account.TxCount++
 		chain = account
 	} else {
-		account := protocol.NewTokenAccountByUrls(u.String(), tokenUrl)
+		account := protocol.NewTokenAccount()
+		account.ChainUrl = types.String(u.String())
+		account.TokenUrl = tokenUrl
 		account.KeyBook = types.String(u.Identity().JoinPath("book0").String())
 		account.Balance.SetInt64(int64(tokens * TokenMx))
 		chain = account
 	}
 
-	data, err := chain.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	db.AddStateEntry(&acctChainId, &types.Bytes32{}, &state.Object{Entry: data})
-	return nil
+	return db.Record(u).PutState(chain)
 }
 
 func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
@@ -180,11 +178,10 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 			return err
 		}
 
-		chainId := types.Bytes(specUrl.ResourceChain()).AsBytes32()
 		group.Pages[i] = specUrl.String()
 
 		spec := new(protocol.KeyPage)
-		_, err = db.LoadChainAs(chainId[:], spec)
+		err = db.Record(specUrl).GetStateAs(spec)
 		if err != nil {
 			return err
 		}

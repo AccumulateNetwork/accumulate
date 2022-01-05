@@ -41,6 +41,7 @@ type Type struct {
 	ChainType    string `yaml:"chain-type"`
 	NonBinary    bool   `yaml:"non-binary"`
 	Incomparable bool   `yaml:"incomparable"`
+	OmitNewFunc  bool   `yaml:"omit-new-func"`
 	Fields       []*Field
 	Embeddings   []string `yaml:"embeddings"`
 }
@@ -54,15 +55,16 @@ func (typ *Type) GoChainType() string {
 }
 
 type Field struct {
-	Name        string
-	Type        string
-	MarshalAs   string `yaml:"marshal-as"`
-	Slice       *Field
-	Pointer     bool
-	Optional    bool
-	IsUrl       bool `yaml:"is-url"`
-	KeepEmpty   bool `yaml:"keep-empty"`
-	Alternative string
+	Name          string
+	Type          string
+	MarshalAs     string `yaml:"marshal-as"`
+	UnmarshalWith string `yaml:"unmarshal-with"`
+	Slice         *Field
+	Pointer       bool
+	Optional      bool
+	IsUrl         bool `yaml:"is-url"`
+	KeepEmpty     bool `yaml:"keep-empty"`
+	Alternative   string
 }
 
 type API map[string]Method

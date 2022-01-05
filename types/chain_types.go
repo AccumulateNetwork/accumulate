@@ -51,8 +51,12 @@ const (
 	// ChainTypeSyntheticTransactions is a chain of synthetic transactions.
 	ChainTypeSyntheticTransactions ChainType = 13
 
+	// ChainTypeInternalLedger is a ledger that tracks the state of internal
+	// operations.
+	ChainTypeInternalLedger ChainType = 14
+
 	// chainMax needs to be set to the last type in the list above
-	chainMax = ChainTypeSyntheticTransactions
+	chainMax = ChainTypeInternalLedger
 )
 
 // ID returns the chain type ID

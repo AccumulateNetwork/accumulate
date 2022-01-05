@@ -12,7 +12,7 @@ type SyntheticDepositCredits struct{}
 
 func (SyntheticDepositCredits) Type() types.TxType { return types.TxTypeSyntheticDepositCredits }
 
-func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SyntheticDepositCredits)
 	err := tx.As(body)
 	if err != nil {

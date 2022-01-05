@@ -9,8 +9,10 @@ import (
 
 func NewChain(typ types.ChainType) (state.Chain, error) {
 	switch typ {
+	case types.ChainTypeAnchor:
+		return new(Anchor), nil
 	case types.ChainTypeIdentity:
-		return new(state.AdiState), nil
+		return new(ADI), nil
 	case types.ChainTypeTokenIssuer:
 		return new(TokenIssuer), nil
 	case types.ChainTypeTokenAccount:
@@ -30,20 +32,21 @@ func NewChain(typ types.ChainType) (state.Chain, error) {
 	case types.ChainTypeLiteDataAccount:
 		return new(LiteDataAccount), nil
 	case types.ChainTypeSyntheticTransactions:
-		return new(state.SyntheticTransactionChain), nil
+		return new(SyntheticTransactionChain), nil
+	case types.ChainTypeInternalLedger:
+		return new(InternalLedger), nil
 	default:
 		return nil, fmt.Errorf("unknown chain type %v", typ)
 	}
 }
 
 func UnmarshalChain(data []byte) (state.Chain, error) {
-	header := new(state.ChainHeader)
-	err := header.UnmarshalBinary(data)
+	typ, err := state.ChainType(data)
 	if err != nil {
 		return nil, err
 	}
 
-	chain, err := NewChain(header.Type)
+	chain, err := NewChain(typ)
 	if err != nil {
 		return nil, err
 	}

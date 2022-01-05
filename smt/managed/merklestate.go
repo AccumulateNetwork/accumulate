@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"math/bits"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
@@ -27,7 +26,7 @@ import (
 type MerkleState struct {
 	HashFunction func(data []byte) Hash // Hash function for this Merkle State
 	Count        int64                  // Count of hashes added to the Merkle tree
-	Pending      []Hash                 // Array of hashes that represent the left edge of the Merkle tree
+	Pending      SparseHashList         // Array of hashes that represent the left edge of the Merkle tree
 	HashList     HashList               // List of Hashes in the order added to the chain
 }
 
@@ -150,26 +149,18 @@ func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
 // Marshal
 // Encodes the Merkle State so it can be embedded into the Merkle Tree
 func (m *MerkleState) Marshal() (MSBytes []byte, err error) {
-
-	defer func() { //                                                   Quite a bit could go wrong, so
-		if rec := recover(); rec != nil { //                             catch any panics and return
-			MSBytes = nil                                              // Don't return any data
-			err = fmt.Errorf("failed to marshal MerkleState: %v", rec) // return an error
-		}
-	}()
-
 	MSBytes = append(MSBytes, common.Int64Bytes(m.Count)...) // Count
-	cnt := m.Count                                           // Each bit set in Count, indicates a Sub Merkle Tree root
-	for i := 0; cnt > 0; i++ {                               // For each bit in cnt,
-		if cnt&1 > 0 { //                                         if the bit is set in cnt, record the hash
-			b := encoding.BytesMarshalBinary(m.Pending[i])
-			MSBytes = append(MSBytes, b...)
-		} //                                                   If the bit is not set, ignore (it is nil anyway)
-		cnt = cnt >> 1 //                                      Shift cnt so we can check the next bit
-	}
 
-	// Write out the hash list
-	b, _ := m.HashList.MarshalBinary()
+	// Write out the pending list. Each bit set in Count indicates a Sub Merkle
+	// Tree root. For each bit, if the bit is set, record the hash.
+	b, err := m.Pending.MarshalBinary(m.Count)
+	if err != nil {
+		return nil, err
+	}
+	MSBytes = append(MSBytes, b...)
+
+	// Write out the hash list (never returns an error)
+	b, _ = m.HashList.MarshalBinary()
 	MSBytes = append(MSBytes, b...)
 	return MSBytes, nil
 }
@@ -179,32 +170,19 @@ func (m *MerkleState) Marshal() (MSBytes []byte, err error) {
 // in this instance of MSMarshal to the state defined by MSBytes.  It is assumed that the
 // hash function has been set by the caller.
 func (m *MerkleState) UnMarshal(MSBytes []byte) (err error) {
-
-	defer func() { //                                                     Quite a bit could go wrong, so
-		if rec := recover(); rec != nil { //                               catch any panics and return
-			err = fmt.Errorf("failed to unmarshal MerkleState: %v", rec) // an error
-		}
-	}()
-
-	m.Count, MSBytes = common.BytesInt64(MSBytes)                 // Extract the Count
-	pendCount := 64 - bits.LeadingZeros64(uint64(m.Count))        //
-	m.Pending = append(m.Pending[:0], make([]Hash, pendCount)...) // Set Pending to zero, then use the bits of Count
-	cnt := m.Count                                                //   to guide the extraction of the List of Sub Merkle State roots
-	for i := range m.Pending {                                    // To do this, go through the count
-		// If the bit is not set, skip that entry
-		if cnt&(1<<i) == 0 {
-			continue
-		}
-
-		// If the bit is set, then extract the next hash
-		h, err := encoding.BytesUnmarshalBinary(MSBytes)
-		if err != nil {
-			return err
-		}
-
-		MSBytes = MSBytes[encoding.BytesBinarySize(h):] // Advance MSBytes by the hash size
-		m.Pending[i] = Hash(h).Copy()                   // Make a copy to avoid weird memory bugs
+	// Unmarshal the Count
+	m.Count, err = encoding.VarintUnmarshalBinary(MSBytes)
+	if err != nil {
+		return err
 	}
+	MSBytes = MSBytes[encoding.VarintBinarySize(m.Count):]
+
+	// Unmarshal the pending list
+	err = m.Pending.UnmarshalBinary(m.Count, MSBytes)
+	if err != nil {
+		return err
+	}
+	MSBytes = MSBytes[m.Pending.BinarySize(m.Count):]
 
 	// Unmarshal the hash list
 	err = m.HashList.UnmarhsalBinary(MSBytes)
@@ -213,6 +191,9 @@ func (m *MerkleState) UnMarshal(MSBytes []byte) (err error) {
 	}
 
 	// Make a copy to avoid weird memory bugs
+	for i, h := range m.Pending {
+		m.Pending[i] = h.Copy()
+	}
 	for i, h := range m.HashList {
 		m.HashList[i] = h.Copy()
 	}

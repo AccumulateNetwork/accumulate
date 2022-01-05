@@ -12,7 +12,7 @@ type WriteData struct{}
 
 func (WriteData) Type() types.TransactionType { return types.TxTypeWriteData }
 
-func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.WriteData)
 	err := tx.As(body)
 	if err != nil {
@@ -41,7 +41,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 	// produced the data entry
 
 	sw := protocol.SegWitDataEntry{}
-	copy(sw.Cause[:], tx.TransactionHash())
+	copy(sw.Cause[:], tx.Transaction.Hash())
 	copy(sw.EntryHash[:], body.Entry.Hash())
 	sw.EntryUrl = st.Origin.Header().GetChainUrl()
 
@@ -50,15 +50,10 @@ func (WriteData) Validate(st *StateManager, tx *transactions.GenTransaction) err
 		return fmt.Errorf("unable to marshal segwit, %v", err)
 	}
 
-	dataPayload, err := body.Entry.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("error marshaling data entry, %v", err)
-	}
-
 	//now replace the original data entry payload with the new segwit payload
-	tx.Transaction = segWitPayload
+	tx.Transaction.Body = segWitPayload
 
-	st.UpdateData(st.Origin, sw.EntryHash[:], dataPayload)
+	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)
 
 	return nil
 }

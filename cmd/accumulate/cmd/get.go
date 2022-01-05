@@ -27,7 +27,7 @@ var getCmd = &cobra.Command{
 					chainId := types.Bytes32{}
 					err = chainId.FromString(args[1])
 					if err == nil {
-						var q *api2.QueryResponse
+						var q *api2.ChainQueryResponse
 						q, err = GetByChainId(chainId[:])
 						if err == nil {
 							var data []byte
@@ -70,8 +70,8 @@ func PrintGet() {
 	//fmt.Println("  accumulate get [transaction id] 		Get data by Accumulate transaction id")
 }
 
-func GetByChainId(chainId []byte) (*api2.QueryResponse, error) {
-	var res api2.QueryResponse
+func GetByChainId(chainId []byte) (*api2.ChainQueryResponse, error) {
+	var res api2.ChainQueryResponse
 
 	params := api2.ChainIdQuery{}
 	params.ChainId = chainId
@@ -101,7 +101,7 @@ func Get(url string) (string, error) {
 }
 
 func GetKey(url, key string) (string, error) {
-	var res api2.QueryResponse
+	var res api2.ChainQueryResponse
 	res.Data = new(query.ResponseKeyPageIndex)
 
 	keyb, err := hex.DecodeString(key)

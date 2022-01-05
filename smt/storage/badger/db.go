@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/batch"
 	"github.com/dgraph-io/badger"
 )
 
@@ -28,7 +29,7 @@ type DB struct {
 	logger   storage.Logger
 }
 
-var _ storage.KeyValueDB = (*DB)(nil)
+var _ storage.KeyValueStore = (*DB)(nil)
 
 // Close
 // Close the underlying database
@@ -207,6 +208,10 @@ func (d *DB) EndBatch(TXCache map[storage.Key][]byte) error {
 	}
 
 	return nil
+}
+
+func (db *DB) Begin() storage.KeyValueTxn {
+	return batch.New(db, db.logger)
 }
 
 type badgerLogger struct {

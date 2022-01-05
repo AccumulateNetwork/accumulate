@@ -84,7 +84,7 @@ func respondWith(obj *state.Object, v interface{}, typ string) (*api.APIDataResp
 	return rAPI, nil
 }
 
-func unmarshalTokenTx(sigInfo *transactions.SignatureInfo, txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
+func unmarshalTokenTx(sigInfo *transactions.Header, txPayload []byte, txId types.Bytes, txSynthTxIds types.Bytes) (*api.APIDataResponse, error) {
 	tx := protocol.SendTokens{}
 	err := tx.UnmarshalBinary(txPayload)
 	if err != nil {
@@ -92,7 +92,7 @@ func unmarshalTokenTx(sigInfo *transactions.SignatureInfo, txPayload []byte, txI
 	}
 
 	txResp := response.TokenTx{}
-	txResp.From = types.String(sigInfo.URL)
+	txResp.From = types.String(sigInfo.Origin.String())
 	txResp.TxId = txId
 
 	if len(txSynthTxIds)/32 != len(tx.To) {
@@ -140,7 +140,7 @@ func unmarshalTxAs(payload []byte, v protocol.TransactionPayload) (*api.APIDataR
 }
 
 //unmarshalTransaction will unpack the transaction stored on-chain and marshal it into a response
-func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
+func unmarshalTransaction(sigInfo *transactions.Header, txPayload []byte, txId []byte, txSynthTxIds []byte) (resp *api.APIDataResponse, err error) {
 	txType, _ := common.BytesUint64(txPayload)
 	payload, err := protocol.NewTransaction(types.TransactionType(txType))
 	if err != nil {
@@ -157,7 +157,7 @@ func unmarshalTransaction(sigInfo *transactions.SignatureInfo, txPayload []byte,
 		return nil, err
 	}
 
-	resp.Origin = types.String(sigInfo.URL)
+	resp.Origin = types.String(sigInfo.Origin.String())
 	return resp, err
 }
 
@@ -199,17 +199,16 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 	}
 
 	switch sChain := sChain.(type) {
-	case *state.AdiState:
+	case *protocol.ADI:
 		rAdi := new(response.ADI)
 		rAdi.Url = *sChain.ChainUrl.AsString()
-		rAdi.PublicKey = sChain.KeyData
 		return respondWith(obj, rAdi, sChain.Type.String())
 
 	case *protocol.TokenAccount:
 		ta := new(protocol.CreateTokenAccount)
 		ta.Url = string(sChain.ChainUrl)
 		ta.TokenUrl = sChain.TokenUrl
-		rAccount := response.NewTokenAccount(ta, sChain.GetBalance())
+		rAccount := response.NewTokenAccount(ta, &sChain.Balance)
 		return respondWith(obj, rAccount, sChain.Type.String())
 
 	case *protocol.LiteTokenAccount:
@@ -219,7 +218,6 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 		rAccount.TokenUrl = string(sChain.TokenUrl)
 		rAccount.Balance = types.Amount{Int: sChain.Balance}
 		rAccount.CreditBalance = types.Amount{Int: sChain.CreditBalance}
-		rAccount.TxCount = sChain.TxCount
 		rAccount.Nonce = sChain.Nonce
 		return respondWith(obj, rAccount, sChain.Type.String())
 

@@ -14,13 +14,16 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/fatih/color"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 	"golang.org/x/term"
@@ -152,6 +155,7 @@ func initNode(*cobra.Command, []string) {
 		Config:   config,
 		RemoteIP: remoteIP,
 		ListenIP: listenIP,
+		Logger:   newLogger(),
 	}))
 }
 
@@ -231,6 +235,7 @@ func initFollower(cmd *cobra.Command, _ []string) {
 		Config:     []*cfg.Config{config},
 		RemoteIP:   []string{""},
 		ListenIP:   []string{u.String()},
+		Logger:     newLogger(),
 	}))
 }
 
@@ -328,12 +333,14 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	}
 
 	if !flagInitDevnet.Compose {
+		logger := newLogger()
 		check(node.Init(node.InitOptions{
 			WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
 			Port:     flagInitDevnet.BasePort,
 			Config:   dnConfig,
 			RemoteIP: dnRemote,
 			ListenIP: dnListen,
+			Logger:   logger.With("subnet", protocol.Directory),
 		}))
 		for bvn := range bvnConfig {
 			bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
@@ -343,11 +350,9 @@ func initDevNet(cmd *cobra.Command, args []string) {
 				Config:   bvnConfig,
 				RemoteIP: bvnRemote,
 				ListenIP: bvnListen,
+				Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
 			}))
 		}
-	}
-
-	if !flagInitDevnet.Compose {
 		return
 	}
 
@@ -445,4 +450,14 @@ func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeTyp
 
 	compose.Services = append(compose.Services, svc)
 	return config, svc.Name, "0.0.0.0"
+}
+
+func newLogger() log.Logger {
+	writer, err := logging.NewConsoleWriter("plain")
+	check(err)
+	level, writer, err := logging.ParseLogLevel(config.DefaultLogLevels, writer)
+	check(err)
+	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	check(err)
+	return logger
 }
