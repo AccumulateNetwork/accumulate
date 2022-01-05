@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -65,30 +64,29 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 	}
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	tx := new(transactions.GenTransaction)
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = protocol.FaucetUrl.String()
-	tx.SigInfo.Nonce = protocol.FaucetWallet.Nonce
-	tx.SigInfo.KeyPageHeight = 1
-	tx.Transaction, err = req.MarshalBinary()
+	tx := new(transactions.Envelope)
+	tx.Transaction.Origin = protocol.FaucetUrl
+	tx.Transaction.Nonce = protocol.FaucetWallet.Nonce
+	tx.Transaction.KeyPageHeight = 1
+	tx.Transaction.Body, err = req.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
 
 	ed := new(transactions.ED25519Sig)
-	tx.Signature = append(tx.Signature, ed)
-	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, tx.TransactionHash())
+	tx.Signatures = append(tx.Signatures, ed)
+	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, tx.Transaction.Hash())
 	if err != nil {
 		return accumulateError(err)
 	}
 
 	txrq := new(TxRequest)
-	txrq.Origin = tx.SigInfo.URL
-	txrq.Signer.Nonce = tx.SigInfo.Nonce
-	txrq.Signer.PublicKey = tx.Signature[0].PublicKey
-	txrq.KeyPage.Height = tx.SigInfo.KeyPageHeight
-	txrq.Signature = tx.Signature[0].Signature
-	return m.execute(ctx, txrq, tx.Transaction)
+	txrq.Origin = tx.Transaction.Origin
+	txrq.Signer.Nonce = tx.Transaction.Nonce
+	txrq.Signer.PublicKey = tx.Signatures[0].PublicKey
+	txrq.KeyPage.Height = tx.Transaction.KeyPageHeight
+	txrq.Signature = tx.Signatures[0].Signature
+	return m.execute(ctx, txrq, tx.Transaction.Body)
 }
 
 // executeQueue manages queues for batching and dispatch of execute requests.
@@ -107,13 +105,8 @@ type executeRequest struct {
 
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
-	u, err := url.Parse(req.Origin)
-	if err != nil {
-		return validatorError(err)
-	}
-
 	// Route the request
-	i := int(u.Routing() % uint64(len(m.opts.Remote)))
+	i := int(req.Origin.Routing() % uint64(len(m.opts.Remote)))
 	if i == m.localIndex {
 		// We have a local node and the routing number is local, so process the
 		// request and broadcast it locally
@@ -121,6 +114,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 
 	// Prepare the request for dispatch to a remote BVC
+	var err error
 	req.Payload = payload
 	ex := new(executeRequest)
 	ex.remote = i
@@ -160,23 +154,22 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 // executeLocal constructs a TX, broadcasts it to the local node, and waits for
 // results.
 func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload []byte) interface{} {
-	// Build the TX
-	tx := new(transactions.GenTransaction)
-	tx.Transaction = payload
 
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = req.Origin
-	tx.SigInfo.Nonce = req.Signer.Nonce
-	tx.SigInfo.KeyPageHeight = req.KeyPage.Height
-	tx.SigInfo.KeyPageIndex = req.KeyPage.Index
+	// Build the TX
+	tx := new(transactions.Envelope)
+	tx.Transaction.Body = payload
+	tx.Transaction.Origin = req.Origin
+	tx.Transaction.Nonce = req.Signer.Nonce
+	tx.Transaction.KeyPageHeight = req.KeyPage.Height
+	tx.Transaction.KeyPageIndex = req.KeyPage.Index
 
 	ed := new(transactions.ED25519Sig)
 	ed.Nonce = req.Signer.Nonce
 	ed.PublicKey = req.Signer.PublicKey
 	ed.Signature = req.Signature
-	tx.Signature = append(tx.Signature, ed)
+	tx.Signatures = append(tx.Signatures, ed)
 
-	txb, err := tx.Marshal()
+	txb, err := tx.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -195,7 +188,7 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 
 		res := new(TxResponse)
 		res.Code = uint64(r.Code)
-		res.Txid = tx.TransactionHash()
+		res.Txid = tx.Transaction.Hash()
 		res.Hash = sha256.Sum256(txb)
 
 		// Check for errors
@@ -222,7 +215,7 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 
 		res := new(TxResponse)
 		res.Code = uint64(r.Code)
-		res.Txid = tx.TransactionHash()
+		res.Txid = tx.Transaction.Hash()
 		res.Hash = sha256.Sum256(txb)
 
 		// Check for errors

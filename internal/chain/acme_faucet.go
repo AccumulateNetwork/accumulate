@@ -16,7 +16,7 @@ type AcmeFaucet struct{}
 
 func (AcmeFaucet) Type() types.TxType { return types.TxTypeAcmeFaucet }
 
-func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) error {
 	// Unmarshal the TX payload
 	body := new(protocol.AcmeFaucet)
 	err := tx.As(body)
@@ -73,7 +73,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.GenTransaction) er
 	// Submit a synthetic deposit token TX
 	amount := new(big.Int).SetUint64(10 * protocol.AcmePrecision)
 	deposit := new(protocol.SyntheticDepositTokens)
-	copy(deposit.Cause[:], tx.TransactionHash())
+	copy(deposit.Cause[:], tx.Transaction.Hash())
 	deposit.Token = protocol.ACME
 	deposit.Amount = *amount
 	st.Submit(u, deposit)
