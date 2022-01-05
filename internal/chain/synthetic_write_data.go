@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -14,7 +13,7 @@ type SyntheticWriteData struct{}
 
 func (SyntheticWriteData) Type() types.TxType { return types.TxTypeSyntheticWriteData }
 
-func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.SyntheticWriteData)
 	err := tx.As(body)
 	if err != nil {
@@ -22,14 +21,9 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.GenTransac
 	}
 
 	sw := protocol.SegWitDataEntry{}
-	var chainId []byte
-	chainUrl, err := url.Parse(tx.SigInfo.URL)
-	if err != nil {
-		return fmt.Errorf("invalid recipient URL: %v", err)
-	}
 
-	var dataPayload []byte
 	var account state.Chain
+	haveLiteChain := true
 
 	if st.Origin != nil {
 		switch origin := st.Origin.(type) {
@@ -38,34 +32,32 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.GenTransac
 		case *protocol.DataAccount:
 			account = origin
 			copy(sw.EntryHash[:], body.Entry.Hash())
-			dataPayload, err = body.Entry.MarshalBinary()
-			if err != nil {
-				return fmt.Errorf("error marshaling data entry, %v", err)
-			}
+			haveLiteChain = false
 		default:
 			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, origin.Header().Type)
 		}
-	} else if _, err := protocol.ParseLiteChainAddress(chainUrl); err != nil {
+	} else if _, err := protocol.ParseLiteChainAddress(tx.Transaction.Origin); err != nil {
 		return fmt.Errorf("invalid lite chain URL: %v", err)
 	} else if err != nil {
 		return err
 	} else {
 		// Address is lite and the chain doesn't exist, so create one
-		liteChainId := protocol.ComputeLiteChainId(&body.Entry)
-		u, err := protocol.LiteDataAddress(chainId)
+		liteDataChainId := protocol.ComputeLiteDataAccountId(&body.Entry)
+		u, err := protocol.LiteDataAddress(liteDataChainId)
 		if err != nil {
 			return err
 		}
 
-		if u.String() != chainUrl.String() {
+		//the computed data account chain id must match the origin url.
+		if u.String() != tx.Transaction.Origin.String() {
 			return fmt.Errorf("first entry doesnt match chain id")
 		}
 
 		lite := protocol.NewLiteDataAccount()
-		lite.ChainUrl = types.String(chainUrl.String())
-		//we store the tail of the chain Id in the state.  the first part
-		//of the chainid can be obtained from the ChainAddress.
-		lite.Tail = liteChainId[20:32]
+		lite.ChainUrl = types.String(tx.Transaction.Origin.String())
+		//we store the tail of the lite data account Id in the state.  the first part
+		//of the lite data account can be obtained from the ChainAddress.
+		lite.Tail = liteDataChainId[20:32]
 
 		account = lite
 
@@ -82,14 +74,15 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.GenTransac
 	// produced the data entry
 
 	//dataPayload will be nil for a lite data account, so need to populate it
-	if dataPayload == nil {
+	if haveLiteChain {
 
-		liteChainId, err := protocol.ParseLiteChainAddress(chainUrl)
+		liteChainId, err := protocol.ParseLiteChainAddress(tx.Transaction.Origin)
 		if err != nil {
 			return err
 		}
 
 		origin := st.Origin.(*protocol.LiteDataAccount)
+
 		//reconstruct full lite chain id
 		liteChainId = append(liteChainId, origin.Tail...)
 
@@ -97,19 +90,14 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.GenTransac
 		copy(lde.ChainId[:], liteChainId[:])
 		lde.DataEntry = body.Entry
 
-		dataPayload, err = lde.MarshalBinary()
-		if err != nil {
-			return fmt.Errorf("error marshaling lite data entry, %v", err)
-		}
-
 		entryHash, err := lde.Hash()
 		if err != nil {
 			return err
 		}
 		copy(sw.EntryHash[:], entryHash)
-
 	}
-	copy(sw.Cause[:], tx.TransactionHash())
+
+	copy(sw.Cause[:], tx.Transaction.Hash())
 	sw.EntryUrl = account.Header().GetChainUrl()
 
 	segWitPayload, err := sw.MarshalBinary()
@@ -118,9 +106,9 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.GenTransac
 	}
 
 	//now replace the original data entry payload with the new segwit payload
-	tx.Transaction = segWitPayload
+	tx.Transaction.Body = segWitPayload
 
-	st.UpdateData(st.Origin, sw.EntryHash[:], dataPayload)
+	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)
 
 	return nil
 }

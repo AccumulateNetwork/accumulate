@@ -3,7 +3,6 @@ package abci_test
 import (
 	"crypto/sha256"
 	"testing"
-	"time"
 
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -19,9 +18,9 @@ func TestProofADI(t *testing.T) {
 	// Setup keys and the lite account
 	liteKey, adiKey := generateKey(), generateKey()
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
-	dbTx := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateLiteTokenAccount(dbTx, liteKey, 5e4))
-	dbTx.Commit(n.NextHeight(), time.Unix(0, 0), nil)
+	batch := n.db.Begin()
+	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 5e4))
+	require.NoError(t, batch.Commit())
 
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {
@@ -40,7 +39,7 @@ func TestProofADI(t *testing.T) {
 	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/page0").Keys[0].PublicKey)
 
 	// Create ADI token account
-	n.Batch(func(send func(*transactions.GenTransaction)) {
+	n.Batch(func(send func(*transactions.Envelope)) {
 		tac := new(protocol.CreateTokenAccount)
 		tac.Url = "RoadRunner/Baz"
 		tac.TokenUrl = protocol.AcmeUrl().String()
