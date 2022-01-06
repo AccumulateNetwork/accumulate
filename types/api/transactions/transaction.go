@@ -9,11 +9,62 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
+// GetTxHash returns the hash of the transaction.
+//
+// GetTxHash will panic if Transaction is nil and TxHash is nil or not a valid
+// hash.
+func (e *Envelope) GetTxHash() []byte {
+	if e.Transaction != nil {
+		return e.Transaction.Hash()
+	}
+
+	if len(e.TxHash) == sha256.Size {
+		return e.TxHash
+	}
+
+	if len(e.TxHash) == 0 {
+		panic("both Transaction and TxHash are unspecified")
+	}
+	panic("invalid TxHash")
+}
+
+// EnvHash calculates the hash of the envelope as H(H(sig₀) + H(sig₁) + ... +
+// H(txn)).
+//
+// EnvHash will panic if any of the signatures are not well formed or if
+// Transaction is nil and TxHash is nil or not a valid hash.
+func (e *Envelope) EnvHash() []byte {
+	// Already computed?
+	if e.hash != nil {
+		return e.hash
+	}
+
+	// Marshal and hash the signatures
+	hashes := make([]byte, 0, (len(e.Signatures)+1)*sha256.Size)
+	for _, sig := range e.Signatures {
+		data, err := sig.MarshalBinary()
+		if err != nil {
+			// Warn the user
+			panic(err)
+		}
+		h := sha256.Sum256(data)
+		hashes = append(hashes, h[:]...)
+	}
+
+	// Append the transaction hash
+	hashes = append(hashes, e.GetTxHash()...)
+
+	// Hash!
+	h := sha256.Sum256(hashes)
+	e.hash = h[:]
+	return h[:]
+}
+
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
 func (t *Transaction) Hash() []byte {
 	// Already computed?
-	if t.txHash != nil {
-		return t.txHash
+	if t.hash != nil {
+		return t.hash
 	}
 
 	// Marshal the header
@@ -30,7 +81,7 @@ func (t *Transaction) Hash() []byte {
 	copy(data, h1[:])
 	copy(data[sha256.Size:], h2[:])
 	h := sha256.Sum256(data)
-	t.txHash = h[:]
+	t.hash = h[:]
 	return h[:]
 }
 
@@ -80,6 +131,7 @@ func NewWith(header *Header, signer func(hash []byte) (*ED25519Sig, error), tx e
 	}
 
 	env := new(Envelope)
+	env.Transaction = new(Transaction)
 	env.Transaction.Header = *header
 	env.Transaction.Body = body
 	env.Signatures = make([]*ED25519Sig, 1)

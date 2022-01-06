@@ -151,6 +151,7 @@ func TestFaucet(t *testing.T) {
 	tx2 := append(k2, append([]byte("="), v2...)...)
 
 	gtx := transactions.Envelope{}
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Signatures = append(gtx.Signatures, &transactions.ED25519Sig{})
 	gtx.Transaction.Origin = &url.URL{Authority: "fakeUrl"}
 	gtx.Transaction.Body = tx1
