@@ -25,8 +25,8 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) error {
 		return fmt.Errorf("invalid token URL: %v", err)
 	}
 
-	if body.Precision <= 0 {
-		return fmt.Errorf("precision must be a positive value")
+	if body.Precision <= 0 || body.Precision > 18 {
+		return fmt.Errorf("precision must be in range 1 to 18")
 	}
 
 	token := protocol.NewTokenIssuer()
