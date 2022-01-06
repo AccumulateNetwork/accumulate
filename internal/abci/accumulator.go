@@ -291,6 +291,7 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
 	defer app.recover(&rct.Code, true)
 
+	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseCheckTx{
 			Code: protocol.CodeDidPanic,
@@ -299,43 +300,35 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	}
 
 	h := sha256.Sum256(req.Tx)
-	txHash := logging.AsHex(h[:])
+	tmHash := logging.AsHex(h[:])
 
-	//the submission is the format of the Tx input
-	env := new(transactions.Envelope)
-
-	//unpack the request
-	err := env.UnmarshalBinary(req.Tx)
-
-	//check to see if there was an error decoding the submission
+	// Unmarshal all of the envelopes
+	// Unmarshal all of the envelopes
+	envelopes, err := transactions.UnmarshalAll(req.Tx)
 	if err != nil {
 		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "tx", txHash, "error", err)
-		//reject it
-		return abci.ResponseCheckTx{Code: protocol.CodeEncodingError, GasWanted: 0,
-			Log: "Unable to decode transaction"}
+		app.logger.Info("Check failed", "tx", tmHash, "error", err)
+		return abci.ResponseCheckTx{Code: protocol.CodeEncodingError, Log: "Unable to decode transaction"}
 	}
 
-	txid := logging.AsHex(env.Transaction.Hash())
+	// Check all of the transactions
+	for _, env := range envelopes {
+		txid := logging.AsHex(env.Transaction.Hash())
+		err := app.Chain.CheckTx(env)
+		if err == nil {
+			app.logger.Debug("Check succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)
+			continue
+		}
 
-	//create a default response
-	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: env.Transaction.Origin.ResourceChain(), Log: "CheckTx"}
-
-	customErr := app.Chain.CheckTx(env)
-
-	if customErr != nil {
-		sentry.CaptureException(customErr)
-		app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", txHash, "error", customErr)
-		ret.Code = uint32(customErr.Code)
-		ret.GasWanted = 0
-		ret.GasUsed = 0
-		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), customErr)
-		return ret
+		sentry.CaptureException(err)
+		app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err)
+		return abci.ResponseCheckTx{
+			Code: uint32(err.Code),
+			Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), err),
+		}
 	}
 
-	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
-	app.logger.Debug("Check succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", txHash)
-	return ret
+	return abci.ResponseCheckTx{Code: protocol.CodeOK}
 }
 
 // DeliverTx implements github.com/tendermint/tendermint/abci/types.Application.
@@ -344,6 +337,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
 	defer app.recover(&rdt.Code, true)
 
+	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseDeliverTx{
 			Code: protocol.CodeDidPanic,
@@ -352,40 +346,32 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	h := sha256.Sum256(req.Tx)
-	txHash := logging.AsHex(h[:])
-	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: protocol.CodeOK}
+	tmHash := logging.AsHex(h[:])
 
-	env := &transactions.Envelope{}
-
-	//unpack the request
-	//how do i detect errors?  This causes segfaults if not tightly checked.
-	err := env.UnmarshalBinary(req.Tx)
+	// Unmarshal all of the envelopes
+	envelopes, err := transactions.UnmarshalAll(req.Tx)
 	if err != nil {
 		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "tx", txHash, "error", err)
-		return abci.ResponseDeliverTx{Code: protocol.CodeEncodingError, GasWanted: 0,
-			Log: "Unable to decode transaction"}
+		app.logger.Info("Deliver failed", "tx", tmHash, "error", err)
+		return abci.ResponseDeliverTx{Code: protocol.CodeEncodingError, Log: "Unable to decode transaction"}
 	}
 
-	txid := logging.AsHex(env.Transaction.Hash())
+	// Deliver all of the transactions
+	for _, env := range envelopes {
+		txid := logging.AsHex(env.Transaction.Hash())
+		err := app.Chain.DeliverTx(env)
+		if err == nil {
+			app.logger.Debug("Deliver succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)
+			continue
+		}
 
-	//run through the validation node
-	customErr := app.Chain.DeliverTx(env)
-
-	if customErr != nil {
-		sentry.CaptureException(customErr)
-		app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", txHash, "error", customErr)
-		ret.Code = uint32(customErr.Code)
-		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
-		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", env.Transaction.Origin, env.Transaction.Type().Name(), customErr)
-		return ret
+		sentry.CaptureException(err)
+		app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err)
+		// Whether or not the transaction succeeds does not matter to Tendermint
 	}
 
-	//now we need to store the data returned by the validator and feed into accumulator
-	app.txct++
-
-	app.logger.Debug("Deliver succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", txHash)
-	return ret
+	app.txct += int64(len(envelopes))
+	return abci.ResponseDeliverTx{Code: protocol.CodeOK}
 }
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.

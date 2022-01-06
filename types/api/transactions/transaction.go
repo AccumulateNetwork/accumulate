@@ -3,7 +3,9 @@ package transactions
 import (
 	"crypto/sha256"
 	"encoding"
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -90,4 +92,27 @@ func NewWith(header *Header, signer func(hash []byte) (*ED25519Sig, error), tx e
 		return nil, err
 	}
 	return env, nil
+}
+
+func UnmarshalAll(data []byte) ([]*Envelope, error) {
+	var envelopes []*Envelope
+	var errs []string
+	for len(data) > 0 {
+		// Unmarshal the envelope
+		env := new(Envelope)
+		err := env.UnmarshalBinary(data)
+		if err != nil {
+			errs = append(errs, err.Error())
+			continue
+		}
+
+		envelopes = append(envelopes, env)
+		data = data[env.BinarySize():]
+	}
+
+	if len(errs) > 0 {
+		return nil, errors.New(strings.Join(errs, "; "))
+	}
+
+	return envelopes, nil
 }

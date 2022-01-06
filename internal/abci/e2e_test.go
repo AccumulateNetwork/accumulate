@@ -31,38 +31,6 @@ func TestEndToEndSuite(t *testing.T) {
 	}))
 }
 
-func BenchmarkFaucetAndLiteTx(b *testing.B) {
-	n := createAppWithMemDB(b, crypto.Address{}, true)
-
-	recipient := generateKey()
-
-	n.Batch(func(send func(*Tx)) {
-		tx, err := acctesting.CreateFakeSyntheticDepositTx(recipient)
-		require.NoError(b, err)
-		send(tx)
-	})
-
-	origin := acctesting.NewWalletEntry()
-	origin.Nonce = 1
-	origin.PrivateKey = recipient.Bytes()
-	origin.Addr = acctesting.AcmeLiteAddressTmPriv(recipient).String()
-
-	rwallet := acctesting.NewWalletEntry()
-
-	b.ResetTimer()
-	n.Batch(func(send func(*Tx)) {
-		for i := 0; i < b.N; i++ {
-			exch := new(protocol.SendTokens)
-			exch.AddRecipient(n.ParseUrl(rwallet.Addr), 1000)
-			tx, err := transactions.New(origin.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
-				return origin.Sign(hash), nil
-			}, exch)
-			require.NoError(b, err)
-			send(tx)
-		}
-	})
-}
-
 func TestCreateLiteAccount(t *testing.T) {
 	var count = 11
 	n := createAppWithMemDB(t, crypto.Address{}, true)
