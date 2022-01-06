@@ -192,8 +192,7 @@ func (c *FakeTendermint) SubmitTx(ctx context.Context, tx types.Tx) *txStatus {
 }
 
 func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
-	gtx := new(transactions.Envelope)
-	err := gtx.UnmarshalBinary(tx)
+	envelopes, err := transactions.UnmarshalAll(tx)
 	if err != nil {
 		c.onError(err)
 		if debugTX {
@@ -202,18 +201,21 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 		return nil
 	}
 
-	if debugTX {
-		txt := gtx.Transaction.Type()
-		fmt.Printf("Submitting %v %X\n", txt, txh)
+	txids := make([][32]byte, len(envelopes))
+	for i, env := range envelopes {
+		if debugTX {
+			txt := env.Transaction.Type()
+			fmt.Printf("Submitting %v %X\n", txt, txh)
+		}
+		copy(txids[i][:], env.Transaction.Hash())
 	}
-
-	var txid [32]byte
-	copy(txid[:], gtx.Transaction.Hash())
 
 	c.txMu.Lock()
 	defer c.txMu.Unlock()
 
-	delete(c.txPend, txid)
+	for _, txid := range txids {
+		delete(c.txPend, txid)
+	}
 
 	st, ok := c.txStatus[txh]
 	if ok {
@@ -223,7 +225,9 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 
 	st = new(txStatus)
 	c.txStatus[txh] = st
-	c.txStatus[txid] = st
+	for _, txid := range txids {
+		c.txStatus[txid] = st
+	}
 	st.Tx = tx
 	st.Hash = txh
 	c.txActive++

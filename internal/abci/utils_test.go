@@ -224,14 +224,18 @@ func (n *fakeNode) Batch(inBlock func(func(*transactions.Envelope))) {
 	n.t.Helper()
 
 	var ids [][32]byte
+	var blob []byte
 	inBlock(func(tx *transactions.Envelope) {
 		var id [32]byte
 		copy(id[:], tx.Transaction.Hash())
 		ids = append(ids, id)
 		b, err := tx.MarshalBinary()
 		require.NoError(n.t, err)
-		n.client.SubmitTx(context.Background(), b)
+		blob = append(blob, b...)
 	})
+
+	// Submit all the transactions as a batch
+	n.client.SubmitTx(context.Background(), blob)
 
 	// n.client.WaitForAll()
 	for _, id := range ids {
