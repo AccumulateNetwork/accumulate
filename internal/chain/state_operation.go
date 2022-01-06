@@ -96,10 +96,6 @@ func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 		// Handle unexpected errors
 		return fmt.Errorf("failed to check for an existing record: %v", err)
 
-	case op.record.Header().Type.IsTransaction():
-		// Non-synthetic transactions are allowed to create transaction
-		// records
-
 	case st.txType.IsSynthetic() || st.txType.IsInternal():
 		// Synthetic and internal transactions are allowed to create records
 
