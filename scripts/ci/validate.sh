@@ -102,11 +102,6 @@ wait-for cli-tx credits keytest/tokens keytest-0-0 0 keytest/page0 125
 BALANCE=$(accumulate -j page get keytest/page0 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 125 ] && success || die "keytest/page0 should have 125 credits but has ${BALANCE}"
 
-section "Bug AC-517"
-WANT='"0000000000000000000000000000000000000000000000000000000000000000"'
-GOT=$(accumulate -j book get keytest/book | jq .data.keyBook)
-[ "${WANT}" = "${GOT}" ] && success || die "Failed"
-
 section "Bug AC-551"
 api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value &> /dev/null
 success
@@ -123,15 +118,15 @@ api-v2 '{ "jsonrpc": "2.0", "id": 0, "method": "query-tx-history", "params": { "
 success
 
 section "Include Merkle state (API, AC-604)"
-accumulate -j adi get keytest | jq -e .merkleState.roots &> /dev/null
-accumulate -j adi get keytest | jq -e .merkleState.count &> /dev/null
-api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query", "params": {"url": "keytest"}}' | jq -e .result.merkleState.roots &> /dev/null
-api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query", "params": {"url": "keytest"}}' | jq -e .result.merkleState.count &> /dev/null
+accumulate -j adi get keytest | jq -e .mainChain.roots &> /dev/null || die "Failed: response does not include main chain roots"
+accumulate -j adi get keytest | jq -e .mainChain.height &> /dev/null || die "Failed: response does not include main chain height"
+api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query", "params": {"url": "keytest"}}' | jq -e .result.mainChain.roots &> /dev/null
+api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query", "params": {"url": "keytest"}}' | jq -e .result.mainChain.height &> /dev/null
 success
 
 section "Query with txid and chainId (API v2, AC-602)"
 # TODO Verify query-chain
-TXID=$(accumulate -j tx history keytest 0 1 | jq -re '.data[0].txid')
+TXID=$(accumulate -j tx history keytest 0 1 | jq -re '.items[0].txid')
 GOT=$(api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query-tx", "params": {"txid": "'${TXID}'"}}' | jq -re .result.txid)
 [ "${TXID}" = "${GOT}" ] || die "Failed to find TX ${TXID}"
 success
