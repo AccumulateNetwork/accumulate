@@ -28,6 +28,11 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeKeyPage, st.Origin.Header().Type)
 	}
 
+	// We're changing the height of the key page, so reset all the nonces
+	for _, key := range page.Keys {
+		key.Nonce = 0
+	}
+
 	// Find the old key
 	var oldKey *protocol.KeySpec
 	index := -1
@@ -115,7 +120,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		}
 
 		// SetThreshold sets the signature threshold for the Key Page
-	case protocol.SetM:
+	case protocol.SetThreshold:
 		if err := page.SetThreshold(body.Threshold); err != nil {
 			return err
 		}
@@ -123,10 +128,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	default:
 		return fmt.Errorf("invalid operation: %v", body.Operation)
 	}
-	// We're changing the height of the key page, so reset all the nonces
-	for _, key := range page.Keys {
-		key.Nonce = 0
-	}
+
 	st.Update(page)
 	return nil
 }

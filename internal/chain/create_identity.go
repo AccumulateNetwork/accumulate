@@ -57,7 +57,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) erro
 	page.ChainUrl = types.String(pageUrl.String()) // TODO Allow override
 	page.Keys = append(page.Keys, keySpec)
 	page.KeyBook = types.String(bookUrl.String())
-	page.M = 1 // Require one signature from the Key Page
+	page.Threshold = 1 // Require one signature from the Key Page
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override

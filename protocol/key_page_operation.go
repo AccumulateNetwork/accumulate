@@ -9,10 +9,11 @@ import (
 type KeyPageOperation uint8
 
 const (
-	UpdateKey KeyPageOperation = iota + 1
-	RemoveKey
-	AddKey
-	SetM
+	UpdateKey    KeyPageOperation = iota + 1 // Replace a key with a new key
+	RemoveKey                                // Remove a KeySpec from the Key Page
+	_                                        // !!! Note: the following ops do NOT find an index in the Key Page !!!
+	AddKey                                   // Add a keySpec to the Key Page
+	SetThreshold                             // Set the Threshold ( the m of "m of n" signatures required)
 )
 
 func KeyPageOperationByName(s string) KeyPageOperation {

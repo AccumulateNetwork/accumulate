@@ -3,7 +3,7 @@ package protocol
 import (
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/smt/managed"
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,6 +40,15 @@ func TestAccUrlValidator(t *testing.T) {
 
 func TestKeyPage_MofN(t *testing.T) {
 	kp := new(KeyPage)
-	var rh managed.RandHash
-	kp.Keys = append(kp.Keys, nil)
+	var rh common.RandHash
+	for i := 1; i < 11; i++ {
+		key := new(KeySpec)
+		key.PublicKey = rh.Next()
+		key.Nonce = 0
+		kp.Keys = append(kp.Keys, key)
+		for j := 1; j < 12; j++ {
+			err := kp.SetThreshold(uint64(j))
+			require.Truef(t, err == nil || j > i, "error: %v i: %d j %d", err, i, j)
+		}
+	}
 }
