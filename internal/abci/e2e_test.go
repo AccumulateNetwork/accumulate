@@ -124,28 +124,37 @@ func TestAnchorChain(t *testing.T) {
 	defer batch.Discard()
 	ledger := batch.Record(n.network.NodeUrl().JoinPath(protocol.Ledger))
 
-	// Extract and verify the anchor chain ledgerState
+	// Check each anchor
 	ledgerState := protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
-	require.ElementsMatch(t, [][32]byte{
-		types.Bytes((&url.URL{Authority: "RoadRunner"}).ResourceChain()).AsBytes32(),
-		types.Bytes((&url.URL{Authority: "RoadRunner/book"}).ResourceChain()).AsBytes32(),
-		types.Bytes((&url.URL{Authority: "RoadRunner/page"}).ResourceChain()).AsBytes32(),
-	}, ledgerState.Records.Chains)
-
-	// Check each anchor
 	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	require.NoError(t, err)
-	first := rootChain.Height() - int64(len(ledgerState.Records.Chains))
-	for i, chain := range ledgerState.Records.Chains {
-		mgr, err := batch.RecordByID(chain[:]).ReadChain(protocol.MainChain)
-		require.NoError(t, err)
+	first := rootChain.Height() - int64(len(ledgerState.Anchors))
+	var accounts []string
+	for i, meta := range ledgerState.Anchors {
+		accounts = append(accounts, fmt.Sprintf("%s#chain/%s", meta.Account, meta.Name))
 
 		root, err := rootChain.Entry(first + int64(i))
 		require.NoError(t, err)
 
-		assert.Equal(t, mgr.Anchor(), root, "wrong anchor for %X", chain)
+		if meta.Name == "bpt" {
+			assert.Equal(t, root, batch.RootHash(), "wrong anchor for BPT")
+			continue
+		}
+
+		mgr, err := batch.Record(meta.Account).ReadChain(meta.Name)
+		require.NoError(t, err)
+
+		assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
 	}
+
+	// Verify that the ADI accounts are included
+	assert.Subset(t, accounts, []string{
+		"acc://RoadRunner#chain/main",
+		"acc://RoadRunner#chain/pending",
+		"acc://RoadRunner/book#chain/main",
+		"acc://RoadRunner/page#chain/main",
+	})
 }
 
 func TestCreateADI(t *testing.T) {
