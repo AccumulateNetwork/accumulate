@@ -71,6 +71,7 @@ var flagInitDevnet struct {
 	BasePort      int
 	BaseIP        string
 	Docker        bool
+	DockerTag     string
 	UseVolumes    bool
 	Compose       bool
 }
@@ -97,6 +98,7 @@ func init() {
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
+	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DockerTag, "tag", "latest", "Tag to use on the docker images")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 }
@@ -357,10 +359,10 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	}
 
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v1", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/cli:latest"
+	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/cli:" + flagInitDevnet.DockerTag
 	svc.Environment = map[string]*string{"ACC_API": &api}
 
 	svc.Command = dc.ShellCommand{"accumulated", "init", "devnet", "-w", "/nodes", "--docker"}
@@ -434,7 +436,7 @@ func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeTyp
 	var svc dc.ServiceConfig
 	svc.Name = name
 	svc.ContainerName = "devnet-" + name
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:latest"
+	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:" + flagInitDevnet.DockerTag
 	svc.DependsOn = []string{"tools"}
 
 	if flagInitDevnet.UseVolumes {
