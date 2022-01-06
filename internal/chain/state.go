@@ -20,6 +20,9 @@ type StateManager struct {
 	Origin        state.Chain
 	OriginUrl     *url.URL
 	OriginChainId [32]byte
+
+	Signator    creditChain
+	SignatorUrl *url.URL
 }
 
 type storeDataEntry struct {
@@ -32,7 +35,7 @@ type storeDataEntry struct {
 // manager along with a not-found error.
 func NewStateManager(batch *database.Batch, nodeUrl *url.URL, tx *transactions.Envelope) (*StateManager, error) {
 	m := new(StateManager)
-	txid := types.Bytes(tx.Transaction.Hash()).AsBytes32()
+	txid := types.Bytes(tx.GetTxHash()).AsBytes32()
 	m.stateCache = *newStateCache(nodeUrl, tx.Transaction.Type(), txid, batch)
 	m.OriginUrl = tx.Transaction.Origin
 
