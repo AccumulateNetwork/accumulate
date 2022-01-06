@@ -79,6 +79,7 @@ type TxExecutor interface {
 
 type creditChain interface {
 	state.Chain
+	SetNonce(key []byte, nonce uint64) error
 	CreditCredits(amount uint64)
 	DebitCredits(amount uint64) bool
 }
