@@ -29,7 +29,6 @@ func main() {
 
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
-	cmd.Flags().BoolVar(&flags.IsState, "is-state", false, "Is this the state package?")
 
 	_ = cmd.Execute()
 }
@@ -51,19 +50,19 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-func readTypes(file string) typegen.Types {
+func readTypes(file string) typegen.DataTypes {
 	f, err := os.Open(file)
 	check(err)
 	defer f.Close()
 
-	var types map[string]*typegen.Type
+	var types map[string]*typegen.DataType
 
 	dec := yaml.NewDecoder(f)
 	dec.KnownFields(true)
 	err = dec.Decode(&types)
 	check(err)
 
-	return typegen.TypesFrom(types)
+	return typegen.DataTypesFrom(types)
 }
 
 func getPackagePath() string {
