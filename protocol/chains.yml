@@ -5,9 +5,9 @@ ChainType:
   Transaction:
     value: 0x01
     description: holds transaction hashes
-  Anchor:
+  Root:
     value: 0x02
-    description: holds chain anchors
+    description: is a root chain of a subnet that holds chain anchors
   Data:
     value: 0x03
     description: holds data entry hashes
