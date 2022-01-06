@@ -115,10 +115,7 @@ func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 		return err
 	}
 
-	// Do not create anchor entries for the ledger
-	if header.Type != types.ChainTypeInternalLedger {
-		meta.Updated = append(meta.Updated, op.url)
-	}
+	meta.Updated = append(meta.Updated, op.url)
 	return nil
 }
 

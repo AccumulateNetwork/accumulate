@@ -1,7 +1,6 @@
 package database
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 
@@ -137,38 +136,20 @@ func (r *Record) PutState(recordState state.Chain) error {
 		}
 	}
 
-	// Load the record's object metadata
-	obj, err := r.ensureObject()
-	if err != nil {
-		return fmt.Errorf("failed to load object metadata: %v", err)
-	}
-
 	// Marshal the state
 	stateData, err := recordState.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal state: %v", err)
 	}
 
-	// Hash the state
-	stateHash := sha256.Sum256(stateData)
-	data := stateHash[:]
-
-	// For each declared chain, take the anchor and append it to the hash
-	for _, meta := range obj.Chains {
-		chain, err := r.chain(meta.Name, false)
-		if err != nil {
-			return fmt.Errorf("failed to load %s chain: %v", meta.Name, err)
-		}
-
-		data = append(data, chain.Anchor()...)
-	}
-
 	// Store the state
 	r.batch.store.Put(r.key.State(), stateData)
-
-	// Hash the hashes and add them to the BPT
-	r.batch.putBpt(r.key.Object(), sha256.Sum256(data))
 	return nil
+}
+
+// PutBpt writes the record's BPT entry.
+func (r *Record) PutBpt(hash [32]byte) {
+	r.batch.bpt.Bpt.Insert(r.key.Object(), hash)
 }
 
 func (r *Record) chain(name string, writable bool) (*Chain, error) {
