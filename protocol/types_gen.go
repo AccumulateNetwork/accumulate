@@ -151,6 +151,7 @@ type KeyPage struct {
 type KeySpec struct {
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+	Owner     string `json:"owner,omitempty" form:"owner" query:"owner" validate:"required"`
 }
 
 type KeySpecParams struct {
@@ -320,6 +321,7 @@ type UpdateKeyPage struct {
 	Key       []byte           `json:"key,omitempty" form:"key" query:"key"`
 	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey"`
 	Threshold uint64           `json:"threshold,omitempty" form:"threshold" query:"threshold"`
+	Owner     string           `json:"owner,omitempty" form:"owner" query:"owner"`
 }
 
 type WriteData struct {
@@ -837,10 +839,6 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 		return false
 	}
 
-	if !(v.Threshold == u.Threshold) {
-		return false
-	}
-
 	if !(len(v.Keys) == len(u.Keys)) {
 		return false
 	}
@@ -1355,10 +1353,6 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		return false
 	}
 
-	if !(v.Threshold == u.Threshold) {
-		return false
-	}
-
 	return true
 }
 
@@ -1724,8 +1718,6 @@ func (v *KeyPage) BinarySize() int {
 	n += v.ChainHeader.GetHeaderSize()
 
 	n += encoding.BigintBinarySize(&v.CreditBalance)
-
-	n += encoding.UvarintBinarySize(v.Threshold)
 
 	n += encoding.UvarintBinarySize(uint64(len(v.Keys)))
 
@@ -2131,8 +2123,6 @@ func (v *UpdateKeyPage) BinarySize() int {
 	n += encoding.BytesBinarySize(v.Key)
 
 	n += encoding.BytesBinarySize(v.NewKey)
-
-	n += encoding.UvarintBinarySize(v.Threshold)
 
 	return n
 }
@@ -2545,8 +2535,6 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 		buffer.Write(b)
 	}
 	buffer.Write(encoding.BigintMarshalBinary(&v.CreditBalance))
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.Threshold))
 
 	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Keys))))
 	for i, v := range v.Keys {
@@ -3011,8 +2999,6 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.Key))
 
 	buffer.Write(encoding.BytesMarshalBinary(v.NewKey))
-
-	buffer.Write(encoding.UvarintMarshalBinary(v.Threshold))
 
 	return buffer.Bytes(), nil
 }
@@ -3736,13 +3722,6 @@ func (v *KeyPage) UnmarshalBinary(data []byte) error {
 		v.CreditBalance.Set(x)
 	}
 	data = data[encoding.BigintBinarySize(&v.CreditBalance):]
-
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Threshold: %w", err)
-	} else {
-		v.Threshold = x
-	}
-	data = data[encoding.UvarintBinarySize(v.Threshold):]
 
 	var lenKeys uint64
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
@@ -4586,13 +4565,6 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.BytesBinarySize(v.NewKey):]
 
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Threshold: %w", err)
-	} else {
-		v.Threshold = x
-	}
-	data = data[encoding.UvarintBinarySize(v.Threshold):]
-
 	return nil
 }
 
@@ -4921,12 +4893,10 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 		Operation KeyPageOperation `json:"operation,omitempty"`
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
-		Threshold uint64           `json:"threshold,omitempty"`
 	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
-	u.Threshold = v.Threshold
 	return json.Marshal(&u)
 }
 
@@ -5507,12 +5477,10 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		Operation KeyPageOperation `json:"operation,omitempty"`
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
-		Threshold uint64           `json:"threshold,omitempty"`
 	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
-	u.Threshold = v.Threshold
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5527,6 +5495,5 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	} else {
 		v.NewKey = x
 	}
-	v.Threshold = u.Threshold
 	return nil
 }

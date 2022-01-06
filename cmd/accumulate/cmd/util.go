@@ -21,7 +21,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 )
 
@@ -190,16 +189,11 @@ func IsLiteAccount(url string) bool {
 
 // Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.
 func Remarshal(src interface{}, dst interface{}) error {
-	cfg := &mapstructure.DecoderConfig{
-		Result:  &dst,
-		TagName: "json",
-		Squash:  true,
-	}
-	decoder, err := mapstructure.NewDecoder(cfg)
+	data, err := json.Marshal(src)
 	if err != nil {
 		return err
 	}
-	return decoder.Decode(src)
+	return json.Unmarshal(data, dst)
 }
 
 // This is a hack to reduce how much we have to change
