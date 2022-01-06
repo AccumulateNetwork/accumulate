@@ -184,7 +184,7 @@ deploy 4/4:
   needs: [deploy 1/4, deploy 2/4, deploy 3/4, deploy 4/4]
   tags: [docker, linux]
   variables:
-    ACC_API: https://devnet.accumulatenetwork.io/v1
+    ACC_API: https://devnet.accumulatenetwork.io/v2
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
 
@@ -199,7 +199,7 @@ validate docker:
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
   script:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  - docker run --rm -v ${PWD}/nodes:/nodes ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} accumulated init devnet -w /nodes --docker --compose -b 3 -v 3
+  - docker run --rm -v ${PWD}/nodes:/nodes ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} init devnet -w /nodes --docker --tag ${CI_COMMIT_REF_SLUG} --compose -b 3 -v 3
   - cd nodes
   - apk add --no-cache docker-compose
   - docker-compose up -d
@@ -212,12 +212,12 @@ validate:
   - apt-get -y update && apt-get -y install jq
   - ./scripts/ci/validate.sh
 
-validate matrix 1/6:
+.validate matrix 1/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_1.1.sh
 
-validate matrix 2/6:
+.validate matrix 2/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_2.1.sh
@@ -228,7 +228,7 @@ validate matrix 2/6:
    - ./scripts/matrix/test_case_2.6.sh
    - ./scripts/matrix/test_case_2.7.sh
 
-validate matrix 3/6:
+.validate matrix 3/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_3.1.sh
@@ -236,7 +236,7 @@ validate matrix 3/6:
    - ./scripts/matrix/test_case_3.3.sh
    - ./scripts/matrix/test_case_3.4.sh
 
-validate matrix 4/6:
+.validate matrix 4/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_4.1.sh
@@ -248,13 +248,13 @@ validate matrix 4/6:
    - ./scripts/matrix/test_case_4.7.sh
    - ./scripts/matrix/test_case_4.8.sh
 
-validate matrix 5/6:
+.validate matrix 5/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_5.1.sh
    - ./scripts/matrix/test_case_5.2.sh
 
-validate matrix 6/6:
+.validate matrix 6/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_6.1.sh
