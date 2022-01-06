@@ -13,6 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -234,8 +235,32 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	return st
 }
 
-func (c *FakeTendermint) addSynthTxns(blockIndex int64) {
+func (c *FakeTendermint) getSynthHeight() int64 {
 	batch := c.db.Begin()
+	defer batch.Discard()
+
+	// Load the ledger state
+	ledger := batch.Record(c.network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerState := protocol.NewInternalLedger()
+	err := ledger.GetStateAs(ledgerState)
+	if err != nil {
+		if errors.Is(err, storage.ErrNotFound) {
+			return 0
+		}
+		panic(err)
+	}
+
+	synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
+	if err != nil {
+		panic(err)
+	}
+
+	return synthChain.Height()
+}
+
+func (c *FakeTendermint) addSynthTxns(blockIndex, lastHeight int64) (int64, bool) {
+	batch := c.db.Begin()
+	defer batch.Discard()
 
 	// Load the ledger state
 	ledger := batch.Record(c.network.NodeUrl().JoinPath(protocol.Ledger))
@@ -243,29 +268,24 @@ func (c *FakeTendermint) addSynthTxns(blockIndex int64) {
 	err := ledger.GetStateAs(ledgerState)
 	if err != nil {
 		c.onError(err)
-		return
+		return 0, false
 	}
 
 	if ledgerState.Index != blockIndex {
-		return
-	}
-
-	if debugTX {
-		fmt.Printf("The last block created %d synthetic transactions\n", ledgerState.Synthetic.Produced)
+		return 0, false
 	}
 
 	synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
 	if err != nil {
 		c.onError(err)
-		return
+		return 0, false
 	}
 
-	// Pull the transaction IDs from the anchor chain
 	height := synthChain.Height()
-	txns, err := synthChain.Entries(height-int64(ledgerState.Synthetic.Produced), height)
+	txns, err := synthChain.Entries(height-lastHeight, height)
 	if err != nil {
 		c.onError(err)
-		return
+		return 0, false
 	}
 
 	c.txMu.Lock()
@@ -275,6 +295,8 @@ func (c *FakeTendermint) addSynthTxns(blockIndex int64) {
 		copy(h32[:], h)
 		c.txPend[h32] = true
 	}
+
+	return height, true
 }
 
 // execute accepts incoming transactions and queues them up for the next block
@@ -300,6 +322,8 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		c.txPend = map[[32]byte]bool{}
 		c.txCond.Broadcast()
 	}()
+
+	synthHeight := c.getSynthHeight()
 
 	for {
 		// Collect transactions, submit at 1Hz
@@ -389,7 +413,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		}
 
 		// Ensure Wait waits for synthetic transactions
-		c.addSynthTxns(height)
+		if h, ok := c.addSynthTxns(height, synthHeight); ok {
+			synthHeight = h
+		}
 
 		c.txActive -= len(queue)
 		c.txMu.RLock()
