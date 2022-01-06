@@ -3,6 +3,7 @@ package chain
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -267,6 +268,7 @@ func (m *Executor) Commit() ([]byte, error) {
 	// Discard changes if commit fails
 	defer m.blockBatch.Discard()
 
+	// Deduplicate the update list
 	updatedMap := make(map[string]bool, len(m.blockMeta.Deliver.Updated))
 	updatedSlice := make([]*url.URL, 0, len(m.blockMeta.Deliver.Updated))
 	for _, u := range m.blockMeta.Deliver.Updated {
@@ -313,7 +315,8 @@ func (m *Executor) Commit() ([]byte, error) {
 }
 
 func (m *Executor) doCommit() error {
-	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
+	ledgerUrl := m.Network.NodeUrl().JoinPath(protocol.Ledger)
+	ledger := m.blockBatch.Record(ledgerUrl)
 
 	// Load the state of minor root
 	ledgerState := protocol.NewInternalLedger()
@@ -332,34 +335,117 @@ func (m *Executor) doCommit() error {
 		return err
 	}
 
+	// Update the state
+	ledgerState.Anchors = nil
+	ledgerState.Index = m.blockIndex
+	ledgerState.Timestamp = m.blockTime
+
 	// Load the main chain of the minor root
-	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
+	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeRoot)
 	if err != nil {
 		return err
 	}
 
 	// Add an anchor to the root chain for every updated record
-	chains := make([][32]byte, 0, len(m.blockMeta.Deliver.Updated))
 	for _, u := range m.blockMeta.Deliver.Updated {
-		chains = append(chains, u.ResourceChain32())
-		recordChain, err := m.blockBatch.Record(u).ReadChain(protocol.MainChain)
+		// Do not create root chain or BPT entries for the ledger
+		if ledgerUrl.Equal(u) {
+			continue
+		}
+
+		// Load the state
+		record := m.blockBatch.Record(u)
+		state, err := record.GetState()
 		if err != nil {
 			return err
 		}
 
-		err = rootChain.AddEntry(recordChain.Anchor())
+		// Marshal it
+		data, err := state.MarshalBinary()
 		if err != nil {
 			return err
 		}
+
+		// Hash it
+		var hashes []byte
+		h := sha256.Sum256(data)
+		hashes = append(hashes, h[:]...)
+
+		// Load the object metadata
+		objMeta, err := record.GetObject()
+		if err != nil {
+			return err
+		}
+
+		// For each chain
+		for _, chainMeta := range objMeta.Chains {
+			// Load the chain
+			recordChain, err := record.ReadChain(chainMeta.Name)
+			if err != nil {
+				return err
+			}
+
+			// Get the anchor
+			anchor := recordChain.Anchor()
+			h := sha256.Sum256(anchor)
+			hashes = append(hashes, h[:]...)
+
+			// Add it to the root chain
+			err = rootChain.AddEntry(anchor)
+			if err != nil {
+				return err
+			}
+
+			// Add its metadata to the ledger
+			ledgerState.Anchors = append(ledgerState.Anchors, protocol.AnchorMetadata{
+				ChainMetadata: chainMeta,
+				Account:       u,
+				Height:        uint64(recordChain.Height()),
+			})
+		}
+
+		// Write the hash of the hashes to the BPT
+		record.PutBpt(sha256.Sum256(hashes))
 
 		m.logDebug("Updated a chain", "url", u.String(), "id", logging.AsHex(u.ResourceChain()))
 	}
 
-	// Update the root state
-	ledgerState.Index = m.blockIndex
-	ledgerState.Timestamp = m.blockTime
-	ledgerState.Records.Chains = chains
-	ledgerState.Synthetic.System = nil
-	ledgerState.Synthetic.Produced = uint64(len(m.blockMeta.Deliver.Submitted))
+	// Add the synthetic transaction chain to the root chain
+	if len(m.blockMeta.Deliver.Submitted) > 0 {
+		synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
+		if err != nil {
+			return err
+		}
+
+		ledgerState.Anchors = append(ledgerState.Anchors, protocol.AnchorMetadata{
+			ChainMetadata: protocol.ChainMetadata{
+				Name: protocol.SyntheticChain,
+				Type: protocol.ChainTypeTransaction,
+			},
+			Account: ledgerUrl,
+			Height:  uint64(synthChain.Height()),
+		})
+		err = rootChain.AddEntry(synthChain.Anchor())
+		if err != nil {
+			return err
+		}
+	}
+
+	// Add the BPT to the root chain
+	m.blockBatch.UpdateBpt()
+	ledgerState.Anchors = append(ledgerState.Anchors, protocol.AnchorMetadata{
+		ChainMetadata: protocol.ChainMetadata{
+			Name: "bpt",
+			Type: protocol.ChainTypeRoot,
+		},
+		Account: m.Network.NodeUrl(),
+		Height:  uint64(m.blockIndex),
+	})
+	err = rootChain.AddEntry(m.blockBatch.RootHash())
+	if err != nil {
+		return err
+	}
+
+	// Write the updated ledger
 	return ledger.PutState(ledgerState)
 }

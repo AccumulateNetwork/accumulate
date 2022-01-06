@@ -39,6 +39,12 @@ type Anchor struct {
 	Synthetic   [32]byte   `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
 }
 
+type AnchorMetadata struct {
+	ChainMetadata
+	Account *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Height  uint64   `json:"height,omitempty" form:"height" query:"height" validate:"required"`
+}
+
 type AnchoredRecord struct {
 	Record []byte   `json:"record,omitempty" form:"record" query:"record" validate:"required"`
 	Anchor [32]byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
@@ -118,10 +124,10 @@ type InternalGenesis struct {
 
 type InternalLedger struct {
 	state.ChainHeader
-	Index     int64           `json:"index,omitempty" form:"index" query:"index" validate:"required"`
-	Timestamp time.Time       `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
-	Synthetic SyntheticLedger `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
-	Records   RecordLedger    `json:"records,omitempty" form:"records" query:"records" validate:"required"`
+	Index     int64            `json:"index,omitempty" form:"index" query:"index" validate:"required"`
+	Timestamp time.Time        `json:"timestamp,omitempty" form:"timestamp" query:"timestamp" validate:"required"`
+	Synthetic SyntheticLedger  `json:"synthetic,omitempty" form:"synthetic" query:"synthetic" validate:"required"`
+	Anchors   []AnchorMetadata `json:"anchors,omitempty" form:"anchors" query:"anchors" validate:"required"`
 }
 
 type InternalSendTransactions struct {
@@ -187,10 +193,6 @@ type MetricsResponse struct {
 type ObjectMetadata struct {
 	Type   ObjectType      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 	Chains []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
-}
-
-type RecordLedger struct {
-	Chains [][32]byte `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 }
 
 type RequestDataEntry struct {
@@ -266,10 +268,8 @@ type SyntheticDepositTokens struct {
 
 type SyntheticLedger struct {
 	Nonce    uint64     `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
-	Produced uint64     `json:"produced,omitempty" form:"produced" query:"produced" validate:"required"`
 	Unsigned [][32]byte `json:"unsigned,omitempty" form:"unsigned" query:"unsigned" validate:"required"`
 	Unsent   [][32]byte `json:"unsent,omitempty" form:"unsent" query:"unsent" validate:"required"`
-	System   [][32]byte `json:"system,omitempty" form:"system" query:"system" validate:"required"`
 }
 
 type SyntheticMirror struct {
@@ -535,6 +535,18 @@ func (v *Anchor) Equal(u *Anchor) bool {
 	return true
 }
 
+func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
+	if !(v.Account.Equal(u.Account)) {
+		return false
+	}
+
+	if !(v.Height == u.Height) {
+		return false
+	}
+
+	return true
+}
+
 func (v *AnchoredRecord) Equal(u *AnchoredRecord) bool {
 	if !(bytes.Equal(v.Record, u.Record)) {
 		return false
@@ -781,8 +793,16 @@ func (v *InternalLedger) Equal(u *InternalLedger) bool {
 		return false
 	}
 
-	if !(v.Records.Equal(&u.Records)) {
+	if !(len(v.Anchors) == len(u.Anchors)) {
 		return false
+	}
+
+	for i := range v.Anchors {
+		v, u := v.Anchors[i], u.Anchors[i]
+		if !(v.Equal(&u)) {
+			return false
+		}
+
 	}
 
 	return true
@@ -961,20 +981,6 @@ func (v *ObjectMetadata) Equal(u *ObjectMetadata) bool {
 			return false
 		}
 
-	}
-
-	return true
-}
-
-func (v *RecordLedger) Equal(u *RecordLedger) bool {
-	if !(len(v.Chains) == len(u.Chains)) {
-		return false
-	}
-
-	for i := range v.Chains {
-		if v.Chains[i] != u.Chains[i] {
-			return false
-		}
 	}
 
 	return true
@@ -1191,10 +1197,6 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 		return false
 	}
 
-	if !(v.Produced == u.Produced) {
-		return false
-	}
-
 	if !(len(v.Unsigned) == len(u.Unsigned)) {
 		return false
 	}
@@ -1211,16 +1213,6 @@ func (v *SyntheticLedger) Equal(u *SyntheticLedger) bool {
 
 	for i := range v.Unsent {
 		if v.Unsent[i] != u.Unsent[i] {
-			return false
-		}
-	}
-
-	if !(len(v.System) == len(u.System)) {
-		return false
-	}
-
-	for i := range v.System {
-		if v.System[i] != u.System[i] {
 			return false
 		}
 	}
@@ -1480,6 +1472,18 @@ func (v *Anchor) BinarySize() int {
 	return n
 }
 
+func (v *AnchorMetadata) BinarySize() int {
+	var n int
+
+	n += v.ChainMetadata.BinarySize()
+
+	n += v.Account.BinarySize()
+
+	n += encoding.UvarintBinarySize(v.Height)
+
+	return n
+}
+
 func (v *AnchoredRecord) BinarySize() int {
 	var n int
 
@@ -1692,7 +1696,12 @@ func (v *InternalLedger) BinarySize() int {
 
 	n += v.Synthetic.BinarySize()
 
-	n += v.Records.BinarySize()
+	n += encoding.UvarintBinarySize(uint64(len(v.Anchors)))
+
+	for _, v := range v.Anchors {
+		n += v.BinarySize()
+
+	}
 
 	return n
 }
@@ -1860,14 +1869,6 @@ func (v *ObjectMetadata) BinarySize() int {
 		n += v.BinarySize()
 
 	}
-
-	return n
-}
-
-func (v *RecordLedger) BinarySize() int {
-	var n int
-
-	n += encoding.ChainSetBinarySize(v.Chains)
 
 	return n
 }
@@ -2048,13 +2049,9 @@ func (v *SyntheticLedger) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(v.Nonce)
 
-	n += encoding.UvarintBinarySize(v.Produced)
-
 	n += encoding.ChainSetBinarySize(v.Unsigned)
 
 	n += encoding.ChainSetBinarySize(v.Unsent)
-
-	n += encoding.ChainSetBinarySize(v.System)
 
 	return n
 }
@@ -2285,6 +2282,26 @@ func (v *Anchor) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.ChainMarshalBinary(&v.ChainAnchor))
 
 	buffer.Write(encoding.ChainMarshalBinary(&v.Synthetic))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	if b, err := v.ChainMetadata.MarshalBinary(); err != nil {
+		return nil, err
+	} else {
+		buffer.Write(b)
+	}
+
+	if b, err := v.Account.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Account: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Height))
 
 	return buffer.Bytes(), nil
 }
@@ -2524,10 +2541,15 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 		buffer.Write(b)
 	}
 
-	if b, err := v.Records.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding Records: %w", err)
-	} else {
-		buffer.Write(b)
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Anchors))))
+	for i, v := range v.Anchors {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding Anchors[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
+
 	}
 
 	return buffer.Bytes(), nil
@@ -2732,14 +2754,6 @@ func (v *ObjectMetadata) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
-func (v *RecordLedger) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
-
-	buffer.Write(encoding.ChainSetMarshalBinary(v.Chains))
-
-	return buffer.Bytes(), nil
-}
-
 func (v *RequestDataEntry) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -2940,13 +2954,9 @@ func (v *SyntheticLedger) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Nonce))
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.Produced))
-
 	buffer.Write(encoding.ChainSetMarshalBinary(v.Unsigned))
 
 	buffer.Write(encoding.ChainSetMarshalBinary(v.Unsent))
-
-	buffer.Write(encoding.ChainSetMarshalBinary(v.System))
 
 	return buffer.Bytes(), nil
 }
@@ -3258,6 +3268,28 @@ func (v *Anchor) UnmarshalBinary(data []byte) error {
 		v.Synthetic = x
 	}
 	data = data[encoding.ChainBinarySize(&v.Synthetic):]
+
+	return nil
+}
+
+func (v *AnchorMetadata) UnmarshalBinary(data []byte) error {
+	if err := v.ChainMetadata.UnmarshalBinary(data); err != nil {
+		return err
+	}
+	data = data[v.ChainMetadata.BinarySize():]
+
+	v.Account = new(url.URL)
+	if err := v.Account.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Account: %w", err)
+	}
+	data = data[v.Account.BinarySize():]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Height: %w", err)
+	} else {
+		v.Height = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Height):]
 
 	return nil
 }
@@ -3699,10 +3731,22 @@ func (v *InternalLedger) UnmarshalBinary(data []byte) error {
 	}
 	data = data[v.Synthetic.BinarySize():]
 
-	if err := v.Records.UnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Records: %w", err)
+	var lenAnchors uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Anchors: %w", err)
+	} else {
+		lenAnchors = x
 	}
-	data = data[v.Records.BinarySize():]
+	data = data[encoding.UvarintBinarySize(lenAnchors):]
+
+	v.Anchors = make([]AnchorMetadata, lenAnchors)
+	for i := range v.Anchors {
+		if err := v.Anchors[i].UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Anchors[%d]: %w", i, err)
+		}
+		data = data[v.Anchors[i].BinarySize():]
+
+	}
 
 	return nil
 }
@@ -4015,17 +4059,6 @@ func (v *ObjectMetadata) UnmarshalBinary(data []byte) error {
 		data = data[v.Chains[i].BinarySize():]
 
 	}
-
-	return nil
-}
-
-func (v *RecordLedger) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Chains: %w", err)
-	} else {
-		v.Chains = x
-	}
-	data = data[encoding.ChainSetBinarySize(v.Chains):]
 
 	return nil
 }
@@ -4417,13 +4450,6 @@ func (v *SyntheticLedger) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(v.Nonce):]
 
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Produced: %w", err)
-	} else {
-		v.Produced = x
-	}
-	data = data[encoding.UvarintBinarySize(v.Produced):]
-
 	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Unsigned: %w", err)
 	} else {
@@ -4437,13 +4463,6 @@ func (v *SyntheticLedger) UnmarshalBinary(data []byte) error {
 		v.Unsent = x
 	}
 	data = data[encoding.ChainSetBinarySize(v.Unsent):]
-
-	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding System: %w", err)
-	} else {
-		v.System = x
-	}
-	data = data[encoding.ChainSetBinarySize(v.System):]
 
 	return nil
 }
@@ -4898,14 +4917,6 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
-func (v *RecordLedger) MarshalJSON() ([]byte, error) {
-	u := struct {
-		Chains []string `json:"chains,omitempty"`
-	}{}
-	u.Chains = encoding.ChainSetToJSON(v.Chains)
-	return json.Marshal(&u)
-}
-
 func (v *RequestDataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url       string `json:"url,omitempty"`
@@ -5017,16 +5028,12 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Nonce    uint64   `json:"nonce,omitempty"`
-		Produced uint64   `json:"produced,omitempty"`
 		Unsigned []string `json:"unsigned,omitempty"`
 		Unsent   []string `json:"unsent,omitempty"`
-		System   []string `json:"system,omitempty"`
 	}{}
 	u.Nonce = v.Nonce
-	u.Produced = v.Produced
 	u.Unsigned = encoding.ChainSetToJSON(v.Unsigned)
 	u.Unsent = encoding.ChainSetToJSON(v.Unsent)
-	u.System = encoding.ChainSetToJSON(v.System)
 	return json.Marshal(&u)
 }
 
@@ -5312,22 +5319,6 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (v *RecordLedger) UnmarshalJSON(data []byte) error {
-	u := struct {
-		Chains []string `json:"chains,omitempty"`
-	}{}
-	u.Chains = encoding.ChainSetToJSON(v.Chains)
-	if err := json.Unmarshal(data, &u); err != nil {
-		return err
-	}
-	if x, err := encoding.ChainSetFromJSON(u.Chains); err != nil {
-		return fmt.Errorf("error decoding Chains: %w", err)
-	} else {
-		v.Chains = x
-	}
-	return nil
-}
-
 func (v *RequestDataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url       string `json:"url,omitempty"`
@@ -5545,21 +5536,16 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Nonce    uint64   `json:"nonce,omitempty"`
-		Produced uint64   `json:"produced,omitempty"`
 		Unsigned []string `json:"unsigned,omitempty"`
 		Unsent   []string `json:"unsent,omitempty"`
-		System   []string `json:"system,omitempty"`
 	}{}
 	u.Nonce = v.Nonce
-	u.Produced = v.Produced
 	u.Unsigned = encoding.ChainSetToJSON(v.Unsigned)
 	u.Unsent = encoding.ChainSetToJSON(v.Unsent)
-	u.System = encoding.ChainSetToJSON(v.System)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Nonce = u.Nonce
-	v.Produced = u.Produced
 	if x, err := encoding.ChainSetFromJSON(u.Unsigned); err != nil {
 		return fmt.Errorf("error decoding Unsigned: %w", err)
 	} else {
@@ -5569,11 +5555,6 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Unsent: %w", err)
 	} else {
 		v.Unsent = x
-	}
-	if x, err := encoding.ChainSetFromJSON(u.System); err != nil {
-		return fmt.Errorf("error decoding System: %w", err)
-	} else {
-		v.System = x
 	}
 	return nil
 }

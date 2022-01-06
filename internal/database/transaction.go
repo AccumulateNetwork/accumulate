@@ -1,7 +1,6 @@
 package database
 
 import (
-	"crypto/sha256"
 	"errors"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -103,7 +102,6 @@ func (t *Transaction) PutState(state *state.Transaction) error {
 	}
 
 	t.batch.store.Put(t.key.State(), data)
-	t.batch.putBpt(t.key.Object(), sha256.Sum256(data))
 	return nil
 }
 
