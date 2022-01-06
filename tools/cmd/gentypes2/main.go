@@ -2,12 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 	"github.com/spf13/cobra"
@@ -50,44 +46,24 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-func readTypes(file string) typegen.DataTypes {
+func readTypes(file string) map[string]typegen.Type {
 	f, err := os.Open(file)
 	check(err)
 	defer f.Close()
 
-	var types map[string]*typegen.DataType
+	var types map[string]typegen.Type
 
 	dec := yaml.NewDecoder(f)
 	dec.KnownFields(true)
 	err = dec.Decode(&types)
 	check(err)
 
-	return typegen.DataTypesFrom(types)
-}
-
-func getPackagePath() string {
-	buf := new(bytes.Buffer)
-	cmd := exec.Command("go", "list", "-m", "-json")
-	cmd.Stdout = buf
-	check(cmd.Run())
-
-	info := new(struct{ Dir string })
-	check(json.Unmarshal(buf.Bytes(), info))
-
-	wd, err := os.Getwd()
-	check(err)
-
-	rel, err := filepath.Rel(info.Dir, wd)
-	check(err)
-
-	rel = strings.ReplaceAll(rel, "\\", "/")
-	fmt.Printf("package %s\n", rel)
-	return rel
+	return types
 }
 
 func run(_ *cobra.Command, args []string) {
 	types := readTypes(args[0])
-	ttypes := convert(types, flags.Package, getPackagePath())
+	ttypes := convert(types, flags.Package)
 
 	w := new(bytes.Buffer)
 	check(Go.Execute(w, ttypes))

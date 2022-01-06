@@ -54,6 +54,7 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 		send := new(protocol.SendTokens)                            // Create a send token transaction
 		send.AddRecipient(addr, 1000)                               // create the transaction output
 		gtx := new(transactions.Envelope)                           // wrap in a GenTransaction
+		gtx.Transaction = new(transactions.Transaction)             //
 		gtx.Transaction.Body, err = send.MarshalBinary()            // add  send transaction
 		if err != nil {
 			return nil, err
@@ -107,6 +108,7 @@ func BuildTestSynthDepositGenTx() (types.String, ed25519.PrivateKey, *transactio
 	}
 
 	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Transaction.Body = depData
 	gtx.Transaction.Origin = destAddress
 
@@ -141,6 +143,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	}
 
 	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Transaction.Body = txData
 	gtx.Transaction.Origin = from
 

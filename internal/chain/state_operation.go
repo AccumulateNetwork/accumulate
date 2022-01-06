@@ -96,10 +96,6 @@ func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 		// Handle unexpected errors
 		return fmt.Errorf("failed to check for an existing record: %v", err)
 
-	case op.record.Header().Type.IsTransaction():
-		// Non-synthetic transactions are allowed to create transaction
-		// records
-
 	case st.txType.IsSynthetic() || st.txType.IsInternal():
 		// Synthetic and internal transactions are allowed to create records
 
@@ -114,15 +110,12 @@ func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 		header.ChainUrl = types.String(op.url.String())
 	}
 
-	err = st.updateStateAndChain(rec, op.record, protocol.MainChain)
+	err = st.updateStateAndChain(rec, op.record, protocol.MainChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return err
 	}
 
-	// Do not create anchor entries for the ledger
-	if header.Type != types.ChainTypeInternalLedger {
-		meta.Updated = append(meta.Updated, op.url)
-	}
+	meta.Updated = append(meta.Updated, op.url)
 	return nil
 }
 
@@ -172,7 +165,7 @@ func (m *stateCache) UpdateNonce(record state.Chain) error {
 }
 
 func (op *updateNonce) Execute(st *stateCache, meta *DeliverMetadata) error {
-	return st.updateStateAndChain(st.batch.Record(op.url), op.record, "Pending")
+	return st.updateStateAndChain(st.batch.Record(op.url), op.record, protocol.PendingChain, protocol.ChainTypeTransaction)
 }
 
 type addDataEntry struct {
@@ -209,7 +202,7 @@ func (op *addDataEntry) Execute(st *stateCache, meta *DeliverMetadata) error {
 	}
 
 	// Add TX to main chain
-	main, err := record.Chain(protocol.MainChain)
+	main, err := record.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return fmt.Errorf("failed to load main chain of %q: %v", op.url, err)
 	}
@@ -289,8 +282,8 @@ func (m *stateCache) UpdateCreditBalance(record state.Chain) {
 	panic("todo: UpdateCredtedBalance needs to be implemented")
 }
 
-func (m *stateCache) updateStateAndChain(record *database.Record, state state.Chain, name string) error {
-	chain, err := record.Chain(name)
+func (m *stateCache) updateStateAndChain(record *database.Record, state state.Chain, name string, typ protocol.ChainType) error {
+	chain, err := record.Chain(name, typ)
 	if err != nil {
 		return fmt.Errorf("failed to load %s chain of %q: %v", name, state.Header().ChainUrl, err)
 	}

@@ -31,38 +31,6 @@ func TestEndToEndSuite(t *testing.T) {
 	}))
 }
 
-func BenchmarkFaucetAndLiteTx(b *testing.B) {
-	n := createAppWithMemDB(b, crypto.Address{}, true)
-
-	recipient := generateKey()
-
-	n.Batch(func(send func(*Tx)) {
-		tx, err := acctesting.CreateFakeSyntheticDepositTx(recipient)
-		require.NoError(b, err)
-		send(tx)
-	})
-
-	origin := acctesting.NewWalletEntry()
-	origin.Nonce = 1
-	origin.PrivateKey = recipient.Bytes()
-	origin.Addr = acctesting.AcmeLiteAddressTmPriv(recipient).String()
-
-	rwallet := acctesting.NewWalletEntry()
-
-	b.ResetTimer()
-	n.Batch(func(send func(*Tx)) {
-		for i := 0; i < b.N; i++ {
-			exch := new(protocol.SendTokens)
-			exch.AddRecipient(n.ParseUrl(rwallet.Addr), 1000)
-			tx, err := transactions.New(origin.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
-				return origin.Sign(hash), nil
-			}, exch)
-			require.NoError(b, err)
-			send(tx)
-		}
-	})
-}
-
 func TestCreateLiteAccount(t *testing.T) {
 	var count = 11
 	n := createAppWithMemDB(t, crypto.Address{}, true)
@@ -156,28 +124,37 @@ func TestAnchorChain(t *testing.T) {
 	defer batch.Discard()
 	ledger := batch.Record(n.network.NodeUrl().JoinPath(protocol.Ledger))
 
-	// Extract and verify the anchor chain ledgerState
+	// Check each anchor
 	ledgerState := protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
-	require.ElementsMatch(t, [][32]byte{
-		types.Bytes((&url.URL{Authority: "RoadRunner"}).ResourceChain()).AsBytes32(),
-		types.Bytes((&url.URL{Authority: "RoadRunner/book"}).ResourceChain()).AsBytes32(),
-		types.Bytes((&url.URL{Authority: "RoadRunner/page"}).ResourceChain()).AsBytes32(),
-	}, ledgerState.Records.Chains)
-
-	// Check each anchor
-	rootChain, err := ledger.Chain(protocol.MinorRootChain)
+	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	require.NoError(t, err)
-	first := rootChain.Height() - int64(len(ledgerState.Records.Chains))
-	for i, chain := range ledgerState.Records.Chains {
-		mgr, err := batch.RecordByID(chain[:]).Chain(protocol.MainChain)
-		require.NoError(t, err)
+	first := rootChain.Height() - int64(len(ledgerState.Anchors))
+	var accounts []string
+	for i, meta := range ledgerState.Anchors {
+		accounts = append(accounts, fmt.Sprintf("%s#chain/%s", meta.Account, meta.Name))
 
 		root, err := rootChain.Entry(first + int64(i))
 		require.NoError(t, err)
 
-		assert.Equal(t, mgr.Anchor(), root, "wrong anchor for %X", chain)
+		if meta.Name == "bpt" {
+			assert.Equal(t, root, batch.RootHash(), "wrong anchor for BPT")
+			continue
+		}
+
+		mgr, err := batch.Record(meta.Account).ReadChain(meta.Name)
+		require.NoError(t, err)
+
+		assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
 	}
+
+	// Verify that the ADI accounts are included
+	assert.Subset(t, accounts, []string{
+		"acc://RoadRunner#chain/main",
+		"acc://RoadRunner#chain/pending",
+		"acc://RoadRunner/book#chain/main",
+		"acc://RoadRunner/page#chain/main",
+	})
 }
 
 func TestCreateADI(t *testing.T) {
@@ -697,7 +674,7 @@ func TestSignatorHeight(t *testing.T) {
 	getHeight := func(u *url.URL) uint64 {
 		batch := n.db.Begin()
 		defer batch.Discard()
-		chain, err := batch.Record(u).Chain(protocol.MainChain)
+		chain, err := batch.Record(u).ReadChain(protocol.MainChain)
 		require.NoError(t, err)
 		return uint64(chain.Height())
 	}

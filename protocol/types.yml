@@ -12,6 +12,25 @@
 # Duration is marshalled as two uvarints: seconds and nanoseconds. A duration of
 # 1 hour and 1 ns is marshalled as (3600, 1).
 
+ObjectMetadata:
+  fields:
+  - name: Type
+    type: ObjectType
+    marshal-as: value
+  - name: Chains
+    type: slice
+    slice:
+      type: ChainMetadata
+      marshal-as: reference
+
+ChainMetadata:
+  fields:
+  - name: Name
+    type: string
+  - name: Type
+    type: ChainType
+    marshal-as: value
+
 ADI:
   kind: chain
   chain-type: Identity
@@ -79,6 +98,8 @@ KeySpec:
       type: bytes
     - name: Nonce
       type: uvarint
+    - name: Owner
+      type: string
 
 KeySpecParams:
   fields:
@@ -170,6 +191,9 @@ UpdateKeyPage:
       optional: true
     - name: NewKey
       type: bytes
+      optional: true
+    - name: Owner
+      type: string
       optional: true
 
 MetricsRequest:
@@ -477,26 +501,30 @@ InternalLedger:
     - name: Synthetic
       type: SyntheticLedger
       marshal-as: reference
-    - name: Records
-      type: RecordLedger
-      marshal-as: reference
+    - name: Anchors
+      type: slice
+      slice:
+        type: AnchorMetadata
+        marshal-as: reference
 
-RecordLedger:
+AnchorMetadata:
+  embeddings:
+    - ChainMetadata
   fields:
-    - name: Chains
-      type: chainSet
+    - name: Account
+      type: url.URL
+      marshal-as: reference
+      pointer: true
+    - name: Height
+      type: uvarint
 
 SyntheticLedger:
   fields:
     - name: Nonce
       type: uvarint
-    - name: Produced
-      type: uvarint
     - name: Unsigned
       type: chainSet
     - name: Unsent
-      type: chainSet
-    - name: System
       type: chainSet
 
 InternalGenesis:

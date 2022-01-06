@@ -43,11 +43,6 @@ func (d *Data) Put(hash []byte, entry *protocol.DataEntry) error {
 		return err
 	}
 
-	// Write the anchor to the BPT
-	var anchor [32]byte
-	copy(anchor[:], d.chain.Anchor())
-	d.batch.putBpt(d.record.Object().Append("Data"), anchor)
-
 	return nil
 }
 

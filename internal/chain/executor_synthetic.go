@@ -16,7 +16,7 @@ func (m *Executor) addSynthTxns(tx *transactions.Envelope, submissions []*Submit
 	txid := types.Bytes(tx.Transaction.Hash()).AsBytes32()
 
 	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
-	chain, err := ledger.Chain(protocol.SyntheticChain)
+	chain, err := ledger.Chain(protocol.SyntheticChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return err
 	}
@@ -62,6 +62,7 @@ func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.Transact
 
 	// Build the transaction
 	env := new(transactions.Envelope)
+	env.Transaction = new(transactions.Transaction)
 	env.Transaction.Origin = dest
 	env.Transaction.KeyPageHeight = 1
 	env.Transaction.KeyPageIndex = 0
