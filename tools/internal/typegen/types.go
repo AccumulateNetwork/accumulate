@@ -78,3 +78,10 @@ type Method struct {
 	CallParams []string `yaml:"call-params"`
 	Validate   []string `yaml:"validate"`
 }
+
+type Type map[string]*TypeValue
+
+type TypeValue struct {
+	Value       interface{}
+	Description string
+}

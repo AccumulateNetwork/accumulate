@@ -48,6 +48,11 @@ type BurnTokens struct {
 	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
+type ChainMetadata struct {
+	Name string    `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type ChainType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+}
+
 type ChainParams struct {
 	Data     []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	IsUpdate bool   `json:"isUpdate,omitempty" form:"isUpdate" query:"isUpdate" validate:"required"`
@@ -177,6 +182,11 @@ type MetricsRequest struct {
 
 type MetricsResponse struct {
 	Value interface{} `json:"value,omitempty" form:"value" query:"value" validate:"required"`
+}
+
+type ObjectMetadata struct {
+	Type   ObjectType      `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Chains []ChainMetadata `json:"chains,omitempty" form:"chains" query:"chains" validate:"required"`
 }
 
 type RecordLedger struct {
@@ -539,6 +549,18 @@ func (v *AnchoredRecord) Equal(u *AnchoredRecord) bool {
 
 func (v *BurnTokens) Equal(u *BurnTokens) bool {
 	if !(v.Amount.Cmp(&u.Amount) == 0) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ChainMetadata) Equal(u *ChainMetadata) bool {
+	if !(v.Name == u.Name) {
+		return false
+	}
+
+	if !(v.Type == u.Type) {
 		return false
 	}
 
@@ -919,6 +941,26 @@ func (v *MetricsRequest) Equal(u *MetricsRequest) bool {
 
 	if !(v.Duration == u.Duration) {
 		return false
+	}
+
+	return true
+}
+
+func (v *ObjectMetadata) Equal(u *ObjectMetadata) bool {
+	if !(v.Type == u.Type) {
+		return false
+	}
+
+	if !(len(v.Chains) == len(u.Chains)) {
+		return false
+	}
+
+	for i := range v.Chains {
+		v, u := v.Chains[i], u.Chains[i]
+		if !(v.Equal(&u)) {
+			return false
+		}
+
 	}
 
 	return true
@@ -1458,6 +1500,16 @@ func (v *BurnTokens) BinarySize() int {
 	return n
 }
 
+func (v *ChainMetadata) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.Name)
+
+	n += v.Type.BinarySize()
+
+	return n
+}
+
 func (v *ChainParams) BinarySize() int {
 	var n int
 
@@ -1793,6 +1845,21 @@ func (v *MetricsRequest) BinarySize() int {
 	n += encoding.StringBinarySize(v.Metric)
 
 	n += encoding.DurationBinarySize(v.Duration)
+
+	return n
+}
+
+func (v *ObjectMetadata) BinarySize() int {
+	var n int
+
+	n += v.Type.BinarySize()
+
+	n += encoding.UvarintBinarySize(uint64(len(v.Chains)))
+
+	for _, v := range v.Chains {
+		n += v.BinarySize()
+
+	}
 
 	return n
 }
@@ -2242,6 +2309,20 @@ func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (v *ChainMetadata) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.Name))
+
+	if b, err := v.Type.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Type: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	return buffer.Bytes(), nil
+}
+
 func (v *ChainParams) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -2624,6 +2705,29 @@ func (v *MetricsRequest) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.Metric))
 
 	buffer.Write(encoding.DurationMarshalBinary(v.Duration))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *ObjectMetadata) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	if b, err := v.Type.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Type: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Chains))))
+	for i, v := range v.Chains {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding Chains[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
+
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -3191,6 +3295,22 @@ func (v *BurnTokens) UnmarshalBinary(data []byte) error {
 		v.Amount.Set(x)
 	}
 	data = data[encoding.BigintBinarySize(&v.Amount):]
+
+	return nil
+}
+
+func (v *ChainMetadata) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Name: %w", err)
+	} else {
+		v.Name = x
+	}
+	data = data[encoding.StringBinarySize(v.Name):]
+
+	if err := v.Type.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Type: %w", err)
+	}
+	data = data[v.Type.BinarySize():]
 
 	return nil
 }
@@ -3869,6 +3989,32 @@ func (v *MetricsRequest) UnmarshalBinary(data []byte) error {
 		v.Duration = x
 	}
 	data = data[encoding.DurationBinarySize(v.Duration):]
+
+	return nil
+}
+
+func (v *ObjectMetadata) UnmarshalBinary(data []byte) error {
+	if err := v.Type.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Type: %w", err)
+	}
+	data = data[v.Type.BinarySize():]
+
+	var lenChains uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Chains: %w", err)
+	} else {
+		lenChains = x
+	}
+	data = data[encoding.UvarintBinarySize(lenChains):]
+
+	v.Chains = make([]ChainMetadata, lenChains)
+	for i := range v.Chains {
+		if err := v.Chains[i].UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Chains[%d]: %w", i, err)
+		}
+		data = data[v.Chains[i].BinarySize():]
+
+	}
 
 	return nil
 }

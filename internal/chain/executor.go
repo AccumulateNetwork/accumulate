@@ -333,7 +333,7 @@ func (m *Executor) doCommit() error {
 	}
 
 	// Load the main chain of the minor root
-	rootChain, err := ledger.Chain(protocol.MinorRootChain)
+	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
 	if err != nil {
 		return err
 	}
@@ -342,7 +342,7 @@ func (m *Executor) doCommit() error {
 	chains := make([][32]byte, 0, len(m.blockMeta.Deliver.Updated))
 	for _, u := range m.blockMeta.Deliver.Updated {
 		chains = append(chains, u.ResourceChain32())
-		recordChain, err := m.blockBatch.Record(u).Chain(protocol.MainChain)
+		recordChain, err := m.blockBatch.Record(u).ReadChain(protocol.MainChain)
 		if err != nil {
 			return err
 		}
