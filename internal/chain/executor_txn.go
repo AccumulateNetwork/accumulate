@@ -349,6 +349,14 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return fmt.Errorf("failed to store transaction: %v", err)
 	}
 
+	// Don't add internal transactions to chains. Internal transactions are
+	// exclusively used for communication between the governor and the state
+	// machine.
+	txt := env.Transaction.Type()
+	if txt.IsInternal() {
+		return nil
+	}
+
 	// Load the origin's pending chain
 	record := m.blockBatch.Record(env.Transaction.Origin)
 	chain, err := record.Chain(protocol.PendingChain, protocol.ChainTypeTransaction)
@@ -362,13 +370,15 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return fmt.Errorf("failed to add signature to pending chain: %v", err)
 	}
 
-	txt := env.Transaction.Type()
+	// Mark the origin as updated
+	m.blockMeta.Deliver.Updated = append(m.blockMeta.Deliver.Updated, st.OriginUrl)
+
 	switch {
 	case st == nil:
 		return nil // Check failed
 	case postCommit:
 		return nil
-	case txt.IsSynthetic(), txt.IsInternal():
+	case txt.IsSynthetic():
 		return nil
 	}
 
@@ -386,6 +396,9 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		if err != nil {
 			return fmt.Errorf("failed to add signature to pending chain: %v", err)
 		}
+
+		// Mark the signator as updated
+		m.blockMeta.Deliver.Updated = append(m.blockMeta.Deliver.Updated, st.SignatorUrl)
 	}
 
 	if status.Code == protocol.CodeOK {
@@ -413,6 +426,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	// }
 	// st.Signator.DebitCredits(uint64(fee))
 
+	// Mark the signator as updated
 	m.blockMeta.Deliver.Updated = append(m.blockMeta.Deliver.Updated, st.SignatorUrl)
 	return sigRecord.PutState(st.Signator)
 }

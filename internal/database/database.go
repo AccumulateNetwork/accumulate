@@ -82,10 +82,6 @@ type Batch struct {
 	bpt   *pmt.Manager
 }
 
-func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
-	b.bpt.Bpt.Insert(key, hash)
-}
-
 func (b *Batch) getAs(key storage.Key, value encoding.BinaryUnmarshaler) error {
 	data, err := b.store.Get(key)
 	if err != nil {
