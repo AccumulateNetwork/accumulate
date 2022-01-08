@@ -1,0 +1,97 @@
+# Accounts - names should be nouns
+
+LiteTokenAccount:
+  kind: chain
+  fields:
+    - name: TokenUrl
+      type: string
+      is-url: true
+    - name: Balance
+      type: bigint
+    - name: Nonce
+      type: uvarint
+    - name: CreditBalance
+      type: bigint
+
+LiteDataAccount:
+  kind: chain
+  fields:
+  - name: Data
+    type: bytes
+
+ADI:
+  kind: chain
+  chain-type: Identity
+  fields: []
+
+TokenAccount:
+  kind: chain
+  fields:
+    - name: TokenUrl
+      type: string
+      is-url: true
+    - name: Balance
+      type: bigint
+
+KeyPage:
+  kind: chain
+  fields:
+    - name: CreditBalance
+      type: bigint
+    - name: Keys
+      type: slice
+      slice:
+        type: KeySpec
+        pointer: true
+        marshal-as: reference
+
+KeyBook:
+  kind: chain
+  fields:
+    - name: Pages
+      type: slice
+      slice:
+        type: string
+        is-url: true
+
+DataAccount:
+  kind: chain
+  fields:
+
+TokenIssuer:
+  kind: chain
+  fields:
+    - name: Symbol
+      type: string
+    - name: Precision
+      type: uvarint
+    - name: Properties
+      type: string
+      is-url: true
+
+Anchor:
+  kind: chain
+  fields:
+    - name: Index
+      type: varint
+    - name: Timestamp
+      type: time
+    - name: Root
+      type: chain
+    - name: Chains
+      type: chainSet
+    - name: ChainAnchor
+      type: chain
+    - name: Synthetic
+      type: chain
+
+##### Data Types #####
+
+KeySpec:
+  fields:
+    - name: PublicKey
+      type: bytes
+    - name: Nonce
+      type: uvarint
+    - name: Owner
+      type: string
