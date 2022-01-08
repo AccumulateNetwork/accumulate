@@ -6,6 +6,9 @@ go_build_accumulated_init
 # unignore directories
 !*/
 
+# User-specific configuration
+/.vscode/settings.json
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -41,7 +44,6 @@ engine/overrideversion.go
 *.bak
 *.txt
 *.log
-.vscode/
 .idea/
 peers.json
 *.csv
