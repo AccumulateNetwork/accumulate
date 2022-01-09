@@ -2,6 +2,7 @@ package database
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -9,15 +10,17 @@ import (
 
 // Chain manages a Merkle tree (chain).
 type Chain struct {
-	db     storage.KeyValueTxn
-	key    storage.Key
-	merkle *managed.MerkleManager
+	db       storage.KeyValueTxn
+	key      storage.Key
+	writable bool
+	merkle   *managed.MerkleManager
 }
 
 // newChain creates a new Chain.
-func newChain(db storage.KeyValueTxn, key storage.Key) (*Chain, error) {
+func newChain(db storage.KeyValueTxn, key storage.Key, writable bool) (*Chain, error) {
 	m := new(Chain)
 	m.key = key
+	m.writable = writable
 
 	var err error
 	m.merkle, err = managed.NewMerkleManager(db, markPower)
@@ -93,6 +96,10 @@ func (c *Chain) Pending() []managed.Hash {
 
 // AddEntry adds an entry to the chain
 func (c *Chain) AddEntry(entry []byte) error {
+	if !c.writable {
+		return fmt.Errorf("chain opened as read-only")
+	}
+
 	// TODO MerkleManager.AddHash really should return an error
 	c.merkle.AddHash(entry)
 	return nil

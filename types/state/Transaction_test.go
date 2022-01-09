@@ -22,6 +22,7 @@ func TestTransactionState(t *testing.T) {
 	u, err := url.Parse(we.Addr)
 	require.NoError(t, err)
 	trans := new(transactions.Envelope)
+	trans.Transaction = new(transactions.Transaction)
 	trans.Transaction.Origin = u
 
 	trans.Transaction.Body, err = nts1.MarshalBinary()

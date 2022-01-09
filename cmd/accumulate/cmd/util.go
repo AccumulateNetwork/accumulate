@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -133,6 +134,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 
 func signGenTx(binaryPayload []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Transaction.Body = binaryPayload
 
 	hdr.Nonce = nonce
@@ -234,12 +236,17 @@ func GetUrl(url string) (*QueryResponse, error) {
 }
 
 func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
-	data, err := json.Marshal(payload)
+	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	dataBinary, err := payload.MarshalBinary()
+	var data []byte
+	if action == "execute" {
+		data, err = json.Marshal(hex.EncodeToString(dataBinary))
+	} else {
+		data, err = json.Marshal(payload)
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -68,9 +68,8 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
 
 	txt := env.Transaction.Type()
 	executor, ok := m.executors[txt]
-	chainId := types.Bytes32(env.Transaction.Origin.ResourceChain32())
 	if !ok {
-		return m.recordTransactionError(env, nil, nil, &chainId, env.Transaction.Hash(), &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", env.Transaction.Type().Name())})
+		return m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", env.Transaction.Type().Name())})
 	}
 
 	// if txt.IsInternal() && tx.Transaction.Nonce != uint64(m.blockIndex) {
@@ -92,14 +91,12 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
 
 	st, err := m.check(m.blockBatch, env)
 	if err != nil {
-		return m.recordTransactionError(env, nil, nil, &chainId, env.Transaction.Hash(), &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+		return m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
-	// Validate
-	// TODO result should return a list of chainId's the transaction touched.
 	err = executor.Validate(st, env)
 	if err != nil {
-		return m.recordTransactionError(env, nil, nil, &chainId, env.Transaction.Hash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+		return m.recordTransactionError(st, env, nil, nil, false, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
 	}
 
 	// If we get here, we were successful in validating.  So, we need to
@@ -112,19 +109,19 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 	if err != nil {
-		return m.recordTransactionError(env, txAccepted, txPending, &chainId, env.Transaction.Hash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	txPendingObject := new(state.Object)
 	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
-		return m.recordTransactionError(env, txAccepted, txPending, &chainId, env.Transaction.Hash(), &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	// Store the tx state
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.putTransaction(env, txAccepted, txPending, status)
+	err = m.putTransaction(st, env, txAccepted, txPending, status, false)
 	if err != nil {
 		return &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
 	}
@@ -132,7 +129,7 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
 	// Store pending state updates, queue state creates for synthetic transactions
 	meta, err := st.Commit()
 	if err != nil {
-		return m.recordTransactionError(env, txAccepted, txPending, &chainId, env.Transaction.Hash(), &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+		return m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
 	}
 	m.blockMeta.Deliver.Append(meta)
 
@@ -181,7 +178,7 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 	book := new(protocol.KeyBook)
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
-		err = m.checkLite(st, env, origin)
+		err = m.checkLite(st, env)
 		if err != nil {
 			return nil, err
 		}
@@ -213,17 +210,18 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 		return nil, fmt.Errorf("invalid sig spec index")
 	}
 
-	u, err := url.Parse(book.Pages[env.Transaction.KeyPageIndex])
+	st.SignatorUrl, err = url.Parse(book.Pages[env.Transaction.KeyPageIndex])
 	if err != nil {
 		return nil, fmt.Errorf("invalid key page url : %s", book.Pages[env.Transaction.KeyPageIndex])
 	}
 	page := new(protocol.KeyPage)
-	err = st.LoadAs(u.ResourceChain32(), page)
+	st.Signator = page
+	err = st.LoadUrlAs(st.SignatorUrl, page)
 	if err != nil {
 		return nil, fmt.Errorf("invalid sig spec: %v", err)
 	}
 
-	height, err := st.GetHeight(u)
+	height, err := st.GetHeight(st.SignatorUrl)
 	if err != nil {
 		return nil, err
 	}
@@ -291,15 +289,12 @@ func (m *Executor) checkInternal(st *StateManager, env *transactions.Envelope) e
 	return nil
 }
 
-func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope, account *protocol.LiteTokenAccount) error {
-	u, err := account.ParseUrl()
-	if err != nil {
-		// This shouldn't happen because invalid URLs should never make it
-		// into the database.
-		return fmt.Errorf("invalid origin record URL: %v", err)
-	}
+func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error {
+	account := st.Origin.(*protocol.LiteTokenAccount)
+	st.Signator = account
+	st.SignatorUrl = st.OriginUrl
 
-	urlKH, _, err := protocol.ParseLiteAddress(u)
+	urlKH, _, err := protocol.ParseLiteAddress(st.OriginUrl)
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
 		// into the database.
@@ -325,16 +320,16 @@ func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope, accou
 	return st.UpdateNonce(account)
 }
 
-func (m *Executor) recordTransactionError(env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, chainId *types.Bytes32, txid []byte, failure *protocol.Error) *protocol.Error {
+func (m *Executor) recordTransactionError(st *StateManager, env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, postCommit bool, failure *protocol.Error) *protocol.Error {
 	status := &protocol.TransactionStatus{Delivered: true, Code: uint64(failure.Code)}
-	err := m.putTransaction(env, txAccepted, txPending, status)
+	err := m.putTransaction(st, env, txAccepted, txPending, status, postCommit)
 	if err != nil {
 		m.logError("Failed to store transaction", "txid", logging.AsHex(env.Transaction.Hash()), "origin", env.Transaction.Origin, "error", err)
 	}
 	return failure
 }
 
-func (m *Executor) putTransaction(env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, status *protocol.TransactionStatus) error {
+func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, status *protocol.TransactionStatus, postCommit bool) error {
 	if txPending == nil {
 		txPending = state.NewPendingTransaction(env)
 	}
@@ -342,34 +337,96 @@ func (m *Executor) putTransaction(env *transactions.Envelope, txAccepted *state.
 		txAccepted, txPending = state.NewTransaction(txPending)
 	}
 
-	err := m.blockBatch.Transaction(env.Transaction.Hash()).Put(txAccepted, status, env.Signatures)
+	// Store against the transaction hash
+	err := m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, env.Signatures)
 	if err != nil {
 		return fmt.Errorf("failed to store transaction: %v", err)
 	}
 
+	// Store against the envelope hash
+	err = m.blockBatch.Transaction(env.EnvHash()).Put(txAccepted, status, env.Signatures)
+	if err != nil {
+		return fmt.Errorf("failed to store transaction: %v", err)
+	}
+
+	// Don't add internal transactions to chains. Internal transactions are
+	// exclusively used for communication between the governor and the state
+	// machine.
+	txt := env.Transaction.Type()
+	if txt.IsInternal() {
+		return nil
+	}
+
+	// Load the origin's pending chain
 	record := m.blockBatch.Record(env.Transaction.Origin)
-	chain, err := record.Chain(protocol.PendingChain)
+	chain, err := record.Chain(protocol.PendingChain, protocol.ChainTypeTransaction)
 	if err != nil {
 		return fmt.Errorf("failed to load pending chain: %v", err)
 	}
 
-	for _, sig := range env.Signatures {
-		txSig := new(protocol.TransactionSignature)
-		copy(txSig.Transaction[:], env.Transaction.Hash())
-		txSig.Signature = sig
+	// Add the envelope to the pending chain
+	err = chain.AddEntry(env.EnvHash())
+	if err != nil {
+		return fmt.Errorf("failed to add signature to pending chain: %v", err)
+	}
 
-		data, err := txSig.MarshalBinary()
+	// Mark the origin as updated
+	m.blockMeta.Deliver.Updated = append(m.blockMeta.Deliver.Updated, st.OriginUrl)
+
+	switch {
+	case st == nil:
+		return nil // Check failed
+	case postCommit:
+		return nil
+	case txt.IsSynthetic():
+		return nil
+	}
+
+	// If the origin is the signator, we already did this
+	if !st.OriginUrl.Equal(st.SignatorUrl) {
+		// Load the signator's pending chain
+		record := m.blockBatch.Record(st.SignatorUrl)
+		chain, err := record.Chain(protocol.PendingChain, protocol.ChainTypeTransaction)
 		if err != nil {
-			return fmt.Errorf("failed to marshal signature: %v", err)
+			return fmt.Errorf("failed to load pending chain: %v", err)
 		}
 
-		sigId := sha256.Sum256(data)
-		record.Index("Signature", sigId).Put(data)
-		err = chain.AddEntry(sigId[:])
+		// Add the envelope to the pending chain
+		err = chain.AddEntry(env.EnvHash())
 		if err != nil {
 			return fmt.Errorf("failed to add signature to pending chain: %v", err)
 		}
+
+		// Mark the signator as updated
+		m.blockMeta.Deliver.Updated = append(m.blockMeta.Deliver.Updated, st.SignatorUrl)
 	}
 
-	return nil
+	if status.Code == protocol.CodeOK {
+		return nil
+	}
+
+	// Update the nonce and charge the failure transaction fee. Reload the
+	// signator to ensure we don't push any invalid changes. Use the database
+	// directly, since the state manager won't be committed.
+	sigRecord := m.blockBatch.Record(st.SignatorUrl)
+	err = sigRecord.GetStateAs(st.Signator)
+	if err != nil {
+		return err
+	}
+
+	sig := env.Signatures[0]
+	err = st.Signator.SetNonce(sig.PublicKey, sig.Nonce)
+	if err != nil {
+		return err
+	}
+
+	// fee, err := protocol.ComputeFee(env)
+	// if err != nil || fee > protocol.FeeFailedMaximum.AsInt() {
+	// 	fee = protocol.FeeFailedMaximum.AsInt()
+	// }
+	// st.Signator.DebitCredits(uint64(fee))
+
+	// Mark the signator as updated
+	m.blockMeta.Deliver.Updated = append(m.blockMeta.Deliver.Updated, st.SignatorUrl)
+	return sigRecord.PutState(st.Signator)
 }

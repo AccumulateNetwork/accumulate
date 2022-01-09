@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"errors"
 	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -90,4 +91,21 @@ func (acct *LiteTokenAccount) DebitCredits(amount uint64) bool {
 
 func (acct *LiteTokenAccount) ParseTokenUrl() (*url.URL, error) {
 	return url.Parse(acct.TokenUrl)
+}
+
+func (acct *LiteTokenAccount) SetNonce(key []byte, nonce uint64) error {
+	// TODO Check the key hash?
+	acct.Nonce = nonce
+	return nil
+}
+
+func (page *KeyPage) SetNonce(key []byte, nonce uint64) error {
+	ks := page.FindKey(key)
+	if ks == nil {
+		// Should never happen
+		return errors.New("failed to find key spec")
+	}
+
+	ks.Nonce = nonce
+	return nil
 }
