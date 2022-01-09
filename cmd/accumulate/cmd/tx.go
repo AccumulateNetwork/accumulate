@@ -12,6 +12,7 @@ import (
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
@@ -46,6 +47,13 @@ var txCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintTXCreate()
 				}
+			case "execute":
+				if len(args) > 2 {
+					out, err = ExecuteTX(args[1], args[2:])
+				} else {
+					fmt.Println("Usage:")
+					PrintTXExecute()
+				}
 			default:
 				fmt.Println("Usage:")
 				PrintTX()
@@ -76,6 +84,10 @@ func PrintTXCreate() {
 	fmt.Println("  accumulate tx create [from] [to] [amount]	Create new token tx")
 }
 
+func PrintTXExecute() {
+	fmt.Println("  accumulate tx execute [from] [payload]	Execute an arbitrary transaction")
+}
+
 func PrintTXHistoryGet() {
 	fmt.Println("  accumulate tx history [url] [starting transaction number] [ending transaction number]	Get transaction history")
 }
@@ -83,6 +95,7 @@ func PrintTXHistoryGet() {
 func PrintTX() {
 	PrintTXGet()
 	PrintTXCreate()
+	PrintTXExecute()
 	PrintTXHistoryGet()
 }
 
@@ -240,6 +253,44 @@ func CreateTX(sender string, args []string) (string, error) {
 	send.AddRecipient(u2, uint64(amt*protocol.AcmePrecision))
 
 	res, err := dispatchTxRequest("send-tokens", send, u, si, pk)
+	if err != nil {
+		return "", err
+	}
+	return ActionResponseFrom(res).Print()
+}
+
+func ExecuteTX(sender string, args []string) (string, error) {
+	//sender string, receiver string, amount string
+	u, err := url.Parse(sender)
+	if err != nil {
+		return "", err
+	}
+
+	args, si, pk, err := prepareSigner(u, args)
+	if err != nil {
+		return "", fmt.Errorf("unable to prepare signer, %v", err)
+	}
+
+	var typ struct {
+		Type types.TransactionType
+	}
+	fmt.Println(args[0])
+	err = json.Unmarshal([]byte(args[0]), &typ)
+	if err != nil {
+		return "", fmt.Errorf("invalid payload 1: %v", err)
+	}
+
+	txn, err := protocol.NewTransaction(typ.Type)
+	if err != nil {
+		return "", fmt.Errorf("invalid payload 2: %v", err)
+	}
+
+	err = json.Unmarshal([]byte(args[0]), txn)
+	if err != nil {
+		return "", fmt.Errorf("invalid payload 3: %v", err)
+	}
+
+	res, err := dispatchTxRequest("execute", txn, u, si, pk)
 	if err != nil {
 		return "", err
 	}
