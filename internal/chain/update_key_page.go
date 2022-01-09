@@ -33,20 +33,22 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		key.Nonce = 0
 	}
 
-	// Find the old key
+	// Find the old key.  Also go ahead and check cases where we must have the
+	// old key, can't have the old key, and don't care about the old key.
 	var oldKey *protocol.KeySpec
 	index := -1
-	if len(body.Key) > 0 && body.Operation < protocol.AddKey {
-		for i, key := range page.Keys {
-			// We could support (double) SHA-256 but I think it's fine to
-			// require the user to provide an exact match.
-			if bytes.Equal(key.PublicKey, body.Key) {
+	if len(body.Key) > 0 && body.Operation != protocol.SetThreshold { // SetThreshold doesn't care about the old key
+		for i, key := range page.Keys { // Look for the old key
+			if bytes.Equal(key.PublicKey, body.Key) { // User must supply an exact match of the key as is on the key page
 				oldKey, index = key, i
 				break
 			}
 		}
-		if index < 0 {
-			return fmt.Errorf("key not found on the key page")
+		if index >= 0 && body.Operation == protocol.AddKey { // AddKey cannot have an old key
+			return fmt.Errorf("an existing key cannot be added again to the Key Page")
+		}
+		if index < 0 { // Everything else must have an old key
+			return fmt.Errorf("specified key not found on the key page")
 		}
 	}
 
@@ -91,9 +93,6 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 
 	switch body.Operation {
 	case protocol.AddKey:
-		if len(body.Key) > 0 {
-			return fmt.Errorf("trying to add a new key but you gave me an existing key")
-		}
 		key := &protocol.KeySpec{
 			PublicKey: body.NewKey,
 		}
@@ -103,28 +102,12 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		page.Keys = append(page.Keys, key)
 
 	case protocol.UpdateKey:
-		if len(body.Key) == 0 {
-			return fmt.Errorf("trying to update a new key but you didn't give me an existing key")
-		}
-		if oldKey == nil {
-			return fmt.Errorf("no matching key found")
-		}
-
 		oldKey.PublicKey = body.NewKey
 		if body.Owner != "" {
 			oldKey.Owner = body.Owner
 		}
 
 	case protocol.RemoveKey:
-		if len(page.Keys) == 1 {
-			return fmt.Errorf("cannot remove the last key") // TODO: allow removal of the last key for all but the first page
-		}
-		if len(body.Key) == 0 {
-			return fmt.Errorf("trying to update a new key but you didn't give me an existing key")
-		}
-		if oldKey == nil {
-			return fmt.Errorf("no matching key found")
-		}
 		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
 
 		if len(page.Keys) == 0 && priority == 0 {

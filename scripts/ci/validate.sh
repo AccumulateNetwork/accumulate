@@ -88,6 +88,10 @@ section "Add a key to page 2 using a key from page 1"
 wait-for cli-tx page key add keytest/page2 keytest-1-0 1 keytest-2-1
 success
 
+section "Set threshold to 2 of 2"
+wait-for cli-tx tx execute keytest/page1 keytest-1-0 '{"type": "updateKeyPage", "operation": "setThreshold", "threshold": 2}'
+success
+
 section "Create an ADI Token Account"
 wait-for cli-tx account create token keytest keytest-0-0 0 keytest/tokens ACME keytest/book
 accumulate account get keytest/tokens &> /dev/null && success || die "Cannot find keytest/tokens"
