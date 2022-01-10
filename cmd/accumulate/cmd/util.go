@@ -629,7 +629,12 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 		return out, nil
 	default:
-		return "", fmt.Errorf("unknown response type %q", res.Type)
+		data, err := json.Marshal(res.Data)
+		if err != nil {
+			return "", err
+		}
+		out := fmt.Sprintf("Unknown account type %s:\n\t%s\n", res.Type, data)
+		return out, nil
 	}
 }
 
@@ -695,7 +700,12 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		return out, nil
 
 	default:
-		return "", fmt.Errorf("unknown response type %q", res.Type)
+		data, err := json.Marshal(res.Data)
+		if err != nil {
+			return "", err
+		}
+		out := fmt.Sprintf("Unknown transaction type %s:\n\t%s\n", res.Type, data)
+		return out, nil
 	}
 }
 

@@ -91,6 +91,10 @@ CreateToken:
     - name: Url
       type: string
       is-url: true
+    - name: KeyBookUrl
+      type: string
+      is-url: true
+      optional: true
     - name: Symbol
       type: string
     - name: Precision
