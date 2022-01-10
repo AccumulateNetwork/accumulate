@@ -13,7 +13,7 @@ InternalLedger:
     - name: Synthetic
       type: SyntheticLedger
       marshal-as: reference
-    - name: Anchors
+    - name: Updates
       type: slice
       slice:
         type: AnchorMetadata
@@ -51,21 +51,12 @@ InternalTransactionsSent:
 
 ##### Data Types #####
 
-AnchorMetadata:
-  embeddings:
-    - ChainMetadata
-  fields:
-    - name: Account
-      type: url.URL
-      marshal-as: reference
-      pointer: true
-    - name: Height
-      type: uvarint
-
 SyntheticLedger:
   fields:
     - name: Nonce
       type: uvarint
+    - name: Produced
+      type: chainSet
     - name: Unsigned
       type: chainSet
     - name: Unsent

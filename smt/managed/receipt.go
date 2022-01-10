@@ -110,6 +110,12 @@ func (r *Receipt) Combine(rm *Receipt) (*Receipt, error) {
 	return nr, nil
 }
 
+func NewReceipt(manager *MerkleManager) *Receipt {
+	r := new(Receipt)
+	r.manager = manager
+	return r
+}
+
 // GetReceipt
 // Given a merkle tree and two elements, produce a proof that the element was used to derive the DAG at the anchor
 // Note that the element must be added to the Merkle Tree before the anchor, but the anchor can be any element
