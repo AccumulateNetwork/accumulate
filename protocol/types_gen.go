@@ -89,6 +89,7 @@ type CreateKeyPage struct {
 
 type CreateToken struct {
 	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	KeyBookUrl string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
 	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
 	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
 	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"acc-url"`
@@ -648,6 +649,10 @@ func (v *CreateKeyPage) Equal(u *CreateKeyPage) bool {
 
 func (v *CreateToken) Equal(u *CreateToken) bool {
 	if !(v.Url == u.Url) {
+		return false
+	}
+
+	if !(v.KeyBookUrl == u.KeyBookUrl) {
 		return false
 	}
 
@@ -1522,6 +1527,8 @@ func (v *CreateToken) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Url)
 
+	n += encoding.StringBinarySize(v.KeyBookUrl)
+
 	n += encoding.StringBinarySize(v.Symbol)
 
 	n += encoding.UvarintBinarySize(v.Precision)
@@ -2313,6 +2320,8 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeCreateToken.ID()))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
+
+	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Symbol))
 
@@ -3374,6 +3383,13 @@ func (v *CreateToken) UnmarshalBinary(data []byte) error {
 		v.Url = x
 	}
 	data = data[encoding.StringBinarySize(v.Url):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding KeyBookUrl: %w", err)
+	} else {
+		v.KeyBookUrl = x
+	}
+	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
 
 	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Symbol: %w", err)

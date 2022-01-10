@@ -274,7 +274,6 @@ func ExecuteTX(sender string, args []string) (string, error) {
 	var typ struct {
 		Type types.TransactionType
 	}
-	fmt.Println(args[0])
 	err = json.Unmarshal([]byte(args[0]), &typ)
 	if err != nil {
 		return "", fmt.Errorf("invalid payload 1: %v", err)
