@@ -64,6 +64,12 @@ var getCmd = &cobra.Command{
 	},
 }
 
+var GetDirect bool
+
+func init() {
+	getCmd.Flags().BoolVar(&GetDirect, "direct", false, "Use debug-query-direct instead of query")
+}
+
 func PrintGet() {
 	fmt.Println("  accumulate get [url] 		Get data by Accumulate URL")
 	//fmt.Println("  accumulate get [chain id] 		Get data by Accumulate chain id")
@@ -89,15 +95,31 @@ func GetByChainId(chainId []byte) (*api2.ChainQueryResponse, error) {
 }
 
 func Get(url string) (string, error) {
-	res, err := GetUrl(url)
+	params := api2.UrlQuery{}
+	params.Url = url
+
+	data, err := json.Marshal(&params)
 	if err != nil {
 		return "", err
 	}
-	data, err := json.Marshal(res.Data)
+
+	method := "query"
+	if GetDirect {
+		method = "debug-query-direct"
+	}
+
+	var res json.RawMessage
+	err = Client.Request(context.Background(), method, json.RawMessage(data), &res)
+	if err == nil {
+		return string(res), nil
+	}
+
+	ret, err := PrintJsonRpcError(err)
 	if err != nil {
 		return "", err
 	}
-	return string(data), nil
+
+	return "", fmt.Errorf("%v", ret)
 }
 
 func GetKey(url, key string) (string, error) {
