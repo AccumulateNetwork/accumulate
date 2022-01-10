@@ -33,6 +33,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			CreateIdentity{},
 			CreateKeyBook{},
 			CreateKeyPage{},
+			CreateToken{},
 			CreateTokenAccount{},
 			SendTokens{},
 			UpdateKeyPage{},
