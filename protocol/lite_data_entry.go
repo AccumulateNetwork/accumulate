@@ -68,11 +68,8 @@ const LiteEntryHeaderSize = 1 + // version
 	32 + // chain id
 	2 // total len
 
-// LiteEntryMaxDataSize is the maximum data length of an Entry.
-const LiteEntryMaxDataSize = 10240
-
-// LiteEntryMaxTotalSize is the maximum total encoded length of an Entry.
-const LiteEntryMaxTotalSize = LiteEntryMaxDataSize + LiteEntryHeaderSize
+// LiteEntryMaxTotalSize is the maximum encoded length of an Entry.
+const LiteEntryMaxTotalSize = WriteDataMax + LiteEntryHeaderSize
 
 // UnmarshalBinary unmarshal the LiteDataEntry in accordance to
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry
@@ -90,7 +87,7 @@ func (e *LiteDataEntry) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("malformed entry payload")
 	}
 
-	j := 35
+	j := LiteEntryHeaderSize
 
 	//reset the extId's if present
 	e.ExtIds = e.ExtIds[0:0]

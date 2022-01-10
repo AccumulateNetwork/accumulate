@@ -42,15 +42,15 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("lite account id doesn't match the expected id")
 	}
 
-	de := LiteDataEntry{}
-	copy(de.ChainId[:], chainId)
-	de.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
+	lde := LiteDataEntry{}
+	copy(lde.ChainId[:], chainId)
+	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
 	for i := 0; i < 3; i++ {
-		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
+		lde.ExtIds = append(lde.ExtIds, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
 	}
 
 	expectedHash := "1bd5955a72f8696416ac3ca39f7aa6a054e7209aa2f9a5f95d601640b8d047a5"
-	entryHash, err := de.Hash()
+	entryHash, err := lde.Hash()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("expected hash %v, but received %x", expectedHash, entryHash)
 	}
 
-	cost, err := de.Cost()
+	cost, err := lde.Cost()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,6 +67,8 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("expected a cost of 10 credits, but computed %d", cost)
 	}
 
+	var de LiteDataEntry
+	de.Data = []byte("a cost test")
 	//now make the data entry larger and compute cost
 	for i := 0; i < 100; i++ {
 		de.ExtIds = append(de.ExtIds, []byte(fmt.Sprintf("extid %d", i)))
@@ -79,7 +81,7 @@ func TestLiteDataEntry(t *testing.T) {
 
 	//the size is now 987 bytes so it should cost 40 credits
 	if cost != 4*FeeWriteData.AsInt() {
-		t.Fatalf("expected a cost of 10 credits, but computed %d", cost)
+		t.Fatalf("expected a cost of 40 credits, but computed %d", cost)
 	}
 
 	//now let's blow up the size of the entry to > 10kB to make sure it fails.

@@ -55,23 +55,16 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 
 		lite := protocol.NewLiteDataAccount()
 		lite.ChainUrl = types.String(tx.Transaction.Origin.String())
-		//we store the tail of the lite data account Id in the state.  the first part
-		//of the lite data account can be obtained from the ChainAddress.
+		//we store the tail of the lite data account id in the state. The first part
+		//of the lite data account can be obtained from the ChainAddress. When
+		//we want to reference the chain, we have all the info we need at the cost
+		//of 12 bytes.  The advantage is we avoid a lookup of entry 0, and
+		//computation of the chain id. The disadvantage is we have to store
+		//12 additional bytes.
 		lite.Tail = liteDataChainId[20:32]
 
 		account = lite
-
 	}
-
-	// now replace the transaction payload with a segregated witness to the data.
-	// This technique is used to segregate the payload from the stored transaction
-	// by replacing the data payload with a smaller reference to that data via the
-	// entry hash.  While technically, not true segwit since the entry hash is not
-	// signed, the original transaction can be reconstructed by recombining the
-	// signature info stored on the pending chain, the transaction info stored on
-	// the main chain, and the original data payload that resides on the data chain
-	// when the user wishes to validate the signature of the transaction that
-	// produced the data entry
 
 	if haveLiteChain {
 		liteChainId, err := protocol.ParseLiteChainAddress(tx.Transaction.Origin)
@@ -95,7 +88,20 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 		copy(sw.EntryHash[:], entryHash)
 	}
 
-	copy(sw.Cause[:], tx.Transaction.Hash())
+	// now replace the transaction payload with a segregated witness to the data.
+	// This technique is used to segregate the payload from the stored transaction
+	// by replacing the data payload with a smaller reference to that data via the
+	// entry hash.  While technically, not true segwit since the entry hash is not
+	// signed, the original transaction can be reconstructed by recombining the
+	// signature info stored on the pending chain, the transaction info stored on
+	// the main chain, and the original data payload that resides on the data chain
+	// when the user wishes to validate the signature of the transaction that
+	// produced the data entry
+
+	//we provide the transaction id of the original transaction which caused this
+	//synth write transaction
+	copy(sw.Cause[:], body.Cause[:])
+
 	sw.EntryUrl = account.Header().GetChainUrl()
 
 	segWitPayload, err := sw.MarshalBinary()
