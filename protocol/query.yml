@@ -1,0 +1,73 @@
+# Request and response types used for querying
+
+MetricsRequest:
+  fields:
+    - name: Metric
+      type: string
+    - name: Duration
+      type: duration
+
+MetricsResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Value
+      type: any
+
+DirectoryQueryResult:
+  fields:
+  - name: Entries
+    type: slice
+    slice:
+      type: string
+    optional: true
+  - name: ExpandedEntries
+    type: slice
+    slice:
+      type: state.Object
+      pointer: true
+      marshal-as: reference
+    optional: true
+  - name: Total
+    type: uvarint
+    keep-empty: true
+
+RequestDataEntry:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: EntryHash
+      type: chain
+      optional: true
+
+RequestDataEntrySet:
+  fields:
+    - name: Url
+      type: string
+      is-url: true
+    - name: Start
+      type: uvarint
+    - name: Count
+      type: uvarint
+    - name: ExpandChains
+      type: bool
+      optional: true
+
+ResponseDataEntry:
+  fields:
+    - name: EntryHash
+      type: chain
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
+
+ResponseDataEntrySet:
+  fields:
+    - name: DataEntries
+      type: slice
+      slice:
+        type: ResponseDataEntry
+        marshal-as: reference
+    - name: Total
+      type: uvarint

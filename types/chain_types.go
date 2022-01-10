@@ -46,12 +46,6 @@ const (
 	// ChainTypeLiteDataAccount is a Lite Data Account chain.
 	ChainTypeLiteDataAccount ChainType = 12
 
-	// ChainTypeSyntheticTransactions is a chain of synthetic transactions.
-	//
-	// Deprecated: synthetic transactions are tracked on an auxiliary chain of
-	// the ledger.
-	ChainTypeSyntheticTransactions ChainType = 13
-
 	// ChainTypeInternalLedger is a ledger that tracks the state of internal
 	// operations.
 	ChainTypeInternalLedger ChainType = 14
@@ -98,8 +92,6 @@ func (t ChainType) String() string {
 		return "dataAccount"
 	case ChainTypeLiteDataAccount:
 		return "liteDataAccount"
-	case ChainTypeSyntheticTransactions:
-		return "syntheticTransactions"
 	default:
 		return fmt.Sprintf("ChainType:%d", t)
 	}
