@@ -130,3 +130,8 @@ TXID=$(accumulate -j tx history keytest 0 1 | jq -re '.items[0].txid')
 GOT=$(api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query-tx", "params": {"txid": "'${TXID}'"}}' | jq -re .result.txid)
 [ "${TXID}" = "${GOT}" ] || die "Failed to find TX ${TXID}"
 success
+
+section "Create a token issuer"
+wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "createToken", "url": "keytest/token-issuer", "symbol": "TOK", "precision": 10}'
+accumulate get keytest/token-issuer &> /dev/null || die "Cannot find keytest/token-issuer"
+success
