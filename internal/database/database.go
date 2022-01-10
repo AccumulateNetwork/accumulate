@@ -1,6 +1,8 @@
 package database
 
 import (
+	"encoding"
+
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -80,8 +82,23 @@ type Batch struct {
 	bpt   *pmt.Manager
 }
 
-func (b *Batch) putBpt(key storage.Key, hash [32]byte) {
-	b.bpt.Bpt.Insert(key, hash)
+func (b *Batch) getAs(key storage.Key, value encoding.BinaryUnmarshaler) error {
+	data, err := b.store.Get(key)
+	if err != nil {
+		return err
+	}
+
+	return value.UnmarshalBinary(data)
+}
+
+func (b *Batch) putAs(key storage.Key, value encoding.BinaryMarshaler) error {
+	data, err := value.MarshalBinary()
+	if err != nil {
+		return err
+	}
+
+	b.store.Put(key, data)
+	return nil
 }
 
 // UpdateBpt updates the Patricia Tree hashes with the values from the updates

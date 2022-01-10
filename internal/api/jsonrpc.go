@@ -407,6 +407,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) (*acmeapi.API
 	}
 
 	env := new(transactions.Envelope)
+	env.Transaction = new(transactions.Transaction)
 	env.Transaction.Body = payload
 
 	env.Transaction.Origin = u
@@ -597,6 +598,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
 	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Transaction.Origin = protocol.FaucetUrl
 	gtx.Transaction.Nonce = protocol.FaucetWallet.Nonce
 	gtx.Transaction.KeyPageHeight = 1

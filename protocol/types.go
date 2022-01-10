@@ -8,7 +8,14 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-//go:generate go run ../tools/cmd/gentypes types.yml
+// ChainType is the type of a chain belonging to an account.
+type ChainType uint64
+
+// ObjectType is the type of an object in the database.
+type ObjectType uint64
+
+//go:generate go run ../tools/cmd/gentypes accounts.yml general.yml internal.yml query.yml transactions.yml
+//go:generate go run ../tools/cmd/gentypes2 --out chains_gen.go chains.yml
 
 func NewValidator() (*validator.Validate, error) {
 	v := validator.New()
