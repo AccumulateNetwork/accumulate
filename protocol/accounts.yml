@@ -38,6 +38,8 @@ KeyPage:
   fields:
     - name: CreditBalance
       type: bigint
+    - name: Threshold
+      type: uvarint
     - name: Keys
       type: slice
       slice:

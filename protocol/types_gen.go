@@ -315,6 +315,7 @@ type UpdateKeyPage struct {
 	Key       []byte           `json:"key,omitempty" form:"key" query:"key"`
 	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey"`
 	Owner     string           `json:"owner,omitempty" form:"owner" query:"owner"`
+	Threshold uint64           `json:"threshold,omitempty" form:"threshold" query:"threshold"`
 }
 
 type WriteData struct {
@@ -1320,6 +1321,10 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 		return false
 	}
 
+	if !(v.Threshold == u.Threshold) {
+		return false
+	}
+
 	return true
 }
 
@@ -2086,6 +2091,8 @@ func (v *UpdateKeyPage) BinarySize() int {
 	n += encoding.BytesBinarySize(v.NewKey)
 
 	n += encoding.StringBinarySize(v.Owner)
+
+	n += encoding.UvarintBinarySize(v.Threshold)
 
 	return n
 }
@@ -2971,6 +2978,8 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.NewKey))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Owner))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Threshold))
 
 	return buffer.Bytes(), nil
 }
@@ -4520,6 +4529,13 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Owner):]
 
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Threshold: %w", err)
+	} else {
+		v.Threshold = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Threshold):]
+
 	return nil
 }
 
@@ -4825,11 +4841,13 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
 		Owner     string           `json:"owner,omitempty"`
+		Threshold uint64           `json:"threshold,omitempty"`
 	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	u.Owner = v.Owner
+	u.Threshold = v.Threshold
 	return json.Marshal(&u)
 }
 
@@ -5355,11 +5373,13 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
 		Owner     string           `json:"owner,omitempty"`
+		Threshold uint64           `json:"threshold,omitempty"`
 	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	u.Owner = v.Owner
+	u.Threshold = v.Threshold
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5375,5 +5395,6 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		v.NewKey = x
 	}
 	v.Owner = u.Owner
+	v.Threshold = u.Threshold
 	return nil
 }
