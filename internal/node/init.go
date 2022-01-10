@@ -80,17 +80,17 @@ func Init(opts InitOptions) (err error) {
 		}
 		if config.Mode == tmcfg.ModeValidator {
 
-		pvKeyFile := path.Join(nodeDir, config.PrivValidator.Key)
-		pvStateFile := path.Join(nodeDir, config.PrivValidator.State)
-		pv, err := privval.LoadFilePV(pvKeyFile, pvStateFile)
-		if err != nil {
-			return fmt.Errorf("failed to load private validator: %v", err)
-		}
+			pvKeyFile := path.Join(nodeDir, config.PrivValidator.Key)
+			pvStateFile := path.Join(nodeDir, config.PrivValidator.State)
+			pv, err := privval.LoadFilePV(pvKeyFile, pvStateFile)
+			if err != nil {
+				return fmt.Errorf("failed to load private validator: %v", err)
+			}
 
-		pubKey, err := pv.GetPubKey(context.Background())
-		if err != nil {
-			return fmt.Errorf("failed to get public key: %v", err)
-		}
+			pubKey, err := pv.GetPubKey(context.Background())
+			if err != nil {
+				return fmt.Errorf("failed to get public key: %v", err)
+			}
 
 			genVals = append(genVals, types.GenesisValidator{
 				Address: pubKey.Address(),
@@ -203,48 +203,48 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	logger := tmlog.NewNopLogger()
 
 	if config.Mode == tmcfg.ModeSeed {
-	nodeKeyFile := config.NodeKeyFile()
-	if _, err := types.LoadOrGenNodeKey(nodeKeyFile); err != nil {
-		return fmt.Errorf("can't load or gen node key: %v", err)
-	}
-	logger.Info("Generated node key", "path", nodeKeyFile)
-	}
-	// private validator
-	if config.Mode == tmcfg.ModeValidator {
-	privValKeyFile := config.PrivValidator.KeyFile()
-	privValStateFile := config.PrivValidator.StateFile()
-	var pv *privval.FilePV
-	var err error
-	if tmos.FileExists(privValKeyFile) {
-		pv, err = privval.LoadFilePV(privValKeyFile, privValStateFile)
-		if err != nil {
-			return fmt.Errorf("failed to load private validator: %w", err)
-		}
-		logger.Info("Found private validator", "keyFile", privValKeyFile,
-			"stateFile", privValStateFile)
-	} else {
-		pv, err = privval.GenFilePV(privValKeyFile, privValStateFile, "")
-		if err != nil {
-			return fmt.Errorf("failed to gen private validator: %w", err)
-		}
-		pv.Save()
-		logger.Info("Generated private validator", "keyFile", privValKeyFile,
-			"stateFile", privValStateFile)
-	}
-
-	nodeKeyFile := config.NodeKeyFile()
-	if tmos.FileExists(nodeKeyFile) {
-		logger.Info("Found node key", "path", nodeKeyFile)
-	} else {
+		nodeKeyFile := config.NodeKeyFile()
 		if _, err := types.LoadOrGenNodeKey(nodeKeyFile); err != nil {
 			return fmt.Errorf("can't load or gen node key: %v", err)
 		}
 		logger.Info("Generated node key", "path", nodeKeyFile)
 	}
-	// genesis file
-	genFile := config.GenesisFile()
-	if tmos.FileExists(genFile) {
-		logger.Info("Found genesis file", "path", genFile)
+	// private validator
+	if config.Mode == tmcfg.ModeValidator {
+		privValKeyFile := config.PrivValidator.KeyFile()
+		privValStateFile := config.PrivValidator.StateFile()
+		var pv *privval.FilePV
+		var err error
+		if tmos.FileExists(privValKeyFile) {
+			pv, err = privval.LoadFilePV(privValKeyFile, privValStateFile)
+			if err != nil {
+				return fmt.Errorf("failed to load private validator: %w", err)
+			}
+			logger.Info("Found private validator", "keyFile", privValKeyFile,
+				"stateFile", privValStateFile)
+		} else {
+			pv, err = privval.GenFilePV(privValKeyFile, privValStateFile, "")
+			if err != nil {
+				return fmt.Errorf("failed to gen private validator: %w", err)
+			}
+			pv.Save()
+			logger.Info("Generated private validator", "keyFile", privValKeyFile,
+				"stateFile", privValStateFile)
+		}
+
+		nodeKeyFile := config.NodeKeyFile()
+		if tmos.FileExists(nodeKeyFile) {
+			logger.Info("Found node key", "path", nodeKeyFile)
+		} else {
+			if _, err := types.LoadOrGenNodeKey(nodeKeyFile); err != nil {
+				return fmt.Errorf("can't load or gen node key: %v", err)
+			}
+			logger.Info("Generated node key", "path", nodeKeyFile)
+		}
+		// genesis file
+		genFile := config.GenesisFile()
+		if tmos.FileExists(genFile) {
+			logger.Info("Found genesis file", "path", genFile)
 		} else {
 			genDoc := types.GenesisDoc{
 				ChainID:         *chainid,
@@ -260,7 +260,7 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 				PubKey:  pubKey,
 				Power:   10,
 			}}
-			
+
 			if err := genDoc.SaveAs(genFile); err != nil {
 				return fmt.Errorf("can't save genFile: %s: %v", genFile, err)
 			}

@@ -29,7 +29,7 @@ type NodeType string
 const (
 	Validator NodeType = "validator"
 	Follower  NodeType = "follower"
-	Seed 	NodeType = "seed"
+	Seed      NodeType = "seed"
 )
 
 const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info;disk-monitor=info;init=info"

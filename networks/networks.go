@@ -129,7 +129,6 @@ var TestNet = Network{
 		Port:        26656,
 		Nodes: []Node{
 			{"0.bvn2.testnet.accumulatenetwork.io", config.Seed},
-
 		},
 	},
 }
