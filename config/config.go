@@ -31,7 +31,7 @@ const (
 	Follower  NodeType = "follower"
 )
 
-const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info;disk-monitor=info;init=info"
+const DefaultLogLevels = "error;main=info;state=info;statesync=info;governor=info;disk-monitor=info;init=info"
 
 func Default(net NetworkType, node NodeType, netId string) *Config {
 	c := new(Config)
@@ -107,12 +107,12 @@ func OffsetPort(addr string, offset int) (string, error) {
 	return u.String(), nil
 }
 
-func (n *Network) NodeUrl() *accurl.URL {
+func (n *Network) NodeUrl(path ...string) *accurl.URL {
 	if n.Type == Directory {
-		return protocol.DnUrl()
+		return protocol.DnUrl().JoinPath(path...)
 	}
 
-	return protocol.BvnUrl(n.ID)
+	return protocol.BvnUrl(n.ID).JoinPath(path...)
 }
 
 // AddressWithPortOffset gets the first address of the given subnet and applies

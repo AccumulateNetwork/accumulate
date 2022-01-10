@@ -3,6 +3,7 @@ package main
 import (
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
 )
@@ -16,6 +17,7 @@ var cmdRun = &cobra.Command{
 
 var flagRun = struct {
 	Node        int
+	Truncate    bool
 	CiStopAfter time.Duration
 }{}
 
@@ -27,14 +29,19 @@ func init() {
 
 func initRunFlags(cmd *cobra.Command, forService bool) {
 	cmd.Flags().IntVarP(&flagRun.Node, "node", "n", -1, "Which node are we? [0, n)")
+	cmd.PersistentFlags().BoolVar(&flagRun.Truncate, "truncate", false, "Truncate Badger if necessary")
 
 	if !forService {
 		cmd.Flags().DurationVar(&flagRun.CiStopAfter, "ci-stop-after", 0, "FOR CI ONLY - stop the node after some time")
 		cmd.Flag("ci-stop-after").Hidden = true
 	}
+
+	cmd.PersistentPreRun = func(*cobra.Command, []string) {
+		badger.TruncateBadger = flagRun.Truncate
+	}
 }
 
-func runNode(cmd *cobra.Command, args []string) {
+func runNode(cmd *cobra.Command, _ []string) {
 	prog := NewProgram(cmd)
 	svc, err := service.New(prog, serviceConfig)
 	check(err)
