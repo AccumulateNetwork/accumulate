@@ -23,6 +23,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
+	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
@@ -116,6 +117,35 @@ func (d *Daemon) Start() (err error) {
 		defer sentry.Flush(2 * time.Second)
 	}
 
+	if d.Config.Mode == tmcfg.ModeSeed {
+		//addrBookFilePath := d.Config.P2P.AddrBookFile
+	addrBookPath := filepath.Join(d.Config.P2P.RootDir, "addrbook.json")
+	d.Config.P2P.AddrBook = addrBookPath
+//	nodeKey, err = types.LoadOrGenNodeKey(d.Config.NodeKeyFile())
+//	if err != nil {
+//		return fmt.Errorf("failed to load or generate node key: %v", err)
+//	}
+	d.node, err = node.New(d.Config, nil, d.Logger)
+	if err != nil {
+		return fmt.Errorf("creating node: %v", err)
+	}
+	err = d.node.Start()
+	if err != nil {
+		return fmt.Errorf("starting node: %v", err)
+	}
+	
+	d.node.Service.Start()
+
+		defer func() {
+			if err != nil {
+				_ = d.node.Stop()
+				d.node.Wait()
+			}
+		}()
+	
+	}
+
+	if d.Config.Mode == tmcfg.ModeValidator {
 	dbPath := filepath.Join(d.Config.RootDir, "valacc.db")
 	d.db, err = database.Open(dbPath, d.UseMemDB, d.Logger)
 	if err != nil {
@@ -180,7 +210,7 @@ func (d *Daemon) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to initialize node: %v", err)
 	}
-
+	
 	// Start node
 	// TODO Feed Tendermint logger to service logger
 	err = d.node.Start()
@@ -322,7 +352,7 @@ func (d *Daemon) Start() (err error) {
 			d.Logger.Error("Error closing database", "module", module, "error", err)
 		}
 	}()
-
+	}
 	return nil
 }
 

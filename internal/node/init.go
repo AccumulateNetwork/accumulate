@@ -78,6 +78,7 @@ func Init(opts InitOptions) (err error) {
 		if err := initFilesWithConfig(config, &subnetID); err != nil {
 			return err
 		}
+		if config.Mode == tmcfg.ModeValidator {
 
 		pvKeyFile := path.Join(nodeDir, config.PrivValidator.Key)
 		pvStateFile := path.Join(nodeDir, config.PrivValidator.State)
@@ -91,7 +92,6 @@ func Init(opts InitOptions) (err error) {
 			return fmt.Errorf("failed to get public key: %v", err)
 		}
 
-		if config.Mode == tmcfg.ModeValidator {
 			genVals = append(genVals, types.GenesisValidator{
 				Address: pubKey.Address(),
 				PubKey:  pubKey,
@@ -188,7 +188,7 @@ func Init(opts InitOptions) (err error) {
 	logMsg := []interface{}{"module", "init"}
 	switch nValidators := len(genVals); nValidators {
 	case 0:
-		logMsg = append(logMsg, "followers", nConfig)
+		logMsg = append(logMsg, "seeds", nConfig)
 	case nConfig:
 		logMsg = append(logMsg, "validators", nConfig)
 	default:
@@ -202,7 +202,15 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 
 	logger := tmlog.NewNopLogger()
 
+	if config.Mode == tmcfg.ModeSeed {
+	nodeKeyFile := config.NodeKeyFile()
+	if _, err := types.LoadOrGenNodeKey(nodeKeyFile); err != nil {
+		return fmt.Errorf("can't load or gen node key: %v", err)
+	}
+	logger.Info("Generated node key", "path", nodeKeyFile)
+	}
 	// private validator
+	if config.Mode == tmcfg.ModeValidator {
 	privValKeyFile := config.PrivValidator.KeyFile()
 	privValStateFile := config.PrivValidator.StateFile()
 	var pv *privval.FilePV
@@ -237,26 +245,27 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 	genFile := config.GenesisFile()
 	if tmos.FileExists(genFile) {
 		logger.Info("Found genesis file", "path", genFile)
-	} else {
-		genDoc := types.GenesisDoc{
-			ChainID:         *chainid,
-			GenesisTime:     tmtime.Now(),
-			ConsensusParams: types.DefaultConsensusParams(),
+		} else {
+			genDoc := types.GenesisDoc{
+				ChainID:         *chainid,
+				GenesisTime:     tmtime.Now(),
+				ConsensusParams: types.DefaultConsensusParams(),
+			}
+			pubKey, err := pv.GetPubKey(context.Background())
+			if err != nil {
+				return fmt.Errorf("can't get pubkey: %v", err)
+			}
+			genDoc.Validators = []types.GenesisValidator{{
+				Address: pubKey.Address(),
+				PubKey:  pubKey,
+				Power:   10,
+			}}
+			
+			if err := genDoc.SaveAs(genFile); err != nil {
+				return fmt.Errorf("can't save genFile: %s: %v", genFile, err)
+			}
+			logger.Info("Generated genesis file", "path", genFile)
 		}
-		pubKey, err := pv.GetPubKey(context.Background())
-		if err != nil {
-			return fmt.Errorf("can't get pubkey: %v", err)
-		}
-		genDoc.Validators = []types.GenesisValidator{{
-			Address: pubKey.Address(),
-			PubKey:  pubKey,
-			Power:   10,
-		}}
-
-		if err := genDoc.SaveAs(genFile); err != nil {
-			return fmt.Errorf("can't save genFile: %s: %v", genFile, err)
-		}
-		logger.Info("Generated genesis file", "path", genFile)
 	}
 
 	return nil

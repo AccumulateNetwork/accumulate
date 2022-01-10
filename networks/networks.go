@@ -122,6 +122,16 @@ var TestNet = Network{
 			{"2.bvn2.testnet.accumulatenetwork.io", config.Validator},
 		},
 	},
+	"SEED": {
+		Name:        "SEED",
+		NetworkName: "TestNet",
+		Type:        config.Directory,
+		Port:        26656,
+		Nodes: []Node{
+			{"0.bvn2.testnet.accumulatenetwork.io", config.Seed},
+
+		},
+	},
 }
 
 var DevNet = Network{

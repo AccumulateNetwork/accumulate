@@ -29,6 +29,7 @@ type NodeType string
 const (
 	Validator NodeType = "validator"
 	Follower  NodeType = "follower"
+	Seed 	NodeType = "seed"
 )
 
 const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=debug;executor=info;disk-monitor=info;init=info"
@@ -45,6 +46,15 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	switch node {
 	case Validator:
 		c.Config = *tm.DefaultValidatorConfig()
+	case Seed:
+		c.Config = *tm.DefaultConfig()
+		c.Mode = "seed"
+		c.P2P.ListenAddress = "tcp://127.0.0.1:26657"
+		c.P2P.AllowDuplicateIP = true
+		c.P2P.AddrBook = c.P2P.AddrBookFile()
+		c.Accumulate.Website.Enabled = false
+		c.PrivValidator.Key = ""
+		c.PrivValidator.State = ""
 	default:
 		c.Config = *tm.DefaultConfig()
 	}
