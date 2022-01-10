@@ -32,7 +32,7 @@ variables:
       echo -e "${SECTION}section_end:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}";
     }
 
-.test:
+test:
   stage: test
   extends: .go
   needs: []
@@ -43,15 +43,7 @@ variables:
       junit: report.xml
   script:
   - go build -v ./...
-  - go run gotest.tools/gotestsum --junitfile report.xml --format testname -- -cpu 4 ./...
-
-test 1/2:
-  extends: .test
-  image: golang:1.16
-
-test 2/2:
-  extends: .test
-  image: golang:1.17
+  - go run gotest.tools/gotestsum --junitfile report.xml --format testname
 
 git describe:
   stage: build
@@ -142,7 +134,7 @@ configure:
 .deploy:
   stage: deploy
   only: [develop] # only run on the main branch
-  needs: [configure, test 1/2, test 2/2]
+  needs: [configure, test]
   tags:
   - linux
   - docker

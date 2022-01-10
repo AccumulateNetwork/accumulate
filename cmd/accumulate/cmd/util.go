@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -235,12 +236,17 @@ func GetUrl(url string) (*QueryResponse, error) {
 }
 
 func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
-	data, err := json.Marshal(payload)
+	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	dataBinary, err := payload.MarshalBinary()
+	var data []byte
+	if action == "execute" {
+		data, err = json.Marshal(hex.EncodeToString(dataBinary))
+	} else {
+		data, err = json.Marshal(payload)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -623,7 +629,12 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 		return out, nil
 	default:
-		return "", fmt.Errorf("unknown response type %q", res.Type)
+		data, err := json.Marshal(res.Data)
+		if err != nil {
+			return "", err
+		}
+		out := fmt.Sprintf("Unknown account type %s:\n\t%s\n", res.Type, data)
+		return out, nil
 	}
 }
 
@@ -689,7 +700,12 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		return out, nil
 
 	default:
-		return "", fmt.Errorf("unknown response type %q", res.Type)
+		data, err := json.Marshal(res.Data)
+		if err != nil {
+			return "", err
+		}
+		out := fmt.Sprintf("Unknown transaction type %s:\n\t%s\n", res.Type, data)
+		return out, nil
 	}
 }
 

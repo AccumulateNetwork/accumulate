@@ -31,8 +31,6 @@ func NewChain(typ types.ChainType) (state.Chain, error) {
 		return new(DataAccount), nil
 	case types.ChainTypeLiteDataAccount:
 		return new(LiteDataAccount), nil
-	case types.ChainTypeSyntheticTransactions:
-		return new(SyntheticTransactionChain), nil
 	case types.ChainTypeInternalLedger:
 		return new(InternalLedger), nil
 	default:
