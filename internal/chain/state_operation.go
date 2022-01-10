@@ -14,12 +14,13 @@ import (
 )
 
 type stateOperation interface {
-	Execute(*stateCache, *DeliverMetadata) error
+	// Execute executes the operation and returns any chains that should be
+	// created via a synthetic transaction.
+	Execute(*stateCache) ([]state.Chain, error)
 }
 
-type createRecord struct {
-	url    *url.URL
-	record state.Chain
+type createRecords struct {
+	records []state.Chain
 }
 
 // Create queues a record for a synthetic chain create transaction. Will panic
@@ -41,21 +42,13 @@ func (m *stateCache) Create(record ...state.Chain) {
 		}
 
 		m.chains[u.ResourceChain32()] = r
-		m.operations = append(m.operations, &createRecord{u, r})
 	}
+
+	m.operations = append(m.operations, &createRecords{record})
 }
 
-func (op *createRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
-	data, err := op.record.MarshalBinary()
-	if err != nil {
-		return fmt.Errorf("failed to marshal record: %v", err)
-	}
-
-	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = st.txHash
-	scc.Chains = []protocol.ChainParams{{Data: data}}
-	meta.Submitted = append(meta.Submitted, &SubmittedTransaction{op.url, scc})
-	return nil
+func (op *createRecords) Execute(st *stateCache) ([]state.Chain, error) {
+	return op.records, nil
 }
 
 type updateRecord struct {
@@ -79,7 +72,7 @@ func (m *stateCache) Update(record ...state.Chain) {
 	}
 }
 
-func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
+func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 	// Update: update an existing record. Non-synthetic transactions are
 	// not allowed to create records, so we must check if the record
 	// already exists. The record may have been added to the DB
@@ -94,11 +87,7 @@ func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 
 	case !errors.Is(err, storage.ErrNotFound):
 		// Handle unexpected errors
-		return fmt.Errorf("failed to check for an existing record: %v", err)
-
-	case op.record.Header().Type.IsTransaction():
-		// Non-synthetic transactions are allowed to create transaction
-		// records
+		return nil, fmt.Errorf("failed to check for an existing record: %v", err)
 
 	case st.txType.IsSynthetic() || st.txType.IsInternal():
 		// Synthetic and internal transactions are allowed to create records
@@ -106,7 +95,7 @@ func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 	default:
 		// Non-synthetic transactions are NOT allowed to create records
 		// (except for TX records)
-		return fmt.Errorf("cannot create a data record in a non-synthetic transaction")
+		return nil, fmt.Errorf("cannot create a data record in a non-synthetic transaction")
 	}
 
 	header := op.record.Header()
@@ -114,16 +103,13 @@ func (op *updateRecord) Execute(st *stateCache, meta *DeliverMetadata) error {
 		header.ChainUrl = types.String(op.url.String())
 	}
 
-	err = st.updateStateAndChain(rec, op.record, protocol.MainChain)
+	record := st.batch.Record(op.url)
+	err = record.PutState(op.record)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	// Do not create anchor entries for the ledger
-	if header.Type != types.ChainTypeInternalLedger {
-		meta.Updated = append(meta.Updated, op.url)
-	}
-	return nil
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
 }
 
 type updateNonce struct {
@@ -171,8 +157,19 @@ func (m *stateCache) UpdateNonce(record state.Chain) error {
 	return nil
 }
 
-func (op *updateNonce) Execute(st *stateCache, meta *DeliverMetadata) error {
-	return st.updateStateAndChain(st.batch.Record(op.url), op.record, "Pending")
+func (op *updateNonce) Execute(st *stateCache) ([]state.Chain, error) {
+	record := st.batch.Record(op.url)
+	err := record.PutState(op.record)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
+	}
+
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.PendingChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
+}
+
+//UpdateCreditBalance update the credits used for a transaction
+func (m *stateCache) UpdateCreditBalance(record state.Chain) {
+	panic("todo: UpdateCredtedBalance needs to be implemented")
 }
 
 type addDataEntry struct {
@@ -191,36 +188,59 @@ func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry 
 		panic(fmt.Errorf("invalid URL: %v", err))
 	}
 
-	// m.chains[u.ResourceChain32()] = record
 	m.operations = append(m.operations, &addDataEntry{u, entryHash, dataEntry})
 }
 
-func (op *addDataEntry) Execute(st *stateCache, meta *DeliverMetadata) error {
+func (op *addDataEntry) Execute(st *stateCache) ([]state.Chain, error) {
 	// Add entry to data chain
 	record := st.batch.Record(op.url)
 	data, err := record.Data()
 	if err != nil {
-		return fmt.Errorf("failed to load data chain of %q: %v", op.url, err)
+		return nil, fmt.Errorf("failed to load data chain of %q: %v", op.url, err)
 	}
 
+	index := data.Height()
 	err = data.Put(op.hash, op.entry)
 	if err != nil {
-		return fmt.Errorf("failed to add entry to data chain of %q: %v", op.url, err)
+		return nil, fmt.Errorf("failed to add entry to data chain of %q: %v", op.url, err)
+	}
+
+	err = didAddChainEntry(st.nodeUrl, st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, uint64(index), 0)
+	if err != nil {
+		return nil, err
 	}
 
 	// Add TX to main chain
-	main, err := record.Chain(protocol.MainChain)
-	if err != nil {
-		return fmt.Errorf("failed to load main chain of %q: %v", op.url, err)
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
+}
+
+type addChainEntryOp struct {
+	account     *url.URL
+	name        string
+	typ         protocol.ChainType
+	entry       []byte
+	sourceIndex uint64
+}
+
+func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
+	// The main and pending chain cannot be updated this way
+	switch name {
+	case protocol.MainChain, protocol.PendingChain:
+		return fmt.Errorf("invalid operation: cannot update %s chain with AddChainEntry", name)
 	}
 
-	err = main.AddEntry(st.txHash[:])
+	// Check if the chain is valid
+	_, err := m.batch.Record(u).Chain(name, typ)
 	if err != nil {
-		return fmt.Errorf("failed to add entry to main chain of %q: %v", op.url, err)
+		return fmt.Errorf("failed to load %s#chain/%s: %v", u, name, err)
 	}
 
-	meta.Updated = append(meta.Updated, op.url)
+	m.operations = append(m.operations, &addChainEntryOp{u, name, typ, entry, sourceIndex})
 	return nil
+}
+
+func (op *addChainEntryOp) Execute(st *stateCache) ([]state.Chain, error) {
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex)
 }
 
 type writeIndex struct {
@@ -260,12 +280,12 @@ func (op *writeIndex) Put(data []byte) {
 	op.value, op.put = data, true
 }
 
-func (op *writeIndex) Execute(st *stateCache, meta *DeliverMetadata) error {
+func (op *writeIndex) Execute(st *stateCache) ([]state.Chain, error) {
 	if !op.put {
-		return nil
+		return nil, nil
 	}
 	op.index.Put(op.value)
-	return nil
+	return nil, nil
 }
 
 type signTransaction struct {
@@ -280,30 +300,22 @@ func (m *stateCache) SignTransaction(txid []byte, signature *transactions.ED2551
 	})
 }
 
-func (op *signTransaction) Execute(st *stateCache, meta *DeliverMetadata) error {
-	return st.batch.Transaction(op.txid).AddSignatures(op.signature)
+func (op *signTransaction) Execute(st *stateCache) ([]state.Chain, error) {
+	return nil, st.batch.Transaction(op.txid).AddSignatures(op.signature)
 }
 
-//UpdateCreditBalance update the credits used for a transaction
-func (m *stateCache) UpdateCreditBalance(record state.Chain) {
-	panic("todo: UpdateCredtedBalance needs to be implemented")
+type addSyntheticTxns struct {
+	txid  []byte
+	synth [][32]byte
 }
 
-func (m *stateCache) updateStateAndChain(record *database.Record, state state.Chain, name string) error {
-	chain, err := record.Chain(name)
-	if err != nil {
-		return fmt.Errorf("failed to load %s chain of %q: %v", name, state.Header().ChainUrl, err)
-	}
+func (m *stateCache) AddSyntheticTxns(txid []byte, synth [][32]byte) {
+	m.operations = append(m.operations, &addSyntheticTxns{
+		txid:  txid,
+		synth: synth,
+	})
+}
 
-	err = chain.AddEntry(m.txHash[:])
-	if err != nil {
-		return fmt.Errorf("failed to add a hash to %s chain of %q: %v", name, state.Header().ChainUrl, err)
-	}
-
-	err = record.PutState(state)
-	if err != nil {
-		return fmt.Errorf("failed to update state of %q: %v", state.Header().ChainUrl, err)
-	}
-
-	return nil
+func (op *addSyntheticTxns) Execute(st *stateCache) ([]state.Chain, error) {
+	return nil, st.batch.Transaction(op.txid).AddSyntheticTxns(op.synth...)
 }

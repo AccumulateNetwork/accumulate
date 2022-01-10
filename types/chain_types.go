@@ -11,10 +11,8 @@ type ChainType uint64
 
 const (
 	// ChainTypeUnknown represents an unknown chain type.
-	ChainTypeUnknown = ChainType(iota)
-)
+	ChainTypeUnknown ChainType = 0
 
-const (
 	// ChainTypeAnchor is one or more Merkle DAG anchors.
 	ChainTypeAnchor ChainType = 1
 
@@ -47,9 +45,6 @@ const (
 
 	// ChainTypeLiteDataAccount is a Lite Data Account chain.
 	ChainTypeLiteDataAccount ChainType = 12
-
-	// ChainTypeSyntheticTransactions is a chain of synthetic transactions.
-	ChainTypeSyntheticTransactions ChainType = 13
 
 	// ChainTypeInternalLedger is a ledger that tracks the state of internal
 	// operations.
@@ -97,8 +92,6 @@ func (t ChainType) String() string {
 		return "dataAccount"
 	case ChainTypeLiteDataAccount:
 		return "liteDataAccount"
-	case ChainTypeSyntheticTransactions:
-		return "syntheticTransactions"
 	default:
 		return fmt.Sprintf("ChainType:%d", t)
 	}

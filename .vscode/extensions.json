@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "golang.go",
+    "eamodio.gitlens",
+    "GitLab.gitlab-workflow",
+    "ms-vsliveshare.vsliveshare-pack",
+    "streetsidesoftware.code-spell-checker"
+  ]
+}

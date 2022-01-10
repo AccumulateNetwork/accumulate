@@ -11,6 +11,10 @@ Envelope:
     - name: Transaction
       type: Transaction
       marshal-as: reference
+      pointer: true
+    - name: hash
+      type: bytes
+      marshal-as: none
 
 Header:
   fields:
@@ -31,6 +35,6 @@ Transaction:
   fields:
     - name: Body
       type: bytes
-    - name: txHash
+    - name: hash
       type: bytes
       marshal-as: none
