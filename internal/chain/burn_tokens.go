@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -20,5 +19,25 @@ func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	return errors.New("not implemented") // TODO
+	var account tokenChain
+	if st.Origin != nil {
+		switch origin := st.Origin.(type) {
+		case *protocol.LiteTokenAccount:
+			account = origin
+		case *protocol.TokenAccount:
+			account = origin
+		default:
+			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, origin.Header().Type)
+		}
+	} else if keyHash, _, err := protocol.ParseLiteAddress(tx.Transaction.Origin); err != nil {
+		return fmt.Errorf("invalid lite token account URL: %v", err)
+	} else if keyHash == nil {
+		return fmt.Errorf("could not find token account")
+	}
+
+	if !account.DebitTokens(&body.Amount) {
+		return fmt.Errorf("unable to debit balance from account")
+	}
+	st.Update(account)
+	return nil
 }
