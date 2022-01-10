@@ -84,7 +84,7 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 	defer batch.Discard()
 
 	ledger := protocol.NewInternalLedger()
-	err = batch.Record(n.network.NodeUrl().JoinPath(protocol.Ledger)).GetStateAs(ledger)
+	err = batch.Record(n.network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
 	if err == nil {
 		n.height = ledger.Index
 	} else {

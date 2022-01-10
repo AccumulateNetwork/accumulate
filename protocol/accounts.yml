@@ -71,19 +71,7 @@ TokenIssuer:
 
 Anchor:
   kind: chain
-  fields:
-    - name: Index
-      type: varint
-    - name: Timestamp
-      type: time
-    - name: Root
-      type: chain
-    - name: Chains
-      type: chainSet
-    - name: ChainAnchor
-      type: chain
-    - name: Synthetic
-      type: chain
+  fields: []
 
 ##### Data Types #####
 
