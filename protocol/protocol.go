@@ -28,6 +28,9 @@ const (
 	// Ledger is the path to a node's internal ledger.
 	Ledger = "ledger"
 
+	// AnchorPool is the path to a node's anchor chain account.
+	AnchorPool = "anchors"
+
 	// MainChain is the main transaction chain of a record.
 	MainChain = "main"
 

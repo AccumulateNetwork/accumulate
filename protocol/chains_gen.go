@@ -16,8 +16,8 @@ const ChainTypeUnknown ChainType = 0
 // ChainTypeTransaction holds transaction hashes.
 const ChainTypeTransaction ChainType = 1
 
-// ChainTypeRoot is a root chain of a subnet that holds chain anchors.
-const ChainTypeRoot ChainType = 2
+// ChainTypeAnchor holds chain anchors.
+const ChainTypeAnchor ChainType = 2
 
 // ChainTypeData holds data entry hashes.
 const ChainTypeData ChainType = 3
@@ -41,8 +41,8 @@ func (v ChainType) String() string {
 		return "unknown"
 	case ChainTypeTransaction:
 		return "transaction"
-	case ChainTypeRoot:
-		return "root"
+	case ChainTypeAnchor:
+		return "anchor"
 	case ChainTypeData:
 		return "data"
 	default:
@@ -57,8 +57,8 @@ func ChainTypeByName(name string) (ChainType, bool) {
 		return ChainTypeUnknown, true
 	case "transaction":
 		return ChainTypeTransaction, true
-	case "root":
-		return ChainTypeRoot, true
+	case "anchor":
+		return ChainTypeAnchor, true
 	case "data":
 		return ChainTypeData, true
 	default:

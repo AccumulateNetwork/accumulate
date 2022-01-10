@@ -199,8 +199,6 @@ SyntheticDepositTokens:
       is-url: true
     - name: Amount
       type: bigint
-    # - name: Metadata
-    #   type: rawJson
 
 SyntheticAnchor:
   kind: tx
@@ -210,18 +208,15 @@ SyntheticAnchor:
       is-url: true
     - name: Major
       type: bool
-    - name: Index
-      type: varint
-    - name: Timestamp
-      type: time
-    - name: Root
+    - name: RootAnchor
       type: chain
-    - name: SynthTxnAnchor
-      type: chain
-    - name: ChainAnchor
-      type: chain
-    - name: Chains
-      type: chainSet
+    - name: RootIndex
+      type: uvarint
+    - name: SourceIndex
+      type: uvarint
+    - name: Receipt
+      type: Receipt
+      marshal-as: reference
 
 SyntheticDepositCredits:
   kind: tx

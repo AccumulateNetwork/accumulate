@@ -122,16 +122,16 @@ func TestAnchorChain(t *testing.T) {
 	// Get the anchor chain manager
 	batch = n.db.Begin()
 	defer batch.Discard()
-	ledger := batch.Record(n.network.NodeUrl().JoinPath(protocol.Ledger))
+	ledger := batch.Record(n.network.NodeUrl(protocol.Ledger))
 
 	// Check each anchor
 	ledgerState := protocol.NewInternalLedger()
 	require.NoError(t, ledger.GetStateAs(ledgerState))
 	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
 	require.NoError(t, err)
-	first := rootChain.Height() - int64(len(ledgerState.Anchors))
+	first := rootChain.Height() - int64(len(ledgerState.Updates))
 	var accounts []string
-	for i, meta := range ledgerState.Anchors {
+	for i, meta := range ledgerState.Updates {
 		accounts = append(accounts, fmt.Sprintf("%s#chain/%s", meta.Account, meta.Name))
 
 		root, err := rootChain.Entry(first + int64(i))
