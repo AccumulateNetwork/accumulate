@@ -35,20 +35,23 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 
 	// Find the old key.  Also go ahead and check cases where we must have the
 	// old key, can't have the old key, and don't care about the old key.
-	var oldKey *protocol.KeySpec
-	index := -1
-	if len(body.Key) > 0 && body.Operation != protocol.SetThreshold { // SetThreshold doesn't care about the old key
+	var bodyKey *protocol.KeySpec
+	indexKey := -1
+	indexNewKey := -1
+	if len(body.Key) > 0 { // SetThreshold doesn't care about the old key
 		for i, key := range page.Keys { // Look for the old key
 			if bytes.Equal(key.PublicKey, body.Key) { // User must supply an exact match of the key as is on the key page
-				oldKey, index = key, i
+				bodyKey, indexKey = key, i
 				break
 			}
 		}
-		if index >= 0 && body.Operation == protocol.AddKey { // AddKey cannot have an old key
-			return fmt.Errorf("an existing key cannot be added again to the Key Page")
-		}
-		if index < 0 { // Everything else must have an old key
-			return fmt.Errorf("specified key not found on the key page")
+	}
+	if len(body.NewKey) > 0 {
+		for i, key := range page.Keys { // Look for the old key
+			if bytes.Equal(key.PublicKey, body.NewKey) { // User must supply an exact match of the key as is on the key page
+				indexNewKey = i
+				break
+			}
 		}
 	}
 
@@ -93,6 +96,15 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 
 	switch body.Operation {
 	case protocol.AddKey:
+		// Check that a NewKey was provided, and that the key isn't already on
+		// the Key Page
+		if len(body.NewKey) == 0 { // Provided
+			return fmt.Errorf("must provide a new key")
+		}
+		if indexNewKey > 0 { // Not on the Key Page
+			return fmt.Errorf("cannot have duplicate keys on key page")
+		}
+
 		key := &protocol.KeySpec{
 			PublicKey: body.NewKey,
 		}
@@ -102,13 +114,27 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		page.Keys = append(page.Keys, key)
 
 	case protocol.UpdateKey:
-		oldKey.PublicKey = body.NewKey
+		// check that the Key to update is on the key Page, and the new Key
+		// is not already on the Key Page
+		if indexKey < 0 { // The Key to update is on key page
+			return fmt.Errorf("key to be updated not found on the key page")
+		}
+		if indexNewKey >= 0 { // The new key is not on the key page
+			return fmt.Errorf("key must be updated to a key not found on key page")
+		}
+
+		bodyKey.PublicKey = body.NewKey
 		if body.Owner != "" {
-			oldKey.Owner = body.Owner
+			bodyKey.Owner = body.Owner
 		}
 
 	case protocol.RemoveKey:
-		page.Keys = append(page.Keys[:index], page.Keys[index+1:]...)
+		// Make sure the key to be removed is on the Key Page
+		if indexKey < 0 {
+			return fmt.Errorf("key to be removed not found on the key page")
+		}
+
+		page.Keys = append(page.Keys[:indexKey], page.Keys[indexKey+1:]...)
 
 		if len(page.Keys) == 0 && priority == 0 {
 			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
@@ -120,6 +146,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 
 		// SetThreshold sets the signature threshold for the Key Page
 	case protocol.SetThreshold:
+		// Don't care what values are provided by keys....
 		if err := page.SetThreshold(body.Threshold); err != nil {
 			return err
 		}
