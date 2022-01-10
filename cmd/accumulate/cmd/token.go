@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"log"
+	"strconv"
 
-	"github.com/AccumulateNetwork/accumulate/types"
-	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/spf13/cobra"
 )
 
@@ -27,7 +25,7 @@ var tokenCmd = &cobra.Command{
 				}
 			case "create":
 				if len(args) > 4 {
-					CreateToken(args[1], args[2], args[3], args[4])
+					CreateToken(args[1], args[2], args[3], args[4], args[5], args[6])
 				} else {
 					fmt.Println("Usage:")
 					PrintTokenCreate()
@@ -45,11 +43,11 @@ var tokenCmd = &cobra.Command{
 }
 
 func PrintTokenGet() {
-	fmt.Println("  accumulate token get [URL]						Get token by URL")
+	fmt.Println("  accumulate token get [url] Get token by URL")
 }
 
 func PrintTokenCreate() {
-	fmt.Println("  accumulate token create [URL] [SYMBOL] [PRECISION] [SIGNER ADI]	Create new token")
+	fmt.Println("  accumulate token create [origin adi url] [signer key name] [url] [symbol] [precision] [properties] 	Create new token")
 }
 
 func PrintToken() {
@@ -57,27 +55,52 @@ func PrintToken() {
 	PrintTokenCreate()
 }
 
-func GetToken(url string) {
+func GetToken(url string) (*QueryResponse, *protocol.TokenAccount, error) {
 
-	var res interface{}
-	var str []byte
-
-	params := acmeapi.APIRequestURL{}
-	params.URL = types.String(url)
-
-	if err := Client.Request(context.Background(), "token", params, &res); err != nil {
-		log.Fatal(err)
-	}
-
-	str, err := json.Marshal(res)
+	res, err := GetUrl(url)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, err
 	}
 
-	fmt.Println(string(str))
+	tokenAccount := protocol.TokenAccount{}
+	err = Remarshal(res.Data, &tokenAccount)
+	if err != nil {
+		return nil, nil, err
+	}
+	return res, &tokenAccount, nil
 
 }
 
-func CreateToken(url string, symbol string, precision string, signer string) {
-	fmt.Println("Creating new token " + symbol)
+func CreateToken(origin, signer, url, symbol, precision, properties string) (string, error) {
+	u, err := url2.Parse(url)
+	if err != nil {
+		return "", err
+	}
+
+	originUrl, err := url2.Parse(origin)
+	if err != nil {
+		return "", err
+	}
+
+	_, si, privKey, err := prepareSigner(u, []string{signer})
+	if err != nil {
+		return "", err
+	}
+
+	prcsn, err := strconv.Atoi(precision)
+	if err != nil {
+		return "", err
+	}
+
+	params := protocol.CreateToken{}
+	params.Symbol = symbol
+	params.Precision = uint64(prcsn)
+	params.Properties = properties
+
+	res, err := dispatchTxRequest("create-token", &params, originUrl, si, privKey)
+	if err != nil {
+		return "", err
+	}
+
+	return ActionResponseFrom(res).Print()
 }
