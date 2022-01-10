@@ -37,6 +37,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	}
 
 	tx := new(transactions.Envelope)
+	tx.Transaction = new(transactions.Transaction)
 	tx.Transaction.Body = depData
 	tx.Transaction.Origin = recipientAdi
 	tx.Transaction.KeyPageHeight = 1
@@ -74,7 +75,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 			return err
 		}
 
-		chain, err := r.Chain(protocol.MainChain)
+		chain, err := r.Chain(protocol.MainChain, protocol.ChainTypeTransaction)
 		if err != nil {
 			return err
 		}

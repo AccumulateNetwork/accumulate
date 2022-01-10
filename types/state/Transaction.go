@@ -33,6 +33,7 @@ func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransact
 
 func (tx *Transaction) Restore() *transactions.Envelope {
 	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Transaction.Header = *tx.SigInfo
 	gtx.Transaction.Body = tx.Transaction
 	return gtx
@@ -48,6 +49,7 @@ func (tx *Transaction) TxType() types.TransactionType {
 
 func (tx *PendingTransaction) Restore() *transactions.Envelope {
 	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Signatures = tx.Signature
 	gtx.Transaction.Header = *tx.TransactionState.SigInfo
 	gtx.Transaction.Body = tx.TransactionState.Transaction
@@ -55,10 +57,10 @@ func (tx *PendingTransaction) Restore() *transactions.Envelope {
 }
 
 func (is *Transaction) TransactionHash() *types.Bytes32 {
-	gtx := transactions.Envelope{}
-	gtx.Transaction.Header = *is.SigInfo
-	gtx.Transaction.Body = is.Transaction
+	tx := new(transactions.Transaction)
+	tx.Header = *is.SigInfo
+	tx.Body = is.Transaction
 	var txHash types.Bytes32
-	copy(txHash[:], gtx.Transaction.Hash())
+	copy(txHash[:], tx.Hash())
 	return &txHash
 }

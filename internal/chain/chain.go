@@ -33,6 +33,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			CreateIdentity{},
 			CreateKeyBook{},
 			CreateKeyPage{},
+			CreateToken{},
 			CreateTokenAccount{},
 			SendTokens{},
 			UpdateKeyPage{},
@@ -79,6 +80,7 @@ type TxExecutor interface {
 
 type creditChain interface {
 	state.Chain
+	SetNonce(key []byte, nonce uint64) error
 	CreditCredits(amount uint64)
 	DebitCredits(amount uint64) bool
 }

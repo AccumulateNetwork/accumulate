@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"encoding"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,7 +22,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/mitchellh/mapstructure"
 	"github.com/spf13/cobra"
 )
 
@@ -134,6 +134,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 
 func signGenTx(binaryPayload []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
 	gtx.Transaction.Body = binaryPayload
 
 	hdr.Nonce = nonce
@@ -190,16 +191,11 @@ func IsLiteAccount(url string) bool {
 
 // Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.
 func Remarshal(src interface{}, dst interface{}) error {
-	cfg := &mapstructure.DecoderConfig{
-		Result:  &dst,
-		TagName: "json",
-		Squash:  true,
-	}
-	decoder, err := mapstructure.NewDecoder(cfg)
+	data, err := json.Marshal(src)
 	if err != nil {
 		return err
 	}
-	return decoder.Decode(src)
+	return json.Unmarshal(data, dst)
 }
 
 // This is a hack to reduce how much we have to change
@@ -240,12 +236,17 @@ func GetUrl(url string) (*QueryResponse, error) {
 }
 
 func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
-	data, err := json.Marshal(payload)
+	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
-	dataBinary, err := payload.MarshalBinary()
+	var data []byte
+	if action == "execute" {
+		data, err = json.Marshal(hex.EncodeToString(dataBinary))
+	} else {
+		data, err = json.Marshal(payload)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -628,7 +629,12 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 		return out, nil
 	default:
-		return "", fmt.Errorf("unknown response type %q", res.Type)
+		data, err := json.Marshal(res.Data)
+		if err != nil {
+			return "", err
+		}
+		out := fmt.Sprintf("Unknown account type %s:\n\t%s\n", res.Type, data)
+		return out, nil
 	}
 }
 
@@ -694,7 +700,12 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		return out, nil
 
 	default:
-		return "", fmt.Errorf("unknown response type %q", res.Type)
+		data, err := json.Marshal(res.Data)
+		if err != nil {
+			return "", err
+		}
+		out := fmt.Sprintf("Unknown transaction type %s:\n\t%s\n", res.Type, data)
+		return out, nil
 	}
 }
 

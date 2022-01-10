@@ -1,0 +1,73 @@
+# General data types
+
+ObjectMetadata:
+  fields:
+    - name: Type
+      type: ObjectType
+      marshal-as: value
+    - name: Chains
+      type: slice
+      slice:
+        type: ChainMetadata
+        marshal-as: reference
+
+ChainMetadata:
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: ChainType
+      marshal-as: value
+
+AnchorMetadata:
+  embeddings:
+    - ChainMetadata
+  fields:
+    - name: Account
+      type: url.URL
+      marshal-as: reference
+      pointer: true
+    - name: Index
+      type: uvarint
+    - name: SourceIndex
+      type: uvarint
+
+DataEntry:
+  fields:
+    - name: ExtIds
+      type: slice
+      slice:
+        type: bytes
+    - name: Data
+      type: bytes
+
+DirectoryIndexMetadata:
+  fields:
+    - name: Count
+      type: uvarint
+
+TransactionStatus:
+  fields:
+    - name: Remote
+      type: bool
+    - name: Delivered
+      type: bool
+    - name: Code
+      type: uvarint
+
+Receipt:
+  fields:
+    - name: Start
+      type: bytes
+    - name: Entries
+      type: slice
+      slice:
+        type: ReceiptEntry
+        marshal-as: reference
+
+ReceiptEntry:
+  fields:
+    - name: Right
+      type: bool
+    - name: Hash
+      type: bytes
