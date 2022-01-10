@@ -104,3 +104,39 @@ func (c *Chain) AddEntry(entry []byte) error {
 	c.merkle.AddHash(entry)
 	return nil
 }
+
+// Receipt builds a receipt from one index to another
+func (c *Chain) Receipt(from, to int64) (*managed.Receipt, error) {
+	if from < 0 || to < 0 || from > c.Height() || to > c.Height() {
+		return nil, fmt.Errorf("index out of range")
+	}
+	if from > to {
+		return nil, fmt.Errorf("from is greater than to")
+	}
+
+	var err error
+	r := managed.NewReceipt(c.merkle)
+	r.ElementIndex = from
+	r.AnchorIndex = to
+	r.Element, err = c.Entry(from)
+	if err != nil {
+		return nil, err
+	}
+	r.Anchor, err = c.Entry(to)
+	if err != nil {
+		return nil, err
+	}
+
+	// If this is the first element in the Merkle Tree, we are already done
+	if from == 0 && to == 0 {
+		r.MDRoot = r.Element
+		return r, nil
+	}
+
+	err = r.BuildReceipt()
+	if err != nil {
+		return nil, err
+	}
+
+	return r, nil
+}

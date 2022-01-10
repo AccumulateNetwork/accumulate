@@ -46,7 +46,6 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		uAdi := opts.Network.NodeUrl()
 		uBook := uAdi.JoinPath(protocol.ValidatorBook)
 		uPage := uAdi.JoinPath(protocol.ValidatorBook + "0")
-		uLedger := uAdi.JoinPath(protocol.Ledger)
 
 		adi := protocol.NewADI()
 		adi.ChainUrl = types.String(uAdi.String())
@@ -72,10 +71,16 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 
 		// Create the ledger
 		ledger := protocol.NewInternalLedger()
-		ledger.ChainUrl = types.String(uLedger.String())
+		ledger.ChainUrl = types.String(uAdi.JoinPath(protocol.Ledger).String())
 		ledger.KeyBook = types.String(uBook.String())
 		ledger.Synthetic.Nonce = 1
 		records = append(records, ledger)
+
+		// Create the anchor pool
+		anchors := protocol.NewAnchor()
+		anchors.ChainUrl = types.String(uAdi.JoinPath(protocol.AnchorPool).String())
+		anchors.KeyBook = types.String(uBook.String())
+		records = append(records, anchors)
 
 		// Create records and directory entries
 		urls := make([]*url.URL, len(records))

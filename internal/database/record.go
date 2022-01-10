@@ -59,6 +59,10 @@ func (r *Record) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.Ob
 		return nil, fmt.Errorf("attempted to add chain %s multiple times with different types", chain.Name)
 	}
 
+	if len(meta.Chains) == origLen {
+		return meta, nil
+	}
+
 	err = r.batch.putAs(r.key.Object(), meta)
 	if err != nil {
 		return nil, err
