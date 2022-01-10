@@ -68,6 +68,12 @@ TokenIssuer:
     - name: Properties
       type: string
       is-url: true
+    - name: Supply
+      type: bigint
+      optional: true
+    - name: HasSupplyLimit
+      type: bool
+      optional: true
 
 Anchor:
   kind: chain
