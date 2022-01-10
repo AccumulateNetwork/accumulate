@@ -29,7 +29,7 @@ func TestStateDBConsistency(t *testing.T) {
 	n := createApp(t, db, crypto.Address{}, true)
 	n.testLiteTx(10)
 
-	ledger := n.network.NodeUrl().JoinPath(protocol.Ledger)
+	ledger := n.network.NodeUrl(protocol.Ledger)
 	ledger1 := protocol.NewInternalLedger()
 	batch := db.Begin()
 	require.NoError(t, batch.Record(ledger).GetStateAs(ledger1))
