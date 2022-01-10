@@ -1,19 +1,13 @@
 package chain
 
-//go:generate go run ../../tools/cmd/gentypes --package chain types.yml
-
-func (b *BlockMetadata) Empty() bool {
-	return b.Deliver.Empty() &&
-		b.Delivered == 0 &&
+func (b *blockMetadata) Empty() bool {
+	return b.Delivered == 0 &&
 		b.SynthSigned == 0 &&
 		b.SynthSent == 0
 }
 
-func (d *DeliverMetadata) Empty() bool {
-	return len(d.Updated) == 0 && len(d.Submitted) == 0
-}
-
-func (d *DeliverMetadata) Append(e DeliverMetadata) {
-	d.Updated = append(d.Updated, e.Updated...)
-	d.Submitted = append(d.Submitted, e.Submitted...)
+type blockMetadata struct {
+	Delivered   uint64 `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	SynthSigned uint64 `json:"synthSigned,omitempty" form:"synthSigned" query:"synthSigned" validate:"required"`
+	SynthSent   uint64 `json:"synthSent,omitempty" form:"synthSent" query:"synthSent" validate:"required"`
 }

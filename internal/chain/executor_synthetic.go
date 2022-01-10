@@ -3,7 +3,6 @@ package chain
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -12,14 +11,7 @@ import (
 )
 
 // addSynthTxns prepares synthetic transactions for signing next block.
-func (m *Executor) addSynthTxns(tx *transactions.Envelope, submissions []*SubmittedTransaction) error {
-	txid := types.Bytes(tx.Transaction.Hash()).AsBytes32()
-
-	ledger := m.blockBatch.Record(m.Network.NodeUrl().JoinPath(protocol.Ledger))
-	chain, err := ledger.Chain(protocol.SyntheticChain, protocol.ChainTypeTransaction)
-	if err != nil {
-		return err
-	}
+func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error {
 
 	// Need to pass this to a threaded batcher / dispatcher to do both signing
 	// and sending of synth tx. No need to spend valuable time here doing that.
@@ -28,7 +20,7 @@ func (m *Executor) addSynthTxns(tx *transactions.Envelope, submissions []*Submit
 		// Generate a synthetic tx and send to the router. Need to track txid to
 		// make sure they get processed.
 
-		tx, err := m.buildSynthTxn(sub.Url, sub.Body, m.blockBatch)
+		tx, err := m.buildSynthTxn(st, sub.Url, sub.Body)
 		if err != nil {
 			return err
 		}
@@ -42,7 +34,7 @@ func (m *Executor) addSynthTxns(tx *transactions.Envelope, submissions []*Submit
 			return err
 		}
 
-		err = chain.AddEntry(tx.Transaction.Hash())
+		err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, tx.Transaction.Hash(), 0)
 		if err != nil {
 			return err
 		}
@@ -50,10 +42,19 @@ func (m *Executor) addSynthTxns(tx *transactions.Envelope, submissions []*Submit
 		copy(ids[i][:], tx.Transaction.Hash())
 	}
 
-	return m.blockBatch.Transaction(txid[:]).AddSyntheticTxns(ids...)
+	ledgerState := protocol.NewInternalLedger()
+	err := st.LoadUrlAs(m.Network.NodeUrl(protocol.Ledger), ledgerState)
+	if err != nil {
+		return err
+	}
+
+	ledgerState.Synthetic.Produced = append(ledgerState.Synthetic.Produced, ids...)
+	st.Update(ledgerState)
+	st.AddSyntheticTxns(st.txHash[:], ids)
+	return nil
 }
 
-func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.TransactionPayload, batch *database.Batch) (*transactions.Envelope, error) {
+func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body protocol.TransactionPayload) (*transactions.Envelope, error) {
 	// Marshal the payload
 	data, err := body.MarshalBinary()
 	if err != nil {
@@ -70,9 +71,8 @@ func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.Transact
 
 	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.Transaction.Hash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
 
-	ledger := batch.Record(opts.Network.NodeUrl().JoinPath(protocol.Ledger))
 	ledgerState := new(protocol.InternalLedger)
-	err = ledger.GetStateAs(ledgerState)
+	err = st.LoadUrlAs(opts.Network.NodeUrl(protocol.Ledger), ledgerState)
 	if err != nil {
 		// If we can't load the ledger, the node is fubared
 		panic(fmt.Errorf("failed to load the ledger: %v", err))
@@ -93,10 +93,6 @@ func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.Transact
 	txid := types.Bytes(env.Transaction.Hash()).AsBytes32()
 	ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
 
-	err = ledger.PutState(ledgerState)
-	if err != nil {
-		return nil, err
-	}
-
+	st.Update(ledgerState)
 	return env, nil
 }
