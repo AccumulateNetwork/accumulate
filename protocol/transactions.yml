@@ -103,6 +103,12 @@ CreateToken:
       type: string
       is-url: true
       optional: true
+    - name: InitialSupply
+      type: bigint
+      optional: true
+    - name: HasSupplyLimit
+      type: bool
+      optional: true
 
 IssueTokens:
   kind: tx
