@@ -84,6 +84,9 @@ jobs:
         run: |
           rm -rf .nodes
           ./accumulated testnet -w .nodes -v 1 -f 0 --no-empty-blocks
+      
+      - name: Init seed
+        run: ./accumulated init -w .nodes -n SEED
 
       # - name: Run and load test localhost
       #   run: |

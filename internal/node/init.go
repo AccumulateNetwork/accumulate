@@ -188,7 +188,7 @@ func Init(opts InitOptions) (err error) {
 	logMsg := []interface{}{"module", "init"}
 	switch nValidators := len(genVals); nValidators {
 	case 0:
-		logMsg = append(logMsg, "seeds", nConfig)
+		logMsg = append(logMsg, "follower", nConfig)
 	case nConfig:
 		logMsg = append(logMsg, "validators", nConfig)
 	default:
