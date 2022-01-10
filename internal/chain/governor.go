@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -33,12 +34,19 @@ type govDidBeginBlock struct {
 }
 
 type govDidCommit struct {
-	mirrorAdi   bool
-	height      int64
-	time        time.Time
-	blockMeta   *BlockMetadata
-	rootAnchor  []byte
-	synthAnchor []byte
+	mirrorAdi  bool
+	height     int64
+	time       time.Time
+	ledger     *protocol.InternalLedger
+	rootAnchor []byte
+	rootHeight int64
+	receipts   map[string]*receiptAndIndex
+}
+
+type receiptAndIndex struct {
+	Receipt     protocol.Receipt
+	Index       int64
+	SourceIndex int64
 }
 
 func newGovernor(opts ExecutorOptions) *governor {
@@ -78,7 +86,7 @@ func (g *governor) DidBeginBlock(isLeader bool, height int64, time time.Time) {
 	}
 }
 
-func (g *governor) DidCommit(batch *database.Batch, isLeader, mirrorAdi bool, height int64, time time.Time, blockMeta *BlockMetadata) error {
+func (g *governor) DidCommit(batch *database.Batch, isLeader, mirrorAdi bool, height int64, time time.Time) error {
 	g.logger.Debug("Did commit block", "height", height, "time", time)
 
 	if !isLeader {
@@ -86,28 +94,74 @@ func (g *governor) DidCommit(batch *database.Batch, isLeader, mirrorAdi bool, he
 		return nil
 	}
 
-	ledger := batch.Record(g.Network.NodeUrl().JoinPath(protocol.Ledger))
-	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	msg := govDidCommit{
+		mirrorAdi: mirrorAdi,
+		height:    height,
+		time:      time,
+	}
+
+	ledger := batch.Record(g.Network.NodeUrl(protocol.Ledger))
+	msg.ledger = protocol.NewInternalLedger()
+	err := ledger.GetStateAs(msg.ledger)
 	if err != nil {
 		return err
 	}
 
-	synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
+	rootChain, err := ledger.ReadChain(protocol.MinorRootChain)
+	if err != nil {
+		return err
+	}
+	msg.rootAnchor = rootChain.Anchor()
+	msg.rootHeight = rootChain.Height()
+
+	// Find BVN anchor chains
+	err = g.buildProofs(&msg, batch, rootChain)
 	if err != nil {
 		return err
 	}
 
 	select {
-	case g.messages <- govDidCommit{
-		mirrorAdi:   mirrorAdi,
-		height:      height,
-		time:        time,
-		blockMeta:   blockMeta,
-		rootAnchor:  rootChain.Anchor(),
-		synthAnchor: synthChain.Anchor(),
-	}:
+	case g.messages <- msg:
 	case <-g.done:
 	}
+	return nil
+}
+
+func (g *governor) buildProofs(msg *govDidCommit, batch *database.Batch, rootChain *database.Chain) error {
+	if g.Network.Type != config.Directory {
+		return nil
+	}
+
+	anchorUrl := g.Network.NodeUrl(protocol.AnchorPool)
+	baseIndex := msg.rootHeight - int64(len(msg.ledger.Updates))
+	msg.receipts = map[string]*receiptAndIndex{}
+
+	for i, u := range msg.ledger.Updates {
+		if u.Type != protocol.ChainTypeAnchor || !u.Account.Equal(anchorUrl) || !strings.HasPrefix(u.Name, "bvn-") {
+			continue
+		}
+
+		bvn := u.Name[4:]
+		if r := msg.receipts[bvn]; r != nil && r.Index > int64(u.Index) {
+			continue
+		}
+
+		rootIndex := baseIndex + int64(i)
+		r, err := buildProof(batch, &u, rootChain, rootIndex, msg.rootHeight)
+		if err != nil {
+			return err
+		}
+
+		var s protocol.Receipt
+		s.Start = r.Element
+		s.Entries = make([]protocol.ReceiptEntry, len(r.Nodes))
+		for i, n := range r.Nodes {
+			s.Entries[i] = protocol.ReceiptEntry{Right: n.Right, Hash: n.Hash}
+		}
+
+		msg.receipts[bvn] = &receiptAndIndex{s, int64(u.Index), int64(u.SourceIndex)}
+	}
+
 	return nil
 }
 
@@ -168,21 +222,12 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	// Create an anchor for the block
 	g.sendAnchor(batch, msg)
 
-	// Load ledger
-	ledger := batch.Record(g.Network.NodeUrl().JoinPath(protocol.Ledger))
-	ledgerState := new(protocol.InternalLedger)
-	err := ledger.GetStateAs(ledgerState)
-	if err != nil {
-		// If we can't load the ledger, the node is fubared
-		panic(fmt.Errorf("failed to load the ledger: %v", err))
-	}
-
 	// Sign and send produced synthetic transactions
-	g.signTransactions(batch, ledgerState)
-	g.sendTransactions(batch, ledgerState)
+	g.signTransactions(batch, msg.ledger)
+	g.sendTransactions(batch, msg.ledger)
 
 	// Dispatch transactions
-	err = g.dispatcher.Send(context.Background())
+	err := g.dispatcher.Send(context.Background())
 	if err != nil {
 		g.logger.Error("Failed to dispatch transactions", "error", err)
 	}
@@ -275,40 +320,30 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 }
 
 func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
-	// Make a copy
-	meta := msg.blockMeta.Deliver
-
-	// Don't count synthetic anchor transactions
-	submitted := meta.Submitted
-	meta.Submitted = make([]*SubmittedTransaction, 0, len(submitted))
-	for _, tx := range submitted {
-		if tx.Body.GetType() == types.TxTypeSyntheticAnchor {
-			continue
-		}
-		meta.Submitted = append(meta.Submitted, tx)
-	}
-
 	// Don't create an anchor transaction if no records were updated and no
 	// synthetic transactions (other than synthetic anchors) were produced
-	if meta.Empty() {
+	if len(msg.ledger.Updates) == 0 && synthCountExceptAnchors(batch, msg.ledger) == 0 {
 		return
 	}
 
 	body := new(protocol.SyntheticAnchor)
 	body.Source = g.Network.NodeUrl().String()
-	body.Index = msg.height
-	body.Timestamp = msg.time
-	copy(body.Root[:], batch.RootHash())
-	body.Chains = make([][32]byte, len(msg.blockMeta.Deliver.Updated))
-	copy(body.ChainAnchor[:], msg.rootAnchor)
-	copy(body.SynthTxnAnchor[:], msg.synthAnchor)
+	body.RootIndex = uint64(msg.rootHeight - 1)
+	copy(body.RootAnchor[:], msg.rootAnchor)
 
-	g.logger.Info("Creating anchor txn", "root", logging.AsHex(body.Root), "chains", logging.AsHex(body.ChainAnchor), "synth", logging.AsHex(body.SynthTxnAnchor))
-
-	for i, u := range msg.blockMeta.Deliver.Updated {
-		body.Chains[i] = u.ResourceChain32()
-		g.logger.Info("Anchor includes", "id", logging.AsHex(body.Chains[i]), "url", u.String())
+	kv := []interface{}{"root", logging.AsHex(body.RootAnchor)}
+	for i, c := range msg.ledger.Updates {
+		kv = append(kv, fmt.Sprintf("[%d]", i))
+		switch c.Name {
+		case "bpt":
+			kv = append(kv, "BPT")
+		case "synthetic":
+			kv = append(kv, "synthetic")
+		default:
+			kv = append(kv, fmt.Sprintf("%s#chain/%s", c.Account, c.Name))
+		}
 	}
+	g.logger.Info("Creating anchor txn", kv...)
 
 	txns := new(protocol.InternalSendTransactions)
 	switch g.Network.Type {
@@ -316,16 +351,22 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
 		// Send anchors from DN to all BVNs
 		txns.Transactions = make([]protocol.SendTransaction, len(g.Network.BvnNames))
 		for i, bvn := range g.Network.BvnNames {
+			body := *body
+			if r := msg.receipts[bvn]; r != nil {
+				body.Receipt = r.Receipt
+				body.SourceIndex = uint64(r.SourceIndex)
+			}
+
 			txns.Transactions[i] = protocol.SendTransaction{
-				Recipient: protocol.BvnUrl(bvn),
-				Payload:   body,
+				Recipient: protocol.BvnUrl(bvn).JoinPath(protocol.AnchorPool),
+				Payload:   &body,
 			}
 		}
 
 	case config.BlockValidator:
 		// Send anchor from BVN to DN
 		txns.Transactions = []protocol.SendTransaction{{
-			Recipient: protocol.DnUrl(),
+			Recipient: protocol.DnUrl().JoinPath(protocol.AnchorPool),
 			Payload:   body,
 		}}
 	}
@@ -392,55 +433,10 @@ func (g *governor) sendMirror(batch *database.Batch) {
 	g.sendInternal(batch, txns)
 }
 
-func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, error) {
-	var arec protocol.AnchoredRecord
-
-	rec := batch.Record(u)
-	state, err := rec.GetState()
-	if err != nil {
-		return arec, fmt.Errorf("failed to load %q: %v", u, err)
-	}
-
-	chain, err := rec.ReadChain(protocol.MainChain)
-	if err != nil {
-		return arec, fmt.Errorf("failed to load main chain of %q: %v", u, err)
-	}
-
-	arec.Record, err = state.MarshalBinary()
-	if err != nil {
-		return arec, fmt.Errorf("failed to marshal %q: %v", u, err)
-	}
-
-	copy(arec.Anchor[:], chain.Anchor())
-	return arec, nil
-}
-
-func loadDirectoryMetadata(batch *database.Batch, chainId []byte) (*protocol.DirectoryIndexMetadata, error) {
-	b, err := batch.RecordByID(chainId).Index("Directory", "Metadata").Get()
-	if err != nil {
-		return nil, err
-	}
-
-	md := new(protocol.DirectoryIndexMetadata)
-	err = md.UnmarshalBinary(b)
-	if err != nil {
-		return nil, err
-	}
-
-	return md, nil
-}
-
-func loadDirectoryEntry(batch *database.Batch, chainId []byte, index uint64) (string, error) {
-	b, err := batch.RecordByID(chainId).Index("Directory", index).Get()
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
-}
-
 func (g *governor) sendInternal(batch *database.Batch, body protocol.TransactionPayload) {
 	// Construct the signature transaction
-	env, err := g.buildSynthTxn(g.Network.NodeUrl().JoinPath(protocol.Ledger), body, batch)
+	st := newStateCache(g.Network.NodeUrl(), 0, [32]byte{}, batch)
+	env, err := g.buildSynthTxn(st, g.Network.NodeUrl(protocol.Ledger), body)
 	if err != nil {
 		g.logger.Error("Failed to build internal transaction", "error", err)
 		return

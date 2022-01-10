@@ -19,6 +19,19 @@ ChainMetadata:
     type: ChainType
     marshal-as: value
 
+AnchorMetadata:
+  embeddings:
+    - ChainMetadata
+  fields:
+    - name: Account
+      type: url.URL
+      marshal-as: reference
+      pointer: true
+    - name: Index
+      type: uvarint
+    - name: SourceIndex
+      type: uvarint
+
 DataEntry:
   fields:
     - name: ExtIds
@@ -41,3 +54,20 @@ TransactionStatus:
       type: bool
     - name: Code
       type: uvarint
+
+Receipt:
+  fields:
+    - name: Start
+      type: bytes
+    - name: Entries
+      type: slice
+      slice:
+        type: ReceiptEntry
+        marshal-as: reference
+
+ReceiptEntry:
+  fields:
+    - name: Right
+      type: bool
+    - name: Hash
+      type: bytes
