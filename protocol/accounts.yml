@@ -16,7 +16,7 @@ LiteTokenAccount:
 LiteDataAccount:
   kind: chain
   fields:
-    - name: Data
+    - name: Tail
       type: bytes
 
 ADI:

@@ -181,13 +181,15 @@ SyntheticCreateChain:
         type: ChainParams
         marshal-as: reference
 
+
 SyntheticWriteData:
   kind: tx
   fields:
     - name: Cause
       type: chain
-    - name: Data
-      type: bytes
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
 
 SyntheticDepositTokens:
   kind: tx
