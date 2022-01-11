@@ -204,7 +204,7 @@ func (op *addDataEntry) Execute(st *stateCache) ([]state.Chain, error) {
 	if op.liteStateRec != nil {
 		_, err := record.GetState()
 		if err != nil {
-			//if we have no state, so store it
+			//if we have no state, store it
 			err = record.PutState(*op.liteStateRec)
 			if err != nil {
 				return nil, err
