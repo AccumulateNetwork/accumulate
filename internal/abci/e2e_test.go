@@ -122,7 +122,7 @@ func TestAnchorChain(t *testing.T) {
 	// Get the anchor chain manager
 	batch = n.db.Begin()
 	defer batch.Discard()
-	ledger := batch.Record(n.network.NodeUrl(protocol.Ledger))
+	ledger := batch.Account(n.network.NodeUrl(protocol.Ledger))
 
 	// Check each anchor
 	ledgerState := protocol.NewInternalLedger()
@@ -142,7 +142,7 @@ func TestAnchorChain(t *testing.T) {
 			continue
 		}
 
-		mgr, err := batch.Record(meta.Account).ReadChain(meta.Name)
+		mgr, err := batch.Account(meta.Account).ReadChain(meta.Name)
 		require.NoError(t, err)
 
 		assert.Equal(t, root, mgr.Anchor(), "wrong anchor for %s#chain/%s", meta.Account, meta.Name)
@@ -217,7 +217,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, types.ChainTypeDataAccount, r.Type)
+		require.Equal(t, types.AccountTypeDataAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
 
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
@@ -247,7 +247,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		u := n.ParseUrl("acc://FooBar/foo/book1")
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, types.ChainTypeDataAccount, r.Type)
+		require.Equal(t, types.AccountTypeDataAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
 		require.Equal(t, types.String("acc://FooBar/mgr/book1"), r.ManagerKeyBook)
 		require.Equal(t, types.String(u.String()), r.KeyBook)
@@ -270,7 +270,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		})
 
 		r := n.GetDataAccount("FooBar/oof")
-		require.Equal(t, types.ChainTypeDataAccount, r.Type)
+		require.Equal(t, types.AccountTypeDataAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/oof"), r.ChainUrl)
 		require.Contains(t, n.GetDirectory("FooBar"), n.ParseUrl("FooBar/oof").String())
 
@@ -370,7 +370,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		})
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
+		require.Equal(t, types.AccountTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 
@@ -404,7 +404,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 		u := n.ParseUrl("foo/book1")
 
 		r := n.GetTokenAccount("FooBar/Baz")
-		require.Equal(t, types.ChainTypeTokenAccount, r.Type)
+		require.Equal(t, types.AccountTypeTokenAccount, r.Type)
 		require.Equal(t, types.String("acc://FooBar/Baz"), r.ChainUrl)
 		require.Equal(t, protocol.AcmeUrl().String(), r.TokenUrl)
 		require.Equal(t, types.String(u.String()), r.KeyBook)
@@ -674,7 +674,7 @@ func TestSignatorHeight(t *testing.T) {
 	getHeight := func(u *url.URL) uint64 {
 		batch := n.db.Begin()
 		defer batch.Discard()
-		chain, err := batch.Record(u).ReadChain(protocol.MainChain)
+		chain, err := batch.Account(u).ReadChain(protocol.MainChain)
 		require.NoError(t, err)
 		return uint64(chain.Height())
 	}
