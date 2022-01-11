@@ -151,8 +151,9 @@ func TestValidate(t *testing.T) {
 	t.Log("Create Key Page")
 	{
 		var keys []*KeySpecParams
+		// pubKey, _ := json.Marshal(adiKey.Public())
 		keys = append(keys, &KeySpecParams{
-			PublicKey: adiKey,
+			PublicKey: adiKey[32:],
 		})
 		executeTx(t, japi, "create-key-page", true, execParams{
 			Origin: adiName,
@@ -186,6 +187,23 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
 	}
 
+	t.Log("Update Key Page")
+	{
+		executeTx(t, japi, "update-key-page", true, execParams{
+			Origin: keyPageUrl,
+			Key:    adiKey,
+			Payload: &UpdateKeyPage{
+				Operation: protocol.UpdateKey,
+				Key:       adiKey[32:],
+				NewKey:    adiKey[32:],
+				Owner:     "acc://foo/book1",
+			},
+		})
+		keyPage := NewKeyPage()
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
+		assert.Equal(t, "acc://foo/book1", keyPage.Keys[0].Owner)
+	}
+
 	tokenUrl := "acc://ACME"
 	tokenAccountUrl := adiName + "/account"
 	t.Log("Create Token Account")
@@ -211,7 +229,7 @@ func TestValidate(t *testing.T) {
 			UrlQuery: api.UrlQuery{
 				Url: keyPageUrl,
 			},
-			Key: adiKey,
+			Key: adiKey[32:],
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
 	}
