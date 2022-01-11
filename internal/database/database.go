@@ -114,16 +114,16 @@ func (b *Batch) RootHash() []byte {
 	return h[:]
 }
 
-// Record returns a Record for the given URL.
-func (b *Batch) Record(u *url.URL) *Record {
-	return &Record{b, record(u)}
+// Account returns an Account for the given URL.
+func (b *Batch) Account(u *url.URL) *Account {
+	return &Account{b, account(u)}
 }
 
-// RecordByID returns a Record for the given resource chain ID.
+// AccountByID returns an Account for the given ID.
 //
-// Deprecated: Use Record.
-func (b *Batch) RecordByID(id []byte) *Record {
-	return &Record{b, recordFromChain(id)}
+// Deprecated: Use Account.
+func (b *Batch) AccountByID(id []byte) *Account {
+	return &Account{b, accountByID(id)}
 }
 
 // Transaction returns a Transaction for the given transaction ID.

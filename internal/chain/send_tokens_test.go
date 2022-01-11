@@ -28,7 +28,7 @@ func TestLiteTokenTransactions(t *testing.T) {
 
 	sponsorUrl := acctesting.AcmeLiteAddressStdPriv(privKey)
 	liteAcct := new(protocol.LiteTokenAccount)
-	require.NoError(t, db.Begin().Record(sponsorUrl).GetStateAs(liteAcct))
+	require.NoError(t, db.Begin().Account(sponsorUrl).GetStateAs(liteAcct))
 
 	//now move some tokens around
 	destAddr := testing2.AcmeLiteAddressStdPriv(destPrivKey).String()

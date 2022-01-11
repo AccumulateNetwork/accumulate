@@ -89,7 +89,7 @@ func Init(kvdb storage.KeyValueStore, opts InitOpts) ([]byte, error) {
 		}
 
 		acme := new(protocol.TokenIssuer)
-		acme.Type = types.ChainTypeTokenIssuer
+		acme.Type = types.AccountTypeTokenIssuer
 		acme.KeyBook = types.String(uBook.String())
 		acme.ChainUrl = types.String(protocol.AcmeUrl().String())
 		acme.Precision = 8
