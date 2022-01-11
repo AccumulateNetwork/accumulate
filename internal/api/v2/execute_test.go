@@ -15,7 +15,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	mock_api "github.com/AccumulateNetwork/accumulate/internal/mock/api"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/golang/mock/gomock"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"

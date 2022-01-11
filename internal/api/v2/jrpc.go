@@ -13,10 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	v1 "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/ybbus/jsonrpc/v2"
 )
 
 type JrpcOptions struct {
