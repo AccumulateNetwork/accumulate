@@ -9,8 +9,27 @@ import (
 )
 
 type LiteDataEntry struct {
-	ChainId [32]byte
-	DataEntry
+	AccountId [32]byte
+	*DataEntry
+}
+
+//ComputeLiteEntryHashFromEntry will compute the entry hash from an entry.
+//If accountId is nil, then entry will be used to construct an account id,
+//and it assumes the entry will be the first entry in the chain
+func ComputeLiteEntryHashFromEntry(accountId []byte, entry *DataEntry) ([]byte, error) {
+	lde := LiteDataEntry{}
+	if entry == nil {
+		return nil, fmt.Errorf("cannot compute lite entry hash, missing entry")
+	}
+	lde.DataEntry = entry
+
+	if accountId == nil && entry != nil {
+		//if we don't know the chain id, we compute one off of the entry
+		copy(lde.AccountId[:], ComputeLiteDataAccountId(entry))
+	} else {
+		copy(lde.AccountId[:], accountId)
+	}
+	return lde.Hash()
 }
 
 // ComputeLiteEntryHash returns the Entry hash of data for a lite chain
@@ -35,16 +54,19 @@ func (e *LiteDataEntry) Hash() ([]byte, error) {
 // MarshalBinary marshal the LiteDataEntry in accordance to
 // https://github.com/FactomProject/FactomDocs/blob/master/factomDataStructureDetails.md#entry
 func (e *LiteDataEntry) MarshalBinary() ([]byte, error) {
+	if e.DataEntry == nil {
+		return nil, fmt.Errorf("no entry specified")
+	}
 	var b bytes.Buffer
 
 	d := [32]byte{}
-	if bytes.Equal(e.ChainId[:], d[:]) {
+	if bytes.Equal(e.AccountId[:], d[:]) {
 		return nil, fmt.Errorf("missing ChainID")
 	}
 
 	// Header, version byte 0x00
 	b.WriteByte(0)
-	b.Write(e.ChainId[:])
+	b.Write(e.AccountId[:])
 
 	// Payload
 	var ex bytes.Buffer
@@ -79,7 +101,7 @@ func (e *LiteDataEntry) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("malformed entry header")
 	}
 
-	copy(e.ChainId[:], data[1:33])
+	copy(e.AccountId[:], data[1:33])
 
 	totalExtIdSize := binary.BigEndian.Uint16(data[33:35])
 
@@ -88,6 +110,10 @@ func (e *LiteDataEntry) UnmarshalBinary(data []byte) error {
 	}
 
 	j := LiteEntryHeaderSize
+
+	if e.DataEntry == nil {
+		e.DataEntry = new(DataEntry)
+	}
 
 	//reset the extId's if present
 	e.ExtIds = e.ExtIds[0:0]

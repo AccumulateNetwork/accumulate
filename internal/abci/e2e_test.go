@@ -23,7 +23,7 @@ var rand = randpkg.New(randpkg.NewSource(0))
 
 type Tx = transactions.Envelope
 
-func TestEndToEndSuite(t *testing.T) {
+func _TestEndToEndSuite(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, true)
@@ -212,7 +212,8 @@ func TestAAAACreateLiteDataAccount(t *testing.T) {
 	chainId := protocol.ComputeLiteDataAccountId(&firstEntry)
 
 	lde := protocol.LiteDataEntry{}
-	copy(lde.ChainId[:], chainId)
+	lde.DataEntry = new(protocol.DataEntry)
+	copy(lde.AccountId[:], chainId)
 	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
 	for i := 0; i < 3; i++ {
 		lde.ExtIds = append(lde.ExtIds, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
@@ -228,11 +229,10 @@ func TestAAAACreateLiteDataAccount(t *testing.T) {
 		batch := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
 		require.NoError(t, batch.Commit())
-
 		n.Batch(func(send func(*transactions.Envelope)) {
 			wdt := new(protocol.WriteDataTo)
 			wdt.Recipient = liteDataAddress.String()
-			wdt.Entry = lde.DataEntry
+			wdt.Entry = firstEntry
 			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), wdt)
 			require.NoError(t, err)
 			send(tx)

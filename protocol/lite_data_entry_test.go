@@ -43,7 +43,7 @@ func TestLiteDataEntry(t *testing.T) {
 	}
 
 	lde := LiteDataEntry{}
-	copy(lde.ChainId[:], chainId)
+	copy(lde.AccountId[:], chainId)
 	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
 	for i := 0; i < 3; i++ {
 		lde.ExtIds = append(lde.ExtIds, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
