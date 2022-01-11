@@ -155,6 +155,7 @@ type KeyBook struct {
 type KeyPage struct {
 	state.ChainHeader
 	CreditBalance big.Int    `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	Threshold     uint64     `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
 	Keys          []*KeySpec `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 }
 
@@ -856,6 +857,10 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 	}
 
 	if !(v.CreditBalance.Cmp(&u.CreditBalance) == 0) {
+		return false
+	}
+
+	if !(v.Threshold == u.Threshold) {
 		return false
 	}
 
@@ -1718,6 +1723,8 @@ func (v *KeyPage) BinarySize() int {
 
 	n += encoding.BigintBinarySize(&v.CreditBalance)
 
+	n += encoding.UvarintBinarySize(v.Threshold)
+
 	n += encoding.UvarintBinarySize(uint64(len(v.Keys)))
 
 	for _, v := range v.Keys {
@@ -2544,6 +2551,8 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 		buffer.Write(b)
 	}
 	buffer.Write(encoding.BigintMarshalBinary(&v.CreditBalance))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Threshold))
 
 	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Keys))))
 	for i, v := range v.Keys {
@@ -3753,6 +3762,13 @@ func (v *KeyPage) UnmarshalBinary(data []byte) error {
 		v.CreditBalance.Set(x)
 	}
 	data = data[encoding.BigintBinarySize(&v.CreditBalance):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Threshold: %w", err)
+	} else {
+		v.Threshold = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Threshold):]
 
 	var lenKeys uint64
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
