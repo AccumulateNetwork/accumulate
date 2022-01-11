@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	api2 "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/stretchr/testify/require"
