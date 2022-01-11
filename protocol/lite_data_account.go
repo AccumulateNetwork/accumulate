@@ -27,7 +27,7 @@ func (c *LiteDataAccount) AccountId() ([]byte, error) {
 		return nil, err
 	}
 
-	head, err := ParseLiteChainAddress(u)
+	head, err := ParseLiteDataAddress(u)
 	if err != nil {
 		return nil, err
 	}
