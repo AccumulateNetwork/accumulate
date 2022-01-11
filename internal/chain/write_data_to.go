@@ -24,9 +24,14 @@ func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) error {
 		return err
 	}
 
+	if _, err := protocol.ParseLiteDataAddress(recipient); err != nil {
+		return fmt.Errorf("only writes to lite data accounts supported: %s: %v", recipient, err)
+	}
+
 	writeThis := new(protocol.SyntheticWriteData)
 	writeThis.Entry = body.Entry
 	copy(writeThis.Cause[:], tx.Transaction.Hash())
+
 	st.Submit(recipient, writeThis)
 
 	return nil
