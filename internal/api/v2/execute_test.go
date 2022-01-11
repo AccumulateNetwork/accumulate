@@ -38,7 +38,7 @@ func testExecute(t *testing.T, j *JrpcMethods, count int) {
 	for i := 0; i < count; i++ {
 		req := new(TxRequest)
 		req.Payload = ""
-		req.Origin = fmt.Sprintf("test%d", i)
+		req.Origin = &url.URL{Authority: fmt.Sprintf("test%d", i)}
 		go func() { ch <- j.DoExecute(context.Background(), req, []byte{}) }()
 	}
 
@@ -116,7 +116,7 @@ func TestDispatchExecuteQueueDuration(t *testing.T) {
 
 func TestExecuteCheckOnly(t *testing.T) {
 	baseReq := TxRequest{
-		Origin:  "check",
+		Origin:  &url.URL{Authority: "check"},
 		Payload: "",
 		Signer: Signer{
 			PublicKey: make([]byte, 32),

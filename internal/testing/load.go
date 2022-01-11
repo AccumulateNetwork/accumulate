@@ -4,18 +4,25 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 	"math/rand"
-	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/api"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/synthetic"
 	abci "github.com/tendermint/tendermint/abci/types"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 )
+
+func MustParseUrl(s string) *url.URL {
+	u, err := url.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
 
 // Load
 // Generate load in our test.  Create a bunch of transactions, and submit them.
@@ -41,24 +48,25 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 			}
 		}
 		const origin = 0
-		randDest := rand.Int()%(len(wallet)-1) + 1                     // pick a destination address
-		addrCountMap[wallet[randDest].Addr]++                          // count the number of deposits to output
-		send := apitypes.NewTokenTx(types.String(wallet[origin].Addr)) // Create a send token transaction
-		send.AddToAccount(types.String(wallet[randDest].Addr), 1000)   // create the transaction output
-		gtx := new(transactions.GenTransaction)                        // wrap in a GenTransaction
-		gtx.SigInfo = new(transactions.SignatureInfo)                  // Get a Signature Info block
-		gtx.Transaction, err = send.MarshalBinary()                    // add  send transaction
+		randDest := rand.Int()%(len(wallet)-1) + 1                  // pick a destination address
+		addrCountMap[wallet[randDest].Addr]++                       // count the number of deposits to output
+		addr := AcmeLiteAddressStdPriv(wallet[randDest].PrivateKey) // Make lite address
+		send := new(protocol.SendTokens)                            // Create a send token transaction
+		send.AddRecipient(addr, 1000)                               // create the transaction output
+		gtx := new(transactions.Envelope)                           // wrap in a GenTransaction
+		gtx.Transaction = new(transactions.Transaction)             //
+		gtx.Transaction.Body, err = send.MarshalBinary()            // add  send transaction
 		if err != nil {
 			return nil, err
 		}
-		gtx.SigInfo.URL = wallet[origin].Addr           // URL of source
-		if err := gtx.SetRoutingChainID(); err != nil { // Routing ChainID is the tx source
-			return nil, fmt.Errorf("failed to set routing chain ID: %v", err)
+		u, err := url.Parse(wallet[origin].Addr)
+		if err != nil {
+			return nil, err
 		}
+		gtx.Transaction.Origin = u // URL of source
 
-		binaryGtx := gtx.TransactionHash() // Must sign the GenTransaction
-
-		gtx.Signature = append(gtx.Signature, wallet[origin].Sign(binaryGtx))
+		hash := gtx.Transaction.Hash() // Must sign the GenTransaction
+		gtx.Signatures = append(gtx.Signatures, wallet[origin].Sign(hash))
 
 		if _, err := query.BroadcastTx(gtx, nil); err != nil {
 			return nil, fmt.Errorf("failed to send TX: %v", err)
@@ -79,90 +87,86 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 	return addrList, nil
 }
 
-func BuildTestSynthDepositGenTx(origin ed25519.PrivateKey) (types.String, ed25519.PrivateKey, *transactions.GenTransaction, error) {
-	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	adiSponsor := types.String(AcmeLiteAddressStdPriv(origin).String())
-
+func BuildTestSynthDepositGenTx() (types.String, ed25519.PrivateKey, *transactions.Envelope, error) {
 	_, privateKey, _ := ed25519.GenerateKey(nil)
 	//set destination url address
-	destAddress := types.String(AcmeLiteAddressStdPriv(privateKey).String())
-
-	txid := sha256.Sum256([]byte("fake txid"))
-
-	tokenUrl := types.String(protocol.AcmeUrl().String())
+	destAddress := AcmeLiteAddressStdPriv(privateKey)
 
 	//create a fake synthetic deposit for faucet.
-	deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
-	amtToDeposit := int64(50000)                             //deposit 50k tokens
-	deposit.DepositAmount.SetInt64(amtToDeposit * 100000000) // assume 8 decimal places
-	deposit.TokenUrl = tokenUrl
+	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Cause = sha256.Sum256([]byte("fake txid"))
+	deposit.Token = protocol.ACME
+	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
+	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
+	// amtToDeposit := int64(50000)                             //deposit 50k tokens
+	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
+	// deposit.TokenUrl = tokenUrl
 
 	depData, err := deposit.MarshalBinary()
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to marshal deposit: %v", err)
 	}
 
-	gtx := new(transactions.GenTransaction)
-	gtx.SigInfo = new(transactions.SignatureInfo)
-	gtx.Transaction = depData
-	gtx.SigInfo.URL = *destAddress.AsString()
-	gtx.ChainID = types.GetChainIdFromChainPath(destAddress.AsString())[:]
-	gtx.Routing = types.GetAddressFromIdentity(destAddress.AsString())
+	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
+	gtx.Transaction.Body = depData
+	gtx.Transaction.Origin = destAddress
 
 	ed := new(transactions.ED25519Sig)
-	gtx.SigInfo.Nonce = 1
+	gtx.Transaction.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.SigInfo.Nonce, privateKey, gtx.TransactionHash())
+	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.Transaction.Hash())
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
 
-	gtx.Signature = append(gtx.Signature, ed)
+	gtx.Signatures = append(gtx.Signatures, ed)
 
-	return destAddress, privateKey, gtx, nil
+	return types.String(destAddress.String()), privateKey, gtx, nil
 }
 
-func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.GenTransaction, error) {
+func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.Envelope, error) {
 	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
-	from := types.String(AcmeLiteAddressStdPriv(sponsor).String())
+	from := AcmeLiteAddressStdPriv(sponsor)
 
-	tokenTx := apitypes.SendTokens{}
+	u, err := url.Parse(destAddr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %v", err)
+	}
 
-	tokenTx.From = types.UrlChain{String: from}
-	tokenTx.AddToAccount(types.String(destAddr), amount)
+	send := protocol.SendTokens{}
+	send.AddRecipient(u, amount)
 
-	txData, err := tokenTx.MarshalBinary()
+	txData, err := send.MarshalBinary()
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal token tx: %v", err)
 	}
 
-	gtx := new(transactions.GenTransaction)
-	gtx.SigInfo = new(transactions.SignatureInfo)
-	gtx.Transaction = txData
-	gtx.SigInfo.URL = string(from)
-	gtx.ChainID = types.GetChainIdFromChainPath(from.AsString())[:]
-	gtx.Routing = types.GetAddressFromIdentity(from.AsString())
+	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
+	gtx.Transaction.Body = txData
+	gtx.Transaction.Origin = from
 
 	ed := new(transactions.ED25519Sig)
-	gtx.SigInfo.Nonce = 1
+	gtx.Transaction.Nonce = 1
 	ed.PublicKey = sponsor[32:]
-	err = ed.Sign(gtx.SigInfo.Nonce, sponsor, gtx.TransactionHash())
+	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.Transaction.Hash())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
 
-	gtx.Signature = append(gtx.Signature, ed)
+	gtx.Signatures = append(gtx.Signatures, ed)
 
 	return gtx, nil
 }
 
-func RunLoadTest(query *api.Query, origin ed25519.PrivateKey, walletCount, txCount int) (addrList []string, err error) {
-	destAddress, privateKey, gtx, err := BuildTestSynthDepositGenTx(origin)
+func RunLoadTest(query *api.Query, walletCount, txCount int) (addrList []string, err error) {
+	destAddress, privateKey, gtx, err := BuildTestSynthDepositGenTx()
 	if err != nil {
 		return nil, err
 	}
 
-	adiSponsor := gtx.SigInfo.URL
+	adiSponsor := gtx.Transaction.Origin.String()
 
 	_, err = query.BroadcastTx(gtx, nil)
 	if err != nil {
@@ -204,24 +208,11 @@ func WaitForTxnBatch(query *api.Query) error {
 	return nil
 }
 
-func SendTxSync(query *api.Query, tx *transactions.GenTransaction) error {
+func SendTxSync(query *api.Query, tx *transactions.Envelope) error {
 	done := make(chan abci.TxResult)
 	_, err := query.BroadcastTx(tx, done)
 	if err != nil {
 		return fmt.Errorf("failed to send TX: %v", err)
 	}
-	<-query.BatchSend()
-
-	select {
-	case txr := <-done:
-		if txr.Result.Code != 0 {
-			return fmt.Errorf(txr.Result.Log)
-		}
-
-		fmt.Printf("TX %X succeeded\n", sha256.Sum256(txr.Tx))
-		return nil
-
-	case <-time.After(1 * time.Minute):
-		return fmt.Errorf("timeout while waiting for TX response")
-	}
+	return WaitForTxnBatch(query)
 }

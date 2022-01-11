@@ -30,10 +30,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
 
-	//create a key from the Tendermint node's private key. He will be the defacto source for the lite token.
-	kpSponsor := ed25519.NewKeyFromSeed(daemon.Key().Bytes()[:32])
-
-	addrList, err := acctesting.RunLoadTest(query, kpSponsor, 10, 10)
+	addrList, err := acctesting.RunLoadTest(query, 10, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +61,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 	fmt.Println(string(output))
 
 	// now use the JSON rpc api's to get the data
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	params := &api.APIRequestURL{URL: types.String(queryTokenUrl)}
 	gParams, err := json.Marshal(params)
@@ -153,46 +150,31 @@ func TestFaucet(t *testing.T) {
 	v2 := []byte("nakamoto")
 	tx2 := append(k2, append([]byte("="), v2...)...)
 
-	gtx := transactions.GenTransaction{}
-	gtx.Signature = append(gtx.Signature, &transactions.ED25519Sig{})
-	gtx.SigInfo = &transactions.SignatureInfo{}
-	gtx.SigInfo.URL = "fakeUrl"
-	gtx.Transaction = tx1
-	gtx.Signature[0].Sign(54321, kpSponsor, gtx.TransactionHash())
+	gtx := transactions.Envelope{}
+	gtx.Transaction = new(transactions.Transaction)
+	gtx.Signatures = append(gtx.Signatures, &transactions.ED25519Sig{})
+	gtx.Transaction.Origin = &url.URL{Authority: "fakeUrl"}
+	gtx.Transaction.Body = tx1
+	gtx.Signatures[0].Sign(54321, kpSponsor, gtx.Transaction.Hash())
 	//changing the nonce will invalidate the signature.
-	gtx.SigInfo.Nonce = 1234
+	gtx.Transaction.Nonce = 1234
 
 	//intentionally send in a bogus transaction
 	ti1, _ := query.BroadcastTx(&gtx, nil)
-	gtx.Transaction = tx2
+	gtx.Transaction.Body = tx2
 	ti2, _ := query.BroadcastTx(&gtx, nil)
 
 	stat := query.BatchSend()
 	bs := <-stat
 	res1, err := bs.ResolveTransactionResponse(ti1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res1.Code == 0 {
-		t.Fatalf("expecting error code that is non zero")
-	}
-
-	errorData, err := json.Marshal(res1)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fmt.Println(string(errorData))
+	require.NoError(t, err)
+	require.NotZero(t, res1.Code, "expecting error code that is non zero")
 
 	res2, err := bs.ResolveTransactionResponse(ti2)
+	require.NoError(t, err)
+	require.NotZero(t, res2.Code, "expecting error code that is non zero")
 
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res2.Code == 0 {
-		t.Fatalf("expecting error code that is non zero")
-	}
-
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	res := jsonapi.Faucet(context.Background(), params)
 	require.IsType(t, (*api.APIDataResponse)(nil), res)
@@ -244,7 +226,7 @@ func TestTransactionHistory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	res := jsonapi.Faucet(context.Background(), params)
 	data, err := json.Marshal(res)
@@ -305,7 +287,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 
 	daemon := startBVC(t, t.TempDir())
 	query := daemon.Query_TESTONLY()
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 	res := jsonapi.Faucet(context.Background(), params)
 	if err, ok := res.(error); ok {
 		require.NoError(t, err)
@@ -327,7 +309,7 @@ func TestFaucetTransactionHistory(t *testing.T) {
 	resp, err := query.GetTransactionHistory(protocol.FaucetUrl.String(), 0, 10)
 	require.NoError(t, err)
 	require.Len(t, resp.Data, 2)
-	require.Equal(t, types.String(types.TxTypeSyntheticGenesis.Name()), resp.Data[0].Type)
+	require.Equal(t, types.String(types.TxTypeInternalGenesis.Name()), resp.Data[0].Type)
 	require.Equal(t, types.String(types.TxTypeSendTokens.Name()), resp.Data[1].Type)
 }
 
@@ -338,7 +320,7 @@ func TestMetrics(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	req, err := json.Marshal(&protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
 	require.NoError(t, err)
@@ -360,7 +342,7 @@ func TestQueryNotFound(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "acc://1cddf368ef9ba2a1ea914291e0201ebaf376130a6c05caf3/ACME"})
 	require.NoError(t, err)
@@ -379,10 +361,9 @@ func TestQueryWrongType(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
-	_, origin, _ := ed25519.GenerateKey(nil)
-	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	err = acctesting.SendTxSync(query, tx)
@@ -405,10 +386,9 @@ func TestGetTxId(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
-	_, origin, _ := ed25519.GenerateKey(nil)
-	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx(origin)
+	destAddress, _, tx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(t, err)
 
 	err = acctesting.SendTxSync(query, tx)
@@ -417,7 +397,7 @@ func TestGetTxId(t *testing.T) {
 	u, err := url.Parse(*destAddress.AsString())
 	require.NoError(t, err)
 	u.Path = ""
-	u.Query = fmt.Sprintf("txid=%x", tx.TransactionHash())
+	u.Query = fmt.Sprintf("txid=%x", tx.Transaction.Hash())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: types.String(u.String())})
 	require.NoError(t, err)
@@ -437,14 +417,13 @@ func TestDirectory(t *testing.T) {
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
-	japi := NewTest(t, query)
+	japi := NewTest(t, &daemon.Config.Accumulate.API, query)
 
 	_, adiKey, _ := ed25519.GenerateKey(nil)
 	dbTx := daemon.DB_TESTONLY().Begin()
 	require.NoError(t, acctesting.CreateADI(dbTx, tmed25519.PrivKey(adiKey), "foo"))
 	require.NoError(t, acctesting.CreateTokenAccount(dbTx, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
-	_, err := dbTx.Commit(3, time.Unix(0, 0), nil)
-	require.NoError(t, err)
+	require.NoError(t, dbTx.Commit())
 
 	req, err := json.Marshal(&api.APIRequestURL{URL: "foo"})
 	require.NoError(t, err)
@@ -467,12 +446,11 @@ func TestFaucetReplay(t *testing.T) {
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 	destAccount := acctesting.AcmeLiteAddressStdPriv(kpSponsor).String()
-	tx := acmeapi.SendTokens{}
-	tx.From.String = types.String(protocol.FaucetWallet.Addr)
-	tx.AddToAccount(types.String(destAccount), 1000000000)
+	tx := protocol.SendTokens{}
+	tx.AddRecipient(acctesting.MustParseUrl(destAccount), 1000000000)
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	gtx, err := transactions.New(*tx.From.AsString(), 1, func(hash []byte) (*transactions.ED25519Sig, error) {
+	gtx, err := transactions.New(protocol.FaucetWallet.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 		return protocol.FaucetWallet.Sign(hash), nil
 	}, &tx)
 	require.NoError(t, err)
@@ -482,7 +460,7 @@ func TestFaucetReplay(t *testing.T) {
 	daemon := startBVC(t, dir)
 	query := daemon.Query_TESTONLY()
 
-	jsonapi := NewTest(t, query)
+	jsonapi := NewTest(t, &daemon.Config.Accumulate.API, query)
 	res, err := jsonapi.BroadcastTx(false, gtx)
 	require.NoError(t, err)
 	require.NoError(t, acctesting.WaitForTxV1(query, res))

@@ -13,7 +13,7 @@ type IssueTokens struct{}
 
 func (IssueTokens) Type() types.TxType { return types.TxTypeIssueTokens }
 
-func (IssueTokens) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.IssueTokens)
 	err := tx.As(body)
 	if err != nil {

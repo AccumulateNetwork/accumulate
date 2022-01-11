@@ -11,10 +11,8 @@ type ChainType uint64
 
 const (
 	// ChainTypeUnknown represents an unknown chain type.
-	ChainTypeUnknown = ChainType(iota)
-)
+	ChainTypeUnknown ChainType = 0
 
-const (
 	// ChainTypeAnchor is one or more Merkle DAG anchors.
 	ChainTypeAnchor ChainType = 1
 
@@ -29,9 +27,6 @@ const (
 
 	// ChainTypeLiteTokenAccount is a Lite Token Account chain.
 	ChainTypeLiteTokenAccount ChainType = 5
-
-	// ChainTypeTransactionReference is a reference to a transaction.
-	ChainTypeTransactionReference ChainType = 6
 
 	// ChainTypeTransaction is a completed transaction.
 	ChainTypeTransaction ChainType = 7
@@ -52,10 +47,17 @@ const (
 	ChainTypeLiteDataAccount ChainType = 12
 
 	// ChainTypeSyntheticTransactions is a chain of synthetic transactions.
+	//
+	// Deprecated: synthetic transactions are tracked on an auxiliary chain of
+	// the ledger.
 	ChainTypeSyntheticTransactions ChainType = 13
 
+	// ChainTypeInternalLedger is a ledger that tracks the state of internal
+	// operations.
+	ChainTypeInternalLedger ChainType = 14
+
 	// chainMax needs to be set to the last type in the list above
-	chainMax = ChainTypeSyntheticTransactions
+	chainMax = ChainTypeInternalLedger
 )
 
 // ID returns the chain type ID
@@ -64,7 +66,7 @@ func (t ChainType) ID() uint64 { return uint64(t) }
 // IsTransaction returns true if the chain type is a transaction.
 func (t ChainType) IsTransaction() bool {
 	switch t {
-	case ChainTypeTransaction, ChainTypeTransactionReference, ChainTypePendingTransaction:
+	case ChainTypeTransaction, ChainTypePendingTransaction:
 		return true
 	default:
 		return false
@@ -84,8 +86,6 @@ func (t ChainType) String() string {
 		return "tokenAccount"
 	case ChainTypeLiteTokenAccount:
 		return "liteTokenAccount"
-	case ChainTypeTransactionReference:
-		return "transactionReference"
 	case ChainTypeTransaction:
 		return "transaction"
 	case ChainTypePendingTransaction:

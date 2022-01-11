@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
-	"math/bits"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/smt/common"
@@ -27,7 +26,7 @@ import (
 type MerkleState struct {
 	HashFunction func(data []byte) Hash // Hash function for this Merkle State
 	Count        int64                  // Count of hashes added to the Merkle tree
-	Pending      []Hash                 // Array of hashes that represent the left edge of the Merkle tree
+	Pending      SparseHashList         // Array of hashes that represent the left edge of the Merkle tree
 	HashList     HashList               // List of Hashes in the order added to the chain
 }
 
@@ -35,7 +34,7 @@ type MerkleState struct {
 // convert the MerkleState to a human readable string
 func (m MerkleState) String() string {
 	var b bytes.Buffer
-	b.WriteString(fmt.Sprintf("%20s %d %x\n", "Count", m.Count, m.Count))
+	b.WriteString(fmt.Sprintf("%20s %d\n", "Count", m.Count))
 	b.WriteString(fmt.Sprintf("%20s %d\n", "Pending[] length:", len(m.Pending)))
 	for i, v := range m.Pending {
 		vp := "nil"
@@ -79,6 +78,25 @@ func (m *MerkleState) PadPending() {
 	}
 }
 
+// Trim
+// Remove any trailing nils from Pending hashes
+func (m *MerkleState) Trim() {
+	for len(m.Pending) > 0 && m.Pending[len(m.Pending)-1] == nil {
+		m.Pending = m.Pending[:len(m.Pending)-1]
+	}
+}
+
+// Pad
+// Add a nil to the end of the Pending list if one isn't there.
+// We need to be able to add an element to Pending if needed while
+// building receipts
+func (m *MerkleState) Pad() {
+
+	if len(m.Pending) == 0 || m.Pending[len(m.Pending)-1] != nil {
+		m.Pending = append(m.Pending, nil)
+	}
+}
+
 // Equal
 // Compares one MerkleState to another, and returns true if they are the same
 func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
@@ -94,22 +112,23 @@ func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
 		return false
 	}
 
-	// The Count drives what is compared, so even if one or the other Pending has a trailing nil, it won't
-	// matter; the bit won't be set.  (A trailing nil is possible as a side effect of an odd number of elements
-	// in the merkle tree).
-	cnt := m.Count             // Only check that we have entries in Pending that have a bit set in the Count.
-	for i := 0; cnt > 0; i++ { // When cnt goes to zero, we are done, even if a nil might exist in the Pending array
-		// If the Merkle State has a nil, m2 must have a nil.  If we later compare m to m2 and m2 has a nil,
-		// we will panic. That's okay, because we catch it and declare them unequal.
-		if m.Pending[i] == nil && m2.Pending[i] != nil {
+	for i, v := range m.Pending { // First check if all non nil elements of m.Pending == m2.Pending
+		if v == nil && len(m2.Pending) <= i { // If m1 has trailing nils where m mas nils, that's okay
+			continue
+		}
+		if v != nil && len(m2.Pending) <= i { // If m1 has trailing nils where m has values, not okay
 			return false
 		}
-
-		// Each element of Pending must be equal
-		if cnt&1 == 1 && !bytes.Equal(m.Pending[i], m2.Pending[i]) {
+		if !bytes.Equal(v, m2.Pending[i]) { //  all values in both lists need to be equal
 			return false
 		}
-		cnt = cnt >> 1 // Shift a bit out of Count; When cnt is zero, we are done.
+	}
+	idx := len(m2.Pending)     // Index of the last entry of m2.Pending
+	for len(m.Pending) < idx { // Check that if m.Pending is shorter, that all of m1's extra entries are nil
+		if m2.Pending[idx-1] != nil {
+			return false
+		}
+		idx--
 	}
 
 	// Each must have the same number of elements in the HashList
@@ -130,26 +149,18 @@ func (m *MerkleState) Equal(m2 *MerkleState) (isEqual bool) {
 // Marshal
 // Encodes the Merkle State so it can be embedded into the Merkle Tree
 func (m *MerkleState) Marshal() (MSBytes []byte, err error) {
-
-	defer func() { //                                                   Quite a bit could go wrong, so
-		if rec := recover(); rec != nil { //                             catch any panics and return
-			MSBytes = nil                                              // Don't return any data
-			err = fmt.Errorf("failed to marshal MerkleState: %v", rec) // return an error
-		}
-	}()
-
 	MSBytes = append(MSBytes, common.Int64Bytes(m.Count)...) // Count
-	cnt := m.Count                                           // Each bit set in Count, indicates a Sub Merkle Tree root
-	for i := 0; cnt > 0; i++ {                               // For each bit in cnt,
-		if cnt&1 > 0 { //                                         if the bit is set in cnt, record the hash
-			b := encoding.BytesMarshalBinary(m.Pending[i])
-			MSBytes = append(MSBytes, b...)
-		} //                                                   If the bit is not set, ignore (it is nil anyway)
-		cnt = cnt >> 1 //                                      Shift cnt so we can check the next bit
-	}
 
-	// Write out the hash list
-	b, _ := m.HashList.MarshalBinary()
+	// Write out the pending list. Each bit set in Count indicates a Sub Merkle
+	// Tree root. For each bit, if the bit is set, record the hash.
+	b, err := m.Pending.MarshalBinary(m.Count)
+	if err != nil {
+		return nil, err
+	}
+	MSBytes = append(MSBytes, b...)
+
+	// Write out the hash list (never returns an error)
+	b, _ = m.HashList.MarshalBinary()
 	MSBytes = append(MSBytes, b...)
 	return MSBytes, nil
 }
@@ -159,32 +170,19 @@ func (m *MerkleState) Marshal() (MSBytes []byte, err error) {
 // in this instance of MSMarshal to the state defined by MSBytes.  It is assumed that the
 // hash function has been set by the caller.
 func (m *MerkleState) UnMarshal(MSBytes []byte) (err error) {
-
-	defer func() { //                                                     Quite a bit could go wrong, so
-		if rec := recover(); rec != nil { //                               catch any panics and return
-			err = fmt.Errorf("failed to unmarshal MerkleState: %v", rec) // an error
-		}
-	}()
-
-	m.Count, MSBytes = common.BytesInt64(MSBytes)                 // Extract the Count
-	pendCount := 64 - bits.LeadingZeros64(uint64(m.Count))        //
-	m.Pending = append(m.Pending[:0], make([]Hash, pendCount)...) // Set Pending to zero, then use the bits of Count
-	cnt := m.Count                                                //   to guide the extraction of the List of Sub Merkle State roots
-	for i := range m.Pending {                                    // To do this, go through the count
-		// If the bit is not set, skip that entry
-		if cnt&(1<<i) == 0 {
-			continue
-		}
-
-		// If the bit is set, then extract the next hash
-		h, err := encoding.BytesUnmarshalBinary(MSBytes)
-		if err != nil {
-			return err
-		}
-
-		MSBytes = MSBytes[encoding.BytesBinarySize(h):] // Advance MSBytes by the hash size
-		m.Pending[i] = Hash(h).Copy()                   // Make a copy to avoid weird memory bugs
+	// Unmarshal the Count
+	m.Count, err = encoding.VarintUnmarshalBinary(MSBytes)
+	if err != nil {
+		return err
 	}
+	MSBytes = MSBytes[encoding.VarintBinarySize(m.Count):]
+
+	// Unmarshal the pending list
+	err = m.Pending.UnmarshalBinary(m.Count, MSBytes)
+	if err != nil {
+		return err
+	}
+	MSBytes = MSBytes[m.Pending.BinarySize(m.Count):]
 
 	// Unmarshal the hash list
 	err = m.HashList.UnmarhsalBinary(MSBytes)
@@ -193,6 +191,9 @@ func (m *MerkleState) UnMarshal(MSBytes []byte) (err error) {
 	}
 
 	// Make a copy to avoid weird memory bugs
+	for i, h := range m.Pending {
+		m.Pending[i] = h.Copy()
+	}
 	for i, h := range m.HashList {
 		m.HashList[i] = h.Copy()
 	}
@@ -251,7 +252,7 @@ func (m *MerkleState) GetMDRoot() (MDRoot Hash) {
 	}
 	for _, v := range m.Pending {
 		if MDRoot == nil { // Pick up the first hash in m.MerkleState no matter what.
-			MDRoot = v // If a nil is assigned over a nil, no harm no foul.  Fewer cases to test this way.
+			MDRoot = v.Copy() // If a nil is assigned over a nil, no harm no foul.  Fewer cases to test this way.
 		} else if v != nil { // If MDRoot isn't nil and v isn't nil, combine them.
 			MDRoot = v.Combine(m.HashFunction, MDRoot) // v is on the left, MDRoot candidate is on the right, for a new MDRoot
 		}

@@ -4,7 +4,13 @@ stages:
 - deploy
 - validate
 
+variables:
+  BOLD_RED: '\e[1;31m'
+  NO_COLOR: '\e[0m'
+  SECTION: '\e[0K'
+
 .go:
+  image: golang:1.17
   cache:
     key: go-mod-cache
     paths:
@@ -21,8 +27,9 @@ stages:
       [ -z "$GOARCH" ] || BIN=${BIN}-${GOARCH}
       [[ $GOOS == windows ]] && BIN=${BIN}.exe
       export BUILDFLAGS="-o ${BIN}"
-      echo Build $BIN
+      echo -e "${SECTION}section_start:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}Build accumulated for $GOOS $GOARCH"
       make GIT_COMMIT=${CI_COMMIT_SHA} GIT_DESCRIBE=${GIT_DESCRIBE}
+      echo -e "${SECTION}section_end:`date +%s`:build_${GOOS}_${GOARCH}\r${SECTION}";
     }
 
 .test:
@@ -49,7 +56,6 @@ test 2/2:
 git describe:
   stage: build
   needs: []
-  tags: [docker, linux]
   script:
   - git fetch --unshallow
   - echo "GIT_DESCRIBE=$(git describe --dirty)" >> git.env
@@ -70,12 +76,37 @@ build images:
   - docker push ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
   - docker push ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
 
+lint:
+  stage: build
+  extends: .go
+  needs: []
+  script:
+  - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
+
+  - echo -e "${SECTION}section_start:`date +%s`:vet\r${SECTION}Vet"
+  - go vet ./...
+  - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
+
+  - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"
+  - go mod tidy
+  - git diff --quiet go.mod go.sum || die "Go mod files are not tidy. Please run \`go mod tidy\`."
+  - echo -e "${SECTION}section_end:`date +%s`:tidy\r${SECTION}"
+
+  - echo -e "${SECTION}section_start:`date +%s`:generate\r${SECTION}Verify generated files are up to date"
+  - go generate -x ./...
+  - git diff --quiet || die "Generated files are not up to date. Please run \`go generate ./...\`."
+  - echo -e "${SECTION}section_end:`date +%s`:generate\r${SECTION}"
+
+  - echo -e "${SECTION}section_start:`date +%s`:imports\r${SECTION}Verify code is correctly formatted"
+  - go run github.com/rinchsan/gosimports/cmd/gosimports -l */ | tee fmt.log
+  - test -s fmt.log && die "Code is incorrectly formatted. Please run \`gosimports -w .\` (or \`./scripts/imports.sh\`)."
+  - echo -e "${SECTION}section_end:`date +%s`:imports\r${SECTION}"
+
 build:
   stage: build
   extends: .go
   needs: [git describe]
   tags: [docker, linux]
-  image: golang:1.17
   script:
   - build-daemon linux amd64
   - build-daemon linux arm64
@@ -92,7 +123,6 @@ configure:
   extends: .go
   needs: [git describe]
   tags: [docker, linux]
-  image: golang:1.17
   script:
   - |
     function init {
@@ -153,9 +183,8 @@ deploy 4/4:
   only: [develop] # only run on the main branch
   needs: [deploy 1/4, deploy 2/4, deploy 3/4, deploy 4/4]
   tags: [docker, linux]
-  image: golang:1.17
   variables:
-    ACC_API: https://devnet.accumulatenetwork.io/v1
+    ACC_API: https://devnet.accumulatenetwork.io/v2
     # set mnemonic for predictable addresses
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
 
@@ -170,7 +199,7 @@ validate docker:
     MNEMONIC: yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow yellow
   script:
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  - docker run --rm -v ${PWD}/nodes:/nodes ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} accumulated init devnet -w /nodes --docker --compose -b 3 -v 3
+  - docker run --rm -v ${PWD}/nodes:/nodes ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} init devnet -w /nodes --docker --tag ${CI_COMMIT_REF_SLUG} --compose -b 3 -v 3
   - cd nodes
   - apk add --no-cache docker-compose
   - docker-compose up -d
@@ -183,12 +212,12 @@ validate:
   - apt-get -y update && apt-get -y install jq
   - ./scripts/ci/validate.sh
 
-validate matrix 1/6:
+.validate matrix 1/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_1.1.sh
 
-validate matrix 2/6:
+.validate matrix 2/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_2.1.sh
@@ -199,7 +228,7 @@ validate matrix 2/6:
    - ./scripts/matrix/test_case_2.6.sh
    - ./scripts/matrix/test_case_2.7.sh
 
-validate matrix 3/6:
+.validate matrix 3/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_3.1.sh
@@ -207,7 +236,7 @@ validate matrix 3/6:
    - ./scripts/matrix/test_case_3.3.sh
    - ./scripts/matrix/test_case_3.4.sh
 
-validate matrix 4/6:
+.validate matrix 4/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_4.1.sh
@@ -219,13 +248,13 @@ validate matrix 4/6:
    - ./scripts/matrix/test_case_4.7.sh
    - ./scripts/matrix/test_case_4.8.sh
 
-validate matrix 5/6:
+.validate matrix 5/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_5.1.sh
    - ./scripts/matrix/test_case_5.2.sh
 
-validate matrix 6/6:
+.validate matrix 6/6:
    extends: .validate
    script:
    - ./scripts/matrix/test_case_6.1.sh

@@ -7,15 +7,14 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type CreateTokenAccount struct{}
 
 func (CreateTokenAccount) Type() types.TxType { return types.TxTypeCreateTokenAccount }
 
-func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransaction) error {
-	body := new(protocol.TokenAccountCreate)
+func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) error {
+	body := new(protocol.CreateTokenAccount)
 	err := tx.As(body)
 	if err != nil {
 		return fmt.Errorf("invalid payload: %v", err)
@@ -36,7 +35,9 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransac
 		return fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, accountUrl)
 	}
 
-	account := state.NewTokenAccount(accountUrl.String(), tokenUrl.String())
+	account := protocol.NewTokenAccount()
+	account.ChainUrl = types.String(accountUrl.String())
+	account.TokenUrl = tokenUrl.String()
 	if body.KeyBookUrl == "" {
 		account.KeyBook = st.Origin.Header().KeyBook
 	} else {
@@ -51,7 +52,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.GenTransac
 			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
 
-		copy(account.KeyBook[:], keyBookUrl.ResourceChain())
+		account.KeyBook = types.String(keyBookUrl.String())
 	}
 
 	st.Create(account)

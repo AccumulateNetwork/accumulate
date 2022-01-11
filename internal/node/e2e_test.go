@@ -3,14 +3,20 @@ package node_test
 import (
 	"context"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
-	"net"
 	"testing"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	apiv2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
@@ -21,11 +27,15 @@ import (
 func TestEndToEnd(t *testing.T) {
 	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
-	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
+	acctesting.SkipPlatform(t, "darwin", "flaky")
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
+
+	// Reuse the same IPs for each test
+	ips := acctesting.GetIPs(3)
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Restart the nodes for every test
-		nodes := initNodes(s.T(), s.T().Name(), net.ParseIP("127.0.25.1"), 3000, 3, nil)
+		nodes := initNodes(s.T(), s.T().Name(), ips, 3000, 3, nil)
 		bvn0 := nodes[0]
 		client, err := local.New(bvn0.Node_TESTONLY().Service.(local.NodeService))
 		require.NoError(s.T(), err)
@@ -35,7 +45,7 @@ func TestEndToEnd(t *testing.T) {
 
 type e2eDUT struct {
 	*e2e.Suite
-	db         *state.StateDB
+	db         *database.Database
 	query      *api.Query
 	client     *local.Local
 	connRouter connections.ConnectionRouter
@@ -60,8 +70,8 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return d.getObj(url).Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
-	b, err := tx.Marshal()
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
 	_, err = d.client.BroadcastTxAsync(context.Background(), b)
 	d.Require().NoError(err)
@@ -83,8 +93,10 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 func TestSubscribeAfterClose(t *testing.T) {
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	daemon := initNodes(t, t.Name(), net.ParseIP("127.0.30.1"), 3000, 1, []string{"127.0.30.1"})[0]
+	ip := acctesting.GetIPs(1)
+	daemon := initNodes(t, t.Name(), ip, 3000, 1, []string{ip[0].String()})[0]
 	require.NoError(t, daemon.Stop())
 
 	client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
@@ -95,4 +107,72 @@ func TestSubscribeAfterClose(t *testing.T) {
 
 	// Ideally, this would also test rpc/core.Environment.Subscribe, but that is
 	// not straight forward
+}
+
+func TestFaucetMultiNetwork(t *testing.T) {
+	acctesting.SkipPlatform(t, "windows", "flaky")
+	acctesting.SkipPlatform(t, "darwin", "flaky")
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
+
+	const bCount, vCount = 3, 1
+	bvns := make([]string, bCount)
+	ips := acctesting.GetIPs(bCount * vCount)
+	for i := range bvns {
+		bvns[i] = ips[i*vCount].String()
+	}
+
+	bvc0 := initNodes(t, "BVC0", ips[0*vCount:1*vCount], 3000, vCount, bvns)
+	bvc1 := initNodes(t, "BVC1", ips[1*vCount:2*vCount], 3000, vCount, bvns)
+	bvc2 := initNodes(t, "BVC2", ips[2*vCount:3*vCount], 3000, vCount, bvns)
+	rpcAddrs := make([]string, 0, 3)
+	for _, bvc := range [][]*accumulated.Daemon{bvc0, bvc1, bvc2} {
+		rpcAddrs = append(rpcAddrs, bvc[0].Config.RPC.ListenAddress)
+	}
+
+	relay, err := relay.NewWith(nil, rpcAddrs...)
+	require.NoError(t, err)
+	if bvc0[0].Config.Accumulate.API.EnableSubscribeTX {
+		require.NoError(t, relay.Start())
+		t.Cleanup(func() { require.NoError(t, relay.Stop()) })
+	}
+	query := api.NewQuery(relay)
+
+	lite, err := url.Parse("acc://b5d4ac455c08bedc04a56d8147e9e9c9494c99eb81e9d8c3/ACME")
+	require.NoError(t, err)
+	require.NotEqual(t, lite.Routing()%3, protocol.FaucetUrl.Routing()%3, "The point of this test is to ensure synthetic transactions are routed correctly. That doesn't work if both URLs route to the same place.")
+
+	req := new(apitypes.APIRequestURL)
+	req.Wait = true
+	req.URL = types.String(lite.String())
+
+	params, err := json.Marshal(&req)
+	require.NoError(t, err)
+
+	jsonapi, err := api.New(&config.API{
+		ListenAddress: fmt.Sprintf("tcp://%s:%d", ips[0], 3000+networks.AccRouterJsonPortOffset),
+	}, query)
+	require.NoError(t, err)
+	res := jsonapi.Faucet(context.Background(), params)
+	switch r := res.(type) {
+	case jsonrpc2.Error:
+		require.NoError(t, r)
+	case *apitypes.APIDataResponse:
+		require.NoError(t, acctesting.WaitForTxV1(query, r))
+	default:
+		require.IsType(t, (*apitypes.APIDataResponse)(nil), r)
+	}
+
+	// Wait for synthetic TX to settle
+	time.Sleep(time.Second)
+
+	obj := new(state.Object)
+	chain := new(state.ChainHeader)
+	account := new(protocol.LiteTokenAccount)
+	qres, err := query.QueryByUrl(lite.String())
+	require.NoError(t, err)
+	require.Zero(t, qres.Response.Code, "Failed, log=%q, info=%q", qres.Response.Log, qres.Response.Info)
+	require.NoError(t, obj.UnmarshalBinary(qres.Response.Value))
+	require.NoError(t, obj.As(chain))
+	require.Equal(t, types.ChainTypeLiteTokenAccount, chain.Type)
+	require.NoError(t, obj.As(account))
 }

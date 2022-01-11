@@ -77,27 +77,25 @@ func (e *ED25519Sig) CanVerify(keyHash []byte) bool {
 	return bytes.Compare(keyHash, pubKeyHash[:]) == 0
 }
 
+func (e *ED25519Sig) WellFormed() bool {
+	return len(e.PublicKey) == 32 && len(e.Signature) == 64
+}
+
 // Verify
 // Returns true if the signature matches the message.  Involves a hash of the
 // message.
 func (e *ED25519Sig) Verify(hash []byte) bool {
-	return ed25519.Verify( //                               ed25519 verify signature
-		e.PublicKey, //                                     with the public key of the signature
-		append(common.Uint64Bytes(e.Nonce), hash...), //    Of the nonce+transaction hash
-		e.Signature) //                                     with the signature
+	return e.WellFormed() &&
+		ed25519.Verify( //                               ed25519 verify signature
+			e.PublicKey, //                                     with the public key of the signature
+			append(common.Uint64Bytes(e.Nonce), hash...), //    Of the nonce+transaction hash
+			e.Signature) //                                     with the signature
 }
 
 // Marshal
 // Marshal a signature.  The data can be unmarshaled
-func (e *ED25519Sig) Marshal() (data []byte, err error) { //
-
-	defer func() { //                                                   On any error, just report the error
-		if r := recover(); r != nil { //                            Check for error on exist
-			err = fmt.Errorf("error marshaling ED25519Sig %v", r) //  Generate the error message
-		} //
-	}() //                                                              If no error occurs, err will be nil
-
-	if len(e.PublicKey) != 32 || len(e.Signature) != 64 { //            Double check data sizes
+func (e *ED25519Sig) Marshal() (data []byte, err error) {
+	if !e.WellFormed() { //            Double check data sizes
 		return nil, fmt.Errorf("poorly formed signature") //            Report error if sizes are wrong
 	} //
 	data = append(data, common.Uint64Bytes(e.Nonce)...) //              Add Nonce
@@ -110,15 +108,24 @@ func (e *ED25519Sig) Marshal() (data []byte, err error) { //
 // UnMarshal a signature
 // further unmarshalling can be done with the returned data
 func (e *ED25519Sig) Unmarshal(data []byte) (nextData []byte, err error) {
-	defer func() {
-		if rErr := recover(); rErr != nil {
-			err = fmt.Errorf("error unmarshaling ED25519Sig %v", rErr)
-		}
-	}()
 	e.Nonce, data = common.BytesUint64(data)
 	e.PublicKey = append([]byte{}, data[:32]...)
 	data = data[32:]
 	e.Signature = append([]byte{}, data[:64]...)
 	data = data[64:]
 	return data, nil
+}
+
+func (e *ED25519Sig) BinarySize() int {
+	data, _ := e.Marshal()
+	return len(data)
+}
+
+func (e *ED25519Sig) MarshalBinary() ([]byte, error) {
+	return e.Marshal()
+}
+
+func (e *ED25519Sig) UnmarshalBinary(data []byte) error {
+	_, err := e.Unmarshal(data)
+	return err
 }

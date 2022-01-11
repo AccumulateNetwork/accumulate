@@ -29,8 +29,8 @@ func (q *queryDispatch) direct(accUrl string) (*queryDirect, error) {
 	return &queryDirect{q.QuerierOptions, route}, nil
 }
 
-func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error)) (*QueryResponse, error) {
-	resCh := make(chan *QueryResponse) // Result channel
+func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) (interface{}, error) {
+	resCh := make(chan interface{}) // Result channel
 	errCh := make(chan error)          // Error channel
 	doneCh := make(chan struct{})      // Completion channel
 
@@ -94,7 +94,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (*QueryResponse, error
 	}
 }
 
-func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
+func (q *queryDispatch) QueryUrl(url string) (interface{}, error) {
 	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (q *queryDispatch) QueryUrl(url string) (*QueryResponse, error) {
 	return direct.QueryUrl(url)
 }
 
-func (q *queryDispatch) QueryKeyPageIndex(url string, key []byte) (*QueryResponse, error) {
+func (q *queryDispatch) QueryKeyPageIndex(url string, key []byte) (*ChainQueryResponse, error) {
 	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err
@@ -110,18 +110,18 @@ func (q *queryDispatch) QueryKeyPageIndex(url string, key []byte) (*QueryRespons
 	return direct.QueryKeyPageIndex(url, key)
 }
 
-func (q *queryDispatch) QueryChain(id []byte) (*QueryResponse, error) {
-	res, err := q.queryAll(func(q *queryDirect) (*QueryResponse, error) {
+func (q *queryDispatch) QueryChain(id []byte) (*ChainQueryResponse, error) {
+	res, err := q.queryAll(func(q *queryDirect) (interface{}, error) {
 		return q.QueryChain(id)
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return res, nil
+	return res.(*ChainQueryResponse), nil
 }
 
-func (q *queryDispatch) QueryDirectory(url string, pagination QueryPagination, queryOptions QueryOptions) (*QueryResponse, error) {
+func (q *queryDispatch) QueryDirectory(url string, pagination QueryPagination, queryOptions QueryOptions) (*MultiResponse, error) {
 	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err
@@ -130,18 +130,18 @@ func (q *queryDispatch) QueryDirectory(url string, pagination QueryPagination, q
 	return direct.QueryDirectory(url, pagination, queryOptions)
 }
 
-func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*QueryResponse, error) {
-	res, err := q.queryAll(func(q *queryDirect) (*QueryResponse, error) {
+func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*TransactionQueryResponse, error) {
+	res, err := q.queryAll(func(q *queryDirect) (interface{}, error) {
 		return q.QueryTx(id, wait)
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return res, nil
+	return res.(*TransactionQueryResponse), nil
 }
 
-func (q *queryDispatch) QueryTxHistory(url string, start, count uint64) (*QueryMultiResponse, error) {
+func (q *queryDispatch) QueryTxHistory(url string, start, count uint64) (*MultiResponse, error) {
 	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err
@@ -150,7 +150,7 @@ func (q *queryDispatch) QueryTxHistory(url string, start, count uint64) (*QueryM
 	return direct.QueryTxHistory(url, start, count)
 }
 
-func (q *queryDispatch) QueryData(url string, entryHash [32]byte) (*QueryResponse, error) {
+func (q *queryDispatch) QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error) {
 	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func (q *queryDispatch) QueryData(url string, entryHash [32]byte) (*QueryRespons
 	return direct.QueryData(url, entryHash)
 }
 
-func (q *queryDispatch) QueryDataSet(url string, pagination QueryPagination, queryOptions QueryOptions) (*QueryResponse, error) {
+func (q *queryDispatch) QueryDataSet(url string, pagination QueryPagination, queryOptions QueryOptions) (*MultiResponse, error) {
 	direct, err := q.direct(url)
 	if err != nil {
 		return nil, err

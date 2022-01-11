@@ -6,14 +6,14 @@ if ! echo $PATH | sed 's/:/\n/g' | grep -q '^'$(go env GOPATH)'/bin$' ; then
 fi
 
 # Check if the CLI is installed
-if ! which cli &> /dev/null ; then
+if ! which accumulate &> /dev/null ; then
 	echo "Installing the CLI to $(go env GOPATH)/bin"
-    (cd $(git rev-parse --show-toplevel) && go install ./cmd/cli) || exit 1
+    (cd $(git rev-parse --show-toplevel) && go install ./cmd/accumulate) || exit 1
 
-	if ! which cli &> /dev/null ; then
+	if ! which accumulate &> /dev/null ; then
         echo "Failed to install the CLI"
 		exit 1
 	fi
 fi
 
-export cli=cli
+export cli=accumulate

@@ -8,16 +8,17 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
+	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/libs/log"
 )
 
-type TestLogger struct {
+type testLogger struct {
 	Test testing.TB
 }
 
-var _ io.Writer = (*TestLogger)(nil)
+var _ io.Writer = (*testLogger)(nil)
 
-func (l *TestLogger) Write(b []byte) (int, error) {
+func (l *testLogger) Write(b []byte) (int, error) {
 	s := string(b)
 	if strings.HasSuffix(s, "\n") {
 		s = s[:len(s)-1]
@@ -28,7 +29,7 @@ func (l *TestLogger) Write(b []byte) (int, error) {
 
 func TestLogWriter(t testing.TB) func(string) (io.Writer, error) {
 	return func(format string) (io.Writer, error) {
-		var w io.Writer = &TestLogger{Test: t}
+		var w io.Writer = &testLogger{Test: t}
 		switch strings.ToLower(format) {
 		case log.LogFormatPlain, log.LogFormatText:
 			w = newConsoleWriter(w)
@@ -41,6 +42,15 @@ func TestLogWriter(t testing.TB) func(string) (io.Writer, error) {
 
 		return w, nil
 	}
+}
+
+func NewTestLogger(t testing.TB, format, level string, trace bool) log.Logger {
+	writer, _ := TestLogWriter(t)(format)
+	level, writer, err := ParseLogLevel(level, writer)
+	require.NoError(t, err)
+	logger, err := NewTendermintLogger(zerolog.New(writer), level, trace)
+	require.NoError(t, err)
+	return logger
 }
 
 func ExcludeMessages(messages ...string) zerolog.HookFunc {

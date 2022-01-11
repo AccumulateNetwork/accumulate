@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/smt/storage/database"
+	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 )
 
 var _ = PrintNode // Avoids highlighting that PrintNode isn't used.  It is useful for debugging.
@@ -44,11 +44,9 @@ func TestManager(t *testing.T) {
 
 	d := 100000
 
-	dbManager, err := database.NewDBManager("memory", "", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	bptManager := NewBPTManager(dbManager)
+	store := memory.NewDB()
+	storeTx := store.Begin()
+	bptManager := NewBPTManager(storeTx)
 	for i := 0; i < d; i++ {
 		key := sha256.Sum256([]byte(fmt.Sprintf("0 key %d", i)))
 		value := sha256.Sum256([]byte(fmt.Sprintf("0 key %d", i)))
@@ -56,7 +54,7 @@ func TestManager(t *testing.T) {
 	}
 	bptManager.Bpt.Update()
 	//PrintNode(0, bptManager.Bpt.Root)
-	bptManager = NewBPTManager(dbManager)
+	bptManager = NewBPTManager(storeTx)
 	//PrintNode(0, bptManager.Bpt.Root)
 	for i := 0; i < d; i++ {
 		key := sha256.Sum256([]byte(fmt.Sprintf("1 key %d", i)))
@@ -72,15 +70,14 @@ func TestManagerSeries(t *testing.T) {
 	SetOfValues := make(map[[32]byte][32]byte) // Keep up with key/values we add
 	d := 100                                   // Add 100 entries each pass.
 
-	dbManager, err := database.NewDBManager("memory", "", nil) // One dbManager, memory based
-	if err != nil {
-		t.Fatal(err)
-	}
+	store := memory.NewDB()
+	storeTx := store.Begin()
+
 	var previous [32]byte    // Previous final root
 	for h := 0; h < 3; h++ { // Run our test 3 times, each time killing one manager, building another which must
 		{ //                     get its state from "disk"
-			bptManager := NewBPTManager(dbManager) // Get manager from disk.  First time empty, and more elements each pass
-			current := bptManager.GetRootHash()    // Check that previous == current, on every pass
+			bptManager := NewBPTManager(storeTx) // Get manager from disk.  First time empty, and more elements each pass
+			current := bptManager.GetRootHash()  // Check that previous == current, on every pass
 			if !bytes.Equal(previous[:], current[:]) {
 				t.Errorf("previous %x should be the same as current %x", previous, current)
 			}
@@ -107,7 +104,7 @@ func TestManagerSeries(t *testing.T) {
 				previous = currentRoot //                                Make previous track current state of database
 			}
 		}
-		bptManager := NewBPTManager(dbManager)  //  One more check that previous is the same as current when
+		bptManager := NewBPTManager(storeTx)    //  One more check that previous is the same as current when
 		currentRoot := bptManager.GetRootHash() //  we build a new BPTManager from the database
 		//fmt.Printf("=> %x %x\n", previous, currentRoot)
 		if !bytes.Equal(previous[:], currentRoot[:]) { //

@@ -41,7 +41,7 @@ if [ -z $2 ]; then
         if [ $? -eq 0 ]; then
 	   Status=`echo $StatusTX | $j .status.code | $s 's/\"/g'`
        else
-	   echo "cli tx get failed"
+	   echo "accumulate tx get failed"
 	   exit 1
        fi
 else
@@ -49,7 +49,7 @@ else
         if [ $? -eq 0 ]; then
 	   Status=`echo $StatusTX | $j .status.code | $s 's/\"/g'`
        else
-	   echo "cli tx get failed"
+	   echo "accumulate tx get failed"
 	   exit 1
        fi
 fi

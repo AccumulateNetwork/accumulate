@@ -14,6 +14,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	accurl "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -309,7 +310,7 @@ func (api *API) getADI(_ context.Context, params json.RawMessage) interface{} {
 
 // createADI creates ADI
 func (api *API) createADI(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.IdentityCreate{}
+	data := &protocol.CreateIdentity{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
@@ -400,23 +401,28 @@ func (api *API) getTokenAccountHistory(_ context.Context, params json.RawMessage
 // sendTx constructs a GenTransaction using the request parameters and
 // transaction payload, then broadcasts it to Tendermint.
 func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) (*acmeapi.APIDataResponse, error) {
-	tx := new(transactions.GenTransaction)
-	tx.Transaction = payload
+	u, err := url.Parse(string(req.Tx.Origin))
+	if err != nil {
+		return nil, fmt.Errorf("invalid origin: %v", err)
+	}
 
-	tx.SigInfo = new(transactions.SignatureInfo)
-	tx.SigInfo.URL = string(req.Tx.Origin)
-	tx.SigInfo.Nonce = req.Tx.Signer.Nonce
-	tx.SigInfo.KeyPageHeight = req.Tx.KeyPage.Height
-	tx.SigInfo.KeyPageIndex = req.Tx.KeyPage.Index
+	env := new(transactions.Envelope)
+	env.Transaction = new(transactions.Transaction)
+	env.Transaction.Body = payload
+
+	env.Transaction.Origin = u
+	env.Transaction.Nonce = req.Tx.Signer.Nonce
+	env.Transaction.KeyPageHeight = req.Tx.KeyPage.Height
+	env.Transaction.KeyPageIndex = req.Tx.KeyPage.Index
 
 	ed := new(transactions.ED25519Sig)
 	ed.Nonce = req.Tx.Signer.Nonce
 	ed.PublicKey = req.Tx.Signer.PublicKey[:]
 	ed.Signature = req.Tx.Sig.Bytes()
 
-	tx.Signature = append(tx.Signature, ed)
+	env.Signatures = append(env.Signatures, ed)
 
-	return api.broadcastTx(req.Wait, tx)
+	return api.broadcastTx(req.Wait, env)
 }
 
 // broadcastTx broadcasts the GenTransaction to Tendermint using
@@ -424,7 +430,7 @@ func (api *API) sendTx(req *acmeapi.APIRequestRaw, payload []byte) (*acmeapi.API
 // wait for DeliverTx to complete. If the server has TX subscription enabled and
 // wait is true, broadcastTx uses a WebSocket subscription to wait for
 // DeliverTx. By default, subscriptions are disabled.
-func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeapi.APIDataResponse, error) {
+func (api *API) broadcastTx(wait bool, tx *transactions.Envelope) (*acmeapi.APIDataResponse, error) {
 	// Disable websocket based behavior if it is not enabled
 	if !api.config.EnableSubscribeTX {
 		wait = false
@@ -458,7 +464,7 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeap
 
 	// Check for an error
 	if resolved.Code != 0 || len(resolved.MempoolError) != 0 {
-		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
+		msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"mempool\":\"%s\",\"codespace\":\"%s\"}", tx.Transaction.Hash(), resolved.Log, resolved.Hash, resolved.Code, resolved.MempoolError, resolved.Codespace))
 		ret.Data = &msg
 		return ret, nil
 	}
@@ -473,7 +479,7 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeap
 			resolved := txr.Result
 			hash := sha256.Sum256(txr.Tx)
 			if txr.Result.Code != 0 {
-				msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Log, hash, resolved.Code, resolved.Codespace))
+				msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"log\":\"%s\",\"hash\":\"%x\",\"code\":\"%d\",\"codespace\":\"%s\"}", tx.Transaction.Hash(), resolved.Log, hash, resolved.Code, resolved.Codespace))
 				ret.Data = &msg
 				return ret, nil
 			}
@@ -482,22 +488,22 @@ func (api *API) broadcastTx(wait bool, tx *transactions.GenTransaction) (*acmeap
 		}
 	}
 
-	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", tx.TransactionHash(), resolved.Hash, resolved.Codespace))
+	msg = []byte(fmt.Sprintf("{\"txid\":\"%x\",\"hash\":\"%x\",\"codespace\":\"%s\"}", tx.Transaction.Hash(), resolved.Hash, resolved.Codespace))
 	ret.Data = &msg
 	return ret, nil
 
 }
 
-func formatTransactionData(tx *transactions.GenTransaction) interface{} {
-	if tx.TransactionHash() != nil {
-		return fmt.Sprintf("txid: %x", tx.TransactionHash())
+func formatTransactionData(tx *transactions.Envelope) interface{} {
+	if tx.Transaction.Hash() != nil {
+		return fmt.Sprintf("txid: %x", tx.Transaction.Hash())
 	}
 	return nil
 }
 
 // createTokenAccount creates Token Account
 func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) interface{} {
-	data := &protocol.TokenAccountCreate{}
+	data := &protocol.CreateTokenAccount{}
 	req, payload, err := api.prepareCreate(params, data)
 	if err != nil {
 		return validatorError(err)
@@ -514,9 +520,12 @@ func (api *API) createTokenAccount(_ context.Context, params json.RawMessage) in
 
 // getTokenTx returns Token Tx info
 func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{} {
+	type TokenTxRequest struct {
+		Hash types.Bytes32 `json:"hash" form:"hash" query:"hash" validate:"required"`
+	}
 
 	var err error
-	req := &acmeapi.TokenTxRequest{}
+	req := &TokenTxRequest{}
 
 	if err = json.Unmarshal(params, &req); err != nil {
 		return validatorError(err)
@@ -538,7 +547,7 @@ func (api *API) getTokenTx(_ context.Context, params json.RawMessage) interface{
 
 // createTokenTx creates Token Tx
 func (api *API) createTokenTx(_ context.Context, params json.RawMessage) interface{} {
-	data := &acmeapi.SendTokens{}
+	data := &protocol.SendTokens{}
 	req, payload, err := api.prepareCreate(params, data, "From", "To")
 	if err != nil {
 		return validatorError(err)
@@ -572,7 +581,6 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return validatorError(err)
 	}
 
-	destAccount := types.String(u.String())
 	addr, tok, err := protocol.ParseLiteAddress(u)
 	switch {
 	case err != nil:
@@ -583,26 +591,20 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return jsonrpc2.NewError(ErrCodeNotAcmeAccount, "Invalid token account", fmt.Errorf("%q is not an ACME account", u))
 	}
 
-	tx := acmeapi.SendTokens{}
-	tx.From.String = types.String(protocol.FaucetWallet.Addr)
-	tx.AddToAccount(destAccount, 1000000000)
+	tx := protocol.SendTokens{}
+	tx.AddRecipient(u, 1000000000)
 
 	txData, err := tx.MarshalBinary()
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
-	gtx := new(transactions.GenTransaction)
-	gtx.Routing = protocol.FaucetUrl.Routing()
-	gtx.ChainID = protocol.FaucetUrl.ResourceChain()
-	gtx.SigInfo = new(transactions.SignatureInfo)
-	gtx.SigInfo.URL = *tx.From.String.AsString()
-	gtx.SigInfo.Nonce = protocol.FaucetWallet.Nonce
-	gtx.SigInfo.KeyPageHeight = 1
-	gtx.SigInfo.KeyPageIndex = 0
-	gtx.Transaction = txData
-	if err := gtx.SetRoutingChainID(); err != nil {
-		return jsonrpc2.NewError(ErrCodeBadURL, fmt.Sprintf("bad url generated %s: ", destAccount), err)
-	}
-	dataToSign := gtx.TransactionHash()
+	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
+	gtx.Transaction.Origin = protocol.FaucetUrl
+	gtx.Transaction.Nonce = protocol.FaucetWallet.Nonce
+	gtx.Transaction.KeyPageHeight = 1
+	gtx.Transaction.KeyPageIndex = 0
+	gtx.Transaction.Body = txData
+	dataToSign := gtx.Transaction.Hash()
 
 	ed := new(transactions.ED25519Sig)
 	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, dataToSign)
@@ -610,7 +612,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return submissionError(err)
 	}
 
-	gtx.Signature = append(gtx.Signature, ed)
+	gtx.Signatures = append(gtx.Signatures, ed)
 
 	broadcastTx, err := api.broadcastTx(req.Wait, gtx)
 	if err != nil {

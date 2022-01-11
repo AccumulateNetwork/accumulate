@@ -3,23 +3,13 @@ package testing
 import (
 	"io"
 	"strings"
+	"net"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/networks"
-	tmnet "github.com/tendermint/tendermint/libs/net"
 )
-
-var LocalBVN = &networks.Subnet{
-	Name: "Local",
-	Type: config.BlockValidator,
-	Port: 35550,
-	Nodes: []networks.Node{
-		{IP: "127.0.0.1", Type: config.Validator},
-	},
-}
 
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(net, node, netId)        //
@@ -38,27 +28,13 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 	return cfg
 }
 
-func NodeInitOptsForNetwork(subnet *networks.Subnet) node.InitOptions {
-	listenIP := make([]string, len(subnet.Nodes))
-	remoteIP := make([]string, len(subnet.Nodes))
-	cfg := make([]*config.Config, len(subnet.Nodes))
-
-	for i, net := range subnet.Nodes {
-		listenIP[i] = "localhost"
-		remoteIP[i] = net.IP
-		cfg[i] = DefaultConfig(subnet.Type, net.Type, subnet.Name) // Configure
-	}
-
-	port, err := tmnet.GetFreePort()
-	if err != nil {
-		panic(err)
-	}
-
+func NodeInitOptsForLocalNetwork(name string, ip net.IP) node.InitOptions {
+	// TODO Support DN, multi-BVN, multi-validator
 	return node.InitOptions{
-		Port:     port,
-		Config:   cfg,
-		RemoteIP: remoteIP,
-		ListenIP: listenIP,
+		Port:     30000,
+		Config:   []*config.Config{DefaultConfig(config.BlockValidator, config.Validator, name)},
+		RemoteIP: []string{ip.String()},
+		ListenIP: []string{ip.String()},
 	}
 }
 

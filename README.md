@@ -3,13 +3,13 @@
 Accumulate is a novel blockchain network designed to be hugely scalable while maintaining
 security. [More details](docs/Accumulate.md)
 
-## CLI
+## Command Line Interface (CLI)
 
-The CLI lives in `./cmd/accumulated`. It can be run directly via `go run ./cmd/accumulated ...`, which builds to a
-temporary directory and executes the binary in one go. It can be built via `go build ./cmd/accumualted`, which
-creates `accumulated` or `accumulated.exe` in the current directory. Or it can be installed
-to `$GOPATH/bin/accumulated` (GOPATH defaults to `$HOME/go`) via
-`go install ./cmd/accumulated`.
+The CLI lives in `./cmd/accumulate`. It can be run directly via `go run ./cmd/accumulate`, which builds to a
+temporary directory and executes the binary in one go. It can be built via `go build ./cmd/accumulate`, which
+creates `accumulate` or `accumulate.exe` in the current directory. It can be installed to `$GOPATH/bin/accumulate` (
+GOPATH defaults to `$HOME/go`) via
+`go install ./cmd/accumulate`.
 
 ### Main TestNet
 
@@ -38,7 +38,7 @@ To run a node in the testnet, run `accumulated run -w <dir>/Node<n>`, e.g.
 Accumulate is broken into the following components:
 
 - `cmd/accumulated` - Daemon
-- `cmd/cli` - CLI wallet
+- `cmd/accumulate` - CLI wallet
 - `config` - Daemon configuration types
 - `internal/abci` - [ABCI](https://docs.tendermint.com/master/spec/abci/)
   implementation

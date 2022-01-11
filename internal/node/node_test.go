@@ -8,20 +8,21 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tmnet "github.com/tendermint/tendermint/libs/net"
 )
 
 func TestNodeLifecycle(t *testing.T) {
-	acctesting.SkipLong(t)
+	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
 	// Configure
-	opts := acctesting.NodeInitOptsForNetwork(acctesting.LocalBVN)
+	opts := acctesting.NodeInitOptsForLocalNetwork(t.Name(), acctesting.GetIP())
 	opts.WorkDir = t.TempDir()
+	opts.Logger = logging.NewTestLogger(t, "plain", config.DefaultLogLevels, false)
 	require.NoError(t, node.Init(opts))
 
 	// Start
@@ -60,11 +61,4 @@ func TestNodeLifecycle(t *testing.T) {
 
 		assert.Failf(t, "Files are still open after the node was shut down", "%q is open", rel)
 	}
-}
-
-func getFreePort(t *testing.T) int {
-	t.Helper()
-	port, err := tmnet.GetFreePort()
-	require.NoError(t, err)
-	return port
 }

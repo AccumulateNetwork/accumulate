@@ -6,8 +6,6 @@ import (
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
 )
 
 func (s *Suite) TestGenesis() {
@@ -20,15 +18,15 @@ func (s *Suite) TestGenesis() {
 }
 
 func (s *Suite) TestCreateLiteAccount() {
-	sponsor, sender := s.generateTmKey(), s.generateTmKey()
+	sender := s.generateTmKey()
 
 	senderUrl, err := protocol.LiteAddress(sender.PubKey().Bytes(), protocol.ACME)
 	s.Require().NoError(err)
 
-	tx, err := acctesting.CreateFakeSyntheticDepositTx(sponsor, sender)
+	tx, err := acctesting.CreateFakeSyntheticDepositTx(sender)
 	s.Require().NoError(err)
 	s.dut.SubmitTxn(tx)
-	s.dut.WaitForTxns(tx.TransactionHash())
+	s.dut.WaitForTxns(tx.Transaction.Hash())
 
 	account := new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
@@ -49,19 +47,19 @@ func (s *Suite) TestCreateLiteAccount() {
 			break
 		}
 
-		exch := apitypes.NewTokenTx(types.String(senderUrl.String()))
+		exch := new(protocol.SendTokens)
 		for i := 0; i < 10; i++ {
 			if i > 2 && testing.Short() {
 				break
 			}
 			recipient := recipients[s.rand.Intn(len(recipients))]
-			exch.AddToAccount(types.String(recipient.String()), 1000)
+			exch.AddRecipient(recipient, 1000)
 			total += 1000
 		}
 
 		tx := s.newTx(senderUrl, sender, uint64(i+1), exch)
 		s.dut.SubmitTxn(tx)
-		txids = append(txids, tx.TransactionHash())
+		txids = append(txids, tx.Transaction.Hash())
 	}
 
 	s.dut.WaitForTxns(txids...)

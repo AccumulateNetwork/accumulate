@@ -115,7 +115,7 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 }
 
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {
-	res := new(QueryResponse)
+	res := new(ChainQueryResponse)
 	res.Type = "version"
 	res.Data = map[string]interface{}{
 		"version":        accumulate.Version,

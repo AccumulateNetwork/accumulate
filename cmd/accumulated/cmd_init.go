@@ -14,13 +14,16 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/fatih/color"
+	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 	"golang.org/x/term"
@@ -68,6 +71,7 @@ var flagInitDevnet struct {
 	BasePort      int
 	BaseIP        string
 	Docker        bool
+	DockerTag     string
 	UseVolumes    bool
 	Compose       bool
 }
@@ -94,6 +98,7 @@ func init() {
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
+	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DockerTag, "tag", "latest", "Tag to use on the docker images")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 }
@@ -158,6 +163,7 @@ func initNode(*cobra.Command, []string) {
 		Config:   config,
 		RemoteIP: remoteIP,
 		ListenIP: listenIP,
+		Logger:   newLogger(),
 	}))
 }
 
@@ -237,6 +243,7 @@ func initFollower(cmd *cobra.Command, _ []string) {
 		Config:     []*cfg.Config{config},
 		RemoteIP:   []string{""},
 		ListenIP:   []string{u.String()},
+		Logger:     newLogger(),
 	}))
 }
 
@@ -335,12 +342,14 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	}
 
 	if !flagInitDevnet.Compose {
+		logger := newLogger()
 		check(node.Init(node.InitOptions{
 			WorkDir:  filepath.Join(flagMain.WorkDir, "dn"),
 			Port:     flagInitDevnet.BasePort,
 			Config:   dnConfig,
 			RemoteIP: dnRemote,
 			ListenIP: dnListen,
+			Logger:   logger.With("subnet", protocol.Directory),
 		}))
 		for bvn := range bvnConfig {
 			bvnConfig, bvnRemote, bvnListen := bvnConfig[bvn], bvnRemote[bvn], bvnListen[bvn]
@@ -350,19 +359,17 @@ func initDevNet(cmd *cobra.Command, args []string) {
 				Config:   bvnConfig,
 				RemoteIP: bvnRemote,
 				ListenIP: bvnListen,
+				Logger:   logger.With("subnet", fmt.Sprintf("BVN%d", bvn)),
 			}))
 		}
-	}
-
-	if !flagInitDevnet.Compose {
 		return
 	}
 
 	var svc dc.ServiceConfig
-	api := fmt.Sprintf("http://%s:%d/v1", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
+	api := fmt.Sprintf("http://%s:%d/v2", dnRemote[0], flagInitDevnet.BasePort+networks.AccRouterJsonPortOffset)
 	svc.Name = "tools"
 	svc.ContainerName = "devnet-init"
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/cli:latest"
+	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/cli:" + flagInitDevnet.DockerTag
 	svc.Environment = map[string]*string{"ACC_API": &api}
 
 	svc.Command = dc.ShellCommand{"accumulated", "init", "devnet", "-w", "/nodes", "--docker"}
@@ -436,7 +443,7 @@ func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeTyp
 	var svc dc.ServiceConfig
 	svc.Name = name
 	svc.ContainerName = "devnet-" + name
-	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:latest"
+	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:" + flagInitDevnet.DockerTag
 	svc.DependsOn = []string{"tools"}
 
 	if flagInitDevnet.UseVolumes {
@@ -452,4 +459,14 @@ func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeTyp
 
 	compose.Services = append(compose.Services, svc)
 	return config, svc.Name, "0.0.0.0"
+}
+
+func newLogger() log.Logger {
+	writer, err := logging.NewConsoleWriter("plain")
+	check(err)
+	level, writer, err := logging.ParseLogLevel(config.DefaultLogLevels, writer)
+	check(err)
+	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
+	check(err)
+	return logger
 }

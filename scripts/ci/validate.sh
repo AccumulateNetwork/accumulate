@@ -7,19 +7,19 @@ function section {
 }
 
 function ensure-key {
-    if ! cli key list | grep "$1"; then
-        cli key generate "$1"
+    if ! accumulate key list | grep "$1"; then
+        accumulate key generate "$1"
     fi
 }
 
 function wait-for {
     TXID=`"$@"` || return 1
     echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
-    cli tx get -j --wait 10s --wait-synth 10s $TXID | jq --indent 0
+    accumulate tx get -j --wait 10s --wait-synth 10s $TXID | jq --indent 0
 }
 
 function cli-tx {
-    JSON=`cli -j "$@"` || return 1
+    JSON=`accumulate -j "$@"` || return 1
     echo "$JSON" | jq -r .txid
 }
 
@@ -43,22 +43,22 @@ function success {
 }
 
 section "Setup"
-if ! which cli > /dev/null ; then
-    go install ./cmd/cli
+if ! which accumulate > /dev/null ; then
+    go install ./cmd/accumulate
     export PATH="${PATH}:$(go env GOPATH)/bin"
 fi
-[ -z "${MNEMONIC}" ] || cli key import mnemonic ${MNEMONIC}
+[ -z "${MNEMONIC}" ] || accumulate key import mnemonic ${MNEMONIC}
 echo
 
 section "Generate a Lite Token Account"
-cli account list | grep -q ACME || cli account generate
-LITE=$(cli account list | grep ACME | head -1)
+accumulate account list | grep -q ACME || accumulate account generate
+LITE=$(accumulate account list | grep ACME | head -1)
 wait-for cli-tx faucet ${LITE}
-cli account get ${LITE} &> /dev/null && success || die "Cannot find ${LITE}"
+accumulate account get ${LITE} &> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
 wait-for cli-tx credits ${LITE} ${LITE} 100
-BALANCE=$(cli -j account get ${LITE} | jq -r .data.creditBalance)
+BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
 
 section "Generate keys"
@@ -71,13 +71,13 @@ echo
 
 section "Create an ADI"
 wait-for cli-tx adi create ${LITE} keytest keytest-0-0 book page0
-cli adi get keytest &> /dev/null && success || die "Cannot find keytest"
+accumulate adi get keytest &> /dev/null && success || die "Cannot find keytest"
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-0-0 keytest/page1 keytest-1-0
 wait-for cli-tx page create keytest/book keytest-0-0 keytest/page2 keytest-2-0
-cli page get keytest/page1 &> /dev/null || die "Cannot find keytest/page1"
-cli page get keytest/page2 &> /dev/null || die "Cannot find keytest/page2"
+accumulate page get keytest/page1 &> /dev/null || die "Cannot find keytest/page1"
+accumulate page get keytest/page2 &> /dev/null || die "Cannot find keytest/page2"
 success
 
 section "Add a key to page 1 using a key from page 1"
@@ -90,31 +90,26 @@ success
 
 section "Create an ADI Token Account"
 wait-for cli-tx account create token keytest keytest-0-0 0 keytest/tokens ACME keytest/book
-cli account get keytest/tokens &> /dev/null && success || die "Cannot find keytest/tokens"
+accumulate account get keytest/tokens &> /dev/null && success || die "Cannot find keytest/tokens"
 
 section "Send tokens from the lite token account to the ADI token account"
 wait-for cli-tx tx create ${LITE} keytest/tokens 5
-BALANCE=$(cli -j account get keytest/tokens | jq -r .data.balance)
+BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
 [ "$BALANCE" -eq 500000000 ] && success || die "${LITE} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
 
 section "Add credits to the ADI's key page 0"
 wait-for cli-tx credits keytest/tokens keytest-0-0 0 keytest/page0 125
-BALANCE=$(cli -j page get keytest/page0 | jq -r .data.creditBalance)
+BALANCE=$(accumulate -j page get keytest/page0 | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 125 ] && success || die "keytest/page0 should have 125 credits but has ${BALANCE}"
-
-section "Bug AC-517"
-WANT='"0000000000000000000000000000000000000000000000000000000000000000"'
-GOT=$(cli -j book get keytest/book | jq .data.keyBook)
-[ "${WANT}" = "${GOT}" ] && success || die "Failed"
 
 section "Bug AC-551"
 api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value &> /dev/null
 success
 
 section "API v2 faucet (AC-570)"
-BEFORE=$(cli -j account get ${LITE} | jq -r .data.balance)
+BEFORE=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE}'"}}'
-AFTER=$(cli -j account get ${LITE} | jq -r .data.balance)
+AFTER=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 DIFF=$(expr $AFTER - $BEFORE)
 [ $DIFF -eq 1000000000 ] && success || die "Faucet did not work, want +1000000000, got ${DIFF}"
 
@@ -123,15 +118,15 @@ api-v2 '{ "jsonrpc": "2.0", "id": 0, "method": "query-tx-history", "params": { "
 success
 
 section "Include Merkle state (API, AC-604)"
-cli -j adi get keytest | jq -e .merkleState.roots &> /dev/null
-cli -j adi get keytest | jq -e .merkleState.count &> /dev/null
-api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query", "params": {"url": "keytest"}}' | jq -e .result.merkleState.roots &> /dev/null
-api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query", "params": {"url": "keytest"}}' | jq -e .result.merkleState.count &> /dev/null
+accumulate -j adi get keytest | jq -e .mainChain.roots &> /dev/null || die "Failed: response does not include main chain roots"
+accumulate -j adi get keytest | jq -e .mainChain.height &> /dev/null || die "Failed: response does not include main chain height"
+api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query", "params": {"url": "keytest"}}' | jq -e .result.mainChain.roots &> /dev/null
+api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query", "params": {"url": "keytest"}}' | jq -e .result.mainChain.height &> /dev/null
 success
 
 section "Query with txid and chainId (API v2, AC-602)"
 # TODO Verify query-chain
-TXID=$(cli -j tx history keytest 0 1 | jq -re '.data[0].txid')
+TXID=$(accumulate -j tx history keytest 0 1 | jq -re '.items[0].txid')
 GOT=$(api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query-tx", "params": {"txid": "'${TXID}'"}}' | jq -re .result.txid)
 [ "${TXID}" = "${GOT}" ] || die "Failed to find TX ${TXID}"
 success

@@ -13,7 +13,7 @@ type CreateDataAccount struct{}
 
 func (CreateDataAccount) Type() types.TransactionType { return types.TxTypeCreateDataAccount }
 
-func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.CreateDataAccount)
 	err := tx.As(body)
 	if err != nil {
@@ -57,7 +57,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.GenTransact
 		if err != nil {
 			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
-		copy(account.KeyBook[:], keyBookUrl.ResourceChain())
+		account.KeyBook = types.String(keyBookUrl.String())
 	}
 
 	st.Create(account)

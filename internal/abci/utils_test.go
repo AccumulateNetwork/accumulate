@@ -9,7 +9,7 @@ import (
 	"fmt"
 	mock_api "github.com/AccumulateNetwork/accumulate/internal/mock/api"
 	"github.com/golang/mock/gomock"
-	"os"
+	"io"
 	"regexp"
 	"testing"
 	"time"
@@ -18,6 +18,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
@@ -41,45 +42,61 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
+const logConsole = false
+
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
-	db := new(state.StateDB)
-	err := db.Open("memory", true, true, nil)
+	db, err := database.Open("", true, nil)
 	require.NoError(t, err)
-
 	return createApp(t, db, addr, doGenesis)
 }
 
-func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis bool) *fakeNode {
+func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenesis bool) *fakeNode {
 	_, bvcKey, _ := ed25519.GenerateKey(rand)
 
 	n := new(fakeNode)
 	n.t = t
 	n.db = db
 
-	logWriter, _ := logging.TestLogWriter(t)("plain")
-	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
-	zl := zerolog.New(logWriter)
-
-	logger, err := logging.NewTendermintLogger(zl, logLevel, false)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: failed to parse log level: %v", err)
-		os.Exit(1)
+	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
+	n.network = &config.Network{
+		Type:     config.BlockValidator,
+		ID:       subnet,
+		BvnNames: []string{subnet},
 	}
+
+	var logWriter io.Writer
+	var err error
+	if logConsole {
+		logWriter, err = logging.NewConsoleWriter("plain")
+	} else {
+		logWriter, err = logging.TestLogWriter(t)("plain")
+	}
+	require.NoError(t, err)
+	logLevel, logWriter, err := logging.ParseLogLevel(config.DefaultLogLevels, logWriter)
+	require.NoError(t, err)
+	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
+	require.NoError(t, err)
 
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
 
-	n.height, err = db.BlockIndex()
-	if !errors.Is(err, storage.ErrNotFound) {
-		require.NoError(t, err)
+	batch := db.Begin()
+	defer batch.Discard()
+
+	ledger := protocol.NewInternalLedger()
+	err = batch.Record(n.network.NodeUrl().JoinPath(protocol.Ledger)).GetStateAs(ledger)
+	if err == nil {
+		n.height = ledger.Index
+	} else {
+		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 	local := mock_api.NewMockABCIBroadcastClient(ctrl)
-	n.client = acctesting.NewABCIApplicationClient(appChan, db, n.NextHeight, func(err error) {
+	n.client = acctesting.NewFakeTendermint(appChan, db, n.network, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
 	}, 100*time.Millisecond)
@@ -87,7 +104,6 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	require.NoError(t, relay.Start())
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
-
 	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
 		DB:               n.db,
@@ -95,22 +111,25 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 		Key:              bvcKey,
 		ConnectionRouter: mock_api.NewMockConnectionRouter(local, nil),
 		Local:            n.client,
-		Network: config.Network{
-			Type:     config.BlockValidator,
-			ID:       subnet,
-			BvnNames: []string{subnet},
-		},
+		Network: *n.network,
 		IsTest: true,
 	})
 	require.NoError(t, err)
 
-	n.app, err = abci.NewAccumulator(db, addr, mgr, logger)
-	require.NoError(t, err)
+	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
+		Chain:   mgr,
+		DB:      db,
+		Logger:  logger,
+		Network: *n.network,
+		Address: addr,
+	})
 	appChan <- n.app
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		require.NoError(t, err)
 	})
 
+	require.NoError(t, mgr.Start())
+	t.Cleanup(func() { _ = mgr.Stop() })
 	t.Cleanup(func() { n.client.Shutdown() })
 
 	if !doGenesis {
@@ -122,9 +141,9 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 	kv := new(memory.DB)
 	_ = kv.InitDB("", nil)
 	_, err = genesis.Init(kv, genesis.InitOpts{
-		SubnetID:    subnet,
-		NetworkType: config.BlockValidator,
+		Network:     *n.network,
 		GenesisTime: time.Now(),
+		Logger:      logger,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: tmed25519.PrivKey(bvcKey).PubKey()},
 		},
@@ -144,12 +163,13 @@ func createApp(t testing.TB, db *state.StateDB, addr crypto.Address, doGenesis b
 }
 
 type fakeNode struct {
-	t      testing.TB
-	db     *state.StateDB
-	app    abcitypes.Application
-	client *acctesting.ABCIApplicationClient
-	query  *accapi.Query
-	height int64
+	t       testing.TB
+	db      *database.Database
+	network *config.Network
+	app     abcitypes.Application
+	client  *acctesting.FakeTendermint
+	query   *accapi.Query
+	height  int64
 }
 
 func (n *fakeNode) NextHeight() int64 {
@@ -206,16 +226,27 @@ func (n *fakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
 	return r
 }
 
-func (n *fakeNode) Batch(inBlock func(func(*transactions.GenTransaction))) {
+func (n *fakeNode) Batch(inBlock func(func(*transactions.Envelope))) {
 	n.t.Helper()
 
-	inBlock(func(tx *transactions.GenTransaction) {
-		b, err := tx.Marshal()
+	var ids [][32]byte
+	var blob []byte
+	inBlock(func(tx *transactions.Envelope) {
+		var id [32]byte
+		copy(id[:], tx.Transaction.Hash())
+		ids = append(ids, id)
+		b, err := tx.MarshalBinary()
 		require.NoError(n.t, err)
-		n.client.SubmitTx(context.Background(), b)
+		blob = append(blob, b...)
 	})
 
-	n.client.Wait()
+	// Submit all the transactions as a batch
+	n.client.SubmitTx(context.Background(), blob)
+
+	// n.client.WaitForAll()
+	for _, id := range ids {
+		n.client.WaitFor(id, true)
+	}
 }
 
 func generateKey() tmed25519.PrivKey {
@@ -237,23 +268,25 @@ func (n *fakeNode) ParseUrl(s string) *url.URL {
 }
 
 func (n *fakeNode) GetDirectory(adi string) []string {
+	batch := n.db.Begin()
+	defer batch.Discard()
+
 	u := n.ParseUrl(adi)
+	record := batch.Record(u)
 	require.True(n.t, u.Identity().Equal(u))
 
 	md := new(protocol.DirectoryIndexMetadata)
-	idc := u.IdentityChain()
-	b, err := n.db.GetIndex(state.DirectoryIndex, idc, "Metadata")
+	err := record.Index("Directory", "Metadata").GetAs(md)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil
 	}
 	require.NoError(n.t, err)
-	require.NoError(n.t, md.UnmarshalBinary(b))
 
 	chains := make([]string, md.Count)
 	for i := range chains {
-		b, err := n.db.GetIndex(state.DirectoryIndex, idc, uint64(i))
+		data, err := record.Index("Directory", uint64(i)).Get()
 		require.NoError(n.t, err)
-		chains[i] = string(b)
+		chains[i] = string(data)
 	}
 	return chains
 }
@@ -281,8 +314,8 @@ func (n *fakeNode) GetDataAccount(url string) *protocol.DataAccount {
 	return acct
 }
 
-func (n *fakeNode) GetTokenAccount(url string) *state.TokenAccount {
-	acct := new(state.TokenAccount)
+func (n *fakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
+	acct := protocol.NewTokenAccount()
 	n.GetChainAs(url, acct)
 	return acct
 }
@@ -293,8 +326,8 @@ func (n *fakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
 	return acct
 }
 
-func (n *fakeNode) GetADI(url string) *state.AdiState {
-	adi := new(state.AdiState)
+func (n *fakeNode) GetADI(url string) *protocol.ADI {
+	adi := new(protocol.ADI)
 	n.GetChainAs(url, adi)
 	return adi
 }
@@ -335,12 +368,16 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	return d.getObj(url).Height
 }
 
-func (d *e2eDUT) SubmitTxn(tx *transactions.GenTransaction) {
-	b, err := tx.Marshal()
+func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
 	d.client.SubmitTx(context.Background(), b)
 }
 
-func (d *e2eDUT) WaitForTxns(...[]byte) {
-	d.client.Wait()
+func (d *e2eDUT) WaitForTxns(ids ...[]byte) {
+	for _, id := range ids {
+		var id32 [32]byte
+		copy(id32[:], id)
+		d.client.WaitFor(id32, true)
+	}
 }

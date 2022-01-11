@@ -21,11 +21,12 @@ type dispatcher struct {
 	localIndex  int
 	isDirectory bool
 	batches     map[connections.Route]txBatch
+	dnBatch     txBatch
 	errg        *errgroup.Group
 }
 
 // newDispatcher creates a new dispatcher.
-func newDispatcher(opts ExecutorOptions) (*dispatcher, error) {
+func newDispatcher(opts ExecutorOptions) *dispatcher {
 	d := new(dispatcher)
 	d.ExecutorOptions = opts
 	d.isDirectory = opts.Network.Type == config.Directory

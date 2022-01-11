@@ -11,8 +11,9 @@ import (
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
+	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	_ "github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -29,45 +30,37 @@ import (
 // a hash tree.
 type Accumulator struct {
 	abci.BaseApplication
+	AccumulatorOptions
+	logger log.Logger
 
-	subnetID string
-	state    State
-	address  crypto.Address
 	txct     int64
 	timer    time.Time
-	chain    Chain
-	logger   log.Logger
 	didPanic bool
 
 	onFatal func(error)
 }
 
+type AccumulatorOptions struct {
+	Chain   Chain
+	DB      *database.Database
+	Logger  log.Logger
+	Network config.Network
+	Address crypto.Address
+}
+
 // NewAccumulator returns a new Accumulator.
-func NewAccumulator(db State, address crypto.Address, chain Chain, logger log.Logger) (*Accumulator, error) {
-	logger = logger.With("module", "accumulate")
-
+func NewAccumulator(opts AccumulatorOptions) *Accumulator {
 	app := &Accumulator{
-		state:  db,
-		chain:  chain,
-		logger: logger,
+		AccumulatorOptions: opts,
+		logger:             opts.Logger.With("module", "accumulate", "subnet", opts.Network.ID),
 	}
 
-	app.address = make([]byte, len(address))
-	copy(app.address, address)
-
-	var err error
-	app.subnetID, err = db.SubnetID()
-	switch {
-	case err == nil:
-		logger = logger.With("subnet", app.subnetID)
-	case errors.Is(err, storage.ErrNotFound):
-		// OK
-	default:
-		return nil, fmt.Errorf("failed to load chain ID: %v", err)
+	if app.Chain == nil {
+		panic("Chain Validator Node not set!")
 	}
 
-	logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
-	return app, nil
+	app.logger.Info("Starting ABCI application", "accumulate", accumulate.Version, "abci", Version)
+	return app
 }
 
 var _ abci.Application = (*Accumulator)(nil)
@@ -79,8 +72,10 @@ func (app *Accumulator) OnFatal(f func(error)) {
 
 // fatal is called when a fatal error occurs. If fatal is called, all subsequent
 // transactions will fail with CodeDidPanic.
-func (app *Accumulator) fatal(err error) {
-	app.didPanic = true
+func (app *Accumulator) fatal(err error, setDidPanic bool) {
+	if setDidPanic {
+		app.didPanic = true
+	}
 
 	app.logger.Error("Fatal error", "error", err, "stack", debug.Stack())
 	sentry.CaptureException(err)
@@ -88,11 +83,14 @@ func (app *Accumulator) fatal(err error) {
 	if app.onFatal != nil {
 		app.onFatal(err)
 	}
+
+	// Throw the panic back at Tendermint
+	panic(err)
 }
 
 // recover will recover from a panic. If a panic occurs, it is passed to fatal
 // and code is set to CodeDidPanic (unless the pointer is nil).
-func (app *Accumulator) recover(code *uint32) {
+func (app *Accumulator) recover(code *uint32, setDidPanic bool) {
 	r := recover()
 	if r == nil {
 		return
@@ -104,7 +102,7 @@ func (app *Accumulator) recover(code *uint32) {
 	} else {
 		err = fmt.Errorf("panicked: %v", r)
 	}
-	app.fatal(err)
+	app.fatal(err, setDidPanic)
 
 	if code != nil {
 		*code = protocol.CodeDidPanic
@@ -113,13 +111,9 @@ func (app *Accumulator) recover(code *uint32) {
 
 // Info implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
-	defer app.recover(nil)
+	defer app.recover(nil, false)
 
 	//todo: load up the merkle databases to the same state we're at...  We will need to rewind.
-
-	if app.chain == nil {
-		panic("Chain Validator Node not set!")
-	}
 
 	// We have two different versions: that of the ABCI application, and that of
 	// the executable. The ABCI application version may affect Tendermint. The
@@ -136,10 +130,19 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		sentry.CaptureException(err)
 	}
 
-	height, err := app.state.BlockIndex()
-	if errors.Is(err, storage.ErrNotFound) {
+	batch := app.DB.Begin()
+	defer batch.Discard()
+
+	var height int64
+	ledger := protocol.NewInternalLedger()
+	err = batch.Record(app.Network.NodeUrl().JoinPath(protocol.Ledger)).GetStateAs(ledger)
+	switch {
+	case err == nil:
+		height = ledger.Index
+	case errors.Is(err, storage.ErrNotFound):
+		// InitChain has not been called yet
 		height = 0
-	} else if err != nil {
+	default:
 		height = -1
 		sentry.CaptureException(err)
 	}
@@ -149,7 +152,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 		Version:          version.ABCIVersion,
 		AppVersion:       Version,
 		LastBlockHeight:  height,
-		LastBlockAppHash: app.state.RootHash(),
+		LastBlockAppHash: batch.RootHash(),
 	}
 }
 
@@ -157,7 +160,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 //
 // Exposed as Tendermint RPC /abci_query.
 func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.ResponseQuery) {
-	defer app.recover(&resQuery.Code)
+	defer app.recover(&resQuery.Code, false)
 
 	if app.didPanic {
 		return abci.ResponseQuery{
@@ -177,7 +180,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	k, v, customErr := app.chain.Query(qu)
+	k, v, customErr := app.Chain.Query(qu)
 	switch {
 	case customErr == nil:
 		//Ok
@@ -211,49 +214,44 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 //
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	_, err := app.state.BlockIndex()
-	if err == nil {
+	batch := app.DB.Begin()
+	_, err := batch.Record(app.Network.NodeUrl().JoinPath(protocol.Ledger)).GetState()
+	switch {
+	case err == nil:
 		// InitChain already happened
-		return abci.ResponseInitChain{AppHash: app.state.RootHash()}
-	} else if !errors.Is(err, storage.ErrNotFound) {
+		return abci.ResponseInitChain{AppHash: batch.RootHash()}
+	case !errors.Is(err, storage.ErrNotFound):
 		panic(fmt.Errorf("failed to check block index: %v", err))
 	}
 
-	err = app.chain.InitChain(req.AppStateBytes)
+	app.logger.Info("Initializing")
+	err = app.Chain.InitChain(req.AppStateBytes, req.Time, req.InitialHeight)
 	if err != nil {
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
-
-	app.subnetID, err = app.state.SubnetID()
-	if err != nil {
-		panic(fmt.Errorf("failed to load subnet ID: %v", err))
-	}
-
-	app.logger = app.logger.With("subnet", req.ChainId)
-	app.logger.Info("Initializing")
 
 	//register a list of the validators.
 	for _, v := range req.Validators {
 		app.updateValidator(v)
 	}
 
-	return abci.ResponseInitChain{AppHash: app.state.RootHash()}
+	return abci.ResponseInitChain{AppHash: batch.RootHash()}
 }
 
 // BeginBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlock {
-	defer app.recover(nil)
+	defer app.recover(nil, true)
 
 	var ret abci.ResponseBeginBlock
 
 	//Identify the leader for this block, if we are the proposer... then we are the leader.
-	_, err := app.chain.BeginBlock(BeginBlockRequest{
-		IsLeader: bytes.Equal(app.address.Bytes(), req.Header.GetProposerAddress()),
+	_, err := app.Chain.BeginBlock(BeginBlockRequest{
+		IsLeader: bytes.Equal(app.Address.Bytes(), req.Header.GetProposerAddress()),
 		Height:   req.Header.Height,
 		Time:     req.Header.Time,
 	})
 	if err != nil {
-		app.fatal(err)
+		app.fatal(err, true)
 		return ret
 	}
 
@@ -291,8 +289,9 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 //
 // Verifies the transaction is sane.
 func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheckTx) {
-	defer app.recover(&rct.Code)
+	defer app.recover(&rct.Code, true)
 
+	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseCheckTx{
 			Code: protocol.CodeDidPanic,
@@ -301,56 +300,44 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	}
 
 	h := sha256.Sum256(req.Tx)
-	txHash := logging.AsHex(h[:])
+	tmHash := logging.AsHex(h[:])
 
-	//the submission is the format of the Tx input
-	sub := new(transactions.GenTransaction)
-
-	//unpack the request
-	rem, err := sub.UnMarshal(req.Tx)
-
-	//check to see if there was an error decoding the submission
-	if len(rem) != 0 || err != nil {
+	// Unmarshal all of the envelopes
+	// Unmarshal all of the envelopes
+	envelopes, err := transactions.UnmarshalAll(req.Tx)
+	if err != nil {
 		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "tx", txHash, "error", err)
-		//reject it
-		return abci.ResponseCheckTx{Code: protocol.CodeEncodingError, GasWanted: 0,
-			Log: "Unable to decode transaction"}
+		app.logger.Info("Check failed", "tx", tmHash, "error", err)
+		return abci.ResponseCheckTx{Code: protocol.CodeEncodingError, Log: "Unable to decode transaction"}
 	}
 
-	txid := logging.AsHex(sub.TransactionHash())
-
-	//create a default response
-	ret := abci.ResponseCheckTx{Code: 0, GasWanted: 1, Data: sub.ChainID, Log: "CheckTx"}
-
-	customErr := app.chain.CheckTx(sub)
-
-	if customErr != nil {
-		u2 := sub.SigInfo.URL
-		u, e2 := url.Parse(sub.SigInfo.URL)
-		if e2 == nil {
-			u2 = u.String()
+	// Check all of the transactions
+	for _, env := range envelopes {
+		txid := logging.AsHex(env.Transaction.Hash())
+		err := app.Chain.CheckTx(env)
+		if err == nil {
+			app.logger.Debug("Check succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)
+			continue
 		}
-		sentry.CaptureException(customErr)
-		app.logger.Info("Check failed", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash, "error", customErr)
-		ret.Code = uint32(customErr.Code)
-		ret.GasWanted = 0
-		ret.GasUsed = 0
-		ret.Log = fmt.Sprintf("%s check of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
-		return ret
+
+		sentry.CaptureException(err)
+		app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err)
+		return abci.ResponseCheckTx{
+			Code: uint32(err.Code),
+			Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), err),
+		}
 	}
 
-	//if we get here, the TX, passed reasonable check, so allow for dispatching to everyone else
-	app.logger.Debug("Check succeeded", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash)
-	return ret
+	return abci.ResponseCheckTx{Code: protocol.CodeOK}
 }
 
 // DeliverTx implements github.com/tendermint/tendermint/abci/types.Application.
 //
 // Verifies the transaction is valid.
 func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseDeliverTx) {
-	defer app.recover(&rdt.Code)
+	defer app.recover(&rdt.Code, true)
 
+	// Is the node borked?
 	if app.didPanic {
 		return abci.ResponseDeliverTx{
 			Code: protocol.CodeDidPanic,
@@ -359,50 +346,37 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	h := sha256.Sum256(req.Tx)
-	txHash := logging.AsHex(h[:])
-	ret := abci.ResponseDeliverTx{GasWanted: 1, GasUsed: 0, Data: []byte(""), Code: protocol.CodeOK}
+	tmHash := logging.AsHex(h[:])
 
-	sub := &transactions.GenTransaction{}
-
-	//unpack the request
-	//how do i detect errors?  This causes segfaults if not tightly checked.
-	_, err := sub.UnMarshal(req.Tx)
+	// Unmarshal all of the envelopes
+	envelopes, err := transactions.UnmarshalAll(req.Tx)
 	if err != nil {
 		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "tx", txHash, "error", err)
-		return abci.ResponseDeliverTx{Code: protocol.CodeEncodingError, GasWanted: 0,
-			Log: "Unable to decode transaction"}
+		app.logger.Info("Deliver failed", "tx", tmHash, "error", err)
+		return abci.ResponseDeliverTx{Code: protocol.CodeEncodingError, Log: "Unable to decode transaction"}
 	}
 
-	txid := logging.AsHex(sub.TransactionHash())
-
-	//run through the validation node
-	customErr := app.chain.DeliverTx(sub)
-
-	if customErr != nil {
-		u2 := sub.SigInfo.URL
-		u, e2 := url.Parse(sub.SigInfo.URL)
-		if e2 == nil {
-			u2 = u.String()
+	// Deliver all of the transactions
+	for _, env := range envelopes {
+		txid := logging.AsHex(env.Transaction.Hash())
+		err := app.Chain.DeliverTx(env)
+		if err == nil {
+			app.logger.Debug("Deliver succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)
+			continue
 		}
-		sentry.CaptureException(customErr)
-		app.logger.Info("Deliver failed", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash, "error", customErr)
-		ret.Code = uint32(customErr.Code)
-		//we don't care about failure as far as tendermint is concerned, so we should place the log in the pending
-		ret.Log = fmt.Sprintf("%s delivery of %s transaction failed: %v", u2, sub.TransactionType().Name(), customErr)
-		return ret
+
+		sentry.CaptureException(err)
+		app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err)
+		// Whether or not the transaction succeeds does not matter to Tendermint
 	}
 
-	//now we need to store the data returned by the validator and feed into accumulator
-	app.txct++
-
-	app.logger.Debug("Deliver succeeded", "type", sub.TransactionType().Name(), "txid", txid, "hash", txHash)
-	return ret
+	app.txct += int64(len(envelopes))
+	return abci.ResponseDeliverTx{Code: protocol.CodeOK}
 }
 
 // EndBlock implements github.com/tendermint/tendermint/abci/types.Application.
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEndBlock) {
-	defer app.recover(nil)
+	defer app.recover(nil, true)
 
 	// Select our leader who will initiate consensus on dbvc chain.
 	//resp.ConsensusParamUpdates
@@ -430,15 +404,15 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 //
 // Commits the transaction block to the chains.
 func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
-	defer app.recover(nil)
+	defer app.recover(nil, true)
 
 	//end the current batch of transactions in the Stateful Merkle Tree
 
-	mdRoot, err := app.chain.Commit()
+	mdRoot, err := app.Chain.Commit()
 	resp.Data = mdRoot
 
 	if err != nil {
-		app.fatal(err)
+		app.fatal(err, true)
 		return
 	}
 

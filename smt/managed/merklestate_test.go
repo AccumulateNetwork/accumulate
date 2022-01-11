@@ -9,6 +9,37 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestMerkleState_Equal(t *testing.T) {
+	var rh, rh1 RandHash
+	ms1 := new(MerkleState)
+	ms1.InitSha256()
+	ms2 := new(MerkleState)
+	ms2.InitSha256()
+	for i := 0; i < 100; i++ {
+		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		ms1.Pending = append(ms1.Pending, nil)
+		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		ms2.Pending = append(ms2.Pending, nil, nil)
+		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+
+		ms1.AddToMerkleTree(rh.Next())
+
+		require.Falsef(t, ms1.Equal(ms2), "Should be equal")
+		ms1.Pending = append(ms1.Pending, nil)
+		require.Falsef(t, ms1.Equal(ms2), "Should be equal")
+		ms2.Pending = append(ms2.Pending, nil, nil)
+		require.Falsef(t, ms1.Equal(ms2), "Should be equal")
+
+		ms2.AddToMerkleTree(rh1.Next())
+		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		ms1.Pending = append(ms1.Pending, nil)
+		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+		ms2.Pending = append(ms2.Pending, nil, nil)
+		require.Truef(t, ms1.Equal(ms2), "Should be equal")
+
+	}
+}
+
 func TestCopy(t *testing.T) {
 	ms1 := new(MerkleState)
 	ms1.InitSha256()

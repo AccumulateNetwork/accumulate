@@ -7,17 +7,16 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type CreateKeyPage struct{}
 
 func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 
-func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error {
 	var group *protocol.KeyBook
 	switch origin := st.Origin.(type) {
-	case *state.AdiState:
+	case *protocol.ADI:
 		// Create an unbound sig spec
 	case *protocol.KeyBook:
 		group = origin
@@ -45,7 +44,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
-	scc.Cause = types.Bytes(tx.TransactionHash()).AsBytes32()
+	scc.Cause = types.Bytes(tx.Transaction.Hash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
 	spec := protocol.NewKeyPage()
@@ -59,8 +58,8 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 			return fmt.Errorf("invalid origin record URL: %v", err)
 		}
 
-		group.Pages = append(group.Pages, types.Bytes(msUrl.ResourceChain()).AsBytes32())
-		spec.KeyBook = types.Bytes(groupUrl.ResourceChain()).AsBytes32()
+		group.Pages = append(group.Pages, msUrl.String())
+		spec.KeyBook = types.String(groupUrl.String())
 
 		err = scc.Update(group)
 		if err != nil {

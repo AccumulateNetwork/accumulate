@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -15,7 +16,7 @@ func (UpdateKeyPage) Type() types.TxType {
 	return types.TxTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction) error {
+func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error {
 	body := new(protocol.UpdateKeyPage)
 	err := tx.As(body)
 	if err != nil {
@@ -48,15 +49,23 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 
 	var book *protocol.KeyBook
 	var priority = -1
-	if page.KeyBook != (types.Bytes32{}) {
+	if page.KeyBook != "" {
 		book = new(protocol.KeyBook)
-		err = st.LoadAs(page.KeyBook, book)
+		u, err := url.Parse(*page.KeyBook.AsString())
+		if err != nil {
+			return fmt.Errorf("invalid key book url : %s", *page.KeyBook.AsString())
+		}
+		err = st.LoadUrlAs(u, book)
 		if err != nil {
 			return fmt.Errorf("invalid key book: %v", err)
 		}
 
 		for i, p := range book.Pages {
-			if p == st.OriginChainId {
+			u, err := url.Parse(p)
+			if err != nil {
+				return fmt.Errorf("invalid key page url : %s", p)
+			}
+			if u.ResourceChain32() == st.OriginChainId {
 				priority = i
 			}
 		}
@@ -65,8 +74,15 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 
 		// 0 is the highest priority, followed by 1, etc
-		if tx.SigInfo.KeyPageIndex > uint64(priority) {
+		if tx.Transaction.KeyPageIndex > uint64(priority) {
 			return fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
+		}
+	}
+
+	if body.Owner != "" {
+		_, err := url.Parse(body.Owner)
+		if err != nil {
+			return fmt.Errorf("invalid key book url : %s", body.Owner)
 		}
 	}
 
@@ -75,10 +91,13 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		if len(body.Key) > 0 {
 			return fmt.Errorf("trying to add a new key but you gave me an existing key")
 		}
-
-		page.Keys = append(page.Keys, &protocol.KeySpec{
+		key := &protocol.KeySpec{
 			PublicKey: body.NewKey,
-		})
+		}
+		if body.Owner != "" {
+			key.Owner = body.Owner
+		}
+		page.Keys = append(page.Keys, key)
 
 	case protocol.UpdateKey:
 		if len(body.Key) == 0 {
@@ -89,6 +108,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 		}
 
 		oldKey.PublicKey = body.NewKey
+		if body.Owner != "" {
+			oldKey.Owner = body.Owner
+		}
 
 	case protocol.RemoveKey:
 		if len(body.Key) == 0 {
@@ -112,10 +134,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.GenTransaction)
 	return nil
 }
 
-func (UpdateKeyPage) CheckTx(st *StateManager, tx *transactions.GenTransaction) error {
+func (UpdateKeyPage) CheckTx(st *StateManager, tx *transactions.Envelope) error {
 	return UpdateKeyPage{}.Validate(st, tx)
 }
 
-func (UpdateKeyPage) DeliverTx(st *StateManager, tx *transactions.GenTransaction) error {
+func (UpdateKeyPage) DeliverTx(st *StateManager, tx *transactions.Envelope) error {
 	return UpdateKeyPage{}.Validate(st, tx)
 }
