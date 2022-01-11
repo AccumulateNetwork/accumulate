@@ -35,7 +35,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) erro
 	case *protocol.LiteTokenAccount, *protocol.ADI:
 		// OK
 	default:
-		return fmt.Errorf("chain type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
+		return fmt.Errorf("account type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
 	}
 
 	var pageUrl, bookUrl *url.URL

@@ -121,8 +121,8 @@ func GetAccount(url string) (string, error) {
 		return "", err
 	}
 
-	if res.Type != types.ChainTypeTokenAccount.String() && res.Type != types.ChainTypeLiteTokenAccount.String() &&
-		res.Type != types.ChainTypeDataAccount.String() && res.Type != types.ChainTypeLiteDataAccount.String() {
+	if res.Type != types.AccountTypeTokenAccount.String() && res.Type != types.AccountTypeLiteTokenAccount.String() &&
+		res.Type != types.AccountTypeDataAccount.String() && res.Type != types.AccountTypeLiteDataAccount.String() {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
 	}
 

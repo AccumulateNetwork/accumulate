@@ -9,7 +9,7 @@ import (
 // NewPendingTransaction will create a new pending transaction from a general transaction
 func NewPendingTransaction(env *transactions.Envelope) *PendingTransaction {
 	ret := &PendingTransaction{}
-	ret.ChainHeader.SetHeader(types.String(env.Transaction.Origin.String()), types.ChainTypePendingTransaction)
+	ret.ChainHeader.SetHeader(types.String(env.Transaction.Origin.String()), types.AccountTypePendingTransaction)
 	ret.Signature = env.Signatures
 	ret.TransactionState = &TxState{}
 	ret.TransactionState.SigInfo = &env.Transaction.Header
@@ -23,7 +23,7 @@ func NewPendingTransaction(env *transactions.Envelope) *PendingTransaction {
 func NewTransaction(pending *PendingTransaction) (*Transaction, *PendingTransaction) {
 	txState := &Transaction{}
 	txState.ChainUrl = pending.ChainUrl
-	txState.Type = types.ChainTypeTransaction
+	txState.Type = types.AccountTypeTransaction
 	txState.Transaction = pending.TransactionState.Transaction
 	txState.SigInfo = pending.TransactionState.SigInfo
 	txState.transactionHash = pending.TransactionState.transactionHash

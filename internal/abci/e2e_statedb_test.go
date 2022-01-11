@@ -32,7 +32,7 @@ func TestStateDBConsistency(t *testing.T) {
 	ledger := n.network.NodeUrl(protocol.Ledger)
 	ledger1 := protocol.NewInternalLedger()
 	batch := db.Begin()
-	require.NoError(t, batch.Record(ledger).GetStateAs(ledger1))
+	require.NoError(t, batch.Account(ledger).GetStateAs(ledger1))
 	rootHash := batch.RootHash()
 	batch.Discard()
 	n.client.Shutdown()
@@ -43,7 +43,7 @@ func TestStateDBConsistency(t *testing.T) {
 	// Block 6 does not make changes so is not saved
 	batch = db.Begin()
 	ledger2 := protocol.NewInternalLedger()
-	require.NoError(t, batch.Record(ledger).GetStateAs(ledger2))
+	require.NoError(t, batch.Account(ledger).GetStateAs(ledger2))
 	require.Equal(t, ledger1, ledger2, "Ledger does not match after load from disk")
 	require.Equal(t, fmt.Sprintf("%X", rootHash), fmt.Sprintf("%X", batch.RootHash()), "Hash does not match after load from disk")
 	batch.Discard()

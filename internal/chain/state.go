@@ -39,7 +39,7 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, tx *transactions.E
 	m.stateCache = *newStateCache(nodeUrl, tx.Transaction.Type(), txid, batch)
 	m.OriginUrl = tx.Transaction.Origin
 
-	copy(m.OriginChainId[:], m.OriginUrl.ResourceChain())
+	copy(m.OriginChainId[:], m.OriginUrl.AccountID())
 
 	// Find the origin
 	var err error
