@@ -25,28 +25,23 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 		return fmt.Errorf("invalid recipient account URL: %v", err)
 	}
 
-	var tokenAccount *protocol.TokenIssuer
-	if st.Origin != nil {
-		switch origin := st.Origin.(type) {
-		case *protocol.TokenIssuer:
-			tokenAccount = origin
-		default:
-			return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeTokenIssuer, origin.Header().Type)
-		}
+	issuer, ok := st.Origin.(*protocol.TokenIssuer)
+	if !ok {
+		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeTokenIssuer, st.Origin.Header().Type)
 	}
 
-	if tokenAccount.Supply.Cmp(&body.Amount) < 0 && tokenAccount.HasSupplyLimit {
+	if issuer.Supply.Cmp(&body.Amount) < 0 && issuer.HasSupplyLimit {
 		return fmt.Errorf("can't issue more than the limited supply")
 	}
-	tokenAccount.Supply.Sub(&tokenAccount.Supply, &body.Amount)
+	issuer.Supply.Sub(&issuer.Supply, &body.Amount)
 
 	deposit := new(protocol.SyntheticDepositTokens)
 	copy(deposit.Cause[:], tx.Transaction.Hash())
-	deposit.Token = tokenAccount.Header().GetChainUrl()
+	deposit.Token = issuer.Header().GetChainUrl()
 	deposit.Amount = body.Amount
 	st.Submit(accountUrl, deposit)
 
-	st.Update(tokenAccount)
+	st.Update(issuer)
 
 	return nil
 }
