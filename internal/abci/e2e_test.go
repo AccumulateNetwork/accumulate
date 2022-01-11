@@ -23,7 +23,7 @@ var rand = randpkg.New(randpkg.NewSource(0))
 
 type Tx = transactions.Envelope
 
-func _TestEndToEndSuite(t *testing.T) {
+func TestEndToEndSuite(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, true)
@@ -31,7 +31,7 @@ func _TestEndToEndSuite(t *testing.T) {
 	}))
 }
 
-func _TestCreateLiteAccount(t *testing.T) {
+func TestCreateLiteAccount(t *testing.T) {
 	var count = 11
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	originAddr, balances := n.testLiteTx(count)
@@ -78,7 +78,7 @@ func (n *fakeNode) testLiteTx(count int) (string, map[string]int64) {
 	return origin.Addr, balance
 }
 
-func _TestFaucet(t *testing.T) {
+func TestFaucet(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice).String()
@@ -96,7 +96,7 @@ func _TestFaucet(t *testing.T) {
 	require.Equal(t, int64(10*protocol.AcmePrecision), n.GetLiteTokenAccount(aliceUrl).Balance.Int64())
 }
 
-func _TestAnchorChain(t *testing.T) {
+func TestAnchorChain(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	liteAccount := generateKey()
 	batch := n.db.Begin()
@@ -157,7 +157,7 @@ func _TestAnchorChain(t *testing.T) {
 	})
 }
 
-func _TestCreateADI(t *testing.T) {
+func TestCreateADI(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 
 	liteAccount := generateKey()
@@ -199,7 +199,7 @@ func _TestCreateADI(t *testing.T) {
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
 }
 
-func TestAAAACreateLiteDataAccount(t *testing.T) {
+func TestCreateLiteDataAccount(t *testing.T) {
 
 	//this test exercises WriteDataTo and SyntheticWriteData validators
 
@@ -249,7 +249,7 @@ func TestAAAACreateLiteDataAccount(t *testing.T) {
 	})
 }
 
-func _TestCreateAdiDataAccount(t *testing.T) {
+func TestCreateAdiDataAccount(t *testing.T) {
 
 	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
 		n := createAppWithMemDB(t, crypto.Address{}, true)
@@ -402,7 +402,7 @@ func _TestCreateAdiDataAccount(t *testing.T) {
 	})
 }
 
-func _TestCreateAdiTokenAccount(t *testing.T) {
+func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
 		n := createAppWithMemDB(t, crypto.Address{}, true)
 		adiKey := generateKey()
@@ -461,7 +461,7 @@ func _TestCreateAdiTokenAccount(t *testing.T) {
 	})
 }
 
-func _TestLiteAccountTx(t *testing.T) {
+func TestLiteAccountTx(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
 	batch := n.db.Begin()
@@ -489,7 +489,7 @@ func _TestLiteAccountTx(t *testing.T) {
 	require.Equal(t, int64(2000), n.GetLiteTokenAccount(charlieUrl).Balance.Int64())
 }
 
-func _TestAdiAccountTx(t *testing.T) {
+func TestAdiAccountTx(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey, barKey := generateKey(), generateKey()
 	batch := n.db.Begin()
@@ -512,7 +512,7 @@ func _TestAdiAccountTx(t *testing.T) {
 	require.Equal(t, int64(68), n.GetTokenAccount("bar/tokens").Balance.Int64())
 }
 
-func _TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
+func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey := generateKey()
 	batch := n.db.Begin()
@@ -536,7 +536,7 @@ func _TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 	require.Equal(t, int64(protocol.AcmePrecision*1e2-protocol.AcmePrecision/protocol.CreditsPerFiatUnit*55), acct.Balance.Int64())
 }
 
-func _TestCreateKeyPage(t *testing.T) {
+func TestCreateKeyPage(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin()
@@ -563,7 +563,7 @@ func _TestCreateKeyPage(t *testing.T) {
 	require.Equal(t, testKey.PubKey().Bytes(), key.PublicKey)
 }
 
-func _TestCreateKeyBook(t *testing.T) {
+func TestCreateKeyBook(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin()
@@ -593,7 +593,7 @@ func _TestCreateKeyBook(t *testing.T) {
 	require.Equal(t, spec.KeyBook, types.String(groupUrl.String()))
 }
 
-func _TestAddKeyPage(t *testing.T) {
+func TestAddKeyPage(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
@@ -628,7 +628,7 @@ func _TestAddKeyPage(t *testing.T) {
 	require.Equal(t, testKey2.PubKey().Bytes(), key.PublicKey)
 }
 
-func _TestAddKey(t *testing.T) {
+func TestAddKey(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey, testKey := generateKey(), generateKey()
 
@@ -654,7 +654,7 @@ func _TestAddKey(t *testing.T) {
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[1].PublicKey)
 }
 
-func _TestUpdateKey(t *testing.T) {
+func TestUpdateKey(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey, testKey := generateKey(), generateKey()
 
@@ -681,7 +681,7 @@ func _TestUpdateKey(t *testing.T) {
 	require.Equal(t, newKey.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
 
-func _TestRemoveKey(t *testing.T) {
+func TestRemoveKey(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
@@ -706,7 +706,7 @@ func _TestRemoveKey(t *testing.T) {
 	require.Equal(t, testKey2.PubKey().Bytes(), spec.Keys[0].PublicKey)
 }
 
-func _TestSignatorHeight(t *testing.T) {
+func TestSignatorHeight(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	liteKey, fooKey := generateKey(), generateKey()
 
