@@ -21,7 +21,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
 )
 

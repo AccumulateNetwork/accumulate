@@ -5,8 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-
-	"gopkg.in/yaml.v3"
 )
 
 var input = flag.String("input", "", "Input YAML file")

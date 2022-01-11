@@ -5,7 +5,6 @@ import (
 	"reflect"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/go-playground/validator/v10"
 )
 
 // ChainType is the type of a chain belonging to an account.

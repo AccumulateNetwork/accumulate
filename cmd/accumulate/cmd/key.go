@@ -13,8 +13,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/spf13/cobra"
-	"github.com/tyler-smith/go-bip32"
-	"github.com/tyler-smith/go-bip39"
 )
 
 var keyCmd = &cobra.Command{
