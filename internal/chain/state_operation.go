@@ -27,7 +27,7 @@ type createRecords struct {
 // if called by a synthetic transaction. Will panic if the record is a
 // transaction.
 func (m *stateCache) Create(record ...state.Chain) {
-	if m.txType.IsSynthetic() && m.txType != types.TxTypeSyntheticWriteData {
+	if m.txType.IsSynthetic() {
 		panic("Called StateManager.Create from a synthetic transaction!")
 	}
 	for _, r := range record {
