@@ -22,7 +22,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 
 	accountUrl, err := url.Parse(body.Recipient)
 	if err != nil {
-		return fmt.Errorf("invalid account URL: %v", err)
+		return fmt.Errorf("invalid recipient account URL: %v", err)
 	}
 
 	var tokenAccount *protocol.TokenIssuer
@@ -40,14 +40,13 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	}
 	tokenAccount.Supply.Sub(&tokenAccount.Supply, &body.Amount)
 
-	account := protocol.NewLiteTokenAccount()
-	account.ChainUrl = types.String(accountUrl.String())
-	account.TokenUrl = tokenAccount.Header().GetChainUrl()
+	deposit := new(protocol.SyntheticDepositTokens)
+	copy(deposit.Cause[:], tx.Transaction.Hash())
+	deposit.Token = tokenAccount.Header().GetChainUrl()
+	deposit.Amount = body.Amount
+	st.Submit(accountUrl, deposit)
 
-	if !account.CreditTokens(&body.Amount) {
-		return fmt.Errorf("unable to add deposit balance to account")
-	}
-	st.Update(account, tokenAccount)
+	st.Update(tokenAccount)
 
 	return nil
 }
