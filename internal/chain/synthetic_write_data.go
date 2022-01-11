@@ -36,7 +36,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 		default:
 			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, origin.Header().Type)
 		}
-	} else if _, err := protocol.ParseLiteChainAddress(tx.Transaction.Origin); err != nil {
+	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin); err != nil {
 		return fmt.Errorf("invalid lite chain URL: %v", err)
 	} else if err != nil {
 		return err
@@ -67,7 +67,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 	}
 
 	if haveLiteChain {
-		liteChainId, err := protocol.ParseLiteChainAddress(tx.Transaction.Origin)
+		liteChainId, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin)
 		if err != nil {
 			return err
 		}

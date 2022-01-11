@@ -38,12 +38,14 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			SendTokens{},
 			UpdateKeyPage{},
 			WriteData{},
+			WriteDataTo{},
 
 			SyntheticAnchor{Network: &opts.Network},
 			SyntheticCreateChain{},
 			SyntheticDepositCredits{},
 			SyntheticDepositTokens{},
 			SyntheticMirror{},
+			SyntheticWriteData{},
 
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},
