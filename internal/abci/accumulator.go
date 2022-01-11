@@ -303,17 +303,18 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	tmHash := logging.AsHex(h[:])
 
 	// Unmarshal all of the envelopes
-	// Unmarshal all of the envelopes
 	envelopes, err := transactions.UnmarshalAll(req.Tx)
 	if err != nil {
 		sentry.CaptureException(err)
 		app.logger.Info("Check failed", "tx", tmHash, "error", err)
 		return abci.ResponseCheckTx{Code: protocol.CodeEncodingError, Log: "Unable to decode transaction"}
 	}
+	app.logger.Info("*** New transaction incoming", "tx", tmHash, "envelopes", len(envelopes))
 
 	// Check all of the transactions
 	for _, env := range envelopes {
 		txid := logging.AsHex(env.Transaction.Hash())
+		app.logger.Debug("Found tx", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)
 		err := app.Chain.CheckTx(env)
 		if err == nil {
 			app.logger.Debug("Check succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)

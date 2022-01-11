@@ -70,7 +70,7 @@ func toURL(t *testing.T, urlString string) *url.URL {
 }
 
 func mockLocalNode(t *testing.T) (*node.Node, connections.ConnectionRouter) {
-	bvc0 := initNodes(t, selfId, net.ParseIP("127.0.26.1"), 3000, 1, []string{"127.0.26.1", "127.0.27.1", "127.0.28.1"})
+	bvc0 := initNodes(t, selfId, net.ParseIP("127.0.26.1"), 3000, 3, []string{"127.0.26.1", "127.0.26.2", "127.0.26.3"})
 	bvc0[0].Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) { require.NoError(t, err) })
 	return bvc0[0].Node_TESTONLY(), bvc0[0].ConnRouter
 }

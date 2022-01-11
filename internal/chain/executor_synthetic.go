@@ -2,7 +2,6 @@ package chain
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -100,31 +99,4 @@ func (opts *ExecutorOptions) buildSynthTxn(dest *url.URL, body protocol.Transact
 	}
 
 	return env, nil
-		// Parse the URL
-		u, err := url.Parse(tx.SigInfo.URL)
-		if err != nil {
-			return nil, err
-		}
-
-		// Add it to the batch
-		m.logDebug("Sending synth txn", "actor", u.String(), "txid", logging.AsHex(tx.TransactionHash()))
-		log.Printf("==> Sending synth txn %v\n", logging.AsHex(tx.TransactionHash()))
-		err = m.dispatcher.BroadcastTxAsync(context.Background(), u, raw)
-		if err != nil {
-			return nil, fmt.Errorf("sending synth txn failed for actor %s and tx %s: %v", u.String(), logging.AsHex(tx.TransactionHash()), err)
-		}
-
-		// Delete the signature
-		m.dbTx.DeleteSynthTxnSig(sig.Txid)
-
-		// Add the synthetic transaction reference
-		var ref abci.SynthTxnReference
-		ref.Type = uint64(tx.TransactionType())
-		ref.Url = tx.SigInfo.URL
-		ref.TxRef = sha256.Sum256(raw)
-		copy(ref.Hash[:], tx.TransactionHash())
-		refs = append(refs, ref)
-	}
-
-	return refs, nil
 }

@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
-	"log"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -109,7 +108,7 @@ type executeRequest struct {
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
 	// Route the request
-	route, err := m.opts.ConnectionRouter.SelectRoute(u, false) // TODO allow query follower?
+	route, err := m.opts.ConnectionRouter.SelectRoute(req.Origin, false) // TODO allow query follower?
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -119,7 +118,6 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 
 	// Prepare the request for dispatch to a remote BVC
-	var err error
 	req.Payload = payload
 	ex := new(executeRequest)
 	ex.route = route
@@ -288,13 +286,11 @@ loop:
 		case 1:
 			// Send single (Tendermint JSON-RPC behaves badly)
 			// FIXME m.logDebug("Sending call", "remote", client.String()) // TODO check if this logs the URL
-			log.Printf("=====> Sending call remote method %s with params %s\n", rq[0].Method, rq[0].Params) // TODO remove after debug
 			r, e := client.Call(rq[0].Method, rq[0].Params)
 			res, err = jsonrpc.RPCResponses{r}, e
 		default:
 			// Send batch
-			// FIXME m.logDebug("Sending call batch", "remote", m.opts.Remote[i])
-			log.Printf("=====> Sending call batch remote %v\n", rq) // TODO remove after debug
+			m.logDebug("Sending call batch", "remote", route.GetSubnetName())
 			res, err = client.CallBatch(rq)
 		}
 

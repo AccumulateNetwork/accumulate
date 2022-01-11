@@ -10,6 +10,7 @@ import (
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
 	"golang.org/x/sync/errgroup"
+	"log"
 )
 
 type txBatch []tm.Tx
@@ -32,11 +33,11 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 	d.isDirectory = opts.Network.Type == config.Directory
 	d.localIndex = -1
 	d.batches = make(map[connections.Route]txBatch)
-	return d, nil
+	return d
 }
 
 // Reset creates new RPC client batches.
-func (d *dispatcher) Reset() {
+func (d *dispatcher) Reset(ctx context.Context) {
 	d.errg = new(errgroup.Group)
 	for key := range d.batches {
 		delete(d.batches, key)
@@ -57,7 +58,11 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 	case connections.Local:
 		d.BroadcastTxAsyncLocal(ctx, tx)
 	default:
+		log.Println("*** Batch size before", len(*batch))
 		*batch = append(*batch, tx)
+		d.batches[route] = *batch
+		log.Println("*** Appended tx to batch ", batch, " for subnet ", route.GetSubnetName(), "batch size", len(*batch))
+		log.Println("*** Batch size before", len(d.batches[route]))
 	}
 	return nil
 }
@@ -131,7 +136,7 @@ func (d *dispatcher) Send(ctx context.Context) error {
 		if route.IsDirectoryNode() && d.IsTest { // Routing to a DN is not supported in the test env, skip it
 			continue
 		}
-
+		log.Println("*** Sending batch to subnet ", route.GetSubnetName(), "batch size", len(batch), " of ", len(d.batches))
 		d.send(ctx, route.GetBatchBroadcastClient(), batch)
 	}
 

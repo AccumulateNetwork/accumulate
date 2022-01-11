@@ -3,7 +3,6 @@ package chain
 import (
 	"errors"
 	"fmt"
-
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"

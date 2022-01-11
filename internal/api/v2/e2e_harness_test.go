@@ -6,7 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"path"
 	"path/filepath"
@@ -242,13 +241,10 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height ui
 
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
-	log.Printf("==> Querying tx %v\n", txid) // TODO remove after debug
-	txr := query(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
-	for _, txid := range txr.SyntheticTxids {
-		log.Printf("==> Querying SyntheticTxids %v\n", txid) // TODO remove after debug
-		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
+	txr := queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
+	for _, synthTxid := range txr.SyntheticTxids {
+		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: synthTxid[:], Wait: 10 * time.Second})
 	}
-	log.Println("==> Querying done")
 }
 
 type e2eDUT struct {

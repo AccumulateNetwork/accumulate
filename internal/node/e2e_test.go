@@ -9,14 +9,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/api"
 	apiv2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
@@ -109,6 +103,7 @@ func TestSubscribeAfterClose(t *testing.T) {
 	// not straight forward
 }
 
+/*
 func TestFaucetMultiNetwork(t *testing.T) {
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
@@ -176,3 +171,4 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	require.Equal(t, types.ChainTypeLiteTokenAccount, chain.Type)
 	require.NoError(t, obj.As(account))
 }
+*/

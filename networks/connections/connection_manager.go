@@ -6,7 +6,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/tendermint/tendermint/libs/bytes"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/tendermint/tendermint/libs/log"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
@@ -52,10 +52,14 @@ func (cm *connectionManager) doHealthCheckOnNode(nc *nodeContext) {
 	*/
 
 	// Try to query Tendermint with something it should not find
-	qryRes, err := nc.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", bytes.HexBytes{0})
-	if err != nil || qryRes.Response.Code != 1 { // TODO is response code 1 always "request is not an Accumulate Query"?
+	qu := query.Query{}
+	qd, _ := qu.MarshalBinary()
+	qryRes, err := nc.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", qd)
+	if err != nil || qryRes.Response.Code != 19 { // FIXME code 19 will emit an error in the log
 		nc.ReportError(err)
-		cm.logger.Info("ABCIQuery response: %v", qryRes.Response)
+		if qryRes != nil {
+			cm.logger.Info("ABCIQuery response: %v", qryRes.Response)
+		}
 		return
 	}
 
@@ -63,6 +67,7 @@ func (cm *connectionManager) doHealthCheckOnNode(nc *nodeContext) {
 		res, err := nc.jsonRpcClient.Call("metrics", &protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
 		cm.logger.Info("TPS response: %v", res.Result)
 	*/
+	nc.metrics.status = Up
 }
 
 type nodeMetrics struct {
@@ -143,10 +148,13 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 		metrics: nodeMetrics{status: Unknown}}
 	nodeCtx.networkGroup = cm.determineNetworkGroup(subnetName, address)
 	nodeCtx.netType, nodeCtx.nodeType = determineTypes(subnetName, cm.accConfig.Network)
-	var err error
-	nodeCtx.resolvedIPs, err = resolveIPs(address)
-	if err != nil {
-		nodeCtx.ReportErrorStatus(Down, fmt.Errorf("error resolving IPs for %s: %w", address, err))
+
+	if address != "local" && address != "self" {
+		var err error
+		nodeCtx.resolvedIPs, err = resolveIPs(address)
+		if err != nil {
+			nodeCtx.ReportErrorStatus(Down, fmt.Errorf("error resolving IPs for %s: %w", address, err))
+		}
 	}
 	return nodeCtx, nil
 }
@@ -234,6 +242,7 @@ func (cm *connectionManager) createAbciClients(nodeCtx *nodeContext) error {
 
 		nodeCtx.queryClient = client
 		nodeCtx.broadcastClient = client
+		nodeCtx.batchBroadcastClient = client
 	}
 	return nil
 }

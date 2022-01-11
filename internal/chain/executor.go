@@ -13,7 +13,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -56,7 +55,7 @@ type ExecutorOptions struct {
 	ConnectionMgr    connections.ConnectionManager
 	ConnectionRouter connections.ConnectionRouter
 	Local            connections.ABCIBroadcastClient
-	Network config.Network
+	Network          config.Network
 
 	isGenesis bool
 	// TODO Remove once tests support running the DN

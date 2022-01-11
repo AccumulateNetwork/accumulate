@@ -45,7 +45,12 @@ func initNodes(t *testing.T, name string, ips []net.IP, basePort int, count int,
 			net.BvnNames = make([]string, len(bvnAddrs))
 			net.Addresses = make(map[string][]string, len(bvnAddrs))
 			for i, addr := range bvnAddrs {
-				bvn := fmt.Sprintf("BVN%d", i)
+				var bvn string
+				if i == 0 {
+					bvn = net.ID // Set first the same as the ID, otherwise it can't be mapped as "local" node
+				} else {
+					bvn = fmt.Sprintf("BVN%d", i) // Auto-generate the rest
+				}
 				net.BvnNames[i] = bvn
 				net.Addresses[bvn] = []string{fmt.Sprintf("http://%s:%d", addr, basePort)}
 				if strings.EqualFold(net.ID, bvn) {

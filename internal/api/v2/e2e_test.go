@@ -263,8 +263,8 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
-
-	daemons := startAccumulate(t, net.ParseIP("127.1.26.1"), 3, 2, 3000)
+	ips := acctesting.GetIPs(4)
+	daemons := startAccumulate(t, ips, 2, 2, 3000)
 	japi := daemons[0].Jrpc_TESTONLY()
 
 	var liteKey ed25519.PrivateKey
@@ -283,7 +283,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 
 		for i := 0; i < len(daemons); i++ {
 			account := NewLiteTokenAccount()
-			queryAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
+			queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
 			assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
 		}
 	})

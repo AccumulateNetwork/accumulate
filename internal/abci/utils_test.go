@@ -104,15 +104,14 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 	require.NoError(t, relay.Start())
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
-	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
 		DB:               n.db,
 		Logger:           logger,
 		Key:              bvcKey,
 		ConnectionRouter: mock_api.NewMockConnectionRouter(local, nil),
 		Local:            n.client,
-		Network: *n.network,
-		IsTest: true,
+		Network:          *n.network,
+		IsTest:           true,
 	})
 	require.NoError(t, err)
 

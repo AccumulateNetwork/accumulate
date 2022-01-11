@@ -56,6 +56,7 @@ func initNodes(t *testing.T, name string, baseIP net.IP, basePort int, count int
 		Config:   config,
 		RemoteIP: IPs,
 		ListenIP: IPs,
+		Logger:   logging.NewTestLogger(t, "plain", cfg.DefaultLogLevels, false),
 	}))
 
 	daemons := make([]*accumulated.Daemon, count)

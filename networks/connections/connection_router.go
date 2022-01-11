@@ -3,7 +3,6 @@ package connections
 import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/tendermint/tendermint/rpc/client/local"
 	"github.com/ybbus/jsonrpc/v2"
 	"log"
 	"strings"
@@ -24,13 +23,12 @@ type ConnectionRouter interface {
 }
 
 type connectionRouter struct {
-	bvnNames     []string
-	bvnGroupMap  map[string]nodeGroup
-	dnGroup      nodeGroup
-	flGroup      nodeGroup
-	localNodeCtx *nodeContext
-	localClient  *local.Local
-	isTest       bool
+	connectionMgr ConnectionManager
+	bvnNames      []string
+	bvnGroupMap   map[string]nodeGroup
+	dnGroup       nodeGroup
+	flGroup       nodeGroup
+	isTest        bool
 }
 
 // Node group is just a list of nodeContext items and an int field for round-robin routing
@@ -59,13 +57,12 @@ type Route interface {
 func NewConnectionRouter(connMgr ConnectionManager, test bool) ConnectionRouter {
 	bvnGroupMap := createBvnGroupMap(connMgr.getBVNContextMap())
 	cr := &connectionRouter{
-		bvnNames:     createKeyList(bvnGroupMap),
-		bvnGroupMap:  bvnGroupMap,
-		dnGroup:      nodeGroup{nodes: connMgr.getDNContextList()},
-		flGroup:      nodeGroup{nodes: connMgr.getFNContextList()},
-		localNodeCtx: connMgr.GetLocalNodeContext(),
-		localClient:  connMgr.GetLocalClient(),
-		isTest:       test,
+		connectionMgr: connMgr,
+		bvnNames:      createKeyList(bvnGroupMap),
+		bvnGroupMap:   bvnGroupMap,
+		dnGroup:       nodeGroup{nodes: connMgr.getDNContextList()},
+		flGroup:       nodeGroup{nodes: connMgr.getFNContextList()},
+		isTest:        test,
 	}
 	return cr
 }
@@ -83,13 +80,14 @@ func (cr *connectionRouter) SelectRoute(adiUrl *url.URL, allowFollower bool) (Ro
 }
 
 func (cr *connectionRouter) GetLocalRoute() (Route, error) {
-	if cr.localNodeCtx == nil {
+	localNodeCtx := cr.connectionMgr.GetLocalNodeContext()
+	if localNodeCtx == nil {
 		return nil, LocaNodeNotFound
 	}
-	if !cr.localNodeCtx.IsHealthy() {
+	if !localNodeCtx.IsHealthy() {
 		return nil, LocaNodeNotHealthy
 	}
-	return cr.localNodeCtx, nil
+	return localNodeCtx, nil
 }
 
 // GetAll is not currently in use, but could be used to verify the health of a seed list in the future, otherwise this can be pruned

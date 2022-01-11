@@ -142,7 +142,7 @@ func (d *Daemon) Start() (err error) {
 		return fmt.Errorf("failed to load private validator: %v", err)
 	}
 
-	// Create a connection manager & router
+	// Create a connection manager
 	d.ConnMgr = connections.NewConnectionManager(&d.Config.Accumulate, d.Logger)
 	d.ConnRouter = connections.NewConnectionRouter(d.ConnMgr, d.IsTest)
 
