@@ -7,6 +7,7 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 var flags struct {

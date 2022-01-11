@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"time"
+
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
 type APIClient struct {
