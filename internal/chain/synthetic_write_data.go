@@ -53,7 +53,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 			panic("synthetic writes to adi data accounts are not currently supported")
 		default:
 			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v",
-				types.ChainTypeLiteDataAccount, types.ChainTypeDataAccount, origin.Header().Type)
+				types.AccountTypeLiteDataAccount, types.AccountTypeDataAccount, origin.Header().Type)
 		}
 	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin); err != nil {
 		return fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Origin.String(), err)
