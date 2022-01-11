@@ -41,7 +41,7 @@ func (m *stateCache) Create(record ...state.Chain) {
 			panic(fmt.Errorf("invalid URL: %v", err))
 		}
 
-		m.chains[u.ResourceChain32()] = r
+		m.chains[u.AccountID32()] = r
 	}
 
 	m.operations = append(m.operations, &createRecords{record})
@@ -67,7 +67,7 @@ func (m *stateCache) Update(record ...state.Chain) {
 			panic(fmt.Errorf("invalid URL: %v", err))
 		}
 
-		m.chains[u.ResourceChain32()] = r
+		m.chains[u.AccountID32()] = r
 		m.operations = append(m.operations, &updateRecord{u, r})
 	}
 }
@@ -79,7 +79,7 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 	// transaction already, so in order to actually know if the record
 	// exists on disk, we have to use GetPersistentEntry.
 
-	rec := st.batch.Record(op.url)
+	rec := st.batch.Account(op.url)
 	_, err := rec.GetState()
 	switch {
 	case err == nil:
@@ -103,7 +103,7 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 		header.ChainUrl = types.String(op.url.String())
 	}
 
-	record := st.batch.Record(op.url)
+	record := st.batch.Account(op.url)
 	err = record.PutState(op.record)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
@@ -124,7 +124,7 @@ func (m *stateCache) UpdateNonce(record state.Chain) error {
 	}
 
 	// Load the previous state of the record
-	rec := m.batch.Record(u)
+	rec := m.batch.Account(u)
 	old, err := rec.GetState()
 	if err != nil {
 		return fmt.Errorf("failed to load state for %q", record.Header().ChainUrl)
@@ -132,14 +132,14 @@ func (m *stateCache) UpdateNonce(record state.Chain) error {
 
 	// Check that the nonce is the only thing that changed
 	switch record.Header().Type {
-	case types.ChainTypeLiteTokenAccount:
+	case types.AccountTypeLiteTokenAccount:
 		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
 		old.Nonce = new.Nonce
 		if !old.Equal(new) {
 			return fmt.Errorf("attempted to change more than the nonce")
 		}
 
-	case types.ChainTypeKeyPage:
+	case types.AccountTypeKeyPage:
 		old, new := old.(*protocol.KeyPage), record.(*protocol.KeyPage)
 		for i := 0; i < len(old.Keys) && i < len(new.Keys); i++ {
 			old.Keys[i].Nonce = new.Keys[i].Nonce
@@ -149,16 +149,16 @@ func (m *stateCache) UpdateNonce(record state.Chain) error {
 		}
 
 	default:
-		return fmt.Errorf("chain type %d is not a signator", old.Header().Type)
+		return fmt.Errorf("account type %d is not a signator", old.Header().Type)
 	}
 
-	m.chains[u.ResourceChain32()] = record
+	m.chains[u.AccountID32()] = record
 	m.operations = append(m.operations, &updateNonce{u, record})
 	return nil
 }
 
 func (op *updateNonce) Execute(st *stateCache) ([]state.Chain, error) {
-	record := st.batch.Record(op.url)
+	record := st.batch.Account(op.url)
 	err := record.PutState(op.record)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
@@ -190,7 +190,7 @@ func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry 
 	}
 
 	var stateRec *state.Chain
-	if record.Header().Type == types.ChainTypeLiteDataAccount {
+	if record.Header().Type == types.AccountTypeLiteDataAccount {
 		stateRec = &record
 	}
 
@@ -198,7 +198,8 @@ func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry 
 }
 
 func (op *addDataEntry) Execute(st *stateCache) ([]state.Chain, error) {
-	record := st.batch.Record(op.url)
+	// Add entry to data chain
+	record := st.batch.Account(op.url)
 
 	// Add lite record to data chain if applicable
 	if op.liteStateRec != nil {
@@ -249,7 +250,7 @@ func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainTy
 	}
 
 	// Check if the chain is valid
-	_, err := m.batch.Record(u).Chain(name, typ)
+	_, err := m.batch.Account(u).Chain(name, typ)
 	if err != nil {
 		return fmt.Errorf("failed to load %s#chain/%s: %v", u, name, err)
 	}
@@ -269,7 +270,7 @@ type writeIndex struct {
 }
 
 func (c *stateCache) RecordIndex(u *url.URL, key ...interface{}) *writeIndex {
-	return c.getIndex(c.batch.Record(u).Index(key...))
+	return c.getIndex(c.batch.Account(u).Index(key...))
 }
 
 func (c *stateCache) TxnIndex(id []byte, key ...interface{}) *writeIndex {

@@ -48,8 +48,8 @@ func TestProofADI(t *testing.T) {
 		send(tx)
 	})
 
-	require.Equal(t, types.ChainTypeIdentity, n.GetADI("RoadRunner").Type)
-	require.Equal(t, types.ChainTypeTokenAccount, n.GetTokenAccount("RoadRunner/Baz").Type)
+	require.Equal(t, types.AccountTypeIdentity, n.GetADI("RoadRunner").Type)
+	require.Equal(t, types.AccountTypeTokenAccount, n.GetTokenAccount("RoadRunner/Baz").Type)
 
 	// TODO Verify proofs
 }
