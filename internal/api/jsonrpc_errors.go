@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/getsentry/sentry-go"
 )
 
 // General Errors

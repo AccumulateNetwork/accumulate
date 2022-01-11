@@ -18,6 +18,7 @@ import (
 	cfg "github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
