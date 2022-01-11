@@ -25,7 +25,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeKeyPage, st.Origin.Header().Type)
+		return fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeKeyPage, st.Origin.Header().Type)
 	}
 
 	// We're changing the height of the key page, so reset all the nonces
@@ -65,7 +65,7 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 			if err != nil {
 				return fmt.Errorf("invalid key page url : %s", p)
 			}
-			if u.ResourceChain32() == st.OriginChainId {
+			if u.AccountID32() == st.OriginChainId {
 				priority = i
 			}
 		}
@@ -106,7 +106,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		if oldKey == nil {
 			return fmt.Errorf("no matching key found")
 		}
-
+		if body.NewKey == nil {
+			return fmt.Errorf("new key is required for update operation")
+		}
 		oldKey.PublicKey = body.NewKey
 		if body.Owner != "" {
 			oldKey.Owner = body.Owner

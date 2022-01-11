@@ -87,7 +87,7 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 
 	var height int64
 	ledger := protocol.NewInternalLedger()
-	err := batch.Record(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
+	err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
 	switch {
 	case err == nil:
 		height = ledger.Index
@@ -251,7 +251,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	m.governor.DidBeginBlock(req.IsLeader, req.Height, req.Time)
 
 	// Load the ledger state
-	ledger := m.blockBatch.Record(m.Network.NodeUrl(protocol.Ledger))
+	ledger := m.blockBatch.Account(m.Network.NodeUrl(protocol.Ledger))
 	ledgerState := protocol.NewInternalLedger()
 	err := ledger.GetStateAs(ledgerState)
 	switch {
@@ -293,7 +293,7 @@ func (m *Executor) Commit() ([]byte, error) {
 	defer m.blockBatch.Discard()
 
 	// Load the ledger
-	ledger := m.blockBatch.Record(m.Network.NodeUrl(protocol.Ledger))
+	ledger := m.blockBatch.Account(m.Network.NodeUrl(protocol.Ledger))
 	ledgerState := protocol.NewInternalLedger()
 	err := ledger.GetStateAs(ledgerState)
 	if err != nil {
@@ -355,7 +355,7 @@ func (m *Executor) Commit() ([]byte, error) {
 func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	// Load the main chain of the minor root
 	ledgerUrl := m.Network.NodeUrl(protocol.Ledger)
-	ledger := m.blockBatch.Record(ledgerUrl)
+	ledger := m.blockBatch.Account(ledgerUrl)
 	rootChain, err := ledger.Chain(protocol.MinorRootChain, protocol.ChainTypeAnchor)
 	if err != nil {
 		return err
@@ -375,7 +375,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		m.logDebug("Updated a chain", "url", fmt.Sprintf("%s#chain/%s", u.Account, u.Name))
 
 		// Load the chain
-		record := m.blockBatch.Record(u.Account)
+		record := m.blockBatch.Account(u.Account)
 		recordChain, err := record.ReadChain(u.Name)
 		if err != nil {
 			return err

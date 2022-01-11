@@ -73,7 +73,7 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 
 		// Check the identity
 		switch record.Header().Type {
-		case types.ChainTypeIdentity:
+		case types.AccountTypeIdentity:
 			// An ADI must be its own identity
 			if !u.Identity().Equal(u) {
 				return fmt.Errorf("ADI is not its own identity")
@@ -81,11 +81,11 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 		default:
 			// Anything else must be a sub-path
 			if u.Identity().Equal(u) {
-				return fmt.Errorf("chain type %v cannot be its own identity", record.Header().Type)
+				return fmt.Errorf("account type %v cannot be its own identity", record.Header().Type)
 			}
 
 			if u.Path != "" && strings.Contains(u.Path[1:], "/") {
-				return fmt.Errorf("chain type %v cannot contain more than one slash in its URL", record.Header().Type)
+				return fmt.Errorf("account type %v cannot contain more than one slash in its URL", record.Header().Type)
 			}
 
 			// Make sure the ADI actually exists
@@ -100,13 +100,13 @@ func (SyntheticCreateChain) Validate(st *StateManager, tx *transactions.Envelope
 
 		// Check the key book
 		switch record.Header().Type {
-		case types.ChainTypeKeyBook:
+		case types.AccountTypeKeyBook:
 			// A key book does not itself have a key book
 			if record.Header().KeyBook != "" {
 				return errors.New("invalid key book: KeyBook is not empty")
 			}
 
-		case types.ChainTypeKeyPage:
+		case types.AccountTypeKeyPage:
 			// A key page can be unbound
 
 		default:

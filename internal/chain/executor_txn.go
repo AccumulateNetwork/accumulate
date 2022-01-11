@@ -23,9 +23,10 @@ func (m *Executor) CheckTx(env *transactions.Envelope) *protocol.Error {
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
-	executor, ok := m.executors[types.TxType(env.Transaction.Type())]
+	txt := types.TxType(env.Transaction.Type())
+	executor, ok := m.executors[txt]
 	if !ok {
-		return &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", types.TxType(env.Transaction.Type()))}
+		return &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", txt)}
 	}
 
 	batch := m.DB.Begin()
@@ -37,6 +38,20 @@ func (m *Executor) CheckTx(env *transactions.Envelope) *protocol.Error {
 	}
 	if err != nil {
 		return &protocol.Error{Code: protocol.CodeCheckTxError, Message: err}
+	}
+
+	// Do not run transaction-specific validation for a synthetic transaction. A
+	// synthetic transaction will be rejected by `m.check` unless it is signed
+	// by a BVN and can be proved to have been included in a DN block. If
+	// `m.check` succeeeds, we know the transaction came from a BVN, thus it is
+	// safe and reasonable to allow the transaction to be delivered.
+	//
+	// This is important because if a synthetic transaction is rejected during
+	// CheckTx, it does not get recorded. If the synthetic transaction is not
+	// recorded, the BVN that sent it and the client that sent the original
+	// transaction cannot verify that the synthetic transaction was received.
+	if txt.IsSynthetic() {
+		return nil
 	}
 
 	err = executor.Validate(st, env)
@@ -207,7 +222,7 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 	default:
 		// The TX origin cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, fmt.Errorf("invalid origin record: chain type %v cannot be the origininator of transactions", origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.Header().Type)
 	}
 
 	if env.Transaction.KeyPageIndex >= uint64(len(book.Pages)) {
@@ -391,7 +406,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	// Update the nonce and charge the failure transaction fee. Reload the
 	// signator to ensure we don't push any invalid changes. Use the database
 	// directly, since the state manager won't be committed.
-	sigRecord := m.blockBatch.Record(st.SignatorUrl)
+	sigRecord := m.blockBatch.Account(st.SignatorUrl)
 	err = sigRecord.GetStateAs(st.Signator)
 	if err != nil {
 		return err

@@ -28,7 +28,7 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) e
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return fmt.Errorf("invalid origin record: want %v, got %v", types.ChainTypeAnchor, st.Origin.Header().Type)
+		return fmt.Errorf("invalid origin record: want %v, got %v", types.AccountTypeAnchor, st.Origin.Header().Type)
 	}
 
 	// Check the source URL

@@ -123,7 +123,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("invalid keypage url %s", bookRec.Pages[hdr.KeyPageIndex])
 	}
-	ms, err := getRecordById(u.ResourceChain(), nil)
+	ms, err := getRecordById(u.AccountID(), nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[hdr.KeyPageIndex][:], err)
 	}
@@ -403,14 +403,14 @@ func printOutput(cmd *cobra.Command, out string, err error) {
 }
 
 var (
-	ApiToString = map[types.ChainType]string{
-		types.ChainTypeLiteTokenAccount: "Lite Account",
-		types.ChainTypeTokenAccount:     "ADI Token Account",
-		types.ChainTypeIdentity:         "ADI",
-		types.ChainTypeKeyBook:          "Key Book",
-		types.ChainTypeKeyPage:          "Key Page",
-		types.ChainTypeDataAccount:      "Data Chain",
-		types.ChainTypeLiteDataAccount:  "Lite Data Chain",
+	ApiToString = map[types.AccountType]string{
+		types.AccountTypeLiteTokenAccount: "Lite Account",
+		types.AccountTypeTokenAccount:     "ADI Token Account",
+		types.AccountTypeIdentity:         "ADI",
+		types.AccountTypeKeyBook:          "Key Book",
+		types.AccountTypeKeyPage:          "Key Page",
+		types.AccountTypeDataAccount:      "Data Chain",
+		types.AccountTypeLiteDataAccount:  "Lite Data Chain",
 	}
 )
 
@@ -548,7 +548,7 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 
 func outputForHumans(res *QueryResponse) (string, error) {
 	switch string(res.Type) {
-	case types.ChainTypeLiteTokenAccount.String():
+	case types.AccountTypeLiteTokenAccount.String():
 		ata := protocol.LiteTokenAccount{}
 		err := Remarshal(res.Data, &ata)
 		if err != nil {
@@ -568,7 +568,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 
 		return out, nil
-	case types.ChainTypeTokenAccount.String():
+	case types.AccountTypeTokenAccount.String():
 		ata := protocol.TokenAccount{}
 		err := Remarshal(res.Data, &ata)
 		if err != nil {
@@ -587,7 +587,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tKey Book Url\t:\t%s\n", ata.KeyBook)
 
 		return out, nil
-	case types.ChainTypeIdentity.String():
+	case types.AccountTypeIdentity.String():
 		adi := protocol.ADI{}
 		err := Remarshal(res.Data, &adi)
 		if err != nil {
@@ -599,7 +599,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		out += fmt.Sprintf("\tKey Book url\t:\t%s\n", adi.KeyBook)
 
 		return out, nil
-	case types.ChainTypeKeyBook.String():
+	case types.AccountTypeKeyBook.String():
 		book := protocol.KeyBook{}
 		err := Remarshal(res.Data, &book)
 		if err != nil {
@@ -612,7 +612,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			out += fmt.Sprintf("\t%d\t\t:\t%s\n", i, v)
 		}
 		return out, nil
-	case types.ChainTypeKeyPage.String():
+	case types.AccountTypeKeyPage.String():
 		ss := protocol.KeyPage{}
 		err := Remarshal(res.Data, &ss)
 		if err != nil {

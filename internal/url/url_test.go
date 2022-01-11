@@ -76,7 +76,7 @@ func TestURL_IdentityChain(t *testing.T) {
 			u, err := Parse(c.url)
 			require.NoError(t, err)
 			h := sha256.Sum256([]byte(c.expect))
-			require.Equal(t, h[:], u.IdentityChain())
+			require.Equal(t, h[:], u.IdentityAccountID())
 		})
 	}
 }
@@ -98,7 +98,7 @@ func TestURL_ResourceChain(t *testing.T) {
 			u, err := Parse(c.url)
 			require.NoError(t, err)
 			h := sha256.Sum256([]byte(c.expect))
-			require.Equal(t, h[:], u.ResourceChain())
+			require.Equal(t, h[:], u.AccountID())
 		})
 	}
 }

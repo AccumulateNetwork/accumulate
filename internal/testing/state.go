@@ -69,7 +69,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 		}
 		urls[i] = u
 
-		r := db.Record(u)
+		r := db.Account(u)
 		err = r.PutState(c)
 		if err != nil {
 			return err
@@ -87,7 +87,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 	}
 
 	return chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
-		return db.Record(u).Index(key...)
+		return db.Account(u).Index(key...)
 	}, urls...)
 }
 
@@ -141,7 +141,7 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		chain = account
 	}
 
-	return db.Record(u).PutState(chain)
+	return db.Account(u).PutState(chain)
 }
 
 func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
@@ -182,7 +182,7 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 		group.Pages[i] = specUrl.String()
 
 		spec := new(protocol.KeyPage)
-		err = db.Record(specUrl).GetStateAs(spec)
+		err = db.Account(specUrl).GetStateAs(spec)
 		if err != nil {
 			return err
 		}

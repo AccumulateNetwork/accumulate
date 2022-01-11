@@ -32,7 +32,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 
 	case u.Fragment == "":
 		// Query by chain URL
-		v, err := m.queryByChainId(batch, u.ResourceChain())
+		v, err := m.queryByChainId(batch, u.AccountID())
 		return []byte("chain"), v, err
 	}
 
@@ -43,7 +43,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 			return nil, nil, fmt.Errorf("invalid fragment")
 		}
 
-		chain, err := batch.Record(u).ReadChain(fragment[1])
+		chain, err := batch.Account(u).ReadChain(fragment[1])
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to load chain %q of %q: %v", strings.Join(fragment[1:], "."), u, err)
 		}
@@ -95,7 +95,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 				return nil, nil, err
 			}
 
-			txns, perr := m.queryTxHistoryByChainId(batch, u.ResourceChain(), start, end, protocol.MainChain)
+			txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), start, end, protocol.MainChain)
 			if perr != nil {
 				return nil, nil, perr
 			}
@@ -103,7 +103,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 			return []byte("tx-history"), txns, nil
 
 		case 2:
-			chain, err := batch.Record(u).ReadChain(protocol.MainChain)
+			chain, err := batch.Account(u).ReadChain(protocol.MainChain)
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
 			}
@@ -228,7 +228,7 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	qr := query.ResponseByChainId{}
 
 	// Look up record or transaction
-	obj, err := batch.RecordByID(chainId).GetState()
+	obj, err := batch.AccountByID(chainId).GetState()
 	if errors.Is(err, storage.ErrNotFound) {
 		obj, err = batch.Transaction(chainId).GetState()
 	}
@@ -247,7 +247,7 @@ func (m *Executor) queryByChainId(batch *database.Batch, chainId []byte) (*query
 	}
 
 	// Add Merkle chain info (for records)
-	chain, err := batch.RecordByID(chainId).ReadChain(protocol.MainChain)
+	chain, err := batch.AccountByID(chainId).ReadChain(protocol.MainChain)
 	if err == nil {
 		qr.Height = uint64(chain.Height())
 
@@ -301,7 +301,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 	}
 
 	pending := new(state.PendingTransaction)
-	pending.Type = types.ChainTypePendingTransaction
+	pending.Type = types.AccountTypePendingTransaction
 	pending.ChainUrl = txState.ChainUrl
 	pending.TransactionState = &txState.TxState
 
@@ -360,7 +360,7 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 }
 
 func (m *Executor) queryTxHistoryByChainId(batch *database.Batch, id []byte, start, end int64, chainName string) (*query.ResponseTxHistory, *protocol.Error) {
-	chain, err := batch.RecordByID(id).ReadChain(chainName)
+	chain, err := batch.AccountByID(id).ReadChain(chainName)
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.CodeTxnHistory, Message: fmt.Errorf("error obtaining txid range %v", err)}
 	}
@@ -389,7 +389,7 @@ func (m *Executor) queryTxHistoryByChainId(batch *database.Batch, id []byte, sta
 func (m *Executor) queryDataByUrl(batch *database.Batch, u *url.URL) (*protocol.ResponseDataEntry, error) {
 	qr := protocol.ResponseDataEntry{}
 
-	data, err := batch.Record(u).Data()
+	data, err := batch.Account(u).Data()
 	if err != nil {
 		return nil, err
 	}
@@ -408,7 +408,7 @@ func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entry
 	qr := protocol.ResponseDataEntry{}
 	copy(qr.EntryHash[:], entryHash)
 
-	data, err := batch.Record(u).Data()
+	data, err := batch.Account(u).Data()
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +425,7 @@ func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entry
 func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, limit int64, expand bool) (*protocol.ResponseDataEntrySet, error) {
 	qr := protocol.ResponseDataEntrySet{}
 
-	data, err := batch.Record(u).Data()
+	data, err := batch.Account(u).Data()
 	if err != nil {
 		return nil, err
 	}
@@ -520,7 +520,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
-		dir, err := m.queryDirectoryByChainId(batch, u.ResourceChain(), chr.Start, chr.Limit)
+		dir, err := m.queryDirectoryByChainId(batch, u.AccountID(), chr.Start, chr.Limit)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeDirectoryURL, Message: err}
 		}
@@ -611,7 +611,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
-		obj, err := m.queryByChainId(batch, u.ResourceChain())
+		obj, err := m.queryByChainId(batch, u.AccountID())
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
 		}
@@ -619,12 +619,12 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err = obj.As(chainHeader); err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeMarshallingError, Message: fmt.Errorf("inavid object error")}
 		}
-		if chainHeader.Type != types.ChainTypeKeyBook {
+		if chainHeader.Type != types.AccountTypeKeyBook {
 			u, err := url.Parse(string(chainHeader.KeyBook))
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 			}
-			obj, err = m.queryByChainId(batch, u.ResourceChain())
+			obj, err = m.queryByChainId(batch, u.AccountID())
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
 			}
@@ -646,7 +646,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", u.String())}
 			}
-			pageObject, err := m.queryByChainId(batch, u.ResourceChain())
+			pageObject, err := m.queryByChainId(batch, u.AccountID())
 			if err != nil {
 				return nil, nil, &protocol.Error{Code: protocol.CodeChainIdError, Message: err}
 			}
@@ -693,7 +693,7 @@ func (m *Executor) expandChainEntry(batch *database.Batch, entryUrl string) (*st
 		return nil, fmt.Errorf("invalid URL in query %s", entryUrl)
 	}
 
-	v, err := m.queryByChainId(batch, u.ResourceChain())
+	v, err := m.queryByChainId(batch, u.AccountID())
 	if err != nil {
 		return nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
 	}

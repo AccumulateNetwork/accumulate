@@ -15,7 +15,7 @@ function ensure-key {
 function wait-for {
     TXID=`"$@"` || return 1
     echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
-    accumulate tx get -j --wait 10s --wait-synth 10s $TXID | jq --indent 0
+    accumulate tx get -j --wait 10s --wait-synth 10s $TXID | jq -C --indent 0
 }
 
 function cli-tx {
@@ -72,6 +72,16 @@ echo
 section "Create an ADI"
 wait-for cli-tx adi create ${LITE} keytest keytest-0-0 book page0
 accumulate adi get keytest &> /dev/null && success || die "Cannot find keytest"
+
+section "Recreating an ADI fails and the synthetic transaction is recorded"
+TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 book page1` || return 1
+echo -e '\033[2mWaiting for '"${TXID}"'\033[0m'
+accumulate tx get -j --wait 10s --wait-synth 10s ${TXID} | jq -C --indent 0
+SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
+STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
+[ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction should have failed"
+[ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not failed"
+success
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-0-0 keytest/page1 keytest-1-0
