@@ -2,6 +2,7 @@ package chain
 
 import (
 	"fmt"
+
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"

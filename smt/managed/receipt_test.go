@@ -12,7 +12,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
-	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
 )
 
