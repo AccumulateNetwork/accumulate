@@ -247,37 +247,6 @@ func TestAAAACreateLiteDataAccount(t *testing.T) {
 		require.Equal(t, types.String(liteDataAddress.String()), r.ChainUrl)
 		require.Equal(t, append(partialChainId, r.Tail...), chainId)
 	})
-
-	//this test will make sure you cannot write to a non-lite data account
-	t.Run("Create two ADI and perform write data to operation", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, true)
-		adiKey := generateKey()
-		batch := n.db.Begin()
-		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
-		require.NoError(t, acctesting.CreateADI(batch, adiKey, "Foo"))
-		require.NoError(t, batch.Commit())
-
-		n.Batch(func(send func(*transactions.Envelope)) {
-			tac := new(protocol.CreateDataAccount)
-			tac.Url = "Foo/Bar"
-			tx, err := transactions.New("Foo", 1, edSigner(adiKey, 1), tac)
-			require.NoError(t, err)
-			send(tx)
-		})
-
-		n.Batch(func(send func(*transactions.Envelope)) {
-			wdt := new(protocol.WriteDataTo)
-			wdt.Recipient = "Foo/Bar"
-			wdt.Entry = firstEntry
-			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), wdt)
-			require.Error(t, err)
-			send(tx)
-		})
-
-		r := n.GetDataAccount("Foo/Bar")
-		require.Equal(t, types.ChainTypeDataAccount, r.Type)
-		require.Equal(t, types.String("acc://Foo/Bar"), r.ChainUrl)
-	})
 }
 
 func _TestCreateAdiDataAccount(t *testing.T) {
