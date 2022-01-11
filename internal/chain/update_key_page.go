@@ -106,7 +106,9 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		if oldKey == nil {
 			return fmt.Errorf("no matching key found")
 		}
-
+		if body.NewKey == nil {
+			return fmt.Errorf("new key is required for update operation")
+		}
 		oldKey.PublicKey = body.NewKey
 		if body.Owner != "" {
 			oldKey.Owner = body.Owner
