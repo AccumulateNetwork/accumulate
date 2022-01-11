@@ -42,7 +42,7 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("lite account id doesn't match the expected id")
 	}
 
-	lde := LiteDataEntry{}
+	lde := NewLiteDataEntry()
 	copy(lde.AccountId[:], chainId)
 	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
 	for i := 0; i < 3; i++ {
@@ -67,7 +67,7 @@ func TestLiteDataEntry(t *testing.T) {
 		t.Fatalf("expected a cost of 10 credits, but computed %d", cost)
 	}
 
-	var de LiteDataEntry
+	de := NewLiteDataEntry()
 	de.Data = []byte("a cost test")
 	//now make the data entry larger and compute cost
 	for i := 0; i < 100; i++ {
