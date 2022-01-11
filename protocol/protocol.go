@@ -91,11 +91,11 @@ func LiteDataAddress(chainId []byte) (*url.URL, error) {
 	return liteUrl, nil
 }
 
-// ParseLiteChainAddress extracts the partial chain id from a lite chain URL.
+// ParseLiteDataAddress extracts the partial chain id from a lite chain URL.
 // Returns `nil, err if the URL does not appear to be a lite token chain
 // URL. Returns an error if the checksum is invalid.
-func ParseLiteChainAddress(u *url.URL) ([]byte, error) {
-	if u.Path != "" || u.Path[0] == '/' || len(u.Path) > 0 {
+func ParseLiteDataAddress(u *url.URL) ([]byte, error) {
+	if u.Path != "" {
 		// A chain URL can have no path
 		return nil, errors.New("invalid chain url")
 	}

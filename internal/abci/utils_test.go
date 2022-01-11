@@ -320,6 +320,12 @@ func (n *fakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
 	return acct
 }
 
+func (n *fakeNode) GetLiteDataAccount(url string) *protocol.LiteDataAccount {
+	acct := new(protocol.LiteDataAccount)
+	n.GetChainAs(url, acct)
+	return acct
+}
+
 func (n *fakeNode) GetADI(url string) *protocol.ADI {
 	adi := new(protocol.ADI)
 	n.GetChainAs(url, adi)
