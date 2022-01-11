@@ -85,7 +85,7 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, int64(100), account.CreditBalance.Int64())
 		assert.Equal(t, int64(10*AcmePrecision-AcmePrecision/100), account.Balance.Int64())
 
-		queryRecord(t, japi, "query-chain", &api.ChainIdQuery{ChainId: liteUrl.ResourceChain()})
+		queryRecord(t, japi, "query-chain", &api.ChainIdQuery{ChainId: liteUrl.AccountID()})
 	}
 
 	var adiKey ed25519.PrivateKey

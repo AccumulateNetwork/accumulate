@@ -19,9 +19,9 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	if st.Origin.Header().Type != types.ChainTypeDataAccount {
+	if st.Origin.Header().Type != types.AccountTypeDataAccount {
 		return fmt.Errorf("invalid origin record: want %v, got %v",
-			types.ChainTypeDataAccount, st.Origin.Header().Type)
+			types.AccountTypeDataAccount, st.Origin.Header().Type)
 	}
 
 	//check will return error if there is too much data or no data for the entry

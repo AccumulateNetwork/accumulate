@@ -21,7 +21,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	case *protocol.KeyBook:
 		group = origin
 	default:
-		return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeIdentity, types.ChainTypeKeyBook, origin.Header().Type)
+		return fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeIdentity, types.AccountTypeKeyBook, origin.Header().Type)
 	}
 
 	body := new(protocol.CreateKeyPage)

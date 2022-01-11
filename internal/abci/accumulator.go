@@ -135,7 +135,7 @@ func (app *Accumulator) Info(req abci.RequestInfo) abci.ResponseInfo {
 
 	var height int64
 	ledger := protocol.NewInternalLedger()
-	err = batch.Record(app.Network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
+	err = batch.Account(app.Network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
 	switch {
 	case err == nil:
 		height = ledger.Index
@@ -215,7 +215,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 // Called when a chain is created.
 func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	batch := app.DB.Begin()
-	_, err := batch.Record(app.Network.NodeUrl(protocol.Ledger)).GetState()
+	_, err := batch.Account(app.Network.NodeUrl(protocol.Ledger)).GetState()
 	switch {
 	case err == nil:
 		// InitChain already happened
