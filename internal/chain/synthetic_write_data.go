@@ -2,11 +2,11 @@ package chain
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
 type SyntheticWriteData struct{}
