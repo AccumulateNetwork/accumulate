@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"fmt"
-
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
 )
 
 func (m *JrpcMethods) DoExecute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
