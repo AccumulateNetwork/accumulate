@@ -19,6 +19,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/getsentry/sentry-go"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"

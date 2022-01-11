@@ -27,6 +27,7 @@ import (
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 	"golang.org/x/term"
+	"gopkg.in/yaml.v3"
 )
 
 var cmdInit = &cobra.Command{

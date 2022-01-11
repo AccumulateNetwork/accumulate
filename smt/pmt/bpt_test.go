@@ -8,6 +8,8 @@ import (
 	"sort"
 	"testing"
 	"time"
+
+	"github.com/dustin/go-humanize"
 )
 
 const defaultNodeCnt = 1000
