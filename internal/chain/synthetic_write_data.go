@@ -47,9 +47,10 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 			copy(sw.EntryHash[:], entryHash)
 			account = origin
 		case *protocol.DataAccount:
+			//synthetic data writes to adi data accounts are not yet permitted.
 			copy(sw.EntryHash[:], body.Entry.Hash())
 			account = origin
-			return fmt.Errorf("synthetic writes to data accounts not currently supported")
+			panic("synthetic writes to adi data accounts are not currently supported")
 		default:
 			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v",
 				types.ChainTypeLiteDataAccount, types.ChainTypeDataAccount, origin.Header().Type)
