@@ -129,7 +129,7 @@ func (v *PendingTransaction) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypePendingTransaction
+	v.Type = types.AccountTypePendingTransaction
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -151,7 +151,7 @@ func (v *Transaction) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeTransaction
+	v.Type = types.AccountTypeTransaction
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -191,7 +191,7 @@ func (v *PendingTransaction) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypePendingTransaction
+	v.Type = types.AccountTypePendingTransaction
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -224,7 +224,7 @@ func (v *Transaction) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeTransaction
+	v.Type = types.AccountTypeTransaction
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -292,11 +292,11 @@ func (v *Object) UnmarshalBinary(data []byte) error {
 }
 
 func (v *PendingTransaction) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypePendingTransaction
+	typ := types.AccountTypePendingTransaction
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -337,11 +337,11 @@ func (v *PendingTransaction) UnmarshalBinary(data []byte) error {
 }
 
 func (v *Transaction) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeTransaction
+	typ := types.AccountTypeTransaction
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 

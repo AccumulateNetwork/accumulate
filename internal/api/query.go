@@ -196,7 +196,7 @@ func (q *Query) GetAdi(adi string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc adi query returned error, %v", err)
 	}
 
-	return unmarshalQueryResponse(r.Response, types.ChainTypeIdentity)
+	return unmarshalQueryResponse(r.Response, types.AccountTypeIdentity)
 }
 
 // GetToken
@@ -207,7 +207,7 @@ func (q *Query) GetToken(tokenUrl string) (*acmeApi.APIDataResponse, error) {
 		return nil, fmt.Errorf("bvc token query returned error, %v", err)
 	}
 
-	return unmarshalQueryResponse(r.Response, types.ChainTypeTokenIssuer)
+	return unmarshalQueryResponse(r.Response, types.AccountTypeTokenIssuer)
 }
 
 // GetTokenAccount get the token balance for a given url
@@ -217,7 +217,7 @@ func (q *Query) GetTokenAccount(adiChainPath string) (*acmeApi.APIDataResponse, 
 		return nil, fmt.Errorf("bvc token account query returned error, %v", err)
 	}
 
-	return unmarshalQueryResponse(r.Response, types.ChainTypeTokenAccount, types.ChainTypeLiteTokenAccount)
+	return unmarshalQueryResponse(r.Response, types.AccountTypeTokenAccount, types.AccountTypeLiteTokenAccount)
 }
 
 // GetDirectory returns directory entries for a given url
@@ -553,7 +553,7 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 	ru := query.RequestTxHistory{}
 	ru.Start = start
 	ru.Limit = limit
-	ru.ChainId.FromBytes(u.ResourceChain())
+	ru.ChainId.FromBytes(u.AccountID())
 	qu.Content, err = ru.MarshalBinary()
 	if err != nil {
 		return nil, err

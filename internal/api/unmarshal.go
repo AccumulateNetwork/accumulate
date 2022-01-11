@@ -161,7 +161,7 @@ func unmarshalTransaction(sigInfo *transactions.Header, txPayload []byte, txId [
 	return resp, err
 }
 
-func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) (*api.APIDataResponse, error) {
+func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.AccountType) (*api.APIDataResponse, error) {
 	if err := responseIsError(rQuery); err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func unmarshalQueryResponse(rQuery tm.ResponseQuery, expect ...types.ChainType) 
 	}
 }
 
-func isExpected(expect []types.ChainType, typ types.ChainType) error {
+func isExpected(expect []types.AccountType, typ types.AccountType) error {
 	for _, e := range expect {
 		if e == typ {
 			return nil
