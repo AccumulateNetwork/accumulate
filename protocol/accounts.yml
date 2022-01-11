@@ -22,7 +22,7 @@ LiteDataAccount:
 ADI:
   kind: chain
   chain-type: Identity
-  fields: [ ]
+  fields: []
 
 TokenAccount:
   kind: chain
@@ -71,7 +71,7 @@ TokenIssuer:
 
 Anchor:
   kind: chain
-  fields: [ ]
+  fields: []
 
 ##### Data Types #####
 
