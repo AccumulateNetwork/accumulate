@@ -145,7 +145,7 @@ func (u *URL) QueryValues() Values {
 	return v
 }
 
-func chain(s string) [32]byte {
+func id(s string) [32]byte {
 	s = strings.ToLower(s)
 	h := sha256.Sum256([]byte(s))
 	return h
@@ -165,40 +165,40 @@ func (u *URL) Identity() *URL {
 	return &v
 }
 
-// IdentityChain constructs a chain identifier from the lower case hostname. The
-// port is not included.
+// IdentityAccountID constructs an account identifier from the lower case
+// hostname. The port is not included.
 //
-//   Chain = Hash(LowerCase(u.Host()))
-func (u *URL) IdentityChain() []byte {
-	c := u.IdentityChain32()
+//   ID = Hash(LowerCase(u.Host()))
+func (u *URL) IdentityAccountID() []byte {
+	c := u.IdentityAccountID32()
 	return c[:]
 }
 
-// IdentityChain32 returns IdentityChain as a [32]byte.
-func (u *URL) IdentityChain32() [32]byte {
-	return chain(u.Hostname())
+// IdentityAccountID32 returns IdentityAccountID as a [32]byte.
+func (u *URL) IdentityAccountID32() [32]byte {
+	return id(u.Hostname())
 }
 
-// ResourceChain constructs a chain identifier from the lower case hostname and
+// AccountID constructs an account identifier from the lower case hostname and
 // path. The port is not included. If the path does not begin with `/`, `/` is
 // added between the hostname and the path.
 //
-//   Chain = Hash(LowerCase(Sprintf("%s/%s", u.Host(), u.Path)))
-func (u *URL) ResourceChain() []byte {
-	c := u.ResourceChain32()
+//   ID = Hash(LowerCase(Sprintf("%s/%s", u.Host(), u.Path)))
+func (u *URL) AccountID() []byte {
+	c := u.AccountID32()
 	return c[:]
 }
 
-// ResourceChain32 returns ResourceChain as a [32]byte.
-func (u *URL) ResourceChain32() [32]byte {
-	return chain(u.Hostname() + ensurePath(u.Path))
+// AccountID32 returns AccountID as a [32]byte.
+func (u *URL) AccountID32() [32]byte {
+	return id(u.Hostname() + ensurePath(u.Path))
 }
 
-// Routing returns the first 8 bytes of the identity chain as an integer.
+// Routing returns the first 8 bytes of the identity account ID as an integer.
 //
-//   Routing = uint64(u.IdentityChain()[:8])
+//   Routing = uint64(u.IdentityAccountID()[:8])
 func (u *URL) Routing() uint64 {
-	return binary.BigEndian.Uint64(u.IdentityChain())
+	return binary.BigEndian.Uint64(u.IdentityAccountID())
 }
 
 // Equal reports whether u and v, converted to strings and interpreted as UTF-8,

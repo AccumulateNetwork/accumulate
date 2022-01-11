@@ -318,7 +318,7 @@ func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*MultiRespo
 	req := new(query.RequestTxHistory)
 	req.Start = int64(start)
 	req.Limit = int64(count)
-	copy(req.ChainId[:], u.ResourceChain())
+	copy(req.ChainId[:], u.AccountID())
 	k, v, err := q.query(req)
 	if err != nil {
 		return nil, err
