@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
@@ -196,6 +197,8 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 }
 
 func TestBadgerReceipts(t *testing.T) {
+	acctesting.SkipCI(t, "flaky")
+
 	badger := new(badger.DB)
 	require.NoError(t, badger.InitDB(filepath.Join(t.TempDir(), "badger.db"), nil))
 	defer badger.Close()
