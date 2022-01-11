@@ -84,7 +84,7 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 	defer batch.Discard()
 
 	ledger := protocol.NewInternalLedger()
-	err = batch.Record(n.network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
+	err = batch.Account(n.network.NodeUrl(protocol.Ledger)).GetStateAs(ledger)
 	if err == nil {
 		n.height = ledger.Index
 	} else {
@@ -266,7 +266,7 @@ func (n *fakeNode) GetDirectory(adi string) []string {
 	defer batch.Discard()
 
 	u := n.ParseUrl(adi)
-	record := batch.Record(u)
+	record := batch.Account(u)
 	require.True(n.t, u.Identity().Equal(u))
 
 	md := new(protocol.DirectoryIndexMetadata)

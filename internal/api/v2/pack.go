@@ -17,7 +17,7 @@ func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryRespons
 
 	u, err := chain.Header().ParseUrl()
 	if err == nil {
-		res.ChainId = u.ResourceChain()
+		res.ChainId = u.AccountID()
 	}
 	return res, nil
 }
