@@ -88,7 +88,7 @@ func GetKeyPage(url string) (*QueryResponse, *protocol.KeyPage, error) {
 		return nil, nil, err
 	}
 
-	if res.Type != types.ChainTypeKeyPage.String() {
+	if res.Type != types.AccountTypeKeyPage.String() {
 		return nil, nil, fmt.Errorf("expecting key page but received %v", res.Type)
 	}
 

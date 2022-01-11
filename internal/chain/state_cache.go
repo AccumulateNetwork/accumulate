@@ -57,7 +57,7 @@ func (c *stateCache) Commit() ([]state.Chain, error) {
 	return create, nil
 }
 
-func (c *stateCache) load(id [32]byte, r *database.Record) (state.Chain, error) {
+func (c *stateCache) load(id [32]byte, r *database.Account) (state.Chain, error) {
 	st, ok := c.chains[id]
 	if ok {
 		return st, nil
@@ -75,7 +75,7 @@ func (c *stateCache) load(id [32]byte, r *database.Record) (state.Chain, error) 
 	return st, nil
 }
 
-func (c *stateCache) loadAs(id [32]byte, r *database.Record, v interface{}) (err error) {
+func (c *stateCache) loadAs(id [32]byte, r *database.Account, v interface{}) (err error) {
 	state, err := c.load(id, r)
 	if err != nil {
 		return err
@@ -99,22 +99,22 @@ func (c *stateCache) loadAs(id [32]byte, r *database.Record, v interface{}) (err
 
 // LoadUrl loads a chain by URL and unmarshals it.
 func (c *stateCache) LoadUrl(u *url.URL) (state.Chain, error) {
-	return c.load(u.ResourceChain32(), c.batch.Record(u))
+	return c.load(u.AccountID32(), c.batch.Account(u))
 }
 
 // LoadUrlAs loads a chain by URL and unmarshals it as a specific type.
 func (c *stateCache) LoadUrlAs(u *url.URL, v interface{}) error {
-	return c.loadAs(u.ResourceChain32(), c.batch.Record(u), v)
+	return c.loadAs(u.AccountID32(), c.batch.Account(u), v)
 }
 
 // ReadChain loads an account's chain by URL and name.
 func (c *stateCache) ReadChain(u *url.URL, name string) (*database.Chain, error) {
-	return c.batch.Record(u).ReadChain(name)
+	return c.batch.Account(u).ReadChain(name)
 }
 
 //GetHeight loads the height of the chain
 func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
-	chain, err := c.batch.Record(u).ReadChain(protocol.MainChain)
+	chain, err := c.batch.Account(u).ReadChain(protocol.MainChain)
 	if err != nil {
 		return 0, err
 	}

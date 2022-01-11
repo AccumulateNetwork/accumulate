@@ -100,7 +100,7 @@ func (g *governor) DidCommit(batch *database.Batch, isLeader, mirrorAdi bool, he
 		time:      time,
 	}
 
-	ledger := batch.Record(g.Network.NodeUrl(protocol.Ledger))
+	ledger := batch.Account(g.Network.NodeUrl(protocol.Ledger))
 	msg.ledger = protocol.NewInternalLedger()
 	err := ledger.GetStateAs(msg.ledger)
 	if err != nil {
@@ -385,14 +385,14 @@ func (g *governor) sendMirror(batch *database.Batch) {
 	}
 	mirror.Objects = append(mirror.Objects, rec)
 
-	md, err := loadDirectoryMetadata(batch, nodeUrl.ResourceChain())
+	md, err := loadDirectoryMetadata(batch, nodeUrl.AccountID())
 	if err != nil {
 		g.logger.Error("Failed to load directory", "error", err, "url", nodeUrl)
 		return
 	}
 
 	for i := uint64(0); i < md.Count; i++ {
-		s, err := loadDirectoryEntry(batch, nodeUrl.ResourceChain(), i)
+		s, err := loadDirectoryEntry(batch, nodeUrl.AccountID(), i)
 		if err != nil {
 			g.logger.Error("Failed to load directory entry", "error", err, "url", nodeUrl, "index", i)
 			return
