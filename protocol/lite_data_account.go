@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"crypto/sha256"
-
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
