@@ -15,7 +15,7 @@ func (CreateKeyBook) Type() types.TxType { return types.TxTypeCreateKeyBook }
 
 func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) error {
 	if _, ok := st.Origin.(*protocol.ADI); !ok {
-		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeIdentity, st.Origin.Header().Type)
+		return fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeIdentity, st.Origin.Header().Type)
 	}
 
 	body := new(protocol.CreateKeyBook)

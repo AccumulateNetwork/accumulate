@@ -36,7 +36,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	case *protocol.LiteTokenAccount:
 		account = origin
 	default:
-		return fmt.Errorf("invalid origin record: want %v or %v, got %v", types.ChainTypeTokenAccount, types.ChainTypeLiteTokenAccount, st.Origin.Header().Type)
+		return fmt.Errorf("invalid origin record: want %v or %v, got %v", types.AccountTypeTokenAccount, types.AccountTypeLiteTokenAccount, st.Origin.Header().Type)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()

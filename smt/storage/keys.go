@@ -106,8 +106,8 @@ func convert(key interface{}) (bytes []byte, printVal bool) {
 		return []byte(key), true
 	case interface{ Bytes() []byte }:
 		return key.Bytes(), false
-	case interface{ ResourceChain() []byte }:
-		return key.ResourceChain(), true
+	case interface{ AccountID() []byte }:
+		return key.AccountID(), true
 	case uint:
 		return common.Uint64Bytes(uint64(key)), true
 	case uint8:
