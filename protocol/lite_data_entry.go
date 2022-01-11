@@ -13,6 +13,12 @@ type LiteDataEntry struct {
 	*DataEntry
 }
 
+func NewLiteDataEntry() *LiteDataEntry {
+	lde := new(LiteDataEntry)
+	lde.DataEntry = new(DataEntry)
+	return lde
+}
+
 //ComputeLiteEntryHashFromEntry will compute the entry hash from an entry.
 //If accountId is nil, then entry will be used to construct an account id,
 //and it assumes the entry will be the first entry in the chain
