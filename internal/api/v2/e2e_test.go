@@ -35,6 +35,7 @@ func TestEndToEnd(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
+	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
@@ -193,7 +194,7 @@ func TestValidate(t *testing.T) {
 			Origin: keyPageUrl,
 			Key:    adiKey,
 			Payload: &UpdateKeyPage{
-				Operation: protocol.UpdateKey,
+				Operation: protocol.KeyPageOperationUpdate,
 				Key:       adiKey[32:],
 				NewKey:    adiKey[32:],
 				Owner:     "acc://foo/book1",

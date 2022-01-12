@@ -107,6 +107,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	mss := protocol.NewKeyPage()
 	mss.ChainUrl = types.String(pageUrl.String())
 	mss.Keys = append(mss.Keys, ss)
+	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
@@ -144,6 +145,21 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	return db.Account(u).PutState(chain)
 }
 
+func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return err
+	}
+
+	issuer := new(protocol.TokenIssuer)
+	issuer.ChainUrl = types.String(u.String())
+	issuer.KeyBook = types.String(u.Identity().JoinPath("book0").String())
+	issuer.Symbol = symbol
+	issuer.Precision = precision
+
+	return db.Account(u).PutState(issuer)
+}
+
 func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
@@ -152,6 +168,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 
 	mss := protocol.NewKeyPage()
 	mss.ChainUrl = types.String(u.String())
+	mss.Threshold = 1
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
 		mss.Keys[i] = &protocol.KeySpec{

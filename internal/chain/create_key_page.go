@@ -47,8 +47,9 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	scc.Cause = types.Bytes(tx.Transaction.Hash()).AsBytes32()
 	st.Submit(st.OriginUrl, scc)
 
-	spec := protocol.NewKeyPage()
-	spec.ChainUrl = types.String(msUrl.String())
+	page := protocol.NewKeyPage()
+	page.ChainUrl = types.String(msUrl.String())
+	page.Threshold = 1 // Require one signature from the Key Page
 
 	if group != nil {
 		groupUrl, err := group.ParseUrl()
@@ -59,7 +60,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		}
 
 		group.Pages = append(group.Pages, msUrl.String())
-		spec.KeyBook = types.String(groupUrl.String())
+		page.KeyBook = types.String(groupUrl.String())
 
 		err = scc.Update(group)
 		if err != nil {
@@ -70,10 +71,10 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	for _, sig := range body.Keys {
 		ss := new(protocol.KeySpec)
 		ss.PublicKey = sig.PublicKey
-		spec.Keys = append(spec.Keys, ss)
+		page.Keys = append(page.Keys, ss)
 	}
 
-	err = scc.Create(spec)
+	err = scc.Create(page)
 	if err != nil {
 		return fmt.Errorf("failed to marshal state: %v", err)
 	}

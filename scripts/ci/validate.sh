@@ -1,42 +1,51 @@
 #!/bin/bash
 
-set -e # Stop immediately on error
+# Stop immediately on error
+set -e
 
+# section <name> - Print a section header
 function section {
     echo -e '\033[1m'"$1"'\033[0m'
 }
 
+# ensure-key <name> - Generate the key if it does not exist
 function ensure-key {
     if ! accumulate key list | grep "$1"; then
         accumulate key generate "$1"
     fi
 }
 
+# wait-for <cmd...> - Execute a transaction and wait for it to complete
 function wait-for {
     TXID=`"$@"` || return 1
     echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
     accumulate tx get -j --wait 10s --wait-synth 10s $TXID | jq -C --indent 0
 }
 
+# cli-tx <args...> - Execute a CLI command and extract the TXID from the result
 function cli-tx {
     JSON=`accumulate -j "$@"` || return 1
     echo "$JSON" | jq -r .txid
 }
 
+# api-v2 <payload> - Send a JSON-RPC message to the API
 function api-v2 {
     curl -s -X POST --data "${1}" -H 'content-type:application/json;' "${ACC_API}/../v2"
 }
 
+# api-tx <payload> - Send a JSON-RPC message to the API and extract the TXID from the result
 function api-tx {
     JSON=`api-v2 "$@"` || return 1
     echo "$JSON" | jq -r .result.txid
 }
 
+# die <message> - Print an error message and exit
 function die {
     echo -e '\033[1;31m'"$@"'\033[0m'
     exit 1
 }
 
+# success - Print 'success' in bold green text
 function success {
     echo -e '\033[1;32m'Success'\033[0m'
     echo
@@ -98,6 +107,12 @@ section "Add a key to page 2 using a key from page 1"
 wait-for cli-tx page key add keytest/page2 keytest-1-0 1 keytest-2-1
 success
 
+section "Set threshold to 2 of 2"
+wait-for cli-tx tx execute keytest/page1 keytest-1-0 '{"type": "updateKeyPage", "operation": "setThreshold", "threshold": 2}'
+THRESHOLD=$(accumulate -j get keytest/page1 | jq -re .data.threshold)
+[ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/page1 threshold: want 2, got ${THRESHOLD}"
+success
+
 section "Create an ADI Token Account"
 wait-for cli-tx account create token keytest keytest-0-0 0 keytest/tokens ACME keytest/book
 accumulate account get keytest/tokens &> /dev/null && success || die "Cannot find keytest/tokens"
@@ -144,4 +159,18 @@ success
 section "Create a token issuer"
 wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "createToken", "url": "keytest/token-issuer", "symbol": "TOK", "precision": 10}'
 accumulate get keytest/token-issuer &> /dev/null || die "Cannot find keytest/token-issuer"
+success
+
+section "Issue tokens"
+LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
+wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueTokens", "recipient": "'${LITE_TOK}'", "amount": 123}'
+BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
+[ "$BALANCE" -eq 123 ] && success || die "${LITE_TOK} should have 123 keytest tokens but has ${BALANCE}"
+success
+
+section "Create lite data account and write the data"
+ACCOUNT_ID="acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa"
+wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "writeDataTo", "recipient": "'${ACCOUNT_ID}'", "entry": {"extIds": ["466163746F6D2050524F", "5475746F7269616C"], "data": ""}}'
+accumulate get $ACCOUNT_ID &> /dev/null || die "Cannot find lite data account"
+accumulate data get $ACCOUNT_ID 0 1 &> /dev/null || die "lite data entry not found"
 success

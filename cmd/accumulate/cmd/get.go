@@ -98,52 +98,81 @@ func Get(url string) (string, error) {
 	params := api2.UrlQuery{}
 	params.Url = url
 
-	data, err := json.Marshal(&params)
-	if err != nil {
-		return "", err
-	}
-
 	method := "query"
 	if GetDirect {
 		method = "debug-query-direct"
 	}
 
 	var res json.RawMessage
-	err = Client.Request(context.Background(), method, json.RawMessage(data), &res)
-	if err == nil {
-		return string(res), nil
-	}
-
-	ret, err := PrintJsonRpcError(err)
+	err := queryAs(method, &params, &res)
 	if err != nil {
 		return "", err
 	}
 
-	return "", fmt.Errorf("%v", ret)
+	if WantJsonOutput {
+		return string(res), nil
+	}
+
+	// Is it an account?
+	if json.Unmarshal(res, new(struct{ Type types.AccountType })) == nil {
+		qr := new(QueryResponse)
+		if json.Unmarshal(res, qr) != nil {
+			return string(res), nil
+		}
+		return PrintChainQueryResponseV2(qr)
+	}
+
+	// Is it a transaction?
+	if json.Unmarshal(res, new(struct{ Type types.TransactionType })) == nil {
+		qr := new(api2.TransactionQueryResponse)
+		if json.Unmarshal(res, qr) != nil {
+			return string(res), nil
+		}
+		return PrintTransactionQueryResponseV2(qr)
+	}
+
+	return string(res), nil
+}
+
+func getKey(url string, key []byte) (*query.ResponseKeyPageIndex, error) {
+	params := new(api2.KeyPageIndexQuery)
+	params.Url = url
+	params.Key = key
+
+	res := new(query.ResponseKeyPageIndex)
+	qres := new(api2.ChainQueryResponse)
+	qres.Data = res
+
+	err := queryAs("query-key-index", &params, &qres)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func GetKey(url, key string) (string, error) {
-	var res api2.ChainQueryResponse
-	res.Data = new(query.ResponseKeyPageIndex)
-
 	keyb, err := hex.DecodeString(key)
 	if err != nil {
 		return "", err
 	}
 
-	params := new(api2.KeyPageIndexQuery)
-	params.Url = url
-	params.Key = keyb
-
-	err = Client.Request(context.Background(), "query-key-index", &params, &res)
-	if err != nil {
-		return PrintJsonRpcError(err)
-	}
-
-	str, err := json.Marshal(res)
+	res, err := getKey(url, keyb)
 	if err != nil {
 		return "", err
 	}
 
-	return string(str), nil
+	if WantJsonOutput {
+		str, err := json.Marshal(res)
+		if err != nil {
+			return "", err
+		}
+
+		return string(str), nil
+	}
+
+	var out string
+	out += fmt.Sprintf("Key book\t:\t%v\n", res.KeyBook)
+	out += fmt.Sprintf("Key page\t:\t%v (index=%v)\n", res.KeyPage, res.Index)
+	return out, nil
 }

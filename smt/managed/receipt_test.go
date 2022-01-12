@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
@@ -83,7 +85,7 @@ func TestReceiptAll(t *testing.T) {
 	manager, _ := NewMerkleManager(storeTx, 2) // MerkleManager
 
 	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
-	var rh RandHash                            // A source of random hashes
+	var rh common.RandHash                     // A source of random hashes
 	var mdRoots [][]byte                       // Collect all the MDRoots for each hash added
 	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
 		manager.AddHash(rh.NextList())                    // Add a hash
@@ -196,6 +198,11 @@ func GenerateReceipts(manager *MerkleManager, receiptCount int64, t *testing.T) 
 }
 
 func TestBadgerReceipts(t *testing.T) {
+	// acctesting.SkipCI(t, "flaky")
+	if os.Getenv("CI") == "true" {
+		t.Skip("Skipping test: running CI: flaky")
+	}
+
 	badger := new(badger.DB)
 	require.NoError(t, badger.InitDB(filepath.Join(t.TempDir(), "badger.db"), nil))
 	defer badger.Close()
@@ -212,7 +219,7 @@ func TestBadgerReceipts(t *testing.T) {
 func TestReceipt_Combine(t *testing.T) {
 	testCnt := int64(50)
 	var m1Roots, m2Roots []Hash
-	var rh RandHash
+	var rh common.RandHash
 	var m1, m2 *MerkleManager
 	store := memory.NewDB()
 	storeTx := store.Begin()

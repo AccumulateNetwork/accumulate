@@ -57,6 +57,7 @@ func readTypes(files []string) typegen.DataTypes {
 		data, err := ioutil.ReadFile(file)
 		check(err)
 		buf.Write(data)
+		buf.WriteRune('\n')
 	}
 
 	var types map[string]*typegen.DataType
