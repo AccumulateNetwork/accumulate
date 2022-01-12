@@ -708,3 +708,50 @@ func TestSignatorHeight(t *testing.T) {
 
 	require.Equal(t, keyPageHeight, getHeight(keyPageUrl), "Key page height changed")
 }
+
+func TestCreateToken(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{}, true)
+	fooKey := generateKey()
+	batch := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, batch.Commit())
+
+	n.Batch(func(send func(*transactions.Envelope)) {
+		body := new(protocol.CreateToken)
+		body.Url = "foo/tokens"
+		body.Symbol = "FOO"
+		body.Precision = 10
+
+		tx, err := transactions.New("foo", 1, edSigner(fooKey, 1), body)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	n.GetTokenIssuer("foo/tokens")
+}
+
+func TestIssueTokens(t *testing.T) {
+	n := createAppWithMemDB(t, crypto.Address{}, true)
+	fooKey, liteKey := generateKey(), generateKey()
+	batch := n.db.Begin()
+	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10))
+	require.NoError(t, batch.Commit())
+
+	liteAddr, err := protocol.LiteAddress(liteKey[32:], "foo/tokens")
+	require.NoError(t, err)
+
+	n.Batch(func(send func(*transactions.Envelope)) {
+		body := new(protocol.IssueTokens)
+		body.Recipient = liteAddr.String()
+		body.Amount.SetUint64(123)
+
+		tx, err := transactions.New("foo/tokens", 1, edSigner(fooKey, 1), body)
+		require.NoError(t, err)
+		send(tx)
+	})
+
+	account := n.GetLiteTokenAccount(liteAddr.String())
+	require.Equal(t, "acc://foo/tokens", account.TokenUrl)
+	require.Equal(t, int64(123), account.Balance.Int64())
+}

@@ -40,7 +40,7 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
-const logConsole = false
+const logConsole = true
 
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
@@ -334,6 +334,12 @@ func (n *fakeNode) GetKeyBook(url string) *protocol.KeyBook {
 
 func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {
 	mss := new(protocol.KeyPage)
+	n.GetChainAs(url, mss)
+	return mss
+}
+
+func (n *fakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
+	mss := new(protocol.TokenIssuer)
 	n.GetChainAs(url, mss)
 	return mss
 }

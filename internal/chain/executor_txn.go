@@ -378,7 +378,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 
 	// Add the envelope to the origin's pending chain
 	err = addChainEntry(m.Network.NodeUrl(), m.blockBatch, st.OriginUrl, protocol.PendingChain, protocol.ChainTypeTransaction, env.EnvHash(), 0)
-	if err != nil {
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return fmt.Errorf("failed to add signature to pending chain: %v", err)
 	}
 
