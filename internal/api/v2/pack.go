@@ -42,14 +42,17 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Tr
 	if len(synth)%32 != 0 {
 		return nil, fmt.Errorf("invalid synthetic transaction information, not divisible by 32")
 	}
-	res.SyntheticTxids = make([][32]byte, len(synth)/32)
-	for i := range res.SyntheticTxids {
-		copy(res.SyntheticTxids[i][:], synth[i*32:(i+1)*32])
+
+	if synth != nil {
+		res.SyntheticTxids = make([][32]byte, len(synth)/32)
+		for i := range res.SyntheticTxids {
+			copy(res.SyntheticTxids[i][:], synth[i*32:(i+1)*32])
+		}
 	}
 
 	switch payload := payload.(type) {
 	case *protocol.SendTokens:
-		if len(res.SyntheticTxids) != len(payload.To) {
+		if synth != nil && len(res.SyntheticTxids) != len(payload.To) {
 			return nil, fmt.Errorf("not enough synthetic TXs: want %d, got %d", len(payload.To), len(res.SyntheticTxids))
 		}
 
@@ -60,7 +63,9 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Tr
 		for i, to := range payload.To {
 			data.To[i].Url = to.Url
 			data.To[i].Amount = to.Amount
-			data.To[i].Txid = synth[i*32 : (i+1)*32]
+			if synth != nil {
+				data.To[i].Txid = synth[i*32 : (i+1)*32]
+			}
 		}
 
 		res.Origin = main.SigInfo.Origin.String()
