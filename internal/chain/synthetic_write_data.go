@@ -46,14 +46,9 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 			}
 			copy(sw.EntryHash[:], entryHash)
 			account = origin
-		case *protocol.DataAccount:
-			//synthetic data writes to adi data accounts are not yet permitted.
-			copy(sw.EntryHash[:], body.Entry.Hash())
-			account = origin
-			panic("synthetic writes to adi data accounts are not currently supported")
 		default:
-			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v",
-				types.AccountTypeLiteDataAccount, types.AccountTypeDataAccount, origin.Header().Type)
+			return fmt.Errorf("invalid origin record: want chain type %v, got %v",
+				types.AccountTypeLiteDataAccount, origin.Header().Type)
 		}
 	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin); err != nil {
 		return fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Origin.String(), err)
