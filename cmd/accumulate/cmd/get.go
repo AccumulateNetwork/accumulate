@@ -109,6 +109,28 @@ func Get(url string) (string, error) {
 		return "", err
 	}
 
+	if WantJsonOutput {
+		return string(res), nil
+	}
+
+	// Is it an account?
+	if json.Unmarshal(res, new(struct{ Type types.AccountType })) == nil {
+		qr := new(QueryResponse)
+		if json.Unmarshal(res, qr) != nil {
+			return string(res), nil
+		}
+		return PrintChainQueryResponseV2(qr)
+	}
+
+	// Is it a transaction?
+	if json.Unmarshal(res, new(struct{ Type types.TransactionType })) == nil {
+		qr := new(api2.TransactionQueryResponse)
+		if json.Unmarshal(res, qr) != nil {
+			return string(res), nil
+		}
+		return PrintTransactionQueryResponseV2(qr)
+	}
+
 	return string(res), nil
 }
 
@@ -140,10 +162,17 @@ func GetKey(url, key string) (string, error) {
 		return "", err
 	}
 
-	str, err := json.Marshal(res)
-	if err != nil {
-		return "", err
+	if WantJsonOutput {
+		str, err := json.Marshal(res)
+		if err != nil {
+			return "", err
+		}
+
+		return string(str), nil
 	}
 
-	return string(str), nil
+	var out string
+	out += fmt.Sprintf("Key book\t:\t%v\n", res.KeyBook)
+	out += fmt.Sprintf("Key page\t:\t%v (index=%v)\n", res.KeyPage, res.Index)
+	return out, nil
 }
