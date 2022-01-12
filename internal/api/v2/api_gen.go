@@ -10,7 +10,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 22)
+		m.methods = make(jsonrpc2.MethodMap, 23)
 	}
 
 	m.methods["execute"] = m.Execute
@@ -24,6 +24,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
 	m.methods["write-data"] = m.ExecuteWriteData
+	m.methods["write-data-to"] = m.ExecuteWriteDataTo
 	m.methods["faucet"] = m.Faucet
 	m.methods["metrics"] = m.Metrics
 	m.methods["query"] = m.Query
@@ -105,6 +106,10 @@ func (m *JrpcMethods) ExecuteUpdateKeyPage(ctx context.Context, params json.RawM
 
 func (m *JrpcMethods) ExecuteWriteData(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.WriteData))
+}
+
+func (m *JrpcMethods) ExecuteWriteDataTo(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.WriteDataTo))
 }
 
 func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface{} {
