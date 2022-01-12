@@ -581,7 +581,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return validatorError(err)
 	}
 
-	addr, tok, err := protocol.ParseLiteAddress(u)
+	addr, tok, err := protocol.ParseLiteTokenAddress(u)
 	switch {
 	case err != nil:
 		return jsonrpc2.NewError(ErrCodeValidation, "Invalid token account", fmt.Errorf("error parsing %q: %v", u, err))
