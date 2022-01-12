@@ -11,35 +11,35 @@ Object:
 
 TxState:
   fields:
-  - name: SigInfo
-    type: transactions.Header
-    marshal-as: reference
-    pointer: true
-  - name: Transaction
-    type: bytes
-  - name: transactionHash
-    type: chain
-    marshal-as: none
+    - name: SigInfo
+      type: transactions.Header
+      marshal-as: reference
+      pointer: true
+    - name: Transaction
+      type: bytes
+    - name: transactionHash
+      type: chain
+      marshal-as: none
 
 Transaction:
   kind: chain
   omit-new-func: true
   embeddings:
-  - TxState
+    - TxState
 
 PendingTransaction:
   kind: chain
   omit-new-func: true
   fields:
-  - name: Signature
-    type: slice
-    slice:
-      type: transactions.ED25519Sig
+    - name: Signature
+      type: slice
+      slice:
+        type: transactions.ED25519Sig
+        marshal-as: reference
+        pointer: true
+    - name: TransactionState
+      type: TxState
       marshal-as: reference
       pointer: true
-  - name: TransactionState
-    type: TxState
-    marshal-as: reference
-    pointer: true
-  - name: Status
-    type: rawJson
+    - name: Status
+      type: rawJson
