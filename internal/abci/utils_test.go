@@ -9,12 +9,14 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
+	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/genesis"
@@ -40,7 +42,7 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
-const logConsole = false
+const logConsole = true
 
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
@@ -51,11 +53,10 @@ func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fake
 }
 
 func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenesis bool) *fakeNode {
-	_, bvcKey, _ := ed25519.GenerateKey(rand)
-
 	n := new(fakeNode)
 	n.t = t
 	n.db = db
+	_, n.key, _ = ed25519.GenerateKey(rand)
 
 	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
 	n.network = &config.Network{
@@ -105,7 +106,7 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 		DB:      n.db,
 		IsTest:  true,
 		Logger:  logger,
-		Key:     bvcKey,
+		Key:     n.key,
 		Network: *n.network,
 	})
 	require.NoError(t, err)
@@ -139,7 +140,7 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 		GenesisTime: time.Now(),
 		Logger:      logger,
 		Validators: []tmtypes.GenesisValidator{
-			{PubKey: tmed25519.PrivKey(bvcKey).PubKey()},
+			{PubKey: tmed25519.PrivKey(n.key).PubKey()},
 		},
 	})
 	require.NoError(t, err)
@@ -163,6 +164,7 @@ type fakeNode struct {
 	app     abcitypes.Application
 	client  *acctesting.FakeTendermint
 	query   *accapi.Query
+	key     ed25519.PrivateKey
 	height  int64
 }
 
@@ -220,7 +222,7 @@ func (n *fakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
 	return r
 }
 
-func (n *fakeNode) Batch(inBlock func(func(*transactions.Envelope))) {
+func (n *fakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte {
 	n.t.Helper()
 
 	var ids [][32]byte
@@ -241,6 +243,7 @@ func (n *fakeNode) Batch(inBlock func(func(*transactions.Envelope))) {
 	for _, id := range ids {
 		n.client.WaitFor(id, true)
 	}
+	return ids
 }
 
 func generateKey() tmed25519.PrivKey {
@@ -283,6 +286,23 @@ func (n *fakeNode) GetDirectory(adi string) []string {
 		chains[i] = string(data)
 	}
 	return chains
+}
+
+func (n *fakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
+	q := api2.NewQueryDirect(n.client, api2.QuerierOptions{})
+	resp, err := q.QueryTx(txid, 0)
+	require.NoError(n.t, err)
+	data, err := json.Marshal(resp.Data)
+	require.NoError(n.t, err)
+
+	var typ types.TransactionType
+	require.NoError(n.t, typ.UnmarshalJSON([]byte(strconv.Quote(resp.Type))))
+
+	resp.Data, err = protocol.NewTransaction(typ)
+	require.NoError(n.t, err)
+	require.NoError(n.t, json.Unmarshal(data, resp.Data))
+
+	return resp
 }
 
 func (n *fakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
@@ -334,6 +354,12 @@ func (n *fakeNode) GetKeyBook(url string) *protocol.KeyBook {
 
 func (n *fakeNode) GetKeyPage(url string) *protocol.KeyPage {
 	mss := new(protocol.KeyPage)
+	n.GetChainAs(url, mss)
+	return mss
+}
+
+func (n *fakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
+	mss := new(protocol.TokenIssuer)
 	n.GetChainAs(url, mss)
 	return mss
 }

@@ -145,6 +145,21 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 	return db.Account(u).PutState(chain)
 }
 
+func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return err
+	}
+
+	issuer := new(protocol.TokenIssuer)
+	issuer.ChainUrl = types.String(u.String())
+	issuer.KeyBook = types.String(u.Identity().JoinPath("book0").String())
+	issuer.Symbol = symbol
+	issuer.Precision = precision
+
+	return db.Account(u).PutState(issuer)
+}
+
 func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 	u, err := url.Parse(*urlStr.AsString())
 	if err != nil {
