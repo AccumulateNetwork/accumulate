@@ -1,5 +1,5 @@
 package types
-
+/*
 import (
 	"math/big"
 
@@ -106,3 +106,4 @@ func IterateValidators(fn func(index int64, val Validatorz) (stop bool)) {
 func IterateStakedValidatorsByVotingPower(fn func(index int64, val Validatorz) (stop bool)) {
 }
 
+*/

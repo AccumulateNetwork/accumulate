@@ -1,178 +1,129 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
-	flag "github.com/spf13/pflag"
 
+	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/spf13/cobra"
 )
+
+// WORK IN PROGRESS
 
 var stakingCmd = &cobra.Command{
 	Use:   "staking",
 	Short: "Staking and Validator commands",
-	DisableFlagParsing:         true,
-	SuggestionsMinimumDistance: 2,
 	Run: func(cmd *cobra.Command, args []string) {
+		var out string
+		var err error
+		if len(args) > 0 {
+			switch arg := args[0]; arg {
+			case "create-validator":
+				if len(args) > 2 {
+						out, err = CreateVal(args[1], args[2:])
+					} else {
+						fmt.Println("Usage:")
+						PrintCreateValidator() 
+					}
+			default:
+						fmt.Printf("\nTo create a Validator, you need to pass in moniker, publicKey, amountStaking, commission, and validatorAddress\n\n")
+					} 
+		} else {
+			fmt.Println("Usage")
+			PrintValidators()
+
+				}
+			//PrintCreateValidator()
+		 
+			printOutput(cmd, out, err)
+		},
+
+	}
 		
 	
-		if len(args) == 2 {
-		CreateVal(cmd.Flags())
-		}
-		cmd.Flags().AddFlagSet(FlagSetPublicKey())
-		cmd.Flags().AddFlagSet(FlagSetAmount())
-		cmd.Flags().AddFlagSet(flagSetDescriptionCreate())
-		cmd.Flags().AddFlagSet(FlagSetCommissionCreate())
-//		NewCreateValidatorCmd(),
-	
-		_ = cmd.MarkFlagRequired(FlagAmount)
-		_ = cmd.MarkFlagRequired(FlagPubKey)
-		_ = cmd.MarkFlagRequired(FlagMoniker)
-	},
 
-	
-	
+func PrintCreateValidator() {
+	fmt.Println("  accumulate staking create-validator [moniker] [identity] [website] [details] [commission] [validator-address] [amount] [pubkey]")
+	fmt.Println("\t\t example usage: accumulate staking create-validator myValName...")
 }
 
-
-const (
-	FlagAddressValidator    = "validator"
-	FlagAddressValidatorSrc = "addr-validator-source"
-	FlagAddressValidatorDst = "addr-validator-dest"
-	FlagPubKey              = "pubkey"
-	FlagAmount              = "amount"
-	FlagSharesAmount        = "shares-amount"
-	FlagSharesFraction      = "shares-fraction"
-
-	FlagMoniker         = "moniker"
-	FlagEditMoniker     = "new-moniker"
-	FlagIdentity        = "identity"
-	FlagWebsite         = "website"
-	FlagSecurityContact = "security-contact"
-	FlagDetails         = "details"
-
-	FlagCommissionRate          = "commission-rate"
-	FlagCommissionMaxRate       = "commission-max-rate"
-	FlagCommissionMaxChangeRate = "commission-max-change-rate"
-
-	FlagMinSelfDelegation = "min-self-delegation"
-
-	FlagGenesisFormat = "genesis-format"
-	FlagNodeID        = "node-id"
-	FlagIP            = "ip"
-)
-
-func flagSetDescriptionCreate() *flag.FlagSet {
-	fs := flag.NewFlagSet("", flag.ContinueOnError)
-
-	fs.String(FlagMoniker, "", "The validator's name")
-	fs.String(FlagIdentity, "", "The optional identity signature (ex. UPort or Keybase)")
-	fs.String(FlagWebsite, "", "The validator's (optional) website")
-	fs.String(FlagSecurityContact, "", "The validator's (optional) security contact email")
-	fs.String(FlagDetails, "", "The validator's (optional) details")
-
-	return fs
+func PrintValidators() {
+	PrintCreateValidator()
 }
-
-// FlagSetCommissionCreate Returns the FlagSet used for commission create.
-func FlagSetCommissionCreate() *flag.FlagSet {
-	fs := flag.NewFlagSet("", flag.ContinueOnError)
-
-	fs.String(FlagCommissionRate, "", "The initial commission rate percentage")
-	fs.String(FlagCommissionMaxRate, "", "The maximum commission rate percentage")
-	fs.String(FlagCommissionMaxChangeRate, "", "The maximum commission change rate percentage (per day)")
-
-	return fs
-}
-
-// FlagSetPublicKey Returns the flagset for Public Key related operations.
-func FlagSetPublicKey() *flag.FlagSet {
-	fs := flag.NewFlagSet("", flag.ContinueOnError)
-	fs.String(FlagPubKey, "", "The validator's Protobuf JSON encoded public key")
-	return fs
-}
-
-// FlagSetAmount Returns the FlagSet for amount related operations.
-func FlagSetAmount() *flag.FlagSet {
-	fs := flag.NewFlagSet("", flag.ContinueOnError)
-	fs.String(FlagAmount, "", "Amount of coins to bond")
-	return fs
-}
-
-
 
 
 // CreateKeyBook create a new key page
-func CreateVal(fs *flag.FlagSet) (*protocol.CreateValidator, error) {
-	cv := protocol.CreateValidator{}
-	fAmount, _ := fs.GetString(FlagAmount)
+func CreateVal(sender string, args []string) (string, error) {
+	/*
+	cv := new(protocol.CreateValidator)
 
-	
-	
-	//vAddr get from addy
-	fPubKey, _ := fs.GetString(FlagPubKey)
-	fmt.Println( fAmount, fPubKey)
+
 
 	var pubKey []byte
+	moniker := cv.Description.Moniker
+	identity := cv.Description.Identity
+	website := cv.Description.Website
+	details := cv.Description.Details
 
-	moniker, _ := fs.GetString(FlagMoniker)
-	identity, _ := fs.GetString(FlagIdentity)
-	website, _ := fs.GetString(FlagWebsite)
-	details, _ := fs.GetString(FlagDetails)
 	description := protocol.NewDescription(
 		moniker,
 		identity,
 		website,
 		details,	
 	)
-	vv := new(protocol.ValidatorType)
-	val := vv.OperatorAddress
+
+	moniker = args[0]
+	if err != nil {
+		PrintAccountCreate()
+		return "", fmt.Errorf("invalid account url %s", args[0])
+	}
+	val := cv.ValidatorAddress
 		// get the validator commission
 	//	rate, _ := fs.GetString(FlagCommissionRate)
 	//	maxRate, _ := fs.GetString(FlagCommissionMaxRate)
 	//	maxChangeRate, _ := fs.GetString(FlagCommissionMaxChangeRate)
-	commish := vv.Commission
+	commish := cv.Commission
 
 	create, err := cv.NewCreateValidator( pubKey, description, commish, val, cv.Amount)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return create, nil
+*/
+	u, err := url2.Parse(sender)
+	if err != nil {
+		return "", err
+	}
+
+	args, si, pk, err := prepareSigner(u, args)
+	if err != nil {
+		return "", fmt.Errorf("unable to prepare signer, %v", err)
+	}
+
+
+	var ty struct {
+		Type types.TransactionType
+	}
+
+	err = json.Unmarshal([]byte(args[0]), &ty)
+	if err != nil {
+		return "", fmt.Errorf("invalid payload 1: %v", err)
+	}
+
+	txn, err := protocol.NewTransaction(ty.Type)
+	if err != nil {
+		return "", fmt.Errorf("invalid payload 2: %v", err)
+	}
+
+	err = json.Unmarshal([]byte(args[0]), txn)
+	if err != nil {
+		return "", fmt.Errorf("invalid payload 3: %v", err)
+	}
+
+	res, err := dispatchTxRequest("execute", txn, u, si, pk)
+	if err != nil {
+		return "", err
+	}
+	return ActionResponseFrom(res).Print()
 }
-
-// Return the flagset, particular flags, and a description of defaults
-// this is anticipated to be used with the gen-tx
-func CreateValidatorMsgFlagSet(ipDefault string) (fs *flag.FlagSet, defaultsDesc string) {
-	fsCreateValidator := flag.NewFlagSet("", flag.ContinueOnError)
-	fsCreateValidator.String(FlagIP, ipDefault, "The node's public IP")
-	fsCreateValidator.String(FlagNodeID, "", "The node's NodeID")
-	fsCreateValidator.String(FlagMoniker, "", "The validator's (optional) moniker")
-	fsCreateValidator.String(FlagWebsite, "", "The validator's (optional) website")
-	fsCreateValidator.String(FlagSecurityContact, "", "The validator's (optional) security contact email")
-	fsCreateValidator.String(FlagDetails, "", "The validator's (optional) details")
-	fsCreateValidator.String(FlagIdentity, "", "The (optional) identity signature (ex. UPort or Keybase)")
-	fsCreateValidator.AddFlagSet(FlagSetCommissionCreate())
-	fsCreateValidator.AddFlagSet(FlagSetAmount())
-	fsCreateValidator.AddFlagSet(FlagSetPublicKey())
-
-	defaultsDesc = fmt.Sprintf(`
-	delegation amount:           %s
-	commission rate:             %s
-	commission max rate:         %s
-	commission max change rate:  %s
-	minimum self delegation:     %s
-`, defaultAmount, defaultCommissionRate,
-		defaultCommissionMaxRate, defaultCommissionMaxChangeRate,
-		defaultMinSelfDelegation)
-
-	return fsCreateValidator, defaultsDesc
-}
-// default values
-var (
-	DefaultTokens                  = 10
-	defaultAmount                  = 1
-	defaultCommissionRate          = "0.1"
-	defaultCommissionMaxRate       = "0.2"
-	defaultCommissionMaxChangeRate = "0.01"
-	defaultMinSelfDelegation       = "1"
-)

@@ -25,17 +25,17 @@ func (c CreateValidator) SetValidator(val ValidatorType) {
 }
 
 
-func (c CreateValidator) SetValidatorByAddr(val ValidatorType) error {
-	pK, err := val.GetConsensusAddress()
-	if err != nil {
-		panic(err)
-	}
-	c.ValidatorAddress = val.OperatorAddress
-	c.PubKey = pK
-	return nil
-	//cvv.Commission = val.Commission
+//func (c CreateValidator) SetValidatorByAddr(val ValidatorType) error {
+//	pK, err := val.GetConsensusAddress()
+//	if err != nil {
+//		panic(err)
+//	}
+//	c.ValidatorAddress = val.OperatorAddress
+//	c.PubKey = pK
+//	return nil
+//	//cvv.Commission = val.Commission
 
-}
+//}
 
 func (c CreateValidator) SetValidatorByPower(val ValidatorType)  {
 	if val.Jailed {
