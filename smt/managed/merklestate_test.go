@@ -6,11 +6,12 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMerkleState_Equal(t *testing.T) {
-	var rh, rh1 RandHash
+	var rh, rh1 common.RandHash
 	ms1 := new(MerkleState)
 	ms1.InitSha256()
 	ms2 := new(MerkleState)

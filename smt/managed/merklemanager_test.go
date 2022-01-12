@@ -15,7 +15,7 @@ import (
 
 func TestMerkleManager_GetChainState(t *testing.T) {
 	const numTests = 100
-	var randHash RandHash
+	var randHash common.RandHash
 	store := memory.NewDB()
 	storeTx := store.Begin()
 	m, e2 := NewMerkleManager(storeTx, 8)
@@ -46,7 +46,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 
 func TestMerkleManager_GetAnyState(t *testing.T) {
 	const testnum = 100
-	var randHash RandHash
+	var randHash common.RandHash
 	store := memory.NewDB()
 	storeTx := store.Begin()
 	m, e2 := NewMerkleManager(storeTx, 2)
@@ -171,7 +171,7 @@ func GenerateTestData(prt bool) [10][]Hash {
 			print("          ")
 		}
 	}
-	var rp RandHash
+	var rp common.RandHash
 	var hashes [10][]Hash
 	row := 0
 	for i := 0; i < 20; i++ {
@@ -242,7 +242,7 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 
 	hashes := GenerateTestData(true)
 
-	var r RandHash
+	var r common.RandHash
 
 	for col := int64(0); col < 20; col++ {
 		m.AddHash(r.NextList())
