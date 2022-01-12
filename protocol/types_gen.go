@@ -45,10 +45,6 @@ type AnchoredRecord struct {
 	Anchor [32]byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 }
 
-type BondStatus struct {
-	BondStatus int64 `json:"bondStatus,omitempty" form:"bondStatus" query:"bondStatus" validate:"required"`
-}
-
 type BurnTokens struct {
 	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
@@ -108,6 +104,14 @@ type CreateTokenAccount struct {
 	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 	TokenUrl   string `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	KeyBookUrl string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"required,acc-url"`
+}
+
+type CreateValidator struct {
+	Description      ValidatorDescription `json:"description,omitempty" form:"description" query:"description" validate:"required"`
+	Commission       Commission           `json:"commission,omitempty" form:"commission" query:"commission"`
+	ValidatorAddress string               `json:"validatorAddress,omitempty" form:"validatorAddress" query:"validatorAddress"`
+	PubKey           []byte               `json:"pubKey,omitempty" form:"pubKey" query:"pubKey"`
+	Amount           int64                `json:"amount,omitempty" form:"amount" query:"amount"`
 }
 
 type DataAccount struct {
@@ -352,9 +356,9 @@ type ValidatorType struct {
 	OperatorAddress string               `json:"operatorAddress,omitempty" form:"operatorAddress" query:"operatorAddress" validate:"required"`
 	ConsensusPubKey []byte               `json:"consensusPubKey,omitempty" form:"consensusPubKey" query:"consensusPubKey" validate:"required"`
 	Jailed          bool                 `json:"jailed,omitempty" form:"jailed" query:"jailed" validate:"required"`
-	Status          BondStatus           `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Status          int64                `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	Tokens          uint64               `json:"tokens,omitempty" form:"tokens" query:"tokens" validate:"required"`
-	DelegatorShares string               `json:"delegatorShares,omitempty" form:"delegatorShares" query:"delegatorShares" validate:"required"`
+	DelegatorShares uint64               `json:"delegatorShares,omitempty" form:"delegatorShares" query:"delegatorShares" validate:"required"`
 	Description     ValidatorDescription `json:"description,omitempty" form:"description" query:"description" validate:"required"`
 	UnStakingHeight uint64               `json:"unStakingHeight,omitempty" form:"unStakingHeight" query:"unStakingHeight" validate:"required"`
 	UnStakingTime   time.Time            `json:"unStakingTime,omitempty" form:"unStakingTime" query:"unStakingTime" validate:"required"`
@@ -447,6 +451,8 @@ func (*CreateKeyPage) GetType() types.TransactionType { return types.TxTypeCreat
 func (*CreateToken) GetType() types.TransactionType { return types.TxTypeCreateToken }
 
 func (*CreateTokenAccount) GetType() types.TransactionType { return types.TxTypeCreateTokenAccount }
+
+func (*CreateValidator) GetType() types.TransactionType { return types.TxTypeCreateValidator }
 
 func (*InternalGenesis) GetType() types.TransactionType { return types.TxTypeInternalGenesis }
 
@@ -550,14 +556,6 @@ func (v *AnchoredRecord) Equal(u *AnchoredRecord) bool {
 	}
 
 	if !(v.Anchor == u.Anchor) {
-		return false
-	}
-
-	return true
-}
-
-func (v *BondStatus) Equal(u *BondStatus) bool {
-	if !(v.BondStatus == u.BondStatus) {
 		return false
 	}
 
@@ -730,6 +728,30 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 	}
 
 	if !(v.KeyBookUrl == u.KeyBookUrl) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CreateValidator) Equal(u *CreateValidator) bool {
+	if !(v.Description.Equal(&u.Description)) {
+		return false
+	}
+
+	if !(v.Commission.Equal(&u.Commission)) {
+		return false
+	}
+
+	if !(v.ValidatorAddress == u.ValidatorAddress) {
+		return false
+	}
+
+	if !(bytes.Equal(v.PubKey, u.PubKey)) {
+		return false
+	}
+
+	if !(v.Amount == u.Amount) {
 		return false
 	}
 
@@ -1458,7 +1480,7 @@ func (v *ValidatorType) Equal(u *ValidatorType) bool {
 		return false
 	}
 
-	if !(v.Status.Equal(&u.Status)) {
+	if !(v.Status == u.Status) {
 		return false
 	}
 
@@ -1573,14 +1595,6 @@ func (v *AnchoredRecord) BinarySize() int {
 	n += encoding.BytesBinarySize(v.Record)
 
 	n += encoding.ChainBinarySize(&v.Anchor)
-
-	return n
-}
-
-func (v *BondStatus) BinarySize() int {
-	var n int
-
-	n += encoding.VarintBinarySize(v.BondStatus)
 
 	return n
 }
@@ -1727,6 +1741,24 @@ func (v *CreateTokenAccount) BinarySize() int {
 	n += encoding.StringBinarySize(v.TokenUrl)
 
 	n += encoding.StringBinarySize(v.KeyBookUrl)
+
+	return n
+}
+
+func (v *CreateValidator) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeCreateValidator.ID())
+
+	n += v.Description.BinarySize()
+
+	n += v.Commission.BinarySize()
+
+	n += encoding.StringBinarySize(v.ValidatorAddress)
+
+	n += encoding.BytesBinarySize(v.PubKey)
+
+	n += encoding.VarintBinarySize(v.Amount)
 
 	return n
 }
@@ -2337,11 +2369,11 @@ func (v *ValidatorType) BinarySize() int {
 
 	n += encoding.BoolBinarySize(v.Jailed)
 
-	n += v.Status.BinarySize()
+	n += encoding.VarintBinarySize(v.Status)
 
 	n += encoding.UvarintBinarySize(v.Tokens)
 
-	n += encoding.StringBinarySize(v.DelegatorShares)
+	n += encoding.UvarintBinarySize(v.DelegatorShares)
 
 	n += v.Description.BinarySize()
 
@@ -2456,14 +2488,6 @@ func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.Record))
 
 	buffer.Write(encoding.ChainMarshalBinary(&v.Anchor))
-
-	return buffer.Bytes(), nil
-}
-
-func (v *BondStatus) MarshalBinary() ([]byte, error) {
-	var buffer bytes.Buffer
-
-	buffer.Write(encoding.VarintMarshalBinary(v.BondStatus))
 
 	return buffer.Bytes(), nil
 }
@@ -2622,6 +2646,32 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.TokenUrl))
 
 	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *CreateValidator) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeCreateValidator.ID()))
+
+	if b, err := v.Description.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Description: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	if b, err := v.Commission.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Commission: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	buffer.Write(encoding.StringMarshalBinary(v.ValidatorAddress))
+
+	buffer.Write(encoding.BytesMarshalBinary(v.PubKey))
+
+	buffer.Write(encoding.VarintMarshalBinary(v.Amount))
 
 	return buffer.Bytes(), nil
 }
@@ -3337,15 +3387,11 @@ func (v *ValidatorType) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.BoolMarshalBinary(v.Jailed))
 
-	if b, err := v.Status.MarshalBinary(); err != nil {
-		return nil, fmt.Errorf("error encoding Status: %w", err)
-	} else {
-		buffer.Write(b)
-	}
+	buffer.Write(encoding.VarintMarshalBinary(v.Status))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Tokens))
 
-	buffer.Write(encoding.StringMarshalBinary(v.DelegatorShares))
+	buffer.Write(encoding.UvarintMarshalBinary(v.DelegatorShares))
 
 	if b, err := v.Description.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding Description: %w", err)
@@ -3508,17 +3554,6 @@ func (v *AnchoredRecord) UnmarshalBinary(data []byte) error {
 		v.Anchor = x
 	}
 	data = data[encoding.ChainBinarySize(&v.Anchor):]
-
-	return nil
-}
-
-func (v *BondStatus) UnmarshalBinary(data []byte) error {
-	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding BondStatus: %w", err)
-	} else {
-		v.BondStatus = x
-	}
-	data = data[encoding.VarintBinarySize(v.BondStatus):]
 
 	return nil
 }
@@ -3836,6 +3871,49 @@ func (v *CreateTokenAccount) UnmarshalBinary(data []byte) error {
 		v.KeyBookUrl = x
 	}
 	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
+
+	return nil
+}
+
+func (v *CreateValidator) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeCreateValidator
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if err := v.Description.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Description: %w", err)
+	}
+	data = data[v.Description.BinarySize():]
+
+	if err := v.Commission.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Commission: %w", err)
+	}
+	data = data[v.Commission.BinarySize():]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ValidatorAddress: %w", err)
+	} else {
+		v.ValidatorAddress = x
+	}
+	data = data[encoding.StringBinarySize(v.ValidatorAddress):]
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding PubKey: %w", err)
+	} else {
+		v.PubKey = x
+	}
+	data = data[encoding.BytesBinarySize(v.PubKey):]
+
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = x
+	}
+	data = data[encoding.VarintBinarySize(v.Amount):]
 
 	return nil
 }
@@ -5050,10 +5128,12 @@ func (v *ValidatorType) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.BoolBinarySize(v.Jailed):]
 
-	if err := v.Status.UnmarshalBinary(data); err != nil {
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Status: %w", err)
+	} else {
+		v.Status = x
 	}
-	data = data[v.Status.BinarySize():]
+	data = data[encoding.VarintBinarySize(v.Status):]
 
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Tokens: %w", err)
@@ -5062,12 +5142,12 @@ func (v *ValidatorType) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(v.Tokens):]
 
-	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding DelegatorShares: %w", err)
 	} else {
 		v.DelegatorShares = x
 	}
-	data = data[encoding.StringBinarySize(v.DelegatorShares):]
+	data = data[encoding.UvarintBinarySize(v.DelegatorShares):]
 
 	if err := v.Description.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Description: %w", err)
@@ -5168,6 +5248,22 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 	u.PublicKey = encoding.BytesToJSON(v.PublicKey)
 	u.KeyBookName = v.KeyBookName
 	u.KeyPageName = v.KeyPageName
+	return json.Marshal(&u)
+}
+
+func (v *CreateValidator) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Description      ValidatorDescription `json:"description,omitempty"`
+		Commission       Commission           `json:"commission,omitempty"`
+		ValidatorAddress string               `json:"validatorAddress,omitempty"`
+		PubKey           *string              `json:"pubKey,omitempty"`
+		Amount           int64                `json:"amount,omitempty"`
+	}{}
+	u.Description = v.Description
+	u.Commission = v.Commission
+	u.ValidatorAddress = v.ValidatorAddress
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
+	u.Amount = v.Amount
 	return json.Marshal(&u)
 }
 
@@ -5409,9 +5505,9 @@ func (v *ValidatorType) MarshalJSON() ([]byte, error) {
 		OperatorAddress string               `json:"operatorAddress,omitempty"`
 		ConsensusPubKey *string              `json:"consensusPubKey,omitempty"`
 		Jailed          bool                 `json:"jailed,omitempty"`
-		Status          BondStatus           `json:"status,omitempty"`
+		Status          int64                `json:"status,omitempty"`
 		Tokens          uint64               `json:"tokens,omitempty"`
-		DelegatorShares string               `json:"delegatorShares,omitempty"`
+		DelegatorShares uint64               `json:"delegatorShares,omitempty"`
 		Description     ValidatorDescription `json:"description,omitempty"`
 		UnStakingHeight uint64               `json:"unStakingHeight,omitempty"`
 		UnStakingTime   time.Time            `json:"unStakingTime,omitempty"`
@@ -5494,6 +5590,34 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	}
 	v.KeyBookName = u.KeyBookName
 	v.KeyPageName = u.KeyPageName
+	return nil
+}
+
+func (v *CreateValidator) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Description      ValidatorDescription `json:"description,omitempty"`
+		Commission       Commission           `json:"commission,omitempty"`
+		ValidatorAddress string               `json:"validatorAddress,omitempty"`
+		PubKey           *string              `json:"pubKey,omitempty"`
+		Amount           int64                `json:"amount,omitempty"`
+	}{}
+	u.Description = v.Description
+	u.Commission = v.Commission
+	u.ValidatorAddress = v.ValidatorAddress
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
+	u.Amount = v.Amount
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Description = u.Description
+	v.Commission = u.Commission
+	v.ValidatorAddress = u.ValidatorAddress
+	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
+		return fmt.Errorf("error decoding PubKey: %w", err)
+	} else {
+		v.PubKey = x
+	}
+	v.Amount = u.Amount
 	return nil
 }
 
@@ -5961,9 +6085,9 @@ func (v *ValidatorType) UnmarshalJSON(data []byte) error {
 		OperatorAddress string               `json:"operatorAddress,omitempty"`
 		ConsensusPubKey *string              `json:"consensusPubKey,omitempty"`
 		Jailed          bool                 `json:"jailed,omitempty"`
-		Status          BondStatus           `json:"status,omitempty"`
+		Status          int64                `json:"status,omitempty"`
 		Tokens          uint64               `json:"tokens,omitempty"`
-		DelegatorShares string               `json:"delegatorShares,omitempty"`
+		DelegatorShares uint64               `json:"delegatorShares,omitempty"`
 		Description     ValidatorDescription `json:"description,omitempty"`
 		UnStakingHeight uint64               `json:"unStakingHeight,omitempty"`
 		UnStakingTime   time.Time            `json:"unStakingTime,omitempty"`

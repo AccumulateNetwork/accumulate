@@ -10,12 +10,11 @@ ValidatorType:
     - name: Jailed
       type: bool
     - name: Status
-      type: BondStatus
-      marshal-as: reference
+      type: varint
     - name: Tokens
       type: uvarint
     - name: DelegatorShares
-      type: string
+      type: uvarint
     - name: Description
       type: ValidatorDescription
       marshal-as: reference
@@ -46,12 +45,6 @@ CommissionRates:
      type: uvarint
    - name: MaxChangeRate
      type: uvarint
-
-BondStatus:
-  kind: val 
-  fields:
-   - name: BondStatus
-     type: varint
 
 ValidatorDescription:
    kind: val

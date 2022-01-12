@@ -2,6 +2,26 @@
 
 ##### User #####
 
+CreateValidator:
+ kind: tx
+ fields:
+    - name: Description
+      type: ValidatorDescription
+      marshal-as: reference
+    - name: Commission
+      type: Commission
+      marshal-as: reference
+      optional: true
+    - name: ValidatorAddress
+      type: string
+      optional: true
+    - name: PubKey
+      type: bytes
+      optional: true
+    - name: Amount
+      type: varint
+      optional: true
+
 CreateIdentity:
   kind: tx
   fields:

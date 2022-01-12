@@ -117,6 +117,11 @@ const (
 	TxTypeSegWitDataEntry TransactionType = 0x39
 )
 
+// Validator TransactionType
+const (
+	TxTypeCreateValidator TransactionType = 0x41
+)
+
 const (
 	// TxTypeInternalGenesis initializes system chains.
 	TxTypeInternalGenesis TransactionType = 0x60
@@ -203,6 +208,9 @@ func (t TransactionType) String() string {
 		return "transactionsSigned"
 	case TxTypeInternalTransactionsSent:
 		return "transactionsSent"
+
+	case TxTypeCreateValidator:
+		return "createValidator"
 
 	default:
 		return fmt.Sprintf("TransactionType:%d", t)

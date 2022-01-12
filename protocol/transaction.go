@@ -64,6 +64,9 @@ func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
 	case types.TxTypeInternalTransactionsSent:
 		return new(InternalTransactionsSent), nil
 
+	case types.TxTypeCreateValidator:
+		return new(CreateValidator), nil
+
 	default:
 		return nil, fmt.Errorf("unknown transaction type %v", typ)
 	}

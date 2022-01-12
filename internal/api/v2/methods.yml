@@ -74,6 +74,11 @@ Execute:
   input: TxRequest
   output: TxResponse
 
+ExecuteCreateValidator:
+  kind: execute
+  rpc: create-validator
+  input: CreateValidator
+  
 ExecuteCreateAdi:
   kind: execute
   rpc: create-adi
