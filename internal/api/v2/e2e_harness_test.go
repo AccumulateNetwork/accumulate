@@ -95,7 +95,7 @@ func newKey(seed []byte) ed25519.PrivateKey {
 
 func makeLiteUrl(t *testing.T, key ed25519.PrivateKey, tok string) *url.URL {
 	t.Helper()
-	u, err := protocol.LiteAddress(key[32:], tok)
+	u, err := protocol.LiteTokenAddress(key[32:], tok)
 	require.NoError(t, err)
 	return u
 }
