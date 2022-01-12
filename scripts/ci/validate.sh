@@ -167,3 +167,10 @@ wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueToke
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 123 ] && success || die "${LITE_TOK} should have 123 keytest tokens but has ${BALANCE}"
 success
+
+section "Create lite data account and write the data"
+ACCOUNT_ID="acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa"
+wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "writeDataTo", "recipient": "'${ACCOUNT_ID}'", "entry": {"extIds": ["466163746F6D2050524F", "5475746F7269616C"], "data": ""}}'
+accumulate get $ACCOUNT_ID &> /dev/null || die "Cannot find lite data account"
+accumulate data get $ACCOUNT_ID 0 1 &> /dev/null || die "lite data entry not found"
+success
