@@ -154,3 +154,10 @@ section "Create a token issuer"
 wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "createToken", "url": "keytest/token-issuer", "symbol": "TOK", "precision": 10}'
 accumulate get keytest/token-issuer &> /dev/null || die "Cannot find keytest/token-issuer"
 success
+
+section "Create lite data account and write the data"
+ACCOUNT_ID="acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa"
+wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "writeDataTo", "url": "'${ACCOUNT_ID}'", "ExtIds": ["Factom PRO", "Tutorial"], "Data": ""}'
+accumulate get $ACCOUNT_ID &> /dev/null || die "Cannot find lite data account"
+accumulate data get $ACCOUNT_ID 0 1 &> /dev/null || die "lite data entry not found"
+success
