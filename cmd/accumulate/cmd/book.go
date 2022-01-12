@@ -75,7 +75,7 @@ func GetKeyBook(url string) (*QueryResponse, *protocol.KeyBook, error) {
 		return nil, nil, err
 	}
 
-	if res.Type != types.ChainTypeKeyBook.String() {
+	if res.Type != types.AccountTypeKeyBook.String() {
 		return nil, nil, fmt.Errorf("expecting key book but received %v", res.Type)
 	}
 

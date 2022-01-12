@@ -36,7 +36,7 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		case *protocol.TokenAccount:
 			account = origin
 		default:
-			return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeTokenAccount, origin.Header().Type)
+			return fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeTokenAccount, origin.Header().Type)
 		}
 	} else if keyHash, tok, err := protocol.ParseLiteAddress(tx.Transaction.Origin); err != nil {
 		return fmt.Errorf("invalid lite token account URL: %v", err)

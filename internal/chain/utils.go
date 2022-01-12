@@ -13,7 +13,7 @@ import (
 )
 
 func addChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
-	chain, err := batch.Record(u).Chain(name, typ)
+	chain, err := batch.Account(u).Chain(name, typ)
 	if err != nil {
 		return err
 	}
@@ -28,7 +28,7 @@ func addChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name str
 }
 
 func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, index, sourceIndex uint64) error {
-	ledger := batch.Record(nodeUrl.JoinPath(protocol.Ledger))
+	ledger := batch.Account(nodeUrl.JoinPath(protocol.Ledger))
 	ledgerState := protocol.NewInternalLedger()
 	err := ledger.GetStateAs(ledgerState)
 	switch {
@@ -52,7 +52,7 @@ func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name 
 }
 
 func loadDirectoryMetadata(batch *database.Batch, chainId []byte) (*protocol.DirectoryIndexMetadata, error) {
-	b, err := batch.RecordByID(chainId).Index("Directory", "Metadata").Get()
+	b, err := batch.AccountByID(chainId).Index("Directory", "Metadata").Get()
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func loadDirectoryMetadata(batch *database.Batch, chainId []byte) (*protocol.Dir
 }
 
 func loadDirectoryEntry(batch *database.Batch, chainId []byte, index uint64) (string, error) {
-	b, err := batch.RecordByID(chainId).Index("Directory", index).Get()
+	b, err := batch.AccountByID(chainId).Index("Directory", index).Get()
 	if err != nil {
 		return "", err
 	}
@@ -77,7 +77,7 @@ func loadDirectoryEntry(batch *database.Batch, chainId []byte, index uint64) (st
 func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, error) {
 	var arec protocol.AnchoredRecord
 
-	rec := batch.Record(u)
+	rec := batch.Account(u)
 	state, err := rec.GetState()
 	if err != nil {
 		return arec, fmt.Errorf("failed to load %q: %v", u, err)
@@ -98,7 +98,7 @@ func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, e
 }
 
 func buildProof(batch *database.Batch, u *protocol.AnchorMetadata, rootChain *database.Chain, rootIndex, rootHeight int64) (*managed.Receipt, error) {
-	anchorChain, err := batch.Record(u.Account).ReadChain(u.Name)
+	anchorChain, err := batch.Account(u.Account).ReadChain(u.Name)
 	if err != nil {
 		return nil, err
 	}
