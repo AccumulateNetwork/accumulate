@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -131,25 +130,7 @@ func NewDescription(moniker, identity, website, details string) ValidatorDescrip
 	}
 }
 
-// ConsensusPower gets the consensus-engine power. Aa reduction of 10^6 from
-// validator tokens is applied
-func (v ValidatorType) ConsensusPower(r big.Int) int64 {
-	if v.IsBonded() {
-		return v.PotentialConsensusPower(r)
-	}
 
-	return 0
-}
-
-// PotentialConsensusPower returns the potential consensus-engine power.
-func (v ValidatorType) PotentialConsensusPower(r big.Int) int64 {
-	return TokensToConsensusPower(v.Tokens, r)
-}
-
-// TokensToConsensusPower - convert input tokens to potential consensus-engine power
-func TokensToConsensusPower(tokens Int, powerReduction Int) int64 {
-	return (tokens.Quo(powerReduction)).Int64()
-}
 
 func (d ValidatorDescription) UpdateDescription(d1 ValidatorDescription) (ValidatorDescription, error) {
 	if d1.Moniker == "" {
@@ -170,26 +151,26 @@ func (d ValidatorDescription) UpdateDescription(d1 ValidatorDescription) (Valida
 
 }
 
-func (v ValidatorType) GetConsensusAddress() (conAdd []byte, err error) {
-	pk, err := v.ConsensusPublicKey()
-	if err != nil {
-		return nil, err
-	}
-	return pk.Address(), nil
+//func (v ValidatorType) GetConsensusAddress() (conAdd []byte, err error) {
+//	pk, err := v.ConsensusPublicKey()
+//	if err != nil {
+//		return nil, err
+//	}
+//	return pk.Address(), nil
 
-}
+//}
 
-func (v ValidatorType) GetConsensusPower(r big.Int) big.Int {
-	return v.
-}
+//func (v ValidatorType) GetConsensusPower(r big.Int) big.Int {
+//	return v.
+//}
 
 //ConsensusPublicKey returns validator's public key as ed25519.PubKey
-func (v ValidatorType) ConsensusPublicKey() (ed25519.PubKey, error) {
-	//return v.ConsensusPubKey
-	pk, ok := v.ConsensusPubKey.GetPubKey().(ed25519.PubKey)
-	if !ok {
-		panic("Validator.ConsensusPublicKey() should return an ed25519.PubKey")
-	}
-	return pk, nil
-}
+//func (v ValidatorType) ConsensusPublicKey() (ed25519.PubKey, error) {
+//	//return v.ConsensusPubKey
+//	pk, ok := v.ConsensusPubKey.GetPubKey().(ed25519.PubKey)
+//	if !ok {
+//		panic("Validator.ConsensusPublicKey() should return an ed25519.PubKey")
+//	}
+//	return pk, nil
+//}
 

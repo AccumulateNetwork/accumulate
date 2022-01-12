@@ -14,8 +14,11 @@ type ChainType uint64
 // ObjectType is the type of an object in the database.
 type ObjectType uint64
 
-//go:generate go run ../tools/cmd/gentypes accounts.yml general.yml internal.yml query.yml transactions.yml val.yml
-//go:generate go run ../tools/cmd/gentypes2 --out chains_gen.go chains.yml
+// KeyPageOperation is the operation type of an UpdateKeyPage transaction.
+type KeyPageOperation uint8
+
+//go:generate go run ../tools/cmd/gentypes accounts.yml general.yml internal.yml query.yml transactions.yml
+//go:generate go run ../tools/cmd/gentypes2 --out enums_gen.go enums.yml
 
 func NewValidator() (*validator.Validate, error) {
 	v := validator.New()
