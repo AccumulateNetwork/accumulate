@@ -25,7 +25,7 @@ type Type struct {
 	MakeConstructor bool
 	ChainType       string
 	TransactionType string
-	ValType		    string
+	ValType         string
 	Embeddings      []string
 	Fields          []*Field
 }

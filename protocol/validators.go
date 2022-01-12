@@ -8,44 +8,39 @@ import (
 	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
-
 func NewValidators(operator string, pubKey ed25519.PubKey, description ValidatorDescription) (ValidatorType, error) {
 	return ValidatorType{
 		OperatorAddress: operator,
 		ConsensusPubKey: pubKey,
-		Jailed: false,
-		Status: 1,
-		Tokens: 0,
+		Jailed:          false,
+		Status:          1,
+		Tokens:          0,
 		DelegatorShares: 0,
-		Description: description,
+		Description:     description,
 		UnStakingHeight: 0,
-		UnStakingTime: time.Unix(0, 0),
-		Commission: NewCommission(0, 0, 0),
-
+		UnStakingTime:   time.Unix(0, 0),
+		Commission:      NewCommission(0, 0, 0),
 	}, nil
 }
 
-
 func NewCommission(rate, maxRate, maxChangeRate uint64) Commission {
 	return Commission{
-	CommissionRates: NewCommissionRates(rate, maxRate, maxChangeRate),
+		CommissionRates: NewCommissionRates(rate, maxRate, maxChangeRate),
 	}
 }
 
-
 func NewCommissionRates(rate, maxRate, maxChangeRate uint64) CommissionRates {
 	return CommissionRates{
-		Rate: rate,
-		MaxRate: maxRate,
+		Rate:          rate,
+		MaxRate:       maxRate,
 		MaxChangeRate: maxChangeRate,
 	}
 }
 
-
 func NewCommissionRatesWithTime(rate, maxRate, maxChangeRate uint64) Commission {
 	return Commission{
 		CommissionRates: NewCommissionRates(rate, maxRate, maxChangeRate),
-		}
+	}
 }
 
 func (c CommissionRates) Validate() error {
@@ -57,7 +52,6 @@ func (c CommissionRates) Validate() error {
 	}
 	return nil
 }
-
 
 type Vals []ValidatorType
 
@@ -73,6 +67,7 @@ type ValsByVotingPower []ValidatorType
 func (vals ValsByVotingPower) Len() int {
 	return len(vals)
 }
+
 /*
 func (vals ValsByVotingPower) Less(i, j int, r big.Int) bool {
 	if vals[i].ConsensusPower(r) == vals[j].ConsensusPower(r) {
@@ -89,18 +84,18 @@ func (vals ValsByVotingPower) Less(i, j int, r big.Int) bool {
 }
 
 */
-func (v ValidatorType) IsJailed() bool { return v.Jailed }
+func (v ValidatorType) IsJailed() bool     { return v.Jailed }
 func (v ValidatorType) GetMoniker() string { return v.Description.Moniker }
-func (v ValidatorType) GetStatus() int64 { return v.Status }
-func (v ValidatorType) GetOperator() string { 
+func (v ValidatorType) GetStatus() int64   { return v.Status }
+func (v ValidatorType) GetOperator() string {
 	if v.OperatorAddress == "" {
 		return ""
- }
- 	addr := v.OperatorAddress
- 	return addr 
+	}
+	addr := v.OperatorAddress
+	return addr
 }
 
- func (v ValidatorType) SetInitCommission(commission Commission) (ValidatorType, error) {
+func (v ValidatorType) SetInitCommission(commission Commission) (ValidatorType, error) {
 	if err := commission.CommissionRates.Validate(); err != nil {
 		return v, err
 	}
@@ -123,31 +118,27 @@ func (v ValidatorType) IsUnbonding() bool {
 
 func NewDescription(moniker, identity, website, details string) ValidatorDescription {
 	return ValidatorDescription{
-		Moniker: moniker,
+		Moniker:  moniker,
 		Identity: identity,
-		Website: website,
-		Details: details,
+		Website:  website,
+		Details:  details,
 	}
 }
-
-
 
 func (d ValidatorDescription) UpdateDescription(d1 ValidatorDescription) (ValidatorDescription, error) {
 	if d1.Moniker == "" {
 		d1.Moniker = d.Moniker
-		}
-	
+	}
+
 	if d1.Identity == "" {
 		d1.Identity = d.Identity
-		}
+	}
 
 	if d1.Website == "" {
 		d1.Website = d.Website
-		}
+	}
 
 	return NewDescription(d1.Moniker, d1.Identity, d1.Website, d1.Details), nil
-
-
 
 }
 
@@ -173,4 +164,3 @@ func (d ValidatorDescription) UpdateDescription(d1 ValidatorDescription) (Valida
 //	}
 //	return pk, nil
 //}
-

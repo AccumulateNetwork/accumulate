@@ -22,27 +22,24 @@ var stakingCmd = &cobra.Command{
 			switch arg := args[0]; arg {
 			case "create-validator":
 				if len(args) > 2 {
-						out, err = CreateVal(args[1], args[2:])
-					} else {
-						fmt.Println("Usage:")
-						PrintCreateValidator() 
-					}
+					out, err = CreateVal(args[1], args[2:])
+				} else {
+					fmt.Println("Usage:")
+					PrintCreateValidator()
+				}
 			default:
-						fmt.Printf("\nTo create a Validator, you need to pass in moniker, publicKey, amountStaking, commission, and validatorAddress\n\n")
-					} 
+				fmt.Printf("\nTo create a Validator, you need to pass in moniker, publicKey, amountStaking, commission, and validatorAddress\n\n")
+			}
 		} else {
 			fmt.Println("Usage")
 			PrintValidators()
 
-				}
-			//PrintCreateValidator()
-		 
-			printOutput(cmd, out, err)
-		},
+		}
+		//PrintCreateValidator()
 
-	}
-		
-	
+		printOutput(cmd, out, err)
+	},
+}
 
 func PrintCreateValidator() {
 	fmt.Println("  accumulate staking create-validator [moniker] [identity] [website] [details] [commission] [validator-address] [amount] [pubkey]")
@@ -53,44 +50,43 @@ func PrintValidators() {
 	PrintCreateValidator()
 }
 
-
 // CreateKeyBook create a new key page
 func CreateVal(sender string, args []string) (string, error) {
 	/*
-	cv := new(protocol.CreateValidator)
+		cv := new(protocol.CreateValidator)
 
 
 
-	var pubKey []byte
-	moniker := cv.Description.Moniker
-	identity := cv.Description.Identity
-	website := cv.Description.Website
-	details := cv.Description.Details
+		var pubKey []byte
+		moniker := cv.Description.Moniker
+		identity := cv.Description.Identity
+		website := cv.Description.Website
+		details := cv.Description.Details
 
-	description := protocol.NewDescription(
-		moniker,
-		identity,
-		website,
-		details,	
-	)
+		description := protocol.NewDescription(
+			moniker,
+			identity,
+			website,
+			details,
+		)
 
-	moniker = args[0]
-	if err != nil {
-		PrintAccountCreate()
-		return "", fmt.Errorf("invalid account url %s", args[0])
-	}
-	val := cv.ValidatorAddress
-		// get the validator commission
-	//	rate, _ := fs.GetString(FlagCommissionRate)
-	//	maxRate, _ := fs.GetString(FlagCommissionMaxRate)
-	//	maxChangeRate, _ := fs.GetString(FlagCommissionMaxChangeRate)
-	commish := cv.Commission
+		moniker = args[0]
+		if err != nil {
+			PrintAccountCreate()
+			return "", fmt.Errorf("invalid account url %s", args[0])
+		}
+		val := cv.ValidatorAddress
+			// get the validator commission
+		//	rate, _ := fs.GetString(FlagCommissionRate)
+		//	maxRate, _ := fs.GetString(FlagCommissionMaxRate)
+		//	maxChangeRate, _ := fs.GetString(FlagCommissionMaxChangeRate)
+		commish := cv.Commission
 
-	create, err := cv.NewCreateValidator( pubKey, description, commish, val, cv.Amount)
-	if err != nil {
-		return "", err
-	}
-*/
+		create, err := cv.NewCreateValidator( pubKey, description, commish, val, cv.Amount)
+		if err != nil {
+			return "", err
+		}
+	*/
 	u, err := url2.Parse(sender)
 	if err != nil {
 		return "", err
@@ -100,7 +96,6 @@ func CreateVal(sender string, args []string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
-
 
 	var ty struct {
 		Type types.TransactionType

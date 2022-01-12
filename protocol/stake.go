@@ -1,29 +1,26 @@
 package protocol
 
-
 func (c CreateValidator) NewCreateValidator(
-	 pubKey []byte, desc ValidatorDescription, commission Commission, val string, amount int64,
-	) (*CreateValidator, error) {
+	pubKey []byte, desc ValidatorDescription, commission Commission, val string, amount int64,
+) (*CreateValidator, error) {
 
-		return &CreateValidator{
-			PubKey: pubKey,
-			Description: desc,
-			Commission: commission,
-			ValidatorAddress: val,
-			Amount: amount,
-		}, nil
+	return &CreateValidator{
+		PubKey:           pubKey,
+		Description:      desc,
+		Commission:       commission,
+		ValidatorAddress: val,
+		Amount:           amount,
+	}, nil
 }
 
-
 func (c CreateValidator) SetValidator(val ValidatorType) {
-	
+
 	c.ValidatorAddress = val.OperatorAddress
 	c.PubKey = val.ConsensusPubKey
-	
+
 	//cvv.Commission = val.Commission
 
 }
-
 
 //func (c CreateValidator) SetValidatorByAddr(val ValidatorType) error {
 //	pK, err := val.GetConsensusAddress()
@@ -37,17 +34,16 @@ func (c CreateValidator) SetValidator(val ValidatorType) {
 
 //}
 
-func (c CreateValidator) SetValidatorByPower(val ValidatorType)  {
+func (c CreateValidator) SetValidatorByPower(val ValidatorType) {
 	if val.Jailed {
-		return 
+		return
 	}
 
 }
 
-
 func (c CreateValidator) SetNewValidatorByPower(val ValidatorType) {
-//	c.GetValidatorByPower(val)
-	
+	//	c.GetValidatorByPower(val)
+
 	//cvv.Commission = val.Commission
 
 }

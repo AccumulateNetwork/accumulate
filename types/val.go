@@ -1,11 +1,11 @@
 package types
+
 /*
 import (
-	"math/big"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	tmcrypto "github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/ed25519"
+
+
+
 )
 
 //types
@@ -52,7 +52,7 @@ type Delegate interface {
 
 type Validatorz interface {
     isJailed() bool 									// Validator can be jailed for acting up
-    GetMoniker() string									// Validator's name	
+    GetMoniker() string									// Validator's name
     GetStatus() BondStatus								// Validator's status [bonded/unbonded/unbonding]
     IsBonded() bool
     IsUnbonded() bool
@@ -76,7 +76,7 @@ func GetValidator(addr string) (validator protocol.ValidatorType, found bool) {
 
 
 func SetValidator(addr string, validator protocol.ValidatorType) {
-	
+
 }
 
 
