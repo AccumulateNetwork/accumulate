@@ -1,0 +1,78 @@
+##### Validators #####
+
+ValidatorType:
+  kind: val
+  fields:
+    - name: OperatorAddress
+      type: string
+    - name: ConsensusPubKey
+      type: bytes
+    - name: Jailed
+      type: bool
+    - name: Status
+      type: BondStatus
+      marshal-as: reference
+    - name: Tokens
+      type: uvarint
+    - name: DelegatorShares
+      type: string
+    - name: Description
+      type: ValidatorDescription
+      marshal-as: reference
+    - name: UnStakingHeight
+      type: uvarint
+    - name: UnStakingTime
+      type: time
+    - name: Commission
+      type: Commission
+      marshal-as: reference
+    
+    
+    
+Commission:
+  kind: val
+  fields:
+   - name: CommissionRates
+     type: CommissionRates
+     marshal-as: reference
+
+
+CommissionRates:
+  kind: val
+  fields:
+   - name: Rate
+     type: uvarint
+   - name: MaxRate
+     type: uvarint
+   - name: MaxChangeRate
+     type: uvarint
+
+BondStatus:
+  kind: val 
+  fields:
+   - name: BondStatus
+     type: varint
+
+ValidatorDescription:
+   kind: val
+   fields:
+    - name: Moniker
+      type: string
+    - name: Identity
+      type: string
+    - name: Website
+      type: string
+    - name: Details
+      type: string
+
+
+HistoricalInfo:
+  kind: val
+  fields:
+    - name: Header
+      type: string
+    - name: ValSet
+      type: slice
+      slice:
+        type: ValidatorType
+        marshal-as: reference

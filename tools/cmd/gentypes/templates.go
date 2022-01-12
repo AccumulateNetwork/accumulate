@@ -19,11 +19,13 @@ type Type struct {
 	Name            string
 	IsChain         bool
 	IsTransaction   bool
+	IsVal           bool
 	IsBinary        bool
 	IsComparable    bool
 	MakeConstructor bool
 	ChainType       string
 	TransactionType string
+	ValType		    string
 	Embeddings      []string
 	Fields          []*Field
 }
@@ -55,10 +57,12 @@ func convert(types typegen.DataTypes, pkgName, pkgPath string) *Types {
 		ttyp.Name = typ.Name
 		ttyp.IsChain = typ.Kind == "chain"
 		ttyp.IsTransaction = typ.Kind == "tx"
+		ttyp.IsVal = typ.Kind == "val"
 		ttyp.IsBinary = !typ.NonBinary
 		ttyp.IsComparable = !typ.Incomparable
 		ttyp.ChainType = typ.ChainType
 		ttyp.TransactionType = typ.TxType
+		ttyp.ValType = typ.ValType
 		ttyp.Embeddings = typ.Embeddings
 		ttyp.Fields = make([]*Field, len(typ.Fields))
 		ttyp.MakeConstructor = !typ.OmitNewFunc

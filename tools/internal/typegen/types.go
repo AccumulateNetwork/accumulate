@@ -38,6 +38,7 @@ type DataType struct {
 	Name         string `yaml:"-"`
 	Kind         string
 	TxType       string `yaml:"tx-type"`
+	ValType 	string `yaml:"val-type"`
 	ChainType    string `yaml:"chain-type"`
 	NonBinary    bool   `yaml:"non-binary"`
 	Incomparable bool   `yaml:"incomparable"`
@@ -54,6 +55,9 @@ func (typ *DataType) GoChainType() string {
 	return "types.ChainType" + typ.ChainType
 }
 
+func (typ *DataType) GoValType() string {
+	return "types.ValType" + typ.ValType
+}
 type Field struct {
 	Name          string
 	Type          string

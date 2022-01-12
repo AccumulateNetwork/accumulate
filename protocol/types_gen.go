@@ -45,6 +45,10 @@ type AnchoredRecord struct {
 	Anchor [32]byte `json:"anchor,omitempty" form:"anchor" query:"anchor" validate:"required"`
 }
 
+type BondStatus struct {
+	BondStatus int64 `json:"bondStatus,omitempty" form:"bondStatus" query:"bondStatus" validate:"required"`
+}
+
 type BurnTokens struct {
 	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
@@ -57,6 +61,16 @@ type ChainMetadata struct {
 type ChainParams struct {
 	Data     []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
 	IsUpdate bool   `json:"isUpdate,omitempty" form:"isUpdate" query:"isUpdate" validate:"required"`
+}
+
+type Commission struct {
+	CommissionRates CommissionRates `json:"commissionRates,omitempty" form:"commissionRates" query:"commissionRates" validate:"required"`
+}
+
+type CommissionRates struct {
+	Rate          uint64 `json:"rate,omitempty" form:"rate" query:"rate" validate:"required"`
+	MaxRate       uint64 `json:"maxRate,omitempty" form:"maxRate" query:"maxRate" validate:"required"`
+	MaxChangeRate uint64 `json:"maxChangeRate,omitempty" form:"maxChangeRate" query:"maxChangeRate" validate:"required"`
 }
 
 type CreateDataAccount struct {
@@ -113,6 +127,11 @@ type DirectoryQueryResult struct {
 	Entries         []string        `json:"entries,omitempty" form:"entries" query:"entries"`
 	ExpandedEntries []*state.Object `json:"expandedEntries,omitempty" form:"expandedEntries" query:"expandedEntries"`
 	Total           uint64          `json:"total" form:"total" query:"total" validate:"required"`
+}
+
+type HistoricalInfo struct {
+	Header string          `json:"header,omitempty" form:"header" query:"header" validate:"required"`
+	ValSet []ValidatorType `json:"valSet,omitempty" form:"valSet" query:"valSet" validate:"required"`
 }
 
 type InternalGenesis struct {
@@ -322,6 +341,26 @@ type UpdateKeyPage struct {
 	Owner     string           `json:"owner,omitempty" form:"owner" query:"owner"`
 }
 
+type ValidatorDescription struct {
+	Moniker  string `json:"moniker,omitempty" form:"moniker" query:"moniker" validate:"required"`
+	Identity string `json:"identity,omitempty" form:"identity" query:"identity" validate:"required"`
+	Website  string `json:"website,omitempty" form:"website" query:"website" validate:"required"`
+	Details  string `json:"details,omitempty" form:"details" query:"details" validate:"required"`
+}
+
+type ValidatorType struct {
+	OperatorAddress string               `json:"operatorAddress,omitempty" form:"operatorAddress" query:"operatorAddress" validate:"required"`
+	ConsensusPubKey []byte               `json:"consensusPubKey,omitempty" form:"consensusPubKey" query:"consensusPubKey" validate:"required"`
+	Jailed          bool                 `json:"jailed,omitempty" form:"jailed" query:"jailed" validate:"required"`
+	Status          BondStatus           `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Tokens          uint64               `json:"tokens,omitempty" form:"tokens" query:"tokens" validate:"required"`
+	DelegatorShares string               `json:"delegatorShares,omitempty" form:"delegatorShares" query:"delegatorShares" validate:"required"`
+	Description     ValidatorDescription `json:"description,omitempty" form:"description" query:"description" validate:"required"`
+	UnStakingHeight uint64               `json:"unStakingHeight,omitempty" form:"unStakingHeight" query:"unStakingHeight" validate:"required"`
+	UnStakingTime   time.Time            `json:"unStakingTime,omitempty" form:"unStakingTime" query:"unStakingTime" validate:"required"`
+	Commission      Commission           `json:"commission,omitempty" form:"commission" query:"commission" validate:"required"`
+}
+
 type WriteData struct {
 	Entry DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
@@ -517,6 +556,14 @@ func (v *AnchoredRecord) Equal(u *AnchoredRecord) bool {
 	return true
 }
 
+func (v *BondStatus) Equal(u *BondStatus) bool {
+	if !(v.BondStatus == u.BondStatus) {
+		return false
+	}
+
+	return true
+}
+
 func (v *BurnTokens) Equal(u *BurnTokens) bool {
 	if !(v.Amount.Cmp(&u.Amount) == 0) {
 		return false
@@ -543,6 +590,30 @@ func (v *ChainParams) Equal(u *ChainParams) bool {
 	}
 
 	if !(v.IsUpdate == u.IsUpdate) {
+		return false
+	}
+
+	return true
+}
+
+func (v *Commission) Equal(u *Commission) bool {
+	if !(v.CommissionRates.Equal(&u.CommissionRates)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *CommissionRates) Equal(u *CommissionRates) bool {
+	if !(v.Rate == u.Rate) {
+		return false
+	}
+
+	if !(v.MaxRate == u.MaxRate) {
+		return false
+	}
+
+	if !(v.MaxChangeRate == u.MaxChangeRate) {
 		return false
 	}
 
@@ -728,6 +799,26 @@ func (v *DirectoryQueryResult) Equal(u *DirectoryQueryResult) bool {
 
 	if !(v.Total == u.Total) {
 		return false
+	}
+
+	return true
+}
+
+func (v *HistoricalInfo) Equal(u *HistoricalInfo) bool {
+	if !(v.Header == u.Header) {
+		return false
+	}
+
+	if !(len(v.ValSet) == len(u.ValSet)) {
+		return false
+	}
+
+	for i := range v.ValSet {
+		v, u := v.ValSet[i], u.ValSet[i]
+		if !(v.Equal(&u)) {
+			return false
+		}
+
 	}
 
 	return true
@@ -1334,6 +1425,70 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 	return true
 }
 
+func (v *ValidatorDescription) Equal(u *ValidatorDescription) bool {
+	if !(v.Moniker == u.Moniker) {
+		return false
+	}
+
+	if !(v.Identity == u.Identity) {
+		return false
+	}
+
+	if !(v.Website == u.Website) {
+		return false
+	}
+
+	if !(v.Details == u.Details) {
+		return false
+	}
+
+	return true
+}
+
+func (v *ValidatorType) Equal(u *ValidatorType) bool {
+	if !(v.OperatorAddress == u.OperatorAddress) {
+		return false
+	}
+
+	if !(bytes.Equal(v.ConsensusPubKey, u.ConsensusPubKey)) {
+		return false
+	}
+
+	if !(v.Jailed == u.Jailed) {
+		return false
+	}
+
+	if !(v.Status.Equal(&u.Status)) {
+		return false
+	}
+
+	if !(v.Tokens == u.Tokens) {
+		return false
+	}
+
+	if !(v.DelegatorShares == u.DelegatorShares) {
+		return false
+	}
+
+	if !(v.Description.Equal(&u.Description)) {
+		return false
+	}
+
+	if !(v.UnStakingHeight == u.UnStakingHeight) {
+		return false
+	}
+
+	if !(v.UnStakingTime == u.UnStakingTime) {
+		return false
+	}
+
+	if !(v.Commission.Equal(&u.Commission)) {
+		return false
+	}
+
+	return true
+}
+
 func (v *WriteData) Equal(u *WriteData) bool {
 	if !(v.Entry.Equal(&u.Entry)) {
 		return false
@@ -1422,6 +1577,14 @@ func (v *AnchoredRecord) BinarySize() int {
 	return n
 }
 
+func (v *BondStatus) BinarySize() int {
+	var n int
+
+	n += encoding.VarintBinarySize(v.BondStatus)
+
+	return n
+}
+
 func (v *BurnTokens) BinarySize() int {
 	var n int
 
@@ -1448,6 +1611,26 @@ func (v *ChainParams) BinarySize() int {
 	n += encoding.BytesBinarySize(v.Data)
 
 	n += encoding.BoolBinarySize(v.IsUpdate)
+
+	return n
+}
+
+func (v *Commission) BinarySize() int {
+	var n int
+
+	n += v.CommissionRates.BinarySize()
+
+	return n
+}
+
+func (v *CommissionRates) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(v.Rate)
+
+	n += encoding.UvarintBinarySize(v.MaxRate)
+
+	n += encoding.UvarintBinarySize(v.MaxChangeRate)
 
 	return n
 }
@@ -1600,6 +1783,21 @@ func (v *DirectoryQueryResult) BinarySize() int {
 	}
 
 	n += encoding.UvarintBinarySize(v.Total)
+
+	return n
+}
+
+func (v *HistoricalInfo) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.Header)
+
+	n += encoding.UvarintBinarySize(uint64(len(v.ValSet)))
+
+	for _, v := range v.ValSet {
+		n += v.BinarySize()
+
+	}
 
 	return n
 }
@@ -2116,6 +2314,46 @@ func (v *UpdateKeyPage) BinarySize() int {
 	return n
 }
 
+func (v *ValidatorDescription) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.Moniker)
+
+	n += encoding.StringBinarySize(v.Identity)
+
+	n += encoding.StringBinarySize(v.Website)
+
+	n += encoding.StringBinarySize(v.Details)
+
+	return n
+}
+
+func (v *ValidatorType) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.OperatorAddress)
+
+	n += encoding.BytesBinarySize(v.ConsensusPubKey)
+
+	n += encoding.BoolBinarySize(v.Jailed)
+
+	n += v.Status.BinarySize()
+
+	n += encoding.UvarintBinarySize(v.Tokens)
+
+	n += encoding.StringBinarySize(v.DelegatorShares)
+
+	n += v.Description.BinarySize()
+
+	n += encoding.UvarintBinarySize(v.UnStakingHeight)
+
+	n += encoding.TimeBinarySize(v.UnStakingTime)
+
+	n += v.Commission.BinarySize()
+
+	return n
+}
+
 func (v *WriteData) BinarySize() int {
 	var n int
 
@@ -2222,6 +2460,14 @@ func (v *AnchoredRecord) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (v *BondStatus) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.VarintMarshalBinary(v.BondStatus))
+
+	return buffer.Bytes(), nil
+}
+
 func (v *BurnTokens) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -2252,6 +2498,30 @@ func (v *ChainParams) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.Data))
 
 	buffer.Write(encoding.BoolMarshalBinary(v.IsUpdate))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *Commission) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	if b, err := v.CommissionRates.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding CommissionRates: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *CommissionRates) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Rate))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.MaxRate))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.MaxChangeRate))
 
 	return buffer.Bytes(), nil
 }
@@ -2416,6 +2686,25 @@ func (v *DirectoryQueryResult) MarshalBinary() ([]byte, error) {
 	}
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Total))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *HistoricalInfo) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.Header))
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.ValSet))))
+	for i, v := range v.ValSet {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding ValSet[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
+
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -3025,6 +3314,58 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (v *ValidatorDescription) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.Moniker))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Identity))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Website))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Details))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *ValidatorType) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.OperatorAddress))
+
+	buffer.Write(encoding.BytesMarshalBinary(v.ConsensusPubKey))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.Jailed))
+
+	if b, err := v.Status.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Status: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Tokens))
+
+	buffer.Write(encoding.StringMarshalBinary(v.DelegatorShares))
+
+	if b, err := v.Description.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Description: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.UnStakingHeight))
+
+	buffer.Write(encoding.TimeMarshalBinary(v.UnStakingTime))
+
+	if b, err := v.Commission.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Commission: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	return buffer.Bytes(), nil
+}
+
 func (v *WriteData) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -3171,6 +3512,17 @@ func (v *AnchoredRecord) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *BondStatus) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding BondStatus: %w", err)
+	} else {
+		v.BondStatus = x
+	}
+	data = data[encoding.VarintBinarySize(v.BondStatus):]
+
+	return nil
+}
+
 func (v *BurnTokens) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeBurnTokens
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
@@ -3220,6 +3572,40 @@ func (v *ChainParams) UnmarshalBinary(data []byte) error {
 		v.IsUpdate = x
 	}
 	data = data[encoding.BoolBinarySize(v.IsUpdate):]
+
+	return nil
+}
+
+func (v *Commission) UnmarshalBinary(data []byte) error {
+	if err := v.CommissionRates.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding CommissionRates: %w", err)
+	}
+	data = data[v.CommissionRates.BinarySize():]
+
+	return nil
+}
+
+func (v *CommissionRates) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Rate: %w", err)
+	} else {
+		v.Rate = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Rate):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding MaxRate: %w", err)
+	} else {
+		v.MaxRate = x
+	}
+	data = data[encoding.UvarintBinarySize(v.MaxRate):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding MaxChangeRate: %w", err)
+	} else {
+		v.MaxChangeRate = x
+	}
+	data = data[encoding.UvarintBinarySize(v.MaxChangeRate):]
 
 	return nil
 }
@@ -3553,6 +3939,34 @@ func (v *DirectoryQueryResult) UnmarshalBinary(data []byte) error {
 		v.Total = x
 	}
 	data = data[encoding.UvarintBinarySize(v.Total):]
+
+	return nil
+}
+
+func (v *HistoricalInfo) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Header: %w", err)
+	} else {
+		v.Header = x
+	}
+	data = data[encoding.StringBinarySize(v.Header):]
+
+	var lenValSet uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ValSet: %w", err)
+	} else {
+		lenValSet = x
+	}
+	data = data[encoding.UvarintBinarySize(lenValSet):]
+
+	v.ValSet = make([]ValidatorType, lenValSet)
+	for i := range v.ValSet {
+		if err := v.ValSet[i].UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding ValSet[%d]: %w", i, err)
+		}
+		data = data[v.ValSet[i].BinarySize():]
+
+	}
 
 	return nil
 }
@@ -4582,6 +4996,106 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *ValidatorDescription) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Moniker: %w", err)
+	} else {
+		v.Moniker = x
+	}
+	data = data[encoding.StringBinarySize(v.Moniker):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Identity: %w", err)
+	} else {
+		v.Identity = x
+	}
+	data = data[encoding.StringBinarySize(v.Identity):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Website: %w", err)
+	} else {
+		v.Website = x
+	}
+	data = data[encoding.StringBinarySize(v.Website):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Details: %w", err)
+	} else {
+		v.Details = x
+	}
+	data = data[encoding.StringBinarySize(v.Details):]
+
+	return nil
+}
+
+func (v *ValidatorType) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding OperatorAddress: %w", err)
+	} else {
+		v.OperatorAddress = x
+	}
+	data = data[encoding.StringBinarySize(v.OperatorAddress):]
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ConsensusPubKey: %w", err)
+	} else {
+		v.ConsensusPubKey = x
+	}
+	data = data[encoding.BytesBinarySize(v.ConsensusPubKey):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Jailed: %w", err)
+	} else {
+		v.Jailed = x
+	}
+	data = data[encoding.BoolBinarySize(v.Jailed):]
+
+	if err := v.Status.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Status: %w", err)
+	}
+	data = data[v.Status.BinarySize():]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Tokens: %w", err)
+	} else {
+		v.Tokens = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Tokens):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding DelegatorShares: %w", err)
+	} else {
+		v.DelegatorShares = x
+	}
+	data = data[encoding.StringBinarySize(v.DelegatorShares):]
+
+	if err := v.Description.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Description: %w", err)
+	}
+	data = data[v.Description.BinarySize():]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding UnStakingHeight: %w", err)
+	} else {
+		v.UnStakingHeight = x
+	}
+	data = data[encoding.UvarintBinarySize(v.UnStakingHeight):]
+
+	if x, err := encoding.TimeUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding UnStakingTime: %w", err)
+	} else {
+		v.UnStakingTime = x
+	}
+	data = data[encoding.TimeBinarySize(v.UnStakingTime):]
+
+	if err := v.Commission.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Commission: %w", err)
+	}
+	data = data[v.Commission.BinarySize():]
+
+	return nil
+}
+
 func (v *WriteData) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeWriteData
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
@@ -4887,6 +5401,32 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	u.Owner = v.Owner
+	return json.Marshal(&u)
+}
+
+func (v *ValidatorType) MarshalJSON() ([]byte, error) {
+	u := struct {
+		OperatorAddress string               `json:"operatorAddress,omitempty"`
+		ConsensusPubKey *string              `json:"consensusPubKey,omitempty"`
+		Jailed          bool                 `json:"jailed,omitempty"`
+		Status          BondStatus           `json:"status,omitempty"`
+		Tokens          uint64               `json:"tokens,omitempty"`
+		DelegatorShares string               `json:"delegatorShares,omitempty"`
+		Description     ValidatorDescription `json:"description,omitempty"`
+		UnStakingHeight uint64               `json:"unStakingHeight,omitempty"`
+		UnStakingTime   time.Time            `json:"unStakingTime,omitempty"`
+		Commission      Commission           `json:"commission,omitempty"`
+	}{}
+	u.OperatorAddress = v.OperatorAddress
+	u.ConsensusPubKey = encoding.BytesToJSON(v.ConsensusPubKey)
+	u.Jailed = v.Jailed
+	u.Status = v.Status
+	u.Tokens = v.Tokens
+	u.DelegatorShares = v.DelegatorShares
+	u.Description = v.Description
+	u.UnStakingHeight = v.UnStakingHeight
+	u.UnStakingTime = v.UnStakingTime
+	u.Commission = v.Commission
 	return json.Marshal(&u)
 }
 
@@ -5413,5 +5953,48 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		v.NewKey = x
 	}
 	v.Owner = u.Owner
+	return nil
+}
+
+func (v *ValidatorType) UnmarshalJSON(data []byte) error {
+	u := struct {
+		OperatorAddress string               `json:"operatorAddress,omitempty"`
+		ConsensusPubKey *string              `json:"consensusPubKey,omitempty"`
+		Jailed          bool                 `json:"jailed,omitempty"`
+		Status          BondStatus           `json:"status,omitempty"`
+		Tokens          uint64               `json:"tokens,omitempty"`
+		DelegatorShares string               `json:"delegatorShares,omitempty"`
+		Description     ValidatorDescription `json:"description,omitempty"`
+		UnStakingHeight uint64               `json:"unStakingHeight,omitempty"`
+		UnStakingTime   time.Time            `json:"unStakingTime,omitempty"`
+		Commission      Commission           `json:"commission,omitempty"`
+	}{}
+	u.OperatorAddress = v.OperatorAddress
+	u.ConsensusPubKey = encoding.BytesToJSON(v.ConsensusPubKey)
+	u.Jailed = v.Jailed
+	u.Status = v.Status
+	u.Tokens = v.Tokens
+	u.DelegatorShares = v.DelegatorShares
+	u.Description = v.Description
+	u.UnStakingHeight = v.UnStakingHeight
+	u.UnStakingTime = v.UnStakingTime
+	u.Commission = v.Commission
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.OperatorAddress = u.OperatorAddress
+	if x, err := encoding.BytesFromJSON(u.ConsensusPubKey); err != nil {
+		return fmt.Errorf("error decoding ConsensusPubKey: %w", err)
+	} else {
+		v.ConsensusPubKey = x
+	}
+	v.Jailed = u.Jailed
+	v.Status = u.Status
+	v.Tokens = u.Tokens
+	v.DelegatorShares = u.DelegatorShares
+	v.Description = u.Description
+	v.UnStakingHeight = u.UnStakingHeight
+	v.UnStakingTime = u.UnStakingTime
+	v.Commission = u.Commission
 	return nil
 }
