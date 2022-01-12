@@ -43,6 +43,8 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) error {
 	token.ChainUrl = types.String(tokenUrl.String())
 	token.KeyBook = types.String(body.KeyBookUrl)
 	token.Precision = body.Precision
+	token.Supply = body.InitialSupply
+	token.HasSupplyLimit = body.HasSupplyLimit
 	token.Symbol = body.Symbol
 	if body.Properties != "" {
 		token.Properties = body.Properties

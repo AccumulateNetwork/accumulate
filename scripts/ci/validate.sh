@@ -160,3 +160,10 @@ section "Create a token issuer"
 wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "createToken", "url": "keytest/token-issuer", "symbol": "TOK", "precision": 10}'
 accumulate get keytest/token-issuer &> /dev/null || die "Cannot find keytest/token-issuer"
 success
+
+section "Issue tokens"
+LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
+wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueTokens", "recipient": "'${LITE_TOK}'", "amount": 123}'
+BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
+[ "$BALANCE" -eq 123 ] && success || die "${LITE_TOK} should have 123 keytest tokens but has ${BALANCE}"
+success
