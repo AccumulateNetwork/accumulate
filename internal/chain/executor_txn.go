@@ -222,7 +222,7 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 	default:
 		// The TX origin cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, fmt.Errorf("invalid origin record: chain type %v cannot be the origininator of transactions", origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.Header().Type)
 	}
 
 	if env.Transaction.KeyPageIndex >= uint64(len(book.Pages)) {
@@ -406,7 +406,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	// Update the nonce and charge the failure transaction fee. Reload the
 	// signator to ensure we don't push any invalid changes. Use the database
 	// directly, since the state manager won't be committed.
-	sigRecord := m.blockBatch.Record(st.SignatorUrl)
+	sigRecord := m.blockBatch.Account(st.SignatorUrl)
 	err = sigRecord.GetStateAs(st.Signator)
 	if err != nil {
 		return err

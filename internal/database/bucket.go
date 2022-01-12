@@ -33,25 +33,25 @@ func (b *objectBucket) Data(key ...interface{}) storage.Key {
 	return b.Object().Append("Data").Append(key...)
 }
 
-// recordBucket is a database bucket for a record.
-type recordBucket struct{ objectBucket }
+// accountBucket is a database bucket for a account.
+type accountBucket struct{ objectBucket }
 
-// record returns a recordBucket for the record with the given URL.
-func record(u *url.URL) recordBucket {
-	return recordBucket{object("Record", u)}
+// account returns a accountBucket for the account with the given URL.
+func account(u *url.URL) accountBucket {
+	return accountBucket{object("Account", u)}
 }
 
-// record returns a recordBucket for the record with the given chain ID.
-func recordFromChain(id []byte) recordBucket {
-	return recordBucket{object("Record", id)}
+// accountByID returns a accountBucket for the account with the given ID.
+func accountByID(id []byte) accountBucket {
+	return accountBucket{object("Account", id)}
 }
 
 // Chain returns the storage key for the given chain of the record.
-func (b *recordBucket) Chain(name string) storage.Key {
+func (b *accountBucket) Chain(name string) storage.Key {
 	return b.Object().Append("Chain", name)
 }
 
-// recordBucket is a database bucket for a transaction.
+// transactionBucket is a database bucket for a transaction.
 type transactionBucket struct{ objectBucket }
 
 // transaction returns a transactionBucket for the transaction with the given ID.

@@ -337,61 +337,61 @@ type WriteDataTo struct {
 
 func NewADI() *ADI {
 	v := new(ADI)
-	v.Type = types.ChainTypeIdentity
+	v.Type = types.AccountTypeIdentity
 	return v
 }
 
 func NewAnchor() *Anchor {
 	v := new(Anchor)
-	v.Type = types.ChainTypeAnchor
+	v.Type = types.AccountTypeAnchor
 	return v
 }
 
 func NewDataAccount() *DataAccount {
 	v := new(DataAccount)
-	v.Type = types.ChainTypeDataAccount
+	v.Type = types.AccountTypeDataAccount
 	return v
 }
 
 func NewInternalLedger() *InternalLedger {
 	v := new(InternalLedger)
-	v.Type = types.ChainTypeInternalLedger
+	v.Type = types.AccountTypeInternalLedger
 	return v
 }
 
 func NewKeyBook() *KeyBook {
 	v := new(KeyBook)
-	v.Type = types.ChainTypeKeyBook
+	v.Type = types.AccountTypeKeyBook
 	return v
 }
 
 func NewKeyPage() *KeyPage {
 	v := new(KeyPage)
-	v.Type = types.ChainTypeKeyPage
+	v.Type = types.AccountTypeKeyPage
 	return v
 }
 
 func NewLiteDataAccount() *LiteDataAccount {
 	v := new(LiteDataAccount)
-	v.Type = types.ChainTypeLiteDataAccount
+	v.Type = types.AccountTypeLiteDataAccount
 	return v
 }
 
 func NewLiteTokenAccount() *LiteTokenAccount {
 	v := new(LiteTokenAccount)
-	v.Type = types.ChainTypeLiteTokenAccount
+	v.Type = types.AccountTypeLiteTokenAccount
 	return v
 }
 
 func NewTokenAccount() *TokenAccount {
 	v := new(TokenAccount)
-	v.Type = types.ChainTypeTokenAccount
+	v.Type = types.AccountTypeTokenAccount
 	return v
 }
 
 func NewTokenIssuer() *TokenIssuer {
 	v := new(TokenIssuer)
-	v.Type = types.ChainTypeTokenIssuer
+	v.Type = types.AccountTypeTokenIssuer
 	return v
 }
 
@@ -1378,7 +1378,7 @@ func (v *ADI) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeIdentity
+	v.Type = types.AccountTypeIdentity
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -1411,7 +1411,7 @@ func (v *Anchor) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeAnchor
+	v.Type = types.AccountTypeAnchor
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -1576,7 +1576,7 @@ func (v *DataAccount) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeDataAccount
+	v.Type = types.AccountTypeDataAccount
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -1640,7 +1640,7 @@ func (v *InternalLedger) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeInternalLedger
+	v.Type = types.AccountTypeInternalLedger
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -1716,7 +1716,7 @@ func (v *KeyBook) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeKeyBook
+	v.Type = types.AccountTypeKeyBook
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -1734,7 +1734,7 @@ func (v *KeyPage) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeKeyPage
+	v.Type = types.AccountTypeKeyPage
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -1774,7 +1774,7 @@ func (v *LiteDataAccount) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeLiteDataAccount
+	v.Type = types.AccountTypeLiteDataAccount
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -1787,7 +1787,7 @@ func (v *LiteTokenAccount) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeLiteTokenAccount
+	v.Type = types.AccountTypeLiteTokenAccount
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -2064,7 +2064,7 @@ func (v *TokenAccount) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeTokenAccount
+	v.Type = types.AccountTypeTokenAccount
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -2079,7 +2079,7 @@ func (v *TokenIssuer) BinarySize() int {
 	var n int
 
 	// Enforce sanity
-	v.Type = types.ChainTypeTokenIssuer
+	v.Type = types.AccountTypeTokenIssuer
 
 	n += v.ChainHeader.GetHeaderSize()
 
@@ -2170,7 +2170,7 @@ func (v *ADI) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeIdentity
+	v.Type = types.AccountTypeIdentity
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2207,7 +2207,7 @@ func (v *Anchor) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeAnchor
+	v.Type = types.AccountTypeAnchor
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2392,7 +2392,7 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeDataAccount
+	v.Type = types.AccountTypeDataAccount
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2464,7 +2464,7 @@ func (v *InternalLedger) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeInternalLedger
+	v.Type = types.AccountTypeInternalLedger
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2559,7 +2559,7 @@ func (v *KeyBook) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeKeyBook
+	v.Type = types.AccountTypeKeyBook
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2580,7 +2580,7 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeKeyPage
+	v.Type = types.AccountTypeKeyPage
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2627,7 +2627,7 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeLiteDataAccount
+	v.Type = types.AccountTypeLiteDataAccount
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2643,7 +2643,7 @@ func (v *LiteTokenAccount) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeLiteTokenAccount
+	v.Type = types.AccountTypeLiteTokenAccount
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2967,7 +2967,7 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeTokenAccount
+	v.Type = types.AccountTypeTokenAccount
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -2985,7 +2985,7 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
 	// Enforce sanity
-	v.Type = types.ChainTypeTokenIssuer
+	v.Type = types.AccountTypeTokenIssuer
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -3092,11 +3092,11 @@ func (v *WriteDataTo) MarshalBinary() ([]byte, error) {
 }
 
 func (v *ADI) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeIdentity
+	typ := types.AccountTypeIdentity
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -3149,11 +3149,11 @@ func (v *AddCredits) UnmarshalBinary(data []byte) error {
 }
 
 func (v *Anchor) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeAnchor
+	typ := types.AccountTypeAnchor
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -3505,11 +3505,11 @@ func (v *CreateTokenAccount) UnmarshalBinary(data []byte) error {
 }
 
 func (v *DataAccount) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeDataAccount
+	typ := types.AccountTypeDataAccount
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -3620,11 +3620,11 @@ func (v *InternalGenesis) UnmarshalBinary(data []byte) error {
 }
 
 func (v *InternalLedger) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeInternalLedger
+	typ := types.AccountTypeInternalLedger
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -3771,11 +3771,11 @@ func (v *IssueTokens) UnmarshalBinary(data []byte) error {
 }
 
 func (v *KeyBook) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeKeyBook
+	typ := types.AccountTypeKeyBook
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -3802,11 +3802,11 @@ func (v *KeyBook) UnmarshalBinary(data []byte) error {
 }
 
 func (v *KeyPage) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeKeyPage
+	typ := types.AccountTypeKeyPage
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -3877,11 +3877,11 @@ func (v *KeySpecParams) UnmarshalBinary(data []byte) error {
 }
 
 func (v *LiteDataAccount) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeLiteDataAccount
+	typ := types.AccountTypeLiteDataAccount
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -3896,11 +3896,11 @@ func (v *LiteDataAccount) UnmarshalBinary(data []byte) error {
 }
 
 func (v *LiteTokenAccount) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeLiteTokenAccount
+	typ := types.AccountTypeLiteTokenAccount
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -4476,11 +4476,11 @@ func (v *SyntheticWriteData) UnmarshalBinary(data []byte) error {
 }
 
 func (v *TokenAccount) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeTokenAccount
+	typ := types.AccountTypeTokenAccount
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 
@@ -4502,11 +4502,11 @@ func (v *TokenAccount) UnmarshalBinary(data []byte) error {
 }
 
 func (v *TokenIssuer) UnmarshalBinary(data []byte) error {
-	typ := types.ChainTypeTokenIssuer
+	typ := types.AccountTypeTokenIssuer
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 

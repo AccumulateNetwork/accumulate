@@ -11,7 +11,7 @@ import (
 // Data manages a data chain.
 type Data struct {
 	batch  *Batch
-	record recordBucket
+	record accountBucket
 	chain  *Chain
 }
 

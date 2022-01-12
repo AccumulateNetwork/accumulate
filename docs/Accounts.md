@@ -1,4 +1,4 @@
-# Accumulate Data Records
+# Accumulate Accounts
 
 - **Lite Token Account**
   - A token account, independent of any other record

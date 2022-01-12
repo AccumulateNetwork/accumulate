@@ -28,7 +28,7 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.Envel
 		account = origin
 
 	default:
-		return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.ChainTypeLiteTokenAccount, types.ChainTypeKeyPage, st.Origin.Header().Type)
+		return fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeKeyPage, st.Origin.Header().Type)
 	}
 
 	account.CreditCredits(body.Amount)
