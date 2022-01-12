@@ -1,8 +1,18 @@
-
 package protocol
 
 
+func (c CreateValidator) NewCreateValidator(
+	 pubKey []byte, desc ValidatorDescription, commission Commission, val string, amount int64,
+	) (*CreateValidator, error) {
 
+		return &CreateValidator{
+			PubKey: pubKey,
+			Description: desc,
+			Commission: commission,
+			ValidatorAddress: val,
+			Amount: amount,
+		}, nil
+}
 
 
 func (c CreateValidator) SetValidator(val ValidatorType) {
