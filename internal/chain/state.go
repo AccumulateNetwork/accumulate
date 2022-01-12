@@ -70,7 +70,7 @@ func (m *StateManager) Commit() ([]*submission, error) {
 	// Group synthetic create chain transactions per identity. All of the
 	// records created by a given synthetic create chain MUST belong to the same
 	// routing location, so grouping by ID is safe. Since routing locations will
-	// change as the network grows, we cannot guarentee that two different
+	// change as the network grows, we cannot guarantee that two different
 	// identities will route the same, so grouping by route is not safe.
 
 	create := map[string]*protocol.SyntheticCreateChain{}

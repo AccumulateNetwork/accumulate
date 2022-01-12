@@ -53,6 +53,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
 	//now replace the original data entry payload with the new segwit payload
 	tx.Transaction.Body = segWitPayload
 
+	//store the entry
 	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)
 
 	return nil

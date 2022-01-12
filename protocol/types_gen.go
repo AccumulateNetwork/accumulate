@@ -169,7 +169,7 @@ type KeySpecParams struct {
 
 type LiteDataAccount struct {
 	state.ChainHeader
-	Data []byte `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Tail []byte `json:"tail,omitempty" form:"tail" query:"tail" validate:"required"`
 }
 
 type LiteTokenAccount struct {
@@ -285,8 +285,8 @@ type SyntheticMirror struct {
 }
 
 type SyntheticWriteData struct {
-	Cause [32]byte `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
-	Data  []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	Cause [32]byte  `json:"cause,omitempty" form:"cause" query:"cause" validate:"required"`
+	Entry DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
 type TokenAccount struct {
@@ -903,7 +903,7 @@ func (v *LiteDataAccount) Equal(u *LiteDataAccount) bool {
 		return false
 	}
 
-	if !(bytes.Equal(v.Data, u.Data)) {
+	if !(bytes.Equal(v.Tail, u.Tail)) {
 		return false
 	}
 
@@ -1249,7 +1249,7 @@ func (v *SyntheticWriteData) Equal(u *SyntheticWriteData) bool {
 		return false
 	}
 
-	if !(bytes.Equal(v.Data, u.Data)) {
+	if !(v.Entry.Equal(&u.Entry)) {
 		return false
 	}
 
@@ -1790,7 +1790,7 @@ func (v *LiteDataAccount) BinarySize() int {
 
 	n += v.ChainHeader.GetHeaderSize()
 
-	n += encoding.BytesBinarySize(v.Data)
+	n += encoding.BytesBinarySize(v.Tail)
 
 	return n
 }
@@ -2067,7 +2067,7 @@ func (v *SyntheticWriteData) BinarySize() int {
 
 	n += encoding.ChainBinarySize(&v.Cause)
 
-	n += encoding.BytesBinarySize(v.Data)
+	n += v.Entry.BinarySize()
 
 	return n
 }
@@ -2650,7 +2650,7 @@ func (v *LiteDataAccount) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
-	buffer.Write(encoding.BytesMarshalBinary(v.Data))
+	buffer.Write(encoding.BytesMarshalBinary(v.Tail))
 
 	return buffer.Bytes(), nil
 }
@@ -2974,7 +2974,11 @@ func (v *SyntheticWriteData) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.ChainMarshalBinary(&v.Cause))
 
-	buffer.Write(encoding.BytesMarshalBinary(v.Data))
+	if b, err := v.Entry.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Entry: %w", err)
+	} else {
+		buffer.Write(b)
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -3911,11 +3915,11 @@ func (v *LiteDataAccount) UnmarshalBinary(data []byte) error {
 	data = data[v.GetHeaderSize():]
 
 	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
+		return fmt.Errorf("error decoding Tail: %w", err)
 	} else {
-		v.Data = x
+		v.Tail = x
 	}
-	data = data[encoding.BytesBinarySize(v.Data):]
+	data = data[encoding.BytesBinarySize(v.Tail):]
 
 	return nil
 }
@@ -4490,12 +4494,10 @@ func (v *SyntheticWriteData) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.ChainBinarySize(&v.Cause):]
 
-	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
+	if err := v.Entry.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
 	}
-	data = data[encoding.BytesBinarySize(v.Data):]
+	data = data[v.Entry.BinarySize():]
 
 	return nil
 }
@@ -4797,10 +4799,10 @@ func (v *KeySpecParams) MarshalJSON() ([]byte, error) {
 func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
 	u := struct {
 		state.ChainHeader
-		Data *string `json:"data,omitempty"`
+		Tail *string `json:"tail,omitempty"`
 	}{}
 	u.ChainHeader = v.ChainHeader
-	u.Data = encoding.BytesToJSON(v.Data)
+	u.Tail = encoding.BytesToJSON(v.Tail)
 	return json.Marshal(&u)
 }
 
@@ -4954,11 +4956,11 @@ func (v *SyntheticLedger) MarshalJSON() ([]byte, error) {
 
 func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Cause string  `json:"cause,omitempty"`
-		Data  *string `json:"data,omitempty"`
+		Cause string    `json:"cause,omitempty"`
+		Entry DataEntry `json:"entry,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Data = encoding.BytesToJSON(v.Data)
+	u.Entry = v.Entry
 	return json.Marshal(&u)
 }
 
@@ -5141,18 +5143,18 @@ func (v *KeySpecParams) UnmarshalJSON(data []byte) error {
 func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 	u := struct {
 		state.ChainHeader
-		Data *string `json:"data,omitempty"`
+		Tail *string `json:"tail,omitempty"`
 	}{}
 	u.ChainHeader = v.ChainHeader
-	u.Data = encoding.BytesToJSON(v.Data)
+	u.Tail = encoding.BytesToJSON(v.Tail)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.ChainHeader = u.ChainHeader
-	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
+	if x, err := encoding.BytesFromJSON(u.Tail); err != nil {
+		return fmt.Errorf("error decoding Tail: %w", err)
 	} else {
-		v.Data = x
+		v.Tail = x
 	}
 	return nil
 }
@@ -5445,11 +5447,11 @@ func (v *SyntheticLedger) UnmarshalJSON(data []byte) error {
 
 func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Cause string  `json:"cause,omitempty"`
-		Data  *string `json:"data,omitempty"`
+		Cause string    `json:"cause,omitempty"`
+		Entry DataEntry `json:"entry,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Data = encoding.BytesToJSON(v.Data)
+	u.Entry = v.Entry
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5458,11 +5460,7 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Cause = x
 	}
-	if x, err := encoding.BytesFromJSON(u.Data); err != nil {
-		return fmt.Errorf("error decoding Data: %w", err)
-	} else {
-		v.Data = x
-	}
+	v.Entry = u.Entry
 	return nil
 }
 
