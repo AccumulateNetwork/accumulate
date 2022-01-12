@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	randpkg "golang.org/x/exp/rand"
 )
 
@@ -754,4 +755,33 @@ func TestIssueTokens(t *testing.T) {
 	account := n.GetLiteTokenAccount(liteAddr.String())
 	require.Equal(t, "acc://foo/tokens", account.TokenUrl)
 	require.Equal(t, int64(123), account.Balance.Int64())
+}
+
+func TestInvalidDeposit(t *testing.T) {
+	// The lite address ends with `foo/tokens` but the token is `foo2/tokens` so
+	// the synthetic transaction will fail. This test verifies that the
+	// transaction fails, but more importantly it verifies that
+	// `Executor.Commit()` does *not* break if DeliverTx fails with a
+	// non-existent origin. This is motivated by a bug that has been fixed. This
+	// bug could have been triggered by a failing SyntheticCreateChains,
+	// SyntheticDepositTokens, or SyntheticDepositCredits.
+
+	n := createAppWithMemDB(t, crypto.Address{}, true)
+
+	liteKey := generateKey()
+	liteAddr, err := protocol.LiteAddress(liteKey[32:], "foo/tokens")
+	require.NoError(t, err)
+
+	id := n.Batch(func(send func(*transactions.Envelope)) {
+		body := new(protocol.SyntheticDepositTokens)
+		body.Token = "foo2/tokens"
+		body.Amount.SetUint64(123)
+
+		tx, err := transactions.New(liteAddr.String(), 1, edSigner(ed25519.PrivKey(n.key), 1), body)
+		require.NoError(t, err)
+		send(tx)
+	})[0]
+
+	tx := n.GetTx(id[:])
+	require.NotZero(t, tx.Status.Code)
 }
