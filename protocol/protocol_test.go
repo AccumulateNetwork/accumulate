@@ -81,3 +81,24 @@ func TestLiteAddress(t *testing.T) {
 		})
 	}
 }
+
+func TestParseLiteAddress(t *testing.T) {
+	fakeKey := make([]byte, 32)
+	fakeHash := sha256.Sum256(fakeKey)
+	addr, err := LiteAddress(fakeKey, "-/-")
+	require.NoError(t, err)
+	addr = addr.Identity()
+
+	tests := []string{
+		"ACME",
+		"foo/tokens",
+	}
+	for _, test := range tests {
+		t.Run(test, func(t *testing.T) {
+			key, tok, err := ParseLiteAddress(addr.JoinPath("/" + test))
+			require.NoError(t, err)
+			require.Equal(t, fakeHash[:20], key)
+			require.Equal(t, "acc://"+test, tok.String())
+		})
+	}
+}

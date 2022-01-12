@@ -27,7 +27,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 
 	issuer, ok := st.Origin.(*protocol.TokenIssuer)
 	if !ok {
-		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.ChainTypeTokenIssuer, st.Origin.Header().Type)
+		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.AccountTypeTokenIssuer, st.Origin.Header().Type)
 	}
 
 	if issuer.Supply.Cmp(&body.Amount) < 0 && issuer.HasSupplyLimit {

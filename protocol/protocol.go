@@ -101,9 +101,9 @@ func LiteAddress(pubKey []byte, tokenUrlStr string) (*url.URL, error) {
 		if err := IsValidAdiUrl(tokenUrl.Identity()); err != nil {
 			return nil, errors.New("invalid adi in token URL")
 		}
-	}
-	if tokenUrl.Path == "" && !bytes.EqualFold([]byte(tokenUrl.Authority), []byte("acme")) {
-		return nil, errors.New("must have a path in token URL")
+		if tokenUrl.Path == "" {
+			return nil, errors.New("must have a path in token URL")
+		}
 	}
 	if tokenUrl.UserInfo != "" {
 		return nil, errors.New("token URLs cannot include user info")
@@ -156,6 +156,7 @@ func ParseLiteAddress(u *url.URL) ([]byte, *url.URL, error) {
 		v.Authority = u.Path[1:]
 		v.Path = ""
 	} else {
+		i++
 		v.Authority = u.Path[1:i]
 		v.Path = u.Path[i:]
 	}

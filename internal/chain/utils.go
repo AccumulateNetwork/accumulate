@@ -13,6 +13,12 @@ import (
 )
 
 func addChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
+	// Check if the account exists
+	_, err := batch.Account(u).GetState()
+	if err != nil {
+		return err
+	}
+
 	chain, err := batch.Account(u).Chain(name, typ)
 	if err != nil {
 		return err
@@ -39,6 +45,11 @@ func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name 
 		return nil
 	default:
 		return err
+	}
+
+	s := u.String()
+	if u.Path == "/foo/tokens" {
+		println(s)
 	}
 
 	var meta protocol.AnchorMetadata
