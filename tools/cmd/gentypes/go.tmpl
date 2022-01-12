@@ -37,7 +37,7 @@ type {{.Name}} struct {
 {{- if and .IsChain .MakeConstructor}}
 func New{{.Name}}() *{{.Name}} {
 	v := new({{.Name}})
-	v.Type = types.ChainType{{.ChainType}}
+	v.Type = types.AccountType{{.ChainType}}
 	return v
 }
 {{- end}}
@@ -75,7 +75,7 @@ func (v *{{.Name}}) BinarySize() int {
 
 	{{if .IsChain}}
 	// Enforce sanity
-	v.Type = types.ChainType{{.ChainType}}
+	v.Type = types.AccountType{{.ChainType}}
 
 	n += v.ChainHeader.GetHeaderSize()
 	{{end}}
@@ -104,7 +104,7 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 
 	{{if .IsChain}}
 	// Enforce sanity
-	v.Type = types.ChainType{{.ChainType}}
+	v.Type = types.AccountType{{.ChainType}}
 
 	if b, err := v.ChainHeader.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding header: %w", err)
@@ -144,11 +144,11 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 	{{end}}
 
 	{{- if .IsChain}}
-	typ := types.ChainType{{.ChainType}}
+	typ := types.AccountType{{.ChainType}}
 	if err := v.ChainHeader.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding header: %w", err)
 	} else if v.Type != typ {
-		return fmt.Errorf("invalid chain type: want %v, got %v", typ, v.Type)
+		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
 	{{end}}
