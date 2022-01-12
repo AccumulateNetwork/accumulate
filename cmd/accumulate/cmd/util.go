@@ -685,6 +685,27 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
+	case types.TxTypeSyntheticCreateChain.String():
+		scc := new(protocol.SyntheticCreateChain)
+		err := Remarshal(res.Data, &scc)
+		if err != nil {
+			return "", err
+		}
+
+		var out string
+		for _, cp := range scc.Chains {
+			c, err := protocol.UnmarshalChain(cp.Data)
+			if err != nil {
+				return "", err
+			}
+			// unmarshal
+			verb := "Created"
+			if cp.IsUpdate {
+				verb = "Updated"
+			}
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().ChainUrl, c.Header().Type)
+		}
+		return out, nil
 	case types.TxTypeCreateIdentity.String():
 		id := protocol.CreateIdentity{}
 		err := Remarshal(res.Data, &id)
