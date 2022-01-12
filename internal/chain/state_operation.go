@@ -174,7 +174,7 @@ func (m *stateCache) UpdateCreditBalance(record state.Chain) {
 
 type addDataEntry struct {
 	url          *url.URL
-	liteStateRec *state.Chain
+	liteStateRec state.Chain
 	hash         []byte
 	entry        *protocol.DataEntry
 }
@@ -189,9 +189,10 @@ func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry 
 		panic(fmt.Errorf("invalid URL: %v", err))
 	}
 
-	var stateRec *state.Chain
+	var stateRec state.Chain
+
 	if record.Header().Type == types.AccountTypeLiteDataAccount {
-		stateRec = &record
+		stateRec = record
 	}
 
 	m.operations = append(m.operations, &addDataEntry{u, stateRec, entryHash, dataEntry})
@@ -206,7 +207,7 @@ func (op *addDataEntry) Execute(st *stateCache) ([]state.Chain, error) {
 		_, err := record.GetState()
 		if err != nil {
 			//if we have no state, store it
-			err = record.PutState(*op.liteStateRec)
+			err = record.PutState(op.liteStateRec)
 			if err != nil {
 				return nil, err
 			}
