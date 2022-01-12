@@ -194,7 +194,7 @@ func TestValidate(t *testing.T) {
 			Origin: keyPageUrl,
 			Key:    adiKey,
 			Payload: &UpdateKeyPage{
-				Operation: protocol.UpdateKey,
+				Operation: protocol.KeyPageOperationUpdate,
 				Key:       adiKey[32:],
 				NewKey:    adiKey[32:],
 				Owner:     "acc://foo/book1",

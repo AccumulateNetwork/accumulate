@@ -92,6 +92,9 @@ KeyPage:
   - name: Index
     type: uvarint
     optional: true
+  - name: Threshold
+    type: uvarint
+    optional: true
 
 Signer:
   non-binary: true

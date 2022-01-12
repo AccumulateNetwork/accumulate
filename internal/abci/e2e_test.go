@@ -591,7 +591,7 @@ func TestAddKey(t *testing.T) {
 	newKey := generateKey()
 	n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.AddKey
+		body.Operation = protocol.KeyPageOperationAdd
 		body.NewKey = newKey.PubKey().Bytes()
 
 		tx, err := transactions.New("foo/page1", 2, edSigner(testKey, 1), body)
@@ -617,7 +617,7 @@ func TestUpdateKey(t *testing.T) {
 	newKey := generateKey()
 	n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.UpdateKey
+		body.Operation = protocol.KeyPageOperationUpdate
 		body.Key = testKey.PubKey().Bytes()
 		body.NewKey = newKey.PubKey().Bytes()
 
@@ -643,7 +643,7 @@ func TestRemoveKey(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		body := new(protocol.UpdateKeyPage)
-		body.Operation = protocol.RemoveKey
+		body.Operation = protocol.KeyPageOperationRemove
 		body.Key = testKey1.PubKey().Bytes()
 
 		tx, err := transactions.New("foo/page1", 2, edSigner(testKey2, 1), body)
