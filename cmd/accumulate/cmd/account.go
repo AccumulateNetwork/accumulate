@@ -37,6 +37,8 @@ var accountCmd = &cobra.Command{
 						out, err = CreateAccount(args[2], args[3:])
 					case "data":
 						out, err = CreateDataAccount(args[2], args[3:])
+					case "lite-data":
+						out, err = CreateLiteDataAccount(args[2], args[3:])
 					default:
 						fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
 						//this will be removed in future release and replaced with usage: PrintAccountCreate()
@@ -94,6 +96,7 @@ func PrintAccountRestore() {
 func PrintAccountCreate() {
 	fmt.Println("  accumulate account create token [origin adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBookUrl]	Create a token account for an ADI")
 	fmt.Println("  accumulate account create data [origin adi] [signing key name] [key index (optional)] [key height (optional)] [new data account url]  [keyBookUrl]	Create a data account under an ADI")
+	fmt.Println("  accumulate account create lite-data [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 }
 
 func PrintAccountImport() {

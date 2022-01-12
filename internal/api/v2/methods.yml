@@ -124,3 +124,8 @@ ExecuteWriteData:
   kind: execute
   rpc: write-data
   input: WriteData
+
+ExecuteWriteDataTo:
+  kind: execute
+  rpc: write-data-to
+  input: WriteDataTo
