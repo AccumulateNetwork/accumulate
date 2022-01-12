@@ -260,7 +260,7 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 		case i > 0:
 			// Only check the nonce of the first key
 		case ks.Nonce >= sig.Nonce:
-			return nil, fmt.Errorf("invalid nonce")
+			return nil, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, sig.Nonce)
 		default:
 			ks.Nonce = sig.Nonce
 		}
@@ -332,7 +332,7 @@ func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error
 		case i > 0:
 			// Only check the nonce of the first key
 		case account.Nonce >= sig.Nonce:
-			return fmt.Errorf("invalid nonce")
+			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, sig.Nonce)
 		default:
 			account.Nonce = sig.Nonce
 		}
@@ -378,12 +378,6 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return nil
 	}
 
-	// Add the envelope to the origin's pending chain
-	err = addChainEntry(m.Network.NodeUrl(), m.blockBatch, st.OriginUrl, protocol.PendingChain, protocol.ChainTypeTransaction, env.EnvHash(), 0)
-	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return fmt.Errorf("failed to add signature to pending chain: %v", err)
-	}
-
 	switch {
 	case st == nil:
 		return nil // Check failed
@@ -391,6 +385,12 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return nil
 	case txt.IsSynthetic():
 		return nil
+	}
+
+	// Add the envelope to the origin's pending chain
+	err = addChainEntry(m.Network.NodeUrl(), m.blockBatch, st.OriginUrl, protocol.PendingChain, protocol.ChainTypeTransaction, env.EnvHash(), 0)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return fmt.Errorf("failed to add signature to pending chain: %v", err)
 	}
 
 	// If the origin and signator are different, add the envelope to the signator's pending chain
