@@ -286,6 +286,44 @@ type ActionDataResponse struct {
 	ActionResponse
 }
 
+type ActionLiteDataResponse struct {
+	AccountUrl types.String  `json:"accountUrl"`
+	AccountId  types.Bytes32 `json:"accountId"`
+	ActionDataResponse
+}
+
+func ActionResponseFromLiteData(r *api2.TxResponse, accountUrl string, accountId []byte, entryHash []byte) *ActionLiteDataResponse {
+	ar := &ActionLiteDataResponse{}
+	ar.AccountUrl = types.String(accountUrl)
+	ar.AccountId.FromBytes(accountId)
+	ar.ActionDataResponse = *ActionResponseFromData(r, entryHash)
+	return ar
+}
+
+func (a *ActionLiteDataResponse) Print() (string, error) {
+	var out string
+	if WantJsonOutput {
+		ok := a.Code == "0" || a.Code == ""
+		if ok {
+			a.Code = "ok"
+		}
+		b, err := json.Marshal(a)
+		if err != nil {
+			return "", err
+		}
+		out = string(b)
+	} else {
+		s, err := a.ActionDataResponse.Print()
+		if err != nil {
+			return "", err
+		}
+		out = fmt.Sprintf("\n\tAccount Url\t\t:%s\n", a.AccountUrl[:])
+		out += fmt.Sprintf("\n\tAccount Id\t\t:%x\n", a.AccountId[:])
+		out += s[1:]
+	}
+	return out, nil
+}
+
 func ActionResponseFromData(r *api2.TxResponse, entryHash []byte) *ActionDataResponse {
 	ar := &ActionDataResponse{}
 	ar.EntryHash.FromBytes(entryHash)
