@@ -84,7 +84,9 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
 	txt := env.Transaction.Type()
 	executor, ok := m.executors[txt]
 	if !ok {
-		return m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", env.Transaction.Type().Name())})
+		return m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{
+			Code:    protocol.CodeInvalidTxnType,
+			Message: fmt.Errorf("unsupported TX type: %v", env.Transaction.Type().Name())})
 	}
 
 	// if txt.IsInternal() && tx.Transaction.Nonce != uint64(m.blockIndex) {

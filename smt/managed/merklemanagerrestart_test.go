@@ -37,7 +37,7 @@ func TestRestart(t *testing.T) {
 
 func TestRestartCache(t *testing.T) {
 	rand.Seed(12344)
-	var rh RandHash
+	var rh common.RandHash
 	store := memory.NewDB()
 	storeTx := store.Begin()
 
