@@ -107,6 +107,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	mss := protocol.NewKeyPage()
 	mss.ChainUrl = types.String(pageUrl.String())
 	mss.Keys = append(mss.Keys, ss)
+	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
@@ -152,6 +153,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 
 	mss := protocol.NewKeyPage()
 	mss.ChainUrl = types.String(u.String())
+	mss.Threshold = 1
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
 		mss.Keys[i] = &protocol.KeySpec{

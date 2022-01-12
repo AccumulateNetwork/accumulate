@@ -167,6 +167,9 @@ UpdateKeyPage:
     - name: Owner
       type: string
       optional: true
+    - name: Threshold
+      type: uvarint
+      optional: true
 
 ##### Synthetic #####
 
