@@ -98,46 +98,46 @@ func Get(url string) (string, error) {
 	params := api2.UrlQuery{}
 	params.Url = url
 
-	data, err := json.Marshal(&params)
-	if err != nil {
-		return "", err
-	}
-
 	method := "query"
 	if GetDirect {
 		method = "debug-query-direct"
 	}
 
 	var res json.RawMessage
-	err = Client.Request(context.Background(), method, json.RawMessage(data), &res)
-	if err == nil {
-		return string(res), nil
-	}
-
-	ret, err := PrintJsonRpcError(err)
+	err := queryAs(method, &params, &res)
 	if err != nil {
 		return "", err
 	}
 
-	return "", fmt.Errorf("%v", ret)
+	return string(res), nil
+}
+
+func getKey(url string, key []byte) (*query.ResponseKeyPageIndex, error) {
+	params := new(api2.KeyPageIndexQuery)
+	params.Url = url
+	params.Key = key
+
+	res := new(query.ResponseKeyPageIndex)
+	qres := new(api2.ChainQueryResponse)
+	qres.Data = res
+
+	err := queryAs("query-key-index", &params, &qres)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func GetKey(url, key string) (string, error) {
-	var res api2.ChainQueryResponse
-	res.Data = new(query.ResponseKeyPageIndex)
-
 	keyb, err := hex.DecodeString(key)
 	if err != nil {
 		return "", err
 	}
 
-	params := new(api2.KeyPageIndexQuery)
-	params.Url = url
-	params.Key = keyb
-
-	err = Client.Request(context.Background(), "query-key-index", &params, &res)
+	res, err := getKey(url, keyb)
 	if err != nil {
-		return PrintJsonRpcError(err)
+		return "", err
 	}
 
 	str, err := json.Marshal(res)
