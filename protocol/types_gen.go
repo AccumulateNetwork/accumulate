@@ -83,11 +83,13 @@ type CreateKeyPage struct {
 }
 
 type CreateToken struct {
-	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	KeyBookUrl string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
-	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
-	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
-	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"acc-url"`
+	Url            string  `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	KeyBookUrl     string  `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
+	Symbol         string  `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision      uint64  `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties     string  `json:"properties,omitempty" form:"properties" query:"properties" validate:"acc-url"`
+	InitialSupply  big.Int `json:"initialSupply,omitempty" form:"initialSupply" query:"initialSupply"`
+	HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty" form:"hasSupplyLimit" query:"hasSupplyLimit"`
 }
 
 type CreateTokenAccount struct {
@@ -295,9 +297,11 @@ type TokenAccount struct {
 
 type TokenIssuer struct {
 	state.ChainHeader
-	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
-	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
-	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"required,acc-url"`
+	Symbol         string  `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision      uint64  `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties     string  `json:"properties,omitempty" form:"properties" query:"properties" validate:"required,acc-url"`
+	Supply         big.Int `json:"supply,omitempty" form:"supply" query:"supply"`
+	HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty" form:"hasSupplyLimit" query:"hasSupplyLimit"`
 }
 
 type TokenRecipient struct {
@@ -645,6 +649,14 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 	}
 
 	if !(v.Properties == u.Properties) {
+		return false
+	}
+
+	if !(v.InitialSupply.Cmp(&u.InitialSupply) == 0) {
+		return false
+	}
+
+	if !(v.HasSupplyLimit == u.HasSupplyLimit) {
 		return false
 	}
 
@@ -1277,6 +1289,14 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 		return false
 	}
 
+	if !(v.Supply.Cmp(&u.Supply) == 0) {
+		return false
+	}
+
+	if !(v.HasSupplyLimit == u.HasSupplyLimit) {
+		return false
+	}
+
 	return true
 }
 
@@ -1540,6 +1560,10 @@ func (v *CreateToken) BinarySize() int {
 	n += encoding.UvarintBinarySize(v.Precision)
 
 	n += encoding.StringBinarySize(v.Properties)
+
+	n += encoding.BigintBinarySize(&v.InitialSupply)
+
+	n += encoding.BoolBinarySize(v.HasSupplyLimit)
 
 	return n
 }
@@ -2077,6 +2101,10 @@ func (v *TokenIssuer) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Properties)
 
+	n += encoding.BigintBinarySize(&v.Supply)
+
+	n += encoding.BoolBinarySize(v.HasSupplyLimit)
+
 	return n
 }
 
@@ -2352,6 +2380,10 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.UvarintMarshalBinary(v.Precision))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Properties))
+
+	buffer.Write(encoding.BigintMarshalBinary(&v.InitialSupply))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.HasSupplyLimit))
 
 	return buffer.Bytes(), nil
 }
@@ -2982,6 +3014,10 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Properties))
 
+	buffer.Write(encoding.BigintMarshalBinary(&v.Supply))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.HasSupplyLimit))
+
 	return buffer.Bytes(), nil
 }
 
@@ -3435,6 +3471,20 @@ func (v *CreateToken) UnmarshalBinary(data []byte) error {
 		v.Properties = x
 	}
 	data = data[encoding.StringBinarySize(v.Properties):]
+
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding InitialSupply: %w", err)
+	} else {
+		v.InitialSupply.Set(x)
+	}
+	data = data[encoding.BigintBinarySize(&v.InitialSupply):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding HasSupplyLimit: %w", err)
+	} else {
+		v.HasSupplyLimit = x
+	}
+	data = data[encoding.BoolBinarySize(v.HasSupplyLimit):]
 
 	return nil
 }
@@ -4505,6 +4555,20 @@ func (v *TokenIssuer) UnmarshalBinary(data []byte) error {
 		v.Properties = x
 	}
 	data = data[encoding.StringBinarySize(v.Properties):]
+
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Supply: %w", err)
+	} else {
+		v.Supply.Set(x)
+	}
+	data = data[encoding.BigintBinarySize(&v.Supply):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding HasSupplyLimit: %w", err)
+	} else {
+		v.HasSupplyLimit = x
+	}
+	data = data[encoding.BoolBinarySize(v.HasSupplyLimit):]
 
 	return nil
 }
