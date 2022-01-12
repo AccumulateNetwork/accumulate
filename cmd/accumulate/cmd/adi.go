@@ -128,7 +128,7 @@ func GetADI(url string) (string, error) {
 		return "", err
 	}
 
-	if res.Type != types.ChainTypeIdentity.String() {
+	if res.Type != types.AccountTypeIdentity.String() {
 		return "", fmt.Errorf("expecting ADI chain but received %v", res.Type)
 	}
 

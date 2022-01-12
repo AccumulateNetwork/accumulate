@@ -40,7 +40,7 @@ func TestTransactionState(t *testing.T) {
 	trans.Signatures = append(trans.Signatures, eSig)
 
 	txPendingState := NewPendingTransaction(trans)
-	txPendingState.ChainHeader.SetHeader(types.String("RedWagon/myAccount"), types.ChainTypePendingTransaction)
+	txPendingState.ChainHeader.SetHeader(types.String("RedWagon/myAccount"), types.AccountTypePendingTransaction)
 	data, err := txPendingState.MarshalBinary()
 	if err != nil {
 		t.Fatalf("error marshaling pending tx state %v", err)

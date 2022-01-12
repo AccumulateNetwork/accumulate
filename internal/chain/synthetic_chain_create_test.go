@@ -40,5 +40,5 @@ func TestSyntheticChainCreate_MultiSlash(t *testing.T) {
 	require.NoError(t, err)
 
 	err = SyntheticCreateChain{}.Validate(st, tx)
-	require.EqualError(t, err, `chain type tokenAccount cannot contain more than one slash in its URL`)
+	require.EqualError(t, err, `account type tokenAccount cannot contain more than one slash in its URL`)
 }
