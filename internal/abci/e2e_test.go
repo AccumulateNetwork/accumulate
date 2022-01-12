@@ -200,6 +200,56 @@ func TestCreateADI(t *testing.T) {
 	require.Equal(t, keyHash[:], ks.Keys[0].PublicKey)
 }
 
+func TestCreateLiteDataAccount(t *testing.T) {
+
+	//this test exercises WriteDataTo and SyntheticWriteData validators
+
+	firstEntry := protocol.DataEntry{}
+
+	firstEntry.ExtIds = append(firstEntry.ExtIds, []byte("Factom PRO"))
+	firstEntry.ExtIds = append(firstEntry.ExtIds, []byte("Tutorial"))
+
+	//create a lite data account aka factom chainId
+	chainId := protocol.ComputeLiteDataAccountId(&firstEntry)
+
+	lde := protocol.LiteDataEntry{}
+	lde.DataEntry = new(protocol.DataEntry)
+	copy(lde.AccountId[:], chainId)
+	lde.Data = []byte("This is useful content of the entry. You can save text, hash, JSON or raw ASCII data here.")
+	for i := 0; i < 3; i++ {
+		lde.ExtIds = append(lde.ExtIds, []byte(fmt.Sprintf("Tag #%d of entry", i+1)))
+	}
+	liteDataAddress, err := protocol.LiteDataAddress(chainId)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("Create ADI then write to Lite Data Account", func(t *testing.T) {
+		n := createAppWithMemDB(t, crypto.Address{}, true)
+		adiKey := generateKey()
+		batch := n.db.Begin()
+		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
+		require.NoError(t, batch.Commit())
+		n.Batch(func(send func(*transactions.Envelope)) {
+			wdt := new(protocol.WriteDataTo)
+			wdt.Recipient = liteDataAddress.String()
+			wdt.Entry = firstEntry
+			tx, err := transactions.New("FooBar", 1, edSigner(adiKey, 1), wdt)
+			require.NoError(t, err)
+			send(tx)
+		})
+
+		partialChainId, err := protocol.ParseLiteDataAddress(liteDataAddress)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r := n.GetLiteDataAccount(liteDataAddress.String())
+		require.Equal(t, types.AccountTypeLiteDataAccount, r.Type)
+		require.Equal(t, types.String(liteDataAddress.String()), r.ChainUrl)
+		require.Equal(t, append(partialChainId, r.Tail...), chainId)
+	})
+}
+
 func TestCreateAdiDataAccount(t *testing.T) {
 
 	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
@@ -661,7 +711,7 @@ func TestSignatorHeight(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 	liteKey, fooKey := generateKey(), generateKey()
 
-	liteUrl, err := protocol.LiteAddress(liteKey.PubKey().Bytes(), "ACME")
+	liteUrl, err := protocol.LiteTokenAddress(liteKey.PubKey().Bytes(), "ACME")
 	require.NoError(t, err)
 	tokenUrl, err := url.Parse("foo/tokens")
 	require.NoError(t, err)
@@ -739,7 +789,7 @@ func TestIssueTokens(t *testing.T) {
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10))
 	require.NoError(t, batch.Commit())
 
-	liteAddr, err := protocol.LiteAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
 	require.NoError(t, err)
 
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -769,7 +819,7 @@ func TestInvalidDeposit(t *testing.T) {
 	n := createAppWithMemDB(t, crypto.Address{}, true)
 
 	liteKey := generateKey()
-	liteAddr, err := protocol.LiteAddress(liteKey[32:], "foo/tokens")
+	liteAddr, err := protocol.LiteTokenAddress(liteKey[32:], "foo/tokens")
 	require.NoError(t, err)
 
 	id := n.Batch(func(send func(*transactions.Envelope)) {

@@ -70,7 +70,7 @@ func PrintDataAccountCreate() {
 }
 
 func PrintDataWrite() {
-	fmt.Println("./cli data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
+	fmt.Println("accumulate data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
 }
 
 func PrintData() {

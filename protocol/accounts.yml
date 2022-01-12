@@ -16,13 +16,13 @@ LiteTokenAccount:
 LiteDataAccount:
   kind: chain
   fields:
-  - name: Data
-    type: bytes
+    - name: Tail
+      type: bytes
 
 ADI:
   kind: chain
   chain-type: Identity
-  fields: []
+  fields: [ ]
 
 TokenAccount:
   kind: chain
@@ -79,7 +79,7 @@ TokenIssuer:
 
 Anchor:
   kind: chain
-  fields: []
+  fields: [ ]
 
 ##### Data Types #####
 
