@@ -18,7 +18,15 @@
             "request": "launch",
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/accumulated",
-            "args": ["run", "devnet", "-w", "${workspaceFolder}/.nodes"]
+            "args": ["run", "devnet", "-w", "${workspaceFolder}/.nodes", "--truncate"]
+        },
+        {
+            "name": "Run Node",
+            "type": "go",
+            "request": "launch",
+            "mode": "auto",
+            "program": "${workspaceFolder}/cmd/accumulated",
+            "args": ["run", "-w", "${workspaceFolder}/.nodes/dn", "-n", "0", "--truncate"]
         }
     ]
 }
