@@ -74,10 +74,10 @@ func Init(opts InitOptions) (err error) {
 		if err != nil {
 			return fmt.Errorf("failed to create data dir: %v", err)
 		}
-
 		if err := initFilesWithConfig(config, &subnetID); err != nil {
 			return err
 		}
+
 		if config.Mode == tmcfg.ModeValidator {
 
 			pvKeyFile := path.Join(nodeDir, config.PrivValidator.Key)
@@ -209,8 +209,10 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 		}
 		logger.Info("Generated node key", "path", nodeKeyFile)
 	}
-	// private validator
+
 	if config.Mode == tmcfg.ModeValidator {
+
+		// private validator
 		privValKeyFile := config.PrivValidator.KeyFile()
 		privValStateFile := config.PrivValidator.StateFile()
 		var pv *privval.FilePV
@@ -266,7 +268,7 @@ func initFilesWithConfig(config *cfg.Config, chainid *string) error {
 			}
 			logger.Info("Generated genesis file", "path", genFile)
 		}
-	}
 
+	}
 	return nil
 }

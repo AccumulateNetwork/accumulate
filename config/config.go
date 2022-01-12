@@ -49,9 +49,7 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 	case Seed:
 		c.Config = *tm.DefaultConfig()
 		c.Mode = "seed"
-		c.P2P.ListenAddress = "tcp://127.0.0.1:26657"
 		c.P2P.AllowDuplicateIP = true
-		c.P2P.AddrBook = c.P2P.AddrBookFile()
 		c.Accumulate.Website.Enabled = false
 		c.PrivValidator.Key = ""
 		c.PrivValidator.State = ""
