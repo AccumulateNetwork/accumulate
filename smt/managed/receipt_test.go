@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
@@ -84,7 +85,7 @@ func TestReceiptAll(t *testing.T) {
 	manager, _ := NewMerkleManager(storeTx, 2) // MerkleManager
 
 	_ = manager.SetKey(storage.MakeKey("one")) // Populate a database
-	var rh RandHash                            // A source of random hashes
+	var rh common.RandHash                     // A source of random hashes
 	var mdRoots [][]byte                       // Collect all the MDRoots for each hash added
 	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
 		manager.AddHash(rh.NextList())                    // Add a hash
@@ -218,7 +219,7 @@ func TestBadgerReceipts(t *testing.T) {
 func TestReceipt_Combine(t *testing.T) {
 	testCnt := int64(50)
 	var m1Roots, m2Roots []Hash
-	var rh RandHash
+	var rh common.RandHash
 	var m1, m2 *MerkleManager
 	store := memory.NewDB()
 	storeTx := store.Begin()
