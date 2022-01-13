@@ -274,7 +274,10 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 		return nil, fmt.Errorf("insufficent credits for the transaction")
 	}
 
-	st.UpdateCreditBalance(page)
+	err = st.UpdateCreditBalance(page)
+	if err != nil {
+		return nil, err
+	}
 	err = st.UpdateNonce(page)
 	if err != nil {
 		return nil, err
@@ -420,11 +423,11 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return err
 	}
 
-	// fee, err := protocol.ComputeFee(env)
-	// if err != nil || fee > protocol.FeeFailedMaximum.AsInt() {
-	// 	fee = protocol.FeeFailedMaximum.AsInt()
-	// }
-	// st.Signator.DebitCredits(uint64(fee))
+	fee, err := protocol.ComputeFee(env)
+	if err != nil || fee > protocol.FeeFailedMaximum.AsInt() {
+		fee = protocol.FeeFailedMaximum.AsInt()
+	}
+	st.Signator.DebitCredits(uint64(fee))
 
 	return sigRecord.PutState(st.Signator)
 }

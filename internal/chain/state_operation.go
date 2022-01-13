@@ -117,6 +117,11 @@ type updateNonce struct {
 	record state.Chain
 }
 
+type updateCreditBalance struct {
+	url    *url.URL
+	record state.Chain
+}
+
 func (m *stateCache) UpdateNonce(record state.Chain) error {
 	u, err := record.Header().ParseUrl()
 	if err != nil {
@@ -167,9 +172,54 @@ func (op *updateNonce) Execute(st *stateCache) ([]state.Chain, error) {
 	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.PendingChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
 }
 
+func (op *updateCreditBalance) Execute(st *stateCache) ([]state.Chain, error) {
+	record := st.batch.Account(op.url)
+	err := record.PutState(op.record)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
+	}
+
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.PendingChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
+}
+
 //UpdateCreditBalance update the credits used for a transaction
-func (m *stateCache) UpdateCreditBalance(record state.Chain) {
-	panic("todo: UpdateCredtedBalance needs to be implemented")
+func (m *stateCache) UpdateCreditBalance(record state.Chain) error {
+	u, err := record.Header().ParseUrl()
+	if err != nil {
+		return fmt.Errorf("invalid URL: %v", err)
+	}
+
+	// Load the previous state of the record
+	rec := m.batch.Account(u)
+	old, err := rec.GetState()
+	if err != nil {
+		return fmt.Errorf("failed to load state for %q", record.Header().ChainUrl)
+	}
+
+	// Check that the credit balance is the only thing that changed
+	switch record.Header().Type {
+	case types.AccountTypeLiteTokenAccount:
+		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
+		old.CreditBalance = new.CreditBalance
+		if !old.Equal(new) {
+			return fmt.Errorf("attempted to change more than the credit balance")
+		}
+
+	case types.AccountTypeKeyPage:
+		old, new := old.(*protocol.KeyPage), record.(*protocol.KeyPage)
+		old.CreditBalance = new.CreditBalance
+		if !old.Equal(new) {
+			return fmt.Errorf("attempted to change more than the credit balance")
+		}
+
+	default:
+		return fmt.Errorf("account type %d is not a signator", old.Header().Type)
+	}
+
+	m.chains[u.AccountID32()] = record
+	m.operations = append(m.operations, &updateCreditBalance{u, record})
+	return nil
+
 }
 
 type addDataEntry struct {
