@@ -21,6 +21,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-key-page"] = m.ExecuteCreateKeyPage
 	m.methods["create-token"] = m.ExecuteCreateToken
 	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
+	m.methods["issue-tokens"] = m.ExecuteIssueTokens
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
 	m.methods["write-data"] = m.ExecuteWriteData
@@ -94,6 +95,10 @@ func (m *JrpcMethods) ExecuteCreateToken(ctx context.Context, params json.RawMes
 
 func (m *JrpcMethods) ExecuteCreateTokenAccount(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.CreateTokenAccount))
+}
+
+func (m *JrpcMethods) ExecuteIssueTokens(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.IssueTokens))
 }
 
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {

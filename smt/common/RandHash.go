@@ -1,4 +1,4 @@
-package managed
+package common
 
 import (
 	"crypto/sha256"
