@@ -48,11 +48,7 @@ func Default(net NetworkType, node NodeType, netId string) *Config {
 		c.Config = *tm.DefaultValidatorConfig()
 	case Seed:
 		c.Config = *tm.DefaultConfig()
-		c.Mode = "seed"
-		c.P2P.AllowDuplicateIP = true
-		c.Accumulate.Website.Enabled = false
-		c.PrivValidator.Key = ""
-		c.PrivValidator.State = ""
+		c.Mode = tm.ModeSeed
 	default:
 		c.Config = *tm.DefaultConfig()
 	}

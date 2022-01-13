@@ -118,24 +118,7 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	if d.Config.Mode == tmcfg.ModeSeed {
-		addrBookPath := filepath.Join(d.Config.RootDir, "addrbook.json")
-		d.Config.P2P.AddrBook = addrBookPath
-
-		d.node, err = node.New(d.Config, nil, d.Logger)
-		if err != nil {
-			return fmt.Errorf("creating node: %v", err)
-		}
-		err = d.node.Start()
-		if err != nil {
-			return fmt.Errorf("starting node: %v", err)
-		}
-
-		defer func() {
-			if err != nil {
-				_ = d.node.Stop()
-				d.node.Wait()
-			}
-		}()
+		return d.startSeed()
 
 	}
 
@@ -347,6 +330,33 @@ func (d *Daemon) Start() (err error) {
 	}()
 
 	return nil
+}
+
+func (d *Daemon) startSeed() (err error) {
+
+	d.node, err = node.New(d.Config, nil, d.Logger)
+	if err != nil {
+		return fmt.Errorf("creating node: %v", err)
+	}
+
+	err = d.node.Start()
+	if err != nil {
+		return fmt.Errorf("starting node: %v", err)
+	}
+
+	d.Logger.Info("Node started")
+	d.node.Service.Start()
+
+	// Stop the node if start fails (mostly for tests)
+	defer func() {
+		if err != nil {
+			_ = d.node.Stop()
+			d.node.Wait()
+		}
+	}()
+
+	return nil
+
 }
 
 func (d *Daemon) ensureSufficientDiskSpace(dbPath string) {
