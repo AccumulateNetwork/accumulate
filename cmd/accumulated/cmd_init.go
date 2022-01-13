@@ -245,7 +245,7 @@ var baseIP net.IP
 var ipCount byte
 
 func nextIP() string {
-	if len(flagInitDevnet.IPs) > 0 {
+	if len(flagInitDevnet.IPs) > 1 {
 		ipCount++
 		if len(flagInitDevnet.IPs) < int(ipCount) {
 			fatalf("not enough IPs")
