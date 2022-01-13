@@ -197,19 +197,16 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 	var res *api.TxResponse
 	//compute the chain id...
 	wdt := protocol.WriteDataTo{}
-	wdt.Recipient = u.String()
-
-	for i := 0; i < len(args); i++ {
-		wdt.Entry.ExtIds = append(wdt.Entry.ExtIds, []byte(args[i]))
-	}
+	wdt.Entry = *prepareData(args, true)
 
 	accountId := protocol.ComputeLiteDataAccountId(&wdt.Entry)
 	addr, err := protocol.LiteDataAddress(accountId)
 	if err != nil {
 		return "", fmt.Errorf("invalid lite data address created from name(s)")
 	}
+	wdt.Recipient = addr.String()
 
-	lite, err := GetUrl(addr.String())
+	lite, err := GetUrl(wdt.Recipient)
 	if lite != nil {
 		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}
@@ -290,7 +287,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 
 	wd := protocol.WriteData{}
-	wd.Entry = *prepareData(args)
+	wd.Entry = *prepareData(args, false)
 
 	res, err := dispatchTxRequest("write-data", &wd, u, si, privKey)
 	if err != nil {
@@ -300,7 +297,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }
 
-func prepareData(args []string) *protocol.DataEntry {
+func prepareData(args []string, isFirstLiteEntry bool) *protocol.DataEntry {
 	entry := new(protocol.DataEntry)
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))
@@ -314,7 +311,7 @@ func prepareData(args []string) *protocol.DataEntry {
 			//clip the padding
 			data = data[:n]
 		}
-		if i == len(args)-1 {
+		if i == len(args)-1 && !isFirstLiteEntry {
 			entry.Data = data
 		} else {
 			entry.ExtIds = append(entry.ExtIds, data)
@@ -355,7 +352,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 		return "", fmt.Errorf("expecting data")
 	}
 
-	wd.Entry = *prepareData(args[1:])
+	wd.Entry = *prepareData(args[1:], false)
 
 	res, err := dispatchTxRequest("write-data-to", &wd, u, si, privKey)
 	if err != nil {
