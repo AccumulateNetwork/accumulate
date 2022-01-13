@@ -35,6 +35,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			CreateKeyPage{},
 			CreateToken{},
 			CreateTokenAccount{},
+			IssueTokens{},
 			SendTokens{},
 			UpdateKeyPage{},
 			WriteData{},

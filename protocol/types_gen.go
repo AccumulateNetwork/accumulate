@@ -83,11 +83,13 @@ type CreateKeyPage struct {
 }
 
 type CreateToken struct {
-	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	KeyBookUrl string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
-	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
-	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
-	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"acc-url"`
+	Url            string  `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	KeyBookUrl     string  `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
+	Symbol         string  `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision      uint64  `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties     string  `json:"properties,omitempty" form:"properties" query:"properties" validate:"acc-url"`
+	InitialSupply  big.Int `json:"initialSupply,omitempty" form:"initialSupply" query:"initialSupply"`
+	HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty" form:"hasSupplyLimit" query:"hasSupplyLimit"`
 }
 
 type CreateTokenAccount struct {
@@ -151,6 +153,7 @@ type KeyBook struct {
 type KeyPage struct {
 	state.ChainHeader
 	CreditBalance big.Int    `json:"creditBalance,omitempty" form:"creditBalance" query:"creditBalance" validate:"required"`
+	Threshold     uint64     `json:"threshold,omitempty" form:"threshold" query:"threshold" validate:"required"`
 	Keys          []*KeySpec `json:"keys,omitempty" form:"keys" query:"keys" validate:"required"`
 }
 
@@ -294,9 +297,11 @@ type TokenAccount struct {
 
 type TokenIssuer struct {
 	state.ChainHeader
-	Symbol     string `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
-	Precision  uint64 `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
-	Properties string `json:"properties,omitempty" form:"properties" query:"properties" validate:"required,acc-url"`
+	Symbol         string  `json:"symbol,omitempty" form:"symbol" query:"symbol" validate:"required"`
+	Precision      uint64  `json:"precision,omitempty" form:"precision" query:"precision" validate:"required"`
+	Properties     string  `json:"properties,omitempty" form:"properties" query:"properties" validate:"required,acc-url"`
+	Supply         big.Int `json:"supply,omitempty" form:"supply" query:"supply"`
+	HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty" form:"hasSupplyLimit" query:"hasSupplyLimit"`
 }
 
 type TokenRecipient struct {
@@ -320,6 +325,7 @@ type UpdateKeyPage struct {
 	Key       []byte           `json:"key,omitempty" form:"key" query:"key"`
 	NewKey    []byte           `json:"newKey,omitempty" form:"newKey" query:"newKey"`
 	Owner     string           `json:"owner,omitempty" form:"owner" query:"owner"`
+	Threshold uint64           `json:"threshold,omitempty" form:"threshold" query:"threshold"`
 }
 
 type WriteData struct {
@@ -646,6 +652,14 @@ func (v *CreateToken) Equal(u *CreateToken) bool {
 		return false
 	}
 
+	if !(v.InitialSupply.Cmp(&u.InitialSupply) == 0) {
+		return false
+	}
+
+	if !(v.HasSupplyLimit == u.HasSupplyLimit) {
+		return false
+	}
+
 	return true
 }
 
@@ -838,6 +852,10 @@ func (v *KeyPage) Equal(u *KeyPage) bool {
 	}
 
 	if !(v.CreditBalance.Cmp(&u.CreditBalance) == 0) {
+		return false
+	}
+
+	if !(v.Threshold == u.Threshold) {
 		return false
 	}
 
@@ -1271,6 +1289,14 @@ func (v *TokenIssuer) Equal(u *TokenIssuer) bool {
 		return false
 	}
 
+	if !(v.Supply.Cmp(&u.Supply) == 0) {
+		return false
+	}
+
+	if !(v.HasSupplyLimit == u.HasSupplyLimit) {
+		return false
+	}
+
 	return true
 }
 
@@ -1328,6 +1354,10 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 	}
 
 	if !(v.Owner == u.Owner) {
+		return false
+	}
+
+	if !(v.Threshold == u.Threshold) {
 		return false
 	}
 
@@ -1531,6 +1561,10 @@ func (v *CreateToken) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Properties)
 
+	n += encoding.BigintBinarySize(&v.InitialSupply)
+
+	n += encoding.BoolBinarySize(v.HasSupplyLimit)
+
 	return n
 }
 
@@ -1715,6 +1749,8 @@ func (v *KeyPage) BinarySize() int {
 	n += v.ChainHeader.GetHeaderSize()
 
 	n += encoding.BigintBinarySize(&v.CreditBalance)
+
+	n += encoding.UvarintBinarySize(v.Threshold)
 
 	n += encoding.UvarintBinarySize(uint64(len(v.Keys)))
 
@@ -2065,6 +2101,10 @@ func (v *TokenIssuer) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Properties)
 
+	n += encoding.BigintBinarySize(&v.Supply)
+
+	n += encoding.BoolBinarySize(v.HasSupplyLimit)
+
 	return n
 }
 
@@ -2112,6 +2152,8 @@ func (v *UpdateKeyPage) BinarySize() int {
 	n += encoding.BytesBinarySize(v.NewKey)
 
 	n += encoding.StringBinarySize(v.Owner)
+
+	n += encoding.UvarintBinarySize(v.Threshold)
 
 	return n
 }
@@ -2339,6 +2381,10 @@ func (v *CreateToken) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Properties))
 
+	buffer.Write(encoding.BigintMarshalBinary(&v.InitialSupply))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.HasSupplyLimit))
+
 	return buffer.Bytes(), nil
 }
 
@@ -2556,6 +2602,8 @@ func (v *KeyPage) MarshalBinary() ([]byte, error) {
 		buffer.Write(b)
 	}
 	buffer.Write(encoding.BigintMarshalBinary(&v.CreditBalance))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Threshold))
 
 	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Keys))))
 	for i, v := range v.Keys {
@@ -2970,6 +3018,10 @@ func (v *TokenIssuer) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Properties))
 
+	buffer.Write(encoding.BigintMarshalBinary(&v.Supply))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.HasSupplyLimit))
+
 	return buffer.Bytes(), nil
 }
 
@@ -3025,6 +3077,8 @@ func (v *UpdateKeyPage) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BytesMarshalBinary(v.NewKey))
 
 	buffer.Write(encoding.StringMarshalBinary(v.Owner))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Threshold))
 
 	return buffer.Bytes(), nil
 }
@@ -3422,6 +3476,20 @@ func (v *CreateToken) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Properties):]
 
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding InitialSupply: %w", err)
+	} else {
+		v.InitialSupply.Set(x)
+	}
+	data = data[encoding.BigintBinarySize(&v.InitialSupply):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding HasSupplyLimit: %w", err)
+	} else {
+		v.HasSupplyLimit = x
+	}
+	data = data[encoding.BoolBinarySize(v.HasSupplyLimit):]
+
 	return nil
 }
 
@@ -3770,6 +3838,13 @@ func (v *KeyPage) UnmarshalBinary(data []byte) error {
 		v.CreditBalance.Set(x)
 	}
 	data = data[encoding.BigintBinarySize(&v.CreditBalance):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Threshold: %w", err)
+	} else {
+		v.Threshold = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Threshold):]
 
 	var lenKeys uint64
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
@@ -4483,6 +4558,20 @@ func (v *TokenIssuer) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Properties):]
 
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Supply: %w", err)
+	} else {
+		v.Supply.Set(x)
+	}
+	data = data[encoding.BigintBinarySize(&v.Supply):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding HasSupplyLimit: %w", err)
+	} else {
+		v.HasSupplyLimit = x
+	}
+	data = data[encoding.BoolBinarySize(v.HasSupplyLimit):]
+
 	return nil
 }
 
@@ -4580,6 +4669,13 @@ func (v *UpdateKeyPage) UnmarshalBinary(data []byte) error {
 		v.Owner = x
 	}
 	data = data[encoding.StringBinarySize(v.Owner):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Threshold: %w", err)
+	} else {
+		v.Threshold = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Threshold):]
 
 	return nil
 }
@@ -4884,11 +4980,13 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
 		Owner     string           `json:"owner,omitempty"`
+		Threshold uint64           `json:"threshold,omitempty"`
 	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	u.Owner = v.Owner
+	u.Threshold = v.Threshold
 	return json.Marshal(&u)
 }
 
@@ -5391,11 +5489,13 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		Key       *string          `json:"key,omitempty"`
 		NewKey    *string          `json:"newKey,omitempty"`
 		Owner     string           `json:"owner,omitempty"`
+		Threshold uint64           `json:"threshold,omitempty"`
 	}{}
 	u.Operation = v.Operation
 	u.Key = encoding.BytesToJSON(v.Key)
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	u.Owner = v.Owner
+	u.Threshold = v.Threshold
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5411,5 +5511,6 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 		v.NewKey = x
 	}
 	v.Owner = u.Owner
+	v.Threshold = u.Threshold
 	return nil
 }

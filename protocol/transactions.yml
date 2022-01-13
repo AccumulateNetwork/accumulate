@@ -103,6 +103,12 @@ CreateToken:
       type: string
       is-url: true
       optional: true
+    - name: InitialSupply
+      type: bigint
+      optional: true
+    - name: HasSupplyLimit
+      type: bool
+      optional: true
 
 IssueTokens:
   kind: tx
@@ -166,6 +172,9 @@ UpdateKeyPage:
       optional: true
     - name: Owner
       type: string
+      optional: true
+    - name: Threshold
+      type: uvarint
       optional: true
 
 ##### Synthetic #####

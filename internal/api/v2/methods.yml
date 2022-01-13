@@ -125,6 +125,11 @@ ExecuteWriteData:
   rpc: write-data
   input: WriteData
 
+ExecuteIssueTokens:
+  kind: execute
+  rpc: issue-tokens
+  input: IssueTokens
+
 ExecuteWriteDataTo:
   kind: execute
   rpc: write-data-to

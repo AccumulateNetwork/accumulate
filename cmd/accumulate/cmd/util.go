@@ -14,7 +14,6 @@ import (
 	"time"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -97,39 +96,42 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 		}
 	}
 
-	originRec := new(state.ChainHeader)
-	_, err = getRecord(origin.String(), &originRec)
+	keyInfo, err := getKey(origin.String(), privKey[32:])
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
+		return nil, nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	bookRec := new(protocol.KeyBook)
-	if originRec.KeyBook == "" {
-		_, err := getRecord(origin.String(), &bookRec)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
-		}
-	} else {
-		_, err := getRecord(*originRec.KeyBook.AsString(), &bookRec)
-		if err != nil {
-			return nil, nil, nil, fmt.Errorf("failed to get %q : %v", origin, err)
-		}
+	ms, err := getRecord(keyInfo.KeyPage, nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
 
-	if hdr.KeyPageIndex >= uint64(len(bookRec.Pages)) {
-		return nil, nil, nil, fmt.Errorf("key page index %d is out of bound of the key book of %q", hdr.KeyPageIndex, origin)
-	}
-	u, err := url.Parse(bookRec.Pages[hdr.KeyPageIndex])
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("invalid keypage url %s", bookRec.Pages[hdr.KeyPageIndex])
-	}
-	ms, err := getRecordById(u.AccountID(), nil)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to get chain %x : %v", bookRec.Pages[hdr.KeyPageIndex][:], err)
-	}
+	hdr.KeyPageIndex = keyInfo.Index
 	hdr.KeyPageHeight = ms.Height
 
 	return args[ct:], &hdr, privKey, nil
+}
+
+func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
+	var typ struct {
+		Type types.AccountType
+	}
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	account, err := protocol.NewChain(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, account)
+	if err != nil {
+		return nil, err
+	}
+
+	return account, nil
 }
 
 func signGenTx(binaryPayload []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
@@ -219,20 +221,26 @@ func GetUrl(url string) (*QueryResponse, error) {
 	params := api2.UrlQuery{}
 	params.Url = u.String()
 
-	data, err := json.Marshal(&params)
+	err = queryAs("query", &params, &res)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := Client.Request(context.Background(), "query", json.RawMessage(data), &res); err != nil {
-		ret, err := PrintJsonRpcError(err)
-		if err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("%v", ret)
+	return &res, nil
+}
+
+func queryAs(method string, input, output interface{}) error {
+	err := Client.Request(context.Background(), method, input, output)
+	if err == nil {
+		return nil
 	}
 
-	return &res, nil
+	ret, err := PrintJsonRpcError(err)
+	if err != nil {
+		return err
+	}
+
+	return fmt.Errorf("%v", ret)
 }
 
 func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
@@ -714,6 +722,27 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		out += fmt.Sprintf("Receive %s to %s (cause: %X)\n", amt, res.Origin, deposit.Cause)
 
 		out += printGeneralTransactionParameters(res)
+		return out, nil
+	case types.TxTypeSyntheticCreateChain.String():
+		scc := new(protocol.SyntheticCreateChain)
+		err := Remarshal(res.Data, &scc)
+		if err != nil {
+			return "", err
+		}
+
+		var out string
+		for _, cp := range scc.Chains {
+			c, err := protocol.UnmarshalChain(cp.Data)
+			if err != nil {
+				return "", err
+			}
+			// unmarshal
+			verb := "Created"
+			if cp.IsUpdate {
+				verb = "Updated"
+			}
+			out += fmt.Sprintf("%s %v (%v)\n", verb, c.Header().ChainUrl, c.Header().Type)
+		}
 		return out, nil
 	case types.TxTypeCreateIdentity.String():
 		id := protocol.CreateIdentity{}
