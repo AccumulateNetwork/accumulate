@@ -46,6 +46,10 @@ func accountByID(id []byte) accountBucket {
 	return accountBucket{object("Account", id)}
 }
 
+func (b *accountBucket) Pending() storage.Key {
+	return b.Object().Append("Pending")
+}
+
 // Chain returns the storage key for the given chain of the record.
 func (b *accountBucket) Chain(name string) storage.Key {
 	return b.Object().Append("Chain", name)

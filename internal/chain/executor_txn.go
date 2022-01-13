@@ -32,7 +32,7 @@ func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResu
 	batch := m.DB.Begin()
 	defer batch.Discard()
 
-	st, err := m.check(batch, env)
+	st, err := m.verifySigsAndChargeFees(batch, env)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, &protocol.Error{Code: protocol.CodeNotFound, Message: err}
 	}
@@ -109,9 +109,25 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 	defer group.Done()
 	m.mu.Unlock()
 
-	st, err := m.check(m.blockBatch, env)
+	// Set up the state manager and validate the signatures
+	st, err := m.verifySigsAndChargeFees(m.blockBatch, env)
 	if err != nil {
 		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+	}
+
+	// If the number of signatures is less than the threshold, the transaction is pending
+	if page, ok := st.Signator.(*protocol.KeyPage); ok && st.SignatureCount < int(page.Threshold) {
+		// Write out changes to the nonce and credit balance
+		_, err := st.Commit()
+		if err != nil {
+			return nil, m.recordTransactionError(st, env, nil, nil, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+		}
+
+		status := &protocol.TransactionStatus{Pending: true}
+		err = m.putTransaction(st, env, nil, nil, status, false)
+		if err != nil {
+			return nil, &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
+		}
 	}
 
 	result, err := executor.Validate(st, env)
@@ -142,6 +158,10 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
+	if txt == types.TxTypeSendTokens {
+		println("!")
+	}
+
 	// Store pending state updates, queue state creates for synthetic transactions
 	submitted, err := st.Commit()
 	if err != nil {
@@ -170,7 +190,9 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 	return result, nil
 }
 
-func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*StateManager, error) {
+// verifySigsAndChargeFees validates signatures, verifies they are authorized,
+// updates the nonce, and charges the fee.
+func (m *Executor) verifySigsAndChargeFees(batch *database.Batch, env *transactions.Envelope) (*StateManager, error) {
 	if len(env.Signatures) == 0 {
 		return nil, fmt.Errorf("transaction is not signed")
 	}
@@ -383,6 +405,11 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return nil
 	}
 
+	// TODO Update the account's list of pending transactions
+	// pendingTxns, err := m.blockBatch.Account(st.OriginUrl).GetPending()
+	// // do some stuff
+	// m.blockBatch.Account(st.OriginUrl).PutPending(pendingTxns)
+
 	// Store against the transaction hash
 	err := m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, env.Signatures)
 	if err != nil {
@@ -401,6 +428,14 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 
 	if postCommit {
 		return nil // Failure after commit
+	}
+
+	// Add the transaction to the origin's main chain, unless it's pending
+	if !status.Pending {
+		err = addChainEntry(m.Network.NodeUrl(), m.blockBatch, st.OriginUrl, protocol.MainChain, protocol.ChainTypeTransaction, env.GetTxHash(), 0, 0)
+		if err != nil && !errors.Is(err, storage.ErrNotFound) {
+			return fmt.Errorf("failed to add signature to pending chain: %v", err)
+		}
 	}
 
 	// Add the envelope to the origin's pending chain

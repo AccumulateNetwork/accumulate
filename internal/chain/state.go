@@ -17,6 +17,8 @@ type StateManager struct {
 	stateCache
 	submissions []*submission
 
+	SignatureCount int
+
 	Origin        state.Chain
 	OriginUrl     *url.URL
 	OriginChainId [32]byte
@@ -33,16 +35,33 @@ type submission struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, tx *transactions.Envelope) (*StateManager, error) {
+func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.Envelope) (*StateManager, error) {
 	m := new(StateManager)
-	txid := types.Bytes(tx.GetTxHash()).AsBytes32()
-	m.stateCache = *newStateCache(nodeUrl, tx.Transaction.Type(), txid, batch)
-	m.OriginUrl = tx.Transaction.Origin
+	txid := types.Bytes(env.GetTxHash()).AsBytes32()
+	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
+	m.OriginUrl = env.Transaction.Origin
 
 	copy(m.OriginChainId[:], m.OriginUrl.AccountID())
 
+	// Count signatures from the envelope
+	m.SignatureCount = len(env.Signatures)
+
+	// Load previous transaction state
+	txState, _, sigs, err := batch.Transaction(txid[:]).Get()
+	switch {
+	case err == nil:
+		// Add previous signatures to the count
+		m.SignatureCount += len(sigs)
+
+		// Populate the transaction from the database
+		env.Transaction = txState.Restore().Transaction
+	case errors.Is(err, storage.ErrNotFound):
+		// OK
+	default:
+		return nil, fmt.Errorf("an error occured while looking up the transaction: %v", err)
+	}
+
 	// Find the origin
-	var err error
 	m.Origin, err = m.LoadUrl(m.OriginUrl)
 	if err == nil {
 		return m, nil

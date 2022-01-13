@@ -325,6 +325,7 @@ type TransactionSignature struct {
 type TransactionStatus struct {
 	Remote    bool              `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
 	Delivered bool              `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Pending   bool              `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result"`
@@ -1381,6 +1382,10 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 
+	if !(v.Pending == u.Pending) {
+		return false
+	}
+
 	if !(v.Code == u.Code) {
 		return false
 	}
@@ -2214,6 +2219,8 @@ func (v *TransactionStatus) BinarySize() int {
 	n += encoding.BoolBinarySize(v.Remote)
 
 	n += encoding.BoolBinarySize(v.Delivered)
+
+	n += encoding.BoolBinarySize(v.Pending)
 
 	n += encoding.UvarintBinarySize(v.Code)
 
@@ -3164,6 +3171,8 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BoolMarshalBinary(v.Remote))
 
 	buffer.Write(encoding.BoolMarshalBinary(v.Delivered))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.Pending))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Code))
 
@@ -4808,6 +4817,13 @@ func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.BoolBinarySize(v.Delivered):]
 
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Pending: %w", err)
+	} else {
+		v.Pending = x
+	}
+	data = data[encoding.BoolBinarySize(v.Pending):]
+
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Code: %w", err)
 	} else {
@@ -5349,12 +5365,14 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Remote    bool            `json:"remote,omitempty"`
 		Delivered bool            `json:"delivered,omitempty"`
+		Pending   bool            `json:"pending,omitempty"`
 		Code      uint64          `json:"code,omitempty"`
 		Message   string          `json:"message,omitempty"`
 		Result    json.RawMessage `json:"result,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
+	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
 	if x, err := json.Marshal(v.Result); err != nil {
@@ -6173,12 +6191,14 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Remote    bool            `json:"remote,omitempty"`
 		Delivered bool            `json:"delivered,omitempty"`
+		Pending   bool            `json:"pending,omitempty"`
 		Code      uint64          `json:"code,omitempty"`
 		Message   string          `json:"message,omitempty"`
 		Result    json.RawMessage `json:"result,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
+	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
 	if x, err := json.Marshal(v.Result); err != nil {
@@ -6192,6 +6212,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	}
 	v.Remote = u.Remote
 	v.Delivered = u.Delivered
+	v.Pending = u.Pending
 	v.Code = u.Code
 	v.Message = u.Message
 	if x, err := UnmarshalTransactionResultJSON(u.Result); err != nil {
