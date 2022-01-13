@@ -36,9 +36,17 @@ var accountCmd = &cobra.Command{
 					case "token":
 						out, err = CreateAccount(args[2], args[3:])
 					case "data":
-						out, err = CreateDataAccount(args[2], args[3:])
-					case "lite-data":
-						out, err = CreateLiteDataAccount(args[2], args[3:])
+						if args[2] != "lite" {
+							//if we don't want a lite data account create a adi data account
+							out, err = CreateLiteDataAccount(args[2], args[3:])
+						} else {
+							//we want a lite data account
+							if len(args) > 5 {
+								out, err = CreateDataAccount(args[3], args[4:])
+							} else {
+								PrintDataLiteAccountCreate()
+							}
+						}
 					default:
 						fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
 						//this will be removed in future release and replaced with usage: PrintAccountCreate()

@@ -169,7 +169,7 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 success
 
 section "Create lite data account and write the data"
-ACCOUNT_ID=$(accumulate -j account create lite-data keytest keytest-0-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
+ACCOUNT_ID=$(accumulate -j account create data lite keytest keytest-0-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
 [ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa" ] && success || die "${ACCOUNT_ID} does not match expected value"
 accumulate data get $ACCOUNT_ID 0 1 &> /dev/null || die "lite data entry not found"
 accumulate -j data write-to keytest keytest-0-0 $ACCOUNT_ID "data test"
