@@ -38,11 +38,11 @@ var accountCmd = &cobra.Command{
 					case "data":
 						if args[2] != "lite" {
 							//if we don't want a lite data account create a adi data account
-							out, err = CreateLiteDataAccount(args[2], args[3:])
+							out, err = CreateDataAccount(args[2], args[3:])
 						} else {
 							//we want a lite data account
 							if len(args) > 5 {
-								out, err = CreateDataAccount(args[3], args[4:])
+								out, err = CreateLiteDataAccount(args[3], args[4:])
 							} else {
 								PrintDataLiteAccountCreate()
 							}
