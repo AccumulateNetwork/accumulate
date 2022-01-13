@@ -61,7 +61,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(pageCmd)
 	cmd.AddCommand(txCmd)
 	cmd.AddCommand(versionCmd)
-	//cmd.AddCommand(tokenCmd)
+	cmd.AddCommand(tokenCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
