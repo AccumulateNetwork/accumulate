@@ -54,7 +54,7 @@ func testCase2_9b(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
-	commandLine := fmt.Sprintf("account create lite-data acc://RedWagon/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
+	commandLine := fmt.Sprintf("account create data lite acc://RedWagon/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
 

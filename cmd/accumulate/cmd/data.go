@@ -88,9 +88,9 @@ func PrintDataWriteTo() {
 }
 
 func PrintDataLiteAccountCreate() {
-	fmt.Println("  accumulate account create lite-data [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
-	fmt.Println("  accumulate account create lite-data [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
-	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName lite extidname1 example2 ")
+	fmt.Println("  accumulate account create data lite [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
+	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
+	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor signingKeyName example1 example2 ")
 }
 
 func PrintData() {
