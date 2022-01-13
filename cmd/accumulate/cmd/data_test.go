@@ -9,7 +9,8 @@ import (
 
 func init() {
 	testMatrix.addTest(testCase2_8)
-	testMatrix.addTest(testCase2_9)
+	testMatrix.addTest(testCase2_9a)
+	testMatrix.addTest(testCase2_9b)
 }
 
 //testCase2_8
@@ -26,13 +27,36 @@ func testCase2_8(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 }
 
-func testCase2_9(t *testing.T, tc *testCmd) {
+func testCase2_9a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
 	commandLine := fmt.Sprintf("data write acc://RedWagon/DataAccount red1 badc0de9 deadbeef cafef00dbabe8badf00d")
 	_, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
+
+	//now read back the response
+	commandLine = fmt.Sprintf("data get acc://RedWagon/DataAccount")
+	_, err = tc.execute(t, commandLine)
+	require.NoError(t, err)
+
+	//now read it back as a set
+	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount 0 1")
+	require.NoError(t, err)
+
+	//now read it back as a expanded set
+	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount 0 1 expand")
+	require.NoError(t, err)
+}
+
+func testCase2_9b(t *testing.T, tc *testCmd) {
+	t.Helper()
+
+	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
+	commandLine := fmt.Sprintf("account create lite-data acc://RedWagon/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
+	r, err := tc.executeTx(t, commandLine)
+	require.NoError(t, err)
+	t.Log(r)
 
 	//now read back the response
 	commandLine = fmt.Sprintf("data get acc://RedWagon/DataAccount")
