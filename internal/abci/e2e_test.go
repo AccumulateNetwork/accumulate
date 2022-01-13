@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	randpkg "golang.org/x/exp/rand"
 )
@@ -27,14 +26,20 @@ type Tx = transactions.Envelope
 func TestEndToEndSuite(t *testing.T) {
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
-		n := createAppWithMemDB(s.T(), crypto.Address{}, true)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		nodes := RunTestNet(t, subnets, daemons, nil, true)
+		n := nodes[subnets[1]][0]
+
 		return &e2eDUT{s, n}
 	}))
 }
 
 func TestCreateLiteAccount(t *testing.T) {
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	var count = 11
-	n := createAppWithMemDB(t, crypto.Address{}, true)
 	originAddr, balances := n.testLiteTx(count)
 	require.Equal(t, int64(5e4*acctesting.TokenMx-count*1000), n.GetLiteTokenAccount(originAddr).Balance.Int64())
 	for addr, bal := range balances {
@@ -42,7 +47,7 @@ func TestCreateLiteAccount(t *testing.T) {
 	}
 }
 
-func (n *fakeNode) testLiteTx(count int) (string, map[string]int64) {
+func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 	_, recipient, gtx, err := acctesting.BuildTestSynthDepositGenTx()
 	require.NoError(n.t, err)
 
@@ -80,7 +85,10 @@ func (n *fakeNode) testLiteTx(count int) (string, map[string]int64) {
 }
 
 func TestFaucet(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	alice := generateKey()
 	aliceUrl := acctesting.AcmeLiteAddressTmPriv(alice).String()
 
@@ -98,7 +106,10 @@ func TestFaucet(t *testing.T) {
 }
 
 func TestAnchorChain(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	liteAccount := generateKey()
 	batch := n.db.Begin()
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, liteAccount, 5e4))
@@ -159,7 +170,9 @@ func TestAnchorChain(t *testing.T) {
 }
 
 func TestCreateADI(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
 
 	liteAccount := generateKey()
 	newAdi := generateKey()
@@ -203,7 +216,10 @@ func TestCreateADI(t *testing.T) {
 func TestCreateAdiDataAccount(t *testing.T) {
 
 	t.Run("Data Account w/ Default Key Book and no Manager Key Book", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, true)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		nodes := RunTestNet(t, subnets, daemons, nil, true)
+		n := nodes[subnets[1]][0]
+
 		adiKey := generateKey()
 		batch := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
@@ -225,7 +241,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account w/ Custom Key Book and Manager Key Book Url", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, true)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		nodes := RunTestNet(t, subnets, daemons, nil, true)
+		n := nodes[subnets[1]][0]
+
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
@@ -256,7 +275,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 	})
 
 	t.Run("Data Account data entry", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, true)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		nodes := RunTestNet(t, subnets, daemons, nil, true)
+		n := nodes[subnets[1]][0]
+
 		adiKey := generateKey()
 		batch := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
@@ -355,7 +377,10 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 func TestCreateAdiTokenAccount(t *testing.T) {
 	t.Run("Default Key Book", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, true)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		nodes := RunTestNet(t, subnets, daemons, nil, true)
+		n := nodes[subnets[1]][0]
+
 		adiKey := generateKey()
 		batch := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
@@ -384,7 +409,10 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 	})
 
 	t.Run("Custom Key Book", func(t *testing.T) {
-		n := createAppWithMemDB(t, crypto.Address{}, true)
+		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+		nodes := RunTestNet(t, subnets, daemons, nil, true)
+		n := nodes[subnets[1]][0]
+
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin()
 		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
@@ -413,7 +441,10 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 }
 
 func TestLiteAccountTx(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
 	batch := n.db.Begin()
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, alice, 5e4))
@@ -441,7 +472,10 @@ func TestLiteAccountTx(t *testing.T) {
 }
 
 func TestAdiAccountTx(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey, barKey := generateKey(), generateKey()
 	batch := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
@@ -464,7 +498,10 @@ func TestAdiAccountTx(t *testing.T) {
 }
 
 func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey := generateKey()
 	batch := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
@@ -488,7 +525,10 @@ func TestSendCreditsFromAdiAccountToMultiSig(t *testing.T) {
 }
 
 func TestCreateKeyPage(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
@@ -515,7 +555,10 @@ func TestCreateKeyPage(t *testing.T) {
 }
 
 func TestCreateKeyBook(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
@@ -545,7 +588,10 @@ func TestCreateKeyBook(t *testing.T) {
 }
 
 func TestAddKeyPage(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
 	u := n.ParseUrl("foo/book1")
@@ -580,7 +626,10 @@ func TestAddKeyPage(t *testing.T) {
 }
 
 func TestAddKey(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey, testKey := generateKey(), generateKey()
 
 	batch := n.db.Begin()
@@ -606,7 +655,10 @@ func TestAddKey(t *testing.T) {
 }
 
 func TestUpdateKey(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey, testKey := generateKey(), generateKey()
 
 	batch := n.db.Begin()
@@ -633,7 +685,10 @@ func TestUpdateKey(t *testing.T) {
 }
 
 func TestRemoveKey(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey, testKey1, testKey2 := generateKey(), generateKey(), generateKey()
 
 	batch := n.db.Begin()
@@ -658,7 +713,10 @@ func TestRemoveKey(t *testing.T) {
 }
 
 func TestSignatorHeight(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	liteKey, fooKey := generateKey(), generateKey()
 
 	liteUrl, err := protocol.LiteAddress(liteKey.PubKey().Bytes(), "ACME")
@@ -711,7 +769,10 @@ func TestSignatorHeight(t *testing.T) {
 }
 
 func TestCreateToken(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey := generateKey()
 	batch := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
@@ -732,7 +793,10 @@ func TestCreateToken(t *testing.T) {
 }
 
 func TestIssueTokens(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
+
 	fooKey, liteKey := generateKey(), generateKey()
 	batch := n.db.Begin()
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
@@ -766,7 +830,9 @@ func TestInvalidDeposit(t *testing.T) {
 	// bug could have been triggered by a failing SyntheticCreateChains,
 	// SyntheticDepositTokens, or SyntheticDepositCredits.
 
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
 
 	liteKey := generateKey()
 	liteAddr, err := protocol.LiteAddress(liteKey[32:], "foo/tokens")
