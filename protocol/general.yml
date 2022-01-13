@@ -36,10 +36,12 @@ DataEntry:
   fields:
     - name: ExtIds
       type: slice
+      optional: true
       slice:
         type: bytes
     - name: Data
       type: bytes
+      optional: true
 
 DirectoryIndexMetadata:
   fields:

@@ -103,8 +103,8 @@ type DataAccount struct {
 }
 
 type DataEntry struct {
-	ExtIds [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds" validate:"required"`
-	Data   []byte   `json:"data,omitempty" form:"data" query:"data" validate:"required"`
+	ExtIds [][]byte `json:"extIds,omitempty" form:"extIds" query:"extIds"`
+	Data   []byte   `json:"data,omitempty" form:"data" query:"data"`
 }
 
 type DirectoryIndexMetadata struct {

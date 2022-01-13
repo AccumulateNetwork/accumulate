@@ -88,6 +88,7 @@ func PrintDataWriteTo() {
 }
 
 func PrintDataLiteAccountCreate() {
+	fmt.Println("  accumulate account create lite-data [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("  accumulate account create lite-data [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
 	fmt.Println("\t\t example usage: accumulate account create data acc://actor signingKeyName lite extidname1 example2 ")
 }
@@ -210,7 +211,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 
 	lite, err := GetUrl(addr.String())
 	if lite != nil {
-		return "", fmt.Errorf("lite data address already exists %q : %v", addr)
+		return "", fmt.Errorf("lite data address already exists %s", addr)
 	}
 
 	lde := protocol.LiteDataEntry{}
