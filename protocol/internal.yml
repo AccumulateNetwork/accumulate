@@ -65,14 +65,14 @@ SyntheticLedger:
 SendTransaction:
   incomparable: true
   fields:
-  - name: Payload
-    type: TransactionPayload
-    marshal-as: value
-    unmarshal-with: UnmarshalTransaction
-  - name: Recipient
-    type: url.URL
-    marshal-as: reference
-    pointer: true
+    - name: Payload
+      type: TransactionPayload
+      marshal-as: value
+      unmarshal-with: UnmarshalTransaction
+    - name: Recipient
+      type: url.URL
+      marshal-as: reference
+      pointer: true
 
 TransactionSignature:
   fields:

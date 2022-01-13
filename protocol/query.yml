@@ -16,21 +16,21 @@ MetricsResponse:
 
 DirectoryQueryResult:
   fields:
-  - name: Entries
-    type: slice
-    slice:
-      type: string
-    optional: true
-  - name: ExpandedEntries
-    type: slice
-    slice:
-      type: state.Object
-      pointer: true
-      marshal-as: reference
-    optional: true
-  - name: Total
-    type: uvarint
-    keep-empty: true
+    - name: Entries
+      type: slice
+      slice:
+        type: string
+      optional: true
+    - name: ExpandedEntries
+      type: slice
+      slice:
+        type: state.Object
+        pointer: true
+        marshal-as: reference
+      optional: true
+    - name: Total
+      type: uvarint
+      keep-empty: true
 
 RequestDataEntry:
   fields:

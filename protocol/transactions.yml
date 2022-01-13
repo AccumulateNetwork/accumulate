@@ -71,12 +71,12 @@ WriteData:
 WriteDataTo:
   kind: tx
   fields:
-  - name: Recipient
-    type: string
-    is-url: true
-  - name: Entry
-    type: DataEntry
-    marshal-as: reference
+    - name: Recipient
+      type: string
+      is-url: true
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
 
 AcmeFaucet:
   kind: tx
@@ -113,17 +113,17 @@ CreateToken:
 IssueTokens:
   kind: tx
   fields:
-  - name: Recipient
-    type: string
-    is-url: true
-  - name: Amount
-    type: bigint
+    - name: Recipient
+      type: string
+      is-url: true
+    - name: Amount
+      type: bigint
 
 BurnTokens:
   kind: tx
   fields:
-  - name: Amount
-    type: bigint
+    - name: Amount
+      type: bigint
 
 CreateKeyPage:
   kind: tx
@@ -190,13 +190,15 @@ SyntheticCreateChain:
         type: ChainParams
         marshal-as: reference
 
+
 SyntheticWriteData:
   kind: tx
   fields:
-  - name: Cause
-    type: chain
-  - name: Data
-    type: bytes
+    - name: Cause
+      type: chain
+    - name: Entry
+      type: DataEntry
+      marshal-as: reference
 
 SyntheticDepositTokens:
   kind: tx

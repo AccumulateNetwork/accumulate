@@ -178,7 +178,7 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 	st, err := NewStateManager(batch, m.Network.NodeUrl(), env)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
-		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens:
+		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens, types.TxTypeSyntheticWriteData:
 			// TX does not require the origin record to exist
 		default:
 			return nil, fmt.Errorf("origin record not found: %w", err)
@@ -318,7 +318,7 @@ func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error
 	st.Signator = account
 	st.SignatorUrl = st.OriginUrl
 
-	urlKH, _, err := protocol.ParseLiteAddress(st.OriginUrl)
+	urlKH, _, err := protocol.ParseLiteTokenAddress(st.OriginUrl)
 	if err != nil {
 		// This shouldn't happen because invalid URLs should never make it
 		// into the database.

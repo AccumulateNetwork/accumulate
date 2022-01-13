@@ -23,7 +23,7 @@ func init() {
 	pubKey := privKey.Public().(ed25519.PublicKey)
 
 	var err error
-	FaucetUrl, err = LiteAddress(pubKey, AcmeUrl().String())
+	FaucetUrl, err = LiteTokenAddress(pubKey, AcmeUrl().String())
 	if err != nil {
 		panic(err)
 	}

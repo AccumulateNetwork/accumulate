@@ -1,8 +1,8 @@
 stages:
-- test
-- build
-- deploy
-- validate
+  - test
+  - build
+  - deploy
+  - validate
 
 variables:
   BOLD_RED: '\e[1;31m'
@@ -14,7 +14,7 @@ variables:
   cache:
     key: go-mod-cache
     paths:
-    - .go-mod-cache
+      - .go-mod-cache
   variables:
     GOMODCACHE: ${CI_PROJECT_DIR}/.go-mod-cache
   before_script:
@@ -58,57 +58,57 @@ git describe:
 build images:
   stage: build
   needs: []
-  tags: [docker, linux]
+  tags: [ docker, linux ]
   image: docker
-  services: ['docker:dind']
+  services: [ 'docker:dind' ]
   script:
-  - docker build -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
-  - docker build -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
-  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  - docker push ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
-  - docker push ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
+    - docker build -t ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG} .
+    - docker build -t ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG} -f Dockerfile.cli .
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push ${CI_REGISTRY_IMAGE}/accumulated:${CI_COMMIT_REF_SLUG}
+    - docker push ${CI_REGISTRY_IMAGE}/cli:${CI_COMMIT_REF_SLUG}
 
 lint:
   stage: build
   extends: .go
-  needs: []
+  needs: [ ]
   script:
-  - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
+    - function die { echo -e "${BOLD_RED}${1}${NO_COLOR}"; false; }
 
-  - echo -e "${SECTION}section_start:`date +%s`:vet\r${SECTION}Vet"
-  - go vet ./...
-  - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
+    - echo -e "${SECTION}section_start:`date +%s`:vet\r${SECTION}Vet"
+    - go vet ./...
+    - echo -e "${SECTION}section_end:`date +%s`:vet\r${SECTION}"
 
-  - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"
-  - go mod tidy
-  - git diff --quiet go.mod go.sum || die "Go mod files are not tidy. Please run \`go mod tidy\`."
-  - echo -e "${SECTION}section_end:`date +%s`:tidy\r${SECTION}"
+    - echo -e "${SECTION}section_start:`date +%s`:tidy\r${SECTION}Verify go.mod is tidy"
+    - go mod tidy
+    - git diff --quiet go.mod go.sum || die "Go mod files are not tidy. Please run \`go mod tidy\`."
+    - echo -e "${SECTION}section_end:`date +%s`:tidy\r${SECTION}"
 
-  - echo -e "${SECTION}section_start:`date +%s`:generate\r${SECTION}Verify generated files are up to date"
-  - go generate -x ./...
-  - git diff --quiet || die "Generated files are not up to date. Please run \`go generate ./...\`."
-  - echo -e "${SECTION}section_end:`date +%s`:generate\r${SECTION}"
+    - echo -e "${SECTION}section_start:`date +%s`:generate\r${SECTION}Verify generated files are up to date"
+    - go generate -x ./...
+    - git diff --quiet || die "Generated files are not up to date. Please run \`go generate ./...\`."
+    - echo -e "${SECTION}section_end:`date +%s`:generate\r${SECTION}"
 
-  - echo -e "${SECTION}section_start:`date +%s`:imports\r${SECTION}Verify code is correctly formatted"
-  - go run github.com/rinchsan/gosimports/cmd/gosimports -l */ | tee fmt.log
-  - test -s fmt.log && die "Code is incorrectly formatted. Please run \`gosimports -w .\` (or \`./scripts/imports.sh\`)."
-  - echo -e "${SECTION}section_end:`date +%s`:imports\r${SECTION}"
+    - echo -e "${SECTION}section_start:`date +%s`:imports\r${SECTION}Verify code is correctly formatted"
+    - go run github.com/rinchsan/gosimports/cmd/gosimports -l */ | tee fmt.log
+    - test -s fmt.log && die "Code is incorrectly formatted. Please run \`gosimports -w .\` (or \`./scripts/imports.sh\`)."
+    - echo -e "${SECTION}section_end:`date +%s`:imports\r${SECTION}"
 
 build:
   stage: build
   extends: .go
-  needs: [git describe]
-  tags: [docker, linux]
+  needs: [ git describe ]
+  tags: [ docker, linux ]
   script:
-  - build-daemon linux amd64
-  - build-daemon linux arm64
-  - build-daemon windows amd64
-  - build-daemon windows arm64
-  - build-daemon darwin amd64
-  - build-daemon darwin arm64
+    - build-daemon linux amd64
+    - build-daemon linux arm64
+    - build-daemon windows amd64
+    - build-daemon windows arm64
+    - build-daemon darwin amd64
+    - build-daemon darwin arm64
   artifacts:
     paths:
-    - accumulated-*
+      - accumulated-*
 
 configure:
   stage: build

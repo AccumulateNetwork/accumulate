@@ -223,9 +223,10 @@ func (m *stateCache) UpdateCreditBalance(record state.Chain) error {
 }
 
 type addDataEntry struct {
-	url   *url.URL
-	hash  []byte
-	entry *protocol.DataEntry
+	url          *url.URL
+	liteStateRec state.Chain
+	hash         []byte
+	entry        *protocol.DataEntry
 }
 
 //UpdateData will cache a data associated with a DataAccount chain.
@@ -238,12 +239,32 @@ func (m *stateCache) UpdateData(record state.Chain, entryHash []byte, dataEntry 
 		panic(fmt.Errorf("invalid URL: %v", err))
 	}
 
-	m.operations = append(m.operations, &addDataEntry{u, entryHash, dataEntry})
+	var stateRec state.Chain
+
+	if record.Header().Type == types.AccountTypeLiteDataAccount {
+		stateRec = record
+	}
+
+	m.operations = append(m.operations, &addDataEntry{u, stateRec, entryHash, dataEntry})
 }
 
 func (op *addDataEntry) Execute(st *stateCache) ([]state.Chain, error) {
 	// Add entry to data chain
 	record := st.batch.Account(op.url)
+
+	// Add lite record to data chain if applicable
+	if op.liteStateRec != nil {
+		_, err := record.GetState()
+		if err != nil {
+			//if we have no state, store it
+			err = record.PutState(op.liteStateRec)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	// Add entry to data chain
 	data, err := record.Data()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load data chain of %q: %v", op.url, err)
