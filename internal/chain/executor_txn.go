@@ -266,15 +266,15 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 		}
 	}
 
-	//cost, err := protocol.ComputeFee(tx)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if !page.DebitCredits(uint64(cost)) {
-	//	return nil, fmt.Errorf("insufficent credits for the transaction")
-	//}
-	//
-	//st.UpdateCreditBalance(page)
+	cost, err := protocol.ComputeFee(env)
+	if err != nil {
+		return nil, err
+	}
+	if !page.DebitCredits(uint64(cost)) {
+		return nil, fmt.Errorf("insufficent credits for the transaction")
+	}
+
+	st.UpdateCreditBalance(page)
 	err = st.UpdateNonce(page)
 	if err != nil {
 		return nil, err
