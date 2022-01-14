@@ -189,5 +189,5 @@ func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) 
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryTxHistory(req.Url, req.Start, req.Count))
+	return jrpcFormatResponse(m.opts.Query.QueryTxHistory(req.Url, req.QueryPagination))
 }
