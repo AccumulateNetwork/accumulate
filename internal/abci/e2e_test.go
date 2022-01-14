@@ -25,6 +25,8 @@ var rand = randpkg.New(randpkg.NewSource(0))
 type Tx = transactions.Envelope
 
 func TestEndToEndSuite(t *testing.T) {
+	acctesting.SkipCI(t, "flaky")
+
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
 		n := createAppWithMemDB(s.T(), crypto.Address{}, true)
