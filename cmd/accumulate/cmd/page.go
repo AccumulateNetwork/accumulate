@@ -30,11 +30,11 @@ var pageCmd = &cobra.Command{
 			} else if args[0] == "key" {
 				switch arg := args[1]; arg {
 				case "update":
-					out, err = KeyPageUpdate(args[2], protocol.UpdateKey, args[3:])
+					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationUpdate, args[3:])
 				case "add":
-					out, err = KeyPageUpdate(args[2], protocol.AddKey, args[3:])
+					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationAdd, args[3:])
 				case "remove":
-					out, err = KeyPageUpdate(args[2], protocol.RemoveKey, args[3:])
+					out, err = KeyPageUpdate(args[2], protocol.KeyPageOperationRemove, args[3:])
 				default:
 					fmt.Println("Usage:")
 					PrintKeyPageCreate()
@@ -88,7 +88,7 @@ func GetKeyPage(url string) (*QueryResponse, *protocol.KeyPage, error) {
 		return nil, nil, err
 	}
 
-	if res.Type != types.ChainTypeKeyPage.String() {
+	if res.Type != types.AccountTypeKeyPage.String() {
 		return nil, nil, fmt.Errorf("expecting key page but received %v", res.Type)
 	}
 
@@ -182,7 +182,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 	ukp.Operation = op
 
 	switch op {
-	case protocol.UpdateKey:
+	case protocol.KeyPageOperationUpdate:
 		if len(args) < 2 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
@@ -194,7 +194,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if err != nil {
 			return "", err
 		}
-	case protocol.AddKey:
+	case protocol.KeyPageOperationAdd:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
@@ -202,7 +202,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if err != nil {
 			return "", err
 		}
-	case protocol.RemoveKey:
+	case protocol.KeyPageOperationRemove:
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}

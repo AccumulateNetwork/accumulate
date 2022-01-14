@@ -61,10 +61,23 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	cmd.AddCommand(pageCmd)
 	cmd.AddCommand(txCmd)
 	cmd.AddCommand(versionCmd)
-	//cmd.AddCommand(tokenCmd)
+	cmd.AddCommand(tokenCmd)
 
 	//for the testnet integration
 	cmd.AddCommand(faucetCmd)
+
+	cmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		switch Client.Server {
+		case "local":
+			Client.Server = "http://127.0.1.1:26660/v2"
+		case "localhost":
+			Client.Server = "http://127.0.0.1:26660/v2"
+		case "devnet":
+			Client.Server = "https://devnet.accumulatenetwork.io/v2"
+		case "testnet":
+			Client.Server = "https://testnet.accumulatenetwork.io/v2"
+		}
+	}
 
 	cmd.PersistentPostRun = func(*cobra.Command, []string) {
 		if DidError != nil {

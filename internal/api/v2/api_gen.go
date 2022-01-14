@@ -10,7 +10,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 22)
+		m.methods = make(jsonrpc2.MethodMap, 24)
 	}
 
 	m.methods["execute"] = m.Execute
@@ -21,9 +21,11 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["create-key-page"] = m.ExecuteCreateKeyPage
 	m.methods["create-token"] = m.ExecuteCreateToken
 	m.methods["create-token-account"] = m.ExecuteCreateTokenAccount
+	m.methods["issue-tokens"] = m.ExecuteIssueTokens
 	m.methods["send-tokens"] = m.ExecuteSendTokens
 	m.methods["update-key-page"] = m.ExecuteUpdateKeyPage
 	m.methods["write-data"] = m.ExecuteWriteData
+	m.methods["write-data-to"] = m.ExecuteWriteDataTo
 	m.methods["faucet"] = m.Faucet
 	m.methods["metrics"] = m.Metrics
 	m.methods["query"] = m.Query
@@ -95,6 +97,10 @@ func (m *JrpcMethods) ExecuteCreateTokenAccount(ctx context.Context, params json
 	return m.executeWith(ctx, params, new(protocol.CreateTokenAccount))
 }
 
+func (m *JrpcMethods) ExecuteIssueTokens(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.IssueTokens))
+}
+
 func (m *JrpcMethods) ExecuteSendTokens(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.SendTokens), "From", "To")
 }
@@ -105,6 +111,10 @@ func (m *JrpcMethods) ExecuteUpdateKeyPage(ctx context.Context, params json.RawM
 
 func (m *JrpcMethods) ExecuteWriteData(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.WriteData))
+}
+
+func (m *JrpcMethods) ExecuteWriteDataTo(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.WriteDataTo))
 }
 
 func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface{} {
@@ -184,5 +194,5 @@ func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) 
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryTxHistory(req.Url, req.Start, req.Count))
+	return jrpcFormatResponse(m.opts.Query.QueryTxHistory(req.Url, req.QueryPagination))
 }

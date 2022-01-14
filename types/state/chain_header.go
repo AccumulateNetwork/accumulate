@@ -19,12 +19,12 @@ type Chain interface {
 }
 
 //ChainHeader information for the state object.  Each state object will contain a header
-//that will consist of the chain type enumerator
+//that will consist of the account type enumerator
 type ChainHeader struct {
-	Type           types.ChainType `json:"type" form:"type" query:"type" validate:"required"`
-	ChainUrl       types.String    `json:"url" form:"url" query:"url" validate:"required,alphanum"`
-	KeyBook        types.String    `json:"keyBook"`        //this is the chain id for the sig spec for the chain
-	ManagerKeyBook types.String    `json:"managerKeyBook"` //this is the manager key book url for the chain
+	Type           types.AccountType `json:"type" form:"type" query:"type" validate:"required"`
+	ChainUrl       types.String      `json:"url" form:"url" query:"url" validate:"required,alphanum"`
+	KeyBook        types.String      `json:"keyBook"`        //this is the chain id for the sig spec for the chain
+	ManagerKeyBook types.String      `json:"managerKeyBook"` //this is the manager key book url for the chain
 	// transient
 	url *url.URL
 }
@@ -39,7 +39,7 @@ func (h *ChainHeader) Equal(g *ChainHeader) bool {
 }
 
 //SetHeader sets the data for a chain header
-func (h *ChainHeader) SetHeader(chainUrl types.String, chainType types.ChainType) {
+func (h *ChainHeader) SetHeader(chainUrl types.String, chainType types.AccountType) {
 	h.ChainUrl = chainUrl
 	h.Type = chainType
 }
@@ -54,8 +54,8 @@ func (h *ChainHeader) GetHeaderSize() int {
 	return i + len(h.ChainUrl) + len(h.KeyBook) + len(h.ManagerKeyBook)
 }
 
-//GetType will return the chain type
-func (h *ChainHeader) GetType() types.ChainType {
+//GetType will return the account type
+func (h *ChainHeader) GetType() types.AccountType {
 	return h.Type
 }
 
@@ -79,13 +79,13 @@ func (h *ChainHeader) ParseUrl() (*url.URL, error) {
 	return u, nil
 }
 
-func ChainType(data []byte) (types.ChainType, error) {
+func ChainType(data []byte) (types.AccountType, error) {
 	v, err := accenc.UvarintUnmarshalBinary(data)
 	if err != nil {
 		return 0, err
 	}
 
-	return types.ChainType(v), nil
+	return types.AccountType(v), nil
 }
 
 //MarshalBinary serializes the header
@@ -109,7 +109,7 @@ func (h *ChainHeader) UnmarshalBinary(data []byte) (err error) {
 	}()
 
 	chainType, data := common.BytesUint64(data)
-	h.Type = types.ChainType(chainType)
+	h.Type = types.AccountType(chainType)
 
 	u, data := common.BytesSlice(data)
 	h.ChainUrl = types.String(u)

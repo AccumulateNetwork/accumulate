@@ -46,7 +46,7 @@ QueryTxHistory:
   rpc: query-tx-history
   input: TxHistoryQuery
   output: QueryMultiResponse with transactions
-  call-params: [Url, Start, Count]
+  call-params: [Url, QueryPagination]
 
 QueryData:
   kind: query
@@ -124,3 +124,13 @@ ExecuteWriteData:
   kind: execute
   rpc: write-data
   input: WriteData
+
+ExecuteIssueTokens:
+  kind: execute
+  rpc: issue-tokens
+  input: IssueTokens
+
+ExecuteWriteDataTo:
+  kind: execute
+  rpc: write-data-to
+  input: WriteDataTo

@@ -71,13 +71,34 @@ func TestLiteAddress(t *testing.T) {
 	for name, str := range TokenURLs {
 		t.Run(name, func(t *testing.T) {
 			publicKey := sha256.Sum256([]byte(name))
-			url, err := LiteAddress(publicKey[:], str)
+			url, err := LiteTokenAddress(publicKey[:], str)
 			if name[:4] == "good" {
 				require.NoError(t, err, "%s should be valid", str)
 				fmt.Println(url.String())
 			} else {
 				require.Errorf(t, err, " %s should be invalid", str)
 			}
+		})
+	}
+}
+
+func TestParseLiteTokenAddress(t *testing.T) {
+	fakeKey := make([]byte, 32)
+	fakeHash := sha256.Sum256(fakeKey)
+	addr, err := LiteTokenAddress(fakeKey, "-/-")
+	require.NoError(t, err)
+	addr = addr.Identity()
+
+	tests := []string{
+		"ACME",
+		"foo/tokens",
+	}
+	for _, test := range tests {
+		t.Run(test, func(t *testing.T) {
+			key, tok, err := ParseLiteTokenAddress(addr.JoinPath("/" + test))
+			require.NoError(t, err)
+			require.Equal(t, fakeHash[:20], key)
+			require.Equal(t, "acc://"+test, tok.String())
 		})
 	}
 }

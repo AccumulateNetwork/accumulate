@@ -14,6 +14,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Resource chain: %X\n", u.ResourceChain())
-	fmt.Printf("Identity chain: %X\n", u.IdentityChain())
+	fmt.Printf("Resource chain: %X\n", u.AccountID())
+	fmt.Printf("Identity chain: %X\n", u.IdentityAccountID())
 }
