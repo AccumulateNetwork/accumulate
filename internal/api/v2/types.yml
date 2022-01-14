@@ -87,14 +87,14 @@ KeyPage:
   non-binary: true
   incomparable: true
   fields:
-  - name: Height
-    type: uvarint
-  - name: Index
-    type: uvarint
-    optional: true
-  - name: Threshold
-    type: uvarint
-    optional: true
+    - name: Height
+      type: uvarint
+    - name: Index
+      type: uvarint
+      optional: true
+    - name: Threshold
+      type: uvarint
+      optional: true
 
 Signer:
   non-binary: true
