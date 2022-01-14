@@ -36,7 +36,17 @@ var accountCmd = &cobra.Command{
 					case "token":
 						out, err = CreateAccount(args[2], args[3:])
 					case "data":
-						out, err = CreateDataAccount(args[2], args[3:])
+						if args[2] != "lite" {
+							//if we don't want a lite data account create a adi data account
+							out, err = CreateDataAccount(args[2], args[3:])
+						} else {
+							//we want a lite data account
+							if len(args) > 5 {
+								out, err = CreateLiteDataAccount(args[3], args[4:])
+							} else {
+								PrintDataLiteAccountCreate()
+							}
+						}
 					default:
 						fmt.Printf("Deprecation Warning!\nTo create a token account, in future please specify either \"token\" or \"data\"\n\n")
 						//this will be removed in future release and replaced with usage: PrintAccountCreate()
@@ -92,8 +102,8 @@ func PrintAccountRestore() {
 }
 
 func PrintAccountCreate() {
-	fmt.Println("  accumulate account create token [origin adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBookUrl]	Create a token account for an ADI")
-	fmt.Println("  accumulate account create data [origin adi] [signing key name] [key index (optional)] [key height (optional)] [new data account url]  [keyBookUrl]	Create a data account under an ADI")
+	PrintDataAccountCreate()
+	PrintDataLiteAccountCreate()
 }
 
 func PrintAccountImport() {
@@ -121,8 +131,8 @@ func GetAccount(url string) (string, error) {
 		return "", err
 	}
 
-	if res.Type != types.ChainTypeTokenAccount.String() && res.Type != types.ChainTypeLiteTokenAccount.String() &&
-		res.Type != types.ChainTypeDataAccount.String() && res.Type != types.ChainTypeLiteDataAccount.String() {
+	if res.Type != types.AccountTypeTokenAccount.String() && res.Type != types.AccountTypeLiteTokenAccount.String() &&
+		res.Type != types.AccountTypeDataAccount.String() && res.Type != types.AccountTypeLiteDataAccount.String() {
 		return "", fmt.Errorf("expecting token account or data account but received %v", res.Type)
 	}
 
@@ -223,7 +233,7 @@ func ListAccounts() (string, error) {
 	}
 	var out string
 	for _, v := range b.KeyValueList {
-		lt, err := protocol.LiteAddress(v.Value, protocol.AcmeUrl().String())
+		lt, err := protocol.LiteTokenAddress(v.Value, protocol.AcmeUrl().String())
 		if err != nil {
 			continue
 		}
@@ -246,7 +256,7 @@ func RestoreAccounts() (out string, err error) {
 		if err != nil {
 			out += fmt.Sprintf("%q is not a valid URL\n", v.Key)
 		}
-		key, _, err := protocol.ParseLiteAddress(u)
+		key, _, err := protocol.ParseLiteTokenAddress(u)
 		if err != nil {
 			out += fmt.Sprintf("%q is not a valid lite account: %v\n", v.Key, err)
 		} else if key == nil {

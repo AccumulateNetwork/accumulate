@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,7 +24,7 @@ var flags struct {
 func main() {
 	cmd := cobra.Command{
 		Use:  "gentypes [file]",
-		Args: cobra.ExactArgs(1),
+		Args: cobra.MinimumNArgs(1),
 		Run:  run,
 	}
 
@@ -50,17 +51,20 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 	}
 }
 
-func readTypes(file string) typegen.DataTypes {
-	f, err := os.Open(file)
-	check(err)
-	defer f.Close()
+func readTypes(files []string) typegen.DataTypes {
+	buf := new(bytes.Buffer)
+	for _, file := range files {
+		data, err := ioutil.ReadFile(file)
+		check(err)
+		buf.Write(data)
+		buf.WriteRune('\n')
+	}
 
 	var types map[string]*typegen.DataType
 
-	dec := yaml.NewDecoder(f)
+	dec := yaml.NewDecoder(buf)
 	dec.KnownFields(true)
-	err = dec.Decode(&types)
-	check(err)
+	check(dec.Decode(&types))
 
 	return typegen.DataTypesFrom(types)
 }
@@ -86,7 +90,7 @@ func getPackagePath() string {
 }
 
 func run(_ *cobra.Command, args []string) {
-	types := readTypes(args[0])
+	types := readTypes(args)
 	ttypes := convert(types, flags.Package, getPackagePath())
 
 	w := new(bytes.Buffer)

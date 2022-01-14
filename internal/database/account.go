@@ -9,14 +9,14 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-// Record manages a record.
-type Record struct {
+// Account manages a record.
+type Account struct {
 	batch *Batch
-	key   recordBucket
+	key   accountBucket
 }
 
 // ensureObject ensures that the record's object metadata is up to date.
-func (r *Record) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.ObjectMetadata, error) {
+func (r *Account) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.ObjectMetadata, error) {
 	// Load the current metadata, if any
 	meta := new(protocol.ObjectMetadata)
 	err := r.batch.getAs(r.key.Object(), meta)
@@ -59,6 +59,10 @@ func (r *Record) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.Ob
 		return nil, fmt.Errorf("attempted to add chain %s multiple times with different types", chain.Name)
 	}
 
+	if len(meta.Chains) == origLen {
+		return meta, nil
+	}
+
 	err = r.batch.putAs(r.key.Object(), meta)
 	if err != nil {
 		return nil, err
@@ -68,7 +72,7 @@ func (r *Record) ensureObject(addChains ...protocol.ChainMetadata) (*protocol.Ob
 }
 
 // GetObject loads the object metadata.
-func (r *Record) GetObject() (*protocol.ObjectMetadata, error) {
+func (r *Account) GetObject() (*protocol.ObjectMetadata, error) {
 	meta := new(protocol.ObjectMetadata)
 	err := r.batch.getAs(r.key.Object(), meta)
 	if err != nil {
@@ -78,7 +82,7 @@ func (r *Record) GetObject() (*protocol.ObjectMetadata, error) {
 }
 
 // GetState loads the record state.
-func (r *Record) GetState() (state.Chain, error) {
+func (r *Account) GetState() (state.Chain, error) {
 	data, err := r.batch.store.Get(r.key.State())
 	if err != nil {
 		return nil, err
@@ -93,7 +97,7 @@ func (r *Record) GetState() (state.Chain, error) {
 }
 
 // GetStateAs loads the record state and unmarshals into the given value.
-func (r *Record) GetStateAs(state state.Chain) error {
+func (r *Account) GetStateAs(state state.Chain) error {
 	data, err := r.batch.store.Get(r.key.State())
 	if err != nil {
 		return err
@@ -108,36 +112,36 @@ func (r *Record) GetStateAs(state state.Chain) error {
 }
 
 // PutState stores the record state and adds the record to the BPT (as a hash).
-func (r *Record) PutState(recordState state.Chain) error {
+func (r *Account) PutState(accountState state.Chain) error {
 	// Does the record state have a URL?
-	if recordState.Header().ChainUrl == "" {
+	if accountState.Header().ChainUrl == "" {
 		return errors.New("invalid URL: empty")
 	}
 
 	// Is the URL valid?
-	u, err := recordState.Header().ParseUrl()
+	u, err := accountState.Header().ParseUrl()
 	if err != nil {
 		return fmt.Errorf("invalid URL: %v", err)
 	}
 
 	// Is this the right URL - does it match the record's key?
-	if record(u) != r.key {
+	if account(u) != r.key {
 		return fmt.Errorf("invalid URL: %v", err)
 	}
 
 	// Make sure the key book is set
-	switch recordState.(type) {
+	switch accountState.(type) {
 	case *protocol.LiteTokenAccount, *protocol.LiteDataAccount,
 		*protocol.KeyBook, *protocol.KeyPage:
 		// Empty key book is OK
 	default:
-		if recordState.Header().KeyBook == "" {
+		if accountState.Header().KeyBook == "" {
 			return fmt.Errorf("missing key book")
 		}
 	}
 
 	// Marshal the state
-	stateData, err := recordState.MarshalBinary()
+	stateData, err := accountState.MarshalBinary()
 	if err != nil {
 		return fmt.Errorf("failed to marshal state: %v", err)
 	}
@@ -148,16 +152,16 @@ func (r *Record) PutState(recordState state.Chain) error {
 }
 
 // PutBpt writes the record's BPT entry.
-func (r *Record) PutBpt(hash [32]byte) {
+func (r *Account) PutBpt(hash [32]byte) {
 	r.batch.bpt.Bpt.Insert(r.key.Object(), hash)
 }
 
-func (r *Record) chain(name string, writable bool) (*Chain, error) {
+func (r *Account) chain(name string, writable bool) (*Chain, error) {
 	return newChain(r.batch.store, r.key.Chain(name), writable)
 }
 
 // Chain returns a chain manager for the given chain.
-func (r *Record) Chain(name string, typ protocol.ChainType) (*Chain, error) {
+func (r *Account) Chain(name string, typ protocol.ChainType) (*Chain, error) {
 	_, err := r.ensureObject(protocol.ChainMetadata{Name: name, Type: typ})
 	if err != nil {
 		return nil, err
@@ -166,17 +170,17 @@ func (r *Record) Chain(name string, typ protocol.ChainType) (*Chain, error) {
 }
 
 // ReadChain returns a read-only chain manager for the given chain.
-func (r *Record) ReadChain(name string) (*Chain, error) {
+func (r *Account) ReadChain(name string) (*Chain, error) {
 	return r.chain(name, false)
 }
 
 // Index returns a value that can read or write an index value.
-func (r *Record) Index(key ...interface{}) *Value {
+func (r *Account) Index(key ...interface{}) *Value {
 	return &Value{r.batch, r.key.Index(key...)}
 }
 
 // Data returns a data chain manager for the data chain.
-func (r *Record) Data() (*Data, error) {
+func (r *Account) Data() (*Data, error) {
 	chain, err := r.Chain(protocol.DataChain, protocol.ChainTypeData)
 	if err != nil {
 		return nil, err

@@ -190,7 +190,7 @@ func (api *API) createKeyBook(_ context.Context, params json.RawMessage) interfa
 		return err
 	}
 
-	ret.Type = types.String(types.ChainTypeKeyBook.String())
+	ret.Type = types.String(types.AccountTypeKeyBook.String())
 	return ret
 }
 
@@ -235,7 +235,7 @@ func (api *API) prepareGet(params json.RawMessage) (*acmeapi.APIRequestURL, erro
 	return req, api.unmarshalRequest(params, req)
 }
 
-func (api *API) get(params json.RawMessage, expect ...types.ChainType) interface{} {
+func (api *API) get(params json.RawMessage, expect ...types.AccountType) interface{} {
 	req, err := api.prepareGet(params)
 	if err != nil {
 		return validatorError(err)
@@ -286,11 +286,11 @@ func (api *API) getDataByChainId(_ context.Context, params json.RawMessage) inte
 }
 
 func (api *API) getKeyPage(_ context.Context, params json.RawMessage) interface{} {
-	return api.get(params, types.ChainTypeKeyPage)
+	return api.get(params, types.AccountTypeKeyPage)
 }
 
 func (api *API) getKeyBook(_ context.Context, params json.RawMessage) interface{} {
-	return api.get(params, types.ChainTypeKeyBook)
+	return api.get(params, types.AccountTypeKeyBook)
 }
 
 // getADI returns ADI info
@@ -581,7 +581,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 		return validatorError(err)
 	}
 
-	addr, tok, err := protocol.ParseLiteAddress(u)
+	addr, tok, err := protocol.ParseLiteTokenAddress(u)
 	switch {
 	case err != nil:
 		return jsonrpc2.NewError(ErrCodeValidation, "Invalid token account", fmt.Errorf("error parsing %q: %v", u, err))

@@ -69,7 +69,7 @@ var flagInitDevnet struct {
 	NumValidators int
 	NumFollowers  int
 	BasePort      int
-	BaseIP        string
+	IPs           []string
 	Docker        bool
 	DockerTag     string
 	UseVolumes    bool
@@ -96,7 +96,7 @@ func init() {
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumValidators, "validators", "v", 2, "Number of validator nodes per subnet to configure")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumFollowers, "followers", "f", 1, "Number of follower nodes per subnet to configure")
 	cmdInitDevnet.Flags().IntVar(&flagInitDevnet.BasePort, "port", 26656, "Base port to use for listeners")
-	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.BaseIP, "ip", "127.0.1.1", "Base IP address for nodes - must not end with .0")
+	cmdInitDevnet.Flags().StringSliceVar(&flagInitDevnet.IPs, "ip", []string{"127.0.1.1"}, "IP addresses to use or base IP - must not end with .0")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Docker, "docker", false, "Configure a network that will be deployed with Docker Compose")
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DockerTag, "tag", "latest", "Tag to use on the docker images")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
@@ -247,14 +247,36 @@ func initFollower(cmd *cobra.Command, _ []string) {
 	}))
 }
 
-func nextIP(baseIP net.IP) net.IP {
+var baseIP net.IP
+var ipCount byte
+
+func nextIP() string {
+	if len(flagInitDevnet.IPs) > 1 {
+		ipCount++
+		if len(flagInitDevnet.IPs) < int(ipCount) {
+			fatalf("not enough IPs")
+		}
+		return flagInitDevnet.IPs[ipCount-1]
+	}
+
+	if baseIP == nil {
+		baseIP = net.ParseIP(flagInitDevnet.IPs[0])
+		if baseIP == nil {
+			fatalf("invalid IP: %q", flagInitDevnet.IPs[0])
+		}
+		if baseIP[15] == 0 {
+			fatalf("invalid IP: base IP address must not end with .0")
+		}
+	}
+
 	ip := make(net.IP, len(baseIP))
 	copy(ip, baseIP)
-	baseIP[15]++
-	return ip
+	ip[15] += ipCount
+	ipCount++
+	return ip.String()
 }
 
-func initDevNet(cmd *cobra.Command, args []string) {
+func initDevNet(cmd *cobra.Command, _ []string) {
 	if cmd.Flag("network").Changed {
 		fatalf("--network is not applicable to devnet")
 	}
@@ -275,23 +297,20 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		fatalf("Must have at least one block validator node")
 	}
 
-	baseIP := net.ParseIP(flagInitDevnet.BaseIP)
-	if !flagInitDevnet.Docker {
-		if baseIP == nil {
-			fmt.Fprintf(os.Stderr, "Error: %q is not a valid IP address\n", flagInitDevnet.BaseIP)
-			printUsageAndExit1(cmd, args)
-		}
-		if baseIP[15] == 0 {
-			fmt.Fprintf(os.Stderr, "Error: base IP address must not end with .0\n")
-			printUsageAndExit1(cmd, args)
-		}
-	}
-
 	count := flagInitDevnet.NumValidators + flagInitDevnet.NumFollowers
 	compose := new(dc.Config)
 	compose.Version = "3"
 	compose.Services = make([]dc.ServiceConfig, 0, 1+count*(flagInitDevnet.NumBvns+1))
 	compose.Volumes = make(map[string]dc.VolumeConfig, 1+count*(flagInitDevnet.NumBvns+1))
+
+	switch len(flagInitDevnet.IPs) {
+	case 1:
+		// Generate a sequence from the base IP
+	case count * (flagInitDevnet.NumBvns + 1):
+		// One IP per node
+	default:
+		fatalf("not enough IPs - you must specify one base IP or one IP for each node")
+	}
 
 	addresses := make(map[string][]string, flagInitDevnet.NumBvns+1)
 	dnConfig := make([]*cfg.Config, count)
@@ -302,7 +321,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 		if i > flagInitDevnet.NumValidators {
 			nodeType = cfg.Follower
 		}
-		dnConfig[i], dnRemote[i], dnListen[i] = initDevNetNode(baseIP, cfg.Directory, nodeType, 0, i, compose)
+		dnConfig[i], dnRemote[i], dnListen[i] = initDevNetNode(cfg.Directory, nodeType, 0, i, compose)
 		addresses[protocol.Directory] = append(addresses[protocol.Directory], fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort))
 	}
 
@@ -320,7 +339,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 			if i > flagInitDevnet.NumValidators {
 				nodeType = cfg.Follower
 			}
-			bvnConfig[bvn][i], bvnRemote[bvn][i], bvnListen[bvn][i] = initDevNetNode(baseIP, cfg.BlockValidator, nodeType, bvn, i, compose)
+			bvnConfig[bvn][i], bvnRemote[bvn][i], bvnListen[bvn][i] = initDevNetNode(cfg.BlockValidator, nodeType, bvn, i, compose)
 			addresses[bvns[bvn]] = append(addresses[bvns[bvn]], fmt.Sprintf("http://%s:%d", bvnRemote[bvn][i], flagInitDevnet.BasePort))
 		}
 	}
@@ -414,7 +433,7 @@ func initDevNet(cmd *cobra.Command, args []string) {
 	check(err)
 }
 
-func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote, listen string) {
+func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node int, compose *dc.Config) (config *cfg.Config, remote, listen string) {
 	if netType == cfg.Directory {
 		config = cfg.Default(netType, nodeType, protocol.Directory)
 	} else {
@@ -429,7 +448,7 @@ func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeTyp
 	}
 
 	if !flagInitDevnet.Docker {
-		ip := nextIP(baseIP).String()
+		ip := nextIP()
 		return config, ip, ip
 	}
 

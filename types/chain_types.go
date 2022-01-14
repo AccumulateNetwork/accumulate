@@ -6,100 +6,92 @@ import (
 	"strings"
 )
 
-// ChainType is the type of a chain.
-type ChainType uint64
+// AccountType is the type of an account.
+type AccountType uint64
 
 const (
-	// ChainTypeUnknown represents an unknown chain type.
-	ChainTypeUnknown ChainType = 0
+	// AccountTypeUnknown represents an unknown account type.
+	AccountTypeUnknown AccountType = 0
 
-	// ChainTypeAnchor is one or more Merkle DAG anchors.
-	ChainTypeAnchor ChainType = 1
+	// AccountTypeAnchor is one or more Merkle DAG anchors.
+	AccountTypeAnchor AccountType = 1
 
-	// ChainTypeIdentity is an Identity chain, aka an ADI.
-	ChainTypeIdentity ChainType = 2
+	// AccountTypeIdentity is an Identity account, aka an ADI.
+	AccountTypeIdentity AccountType = 2
 
-	// ChainTypeTokenIssuer is a Token Issuer chain.
-	ChainTypeTokenIssuer ChainType = 3
+	// AccountTypeTokenIssuer is a Token Issuer account.
+	AccountTypeTokenIssuer AccountType = 3
 
-	// ChainTypeTokenAccount is an ADI Token Account chain.
-	ChainTypeTokenAccount ChainType = 4
+	// AccountTypeTokenAccount is an ADI Token Account.
+	AccountTypeTokenAccount AccountType = 4
 
-	// ChainTypeLiteTokenAccount is a Lite Token Account chain.
-	ChainTypeLiteTokenAccount ChainType = 5
+	// AccountTypeLiteTokenAccount is a Lite Token Account.
+	AccountTypeLiteTokenAccount AccountType = 5
 
-	// ChainTypeTransaction is a completed transaction.
-	ChainTypeTransaction ChainType = 7
+	// AccountTypeTransaction is a completed transaction.
+	AccountTypeTransaction AccountType = 7
 
-	// ChainTypeTransaction is a pending transaction.
-	ChainTypePendingTransaction ChainType = 8
+	// AccountTypePendingTransaction is a pending transaction.
+	AccountTypePendingTransaction AccountType = 8
 
-	// ChainTypeKeyPage is a key page chain.
-	ChainTypeKeyPage ChainType = 9
+	// AccountTypeKeyPage is a Key Page account.
+	AccountTypeKeyPage AccountType = 9
 
-	// ChainTypeKeyBook is a key book chain.
-	ChainTypeKeyBook ChainType = 10
+	// AccountTypeKeyBook is a Key Book account.
+	AccountTypeKeyBook AccountType = 10
 
-	// ChainTypeDataAccount is an ADI Data Account chain.
-	ChainTypeDataAccount ChainType = 11
+	// AccountTypeDataAccount is an ADI Data Account.
+	AccountTypeDataAccount AccountType = 11
 
-	// ChainTypeLiteDataAccount is a Lite Data Account chain.
-	ChainTypeLiteDataAccount ChainType = 12
+	// AccountTypeLiteDataAccount is a Lite Data Account.
+	AccountTypeLiteDataAccount AccountType = 12
 
-	// ChainTypeSyntheticTransactions is a chain of synthetic transactions.
-	//
-	// Deprecated: synthetic transactions are tracked on an auxiliary chain of
-	// the ledger.
-	ChainTypeSyntheticTransactions ChainType = 13
-
-	// ChainTypeInternalLedger is a ledger that tracks the state of internal
+	// AccountTypeInternalLedger is a ledger that tracks the state of internal
 	// operations.
-	ChainTypeInternalLedger ChainType = 14
+	AccountTypeInternalLedger AccountType = 14
 
-	// chainMax needs to be set to the last type in the list above
-	chainMax = ChainTypeInternalLedger
+	// accountMax needs to be set to the last type in the list above
+	accountMax = AccountTypeInternalLedger
 )
 
-// ID returns the chain type ID
-func (t ChainType) ID() uint64 { return uint64(t) }
+// ID returns the account type ID
+func (t AccountType) ID() uint64 { return uint64(t) }
 
-// IsTransaction returns true if the chain type is a transaction.
-func (t ChainType) IsTransaction() bool {
+// IsTransaction returns true if the account type is a transaction.
+func (t AccountType) IsTransaction() bool {
 	switch t {
-	case ChainTypeTransaction, ChainTypePendingTransaction:
+	case AccountTypeTransaction, AccountTypePendingTransaction:
 		return true
 	default:
 		return false
 	}
 }
 
-// String returns the name of the chain type
-func (t ChainType) String() string {
+// String returns the name of the account type
+func (t AccountType) String() string {
 	switch t {
-	case ChainTypeUnknown:
+	case AccountTypeUnknown:
 		return "unknown"
-	case ChainTypeIdentity:
+	case AccountTypeIdentity:
 		return "identity"
-	case ChainTypeTokenIssuer:
+	case AccountTypeTokenIssuer:
 		return "token"
-	case ChainTypeTokenAccount:
+	case AccountTypeTokenAccount:
 		return "tokenAccount"
-	case ChainTypeLiteTokenAccount:
+	case AccountTypeLiteTokenAccount:
 		return "liteTokenAccount"
-	case ChainTypeTransaction:
+	case AccountTypeTransaction:
 		return "transaction"
-	case ChainTypePendingTransaction:
+	case AccountTypePendingTransaction:
 		return "pendingTransaction"
-	case ChainTypeKeyPage:
+	case AccountTypeKeyPage:
 		return "keyPage"
-	case ChainTypeKeyBook:
+	case AccountTypeKeyBook:
 		return "keyBook"
-	case ChainTypeDataAccount:
+	case AccountTypeDataAccount:
 		return "dataAccount"
-	case ChainTypeLiteDataAccount:
+	case AccountTypeLiteDataAccount:
 		return "liteDataAccount"
-	case ChainTypeSyntheticTransactions:
-		return "syntheticTransactions"
 	default:
 		return fmt.Sprintf("ChainType:%d", t)
 	}
@@ -107,17 +99,17 @@ func (t ChainType) String() string {
 
 // Name is an alias for String
 // Deprecated: use String
-func (t ChainType) Name() string { return t.String() }
+func (t AccountType) Name() string { return t.String() }
 
-var chainByName = map[string]ChainType{}
+var chainByName = map[string]AccountType{}
 
 func init() {
-	for t := ChainTypeUnknown; t <= chainMax; t++ {
+	for t := AccountTypeUnknown; t <= accountMax; t++ {
 		chainByName[t.String()] = t
 	}
 }
 
-func (t *ChainType) UnmarshalJSON(data []byte) error {
+func (t *AccountType) UnmarshalJSON(data []byte) error {
 	var s string
 	err := json.Unmarshal(data, &s)
 	if err != nil {
@@ -132,6 +124,6 @@ func (t *ChainType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (t ChainType) MarshalJSON() ([]byte, error) {
+func (t AccountType) MarshalJSON() ([]byte, error) {
 	return json.Marshal(t.String())
 }

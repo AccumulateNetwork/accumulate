@@ -69,7 +69,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 		}
 		urls[i] = u
 
-		r := db.Record(u)
+		r := db.Account(u)
 		err = r.PutState(c)
 		if err != nil {
 			return err
@@ -87,7 +87,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 	}
 
 	return chain.AddDirectoryEntry(func(u *url.URL, key ...interface{}) chain.Value {
-		return db.Record(u).Index(key...)
+		return db.Account(u).Index(key...)
 	}, urls...)
 }
 
@@ -107,6 +107,7 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	mss := protocol.NewKeyPage()
 	mss.ChainUrl = types.String(pageUrl.String())
 	mss.Keys = append(mss.Keys, ss)
+	mss.Threshold = 1
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
@@ -141,7 +142,22 @@ func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite boo
 		chain = account
 	}
 
-	return db.Record(u).PutState(chain)
+	return db.Account(u).PutState(chain)
+}
+
+func CreateTokenIssuer(db DB, urlStr, symbol string, precision uint64) error {
+	u, err := url.Parse(urlStr)
+	if err != nil {
+		return err
+	}
+
+	issuer := new(protocol.TokenIssuer)
+	issuer.ChainUrl = types.String(u.String())
+	issuer.KeyBook = types.String(u.Identity().JoinPath("book0").String())
+	issuer.Symbol = symbol
+	issuer.Precision = precision
+
+	return db.Account(u).PutState(issuer)
 }
 
 func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
@@ -152,6 +168,7 @@ func CreateKeyPage(db DB, urlStr types.String, keys ...tmed25519.PubKey) error {
 
 	mss := protocol.NewKeyPage()
 	mss.ChainUrl = types.String(u.String())
+	mss.Threshold = 1
 	mss.Keys = make([]*protocol.KeySpec, len(keys))
 	for i, key := range keys {
 		mss.Keys[i] = &protocol.KeySpec{
@@ -182,7 +199,7 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 		group.Pages[i] = specUrl.String()
 
 		spec := new(protocol.KeyPage)
-		err = db.Record(specUrl).GetStateAs(spec)
+		err = db.Account(specUrl).GetStateAs(spec)
 		if err != nil {
 			return err
 		}
@@ -201,9 +218,9 @@ func CreateKeyBook(db DB, urlStr types.String, pageUrls ...string) error {
 // AcmeLiteAddress creates an ACME lite address for the given key. FOR TESTING
 // USE ONLY.
 func AcmeLiteAddress(pubKey []byte) *url.URL {
-	u, err := protocol.LiteAddress(pubKey, protocol.ACME)
+	u, err := protocol.LiteTokenAddress(pubKey, protocol.ACME)
 	if err != nil {
-		// LiteAddress should only return an error if the token URL is invalid,
+		// LiteTokenAddress should only return an error if the token URL is invalid,
 		// so this should never return an error. But ignoring errors is a great
 		// way to get bugs.
 		panic(err)

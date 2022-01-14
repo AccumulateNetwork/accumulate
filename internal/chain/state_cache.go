@@ -23,7 +23,6 @@ type stateCache struct {
 
 	batch      *database.Batch
 	operations []stateOperation
-	dataStores map[[32]byte]*storeDataEntry
 	chains     map[[32]byte]state.Chain
 	indices    map[[32]byte]*writeIndex
 }
@@ -35,25 +34,30 @@ func newStateCache(nodeUrl *url.URL, txtype types.TransactionType, txid [32]byte
 	c.txHash = txid
 
 	c.batch = batch
-	c.dataStores = map[[32]byte]*storeDataEntry{}
-	c.chains = map[[32]byte]state.Chain{}
-	c.indices = map[[32]byte]*writeIndex{}
+	c.Reset()
 	return c
 }
 
-func (c *stateCache) Commit() (DeliverMetadata, error) {
-	var meta DeliverMetadata
-	for _, op := range c.operations {
-		err := op.Execute(c, &meta)
-		if err != nil {
-			return DeliverMetadata{}, err
-		}
-	}
-
-	return meta, nil
+func (c *stateCache) Reset() {
+	c.operations = c.operations[:0]
+	c.chains = map[[32]byte]state.Chain{}
+	c.indices = map[[32]byte]*writeIndex{}
 }
 
-func (c *stateCache) load(id [32]byte, r *database.Record) (state.Chain, error) {
+func (c *stateCache) Commit() ([]state.Chain, error) {
+	var create []state.Chain
+	for _, op := range c.operations {
+		records, err := op.Execute(c)
+		if err != nil {
+			return nil, err
+		}
+		create = append(create, records...)
+	}
+
+	return create, nil
+}
+
+func (c *stateCache) load(id [32]byte, r *database.Account) (state.Chain, error) {
 	st, ok := c.chains[id]
 	if ok {
 		return st, nil
@@ -71,7 +75,7 @@ func (c *stateCache) load(id [32]byte, r *database.Record) (state.Chain, error) 
 	return st, nil
 }
 
-func (c *stateCache) loadAs(id [32]byte, r *database.Record, v interface{}) (err error) {
+func (c *stateCache) loadAs(id [32]byte, r *database.Account, v interface{}) (err error) {
 	state, err := c.load(id, r)
 	if err != nil {
 		return err
@@ -93,49 +97,24 @@ func (c *stateCache) loadAs(id [32]byte, r *database.Record, v interface{}) (err
 	return nil
 }
 
-// Load loads a chain by ID and unmarshals it.
-func (c *stateCache) Load(id [32]byte) (state.Chain, error) {
-	return c.load(id, c.batch.RecordByID(id[:]))
-}
-
 // LoadUrl loads a chain by URL and unmarshals it.
 func (c *stateCache) LoadUrl(u *url.URL) (state.Chain, error) {
-	return c.load(u.ResourceChain32(), c.batch.Record(u))
-}
-
-// LoadString loads a chain by URL and unmarshals it.
-func (c *stateCache) LoadString(s string) (state.Chain, error) {
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, fmt.Errorf("invalid URL: %v", err)
-	}
-
-	return c.LoadUrl(u)
-}
-
-// LoadAs loads a chain by ID and unmarshals it as a specific type.
-func (c *stateCache) LoadAs(id [32]byte, v interface{}) error {
-	return c.loadAs(id, c.batch.RecordByID(id[:]), v)
+	return c.load(u.AccountID32(), c.batch.Account(u))
 }
 
 // LoadUrlAs loads a chain by URL and unmarshals it as a specific type.
 func (c *stateCache) LoadUrlAs(u *url.URL, v interface{}) error {
-	return c.loadAs(u.ResourceChain32(), c.batch.Record(u), v)
+	return c.loadAs(u.AccountID32(), c.batch.Account(u), v)
 }
 
-// LoadStringAs loads a chain by URL and unmarshals it as a specific type.
-func (c *stateCache) LoadStringAs(s string, v interface{}) error {
-	u, err := url.Parse(s)
-	if err != nil {
-		return fmt.Errorf("invalid URL: %v", err)
-	}
-
-	return c.LoadUrlAs(u, v)
+// ReadChain loads an account's chain by URL and name.
+func (c *stateCache) ReadChain(u *url.URL, name string) (*database.Chain, error) {
+	return c.batch.Account(u).ReadChain(name)
 }
 
 //GetHeight loads the height of the chain
 func (c *stateCache) GetHeight(u *url.URL) (uint64, error) {
-	chain, err := c.batch.Record(u).ReadChain(protocol.MainChain)
+	chain, err := c.batch.Account(u).ReadChain(protocol.MainChain)
 	if err != nil {
 		return 0, err
 	}

@@ -7,36 +7,34 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-func NewChain(typ types.ChainType) (state.Chain, error) {
+func NewChain(typ types.AccountType) (state.Chain, error) {
 	switch typ {
-	case types.ChainTypeAnchor:
+	case types.AccountTypeAnchor:
 		return new(Anchor), nil
-	case types.ChainTypeIdentity:
+	case types.AccountTypeIdentity:
 		return new(ADI), nil
-	case types.ChainTypeTokenIssuer:
+	case types.AccountTypeTokenIssuer:
 		return new(TokenIssuer), nil
-	case types.ChainTypeTokenAccount:
+	case types.AccountTypeTokenAccount:
 		return new(TokenAccount), nil
-	case types.ChainTypeLiteTokenAccount:
+	case types.AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
-	case types.ChainTypeTransaction:
+	case types.AccountTypeTransaction:
 		return new(state.Transaction), nil
-	case types.ChainTypePendingTransaction:
+	case types.AccountTypePendingTransaction:
 		return new(state.PendingTransaction), nil
-	case types.ChainTypeKeyPage:
+	case types.AccountTypeKeyPage:
 		return new(KeyPage), nil
-	case types.ChainTypeKeyBook:
+	case types.AccountTypeKeyBook:
 		return new(KeyBook), nil
-	case types.ChainTypeDataAccount:
+	case types.AccountTypeDataAccount:
 		return new(DataAccount), nil
-	case types.ChainTypeLiteDataAccount:
+	case types.AccountTypeLiteDataAccount:
 		return new(LiteDataAccount), nil
-	case types.ChainTypeSyntheticTransactions:
-		return new(SyntheticTransactionChain), nil
-	case types.ChainTypeInternalLedger:
+	case types.AccountTypeInternalLedger:
 		return new(InternalLedger), nil
 	default:
-		return nil, fmt.Errorf("unknown chain type %v", typ)
+		return nil, fmt.Errorf("unknown account type %v", typ)
 	}
 }
 

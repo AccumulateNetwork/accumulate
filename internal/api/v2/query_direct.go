@@ -299,29 +299,29 @@ query:
 	return packTxResponse(res.TxId, res.TxSynthTxIds, nil, main, pend, pl)
 }
 
-func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*MultiResponse, error) {
+func (q *queryDirect) QueryTxHistory(s string, pagination QueryPagination) (*MultiResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
 	}
 
-	if count == 0 {
+	if pagination.Count == 0 {
 		// TODO Return an empty array plus the total count?
 		return nil, validatorError(errors.New("count must be greater than 0"))
 	}
 
-	if start > math.MaxInt64 {
+	if pagination.Start > math.MaxInt64 {
 		return nil, errors.New("start is too large")
 	}
 
-	if count > math.MaxInt64 {
+	if pagination.Count > math.MaxInt64 {
 		return nil, errors.New("count is too large")
 	}
 
 	req := new(query.RequestTxHistory)
-	req.Start = int64(start)
-	req.Limit = int64(count)
-	copy(req.ChainId[:], u.ResourceChain())
+	req.Start = int64(pagination.Start)
+	req.Limit = int64(pagination.Count)
+	copy(req.ChainId[:], u.AccountID())
 	k, v, err := q.query(req)
 	if err != nil {
 		return nil, err
@@ -339,8 +339,8 @@ func (q *queryDirect) QueryTxHistory(s string, start, count uint64) (*MultiRespo
 	res := new(MultiResponse)
 	res.Type = "txHistory"
 	res.Items = make([]interface{}, len(txh.Transactions))
-	res.Start = start
-	res.Count = count
+	res.Start = pagination.Start
+	res.Count = pagination.Count
 	res.Total = uint64(txh.Total)
 	for i, tx := range txh.Transactions {
 		main, pend, pl, err := unmarshalTxResponse(tx.TxState, tx.TxPendingState)

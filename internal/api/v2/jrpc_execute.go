@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"time"
@@ -14,7 +15,7 @@ import (
 )
 
 func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) interface{} {
-	var payload []byte
+	var payload string
 	req := new(TxRequest)
 	req.Payload = &payload
 	err := m.parse(params, req)
@@ -22,17 +23,16 @@ func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) inter
 		return err
 	}
 
-	return m.execute(ctx, req, payload)
+	data, err := hex.DecodeString(payload)
+	if err != nil {
+		return validatorError(err)
+	}
+
+	return m.execute(ctx, req, data)
 }
 
 func (m *JrpcMethods) ExecuteCreateIdentity(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.CreateIdentity))
-}
-
-func (m *JrpcMethods) ExecuteWith(newParams func() protocol.TransactionPayload, validateFields ...string) jsonrpc2.MethodFunc {
-	return func(ctx context.Context, params json.RawMessage) interface{} {
-		return m.executeWith(ctx, params, newParams(), validateFields...)
-	}
 }
 
 func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionPayload, validateFields ...string) interface{} {
@@ -118,7 +118,7 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 
 	// Prepare the request for dispatch to a remote BVC
-	req.Payload = payload
+	req.Payload = hex.EncodeToString(payload)
 	ex := new(executeRequest)
 	ex.route = route
 	ex.params, err = req.MarshalJSON()

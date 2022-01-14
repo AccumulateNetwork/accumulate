@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/stretchr/testify/require"
@@ -31,7 +32,7 @@ func TestConversions(t *testing.T) {
 func TestMerkleManager_GetRange(t *testing.T) {
 	for NumTests := int64(50); NumTests < 64; NumTests++ {
 
-		var rh RandHash
+		var rh common.RandHash
 		store := memory.NewDB()
 		storeTx := store.Begin()
 

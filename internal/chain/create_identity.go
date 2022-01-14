@@ -35,7 +35,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) erro
 	case *protocol.LiteTokenAccount, *protocol.ADI:
 		// OK
 	default:
-		return fmt.Errorf("chain type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
+		return fmt.Errorf("account type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
 	}
 
 	var pageUrl, bookUrl *url.URL
@@ -57,6 +57,7 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) erro
 	page.ChainUrl = types.String(pageUrl.String()) // TODO Allow override
 	page.Keys = append(page.Keys, keySpec)
 	page.KeyBook = types.String(bookUrl.String())
+	page.Threshold = 1 // Require one signature from the Key Page
 
 	book := protocol.NewKeyBook()
 	book.ChainUrl = types.String(bookUrl.String()) // TODO Allow override
