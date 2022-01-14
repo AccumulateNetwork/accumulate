@@ -164,7 +164,6 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *tra
 
 	// TODO The payload field can be set equal to the struct, without marshalling first
 	params.Payload = json.RawMessage(jsonPayload)
-	params.Signer.PublicKey = privKey[32:]
 	params.Signer.Nonce = nonce
 	params.Origin = origin
 	params.KeyPage.Height = si.KeyPageHeight
