@@ -3,6 +3,7 @@ package encoding
 import (
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"time"
@@ -262,8 +263,14 @@ func ChainSetToJSON(v [][32]byte) []string {
 	return s
 }
 
+type DurationFields struct {
+	Seconds     uint64 `json:"seconds,omitempty"`
+	Nanoseconds uint64 `json:"nanoseconds,omitempty"`
+}
+
 func DurationToJSON(v time.Duration) interface{} {
-	return v.String()
+	sec, ns := SplitDuration(v)
+	return DurationFields{sec, ns}
 }
 
 func BytesFromJSON(s *string) ([]byte, error) {
@@ -305,7 +312,19 @@ func DurationFromJSON(v interface{}) (time.Duration, error) {
 		return time.Second * time.Duration(v), nil
 	case string:
 		return time.ParseDuration(v)
-	default:
-		return 0, fmt.Errorf("cannot parse %T as a duration", v)
+	case DurationFields:
+		return time.Duration(v.Seconds)*time.Second + time.Duration(v.Nanoseconds), nil
+	case map[string]interface{}:
+		data, err := json.Marshal(v)
+		if err != nil {
+			break
+		}
+
+		var df DurationFields
+		if json.Unmarshal(data, &df) != nil {
+			break
+		}
+		return time.Duration(df.Seconds)*time.Second + time.Duration(df.Nanoseconds), nil
 	}
+	return 0, fmt.Errorf("cannot parse %T as a duration", v)
 }
