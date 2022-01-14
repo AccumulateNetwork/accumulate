@@ -135,13 +135,13 @@ func (q *queryDispatch) QueryTx(id []byte, wait time.Duration) (*TransactionQuer
 	return res.(*TransactionQueryResponse), nil
 }
 
-func (q *queryDispatch) QueryTxHistory(url string, start, count uint64) (*MultiResponse, error) {
+func (q *queryDispatch) QueryTxHistory(url string, pagination QueryPagination) (*MultiResponse, error) {
 	r, err := q.routing(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return q.direct(r).QueryTxHistory(url, start, count)
+	return q.direct(r).QueryTxHistory(url, pagination)
 }
 
 func (q *queryDispatch) QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error) {
