@@ -29,6 +29,7 @@ CreateTokenAccount:
     - name: KeyBookUrl
       type: string
       is-url: true
+      optional: true
 
 SendTokens:
   kind: tx
