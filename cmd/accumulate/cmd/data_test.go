@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -9,7 +10,8 @@ import (
 
 func init() {
 	testMatrix.addTest(testCase2_8)
-	testMatrix.addTest(testCase2_9)
+	testMatrix.addTest(testCase2_9a)
+	testMatrix.addTest(testCase2_9b)
 }
 
 //testCase2_8
@@ -26,7 +28,7 @@ func testCase2_8(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 }
 
-func testCase2_9(t *testing.T, tc *testCmd) {
+func testCase2_9a(t *testing.T, tc *testCmd) {
 	t.Helper()
 
 	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
@@ -45,6 +47,35 @@ func testCase2_9(t *testing.T, tc *testCmd) {
 
 	//now read it back as a expanded set
 	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount 0 1 expand")
+	require.NoError(t, err)
+}
+
+func testCase2_9b(t *testing.T, tc *testCmd) {
+	t.Helper()
+
+	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
+	commandLine := fmt.Sprintf("account create data lite acc://RedWagon/DataAccount red1 466163746f6d2050524f 5475746f7269616c")
+	r, err := tc.executeTx(t, commandLine)
+	require.NoError(t, err)
+
+	aldr := ActionLiteDataResponse{}
+	require.NoError(t, json.Unmarshal([]byte(r), &aldr))
+	//now read back the response
+	commandLine = fmt.Sprintf("data get %s", aldr.AccountUrl)
+	_, err = tc.execute(t, commandLine)
+	require.NoError(t, err)
+
+	//now read it back as a set
+	_, err = tc.execute(t, fmt.Sprintf("%s 0 1", commandLine))
+	require.NoError(t, err)
+
+	//pass in some hex encoded stuff 2 ext id's and an encoded data entry
+	commandLine = fmt.Sprintf("data write-to acc://RedWagon/DataAccount red1 %s 0badc0de", aldr.AccountUrl)
+	r, err = tc.executeTx(t, commandLine)
+	require.NoError(t, err)
+
+	//now read it back as a expanded set
+	_, err = tc.execute(t, fmt.Sprintf("%s 0 1 expand", commandLine))
 	require.NoError(t, err)
 }
 
