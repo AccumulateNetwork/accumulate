@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	mock_api "github.com/AccumulateNetwork/accumulate/internal/mock/api"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,7 @@ const debugTX = false
 // FakeTendermint is a test harness that facilitates testing the ABCI
 // application without creating an actual Tendermint node.
 type FakeTendermint struct {
+	mock_api.MockRoute
 	*types.EventBus
 
 	CreateEmptyBlocks bool
