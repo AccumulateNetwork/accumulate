@@ -7,12 +7,17 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
+// debug is a bit field for enabling debug log messages
 const debug = 0 // | debugGet | debugGetValue | debugPut | debugPutValue
 
 const (
+	// debugGet logs the key of Batch.Get
 	debugGet = 1 << iota
+	// debugGetValue logs the value of Batch.Get
 	debugGetValue
+	// debugPut logs the key of Batch.Put
 	debugPut
+	// debugPutValue logs the value of Batch.Put
 	debugPutValue
 )
 
