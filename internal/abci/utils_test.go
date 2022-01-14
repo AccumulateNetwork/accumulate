@@ -47,15 +47,12 @@ const logConsole = true
 var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
 
 func createAppWithMemDB(t testing.TB, addr crypto.Address, doGenesis bool) *fakeNode {
-	db, err := database.Open("", true, nil)
-	require.NoError(t, err)
-	return createApp(t, db, addr, doGenesis)
+	return createApp(t, nil, addr, doGenesis)
 }
 
 func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenesis bool) *fakeNode {
 	n := new(fakeNode)
 	n.t = t
-	n.db = db
 	_, n.key, _ = ed25519.GenerateKey(rand)
 
 	subnet := reAlphaNum.ReplaceAllString(t.Name(), "-")
@@ -77,6 +74,12 @@ func createApp(t testing.TB, db *database.Database, addr crypto.Address, doGenes
 	require.NoError(t, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
 	require.NoError(t, err)
+
+	if db == nil {
+		db, err = database.Open("", true, logger)
+		require.NoError(t, err)
+	}
+	n.db = db
 
 	appChan := make(chan abcitypes.Application)
 	defer close(appChan)
