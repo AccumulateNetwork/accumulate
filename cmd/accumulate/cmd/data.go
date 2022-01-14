@@ -47,6 +47,16 @@ var dataCmd = &cobra.Command{
 			} else {
 				PrintDataWrite()
 			}
+		case "write-to":
+			if len(args) > 2 {
+				out, err = WriteDataTo(args[1], args[2:])
+				if err != nil {
+					fmt.Println("Usage:")
+					PrintDataWriteTo()
+				}
+			} else {
+				PrintDataWriteTo()
+			}
 		default:
 			PrintData()
 		}
@@ -55,7 +65,7 @@ var dataCmd = &cobra.Command{
 }
 
 func PrintDataGet() {
-	fmt.Println("  accumulate data get [DataAccountURL]			  Get existing Key Page by URL")
+	fmt.Println("  accumulate data get [DataAccountURL]			  Get most current data entry by URL")
 	fmt.Println("  accumulate data get [DataAccountURL] [EntryHash]  Get data entry by entryHash in hex")
 	fmt.Println("  accumulate data get [DataAccountURL] [start index] [count] expand(optional) Get a set of data entries starting from start and going to start+count, if \"expand\" is specified, data entries will also be provided")
 	//./cli data get acc://actor/dataAccount
@@ -73,10 +83,22 @@ func PrintDataWrite() {
 	fmt.Println("accumulate data write [data account url] [signingKey] [extid_0 (optional)] ... [extid_n (optional)] [data] Write entry to your data account. Note: extid's and data needs to be a quoted string or hex")
 }
 
+func PrintDataWriteTo() {
+	fmt.Println("accumulate data write-to [account url] [signing key] [lite data account] [extid_0 (optional)] ... [extid_n (optional)] [data]")
+}
+
+func PrintDataLiteAccountCreate() {
+	fmt.Println("  accumulate account create data lite [lite token account] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
+	fmt.Println("  accumulate account create data lite [origin url] [signing key name]  [key index (optional)] [key height (optional)] [name_0] ... [name_n] Create new lite data account creating a chain based upon a name list")
+	fmt.Println("\t\t example usage: accumulate account create data lite acc://actor signingKeyName example1 example2 ")
+}
+
 func PrintData() {
 	PrintDataAccountCreate()
+	PrintDataLiteAccountCreate()
 	PrintDataGet()
 	PrintDataWrite()
+	PrintDataWriteTo()
 }
 
 func GetDataEntry(accountUrl string, args []string) (string, error) {
@@ -157,6 +179,54 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 	return PrintMultiResponse(&res)
 }
 
+func CreateLiteDataAccount(origin string, args []string) (string, error) {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return "", err
+	}
+
+	args, si, privKey, err := prepareSigner(u, args)
+	if err != nil {
+		return "", fmt.Errorf("unable to prepare signer, %v", err)
+	}
+
+	if len(args) < 1 {
+		return "", fmt.Errorf("expecting account url or 'lite' keyword")
+	}
+
+	var res *api.TxResponse
+	//compute the chain id...
+	wdt := protocol.WriteDataTo{}
+	wdt.Entry = *prepareData(args, true)
+
+	accountId := protocol.ComputeLiteDataAccountId(&wdt.Entry)
+	addr, err := protocol.LiteDataAddress(accountId)
+	if err != nil {
+		return "", fmt.Errorf("invalid lite data address created from name(s)")
+	}
+	wdt.Recipient = addr.String()
+
+	lite, err := GetUrl(wdt.Recipient)
+	if lite != nil {
+		return "", fmt.Errorf("lite data address already exists %s", addr)
+	}
+
+	lde := protocol.LiteDataEntry{}
+	copy(lde.AccountId[:], accountId)
+	lde.DataEntry = &wdt.Entry
+	entryHash, err := lde.Hash()
+	if err != nil {
+		return "", fmt.Errorf("lite data hash cannot be computed, %v", err)
+	}
+
+	res, err = dispatchTxRequest("write-data-to", &wdt, u, si, privKey)
+	if err != nil {
+		return "", err
+	}
+
+	return ActionResponseFromLiteData(res, addr.String(), accountId, entryHash).Print()
+}
+
 func CreateDataAccount(origin string, args []string) (string, error) {
 	u, err := url.Parse(origin)
 	if err != nil {
@@ -169,9 +239,10 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	}
 
 	if len(args) < 1 {
-		return "", fmt.Errorf("expecting account url")
+		return "", fmt.Errorf("expecting account url or 'lite' keyword")
 	}
 
+	var res *api.TxResponse
 	accountUrl, err := url.Parse(args[0])
 	if err != nil {
 		return "", fmt.Errorf("invalid account url %s", args[0])
@@ -193,7 +264,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda.Url = accountUrl.String()
 	cda.KeyBookUrl = keybook
 
-	res, err := dispatchTxRequest("create-data-account", &cda, u, si, privKey)
+	res, err = dispatchTxRequest("create-data-account", &cda, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
@@ -216,7 +287,18 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	}
 
 	wd := protocol.WriteData{}
+	wd.Entry = *prepareData(args, false)
 
+	res, err := dispatchTxRequest("write-data", &wd, u, si, privKey)
+	if err != nil {
+		return "", err
+	}
+
+	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
+}
+
+func prepareData(args []string, isFirstLiteEntry bool) *protocol.DataEntry {
+	entry := new(protocol.DataEntry)
 	for i := 0; i < len(args); i++ {
 		data := make([]byte, len(args[i]))
 
@@ -229,17 +311,62 @@ func WriteData(accountUrl string, args []string) (string, error) {
 			//clip the padding
 			data = data[:n]
 		}
-		if i == len(args)-1 {
-			wd.Entry.Data = data
+		if i == len(args)-1 && !isFirstLiteEntry {
+			entry.Data = data
 		} else {
-			wd.Entry.ExtIds = append(wd.Entry.ExtIds, data)
+			entry.ExtIds = append(entry.ExtIds, data)
 		}
 	}
+	return entry
+}
 
-	res, err := dispatchTxRequest("write-data", &wd, u, si, privKey)
+func WriteDataTo(accountUrl string, args []string) (string, error) {
+	u, err := url.Parse(accountUrl)
 	if err != nil {
 		return "", err
 	}
 
-	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
+	args, si, privKey, err := prepareSigner(u, args)
+	if err != nil {
+		return "", err
+	}
+
+	if len(args) < 1 {
+		return "", fmt.Errorf("expecting lite data account url")
+	}
+
+	wd := protocol.WriteDataTo{}
+	r, err := url.Parse(args[0])
+	if err != nil {
+		return "", fmt.Errorf("unable to parse lite account url")
+	}
+
+	accountId, err := protocol.ParseLiteDataAddress(r)
+	if err != nil {
+		return "", fmt.Errorf("invalid lite data account url")
+	}
+
+	wd.Recipient = r.String()
+
+	if len(args) < 2 {
+		return "", fmt.Errorf("expecting data")
+	}
+
+	wd.Entry = *prepareData(args[1:], false)
+
+	res, err := dispatchTxRequest("write-data-to", &wd, u, si, privKey)
+	if err != nil {
+		return "", err
+	}
+
+	lda := protocol.LiteDataAccount{}
+	q, err := GetUrl(wd.Recipient)
+	if err == nil {
+		Remarshal(q.Data, &lda)
+	}
+
+	lde := protocol.LiteDataEntry{}
+	copy(lde.AccountId[:], append(accountId, lda.Tail...))
+	lde.DataEntry = &wd.Entry
+	return ActionResponseFromLiteData(res, wd.Recipient, lde.AccountId[:], wd.Entry.Hash()).Print()
 }
