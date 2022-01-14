@@ -130,18 +130,18 @@ func (mr *MockQuerierMockRecorder) QueryTx(id, wait interface{}) *gomock.Call {
 }
 
 // QueryTxHistory mocks base method.
-func (m *MockQuerier) QueryTxHistory(url string, start, count uint64) (*api.MultiResponse, error) {
+func (m *MockQuerier) QueryTxHistory(url string, pagination api.QueryPagination) (*api.MultiResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryTxHistory", url, start, count)
+	ret := m.ctrl.Call(m, "QueryTxHistory", url, pagination)
 	ret0, _ := ret[0].(*api.MultiResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // QueryTxHistory indicates an expected call of QueryTxHistory.
-func (mr *MockQuerierMockRecorder) QueryTxHistory(url, start, count interface{}) *gomock.Call {
+func (mr *MockQuerierMockRecorder) QueryTxHistory(url, pagination interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryTxHistory", reflect.TypeOf((*MockQuerier)(nil).QueryTxHistory), url, start, count)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryTxHistory", reflect.TypeOf((*MockQuerier)(nil).QueryTxHistory), url, pagination)
 }
 
 // QueryUrl mocks base method.
