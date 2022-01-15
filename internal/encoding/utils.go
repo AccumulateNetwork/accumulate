@@ -328,3 +328,35 @@ func DurationFromJSON(v interface{}) (time.Duration, error) {
 	}
 	return 0, fmt.Errorf("cannot parse %T as a duration", v)
 }
+
+func AnyToJSON(v interface{}) interface{} {
+	switch v := v.(type) {
+	case json.Marshaler:
+		return v
+	case []byte:
+		return hex.EncodeToString(v)
+	case [32]byte:
+		return hex.EncodeToString(v[:])
+	case interface{ Bytes() []byte }:
+		return hex.EncodeToString(v.Bytes())
+	case time.Duration:
+		return DurationToJSON(v)
+	default:
+		return v
+	}
+}
+
+func AnyFromJSON(v interface{}) interface{} {
+	switch v := v.(type) {
+	case map[string]interface{}:
+		// Does it look like a duration?
+		sec, ok1 := v["seconds"].(int)
+		ns, ok2 := v["nanoseconds"].(int)
+		if ok1 && ok2 && len(v) == 2 {
+			return time.Duration(sec)*time.Second + time.Duration(ns)
+		}
+	}
+
+	// There's not a lot we can do without metadata
+	return v
+}

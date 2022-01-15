@@ -104,7 +104,7 @@ func GoJsonType(field *Field) string {
 		return "string"
 	case "chainSet":
 		return "[]string"
-	case "duration":
+	case "duration", "any":
 		return "interface{}"
 	case "slice":
 		jt := GoJsonType(field.Slice)
@@ -346,7 +346,7 @@ func GoBinaryUnmarshalValue(field *Field, varName, errName string, errArgs ...st
 func GoValueToJson(field *Field, tgtName, srcName string) string {
 	w := new(strings.Builder)
 	switch field.Type {
-	case "bytes", "chain", "chainSet", "duration":
+	case "bytes", "chain", "chainSet", "duration", "any":
 		fmt.Fprintf(w, "\t%s = %s(%s)", tgtName, GoMethodName(field.Type, "ToJSON"), srcName)
 		return w.String()
 
@@ -371,6 +371,10 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 	w := new(strings.Builder)
 	err := GoFieldError("decoding", errName, errArgs...)
 	switch field.Type {
+	case "any":
+		fmt.Fprintf(w, "\t%s = %s(%s)\n", tgtName, GoMethodName(field.Type, "FromJSON"), srcName)
+		return w.String()
+
 	case "bytes", "chain", "chainSet", "duration":
 		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = x\n\t}", GoMethodName(field.Type, "FromJSON"), srcName, err, tgtName)
 		return w.String()
