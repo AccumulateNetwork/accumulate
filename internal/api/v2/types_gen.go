@@ -355,7 +355,7 @@ func (v *ChainQueryResponse) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type
 	u.MainChain = v.MainChain
 	u.MerkleState = v.MainChain
-	u.Data = v.Data
+	u.Data = encoding.AnyToJSON(v.Data)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	return json.Marshal(&u)
 }
@@ -428,6 +428,38 @@ func (v *MetricsQuery) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Value interface{} `json:"value,omitempty"`
+	}{}
+	u.Value = encoding.AnyToJSON(v.Value)
+	return json.Marshal(&u)
+}
+
+func (v *MultiResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type       string        `json:"type,omitempty"`
+		Items      []interface{} `json:"items,omitempty"`
+		Start      uint64        `json:"start"`
+		Count      uint64        `json:"count"`
+		Total      uint64        `json:"total"`
+		OtherItems []interface{} `json:"otherItems,omitempty"`
+	}{}
+	u.Type = v.Type
+	u.Items = make([]interface{}, len(v.Items))
+	for i, x := range v.Items {
+		u.Items[i] = encoding.AnyToJSON(x)
+	}
+	u.Start = v.Start
+	u.Count = v.Count
+	u.Total = v.Total
+	u.OtherItems = make([]interface{}, len(v.OtherItems))
+	for i, x := range v.OtherItems {
+		u.OtherItems[i] = encoding.AnyToJSON(x)
+	}
+	return json.Marshal(&u)
+}
+
 func (v *Signer) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
@@ -467,7 +499,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.Type = v.Type
 	u.MainChain = v.MainChain
 	u.MerkleState = v.MainChain
-	u.Data = v.Data
+	u.Data = encoding.AnyToJSON(v.Data)
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.KeyPage = v.KeyPage
@@ -494,7 +526,7 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
-	u.Payload = v.Payload
+	u.Payload = encoding.AnyToJSON(v.Payload)
 	return json.Marshal(&u)
 }
 
@@ -551,7 +583,7 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type
 	u.MainChain = v.MainChain
 	u.MerkleState = v.MainChain
-	u.Data = v.Data
+	u.Data = encoding.AnyToJSON(v.Data)
 	u.ChainId = encoding.BytesToJSON(v.ChainId)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -563,7 +595,8 @@ func (v *ChainQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.MainChain = u.MerkleState
 	}
-	v.Data = u.Data
+	v.Data = encoding.AnyFromJSON(u.Data)
+
 	if x, err := encoding.BytesFromJSON(u.ChainId); err != nil {
 		return fmt.Errorf("error decoding ChainId: %w", err)
 	} else {
@@ -709,6 +742,58 @@ func (v *MetricsQuery) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Value interface{} `json:"value,omitempty"`
+	}{}
+	u.Value = encoding.AnyToJSON(v.Value)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Value = encoding.AnyFromJSON(u.Value)
+
+	return nil
+}
+
+func (v *MultiResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type       string        `json:"type,omitempty"`
+		Items      []interface{} `json:"items,omitempty"`
+		Start      uint64        `json:"start"`
+		Count      uint64        `json:"count"`
+		Total      uint64        `json:"total"`
+		OtherItems []interface{} `json:"otherItems,omitempty"`
+	}{}
+	u.Type = v.Type
+	u.Items = make([]interface{}, len(v.Items))
+	for i, x := range v.Items {
+		u.Items[i] = encoding.AnyToJSON(x)
+	}
+	u.Start = v.Start
+	u.Count = v.Count
+	u.Total = v.Total
+	u.OtherItems = make([]interface{}, len(v.OtherItems))
+	for i, x := range v.OtherItems {
+		u.OtherItems[i] = encoding.AnyToJSON(x)
+	}
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Type = u.Type
+	v.Items = make([]interface{}, len(u.Items))
+	for i, x := range u.Items {
+		v.Items[i] = encoding.AnyFromJSON(x)
+	}
+	v.Start = u.Start
+	v.Count = u.Count
+	v.Total = u.Total
+	v.OtherItems = make([]interface{}, len(u.OtherItems))
+	for i, x := range u.OtherItems {
+		v.OtherItems[i] = encoding.AnyFromJSON(x)
+	}
+	return nil
+}
+
 func (v *Signer) UnmarshalJSON(data []byte) error {
 	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
@@ -767,7 +852,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.Type = v.Type
 	u.MainChain = v.MainChain
 	u.MerkleState = v.MainChain
-	u.Data = v.Data
+	u.Data = encoding.AnyToJSON(v.Data)
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.KeyPage = v.KeyPage
@@ -785,7 +870,8 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.MainChain = u.MerkleState
 	}
-	v.Data = u.Data
+	v.Data = encoding.AnyFromJSON(u.Data)
+
 	var zeroOrigin string
 	if u.Origin != zeroOrigin {
 		v.Origin = u.Origin
@@ -824,7 +910,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
-	u.Payload = v.Payload
+	u.Payload = encoding.AnyToJSON(v.Payload)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -842,7 +928,8 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		v.Signature = x
 	}
 	v.KeyPage = u.KeyPage
-	v.Payload = u.Payload
+	v.Payload = encoding.AnyFromJSON(u.Payload)
+
 	return nil
 }
 

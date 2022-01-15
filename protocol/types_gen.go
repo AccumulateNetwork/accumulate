@@ -4816,6 +4816,14 @@ func (v *MetricsRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *MetricsResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Value interface{} `json:"value,omitempty"`
+	}{}
+	u.Value = encoding.AnyToJSON(v.Value)
+	return json.Marshal(&u)
+}
+
 func (v *Receipt) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Start   *string        `json:"start,omitempty"`
@@ -5175,6 +5183,19 @@ func (v *MetricsRequest) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Duration = x
 	}
+	return nil
+}
+
+func (v *MetricsResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Value interface{} `json:"value,omitempty"`
+	}{}
+	u.Value = encoding.AnyToJSON(v.Value)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Value = encoding.AnyFromJSON(u.Value)
+
 	return nil
 }
 
