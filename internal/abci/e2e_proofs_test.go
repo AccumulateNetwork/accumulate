@@ -9,11 +9,12 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto"
 )
 
 func TestProofADI(t *testing.T) {
-	n := createAppWithMemDB(t, crypto.Address{}, true)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	nodes := RunTestNet(t, subnets, daemons, nil, true)
+	n := nodes[subnets[1]][0]
 
 	// Setup keys and the lite account
 	liteKey, adiKey := generateKey(), generateKey()
