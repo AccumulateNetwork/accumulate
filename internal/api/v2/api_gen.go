@@ -10,11 +10,12 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 24)
+		m.methods = make(jsonrpc2.MethodMap, 25)
 	}
 
 	m.methods["execute"] = m.Execute
 	m.methods["add-credits"] = m.ExecuteAddCredits
+	m.methods["burn-tokens"] = m.ExecuteBurnTokens
 	m.methods["create-adi"] = m.ExecuteCreateAdi
 	m.methods["create-data-account"] = m.ExecuteCreateDataAccount
 	m.methods["create-key-book"] = m.ExecuteCreateKeyBook
@@ -71,6 +72,10 @@ func jrpcFormatResponse(res interface{}, err error) interface{} {
 
 func (m *JrpcMethods) ExecuteAddCredits(ctx context.Context, params json.RawMessage) interface{} {
 	return m.executeWith(ctx, params, new(protocol.AddCredits))
+}
+
+func (m *JrpcMethods) ExecuteBurnTokens(ctx context.Context, params json.RawMessage) interface{} {
+	return m.executeWith(ctx, params, new(protocol.BurnTokens))
 }
 
 func (m *JrpcMethods) ExecuteCreateAdi(ctx context.Context, params json.RawMessage) interface{} {
