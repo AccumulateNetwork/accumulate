@@ -357,6 +357,8 @@ func TestQueryNotFound(t *testing.T) {
 }
 
 func TestQueryWrongType(t *testing.T) {
+	acctesting.SkipCI(t, "deprecated")
+
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
@@ -382,6 +384,8 @@ func TestQueryWrongType(t *testing.T) {
 }
 
 func TestGetTxId(t *testing.T) {
+	acctesting.SkipCI(t, "deprecated")
+
 	//make a client, and also spin up the router grpc
 	dir := t.TempDir()
 	daemon := startBVC(t, dir)
