@@ -260,7 +260,7 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 		case i > 0:
 			// Only check the nonce of the first key
 		case ks.Nonce >= sig.Nonce:
-			return nil, fmt.Errorf("invalid nonce")
+			return nil, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, sig.Nonce)
 		default:
 			ks.Nonce = sig.Nonce
 		}
@@ -332,7 +332,7 @@ func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error
 		case i > 0:
 			// Only check the nonce of the first key
 		case account.Nonce >= sig.Nonce:
-			return fmt.Errorf("invalid nonce")
+			return fmt.Errorf("invalid nonce: have %d, received %d", account.Nonce, sig.Nonce)
 		default:
 			account.Nonce = sig.Nonce
 		}
@@ -358,6 +358,14 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		txAccepted, txPending = state.NewTransaction(txPending)
 	}
 
+	// Don't add internal transactions to chains. Internal transactions are
+	// exclusively used for communication between the governor and the state
+	// machine.
+	txt := env.Transaction.Type()
+	if txt.IsInternal() {
+		return nil
+	}
+
 	// Store against the transaction hash
 	err := m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, env.Signatures)
 	if err != nil {
@@ -370,12 +378,12 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return fmt.Errorf("failed to store transaction: %v", err)
 	}
 
-	// Don't add internal transactions to chains. Internal transactions are
-	// exclusively used for communication between the governor and the state
-	// machine.
-	txt := env.Transaction.Type()
-	if txt.IsInternal() {
-		return nil
+	if st == nil {
+		return nil // Check failed
+	}
+
+	if postCommit {
+		return nil // Failure after commit
 	}
 
 	// Add the envelope to the origin's pending chain
@@ -384,12 +392,10 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return fmt.Errorf("failed to add signature to pending chain: %v", err)
 	}
 
-	switch {
-	case st == nil:
-		return nil // Check failed
-	case postCommit:
-		return nil
-	case txt.IsSynthetic():
+	// The signator of a synthetic transaction is the subnet ADI (acc://dn or
+	// acc://bvn-{id}). Do not add transactions to the subnet's pending chain
+	// and do not charge fees to the subnet's ADI.
+	if txt.IsSynthetic() {
 		return nil
 	}
 
