@@ -7,12 +7,17 @@ import (
 	"runtime"
 )
 
-func getIP() net.IP {
-	_, file, line, ok := runtime.Caller(2)
+func hashCaller(skip int, id string) []byte {
+	_, file, line, ok := runtime.Caller(skip + 1)
 	if !ok {
 		panic("could not determine caller")
 	}
-	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", file, line)))
+	hash := sha256.Sum256([]byte(fmt.Sprintf("%s:%d-%s", file, line, id)))
+	return hash[:]
+}
+
+// getIP creates a 127.x.y.z address from the first 3 bytes of the hash.
+func getIP(hash []byte) net.IP {
 	ip := net.ParseIP("127.0.0.0")
 	ip[13] = hash[0]
 	ip[14] = hash[1]
@@ -23,17 +28,21 @@ func getIP() net.IP {
 	return ip
 }
 
+// getPort calculates a port number between 1001 and 65535 from bytes 4-5 of the
+// hash.
+func getPort(hash []byte) int {
+	v := int(hash[3])<<8 | int(hash[4])
+	return v%(1<<16-1002) + 1002
+}
+
 func GetIP() net.IP {
-	return getIP()
+	return getIP(hashCaller(1, ""))
 }
 
 func GetIPs(n int) []net.IP {
-	ip := getIP()
 	ips := make([]net.IP, n)
 	for i := range ips {
-		ips[i] = make(net.IP, len(ip))
-		copy(ips[i], ip)
-		ip[15]++
+		ips[i] = getIP(hashCaller(1, fmt.Sprint(i)))
 	}
 	return ips
 }

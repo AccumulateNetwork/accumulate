@@ -5,40 +5,48 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto"
 )
 
 func TestStateDBConsistency(t *testing.T) {
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
-	dir := t.TempDir()
-	store := new(badger.DB)
-	err := store.InitDB(filepath.Join(dir, "valacc.db"), nil)
-	require.NoError(t, err)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	stores := map[*accumulated.Daemon]*badger.DB{}
+	for _, netName := range subnets {
+		for _, daemon := range daemons[netName] {
+			store := new(badger.DB)
+			err := store.InitDB(filepath.Join(daemon.Config.RootDir, "valacc.db"), nil)
+			require.NoError(t, err)
+			stores[daemon] = store
 
-	// Call during test cleanup. This ensures that the app client is shutdown
-	// before the database is closed.
-	t.Cleanup(func() { store.Close() })
+			// Call during test cleanup. This ensures that the app client is shutdown
+			// before the database is closed.
+			t.Cleanup(func() { store.Close() })
+		}
+	}
 
-	db := database.New(store, nil)
-	n := createApp(t, db, crypto.Address{}, true)
+	getDb := func(d *accumulated.Daemon) (*database.Database, error) { return database.New(stores[d], d.Logger), nil }
+	nodes := RunTestNet(t, subnets, daemons, getDb, true)
+	n := nodes[subnets[1]][0]
+
 	n.testLiteTx(10)
 
 	ledger := n.network.NodeUrl(protocol.Ledger)
 	ledger1 := protocol.NewInternalLedger()
-	batch := db.Begin()
+	batch := n.db.Begin()
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger1))
 	rootHash := batch.RootHash()
 	batch.Discard()
 	n.client.Shutdown()
 
 	// Reopen the database
-	db = database.New(store, nil)
+	db := database.New(stores[daemons[subnets[1]][0]], nil)
 
 	// Block 6 does not make changes so is not saved
 	batch = db.Begin()
@@ -49,6 +57,7 @@ func TestStateDBConsistency(t *testing.T) {
 	batch.Discard()
 
 	// Recreate the app and try to do more transactions
-	n = createApp(t, db, crypto.Address{}, false)
+	nodes = RunTestNet(t, subnets, daemons, getDb, false)
+	n = nodes[subnets[1]][0]
 	n.testLiteTx(10)
 }
