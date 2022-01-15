@@ -1,7 +1,6 @@
 package chain
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -20,5 +19,16 @@ func (SyntheticBurnTokens) Validate(st *StateManager, tx *transactions.Envelope)
 		return fmt.Errorf("invalid payload: %v", err)
 	}
 
-	return errors.New("not implemented") // TODO
+	account := protocol.NewTokenIssuer()
+	switch origin := st.Origin.(type) {
+	case *protocol.TokenIssuer:
+		account = origin
+	default:
+		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.AccountTypeTokenIssuer, origin.Header().Type)
+	}
+
+	account.Supply.Add(&account.Supply, &body.Amount)
+
+	st.Update(account)
+	return nil
 }
