@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/spf13/cobra"
@@ -161,11 +162,30 @@ func getPublicKey(s string) ([]byte, error) {
 }
 
 func LookupByLabel(label string) ([]byte, error) {
+	label, _ = LabelForLiteTokenAccount(label)
+
 	pubKey, err := Db.Get(BucketLabel, []byte(label))
 	if err != nil {
 		return nil, fmt.Errorf("valid key not found for %s", label)
 	}
 	return LookupByPubKey(pubKey)
+}
+
+// LabelForLiteTokenAccount returns the identity of the token account if label
+// is a valid token account URL. Otherwise, LabelForLiteTokenAccount returns the
+// original value.
+func LabelForLiteTokenAccount(label string) (string, bool) {
+	u, err := url.Parse(label)
+	if err != nil {
+		return label, false
+	}
+
+	key, _, err := protocol.ParseLiteTokenAddress(u)
+	if key == nil || err != nil {
+		return label, false
+	}
+
+	return u.Hostname(), true
 }
 
 func LookupByPubKey(pubKey []byte) ([]byte, error) {
@@ -207,6 +227,13 @@ func GenerateKey(label string) (string, error) {
 	err = Db.Put(BucketLabel, []byte(label), pubKey)
 	if err != nil {
 		return "", err
+	}
+
+	if label, ok := LabelForLiteTokenAccount(label); ok {
+		err = Db.Put(BucketLabel, []byte(label), pubKey)
+		if err != nil {
+			return "", err
+		}
 	}
 
 	if WantJsonOutput {
