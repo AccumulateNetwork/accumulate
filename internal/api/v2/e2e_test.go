@@ -25,38 +25,34 @@ func TestEndToEnd(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	// Reuse the same IPs for each test
-	ips := acctesting.GetIPs(2)
-
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
-		daemons := startAccumulate(t, ips, 1, 2, 3000)
-		return &e2eDUT{s, daemons}
+		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 2, 0)
+		acctesting.RunTestNet(s.T(), subnets, daemons)
+		return &e2eDUT{s, daemons[protocol.Directory][0]}
 	}))
 }
 
 func TestValidate(t *testing.T) {
-	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	daemons := startAccumulate(t, acctesting.GetIPs(4), 2, 2, 3000)
-	japi := daemons[0].Jrpc_TESTONLY()
+	subnets, daemons := acctesting.CreateTestNet(t, 2, 2, 0)
+	acctesting.RunTestNet(t, subnets, daemons)
+	japi := daemons[protocol.Directory][0].Jrpc_TESTONLY()
 
-	t.Log("Not found")
-	{
+	t.Run("Not found", func(t *testing.T) {
 		b, err := json.Marshal(&api.TxnQuery{Txid: make([]byte, 32), Wait: 2 * time.Second})
 		require.NoError(t, err)
 
 		r := japi.GetMethod("query-tx")(context.Background(), b)
 		err, _ = r.(error)
 		require.Error(t, err)
-	}
+	})
 
 	var liteKey ed25519.PrivateKey
 	var liteUrl *url.URL
-	t.Log("Faucet")
-	{
+	t.Run("Faucet", func(t *testing.T) {
 		liteKey = newKey([]byte(t.Name()))
 		liteUrl = makeLiteUrl(t, liteKey, ACME)
 
@@ -68,10 +64,9 @@ func TestValidate(t *testing.T) {
 		account := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
 		assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
-	}
+	})
 
-	t.Log("Lite Account Credits")
-	{
+	t.Run("Lite Account Credits", func(t *testing.T) {
 		executeTx(t, japi, "add-credits", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,
@@ -87,12 +82,11 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, int64(10*AcmePrecision-AcmePrecision/100), account.Balance.Int64())
 
 		queryRecord(t, japi, "query-chain", &api.ChainIdQuery{ChainId: liteUrl.AccountID()})
-	}
+	})
 
 	var adiKey ed25519.PrivateKey
 	var adiName = "acc://keytest"
-	t.Log("Create ADI")
-	{
+	t.Run("Create ADI", func(t *testing.T) {
 		adiKey = newKey([]byte(t.Name()))
 
 		executeTx(t, japi, "create-adi", true, execParams{
@@ -121,21 +115,19 @@ func TestValidate(t *testing.T) {
 			adiName + "/book",
 			adiName + "/page",
 		}, dir.Items)
-	}
+	})
 
-	t.Log("Txn History")
-	{
+	t.Run("Txn History", func(t *testing.T) {
 		r := new(api.MultiResponse)
 		callApi(t, japi, "query-tx-history", struct {
 			Url   string
 			Count int
 		}{liteUrl.String(), 10}, r)
 		require.Len(t, r.Items, 3)
-	}
+	})
 
 	dataAccountUrl := adiName + "/dataAccount"
-	t.Log("Create Data Account")
-	{
+	t.Run("Create Data Account", func(t *testing.T) {
 		executeTx(t, japi, "create-data-account", true, execParams{
 			Origin: adiName,
 			Key:    adiKey,
@@ -146,11 +138,10 @@ func TestValidate(t *testing.T) {
 		dataAccount := NewDataAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: dataAccountUrl}, dataAccount)
 		assert.Equal(t, dataAccountUrl, string(dataAccount.ChainUrl))
-	}
+	})
 
 	keyPageUrl := adiName + "/page1"
-	t.Log("Create Key Page")
-	{
+	t.Run("Create Key Page", func(t *testing.T) {
 		var keys []*KeySpecParams
 		// pubKey, _ := json.Marshal(adiKey.Public())
 		keys = append(keys, &KeySpecParams{
@@ -167,11 +158,10 @@ func TestValidate(t *testing.T) {
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
 		assert.Equal(t, keyPageUrl, string(keyPage.ChainUrl))
-	}
+	})
 
 	keyBookUrl := adiName + "/book1"
-	t.Log("Create Key Book")
-	{
+	t.Run("Create Key Book", func(t *testing.T) {
 		var page []string
 		pageUrl := makeUrl(t, keyPageUrl)
 		page = append(page, pageUrl.String())
@@ -186,29 +176,29 @@ func TestValidate(t *testing.T) {
 		keyBook := NewKeyBook()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyBookUrl}, keyBook)
 		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
-	}
+	})
 
-	t.Log("Update Key Page")
-	{
+	var adiKey2 ed25519.PrivateKey
+	t.Run("Update Key Page", func(t *testing.T) {
+		adiKey2 = newKey([]byte(t.Name()))
+
 		executeTx(t, japi, "update-key-page", true, execParams{
 			Origin: keyPageUrl,
 			Key:    adiKey,
 			Payload: &UpdateKeyPage{
-				Operation: protocol.KeyPageOperationUpdate,
-				Key:       adiKey[32:],
-				NewKey:    adiKey[32:],
+				Operation: protocol.KeyPageOperationAdd,
+				NewKey:    adiKey2[32:],
 				Owner:     "acc://foo/book1",
 			},
 		})
 		keyPage := NewKeyPage()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, keyPage)
-		assert.Equal(t, "acc://foo/book1", keyPage.Keys[0].Owner)
-	}
+		assert.Equal(t, "acc://foo/book1", keyPage.Keys[1].Owner)
+	})
 
 	tokenUrl := "acc://ACME"
 	tokenAccountUrl := adiName + "/account"
-	t.Log("Create Token Account")
-	{
+	t.Run("Create Token Account", func(t *testing.T) {
 		executeTx(t, japi, "create-token-account", true, execParams{
 			Origin: adiName,
 			Key:    adiKey,
@@ -221,10 +211,9 @@ func TestValidate(t *testing.T) {
 		tokenAccount := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: tokenAccountUrl}, tokenAccount)
 		assert.Equal(t, tokenAccountUrl, string(tokenAccount.ChainUrl))
-	}
+	})
 
-	t.Log("Query Key Index")
-	{
+	t.Run("Query Key Index", func(t *testing.T) {
 		keyIndex := &query2.ResponseKeyPageIndex{}
 		queryRecordAs(t, japi, "query-key-index", &api.KeyPageIndexQuery{
 			UrlQuery: api.UrlQuery{
@@ -233,16 +222,16 @@ func TestValidate(t *testing.T) {
 			Key: adiKey[32:],
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
-	}
-
+	})
 }
 
 func TestTokenTransfer(t *testing.T) {
-	acctesting.SkipPlatform(t, "windows", "flaky")
+	// acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	daemons := startAccumulate(t, acctesting.GetIPs(4), 2, 2, 3000)
+	subnets, daemons := acctesting.CreateTestNet(t, 2, 2, 0)
+	acctesting.RunTestNet(t, subnets, daemons)
 
 	var aliceKey ed25519.PrivateKey
 	var aliceUrl *url.URL
@@ -269,10 +258,15 @@ func TestTokenTransfer(t *testing.T) {
 
 		// Ensure we see the not found error code regardless of which
 		// node on which BVN the transaction is sent to
-		for i, daemon := range daemons {
-			japi := daemon.Jrpc_TESTONLY()
-			res := executeTxFail(t, japi, "send-tokens", 1, txParams)
-			assert.Equal(t, uint64(protocol.CodeNotFound), res.Code, "Node %d (BVN %d) returned the wrong error code", i, i/2)
+		for netName, daemons := range daemons {
+			if netName == protocol.Directory {
+				continue
+			}
+			for i, daemon := range daemons {
+				japi := daemon.Jrpc_TESTONLY()
+				res := executeTxFail(t, japi, "send-tokens", 1, txParams)
+				assert.Equal(t, uint64(protocol.CodeNotFound), res.Code, "Node %d (%s) returned the wrong error code", i, netName)
+			}
 		}
 	})
 
