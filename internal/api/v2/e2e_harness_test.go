@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"reflect"
 	"testing"
@@ -213,7 +212,7 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	pl.Signature = tx.Signatures[0].Signature
 	pl.KeyPage.Index = tx.Transaction.KeyPageIndex
 	pl.KeyPage.Height = tx.Transaction.KeyPageHeight
-	pl.Payload = hex.EncodeToString(tx.Transaction.Body)
+	pl.Payload = tx.Transaction.Body
 
 	data, err := pl.MarshalJSON()
 	d.Require().NoError(err)
