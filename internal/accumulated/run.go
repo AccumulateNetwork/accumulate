@@ -44,7 +44,7 @@ type Daemon struct {
 	jrpc  *api.JrpcMethods
 
 	// knobs for tests
-	IsTest   bool
+	// IsTest   bool
 	UseMemDB bool
 }
 
@@ -155,7 +155,6 @@ func (d *Daemon) Start() (err error) {
 		Logger:  d.Logger,
 		Key:     d.Key().Bytes(),
 		Network: d.Config.Accumulate.Network,
-		IsTest:  d.IsTest,
 	}
 	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {

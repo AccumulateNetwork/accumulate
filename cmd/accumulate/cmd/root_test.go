@@ -7,9 +7,7 @@ import (
 	"io/ioutil"
 	net2 "net"
 	"net/url"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"reflect"
 	"runtime"
 	"sort"
@@ -17,11 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/node"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
 )
@@ -65,8 +59,7 @@ func (tm *testMatrixTests) execute(t *testing.T, tc *testCmd) {
 	//execute the tests
 	for _, f := range testMatrix {
 		name := strings.Split(GetFunctionName(f), ".")
-		t.Logf("--- %s ---", name[len(name)-1])
-		f(t, tc)
+		t.Run(name[len(name)-1], func(t *testing.T) { f(t, tc) })
 	}
 }
 
@@ -76,58 +69,35 @@ type testCmd struct {
 	validatorCmd   *exec.Cmd
 	defaultWorkDir string
 	jsonRpcAddr    string
-	jsonRpcPort    int
 }
 
 //NewTestBVNN creates a BVN test Node and returns the rest and jsonrpc ports
-func NewTestBVNN(t *testing.T, defaultWorkDir string) (string, int) {
+func NewTestBVNN(t *testing.T) string {
 	t.Helper()
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	// Configure
-	opts := acctesting.NodeInitOptsForLocalNetwork(t.Name(), acctesting.GetIP())
-	opts.WorkDir = defaultWorkDir
-	opts.Logger = logging.NewTestLogger(t, "plain", config.DefaultLogLevels, false)
-	require.NoError(t, node.Init(opts))
-
 	// Start
-	_, err := acctesting.RunDaemon(acctesting.DaemonOptions{
-		Dir:       filepath.Join(defaultWorkDir, "Node0"),
-		LogWriter: logging.TestLogWriter(t),
-	}, t.Cleanup)
-	require.NoError(t, err)
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	acctesting.RunTestNet(t, subnets, daemons)
 
 	time.Sleep(time.Second)
-	return opts.RemoteIP[0], opts.Port + networks.AccRouterJsonPortOffset
+	c := daemons[subnets[1]][0].Config
+	return c.Accumulate.API.ListenAddress
 }
 
 func (c *testCmd) initalize(t *testing.T) {
 	t.Helper()
 
-	defaultWorkDir, err := ioutil.TempDir("", "cliTest")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	err = os.MkdirAll(defaultWorkDir, 0700)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	c.rootCmd = InitRootCmd(initDB(defaultWorkDir, true))
+	c.rootCmd = InitRootCmd(initDB(t.TempDir(), true))
 	c.rootCmd.PersistentPostRun = nil
 
-	c.jsonRpcAddr, c.jsonRpcPort = NewTestBVNN(t, defaultWorkDir)
+	c.jsonRpcAddr = NewTestBVNN(t)
 	time.Sleep(2 * time.Second)
-
-	t.Cleanup(func() {
-		os.Remove(defaultWorkDir)
-	})
 }
 
 func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
-	fullCommand := fmt.Sprintf("-j -s http://%s:%v/v2 %s",
-		c.jsonRpcAddr, c.jsonRpcPort, cmdLine)
+	fullCommand := fmt.Sprintf("-j -s %s/v2 %s",
+		c.jsonRpcAddr, cmdLine)
 	args := strings.Split(fullCommand, " ")
 
 	e := bytes.NewBufferString("")
