@@ -29,6 +29,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 	case config.BlockValidator:
 		return newExecutor(opts,
 			AddCredits{},
+			BurnTokens{},
 			CreateDataAccount{},
 			CreateIdentity{},
 			CreateKeyBook{},
@@ -42,6 +43,7 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			WriteDataTo{},
 
 			SyntheticAnchor{Network: &opts.Network},
+			SyntheticBurnTokens{},
 			SyntheticCreateChain{},
 			SyntheticDepositCredits{},
 			SyntheticDepositTokens{},
