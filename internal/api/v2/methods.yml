@@ -134,3 +134,8 @@ ExecuteWriteDataTo:
   kind: execute
   rpc: write-data-to
   input: WriteDataTo
+
+ExecuteBurnTokens:
+  kind: execute
+  rpc: burn-tokens
+  input: BurnTokens

@@ -111,7 +111,6 @@ section "Set threshold to 2 of 2"
 wait-for cli-tx tx execute keytest/page1 keytest-1-0 '{"type": "updateKeyPage", "operation": "setThreshold", "threshold": 2}'
 THRESHOLD=$(accumulate -j get keytest/page1 | jq -re .data.threshold)
 [ "$THRESHOLD" -eq 2 ] && success || die "Bad keytest/page1 threshold: want 2, got ${THRESHOLD}"
-success
 
 section "Create an ADI Token Account"
 wait-for cli-tx account create token keytest keytest-0-0 0 keytest/tokens ACME keytest/book
@@ -166,7 +165,11 @@ LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
 wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueTokens", "recipient": "'${LITE_TOK}'", "amount": 123}'
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 123 ] && success || die "${LITE_TOK} should have 123 keytest tokens but has ${BALANCE}"
-success
+
+section "Burn tokens"
+wait-for cli-tx tx execute ${LITE_TOK} '{"type": "burnTokens", "amount": 100}'
+BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
+[ "$BALANCE" -eq 23 ] && success || die "${LITE_TOK} should have 23 keytest tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data lite keytest keytest-0-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
