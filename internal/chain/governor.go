@@ -256,7 +256,9 @@ func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.Inte
 
 		var typ types.TransactionType
 		_ = typ.UnmarshalBinary(tx.Transaction)
-		g.logger.Info("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
+		if typ != types.TxTypeSyntheticAnchor {
+			g.logger.Info("Signing synth txn", "txid", logging.AsHex(txid), "type", typ)
+		}
 
 		// Sign it
 		ed := new(transactions.ED25519Sig)
@@ -311,7 +313,10 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		}
 
 		// Send it
-		g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.Transaction.Hash()))
+		typ := env.Transaction.Type()
+		if typ != types.TxTypeSyntheticAnchor {
+			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.Transaction.Hash()), "type", typ)
+		}
 		g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
 		body.Transactions = append(body.Transactions, id)
 	}
@@ -460,6 +465,6 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	}
 
 	// Send it
-	g.logger.Info("Sending internal txn", "txid", logging.AsHex(env.Transaction.Hash()), "type", body.GetType())
+	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.Transaction.Hash()), "type", body.GetType())
 	g.dispatcher.BroadcastTxAsyncLocal(context.TODO(), data)
 }
