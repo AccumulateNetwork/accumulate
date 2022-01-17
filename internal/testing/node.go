@@ -1,11 +1,9 @@
 package testing
 
 import (
-	"io"
-	"strings"
-	"net"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 

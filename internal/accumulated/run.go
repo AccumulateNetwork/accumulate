@@ -44,7 +44,7 @@ type Daemon struct {
 	jrpc  *api.JrpcMethods
 
 	// knobs for tests
-	// IsTest   bool
+	//IsTest   bool
 	UseMemDB bool
 
 	// Connection & router accessible for tests
@@ -144,7 +144,7 @@ func (d *Daemon) Start() (err error) {
 
 	// Create a connection manager
 	d.ConnMgr = connections.NewConnectionManager(&d.Config.Accumulate, d.Logger)
-	d.ConnRouter = connections.NewConnectionRouter(d.ConnMgr, d.IsTest)
+	d.ConnRouter = connections.NewConnectionRouter(d.ConnMgr, false)
 
 	// Create a proxy local client which we will populate with the local client
 	// after the node has been created.
@@ -165,7 +165,6 @@ func (d *Daemon) Start() (err error) {
 		Logger:           d.Logger,
 		Key:              d.Key().Bytes(),
 		Network:          d.Config.Accumulate.Network,
-
 	}
 	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {
