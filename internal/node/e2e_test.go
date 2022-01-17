@@ -3,6 +3,7 @@ package node_test
 import (
 	"context"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,8 +12,14 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
+	apitypes "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/tendermint/tendermint/rpc/client/local"
@@ -24,16 +31,14 @@ func TestEndToEnd(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	// Reuse the same IPs for each test
-	ips := acctesting.GetIPs(3)
-
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Restart the nodes for every test
-		nodes := initNodes(s.T(), s.T().Name(), ips, 3000, 3, nil)
-		bvn0 := nodes[0]
-		client, err := local.New(bvn0.Node_TESTONLY().Service.(local.NodeService))
+		subnets, daemons := acctesting.CreateTestNet(s.T(), 3, 1, 0)
+		acctesting.RunTestNet(s.T(), subnets, daemons)
+		daemon := daemons[subnets[1]][0]
+		client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
 		require.NoError(s.T(), err)
-		return &e2eDUT{s, bvn0.DB_TESTONLY(), bvn0.Query_TESTONLY(), client, bvn0.ConnRouter}
+		return &e2eDUT{s, daemon.DB_TESTONLY(), daemon.Query_TESTONLY(), client, daemon.connRouter}
 	}))
 }
 
@@ -65,6 +70,7 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	d.T().Helper()
 	b, err := tx.MarshalBinary()
 	d.Require().NoError(err)
 	_, err = d.client.BroadcastTxAsync(context.Background(), b)
@@ -72,15 +78,28 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 }
 
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
+	d.T().Helper()
+
 	route, err := d.connRouter.GetLocalRoute()
 	d.Require().NoError(err)
 	q := apiv2.NewQueryDirect(route, apiv2.QuerierOptions{
 		TxMaxWaitTime: 10 * time.Second,
 	})
 
-	for _, txid := range txids {
-		_, err := q.QueryTx(txid, 10*time.Second)
-		d.Require().NoError(err)
+	for len(txids) > 0 {
+		var synth [][]byte
+		for _, txid := range txids {
+			r, err := q.QueryTx(txid, 10*time.Second)
+			d.Require().NoError(err)
+			d.Require().NotNil(r.Status, "Transaction status is empty")
+			d.Require().True(r.Status.Delivered, "Transaction has not been delivered")
+			d.Require().Zero(r.Status.Code, "Transaction failed")
+			for _, id := range r.SyntheticTxids {
+				id := id // We want a pointer to a copy, not to the loop var
+				synth = append(synth, id[:])
+			}
+		}
+		txids = synth
 	}
 }
 
@@ -89,10 +108,19 @@ func TestSubscribeAfterClose(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	ip := acctesting.GetIPs(1)
-	daemon := initNodes(t, t.Name(), ip, 3000, 1, []string{ip[0].String()})[0]
-	require.NoError(t, daemon.Stop())
+	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
+	for _, netName := range subnets {
+		for _, daemon := range daemons[netName] {
+			require.NoError(t, daemon.Start())
+		}
+	}
+	for _, netName := range subnets {
+		for _, daemon := range daemons[netName] {
+			assert.NoError(t, daemon.Stop())
+		}
+	}
 
+	daemon := daemons[protocol.Directory][0]
 	client, err := local.New(daemon.Node_TESTONLY().Service.(local.NodeService))
 	require.NoError(t, err)
 	_, err = client.Subscribe(context.Background(), t.Name(), "tm.event = 'Tx'")
@@ -109,24 +137,18 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	acctesting.SkipPlatform(t, "darwin", "flaky")
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	const bCount, vCount = 3, 1
-	bvns := make([]string, bCount)
-	ips := acctesting.GetIPs(bCount * vCount)
-	for i := range bvns {
-		bvns[i] = ips[i*vCount].String()
-	}
+	subnets, daemons := acctesting.CreateTestNet(t, 3, 1, 0)
+	acctesting.RunTestNet(t, subnets, daemons)
+	daemon := daemons[protocol.Directory][0]
 
-	bvc0 := initNodes(t, "BVC0", ips[0*vCount:1*vCount], 3000, vCount, bvns)
-	bvc1 := initNodes(t, "BVC1", ips[1*vCount:2*vCount], 3000, vCount, bvns)
-	bvc2 := initNodes(t, "BVC2", ips[2*vCount:3*vCount], 3000, vCount, bvns)
 	rpcAddrs := make([]string, 0, 3)
-	for _, bvc := range [][]*accumulated.Daemon{bvc0, bvc1, bvc2} {
-		rpcAddrs = append(rpcAddrs, bvc[0].Config.RPC.ListenAddress)
+	for _, netName := range subnets[1:] {
+		rpcAddrs = append(rpcAddrs, daemons[netName][0].Config.RPC.ListenAddress)
 	}
 
 	relay, err := relay.NewWith(nil, rpcAddrs...)
 	require.NoError(t, err)
-	if bvc0[0].Config.Accumulate.API.EnableSubscribeTX {
+	if daemon.Config.Accumulate.API.EnableSubscribeTX {
 		require.NoError(t, relay.Start())
 		t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	}
@@ -143,9 +165,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	params, err := json.Marshal(&req)
 	require.NoError(t, err)
 
-	jsonapi, err := api.New(&config.API{
-		ListenAddress: fmt.Sprintf("tcp://%s:%d", ips[0], 3000+networks.AccRouterJsonPortOffset),
-	}, query)
+	jsonapi, err := api.New(&daemon.Config.Accumulate.API, query)
 	require.NoError(t, err)
 	res := jsonapi.Faucet(context.Background(), params)
 	switch r := res.(type) {

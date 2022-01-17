@@ -5,23 +5,12 @@ import (
 	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/json"
-	"fmt"
-	"net"
-	"path"
-	"path/filepath"
 	"reflect"
-	"regexp"
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	cfg "github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/node"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -29,69 +18,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
 )
-
-var reAlphaNum = regexp.MustCompile("[^a-zA-Z0-9]")
-
-func startAccumulate(t *testing.T, ips []net.IP, bvns, validators, basePort int) []*accumulated.Daemon {
-	if len(ips) != bvns*validators {
-		panic(fmt.Errorf("want %d validators each for %d BVNs but got %d IPs", validators, bvns, len(ips)))
-	}
-
-	names := make([]string, bvns)
-	addrs := make(map[string][]string, bvns)
-	IPs := make([][]string, bvns)
-	config := make([][]*config.Config, bvns)
-
-	workDir := t.TempDir()
-	name := reAlphaNum.ReplaceAllString(t.Name(), "-")
-	for bvn := 0; bvn < bvns; bvn++ {
-		names[bvn] = fmt.Sprintf("%s-BVN%d", name, bvn)
-		IPs[bvn] = make([]string, validators)
-		addrs[names[bvn]] = make([]string, validators)
-		for val := 0; val < validators; val++ {
-			ip := ips[0]
-			ips = ips[1:]
-			IPs[bvn][val] = ip.String()
-			addrs[names[bvn]][val] = fmt.Sprintf("http://%v:%d", ip, basePort)
-		}
-	}
-
-	for bvn := 0; bvn < bvns; bvn++ {
-		config[bvn] = make([]*cfg.Config, validators)
-		for val := 0; val < validators; val++ {
-			bvnName := names[bvn]
-			config[bvn][val] = acctesting.DefaultConfig(cfg.BlockValidator, cfg.Validator, bvnName)
-			net := &config[bvn][val].Accumulate.Network
-			net.BvnNames = names
-			net.Addresses = addrs
-			net.SelfAddress = addrs[bvnName][0]
-		}
-	}
-
-	daemons := make([]*accumulated.Daemon, 0, bvns*validators)
-	for bvn := 0; bvn < bvns; bvn++ {
-		require.NoError(t, node.Init(node.InitOptions{
-			WorkDir:  path.Join(workDir, fmt.Sprintf("bvn%d", bvn)),
-			Port:     3000,
-			Config:   config[bvn],
-			RemoteIP: IPs[bvn],
-			ListenIP: IPs[bvn],
-			Logger:   logging.NewTestLogger(t, "plain", cfg.DefaultLogLevels, false),
-		}))
-
-		for val := 0; val < validators; val++ {
-			daemon, err := acctesting.RunDaemon(acctesting.DaemonOptions{
-				Dir:       filepath.Join(workDir, fmt.Sprintf("bvn%d", bvn), fmt.Sprintf("Node%d", val)),
-				LogWriter: logging.TestLogWriter(t),
-			}, t.Cleanup)
-			require.NoError(t, err)
-			daemon.Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) { require.NoError(t, err) })
-			daemons = append(daemons, daemon)
-		}
-	}
-
-	return daemons
-}
 
 func newKey(seed []byte) ed25519.PrivateKey {
 	h := sha256.Sum256(seed)
@@ -241,22 +167,24 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height ui
 
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {
 	t.Helper()
+
 	txr := queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid, Wait: 10 * time.Second})
-	for _, synthTxid := range txr.SyntheticTxids {
-		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: synthTxid[:], Wait: 10 * time.Second})
+	for _, txid := range txr.SyntheticTxids {
+		queryTxn(t, japi, "query-tx", &api.TxnQuery{Txid: txid[:], Wait: 10 * time.Second})
 	}
 }
 
 type e2eDUT struct {
 	*e2e.Suite
-	daemons []*accumulated.Daemon
+	daemon *accumulated.Daemon
 }
 
 func (d *e2eDUT) api() *api.JrpcMethods {
-	return d.daemons[0].Jrpc_TESTONLY()
+	return d.daemon.Jrpc_TESTONLY()
 }
 
 func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
+	d.T().Helper()
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
 	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
@@ -266,6 +194,7 @@ func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 }
 
 func (d *e2eDUT) GetRecordHeight(url string) uint64 {
+	d.T().Helper()
 	r, err := d.api().Querier().QueryUrl(url)
 	d.Require().NoError(err)
 	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
@@ -274,6 +203,7 @@ func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
+	d.T().Helper()
 	d.Require().NotEmpty(tx.Signatures, "Transaction has no signatures")
 	pl := new(api.TxRequest)
 	pl.Origin = tx.Transaction.Origin
@@ -282,7 +212,7 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 	pl.Signature = tx.Signatures[0].Signature
 	pl.KeyPage.Index = tx.Transaction.KeyPageIndex
 	pl.KeyPage.Height = tx.Transaction.KeyPageHeight
-	pl.Payload = tx.Transaction
+	pl.Payload = tx.Transaction.Body
 
 	data, err := pl.MarshalJSON()
 	d.Require().NoError(err)
@@ -293,6 +223,7 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 }
 
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
+	d.T().Helper()
 	for _, txid := range txids {
 		r, err := d.api().Querier().QueryTx(txid, 10*time.Second)
 		d.Require().NoError(err)

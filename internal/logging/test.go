@@ -50,7 +50,7 @@ func NewTestLogger(t testing.TB, format, level string, trace bool) log.Logger {
 	require.NoError(t, err)
 	logger, err := NewTendermintLogger(zerolog.New(writer), level, trace)
 	require.NoError(t, err)
-	return logger
+	return logger.With("test", t.Name())
 }
 
 func ExcludeMessages(messages ...string) zerolog.HookFunc {

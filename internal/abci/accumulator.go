@@ -17,6 +17,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	_ "github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"github.com/AccumulateNetwork/accumulate/types"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/getsentry/sentry-go"
@@ -317,7 +318,10 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		app.logger.Debug("Found tx", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)
 		err := app.Chain.CheckTx(env)
 		if err == nil {
-			app.logger.Debug("Check succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)
+			typ := env.Transaction.Type()
+			if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
+				app.logger.Debug("Check succeeded", "type", typ, "txid", txid, "hash", tmHash)
+			}
 			continue
 		}
 
@@ -362,7 +366,10 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		txid := logging.AsHex(env.Transaction.Hash())
 		err := app.Chain.DeliverTx(env)
 		if err == nil {
-			app.logger.Debug("Deliver succeeded", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash)
+			typ := env.Transaction.Type()
+			if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
+				app.logger.Debug("Deliver succeeded", "type", typ, "txid", txid, "hash", tmHash)
+			}
 			continue
 		}
 

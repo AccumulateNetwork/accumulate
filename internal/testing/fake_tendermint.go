@@ -18,6 +18,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/bytes"
 	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
 	tmquery "github.com/tendermint/tendermint/libs/pubsub/query"
@@ -41,6 +42,7 @@ type FakeTendermint struct {
 	db         *database.Database
 	network    *config.Network
 	nextHeight func() int64
+	address    crypto.Address
 	onError    func(err error)
 
 	stop    chan struct{}
@@ -56,6 +58,7 @@ type FakeTendermint struct {
 }
 
 type txStatus struct {
+	Envelopes     []*transactions.Envelope
 	Tx            []byte
 	Hash          [32]byte
 	Height        int64
@@ -67,12 +70,13 @@ type txStatus struct {
 
 var _ relay.Client = (*FakeTendermint)(nil)
 
-func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
+func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, address crypto.Address, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
 	c := new(FakeTendermint)
 	c.appWg = new(sync.WaitGroup)
 	c.db = db
 	c.network = network
 	c.nextHeight = nextHeight
+	c.address = address
 	c.onError = onError
 	c.EventBus = types.NewEventBus()
 	c.stop = make(chan struct{})
@@ -208,7 +212,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	for i, env := range envelopes {
 		if debugTX {
 			txt := env.Transaction.Type()
-			fmt.Printf("Submitting %v %X\n", txt, txh)
+			fmt.Printf("Submitting type=%v tx=%X env=%X\n", txt, env.GetTxHash(), env.EnvHash())
 		}
 		copy(txids[i][:], env.Transaction.Hash())
 	}
@@ -231,6 +235,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	for _, txid := range txids {
 		c.txStatus[txid] = st
 	}
+	st.Envelopes = envelopes
 	st.Tx = tx
 	st.Hash = txh
 	c.txActive++
@@ -367,6 +372,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 		begin := abci.RequestBeginBlock{}
 		begin.Header.Height = height
+		begin.Header.ProposerAddress = c.address
 		c.app.BeginBlock(begin)
 
 		// Process the queue
@@ -377,7 +383,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			cr := c.app.CheckTx(abci.RequestCheckTx{Tx: sub.Tx})
 			sub.CheckResult = &cr
 			if debugTX {
-				fmt.Printf("Checked %X\n", sub.Hash)
+				for _, env := range sub.Envelopes {
+					fmt.Printf("Checked type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
+				}
 			}
 			if cr.Code != 0 {
 				c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
@@ -387,7 +395,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			dr := c.app.DeliverTx(abci.RequestDeliverTx{Tx: sub.Tx})
 			sub.DeliverResult = &dr
 			if debugTX {
-				fmt.Printf("Delivered %X\n", sub.Hash)
+				for _, env := range sub.Envelopes {
+					fmt.Printf("Delivered type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
+				}
 			}
 			if dr.Code != 0 {
 				c.onError(fmt.Errorf("DeliverTx failed: %v\n", dr.Log))
@@ -410,7 +420,9 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		for _, sub := range queue {
 			sub.Done = true
 			if debugTX {
-				fmt.Printf("Comitted %X\n", sub.Hash)
+				for _, env := range sub.Envelopes {
+					fmt.Printf("Committed type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
+				}
 			}
 		}
 
