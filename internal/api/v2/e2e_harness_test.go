@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
@@ -78,10 +79,9 @@ func queryRecordAs(t *testing.T, japi *api.JrpcMethods, method string, params, r
 }
 
 type execParams struct {
-	Origin    string
-	Key       ed25519.PrivateKey
-	PageIndex uint64
-	Payload   protocol.TransactionPayload
+	Origin  string
+	Key     ed25519.PrivateKey
+	Payload protocol.TransactionPayload
 }
 
 func recode(t *testing.T, from, to interface{}) {
@@ -93,18 +93,31 @@ func recode(t *testing.T, from, to interface{}) {
 	require.NoError(t, err)
 }
 
-func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, params execParams) *api.TxResponse {
+func prepareTx(t *testing.T, japi *api.JrpcMethods, params execParams) *api.TxRequest {
 	t.Helper()
-
 	u, err := url.Parse(params.Origin)
 	require.NoError(t, err)
 
-	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: params.Origin})
+	var signator string
+	var keyPageIndex uint64
+	if key, _, _ := protocol.ParseLiteTokenAddress(u); key != nil {
+		signator = params.Origin
+	} else {
+		q := new(api.KeyPageIndexQuery)
+		q.Url = params.Origin
+		q.Key = params.Key.Public().(ed25519.PublicKey)
+		qr := queryRecord(t, japi, "query-key-index", q)
+		resp := new(query.ResponseKeyPageIndex)
+		recode(t, qr.Data, resp)
+		signator, keyPageIndex = resp.KeyPage, resp.Index
+	}
+
+	qr := queryRecord(t, japi, "query", &api.UrlQuery{Url: signator})
 	now := time.Now()
 	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
 	tx, err := transactions.NewWith(&transactions.Header{
 		Origin:        u,
-		KeyPageIndex:  params.PageIndex,
+		KeyPageIndex:  keyPageIndex,
 		KeyPageHeight: qr.MainChain.Height,
 		Nonce:         nonce,
 	}, func(hash []byte) (*transactions.ED25519Sig, error) {
@@ -118,21 +131,27 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	req.Signer.PublicKey = params.Key[32:]
 	req.Signer.Nonce = nonce
 	req.Signature = tx.Signatures[0].Signature
-	req.KeyPage.Index = params.PageIndex
+	req.KeyPage.Index = keyPageIndex
 	req.KeyPage.Height = qr.MainChain.Height
 	req.Payload = params.Payload
-
-	r := new(api.TxResponse)
-	callApi(t, japi, method, req, r)
-	require.Zero(t, r.Code, r.Message)
-
-	if wait {
-		txWait(t, japi, r.Txid)
-	}
-	return r
+	return req
 }
 
-func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height uint64, params execParams) *api.TxResponse {
+func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, params execParams) *api.TxResponse {
+	t.Helper()
+
+	req := prepareTx(t, japi, params)
+	resp := new(api.TxResponse)
+	callApi(t, japi, method, req, resp)
+	require.Zero(t, resp.Code, resp.Message)
+
+	if wait {
+		txWait(t, japi, resp.Txid)
+	}
+	return resp
+}
+
+func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIndex, keyPageHeight uint64, params execParams) *api.TxResponse {
 	t.Helper()
 
 	u, err := url.Parse(params.Origin)
@@ -142,8 +161,8 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height ui
 	nonce := uint64(now.Unix()*1e9) + uint64(now.Nanosecond())
 	tx, err := transactions.NewWith(&transactions.Header{
 		Origin:        u,
-		KeyPageIndex:  params.PageIndex,
-		KeyPageHeight: height,
+		KeyPageIndex:  keyPageIndex,
+		KeyPageHeight: keyPageHeight,
 		Nonce:         nonce,
 	}, func(hash []byte) (*transactions.ED25519Sig, error) {
 		sig := new(transactions.ED25519Sig)
@@ -156,13 +175,13 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, height ui
 	req.Signer.PublicKey = params.Key[32:]
 	req.Signer.Nonce = nonce
 	req.Signature = tx.Signatures[0].Signature
-	req.KeyPage.Index = params.PageIndex
-	req.KeyPage.Height = height
+	req.KeyPage.Index = keyPageIndex
+	req.KeyPage.Height = keyPageHeight
 	req.Payload = params.Payload
 
-	r := new(api.TxResponse)
-	callApi(t, japi, method, req, r)
-	return r
+	resp := new(api.TxResponse)
+	callApi(t, japi, method, req, resp)
+	return resp
 }
 
 func txWait(t *testing.T, japi *api.JrpcMethods, txid []byte) {

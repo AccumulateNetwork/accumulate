@@ -325,7 +325,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 		}
 
 		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err)
+		app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
 		return abci.ResponseCheckTx{
 			Code: uint32(err.Code),
 			Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), err),
@@ -373,7 +373,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 		}
 
 		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err)
+		app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
 		// Whether or not the transaction succeeds does not matter to Tendermint
 	}
 
@@ -430,7 +430,7 @@ func (app *Accumulator) Commit() (resp abci.ResponseCommit) {
 	// }
 
 	duration := time.Since(app.timer)
-	app.logger.Info("Committed", "transactions", app.txct, "duration", duration.String(), "tps", float64(app.txct)/duration.Seconds())
+	app.logger.Debug("Committed", "transactions", app.txct, "duration", duration.String(), "tps", float64(app.txct)/duration.Seconds())
 
 	return resp
 }
