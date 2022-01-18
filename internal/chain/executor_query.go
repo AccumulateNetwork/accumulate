@@ -662,7 +662,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			}
 		}
 		if !found {
-			return nil, nil, &protocol.Error{Code: protocol.CodeNotFound, Message: fmt.Errorf("key %s not found in keypage url %s", chr.Key, chr.Url)}
+			return nil, nil, &protocol.Error{Code: protocol.CodeNotFound, Message: fmt.Errorf("key %X not found in keypage url %s", chr.Key, chr.Url)}
 		}
 		v, err = response.MarshalBinary()
 		if err != nil {

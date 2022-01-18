@@ -51,7 +51,9 @@ func testCase4_2(t *testing.T, tc *testCmd) {
 func testCase4_3(t *testing.T, tc *testCmd) {
 	t.Helper()
 
-	//uncomment after key page fix
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/page1 1000", liteAccounts[2])
+	require.NoError(t, err)
+
 	commandLine := fmt.Sprintf("page key add acc://RedWagon/page1 red2 red4")
 	r, err := tc.executeTx(t, commandLine)
 	require.NoError(t, err)
