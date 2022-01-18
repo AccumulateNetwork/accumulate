@@ -7,6 +7,28 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
 
+type TokenHolder interface {
+	TokenBalance() *big.Int
+	CreditTokens(amount *big.Int) bool
+	CanDebitTokens(amount *big.Int) bool
+	DebitTokens(amount *big.Int) bool
+	ParseTokenUrl() (*url.URL, error)
+}
+
+type CreditHolder interface {
+	CreditCredits(amount uint64)
+	DebitCredits(amount uint64) bool
+}
+
+var _ TokenHolder = (*TokenAccount)(nil)
+var _ TokenHolder = (*LiteTokenAccount)(nil)
+var _ CreditHolder = (*KeyPage)(nil)
+var _ CreditHolder = (*LiteTokenAccount)(nil)
+
+func (acct *TokenAccount) TokenBalance() *big.Int {
+	return &acct.Balance
+}
+
 func (acct *TokenAccount) CreditTokens(amount *big.Int) bool {
 	if amount == nil || amount.Sign() < 0 {
 		return false
@@ -48,6 +70,10 @@ func (ms *KeyPage) DebitCredits(amount uint64) bool {
 
 	ms.CreditBalance.Sub(&ms.CreditBalance, amt)
 	return true
+}
+
+func (acct *LiteTokenAccount) TokenBalance() *big.Int {
+	return &acct.Balance
 }
 
 func (acct *LiteTokenAccount) CreditTokens(amount *big.Int) bool {
