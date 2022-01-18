@@ -486,3 +486,4 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 
 	return sigRecord.PutState(st.Signator)
 }
+

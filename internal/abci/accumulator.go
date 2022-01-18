@@ -46,7 +46,7 @@ type AccumulatorOptions struct {
 	DB      *database.Database
 	Logger  log.Logger
 	Network config.Network
-	Address crypto.Address
+	Address crypto.Address  // This is the address of this node, and is used to determine if the node is the leader
 }
 
 // NewAccumulator returns a new Accumulator.

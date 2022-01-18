@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -881,4 +882,41 @@ func TestInvalidDeposit(t *testing.T) {
 
 	tx := n.GetTx(id[:])
 	require.NotZero(t, tx.Status.Code)
+}
+
+func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
+	account := batch.Account(accountUrl)
+	state, err := account.GetState()
+	require.NoError(t, err)
+	fmt.Println("Dump", accountUrl, state.Header().Type)
+	meta, err := account.GetObject()
+	require.NoError(t, err)
+	seen := map[[32]byte]bool{}
+	for _, cmeta := range meta.Chains {
+		chain, err := account.ReadChain(cmeta.Name)
+		require.NoError(t, err)
+		fmt.Printf("  Chain: %s (%v)\n", cmeta.Name, cmeta.Type)
+		height := chain.Height()
+		entries, err := chain.Entries(0, height)
+		require.NoError(t, err)
+		for idx, id := range entries {
+			fmt.Printf("    Entry %d: %X\n", idx, id)
+			if cmeta.Type != protocol.ChainTypeTransaction {
+				continue
+			}
+			var id32 [32]byte
+			require.Equal(t, 32, copy(id32[:], id))
+			if seen[id32] {
+				continue
+			}
+			txState, txStatus, txSigs, err := batch.Transaction(id32[:]).Get()
+			require.NoError(t, err)
+			if seen[*txState.TransactionHash()] {
+				fmt.Printf("      TX: hash=%X\n", *txState.TransactionHash())
+				continue
+			}
+			fmt.Printf("      TX: type=%v origin=%v status=%#v sigs=%d\n", txState.TxType(), txState.ChainUrl, txStatus, len(txSigs))
+			seen[id32] = true
+		}
+	}
 }

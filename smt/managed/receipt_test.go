@@ -210,9 +210,9 @@ func TestBadgerReceipts(t *testing.T) {
 	manager, err := NewMerkleManager(badger.Begin(), 2)
 	require.NoError(t, err)
 
-	PopulateDatabase(manager, 1400)
+	PopulateDatabase(manager, 700)
 
-	GenerateReceipts(manager, 1500000, t)
+	GenerateReceipts(manager, 150000, t)
 
 }
 
