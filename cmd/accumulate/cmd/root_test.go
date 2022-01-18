@@ -121,7 +121,8 @@ func (c *testCmd) execute(t *testing.T, cmdLine string) (string, error) {
 	return string(ret), err
 }
 
-func (c *testCmd) executeTx(t *testing.T, cmdLine string) (string, error) {
+func (c *testCmd) executeTx(t *testing.T, cmdLine string, args ...interface{}) (string, error) {
+	cmdLine = fmt.Sprintf(cmdLine, args...)
 	out, err := c.execute(t, cmdLine)
 	if err == nil {
 		waitForTxns(t, c, out)

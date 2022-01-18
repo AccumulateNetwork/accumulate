@@ -76,7 +76,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 	}
 
 	if !account.CanDebitTokens(&amount.Int) {
-		return fmt.Errorf("insufficient balance")
+		return fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &amount.Int)
 	}
 
 	if !account.DebitTokens(&amount.Int) {

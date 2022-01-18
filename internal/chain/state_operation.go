@@ -112,12 +112,12 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
 }
 
-type updateNonce struct {
+type updateSignator struct {
 	url    *url.URL
 	record state.Chain
 }
 
-func (m *stateCache) UpdateNonce(record state.Chain) error {
+func (m *stateCache) UpdateSignator(record state.Chain) error {
 	u, err := record.Header().ParseUrl()
 	if err != nil {
 		return fmt.Errorf("invalid URL: %v", err)
@@ -135,17 +135,19 @@ func (m *stateCache) UpdateNonce(record state.Chain) error {
 	case types.AccountTypeLiteTokenAccount:
 		old, new := old.(*protocol.LiteTokenAccount), record.(*protocol.LiteTokenAccount)
 		old.Nonce = new.Nonce
+		old.CreditBalance = new.CreditBalance
 		if !old.Equal(new) {
-			return fmt.Errorf("attempted to change more than the nonce")
+			return fmt.Errorf("attempted to change more than the nonce and the credit balance")
 		}
 
 	case types.AccountTypeKeyPage:
 		old, new := old.(*protocol.KeyPage), record.(*protocol.KeyPage)
+		old.CreditBalance = new.CreditBalance
 		for i := 0; i < len(old.Keys) && i < len(new.Keys); i++ {
 			old.Keys[i].Nonce = new.Keys[i].Nonce
 		}
 		if !old.Equal(new) {
-			return fmt.Errorf("attempted to change more than a nonce")
+			return fmt.Errorf("attempted to change more than a nonce and the credit balance")
 		}
 
 	default:
@@ -153,11 +155,11 @@ func (m *stateCache) UpdateNonce(record state.Chain) error {
 	}
 
 	m.chains[u.AccountID32()] = record
-	m.operations = append(m.operations, &updateNonce{u, record})
+	m.operations = append(m.operations, &updateSignator{u, record})
 	return nil
 }
 
-func (op *updateNonce) Execute(st *stateCache) ([]state.Chain, error) {
+func (op *updateSignator) Execute(st *stateCache) ([]state.Chain, error) {
 	record := st.batch.Account(op.url)
 	err := record.PutState(op.record)
 	if err != nil {
@@ -165,11 +167,6 @@ func (op *updateNonce) Execute(st *stateCache) ([]state.Chain, error) {
 	}
 
 	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.PendingChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
-}
-
-//UpdateCreditBalance update the credits used for a transaction
-func (m *stateCache) UpdateCreditBalance(record state.Chain) {
-	panic("todo: UpdateCredtedBalance needs to be implemented")
 }
 
 type addDataEntry struct {

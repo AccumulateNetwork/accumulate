@@ -122,6 +122,7 @@ func TestJsonRpcLiteToken(t *testing.T) {
 }
 
 func TestFaucet(t *testing.T) {
+	t.Skip("TODO Update to API v2")
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	//make a client, and also spin up the router grpc
@@ -208,6 +209,7 @@ func TestFaucet(t *testing.T) {
 }
 
 func TestTransactionHistory(t *testing.T) {
+	t.Skip("TODO Update to API v2")
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	//make a client, and also spin up the router grpc
@@ -280,6 +282,7 @@ func TestTransactionHistory(t *testing.T) {
 }
 
 func TestFaucetTransactionHistory(t *testing.T) {
+	t.Skip("TODO Update to API v2")
 	req := &api.APIRequestURL{}
 	req.URL = types.String(acctesting.AcmeLiteAddress(ed25519.PublicKey{}).String())
 	params, err := json.Marshal(&req)
@@ -357,6 +360,7 @@ func TestQueryNotFound(t *testing.T) {
 }
 
 func TestQueryWrongType(t *testing.T) {
+	t.Skip("Deprecated")
 	acctesting.SkipCI(t, "deprecated")
 
 	//make a client, and also spin up the router grpc
@@ -384,6 +388,7 @@ func TestQueryWrongType(t *testing.T) {
 }
 
 func TestGetTxId(t *testing.T) {
+	t.Skip("Deprecated")
 	acctesting.SkipCI(t, "deprecated")
 
 	//make a client, and also spin up the router grpc
@@ -446,6 +451,7 @@ func TestDirectory(t *testing.T) {
 }
 
 func TestFaucetReplay(t *testing.T) {
+	t.Skip("TODO Update to API v2")
 	acctesting.SkipPlatformCI(t, "darwin", "flaky")
 
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
