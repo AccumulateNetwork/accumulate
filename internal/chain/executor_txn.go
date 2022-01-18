@@ -266,16 +266,15 @@ func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*St
 		}
 	}
 
-	//cost, err := protocol.ComputeFee(tx)
-	//if err != nil {
-	//	return nil, err
-	//}
-	//if !page.DebitCredits(uint64(cost)) {
-	//	return nil, fmt.Errorf("insufficent credits for the transaction")
-	//}
-	//
-	//st.UpdateCreditBalance(page)
-	err = st.UpdateNonce(page)
+	cost, err := protocol.ComputeFee(env)
+	if err != nil {
+		return nil, err
+	}
+	if !page.DebitCredits(uint64(cost)) {
+		return nil, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.ChainUrl, page.CreditBalance.String(), cost)
+	}
+
+	err = st.UpdateSignator(page)
 	if err != nil {
 		return nil, err
 	}
@@ -338,7 +337,15 @@ func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error
 		}
 	}
 
-	return st.UpdateNonce(account)
+	cost, err := protocol.ComputeFee(env)
+	if err != nil {
+		return err
+	}
+	if !account.DebitCredits(uint64(cost)) {
+		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.ChainUrl, account.CreditBalance.String(), cost)
+	}
+
+	return st.UpdateSignator(account)
 }
 
 func (m *Executor) recordTransactionError(st *StateManager, env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, postCommit bool, failure *protocol.Error) *protocol.Error {
@@ -426,11 +433,11 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return err
 	}
 
-	// fee, err := protocol.ComputeFee(env)
-	// if err != nil || fee > protocol.FeeFailedMaximum.AsInt() {
-	// 	fee = protocol.FeeFailedMaximum.AsInt()
-	// }
-	// st.Signator.DebitCredits(uint64(fee))
+	fee, err := protocol.ComputeFee(env)
+	if err != nil || fee > protocol.FeeFailedMaximum.AsInt() {
+		fee = protocol.FeeFailedMaximum.AsInt()
+	}
+	st.Signator.DebitCredits(uint64(fee))
 
 	return sigRecord.PutState(st.Signator)
 }
