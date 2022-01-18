@@ -53,7 +53,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	}
 
 	if !account.CanDebitTokens(&total.Int) {
-		return fmt.Errorf("insufficient balance")
+		return fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &total.Int)
 	}
 
 	for i, u := range recipients {

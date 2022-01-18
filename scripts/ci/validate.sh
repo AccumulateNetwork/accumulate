@@ -17,9 +17,34 @@ function ensure-key {
 
 # wait-for <cmd...> - Execute a transaction and wait for it to complete
 function wait-for {
+    if [ "$1" == "--no-check" ]; then
+        local NO_CHECK=$1
+        shift
+    fi
+    local TXID
     TXID=`"$@"` || return 1
+    wait-for-tx $NO_CHECK "$TXID" || return 1
+}
+
+# wait-for-tx [--no-check] <tx id> - Wait for a transaction and any synthetic transactions to complete
+function wait-for-tx {
+    if [ "$1" == "--no-check" ]; then
+        local NO_CHECK=$1
+        shift
+    fi
+
+    local TXID=$1
     echo -e '\033[2mWaiting for '"$TXID"'\033[0m'
-    accumulate tx get -j --wait 10s --wait-synth 10s $TXID | jq -C --indent 0
+    local RESP=$(accumulate tx get -j --wait 10s $TXID)
+    echo $RESP | jq -C --indent 0
+
+    if [ -z "$NO_CHECK" ]; then
+        [ $(echo $RESP | jq -re '.status.code // 0') -ne 0 ] && die "$TXID failed:" $(echo $RESP | jq -C --indent 0 .status)
+    fi
+
+    for TXID in $(echo $RESP | jq -re '(.syntheticTxids // [])[]'); do
+        wait-for-tx $NO_CHECK "$TXID"
+    done
 }
 
 # cli-tx <args...> - Execute a CLI command and extract the TXID from the result
@@ -62,13 +87,32 @@ echo
 section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
-wait-for cli-tx faucet ${LITE}
+TX0=$(cli-tx faucet ${LITE})
+TX1=$(cli-tx faucet ${LITE})
+TX2=$(cli-tx faucet ${LITE})
+TX3=$(cli-tx faucet ${LITE})
+TX4=$(cli-tx faucet ${LITE})
+TX5=$(cli-tx faucet ${LITE})
+TX6=$(cli-tx faucet ${LITE})
+TX7=$(cli-tx faucet ${LITE})
+TX8=$(cli-tx faucet ${LITE})
+TX9=$(cli-tx faucet ${LITE})
+wait-for-tx $TX0
+wait-for-tx $TX1
+wait-for-tx $TX2
+wait-for-tx $TX3
+wait-for-tx $TX4
+wait-for-tx $TX5
+wait-for-tx $TX6
+wait-for-tx $TX7
+wait-for-tx $TX8
+wait-for-tx $TX9
 accumulate account get ${LITE} &> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
-wait-for cli-tx credits ${LITE} ${LITE} 100
+wait-for cli-tx credits ${LITE} ${LITE} 1100
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
+[ "$BALANCE" -ge 1100 ] && success || die "${LITE} should have at least 1100 credits but only has ${BALANCE}"
 
 section "Generate keys"
 ensure-key keytest-0-0
@@ -82,15 +126,23 @@ section "Create an ADI"
 wait-for cli-tx adi create ${LITE} keytest keytest-0-0 book page0
 accumulate adi get keytest &> /dev/null && success || die "Cannot find keytest"
 
+section "Verify fee charge"
+BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 100 ] && success || die "${LITE} should have at least 100 credits but only has ${BALANCE}"
+
 section "Recreating an ADI fails and the synthetic transaction is recorded"
 TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 book page1` || return 1
-echo -e '\033[2mWaiting for '"${TXID}"'\033[0m'
-accumulate tx get -j --wait 10s --wait-synth 10s ${TXID} | jq -C --indent 0
+wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
 [ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction should have failed"
 [ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not failed"
 success
+
+section "Add credits to the ADI's key page 0"
+wait-for cli-tx credits ${LITE} keytest/page0 5500
+BALANCE=$(accumulate -j page get keytest/page0 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 5500 ] && success || die "keytest/page0 should have 5500 credits but has ${BALANCE}"
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-0-0 keytest/page1 keytest-1-0
@@ -98,6 +150,11 @@ wait-for cli-tx page create keytest/book keytest-0-0 keytest/page2 keytest-2-0
 accumulate page get keytest/page1 &> /dev/null || die "Cannot find keytest/page1"
 accumulate page get keytest/page2 &> /dev/null || die "Cannot find keytest/page2"
 success
+
+section "Add credits to the ADI's key page 1"
+wait-for cli-tx credits ${LITE} keytest/page1 100
+BALANCE=$(accumulate -j page get keytest/page1 | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 100 ] && success || die "keytest/page1 should have 100 credits but has ${BALANCE}"
 
 section "Add a key to page 1 using a key from page 1"
 wait-for cli-tx page key add keytest/page1 keytest-1-0 1 keytest-1-1
@@ -120,11 +177,6 @@ section "Send tokens from the lite token account to the ADI token account"
 wait-for cli-tx tx create ${LITE} keytest/tokens 5
 BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
 [ "$BALANCE" -eq 500000000 ] && success || die "${LITE} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
-
-section "Add credits to the ADI's key page 0"
-wait-for cli-tx credits keytest/tokens keytest-0-0 0 keytest/page0 125
-BALANCE=$(accumulate -j page get keytest/page0 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 125 ] && success || die "keytest/page0 should have 125 credits but has ${BALANCE}"
 
 section "Bug AC-551"
 api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value &> /dev/null
@@ -165,6 +217,11 @@ LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
 wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueTokens", "recipient": "'${LITE_TOK}'", "amount": 123}'
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 123 ] && success || die "${LITE_TOK} should have 123 keytest tokens but has ${BALANCE}"
+
+section "Add credits to lite account (TOK)"
+wait-for cli-tx credits ${LITE} ${LITE_TOK} 100
+BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.creditBalance)
+[ "$BALANCE" -ge 100 ] && success || die "${LITE_TOK} should have at least 100 credits but only has ${BALANCE}"
 
 section "Burn tokens"
 wait-for cli-tx tx execute ${LITE_TOK} '{"type": "burnTokens", "amount": 100}'
