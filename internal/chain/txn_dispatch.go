@@ -50,9 +50,6 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 	if err != nil {
 		return err
 	}
-	if route == nil && d.IsTest { // TODO remove hacks to accommodate testing code
-		return nil
-	}
 
 	switch route.GetNetworkGroup() {
 	case connections.Local:

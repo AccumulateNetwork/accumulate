@@ -276,9 +276,11 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	acctesting.SkipCI(t, "flaky")
 	acctesting.SkipPlatform(t, "windows", "flaky")
 	acctesting.SkipPlatform(t, "darwin", "flaky, requires setting up localhost aliases")
-	ips := acctesting.GetIPs(4)
-	daemons := startAccumulate(t, ips, 2, 2, 3000)
-	japi := daemons[0].Jrpc_TESTONLY()
+
+	subnets, daemons := acctesting.CreateTestNet(t, 3, 1, 0)
+	acctesting.RunTestNet(t, subnets, daemons)
+	daemon := daemons[protocol.Directory][0]
+	japi := daemon.Jrpc_TESTONLY()
 
 	var liteKey ed25519.PrivateKey
 	var liteUrl *url.URL

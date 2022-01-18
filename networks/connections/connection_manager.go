@@ -39,6 +39,7 @@ type connectionManager struct {
 	localNodeCtx *nodeContext
 	localClient  *local.Local
 	logger       log.Logger
+	selfAddress  string
 }
 
 func (cm *connectionManager) doHealthCheckOnNode(nc *nodeContext) {
@@ -75,9 +76,10 @@ type nodeMetrics struct {
 	// TODO add metrics that can be useful for the router to determine whether it should put or should avoid putting put more load on a BVN
 }
 
-func NewConnectionManager(accConfig *config.Accumulate, logger log.Logger) ConnectionManager {
+func NewConnectionManager(config *config.Config, logger log.Logger) ConnectionManager {
 	cm := new(connectionManager)
-	cm.accConfig = accConfig
+	cm.accConfig = &config.Accumulate
+	cm.selfAddress = cm.reformatAddress(config.Config.P2P.ListenAddress)
 	cm.logger = logger
 	cm.buildNodeInventory()
 	return cm
@@ -161,14 +163,20 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 
 func (cm *connectionManager) determineNetworkGroup(subnetName string, address string) NetworkGroup {
 	switch {
-	case (strings.EqualFold(subnetName, cm.accConfig.Network.ID) && strings.EqualFold(address, cm.accConfig.Network.SelfAddress)) ||
-		strings.EqualFold(address, "local") || strings.EqualFold(address, "self"):
+	case (strings.EqualFold(subnetName, cm.accConfig.Network.ID) && strings.EqualFold(cm.reformatAddress(address), cm.selfAddress)):
 		return Local
 	case strings.EqualFold(subnetName, cm.accConfig.Network.ID):
 		return SameSubnet
 	default:
 		return OtherSubnet
 	}
+}
+
+func (cm *connectionManager) reformatAddress(address string) string {
+	if address == "local" || address == "self" {
+		return cm.selfAddress
+	}
+	return strings.Split(address, "//")[1]
 }
 
 func determineTypes(subnetName string, netCfg config.Network) (config.NetworkType, config.NodeType) {

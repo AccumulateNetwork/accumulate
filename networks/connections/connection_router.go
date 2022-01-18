@@ -28,7 +28,6 @@ type connectionRouter struct {
 	bvnGroupMap   map[string]nodeGroup
 	dnGroup       nodeGroup
 	flGroup       nodeGroup
-	isTest        bool
 }
 
 // Node group is just a list of nodeContext items and an int field for round-robin routing
@@ -54,7 +53,7 @@ type Route interface {
 	ReportErrorStatus(status NodeStatus, err error)
 }
 
-func NewConnectionRouter(connMgr ConnectionManager, test bool) ConnectionRouter {
+func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
 	bvnGroupMap := createBvnGroupMap(connMgr.getBVNContextMap())
 	cr := &connectionRouter{
 		connectionMgr: connMgr,
@@ -62,16 +61,11 @@ func NewConnectionRouter(connMgr ConnectionManager, test bool) ConnectionRouter 
 		bvnGroupMap:   bvnGroupMap,
 		dnGroup:       nodeGroup{nodes: connMgr.getDNContextList()},
 		flGroup:       nodeGroup{nodes: connMgr.getFNContextList()},
-		isTest:        test,
 	}
 	return cr
 }
 
 func (cr *connectionRouter) SelectRoute(adiUrl *url.URL, allowFollower bool) (Route, error) {
-	if cr.isTest && protocol.IsDnUrl(adiUrl) { // TODO remove hacks to accommodate testing code
-		return cr.GetLocalRoute()
-	}
-
 	nodeCtx, err := cr.selectNodeContext(adiUrl, allowFollower)
 	if err != nil {
 		return nil, errorCouldNotSelectNode(adiUrl, err)

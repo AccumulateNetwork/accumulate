@@ -3,7 +3,6 @@ package testing
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -33,9 +32,6 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 	cfg.Accumulate.Network.BvnNames = []string{netId}
 	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}}
 	cfg.LogLevel = DefaultLogLevels
-	if strings.EqualFold(cfg.Accumulate.Network.ID, netId) {
-		cfg.Accumulate.Network.SelfAddress = cfg.Accumulate.Network.Addresses[netId][0]
-	}
 	return cfg
 }
 
@@ -78,8 +74,9 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]st
 	// Add addresses and BVN names to node configurations
 	for _, configs := range allConfigs {
 		for _, config := range configs {
-			config.Accumulate.Network.BvnNames = subnets[1:]
-			config.Accumulate.Network.Addresses = allAddresses
+			network := config.Accumulate.Network
+			network.BvnNames = subnets[1:]
+			network.Addresses = allAddresses
 		}
 	}
 

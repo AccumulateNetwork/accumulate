@@ -143,18 +143,14 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	// Create a connection manager
-	d.ConnMgr = connections.NewConnectionManager(&d.Config.Accumulate, d.Logger)
-	d.ConnRouter = connections.NewConnectionRouter(d.ConnMgr, false)
+	d.ConnMgr = connections.NewConnectionManager(d.Config, d.Logger)
+	d.ConnRouter = connections.NewConnectionRouter(d.ConnMgr)
 
 	// Create a proxy local client which we will populate with the local client
 	// after the node has been created.
 	clientProxy := node.NewLocalClient()
 
 	bvnAddrs := d.Config.Accumulate.Network.BvnAddressesWithPortOffset(networks.TmRpcPortOffset)
-	d.relay, err = relay.NewWith(clientProxy, bvnAddrs...)
-	if err != nil {
-		return fmt.Errorf("failed to create RPC relay: %v", err)
-	}
 	d.query = apiv1.NewQuery(d.relay)
 
 	execOpts := chain.ExecutorOptions{
@@ -221,7 +217,19 @@ func (d *Daemon) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to initialize connection manager: %v", err)
 	}
+
 	clientProxy.Set(lclClient)
+	route, err := d.ConnRouter.GetLocalRoute()
+	if err != nil {
+		return fmt.Errorf("failed to get local route for relay: %v", err)
+	}
+	relayClient, ok := route.(relay.Client)
+	if ok {
+		d.relay, err = relay.NewWith(relayClient, bvnAddrs...)
+		if err != nil {
+			return fmt.Errorf("failed to create RPC relay: %v", err)
+		}
+	}
 
 	if d.Config.Accumulate.API.EnableSubscribeTX {
 		err = d.relay.Start()
