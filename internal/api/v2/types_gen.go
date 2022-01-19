@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
@@ -101,9 +102,9 @@ type Signer struct {
 }
 
 type TokenDeposit struct {
-	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Amount string `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
-	Txid   []byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Url    string  `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Txid   []byte  `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 }
 
 type TokenSend struct {
@@ -473,7 +474,7 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url    string  `json:"url,omitempty"`
-		Amount string  `json:"amount,omitempty"`
+		Amount big.Int `json:"amount,omitempty"`
 		Txid   *string `json:"txid,omitempty"`
 	}{}
 	u.Url = v.Url
@@ -816,7 +817,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url    string  `json:"url,omitempty"`
-		Amount string  `json:"amount,omitempty"`
+		Amount big.Int `json:"amount,omitempty"`
 		Txid   *string `json:"txid,omitempty"`
 	}{}
 	u.Url = v.Url
