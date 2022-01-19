@@ -10,6 +10,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -21,6 +22,11 @@ type DB = *database.Batch
 
 // Token multiplier
 const TokenMx = protocol.AcmePrecision
+
+func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
+	h := storage.MakeKey(seed...)
+	return ed25519.NewKeyFromSeed(h[:])
+}
 
 func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Envelope, error) {
 	recipientAdi := AcmeLiteAddressTmPriv(recipient)
