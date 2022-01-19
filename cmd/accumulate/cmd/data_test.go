@@ -42,7 +42,7 @@ func testCase2_9a(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 
 	//now read it back as a set
-	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount 0 1")
+	_, err = tc.execute(t, "data get acc://RedWagon/DataAccount/0:1")
 	require.NoError(t, err)
 
 	//now read it back as a expanded set
