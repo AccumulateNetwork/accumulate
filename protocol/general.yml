@@ -56,6 +56,11 @@ TransactionStatus:
       type: bool
     - name: Code
       type: uvarint
+    - name: Result
+      type: TransactionResult
+      optional: true
+      marshal-as: value
+      unmarshal-with: UnmarshalTransactionResult
 
 Receipt:
   fields:

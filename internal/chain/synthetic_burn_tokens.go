@@ -12,11 +12,11 @@ type SyntheticBurnTokens struct{}
 
 func (SyntheticBurnTokens) Type() types.TxType { return types.TxTypeSyntheticBurnTokens }
 
-func (SyntheticBurnTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (SyntheticBurnTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.SyntheticBurnTokens)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	account := protocol.NewTokenIssuer()
@@ -24,11 +24,11 @@ func (SyntheticBurnTokens) Validate(st *StateManager, tx *transactions.Envelope)
 	case *protocol.TokenIssuer:
 		account = origin
 	default:
-		return fmt.Errorf("invalid origin record: want chain type %v, got %v", types.AccountTypeTokenIssuer, origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v", types.AccountTypeTokenIssuer, origin.Header().Type)
 	}
 
 	account.Supply.Add(&account.Supply, &body.Amount)
 
 	st.Update(account)
-	return nil
+	return nil, nil
 }

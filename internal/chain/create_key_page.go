@@ -13,7 +13,7 @@ type CreateKeyPage struct{}
 
 func (CreateKeyPage) Type() types.TxType { return types.TxTypeCreateKeyPage }
 
-func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	var group *protocol.KeyBook
 	switch origin := st.Origin.(type) {
 	case *protocol.ADI:
@@ -21,26 +21,26 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	case *protocol.KeyBook:
 		group = origin
 	default:
-		return fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeIdentity, types.AccountTypeKeyBook, origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeIdentity, types.AccountTypeKeyBook, origin.Header().Type)
 	}
 
 	body := new(protocol.CreateKeyPage)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	if len(body.Keys) == 0 {
-		return fmt.Errorf("cannot create empty sig spec")
+		return nil, fmt.Errorf("cannot create empty sig spec")
 	}
 
 	msUrl, err := url.Parse(body.Url)
 	if err != nil {
-		return fmt.Errorf("invalid target URL: %v", err)
+		return nil, fmt.Errorf("invalid target URL: %v", err)
 	}
 
 	if !msUrl.Identity().Equal(st.OriginUrl.Identity()) {
-		return fmt.Errorf("%q does not belong to %q", msUrl, st.OriginUrl)
+		return nil, fmt.Errorf("%q does not belong to %q", msUrl, st.OriginUrl)
 	}
 
 	scc := new(protocol.SyntheticCreateChain)
@@ -56,7 +56,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		if err != nil {
 			// Failing here would require writing an invalid URL to the state.
 			// But stuff happens, so don't panic.
-			return fmt.Errorf("invalid origin record URL: %v", err)
+			return nil, fmt.Errorf("invalid origin record URL: %v", err)
 		}
 
 		group.Pages = append(group.Pages, msUrl.String())
@@ -64,7 +64,7 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 
 		err = scc.Update(group)
 		if err != nil {
-			return fmt.Errorf("failed to marshal state: %v", err)
+			return nil, fmt.Errorf("failed to marshal state: %v", err)
 		}
 	}
 
@@ -76,8 +76,8 @@ func (CreateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 
 	err = scc.Create(page)
 	if err != nil {
-		return fmt.Errorf("failed to marshal state: %v", err)
+		return nil, fmt.Errorf("failed to marshal state: %v", err)
 	}
 
-	return nil
+	return nil, nil
 }

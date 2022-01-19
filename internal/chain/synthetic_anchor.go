@@ -18,23 +18,23 @@ type SyntheticAnchor struct {
 
 func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
 
-func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body := new(protocol.SyntheticAnchor)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return fmt.Errorf("invalid origin record: want %v, got %v", types.AccountTypeAnchor, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v", types.AccountTypeAnchor, st.Origin.Header().Type)
 	}
 
 	// Check the source URL
 	source, err := url.Parse(body.Source)
 	if err != nil {
-		return fmt.Errorf("invalid source: %v", err)
+		return nil, fmt.Errorf("invalid source: %v", err)
 	}
 	name, ok := protocol.ParseBvnUrl(source)
 	switch {
@@ -43,19 +43,19 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) e
 	case protocol.IsDnUrl(source):
 		name = "dn"
 	default:
-		return fmt.Errorf("invalid source: not a BVN or the DN")
+		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
 	}
 
 	// Add the anchor to the chain
 	err = st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// If we got a receipt, verify it
 	r := body.Receipt
 	if r.Start == nil {
-		return nil
+		return nil, nil
 	}
 
 	// Get the merkle state at the specified index
@@ -65,16 +65,16 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) e
 	}
 	rootChain, err := st.ReadChain(st.nodeUrl.JoinPath(protocol.Ledger), chainName)
 	if err != nil {
-		return fmt.Errorf("failed to open ledger %s chain: %v", chainName, err)
+		return nil, fmt.Errorf("failed to open ledger %s chain: %v", chainName, err)
 	}
 	ms, err := rootChain.State(int64(body.SourceIndex))
 	if err != nil {
-		return fmt.Errorf("failed to get state %d of ledger %s chain: %v", body.SourceIndex, chainName, err)
+		return nil, fmt.Errorf("failed to get state %d of ledger %s chain: %v", body.SourceIndex, chainName, err)
 	}
 
 	// Verify the start matches the root chain anchor
 	if !bytes.Equal(ms.GetMDRoot(), body.Receipt.Start) {
-		return fmt.Errorf("receipt start does match root anchor at %d", body.RootIndex)
+		return nil, fmt.Errorf("receipt start does match root anchor at %d", body.RootIndex)
 	}
 
 	// Calculate receipt end
@@ -89,8 +89,8 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) e
 
 	// Verify the end matches what we received
 	if !bytes.Equal(hash, body.RootAnchor[:]) {
-		return fmt.Errorf("receipt end does match received root")
+		return nil, fmt.Errorf("receipt end does match received root")
 	}
 
-	return nil
+	return nil, nil
 }

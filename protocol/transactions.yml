@@ -266,6 +266,14 @@ SegWitDataEntry:
     - name: EntryHash
       type: chain
 
+##### Result Types #####
+
+WriteDataResult:
+  kind: tx-result
+  fields:
+    - name: EntryHash
+      type: chain
+
 ##### Data Types #####
 
 TokenRecipient:

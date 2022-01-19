@@ -13,11 +13,11 @@ type SyntheticWriteData struct{}
 
 func (SyntheticWriteData) Type() types.TransactionType { return types.TxTypeSyntheticWriteData }
 
-func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.SyntheticWriteData)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	var account state.Chain
@@ -34,7 +34,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 		case *protocol.LiteDataAccount:
 			liteDataAccountId, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			//reconstruct full lite chain id
 			liteDataAccountId = append(liteDataAccountId, origin.Tail...)
@@ -42,28 +42,28 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 			//compute the hash for this entry
 			entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, &body.Entry)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			copy(sw.EntryHash[:], entryHash)
 			account = origin
 		default:
-			return fmt.Errorf("invalid origin record: want chain type %v, got %v",
+			return nil, fmt.Errorf("invalid origin record: want chain type %v, got %v",
 				types.AccountTypeLiteDataAccount, origin.Header().Type)
 		}
 	} else if _, err := protocol.ParseLiteDataAddress(tx.Transaction.Origin); err != nil {
-		return fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Origin.String(), err)
+		return nil, fmt.Errorf("invalid lite data URL %s: %v", tx.Transaction.Origin.String(), err)
 	} else {
 		// Address is lite, but the lite data account doesn't exist, so create one
 		liteDataAccountId := protocol.ComputeLiteDataAccountId(&body.Entry)
 		u, err := protocol.LiteDataAddress(liteDataAccountId)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		originUrl := tx.Transaction.Origin.String()
 
 		//the computed data account chain id must match the origin url.
 		if u.String() != originUrl {
-			return fmt.Errorf("first entry doesnt match chain id")
+			return nil, fmt.Errorf("first entry doesnt match chain id")
 		}
 
 		lite := protocol.NewLiteDataAccount()
@@ -78,7 +78,7 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 
 		entryHash, err := protocol.ComputeLiteEntryHashFromEntry(liteDataAccountId, &body.Entry)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		copy(sw.EntryHash[:], entryHash)
 		sw.EntryUrl = originUrl
@@ -99,11 +99,13 @@ func (SyntheticWriteData) Validate(st *StateManager, tx *transactions.Envelope) 
 	//now replace the original data entry payload with the new segwit payload
 	segWitPayload, err := sw.MarshalBinary()
 	if err != nil {
-		return fmt.Errorf("unable to marshal segwit, %v", err)
+		return nil, fmt.Errorf("unable to marshal segwit, %v", err)
 	}
 	tx.Transaction.Body = segWitPayload
 
 	st.UpdateData(account, sw.EntryHash[:], &body.Entry)
 
-	return nil
+	return &protocol.WriteDataResult{
+		EntryHash: sw.EntryHash,
+	}, nil
 }
