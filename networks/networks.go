@@ -81,12 +81,17 @@ var TestNet = Network{
 			{"0.bvn0.testnet.accumulatenetwork.io", config.Validator}, // 0-0
 			{"1.bvn0.testnet.accumulatenetwork.io", config.Follower},  // 0-1
 			{"2.bvn0.testnet.accumulatenetwork.io", config.Follower},  // 0-2
+			{"3.seed.testnet.accumulatenetwork.io", config.Seed},
+
 			{"0.bvn1.testnet.accumulatenetwork.io", config.Validator}, // 1-0
 			{"1.bvn1.testnet.accumulatenetwork.io", config.Follower},  // 1-1
 			{"2.bvn1.testnet.accumulatenetwork.io", config.Follower},  // 1-2
+			{"3.seed.testnet.accumulatenetwork.io", config.Seed},
+
 			{"0.bvn2.testnet.accumulatenetwork.io", config.Validator}, // 2-0
 			{"1.bvn2.testnet.accumulatenetwork.io", config.Follower},  // 2-1
 			{"2.bvn2.testnet.accumulatenetwork.io", config.Follower},  // 2-2
+			{"3.seed.testnet.accumulatenetwork.io", config.Seed},
 		},
 	},
 	"BVN0": {
@@ -98,6 +103,7 @@ var TestNet = Network{
 			{"0.bvn0.testnet.accumulatenetwork.io", config.Validator},
 			{"1.bvn0.testnet.accumulatenetwork.io", config.Validator},
 			{"2.bvn0.testnet.accumulatenetwork.io", config.Validator},
+			{"3.seed.testnet.accumulatenetwork.io", config.Seed},
 		},
 	},
 	"BVN1": {
@@ -109,6 +115,7 @@ var TestNet = Network{
 			{"0.bvn1.testnet.accumulatenetwork.io", config.Validator},
 			{"1.bvn1.testnet.accumulatenetwork.io", config.Validator},
 			{"2.bvn1.testnet.accumulatenetwork.io", config.Validator},
+			{"3.seed.testnet.accumulatenetwork.io", config.Seed},
 		},
 	},
 	"BVN2": {
@@ -120,15 +127,7 @@ var TestNet = Network{
 			{"0.bvn2.testnet.accumulatenetwork.io", config.Validator},
 			{"1.bvn2.testnet.accumulatenetwork.io", config.Validator},
 			{"2.bvn2.testnet.accumulatenetwork.io", config.Validator},
-		},
-	},
-	"SEED": {
-		Name:        "SEED",
-		NetworkName: "TestNet",
-		Type:        config.Directory,
-		Port:        33000,
-		Nodes: []Node{
-			{"0.seed.testnet.accumulatenetwork.io", config.Seed},
+			{"3.seed.testnet.accumulatenetwork.io", config.Seed},
 		},
 	},
 }

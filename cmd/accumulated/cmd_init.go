@@ -51,6 +51,13 @@ var cmdInitDevnet = &cobra.Command{
 	Args:  cobra.NoArgs,
 }
 
+var cmdInitSeed = &cobra.Command{
+	Use:   "seed",
+	Short: "Initialize seed node",
+	Run:   initSeed,
+	Args:  cobra.NoArgs,
+}
+
 var flagInit struct {
 	Net           string
 	NoEmptyBlocks bool
@@ -78,7 +85,7 @@ var flagInitDevnet struct {
 
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitFollower, cmdInitDevnet)
+	cmdInit.AddCommand(cmdInitFollower, cmdInitDevnet, cmdInitSeed)
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
@@ -452,6 +459,44 @@ func initDevNetNode(baseIP net.IP, netType cfg.NetworkType, nodeType cfg.NodeTyp
 
 	compose.Services = append(compose.Services, svc)
 	return config, svc.Name, "0.0.0.0"
+}
+
+func initSeed(cmd *cobra.Command, _ []string) {
+	u, err := url.Parse(flagInitFollower.ListenIP)
+	checkf(err, "invalid --listen %q", flagInitFollower.ListenIP)
+
+	port := 26656
+	if u.Port() != "" {
+		p, err := strconv.ParseInt(u.Port(), 10, 16)
+		if err != nil {
+			fatalf("invalid port number %q", u.Port())
+		}
+		port = int(p)
+		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
+	}
+
+	subnet, err := networks.Resolve(flagInit.Net)
+	checkf(err, "--network")
+
+	var genDoc *types.GenesisDoc
+
+	config := config.Default(subnet.Type, cfg.Seed, subnet.Name)
+	config.Accumulate.Website.Enabled = false
+	config.P2P.AddrBookStrict = false
+
+	if flagInit.Reset {
+		nodeReset()
+	}
+
+	check(node.Init(node.InitOptions{
+		WorkDir:    flagMain.WorkDir,
+		Port:       port,
+		GenesisDoc: genDoc,
+		Config:     []*cfg.Config{config},
+		RemoteIP:   []string{""},
+		ListenIP:   []string{u.String()},
+		Logger:     newLogger(),
+	}))
 }
 
 func newLogger() log.Logger {
