@@ -4731,6 +4731,14 @@ func (v *AnchoredRecord) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *BurnTokens) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Amount *string `json:"amount,omitempty"`
+	}{}
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	return json.Marshal(&u)
+}
+
 func (v *ChainParams) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Data     *string `json:"data,omitempty"`
@@ -4755,6 +4763,26 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *CreateToken) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url            string  `json:"url,omitempty"`
+		KeyBookUrl     string  `json:"keyBookUrl,omitempty"`
+		Symbol         string  `json:"symbol,omitempty"`
+		Precision      uint64  `json:"precision,omitempty"`
+		Properties     string  `json:"properties,omitempty"`
+		InitialSupply  *string `json:"initialSupply,omitempty"`
+		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.KeyBookUrl = v.KeyBookUrl
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	u.Properties = v.Properties
+	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
+	u.HasSupplyLimit = v.HasSupplyLimit
+	return json.Marshal(&u)
+}
+
 func (v *DataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		ExtIds []*string `json:"extIds,omitempty"`
@@ -4773,6 +4801,30 @@ func (v *InternalTransactionsSent) MarshalJSON() ([]byte, error) {
 		Transactions []string `json:"transactions,omitempty"`
 	}{}
 	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	return json.Marshal(&u)
+}
+
+func (v *IssueTokens) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Recipient string  `json:"recipient,omitempty"`
+		Amount    *string `json:"amount,omitempty"`
+	}{}
+	u.Recipient = v.Recipient
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	return json.Marshal(&u)
+}
+
+func (v *KeyPage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		CreditBalance *string    `json:"creditBalance,omitempty"`
+		Threshold     uint64     `json:"threshold,omitempty"`
+		Keys          []*KeySpec `json:"keys,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.Threshold = v.Threshold
+	u.Keys = v.Keys
 	return json.Marshal(&u)
 }
 
@@ -4803,6 +4855,22 @@ func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
 	}{}
 	u.ChainHeader = v.ChainHeader
 	u.Tail = encoding.BytesToJSON(v.Tail)
+	return json.Marshal(&u)
+}
+
+func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		TokenUrl      string  `json:"tokenUrl,omitempty"`
+		Balance       *string `json:"balance,omitempty"`
+		Nonce         uint64  `json:"nonce,omitempty"`
+		CreditBalance *string `json:"creditBalance,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.TokenUrl = v.TokenUrl
+	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.Nonce = v.Nonce
+	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
 	return json.Marshal(&u)
 }
 
@@ -4909,10 +4977,10 @@ func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Cause  string  `json:"cause,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	return json.Marshal(&u)
 }
 
@@ -4940,11 +5008,11 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Cause  string  `json:"cause,omitempty"`
 		Token  string  `json:"token,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Token = v.Token
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	return json.Marshal(&u)
 }
 
@@ -4969,6 +5037,46 @@ func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Entry = v.Entry
+	return json.Marshal(&u)
+}
+
+func (v *TokenAccount) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		TokenUrl string  `json:"tokenUrl,omitempty"`
+		Balance  *string `json:"balance,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.TokenUrl = v.TokenUrl
+	u.Balance = encoding.BigintToJSON(&v.Balance)
+	return json.Marshal(&u)
+}
+
+func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		Symbol         string  `json:"symbol,omitempty"`
+		Precision      uint64  `json:"precision,omitempty"`
+		Properties     string  `json:"properties,omitempty"`
+		Supply         *string `json:"supply,omitempty"`
+		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	u.Properties = v.Properties
+	u.Supply = encoding.BigintToJSON(&v.Supply)
+	u.HasSupplyLimit = v.HasSupplyLimit
+	return json.Marshal(&u)
+}
+
+func (v *TokenRecipient) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url    string  `json:"url,omitempty"`
+		Amount *string `json:"amount,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	return json.Marshal(&u)
 }
 
@@ -5021,6 +5129,22 @@ func (v *AnchoredRecord) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *BurnTokens) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Amount *string `json:"amount,omitempty"`
+	}{}
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	return nil
+}
+
 func (v *ChainParams) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Data     *string `json:"data,omitempty"`
@@ -5062,6 +5186,40 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	}
 	v.KeyBookName = u.KeyBookName
 	v.KeyPageName = u.KeyPageName
+	return nil
+}
+
+func (v *CreateToken) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url            string  `json:"url,omitempty"`
+		KeyBookUrl     string  `json:"keyBookUrl,omitempty"`
+		Symbol         string  `json:"symbol,omitempty"`
+		Precision      uint64  `json:"precision,omitempty"`
+		Properties     string  `json:"properties,omitempty"`
+		InitialSupply  *string `json:"initialSupply,omitempty"`
+		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.KeyBookUrl = v.KeyBookUrl
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	u.Properties = v.Properties
+	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
+	u.HasSupplyLimit = v.HasSupplyLimit
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	v.KeyBookUrl = u.KeyBookUrl
+	v.Symbol = u.Symbol
+	v.Precision = u.Precision
+	v.Properties = u.Properties
+	if x, err := encoding.BigintFromJSON(u.InitialSupply); err != nil {
+		return fmt.Errorf("error decoding InitialSupply: %w", err)
+	} else {
+		v.InitialSupply = *x
+	}
+	v.HasSupplyLimit = u.HasSupplyLimit
 	return nil
 }
 
@@ -5107,6 +5265,50 @@ func (v *InternalTransactionsSent) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Transactions = x
 	}
+	return nil
+}
+
+func (v *IssueTokens) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Recipient string  `json:"recipient,omitempty"`
+		Amount    *string `json:"amount,omitempty"`
+	}{}
+	u.Recipient = v.Recipient
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Recipient = u.Recipient
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	return nil
+}
+
+func (v *KeyPage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		CreditBalance *string    `json:"creditBalance,omitempty"`
+		Threshold     uint64     `json:"threshold,omitempty"`
+		Keys          []*KeySpec `json:"keys,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.Threshold = v.Threshold
+	u.Keys = v.Keys
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
+		return fmt.Errorf("error decoding CreditBalance: %w", err)
+	} else {
+		v.CreditBalance = *x
+	}
+	v.Threshold = u.Threshold
+	v.Keys = u.Keys
 	return nil
 }
 
@@ -5163,6 +5365,38 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Tail: %w", err)
 	} else {
 		v.Tail = x
+	}
+	return nil
+}
+
+func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		TokenUrl      string  `json:"tokenUrl,omitempty"`
+		Balance       *string `json:"balance,omitempty"`
+		Nonce         uint64  `json:"nonce,omitempty"`
+		CreditBalance *string `json:"creditBalance,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.TokenUrl = v.TokenUrl
+	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.Nonce = v.Nonce
+	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	v.TokenUrl = u.TokenUrl
+	if x, err := encoding.BigintFromJSON(u.Balance); err != nil {
+		return fmt.Errorf("error decoding Balance: %w", err)
+	} else {
+		v.Balance = *x
+	}
+	v.Nonce = u.Nonce
+	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
+		return fmt.Errorf("error decoding CreditBalance: %w", err)
+	} else {
+		v.CreditBalance = *x
 	}
 	return nil
 }
@@ -5357,10 +5591,10 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Cause  string  `json:"cause,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5369,7 +5603,11 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Cause = x
 	}
-	v.Amount = u.Amount
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
 	return nil
 }
 
@@ -5415,11 +5653,11 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Cause  string  `json:"cause,omitempty"`
 		Token  string  `json:"token,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Token = v.Token
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5429,7 +5667,11 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		v.Cause = x
 	}
 	v.Token = u.Token
-	v.Amount = u.Amount
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
 	return nil
 }
 
@@ -5482,6 +5724,78 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 		v.Cause = x
 	}
 	v.Entry = u.Entry
+	return nil
+}
+
+func (v *TokenAccount) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		TokenUrl string  `json:"tokenUrl,omitempty"`
+		Balance  *string `json:"balance,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.TokenUrl = v.TokenUrl
+	u.Balance = encoding.BigintToJSON(&v.Balance)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	v.TokenUrl = u.TokenUrl
+	if x, err := encoding.BigintFromJSON(u.Balance); err != nil {
+		return fmt.Errorf("error decoding Balance: %w", err)
+	} else {
+		v.Balance = *x
+	}
+	return nil
+}
+
+func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		Symbol         string  `json:"symbol,omitempty"`
+		Precision      uint64  `json:"precision,omitempty"`
+		Properties     string  `json:"properties,omitempty"`
+		Supply         *string `json:"supply,omitempty"`
+		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	u.Properties = v.Properties
+	u.Supply = encoding.BigintToJSON(&v.Supply)
+	u.HasSupplyLimit = v.HasSupplyLimit
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	v.Symbol = u.Symbol
+	v.Precision = u.Precision
+	v.Properties = u.Properties
+	if x, err := encoding.BigintFromJSON(u.Supply); err != nil {
+		return fmt.Errorf("error decoding Supply: %w", err)
+	} else {
+		v.Supply = *x
+	}
+	v.HasSupplyLimit = u.HasSupplyLimit
+	return nil
+}
+
+func (v *TokenRecipient) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url    string  `json:"url,omitempty"`
+		Amount *string `json:"amount,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
 	return nil
 }
 

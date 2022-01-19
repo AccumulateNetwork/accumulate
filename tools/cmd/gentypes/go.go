@@ -100,6 +100,8 @@ func GoJsonType(field *Field) string {
 	switch field.Type {
 	case "bytes":
 		return "*string"
+	case "bigint":
+		return "*string"
 	case "chain":
 		return "string"
 	case "chainSet":
@@ -349,7 +351,9 @@ func GoValueToJson(field *Field, tgtName, srcName string) string {
 	case "bytes", "chain", "chainSet", "duration", "any":
 		fmt.Fprintf(w, "\t%s = %s(%s)", tgtName, GoMethodName(field.Type, "ToJSON"), srcName)
 		return w.String()
-
+	case "bigint":
+		fmt.Fprintf(w, "\t%s = %s(&%s)", tgtName, GoMethodName(field.Type, "ToJSON"), srcName)
+		return w.String()
 	case "slice":
 		if GoJsonType(field.Slice) == "" {
 			break
@@ -378,7 +382,9 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 	case "bytes", "chain", "chainSet", "duration":
 		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = x\n\t}", GoMethodName(field.Type, "FromJSON"), srcName, err, tgtName)
 		return w.String()
-
+	case "bigint":
+		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = *x\n\t}", GoMethodName(field.Type, "FromJSON"), srcName, err, tgtName)
+		return w.String()
 	case "slice":
 		if GoJsonType(field.Slice) == "" {
 			break
