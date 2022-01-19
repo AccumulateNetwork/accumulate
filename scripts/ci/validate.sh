@@ -136,8 +136,9 @@ TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 book page1` || return 1
 wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
-[ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction should have failed"
-[ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not failed"
+[ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction was not delivered"
+[ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not fail"
+echo $STATUS | jq -re .message &> /dev/null || die "Synthetic transaction does not have a message"
 success
 
 section "Add credits to the ADI's key page 0"

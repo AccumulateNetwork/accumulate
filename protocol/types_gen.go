@@ -318,6 +318,7 @@ type TransactionStatus struct {
 	Remote    bool              `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
 	Delivered bool              `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
 	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result"`
 }
 
@@ -1344,6 +1345,10 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 
+	if !(v.Message == u.Message) {
+		return false
+	}
+
 	if !(v.Result == u.Result) {
 		return false
 	}
@@ -2155,6 +2160,8 @@ func (v *TransactionStatus) BinarySize() int {
 	n += encoding.BoolBinarySize(v.Delivered)
 
 	n += encoding.UvarintBinarySize(v.Code)
+
+	n += encoding.StringBinarySize(v.Message)
 
 	n += v.Result.BinarySize()
 
@@ -3088,6 +3095,8 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BoolMarshalBinary(v.Delivered))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Code))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Message))
 
 	if b, err := v.Result.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding Result: %w", err)
@@ -4679,6 +4688,13 @@ func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(v.Code):]
 
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Message: %w", err)
+	} else {
+		v.Message = x
+	}
+	data = data[encoding.StringBinarySize(v.Message):]
+
 	if x, err := UnmarshalTransactionResult(data); err != nil {
 		return fmt.Errorf("error decoding Result: %w", err)
 	} else {
@@ -5075,11 +5091,13 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 		Remote    bool            `json:"remote,omitempty"`
 		Delivered bool            `json:"delivered,omitempty"`
 		Code      uint64          `json:"code,omitempty"`
+		Message   string          `json:"message,omitempty"`
 		Result    json.RawMessage `json:"result,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
 	u.Code = v.Code
+	u.Message = v.Message
 	if x, err := json.Marshal(v.Result); err != nil {
 		return nil, fmt.Errorf("error encoding Result: %w", err)
 	} else {
@@ -5651,11 +5669,13 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 		Remote    bool            `json:"remote,omitempty"`
 		Delivered bool            `json:"delivered,omitempty"`
 		Code      uint64          `json:"code,omitempty"`
+		Message   string          `json:"message,omitempty"`
 		Result    json.RawMessage `json:"result,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
 	u.Code = v.Code
+	u.Message = v.Message
 	if x, err := json.Marshal(v.Result); err != nil {
 		return fmt.Errorf("error encoding Result: %w", err)
 	} else {
@@ -5668,6 +5688,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	v.Remote = u.Remote
 	v.Delivered = u.Delivered
 	v.Code = u.Code
+	v.Message = u.Message
 	if x, err := UnmarshalTransactionResultJSON(u.Result); err != nil {
 		return fmt.Errorf("error decoding Result: %w", err)
 	} else {

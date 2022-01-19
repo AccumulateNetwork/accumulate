@@ -355,7 +355,11 @@ func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error
 }
 
 func (m *Executor) recordTransactionError(st *StateManager, env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, postCommit bool, failure *protocol.Error) *protocol.Error {
-	status := &protocol.TransactionStatus{Delivered: true, Code: uint64(failure.Code)}
+	status := &protocol.TransactionStatus{
+		Delivered: true,
+		Code:      uint64(failure.Code),
+		Message:   failure.Error(),
+	}
 	err := m.putTransaction(st, env, txAccepted, txPending, status, postCommit)
 	if err != nil {
 		m.logError("Failed to store transaction", "txid", logging.AsHex(env.Transaction.Hash()), "origin", env.Transaction.Origin, "error", err)
