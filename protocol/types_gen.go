@@ -306,7 +306,7 @@ type TokenIssuer struct {
 
 type TokenRecipient struct {
 	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount string `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
 type TransactionSignature struct {
@@ -2113,7 +2113,7 @@ func (v *TokenRecipient) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Url)
 
-	n += encoding.UvarintBinarySize(v.Amount)
+	n += encoding.StringBinarySize(v.Amount)
 
 	return n
 }
@@ -3030,7 +3030,7 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.Amount))
+	buffer.Write(encoding.StringMarshalBinary(v.Amount))
 
 	return buffer.Bytes(), nil
 }
@@ -4583,12 +4583,12 @@ func (v *TokenRecipient) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Url):]
 
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Amount: %w", err)
 	} else {
 		v.Amount = x
 	}
-	data = data[encoding.UvarintBinarySize(v.Amount):]
+	data = data[encoding.StringBinarySize(v.Amount):]
 
 	return nil
 }

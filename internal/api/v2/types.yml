@@ -124,7 +124,7 @@ TokenDeposit:
   - name: Url
     type: string
   - name: Amount
-    type: uvarint
+    type: string
   - name: Txid
     type: bytes
 

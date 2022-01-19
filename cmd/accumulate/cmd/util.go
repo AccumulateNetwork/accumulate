@@ -695,7 +695,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 		var out string
 		for i := range tx.ToAccount {
 			bi := big.Int{}
-			bi.SetInt64(int64(tx.ToAccount[i].Amount))
+			bi.SetString(tx.ToAccount[i].Amount, 10)
 			amt, err := formatAmount("acc://ACME", &bi)
 			if err != nil {
 				amt = "unknown"

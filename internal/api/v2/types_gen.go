@@ -102,7 +102,7 @@ type Signer struct {
 
 type TokenDeposit struct {
 	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Amount string `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 	Txid   []byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 }
 
@@ -473,7 +473,7 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url    string  `json:"url,omitempty"`
-		Amount uint64  `json:"amount,omitempty"`
+		Amount string  `json:"amount,omitempty"`
 		Txid   *string `json:"txid,omitempty"`
 	}{}
 	u.Url = v.Url
@@ -816,7 +816,7 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url    string  `json:"url,omitempty"`
-		Amount uint64  `json:"amount,omitempty"`
+		Amount string  `json:"amount,omitempty"`
 		Txid   *string `json:"txid,omitempty"`
 	}{}
 	u.Url = v.Url

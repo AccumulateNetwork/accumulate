@@ -48,8 +48,14 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	//really only need to provide one input...
 	//now check to see if the account is good to send tokens from
 	total := types.Amount{}
-	for _, to := range body.To {
-		total.Add(total.AsBigInt(), new(big.Int).SetUint64(to.Amount))
+	toAmts := make([]*big.Int, len(body.To))
+	for i, to := range body.To {
+		toAmt, ret := new(big.Int).SetString(to.Amount, 10)
+		if ret == false {
+			return fmt.Errorf("invalid amount %s %s", to.Url, to.Amount)
+		}
+		total.Add(total.AsBigInt(), toAmt)
+		toAmts[i] = toAmt
 	}
 
 	if !account.CanDebitTokens(&total.Int) {
@@ -60,7 +66,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 		deposit := new(protocol.SyntheticDepositTokens)
 		copy(deposit.Cause[:], tx.Transaction.Hash())
 		deposit.Token = tokenUrl.String()
-		deposit.Amount = *new(big.Int).SetUint64(body.To[i].Amount)
+		deposit.Amount = *toAmts[i]
 		st.Submit(u, deposit)
 	}
 

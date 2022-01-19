@@ -274,7 +274,7 @@ TokenRecipient:
       type: string
       is-url: true
     - name: Amount
-      type: uvarint
+      type: string
 
 ChainParams:
   fields:
