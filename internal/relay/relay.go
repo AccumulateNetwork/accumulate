@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"reflect"
 	"strings"
 	"sync"
@@ -13,7 +14,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/rpc/client/http"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
@@ -32,7 +32,7 @@ type txBatch struct {
 }
 
 type Relay struct {
-	client      []Client
+	connRouter  connections.ConnectionRouter
 	txQueue     []txBatch
 	numNetworks uint64
 	mutex       *sync.Mutex
@@ -43,16 +43,18 @@ type Relay struct {
 }
 
 // New Create the new bouncer and initialize it with a client connection to each of the nodes
-func New(clients ...Client) *Relay {
-	for i, c := range clients {
-		if c, ok := c.(*http.HTTP); ok {
-			clients[i] = rpcClient{c}
-		}
-	}
+func New(connRouter connections.ConnectionRouter) *Relay {
+	/*
+	   //	relayClient, ok := route.(relay.Client)
 
+	   	for i, c := range clients {
+	   		if c, ok := c.(*http.HTTP); ok {
+	   			clients[i] = rpcClient{c}
+	   		}
+	   	}
+	*/
 	r := &Relay{}
-	r.numNetworks = uint64(len(clients))
-	r.client = clients
+	r.connRouter = connRouter
 	r.mutex = new(sync.Mutex)
 	r.resultMu = new(sync.Mutex)
 	r.results = map[[32]byte]chan<- abci.TxResult{}

@@ -29,7 +29,9 @@ func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *
 	cfg.Consensus.TimeoutCommit = time.Second / 5 // Increase block frequency
 	cfg.Accumulate.Website.Enabled = false        // No need for the website
 	cfg.Instrumentation.Prometheus = false        // Disable prometheus: https://github.com/tendermint/tendermint/issues/7076
-	cfg.Accumulate.Network.BvnNames = []string{netId}
+	if net == config.BlockValidator {
+		cfg.Accumulate.Network.BvnNames = []string{netId}
+	}
 	cfg.Accumulate.Network.Addresses = map[string][]string{netId: {"local"}}
 	cfg.LogLevel = DefaultLogLevels
 	return cfg
@@ -74,7 +76,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]st
 	// Add addresses and BVN names to node configurations
 	for _, configs := range allConfigs {
 		for _, config := range configs {
-			network := config.Accumulate.Network
+			network := &config.Accumulate.Network
 			network.BvnNames = subnets[1:]
 			network.Addresses = allAddresses
 		}

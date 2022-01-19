@@ -122,6 +122,9 @@ func (cm *connectionManager) buildNodeInventory() {
 				switch nodeCtx.netType {
 				case config.BlockValidator:
 					bvnName := protocol.BvnNameFromSubnetName(subnetName)
+					if bvnName == "bvn-directory" {
+						panic("Directory subnet node is misconfigured as blockvalidator")
+					}
 					nodeList, ok := cm.bvnCtxMap[bvnName]
 					if !ok {
 						nodeList := make([]*nodeContext, 1)

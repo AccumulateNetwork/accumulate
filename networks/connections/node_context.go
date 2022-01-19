@@ -90,6 +90,7 @@ func (nc *nodeContext) IsHealthy() bool {
 
 func (nc *nodeContext) ReportError(err error) {
 	nc.metrics.status = OutOfService
+	nc.lastError = err
 	// TODO refine err to status, OutOfService means the node is alive & kicking, but not able to handle request (ie still loading DB or syncing up)
 	nc.lastErrorExpiryTime = time.Now().Add(UnhealthyNodeCheckInterval)
 }

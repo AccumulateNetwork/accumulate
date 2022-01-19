@@ -219,13 +219,8 @@ func (d *Daemon) Start() (err error) {
 	}
 
 	clientProxy.Set(lclClient)
-	route, err := d.ConnRouter.GetLocalRoute()
-	if err != nil {
-		return fmt.Errorf("failed to get local route for relay: %v", err)
-	}
-	relayClient, ok := route.(relay.Client)
 	if ok {
-		d.relay, err = relay.NewWith(relayClient, bvnAddrs...)
+		d.relay = relay.New(d.ConnRouter)
 		if err != nil {
 			return fmt.Errorf("failed to create RPC relay: %v", err)
 		}
