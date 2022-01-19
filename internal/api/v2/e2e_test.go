@@ -279,7 +279,7 @@ func TestTokenTransfer(t *testing.T) {
 		var to []*protocol.TokenRecipient
 		to = append(to, &protocol.TokenRecipient{
 			Url:    aliceUrl.String(),
-			Amount: uint64(100),
+			Amount: "100",
 		})
 		txParams := execParams{
 			Origin: bobUrl.String(),
