@@ -4,10 +4,10 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -279,7 +279,7 @@ func TestTokenTransfer(t *testing.T) {
 		var to []*protocol.TokenRecipient
 		to = append(to, &protocol.TokenRecipient{
 			Url:    aliceUrl.String(),
-			Amount: uint64(100),
+			Amount: "100",
 		})
 		txParams := execParams{
 			Origin: bobUrl.String(),
