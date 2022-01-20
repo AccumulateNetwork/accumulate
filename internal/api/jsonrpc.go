@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"time"
@@ -592,7 +593,7 @@ func (api *API) Faucet(_ context.Context, params json.RawMessage) interface{} {
 	}
 
 	tx := protocol.SendTokens{}
-	tx.AddRecipient(u, 1000000000)
+	tx.AddRecipient(u, big.NewInt(int64(1000000000)))
 
 	txData, err := tx.MarshalBinary()
 

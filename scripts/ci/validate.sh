@@ -214,7 +214,7 @@ success
 
 section "Issue tokens"
 LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
-wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueTokens", "recipient": "'${LITE_TOK}'", "amount": 123}'
+wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueTokens", "recipient": "'${LITE_TOK}'", "amount": "123"}'
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 123 ] && success || die "${LITE_TOK} should have 123 keytest tokens but has ${BALANCE}"
 
@@ -224,7 +224,7 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE_TOK} should have at least 100 credits but only has ${BALANCE}"
 
 section "Burn tokens"
-wait-for cli-tx tx execute ${LITE_TOK} '{"type": "burnTokens", "amount": 100}'
+wait-for cli-tx tx execute ${LITE_TOK} '{"type": "burnTokens", "amount": "100"}'
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 23 ] && success || die "${LITE_TOK} should have 23 keytest tokens but has ${BALANCE}"
 
