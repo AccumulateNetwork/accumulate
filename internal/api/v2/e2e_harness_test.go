@@ -180,7 +180,7 @@ func executeTxFail(t *testing.T, japi *api.JrpcMethods, method string, keyPageIn
 	req.Payload = params.Payload
 
 	resp := new(api.TxResponse)
-	callApi(t, japi, method, req, resp)
+	callApi(t, japi, method, &req, resp)
 	return resp
 }
 

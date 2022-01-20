@@ -460,7 +460,6 @@ var (
 )
 
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
-
 	//query the token
 	tokenData, err := Get(tokenUrl)
 	if err != nil {
