@@ -13,26 +13,26 @@ type CreateTokenAccount struct{}
 
 func (CreateTokenAccount) Type() types.TxType { return types.TxTypeCreateTokenAccount }
 
-func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.CreateTokenAccount)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	accountUrl, err := url.Parse(body.Url)
 	if err != nil {
-		return fmt.Errorf("invalid account URL: %v", err)
+		return nil, fmt.Errorf("invalid account URL: %v", err)
 	}
 
 	tokenUrl, err := url.Parse(body.TokenUrl)
 	if err != nil {
-		return fmt.Errorf("invalid token URL: %v", err)
+		return nil, fmt.Errorf("invalid token URL: %v", err)
 	}
 	// TODO Make sure tokenUrl is a real kind of token
 
 	if !accountUrl.Identity().Equal(st.OriginUrl) {
-		return fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, accountUrl)
+		return nil, fmt.Errorf("%q cannot be the origininator of %q", st.OriginUrl, accountUrl)
 	}
 
 	account := protocol.NewTokenAccount()
@@ -43,18 +43,18 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 	} else {
 		keyBookUrl, err := url.Parse(body.KeyBookUrl)
 		if err != nil {
-			return fmt.Errorf("invalid key book URL: %v", err)
+			return nil, fmt.Errorf("invalid key book URL: %v", err)
 		}
 
 		book := new(protocol.KeyBook)
 		err = st.LoadUrlAs(keyBookUrl, book)
 		if err != nil {
-			return fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
+			return nil, fmt.Errorf("invalid key book %q: %v", keyBookUrl, err)
 		}
 
 		account.KeyBook = types.String(keyBookUrl.String())
 	}
 
 	st.Create(account)
-	return nil
+	return nil, nil
 }

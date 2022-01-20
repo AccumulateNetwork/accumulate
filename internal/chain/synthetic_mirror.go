@@ -12,11 +12,11 @@ type SyntheticMirror struct{}
 
 func (SyntheticMirror) Type() types.TxType { return types.TxTypeSyntheticMirror }
 
-func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.SyntheticMirror)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	for _, obj := range body.Objects {
@@ -25,13 +25,13 @@ func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) err
 		// Unmarshal the record
 		record, err := protocol.UnmarshalChain(obj.Record)
 		if err != nil {
-			return fmt.Errorf("failed to unmarshal record: %v", err)
+			return nil, fmt.Errorf("failed to unmarshal record: %v", err)
 		}
 
 		// Ensure the URL is valid
 		_, err = record.Header().ParseUrl()
 		if err != nil {
-			return fmt.Errorf("invalid chain URL: %v", record.Header().ChainUrl)
+			return nil, fmt.Errorf("invalid chain URL: %v", record.Header().ChainUrl)
 		}
 
 		// TODO Save the merkle state somewhere?
@@ -39,5 +39,5 @@ func (SyntheticMirror) Validate(st *StateManager, tx *transactions.Envelope) err
 		st.Update(record)
 	}
 
-	return nil
+	return nil, nil
 }
