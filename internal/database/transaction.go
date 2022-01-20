@@ -123,6 +123,10 @@ func (t *Transaction) GetStatus() (*protocol.TransactionStatus, error) {
 
 // PutStatus stores the transaction state.
 func (t *Transaction) PutStatus(status *protocol.TransactionStatus) error {
+	if status.Result == nil {
+		status.Result = new(protocol.EmptyResult)
+	}
+
 	data, err := status.MarshalBinary()
 	if err != nil {
 		return err

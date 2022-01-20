@@ -313,26 +313,34 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	}
 
 	// Check all of the transactions
+	resp := abci.ResponseCheckTx{Code: protocol.CodeOK}
 	for _, env := range envelopes {
 		txid := logging.AsHex(env.Transaction.Hash())
-		err := app.Chain.CheckTx(env)
-		if err == nil {
-			typ := env.Transaction.Type()
-			if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
-				app.logger.Debug("Check succeeded", "type", typ, "txid", txid, "hash", tmHash)
+		result, err := app.Chain.CheckTx(env)
+		if err != nil {
+			sentry.CaptureException(err)
+			app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
+			return abci.ResponseCheckTx{
+				Code: uint32(err.Code),
+				Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), err),
 			}
+		}
+
+		typ := env.Transaction.Type()
+		if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
+			app.logger.Debug("Check succeeded", "type", typ, "txid", txid, "hash", tmHash)
+		}
+
+		data, err2 := result.MarshalBinary()
+		if err2 != nil {
+			app.logger.Error("Check - failed to marshal transaction result", "error", err2, "type", typ, "txid", txid, "hash", tmHash)
 			continue
 		}
 
-		sentry.CaptureException(err)
-		app.logger.Info("Check failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
-		return abci.ResponseCheckTx{
-			Code: uint32(err.Code),
-			Log:  fmt.Sprintf("%s check of %s transaction failed: %v", env.Transaction.Origin.String(), env.Transaction.Type().Name(), err),
-		}
+		resp.Data = append(resp.Data, data...)
 	}
 
-	return abci.ResponseCheckTx{Code: protocol.CodeOK}
+	return resp
 }
 
 // DeliverTx implements github.com/tendermint/tendermint/abci/types.Application.
@@ -361,20 +369,29 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	}
 
 	// Deliver all of the transactions
+	resp := abci.ResponseCheckTx{Code: protocol.CodeOK}
 	for _, env := range envelopes {
 		txid := logging.AsHex(env.Transaction.Hash())
-		err := app.Chain.DeliverTx(env)
-		if err == nil {
-			typ := env.Transaction.Type()
-			if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
-				app.logger.Debug("Deliver succeeded", "type", typ, "txid", txid, "hash", tmHash)
-			}
+		result, err := app.Chain.DeliverTx(env)
+		if err != nil {
+			sentry.CaptureException(err)
+			app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
+			// Whether or not the transaction succeeds does not matter to Tendermint
 			continue
 		}
 
-		sentry.CaptureException(err)
-		app.logger.Info("Deliver failed", "type", env.Transaction.Type().Name(), "txid", txid, "hash", tmHash, "error", err, "origin", env.Transaction.Origin)
-		// Whether or not the transaction succeeds does not matter to Tendermint
+		typ := env.Transaction.Type()
+		if !typ.IsInternal() && typ != types.TxTypeSyntheticAnchor {
+			app.logger.Debug("Deliver succeeded", "type", typ, "txid", txid, "hash", tmHash)
+		}
+
+		data, err2 := result.MarshalBinary()
+		if err2 != nil {
+			app.logger.Error("Check - failed to marshal transaction result", "error", err2, "type", typ, "txid", txid, "hash", tmHash)
+			continue
+		}
+
+		resp.Data = append(resp.Data, data...)
 	}
 
 	app.txct += int64(len(envelopes))

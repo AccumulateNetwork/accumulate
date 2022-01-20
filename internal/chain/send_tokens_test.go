@@ -37,7 +37,7 @@ func TestLiteTokenTransactions(t *testing.T) {
 	st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), gtx)
 	require.NoError(t, err)
 
-	err = SendTokens{}.Validate(st, gtx)
+	_, err = SendTokens{}.Validate(st, gtx)
 	require.NoError(t, err)
 
 	//pull the chains again

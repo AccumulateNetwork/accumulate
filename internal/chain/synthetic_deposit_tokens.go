@@ -15,17 +15,17 @@ func (SyntheticDepositTokens) Type() types.TxType {
 	return types.TxTypeSyntheticDepositTokens
 }
 
-func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// *big.Int, tokenChain, *url.URL
 	body := new(protocol.SyntheticDepositTokens)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	tokenUrl, err := url.Parse(body.Token)
 	if err != nil {
-		return fmt.Errorf("invalid token URL: %v", err)
+		return nil, fmt.Errorf("invalid token URL: %v", err)
 	}
 
 	var account tokenChain
@@ -36,14 +36,14 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 		case *protocol.TokenAccount:
 			account = origin
 		default:
-			return fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeTokenAccount, origin.Header().Type)
+			return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeTokenAccount, origin.Header().Type)
 		}
 	} else if keyHash, tok, err := protocol.ParseLiteTokenAddress(tx.Transaction.Origin); err != nil {
-		return fmt.Errorf("invalid lite token account URL: %v", err)
+		return nil, fmt.Errorf("invalid lite token account URL: %v", err)
 	} else if keyHash == nil {
-		return fmt.Errorf("could not find token account")
+		return nil, fmt.Errorf("could not find token account")
 	} else if !tokenUrl.Equal(tok) {
-		return fmt.Errorf("token URL does not match lite token account URL")
+		return nil, fmt.Errorf("token URL does not match lite token account URL")
 	} else {
 		// Address is lite and the account doesn't exist, so create one
 		lite := protocol.NewLiteTokenAccount()
@@ -53,9 +53,9 @@ func (SyntheticDepositTokens) Validate(st *StateManager, tx *transactions.Envelo
 	}
 
 	if !account.CreditTokens(&body.Amount) {
-		return fmt.Errorf("unable to add deposit balance to account")
+		return nil, fmt.Errorf("unable to add deposit balance to account")
 	}
 	st.Update(account)
 
-	return nil
+	return nil, nil
 }
