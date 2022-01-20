@@ -3,6 +3,7 @@ package protocol
 import (
 	"encoding"
 	"fmt"
+	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -132,9 +133,9 @@ func (tx *SyntheticCreateChain) Update(chains ...state.Chain) error {
 	return nil
 }
 
-func (tx *SendTokens) AddRecipient(to *url.URL, amount uint64) {
+func (tx *SendTokens) AddRecipient(to *url.URL, amount *big.Int) {
 	recipient := new(TokenRecipient)
 	recipient.Url = to.String()
-	recipient.Amount = amount
+	recipient.Amount = *amount
 	tx.To = append(tx.To, recipient)
 }

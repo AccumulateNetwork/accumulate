@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"math/big"
 	"testing"
 
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -58,7 +59,7 @@ func (s *Suite) TestCreateLiteAccount() {
 				break
 			}
 			recipient := recipients[s.rand.Intn(len(recipients))]
-			exch.AddRecipient(recipient, 1000)
+			exch.AddRecipient(recipient, big.NewInt(int64(1000)))
 			total += 1000
 		}
 
