@@ -39,7 +39,8 @@ function wait-for-tx {
     echo $RESP | jq -C --indent 0
 
     if [ -z "$NO_CHECK" ]; then
-        [ $(echo $RESP | jq -re '.status.code // 0') -ne 0 ] && die "$TXID failed:" $(echo $RESP | jq -C --indent 0 .status)
+        CODE=$(echo $RESP | jq -re '.status.code // 0') || return 1
+        [ "$CODE" -ne 0 ] && die "$TXID failed:" $(echo $RESP | jq -C --indent 0 .status)
     fi
 
     for TXID in $(echo $RESP | jq -re '(.syntheticTxids // [])[]'); do
@@ -50,7 +51,7 @@ function wait-for-tx {
 # cli-tx <args...> - Execute a CLI command and extract the TXID from the result
 function cli-tx {
     JSON=`accumulate -j "$@"` || return 1
-    echo "$JSON" | jq -r .txid
+    echo "$JSON" | jq -re .txid
 }
 
 # api-v2 <payload> - Send a JSON-RPC message to the API
@@ -135,8 +136,9 @@ TXID=`cli-tx adi create ${LITE} keytest keytest-1-0 book page1` || return 1
 wait-for-tx --no-check $TXID
 SYNTH=`accumulate tx get -j ${TXID} | jq -re '.syntheticTxids[0]'`
 STATUS=`accumulate tx get -j ${SYNTH} | jq --indent 0 .status`
-[ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction should have failed"
-[ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not failed"
+[ $(echo $STATUS | jq -re .delivered) = "true" ] || die "Synthetic transaction was not delivered"
+[ $(echo $STATUS | jq -re '.code // 0') -ne 0 ] || die "Synthetic transaction did not fail"
+echo $STATUS | jq -re .message &> /dev/null || die "Synthetic transaction does not have a message"
 success
 
 section "Add credits to the ADI's key page 0"
@@ -230,8 +232,21 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data lite keytest keytest-0-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
-[ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa" ] && success || die "${ACCOUNT_ID} does not match expected value"
+[ "$ACCOUNT_ID" == "acc://b36c1c4073305a41edc6353a094329c24ffa54c029a521aa" ] || die "${ACCOUNT_ID} does not match expected value"
 accumulate data get $ACCOUNT_ID 0 1 &> /dev/null || die "lite data entry not found"
-accumulate -j data write-to keytest keytest-0-0 $ACCOUNT_ID "data test"
+wait-for cli-tx data write-to keytest keytest-0-0 $ACCOUNT_ID "data test"
 accumulate data get $ACCOUNT_ID 0 2 &> /dev/null || die "lite data error"
+success
+
+section "Create ADI Data Account"
+wait-for cli-tx account create data keytest keytest-0-0 keytest/data
+accumulate account get keytest/data &> /dev/null && success || die "Cannot find keytest/data"
+
+section "Write data to ADI Data Account"
+JSON=$(accumulate -j data write keytest/data keytest-0-0 foo bar)
+TXID=$(echo $JSON | jq -re .txid)
+echo $JSON | jq -C --indent 0
+wait-for-tx $TXID
+echo $JSON | jq -re .result.entryHash &> /dev/null || die "Deliver response does not include the entry hash"
+accumulate -j tx get $TXID | jq -re .status.result.entryHash &> /dev/null || die "Transaction query response does not include the entry hash"
 success

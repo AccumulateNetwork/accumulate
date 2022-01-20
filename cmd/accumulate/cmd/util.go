@@ -286,6 +286,7 @@ type ActionResponse struct {
 	Codespace types.String  `json:"codespace"`
 	Error     types.String  `json:"error"`
 	Mempool   types.String  `json:"mempool"`
+	Result    interface{}   `json:"result"`
 }
 
 type ActionDataResponse struct {

@@ -12,22 +12,22 @@ type WriteData struct{}
 
 func (WriteData) Type() types.TransactionType { return types.TxTypeWriteData }
 
-func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.WriteData)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	if st.Origin.Header().Type != types.AccountTypeDataAccount {
-		return fmt.Errorf("invalid origin record: want %v, got %v",
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v",
 			types.AccountTypeDataAccount, st.Origin.Header().Type)
 	}
 
 	//check will return error if there is too much data or no data for the entry
 	_, err = body.Entry.CheckSize()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// now replace the transaction payload with a segregated witness to the data.
@@ -47,7 +47,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
 
 	segWitPayload, err := sw.MarshalBinary()
 	if err != nil {
-		return fmt.Errorf("unable to marshal segwit, %v", err)
+		return nil, fmt.Errorf("unable to marshal segwit, %v", err)
 	}
 
 	//now replace the original data entry payload with the new segwit payload
@@ -56,5 +56,7 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) error {
 	//store the entry
 	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)
 
-	return nil
+	return &protocol.WriteDataResult{
+		EntryHash: sw.EntryHash,
+	}, nil
 }

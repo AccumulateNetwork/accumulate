@@ -294,6 +294,10 @@ func WriteData(accountUrl string, args []string) (string, error) {
 		return "", err
 	}
 
+	if WantJsonOutput {
+		return PrintJson(res)
+	}
+
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()
 }
 

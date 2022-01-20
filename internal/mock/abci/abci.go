@@ -54,11 +54,12 @@ func (mr *MockChainMockRecorder) BeginBlock(arg0 interface{}) *gomock.Call {
 }
 
 // CheckTx mocks base method.
-func (m *MockChain) CheckTx(arg0 *transactions.Envelope) *protocol.Error {
+func (m *MockChain) CheckTx(arg0 *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTx", arg0)
-	ret0, _ := ret[0].(*protocol.Error)
-	return ret0
+	ret0, _ := ret[0].(protocol.TransactionResult)
+	ret1, _ := ret[1].(*protocol.Error)
+	return ret0, ret1
 }
 
 // CheckTx indicates an expected call of CheckTx.
@@ -83,11 +84,12 @@ func (mr *MockChainMockRecorder) Commit() *gomock.Call {
 }
 
 // DeliverTx mocks base method.
-func (m *MockChain) DeliverTx(arg0 *transactions.Envelope) *protocol.Error {
+func (m *MockChain) DeliverTx(arg0 *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeliverTx", arg0)
-	ret0, _ := ret[0].(*protocol.Error)
-	return ret0
+	ret0, _ := ret[0].(protocol.TransactionResult)
+	ret1, _ := ret[1].(*protocol.Error)
+	return ret0, ret1
 }
 
 // DeliverTx indicates an expected call of DeliverTx.
