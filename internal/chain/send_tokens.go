@@ -2,7 +2,6 @@ package chain
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -49,7 +48,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	//now check to see if the account is good to send tokens from
 	total := types.Amount{}
 	for _, to := range body.To {
-		total.Add(total.AsBigInt(), new(big.Int).SetUint64(to.Amount))
+		total.Add(total.AsBigInt(), &to.Amount)
 	}
 
 	if !account.CanDebitTokens(&total.Int) {
@@ -60,7 +59,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 		deposit := new(protocol.SyntheticDepositTokens)
 		copy(deposit.Cause[:], tx.Transaction.Hash())
 		deposit.Token = tokenUrl.String()
-		deposit.Amount = *new(big.Int).SetUint64(body.To[i].Amount)
+		deposit.Amount = body.To[i].Amount
 		st.Submit(u, deposit)
 	}
 

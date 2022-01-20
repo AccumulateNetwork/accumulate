@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -250,7 +251,7 @@ func CreateTX(sender string, args []string) (string, error) {
 
 	// TODO Fetch the precision instead of hard-coding it
 	send := new(protocol.SendTokens)
-	send.AddRecipient(u2, uint64(amt*protocol.AcmePrecision))
+	send.AddRecipient(u2, big.NewInt(int64(amt*protocol.AcmePrecision)))
 
 	res, err := dispatchTxRequest("send-tokens", send, u, si, pk)
 	if err != nil {
