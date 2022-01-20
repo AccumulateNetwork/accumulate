@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"math/big"
 	"testing"
 	"time"
 
@@ -279,7 +280,7 @@ func TestTokenTransfer(t *testing.T) {
 		var to []*protocol.TokenRecipient
 		to = append(to, &protocol.TokenRecipient{
 			Url:    aliceUrl.String(),
-			Amount: "100",
+			Amount: *big.NewInt(100),
 		})
 		txParams := execParams{
 			Origin: bobUrl.String(),

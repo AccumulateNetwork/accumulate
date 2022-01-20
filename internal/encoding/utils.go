@@ -243,6 +243,14 @@ func ChainSetUnmarshalBinary(b []byte) ([][32]byte, error) {
 	return v, nil
 }
 
+func BigintToJSON(b *big.Int) *string {
+	if b == nil {
+		return nil
+	}
+	s := b.String()
+	return &s
+}
+
 func BytesToJSON(v []byte) *string {
 	if v == nil {
 		return nil
@@ -271,6 +279,18 @@ type DurationFields struct {
 func DurationToJSON(v time.Duration) interface{} {
 	sec, ns := SplitDuration(v)
 	return DurationFields{sec, ns}
+}
+
+func BigintFromJSON(s *string) (*big.Int, error) {
+	if s == nil {
+		return nil, nil
+	}
+	ret := new(big.Int)
+	_, b := ret.SetString(*s, 10)
+	if b == true {
+		return nil, ErrMalformedBigInt
+	}
+	return ret, nil
 }
 
 func BytesFromJSON(s *string) ([]byte, error) {
