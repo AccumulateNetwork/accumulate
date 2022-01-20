@@ -287,7 +287,7 @@ func BigintFromJSON(s *string) (*big.Int, error) {
 	}
 	ret := new(big.Int)
 	_, b := ret.SetString(*s, 10)
-	if b == true {
+	if b == false {
 		return nil, ErrMalformedBigInt
 	}
 	return ret, nil
