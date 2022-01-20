@@ -3,6 +3,7 @@ package abci_test
 import (
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
@@ -77,7 +78,7 @@ func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 			balance[recipient.Addr] += 1000
 
 			exch := new(protocol.SendTokens)
-			exch.AddRecipient(n.ParseUrl(recipient.Addr), 1000)
+			exch.AddRecipient(n.ParseUrl(recipient.Addr), big.NewInt(int64(1000)))
 			tx, err := transactions.New(origin.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 				return origin.Sign(hash), nil
 			}, exch)
@@ -516,8 +517,8 @@ func TestLiteAccountTx(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), 1000)
-		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), 2000)
+		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), big.NewInt(int64(1000)))
+		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
 
 		tx, err := transactions.New(aliceUrl, 2, edSigner(alice, 1), exch)
 		require.NoError(t, err)
@@ -544,7 +545,7 @@ func TestAdiAccountTx(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(n.ParseUrl("bar/tokens"), 68)
+		exch.AddRecipient(n.ParseUrl("bar/tokens"), big.NewInt(int64(68)))
 
 		tx, err := transactions.New("foo/tokens", 1, edSigner(fooKey, 1), exch)
 		require.NoError(t, err)
