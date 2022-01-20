@@ -43,7 +43,7 @@ func New{{.Name}}() *{{.Name}} {
 {{- end}}
 {{end}}
 
-{{range .Types}}{{if .IsTransaction}}
+{{range .Types}}{{if or .IsTransaction .IsTxResult}}
 func (*{{.Name}}) GetType() types.TransactionType { return types.TxType{{.TransactionType}} }
 {{end}}{{end}}
 
@@ -69,7 +69,7 @@ func (v *{{.Name}}) Equal(u *{{.Name}}) bool {
 func (v *{{.Name}}) BinarySize() int {
 	var n int
 
-	{{if .IsTransaction}}
+	{{if or .IsTransaction .IsTxResult}}
 	n += encoding.UvarintBinarySize(types.TxType{{.TransactionType}}.ID())
 	{{end}}
 
@@ -98,7 +98,7 @@ func (v *{{.Name}}) BinarySize() int {
 func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
-	{{if .IsTransaction}}
+	{{if or .IsTransaction .IsTxResult}}
 	buffer.Write(encoding.UvarintMarshalBinary(types.TxType{{.TransactionType}}.ID()))
 	{{end}}
 
@@ -133,7 +133,7 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 
 {{range .Types}}{{if .IsBinary}}
 func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
-	{{- if .IsTransaction}}
+	{{- if or .IsTransaction .IsTxResult}}
 	typ := types.TxType{{.TransactionType}}
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding TX type: %w", err)
@@ -173,6 +173,8 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 {{define "jsonType"}}struct {
 	{{- if .IsChain}}{{if isPkg "types/state"}}ChainHeader{{else}}state.ChainHeader{{end}}
 	{{- end}}
+	{{- if .IsTxResult}}Type {{if isPkg "types"}}TransactionType{{else}}types.TransactionType{{end}} `json:"type"`
+	{{- end}}
 	{{- range .Embeddings}}{{.}}
 	{{- end}}
 	{{- range .Fields}}
@@ -193,15 +195,19 @@ func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
 	u.ChainHeader = v.ChainHeader
 	{{- end}}
 
+	{{- if .IsTxResult}}
+	u.Type = v.GetType()
+	{{- end}}
+
 	{{- range .Embeddings}}
 	u.{{.}} = v.{{.}}
 	{{- end}}
 
 	{{- range .Fields}}
 	{{- if .IsMarshalled}}
-	{{valueToJson . (print "u." .Name) (print "v." .Name)}}
+	{{valueToJson . (print "u." .Name) (print "v." .Name) false .Name}}
 	{{- if .AlternativeName}}
-	{{valueToJson . (print "u." .AlternativeName) (print "v." .Name)}}
+	{{valueToJson . (print "u." .AlternativeName) (print "v." .Name) false .Name}}
 	{{- end}}
 	{{- end}}
 	{{- end}}
@@ -217,15 +223,19 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	u.ChainHeader = v.ChainHeader
 	{{- end}}
 
+	{{- if .IsTxResult}}
+	u.Type = v.GetType()
+	{{- end}}
+
 	{{- range .Embeddings}}
 	u.{{.}} = v.{{.}}
 	{{- end}}
 
 	{{- range .Fields}}
 	{{- if .IsMarshalled}}
-	{{valueToJson . (print "u." .Name) (print "v." .Name)}}
+	{{valueToJson . (print "u." .Name) (print "v." .Name) true .Name}}
 	{{- if .AlternativeName}}
-	{{valueToJson . (print "u." .AlternativeName) (print "v." .Name)}}
+	{{valueToJson . (print "u." .AlternativeName) (print "v." .Name) true .Name}}
 	{{- end}}
 	{{- end}}
 	{{- end}}

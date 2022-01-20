@@ -139,11 +139,12 @@ type TxRequest struct {
 }
 
 type TxResponse struct {
-	Txid      []byte   `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
-	Code      uint64   `json:"code,omitempty" form:"code" query:"code" validate:"required"`
-	Message   string   `json:"message,omitempty" form:"message" query:"message" validate:"required"`
-	Delivered bool     `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Txid      []byte      `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Hash      [32]byte    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Code      uint64      `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Message   string      `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Delivered bool        `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Result    interface{} `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 }
 
 type TxnQuery struct {
@@ -533,17 +534,19 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 
 func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Txid      *string `json:"txid,omitempty"`
-		Hash      string  `json:"hash,omitempty"`
-		Code      uint64  `json:"code,omitempty"`
-		Message   string  `json:"message,omitempty"`
-		Delivered bool    `json:"delivered,omitempty"`
+		Txid      *string     `json:"txid,omitempty"`
+		Hash      string      `json:"hash,omitempty"`
+		Code      uint64      `json:"code,omitempty"`
+		Message   string      `json:"message,omitempty"`
+		Delivered bool        `json:"delivered,omitempty"`
+		Result    interface{} `json:"result,omitempty"`
 	}{}
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Delivered = v.Delivered
+	u.Result = encoding.AnyToJSON(v.Result)
 	return json.Marshal(&u)
 }
 
@@ -940,17 +943,19 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 
 func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Txid      *string `json:"txid,omitempty"`
-		Hash      string  `json:"hash,omitempty"`
-		Code      uint64  `json:"code,omitempty"`
-		Message   string  `json:"message,omitempty"`
-		Delivered bool    `json:"delivered,omitempty"`
+		Txid      *string     `json:"txid,omitempty"`
+		Hash      string      `json:"hash,omitempty"`
+		Code      uint64      `json:"code,omitempty"`
+		Message   string      `json:"message,omitempty"`
+		Delivered bool        `json:"delivered,omitempty"`
+		Result    interface{} `json:"result,omitempty"`
 	}{}
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Delivered = v.Delivered
+	u.Result = encoding.AnyToJSON(v.Result)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -967,6 +972,8 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	v.Code = u.Code
 	v.Message = u.Message
 	v.Delivered = u.Delivered
+	v.Result = encoding.AnyFromJSON(u.Result)
+
 	return nil
 }
 
