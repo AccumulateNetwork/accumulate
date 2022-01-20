@@ -1,4 +1,5 @@
 # Transactions - names should be verbs
+# Transactions - names should be verbs
 
 ##### User #####
 
@@ -274,7 +275,7 @@ TokenRecipient:
       type: string
       is-url: true
     - name: Amount
-      type: uvarint
+      type: bigint
 
 ChainParams:
   fields:
