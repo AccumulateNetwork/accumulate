@@ -12,11 +12,11 @@ type BurnTokens struct{}
 
 func (BurnTokens) Type() types.TxType { return types.TxTypeBurnTokens }
 
-func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.BurnTokens)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	var account tokenChain
@@ -26,12 +26,12 @@ func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeTokenAccount, origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want chain type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeTokenAccount, origin.Header().Type)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
 	if err != nil {
-		return fmt.Errorf("invalid token url: %v", err)
+		return nil, fmt.Errorf("invalid token url: %v", err)
 	}
 
 	burn := new(protocol.SyntheticBurnTokens)
@@ -40,8 +40,8 @@ func (BurnTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	st.Submit(tokenUrl, burn)
 
 	if !account.DebitTokens(&body.Amount) {
-		return fmt.Errorf("unable to debit balance from account")
+		return nil, fmt.Errorf("unable to debit balance from account")
 	}
 	st.Update(account)
-	return nil
+	return nil, nil
 }

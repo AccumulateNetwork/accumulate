@@ -24,7 +24,7 @@ func TestSynthTokenDeposit_Lite(t *testing.T) {
 	st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), gtx)
 	require.ErrorIs(t, err, storage.ErrNotFound)
 
-	err = SyntheticDepositTokens{}.Validate(st, gtx)
+	_, err = SyntheticDepositTokens{}.Validate(st, gtx)
 	require.NoError(t, err)
 
 	//try to extract the state to see if we have a valid account

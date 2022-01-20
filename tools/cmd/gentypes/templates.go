@@ -19,6 +19,7 @@ type Type struct {
 	Name            string
 	IsChain         bool
 	IsTransaction   bool
+	IsTxResult      bool
 	IsBinary        bool
 	IsComparable    bool
 	MakeConstructor bool
@@ -55,6 +56,7 @@ func convert(types typegen.DataTypes, pkgName, pkgPath string) *Types {
 		ttyp.Name = typ.Name
 		ttyp.IsChain = typ.Kind == "chain"
 		ttyp.IsTransaction = typ.Kind == "tx"
+		ttyp.IsTxResult = typ.Kind == "tx-result"
 		ttyp.IsBinary = !typ.NonBinary
 		ttyp.IsComparable = !typ.Incomparable
 		ttyp.ChainType = typ.ChainType
