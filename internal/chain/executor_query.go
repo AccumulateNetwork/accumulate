@@ -131,6 +131,85 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 
 			return []byte("tx"), res, nil
 		}
+	case "data":
+		data, err := batch.Account(u).Data()
+		if err != nil {
+			return nil, nil, err
+		}
+		switch len(fragment) {
+		case 1:
+			entryHash, entry, err := data.GetLatest()
+			if err != nil {
+				return nil, nil, err
+			}
+			res := &protocol.ResponseDataEntry{
+				Entry: *entry,
+			}
+			copy(res.EntryHash[:], entryHash)
+			return []byte("data-entry"), res, nil
+		case 2:
+			queryParam := fragment[1]
+			if strings.Contains(queryParam, ":") {
+				indexes := strings.Split(queryParam, ":")
+				start, err := strconv.Atoi(indexes[0])
+				if err != nil {
+					return nil, nil, err
+				}
+				end, err := strconv.Atoi(indexes[1])
+				if err != nil {
+					return nil, nil, err
+				}
+				entryHashes, err := data.GetHashes(int64(start), int64(end))
+				if err != nil {
+					return nil, nil, err
+				}
+				res := &protocol.ResponseDataEntrySet{}
+				res.Total = uint64(data.Height())
+				for _, entryHash := range entryHashes {
+					er := protocol.ResponseDataEntry{}
+					copy(er.EntryHash[:], entryHash)
+
+					entry, err := data.Get(entryHash)
+					if err != nil {
+						return nil, nil, err
+					}
+					er.Entry = *entry
+					res.DataEntries = append(res.DataEntries, er)
+				}
+				return []byte("data-range"), res, nil
+			} else {
+				index, err := strconv.Atoi(queryParam)
+				if err != nil {
+					entry, err := data.Get([]byte(queryParam))
+					if err != nil {
+						return nil, nil, err
+					}
+
+					res := &protocol.ResponseDataEntry{}
+					copy(res.EntryHash[:], []byte(queryParam))
+					res.Entry = *entry
+					return []byte("data-entry"), res, nil
+				} else {
+					entryHashes, err := data.GetHashes(int64(index), int64(index))
+					if err != nil {
+						return nil, nil, err
+					}
+					if len(entryHashes) != 1 {
+						return nil, nil, fmt.Errorf("received invalid data for index")
+					}
+					entryHash := entryHashes[0]
+					res := &protocol.ResponseDataEntry{}
+					copy(res.EntryHash[:], entryHash)
+
+					entry, err := data.Get(entryHash)
+					if err != nil {
+						return nil, nil, err
+					}
+					res.Entry = *entry
+					return []byte("data-entry"), res, nil
+				}
+			}
+		}
 	}
 
 	return nil, nil, fmt.Errorf("invalid fragment")
@@ -386,97 +465,27 @@ func (m *Executor) queryTxHistoryByChainId(batch *database.Batch, id []byte, sta
 	return &thr, nil
 }
 
-func (m *Executor) queryDataByUrl(batch *database.Batch, u *url.URL) (*protocol.ResponseDataEntrySet, error) {
-	qr := protocol.ResponseDataEntrySet{}
+func (m *Executor) queryDataByUrl(batch *database.Batch, u *url.URL) (*protocol.ResponseDataEntry, error) {
+	qr := protocol.ResponseDataEntry{}
 
 	data, err := batch.Account(u).Data()
 	if err != nil {
 		return nil, err
 	}
 
-	var entryHash []byte
-	var entry *protocol.DataEntry
-	paths := strings.Split(u.Path, "/")
-	if len(paths) == 2 || u.Path == "" {
-		entryHash, entry, err = data.GetLatest()
-		if err != nil {
-			return nil, err
-		}
-		dataEntry := protocol.ResponseDataEntry{
-			Entry: *entry,
-		}
-		copy(dataEntry.EntryHash[:], entryHash)
-		qr.DataEntries = append(qr.DataEntries, dataEntry)
-		qr.Total = 1
-	} else if len(paths) == 3 {
-		queryParam := paths[2]
-		if strings.Contains(queryParam, ":") {
-			indexes := strings.Split(queryParam, ":")
-			start, err := strconv.Atoi(indexes[0])
-			if err != nil {
-				return nil, err
-			}
-			end, err := strconv.Atoi(indexes[1])
-			if err != nil {
-				return nil, err
-			}
-			entryHashes, err := data.GetHashes(int64(start), int64(end))
-			if err != nil {
-				return nil, err
-			}
-			qr.Total = uint64(data.Height())
-			for _, entryHash := range entryHashes {
-				er := protocol.ResponseDataEntry{}
-				copy(er.EntryHash[:], entryHash)
-
-				entry, err := data.Get(entryHash)
-				if err != nil {
-					return nil, err
-				}
-				er.Entry = *entry
-				qr.DataEntries = append(qr.DataEntries, er)
-			}
-		} else {
-			index, err := strconv.Atoi(queryParam)
-			if err != nil {
-				er := protocol.ResponseDataEntry{}
-				copy(er.EntryHash[:], entryHash)
-				entry, err := data.Get(entryHash)
-				if err != nil {
-					return nil, err
-				}
-				er.Entry = *entry
-				qr.DataEntries = append(qr.DataEntries, er)
-				qr.Total = 1
-			} else {
-				entryHashes, err := data.GetHashes(int64(index), int64(index))
-				if err != nil {
-					return nil, err
-				}
-				qr.Total = uint64(data.Height())
-				for _, entryHash := range entryHashes {
-					er := protocol.ResponseDataEntry{}
-					copy(er.EntryHash[:], entryHash)
-
-					entry, err := data.Get(entryHash)
-					if err != nil {
-						return nil, err
-					}
-					er.Entry = *entry
-					qr.DataEntries = append(qr.DataEntries, er)
-				}
-			}
-		}
-	} else {
-		return nil, fmt.Errorf("invalid path in data url")
+	entryHash, entry, err := data.GetLatest()
+	if err != nil {
+		return nil, err
 	}
+
+	copy(qr.EntryHash[:], entryHash)
+	qr.Entry = *entry
 	return &qr, nil
 }
 
-func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entryHash []byte) (*protocol.ResponseDataEntrySet, error) {
-	qr := protocol.ResponseDataEntrySet{}
-	er := protocol.ResponseDataEntry{}
-	copy(er.EntryHash[:], entryHash)
+func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entryHash []byte) (*protocol.ResponseDataEntry, error) {
+	qr := protocol.ResponseDataEntry{}
+	copy(qr.EntryHash[:], entryHash)
 
 	data, err := batch.Account(u).Data()
 	if err != nil {
@@ -488,9 +497,7 @@ func (m *Executor) queryDataByEntryHash(batch *database.Batch, u *url.URL, entry
 		return nil, err
 	}
 
-	er.Entry = *entry
-	qr.DataEntries = append(qr.DataEntries, er)
-	qr.Total = uint64(data.Height())
+	qr.Entry = *entry
 	return &qr, nil
 }
 
@@ -637,7 +644,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 			return nil, nil, &protocol.Error{Code: protocol.CodeInvalidURL, Message: fmt.Errorf("invalid URL in query %s", chr.Url)}
 		}
 
-		var ret *protocol.ResponseDataEntrySet
+		var ret *protocol.ResponseDataEntry
 		if chr.EntryHash != [32]byte{} {
 			ret, err = m.queryDataByEntryHash(batch, u, chr.EntryHash[:])
 			if err != nil {
