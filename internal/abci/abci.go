@@ -52,8 +52,8 @@ type Chain interface {
 	InitChain(state []byte, time time.Time, blockIndex int64) error
 
 	BeginBlock(BeginBlockRequest) (BeginBlockResponse, error)
-	CheckTx(*transactions.Envelope) *protocol.Error
-	DeliverTx(*transactions.Envelope) *protocol.Error
+	CheckTx(*transactions.Envelope) (protocol.TransactionResult, *protocol.Error)
+	DeliverTx(*transactions.Envelope) (protocol.TransactionResult, *protocol.Error)
 	EndBlock(EndBlockRequest)
 	Commit() ([]byte, error)
 }

@@ -12,16 +12,16 @@ type InternalTransactionsSent struct{}
 
 func (InternalTransactionsSent) Type() types.TxType { return types.TxTypeInternalTransactionsSent }
 
-func (InternalTransactionsSent) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (InternalTransactionsSent) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.InternalTransactionsSent)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	ledger, ok := st.Origin.(*protocol.InternalLedger)
 	if !ok {
-		return fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeInternalLedger, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeInternalLedger, st.Origin.Header().Type)
 	}
 
 	sent := map[[32]byte]bool{}
@@ -40,5 +40,5 @@ func (InternalTransactionsSent) Validate(st *StateManager, tx *transactions.Enve
 	}
 
 	st.Update(ledger)
-	return nil
+	return nil, nil
 }

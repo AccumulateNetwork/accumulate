@@ -13,20 +13,20 @@ type WriteDataTo struct{}
 
 func (WriteDataTo) Type() types.TransactionType { return types.TxTypeWriteDataTo }
 
-func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.WriteDataTo)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	recipient, err := url.Parse(body.Recipient)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	if _, err := protocol.ParseLiteDataAddress(recipient); err != nil {
-		return fmt.Errorf("only writes to lite data accounts supported: %s: %v", recipient, err)
+		return nil, fmt.Errorf("only writes to lite data accounts supported: %s: %v", recipient, err)
 	}
 
 	writeThis := new(protocol.SyntheticWriteData)
@@ -35,5 +35,7 @@ func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) error {
 
 	st.Submit(recipient, writeThis)
 
-	return nil
+	res := new(protocol.WriteDataResult)
+	copy(res.EntryHash[:], body.Entry.Hash())
+	return res, nil
 }
