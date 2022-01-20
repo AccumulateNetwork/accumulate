@@ -315,9 +315,11 @@ type TransactionSignature struct {
 }
 
 type TransactionStatus struct {
-	Remote    bool   `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
-	Delivered bool   `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
-	Code      uint64 `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Remote    bool              `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
+	Delivered bool              `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result"`
 }
 
 type UpdateKeyPage struct {
@@ -330,6 +332,10 @@ type UpdateKeyPage struct {
 
 type WriteData struct {
 	Entry DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+}
+
+type WriteDataResult struct {
+	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 }
 
 type WriteDataTo struct {
@@ -456,6 +462,8 @@ func (*SyntheticWriteData) GetType() types.TransactionType { return types.TxType
 func (*UpdateKeyPage) GetType() types.TransactionType { return types.TxTypeUpdateKeyPage }
 
 func (*WriteData) GetType() types.TransactionType { return types.TxTypeWriteData }
+
+func (*WriteDataResult) GetType() types.TransactionType { return types.TxTypeWriteData }
 
 func (*WriteDataTo) GetType() types.TransactionType { return types.TxTypeWriteDataTo }
 
@@ -1337,6 +1345,14 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 		return false
 	}
 
+	if !(v.Message == u.Message) {
+		return false
+	}
+
+	if !(v.Result == u.Result) {
+		return false
+	}
+
 	return true
 }
 
@@ -1366,6 +1382,14 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 
 func (v *WriteData) Equal(u *WriteData) bool {
 	if !(v.Entry.Equal(&u.Entry)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *WriteDataResult) Equal(u *WriteDataResult) bool {
+	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
 
@@ -2137,6 +2161,10 @@ func (v *TransactionStatus) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(v.Code)
 
+	n += encoding.StringBinarySize(v.Message)
+
+	n += v.Result.BinarySize()
+
 	return n
 }
 
@@ -2164,6 +2192,16 @@ func (v *WriteData) BinarySize() int {
 	n += encoding.UvarintBinarySize(types.TxTypeWriteData.ID())
 
 	n += v.Entry.BinarySize()
+
+	return n
+}
+
+func (v *WriteDataResult) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeWriteData.ID())
+
+	n += encoding.ChainBinarySize(&v.EntryHash)
 
 	return n
 }
@@ -3058,6 +3096,14 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Code))
 
+	buffer.Write(encoding.StringMarshalBinary(v.Message))
+
+	if b, err := v.Result.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Result: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
 	return buffer.Bytes(), nil
 }
 
@@ -3093,6 +3139,16 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeWriteData.ID()))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
 
 	return buffer.Bytes(), nil
 }
@@ -4632,6 +4688,20 @@ func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(v.Code):]
 
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Message: %w", err)
+	} else {
+		v.Message = x
+	}
+	data = data[encoding.StringBinarySize(v.Message):]
+
+	if x, err := UnmarshalTransactionResult(data); err != nil {
+		return fmt.Errorf("error decoding Result: %w", err)
+	} else {
+		v.Result = x
+	}
+	data = data[v.Result.BinarySize():]
+
 	return nil
 }
 
@@ -4693,6 +4763,25 @@ func (v *WriteData) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("error decoding Entry: %w", err)
 	}
 	data = data[v.Entry.BinarySize():]
+
+	return nil
+}
+
+func (v *WriteDataResult) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeWriteData
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
+	data = data[encoding.ChainBinarySize(&v.EntryHash):]
 
 	return nil
 }
@@ -4956,6 +5045,21 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SendTransaction) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Payload   json.RawMessage `json:"payload,omitempty"`
+		Recipient *url.URL        `json:"recipient,omitempty"`
+	}{}
+	if x, err := json.Marshal(v.Payload); err != nil {
+		return nil, fmt.Errorf("error encoding Payload: %w", err)
+	} else {
+		u.Payload = x
+	}
+
+	u.Recipient = v.Recipient
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Source      string  `json:"source,omitempty"`
@@ -5090,6 +5194,27 @@ func (v *TransactionSignature) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Remote    bool            `json:"remote,omitempty"`
+		Delivered bool            `json:"delivered,omitempty"`
+		Code      uint64          `json:"code,omitempty"`
+		Message   string          `json:"message,omitempty"`
+		Result    json.RawMessage `json:"result,omitempty"`
+	}{}
+	u.Remote = v.Remote
+	u.Delivered = v.Delivered
+	u.Code = v.Code
+	u.Message = v.Message
+	if x, err := json.Marshal(v.Result); err != nil {
+		return nil, fmt.Errorf("error encoding Result: %w", err)
+	} else {
+		u.Result = x
+	}
+
+	return json.Marshal(&u)
+}
+
 func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Operation KeyPageOperation `json:"operation,omitempty"`
@@ -5103,6 +5228,16 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	u.NewKey = encoding.BytesToJSON(v.NewKey)
 	u.Owner = v.Owner
 	u.Threshold = v.Threshold
+	return json.Marshal(&u)
+}
+
+func (v *WriteDataResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      types.TransactionType `json:"type"`
+		EntryHash string                `json:"entryHash,omitempty"`
+	}{}
+	u.Type = v.GetType()
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	return json.Marshal(&u)
 }
 
@@ -5557,6 +5692,31 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *SendTransaction) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Payload   json.RawMessage `json:"payload,omitempty"`
+		Recipient *url.URL        `json:"recipient,omitempty"`
+	}{}
+	if x, err := json.Marshal(v.Payload); err != nil {
+		return fmt.Errorf("error encoding Payload: %w", err)
+	} else {
+		u.Payload = x
+	}
+
+	u.Recipient = v.Recipient
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := UnmarshalTransactionJSON(u.Payload); err != nil {
+		return fmt.Errorf("error decoding Payload: %w", err)
+	} else {
+		v.Payload = x
+	}
+
+	v.Recipient = u.Recipient
+	return nil
+}
+
 func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Source      string  `json:"source,omitempty"`
@@ -5818,6 +5978,40 @@ func (v *TransactionSignature) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Remote    bool            `json:"remote,omitempty"`
+		Delivered bool            `json:"delivered,omitempty"`
+		Code      uint64          `json:"code,omitempty"`
+		Message   string          `json:"message,omitempty"`
+		Result    json.RawMessage `json:"result,omitempty"`
+	}{}
+	u.Remote = v.Remote
+	u.Delivered = v.Delivered
+	u.Code = v.Code
+	u.Message = v.Message
+	if x, err := json.Marshal(v.Result); err != nil {
+		return fmt.Errorf("error encoding Result: %w", err)
+	} else {
+		u.Result = x
+	}
+
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Remote = u.Remote
+	v.Delivered = u.Delivered
+	v.Code = u.Code
+	v.Message = u.Message
+	if x, err := UnmarshalTransactionResultJSON(u.Result); err != nil {
+		return fmt.Errorf("error decoding Result: %w", err)
+	} else {
+		v.Result = x
+	}
+
+	return nil
+}
+
 func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Operation KeyPageOperation `json:"operation,omitempty"`
@@ -5847,5 +6041,23 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	}
 	v.Owner = u.Owner
 	v.Threshold = u.Threshold
+	return nil
+}
+
+func (v *WriteDataResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      types.TransactionType `json:"type"`
+		EntryHash string                `json:"entryHash,omitempty"`
+	}{}
+	u.Type = v.GetType()
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
 	return nil
 }

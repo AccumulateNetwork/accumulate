@@ -15,11 +15,11 @@ type AddCredits struct{}
 
 func (AddCredits) Type() types.TxType { return types.TxTypeAddCredits }
 
-func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.AddCredits)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	// tokens = credits / (credits per dollar) / (dollars per token)
@@ -30,7 +30,7 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 
 	recvUrl, err := url.Parse(body.Recipient)
 	if err != nil {
-		return fmt.Errorf("invalid recipient")
+		return nil, fmt.Errorf("invalid recipient")
 	}
 
 	recv, err := st.LoadUrl(recvUrl)
@@ -42,17 +42,17 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 		case *protocol.LiteTokenAccount, *protocol.KeyPage:
 			// OK
 		default:
-			return fmt.Errorf("invalid recipient: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeKeyPage, recv.Header().Type)
+			return nil, fmt.Errorf("invalid recipient: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeKeyPage, recv.Header().Type)
 		}
 	} else if errors.Is(err, storage.ErrNotFound) {
 		if recvUrl.Routing() == tx.Transaction.Origin.Routing() {
 			// If the recipient and the origin have the same routing number,
 			// they must be on the same BVC. Thus in that case, failing to
 			// locate the recipient chain means it doesn't exist.
-			return fmt.Errorf("invalid recipient: not found")
+			return nil, fmt.Errorf("invalid recipient: not found")
 		}
 	} else {
-		return fmt.Errorf("failed to load recipient: %v", err)
+		return nil, fmt.Errorf("failed to load recipient: %v", err)
 	}
 
 	var account tokenChain
@@ -62,25 +62,25 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 	case *protocol.TokenAccount:
 		account = origin
 	default:
-		return fmt.Errorf("not an account: %q", tx.Transaction.Origin)
+		return nil, fmt.Errorf("not an account: %q", tx.Transaction.Origin)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
 	if err != nil {
-		return fmt.Errorf("invalid token account: %v", err)
+		return nil, fmt.Errorf("invalid token account: %v", err)
 	}
 
 	// Only ACME tokens can be converted into credits
 	if !protocol.AcmeUrl().Equal(tokenUrl) {
-		return fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
+		return nil, fmt.Errorf("%q tokens cannot be converted into credits", tokenUrl.String())
 	}
 
 	if !account.CanDebitTokens(&amount.Int) {
-		return fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &amount.Int)
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &amount.Int)
 	}
 
 	if !account.DebitTokens(&amount.Int) {
-		return fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
+		return nil, fmt.Errorf("failed to debit %v", tx.Transaction.Origin)
 	}
 	st.Update(account)
 
@@ -90,5 +90,5 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
 	sdc.Amount = body.Amount
 	st.Submit(recvUrl, sdc)
 
-	return nil
+	return nil, nil
 }

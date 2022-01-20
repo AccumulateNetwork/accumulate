@@ -79,7 +79,7 @@ type TxExecutor interface {
 	Type() types.TransactionType
 
 	// Validate fully validates and executes the transaction.
-	Validate(*StateManager, *transactions.Envelope) error
+	Validate(*StateManager, *transactions.Envelope) (protocol.TransactionResult, error)
 }
 
 type creditChain interface {

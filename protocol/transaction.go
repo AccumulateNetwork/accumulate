@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding"
+	"encoding/json"
 	"fmt"
 	"math/big"
 
@@ -83,6 +84,26 @@ func UnmarshalTransaction(data []byte) (TransactionPayload, error) {
 	}
 
 	err = tx.UnmarshalBinary(data)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+}
+
+func UnmarshalTransactionJSON(data []byte) (TransactionPayload, error) {
+	var typ struct{ Type types.TransactionType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := NewTransaction(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, tx)
 	if err != nil {
 		return nil, err
 	}
