@@ -19,14 +19,14 @@ import (
 )
 
 // CheckTx implements ./abci.Chain
-func (m *Executor) CheckTx(env *transactions.Envelope) *protocol.Error {
+func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	// If the transaction is borked, the transaction type is probably invalid,
 	// so check that first. "Invalid transaction type" is a more useful error
 	// than "invalid signature" if the real error is the transaction got borked.
 	txt := types.TxType(env.Transaction.Type())
 	executor, ok := m.executors[txt]
 	if !ok {
-		return &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", txt)}
+		return nil, &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", txt)}
 	}
 
 	batch := m.DB.Begin()
@@ -34,10 +34,10 @@ func (m *Executor) CheckTx(env *transactions.Envelope) *protocol.Error {
 
 	st, err := m.check(batch, env)
 	if errors.Is(err, storage.ErrNotFound) {
-		return &protocol.Error{Code: protocol.CodeNotFound, Message: err}
+		return nil, &protocol.Error{Code: protocol.CodeNotFound, Message: err}
 	}
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeCheckTxError, Message: err}
+		return nil, &protocol.Error{Code: protocol.CodeCheckTxError, Message: err}
 	}
 
 	// Do not run transaction-specific validation for a synthetic transaction. A
@@ -51,18 +51,21 @@ func (m *Executor) CheckTx(env *transactions.Envelope) *protocol.Error {
 	// recorded, the BVN that sent it and the client that sent the original
 	// transaction cannot verify that the synthetic transaction was received.
 	if txt.IsSynthetic() {
-		return nil
+		return new(protocol.EmptyResult), nil
 	}
 
-	err = executor.Validate(st, env)
+	result, err := executor.Validate(st, env)
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeValidateTxnError, Message: err}
+		return nil, &protocol.Error{Code: protocol.CodeValidateTxnError, Message: err}
 	}
-	return nil
+	if result == nil {
+		result = new(protocol.EmptyResult)
+	}
+	return result, nil
 }
 
 // DeliverTx implements ./abci.Chain
-func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
+func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	m.wg.Add(1)
 
 	// If this is done async (`go m.deliverTxAsync(tx)`), how would an error
@@ -78,20 +81,20 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
 	defer m.wg.Done()
 
 	if env.Transaction.Origin == nil {
-		return &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("malformed transaction error")}
+		return nil, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("malformed transaction error")}
 	}
 
 	txt := env.Transaction.Type()
 	executor, ok := m.executors[txt]
 	if !ok {
-		return m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{
+		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{
 			Code:    protocol.CodeInvalidTxnType,
 			Message: fmt.Errorf("unsupported TX type: %v", env.Transaction.Type().Name())})
 	}
 
 	// if txt.IsInternal() && tx.Transaction.Nonce != uint64(m.blockIndex) {
 	// 	err := fmt.Errorf("nonce does not match block index, want %d, got %d", m.blockIndex, tx.Transaction.Nonce)
-	// 	return m.recordTransactionError(tx, nil, nil, &chainId, tx.Transaction.Hash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
+	// 	return nil, m.recordTransactionError(tx, nil, nil, &chainId, tx.Transaction.Hash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
 	// }
 
 	m.mu.Lock()
@@ -108,12 +111,15 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
 
 	st, err := m.check(m.blockBatch, env)
 	if err != nil {
-		return m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
+		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
-	err = executor.Validate(st, env)
+	result, err := executor.Validate(st, env)
 	if err != nil {
-		return m.recordTransactionError(st, env, nil, nil, false, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+		return nil, m.recordTransactionError(st, env, nil, nil, false, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("txn validation failed : %v", err)})
+	}
+	if result == nil {
+		result = new(protocol.EmptyResult)
 	}
 
 	// If we get here, we were successful in validating.  So, we need to
@@ -126,42 +132,42 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) *protocol.Error {
 	txAcceptedObject := new(state.Object)
 	txAcceptedObject.Entry, err = txAccepted.MarshalBinary()
 	if err != nil {
-		return m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	txPendingObject := new(state.Object)
 	txPending.Status = json.RawMessage(fmt.Sprintf("{\"code\":\"0\"}"))
 	txPendingObject.Entry, err = txPending.MarshalBinary()
 	if err != nil {
-		return m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
+		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
 	// Store pending state updates, queue state creates for synthetic transactions
 	submitted, err := st.Commit()
 	if err != nil {
-		return m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+		return nil, m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
 	}
 
 	// Store the tx state
-	status := &protocol.TransactionStatus{Delivered: true}
+	status := &protocol.TransactionStatus{Delivered: true, Result: result}
 	err = m.putTransaction(st, env, txAccepted, txPending, status, false)
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
+		return nil, &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
 	}
 
 	// Process synthetic transactions generated by the validator
 	st.Reset()
 	err = m.addSynthTxns(&st.stateCache, submitted)
 	if err != nil {
-		return &protocol.Error{Code: protocol.CodeSyntheticTxnError, Message: err}
+		return nil, &protocol.Error{Code: protocol.CodeSyntheticTxnError, Message: err}
 	}
 	_, err = st.Commit()
 	if err != nil {
-		return m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
+		return nil, m.recordTransactionError(st, env, txAccepted, txPending, true, &protocol.Error{Code: protocol.CodeRecordTxnError, Message: err})
 	}
 
 	m.blockMeta.Delivered++
-	return nil
+	return result, nil
 }
 
 func (m *Executor) check(batch *database.Batch, env *transactions.Envelope) (*StateManager, error) {
@@ -349,7 +355,11 @@ func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error
 }
 
 func (m *Executor) recordTransactionError(st *StateManager, env *transactions.Envelope, txAccepted *state.Transaction, txPending *state.PendingTransaction, postCommit bool, failure *protocol.Error) *protocol.Error {
-	status := &protocol.TransactionStatus{Delivered: true, Code: uint64(failure.Code)}
+	status := &protocol.TransactionStatus{
+		Delivered: true,
+		Code:      uint64(failure.Code),
+		Message:   failure.Error(),
+	}
 	err := m.putTransaction(st, env, txAccepted, txPending, status, postCommit)
 	if err != nil {
 		m.logError("Failed to store transaction", "txid", logging.AsHex(env.Transaction.Hash()), "origin", env.Transaction.Origin, "error", err)
