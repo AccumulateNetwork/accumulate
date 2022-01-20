@@ -52,7 +52,7 @@ func Load(query *api.Query, Origin ed25519.PrivateKey, walletCount, txCount int)
 		addrCountMap[wallet[randDest].Addr]++                       // count the number of deposits to output
 		addr := AcmeLiteAddressStdPriv(wallet[randDest].PrivateKey) // Make lite address
 		send := new(protocol.SendTokens)                            // Create a send token transaction
-		send.AddRecipient(addr, 1000)                               // create the transaction output
+		send.AddRecipient(addr, big.NewInt(int64(1000)))            // create the transaction output
 		gtx := new(transactions.Envelope)                           // wrap in a GenTransaction
 		gtx.Transaction = new(transactions.Transaction)             //
 		gtx.Transaction.Body, err = send.MarshalBinary()            // add  send transaction
@@ -135,7 +135,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	}
 
 	send := protocol.SendTokens{}
-	send.AddRecipient(u, amount)
+	send.AddRecipient(u, big.NewInt(int64(amount)))
 
 	txData, err := send.MarshalBinary()
 	if err != nil {
