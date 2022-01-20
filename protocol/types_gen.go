@@ -38,6 +38,7 @@ type AnchorMetadata struct {
 	Account     *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Index       uint64   `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	SourceIndex uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
+	Entry       []byte   `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
 type AnchoredRecord struct {
@@ -513,6 +514,10 @@ func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
 	}
 
 	if !(v.SourceIndex == u.SourceIndex) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Entry, u.Entry)) {
 		return false
 	}
 
@@ -1463,6 +1468,8 @@ func (v *AnchorMetadata) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(v.SourceIndex)
 
+	n += encoding.BytesBinarySize(v.Entry)
+
 	return n
 }
 
@@ -2288,6 +2295,8 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.UvarintMarshalBinary(v.Index))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.SourceIndex))
+
+	buffer.Write(encoding.BytesMarshalBinary(v.Entry))
 
 	return buffer.Bytes(), nil
 }
@@ -3263,6 +3272,13 @@ func (v *AnchorMetadata) UnmarshalBinary(data []byte) error {
 		v.SourceIndex = x
 	}
 	data = data[encoding.UvarintBinarySize(v.SourceIndex):]
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
+	} else {
+		v.Entry = x
+	}
+	data = data[encoding.BytesBinarySize(v.Entry):]
 
 	return nil
 }
@@ -4810,6 +4826,22 @@ func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ChainMetadata
+		Account     *url.URL `json:"account,omitempty"`
+		Index       uint64   `json:"index,omitempty"`
+		SourceIndex uint64   `json:"sourceIndex,omitempty"`
+		Entry       *string  `json:"entry,omitempty"`
+	}{}
+	u.ChainMetadata = v.ChainMetadata
+	u.Account = v.Account
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	return json.Marshal(&u)
+}
+
 func (v *AnchoredRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Record *string `json:"record,omitempty"`
@@ -5239,6 +5271,34 @@ func (v *WriteDataResult) MarshalJSON() ([]byte, error) {
 	u.Type = v.GetType()
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	return json.Marshal(&u)
+}
+
+func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ChainMetadata
+		Account     *url.URL `json:"account,omitempty"`
+		Index       uint64   `json:"index,omitempty"`
+		SourceIndex uint64   `json:"sourceIndex,omitempty"`
+		Entry       *string  `json:"entry,omitempty"`
+	}{}
+	u.ChainMetadata = v.ChainMetadata
+	u.Account = v.Account
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainMetadata = u.ChainMetadata
+	v.Account = u.Account
+	v.Index = u.Index
+	v.SourceIndex = u.SourceIndex
+	if x, err := encoding.BytesFromJSON(u.Entry); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
+	} else {
+		v.Entry = x
+	}
+	return nil
 }
 
 func (v *AnchoredRecord) UnmarshalJSON(data []byte) error {

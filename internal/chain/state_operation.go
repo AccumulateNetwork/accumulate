@@ -223,7 +223,7 @@ func (op *addDataEntry) Execute(st *stateCache) ([]state.Chain, error) {
 		return nil, fmt.Errorf("failed to add entry to data chain of %q: %v", op.url, err)
 	}
 
-	err = didAddChainEntry(st.nodeUrl, st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, uint64(index), 0)
+	err = didAddChainEntry(st.nodeUrl, st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, op.hash, uint64(index), 0)
 	if err != nil {
 		return nil, err
 	}

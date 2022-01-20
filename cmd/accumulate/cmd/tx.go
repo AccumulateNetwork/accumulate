@@ -106,6 +106,7 @@ func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, err
 
 	params := new(api2.TxnQuery)
 	params.Txid = hash
+	params.Prove = TxProve
 
 	if wait > 0 {
 		params.Wait = wait

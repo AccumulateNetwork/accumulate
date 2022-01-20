@@ -181,7 +181,7 @@ func (app *Accumulator) Query(reqQuery abci.RequestQuery) (resQuery abci.Respons
 		return resQuery
 	}
 
-	k, v, customErr := app.Chain.Query(qu)
+	k, v, customErr := app.Chain.Query(qu, reqQuery.Height, reqQuery.Prove)
 	switch {
 	case customErr == nil:
 		//Ok

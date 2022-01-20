@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -17,7 +18,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/state"
 )
 
-func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encoding.BinaryMarshaler, error) {
+func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]byte, encoding.BinaryMarshaler, error) {
 	qv := u.QueryValues()
 	switch {
 	case qv.Get("txid") != "":
@@ -27,7 +28,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 			return nil, nil, fmt.Errorf("invalid txid %q: %v", qv.Get("txid"), err)
 		}
 
-		v, err := m.queryByTxId(batch, txid)
+		v, err := m.queryByTxId(batch, txid, prove)
 		return []byte("tx"), v, err
 
 	case u.Fragment == "":
@@ -118,7 +119,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
 			}
 
-			res, err := m.queryByTxId(batch, txid)
+			res, err := m.queryByTxId(batch, txid, prove)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -364,7 +365,7 @@ func (m *Executor) queryDirectoryByChainId(batch *database.Batch, chainId []byte
 	return resp, nil
 }
 
-func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.ResponseByTxId, error) {
+func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (*query.ResponseByTxId, error) {
 	var err error
 
 	tx := batch.Transaction(txid)
@@ -400,7 +401,9 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 	}
 
 	qr := query.ResponseByTxId{}
+	copy(qr.TxId[:], txid)
 	qr.Height = -1
+
 	txObj := new(state.Object)
 	txObj.Entry, err = txState.MarshalBinary()
 	if err != nil {
@@ -430,7 +433,54 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte) (*query.Respo
 		qr.TxSynthTxIds = append(qr.TxSynthTxIds, synth[:]...)
 	}
 
-	copy(qr.TxId[:], txid)
+	if !prove {
+		return &qr, nil
+	}
+
+	rootChain, err := batch.Account(m.Network.NodeUrl(protocol.Ledger)).ReadChain(protocol.MinorRootChain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read the minor root chain: %v", err)
+	}
+
+	chainIndex, err := indexing.TransactionChain(batch, txid).Get()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load transaction chain index: %v", err)
+	}
+
+	qr.Receipts = make([]*query.TxReceipt, len(chainIndex.Entries))
+	for i, entry := range chainIndex.Entries {
+		receipt := new(query.TxReceipt)
+		qr.Receipts[i] = receipt
+		receipt.Account = entry.Account
+		receipt.Chain = entry.Chain
+		receipt.Receipt.Start = txid
+
+		accountChain, err := batch.Account(entry.Account).ReadChain(entry.Chain)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read chain %s of %v: %v", entry.Chain, entry.Account, err)
+		}
+
+		accountReceipt, err := accountChain.Receipt(int64(entry.ChainEntry), int64(entry.ChainAnchor))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get a receipt %s of %v from %d to %d: %v", entry.Chain, entry.Account, entry.ChainEntry, entry.ChainAnchor, err)
+		}
+
+		rootReceipt, err := rootChain.Receipt(int64(entry.RootEntry), int64(entry.RootAnchor))
+		if err != nil {
+			return nil, fmt.Errorf("failed to get a receipt the minor root chain from %d to %d: %v", entry.RootEntry, entry.RootAnchor, err)
+		}
+
+		r, err := accountReceipt.Combine(rootReceipt)
+		if err != nil {
+			return nil, fmt.Errorf("failed to combined chain receipt and root receipt: %v", err)
+		}
+
+		receipt.Receipt.Entries = make([]protocol.ReceiptEntry, len(r.Nodes))
+		for i, node := range r.Nodes {
+			receipt.Receipt.Entries[i] = protocol.ReceiptEntry{Hash: node.Hash, Right: node.Right}
+		}
+	}
+
 	return &qr, nil
 }
 
@@ -451,7 +501,7 @@ func (m *Executor) queryTxHistoryByChainId(batch *database.Batch, id []byte, sta
 	}
 
 	for _, txid := range txids {
-		qr, err := m.queryByTxId(batch, txid)
+		qr, err := m.queryByTxId(batch, txid, false)
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
 		}
@@ -528,7 +578,7 @@ func (m *Executor) queryDataSet(batch *database.Batch, u *url.URL, start int64, 
 	return &qr, nil
 }
 
-func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
+func (m *Executor) Query(q *query.Query, _ int64, prove bool) (k, v []byte, err *protocol.Error) {
 	batch := m.DB.Begin()
 	defer batch.Discard()
 
@@ -539,7 +589,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeUnMarshallingError, Message: err}
 		}
-		qr, err := m.queryByTxId(batch, txr.TxId[:])
+		qr, err := m.queryByTxId(batch, txr.TxId[:], prove)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
 		}
@@ -577,7 +627,7 @@ func (m *Executor) Query(q *query.Query) (k, v []byte, err *protocol.Error) {
 		}
 
 		var obj encoding.BinaryMarshaler
-		k, obj, err = m.queryByUrl(batch, u)
+		k, obj, err = m.queryByUrl(batch, u, prove)
 		if err != nil {
 			return nil, nil, &protocol.Error{Code: protocol.CodeTxnQueryError, Message: err}
 		}

@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
@@ -361,6 +362,13 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		return err
 	}
 
+	// Pending transaction-chain index entries
+	type txChainIndexEntry struct {
+		indexing.TransactionChainEntry
+		Txid []byte
+	}
+	txChainEntries := make([]*txChainIndexEntry, 0, len(ledgerState.Updates))
+
 	// Add an anchor to the root chain for every updated chain
 	accountSeen := map[string]bool{}
 	updates := ledgerState.Updates
@@ -382,9 +390,23 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		}
 
 		// Add its anchor to the root chain
+		rootIndex := rootChain.Height()
 		err = rootChain.AddEntry(recordChain.Anchor())
 		if err != nil {
 			return err
+		}
+
+		// Add a pending transaction-chain index update
+		if u.Type == protocol.ChainTypeTransaction {
+			e := new(txChainIndexEntry)
+			e.Txid = u.Entry
+			e.Account = u.Account
+			e.Chain = u.Name
+			e.Block = uint64(m.blockIndex)
+			e.ChainEntry = u.Index
+			e.ChainAnchor = uint64(recordChain.Height()) - 1
+			e.RootEntry = uint64(rootIndex)
+			txChainEntries = append(txChainEntries, e)
 		}
 
 		// Once for each account
@@ -466,5 +488,20 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		Account: m.Network.NodeUrl(),
 		Index:   uint64(m.blockIndex - 1),
 	})
-	return rootChain.AddEntry(m.blockBatch.RootHash())
+
+	err = rootChain.AddEntry(m.blockBatch.RootHash())
+	if err != nil {
+		return err
+	}
+
+	// Update the transaction-chain index
+	for _, e := range txChainEntries {
+		e.RootAnchor = uint64(rootChain.Height()) - 1
+		err = indexing.TransactionChain(m.blockBatch, e.Txid).Add(&e.TransactionChainEntry)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -12,14 +12,15 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
-func addChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
+func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
 	// Check if the account exists
-	_, err := batch.Account(u).GetState()
+	_, err := batch.Account(account).GetState()
 	if err != nil {
 		return err
 	}
 
-	chain, err := batch.Account(u).Chain(name, typ)
+	// Add an entry to the chain
+	chain, err := batch.Account(account).Chain(name, typ)
 	if err != nil {
 		return err
 	}
@@ -30,10 +31,19 @@ func addChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name str
 		return err
 	}
 
-	return didAddChainEntry(nodeUrl, batch, u, name, typ, uint64(index), sourceIndex)
+	// // Add an index entry
+	// if typ == protocol.ChainTypeTransaction {
+	// 	err = indexing.TransactionChain(batch, entry).Add(account, name, uint64(index))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+	// }
+
+	// Update the ledger
+	return didAddChainEntry(nodeUrl, batch, account, name, typ, entry, uint64(index), sourceIndex)
 }
 
-func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, index, sourceIndex uint64) error {
+func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex uint64) error {
 	ledger := batch.Account(nodeUrl.JoinPath(protocol.Ledger))
 	ledgerState := protocol.NewInternalLedger()
 	err := ledger.GetStateAs(ledgerState)
@@ -58,6 +68,7 @@ func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name 
 	meta.Account = u
 	meta.Index = index
 	meta.SourceIndex = sourceIndex
+	meta.Entry = entry
 	ledgerState.Updates = append(ledgerState.Updates, meta)
 	return ledger.PutState(ledgerState)
 }

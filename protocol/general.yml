@@ -31,6 +31,8 @@ AnchorMetadata:
       type: uvarint
     - name: SourceIndex
       type: uvarint
+    - name: Entry
+      type: bytes
 
 DataEntry:
   fields:

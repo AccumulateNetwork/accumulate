@@ -78,3 +78,21 @@ ResponseByTxId:
       type: slice
       slice:
         type: bytes
+    - name: Receipts
+      type: slice
+      slice:
+        type: TxReceipt
+        marshal-as: reference
+        pointer: true
+
+TxReceipt:
+  fields:
+    - name: Account
+      type: url.URL
+      marshal-as: reference
+      pointer: true
+    - name: Chain
+      type: string
+    - name: Receipt
+      type: protocol.Receipt
+      marshal-as: reference
