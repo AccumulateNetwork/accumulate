@@ -1,23 +1,11 @@
 package protocol
 
 import (
-	"encoding/json"
 	"fmt"
-	"math/big"
 	"testing"
 )
 
 func TestDataEntry(t *testing.T) {
-
-	u := struct {
-		Url    string  `json:"url,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
-		Txid   *string `json:"txid,omitempty"`
-	}{}
-	u.Amount = *big.NewInt(1234)
-	data, err := json.Marshal(&u)
-	t.Log(string(data))
-
 	de := DataEntry{}
 
 	de.Data = []byte("test data entry")
