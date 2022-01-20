@@ -460,7 +460,6 @@ var (
 )
 
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
-
 	//query the token
 	tokenData, err := Get(tokenUrl)
 	if err != nil {
@@ -694,9 +693,7 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		var out string
 		for i := range tx.ToAccount {
-			bi := big.Int{}
-			bi.SetInt64(int64(tx.ToAccount[i].Amount))
-			amt, err := formatAmount("acc://ACME", &bi)
+			amt, err := formatAmount("acc://ACME", &tx.ToAccount[i].Amount)
 			if err != nil {
 				amt = "unknown"
 			}

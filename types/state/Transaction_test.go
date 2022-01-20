@@ -3,6 +3,7 @@ package state_test
 import (
 	"bytes"
 	"crypto/sha256"
+	"math/big"
 	"testing"
 
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -16,7 +17,7 @@ import (
 
 func TestTransactionState(t *testing.T) {
 	nts1 := protocol.SendTokens{}
-	nts1.AddRecipient(&url.URL{Authority: "BlueWagon", Path: "/account"}, uint64(100*100000000))
+	nts1.AddRecipient(&url.URL{Authority: "BlueWagon", Path: "/account"}, big.NewInt(int64(100*100000000)))
 
 	we := acctesting.NewWalletEntry()
 	u, err := url.Parse(we.Addr)
