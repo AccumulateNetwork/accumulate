@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"reflect"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/service"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
@@ -27,13 +27,14 @@ var ErrTimedOut = errors.New("timed out")
 // in the system
 
 type txBatch struct {
-	networkId int
-	tx        [][]byte
+	route connections.Route
+	tx    [][]byte
 }
 
 type Relay struct {
 	connRouter  connections.ConnectionRouter
-	txQueue     []txBatch
+	connMgr     connections.ConnectionManager
+	batches     map[connections.Route]*txBatch
 	numNetworks uint64
 	mutex       *sync.Mutex
 
@@ -43,7 +44,7 @@ type Relay struct {
 }
 
 // New Create the new bouncer and initialize it with a client connection to each of the nodes
-func New(connRouter connections.ConnectionRouter) *Relay {
+func New(connRouter connections.ConnectionRouter, connMgr connections.ConnectionManager) *Relay {
 	/*
 	   //	relayClient, ok := route.(relay.Client)
 
@@ -55,6 +56,7 @@ func New(connRouter connections.ConnectionRouter) *Relay {
 	*/
 	r := &Relay{}
 	r.connRouter = connRouter
+	r.connMgr = connMgr
 	r.mutex = new(sync.Mutex)
 	r.resultMu = new(sync.Mutex)
 	r.results = map[[32]byte]chan<- abci.TxResult{}
@@ -66,15 +68,9 @@ func New(connRouter connections.ConnectionRouter) *Relay {
 // resetBatches gets called after each call to BatchSend().  It will thread off the batch of transactions it has, then
 // create a new batch by calling this function
 func (r *Relay) resetBatches() {
-	r.txQueue = make([]txBatch, r.numNetworks)
-}
-
-func (r *Relay) GetNetworkId(routing uint64) int {
-	return int(routing % r.numNetworks)
-}
-
-func (r *Relay) GetNetworkCount() uint64 {
-	return r.numNetworks
+	for key := range r.batches {
+		delete(r.batches, key)
+	}
 }
 
 func (r *Relay) Start() error {
@@ -84,15 +80,16 @@ func (r *Relay) Start() error {
 		return errors.New("already started")
 	}
 
+	allNodeContexts := r.connMgr.GetAllNodeContexts()
 	r.stopResults = make(chan struct{})
-	cases := make([]reflect.SelectCase, 0, len(r.client)+1)
+	cases := make([]reflect.SelectCase, 0, len(allNodeContexts)+1)
 	cases = append(cases, reflect.SelectCase{
 		Dir:  reflect.SelectRecv,
 		Chan: reflect.ValueOf(r.stopResults),
 	})
 
-	for _, c := range r.client {
-		svc, _ := c.(service.Service)
+	for _, nodeCtx := range allNodeContexts { // TODO All nodes or just BVN's?
+		svc := nodeCtx.GetService()
 		if svc != nil {
 			err := svc.Start()
 			if err != nil {
@@ -105,7 +102,7 @@ func (r *Relay) Start() error {
 		// per TX hash does not work well. Tendermint does not clean up
 		// subscriptions sufficiently well, so old unused channels lead to
 		// blockages.
-		ch, err := c.Subscribe(context.Background(), "acc-relay", "tm.event = 'Tx'")
+		ch, err := nodeCtx.GetRawClient().Subscribe(context.Background(), "acc-relay", "tm.event = 'Tx'")
 		if err != nil {
 			failed = true
 			return err
@@ -155,9 +152,9 @@ func (r *Relay) Start() error {
 func (r *Relay) Stop() error {
 	var errs []string
 
-	for _, c := range r.client {
-		svc, ok := c.(service.Service)
-		if !ok {
+	for _, nodeCtx := range r.connMgr.GetAllNodeContexts() {
+		svc := nodeCtx.GetService()
+		if svc == nil {
 			continue
 		}
 
@@ -190,18 +187,23 @@ func (r *Relay) SubscribeTx(hash [32]byte, ch chan<- abci.TxResult) error {
 //BatchTx
 //appends the transaction to the transaction queue and returns the tx hash used to track
 //in tendermint, the index within the queue, and the network the transaction will be submitted on
-func (r *Relay) BatchTx(routing uint64, tx tmtypes.Tx) (ti TransactionInfo) {
-	i := r.GetNetworkId(routing)
+func (r *Relay) BatchTx(accUrl *url.URL, tx tmtypes.Tx) (ti TransactionInfo, err error) {
+	route, batch, err := r.getRouteAndBatch(accUrl)
+	if err != nil {
+		return ti, err
+	}
+
 	r.mutex.Lock()
-	r.txQueue[i].tx = append(r.txQueue[i].tx, tx)
-	r.txQueue[i].networkId = i
+
+	batch.tx = append(batch.tx, tx)
+	batch.route = route
 	r.mutex.Unlock()
-	index := len(r.txQueue[i].tx) - 1
+	index := len(batch.tx) - 1
 	txReference := sha256.Sum256(tx)
 	ti.ReferenceId = txReference[:]
-	ti.NetworkId = i
 	ti.QueueIndex = index
-	return ti
+	ti.Route = route
+	return ti, nil
 }
 
 // BatchSend
@@ -213,35 +215,54 @@ func (r *Relay) BatchSend() <-chan BatchedStatus {
 	//sort out the requests
 	r.mutex.Lock()
 
-	for i, c := range r.client {
-		l := len(r.txQueue[i].tx)
-		if _, ok := c.(Batchable); l > 1 && ok {
-			sendTxsAsBatch = append(sendTxsAsBatch, r.txQueue[i])
+	for _, txb := range r.batches {
+		l := len(txb.tx)
+		bbc := txb.route.GetBatchBroadcastClient()
+		if bbc != nil {
+			sendTxsAsBatch = append(sendTxsAsBatch, *txb)
 		} else if l > 0 {
-			sendTxsAsSingle = append(sendTxsAsSingle, r.txQueue[i])
+			sendTxsAsSingle = append(sendTxsAsSingle, *txb)
 		}
 		//reset the queue here.
-		r.txQueue[i] = txBatch{}
+		delete(r.batches, txb.route)
 	}
 	stat := make(chan BatchedStatus, 1)
-	go dispatch(r.client, sendTxsAsBatch, sendTxsAsSingle, stat)
+	go dispatch(sendTxsAsBatch, sendTxsAsSingle, stat)
 	r.resetBatches()
 
 	r.mutex.Unlock()
 	return stat
 }
 
+func (r *Relay) getRouteAndBatch(u *url.URL) (connections.Route, *txBatch, error) {
+	route, err := r.connRouter.SelectRoute(u, false)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	if route.GetNetworkGroup() == connections.Local {
+		return route, nil, nil
+	}
+
+	batch := r.batches[route]
+	if batch == nil {
+		batch = new(txBatch)
+		r.batches[route] = batch
+	}
+	return route, batch, nil
+}
+
 // dispatch
 // This function is executed as a go routine to send out all the batches
-func dispatch(client []Client, sendAsBatch []txBatch, sendAsSingle []txBatch, stat chan BatchedStatus) {
+func dispatch(sendAsBatch []txBatch, sendAsSingle []txBatch, stat chan BatchedStatus) {
 	defer close(stat)
 
 	batchedStatus := make(chan BatchedStatus)
 	singlesStatus := make(chan BatchedStatus)
 
 	//now send out the batches
-	go dispatchBatch(client, sendAsBatch, batchedStatus)
-	go dispatchSingles(client, sendAsSingle, singlesStatus)
+	go dispatchBatch(sendAsBatch, batchedStatus)
+	go dispatchSingles(sendAsSingle, singlesStatus)
 
 	bStatus := <-batchedStatus
 	sStatus := <-singlesStatus
@@ -251,7 +272,7 @@ func dispatch(client []Client, sendAsBatch []txBatch, sendAsSingle []txBatch, st
 	stat <- bs
 }
 
-func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedStatus) {
+func dispatchBatch(sendBatches []txBatch, status chan BatchedStatus) {
 	defer close(status)
 
 	bs := BatchedStatus{}
@@ -259,12 +280,11 @@ func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedSt
 
 	var batches []Batch
 	for i, txb := range sendBatches {
-		batches = append(batches, client[txb.networkId].(Batchable).NewBatch())
+		batches = append(batches, txb.route.GetBatchBroadcastClient().NewBatch())
 		for _, tx := range sendBatches[i].tx {
 			if debugTxSend {
 				fmt.Printf("Send TX %X\n", sha256.Sum256(tx))
 			}
-			bs.Status[i].NetworkId = txb.networkId
 			_, _ = batches[i].BroadcastTxSync(context.Background(), tx)
 		}
 	}
@@ -277,20 +297,20 @@ func dispatchBatch(client []Client, sendBatches []txBatch, status chan BatchedSt
 	status <- bs
 }
 
-func dispatchSingles(client []Client, sendSingles []txBatch, status chan BatchedStatus) {
+func dispatchSingles(sendSingles []txBatch, status chan BatchedStatus) {
 	defer close(status)
 
 	bs := BatchedStatus{}
 	bs.Status = make([]DispatchStatus, len(sendSingles))
 
 	for i, single := range sendSingles {
-		bs.Status[i].NetworkId = single.networkId
 		bs.Status[i].Returns = make([]interface{}, len(single.tx))
 		for j := range single.tx {
 			if debugTxSend {
 				fmt.Printf("Send TX %X\n", sha256.Sum256(single.tx[j]))
 			}
-			bs.Status[i].Returns[j], bs.Status[i].Err = client[single.networkId].BroadcastTxSync(context.Background(), single.tx[j])
+			bs.Status[i].Returns[j], bs.Status[i].Err = single.route.GetBroadcastClient().BroadcastTxSync(context.Background(), single.tx[j])
+			bs.Status[i].Route = single.route
 		}
 	}
 
@@ -305,17 +325,38 @@ func (r *Relay) SendTx(tx tmtypes.Tx) (*ctypes.ResultBroadcastTx, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.client[r.GetNetworkId(gtx.Transaction.Origin.Routing())].BroadcastTxAsync(context.Background(), tx)
+
+	route, err := r.connRouter.SelectRoute(gtx.Transaction.Origin, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return route.GetBroadcastClient().BroadcastTxAsync(context.Background(), tx)
 }
 
 // Query
 // This function will return the state object from the accumulate network for a given URL.
-func (r *Relay) Query(routing uint64, data bytes.HexBytes) (ret *ctypes.ResultABCIQuery, err error) {
-	return r.client[r.GetNetworkId(routing)].ABCIQuery(context.Background(), "/abci_query", data)
+func (r *Relay) Query(route connections.Route, data bytes.HexBytes) (ret *ctypes.ResultABCIQuery, err error) {
+	return route.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", data)
 }
 
-func (r *Relay) GetTx(routing uint64, hash []byte) (*ctypes.ResultTx, error) {
-	return r.client[r.GetNetworkId(routing)].Tx(context.Background(), hash, false)
+// QueryByUrl
+// This function will return the state object from the accumulate network for a given URL.
+func (r *Relay) QueryByUrl(adiUrl *url.URL, data bytes.HexBytes) (ret *ctypes.ResultABCIQuery, err error) {
+	route, err := r.GetConnectionRouter().SelectRoute(adiUrl, false)
+	if err != nil {
+		return nil, err
+	}
+
+	return route.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", data)
+}
+
+func (r *Relay) GetTx(route connections.Route, hash []byte) (*ctypes.ResultTx, error) {
+	return route.GetRawClient().Tx(context.Background(), hash, false)
+}
+
+func (r *Relay) GetConnectionRouter() connections.ConnectionRouter {
+	return r.connRouter
 }
 
 func decodeTX(tx tmtypes.Tx) (*transactions.Envelope, error) {

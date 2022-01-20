@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api"
@@ -48,16 +48,16 @@ func (q *Query) BroadcastTx(gtx *transactions.Envelope, done chan abci.TxResult)
 		}
 	}
 
-	ti = q.txRelay.BatchTx(gtx.Transaction.Origin.Routing(), payload)
-	return ti, nil
+	ti, err = q.txRelay.BatchTx(gtx.Transaction.Origin, payload)
+	return ti, err
 }
 
 func (q *Query) SubscribeTx(txRef [32]byte, done chan abci.TxResult) error {
 	return q.txRelay.SubscribeTx(txRef, done)
 }
 
-func (q *Query) GetTx(routing uint64, txRef [32]byte) (*ctypes.ResultTx, error) {
-	return q.txRelay.GetTx(routing, txRef[:])
+func (q *Query) GetTx(route connections.Route, txRef [32]byte) (*ctypes.ResultTx, error) {
+	return q.txRelay.GetTx(route, txRef[:])
 }
 
 func (q *Query) QueryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
@@ -81,7 +81,7 @@ func (q *Query) QueryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
 		return nil, err
 	}
 
-	return q.txRelay.Query(qu.RouteId, qd)
+	return q.txRelay.QueryByUrl(u, qd)
 }
 
 func (q *Query) QueryDirectoryByUrl(url string) (*ctypes.ResultABCIQuery, error) {
@@ -105,7 +105,7 @@ func (q *Query) QueryDirectoryByUrl(url string) (*ctypes.ResultABCIQuery, error)
 		return nil, err
 	}
 
-	return q.txRelay.Query(qu.RouteId, qd)
+	return q.txRelay.QueryByUrl(u, qd)
 }
 
 func (q *Query) QueryByTxId(txId []byte) (resp *ctypes.ResultABCIQuery, err error) {
@@ -138,14 +138,19 @@ func (q *Query) queryAll(apiQuery *query.Query) (ret *ctypes.ResultABCIQuery, er
 	//TODO: when the data servers become a thing, we will query that instead to get the information we need
 	//in the mean time, we will need to ping all the bvc's for the needed info.  not ideal by any means, but it works.
 	var results []chan queryData
-	for i := uint64(0); i < q.txRelay.GetNetworkCount(); i++ {
+
+	bvnUrlList, err := q.txRelay.GetConnectionRouter().GetBvnAdiUrls()
+	if err != nil {
+		return nil, err
+	}
+
+	for i, bvnUrl := range bvnUrlList {
 		results = append(results, make(chan queryData))
-		apiQuery.RouteId = i
 		payload, err := apiQuery.MarshalBinary()
 		if err != nil {
 			return nil, err
 		}
-		go q.query(i, payload, results[i])
+		go q.query(bvnUrl, payload, results[i])
 	}
 
 	for i := range results {
@@ -170,10 +175,10 @@ func (q *Query) queryAll(apiQuery *query.Query) (ret *ctypes.ResultABCIQuery, er
 
 //query
 //internal query call to a targeted bvc.  populates the channel with the query results
-func (q *Query) query(i uint64, payload bytes.HexBytes, r chan queryData) {
+func (q *Query) query(adiUrl *url2.URL, payload bytes.HexBytes, r chan queryData) {
 
 	qd := queryData{}
-	qd.ret, qd.err = q.txRelay.Query(i, payload)
+	qd.ret, qd.err = q.txRelay.QueryByUrl(adiUrl, payload)
 
 	r <- qd
 }
@@ -272,7 +277,7 @@ func (q *Query) GetDataSetByUrl(url string, start uint64, limit uint64, expand b
 		return nil, err
 	}
 
-	res, err := q.txRelay.Query(qu.RouteId, qd)
+	res, err := q.txRelay.QueryByUrl(u, qd)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +351,7 @@ func (q *Query) GetDataByEntryHash(url string, entryHash []byte) (*acmeApi.APIDa
 		return nil, err
 	}
 
-	res, err := q.txRelay.Query(qu.RouteId, qd)
+	res, err := q.txRelay.QueryByUrl(u, qd)
 	if err != nil {
 		return nil, err
 	}
@@ -400,7 +405,7 @@ func (q *Query) QueryDataByUrl(url string) (*acmeApi.APIDataResponse, error) {
 		return nil, err
 	}
 
-	res, err := q.txRelay.Query(qu.RouteId, qd)
+	res, err := q.txRelay.QueryByUrl(u, qd)
 	if err != nil {
 		return nil, err
 	}
@@ -564,7 +569,7 @@ func (q *Query) GetTransactionHistory(url string, start int64, limit int64) (*ap
 		return nil, err
 	}
 
-	res, err := q.txRelay.Query(qu.RouteId, qd)
+	res, err := q.txRelay.QueryByUrl(u, qd)
 	if err != nil {
 		return nil, err
 	}

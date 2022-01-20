@@ -2,6 +2,8 @@ package connections
 
 import (
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/tendermint/tendermint/libs/service"
+	"github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/ybbus/jsonrpc/v2"
 	"net"
 	"time"
@@ -24,6 +26,10 @@ const (
 	OtherSubnet
 )
 
+type RawClient struct {
+	*http.HTTP
+}
+
 type nodeContext struct {
 	subnetName           string
 	address              string
@@ -37,6 +43,8 @@ type nodeContext struct {
 	broadcastClient      ABCIBroadcastClient
 	batchBroadcastClient BatchABCIBroadcastClient
 	jsonRpcClient        jsonrpc.RPCClient
+	rawClient            RawClient
+	service              service.Service
 	lastError            error
 	lastErrorExpiryTime  time.Time
 }
@@ -59,6 +67,10 @@ func (nc *nodeContext) GetJsonRpcClient() jsonrpc.RPCClient {
 
 func (nc *nodeContext) GetQueryClient() ABCIQueryClient {
 	return nc.queryClient
+}
+
+func (nc *nodeContext) GetRawClient() RawClient {
+	return nc.rawClient
 }
 
 func (nc *nodeContext) GetBroadcastClient() ABCIBroadcastClient {
@@ -99,4 +111,8 @@ func (nc *nodeContext) ReportErrorStatus(status NodeStatus, err error) {
 	nc.metrics.status = status
 	nc.lastError = err
 	nc.lastErrorExpiryTime = time.Now().Add(UnhealthyNodeCheckInterval)
+}
+
+func (nc *nodeContext) GetService() service.Service {
+	return nc.service
 }

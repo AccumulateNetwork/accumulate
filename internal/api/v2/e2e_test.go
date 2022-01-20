@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -222,7 +223,9 @@ func TestValidate(t *testing.T) {
 			Key: adiKey[32:],
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
+		fmt.Println("==== Query Key Index finished ====")
 	})
+	fmt.Println("==== All tests finished ====")
 }
 
 func TestTokenTransfer(t *testing.T) {
@@ -301,5 +304,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 			queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
 			assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
 		}
+		fmt.Println("==== TestFaucetMultiNetwork finished1 ====")
 	})
+	fmt.Println("==== TestFaucetMultiNetwork finished2 ====")
 }

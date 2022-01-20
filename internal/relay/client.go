@@ -3,6 +3,7 @@ package relay
 import (
 	"context"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/rpc/client"
@@ -46,14 +47,14 @@ func (c rpcClient) NewBatch() Batch {
 
 type TransactionInfo struct {
 	ReferenceId []byte //tendermint reference id
-	NetworkId   int    //network the transaction will be submitted to
 	QueueIndex  int    //the transaction's place in line
+	Route       connections.Route
 }
 
 type DispatchStatus struct {
-	NetworkId int
-	Returns   []interface{}
-	Err       error
+	Route   connections.Route
+	Returns []interface{}
+	Err     error
 }
 
 type BatchedStatus struct {
@@ -62,7 +63,7 @@ type BatchedStatus struct {
 
 func (bs *BatchedStatus) ResolveTransactionResponse(ti TransactionInfo) (*ctypes.ResultBroadcastTx, error) {
 	for _, s := range bs.Status {
-		if ti.NetworkId == s.NetworkId {
+		if ti.Route == s.Route {
 			if len(s.Returns) < ti.QueueIndex {
 				return nil, fmt.Errorf("invalid queue length for batch dispatch response, unable to find transaction")
 			}

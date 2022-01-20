@@ -123,7 +123,15 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 			})
 		}
 	}
+
+	for _, netName := range subnets {
+		for _, daemon := range daemons[netName] {
+			daemon.ConnMgr.ResetErrors()
+		}
+	}
+
 	t.Cleanup(func() {
+		fmt.Println("==== Cleaning up ====")
 		errg := new(errgroup.Group)
 		for _, netName := range subnets {
 			for _, daemon := range daemons[netName] {

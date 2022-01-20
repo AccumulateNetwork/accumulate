@@ -199,7 +199,7 @@ func WaitForTxnBatch(query *api.Query) error {
 			if r.Code != 0 {
 				return fmt.Errorf("got code %d", r.Code)
 			}
-			err := WaitForTxHashV1(query, uint64(s.NetworkId), r.Hash)
+			err := WaitForTxHashV1(query, s.Route, r.Hash)
 			if err != nil {
 				return err
 			}

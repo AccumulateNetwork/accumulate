@@ -25,7 +25,7 @@ func TestDebugFaucet(t *testing.T) {
 
 	found := []int{}
 	for i, c := range clients {
-		q := api.NewQuery(relay.New(c))
+		q := api.NewQuery(relay.New(c, nil))
 		resp, err := q.QueryByUrl(u.String())
 		require.NoError(t, err)
 		if resp.Response.Code != 0 {

@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"fmt"
 	"testing"
 
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -67,4 +68,5 @@ func (s *Suite) TestCreateLiteAccount() {
 	account = new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx-total), account.Balance.Int64())
+	fmt.Println("==== TestCreateLiteAccount1 finished ====")
 }

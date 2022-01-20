@@ -20,11 +20,13 @@ import (
 const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml?
 
 type ConnectionManager interface {
-	getBVNContextMap() map[string][]*nodeContext
-	getDNContextList() []*nodeContext
-	getFNContextList() []*nodeContext
 	GetLocalNodeContext() *nodeContext
 	GetLocalClient() *local.Local
+	GetBVNContextMap() map[string][]*nodeContext
+	GetDNContextList() []*nodeContext
+	GetFNContextList() []*nodeContext
+	GetAllNodeContexts() []*nodeContext
+	ResetErrors()
 }
 
 type ConnectionInitializer interface {
@@ -36,6 +38,7 @@ type connectionManager struct {
 	bvnCtxMap    map[string][]*nodeContext
 	dnCtxList    []*nodeContext
 	fnCtxList    []*nodeContext
+	all          []*nodeContext
 	localNodeCtx *nodeContext
 	localClient  *local.Local
 	logger       log.Logger
@@ -85,16 +88,20 @@ func NewConnectionManager(config *config.Config, logger log.Logger) ConnectionMa
 	return cm
 }
 
-func (cm *connectionManager) getBVNContextMap() map[string][]*nodeContext {
+func (cm *connectionManager) GetBVNContextMap() map[string][]*nodeContext {
 	return cm.bvnCtxMap
 }
 
-func (cm *connectionManager) getDNContextList() []*nodeContext {
+func (cm *connectionManager) GetDNContextList() []*nodeContext {
 	return cm.dnCtxList
 }
 
-func (cm *connectionManager) getFNContextList() []*nodeContext {
+func (cm *connectionManager) GetFNContextList() []*nodeContext {
 	return cm.fnCtxList
+}
+
+func (cm *connectionManager) GetAllNodeContexts() []*nodeContext {
+	return cm.all
 }
 
 func (cm *connectionManager) GetLocalNodeContext() *nodeContext {
@@ -103,6 +110,14 @@ func (cm *connectionManager) GetLocalNodeContext() *nodeContext {
 
 func (cm *connectionManager) GetLocalClient() *local.Local {
 	return cm.localClient
+}
+
+func (cm *connectionManager) ResetErrors() {
+	for _, nodeCtx := range cm.all {
+		nodeCtx.metrics.status = Unknown
+		nodeCtx.lastError = nil
+		nodeCtx.lastErrorExpiryTime = time.Now()
+	}
 }
 
 func (cm *connectionManager) buildNodeInventory() {
@@ -133,11 +148,14 @@ func (cm *connectionManager) buildNodeInventory() {
 					} else {
 						cm.bvnCtxMap[bvnName] = append(nodeList, nodeCtx)
 					}
+					cm.all = append(cm.all, nodeCtx)
 				case config.Directory:
 					cm.dnCtxList = append(cm.dnCtxList, nodeCtx)
+					cm.all = append(cm.all, nodeCtx)
 				}
 			case config.Follower:
 				cm.fnCtxList = append(cm.fnCtxList, nodeCtx)
+				cm.all = append(cm.all, nodeCtx)
 			}
 			if nodeCtx.networkGroup == Local {
 				cm.localNodeCtx = nodeCtx
@@ -241,6 +259,7 @@ func (cm *connectionManager) createAbciClients(nodeCtx *nodeContext) error {
 	case Local:
 		nodeCtx.queryClient = cm.localClient
 		nodeCtx.broadcastClient = cm.localClient
+		nodeCtx.service = cm.localClient
 	default:
 		offsetAddr, err := config.OffsetPort(nodeCtx.address, networks.TmRpcPortOffset)
 		if err != nil {
@@ -254,6 +273,8 @@ func (cm *connectionManager) createAbciClients(nodeCtx *nodeContext) error {
 		nodeCtx.queryClient = client
 		nodeCtx.broadcastClient = client
 		nodeCtx.batchBroadcastClient = client
+		nodeCtx.rawClient = RawClient{client}
+		nodeCtx.service = nodeCtx.rawClient
 	}
 	return nil
 }

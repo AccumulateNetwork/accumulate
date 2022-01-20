@@ -18,8 +18,9 @@ var dnNameMap = map[string]bool{
 type ConnectionRouter interface {
 	SelectRoute(url *url.URL, allowFollower bool) (Route, error)
 	GetLocalRoute() (Route, error)
-	GetAll() ([]Route, error)
-	GetAllBVNs() ([]Route, error)
+	GetAllRoutes() ([]Route, error)
+	GetBvnRoutes() ([]Route, error)
+	GetBvnAdiUrls() ([]*url.URL, error)
 }
 
 type connectionRouter struct {
@@ -47,6 +48,7 @@ type LocalRoute interface {
 
 type Route interface {
 	LocalRoute
+	GetRawClient() RawClient
 	GetNetworkGroup() NetworkGroup
 	GetBatchBroadcastClient() BatchABCIBroadcastClient
 	ReportError(err error)
@@ -54,13 +56,13 @@ type Route interface {
 }
 
 func NewConnectionRouter(connMgr ConnectionManager) ConnectionRouter {
-	bvnGroupMap := createBvnGroupMap(connMgr.getBVNContextMap())
+	bvnGroupMap := createBvnGroupMap(connMgr.GetBVNContextMap())
 	cr := &connectionRouter{
 		connectionMgr: connMgr,
 		bvnNames:      createKeyList(bvnGroupMap),
 		bvnGroupMap:   bvnGroupMap,
-		dnGroup:       nodeGroup{nodes: connMgr.getDNContextList()},
-		flGroup:       nodeGroup{nodes: connMgr.getFNContextList()},
+		dnGroup:       nodeGroup{nodes: connMgr.GetDNContextList()},
+		flGroup:       nodeGroup{nodes: connMgr.GetFNContextList()},
 	}
 	return cr
 }
@@ -84,9 +86,8 @@ func (cr *connectionRouter) GetLocalRoute() (Route, error) {
 	return localNodeCtx, nil
 }
 
-// GetAll is not currently in use, but could be used to verify the health of a seed list in the future, otherwise this can be pruned
-func (cr *connectionRouter) GetAll() ([]Route, error) {
-	routes, _ := cr.GetAllBVNs()
+func (cr *connectionRouter) GetAllRoutes() ([]Route, error) {
+	routes, _ := cr.GetBvnRoutes()
 	for _, route := range cr.dnGroup.nodes {
 		if route.IsHealthy() {
 			routes = append(routes, route)
@@ -104,7 +105,7 @@ func (cr *connectionRouter) GetAll() ([]Route, error) {
 	return routes, nil
 }
 
-func (cr *connectionRouter) GetAllBVNs() ([]Route, error) {
+func (cr *connectionRouter) GetBvnRoutes() ([]Route, error) {
 	routes := make([]Route, 0)
 	for _, group := range cr.bvnGroupMap {
 		bvn, err := cr.selectNodeFromGroup(group, false)
@@ -117,6 +118,14 @@ func (cr *connectionRouter) GetAllBVNs() ([]Route, error) {
 		return nil, NoHealthyNodes
 	}
 	return routes, nil
+}
+
+func (cr *connectionRouter) GetBvnAdiUrls() ([]*url.URL, error) {
+	urls := make([]*url.URL, 0)
+	for _, group := range cr.bvnGroupMap {
+		urls = append(urls, group.nodeUrl)
+	}
+	return urls, nil
 }
 
 func (cr *connectionRouter) selectNodeContext(adiUrl *url.URL, allowFollower bool) (*nodeContext, error) {

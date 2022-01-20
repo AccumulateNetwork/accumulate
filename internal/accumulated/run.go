@@ -21,7 +21,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/relay"
-	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
@@ -149,8 +148,6 @@ func (d *Daemon) Start() (err error) {
 	// Create a proxy local client which we will populate with the local client
 	// after the node has been created.
 	clientProxy := node.NewLocalClient()
-
-	bvnAddrs := d.Config.Accumulate.Network.BvnAddressesWithPortOffset(networks.TmRpcPortOffset)
 	d.query = apiv1.NewQuery(d.relay)
 
 	execOpts := chain.ExecutorOptions{
@@ -220,7 +217,7 @@ func (d *Daemon) Start() (err error) {
 
 	clientProxy.Set(lclClient)
 	if ok {
-		d.relay = relay.New(d.ConnRouter)
+		d.relay = relay.New(d.ConnRouter, d.ConnMgr)
 		if err != nil {
 			return fmt.Errorf("failed to create RPC relay: %v", err)
 		}

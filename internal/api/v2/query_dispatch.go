@@ -33,7 +33,7 @@ func (q *queryDispatch) queryAll(query func(*queryDirect) (interface{}, error)) 
 	errCh := make(chan error)       // Error channel
 	doneCh := make(chan struct{})   // Completion channel
 
-	allRoutes, err := q.connRouter.GetAllBVNs()
+	allRoutes, err := q.connRouter.GetBvnRoutes()
 	if err != nil {
 		return nil, err
 	}

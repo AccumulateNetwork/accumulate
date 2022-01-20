@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"strings"
 	"time"
 
@@ -15,7 +16,7 @@ import (
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 )
 
-func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
+func WaitForTxHashV1(query *api.Query, route connections.Route, txid []byte) error {
 	var txid32 [32]byte
 	copy(txid32[:], txid)
 
@@ -23,7 +24,7 @@ func WaitForTxHashV1(query *api.Query, routing uint64, txid []byte) error {
 	var r *coretypes.ResultTx
 	var err error
 	for {
-		r, err = query.GetTx(routing, txid32)
+		r, err = query.GetTx(route, txid32)
 		if err == nil {
 			break
 		}

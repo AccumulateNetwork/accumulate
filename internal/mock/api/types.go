@@ -220,6 +220,16 @@ type MockConnectionRouter struct {
 	recorder *MockConnectionRouterMockRecorder
 }
 
+func (m *MockConnectionRouter) GetBvnRoutes() ([]connections.Route, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockConnectionRouter) GetBvnAdiUrls() ([]*url.URL, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *MockConnectionRouter) GetLocalSubnetRoutes() ([]connections.Route, error) {
 	panic("implement me")
 }
@@ -230,6 +240,10 @@ type MockRoute struct {
 	subnetName      string
 	networkGroup    connections.NetworkGroup
 	client          jsonrpc.RPCClient
+}
+
+func (m MockRoute) GetRawClient() connections.RawClient {
+	panic("implement me")
 }
 
 func (m MockRoute) ReportError(err error) {
@@ -279,11 +293,11 @@ func (m *MockConnectionRouter) GetLocalRoute() (connections.Route, error) {
 	return m.route, nil
 }
 
-func (m *MockConnectionRouter) GetAll() ([]connections.Route, error) {
+func (m *MockConnectionRouter) GetAllRoutes() ([]connections.Route, error) {
 	return []connections.Route{m.route}, nil
 }
 
-func (m *MockConnectionRouter) GetAllBVNs() ([]connections.Route, error) {
+func (m *MockConnectionRouter) GetBVNRoutes() ([]connections.Route, error) {
 	return []connections.Route{m.route}, nil
 }
 

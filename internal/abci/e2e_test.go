@@ -46,6 +46,7 @@ func TestCreateLiteAccount(t *testing.T) {
 	for addr, bal := range balances {
 		require.Equal(t, bal, n.GetLiteTokenAccount(addr).Balance.Int64())
 	}
+	fmt.Println("==== TestCreateLiteAccount1 finished ====")
 }
 
 func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
