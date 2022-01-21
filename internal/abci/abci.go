@@ -17,6 +17,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 //go:generate go run github.com/golang/mock/mockgen -source abci.go -destination ../mock/abci/abci.go
@@ -45,6 +46,10 @@ type SynthTxnReference struct {
 // EndBlockRequest is the input parameter to Chain.EndBlock
 type EndBlockRequest struct{}
 
+type EndBlockResponse struct {
+	NewValidators []ed25519.PubKey
+}
+
 // Chain is the interface for the Accumulate transaction (chain) validator.
 type Chain interface {
 	Query(*apiQuery.Query) (k, v []byte, err *protocol.Error)
@@ -54,6 +59,6 @@ type Chain interface {
 	BeginBlock(BeginBlockRequest) (BeginBlockResponse, error)
 	CheckTx(*transactions.Envelope) (protocol.TransactionResult, *protocol.Error)
 	DeliverTx(*transactions.Envelope) (protocol.TransactionResult, *protocol.Error)
-	EndBlock(EndBlockRequest)
+	EndBlock(EndBlockRequest) EndBlockResponse
 	Commit() ([]byte, error)
 }
