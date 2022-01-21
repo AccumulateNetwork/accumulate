@@ -16,16 +16,16 @@ func (UpdateKeyPage) Type() types.TxType {
 	return types.TxTypeUpdateKeyPage
 }
 
-func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.UpdateKeyPage)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	page, ok := st.Origin.(*protocol.KeyPage)
 	if !ok {
-		return fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeKeyPage, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v, got %v", types.AccountTypeKeyPage, st.Origin.Header().Type)
 	}
 
 	// We're changing the height of the key page, so reset all the nonces
@@ -61,36 +61,36 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		book = new(protocol.KeyBook)
 		u, err := url.Parse(*page.KeyBook.AsString())
 		if err != nil {
-			return fmt.Errorf("invalid key book url : %s", *page.KeyBook.AsString())
+			return nil, fmt.Errorf("invalid key book url : %s", *page.KeyBook.AsString())
 		}
 		err = st.LoadUrlAs(u, book)
 		if err != nil {
-			return fmt.Errorf("invalid key book: %v", err)
+			return nil, fmt.Errorf("invalid key book: %v", err)
 		}
 
 		for i, p := range book.Pages {
 			u, err := url.Parse(p)
 			if err != nil {
-				return fmt.Errorf("invalid key page url : %s", p)
+				return nil, fmt.Errorf("invalid key page url : %s", p)
 			}
 			if u.AccountID32() == st.OriginChainId {
 				priority = i
 			}
 		}
 		if priority < 0 {
-			return fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
+			return nil, fmt.Errorf("cannot find %q in key book with ID %X", st.OriginUrl, page.KeyBook)
 		}
 
 		// 0 is the highest priority, followed by 1, etc
 		if tx.Transaction.KeyPageIndex > uint64(priority) {
-			return fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
+			return nil, fmt.Errorf("cannot modify %q with a lower priority key page", st.OriginUrl)
 		}
 	}
 
 	if body.Owner != "" {
 		_, err := url.Parse(body.Owner)
 		if err != nil {
-			return fmt.Errorf("invalid key book url : %s", body.Owner)
+			return nil, fmt.Errorf("invalid key book url : %s", body.Owner)
 		}
 	}
 
@@ -99,10 +99,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		// Check that a NewKey was provided, and that the key isn't already on
 		// the Key Page
 		if len(body.NewKey) == 0 { // Provided
-			return fmt.Errorf("must provide a new key")
+			return nil, fmt.Errorf("must provide a new key")
 		}
 		if indexNewKey > 0 { // Not on the Key Page
-			return fmt.Errorf("cannot have duplicate keys on key page")
+			return nil, fmt.Errorf("cannot have duplicate keys on key page")
 		}
 
 		key := &protocol.KeySpec{
@@ -117,10 +117,10 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 		// check that the Key to update is on the key Page, and the new Key
 		// is not already on the Key Page
 		if indexKey < 0 { // The Key to update is on key page
-			return fmt.Errorf("key to be updated not found on the key page")
+			return nil, fmt.Errorf("key to be updated not found on the key page")
 		}
 		if indexNewKey >= 0 { // The new key is not on the key page
-			return fmt.Errorf("key must be updated to a key not found on key page")
+			return nil, fmt.Errorf("key must be updated to a key not found on key page")
 		}
 
 		bodyKey.PublicKey = body.NewKey
@@ -131,13 +131,13 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	case protocol.KeyPageOperationRemove:
 		// Make sure the key to be removed is on the Key Page
 		if indexKey < 0 {
-			return fmt.Errorf("key to be removed not found on the key page")
+			return nil, fmt.Errorf("key to be removed not found on the key page")
 		}
 
 		page.Keys = append(page.Keys[:indexKey], page.Keys[indexKey+1:]...)
 
 		if len(page.Keys) == 0 && priority == 0 {
-			return fmt.Errorf("cannot delete last key of the highest priority page of a key book")
+			return nil, fmt.Errorf("cannot delete last key of the highest priority page of a key book")
 		}
 
 		if page.Threshold > uint64(len(page.Keys)) {
@@ -148,21 +148,13 @@ func (UpdateKeyPage) Validate(st *StateManager, tx *transactions.Envelope) error
 	case protocol.KeyPageOperationSetThreshold:
 		// Don't care what values are provided by keys....
 		if err := page.SetThreshold(body.Threshold); err != nil {
-			return err
+			return nil, err
 		}
 
 	default:
-		return fmt.Errorf("invalid operation: %v", body.Operation)
+		return nil, fmt.Errorf("invalid operation: %v", body.Operation)
 	}
 
 	st.Update(page)
-	return nil
-}
-
-func (UpdateKeyPage) CheckTx(st *StateManager, tx *transactions.Envelope) error {
-	return UpdateKeyPage{}.Validate(st, tx)
-}
-
-func (UpdateKeyPage) DeliverTx(st *StateManager, tx *transactions.Envelope) error {
-	return UpdateKeyPage{}.Validate(st, tx)
+	return nil, nil
 }
