@@ -4,11 +4,21 @@ package indexing
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 )
+
+type BlockStateIndex struct {
+	ProducedSynthTxns []*BlockStateSynthTxnEntry `json:"producedSynthTxns,omitempty" form:"producedSynthTxns" query:"producedSynthTxns" validate:"required"`
+}
+
+type BlockStateSynthTxnEntry struct {
+	Transaction []byte `json:"transaction,omitempty" form:"transaction" query:"transaction" validate:"required"`
+	ChainEntry  uint64 `json:"chainEntry,omitempty" form:"chainEntry" query:"chainEntry" validate:"required"`
+}
 
 type TransactionChainEntry struct {
 	Account     *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
@@ -22,6 +32,34 @@ type TransactionChainEntry struct {
 
 type TransactionChainIndex struct {
 	Entries []*TransactionChainEntry `json:"entries,omitempty" form:"entries" query:"entries" validate:"required"`
+}
+
+func (v *BlockStateIndex) Equal(u *BlockStateIndex) bool {
+	if !(len(v.ProducedSynthTxns) == len(u.ProducedSynthTxns)) {
+		return false
+	}
+
+	for i := range v.ProducedSynthTxns {
+		v, u := v.ProducedSynthTxns[i], u.ProducedSynthTxns[i]
+		if !(v.Equal(u)) {
+			return false
+		}
+
+	}
+
+	return true
+}
+
+func (v *BlockStateSynthTxnEntry) Equal(u *BlockStateSynthTxnEntry) bool {
+	if !(bytes.Equal(v.Transaction, u.Transaction)) {
+		return false
+	}
+
+	if !(v.ChainEntry == u.ChainEntry) {
+		return false
+	}
+
+	return true
 }
 
 func (v *TransactionChainEntry) Equal(u *TransactionChainEntry) bool {
@@ -72,6 +110,29 @@ func (v *TransactionChainIndex) Equal(u *TransactionChainIndex) bool {
 	return true
 }
 
+func (v *BlockStateIndex) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(uint64(len(v.ProducedSynthTxns)))
+
+	for _, v := range v.ProducedSynthTxns {
+		n += v.BinarySize()
+
+	}
+
+	return n
+}
+
+func (v *BlockStateSynthTxnEntry) BinarySize() int {
+	var n int
+
+	n += encoding.BytesBinarySize(v.Transaction)
+
+	n += encoding.UvarintBinarySize(v.ChainEntry)
+
+	return n
+}
+
 func (v *TransactionChainEntry) BinarySize() int {
 	var n int
 
@@ -103,6 +164,33 @@ func (v *TransactionChainIndex) BinarySize() int {
 	}
 
 	return n
+}
+
+func (v *BlockStateIndex) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.ProducedSynthTxns))))
+	for i, v := range v.ProducedSynthTxns {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding ProducedSynthTxns[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
+
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *BlockStateSynthTxnEntry) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.BytesMarshalBinary(v.Transaction))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.ChainEntry))
+
+	return buffer.Bytes(), nil
 }
 
 func (v *TransactionChainEntry) MarshalBinary() ([]byte, error) {
@@ -144,6 +232,48 @@ func (v *TransactionChainIndex) MarshalBinary() ([]byte, error) {
 	}
 
 	return buffer.Bytes(), nil
+}
+
+func (v *BlockStateIndex) UnmarshalBinary(data []byte) error {
+	var lenProducedSynthTxns uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ProducedSynthTxns: %w", err)
+	} else {
+		lenProducedSynthTxns = x
+	}
+	data = data[encoding.UvarintBinarySize(lenProducedSynthTxns):]
+
+	v.ProducedSynthTxns = make([]*BlockStateSynthTxnEntry, lenProducedSynthTxns)
+	for i := range v.ProducedSynthTxns {
+		var x *BlockStateSynthTxnEntry
+		x = new(BlockStateSynthTxnEntry)
+		if err := x.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding ProducedSynthTxns[%d]: %w", i, err)
+		}
+		data = data[x.BinarySize():]
+
+		v.ProducedSynthTxns[i] = x
+	}
+
+	return nil
+}
+
+func (v *BlockStateSynthTxnEntry) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Transaction: %w", err)
+	} else {
+		v.Transaction = x
+	}
+	data = data[encoding.BytesBinarySize(v.Transaction):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding ChainEntry: %w", err)
+	} else {
+		v.ChainEntry = x
+	}
+	data = data[encoding.UvarintBinarySize(v.ChainEntry):]
+
+	return nil
 }
 
 func (v *TransactionChainEntry) UnmarshalBinary(data []byte) error {
@@ -219,5 +349,34 @@ func (v *TransactionChainIndex) UnmarshalBinary(data []byte) error {
 		v.Entries[i] = x
 	}
 
+	return nil
+}
+
+func (v *BlockStateSynthTxnEntry) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Transaction *string `json:"transaction,omitempty"`
+		ChainEntry  uint64  `json:"chainEntry,omitempty"`
+	}{}
+	u.Transaction = encoding.BytesToJSON(v.Transaction)
+	u.ChainEntry = v.ChainEntry
+	return json.Marshal(&u)
+}
+
+func (v *BlockStateSynthTxnEntry) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Transaction *string `json:"transaction,omitempty"`
+		ChainEntry  uint64  `json:"chainEntry,omitempty"`
+	}{}
+	u.Transaction = encoding.BytesToJSON(v.Transaction)
+	u.ChainEntry = v.ChainEntry
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BytesFromJSON(u.Transaction); err != nil {
+		return fmt.Errorf("error decoding Transaction: %w", err)
+	} else {
+		v.Transaction = x
+	}
+	v.ChainEntry = u.ChainEntry
 	return nil
 }

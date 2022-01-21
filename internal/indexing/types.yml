@@ -25,3 +25,19 @@ TransactionChainEntry:
     type: uvarint
   - name: RootAnchor
     type: uvarint
+
+BlockStateIndex:
+  fields:
+  - name: ProducedSynthTxns
+    type: slice
+    slice:
+      type: BlockStateSynthTxnEntry
+      pointer: true
+      marshal-as: reference
+
+BlockStateSynthTxnEntry:
+  fields:
+  - name: Transaction
+    type: bytes
+  - name: ChainEntry
+    type: uvarint

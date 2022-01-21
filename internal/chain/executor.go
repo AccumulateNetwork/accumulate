@@ -164,6 +164,11 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 		return nil, err
 	}
 
+	err = indexing.BlockState(m.blockBatch, m.Network.NodeUrl(protocol.Ledger)).Clear()
+	if err != nil {
+		return nil, err
+	}
+
 	err = callback(st)
 	if err != nil {
 		return nil, err
@@ -251,10 +256,16 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 
 	m.governor.DidBeginBlock(req.IsLeader, req.Height, req.Time)
 
+	// Reset the block state
+	err := indexing.BlockState(m.blockBatch, m.Network.NodeUrl(protocol.Ledger)).Clear()
+	if err != nil {
+		return abci.BeginBlockResponse{}, nil
+	}
+
 	// Load the ledger state
 	ledger := m.blockBatch.Account(m.Network.NodeUrl(protocol.Ledger))
 	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	err = ledger.GetStateAs(ledgerState)
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
@@ -458,6 +469,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	}
 
 	// Add the synthetic transaction chain to the root chain
+	var synthRootIndex, synthAnchorIndex uint64
 	if len(ledgerState.Synthetic.Produced) > 0 {
 		synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
 		if err != nil {
@@ -473,6 +485,8 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 			Index:   uint64(synthChain.Height() - 1),
 		})
 
+		synthAnchorIndex = uint64(synthChain.Height() - 1)
+		synthRootIndex = uint64(rootChain.Height())
 		err = rootChain.AddEntry(synthChain.Anchor())
 		if err != nil {
 			return err
@@ -498,6 +512,27 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	for _, e := range txChainEntries {
 		e.RootAnchor = uint64(rootChain.Height()) - 1
 		err = indexing.TransactionChain(m.blockBatch, e.Txid).Add(&e.TransactionChainEntry)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Add transaction-chain index entries for synthetic transactions
+	blockState, err := indexing.BlockState(m.blockBatch, ledgerUrl).Get()
+	if err != nil {
+		return err
+	}
+
+	for _, e := range blockState.ProducedSynthTxns {
+		err = indexing.TransactionChain(m.blockBatch, e.Transaction).Add(&indexing.TransactionChainEntry{
+			Account:     ledgerUrl,
+			Chain:       protocol.SyntheticChain,
+			Block:       uint64(m.blockIndex),
+			ChainEntry:  e.ChainEntry,
+			ChainAnchor: synthAnchorIndex,
+			RootEntry:   synthRootIndex,
+			RootAnchor:  uint64(rootChain.Height()) - 1,
+		})
 		if err != nil {
 			return err
 		}

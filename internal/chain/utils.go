@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
@@ -12,7 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
-func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
+func  addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
 	// Check if the account exists
 	_, err := batch.Account(account).GetState()
 	if err != nil {
@@ -31,19 +32,21 @@ func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, na
 		return err
 	}
 
-	// // Add an index entry
-	// if typ == protocol.ChainTypeTransaction {
-	// 	err = indexing.TransactionChain(batch, entry).Add(account, name, uint64(index))
-	// 	if err != nil {
-	// 		return err
-	// 	}
-	// }
-
 	// Update the ledger
 	return didAddChainEntry(nodeUrl, batch, account, name, typ, entry, uint64(index), sourceIndex)
 }
 
 func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex uint64) error {
+	if name == protocol.SyntheticChain && typ == protocol.ChainTypeTransaction {
+		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
+			Transaction: entry,
+			ChainEntry: index,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	ledger := batch.Account(nodeUrl.JoinPath(protocol.Ledger))
 	ledgerState := protocol.NewInternalLedger()
 	err := ledger.GetStateAs(ledgerState)
