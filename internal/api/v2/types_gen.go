@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
@@ -101,9 +102,9 @@ type Signer struct {
 }
 
 type TokenDeposit struct {
-	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required"`
-	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
-	Txid   []byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Url    string  `json:"url,omitempty" form:"url" query:"url" validate:"required"`
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Txid   []byte  `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 }
 
 type TokenSend struct {
@@ -138,11 +139,12 @@ type TxRequest struct {
 }
 
 type TxResponse struct {
-	Txid      []byte   `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
-	Hash      [32]byte `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
-	Code      uint64   `json:"code,omitempty" form:"code" query:"code" validate:"required"`
-	Message   string   `json:"message,omitempty" form:"message" query:"message" validate:"required"`
-	Delivered bool     `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Txid      []byte      `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Hash      [32]byte    `json:"hash,omitempty" form:"hash" query:"hash" validate:"required"`
+	Code      uint64      `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Message   string      `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Delivered bool        `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Result    interface{} `json:"result,omitempty" form:"result" query:"result" validate:"required"`
 }
 
 type TxnQuery struct {
@@ -473,11 +475,11 @@ func (v *Signer) MarshalJSON() ([]byte, error) {
 func (v *TokenDeposit) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url    string  `json:"url,omitempty"`
-		Amount uint64  `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 		Txid   *string `json:"txid,omitempty"`
 	}{}
 	u.Url = v.Url
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	return json.Marshal(&u)
 }
@@ -532,17 +534,19 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 
 func (v *TxResponse) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Txid      *string `json:"txid,omitempty"`
-		Hash      string  `json:"hash,omitempty"`
-		Code      uint64  `json:"code,omitempty"`
-		Message   string  `json:"message,omitempty"`
-		Delivered bool    `json:"delivered,omitempty"`
+		Txid      *string     `json:"txid,omitempty"`
+		Hash      string      `json:"hash,omitempty"`
+		Code      uint64      `json:"code,omitempty"`
+		Message   string      `json:"message,omitempty"`
+		Delivered bool        `json:"delivered,omitempty"`
+		Result    interface{} `json:"result,omitempty"`
 	}{}
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Delivered = v.Delivered
+	u.Result = encoding.AnyToJSON(v.Result)
 	return json.Marshal(&u)
 }
 
@@ -816,17 +820,21 @@ func (v *Signer) UnmarshalJSON(data []byte) error {
 func (v *TokenDeposit) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url    string  `json:"url,omitempty"`
-		Amount uint64  `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 		Txid   *string `json:"txid,omitempty"`
 	}{}
 	u.Url = v.Url
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
 	v.Url = u.Url
-	v.Amount = u.Amount
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
 	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
 		return fmt.Errorf("error decoding Txid: %w", err)
 	} else {
@@ -935,17 +943,19 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 
 func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Txid      *string `json:"txid,omitempty"`
-		Hash      string  `json:"hash,omitempty"`
-		Code      uint64  `json:"code,omitempty"`
-		Message   string  `json:"message,omitempty"`
-		Delivered bool    `json:"delivered,omitempty"`
+		Txid      *string     `json:"txid,omitempty"`
+		Hash      string      `json:"hash,omitempty"`
+		Code      uint64      `json:"code,omitempty"`
+		Message   string      `json:"message,omitempty"`
+		Delivered bool        `json:"delivered,omitempty"`
+		Result    interface{} `json:"result,omitempty"`
 	}{}
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Hash = encoding.ChainToJSON(v.Hash)
 	u.Code = v.Code
 	u.Message = v.Message
 	u.Delivered = v.Delivered
+	u.Result = encoding.AnyToJSON(v.Result)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -962,6 +972,8 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 	v.Code = u.Code
 	v.Message = u.Message
 	v.Delivered = u.Delivered
+	v.Result = encoding.AnyFromJSON(u.Result)
+
 	return nil
 }
 

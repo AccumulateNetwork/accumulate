@@ -3,6 +3,7 @@ package api_test
 import (
 	"crypto/sha256"
 	"encoding/json"
+	"math/big"
 	"testing"
 	"time"
 
@@ -47,7 +48,7 @@ func createToken(tokenUrl string) (string, error) {
 func createTokenTx() (string, error) {
 	tx := &protocol.SendTokens{}
 	amt := uint64(1234)
-	tx.AddRecipient(&url.URL{Authority: "redwagon", Path: "/AcmeAccount"}, amt)
+	tx.AddRecipient(&url.URL{Authority: "redwagon", Path: "/AcmeAccount"}, big.NewInt(int64(amt)))
 	ret, err := json.Marshal(&tx)
 	return string(ret), err
 }

@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
@@ -457,7 +458,7 @@ func TestFaucetReplay(t *testing.T) {
 	_, kpSponsor, _ := ed25519.GenerateKey(nil)
 	destAccount := acctesting.AcmeLiteAddressStdPriv(kpSponsor).String()
 	tx := protocol.SendTokens{}
-	tx.AddRecipient(acctesting.MustParseUrl(destAccount), 1000000000)
+	tx.AddRecipient(acctesting.MustParseUrl(destAccount), big.NewInt(int64(1000000000)))
 
 	protocol.FaucetWallet.Nonce = uint64(time.Now().UnixNano())
 	gtx, err := transactions.New(protocol.FaucetWallet.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
