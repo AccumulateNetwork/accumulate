@@ -72,3 +72,13 @@ func (d *Data) GetLatest() ([]byte, *protocol.DataEntry, error) {
 func (d *Data) GetHashes(start, end int64) ([][]byte, error) {
 	return d.chain.Entries(start, end)
 }
+
+// Entry looks up an entry by its height.
+func (d *Data) Entry(height int64) (*protocol.DataEntry, error) {
+	hash, err := d.chain.Entry(height)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.Get(hash)
+}
