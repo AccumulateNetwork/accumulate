@@ -250,3 +250,20 @@ wait-for-tx $TXID
 echo $JSON | jq -re .result.entryHash &> /dev/null || die "Deliver response does not include the entry hash"
 accumulate -j tx get $TXID | jq -re .status.result.entryHash &> /dev/null || die "Transaction query response does not include the entry hash"
 success
+
+section "Query latest data entry by URL"
+RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data)
+[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Latest entry is not 'bar'"
+
+section "Query data entry at height 0 by URL"
+RESULT=$(accumulate -j get keytest/data#data/0 | jq -re .data.entry.data)
+[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry at height 0 is not 'bar'"
+
+section "Query data entry with hash by URL"
+ENTRY=$(accumulate -j get keytest/data#data/0 | jq -re .data.entryHash)
+RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data)
+[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry with hash ${ENTRY} is not 'bar'"
+
+section "Query data entry range by URL"
+RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
+[ "$RESULT" -ge 1 ] && success || die "No entries found"

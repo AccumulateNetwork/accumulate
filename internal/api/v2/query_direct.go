@@ -161,6 +161,30 @@ func (q *queryDirect) QueryUrl(s string) (interface{}, error) {
 		qr.MainChain.Roots = res.State
 		return qr, nil
 
+	case "data-entry":
+		res := new(protocol.ResponseDataEntry)
+		err := res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		qr := new(ChainQueryResponse)
+		qr.Type = "dataEntry"
+		qr.Data = res
+		return qr, nil
+
+	case "data-entry-set":
+		res := new(protocol.ResponseDataEntrySet)
+		err := res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		qr := new(ChainQueryResponse)
+		qr.Type = "dataEntry"
+		qr.Data = res
+		return qr, nil
+
 	default:
 		return nil, fmt.Errorf("unknown response type %q", k)
 	}
