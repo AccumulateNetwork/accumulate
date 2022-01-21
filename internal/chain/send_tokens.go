@@ -13,18 +13,18 @@ type SendTokens struct{}
 
 func (SendTokens) Type() types.TxType { return types.TxTypeSendTokens }
 
-func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.SendTokens)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	recipients := make([]*url.URL, len(body.To))
 	for i, to := range body.To {
 		recipients[i], err = url.Parse(to.Url)
 		if err != nil {
-			return fmt.Errorf("invalid destination URL: %v", err)
+			return nil, fmt.Errorf("invalid destination URL: %v", err)
 		}
 	}
 
@@ -35,12 +35,12 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	case *protocol.LiteTokenAccount:
 		account = origin
 	default:
-		return fmt.Errorf("invalid origin record: want %v or %v, got %v", types.AccountTypeTokenAccount, types.AccountTypeLiteTokenAccount, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want %v or %v, got %v", types.AccountTypeTokenAccount, types.AccountTypeLiteTokenAccount, st.Origin.Header().Type)
 	}
 
 	tokenUrl, err := account.ParseTokenUrl()
 	if err != nil {
-		return fmt.Errorf("invalid token URL: %v", err)
+		return nil, fmt.Errorf("invalid token URL: %v", err)
 	}
 
 	//now check to see if we can transact
@@ -52,7 +52,7 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	}
 
 	if !account.CanDebitTokens(&total.Int) {
-		return fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &total.Int)
+		return nil, fmt.Errorf("insufficient balance: have %v, want %v", account.TokenBalance(), &total.Int)
 	}
 
 	for i, u := range recipients {
@@ -64,9 +64,9 @@ func (SendTokens) Validate(st *StateManager, tx *transactions.Envelope) error {
 	}
 
 	if !account.DebitTokens(&total.Int) {
-		return fmt.Errorf("%q balance is insufficient", st.OriginUrl)
+		return nil, fmt.Errorf("%q balance is insufficient", st.OriginUrl)
 	}
 	st.Update(account)
 
-	return nil
+	return nil, nil
 }
