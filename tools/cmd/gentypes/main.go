@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
@@ -10,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"unicode"
 
 	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 	"github.com/spf13/cobra"
@@ -17,10 +17,10 @@ import (
 )
 
 var flags struct {
-	Package string
+	Package  string
 	Language string
-	Out     string
-	IsState bool
+	Out      string
+	IsState  bool
 }
 
 func main() {
@@ -92,6 +92,22 @@ func getPackagePath() string {
 	return rel
 }
 
+func cleanupWhitespace(s string) string {
+	sa := strings.FieldsFunc(s, func(c rune) bool { return '\n' == c })
+	var cw bytes.Buffer
+	for _, s := range sa {
+		s = strings.TrimRightFunc(s, func(c rune) bool { return unicode.IsSpace(c) })
+		if len(s) > 0 {
+			if strings.HasPrefix(s, "///") {
+				cw.WriteByte('\n')
+			}
+			cw.WriteString(s)
+			cw.WriteByte('\n')
+		}
+	}
+	return cw.String()
+}
+
 func run(_ *cobra.Command, args []string) {
 	types := readTypes(args)
 	ttypes := convert(types, flags.Package, getPackagePath())
@@ -103,17 +119,34 @@ func run(_ *cobra.Command, args []string) {
 		check(typegen.GoFmt(flags.Out, w))
 	case "c":
 		cw := new(bytes.Buffer)
-		check(C.Execute(cw, ttypes))
-		f, err := os.Create(flags.Out)
-		check(err)
-		defer f.Close()
+		check(CH.Execute(cw, ttypes))
+		cc := new(bytes.Buffer)
+		check(C.Execute(cc, ttypes))
 
-		w := bufio.NewWriter(f)
-		_, err = w.Write(cw.Bytes())
+		ext := filepath.Ext(flags.Out)
+		basepath := flags.Out
+		if ext == ".h" || ext == ".c" {
+			basepath = strings.TrimSuffix(basepath, ext)
+		}
+		header := basepath + ".h"
+		source := basepath + ".c"
+
+		sh := cleanupWhitespace(cw.String())
+		sc := cleanupWhitespace(cc.String())
+
+		f, err := os.Create(header)
 		check(err)
+		f.WriteString(sh)
+		f.Close()
+
+		f, err = os.Create(source)
+		check(err)
+		fmt.Fprintf(f, "#include \"%s\"\n", header)
+		f.WriteString(sc)
+		f.Close()
+
 	default:
 		fmt.Printf("Unsupported language %s", flags.Language)
 	}
-
 
 }

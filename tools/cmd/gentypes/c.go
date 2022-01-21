@@ -7,10 +7,7 @@ import (
 	"text/template"
 )
 
-//go:embed c.tmpl
-var cSrc string
-
-var C = mustParseTemplate("c.tmpl", cSrc, template.FuncMap{
+var cFuncMap = template.FuncMap{
 	"isPkg":       func(s string) bool { return s == PackagePath },
 	"lcName":      lcName,
 	"resolveType": CResolveType,
@@ -52,7 +49,16 @@ var C = mustParseTemplate("c.tmpl", cSrc, template.FuncMap{
 		}
 		return fmt.Sprintf(` validate:"%s"`, strings.Join(flags, ","))
 	},
-})
+}
+
+//go:embed c_header.tmpl
+var chSrc string
+
+//go:embed c.tmpl
+var cSrc string
+
+var CH = mustParseTemplate("c_header.tmpl", chSrc, cFuncMap)
+var C = mustParseTemplate("c.tmpl", cSrc, cFuncMap)
 
 func CMethodName(typ, name string) string {
 	return "encoding." + strings.Title(typ) + name

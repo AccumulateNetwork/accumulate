@@ -1,0 +1,25 @@
+# Transactions - names should be verbs
+# Transactions - names should be verbs
+
+##### User #####
+
+Basic:
+  kind: tx
+  fields:
+    - name: Recipient
+      type: string
+      is-url: true
+    - name: Precision
+      type: uvarint
+    - name: Properties
+      type: string
+      is-url: true
+      optional: true
+    - name: InitialSupply
+      type: bigint
+      optional: true
+    - name: HasSupplyLimit
+      type: bool
+      optional: true
+    - name: Cause
+      type: chain
