@@ -1,6 +1,7 @@
 package chain
 
 import (
+	"bytes"
 	"encoding"
 	"encoding/hex"
 	"errors"
@@ -455,6 +456,12 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 		receipt.Chain = entry.Chain
 		receipt.Receipt.Start = txid
 
+		anchor, err := indexing.DirectoryAnchor(batch, m.Network.NodeUrl(protocol.Ledger)).AnchorForLocalBlock(entry.Block, false)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read anchor for block %d: %v", entry.Block, err)
+		}
+		receipt.DirectoryBlock = anchor.Block
+
 		accountChain, err := batch.Account(entry.Account).ReadChain(entry.Chain)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read chain %s of %v: %v", entry.Chain, entry.Account, err)
@@ -472,7 +479,20 @@ func (m *Executor) queryByTxId(batch *database.Batch, txid []byte, prove bool) (
 
 		r, err := accountReceipt.Combine(rootReceipt)
 		if err != nil {
-			return nil, fmt.Errorf("failed to combined chain receipt and root receipt: %v", err)
+			return nil, fmt.Errorf("failed to combined receipts: %v", err)
+		}
+
+		r, err = r.Combine(anchor.Receipt.Convert())
+		if err != nil {
+			return nil, fmt.Errorf("failed to combined receipts: %v", err)
+		}
+
+		if !bytes.Equal(anchor.RootAnchor[:], r.MDRoot) {
+			return nil, fmt.Errorf("invalid receipt end: want %X, got %X", anchor.RootAnchor, r.MDRoot)
+		}
+
+		if !r.Validate() {
+			return nil, fmt.Errorf("receipt is invalid")
 		}
 
 		receipt.Receipt.Entries = make([]protocol.ReceiptEntry, len(r.Nodes))

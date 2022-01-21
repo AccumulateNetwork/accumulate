@@ -33,7 +33,7 @@ func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error
 			return err
 		}
 
-		err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, tx.Transaction.Hash(), 0)
+		err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, tx.Transaction.Hash(), 0, 0)
 		if err != nil {
 			return err
 		}

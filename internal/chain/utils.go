@@ -13,7 +13,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
-func  addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
+func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
 	// Check if the account exists
 	_, err := batch.Account(account).GetState()
 	if err != nil {
@@ -33,14 +33,14 @@ func  addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, n
 	}
 
 	// Update the ledger
-	return didAddChainEntry(nodeUrl, batch, account, name, typ, entry, uint64(index), sourceIndex)
+	return didAddChainEntry(nodeUrl, batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
 }
 
-func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex uint64) error {
+func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
 	if name == protocol.SyntheticChain && typ == protocol.ChainTypeTransaction {
 		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
 			Transaction: entry,
-			ChainEntry: index,
+			ChainEntry:  index,
 		})
 		if err != nil {
 			return err
@@ -71,6 +71,7 @@ func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name 
 	meta.Account = u
 	meta.Index = index
 	meta.SourceIndex = sourceIndex
+	meta.SourceBlock = sourceBlock
 	meta.Entry = entry
 	ledgerState.Updates = append(ledgerState.Updates, meta)
 	return ledger.PutState(ledgerState)

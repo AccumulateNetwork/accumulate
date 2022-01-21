@@ -54,9 +54,10 @@ type ResponseTxHistory struct {
 }
 
 type TxReceipt struct {
-	Account *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
-	Chain   string           `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
-	Receipt protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
+	Account        *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Chain          string           `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
+	Receipt        protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 }
 
 func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
@@ -224,6 +225,10 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 		return false
 	}
 
+	if !(v.DirectoryBlock == u.DirectoryBlock) {
+		return false
+	}
+
 	if !(v.Receipt.Equal(&u.Receipt)) {
 		return false
 	}
@@ -344,6 +349,8 @@ func (v *TxReceipt) BinarySize() int {
 	n += v.Account.BinarySize()
 
 	n += encoding.StringBinarySize(v.Chain)
+
+	n += encoding.UvarintBinarySize(v.DirectoryBlock)
 
 	n += v.Receipt.BinarySize()
 
@@ -475,6 +482,8 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	}
 
 	buffer.Write(encoding.StringMarshalBinary(v.Chain))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.DirectoryBlock))
 
 	if b, err := v.Receipt.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding Receipt: %w", err)
@@ -742,6 +751,13 @@ func (v *TxReceipt) UnmarshalBinary(data []byte) error {
 		v.Chain = x
 	}
 	data = data[encoding.StringBinarySize(v.Chain):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding DirectoryBlock: %w", err)
+	} else {
+		v.DirectoryBlock = x
+	}
+	data = data[encoding.UvarintBinarySize(v.DirectoryBlock):]
 
 	if err := v.Receipt.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Receipt: %w", err)
