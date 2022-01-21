@@ -176,11 +176,15 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 					er.Entry = *entry
 					res.DataEntries = append(res.DataEntries, er)
 				}
-				return []byte("data-range"), res, nil
+				return []byte("data-entry-set"), res, nil
 			} else {
 				index, err := strconv.Atoi(queryParam)
 				if err != nil {
-					entry, err := data.Get([]byte(queryParam))
+					entryHash, err := hex.DecodeString(queryParam)
+					if err != nil {
+						return nil, nil, err
+					}
+					entry, err := data.Get(entryHash)
 					if err != nil {
 						return nil, nil, err
 					}
@@ -190,21 +194,13 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 					res.Entry = *entry
 					return []byte("data-entry"), res, nil
 				} else {
-					entryHashes, err := data.GetHashes(int64(index), int64(index))
+					entry, err := data.Entry(int64(index))
 					if err != nil {
 						return nil, nil, err
 					}
-					if len(entryHashes) != 1 {
-						return nil, nil, fmt.Errorf("received invalid data for index")
-					}
-					entryHash := entryHashes[0]
 					res := &protocol.ResponseDataEntry{}
-					copy(res.EntryHash[:], entryHash)
 
-					entry, err := data.Get(entryHash)
-					if err != nil {
-						return nil, nil, err
-					}
+					copy(res.EntryHash[:], entry.Hash())
 					res.Entry = *entry
 					return []byte("data-entry"), res, nil
 				}
