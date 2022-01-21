@@ -18,6 +18,7 @@ type ObjectType uint64
 type KeyPageOperation uint8
 
 //go:generate go run ../tools/cmd/gentypes accounts.yml general.yml internal.yml query.yml transactions.yml
+//go:generate go run ../tools/cmd/gentypes transactions.yml --out transactions.h --language c
 //go:generate go run ../tools/cmd/gentypes2 --out enums_gen.go enums.yml
 
 func NewValidator() (*validator.Validate, error) {
