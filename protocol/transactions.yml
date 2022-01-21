@@ -61,6 +61,9 @@ CreateDataAccount:
       type: string
       is-url: true
       optional: true
+    - name: Scratch
+      type: bool
+      optional: true
 
 WriteData:
   kind: tx

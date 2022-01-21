@@ -33,6 +33,7 @@ func (CreateDataAccount) Validate(st *StateManager, tx *transactions.Envelope) e
 	//create the data account
 	account := protocol.NewDataAccount()
 	account.ChainUrl = types.String(dataAccountUrl.String())
+	account.Scratch = body.Scratch
 
 	//if we have a manger book URL, then we need make sure it is valid url syntax
 	if body.ManagerKeyBookUrl != "" {
