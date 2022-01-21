@@ -131,6 +131,81 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL) ([]byte, encodi
 
 			return []byte("tx"), res, nil
 		}
+	case "data":
+		data, err := batch.Account(u).Data()
+		if err != nil {
+			return nil, nil, err
+		}
+		switch len(fragment) {
+		case 1:
+			entryHash, entry, err := data.GetLatest()
+			if err != nil {
+				return nil, nil, err
+			}
+			res := &protocol.ResponseDataEntry{
+				Entry: *entry,
+			}
+			copy(res.EntryHash[:], entryHash)
+			return []byte("data-entry"), res, nil
+		case 2:
+			queryParam := fragment[1]
+			if strings.Contains(queryParam, ":") {
+				indexes := strings.Split(queryParam, ":")
+				start, err := strconv.Atoi(indexes[0])
+				if err != nil {
+					return nil, nil, err
+				}
+				end, err := strconv.Atoi(indexes[1])
+				if err != nil {
+					return nil, nil, err
+				}
+				entryHashes, err := data.GetHashes(int64(start), int64(end))
+				if err != nil {
+					return nil, nil, err
+				}
+				res := &protocol.ResponseDataEntrySet{}
+				res.Total = uint64(data.Height())
+				for _, entryHash := range entryHashes {
+					er := protocol.ResponseDataEntry{}
+					copy(er.EntryHash[:], entryHash)
+
+					entry, err := data.Get(entryHash)
+					if err != nil {
+						return nil, nil, err
+					}
+					er.Entry = *entry
+					res.DataEntries = append(res.DataEntries, er)
+				}
+				return []byte("data-entry-set"), res, nil
+			} else {
+				index, err := strconv.Atoi(queryParam)
+				if err != nil {
+					entryHash, err := hex.DecodeString(queryParam)
+					if err != nil {
+						return nil, nil, err
+					}
+					entry, err := data.Get(entryHash)
+					if err != nil {
+						return nil, nil, err
+					}
+
+					res := &protocol.ResponseDataEntry{}
+					copy(res.EntryHash[:], []byte(queryParam))
+					res.Entry = *entry
+					return []byte("data-entry"), res, nil
+				} else {
+					entry, err := data.Entry(int64(index))
+					if err != nil {
+						return nil, nil, err
+					}
+					res := &protocol.ResponseDataEntry{}
+
+					copy(res.EntryHash[:], entry.Hash())
+					res.Entry = *entry
+					return []byte("data-entry"), res, nil
+				}
+			}
+		}
 	}
 
 	return nil, nil, fmt.Errorf("invalid fragment")
