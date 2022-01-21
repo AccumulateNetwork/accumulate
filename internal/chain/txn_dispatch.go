@@ -180,7 +180,8 @@ func (d *dispatcher) send(ctx context.Context, server string, batch txBatch) {
 	})
 }
 
-var errTxInCache = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+var errTxInCache2 = jsonrpc2.NewError(jsonrpc2.ErrorCode(errTxInCache1.Code), errTxInCache1.Message, errTxInCache1.Data)
 
 // checkError returns nil if the error can be ignored.
 func (*dispatcher) checkError(err error) error {
@@ -197,8 +198,13 @@ func (*dispatcher) checkError(err error) error {
 	}
 
 	// Or RPC error "tx already exists in cache"?
-	var rpcErr *jrpc.RPCError
-	if errors.As(err, &rpcErr) && *rpcErr == *errTxInCache {
+	var rpcErr1 *jrpc.RPCError
+	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
+		return nil
+	}
+
+	var rpcErr2 jsonrpc2.Error
+	if errors.As(err, &rpcErr2) && rpcErr2 == errTxInCache2 {
 		return nil
 	}
 
