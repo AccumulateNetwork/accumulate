@@ -32,6 +32,9 @@ TokenAccount:
       is-url: true
     - name: Balance
       type: bigint
+    - name: Scratch
+      type: bool
+      optional: true
 
 KeyPage:
   kind: chain

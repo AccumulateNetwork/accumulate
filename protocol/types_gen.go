@@ -97,6 +97,7 @@ type CreateTokenAccount struct {
 	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 	TokenUrl   string `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	KeyBookUrl string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
+	Scratch    bool   `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
 type DataAccount struct {
@@ -295,6 +296,7 @@ type TokenAccount struct {
 	state.ChainHeader
 	TokenUrl string  `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	Balance  big.Int `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
+	Scratch  bool    `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
 type TokenIssuer struct {
@@ -687,6 +689,10 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 	}
 
 	if !(v.KeyBookUrl == u.KeyBookUrl) {
+		return false
+	}
+
+	if !(v.Scratch == u.Scratch) {
 		return false
 	}
 
@@ -1287,6 +1293,10 @@ func (v *TokenAccount) Equal(u *TokenAccount) bool {
 		return false
 	}
 
+	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+
 	return true
 }
 
@@ -1614,6 +1624,8 @@ func (v *CreateTokenAccount) BinarySize() int {
 	n += encoding.StringBinarySize(v.TokenUrl)
 
 	n += encoding.StringBinarySize(v.KeyBookUrl)
+
+	n += encoding.BoolBinarySize(v.Scratch)
 
 	return n
 }
@@ -2122,6 +2134,8 @@ func (v *TokenAccount) BinarySize() int {
 
 	n += encoding.BigintBinarySize(&v.Balance)
 
+	n += encoding.BoolBinarySize(v.Scratch)
+
 	return n
 }
 
@@ -2452,6 +2466,8 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.TokenUrl))
 
 	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
 
 	return buffer.Bytes(), nil
 }
@@ -3053,6 +3069,8 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.BigintMarshalBinary(&v.Balance))
 
+	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
+
 	return buffer.Bytes(), nil
 }
 
@@ -3602,6 +3620,13 @@ func (v *CreateTokenAccount) UnmarshalBinary(data []byte) error {
 		v.KeyBookUrl = x
 	}
 	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Scratch: %w", err)
+	} else {
+		v.Scratch = x
+	}
+	data = data[encoding.BoolBinarySize(v.Scratch):]
 
 	return nil
 }
@@ -4612,6 +4637,13 @@ func (v *TokenAccount) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.BigintBinarySize(&v.Balance):]
 
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Scratch: %w", err)
+	} else {
+		v.Scratch = x
+	}
+	data = data[encoding.BoolBinarySize(v.Scratch):]
+
 	return nil
 }
 
@@ -5180,10 +5212,12 @@ func (v *TokenAccount) MarshalJSON() ([]byte, error) {
 		state.ChainHeader
 		TokenUrl string  `json:"tokenUrl,omitempty"`
 		Balance  *string `json:"balance,omitempty"`
+		Scratch  bool    `json:"scratch,omitempty"`
 	}{}
 	u.ChainHeader = v.ChainHeader
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.Scratch = v.Scratch
 	return json.Marshal(&u)
 }
 
@@ -5923,10 +5957,12 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 		state.ChainHeader
 		TokenUrl string  `json:"tokenUrl,omitempty"`
 		Balance  *string `json:"balance,omitempty"`
+		Scratch  bool    `json:"scratch,omitempty"`
 	}{}
 	u.ChainHeader = v.ChainHeader
 	u.TokenUrl = v.TokenUrl
 	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.Scratch = v.Scratch
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5937,6 +5973,7 @@ func (v *TokenAccount) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Balance = *x
 	}
+	v.Scratch = u.Scratch
 	return nil
 }
 
