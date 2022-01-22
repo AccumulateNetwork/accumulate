@@ -59,6 +59,9 @@ KeyBook:
 DataAccount:
   kind: chain
   fields:
+    - name: Scratch
+      type: bool
+      optional: true
 
 TokenIssuer:
   kind: chain
