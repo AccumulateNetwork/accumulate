@@ -38,6 +38,7 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 	account := protocol.NewTokenAccount()
 	account.ChainUrl = types.String(accountUrl.String())
 	account.TokenUrl = tokenUrl.String()
+	account.Scratch = body.Scratch
 	if body.KeyBookUrl == "" {
 		account.KeyBook = st.Origin.Header().KeyBook
 	} else {
