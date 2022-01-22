@@ -63,6 +63,7 @@ type CreateDataAccount struct {
 	Url               string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 	KeyBookUrl        string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
 	ManagerKeyBookUrl string `json:"managerKeyBookUrl,omitempty" form:"managerKeyBookUrl" query:"managerKeyBookUrl" validate:"acc-url"`
+	Scratch           bool   `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
 type CreateIdentity struct {
@@ -100,6 +101,7 @@ type CreateTokenAccount struct {
 
 type DataAccount struct {
 	state.ChainHeader
+	Scratch bool `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
 type DataEntry struct {
@@ -576,6 +578,10 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 		return false
 	}
 
+	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+
 	return true
 }
 
@@ -689,6 +695,10 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 
 func (v *DataAccount) Equal(u *DataAccount) bool {
 	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.Scratch == u.Scratch) {
 		return false
 	}
 
@@ -1517,6 +1527,8 @@ func (v *CreateDataAccount) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.ManagerKeyBookUrl)
 
+	n += encoding.BoolBinarySize(v.Scratch)
+
 	return n
 }
 
@@ -1613,6 +1625,8 @@ func (v *DataAccount) BinarySize() int {
 	v.Type = types.AccountTypeDataAccount
 
 	n += v.ChainHeader.GetHeaderSize()
+
+	n += encoding.BoolBinarySize(v.Scratch)
 
 	return n
 }
@@ -2347,6 +2361,8 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.ManagerKeyBookUrl))
 
+	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
+
 	return buffer.Bytes(), nil
 }
 
@@ -2451,6 +2467,7 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
+	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
 
 	return buffer.Bytes(), nil
 }
@@ -3368,6 +3385,13 @@ func (v *CreateDataAccount) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.ManagerKeyBookUrl):]
 
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Scratch: %w", err)
+	} else {
+		v.Scratch = x
+	}
+	data = data[encoding.BoolBinarySize(v.Scratch):]
+
 	return nil
 }
 
@@ -3590,6 +3614,13 @@ func (v *DataAccount) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Scratch: %w", err)
+	} else {
+		v.Scratch = x
+	}
+	data = data[encoding.BoolBinarySize(v.Scratch):]
 
 	return nil
 }
