@@ -16,15 +16,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var accountCmd = &cobra.Command{
-	Use:   "account",
-	Short: "Create and get token accounts",
-	Run: func(cmd *cobra.Command, _ []string) {
-		_ = cmd.Usage()
-		os.Exit(1)
-	},
-}
-
 func init() {
 	accountCmd.AddCommand(
 		accountGetCmd,
@@ -40,6 +31,15 @@ func init() {
 
 	accountCreateDataCmd.AddCommand(
 		accountCreateDataLiteCmd)
+}
+
+var accountCmd = &cobra.Command{
+	Use:   "account",
+	Short: "Create and get token accounts",
+	Run: func(cmd *cobra.Command, _ []string) {
+		_ = cmd.Usage()
+		os.Exit(1)
+	},
 }
 
 var accountGetCmd = &cobra.Command{
@@ -80,6 +80,8 @@ var accountCreateDataCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 3 {
 			PrintDataAccountCreate()
+			PrintDataLiteAccountCreate()
+			return
 		}
 		out, err := CreateDataAccount(args[0], args[1:])
 		printOutput(cmd, out, err)
@@ -92,6 +94,7 @@ var accountCreateDataLiteCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {
 			PrintDataLiteAccountCreate()
+			return
 		}
 		out, err := CreateLiteDataAccount(args[0], args[1:])
 		printOutput(cmd, out, err)
