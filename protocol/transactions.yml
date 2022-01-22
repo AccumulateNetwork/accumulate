@@ -31,6 +31,9 @@ CreateTokenAccount:
       type: string
       is-url: true
       optional: true
+    - name: Scratch
+      type: bool
+      optional: true
 
 SendTokens:
   kind: tx
