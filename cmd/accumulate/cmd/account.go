@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
-	"os"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -36,10 +35,6 @@ func init() {
 var accountCmd = &cobra.Command{
 	Use:   "account",
 	Short: "Create and get token accounts",
-	Run: func(cmd *cobra.Command, _ []string) {
-		_ = cmd.Usage()
-		os.Exit(1)
-	},
 }
 
 var accountGetCmd = &cobra.Command{

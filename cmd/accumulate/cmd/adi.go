@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strconv"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
@@ -26,10 +25,6 @@ func init() {
 var adiCmd = &cobra.Command{
 	Use:   "adi",
 	Short: "Create and manage ADI",
-	Run: func(cmd *cobra.Command, _ []string) {
-		_ = cmd.Usage()
-		os.Exit(1)
-	},
 }
 
 var adiGetCmd = &cobra.Command{
