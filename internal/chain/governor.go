@@ -47,6 +47,8 @@ type receiptAndIndex struct {
 	Receipt     protocol.Receipt
 	Index       int64
 	SourceIndex int64
+	Block       uint64
+	SourceBlock uint64
 }
 
 func newGovernor(opts ExecutorOptions) *governor {
@@ -159,7 +161,7 @@ func (g *governor) buildProofs(msg *govDidCommit, batch *database.Batch, rootCha
 			s.Entries[i] = protocol.ReceiptEntry{Right: n.Right, Hash: n.Hash}
 		}
 
-		msg.receipts[bvn] = &receiptAndIndex{s, int64(u.Index), int64(u.SourceIndex)}
+		msg.receipts[bvn] = &receiptAndIndex{s, int64(u.Index), int64(u.SourceIndex), uint64(msg.height), u.SourceBlock}
 	}
 
 	return nil
@@ -334,6 +336,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
 	body := new(protocol.SyntheticAnchor)
 	body.Source = g.Network.NodeUrl().String()
 	body.RootIndex = uint64(msg.rootHeight - 1)
+	body.Block = uint64(msg.ledger.Index)
 	copy(body.RootAnchor[:], msg.rootAnchor)
 
 	kv := []interface{}{"root", logging.AsHex(body.RootAnchor)}
@@ -360,6 +363,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
 			if r := msg.receipts[bvn]; r != nil {
 				body.Receipt = r.Receipt
 				body.SourceIndex = uint64(r.SourceIndex)
+				body.SourceBlock = r.SourceBlock
 			}
 
 			txns.Transactions[i] = protocol.SendTransaction{
