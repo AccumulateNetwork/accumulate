@@ -38,6 +38,8 @@ type AnchorMetadata struct {
 	Account     *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Index       uint64   `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	SourceIndex uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
+	SourceBlock uint64   `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
+	Entry       []byte   `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
 type AnchoredRecord struct {
@@ -251,7 +253,9 @@ type SyntheticAnchor struct {
 	Major       bool     `json:"major,omitempty" form:"major" query:"major" validate:"required"`
 	RootAnchor  [32]byte `json:"rootAnchor,omitempty" form:"rootAnchor" query:"rootAnchor" validate:"required"`
 	RootIndex   uint64   `json:"rootIndex,omitempty" form:"rootIndex" query:"rootIndex" validate:"required"`
+	Block       uint64   `json:"block,omitempty" form:"block" query:"block" validate:"required"`
 	SourceIndex uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
+	SourceBlock uint64   `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
 	Receipt     Receipt  `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 }
 
@@ -517,6 +521,14 @@ func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
 	}
 
 	if !(v.SourceIndex == u.SourceIndex) {
+		return false
+	}
+
+	if !(v.SourceBlock == u.SourceBlock) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Entry, u.Entry)) {
 		return false
 	}
 
@@ -1143,7 +1155,15 @@ func (v *SyntheticAnchor) Equal(u *SyntheticAnchor) bool {
 		return false
 	}
 
+	if !(v.Block == u.Block) {
+		return false
+	}
+
 	if !(v.SourceIndex == u.SourceIndex) {
+		return false
+	}
+
+	if !(v.SourceBlock == u.SourceBlock) {
 		return false
 	}
 
@@ -1482,6 +1502,10 @@ func (v *AnchorMetadata) BinarySize() int {
 	n += encoding.UvarintBinarySize(v.Index)
 
 	n += encoding.UvarintBinarySize(v.SourceIndex)
+
+	n += encoding.UvarintBinarySize(v.SourceBlock)
+
+	n += encoding.BytesBinarySize(v.Entry)
 
 	return n
 }
@@ -2019,7 +2043,11 @@ func (v *SyntheticAnchor) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(v.RootIndex)
 
+	n += encoding.UvarintBinarySize(v.Block)
+
 	n += encoding.UvarintBinarySize(v.SourceIndex)
+
+	n += encoding.UvarintBinarySize(v.SourceBlock)
 
 	n += v.Receipt.BinarySize()
 
@@ -2316,6 +2344,10 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.UvarintMarshalBinary(v.Index))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.SourceIndex))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.SourceBlock))
+
+	buffer.Write(encoding.BytesMarshalBinary(v.Entry))
 
 	return buffer.Bytes(), nil
 }
@@ -2935,7 +2967,11 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.RootIndex))
 
+	buffer.Write(encoding.UvarintMarshalBinary(v.Block))
+
 	buffer.Write(encoding.UvarintMarshalBinary(v.SourceIndex))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.SourceBlock))
 
 	if b, err := v.Receipt.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding Receipt: %w", err)
@@ -3298,6 +3334,20 @@ func (v *AnchorMetadata) UnmarshalBinary(data []byte) error {
 		v.SourceIndex = x
 	}
 	data = data[encoding.UvarintBinarySize(v.SourceIndex):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding SourceBlock: %w", err)
+	} else {
+		v.SourceBlock = x
+	}
+	data = data[encoding.UvarintBinarySize(v.SourceBlock):]
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
+	} else {
+		v.Entry = x
+	}
+	data = data[encoding.BytesBinarySize(v.Entry):]
 
 	return nil
 }
@@ -4394,11 +4444,25 @@ func (v *SyntheticAnchor) UnmarshalBinary(data []byte) error {
 	data = data[encoding.UvarintBinarySize(v.RootIndex):]
 
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Block: %w", err)
+	} else {
+		v.Block = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Block):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding SourceIndex: %w", err)
 	} else {
 		v.SourceIndex = x
 	}
 	data = data[encoding.UvarintBinarySize(v.SourceIndex):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding SourceBlock: %w", err)
+	} else {
+		v.SourceBlock = x
+	}
+	data = data[encoding.UvarintBinarySize(v.SourceBlock):]
 
 	if err := v.Receipt.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Receipt: %w", err)
@@ -4873,6 +4937,24 @@ func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ChainMetadata
+		Account     *url.URL `json:"account,omitempty"`
+		Index       uint64   `json:"index,omitempty"`
+		SourceIndex uint64   `json:"sourceIndex,omitempty"`
+		SourceBlock uint64   `json:"sourceBlock,omitempty"`
+		Entry       *string  `json:"entry,omitempty"`
+	}{}
+	u.ChainMetadata = v.ChainMetadata
+	u.Account = v.Account
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	return json.Marshal(&u)
+}
+
 func (v *AnchoredRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Record *string `json:"record,omitempty"`
@@ -5129,14 +5211,18 @@ func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 		Major       bool    `json:"major,omitempty"`
 		RootAnchor  string  `json:"rootAnchor,omitempty"`
 		RootIndex   uint64  `json:"rootIndex,omitempty"`
+		Block       uint64  `json:"block,omitempty"`
 		SourceIndex uint64  `json:"sourceIndex,omitempty"`
+		SourceBlock uint64  `json:"sourceBlock,omitempty"`
 		Receipt     Receipt `json:"receipt,omitempty"`
 	}{}
 	u.Source = v.Source
 	u.Major = v.Major
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.RootIndex = v.RootIndex
+	u.Block = v.Block
 	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
 	u.Receipt = v.Receipt
 	return json.Marshal(&u)
 }
@@ -5304,6 +5390,37 @@ func (v *WriteDataResult) MarshalJSON() ([]byte, error) {
 	u.Type = v.GetType()
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
 	return json.Marshal(&u)
+}
+
+func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ChainMetadata
+		Account     *url.URL `json:"account,omitempty"`
+		Index       uint64   `json:"index,omitempty"`
+		SourceIndex uint64   `json:"sourceIndex,omitempty"`
+		SourceBlock uint64   `json:"sourceBlock,omitempty"`
+		Entry       *string  `json:"entry,omitempty"`
+	}{}
+	u.ChainMetadata = v.ChainMetadata
+	u.Account = v.Account
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainMetadata = u.ChainMetadata
+	v.Account = u.Account
+	v.Index = u.Index
+	v.SourceIndex = u.SourceIndex
+	v.SourceBlock = u.SourceBlock
+	if x, err := encoding.BytesFromJSON(u.Entry); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
+	} else {
+		v.Entry = x
+	}
+	return nil
 }
 
 func (v *AnchoredRecord) UnmarshalJSON(data []byte) error {
@@ -5788,14 +5905,18 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 		Major       bool    `json:"major,omitempty"`
 		RootAnchor  string  `json:"rootAnchor,omitempty"`
 		RootIndex   uint64  `json:"rootIndex,omitempty"`
+		Block       uint64  `json:"block,omitempty"`
 		SourceIndex uint64  `json:"sourceIndex,omitempty"`
+		SourceBlock uint64  `json:"sourceBlock,omitempty"`
 		Receipt     Receipt `json:"receipt,omitempty"`
 	}{}
 	u.Source = v.Source
 	u.Major = v.Major
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.RootIndex = v.RootIndex
+	u.Block = v.Block
 	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
 	u.Receipt = v.Receipt
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -5808,7 +5929,9 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 		v.RootAnchor = x
 	}
 	v.RootIndex = u.RootIndex
+	v.Block = u.Block
 	v.SourceIndex = u.SourceIndex
+	v.SourceBlock = u.SourceBlock
 	v.Receipt = u.Receipt
 	return nil
 }

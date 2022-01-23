@@ -17,6 +17,7 @@ var (
 	Db             db.DB
 	WantJsonOutput = false
 	TxPretend      = false
+	TxProve        = false
 )
 
 var currentUser = func() *user.User {
@@ -49,6 +50,7 @@ func InitRootCmd(database db.DB) *cobra.Command {
 	flags.BoolVarP(&Client.DebugRequest, "debug", "d", false, "Print accumulated API calls")
 	flags.BoolVarP(&WantJsonOutput, "json", "j", false, "print outputs as json")
 	flags.BoolVarP(&TxPretend, "pretend", "n", false, "Enables check-only mode for transactions")
+	flags.BoolVar(&TxProve, "prove", false, "Request a receipt proving the transaction is in a block")
 
 	//add the commands
 	cmd.AddCommand(accountCmd)

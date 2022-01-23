@@ -12,6 +12,7 @@ import (
 	api "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	gomock "github.com/golang/mock/gomock"
 	bytes "github.com/tendermint/tendermint/libs/bytes"
+	client "github.com/tendermint/tendermint/rpc/client"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	types "github.com/tendermint/tendermint/types"
 )
@@ -115,18 +116,18 @@ func (mr *MockQuerierMockRecorder) QueryKeyPageIndex(url, key interface{}) *gomo
 }
 
 // QueryTx mocks base method.
-func (m *MockQuerier) QueryTx(id []byte, wait time.Duration) (*api.TransactionQueryResponse, error) {
+func (m *MockQuerier) QueryTx(id []byte, wait time.Duration, opts api.QueryOptions) (*api.TransactionQueryResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryTx", id, wait)
+	ret := m.ctrl.Call(m, "QueryTx", id, wait, opts)
 	ret0, _ := ret[0].(*api.TransactionQueryResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // QueryTx indicates an expected call of QueryTx.
-func (mr *MockQuerierMockRecorder) QueryTx(id, wait interface{}) *gomock.Call {
+func (mr *MockQuerierMockRecorder) QueryTx(id, wait, opts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryTx", reflect.TypeOf((*MockQuerier)(nil).QueryTx), id, wait)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryTx", reflect.TypeOf((*MockQuerier)(nil).QueryTx), id, wait, opts)
 }
 
 // QueryTxHistory mocks base method.
@@ -145,18 +146,18 @@ func (mr *MockQuerierMockRecorder) QueryTxHistory(url, pagination interface{}) *
 }
 
 // QueryUrl mocks base method.
-func (m *MockQuerier) QueryUrl(url string) (interface{}, error) {
+func (m *MockQuerier) QueryUrl(url string, opts api.QueryOptions) (interface{}, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "QueryUrl", url)
+	ret := m.ctrl.Call(m, "QueryUrl", url, opts)
 	ret0, _ := ret[0].(interface{})
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // QueryUrl indicates an expected call of QueryUrl.
-func (mr *MockQuerierMockRecorder) QueryUrl(url interface{}) *gomock.Call {
+func (mr *MockQuerierMockRecorder) QueryUrl(url, opts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryUrl", reflect.TypeOf((*MockQuerier)(nil).QueryUrl), url)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryUrl", reflect.TypeOf((*MockQuerier)(nil).QueryUrl), url, opts)
 }
 
 // MockABCIQueryClient is a mock of ABCIQueryClient interface.
@@ -182,19 +183,19 @@ func (m *MockABCIQueryClient) EXPECT() *MockABCIQueryClientMockRecorder {
 	return m.recorder
 }
 
-// ABCIQuery mocks base method.
-func (m *MockABCIQueryClient) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
+// ABCIQueryWithOptions mocks base method.
+func (m *MockABCIQueryClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ABCIQuery", ctx, path, data)
+	ret := m.ctrl.Call(m, "ABCIQueryWithOptions", ctx, path, data, opts)
 	ret0, _ := ret[0].(*coretypes.ResultABCIQuery)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// ABCIQuery indicates an expected call of ABCIQuery.
-func (mr *MockABCIQueryClientMockRecorder) ABCIQuery(ctx, path, data interface{}) *gomock.Call {
+// ABCIQueryWithOptions indicates an expected call of ABCIQueryWithOptions.
+func (mr *MockABCIQueryClientMockRecorder) ABCIQueryWithOptions(ctx, path, data, opts interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ABCIQuery", reflect.TypeOf((*MockABCIQueryClient)(nil).ABCIQuery), ctx, path, data)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ABCIQueryWithOptions", reflect.TypeOf((*MockABCIQueryClient)(nil).ABCIQueryWithOptions), ctx, path, data, opts)
 }
 
 // MockABCIBroadcastClient is a mock of ABCIBroadcastClient interface.

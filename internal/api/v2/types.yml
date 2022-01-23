@@ -46,6 +46,12 @@ TransactionQueryResponse:
       pointer: true
     - name: SyntheticTxids
       type: chainSet
+    - name: Receipts
+      type: slice
+      slice:
+        type: query.TxReceipt
+        marshal-as: reference
+        pointer: true
 
 MerkleState:
   non-binary: true
@@ -128,6 +134,13 @@ TokenDeposit:
   - name: Txid
     type: bytes
 
+GeneralQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+  - UrlQuery
+  - QueryOptions
+
 UrlQuery:
   non-binary: true
   incomparable: true
@@ -144,7 +157,6 @@ KeyPageIndexQuery:
   fields:
   - name: Key
     type: bytes
-
 
 TxHistoryQuery:
   non-binary: true
@@ -176,13 +188,22 @@ QueryOptions:
   non-binary: true
   incomparable: true
   fields:
-    - name: ExpandChains
+    - name: Expand
+      type: bool
+      optional: true
+      alternative: ExpandChains
+    - name: Height
+      type: uvarint
+      optional: true
+    - name: Prove
       type: bool
       optional: true
 
 TxnQuery:
   non-binary: true
   incomparable: true
+  embeddings:
+  - QueryOptions
   fields:
   - name: Txid
     type: bytes
