@@ -225,7 +225,11 @@ SyntheticAnchor:
       type: chain
     - name: RootIndex
       type: uvarint
+    - name: Block
+      type: uvarint
     - name: SourceIndex
+      type: uvarint
+    - name: SourceBlock
       type: uvarint
     - name: Receipt
       type: Receipt

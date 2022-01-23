@@ -12,6 +12,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 )
 
@@ -53,6 +54,11 @@ type DirectoryQuery struct {
 	QueryOptions
 }
 
+type GeneralQuery struct {
+	UrlQuery
+	QueryOptions
+}
+
 type KeyPage struct {
 	Height    uint64 `json:"height,omitempty" form:"height" query:"height" validate:"required"`
 	Index     uint64 `json:"index,omitempty" form:"index" query:"index"`
@@ -88,7 +94,9 @@ type MultiResponse struct {
 }
 
 type QueryOptions struct {
-	ExpandChains bool `json:"expandChains,omitempty" form:"expandChains" query:"expandChains"`
+	Expand bool   `json:"expand,omitempty" form:"expand" query:"expand"`
+	Height uint64 `json:"height,omitempty" form:"height" query:"height"`
+	Prove  bool   `json:"prove,omitempty" form:"prove" query:"prove"`
 }
 
 type QueryPagination struct {
@@ -122,6 +130,7 @@ type TransactionQueryResponse struct {
 	Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty" form:"signatures" query:"signatures" validate:"required"`
 	Status         *protocol.TransactionStatus `json:"status,omitempty" form:"status" query:"status" validate:"required"`
 	SyntheticTxids [][32]byte                  `json:"syntheticTxids,omitempty" form:"syntheticTxids" query:"syntheticTxids" validate:"required"`
+	Receipts       []*query.TxReceipt          `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 }
 
 type TxHistoryQuery struct {
@@ -148,6 +157,7 @@ type TxResponse struct {
 }
 
 type TxnQuery struct {
+	QueryOptions
 	Txid []byte        `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
 	Wait time.Duration `json:"wait,omitempty" form:"wait" query:"wait"`
 }
@@ -497,6 +507,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 		Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
 		Status         *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
+		Receipts       []*query.TxReceipt          `json:"receipts,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -509,6 +520,7 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	u.Signatures = v.Signatures
 	u.Status = v.Status
 	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
+	u.Receipts = v.Receipts
 	return json.Marshal(&u)
 }
 
@@ -552,9 +564,11 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 
 func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
+		QueryOptions
 		Txid *string     `json:"txid,omitempty"`
 		Wait interface{} `json:"wait,omitempty"`
 	}{}
+	u.QueryOptions = v.QueryOptions
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	return json.Marshal(&u)
@@ -856,6 +870,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 		Signatures     []*transactions.ED25519Sig  `json:"signatures,omitempty"`
 		Status         *protocol.TransactionStatus `json:"status,omitempty"`
 		SyntheticTxids []string                    `json:"syntheticTxids,omitempty"`
+		Receipts       []*query.TxReceipt          `json:"receipts,omitempty"`
 	}{}
 	u.Type = v.Type
 	u.MainChain = v.MainChain
@@ -868,6 +883,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	u.Signatures = v.Signatures
 	u.Status = v.Status
 	u.SyntheticTxids = encoding.ChainSetToJSON(v.SyntheticTxids)
+	u.Receipts = v.Receipts
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -899,6 +915,7 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	} else {
 		v.SyntheticTxids = x
 	}
+	v.Receipts = u.Receipts
 	return nil
 }
 
@@ -979,14 +996,17 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 
 func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
+		QueryOptions
 		Txid *string     `json:"txid,omitempty"`
 		Wait interface{} `json:"wait,omitempty"`
 	}{}
+	u.QueryOptions = v.QueryOptions
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.QueryOptions = u.QueryOptions
 	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
 		return fmt.Errorf("error decoding Txid: %w", err)
 	} else {

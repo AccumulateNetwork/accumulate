@@ -87,7 +87,7 @@ func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 	for len(txids) > 0 {
 		var synth [][]byte
 		for _, txid := range txids {
-			r, err := q.QueryTx(txid, 10*time.Second)
+			r, err := q.QueryTx(txid, 10*time.Second, apiv2.QueryOptions{})
 			d.Require().NoError(err)
 			d.Require().NotNil(r.Status, "Transaction status is empty")
 			d.Require().True(r.Status.Delivered, "Transaction has not been delivered")
