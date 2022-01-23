@@ -15,10 +15,10 @@ Faucet:
 Query:
   kind: query
   rpc: query
-  input: UrlQuery
+  input: GeneralQuery
   output: QueryResponse with record or tx payload
   call: QueryUrl
-  call-params: [Url]
+  call-params: [Url, QueryOptions]
 
 QueryDirectory:
   kind: query
@@ -39,7 +39,7 @@ QueryTx:
   rpc: query-tx
   input: TxnQuery
   output: QueryResponse with tx payload
-  call-params: [Txid, Wait]
+  call-params: [Txid, Wait, QueryOptions]
 
 QueryTxHistory:
   kind: query

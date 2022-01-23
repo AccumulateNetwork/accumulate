@@ -96,7 +96,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	params.Url = u.String()
 	params.Start = uint64(st)
 	params.Count = uint64(ct)
-	params.ExpandChains = true
+	params.Expand = true
 
 	data, err := json.Marshal(&params)
 	if err != nil {
