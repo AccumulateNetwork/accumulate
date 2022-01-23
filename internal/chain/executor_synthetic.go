@@ -12,7 +12,6 @@ import (
 
 // addSynthTxns prepares synthetic transactions for signing next block.
 func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error {
-
 	// Need to pass this to a threaded batcher / dispatcher to do both signing
 	// and sending of synth tx. No need to spend valuable time here doing that.
 	ids := make([][32]byte, len(submissions))
@@ -34,7 +33,7 @@ func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error
 			return err
 		}
 
-		err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, tx.Transaction.Hash(), 0)
+		err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, tx.Transaction.Hash(), 0, 0)
 		if err != nil {
 			return err
 		}

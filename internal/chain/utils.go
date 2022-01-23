@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/managed"
@@ -12,14 +13,15 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 )
 
-func addChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
+func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
 	// Check if the account exists
-	_, err := batch.Account(u).GetState()
+	_, err := batch.Account(account).GetState()
 	if err != nil {
 		return err
 	}
 
-	chain, err := batch.Account(u).Chain(name, typ)
+	// Add an entry to the chain
+	chain, err := batch.Account(account).Chain(name, typ)
 	if err != nil {
 		return err
 	}
@@ -30,10 +32,21 @@ func addChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name str
 		return err
 	}
 
-	return didAddChainEntry(nodeUrl, batch, u, name, typ, uint64(index), sourceIndex)
+	// Update the ledger
+	return didAddChainEntry(nodeUrl, batch, account, name, typ, entry, uint64(index), sourceIndex, sourceBlock)
 }
 
-func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, index, sourceIndex uint64) error {
+func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name string, typ protocol.ChainType, entry []byte, index, sourceIndex, sourceBlock uint64) error {
+	if name == protocol.SyntheticChain && typ == protocol.ChainTypeTransaction {
+		err := indexing.BlockState(batch, u).DidProduceSynthTxn(&indexing.BlockStateSynthTxnEntry{
+			Transaction: entry,
+			ChainEntry:  index,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
 	ledger := batch.Account(nodeUrl.JoinPath(protocol.Ledger))
 	ledgerState := protocol.NewInternalLedger()
 	err := ledger.GetStateAs(ledgerState)
@@ -58,6 +71,8 @@ func didAddChainEntry(nodeUrl *url.URL, batch *database.Batch, u *url.URL, name 
 	meta.Account = u
 	meta.Index = index
 	meta.SourceIndex = sourceIndex
+	meta.SourceBlock = sourceBlock
+	meta.Entry = entry
 	ledgerState.Updates = append(ledgerState.Updates, meta)
 	return ledger.PutState(ledgerState)
 }

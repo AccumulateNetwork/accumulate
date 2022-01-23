@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/rpc/client"
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	tm "github.com/tendermint/tendermint/types"
 )
@@ -14,10 +15,10 @@ import (
 //go:generate go run github.com/golang/mock/mockgen -source types.go -destination ../../mock/api/types.go
 
 type Querier interface {
-	QueryUrl(url string) (interface{}, error)
+	QueryUrl(url string, opts QueryOptions) (interface{}, error)
 	QueryDirectory(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
 	QueryChain(id []byte) (*ChainQueryResponse, error)
-	QueryTx(id []byte, wait time.Duration) (*TransactionQueryResponse, error)
+	QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error)
 	QueryTxHistory(url string, pagination QueryPagination) (*MultiResponse, error)
 	QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error)
 	QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
@@ -27,7 +28,7 @@ type Querier interface {
 // ABCIQueryClient is a subset of from TM/rpc/client.ABCIClient for sending
 // queries.
 type ABCIQueryClient interface {
-	ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*core.ResultABCIQuery, error)
+	ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error)
 }
 
 // ABCIBroadcastClient is a subset of from TM/rpc/client.ABCIClient for
