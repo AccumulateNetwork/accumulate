@@ -3,9 +3,9 @@
 ValidatorType:
   kind: val
   fields:
-    - name: OperatorAddress
+    - name: ValidatorAddress
       type: string
-    - name: ConsensusPubKey
+    - name: PubKey
       type: bytes
     - name: Jailed
       type: bool
@@ -15,9 +15,14 @@ ValidatorType:
       type: uvarint
     - name: DelegatorShares
       type: uvarint
-    - name: Description
-      type: ValidatorDescription
-      marshal-as: reference
+    - name: Moniker
+      type: string
+    - name: Identity
+      type: string
+    - name: Website
+      type: string
+    - name: Details
+      type: string
     - name: UnStakingHeight
       type: uvarint
     - name: UnStakingTime

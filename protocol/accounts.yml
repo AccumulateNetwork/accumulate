@@ -71,6 +71,29 @@ TokenIssuer:
       type: string
       is-url: true
 
+StakingValidator:
+  kind: chain
+  fields:
+    - name: ValidatorAddress
+      type: string
+    - name: PubKey
+      type: bytes
+    - name: Moniker
+      type: string
+    - name: Identity
+      type: string
+    - name: Website
+      type: string
+    - name: Details
+      type: string
+    - name: Amount
+      type: varint
+      optional: true
+    - name: Commission
+      type: Commission
+      marshal-as: reference
+    
+
 Anchor:
   kind: chain
   fields: []

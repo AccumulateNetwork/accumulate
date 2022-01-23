@@ -19,6 +19,8 @@ func NewChain(typ types.AccountType) (state.Chain, error) {
 		return new(TokenAccount), nil
 	case types.AccountTypeLiteTokenAccount:
 		return new(LiteTokenAccount), nil
+	case types.AccountTypeValidator:
+		return new(StakingValidator), nil
 	case types.AccountTypeTransaction:
 		return new(state.Transaction), nil
 	case types.AccountTypePendingTransaction:

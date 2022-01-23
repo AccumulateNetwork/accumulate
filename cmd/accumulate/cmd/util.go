@@ -419,6 +419,7 @@ var (
 		types.AccountTypeKeyPage:          "Key Page",
 		types.AccountTypeDataAccount:      "Data Chain",
 		types.AccountTypeLiteDataAccount:  "Lite Data Chain",
+		types.AccountTypeValidator:		   "Staking Validator",
 	}
 )
 
@@ -727,7 +728,19 @@ func outputForHumansTx(res *api2.TransactionQueryResponse) (string, error) {
 
 		out += printGeneralTransactionParameters(res)
 		return out, nil
+	case types.TxTypeCreateValidator.String():
+		i := protocol.CreateValidator{}
+		err := Remarshal(res.Data, &i)
+		if err != nil {
+			return "", err
+		}
 
+		out := "\n"
+		out += fmt.Sprintf("Validator Address \t\t:\tHERE%s\n", i.ValidatorAddress)
+		out += fmt.Sprintf("PubKey \t\t:\tacc://%s\n", i.PubKey)
+		out += fmt.Sprintf("Moniker \t\t:\tacc://%s/\n", i.Moniker)
+		out += printGeneralTransactionParameters(res)
+		return out, nil
 	default:
 		data, err := json.Marshal(res.Data)
 		if err != nil {

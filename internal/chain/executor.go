@@ -23,6 +23,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/tendermint/tendermint/libs/log"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+
 )
 
 const chainWGSize = 4
@@ -43,6 +45,7 @@ type Executor struct {
 	blockTime   time.Time
 	blockBatch  *database.Batch
 	blockMeta   blockMetadata
+	newValidators []tmed25519.PubKey
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -247,6 +250,7 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 	m.blockTime = req.Time
 	m.blockBatch = m.DB.Begin()
 	m.blockMeta = blockMetadata{}
+	m.newValidators = m.newValidators[:0]
 
 	m.governor.DidBeginBlock(req.IsLeader, req.Height, req.Time)
 
@@ -283,7 +287,12 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 }
 
 // EndBlock implements ./abci.Chain
-func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
+func (m *Executor) EndBlock(req abci.EndBlockRequest) abci.EndBlockResponse {
+	return abci.EndBlockResponse{
+		NewValidatorSet: m.newValidators,
+	}
+
+}
 
 // Commit implements ./abci.Chain
 func (m *Executor) Commit() ([]byte, error) {

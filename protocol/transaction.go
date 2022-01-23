@@ -7,6 +7,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+
 )
 
 func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
@@ -27,6 +28,8 @@ func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
 		return new(AcmeFaucet), nil
 	case types.TxTypeCreateToken:
 		return new(CreateToken), nil
+	case types.TxTypeCreateValidator:
+		return new(CreateValidator), nil
 	case types.TxTypeIssueTokens:
 		return new(IssueTokens), nil
 	case types.TxTypeBurnTokens:
@@ -63,9 +66,6 @@ func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
 		return new(InternalTransactionsSigned), nil
 	case types.TxTypeInternalTransactionsSent:
 		return new(InternalTransactionsSent), nil
-
-	case types.TxTypeCreateValidator:
-		return new(CreateValidator), nil
 
 	default:
 		return nil, fmt.Errorf("unknown transaction type %v", typ)

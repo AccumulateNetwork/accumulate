@@ -5,18 +5,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto/ed25519"
+	//"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
-func NewValidators(operator string, pubKey ed25519.PubKey, description ValidatorDescription) (ValidatorType, error) {
+func NewValidators(operator string, pubKey []byte, moniker, website, identity, details string) (ValidatorType, error) {
 	return ValidatorType{
-		OperatorAddress: operator,
-		ConsensusPubKey: pubKey,
+		ValidatorAddress: operator,
+		PubKey: pubKey,
 		Jailed:          false,
 		Status:          1,
 		Tokens:          0,
 		DelegatorShares: 0,
-		Description:     description,
+		Moniker:      moniker,
+		Website: website,
+		Identity: identity,
+		Details: details,		
 		UnStakingHeight: 0,
 		UnStakingTime:   time.Unix(0, 0),
 		Commission:      NewCommission(0, 0, 0),
@@ -85,13 +88,13 @@ func (vals ValsByVotingPower) Less(i, j int, r big.Int) bool {
 
 */
 func (v ValidatorType) IsJailed() bool     { return v.Jailed }
-func (v ValidatorType) GetMoniker() string { return v.Description.Moniker }
+func (v ValidatorType) GetMoniker() string { return v.Moniker }
 func (v ValidatorType) GetStatus() int64   { return v.Status }
 func (v ValidatorType) GetOperator() string {
-	if v.OperatorAddress == "" {
+	if v.ValidatorAddress == "" {
 		return ""
 	}
-	addr := v.OperatorAddress
+	addr := v.ValidatorAddress
 	return addr
 }
 

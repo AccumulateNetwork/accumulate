@@ -23,7 +23,9 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
+	protocrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	"github.com/tendermint/tendermint/version"
+
 )
 
 // Accumulator is an ABCI application that accumulates validated transactions in
@@ -230,11 +232,6 @@ func (app *Accumulator) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(fmt.Errorf("failed to init chain: %v", err))
 	}
 
-	//register a list of the validators.
-	for _, v := range req.Validators {
-		app.updateValidator(v)
-	}
-
 	return abci.ResponseInitChain{AppHash: batch.RootHash()}
 }
 
@@ -258,29 +255,6 @@ func (app *Accumulator) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBegi
 	app.timer = time.Now()
 
 	app.txct = 0
-
-	/*
-		app.ValUpdates = make([]types.ValidatorUpdate, 0)
-
-		// Punish validators who committed equivocation.
-		for _, ev := range req.ByzantineValidators {
-			if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
-				addr := string(ev.Validator.Address)
-				if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
-					app.updateValidator(types.ValidatorUpdate{
-						PubKey: pubKey,
-						Power:  ev.Validator.Power - 1,
-					})
-					app.logger.Info("Decreased val power by 1 because of the equivocation",
-						"val", addr)
-				} else {
-					app.logger.Error("Wanted to punish val, but can't find it",
-						"val", addr)
-				}
-			}
-		}
-
-	*/
 
 	return ret
 }
@@ -378,24 +352,18 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEndBlock) {
 	defer app.recover(nil, true)
 
-	// Select our leader who will initiate consensus on dbvc chain.
-	//resp.ConsensusParamUpdates
-	//for _, ev := range req.ByzantineValidators {
-	//	if ev.Type == types.EvidenceType_DUPLICATE_VOTE {
-	//		addr := string(ev.Validator.Address)
-	//		if pubKey, ok := app.valAddrToPubKeyMap[addr]; ok {
-	//			app.updateValidator(types.ValidatorUpdate{
-	//				PubKey: pubKey,
-	//				Power:  ev.Validator.Power - 1,
-	//			})
-	//			app.logger.Info("Decreased val power by 1 because of the equivocation",
-	//				"val", addr)
-	//		} else {
-	//			app.logger.Error("Wanted to punish val, but can't find it",
-	//				"val", addr)
-	//		}
-	//	}
-	//}
+	r := app.Chain.EndBlock(EndBlockRequest{})
+	resp.ValidatorUpdates = make([]abci.ValidatorUpdate, len(r.NewValidatorSet))
+	for i, key := range r.NewValidatorSet {
+		resp.ValidatorUpdates[i] = abci.ValidatorUpdate{
+			PubKey: protocrypto.PublicKey{
+				Sum: &protocrypto.PublicKey_Ed25519{
+					Ed25519: key,
+				},
+			},
+			Power: 1,
+		}
+	}
 
 	return abci.ResponseEndBlock{} //ValidatorUpdates: app.ValUpdates}
 }
@@ -458,45 +426,26 @@ func (app *Accumulator) ApplySnapshotChunk(
 	req abci.RequestApplySnapshotChunk) abci.ResponseApplySnapshotChunk {
 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ABORT}
 }
-
+/*
 //updateValidator add, update, or remove a validator
-func (app *Accumulator) updateValidator(v abci.ValidatorUpdate) {
-	// pubkey, _ := encoding.PubKeyFromProto(v.PubKey)
-	// app.logger.Info("Val Pub Key", "address", pubkey.Address())
-	/*
-	   	if err != nil {
-	   		panic(fmt.Errorf("can't decode public key: %w", err))
-	   	}
-	   	//key := []byte("val:" + string(pubkey.Bytes()))
-	   	if v.Power == 0 {
-	   		// remove validator
-	   		_, found := app.tmvalidators[string(pubkey.Address())]// app.app.state.db.Has(key)
-	   		if !found {
-	   			pubStr := base64.StdEncoding.EncodeToString(pubkey.Bytes())
-	   			return abcitypes.ResponseDeliverTx{
-	   				Code: code.CodeTypeUnauthorized,
-	   				Log:  fmt.Sprintf("Cannot remove non-existent validator %s", pubStr)}
-	   		}
-	   //		if !hasKey
-	   		//if err = app.app.state.db.Delete(key); err != nil {
-	   		//	panic(err)
-	   		//}
-	   		delete(app.tmvalidators, string(pubkey.Address()))
-	   	} else {
-	   		// add or update validator
-	   		//value := bytes.NewBuffer(make([]byte, 0))
-	   		//if err := types.WriteMessage(&v, value); err != nil {
-	   		//	return types.ResponseDeliverTx{
-	   		//		Code: code.CodeTypeEncodingError,
-	   		//		Log:  fmt.Sprintf("Error encoding validator: %v", err)}
-	   		//}
-	   		//if err = app.app.state.db.Set(key, value.Bytes()); err != nil {
-	   		//	panic(err)
-	   		//}
-	   		app.tmvalidators[string(pubkey.Address())] = pubkey
-	   	}
-	*/
+ func (app *Accumulator) updateValidator(v abci.ValidatorUpdate) {
+	 //pubkey, _ := encoding.PubKeyFromProto(v.PubKey)
+	 pubkey, _ := tmtype.ValidatorFromProto(&tmproto.Validator{})
+	 
+	 app.logger.Info("Val Pub Key", "address", pubkey.Address.String())
+	 
+	 //key := []byte("val:" + string(pubkey.Bytes()))
+	 value := bytes.NewBuffer(make([]byte, 0))
+	 if err := abci.WriteMessage(&v, value); err != nil {
+		
+	 }
+	//zeke := abci.Ed25519ValidatorUpdate(pubkey.Bytes(), 20)
+
 
 	// we only update the changes array if we successfully updated the tree
 	//app.ValUpdates = append(app.ValUpdates, v)
-}
+	app.valSet.Validators = append(app.valSet.Validators, pubkey)
+
+ }
+
+ */

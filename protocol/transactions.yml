@@ -5,19 +5,22 @@
 CreateValidator:
  kind: tx
  fields:
-    - name: Description
-      type: ValidatorDescription
-      marshal-as: reference
+    - name: Moniker
+      type: string
+    - name: Identity
+      type: string
+    - name: Website
+      type: string
+    - name: Details
+      type: string
     - name: Commission
       type: Commission
       marshal-as: reference
       optional: true
     - name: ValidatorAddress
       type: string
-      optional: true
     - name: PubKey
       type: bytes
-      optional: true
     - name: Amount
       type: varint
       optional: true

@@ -86,6 +86,8 @@ const (
 	// TxTypeUpdateKeyPage adds, removes, or updates keys in a key page, which
 	// *does not* produce a synthetic transaction.
 	TxTypeUpdateKeyPage TransactionType = 0x0F
+
+	TxTypeCreateValidator TransactionType = 0x10
 )
 
 // Synthetic transactions
@@ -117,10 +119,7 @@ const (
 	TxTypeSegWitDataEntry TransactionType = 0x39
 )
 
-// Validator TransactionType
-const (
-	TxTypeCreateValidator TransactionType = 0x41
-)
+
 
 const (
 	// TxTypeInternalGenesis initializes system chains.

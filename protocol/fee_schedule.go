@@ -66,6 +66,8 @@ const (
 
 	//FeeWriteScratchData $0.0001 / 256 bytes
 	FeeWriteScratchData Fee = 1
+
+	FeeCreateValidator Fee = 1
 )
 
 func ComputeFee(tx *transactions.Envelope) (int, error) {
@@ -76,6 +78,8 @@ func ComputeFee(tx *transactions.Envelope) (int, error) {
 	switch types.TransactionType(txType) {
 	case types.TxTypeCreateIdentity:
 		return FeeCreateIdentity.AsInt(), nil
+	case types.TxTypeCreateValidator:
+		return FeeCreateValidator.AsInt(), nil
 	case types.TxTypeCreateTokenAccount:
 		return FeeCreateTokenAccount.AsInt(), nil
 	case types.TxTypeSendTokens:

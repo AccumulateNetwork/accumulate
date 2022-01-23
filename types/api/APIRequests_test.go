@@ -44,6 +44,28 @@ func createToken(tokenUrl string) (string, error) {
 	return string(ret), nil
 }
 
+func createVal(operator string, pubkey []byte, moniker string, identity string, website string, details string, rate uint64, maxR uint64, maxCr uint64) (string, error) {
+	data := &protocol.CreateValidator{}
+
+	data.PubKey = pubkey
+	data.ValidatorAddress = operator
+	data.Moniker = moniker
+	data.Identity = identity
+	data.Website = website 
+	data.Details = details
+	data.Commission.CommissionRates.Rate = rate
+	data.Commission.CommissionRates.MaxRate = maxR
+	data.Commission.CommissionRates.MaxChangeRate = maxCr
+
+	ret, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	return string(ret), nil
+}
+
+
 func createTokenTx() (string, error) {
 	tx := &protocol.SendTokens{}
 	amt := uint64(1234)
@@ -140,13 +162,21 @@ func TestAPIRequest_Adi(t *testing.T) {
 	}
 }
 
-func TestAPIRequest_Token(t *testing.T) {
+func TestAPIRequest_CreateValidator(t *testing.T) {
 	kp := types.CreateKeyPair()
 
 	adiUrl := "redwagon"
-	tokenUrl := adiUrl + "/MyTokens"
+	pubKey := kp.PubKey().Bytes()
+	op := kp.PubKey().Address().String()
+	mon := "mo"
+	id := "lo"
+	web := "www"
+	det := "lol"
+	r := uint64(100)
+	rr := uint64(10000)
+	rrr := uint64(100000)
 
-	message, err := createToken(tokenUrl)
+	message, err := createVal(op , pubKey, mon, id, web, det, r, rr, rrr)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -166,7 +196,7 @@ func TestAPIRequest_Token(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data := &protocol.CreateToken{}
+	data := &protocol.CreateValidator{}
 
 	// parse req.tx.data
 	err = mapstructure.Decode(req.Tx.Data, data)
@@ -191,6 +221,8 @@ func TestAPIRequest_Token(t *testing.T) {
 		//the data should have been unmarshalled correctly and the data is should be valid
 		t.Fatal(err)
 	}
+	t.Log(rawreq)
+	t.Log(rawreq.Tx.Data)
 }
 
 func TestAPIRequest_TokenTx(t *testing.T) {

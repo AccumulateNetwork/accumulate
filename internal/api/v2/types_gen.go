@@ -154,6 +154,21 @@ type UrlQuery struct {
 	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 }
 
+type ValidatorTxRequest struct {
+	OperatorAddress string                    `json:"operatorAddress,omitempty" form:"operatorAddress" query:"operatorAddress" validate:"required"`
+	PubKey          []byte                    `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
+	Payload         *protocol.CreateValidator `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+}
+
+type ValidatorTxResponse struct {
+	OperatorAddress string `json:"operatorAddress,omitempty" form:"operatorAddress" query:"operatorAddress" validate:"required"`
+	PubKey          []byte `json:"pubKey,omitempty" form:"pubKey" query:"pubKey" validate:"required"`
+	Jailed          bool   `json:"jailed,omitempty" form:"jailed" query:"jailed" validate:"required"`
+	Status          int64  `json:"status,omitempty" form:"status" query:"status" validate:"required"`
+	Code            uint64 `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Message         string `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+}
+
 func (v *DataEntry) Equal(u *DataEntry) bool {
 	if !(len(v.ExtIds) == len(u.ExtIds)) {
 		return false
@@ -521,6 +536,36 @@ func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
+	return json.Marshal(&u)
+}
+
+func (v *ValidatorTxRequest) MarshalJSON() ([]byte, error) {
+	u := struct {
+		OperatorAddress string                    `json:"operatorAddress,omitempty"`
+		PubKey          *string                   `json:"pubKey,omitempty"`
+		Payload         *protocol.CreateValidator `json:"payload,omitempty"`
+	}{}
+	u.OperatorAddress = v.OperatorAddress
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
+	u.Payload = v.Payload
+	return json.Marshal(&u)
+}
+
+func (v *ValidatorTxResponse) MarshalJSON() ([]byte, error) {
+	u := struct {
+		OperatorAddress string  `json:"operatorAddress,omitempty"`
+		PubKey          *string `json:"pubKey,omitempty"`
+		Jailed          bool    `json:"jailed,omitempty"`
+		Status          int64   `json:"status,omitempty"`
+		Code            uint64  `json:"code,omitempty"`
+		Message         string  `json:"message,omitempty"`
+	}{}
+	u.OperatorAddress = v.OperatorAddress
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
+	u.Jailed = v.Jailed
+	u.Status = v.Status
+	u.Code = v.Code
+	u.Message = v.Message
 	return json.Marshal(&u)
 }
 
@@ -898,5 +943,58 @@ func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Wait = x
 	}
+	return nil
+}
+
+func (v *ValidatorTxRequest) UnmarshalJSON(data []byte) error {
+	u := struct {
+		OperatorAddress string                    `json:"operatorAddress,omitempty"`
+		PubKey          *string                   `json:"pubKey,omitempty"`
+		Payload         *protocol.CreateValidator `json:"payload,omitempty"`
+	}{}
+	u.OperatorAddress = v.OperatorAddress
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
+	u.Payload = v.Payload
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.OperatorAddress = u.OperatorAddress
+	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
+		return fmt.Errorf("error decoding PubKey: %w", err)
+	} else {
+		v.PubKey = x
+	}
+	v.Payload = u.Payload
+	return nil
+}
+
+func (v *ValidatorTxResponse) UnmarshalJSON(data []byte) error {
+	u := struct {
+		OperatorAddress string  `json:"operatorAddress,omitempty"`
+		PubKey          *string `json:"pubKey,omitempty"`
+		Jailed          bool    `json:"jailed,omitempty"`
+		Status          int64   `json:"status,omitempty"`
+		Code            uint64  `json:"code,omitempty"`
+		Message         string  `json:"message,omitempty"`
+	}{}
+	u.OperatorAddress = v.OperatorAddress
+	u.PubKey = encoding.BytesToJSON(v.PubKey)
+	u.Jailed = v.Jailed
+	u.Status = v.Status
+	u.Code = v.Code
+	u.Message = v.Message
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.OperatorAddress = u.OperatorAddress
+	if x, err := encoding.BytesFromJSON(u.PubKey); err != nil {
+		return fmt.Errorf("error decoding PubKey: %w", err)
+	} else {
+		v.PubKey = x
+	}
+	v.Jailed = u.Jailed
+	v.Status = u.Status
+	v.Code = u.Code
+	v.Message = u.Message
 	return nil
 }

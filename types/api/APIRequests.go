@@ -69,7 +69,7 @@ type APIRequestURLPagination struct {
 
 // APIDataResponse is used in "get" API method response
 type APIDataResponse struct {
-	Type        types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,tx,keyPage,keyBook,assignKeyPage,addCredits,directory,version"`
+	Type        types.String       `json:"type" form:"type" query:"type" validate:"oneof:adi,token,tokenAccount,tokenTx,tx,keyPage,keyBook,assignKeyPage,addCredits,directory,version,validator"`
 	MerkleState *MerkleState       `json:"merkleState,omitempty" form:"merkleState" query:"merkleState"`
 	Data        *json.RawMessage   `json:"data" form:"data" query:"data"`
 	Origin      types.String       `json:"sponsor" form:"sponsor" query:"sponsor" validate:"required"` // retain 'sponsor' for backwards compatability

@@ -19,6 +19,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	acmeapi "github.com/AccumulateNetwork/accumulate/types/api"
+
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
@@ -96,6 +97,9 @@ func (api *API) Handler() http.Handler {
 
 		// credits
 		"add-credits": api.addCredits,
+
+		//validator 
+		"create-validator": api.createVal,
 	}
 
 	return jsonrpc2.HTTPRequestHandler(methods, log.New(os.Stdout, "", 0))
@@ -340,6 +344,23 @@ func (api *API) getToken(_ context.Context, params json.RawMessage) interface{} 
 	return resp
 
 }
+
+func (api *API) createVal(_ context.Context, params json.RawMessage) interface{} {
+	data := &protocol.CreateValidator{}
+	req, payload, err := api.prepareCreate(params, data)
+	if err != nil {
+		return validatorError(err)
+	}
+	ret, err := api.sendTx(req, payload)
+	if err != nil {
+		return err
+	}
+
+	ret.Type = "validator"
+	return ret
+
+}
+
 
 // createToken creates Token
 func (api *API) createToken(_ context.Context, params json.RawMessage) interface{} {

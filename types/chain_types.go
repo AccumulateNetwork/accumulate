@@ -46,6 +46,8 @@ const (
 	// AccountTypeLiteDataAccount is a Lite Data Account.
 	AccountTypeLiteDataAccount AccountType = 12
 
+	AccountTypeValidator AccountType = 13
+
 	// AccountTypeInternalLedger is a ledger that tracks the state of internal
 	// operations.
 	AccountTypeInternalLedger AccountType = 14
@@ -92,6 +94,8 @@ func (t AccountType) String() string {
 		return "dataAccount"
 	case AccountTypeLiteDataAccount:
 		return "liteDataAccount"
+	case AccountTypeValidator:
+		return "validator"
 	default:
 		return fmt.Sprintf("ChainType:%d", t)
 	}

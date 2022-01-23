@@ -251,6 +251,37 @@ TxResponse:
   - name: Delivered
     type: bool
 
+ValidatorTxRequest:
+  non-binary: true
+  incomparable: true
+  fields:
+  - name: OperatorAddress
+    type: string
+  - name: PubKey
+    type: bytes
+  - name: Payload
+    type: protocol.CreateValidator
+    marshal-as: reference
+    pointer: true
+
+ValidatorTxResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+  - name: OperatorAddress
+    type: string
+  - name: PubKey
+    type: bytes
+  - name: Jailed
+    type: bool
+  - name: Status
+    type: varint
+  - name: Code
+    type: uvarint
+  - name: Message
+    type: string
+
+
 DataEntry:
   fields:
     - name: ExtIds
