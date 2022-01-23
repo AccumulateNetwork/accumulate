@@ -313,7 +313,7 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 	q := api2.NewQueryDirect(n.client, api2.QuerierOptions{})
-	resp, err := q.QueryTx(txid, 0)
+	resp, err := q.QueryTx(txid, 0, api2.QueryOptions{})
 	require.NoError(n.t, err)
 	data, err := json.Marshal(resp.Data)
 	require.NoError(n.t, err)

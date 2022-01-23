@@ -75,6 +75,10 @@
         "keytest-0-0",
         "foo",
         "bar"
+
+        // "tx",
+        // "get",
+        // "c85422d30077a4f297d129b3fd34e9368dc4aa0bda213e966ba09f32c33ce336"
       ]
     }
   ]
