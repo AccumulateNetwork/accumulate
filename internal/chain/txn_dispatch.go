@@ -215,7 +215,7 @@ func (*dispatcher) checkError(err error) error {
 // Send sends all of the batches.
 func (d *dispatcher) Send(ctx context.Context) error {
 	// Send local
-	if d.localIndex >= 0 && len(d.localBatch) > 0 {
+	if d.Local != nil && len(d.localBatch) > 0 {
 		d.errg.Go(func() error {
 			_, err := d.Local.BroadcastTxAsync(ctx, tm.Tx(d.localBatch))
 			return d.checkError(err)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -109,7 +110,7 @@ func (op *updateRecord) Execute(st *stateCache) ([]state.Chain, error) {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type updateSignator struct {
@@ -166,7 +167,7 @@ func (op *updateSignator) Execute(st *stateCache) ([]state.Chain, error) {
 		return nil, fmt.Errorf("failed to update state of %q: %v", op.url, err)
 	}
 
-	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.PendingChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.PendingChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addDataEntry struct {
@@ -223,13 +224,13 @@ func (op *addDataEntry) Execute(st *stateCache) ([]state.Chain, error) {
 		return nil, fmt.Errorf("failed to add entry to data chain of %q: %v", op.url, err)
 	}
 
-	err = didAddChainEntry(st.nodeUrl, st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, uint64(index), 0)
+	err = didAddChainEntry(st.nodeUrl, st.batch, op.url, protocol.DataChain, protocol.ChainTypeData, op.hash, uint64(index), 0, 0)
 	if err != nil {
 		return nil, err
 	}
 
 	// Add TX to main chain
-	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0)
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.url, protocol.MainChain, protocol.ChainTypeTransaction, st.txHash[:], 0, 0)
 }
 
 type addChainEntryOp struct {
@@ -238,9 +239,10 @@ type addChainEntryOp struct {
 	typ         protocol.ChainType
 	entry       []byte
 	sourceIndex uint64
+	sourceBlock uint64
 }
 
-func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex uint64) error {
+func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainType, entry []byte, sourceIndex, sourceBlock uint64) error {
 	// The main and pending chain cannot be updated this way
 	switch name {
 	case protocol.MainChain, protocol.PendingChain:
@@ -253,12 +255,12 @@ func (m *stateCache) AddChainEntry(u *url.URL, name string, typ protocol.ChainTy
 		return fmt.Errorf("failed to load %s#chain/%s: %v", u, name, err)
 	}
 
-	m.operations = append(m.operations, &addChainEntryOp{u, name, typ, entry, sourceIndex})
+	m.operations = append(m.operations, &addChainEntryOp{u, name, typ, entry, sourceIndex, sourceBlock})
 	return nil
 }
 
 func (op *addChainEntryOp) Execute(st *stateCache) ([]state.Chain, error) {
-	return nil, addChainEntry(st.nodeUrl, st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex)
+	return nil, addChainEntry(st.nodeUrl, st.batch, op.account, op.name, op.typ, op.entry, op.sourceIndex, op.sourceBlock)
 }
 
 type writeIndex struct {
@@ -336,4 +338,18 @@ func (m *stateCache) AddSyntheticTxns(txid []byte, synth [][32]byte) {
 
 func (op *addSyntheticTxns) Execute(st *stateCache) ([]state.Chain, error) {
 	return nil, st.batch.Transaction(op.txid).AddSyntheticTxns(op.synth...)
+}
+
+type addDirectoryAnchor struct {
+	anchor *protocol.SyntheticAnchor
+}
+
+func (m *stateCache) AddDirectoryAnchor(anchor *protocol.SyntheticAnchor) {
+	m.operations = append(m.operations, &addDirectoryAnchor{
+		anchor: anchor,
+	})
+}
+
+func (op *addDirectoryAnchor) Execute(st *stateCache) ([]state.Chain, error) {
+	return nil, indexing.DirectoryAnchor(st.batch, st.nodeUrl.JoinPath(protocol.Ledger)).Add(op.anchor)
 }
