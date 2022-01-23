@@ -204,7 +204,7 @@ func (d *e2eDUT) api() *api.JrpcMethods {
 
 func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 	d.T().Helper()
-	r, err := d.api().Querier().QueryUrl(url)
+	r, err := d.api().Querier().QueryUrl(url, api.QueryOptions{})
 	d.Require().NoError(err)
 	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
 	qr := r.(*api.ChainQueryResponse)
@@ -214,7 +214,7 @@ func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
 
 func (d *e2eDUT) GetRecordHeight(url string) uint64 {
 	d.T().Helper()
-	r, err := d.api().Querier().QueryUrl(url)
+	r, err := d.api().Querier().QueryUrl(url, api.QueryOptions{})
 	d.Require().NoError(err)
 	d.Require().IsType((*api.ChainQueryResponse)(nil), r)
 	qr := r.(*api.ChainQueryResponse)
@@ -244,11 +244,11 @@ func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
 func (d *e2eDUT) WaitForTxns(txids ...[]byte) {
 	d.T().Helper()
 	for _, txid := range txids {
-		r, err := d.api().Querier().QueryTx(txid, 10*time.Second)
+		r, err := d.api().Querier().QueryTx(txid, 10*time.Second, api.QueryOptions{})
 		d.Require().NoError(err)
 
 		for _, txid := range r.SyntheticTxids {
-			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second)
+			_, err := d.api().Querier().QueryTx(txid[:], 10*time.Second, api.QueryOptions{})
 			d.Require().NoError(err)
 		}
 	}

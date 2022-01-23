@@ -161,7 +161,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 
 	if len(args) > 2 {
 		if args[2] == "expand" {
-			params.ExpandChains = true
+			params.Expand = true
 		}
 	}
 

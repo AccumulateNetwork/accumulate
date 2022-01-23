@@ -404,7 +404,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	}
 
 	// Add the envelope to the origin's pending chain
-	err = addChainEntry(m.Network.NodeUrl(), m.blockBatch, st.OriginUrl, protocol.PendingChain, protocol.ChainTypeTransaction, env.EnvHash(), 0)
+	err = addChainEntry(m.Network.NodeUrl(), m.blockBatch, st.OriginUrl, protocol.PendingChain, protocol.ChainTypeTransaction, env.EnvHash(), 0, 0)
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
 		return fmt.Errorf("failed to add signature to pending chain: %v", err)
 	}
@@ -418,7 +418,7 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 
 	// If the origin and signator are different, add the envelope to the signator's pending chain
 	if !st.OriginUrl.Equal(st.SignatorUrl) {
-		err = addChainEntry(m.Network.NodeUrl(), m.blockBatch, st.SignatorUrl, protocol.PendingChain, protocol.ChainTypeTransaction, env.EnvHash(), 0)
+		err = addChainEntry(m.Network.NodeUrl(), m.blockBatch, st.SignatorUrl, protocol.PendingChain, protocol.ChainTypeTransaction, env.EnvHash(), 0, 0)
 		if err != nil {
 			return fmt.Errorf("failed to add signature to pending chain: %v", err)
 		}

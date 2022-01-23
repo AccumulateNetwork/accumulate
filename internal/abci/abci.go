@@ -47,7 +47,7 @@ type EndBlockRequest struct{}
 
 // Chain is the interface for the Accumulate transaction (chain) validator.
 type Chain interface {
-	Query(*apiQuery.Query) (k, v []byte, err *protocol.Error)
+	Query(q *apiQuery.Query, height int64, prove bool) (k, v []byte, err *protocol.Error)
 
 	InitChain(state []byte, time time.Time, blockIndex int64) error
 
