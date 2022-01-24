@@ -41,6 +41,8 @@ require (
 	gotest.tools/gotestsum v1.7.0
 )
 
+replace github.com/tendermint/tendermint v0.35.0-rc1 => github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20220122004453-8b50702426bf
+
 require (
 	github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d // indirect
 	github.com/AdamSLevy/jsonrpc2/v14 v14.0.0 // indirect
@@ -120,5 +122,3 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	rsc.io/qr v0.2.0 // indirect
 )
-
-replace github.com/tendermint/tendermint v0.35.0-rc1 => github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20211104230238-906615e51028

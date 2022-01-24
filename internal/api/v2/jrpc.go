@@ -96,13 +96,13 @@ func (m *JrpcMethods) EnableDebug() error {
 	q := &queryDirect{connRoute: m.lclRoute}
 
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
-		req := new(UrlQuery)
+		req := new(GeneralQuery)
 		err := m.parse(params, req)
 		if err != nil {
 			return err
 		}
 
-		return jrpcFormatResponse(q.QueryUrl(req.Url))
+		return jrpcFormatResponse(q.QueryUrl(req.Url, req.QueryOptions))
 	}
 	return nil
 }

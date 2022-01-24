@@ -13,39 +13,39 @@ type CreateIdentity struct{}
 
 func (CreateIdentity) Type() types.TxType { return types.TxTypeCreateIdentity }
 
-func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// *protocol.IdentityCreate, *url.URL, state.Chain
 	body := new(protocol.CreateIdentity)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	identityUrl, err := url.Parse(body.Url)
 	if err != nil {
-		return fmt.Errorf("invalid URL: %v", err)
+		return nil, fmt.Errorf("invalid URL: %v", err)
 	}
 
 	err = protocol.IsValidAdiUrl(identityUrl)
 	if err != nil {
-		return fmt.Errorf("invalid URL: %v", err)
+		return nil, fmt.Errorf("invalid URL: %v", err)
 	}
 
 	switch st.Origin.(type) {
 	case *protocol.LiteTokenAccount, *protocol.ADI:
 		// OK
 	default:
-		return fmt.Errorf("account type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
+		return nil, fmt.Errorf("account type %d cannot be the origininator of ADIs", st.Origin.Header().Type)
 	}
 
 	var pageUrl, bookUrl *url.URL
 	if body.KeyBookName == "" {
-		return fmt.Errorf("missing key book name")
+		return nil, fmt.Errorf("missing key book name")
 	} else {
 		bookUrl = identityUrl.JoinPath(body.KeyBookName)
 	}
 	if body.KeyPageName == "" {
-		return fmt.Errorf("missing key page name")
+		return nil, fmt.Errorf("missing key page name")
 	} else {
 		pageUrl = identityUrl.JoinPath(body.KeyPageName)
 	}
@@ -68,5 +68,5 @@ func (CreateIdentity) Validate(st *StateManager, tx *transactions.Envelope) erro
 	identity.KeyBook = types.String(bookUrl.String())
 
 	st.Create(identity, book, page)
-	return nil
+	return nil, nil
 }

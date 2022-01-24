@@ -31,6 +31,10 @@ AnchorMetadata:
       type: uvarint
     - name: SourceIndex
       type: uvarint
+    - name: SourceBlock
+      type: uvarint
+    - name: Entry
+      type: bytes
 
 DataEntry:
   fields:
@@ -56,6 +60,13 @@ TransactionStatus:
       type: bool
     - name: Code
       type: uvarint
+    - name: Message
+      type: string
+    - name: Result
+      type: TransactionResult
+      optional: true
+      marshal-as: value
+      unmarshal-with: UnmarshalTransactionResult
 
 Receipt:
   fields:

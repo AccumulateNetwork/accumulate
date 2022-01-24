@@ -31,6 +31,9 @@ var Go = mustParseTemplate("go.tmpl", goSrc, template.FuncMap{
 	"valueFromJson":        GoValueFromJson,
 
 	"needsCustomJSON": func(typ *Type) bool {
+		if typ.IsTxResult {
+			return true
+		}
 		for _, f := range typ.Fields {
 			if GoJsonType(f) != "" {
 				return true
@@ -100,6 +103,8 @@ func GoJsonType(field *Field) string {
 	switch field.Type {
 	case "bytes":
 		return "*string"
+	case "bigint":
+		return "*string"
 	case "chain":
 		return "string"
 	case "chainSet":
@@ -111,6 +116,10 @@ func GoJsonType(field *Field) string {
 		if jt != "" {
 			return "[]" + jt
 		}
+	}
+
+	if field.UnmarshalWith != "" {
+		return "json.RawMessage"
 	}
 
 	return ""
@@ -343,13 +352,15 @@ func GoBinaryUnmarshalValue(field *Field, varName, errName string, errArgs ...st
 	return w.String(), nil
 }
 
-func GoValueToJson(field *Field, tgtName, srcName string) string {
+func GoValueToJson(field *Field, tgtName, srcName string, forUnmarshal bool, errName string, errArgs ...string) string {
 	w := new(strings.Builder)
 	switch field.Type {
 	case "bytes", "chain", "chainSet", "duration", "any":
 		fmt.Fprintf(w, "\t%s = %s(%s)", tgtName, GoMethodName(field.Type, "ToJSON"), srcName)
 		return w.String()
-
+	case "bigint":
+		fmt.Fprintf(w, "\t%s = %s(&%s)", tgtName, GoMethodName(field.Type, "ToJSON"), srcName)
+		return w.String()
 	case "slice":
 		if GoJsonType(field.Slice) == "" {
 			break
@@ -357,8 +368,17 @@ func GoValueToJson(field *Field, tgtName, srcName string) string {
 
 		fmt.Fprintf(w, "\t%s = make([]%s, len(%s))\n", tgtName, GoJsonType(field.Slice), srcName)
 		fmt.Fprintf(w, "\tfor i, x := range %s {\n", srcName)
-		w.WriteString(GoValueToJson(field.Slice, tgtName+"[i]", "x"))
+		w.WriteString(GoValueToJson(field.Slice, tgtName+"[i]", "x", forUnmarshal, errName+"[%d]", "i"))
 		fmt.Fprintf(w, "\t}")
+		return w.String()
+	}
+
+	if field.UnmarshalWith != "" {
+		err := GoFieldError("encoding", errName, errArgs...)
+		if !forUnmarshal {
+			err = "nil, " + err
+		}
+		fmt.Fprintf(w, "\tif x, err := json.Marshal(%s); err != nil { return %s } else { %s = x }\n", srcName, err, tgtName)
 		return w.String()
 	}
 
@@ -378,7 +398,9 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 	case "bytes", "chain", "chainSet", "duration":
 		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = x\n\t}", GoMethodName(field.Type, "FromJSON"), srcName, err, tgtName)
 		return w.String()
-
+	case "bigint":
+		fmt.Fprintf(w, "\tif x, err := %s(%s); err != nil {\n\t\treturn %s\n\t} else {\n\t\t%s = *x\n\t}", GoMethodName(field.Type, "FromJSON"), srcName, err, tgtName)
+		return w.String()
 	case "slice":
 		if GoJsonType(field.Slice) == "" {
 			break
@@ -388,6 +410,11 @@ func GoValueFromJson(field *Field, tgtName, srcName, errName string, errArgs ...
 		fmt.Fprintf(w, "\tfor i, x := range %s {\n", srcName)
 		w.WriteString(GoValueFromJson(field.Slice, tgtName+"[i]", "x", errName+"[%d]", "i"))
 		fmt.Fprintf(w, "\t}")
+		return w.String()
+	}
+
+	if field.UnmarshalWith != "" {
+		fmt.Fprintf(w, "\tif x, err := %sJSON(%s); err != nil { return %s } else { %s = x }\n", field.UnmarshalWith, srcName, err, tgtName)
 		return w.String()
 	}
 

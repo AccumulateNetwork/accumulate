@@ -18,46 +18,57 @@ type SyntheticAnchor struct {
 
 func (SyntheticAnchor) Type() types.TxType { return types.TxTypeSyntheticAnchor }
 
-func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	// Unpack the payload
 	body := new(protocol.SyntheticAnchor)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	// Verify the origin
 	if _, ok := st.Origin.(*protocol.Anchor); !ok {
-		return fmt.Errorf("invalid origin record: want %v, got %v", types.AccountTypeAnchor, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want %v, got %v", types.AccountTypeAnchor, st.Origin.Header().Type)
 	}
 
 	// Check the source URL
 	source, err := url.Parse(body.Source)
 	if err != nil {
-		return fmt.Errorf("invalid source: %v", err)
+		return nil, fmt.Errorf("invalid source: %v", err)
 	}
 	name, ok := protocol.ParseBvnUrl(source)
+	var fromDirectory bool
 	switch {
 	case ok:
 		name = "bvn-" + name
 	case protocol.IsDnUrl(source):
-		name = "dn"
+		name, fromDirectory = "dn", true
 	default:
-		return fmt.Errorf("invalid source: not a BVN or the DN")
+		return nil, fmt.Errorf("invalid source: not a BVN or the DN")
+	}
+
+	if body.Receipt.Start != nil {
+		// If we got a receipt, verify it
+		err = x.verifyReceipt(st, body)
+		if err != nil {
+			return nil, err
+		}
+
+		if fromDirectory {
+			st.AddDirectoryAnchor(body)
+		}
 	}
 
 	// Add the anchor to the chain
-	err = st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex)
+	err = st.AddChainEntry(st.OriginUrl, name, protocol.ChainTypeAnchor, body.RootAnchor[:], body.RootIndex, body.Block)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// If we got a receipt, verify it
-	r := body.Receipt
-	if r.Start == nil {
-		return nil
-	}
+	return nil, nil
+}
 
+func (SyntheticAnchor) verifyReceipt(st *StateManager, body *protocol.SyntheticAnchor) error {
 	// Get the merkle state at the specified index
 	chainName := protocol.MinorRootChain
 	if body.Major {
@@ -78,8 +89,8 @@ func (x SyntheticAnchor) Validate(st *StateManager, tx *transactions.Envelope) e
 	}
 
 	// Calculate receipt end
-	hash := managed.Hash(r.Start)
-	for _, entry := range r.Entries {
+	hash := managed.Hash(body.Receipt.Start)
+	for _, entry := range body.Receipt.Entries {
 		if entry.Right {
 			hash = hash.Combine(managed.Sha256, entry.Hash)
 		} else {

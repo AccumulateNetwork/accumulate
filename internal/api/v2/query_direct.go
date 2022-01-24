@@ -14,6 +14,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/query"
+	"github.com/tendermint/tendermint/rpc/client"
 )
 
 type queryDirect struct {
@@ -21,7 +22,7 @@ type queryDirect struct {
 	connRoute connections.Route
 }
 
-func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
+func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []byte, error) {
 	var err error
 	req := new(query.Query)
 	req.Type = content.Type()
@@ -35,7 +36,7 @@ func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	res, err := q.connRoute.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", b)
+	res, err := q.connRoute.GetQueryClient().ABCIQueryWithOptions(context.Background(), "/abci_query", b, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
 	if err != nil {
 		q.connRoute.ReportError(err)
 		// TODO Retry to other route?
@@ -59,7 +60,7 @@ func (q *queryDirect) query(content queryRequest) (string, []byte, error) {
 	return "", nil, perr
 }
 
-func (q *queryDirect) QueryUrl(s string) (interface{}, error) {
+func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error) {
 	u, err := url.Parse(s)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
@@ -67,7 +68,7 @@ func (q *queryDirect) QueryUrl(s string) (interface{}, error) {
 
 	req := new(query.RequestByUrl)
 	req.Url = types.String(u.String())
-	k, v, err := q.query(req)
+	k, v, err := q.query(req, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +101,13 @@ func (q *queryDirect) QueryUrl(s string) (interface{}, error) {
 			ms.Roots = res.ChainState
 		}
 
-		return packTxResponse(res.TxId, res.TxSynthTxIds, ms, main, pend, pl)
+		packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, ms, main, pend, pl)
+		if err != nil {
+			return nil, err
+		}
+
+		packed.Receipts = res.Receipts
+		return packed, nil
 
 	case "tx-history":
 		txh := new(query.ResponseTxHistory)
@@ -164,6 +171,30 @@ func (q *queryDirect) QueryUrl(s string) (interface{}, error) {
 		qr.MainChain.Roots = res.State
 		return qr, nil
 
+	case "data-entry":
+		res := new(protocol.ResponseDataEntry)
+		err := res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		qr := new(ChainQueryResponse)
+		qr.Type = "dataEntry"
+		qr.Data = res
+		return qr, nil
+
+	case "data-entry-set":
+		res := new(protocol.ResponseDataEntrySet)
+		err := res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		qr := new(ChainQueryResponse)
+		qr.Type = "dataEntry"
+		qr.Data = res
+		return qr, nil
+
 	default:
 		return nil, fmt.Errorf("unknown response type %q", k)
 	}
@@ -179,8 +210,8 @@ func (q *queryDirect) QueryDirectory(s string, pagination QueryPagination, opts 
 	req.Url = types.String(u.String())
 	req.Start = pagination.Start
 	req.Limit = pagination.Count
-	req.ExpandChains = opts.ExpandChains
-	key, val, err := q.query(req)
+	req.ExpandChains = opts.Expand
+	key, val, err := q.query(req, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +262,7 @@ func (q *queryDirect) QueryChain(id []byte) (*ChainQueryResponse, error) {
 
 	req := new(query.RequestByChainId)
 	copy(req.ChainId[:], id)
-	k, v, err := q.query(req)
+	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -247,7 +278,7 @@ func (q *queryDirect) QueryChain(id []byte) (*ChainQueryResponse, error) {
 	return packStateResponse(obj, chain)
 }
 
-func (q *queryDirect) QueryTx(id []byte, wait time.Duration) (*TransactionQueryResponse, error) {
+func (q *queryDirect) QueryTx(id []byte, wait time.Duration, opts QueryOptions) (*TransactionQueryResponse, error) {
 	if len(id) != 32 {
 		return nil, fmt.Errorf("invalid TX ID: wanted 32 bytes, got %d", len(id))
 	}
@@ -266,7 +297,7 @@ func (q *queryDirect) QueryTx(id []byte, wait time.Duration) (*TransactionQueryR
 	copy(req.TxId[:], id)
 
 query:
-	k, v, err := q.query(req)
+	k, v, err := q.query(req, opts)
 	switch {
 	case err == nil:
 		// Found
@@ -296,7 +327,13 @@ query:
 		return nil, err
 	}
 
-	return packTxResponse(res.TxId, res.TxSynthTxIds, nil, main, pend, pl)
+	packed, err := packTxResponse(res.TxId, res.TxSynthTxIds, nil, main, pend, pl)
+	if err != nil {
+		return nil, err
+	}
+
+	packed.Receipts = res.Receipts
+	return packed, nil
 }
 
 func (q *queryDirect) QueryTxHistory(s string, pagination QueryPagination) (*MultiResponse, error) {
@@ -322,7 +359,7 @@ func (q *queryDirect) QueryTxHistory(s string, pagination QueryPagination) (*Mul
 	req.Start = int64(pagination.Start)
 	req.Limit = int64(pagination.Count)
 	copy(req.ChainId[:], u.AccountID())
-	k, v, err := q.query(req)
+	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +395,7 @@ func (q *queryDirect) QueryTxHistory(s string, pagination QueryPagination) (*Mul
 }
 
 func (q *queryDirect) QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error) {
-	r, err := q.QueryUrl(url)
+	r, err := q.QueryUrl(url, QueryOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("chain state for data not found for %s, %v", url, err)
 	}
@@ -370,7 +407,7 @@ func (q *queryDirect) QueryData(url string, entryHash [32]byte) (*ChainQueryResp
 	req := new(query.RequestDataEntry)
 	req.Url = url
 	req.EntryHash = entryHash
-	k, v, err := q.query(req)
+	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -400,9 +437,9 @@ func (q *queryDirect) QueryDataSet(url string, pagination QueryPagination, opts 
 	req.Url = url
 	req.Start = pagination.Start
 	req.Count = pagination.Count
-	req.ExpandChains = opts.ExpandChains
+	req.ExpandChains = opts.Expand
 
-	k, v, err := q.query(req)
+	k, v, err := q.query(req, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +483,7 @@ func (q *queryDirect) QueryKeyPageIndex(s string, key []byte) (*ChainQueryRespon
 	req := new(query.RequestKeyPageIndex)
 	req.Url = u.String()
 	req.Key = key
-	k, v, err := q.query(req)
+	k, v, err := q.query(req, QueryOptions{})
 	if err != nil {
 		return nil, err
 	}

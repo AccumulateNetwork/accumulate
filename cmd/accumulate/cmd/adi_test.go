@@ -33,8 +33,10 @@ func testCase2_1(t *testing.T, tc *testCmd) {
 	//faucet the lite account to make sure there are tokens available
 	testCase5_1(t, tc)
 
-	commandLine := fmt.Sprintf("adi create %s acc://RedWagon red1", liteAccounts[0])
-	_, err := tc.executeTx(t, commandLine)
+	_, err := tc.executeTx(t, "credits %s %s 1000", liteAccounts[0], liteAccounts[0])
+	require.NoError(t, err)
+
+	_, err = tc.executeTx(t, "adi create %s acc://RedWagon red1", liteAccounts[0])
 	require.NoError(t, err)
 
 	//if this doesn't fail, then adi is created
@@ -100,6 +102,9 @@ func testCase2_5(t *testing.T, tc *testCmd) {
 //Create an ADI from another ADI
 func testCase2_6(t *testing.T, tc *testCmd) {
 	t.Helper()
+
+	_, err := tc.executeTx(t, "credits %s acc://RedWagon/page0 1000", liteAccounts[1])
+	require.NoError(t, err)
 
 	commandLine := fmt.Sprintf("adi create acc://RedWagon red1 acc://Redstone red2")
 	r, err := tc.executeTx(t, commandLine)

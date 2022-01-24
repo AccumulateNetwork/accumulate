@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"math/big"
 	"testing"
 
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
@@ -33,6 +34,11 @@ func (s *Suite) TestCreateLiteAccount() {
 	s.dut.GetRecordAs(senderUrl.String(), account)
 	s.Require().Equal(int64(5e4*acctesting.TokenMx), account.Balance.Int64())
 
+	var nonce uint64 = 1
+	tx = s.newTx(senderUrl, sender, nonce, &protocol.AddCredits{Recipient: senderUrl.String(), Amount: 1e8})
+	s.dut.SubmitTxn(tx)
+	s.dut.WaitForTxns(tx.Transaction.Hash())
+
 	recipients := make([]*url.URL, 10)
 	for i := range recipients {
 		key := s.generateTmKey()
@@ -54,11 +60,12 @@ func (s *Suite) TestCreateLiteAccount() {
 				break
 			}
 			recipient := recipients[s.rand.Intn(len(recipients))]
-			exch.AddRecipient(recipient, 1000)
+			exch.AddRecipient(recipient, big.NewInt(int64(1000)))
 			total += 1000
 		}
 
-		tx := s.newTx(senderUrl, sender, uint64(i+1), exch)
+		nonce++
+		tx := s.newTx(senderUrl, sender, nonce, exch)
 		s.dut.SubmitTxn(tx)
 		txids = append(txids, tx.Transaction.Hash())
 	}
@@ -67,6 +74,5 @@ func (s *Suite) TestCreateLiteAccount() {
 
 	account = new(protocol.LiteTokenAccount)
 	s.dut.GetRecordAs(senderUrl.String(), account)
-	s.Require().Equal(int64(5e4*acctesting.TokenMx-total), account.Balance.Int64())
-	fmt.Println("==== TestCreateLiteAccount1 finished ====")
+	s.Require().Equal(int64(4e4*acctesting.TokenMx-total), account.Balance.Int64())
 }

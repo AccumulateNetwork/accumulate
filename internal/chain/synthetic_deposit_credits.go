@@ -12,11 +12,11 @@ type SyntheticDepositCredits struct{}
 
 func (SyntheticDepositCredits) Type() types.TxType { return types.TxTypeSyntheticDepositCredits }
 
-func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.Envelope) error {
+func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.Envelope) (protocol.TransactionResult, error) {
 	body := new(protocol.SyntheticDepositCredits)
 	err := tx.As(body)
 	if err != nil {
-		return fmt.Errorf("invalid payload: %v", err)
+		return nil, fmt.Errorf("invalid payload: %v", err)
 	}
 
 	var account creditChain
@@ -28,10 +28,10 @@ func (SyntheticDepositCredits) Validate(st *StateManager, tx *transactions.Envel
 		account = origin
 
 	default:
-		return fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeKeyPage, st.Origin.Header().Type)
+		return nil, fmt.Errorf("invalid origin record: want account type %v or %v, got %v", types.AccountTypeLiteTokenAccount, types.AccountTypeKeyPage, st.Origin.Header().Type)
 	}
 
 	account.CreditCredits(body.Amount)
 	st.Update(account)
-	return nil
+	return nil, nil
 }

@@ -1,4 +1,5 @@
 # Transactions - names should be verbs
+# Transactions - names should be verbs
 
 ##### User #####
 
@@ -30,6 +31,9 @@ CreateTokenAccount:
       type: string
       is-url: true
       optional: true
+    - name: Scratch
+      type: bool
+      optional: true
 
 SendTokens:
   kind: tx
@@ -60,6 +64,9 @@ CreateDataAccount:
     - name: ManagerKeyBookUrl
       type: string
       is-url: true
+      optional: true
+    - name: Scratch
+      type: bool
       optional: true
 
 WriteData:
@@ -224,7 +231,11 @@ SyntheticAnchor:
       type: chain
     - name: RootIndex
       type: uvarint
+    - name: Block
+      type: uvarint
     - name: SourceIndex
+      type: uvarint
+    - name: SourceBlock
       type: uvarint
     - name: Receipt
       type: Receipt
@@ -266,6 +277,14 @@ SegWitDataEntry:
     - name: EntryHash
       type: chain
 
+##### Result Types #####
+
+WriteDataResult:
+  kind: tx-result
+  fields:
+    - name: EntryHash
+      type: chain
+
 ##### Data Types #####
 
 TokenRecipient:
@@ -274,7 +293,7 @@ TokenRecipient:
       type: string
       is-url: true
     - name: Amount
-      type: uvarint
+      type: bigint
 
 ChainParams:
   fields:

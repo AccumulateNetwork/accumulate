@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/json"
+	"math/big"
 	"fmt"
 	"testing"
 	"time"
@@ -57,14 +58,17 @@ func TestValidate(t *testing.T) {
 		liteKey = newKey([]byte(t.Name()))
 		liteUrl = makeLiteUrl(t, liteKey, ACME)
 
-		xr := new(api.TxResponse)
-		callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl.String()}, xr)
-		require.Zero(t, xr.Code, xr.Message)
-		txWait(t, japi, xr.Txid)
+		const count = 3
+		for i := 0; i < count; i++ {
+			xr := new(api.TxResponse)
+			callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl.String()}, xr)
+			require.Zero(t, xr.Code, xr.Message)
+			txWait(t, japi, xr.Txid)
+		}
 
 		account := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
-		assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
+		assert.Equal(t, int64(count*10*AcmePrecision), account.Balance.Int64())
 	})
 
 	t.Run("Lite Account Credits", func(t *testing.T) {
@@ -73,14 +77,13 @@ func TestValidate(t *testing.T) {
 			Key:    liteKey,
 			Payload: &AddCredits{
 				Recipient: liteUrl.String(),
-				Amount:    100,
+				Amount:    1e5,
 			},
 		})
 
 		account := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
-		assert.Equal(t, int64(100), account.CreditBalance.Int64())
-		assert.Equal(t, int64(10*AcmePrecision-AcmePrecision/100), account.Balance.Int64())
+		assert.Equal(t, int64(1e5), account.CreditBalance.Int64())
 
 		queryRecord(t, japi, "query-chain", &api.ChainIdQuery{ChainId: liteUrl.AccountID()})
 	})
@@ -118,13 +121,29 @@ func TestValidate(t *testing.T) {
 		}, dir.Items)
 	})
 
+	t.Run("Key page credits", func(t *testing.T) {
+		pageUrl := adiName + "/page"
+		executeTx(t, japi, "add-credits", true, execParams{
+			Origin: liteUrl.String(),
+			Key:    liteKey,
+			Payload: &AddCredits{
+				Recipient: pageUrl,
+				Amount:    1e5,
+			},
+		})
+
+		page := NewKeyPage()
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: pageUrl}, page)
+		assert.Equal(t, int64(1e5), page.CreditBalance.Int64())
+	})
+
 	t.Run("Txn History", func(t *testing.T) {
 		r := new(api.MultiResponse)
 		callApi(t, japi, "query-tx-history", struct {
 			Url   string
 			Count int
 		}{liteUrl.String(), 10}, r)
-		require.Len(t, r.Items, 3)
+		require.Len(t, r.Items, 6)
 	})
 
 	dataAccountUrl := adiName + "/dataAccount"
@@ -179,6 +198,21 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, keyBookUrl, string(keyBook.ChainUrl))
 	})
 
+	t.Run("Key page credits 2", func(t *testing.T) {
+		executeTx(t, japi, "add-credits", true, execParams{
+			Origin: liteUrl.String(),
+			Key:    liteKey,
+			Payload: &AddCredits{
+				Recipient: keyPageUrl,
+				Amount:    1e5,
+			},
+		})
+
+		page := NewKeyPage()
+		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: keyPageUrl}, page)
+		assert.Equal(t, int64(1e5), page.CreditBalance.Int64())
+	})
+
 	var adiKey2 ed25519.PrivateKey
 	t.Run("Update Key Page", func(t *testing.T) {
 		adiKey2 = newKey([]byte(t.Name()))
@@ -223,9 +257,7 @@ func TestValidate(t *testing.T) {
 			Key: adiKey[32:],
 		}, keyIndex)
 		assert.Equal(t, keyPageUrl, keyIndex.KeyPage)
-		fmt.Println("==== Query Key Index finished ====")
 	})
-	fmt.Println("==== All tests finished ====")
 }
 
 func TestTokenTransfer(t *testing.T) {
@@ -249,7 +281,7 @@ func TestTokenTransfer(t *testing.T) {
 		var to []*protocol.TokenRecipient
 		to = append(to, &protocol.TokenRecipient{
 			Url:    aliceUrl.String(),
-			Amount: uint64(100),
+			Amount: *big.NewInt(100),
 		})
 		txParams := execParams{
 			Origin: bobUrl.String(),
@@ -267,7 +299,7 @@ func TestTokenTransfer(t *testing.T) {
 			}
 			for i, daemon := range daemons {
 				japi := daemon.Jrpc_TESTONLY()
-				res := executeTxFail(t, japi, "send-tokens", 1, txParams)
+				res := executeTxFail(t, japi, "send-tokens", 0, 1, txParams)
 				assert.Equal(t, uint64(protocol.CodeNotFound), res.Code, "Node %d (%s) returned the wrong error code", i, netName)
 			}
 		}
@@ -304,7 +336,5 @@ func TestFaucetMultiNetwork(t *testing.T) {
 			queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
 			assert.Equal(t, int64(10*AcmePrecision), account.Balance.Int64())
 		}
-		fmt.Println("==== TestFaucetMultiNetwork finished1 ====")
 	})
-	fmt.Println("==== TestFaucetMultiNetwork finished2 ====")
 }

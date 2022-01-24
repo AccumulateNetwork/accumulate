@@ -18,7 +18,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const DefaultLogLevels = "error;main=info;state=info;statesync=info;accumulate=info;init=info"
+const DefaultLogLevels = "error;accumulate=info"
 
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(net, node, netId)       //

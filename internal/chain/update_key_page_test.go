@@ -62,7 +62,7 @@ func TestUpdateKeyPage_Priority(t *testing.T) {
 			st, err := NewStateManager(db.Begin(), protocol.BvnUrl(t.Name()), tx)
 			require.NoError(t, err)
 
-			err = UpdateKeyPage{}.DeliverTx(st, tx)
+			_, err = UpdateKeyPage{}.Validate(st, tx)
 			if idx <= 1 {
 				require.NoError(t, err)
 			} else {

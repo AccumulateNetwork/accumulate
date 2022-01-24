@@ -2,7 +2,9 @@ package protocol
 
 import (
 	"encoding"
+	"encoding/json"
 	"fmt"
+	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -89,6 +91,26 @@ func UnmarshalTransaction(data []byte) (TransactionPayload, error) {
 	return tx, nil
 }
 
+func UnmarshalTransactionJSON(data []byte) (TransactionPayload, error) {
+	var typ struct{ Type types.TransactionType }
+	err := json.Unmarshal(data, &typ)
+	if err != nil {
+		return nil, err
+	}
+
+	tx, err := NewTransaction(typ.Type)
+	if err != nil {
+		return nil, err
+	}
+
+	err = json.Unmarshal(data, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	return tx, nil
+}
+
 type TransactionPayload interface {
 	encoding.BinaryMarshaler
 	encoding.BinaryUnmarshaler
@@ -132,9 +154,9 @@ func (tx *SyntheticCreateChain) Update(chains ...state.Chain) error {
 	return nil
 }
 
-func (tx *SendTokens) AddRecipient(to *url.URL, amount uint64) {
+func (tx *SendTokens) AddRecipient(to *url.URL, amount *big.Int) {
 	recipient := new(TokenRecipient)
 	recipient.Url = to.String()
-	recipient.Amount = amount
+	recipient.Amount = *amount
 	tx.To = append(tx.To, recipient)
 }

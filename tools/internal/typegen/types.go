@@ -2,6 +2,7 @@ package typegen
 
 import (
 	"sort"
+	"strings"
 )
 
 type DataTypes []*DataType
@@ -13,7 +14,11 @@ func DataTypesFrom(m map[string]*DataType) DataTypes {
 		t = append(t, typ)
 
 		if typ.TxType == "" {
-			typ.TxType = typ.Name
+			if typ.Kind == "tx-result" && strings.HasSuffix(name, "Result") {
+				typ.TxType = name[0 : len(name)-6]
+			} else {
+				typ.TxType = typ.Name
+			}
 		}
 
 		if typ.ChainType == "" {
