@@ -1,7 +1,9 @@
 package chain
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -9,8 +11,10 @@ import (
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
+	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
 	"log"
+	"net/http"
 )
 
 type txBatch []byte
@@ -60,7 +64,7 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 		d.BroadcastTxAsyncLocal(ctx, tx)
 	default:
 		log.Println("*** Batch size before", len(*batch))
-		*batch = append(*batch, tx)
+		batch.Append(tx)
 		d.batches[route] = *batch
 		log.Println("*** Appended tx to batch ", batch, " for subnet ", route.GetSubnetName(), "batch size", len(*batch))
 		log.Println("*** Batch size before", len(d.batches[route]))
@@ -76,18 +80,14 @@ func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
 	})
 }
 
-func (d *dispatcher) send(ctx context.Context, client connections.BatchABCIBroadcastClient, batch txBatch) {
-	switch len(batch) {
-	case 0:
-		// Nothing to do
+func (d *dispatcher) send(ctx context.Context, route connections.Route, batch txBatch) {
+	if len(batch) == 0 {
+		return
+	}
 
-	case 1:
-		// Send single. Tendermint's batch RPC client is buggy - it breaks if
-		// you don't give it more than one request.
-		d.errg.Go(func() error {
-			_, err := client.BroadcastTxAsync(ctx, batch[0])
-			return d.checkError(err)
-		})
+	// Tendermint's JSON RPC batch client is utter trash, so we're rolling our
+	// own
+
 	request := jsonrpc2.Request{
 		Method: "broadcast_tx_async",
 		Params: map[string]interface{}{"tx": batch},
@@ -100,21 +100,7 @@ func (d *dispatcher) send(ctx context.Context, client connections.BatchABCIBroad
 			return err
 		}
 
-	default:
-		// Send batch
-		d.errg.Go(func() error {
-			b := client.NewBatch()
-			for _, tx := range batch {
-				_, err := b.BroadcastTxAsync(ctx, tx)
-				if err != nil {
-					return err
-				}
-			}
-			_, err := b.Send(ctx)
-			return d.checkError(err)
-		})
-	}
-		httpReq, err := http.NewRequest(http.MethodPost, server, bytes.NewBuffer(data))
+		httpReq, err := http.NewRequest(http.MethodPost, route.GetNodeUrl(), bytes.NewBuffer(data))
 		if err != nil {
 			return err
 		}
@@ -185,7 +171,7 @@ func (d *dispatcher) Send(ctx context.Context) error {
 			continue
 		}
 		log.Println("*** Sending batch to subnet ", route.GetSubnetName(), "batch size", len(batch), " of ", len(d.batches))
-		d.send(ctx, route.GetBatchBroadcastClient(), batch)
+		d.send(ctx, route, batch)
 	}
 
 	// Wait for everyone to finish

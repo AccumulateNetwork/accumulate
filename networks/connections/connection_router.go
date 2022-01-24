@@ -51,6 +51,7 @@ type Route interface {
 	GetRawClient() RawClient
 	GetNetworkGroup() NetworkGroup
 	GetBatchBroadcastClient() BatchABCIBroadcastClient
+	GetNodeUrl() string
 	ReportError(err error)
 	ReportErrorStatus(status NodeStatus, err error)
 }

@@ -39,6 +39,7 @@ type nodeContext struct {
 	networkGroup         NetworkGroup
 	resolvedIPs          []net.IP
 	metrics              nodeMetrics
+	nodeUrl              string
 	queryClient          ABCIQueryClient
 	broadcastClient      ABCIBroadcastClient
 	batchBroadcastClient BatchABCIBroadcastClient
@@ -47,6 +48,10 @@ type nodeContext struct {
 	service              service.Service
 	lastError            error
 	lastErrorExpiryTime  time.Time
+}
+
+func (nc *nodeContext) GetNodeUrl() string {
+	return nc.nodeUrl
 }
 
 func (nc *nodeContext) GetSubnetName() string {

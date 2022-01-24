@@ -102,7 +102,7 @@ func loadTest(cmd *cobra.Command, args []string) {
 		printUsageAndExit1(cmd, args)
 	}
 
-	relay := relay.New(connMgr, connRouter)
+	relay := relay.New(nil, nil) // TODO
 	query := api.NewQuery(relay)
 
 	err = relay.Start()

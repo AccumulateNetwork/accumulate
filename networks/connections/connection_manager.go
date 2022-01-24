@@ -8,6 +8,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/tendermint/tendermint/libs/log"
+	rpc "github.com/tendermint/tendermint/rpc/client"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	"github.com/ybbus/jsonrpc/v2"
@@ -58,7 +59,7 @@ func (cm *connectionManager) doHealthCheckOnNode(nc *nodeContext) {
 	// Try to query Tendermint with something it should not find
 	qu := query.Query{}
 	qd, _ := qu.MarshalBinary()
-	qryRes, err := nc.GetQueryClient().ABCIQuery(context.Background(), "/abci_query", qd)
+	qryRes, err := nc.GetQueryClient().ABCIQueryWithOptions(context.Background(), "/abci_query", qd, rpc.DefaultABCIQueryOptions)
 	if err != nil || qryRes.Response.Code != 19 { // FIXME code 19 will emit an error in the log
 		nc.ReportError(err)
 		if qryRes != nil {
@@ -270,6 +271,7 @@ func (cm *connectionManager) createAbciClients(nodeCtx *nodeContext) error {
 			return fmt.Errorf("failed to create RPC client: %v", err)
 		}
 
+		nodeCtx.nodeUrl = offsetAddr
 		nodeCtx.queryClient = client
 		nodeCtx.broadcastClient = client
 		nodeCtx.batchBroadcastClient = client

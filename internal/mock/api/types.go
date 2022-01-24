@@ -243,6 +243,11 @@ type MockRoute struct {
 	client          jsonrpc.RPCClient
 }
 
+func (m MockRoute) GetNodeUrl() string {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m MockRoute) GetRawClient() connections.RawClient {
 	panic("implement me")
 }
