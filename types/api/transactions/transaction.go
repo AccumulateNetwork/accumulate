@@ -1,6 +1,7 @@
 package transactions
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding"
 	"errors"
@@ -60,6 +61,14 @@ func (e *Envelope) EnvHash() []byte {
 	h := sha256.Sum256(hashes)
 	e.hash = h[:]
 	return h[:]
+}
+
+// VerifyTxHash verifies that TxHash matches the hash of the transaction.
+func (e *Envelope) VerifyTxHash() bool {
+	if e.TxHash == nil {
+		return true
+	}
+	return bytes.Equal(e.TxHash, e.Transaction.calculateHash())
 }
 
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).

@@ -180,6 +180,8 @@ func (t TransactionType) String() string {
 		return "addCredits"
 	case TxTypeUpdateKeyPage:
 		return "updateKeyPage"
+	case TxTypeSignPending:
+		return "signPending"
 
 	case TxTypeSyntheticCreateChain:
 		return "syntheticCreateChain"

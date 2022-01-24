@@ -147,36 +147,10 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 // validate validates signatures, verifies they are authorized,
 // updates the nonce, and charges the fee.
 func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
-	// All transactions must be signed
-	if len(env.Signatures) == 0 {
-		return nil, nil, false, fmt.Errorf("transaction is not signed")
-	}
-
-	// TxHash must either be empty or a SHA-256 hash
-	if len(env.TxHash) != 0 && len(env.TxHash) != sha256.Size {
-		return nil, nil, false, fmt.Errorf("invalid hash")
-	}
-
-	// TxHash must be specified for signature transactions
-	txt := env.Transaction.Type()
-	if txt == types.TxTypeSignPending && len(env.TxHash) == 0 {
-		return nil, nil, false, fmt.Errorf("invalid signature transaction: missing transaction hash")
-	}
-
-	// If the transaction is borked, the transaction type is probably invalid,
-	// so check that first. "Invalid transaction type" is a more useful error
-	// than "invalid signature" if the real error is the transaction got borked.
-	var ok bool
-	if txt != types.TxTypeSignPending {
-		executor, ok = m.executors[txt]
-		if !ok && txt != types.TxTypeSignPending {
-			return nil, nil, false, fmt.Errorf("unsupported TX type: %v", txt)
-		}
-	}
-
-	// Verify the transaction's signatures
-	if !env.Verify() {
-		return nil, nil, false, fmt.Errorf("invalid signature")
+	// Basic validation
+	err = m.validateBasic(batch, env)
+	if err != nil {
+		return nil, nil, false, err
 	}
 
 	// Calculate the fee before modifying the transaction
@@ -186,28 +160,22 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 	}
 
 	// Load previous transaction state
-	txState, _, sigs, err := batch.Transaction(env.GetTxHash()).Get()
+	txt := env.Transaction.Type()
+	txState, err := batch.Transaction(env.GetTxHash()).GetState()
 	switch {
 	case err == nil:
 		// Populate the transaction from the database
 		env.Transaction = txState.Restore().Transaction
-
-		// Update txt and executor for signature transactions
-		if txt != types.TxTypeSignPending {
-			break
-		}
-
-		// This should never fail because an invalid transaction should never be
-		// written to the database
 		txt = env.Transaction.Type()
-		executor, ok = m.executors[txt]
-		if !ok && txt != types.TxTypeSignPending {
-			return nil, nil, false, fmt.Errorf("unsupported TX type: %v", txt)
-		}
+
 	case !errors.Is(err, storage.ErrNotFound):
 		return nil, nil, false, fmt.Errorf("an error occured while looking up the transaction: %v", err)
-	case txt == types.TxTypeSignPending:
-		return nil, nil, false, fmt.Errorf("invalid signature transaction: %w", err)
+	}
+
+	// If this fails, the code is wrong
+	executor, ok := m.executors[txt]
+	if !ok {
+		return nil, nil, false, fmt.Errorf("internal error: unsupported TX type: %v", txt)
 	}
 
 	// Set up the state manager
@@ -260,8 +228,85 @@ func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (
 		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.Header().Type)
 	}
 
-	hasEnoughSigs, err = m.validateAgainstBook(st, env, book, fee, len(sigs))
+	hasEnoughSigs, err = m.validateAgainstBook(st, env, book, fee)
 	return st, executor, hasEnoughSigs, err
+}
+
+func (m *Executor) validateBasic(batch *database.Batch, env *transactions.Envelope) error {
+	// If the transaction is borked, the transaction type is probably invalid,
+	// so check that first. "Invalid transaction type" is a more useful error
+	// than "invalid signature" if the real error is the transaction got borked.
+	txt := env.Transaction.Type()
+	_, ok := m.executors[txt]
+	if !ok && txt != types.TxTypeSignPending {
+		return fmt.Errorf("unsupported TX type: %v", txt)
+	}
+
+	// All transactions must be signed
+	if len(env.Signatures) == 0 {
+		return fmt.Errorf("transaction is not signed")
+	}
+
+	switch {
+	case len(env.TxHash) == 0:
+		// TxHash must be specified for signature transactions
+		if txt == types.TxTypeSignPending {
+			return fmt.Errorf("invalid signature transaction: missing transaction hash")
+		}
+
+	case len(env.TxHash) != sha256.Size:
+		// TxHash must either be empty or a SHA-256 hash
+		return fmt.Errorf("invalid hash: not a SHA-256 hash")
+
+	case !env.VerifyTxHash():
+		// TxHash must match the transaction
+		if txt != types.TxTypeSignPending {
+			return fmt.Errorf("invalid hash: does not match transaction")
+		}
+	}
+
+	// TxHash must either be empty or a SHA-256 hash
+	if len(env.TxHash) != 0 && len(env.TxHash) != sha256.Size {
+		return fmt.Errorf("invalid hash")
+	}
+
+	// TxHash must be specified for signature transactions
+	if txt == types.TxTypeSignPending && len(env.TxHash) == 0 {
+		return fmt.Errorf("invalid signature transaction: missing transaction hash")
+	}
+
+	// Verify the transaction's signatures
+	if !env.Verify() {
+		return fmt.Errorf("invalid signature(s)")
+	}
+
+	// Check the envelope
+	_, err := batch.Transaction(env.EnvHash()).GetState()
+	switch {
+	case err == nil:
+		return fmt.Errorf("duplicate envelope")
+	case errors.Is(err, storage.ErrNotFound):
+		// OK
+	default:
+		return fmt.Errorf("error while checking envelope state: %v", err)
+	}
+
+	// Check the transaction
+	status, err := batch.Transaction(env.GetTxHash()).GetStatus()
+	switch {
+	case err == nil:
+		if status.Delivered {
+			return fmt.Errorf("transaction has already been delivered")
+		}
+	case errors.Is(err, storage.ErrNotFound):
+		if txt == types.TxTypeSignPending {
+			return fmt.Errorf("transaction not found")
+		}
+	default:
+		return fmt.Errorf("failed to load transaction status: %v", err)
+	}
+
+	return nil
 }
 
 func (m *Executor) validateSynthetic(st *StateManager, env *transactions.Envelope) error {
@@ -292,7 +337,7 @@ func (m *Executor) validateInternal(st *StateManager, env *transactions.Envelope
 	return nil
 }
 
-func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envelope, book *protocol.KeyBook, fee protocol.Fee, previousSigCount int) (bool, error) {
+func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envelope, book *protocol.KeyBook, fee protocol.Fee) (bool, error) {
 	if env.Transaction.KeyPageIndex >= uint64(len(book.Pages)) {
 		return false, fmt.Errorf("invalid sig spec index")
 	}
@@ -342,8 +387,13 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 		return false, err
 	}
 
+	sigCount, err := st.batch.Transaction(env.GetTxHash()).AddSignatures(env.Signatures...)
+	if err != nil && !errors.Is(err, storage.ErrNotFound) {
+		return false, fmt.Errorf("failed to add signatures: %v", err)
+	}
+
 	// If the number of signatures is less than the threshold, the transaction is pending
-	return previousSigCount+len(env.Signatures) >= int(page.Threshold), nil
+	return sigCount >= int(page.Threshold), nil
 }
 
 func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envelope, fee protocol.Fee) error {
