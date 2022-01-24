@@ -48,10 +48,16 @@ function wait-for-tx {
     done
 }
 
-# cli-tx <args...> - Execute a CLI command and extract the TXID from the result
+# cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
 function cli-tx {
     JSON=`accumulate -j "$@"` || return 1
-    echo "$JSON" | jq -re .txid
+    echo "$JSON" | jq -re .transactionHash
+}
+
+# cli-tx-env <args...> - Execute a CLI command and extract the envelope hash from the result
+function cli-tx-env {
+    JSON=`accumulate -j "$@"` || return 1
+    echo "$JSON" | jq -re .envelopeHash
 }
 
 # api-v2 <payload> - Send a JSON-RPC message to the API
@@ -62,7 +68,7 @@ function api-v2 {
 # api-tx <payload> - Send a JSON-RPC message to the API and extract the TXID from the result
 function api-tx {
     JSON=`api-v2 "$@"` || return 1
-    echo "$JSON" | jq -r .result.txid
+    echo "$JSON" | jq -r .result.transactionHash
 }
 
 # die <message> - Print an error message and exit
@@ -119,6 +125,7 @@ section "Generate keys"
 ensure-key keytest-0-0
 ensure-key keytest-1-0
 ensure-key keytest-1-1
+ensure-key keytest-1-2
 ensure-key keytest-2-0
 ensure-key keytest-2-1
 echo
@@ -160,6 +167,7 @@ BALANCE=$(accumulate -j page get keytest/page1 | jq -r .data.creditBalance)
 
 section "Add a key to page 1 using a key from page 1"
 wait-for cli-tx page key add keytest/page1 keytest-1-0 1 keytest-1-1
+wait-for cli-tx page key add keytest/page1 keytest-1-0 1 keytest-1-2
 success
 
 section "Add a key to page 2 using a key from page 1"
@@ -183,12 +191,26 @@ BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
 section "Send tokens from the ADI token account to the lite token account using the multisig page"
 TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1)
 wait-for-tx $TXID
-accumulate -j tx get $TXID | jq -re .status.pending && success || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.pending &> /dev/null || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.delivered &> /dev/null && die "Transaction was delivered"
+success
+
+section "Signing the transaction with the same key does not deliver it"
+wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
+accumulate -j tx get $TXID | jq -re .status.pending &> /dev/null || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.delivered &> /dev/null && die "Transaction was delivered"
+wait-for-tx $TXID
+success
 
 section "Sign the pending transaction using the other key"
-wait-for cli-tx tx sign keytest/tokens keytest-1-1 $TXID
-accumulate -j tx get $TXID | jq -re .status.delivered && success || die "Transaction was not delivered"
+wait-for cli-tx-env tx sign keytest/tokens keytest-1-1 $TXID
+accumulate -j tx get $TXID | jq -re .status.pending &> /dev/null && die "Transaction is pending"
+accumulate -j tx get $TXID | jq -re .status.delivered &> /dev/null || die "Transaction was not delivered"
 wait-for-tx $TXID
+success
+
+section "Signing the transaction after it has been delivered fails"
+cli-tx-env tx sign keytest/tokens keytest-1-2 $TXID && die "Signed the transaction after it was delivered" || success
 
 section "Bug AC-551"
 api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value &> /dev/null
@@ -258,7 +280,7 @@ accumulate account get keytest/data &> /dev/null && success || die "Cannot find 
 
 section "Write data to ADI Data Account"
 JSON=$(accumulate -j data write keytest/data keytest-0-0 foo bar)
-TXID=$(echo $JSON | jq -re .txid)
+TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
 echo $JSON | jq -re .result.entryHash &> /dev/null || die "Deliver response does not include the entry hash"
