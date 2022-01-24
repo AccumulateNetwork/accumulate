@@ -149,7 +149,6 @@ func initNode(*cobra.Command, []string) {
 		}
 
 		config[i].Accumulate.Network.BvnNames = bvnNames
-		config[i].Accumulate.Network.SelfAddress = selfAddresses[i]
 		config[i].Accumulate.Network.Addresses = addresses
 	}
 
@@ -352,7 +351,6 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 		for _, c := range c {
 			c.Accumulate.Network.BvnNames = bvns
 			c.Accumulate.Network.Addresses = addresses
-			c.Accumulate.Network.SelfAddress = addresses[c.Accumulate.Network.ID][0]
 		}
 	}
 
