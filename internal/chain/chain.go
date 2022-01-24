@@ -2,11 +2,10 @@ package chain
 
 import (
 	"fmt"
-	"math/big"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -80,20 +79,16 @@ type TxExecutor interface {
 	Type() types.TransactionType
 
 	// Validate fully validates and executes the transaction.
-	Validate(*StateManager, *transactions.Envelope) error
+	Validate(*StateManager, *transactions.Envelope) (protocol.TransactionResult, error)
 }
 
 type creditChain interface {
 	state.Chain
 	SetNonce(key []byte, nonce uint64) error
-	CreditCredits(amount uint64)
-	DebitCredits(amount uint64) bool
+	protocol.CreditHolder
 }
 
 type tokenChain interface {
 	state.Chain
-	ParseTokenUrl() (*url.URL, error)
-	CreditTokens(amount *big.Int) bool
-	CanDebitTokens(amount *big.Int) bool
-	DebitTokens(amount *big.Int) bool
+	protocol.TokenHolder
 }

@@ -3,6 +3,7 @@ package abci_test
 import (
 	"crypto/sha256"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
@@ -66,6 +67,10 @@ func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 		send(gtx)
 	})
 
+	batch := n.db.Begin()
+	n.Require().NoError(acctesting.AddCredits(batch, acctesting.AcmeLiteAddressStdPriv(recipient), 1e9))
+	n.require.NoError(batch.Commit())
+
 	balance := map[string]int64{}
 	n.Batch(func(send func(*Tx)) {
 		for i := 0; i < count; i++ {
@@ -73,7 +78,7 @@ func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 			balance[recipient.Addr] += 1000
 
 			exch := new(protocol.SendTokens)
-			exch.AddRecipient(n.ParseUrl(recipient.Addr), 1000)
+			exch.AddRecipient(n.ParseUrl(recipient.Addr), big.NewInt(int64(1000)))
 			tx, err := transactions.New(origin.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
 				return origin.Sign(hash), nil
 			}, exch)
@@ -113,7 +118,7 @@ func TestAnchorChain(t *testing.T) {
 
 	liteAccount := generateKey()
 	batch := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, liteAccount, 5e4))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, 5e4, 1e6))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*Tx)) {
@@ -179,7 +184,7 @@ func TestCreateADI(t *testing.T) {
 	newAdi := generateKey()
 	keyHash := sha256.Sum256(newAdi.PubKey().Address())
 	batch := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, liteAccount, 5e4))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteAccount, 5e4, 1e6))
 	require.NoError(t, batch.Commit())
 
 	wallet := new(transactions.WalletEntry)
@@ -245,7 +250,7 @@ func TestCreateLiteDataAccount(t *testing.T) {
 
 		adiKey := generateKey()
 		batch := n.db.Begin()
-		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, batch.Commit())
 		n.Batch(func(send func(*transactions.Envelope)) {
 			wdt := new(protocol.WriteDataTo)
@@ -276,7 +281,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		adiKey := generateKey()
 		batch := n.db.Begin()
-		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.Batch(func(send func(*transactions.Envelope)) {
@@ -301,7 +306,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin()
-		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/foo/page1", pageKey.PubKey().Bytes()))
 		require.NoError(t, acctesting.CreateKeyBook(batch, "acc://FooBar/foo/book1", "acc://FooBar/foo/page1"))
 		require.NoError(t, acctesting.CreateKeyPage(batch, "acc://FooBar/mgr/page1", pageKey.PubKey().Bytes()))
@@ -335,7 +340,7 @@ func TestCreateAdiDataAccount(t *testing.T) {
 
 		adiKey := generateKey()
 		batch := n.db.Begin()
-		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.Batch(func(send func(*transactions.Envelope)) {
@@ -437,7 +442,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 
 		adiKey := generateKey()
 		batch := n.db.Begin()
-		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, batch.Commit())
 
 		n.Batch(func(send func(*transactions.Envelope)) {
@@ -469,7 +474,7 @@ func TestCreateAdiTokenAccount(t *testing.T) {
 
 		adiKey, pageKey := generateKey(), generateKey()
 		batch := n.db.Begin()
-		require.NoError(t, acctesting.CreateADI(batch, adiKey, "FooBar"))
+		require.NoError(t, acctesting.CreateAdiWithCredits(batch, adiKey, "FooBar", 1e9))
 		require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", pageKey.PubKey().Bytes()))
 		require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
 		require.NoError(t, batch.Commit())
@@ -501,7 +506,7 @@ func TestLiteAccountTx(t *testing.T) {
 
 	alice, bob, charlie := generateKey(), generateKey(), generateKey()
 	batch := n.db.Begin()
-	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, alice, 5e4))
+	require.NoError(n.t, acctesting.CreateLiteTokenAccountWithCredits(batch, alice, 5e4, 1e9))
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, bob, 0))
 	require.NoError(n.t, acctesting.CreateLiteTokenAccount(batch, charlie, 0))
 	require.NoError(t, batch.Commit())
@@ -512,8 +517,8 @@ func TestLiteAccountTx(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), 1000)
-		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), 2000)
+		exch.AddRecipient(acctesting.MustParseUrl(bobUrl), big.NewInt(int64(1000)))
+		exch.AddRecipient(acctesting.MustParseUrl(charlieUrl), big.NewInt(int64(2000)))
 
 		tx, err := transactions.New(aliceUrl, 2, edSigner(alice, 1), exch)
 		require.NoError(t, err)
@@ -532,7 +537,7 @@ func TestAdiAccountTx(t *testing.T) {
 
 	fooKey, barKey := generateKey(), generateKey()
 	batch := n.db.Begin()
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "foo/tokens", protocol.AcmeUrl().String(), 1, false))
 	require.NoError(t, acctesting.CreateADI(batch, barKey, "bar"))
 	require.NoError(t, acctesting.CreateTokenAccount(batch, "bar/tokens", protocol.AcmeUrl().String(), 0, false))
@@ -540,7 +545,7 @@ func TestAdiAccountTx(t *testing.T) {
 
 	n.Batch(func(send func(*transactions.Envelope)) {
 		exch := new(protocol.SendTokens)
-		exch.AddRecipient(n.ParseUrl("bar/tokens"), 68)
+		exch.AddRecipient(n.ParseUrl("bar/tokens"), big.NewInt(int64(68)))
 
 		tx, err := transactions.New("foo/tokens", 1, edSigner(fooKey, 1), exch)
 		require.NoError(t, err)
@@ -585,7 +590,7 @@ func TestCreateKeyPage(t *testing.T) {
 
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin()
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -615,7 +620,7 @@ func TestCreateKeyBook(t *testing.T) {
 
 	fooKey, testKey := generateKey(), generateKey()
 	batch := n.db.Begin()
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
 	require.NoError(t, batch.Commit())
 
@@ -654,6 +659,7 @@ func TestAddKeyPage(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey1.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	// Sanity check
@@ -690,6 +696,7 @@ func TestAddKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	newKey := generateKey()
@@ -719,6 +726,7 @@ func TestUpdateKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	newKey := generateKey()
@@ -749,6 +757,7 @@ func TestRemoveKey(t *testing.T) {
 	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
 	require.NoError(t, acctesting.CreateKeyPage(batch, "foo/page1", testKey1.PubKey().Bytes(), testKey2.PubKey().Bytes()))
 	require.NoError(t, acctesting.CreateKeyBook(batch, "foo/book1", "foo/page1"))
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page1"), 1e9))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -781,7 +790,7 @@ func TestSignatorHeight(t *testing.T) {
 	require.NoError(t, err)
 
 	batch := n.db.Begin()
-	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 1))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 1, 1e9))
 	require.NoError(t, batch.Commit())
 
 	getHeight := func(u *url.URL) uint64 {
@@ -808,6 +817,10 @@ func TestSignatorHeight(t *testing.T) {
 
 	require.Equal(t, liteHeight, getHeight(liteUrl), "Lite account height changed")
 
+	batch = n.db.Begin()
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page0"), 1e9))
+	require.NoError(t, batch.Commit())
+
 	keyPageHeight := getHeight(keyPageUrl)
 
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -829,7 +842,7 @@ func TestCreateToken(t *testing.T) {
 
 	fooKey := generateKey()
 	batch := n.db.Begin()
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, batch.Commit())
 
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -853,7 +866,7 @@ func TestIssueTokens(t *testing.T) {
 
 	fooKey, liteKey := generateKey(), generateKey()
 	batch := n.db.Begin()
-	require.NoError(t, acctesting.CreateADI(batch, fooKey, "foo"))
+	require.NoError(t, acctesting.CreateAdiWithCredits(batch, fooKey, "foo", 1e9))
 	require.NoError(t, acctesting.CreateTokenIssuer(batch, "foo/tokens", "FOO", 10))
 	require.NoError(t, batch.Commit())
 

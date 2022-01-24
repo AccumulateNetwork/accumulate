@@ -38,6 +38,8 @@ type AnchorMetadata struct {
 	Account     *url.URL `json:"account,omitempty" form:"account" query:"account" validate:"required"`
 	Index       uint64   `json:"index,omitempty" form:"index" query:"index" validate:"required"`
 	SourceIndex uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
+	SourceBlock uint64   `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
+	Entry       []byte   `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
 }
 
 type AnchoredRecord struct {
@@ -63,6 +65,7 @@ type CreateDataAccount struct {
 	Url               string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 	KeyBookUrl        string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
 	ManagerKeyBookUrl string `json:"managerKeyBookUrl,omitempty" form:"managerKeyBookUrl" query:"managerKeyBookUrl" validate:"acc-url"`
+	Scratch           bool   `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
 type CreateIdentity struct {
@@ -96,10 +99,12 @@ type CreateTokenAccount struct {
 	Url        string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 	TokenUrl   string `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	KeyBookUrl string `json:"keyBookUrl,omitempty" form:"keyBookUrl" query:"keyBookUrl" validate:"acc-url"`
+	Scratch    bool   `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
 type DataAccount struct {
 	state.ChainHeader
+	Scratch bool `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
 type DataEntry struct {
@@ -248,7 +253,9 @@ type SyntheticAnchor struct {
 	Major       bool     `json:"major,omitempty" form:"major" query:"major" validate:"required"`
 	RootAnchor  [32]byte `json:"rootAnchor,omitempty" form:"rootAnchor" query:"rootAnchor" validate:"required"`
 	RootIndex   uint64   `json:"rootIndex,omitempty" form:"rootIndex" query:"rootIndex" validate:"required"`
+	Block       uint64   `json:"block,omitempty" form:"block" query:"block" validate:"required"`
 	SourceIndex uint64   `json:"sourceIndex,omitempty" form:"sourceIndex" query:"sourceIndex" validate:"required"`
+	SourceBlock uint64   `json:"sourceBlock,omitempty" form:"sourceBlock" query:"sourceBlock" validate:"required"`
 	Receipt     Receipt  `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 }
 
@@ -293,6 +300,7 @@ type TokenAccount struct {
 	state.ChainHeader
 	TokenUrl string  `json:"tokenUrl,omitempty" form:"tokenUrl" query:"tokenUrl" validate:"required,acc-url"`
 	Balance  big.Int `json:"balance,omitempty" form:"balance" query:"balance" validate:"required"`
+	Scratch  bool    `json:"scratch,omitempty" form:"scratch" query:"scratch"`
 }
 
 type TokenIssuer struct {
@@ -305,8 +313,8 @@ type TokenIssuer struct {
 }
 
 type TokenRecipient struct {
-	Url    string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
-	Amount uint64 `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
+	Url    string  `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
+	Amount big.Int `json:"amount,omitempty" form:"amount" query:"amount" validate:"required"`
 }
 
 type TransactionSignature struct {
@@ -315,9 +323,11 @@ type TransactionSignature struct {
 }
 
 type TransactionStatus struct {
-	Remote    bool   `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
-	Delivered bool   `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
-	Code      uint64 `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Remote    bool              `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
+	Delivered bool              `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
+	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
+	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result"`
 }
 
 type UpdateKeyPage struct {
@@ -330,6 +340,10 @@ type UpdateKeyPage struct {
 
 type WriteData struct {
 	Entry DataEntry `json:"entry,omitempty" form:"entry" query:"entry" validate:"required"`
+}
+
+type WriteDataResult struct {
+	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
 }
 
 type WriteDataTo struct {
@@ -457,6 +471,8 @@ func (*UpdateKeyPage) GetType() types.TransactionType { return types.TxTypeUpdat
 
 func (*WriteData) GetType() types.TransactionType { return types.TxTypeWriteData }
 
+func (*WriteDataResult) GetType() types.TransactionType { return types.TxTypeWriteData }
+
 func (*WriteDataTo) GetType() types.TransactionType { return types.TxTypeWriteDataTo }
 
 func (v *ADI) Equal(u *ADI) bool {
@@ -505,6 +521,14 @@ func (v *AnchorMetadata) Equal(u *AnchorMetadata) bool {
 	}
 
 	if !(v.SourceIndex == u.SourceIndex) {
+		return false
+	}
+
+	if !(v.SourceBlock == u.SourceBlock) {
+		return false
+	}
+
+	if !(bytes.Equal(v.Entry, u.Entry)) {
 		return false
 	}
 
@@ -565,6 +589,10 @@ func (v *CreateDataAccount) Equal(u *CreateDataAccount) bool {
 	}
 
 	if !(v.ManagerKeyBookUrl == u.ManagerKeyBookUrl) {
+		return false
+	}
+
+	if !(v.Scratch == u.Scratch) {
 		return false
 	}
 
@@ -676,11 +704,19 @@ func (v *CreateTokenAccount) Equal(u *CreateTokenAccount) bool {
 		return false
 	}
 
+	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+
 	return true
 }
 
 func (v *DataAccount) Equal(u *DataAccount) bool {
 	if !v.ChainHeader.Equal(&u.ChainHeader) {
+		return false
+	}
+
+	if !(v.Scratch == u.Scratch) {
 		return false
 	}
 
@@ -1119,7 +1155,15 @@ func (v *SyntheticAnchor) Equal(u *SyntheticAnchor) bool {
 		return false
 	}
 
+	if !(v.Block == u.Block) {
+		return false
+	}
+
 	if !(v.SourceIndex == u.SourceIndex) {
+		return false
+	}
+
+	if !(v.SourceBlock == u.SourceBlock) {
 		return false
 	}
 
@@ -1269,6 +1313,10 @@ func (v *TokenAccount) Equal(u *TokenAccount) bool {
 		return false
 	}
 
+	if !(v.Scratch == u.Scratch) {
+		return false
+	}
+
 	return true
 }
 
@@ -1305,7 +1353,7 @@ func (v *TokenRecipient) Equal(u *TokenRecipient) bool {
 		return false
 	}
 
-	if !(v.Amount == u.Amount) {
+	if !(v.Amount.Cmp(&u.Amount) == 0) {
 		return false
 	}
 
@@ -1334,6 +1382,14 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	}
 
 	if !(v.Code == u.Code) {
+		return false
+	}
+
+	if !(v.Message == u.Message) {
+		return false
+	}
+
+	if !(v.Result == u.Result) {
 		return false
 	}
 
@@ -1366,6 +1422,14 @@ func (v *UpdateKeyPage) Equal(u *UpdateKeyPage) bool {
 
 func (v *WriteData) Equal(u *WriteData) bool {
 	if !(v.Entry.Equal(&u.Entry)) {
+		return false
+	}
+
+	return true
+}
+
+func (v *WriteDataResult) Equal(u *WriteDataResult) bool {
+	if !(v.EntryHash == u.EntryHash) {
 		return false
 	}
 
@@ -1439,6 +1503,10 @@ func (v *AnchorMetadata) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(v.SourceIndex)
 
+	n += encoding.UvarintBinarySize(v.SourceBlock)
+
+	n += encoding.BytesBinarySize(v.Entry)
+
 	return n
 }
 
@@ -1492,6 +1560,8 @@ func (v *CreateDataAccount) BinarySize() int {
 	n += encoding.StringBinarySize(v.KeyBookUrl)
 
 	n += encoding.StringBinarySize(v.ManagerKeyBookUrl)
+
+	n += encoding.BoolBinarySize(v.Scratch)
 
 	return n
 }
@@ -1579,6 +1649,8 @@ func (v *CreateTokenAccount) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.KeyBookUrl)
 
+	n += encoding.BoolBinarySize(v.Scratch)
+
 	return n
 }
 
@@ -1589,6 +1661,8 @@ func (v *DataAccount) BinarySize() int {
 	v.Type = types.AccountTypeDataAccount
 
 	n += v.ChainHeader.GetHeaderSize()
+
+	n += encoding.BoolBinarySize(v.Scratch)
 
 	return n
 }
@@ -1969,7 +2043,11 @@ func (v *SyntheticAnchor) BinarySize() int {
 
 	n += encoding.UvarintBinarySize(v.RootIndex)
 
+	n += encoding.UvarintBinarySize(v.Block)
+
 	n += encoding.UvarintBinarySize(v.SourceIndex)
+
+	n += encoding.UvarintBinarySize(v.SourceBlock)
 
 	n += v.Receipt.BinarySize()
 
@@ -2084,6 +2162,8 @@ func (v *TokenAccount) BinarySize() int {
 
 	n += encoding.BigintBinarySize(&v.Balance)
 
+	n += encoding.BoolBinarySize(v.Scratch)
+
 	return n
 }
 
@@ -2113,7 +2193,7 @@ func (v *TokenRecipient) BinarySize() int {
 
 	n += encoding.StringBinarySize(v.Url)
 
-	n += encoding.UvarintBinarySize(v.Amount)
+	n += encoding.BigintBinarySize(&v.Amount)
 
 	return n
 }
@@ -2136,6 +2216,10 @@ func (v *TransactionStatus) BinarySize() int {
 	n += encoding.BoolBinarySize(v.Delivered)
 
 	n += encoding.UvarintBinarySize(v.Code)
+
+	n += encoding.StringBinarySize(v.Message)
+
+	n += v.Result.BinarySize()
 
 	return n
 }
@@ -2164,6 +2248,16 @@ func (v *WriteData) BinarySize() int {
 	n += encoding.UvarintBinarySize(types.TxTypeWriteData.ID())
 
 	n += v.Entry.BinarySize()
+
+	return n
+}
+
+func (v *WriteDataResult) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeWriteData.ID())
+
+	n += encoding.ChainBinarySize(&v.EntryHash)
 
 	return n
 }
@@ -2251,6 +2345,10 @@ func (v *AnchorMetadata) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.SourceIndex))
 
+	buffer.Write(encoding.UvarintMarshalBinary(v.SourceBlock))
+
+	buffer.Write(encoding.BytesMarshalBinary(v.Entry))
+
 	return buffer.Bytes(), nil
 }
 
@@ -2308,6 +2406,8 @@ func (v *CreateDataAccount) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
 
 	buffer.Write(encoding.StringMarshalBinary(v.ManagerKeyBookUrl))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
 
 	return buffer.Bytes(), nil
 }
@@ -2399,6 +2499,8 @@ func (v *CreateTokenAccount) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.KeyBookUrl))
 
+	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
+
 	return buffer.Bytes(), nil
 }
 
@@ -2413,6 +2515,7 @@ func (v *DataAccount) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
+	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
 
 	return buffer.Bytes(), nil
 }
@@ -2864,7 +2967,11 @@ func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.RootIndex))
 
+	buffer.Write(encoding.UvarintMarshalBinary(v.Block))
+
 	buffer.Write(encoding.UvarintMarshalBinary(v.SourceIndex))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.SourceBlock))
 
 	if b, err := v.Receipt.MarshalBinary(); err != nil {
 		return nil, fmt.Errorf("error encoding Receipt: %w", err)
@@ -2998,6 +3105,8 @@ func (v *TokenAccount) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.BigintMarshalBinary(&v.Balance))
 
+	buffer.Write(encoding.BoolMarshalBinary(v.Scratch))
+
 	return buffer.Bytes(), nil
 }
 
@@ -3030,7 +3139,7 @@ func (v *TokenRecipient) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.StringMarshalBinary(v.Url))
 
-	buffer.Write(encoding.UvarintMarshalBinary(v.Amount))
+	buffer.Write(encoding.BigintMarshalBinary(&v.Amount))
 
 	return buffer.Bytes(), nil
 }
@@ -3057,6 +3166,14 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BoolMarshalBinary(v.Delivered))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Code))
+
+	buffer.Write(encoding.StringMarshalBinary(v.Message))
+
+	if b, err := v.Result.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Result: %w", err)
+	} else {
+		buffer.Write(b)
+	}
 
 	return buffer.Bytes(), nil
 }
@@ -3093,6 +3210,16 @@ func (v *WriteData) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeWriteData.ID()))
+
+	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
 
 	return buffer.Bytes(), nil
 }
@@ -3208,6 +3335,20 @@ func (v *AnchorMetadata) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.UvarintBinarySize(v.SourceIndex):]
 
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding SourceBlock: %w", err)
+	} else {
+		v.SourceBlock = x
+	}
+	data = data[encoding.UvarintBinarySize(v.SourceBlock):]
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
+	} else {
+		v.Entry = x
+	}
+	data = data[encoding.BytesBinarySize(v.Entry):]
+
 	return nil
 }
 
@@ -3311,6 +3452,13 @@ func (v *CreateDataAccount) UnmarshalBinary(data []byte) error {
 		v.ManagerKeyBookUrl = x
 	}
 	data = data[encoding.StringBinarySize(v.ManagerKeyBookUrl):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Scratch: %w", err)
+	} else {
+		v.Scratch = x
+	}
+	data = data[encoding.BoolBinarySize(v.Scratch):]
 
 	return nil
 }
@@ -3523,6 +3671,13 @@ func (v *CreateTokenAccount) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.KeyBookUrl):]
 
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Scratch: %w", err)
+	} else {
+		v.Scratch = x
+	}
+	data = data[encoding.BoolBinarySize(v.Scratch):]
+
 	return nil
 }
 
@@ -3534,6 +3689,13 @@ func (v *DataAccount) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("invalid account type: want %v, got %v", typ, v.Type)
 	}
 	data = data[v.GetHeaderSize():]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Scratch: %w", err)
+	} else {
+		v.Scratch = x
+	}
+	data = data[encoding.BoolBinarySize(v.Scratch):]
 
 	return nil
 }
@@ -4282,11 +4444,25 @@ func (v *SyntheticAnchor) UnmarshalBinary(data []byte) error {
 	data = data[encoding.UvarintBinarySize(v.RootIndex):]
 
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Block: %w", err)
+	} else {
+		v.Block = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Block):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding SourceIndex: %w", err)
 	} else {
 		v.SourceIndex = x
 	}
 	data = data[encoding.UvarintBinarySize(v.SourceIndex):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding SourceBlock: %w", err)
+	} else {
+		v.SourceBlock = x
+	}
+	data = data[encoding.UvarintBinarySize(v.SourceBlock):]
 
 	if err := v.Receipt.UnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Receipt: %w", err)
@@ -4525,6 +4701,13 @@ func (v *TokenAccount) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.BigintBinarySize(&v.Balance):]
 
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Scratch: %w", err)
+	} else {
+		v.Scratch = x
+	}
+	data = data[encoding.BoolBinarySize(v.Scratch):]
+
 	return nil
 }
 
@@ -4583,12 +4766,12 @@ func (v *TokenRecipient) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.StringBinarySize(v.Url):]
 
-	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+	if x, err := encoding.BigintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Amount: %w", err)
 	} else {
-		v.Amount = x
+		v.Amount.Set(x)
 	}
-	data = data[encoding.UvarintBinarySize(v.Amount):]
+	data = data[encoding.BigintBinarySize(&v.Amount):]
 
 	return nil
 }
@@ -4631,6 +4814,20 @@ func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
 		v.Code = x
 	}
 	data = data[encoding.UvarintBinarySize(v.Code):]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Message: %w", err)
+	} else {
+		v.Message = x
+	}
+	data = data[encoding.StringBinarySize(v.Message):]
+
+	if x, err := UnmarshalTransactionResult(data); err != nil {
+		return fmt.Errorf("error decoding Result: %w", err)
+	} else {
+		v.Result = x
+	}
+	data = data[v.Result.BinarySize():]
 
 	return nil
 }
@@ -4697,6 +4894,25 @@ func (v *WriteData) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *WriteDataResult) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeWriteData
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	if x, err := encoding.ChainUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
+	data = data[encoding.ChainBinarySize(&v.EntryHash):]
+
+	return nil
+}
+
 func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeWriteDataTo
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
@@ -4721,6 +4937,24 @@ func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ChainMetadata
+		Account     *url.URL `json:"account,omitempty"`
+		Index       uint64   `json:"index,omitempty"`
+		SourceIndex uint64   `json:"sourceIndex,omitempty"`
+		SourceBlock uint64   `json:"sourceBlock,omitempty"`
+		Entry       *string  `json:"entry,omitempty"`
+	}{}
+	u.ChainMetadata = v.ChainMetadata
+	u.Account = v.Account
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	return json.Marshal(&u)
+}
+
 func (v *AnchoredRecord) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Record *string `json:"record,omitempty"`
@@ -4728,6 +4962,14 @@ func (v *AnchoredRecord) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Record = encoding.BytesToJSON(v.Record)
 	u.Anchor = encoding.ChainToJSON(v.Anchor)
+	return json.Marshal(&u)
+}
+
+func (v *BurnTokens) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Amount *string `json:"amount,omitempty"`
+	}{}
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	return json.Marshal(&u)
 }
 
@@ -4755,6 +4997,26 @@ func (v *CreateIdentity) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *CreateToken) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url            string  `json:"url,omitempty"`
+		KeyBookUrl     string  `json:"keyBookUrl,omitempty"`
+		Symbol         string  `json:"symbol,omitempty"`
+		Precision      uint64  `json:"precision,omitempty"`
+		Properties     string  `json:"properties,omitempty"`
+		InitialSupply  *string `json:"initialSupply,omitempty"`
+		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.KeyBookUrl = v.KeyBookUrl
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	u.Properties = v.Properties
+	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
+	u.HasSupplyLimit = v.HasSupplyLimit
+	return json.Marshal(&u)
+}
+
 func (v *DataEntry) MarshalJSON() ([]byte, error) {
 	u := struct {
 		ExtIds []*string `json:"extIds,omitempty"`
@@ -4773,6 +5035,30 @@ func (v *InternalTransactionsSent) MarshalJSON() ([]byte, error) {
 		Transactions []string `json:"transactions,omitempty"`
 	}{}
 	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	return json.Marshal(&u)
+}
+
+func (v *IssueTokens) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Recipient string  `json:"recipient,omitempty"`
+		Amount    *string `json:"amount,omitempty"`
+	}{}
+	u.Recipient = v.Recipient
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	return json.Marshal(&u)
+}
+
+func (v *KeyPage) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		CreditBalance *string    `json:"creditBalance,omitempty"`
+		Threshold     uint64     `json:"threshold,omitempty"`
+		Keys          []*KeySpec `json:"keys,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.Threshold = v.Threshold
+	u.Keys = v.Keys
 	return json.Marshal(&u)
 }
 
@@ -4803,6 +5089,22 @@ func (v *LiteDataAccount) MarshalJSON() ([]byte, error) {
 	}{}
 	u.ChainHeader = v.ChainHeader
 	u.Tail = encoding.BytesToJSON(v.Tail)
+	return json.Marshal(&u)
+}
+
+func (v *LiteTokenAccount) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		TokenUrl      string  `json:"tokenUrl,omitempty"`
+		Balance       *string `json:"balance,omitempty"`
+		Nonce         uint64  `json:"nonce,omitempty"`
+		CreditBalance *string `json:"creditBalance,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.TokenUrl = v.TokenUrl
+	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.Nonce = v.Nonce
+	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
 	return json.Marshal(&u)
 }
 
@@ -4888,20 +5190,39 @@ func (v *SendTokens) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *SendTransaction) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Payload   json.RawMessage `json:"payload,omitempty"`
+		Recipient *url.URL        `json:"recipient,omitempty"`
+	}{}
+	if x, err := json.Marshal(v.Payload); err != nil {
+		return nil, fmt.Errorf("error encoding Payload: %w", err)
+	} else {
+		u.Payload = x
+	}
+
+	u.Recipient = v.Recipient
+	return json.Marshal(&u)
+}
+
 func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Source      string  `json:"source,omitempty"`
 		Major       bool    `json:"major,omitempty"`
 		RootAnchor  string  `json:"rootAnchor,omitempty"`
 		RootIndex   uint64  `json:"rootIndex,omitempty"`
+		Block       uint64  `json:"block,omitempty"`
 		SourceIndex uint64  `json:"sourceIndex,omitempty"`
+		SourceBlock uint64  `json:"sourceBlock,omitempty"`
 		Receipt     Receipt `json:"receipt,omitempty"`
 	}{}
 	u.Source = v.Source
 	u.Major = v.Major
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.RootIndex = v.RootIndex
+	u.Block = v.Block
 	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
 	u.Receipt = v.Receipt
 	return json.Marshal(&u)
 }
@@ -4909,10 +5230,10 @@ func (v *SyntheticAnchor) MarshalJSON() ([]byte, error) {
 func (v *SyntheticBurnTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Cause  string  `json:"cause,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	return json.Marshal(&u)
 }
 
@@ -4940,11 +5261,11 @@ func (v *SyntheticDepositTokens) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Cause  string  `json:"cause,omitempty"`
 		Token  string  `json:"token,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Token = v.Token
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	return json.Marshal(&u)
 }
 
@@ -4972,6 +5293,48 @@ func (v *SyntheticWriteData) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *TokenAccount) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		TokenUrl string  `json:"tokenUrl,omitempty"`
+		Balance  *string `json:"balance,omitempty"`
+		Scratch  bool    `json:"scratch,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.TokenUrl = v.TokenUrl
+	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.Scratch = v.Scratch
+	return json.Marshal(&u)
+}
+
+func (v *TokenIssuer) MarshalJSON() ([]byte, error) {
+	u := struct {
+		state.ChainHeader
+		Symbol         string  `json:"symbol,omitempty"`
+		Precision      uint64  `json:"precision,omitempty"`
+		Properties     string  `json:"properties,omitempty"`
+		Supply         *string `json:"supply,omitempty"`
+		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	u.Properties = v.Properties
+	u.Supply = encoding.BigintToJSON(&v.Supply)
+	u.HasSupplyLimit = v.HasSupplyLimit
+	return json.Marshal(&u)
+}
+
+func (v *TokenRecipient) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url    string  `json:"url,omitempty"`
+		Amount *string `json:"amount,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	return json.Marshal(&u)
+}
+
 func (v *TransactionSignature) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Transaction string                   `json:"transaction,omitempty"`
@@ -4979,6 +5342,27 @@ func (v *TransactionSignature) MarshalJSON() ([]byte, error) {
 	}{}
 	u.Transaction = encoding.ChainToJSON(v.Transaction)
 	u.Signature = v.Signature
+	return json.Marshal(&u)
+}
+
+func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Remote    bool            `json:"remote,omitempty"`
+		Delivered bool            `json:"delivered,omitempty"`
+		Code      uint64          `json:"code,omitempty"`
+		Message   string          `json:"message,omitempty"`
+		Result    json.RawMessage `json:"result,omitempty"`
+	}{}
+	u.Remote = v.Remote
+	u.Delivered = v.Delivered
+	u.Code = v.Code
+	u.Message = v.Message
+	if x, err := json.Marshal(v.Result); err != nil {
+		return nil, fmt.Errorf("error encoding Result: %w", err)
+	} else {
+		u.Result = x
+	}
+
 	return json.Marshal(&u)
 }
 
@@ -4996,6 +5380,47 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 	u.Owner = v.Owner
 	u.Threshold = v.Threshold
 	return json.Marshal(&u)
+}
+
+func (v *WriteDataResult) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Type      types.TransactionType `json:"type"`
+		EntryHash string                `json:"entryHash,omitempty"`
+	}{}
+	u.Type = v.GetType()
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	return json.Marshal(&u)
+}
+
+func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ChainMetadata
+		Account     *url.URL `json:"account,omitempty"`
+		Index       uint64   `json:"index,omitempty"`
+		SourceIndex uint64   `json:"sourceIndex,omitempty"`
+		SourceBlock uint64   `json:"sourceBlock,omitempty"`
+		Entry       *string  `json:"entry,omitempty"`
+	}{}
+	u.ChainMetadata = v.ChainMetadata
+	u.Account = v.Account
+	u.Index = v.Index
+	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
+	u.Entry = encoding.BytesToJSON(v.Entry)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainMetadata = u.ChainMetadata
+	v.Account = u.Account
+	v.Index = u.Index
+	v.SourceIndex = u.SourceIndex
+	v.SourceBlock = u.SourceBlock
+	if x, err := encoding.BytesFromJSON(u.Entry); err != nil {
+		return fmt.Errorf("error decoding Entry: %w", err)
+	} else {
+		v.Entry = x
+	}
+	return nil
 }
 
 func (v *AnchoredRecord) UnmarshalJSON(data []byte) error {
@@ -5017,6 +5442,22 @@ func (v *AnchoredRecord) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Anchor: %w", err)
 	} else {
 		v.Anchor = x
+	}
+	return nil
+}
+
+func (v *BurnTokens) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Amount *string `json:"amount,omitempty"`
+	}{}
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
 	}
 	return nil
 }
@@ -5065,6 +5506,40 @@ func (v *CreateIdentity) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *CreateToken) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url            string  `json:"url,omitempty"`
+		KeyBookUrl     string  `json:"keyBookUrl,omitempty"`
+		Symbol         string  `json:"symbol,omitempty"`
+		Precision      uint64  `json:"precision,omitempty"`
+		Properties     string  `json:"properties,omitempty"`
+		InitialSupply  *string `json:"initialSupply,omitempty"`
+		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.KeyBookUrl = v.KeyBookUrl
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	u.Properties = v.Properties
+	u.InitialSupply = encoding.BigintToJSON(&v.InitialSupply)
+	u.HasSupplyLimit = v.HasSupplyLimit
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	v.KeyBookUrl = u.KeyBookUrl
+	v.Symbol = u.Symbol
+	v.Precision = u.Precision
+	v.Properties = u.Properties
+	if x, err := encoding.BigintFromJSON(u.InitialSupply); err != nil {
+		return fmt.Errorf("error decoding InitialSupply: %w", err)
+	} else {
+		v.InitialSupply = *x
+	}
+	v.HasSupplyLimit = u.HasSupplyLimit
+	return nil
+}
+
 func (v *DataEntry) UnmarshalJSON(data []byte) error {
 	u := struct {
 		ExtIds []*string `json:"extIds,omitempty"`
@@ -5107,6 +5582,50 @@ func (v *InternalTransactionsSent) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Transactions = x
 	}
+	return nil
+}
+
+func (v *IssueTokens) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Recipient string  `json:"recipient,omitempty"`
+		Amount    *string `json:"amount,omitempty"`
+	}{}
+	u.Recipient = v.Recipient
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Recipient = u.Recipient
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	return nil
+}
+
+func (v *KeyPage) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		CreditBalance *string    `json:"creditBalance,omitempty"`
+		Threshold     uint64     `json:"threshold,omitempty"`
+		Keys          []*KeySpec `json:"keys,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	u.Threshold = v.Threshold
+	u.Keys = v.Keys
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
+		return fmt.Errorf("error decoding CreditBalance: %w", err)
+	} else {
+		v.CreditBalance = *x
+	}
+	v.Threshold = u.Threshold
+	v.Keys = u.Keys
 	return nil
 }
 
@@ -5163,6 +5682,38 @@ func (v *LiteDataAccount) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding Tail: %w", err)
 	} else {
 		v.Tail = x
+	}
+	return nil
+}
+
+func (v *LiteTokenAccount) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		TokenUrl      string  `json:"tokenUrl,omitempty"`
+		Balance       *string `json:"balance,omitempty"`
+		Nonce         uint64  `json:"nonce,omitempty"`
+		CreditBalance *string `json:"creditBalance,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.TokenUrl = v.TokenUrl
+	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.Nonce = v.Nonce
+	u.CreditBalance = encoding.BigintToJSON(&v.CreditBalance)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	v.TokenUrl = u.TokenUrl
+	if x, err := encoding.BigintFromJSON(u.Balance); err != nil {
+		return fmt.Errorf("error decoding Balance: %w", err)
+	} else {
+		v.Balance = *x
+	}
+	v.Nonce = u.Nonce
+	if x, err := encoding.BigintFromJSON(u.CreditBalance); err != nil {
+		return fmt.Errorf("error decoding CreditBalance: %w", err)
+	} else {
+		v.CreditBalance = *x
 	}
 	return nil
 }
@@ -5323,20 +5874,49 @@ func (v *SendTokens) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *SendTransaction) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Payload   json.RawMessage `json:"payload,omitempty"`
+		Recipient *url.URL        `json:"recipient,omitempty"`
+	}{}
+	if x, err := json.Marshal(v.Payload); err != nil {
+		return fmt.Errorf("error encoding Payload: %w", err)
+	} else {
+		u.Payload = x
+	}
+
+	u.Recipient = v.Recipient
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := UnmarshalTransactionJSON(u.Payload); err != nil {
+		return fmt.Errorf("error decoding Payload: %w", err)
+	} else {
+		v.Payload = x
+	}
+
+	v.Recipient = u.Recipient
+	return nil
+}
+
 func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Source      string  `json:"source,omitempty"`
 		Major       bool    `json:"major,omitempty"`
 		RootAnchor  string  `json:"rootAnchor,omitempty"`
 		RootIndex   uint64  `json:"rootIndex,omitempty"`
+		Block       uint64  `json:"block,omitempty"`
 		SourceIndex uint64  `json:"sourceIndex,omitempty"`
+		SourceBlock uint64  `json:"sourceBlock,omitempty"`
 		Receipt     Receipt `json:"receipt,omitempty"`
 	}{}
 	u.Source = v.Source
 	u.Major = v.Major
 	u.RootAnchor = encoding.ChainToJSON(v.RootAnchor)
 	u.RootIndex = v.RootIndex
+	u.Block = v.Block
 	u.SourceIndex = v.SourceIndex
+	u.SourceBlock = v.SourceBlock
 	u.Receipt = v.Receipt
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -5349,7 +5929,9 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 		v.RootAnchor = x
 	}
 	v.RootIndex = u.RootIndex
+	v.Block = u.Block
 	v.SourceIndex = u.SourceIndex
+	v.SourceBlock = u.SourceBlock
 	v.Receipt = u.Receipt
 	return nil
 }
@@ -5357,10 +5939,10 @@ func (v *SyntheticAnchor) UnmarshalJSON(data []byte) error {
 func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Cause  string  `json:"cause,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5369,7 +5951,11 @@ func (v *SyntheticBurnTokens) UnmarshalJSON(data []byte) error {
 	} else {
 		v.Cause = x
 	}
-	v.Amount = u.Amount
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
 	return nil
 }
 
@@ -5415,11 +6001,11 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Cause  string  `json:"cause,omitempty"`
 		Token  string  `json:"token,omitempty"`
-		Amount big.Int `json:"amount,omitempty"`
+		Amount *string `json:"amount,omitempty"`
 	}{}
 	u.Cause = encoding.ChainToJSON(v.Cause)
 	u.Token = v.Token
-	u.Amount = v.Amount
+	u.Amount = encoding.BigintToJSON(&v.Amount)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -5429,7 +6015,11 @@ func (v *SyntheticDepositTokens) UnmarshalJSON(data []byte) error {
 		v.Cause = x
 	}
 	v.Token = u.Token
-	v.Amount = u.Amount
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
 	return nil
 }
 
@@ -5485,6 +6075,81 @@ func (v *SyntheticWriteData) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *TokenAccount) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		TokenUrl string  `json:"tokenUrl,omitempty"`
+		Balance  *string `json:"balance,omitempty"`
+		Scratch  bool    `json:"scratch,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.TokenUrl = v.TokenUrl
+	u.Balance = encoding.BigintToJSON(&v.Balance)
+	u.Scratch = v.Scratch
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	v.TokenUrl = u.TokenUrl
+	if x, err := encoding.BigintFromJSON(u.Balance); err != nil {
+		return fmt.Errorf("error decoding Balance: %w", err)
+	} else {
+		v.Balance = *x
+	}
+	v.Scratch = u.Scratch
+	return nil
+}
+
+func (v *TokenIssuer) UnmarshalJSON(data []byte) error {
+	u := struct {
+		state.ChainHeader
+		Symbol         string  `json:"symbol,omitempty"`
+		Precision      uint64  `json:"precision,omitempty"`
+		Properties     string  `json:"properties,omitempty"`
+		Supply         *string `json:"supply,omitempty"`
+		HasSupplyLimit bool    `json:"hasSupplyLimit,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.Symbol = v.Symbol
+	u.Precision = v.Precision
+	u.Properties = v.Properties
+	u.Supply = encoding.BigintToJSON(&v.Supply)
+	u.HasSupplyLimit = v.HasSupplyLimit
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	v.Symbol = u.Symbol
+	v.Precision = u.Precision
+	v.Properties = u.Properties
+	if x, err := encoding.BigintFromJSON(u.Supply); err != nil {
+		return fmt.Errorf("error decoding Supply: %w", err)
+	} else {
+		v.Supply = *x
+	}
+	v.HasSupplyLimit = u.HasSupplyLimit
+	return nil
+}
+
+func (v *TokenRecipient) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url    string  `json:"url,omitempty"`
+		Amount *string `json:"amount,omitempty"`
+	}{}
+	u.Url = v.Url
+	u.Amount = encoding.BigintToJSON(&v.Amount)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Url = u.Url
+	if x, err := encoding.BigintFromJSON(u.Amount); err != nil {
+		return fmt.Errorf("error decoding Amount: %w", err)
+	} else {
+		v.Amount = *x
+	}
+	return nil
+}
+
 func (v *TransactionSignature) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Transaction string                   `json:"transaction,omitempty"`
@@ -5501,6 +6166,40 @@ func (v *TransactionSignature) UnmarshalJSON(data []byte) error {
 		v.Transaction = x
 	}
 	v.Signature = u.Signature
+	return nil
+}
+
+func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Remote    bool            `json:"remote,omitempty"`
+		Delivered bool            `json:"delivered,omitempty"`
+		Code      uint64          `json:"code,omitempty"`
+		Message   string          `json:"message,omitempty"`
+		Result    json.RawMessage `json:"result,omitempty"`
+	}{}
+	u.Remote = v.Remote
+	u.Delivered = v.Delivered
+	u.Code = v.Code
+	u.Message = v.Message
+	if x, err := json.Marshal(v.Result); err != nil {
+		return fmt.Errorf("error encoding Result: %w", err)
+	} else {
+		u.Result = x
+	}
+
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.Remote = u.Remote
+	v.Delivered = u.Delivered
+	v.Code = u.Code
+	v.Message = u.Message
+	if x, err := UnmarshalTransactionResultJSON(u.Result); err != nil {
+		return fmt.Errorf("error decoding Result: %w", err)
+	} else {
+		v.Result = x
+	}
+
 	return nil
 }
 
@@ -5533,5 +6232,23 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 	}
 	v.Owner = u.Owner
 	v.Threshold = u.Threshold
+	return nil
+}
+
+func (v *WriteDataResult) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Type      types.TransactionType `json:"type"`
+		EntryHash string                `json:"entryHash,omitempty"`
+	}{}
+	u.Type = v.GetType()
+	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainFromJSON(u.EntryHash); err != nil {
+		return fmt.Errorf("error decoding EntryHash: %w", err)
+	} else {
+		v.EntryHash = x
+	}
 	return nil
 }

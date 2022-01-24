@@ -110,13 +110,13 @@ func (m *JrpcMethods) EnableDebug(local ABCIQueryClient) {
 	q := &queryDirect{client: local}
 
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
-		req := new(UrlQuery)
+		req := new(GeneralQuery)
 		err := m.parse(params, req)
 		if err != nil {
 			return err
 		}
 
-		return jrpcFormatResponse(q.QueryUrl(req.Url))
+		return jrpcFormatResponse(q.QueryUrl(req.Url, req.QueryOptions))
 	}
 }
 

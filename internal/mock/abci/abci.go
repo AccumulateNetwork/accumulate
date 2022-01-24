@@ -54,11 +54,12 @@ func (mr *MockChainMockRecorder) BeginBlock(arg0 interface{}) *gomock.Call {
 }
 
 // CheckTx mocks base method.
-func (m *MockChain) CheckTx(arg0 *transactions.Envelope) *protocol.Error {
+func (m *MockChain) CheckTx(arg0 *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTx", arg0)
-	ret0, _ := ret[0].(*protocol.Error)
-	return ret0
+	ret0, _ := ret[0].(protocol.TransactionResult)
+	ret1, _ := ret[1].(*protocol.Error)
+	return ret0, ret1
 }
 
 // CheckTx indicates an expected call of CheckTx.
@@ -83,11 +84,12 @@ func (mr *MockChainMockRecorder) Commit() *gomock.Call {
 }
 
 // DeliverTx mocks base method.
-func (m *MockChain) DeliverTx(arg0 *transactions.Envelope) *protocol.Error {
+func (m *MockChain) DeliverTx(arg0 *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeliverTx", arg0)
-	ret0, _ := ret[0].(*protocol.Error)
-	return ret0
+	ret0, _ := ret[0].(protocol.TransactionResult)
+	ret1, _ := ret[1].(*protocol.Error)
+	return ret0, ret1
 }
 
 // DeliverTx indicates an expected call of DeliverTx.
@@ -123,9 +125,9 @@ func (mr *MockChainMockRecorder) InitChain(state, time, blockIndex interface{}) 
 }
 
 // Query mocks base method.
-func (m *MockChain) Query(arg0 *query.Query) ([]byte, []byte, *protocol.Error) {
+func (m *MockChain) Query(q *query.Query, height int64, prove bool) ([]byte, []byte, *protocol.Error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Query", arg0)
+	ret := m.ctrl.Call(m, "Query", q, height, prove)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(*protocol.Error)
@@ -133,7 +135,7 @@ func (m *MockChain) Query(arg0 *query.Query) ([]byte, []byte, *protocol.Error) {
 }
 
 // Query indicates an expected call of Query.
-func (mr *MockChainMockRecorder) Query(arg0 interface{}) *gomock.Call {
+func (mr *MockChainMockRecorder) Query(q, height, prove interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockChain)(nil).Query), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockChain)(nil).Query), q, height, prove)
 }

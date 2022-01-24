@@ -10,6 +10,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -21,6 +22,11 @@ type DB = *database.Batch
 
 // Token multiplier
 const TokenMx = protocol.AcmePrecision
+
+func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
+	h := storage.MakeKey(seed...)
+	return ed25519.NewKeyFromSeed(h[:])
+}
 
 func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Envelope, error) {
 	recipientAdi := AcmeLiteAddressTmPriv(recipient)
@@ -57,6 +63,26 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
 	url := types.String(AcmeLiteAddressTmPriv(key).String())
 	return CreateTokenAccount(db, string(url), protocol.AcmeUrl().String(), tokens, true)
+}
+
+func AddCredits(db DB, account *url.URL, credits float64) error {
+	state, err := db.Account(account).GetState()
+	if err != nil {
+		return err
+	}
+
+	state.(protocol.CreditHolder).CreditCredits(uint64(credits * protocol.CreditPrecision))
+	return db.Account(account).PutState(state)
+}
+
+func CreateLiteTokenAccountWithCredits(db DB, key tmed25519.PrivKey, tokens, credits float64) error {
+	url := AcmeLiteAddressTmPriv(key)
+	err := CreateTokenAccount(db, url.String(), protocol.AcmeUrl().String(), tokens, true)
+	if err != nil {
+		return err
+	}
+
+	return AddCredits(db, url, credits)
 }
 
 func WriteStates(db DB, chains ...state.Chain) error {
@@ -118,6 +144,20 @@ func CreateADI(db DB, key tmed25519.PrivKey, urlStr types.String) error {
 	adi.KeyBook = types.String(bookUrl.String())
 
 	return WriteStates(db, adi, book, mss)
+}
+
+func CreateAdiWithCredits(db DB, key tmed25519.PrivKey, urlStr types.String, credits float64) error {
+	err := CreateADI(db, key, urlStr)
+	if err != nil {
+		return err
+	}
+
+	u, err := url.Parse(string(urlStr))
+	if err != nil {
+		return err
+	}
+
+	return AddCredits(db, u.JoinPath("page0"), credits)
 }
 
 func CreateTokenAccount(db DB, accUrl, tokenUrl string, tokens float64, lite bool) error {

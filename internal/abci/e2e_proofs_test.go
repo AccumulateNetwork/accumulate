@@ -16,12 +16,15 @@ func TestProofADI(t *testing.T) {
 	nodes := RunTestNet(t, subnets, daemons, nil, true)
 	n := nodes[subnets[1]][0]
 
+	const initialCredits = 1e6
+
 	// Setup keys and the lite account
 	liteKey, adiKey := generateKey(), generateKey()
 	keyHash := sha256.Sum256(adiKey.PubKey().Bytes())
 	batch := n.db.Begin()
-	require.NoError(t, acctesting.CreateLiteTokenAccount(batch, liteKey, 5e4))
+	require.NoError(t, acctesting.CreateLiteTokenAccountWithCredits(batch, liteKey, 5e4, initialCredits))
 	require.NoError(t, batch.Commit())
+	liteAddr := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
 
 	// Create ADI
 	n.Batch(func(send func(*Tx)) {
@@ -31,13 +34,18 @@ func TestProofADI(t *testing.T) {
 		adi.KeyPageName = "page0"
 		adi.PublicKey = keyHash[:]
 
-		sponsorUrl := acctesting.AcmeLiteAddressTmPriv(liteKey).String()
-		tx, err := transactions.New(sponsorUrl, 1, edSigner(liteKey, 1), adi)
+		tx, err := transactions.New(liteAddr, 1, edSigner(liteKey, 1), adi)
 		require.NoError(t, err)
 
 		send(tx)
 	})
+
+	require.Less(t, n.GetLiteTokenAccount(liteAddr).CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
 	require.Equal(t, keyHash[:], n.GetKeyPage("RoadRunner/page0").Keys[0].PublicKey)
+
+	batch = n.db.Begin()
+	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("RoadRunner/page0"), initialCredits))
+	require.NoError(t, batch.Commit())
 
 	// Create ADI token account
 	n.Batch(func(send func(*transactions.Envelope)) {
@@ -49,6 +57,7 @@ func TestProofADI(t *testing.T) {
 		send(tx)
 	})
 
+	require.Less(t, n.GetKeyPage("RoadRunner/page0").CreditBalance.Int64(), int64(initialCredits*protocol.CreditPrecision))
 	require.Equal(t, types.AccountTypeIdentity, n.GetADI("RoadRunner").Type)
 	require.Equal(t, types.AccountTypeTokenAccount, n.GetTokenAccount("RoadRunner/Baz").Type)
 

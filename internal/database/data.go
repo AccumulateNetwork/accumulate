@@ -1,11 +1,9 @@
 package database
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
 )
 
 // Data manages a data chain.
@@ -22,14 +20,6 @@ func (d *Data) Height() int64 {
 
 // Put adds an entry to the chain.
 func (d *Data) Put(hash []byte, entry *protocol.DataEntry) error {
-	// Check that the entry does already not exist.
-	_, err := d.batch.store.Get(d.record.Data(hash))
-	if err == nil {
-		return fmt.Errorf("data entry with hash %X exsits", hash)
-	} else if !errors.Is(err, storage.ErrNotFound) {
-		return err
-	}
-
 	// Write data entry
 	data, err := entry.MarshalBinary()
 	if err != nil {
@@ -81,4 +71,14 @@ func (d *Data) GetLatest() ([]byte, *protocol.DataEntry, error) {
 // GetHashes returns entry hashes in the given range
 func (d *Data) GetHashes(start, end int64) ([][]byte, error) {
 	return d.chain.Entries(start, end)
+}
+
+// Entry looks up an entry by its height.
+func (d *Data) Entry(height int64) (*protocol.DataEntry, error) {
+	hash, err := d.chain.Entry(height)
+	if err != nil {
+		return nil, err
+	}
+
+	return d.Get(hash)
 }

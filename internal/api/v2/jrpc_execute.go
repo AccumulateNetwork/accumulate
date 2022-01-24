@@ -180,6 +180,9 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 	// BroadcastTxSync return different types, and the latter does not have any
 	// methods, so they have to be handled separately.
 
+	var code uint64
+	var mempool, log string
+	var data []byte
 	switch {
 	case req.CheckOnly:
 		// Check the TX
@@ -188,25 +191,10 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 			return accumulateError(err)
 		}
 
-		res := new(TxResponse)
-		res.Code = uint64(r.Code)
-		res.Txid = tx.Transaction.Hash()
-		res.Hash = sha256.Sum256(txb)
-
-		// Check for errors
-		switch {
-		case len(r.MempoolError) > 0:
-			res.Message = r.MempoolError
-			return res
-		case len(r.Log) > 0:
-			res.Message = r.Log
-			return res
-		case r.Code != 0:
-			res.Message = "An unknown error occured"
-			return res
-		default:
-			return res
-		}
+		code = uint64(r.Code)
+		mempool = r.MempoolError
+		log = r.Log
+		data = r.Data
 
 	default:
 		// Broadcast the TX
@@ -215,25 +203,50 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 			return accumulateError(err)
 		}
 
-		res := new(TxResponse)
-		res.Code = uint64(r.Code)
-		res.Txid = tx.Transaction.Hash()
-		res.Hash = sha256.Sum256(txb)
+		code = uint64(r.Code)
+		mempool = r.MempoolError
+		log = r.Log
+		data = r.Data
+	}
 
-		// Check for errors
-		switch {
-		case len(r.MempoolError) > 0:
-			res.Message = r.MempoolError
-			return res
-		case len(r.Log) > 0:
-			res.Message = r.Log
-			return res
-		case r.Code != 0:
-			res.Message = "An unknown error occured"
-			return res
-		default:
-			return res
+	res := new(TxResponse)
+	res.Code = code
+	res.Txid = tx.Transaction.Hash()
+	res.Hash = sha256.Sum256(txb)
+
+	var results []protocol.TransactionResult
+	for len(data) > 0 {
+		result, err := protocol.UnmarshalTransactionResult(data)
+		if err != nil {
+			m.logError("Failed to decode transaction results", "error", err)
+			break
 		}
+		data = data[result.BinarySize():]
+		if _, ok := result.(*protocol.EmptyResult); ok {
+			result = nil
+		}
+		results = append(results, result)
+	}
+
+	if len(results) == 1 {
+		res.Result = results[0]
+	} else if len(results) > 0 {
+		res.Result = results
+	}
+
+	// Check for errors
+	switch {
+	case len(mempool) > 0:
+		res.Message = mempool
+		return res
+	case len(log) > 0:
+		res.Message = log
+		return res
+	case code != 0:
+		res.Message = "An unknown error occured"
+		return res
+	default:
+		return res
 	}
 }
 

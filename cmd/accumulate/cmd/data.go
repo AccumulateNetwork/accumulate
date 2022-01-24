@@ -161,7 +161,7 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 
 	if len(args) > 2 {
 		if args[2] == "expand" {
-			params.ExpandChains = true
+			params.Expand = true
 		}
 	}
 
@@ -292,6 +292,10 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	res, err := dispatchTxRequest("write-data", &wd, u, si, privKey)
 	if err != nil {
 		return "", err
+	}
+
+	if WantJsonOutput {
+		return PrintJson(res)
 	}
 
 	return ActionResponseFromData(res, wd.Entry.Hash()).Print()

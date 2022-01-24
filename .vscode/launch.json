@@ -39,19 +39,47 @@
       ]
     },
     {
-        "name": "Run Node",
-        "type": "go",
-        "request": "launch",
-        "mode": "auto",
-        "program": "${workspaceFolder}/cmd/accumulated",
-        "args": [
-          "run",
-          "-w",
-          "${workspaceFolder}/.nodes/dn",
-          "-n",
-          "0",
-          "--truncate"
-        ]
+      "name": "Run Node",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulated",
+      "args": [
+        "run",
+        "-w",
+        "${workspaceFolder}/.nodes/dn",
+        "-n",
+        "0",
+        "--truncate"
+      ]
+    },
+    {
+      "name": "Run CLI",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/accumulate",
+      "env": {
+        "ACC_API": "local"
+      },
+      "args": [
+        // "tx",
+        // "get",
+        // "-j",
+        // "97de5192c4e0b199a2bf978e7f4a88367bf03412c1ead814e0b4dc0803809ea6"
+
+        "data",
+        "write",
+        "-j",
+        "keytest/data",
+        "keytest-0-0",
+        "foo",
+        "bar"
+
+        // "tx",
+        // "get",
+        // "c85422d30077a4f297d129b3fd34e9368dc4aa0bda213e966ba09f32c33ce336"
+      ]
     }
   ]
 }

@@ -19,7 +19,11 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type txBatch []tm.Tx
+type txBatch []byte
+
+func (b *txBatch) Append(tx []byte) {
+	*b = append(*b, tx...)
+}
 
 // dispatcher is responsible for dispatching outgoing synthetic transactions to
 // their recipients.
@@ -27,6 +31,7 @@ type dispatcher struct {
 	ExecutorOptions
 	localIndex  int
 	isDirectory bool
+	localBatch  txBatch
 	bvn         []string
 	bvnBatches  []txBatch
 	dn          string
@@ -68,6 +73,7 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 func (d *dispatcher) Reset(ctx context.Context) {
 	d.errg = new(errgroup.Group)
 
+	d.localBatch = d.localBatch[:0]
 	d.dnBatch = d.dnBatch[:0]
 	for i, bv := range d.bvnBatches {
 		d.bvnBatches[i] = bv[:0]
@@ -75,16 +81,16 @@ func (d *dispatcher) Reset(ctx context.Context) {
 }
 
 // route gets the client for the URL
-func (d *dispatcher) route(u *url.URL) (batch *txBatch, local bool) {
+func (d *dispatcher) route(u *url.URL) *txBatch {
 	// Is it a DN URL?
 	if protocol.IsDnUrl(u) {
 		if d.isDirectory {
-			return nil, true
+			return &d.localBatch
 		}
 		if d.dn == "" && !d.IsTest {
 			panic("Directory was not configured")
 		}
-		return &d.dnBatch, false
+		return &d.dnBatch
 	}
 
 	// Is it a BVN URL?
@@ -93,10 +99,10 @@ func (d *dispatcher) route(u *url.URL) (batch *txBatch, local bool) {
 			if strings.EqualFold(bvn, id) {
 				if i == d.localIndex {
 					// Use the local client for local requests
-					return nil, true
+					return nil
 				}
 
-				return &d.bvnBatches[i], false
+				return &d.bvnBatches[i]
 			}
 		}
 
@@ -107,28 +113,19 @@ func (d *dispatcher) route(u *url.URL) (batch *txBatch, local bool) {
 	i := u.Routing() % uint64(len(d.bvn))
 	if i == uint64(d.localIndex) {
 		// Use the local client for local requests
-		return nil, true
+		return &d.localBatch
 	}
-	return &d.bvnBatches[i], false
+	return &d.bvnBatches[i]
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte) {
-	batch, local := d.route(u)
-	if local {
-		d.BroadcastTxAsyncLocal(ctx, tx)
-		return
-	}
-
-	*batch = append(*batch, tx)
+	d.route(u).Append(tx)
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
-	d.errg.Go(func() error {
-		_, err := d.Local.BroadcastTxAsync(ctx, tx)
-		return d.checkError(err)
-	})
+	d.localBatch.Append(tx)
 }
 
 func (d *dispatcher) send(ctx context.Context, server string, batch txBatch) {
@@ -139,13 +136,10 @@ func (d *dispatcher) send(ctx context.Context, server string, batch txBatch) {
 	// Tendermint's JSON RPC batch client is utter trash, so we're rolling our
 	// own
 
-	request := make(jsonrpc2.BatchRequest, len(batch))
-	for i, tx := range batch {
-		request[i] = jsonrpc2.Request{
-			Method: "broadcast_tx_async",
-			Params: map[string]interface{}{"tx": tx},
-			ID:     rand.Int()%5000 + 1,
-		}
+	request := jsonrpc2.Request{
+		Method: "broadcast_tx_async",
+		Params: map[string]interface{}{"tx": batch},
+		ID:     rand.Int()%5000 + 1,
 	}
 
 	d.errg.Go(func() error {
@@ -159,7 +153,7 @@ func (d *dispatcher) send(ctx context.Context, server string, batch txBatch) {
 			return err
 		}
 		httpReq = httpReq.WithContext(ctx)
-		httpReq.Header.Add(http.CanonicalHeaderKey("Content-Type"), "application/json")
+		httpReq.Header.Add("Content-Type", "application/json")
 
 		httpRes, err := http.DefaultClient.Do(httpReq)
 		if err != nil {
@@ -167,36 +161,27 @@ func (d *dispatcher) send(ctx context.Context, server string, batch txBatch) {
 		}
 		defer httpRes.Body.Close()
 
-		// For some ****ing reason, if you send a single transaction in a batch,
-		// Tendermint responds with an object instead of an array. Again,
-		// Tendermint's JSON RPC implementation is utter trash.
-		var response jsonrpc2.BatchResponse
-		if len(request) == 1 {
-			response = jsonrpc2.BatchResponse{{}}
-			err = json.NewDecoder(httpRes.Body).Decode(&response[0])
-		} else {
-			err = json.NewDecoder(httpRes.Body).Decode(&response)
-		}
+		response := new(jsonrpc2.Response)
+		err = json.NewDecoder(httpRes.Body).Decode(&response)
 		if err != nil {
 			return err
 		}
 
-		for _, response := range response {
-			if !response.HasError() {
-				continue
-			}
+		if !response.HasError() {
+			return nil
+		}
 
-			err := d.checkError(response.Error)
-			if err != nil {
-				return err
-			}
+		err = d.checkError(response.Error)
+		if err != nil {
+			return err
 		}
 
 		return nil
 	})
 }
 
-var errTxInCache = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+var errTxInCache2 = jsonrpc2.NewError(jsonrpc2.ErrorCode(errTxInCache1.Code), errTxInCache1.Message, errTxInCache1.Data)
 
 // checkError returns nil if the error can be ignored.
 func (*dispatcher) checkError(err error) error {
@@ -213,8 +198,13 @@ func (*dispatcher) checkError(err error) error {
 	}
 
 	// Or RPC error "tx already exists in cache"?
-	var rpcErr *jrpc.RPCError
-	if errors.As(err, &rpcErr) && *rpcErr == *errTxInCache {
+	var rpcErr1 *jrpc.RPCError
+	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
+		return nil
+	}
+
+	var rpcErr2 jsonrpc2.Error
+	if errors.As(err, &rpcErr2) && rpcErr2 == errTxInCache2 {
 		return nil
 	}
 
@@ -224,6 +214,14 @@ func (*dispatcher) checkError(err error) error {
 
 // Send sends all of the batches.
 func (d *dispatcher) Send(ctx context.Context) error {
+	// Send local
+	if d.Local != nil && len(d.localBatch) > 0 {
+		d.errg.Go(func() error {
+			_, err := d.Local.BroadcastTxAsync(ctx, tm.Tx(d.localBatch))
+			return d.checkError(err)
+		})
+	}
+
 	// Send to the DN
 	if d.dn != "" || !d.IsTest {
 		d.send(ctx, d.dn, d.dnBatch)
