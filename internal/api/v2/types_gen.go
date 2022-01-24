@@ -144,7 +144,7 @@ type TxRequest struct {
 	Signer    Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Signature []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	KeyPage   KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	TxHash    []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash" validate:"required"`
+	TxHash    []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
 	Payload   interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
 }
 

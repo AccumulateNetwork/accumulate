@@ -411,11 +411,16 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	}
 
 	// Update the account's list of pending transactions
+	pending := indexing.PendingTransactions(m.blockBatch, st.OriginUrl)
 	if status.Pending {
-		pending := indexing.PendingTransactions(m.blockBatch, st.OriginUrl)
 		err := pending.Add(st.txHash)
 		if err != nil {
 			return fmt.Errorf("failed to add transaction to the pending list: %v", err)
+		}
+	} else if status.Delivered {
+		err := pending.Remove(st.txHash)
+		if err != nil {
+			return fmt.Errorf("failed to remove transaction to the pending list: %v", err)
 		}
 	}
 

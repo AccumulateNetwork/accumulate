@@ -256,6 +256,7 @@ TxRequest:
     marshal-as: reference
   - name: TxHash
     type: bytes
+    optional: true
   - name: Payload
     type: any
 
