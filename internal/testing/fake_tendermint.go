@@ -11,7 +11,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/types/api/query"
@@ -19,8 +18,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/bytes"
-	tmpubsub "github.com/tendermint/tendermint/libs/pubsub"
-	tmquery "github.com/tendermint/tendermint/libs/pubsub/query"
 	rpc "github.com/tendermint/tendermint/rpc/client"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	"github.com/tendermint/tendermint/types"
@@ -31,8 +28,6 @@ const debugTX = false
 // FakeTendermint is a test harness that facilitates testing the ABCI
 // application without creating an actual Tendermint node.
 type FakeTendermint struct {
-	*types.EventBus
-
 	CreateEmptyBlocks bool
 
 	appWg      *sync.WaitGroup
@@ -66,8 +61,6 @@ type txStatus struct {
 	Done          bool
 }
 
-var _ relay.Client = (*FakeTendermint)(nil)
-
 func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, address crypto.Address, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
 	c := new(FakeTendermint)
 	c.appWg = new(sync.WaitGroup)
@@ -76,7 +69,6 @@ func NewFakeTendermint(app <-chan abci.Application, db *database.Database, netwo
 	c.nextHeight = nextHeight
 	c.address = address
 	c.onError = onError
-	c.EventBus = types.NewEventBus()
 	c.stop = make(chan struct{})
 	c.txCh = make(chan *txStatus)
 	c.stopped = new(sync.WaitGroup)
@@ -400,16 +392,6 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			if dr.Code != 0 {
 				c.onError(fmt.Errorf("DeliverTx failed: %v\n", dr.Log))
 			}
-
-			err := c.PublishEventTx(types.EventDataTx{TxResult: abci.TxResult{
-				Height: sub.Height,
-				Index:  sub.Index,
-				Tx:     sub.Tx,
-				Result: dr,
-			}})
-			if err != nil {
-				c.onError(err)
-			}
 		}
 
 		c.app.EndBlock(abci.RequestEndBlock{})
@@ -466,11 +448,6 @@ func (c *FakeTendermint) Tx(ctx context.Context, hash []byte, prove bool) (*ctyp
 	}, nil
 }
 
-func (c *FakeTendermint) ABCIInfo(context.Context) (*ctypes.ResultABCIInfo, error) {
-	r := c.App().Info(abci.RequestInfo{})
-	return &ctypes.ResultABCIInfo{Response: r}, nil
-}
-
 func (c *FakeTendermint) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*ctypes.ResultABCIQuery, error) {
 	return c.ABCIQueryWithOptions(ctx, path, data, rpc.DefaultABCIQueryOptions)
 }
@@ -508,112 +485,4 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 		MempoolError: cr.MempoolError,
 		Hash:         hash[:],
 	}, nil
-}
-
-func (c *FakeTendermint) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*ctypes.ResultBroadcastTxCommit, error) {
-	return nil, errors.New("not supported")
-}
-
-// Stolen from Tendermint
-func (c *FakeTendermint) Subscribe(ctx context.Context, subscriber, query string, outCapacity ...int) (out <-chan ctypes.ResultEvent, err error) {
-	q, err := tmquery.New(query)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse query: %w", err)
-	}
-
-	outCap := 1
-	if len(outCapacity) > 0 {
-		outCap = outCapacity[0]
-	}
-
-	var sub types.Subscription
-	if outCap > 0 {
-		sub, err = c.EventBus.Subscribe(ctx, subscriber, q, outCap)
-	} else {
-		sub, err = c.EventBus.SubscribeUnbuffered(ctx, subscriber, q)
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to subscribe: %w", err)
-	}
-	if sub == nil {
-		return nil, fmt.Errorf("node is shut down")
-	}
-
-	outc := make(chan ctypes.ResultEvent, outCap)
-	go c.eventsRoutine(sub, subscriber, q, outc)
-
-	return outc, nil
-}
-
-func (c *FakeTendermint) eventsRoutine(
-	sub types.Subscription,
-	subscriber string,
-	q tmpubsub.Query,
-	outc chan<- ctypes.ResultEvent) {
-	for {
-		select {
-		case msg := <-sub.Out():
-			result := ctypes.ResultEvent{
-				SubscriptionID: msg.SubscriptionID(),
-				Query:          q.String(),
-				Data:           msg.Data(),
-				Events:         msg.Events(),
-			}
-
-			if cap(outc) == 0 {
-				outc <- result
-			} else {
-				select {
-				case outc <- result:
-				default:
-					c.Logger.Error("wanted to publish ResultEvent, but out channel is full", "result", result, "query", result.Query)
-				}
-			}
-		case <-sub.Canceled():
-			if sub.Err() == tmpubsub.ErrUnsubscribed {
-				return
-			}
-
-			c.Logger.Error("subscription was canceled, resubscribing...", "err", sub.Err(), "query", q.String())
-			sub = c.resubscribe(subscriber, q)
-			if sub == nil { // client was stopped
-				return
-			}
-		case <-c.Quit():
-			return
-		}
-	}
-}
-
-// Try to resubscribe with exponential backoff.
-func (c *FakeTendermint) resubscribe(subscriber string, q tmpubsub.Query) types.Subscription {
-	attempts := 0
-	for {
-		if !c.IsRunning() {
-			return nil
-		}
-
-		sub, err := c.EventBus.Subscribe(context.Background(), subscriber, q)
-		if err == nil {
-			return sub
-		}
-
-		attempts++
-		time.Sleep((10 << uint(attempts)) * time.Millisecond) // 10ms -> 20ms -> 40ms
-	}
-}
-
-func (c *FakeTendermint) Unsubscribe(ctx context.Context, subscriber, query string) error {
-	args := tmpubsub.UnsubscribeArgs{Subscriber: subscriber}
-	var err error
-	args.Query, err = tmquery.New(query)
-	if err != nil {
-		// if this isn't a valid query it might be an ID, so
-		// we'll try that. It'll turn into an error when we
-		// try to unsubscribe. Eventually, perhaps, we'll want
-		// to change the interface to only allow
-		// unsubscription by ID, but that's a larger change.
-		args.ID = query
-	}
-	return c.EventBus.Unsubscribe(ctx, args)
 }
