@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"io"
 	"strconv"
 	"testing"
@@ -53,8 +52,6 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 		nodes := make([]*FakeNode, len(daemons))
 		allNodes[netName] = nodes
 		for i, daemon := range daemons {
-			daemon.ConnMgr = acctesting.NewFakeConnectionManager(&daemon.Config.Accumulate)
-			daemon.ConnRouter = connections.NewConnectionRouter(daemon.ConnMgr)
 			nodes[i] = StartFake(t, daemon, openDb, doGenesis)
 		}
 	}
@@ -111,11 +108,7 @@ func StartFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.D
 		t.Helper()
 		assert.NoError(t, err)
 	}, 100*time.Millisecond)
-
-	connInitializer := d.ConnMgr.(acctesting.FakeConnectionInitializer)
-	require.NoError(t, connInitializer.CreateClients(n.client))
-
-	relay := relay.New(d.ConnRouter, d.ConnMgr)
+	relay := relay.New(n.client)
 	require.NoError(t, relay.Start())
 	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
 	n.query = accapi.NewQuery(relay)
