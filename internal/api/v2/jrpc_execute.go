@@ -210,10 +210,12 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 		data = r.Data
 	}
 
+	simpleHash := sha256.Sum256(txb)
 	res := new(TxResponse)
 	res.Code = code
-	res.Txid = env.GetTxHash()
-	res.Hash = sha256.Sum256(txb)
+	res.TransactionHash = env.GetTxHash()
+	res.EnvelopeHash = env.EnvHash()
+	res.SimpleHash = simpleHash[:]
 
 	var results []protocol.TransactionResult
 	for len(data) > 0 {

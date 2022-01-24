@@ -34,8 +34,9 @@ TransactionQueryResponse:
       type: KeyPage
       pointer: true
       marshal-as: reference
-    - name: Txid
+    - name: TransactionHash
       type: bytes
+      alternative: Txid
     - name: Signatures
       type: slice
       slice:
@@ -264,10 +265,14 @@ TxResponse:
   non-binary: true
   incomparable: true
   fields:
-  - name: Txid
+  - name: TransactionHash
     type: bytes
-  - name: Hash
-    type: chain
+    alternative: Txid
+  - name: EnvelopeHash
+    type: bytes
+  - name: SimpleHash
+    type: bytes
+    alternative: Hash
   - name: Code
     type: uvarint
   - name: Message

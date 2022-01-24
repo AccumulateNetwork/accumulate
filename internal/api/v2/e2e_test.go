@@ -62,7 +62,7 @@ func TestValidate(t *testing.T) {
 			xr := new(api.TxResponse)
 			callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl.String()}, xr)
 			require.Zero(t, xr.Code, xr.Message)
-			txWait(t, japi, xr.Txid)
+			txWait(t, japi, xr.TransactionHash)
 		}
 
 		account := NewLiteTokenAccount()
