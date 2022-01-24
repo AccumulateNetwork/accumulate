@@ -460,20 +460,6 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return nil
 	}
 
-	// Update the account's list of pending transactions
-	pending := indexing.PendingTransactions(m.blockBatch, st.OriginUrl)
-	if status.Pending {
-		err := pending.Add(st.txHash)
-		if err != nil {
-			return fmt.Errorf("failed to add transaction to the pending list: %v", err)
-		}
-	} else if status.Delivered {
-		err := pending.Remove(st.txHash)
-		if err != nil {
-			return fmt.Errorf("failed to remove transaction to the pending list: %v", err)
-		}
-	}
-
 	// Store against the transaction hash
 	err := m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, env.Signatures)
 	if err != nil {
@@ -492,6 +478,20 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 
 	if postCommit {
 		return nil // Failure after commit
+	}
+
+	// Update the account's list of pending transactions
+	pending := indexing.PendingTransactions(m.blockBatch, st.OriginUrl)
+	if status.Pending {
+		err := pending.Add(st.txHash)
+		if err != nil {
+			return fmt.Errorf("failed to add transaction to the pending list: %v", err)
+		}
+	} else if status.Delivered {
+		err := pending.Remove(st.txHash)
+		if err != nil {
+			return fmt.Errorf("failed to remove transaction to the pending list: %v", err)
+		}
 	}
 
 	// Add the transaction to the origin's main chain, unless it's pending
