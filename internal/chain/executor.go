@@ -389,7 +389,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 
 		// Add its anchor to the root chain
 		rootIndex := rootChain.Height()
-		err = rootChain.AddEntry(recordChain.Anchor())
+		err = rootChain.AddEntry(recordChain.Anchor(), false)
 		if err != nil {
 			return err
 		}
@@ -474,7 +474,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 
 		synthAnchorIndex = uint64(synthChain.Height() - 1)
 		synthRootIndex = uint64(rootChain.Height())
-		err = rootChain.AddEntry(synthChain.Anchor())
+		err = rootChain.AddEntry(synthChain.Anchor(), false)
 		if err != nil {
 			return err
 		}
@@ -490,7 +490,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		Index:   uint64(m.blockIndex - 1),
 	})
 
-	err = rootChain.AddEntry(m.blockBatch.RootHash())
+	err = rootChain.AddEntry(m.blockBatch.RootHash(), false)
 	if err != nil {
 		return err
 	}

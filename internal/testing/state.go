@@ -187,7 +187,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 			return err
 		}
 
-		err = chain.AddEntry(txid[:])
+		err = chain.AddEntry(txid[:], true)
 		if err != nil {
 			return err
 		}
