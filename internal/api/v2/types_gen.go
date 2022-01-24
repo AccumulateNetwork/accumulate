@@ -144,6 +144,7 @@ type TxRequest struct {
 	Signer    Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
 	Signature []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
 	KeyPage   KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	TxHash    []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash" validate:"required"`
 	Payload   interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
 }
 
@@ -532,6 +533,7 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 		Signer    Signer      `json:"signer,omitempty"`
 		Signature *string     `json:"signature,omitempty"`
 		KeyPage   KeyPage     `json:"keyPage,omitempty"`
+		TxHash    *string     `json:"txHash,omitempty"`
 		Payload   interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
@@ -540,6 +542,7 @@ func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
+	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Payload = encoding.AnyToJSON(v.Payload)
 	return json.Marshal(&u)
 }
@@ -927,6 +930,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		Signer    Signer      `json:"signer,omitempty"`
 		Signature *string     `json:"signature,omitempty"`
 		KeyPage   KeyPage     `json:"keyPage,omitempty"`
+		TxHash    *string     `json:"txHash,omitempty"`
 		Payload   interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
@@ -935,6 +939,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u.Signer = v.Signer
 	u.Signature = encoding.BytesToJSON(v.Signature)
 	u.KeyPage = v.KeyPage
+	u.TxHash = encoding.BytesToJSON(v.TxHash)
 	u.Payload = encoding.AnyToJSON(v.Payload)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -953,6 +958,11 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		v.Signature = x
 	}
 	v.KeyPage = u.KeyPage
+	if x, err := encoding.BytesFromJSON(u.TxHash); err != nil {
+		return fmt.Errorf("error decoding TxHash: %w", err)
+	} else {
+		v.TxHash = x
+	}
 	v.Payload = encoding.AnyFromJSON(u.Payload)
 
 	return nil

@@ -46,7 +46,7 @@ type AccumulatorOptions struct {
 	DB      *database.Database
 	Logger  log.Logger
 	Network config.Network
-	Address crypto.Address  // This is the address of this node, and is used to determine if the node is the leader
+	Address crypto.Address // This is the address of this node, and is used to determine if the node is the leader
 }
 
 // NewAccumulator returns a new Accumulator.
@@ -315,7 +315,7 @@ func (app *Accumulator) CheckTx(req abci.RequestCheckTx) (rct abci.ResponseCheck
 	// Check all of the transactions
 	resp := abci.ResponseCheckTx{Code: protocol.CodeOK}
 	for _, env := range envelopes {
-		txid := logging.AsHex(env.Transaction.Hash())
+		txid := logging.AsHex(env.GetTxHash())
 		result, err := app.Chain.CheckTx(env)
 		if err != nil {
 			sentry.CaptureException(err)
@@ -371,7 +371,7 @@ func (app *Accumulator) DeliverTx(req abci.RequestDeliverTx) (rdt abci.ResponseD
 	// Deliver all of the transactions
 	resp := abci.ResponseCheckTx{Code: protocol.CodeOK}
 	for _, env := range envelopes {
-		txid := logging.AsHex(env.Transaction.Hash())
+		txid := logging.AsHex(env.GetTxHash())
 		result, err := app.Chain.DeliverTx(env)
 		if err != nil {
 			sentry.CaptureException(err)

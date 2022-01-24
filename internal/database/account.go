@@ -111,40 +111,6 @@ func (r *Account) GetStateAs(state state.Chain) error {
 	return nil
 }
 
-// GetPending loads the list of pending transactions.
-func (r *Account) GetPending() ([][32]byte, error) {
-	// Load the data out of the database
-	data, err := r.batch.store.Get(r.key.Pending())
-	if errors.Is(err, storage.ErrNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-
-	// The length should be a multiple of 32
-	if len(data)%32 != 0 {
-		return nil, errors.New("pending list length is not divisible by 32")
-	}
-
-	// Turn the byte array into an array of hash
-	pending := make([][32]byte, len(data)/32)
-	for i := range pending {
-		copy(pending[i][:], data[i*32:(i+1)*32])
-	}
-	return pending, nil
-}
-
-// PutPending stores the list of pending transactions.
-func (r *Account) PutPending(pending [][32]byte) {
-	// Concatenate all of the hashes into a byte array
-	data := make([]byte, 0, len(pending)*32)
-	for _, h := range pending {
-		data = append(data, h[:]...)
-	}
-	r.batch.store.Put(r.key.Pending(), data)
-}
-
 // PutState stores the record state and adds the record to the BPT (as a hash).
 func (r *Account) PutState(accountState state.Chain) error {
 	// Does the record state have a URL?

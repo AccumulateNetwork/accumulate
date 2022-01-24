@@ -17,8 +17,6 @@ type StateManager struct {
 	stateCache
 	submissions []*submission
 
-	SignatureCount int
-
 	Origin        state.Chain
 	OriginUrl     *url.URL
 	OriginChainId [32]byte
@@ -43,25 +41,8 @@ func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.
 
 	copy(m.OriginChainId[:], m.OriginUrl.AccountID())
 
-	// Count signatures from the envelope
-	m.SignatureCount = len(env.Signatures)
-
-	// Load previous transaction state
-	txState, _, sigs, err := batch.Transaction(txid[:]).Get()
-	switch {
-	case err == nil:
-		// Add previous signatures to the count
-		m.SignatureCount += len(sigs)
-
-		// Populate the transaction from the database
-		env.Transaction = txState.Restore().Transaction
-	case errors.Is(err, storage.ErrNotFound):
-		// OK
-	default:
-		return nil, fmt.Errorf("an error occured while looking up the transaction: %v", err)
-	}
-
 	// Find the origin
+	var err error
 	m.Origin, err = m.LoadUrl(m.OriginUrl)
 	if err == nil {
 		return m, nil

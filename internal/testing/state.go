@@ -59,7 +59,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	ed := new(transactions.ED25519Sig)
 	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.Transaction.Hash())
+	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
 	if err != nil {
 		return nil, err
 	}

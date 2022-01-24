@@ -254,6 +254,8 @@ TxRequest:
   - name: KeyPage
     type: KeyPage
     marshal-as: reference
+  - name: TxHash
+    type: bytes
   - name: Payload
     type: any
 

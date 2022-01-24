@@ -16,12 +16,12 @@ import (
 // GetTxHash will panic if Transaction is nil and TxHash is nil or not a valid
 // hash.
 func (e *Envelope) GetTxHash() []byte {
-	if e.Transaction != nil {
-		return e.Transaction.Hash()
-	}
-
 	if len(e.TxHash) == sha256.Size {
 		return e.TxHash
+	}
+
+	if e.Transaction != nil {
+		return e.Transaction.calculateHash()
 	}
 
 	if len(e.TxHash) == 0 {
@@ -63,10 +63,15 @@ func (e *Envelope) EnvHash() []byte {
 }
 
 // Hash calculates the hash of the transaction as H(H(header) + H(body)).
-func (t *Transaction) Hash() []byte {
+func (t *Transaction) calculateHash() []byte {
 	// Already computed?
 	if t.hash != nil {
 		return t.hash
+	}
+
+	if t.Type() == types.TxTypeSignPending {
+		// Do not use the hash for a signature transaction
+		return nil
 	}
 
 	// Marshal the header
@@ -97,7 +102,7 @@ func (t *Transaction) Type() types.TransactionType {
 // Verify verifies that the signatures are valid.
 func (e *Envelope) Verify() bool {
 	// Compute the transaction hash
-	txid := e.Transaction.Hash()
+	txid := e.GetTxHash()
 
 	// Check each signature
 	for _, v := range e.Signatures {
@@ -138,7 +143,7 @@ func NewWith(header *Header, signer func(hash []byte) (*ED25519Sig, error), tx e
 	env.Transaction.Body = body
 	env.Signatures = make([]*ED25519Sig, 1)
 
-	hash := env.Transaction.Hash()
+	hash := env.GetTxHash()
 	env.Signatures[0], err = signer(hash)
 	if err != nil {
 		return nil, err

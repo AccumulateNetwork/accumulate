@@ -6,9 +6,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -20,19 +20,10 @@ import (
 
 // CheckTx implements ./abci.Chain
 func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
-	// If the transaction is borked, the transaction type is probably invalid,
-	// so check that first. "Invalid transaction type" is a more useful error
-	// than "invalid signature" if the real error is the transaction got borked.
-	txt := types.TxType(env.Transaction.Type())
-	executor, ok := m.executors[txt]
-	if !ok {
-		return nil, &protocol.Error{Code: protocol.CodeInvalidTxnType, Message: fmt.Errorf("unsupported TX type: %v", txt)}
-	}
-
 	batch := m.DB.Begin()
 	defer batch.Discard()
 
-	st, err := m.verifySigsAndChargeFees(batch, env)
+	st, executor, hasEnoughSigs, err := m.validate(batch, env)
 	if errors.Is(err, storage.ErrNotFound) {
 		return nil, &protocol.Error{Code: protocol.CodeNotFound, Message: err}
 	}
@@ -50,7 +41,12 @@ func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResu
 	// CheckTx, it does not get recorded. If the synthetic transaction is not
 	// recorded, the BVN that sent it and the client that sent the original
 	// transaction cannot verify that the synthetic transaction was received.
-	if txt.IsSynthetic() {
+	if env.Transaction.Type().IsSynthetic() {
+		return new(protocol.EmptyResult), nil
+	}
+
+	// Do not validate if we don't have enough signatures
+	if !hasEnoughSigs {
 		return new(protocol.EmptyResult), nil
 	}
 
@@ -66,57 +62,18 @@ func (m *Executor) CheckTx(env *transactions.Envelope) (protocol.TransactionResu
 
 // DeliverTx implements ./abci.Chain
 func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionResult, *protocol.Error) {
-	m.wg.Add(1)
-
-	// If this is done async (`go m.deliverTxAsync(tx)`), how would an error
-	// get back to the ABCI callback?
-	// > errors would not go back to ABCI callback. The errors determine what gets kept in tm TX history, so as far
-	// > as tendermint is concerned, it will keep everything, but we don't care because we are pruning tm history.
-	// > For reporting errors back to the world, we would to provide a different mechanism for querying
-	// > tx status, which can be done via the pending chains.  Thus, going on that assumption, because each
-	// > identity operates independently, we can make the validation process highly parallel, and sync up at
-	// > the commit when we go to write the states.
-	// go func() {
-
-	defer m.wg.Done()
-
-	if env.Transaction.Origin == nil {
-		return nil, &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: fmt.Errorf("malformed transaction error")}
-	}
-
-	txt := env.Transaction.Type()
-	executor, ok := m.executors[txt]
-	if !ok {
-		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{
-			Code:    protocol.CodeInvalidTxnType,
-			Message: fmt.Errorf("unsupported TX type: %v", env.Transaction.Type().Name())})
-	}
-
 	// if txt.IsInternal() && tx.Transaction.Nonce != uint64(m.blockIndex) {
 	// 	err := fmt.Errorf("nonce does not match block index, want %d, got %d", m.blockIndex, tx.Transaction.Nonce)
-	// 	return nil, m.recordTransactionError(tx, nil, nil, &chainId, tx.Transaction.Hash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
+	// 	return nil, m.recordTransactionError(tx, nil, nil, &chainId, tx.GetTxHash(), &protocol.Error{Code: protocol.CodeInvalidTxnError, Message: err})
 	// }
 
-	m.mu.Lock()
-	group, ok := m.chainWG[env.Transaction.Origin.Routing()%chainWGSize]
-	if !ok {
-		group = new(sync.WaitGroup)
-		m.chainWG[env.Transaction.Origin.Routing()%chainWGSize] = group
-	}
-
-	group.Wait()
-	group.Add(1)
-	defer group.Done()
-	m.mu.Unlock()
-
 	// Set up the state manager and validate the signatures
-	st, err := m.verifySigsAndChargeFees(m.blockBatch, env)
+	st, executor, hasEnoughSigs, err := m.validate(m.blockBatch, env)
 	if err != nil {
 		return nil, m.recordTransactionError(nil, env, nil, nil, false, &protocol.Error{Code: protocol.CodeCheckTxError, Message: fmt.Errorf("txn check failed : %v", err)})
 	}
 
-	// If the number of signatures is less than the threshold, the transaction is pending
-	if page, ok := st.Signator.(*protocol.KeyPage); ok && st.SignatureCount < int(page.Threshold) {
+	if !hasEnoughSigs {
 		// Write out changes to the nonce and credit balance
 		_, err := st.Commit()
 		if err != nil {
@@ -128,6 +85,7 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 		if err != nil {
 			return nil, &protocol.Error{Code: protocol.CodeTxnStateError, Message: err}
 		}
+		return new(protocol.EmptyResult), nil
 	}
 
 	result, err := executor.Validate(st, env)
@@ -158,10 +116,6 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 		return nil, m.recordTransactionError(st, env, txAccepted, txPending, false, &protocol.Error{Code: protocol.CodeMarshallingError, Message: err})
 	}
 
-	if txt == types.TxTypeSendTokens {
-		println("!")
-	}
-
 	// Store pending state updates, queue state creates for synthetic transactions
 	submitted, err := st.Commit()
 	if err != nil {
@@ -190,60 +144,111 @@ func (m *Executor) DeliverTx(env *transactions.Envelope) (protocol.TransactionRe
 	return result, nil
 }
 
-// verifySigsAndChargeFees validates signatures, verifies they are authorized,
+// validate validates signatures, verifies they are authorized,
 // updates the nonce, and charges the fee.
-func (m *Executor) verifySigsAndChargeFees(batch *database.Batch, env *transactions.Envelope) (*StateManager, error) {
+func (m *Executor) validate(batch *database.Batch, env *transactions.Envelope) (st *StateManager, executor TxExecutor, hasEnoughSigs bool, err error) {
+	// All transactions must be signed
 	if len(env.Signatures) == 0 {
-		return nil, fmt.Errorf("transaction is not signed")
+		return nil, nil, false, fmt.Errorf("transaction is not signed")
 	}
 
-	if !env.Verify() {
-		return nil, fmt.Errorf("invalid signature")
+	// TxHash must either be empty or a SHA-256 hash
+	if len(env.TxHash) != 0 && len(env.TxHash) != sha256.Size {
+		return nil, nil, false, fmt.Errorf("invalid hash")
 	}
 
+	// TxHash must be specified for signature transactions
 	txt := env.Transaction.Type()
+	if txt == types.TxTypeSignPending && len(env.TxHash) == 0 {
+		return nil, nil, false, fmt.Errorf("invalid signature transaction: missing transaction hash")
+	}
 
-	st, err := NewStateManager(batch, m.Network.NodeUrl(), env)
+	// If the transaction is borked, the transaction type is probably invalid,
+	// so check that first. "Invalid transaction type" is a more useful error
+	// than "invalid signature" if the real error is the transaction got borked.
+	var ok bool
+	if txt != types.TxTypeSignPending {
+		executor, ok = m.executors[txt]
+		if !ok && txt != types.TxTypeSignPending {
+			return nil, nil, false, fmt.Errorf("unsupported TX type: %v", txt)
+		}
+	}
+
+	// Verify the transaction's signatures
+	if !env.Verify() {
+		return nil, nil, false, fmt.Errorf("invalid signature")
+	}
+
+	// Calculate the fee before modifying the transaction
+	fee, err := protocol.ComputeFee(env)
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	// Load previous transaction state
+	txState, _, sigs, err := batch.Transaction(env.GetTxHash()).Get()
+	switch {
+	case err == nil:
+		// Populate the transaction from the database
+		env.Transaction = txState.Restore().Transaction
+
+		// Update txt and executor for signature transactions
+		if txt != types.TxTypeSignPending {
+			break
+		}
+
+		// This should never fail because an invalid transaction should never be
+		// written to the database
+		txt = env.Transaction.Type()
+		executor, ok = m.executors[txt]
+		if !ok && txt != types.TxTypeSignPending {
+			return nil, nil, false, fmt.Errorf("unsupported TX type: %v", txt)
+		}
+	case !errors.Is(err, storage.ErrNotFound):
+		return nil, nil, false, fmt.Errorf("an error occured while looking up the transaction: %v", err)
+	case txt == types.TxTypeSignPending:
+		return nil, nil, false, fmt.Errorf("invalid signature transaction: %w", err)
+	}
+
+	// Set up the state manager
+	st, err = NewStateManager(batch, m.Network.NodeUrl(), env)
 	if errors.Is(err, storage.ErrNotFound) {
 		switch txt {
 		case types.TxTypeSyntheticCreateChain, types.TxTypeSyntheticDepositTokens, types.TxTypeSyntheticWriteData:
 			// TX does not require the origin record to exist
 		default:
-			return nil, fmt.Errorf("origin record not found: %w", err)
+			return nil, nil, false, fmt.Errorf("origin record not found: %w", err)
 		}
 	} else if err != nil {
-		return nil, err
+		return nil, nil, false, err
 	}
 	st.logger.L = m.logger
 
+	// Validate the transaction
 	if txt.IsSynthetic() {
-		return st, m.checkSynthetic(st, env)
+		return st, executor, true, m.validateSynthetic(st, env)
 	}
 
 	if txt.IsInternal() {
-		return st, m.checkInternal(st, env)
+		return st, executor, true, m.validateInternal(st, env)
 	}
 
 	book := new(protocol.KeyBook)
 	switch origin := st.Origin.(type) {
 	case *protocol.LiteTokenAccount:
-		err = m.checkLite(st, env)
-		if err != nil {
-			return nil, err
-		}
-		return st, nil
+		return st, executor, true, m.validateAgainstLite(st, env, fee)
 
 	case *protocol.ADI, *protocol.TokenAccount, *protocol.KeyPage, *protocol.DataAccount, *protocol.TokenIssuer:
 		if origin.Header().KeyBook == "" {
-			return nil, fmt.Errorf("sponsor has not been assigned to a key book")
+			return nil, nil, false, fmt.Errorf("sponsor has not been assigned to a key book")
 		}
 		u, err := url.Parse(*origin.Header().KeyBook.AsString())
 		if err != nil {
-			return nil, fmt.Errorf("invalid keybook url %s", u.String())
+			return nil, nil, false, fmt.Errorf("invalid keybook url %s", u.String())
 		}
 		err = st.LoadUrlAs(u, book)
 		if err != nil {
-			return nil, fmt.Errorf("invalid KeyBook: %v", err)
+			return nil, nil, false, fmt.Errorf("invalid KeyBook: %v", err)
 		}
 
 	case *protocol.KeyBook:
@@ -252,64 +257,14 @@ func (m *Executor) verifySigsAndChargeFees(batch *database.Batch, env *transacti
 	default:
 		// The TX origin cannot be a transaction
 		// Token issue chains are not implemented
-		return nil, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.Header().Type)
+		return nil, nil, false, fmt.Errorf("invalid origin record: account type %v cannot be the origininator of transactions", origin.Header().Type)
 	}
 
-	if env.Transaction.KeyPageIndex >= uint64(len(book.Pages)) {
-		return nil, fmt.Errorf("invalid sig spec index")
-	}
-
-	st.SignatorUrl, err = url.Parse(book.Pages[env.Transaction.KeyPageIndex])
-	if err != nil {
-		return nil, fmt.Errorf("invalid key page url : %s", book.Pages[env.Transaction.KeyPageIndex])
-	}
-	page := new(protocol.KeyPage)
-	st.Signator = page
-	err = st.LoadUrlAs(st.SignatorUrl, page)
-	if err != nil {
-		return nil, fmt.Errorf("invalid sig spec: %v", err)
-	}
-
-	height, err := st.GetHeight(st.SignatorUrl)
-	if err != nil {
-		return nil, err
-	}
-	if height != env.Transaction.KeyPageHeight {
-		return nil, fmt.Errorf("invalid height")
-	}
-
-	for i, sig := range env.Signatures {
-		ks := page.FindKey(sig.PublicKey)
-		if ks == nil {
-			return nil, fmt.Errorf("no key spec matches signature %d", i)
-		}
-
-		switch {
-		case i > 0:
-			// Only check the nonce of the first key
-		case ks.Nonce >= sig.Nonce:
-			return nil, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, sig.Nonce)
-		default:
-			ks.Nonce = sig.Nonce
-		}
-	}
-
-	cost, err := protocol.ComputeFee(env)
-	if err != nil {
-		return nil, err
-	}
-	if !page.DebitCredits(uint64(cost)) {
-		return nil, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.ChainUrl, page.CreditBalance.String(), cost)
-	}
-
-	err = st.UpdateSignator(page)
-	if err != nil {
-		return nil, err
-	}
-	return st, nil
+	hasEnoughSigs, err = m.validateAgainstBook(st, env, book, fee, len(sigs))
+	return st, executor, hasEnoughSigs, err
 }
 
-func (m *Executor) checkSynthetic(st *StateManager, env *transactions.Envelope) error {
+func (m *Executor) validateSynthetic(st *StateManager, env *transactions.Envelope) error {
 	//placeholder for special validation rules for synthetic transactions.
 	//need to verify the sender is a legit bvc validator also need the dbvc receipt
 	//so if the transaction is a synth tx, then we need to verify the sender is a BVC validator and
@@ -318,10 +273,10 @@ func (m *Executor) checkSynthetic(st *StateManager, env *transactions.Envelope) 
 
 	// TODO Get rid of this hack and actually check the nonce. But first we have
 	// to implement transaction batching.
-	v := st.RecordIndex(m.Network.NodeUrl(), "SeenSynth", env.Transaction.Hash())
+	v := st.RecordIndex(m.Network.NodeUrl(), "SeenSynth", env.GetTxHash())
 	_, err := v.Get()
 	if err == nil {
-		return fmt.Errorf("duplicate synthetic transaction %X", env.Transaction.Hash())
+		return fmt.Errorf("duplicate synthetic transaction %X", env.GetTxHash())
 	} else if errors.Is(err, storage.ErrNotFound) {
 		v.Put([]byte{1})
 	} else {
@@ -331,13 +286,67 @@ func (m *Executor) checkSynthetic(st *StateManager, env *transactions.Envelope) 
 	return nil
 }
 
-func (m *Executor) checkInternal(st *StateManager, env *transactions.Envelope) error {
+func (m *Executor) validateInternal(st *StateManager, env *transactions.Envelope) error {
 	//placeholder for special validation rules for internal transactions.
 	//need to verify that the transaction came from one of the node's governors.
 	return nil
 }
 
-func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error {
+func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envelope, book *protocol.KeyBook, fee protocol.Fee, previousSigCount int) (bool, error) {
+	if env.Transaction.KeyPageIndex >= uint64(len(book.Pages)) {
+		return false, fmt.Errorf("invalid sig spec index")
+	}
+
+	var err error
+	st.SignatorUrl, err = url.Parse(book.Pages[env.Transaction.KeyPageIndex])
+	if err != nil {
+		return false, fmt.Errorf("invalid key page url : %s", book.Pages[env.Transaction.KeyPageIndex])
+	}
+	page := new(protocol.KeyPage)
+	st.Signator = page
+	err = st.LoadUrlAs(st.SignatorUrl, page)
+	if err != nil {
+		return false, fmt.Errorf("invalid sig spec: %v", err)
+	}
+
+	height, err := st.GetHeight(st.SignatorUrl)
+	if err != nil {
+		return false, err
+	}
+	if height != env.Transaction.KeyPageHeight {
+		return false, fmt.Errorf("invalid height")
+	}
+
+	for i, sig := range env.Signatures {
+		ks := page.FindKey(sig.PublicKey)
+		if ks == nil {
+			return false, fmt.Errorf("no key spec matches signature %d", i)
+		}
+
+		switch {
+		case i > 0:
+			// Only check the nonce of the first key
+		case ks.Nonce >= sig.Nonce:
+			return false, fmt.Errorf("invalid nonce: have %d, received %d", ks.Nonce, sig.Nonce)
+		default:
+			ks.Nonce = sig.Nonce
+		}
+	}
+
+	if !page.DebitCredits(uint64(fee)) {
+		return false, fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", page.ChainUrl, page.CreditBalance.String(), fee)
+	}
+
+	err = st.UpdateSignator(page)
+	if err != nil {
+		return false, err
+	}
+
+	// If the number of signatures is less than the threshold, the transaction is pending
+	return previousSigCount+len(env.Signatures) >= int(page.Threshold), nil
+}
+
+func (m *Executor) validateAgainstLite(st *StateManager, env *transactions.Envelope, fee protocol.Fee) error {
 	account := st.Origin.(*protocol.LiteTokenAccount)
 	st.Signator = account
 	st.SignatorUrl = st.OriginUrl
@@ -365,12 +374,8 @@ func (m *Executor) checkLite(st *StateManager, env *transactions.Envelope) error
 		}
 	}
 
-	cost, err := protocol.ComputeFee(env)
-	if err != nil {
-		return err
-	}
-	if !account.DebitCredits(uint64(cost)) {
-		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.ChainUrl, account.CreditBalance.String(), cost)
+	if !account.DebitCredits(uint64(fee)) {
+		return fmt.Errorf("insufficent credits for the transaction: %q has %v, cost is %d", account.ChainUrl, account.CreditBalance.String(), fee)
 	}
 
 	return st.UpdateSignator(account)
@@ -384,7 +389,7 @@ func (m *Executor) recordTransactionError(st *StateManager, env *transactions.En
 	}
 	err := m.putTransaction(st, env, txAccepted, txPending, status, postCommit)
 	if err != nil {
-		m.logError("Failed to store transaction", "txid", logging.AsHex(env.Transaction.Hash()), "origin", env.Transaction.Origin, "error", err)
+		m.logError("Failed to store transaction", "txid", logging.AsHex(env.GetTxHash()), "origin", env.Transaction.Origin, "error", err)
 	}
 	return failure
 }
@@ -405,10 +410,14 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 		return nil
 	}
 
-	// TODO Update the account's list of pending transactions
-	// pendingTxns, err := m.blockBatch.Account(st.OriginUrl).GetPending()
-	// // do some stuff
-	// m.blockBatch.Account(st.OriginUrl).PutPending(pendingTxns)
+	// Update the account's list of pending transactions
+	if status.Pending {
+		pending := indexing.PendingTransactions(m.blockBatch, st.OriginUrl)
+		err := pending.Add(st.txHash)
+		if err != nil {
+			return fmt.Errorf("failed to add transaction to the pending list: %v", err)
+		}
+	}
 
 	// Store against the transaction hash
 	err := m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, env.Signatures)
@@ -479,11 +488,10 @@ func (m *Executor) putTransaction(st *StateManager, env *transactions.Envelope, 
 	}
 
 	fee, err := protocol.ComputeFee(env)
-	if err != nil || fee > protocol.FeeFailedMaximum.AsInt() {
-		fee = protocol.FeeFailedMaximum.AsInt()
+	if err != nil || fee > protocol.FeeFailedMaximum {
+		fee = protocol.FeeFailedMaximum
 	}
 	st.Signator.DebitCredits(uint64(fee))
 
 	return sigRecord.PutState(st.Signator)
 }
-

@@ -86,6 +86,9 @@ const (
 	// TxTypeUpdateKeyPage adds, removes, or updates keys in a key page, which
 	// *does not* produce a synthetic transaction.
 	TxTypeUpdateKeyPage TransactionType = 0x0F
+
+	// TxTypeSignPending is used to sign a pending transaction.
+	TxTypeSignPending TransactionType = 0x30
 )
 
 // Synthetic transactions

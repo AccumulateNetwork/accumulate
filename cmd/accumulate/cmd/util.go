@@ -134,29 +134,31 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(binaryPayload []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
-	gtx := new(transactions.Envelope)
-	gtx.Transaction = new(transactions.Transaction)
-	gtx.Transaction.Body = binaryPayload
+func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+	env := new(transactions.Envelope)
+	env.TxHash = txHash
+	env.Transaction = new(transactions.Transaction)
+	env.Transaction.Body = binaryPayload
 
 	hdr.Nonce = nonce
-	gtx.Transaction.Header = *hdr
+	env.Transaction.Header = *hdr
 
 	ed := new(transactions.ED25519Sig)
-	err := ed.Sign(nonce, privKey, gtx.Transaction.Hash())
+	err := ed.Sign(nonce, privKey, env.GetTxHash())
 	if err != nil {
 		return nil, err
 	}
 	return ed, nil
 }
 
-func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(binaryPayload, origin, si, privKey, nonce)
+func prepareGenTxV2(jsonPayload, binaryPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+	ed, err := signGenTx(binaryPayload, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
 
 	params := &api2.TxRequest{}
+	params.TxHash = txHash
 
 	if TxPretend {
 		params.CheckOnly = true
@@ -242,7 +244,11 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+	if payload == nil && txHash != nil {
+		payload = new(protocol.SignPending)
+	}
+
 	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -259,7 +265,7 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, origin, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}

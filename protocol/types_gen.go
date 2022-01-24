@@ -248,6 +248,9 @@ type SendTransaction struct {
 	Recipient *url.URL           `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 }
 
+type SignPending struct {
+}
+
 type SyntheticAnchor struct {
 	Source      string   `json:"source,omitempty" form:"source" query:"source" validate:"required,acc-url"`
 	Major       bool     `json:"major,omitempty" form:"major" query:"major" validate:"required"`
@@ -449,6 +452,8 @@ func (*IssueTokens) GetType() types.TransactionType { return types.TxTypeIssueTo
 func (*SegWitDataEntry) GetType() types.TransactionType { return types.TxTypeSegWitDataEntry }
 
 func (*SendTokens) GetType() types.TransactionType { return types.TxTypeSendTokens }
+
+func (*SignPending) GetType() types.TransactionType { return types.TxTypeSignPending }
 
 func (*SyntheticAnchor) GetType() types.TransactionType { return types.TxTypeSyntheticAnchor }
 
@@ -1135,6 +1140,11 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 		}
 
 	}
+
+	return true
+}
+
+func (v *SignPending) Equal(u *SignPending) bool {
 
 	return true
 }
@@ -2031,6 +2041,14 @@ func (v *SendTransaction) BinarySize() int {
 	n += v.Payload.BinarySize()
 
 	n += v.Recipient.BinarySize()
+
+	return n
+}
+
+func (v *SignPending) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeSignPending.ID())
 
 	return n
 }
@@ -2957,6 +2975,14 @@ func (v *SendTransaction) MarshalBinary() ([]byte, error) {
 	} else {
 		buffer.Write(b)
 	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *SignPending) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSignPending.ID()))
 
 	return buffer.Bytes(), nil
 }
@@ -4411,6 +4437,18 @@ func (v *SendTransaction) UnmarshalBinary(data []byte) error {
 		return fmt.Errorf("error decoding Recipient: %w", err)
 	}
 	data = data[v.Recipient.BinarySize():]
+
+	return nil
+}
+
+func (v *SignPending) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeSignPending
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
 
 	return nil
 }

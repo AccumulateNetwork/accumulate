@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
@@ -35,10 +34,6 @@ type Executor struct {
 	governor  *governor
 	logger    log.Logger
 
-	wg      *sync.WaitGroup
-	mu      *sync.Mutex
-	chainWG map[uint64]*sync.WaitGroup
-
 	blockLeader bool
 	blockIndex  int64
 	blockTime   time.Time
@@ -62,8 +57,6 @@ func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, erro
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[types.TxType]TxExecutor{}
-	m.wg = new(sync.WaitGroup)
-	m.mu = new(sync.Mutex)
 
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "executor")
@@ -156,7 +149,7 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	txAccepted, txPending := state.NewTransaction(txPending)
 
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(env.Transaction.Hash()).Put(txAccepted, status, nil)
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +237,6 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockResponse, error) {
 	m.logDebug("Begin block", "height", req.Height, "leader", req.IsLeader, "time", req.Time)
 
-	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
 	m.blockLeader = req.IsLeader
 	m.blockIndex = req.Height
 	m.blockTime = req.Time
@@ -296,8 +288,6 @@ func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
 
 // Commit implements ./abci.Chain
 func (m *Executor) Commit() ([]byte, error) {
-	m.wg.Wait()
-
 	// Discard changes if commit fails
 	defer m.blockBatch.Discard()
 

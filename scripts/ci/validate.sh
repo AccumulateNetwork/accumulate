@@ -180,6 +180,16 @@ wait-for cli-tx tx create ${LITE} keytest/tokens 5
 BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
 [ "$BALANCE" -eq 500000000 ] && success || die "${LITE} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
 
+section "Send tokens from the ADI token account to the lite token account using the multisig page"
+TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1)
+wait-for-tx $TXID
+accumulate -j tx get $TXID | jq -re .status.pending && success || die "Transaction is not pending"
+
+section "Sign the pending transaction using the other key"
+wait-for cli-tx tx sign keytest/tokens keytest-1-1 $TXID
+accumulate -j tx get $TXID | jq -re .status.delivered && success || die "Transaction was not delivered"
+wait-for-tx $TXID
+
 section "Bug AC-551"
 api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value &> /dev/null
 success
