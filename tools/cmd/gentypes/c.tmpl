@@ -13,46 +13,23 @@
 #include "types/api/transactions"
 {{- end}}
 
-{{range .Types}}
-struct {{.Name}} {
-    //pseudo helper functions
-    int (*GetType)();
-    rbytes (*MarshalBinary)(v *{{.Name}});
-    error (*UnmarshalBinary)(v *{{.Name}});
-    rbytes (*MarshalJSON)(v *{{.Name}});
-    error (*UnmarshalJSON)(v *{{.Name}});
-    bool (*Equal)(v *{{.Name}},u *{{.Name}});
-    int (*BinarySize)(v *{{.Name}});
-
-
-	{{if .IsChain}}{{if isPkg "types/state"}}ChainHeader{{else}}state.ChainHeader{{end}}
-	{{- end}}
-	{{- range .Embeddings}}
-	{{.}}
-	{{- end}}
-	{{- range .Fields}}
-	{{resolveType . false}} {{.Name}} {{if .IsMarshalled}}; //`json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}" form:"{{lcName .Name}}" query:"{{lcName .Name}}"{{validateTag .}}`{{end}}
-	{{- end}}
-
-};
-{{end}}
 
 {{range .Types}}
-{{- if and .IsChain .MakeConstructor}}
-func New{{.Name}}() *{{.Name}} {
-	v := new({{.Name}})
-	v.Type = types.AccountType{{.ChainType}}
-
-    .GetType = GetType##Struct,\
-    .MarshalBinary = MarshalBinary##Struct,\
-    .UnmarshalBinary = UnmarshalBinary##Struct, \
-    .MarshalJSON = MarshalJSON##Struct,\
-    .UnmarshalJSON = UnmarshalJSON##Struct,\
-    .Equal = Equal##Struct,\
-	return v
-}
+{{- if and .MakeConstructor}}
+func New{{.Name}}() {{.Name}} {
+	{{.Name}} v;
+{{- if and .IsChain}}
+	v.Type = types.AccountType{{.ChainType}};
 {{- end}}
-{{end}}
+    v.GetType = GetType{{.Name}};
+    v.MarshalBinary = MarshalBinary{{.Name}};
+    v.UnmarshalBinary = UnmarshalBinary{{.Name}};
+    v.MarshalJSON = MarshalJSON{{.Name}};
+    v.UnmarshalJSON = UnmarshalJSON{{.Name}};
+    v.Equal = Equal{{.Name}};
+    return v;
+}
+{{- end}}{{end}}
 
 {{range .Types}}{{if .IsTransaction}}
 TxType GetType{{.Name}}()  { return TxType{{.TransactionType}}; }

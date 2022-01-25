@@ -72,27 +72,27 @@ func CFieldError(op, name string, args ...string) string {
 func CResolveType(field *Field, forNew bool) string {
 	switch field.Type {
 	case "bytes":
-		return "[]byte"
+		return "Bytes"
 	case "rawJson":
 		return "json.RawMessage"
 	case "bigint":
-		return "big.Int"
+		return "uint256_t"
 	case "uvarint":
-		return "uint64"
+		return "uint64_t"
 	case "varint":
-		return "int64"
+		return "int64_t"
 	case "chain":
-		return "[32]byte"
+		return "Bytes32"
 	case "chainSet":
-		return "[][32]byte"
+		return "Bytes32[]"
 	case "duration":
-		return "time.Duration"
+		return "timespec"
 	case "time":
-		return "time.Time"
+		return "time_t"
 	case "any":
 		return "interface{}"
 	case "slice":
-		return "[]" + CResolveType(field.Slice, false)
+		return CResolveType(field.Slice, false) + "[]"
 	}
 
 	typ := field.Type
@@ -105,13 +105,13 @@ func CResolveType(field *Field, forNew bool) string {
 func CJsonType(field *Field) string {
 	switch field.Type {
 	case "bytes":
-		return "*string"
+		return "String*"
 	case "bigint":
-		return "*string"
+		return "String*"
 	case "chain":
-		return "string"
+		return "String"
 	case "chainSet":
-		return "[]string"
+		return "String[]"
 	case "duration", "any":
 		return "interface{}"
 	case "slice":
@@ -127,10 +127,14 @@ func CJsonType(field *Field) string {
 func CAreEqual(field *Field, varName, otherName string) (string, error) {
 	var expr string
 	switch field.Type {
-	case "bool", "string", "chain", "uvarint", "varint", "duration", "time":
+	case "uvarint", "varint":
+		expr = "memcmp(%s, %s) == 0"
+	case "string":
+		expr = "strcmp(%s.string.Data, %s.string.Data)==0"
+	case "bool", "chain", "duration", "time":
 		expr = "%s == %s"
 	case "bytes", "rawJson":
-		expr = "bytes.Equal(%s, %s)"
+		expr = "memcmp(%s, %s)==0"
 	case "bigint":
 		if field.IsPointer {
 			expr = "%s.Cmp(%s) == 0"
@@ -138,7 +142,7 @@ func CAreEqual(field *Field, varName, otherName string) (string, error) {
 			expr = "%s.Cmp(&%s) == 0"
 		}
 	case "slice", "chainSet":
-		expr = "len(%s) == len(%s)"
+		expr = "%s.data.len == %s.data.len"
 	default:
 		switch {
 		case field.AsReference:

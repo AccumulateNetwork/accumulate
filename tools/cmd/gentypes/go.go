@@ -3,6 +3,7 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"strings"
 	"text/template"
 )
@@ -311,7 +312,7 @@ func GoBinaryUnmarshalValue(field *Field, varName, errName string, errArgs ...st
 			expr, inPlace = field.UnmarshalWith+"(data)", false
 		}
 	}
-
+	encoding.BigintFromJSON()
 	if init != "" {
 		fmt.Fprintf(w, "\t%s\n", fmt.Sprintf(init, varName))
 	}
