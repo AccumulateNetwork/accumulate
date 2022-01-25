@@ -14,66 +14,62 @@ import (
 	"github.com/spf13/cobra"
 )
 
+func init() {
+	adiCmd.AddCommand(
+		adiGetCmd,
+		adiListCmd,
+		adiDirectoryCmd,
+		adiCreateCmd)
+}
+
 var adiCmd = &cobra.Command{
 	Use:   "adi",
 	Short: "Create and manage ADI",
+}
+
+var adiGetCmd = &cobra.Command{
+	Use:   "get [url]",
+	Short: "Get existing ADI by URL",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		var out string
-		var err error
-		if len(args) > 0 {
-			switch arg := args[0]; arg {
-			case "get":
-				if len(args) > 1 {
-					out, err = GetADI(args[1])
-				} else {
-					fmt.Println("Usage:")
-					PrintADIGet()
-				}
-			case "list":
-				out, err = ListADIs()
-			case "directory":
-				if len(args) > 3 {
-					out, err = GetAdiDirectory(args[1], args[2], args[3])
-					if err != nil {
-						PrintAdiDirectory()
-					}
-				} else {
-					PrintAdiDirectory()
-				}
-			case "create":
-				if len(args) > 3 {
-					out, err = NewADI(args[1], args[2:])
-				} else {
-					fmt.Println("Usage:")
-					PrintADICreate()
-				}
-			default:
-				fmt.Println("Usage:")
-				PrintADI()
-			}
-		} else {
-			fmt.Println("Usage:")
-			PrintADI()
-		}
+		out, err := GetADI(args[0])
 		printOutput(cmd, out, err)
 	},
 }
-
-func PrintADIGet() {
-	fmt.Println("  accumulate adi get [URL]			Get existing ADI by URL")
+var adiListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "Get existing ADI by URL",
+	Args:  cobra.NoArgs,
+	Run: func(cmd *cobra.Command, _ []string) {
+		out, err := ListADIs()
+		printOutput(cmd, out, err)
+	},
+}
+var adiDirectoryCmd = &cobra.Command{
+	Use:   "directory [url] [from] [to]",
+	Short: "Get directory of URL's associated with an ADI with starting index and number of directories to receive",
+	Args:  cobra.ExactArgs(3),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := GetAdiDirectory(args[0], args[1], args[2])
+		printOutput(cmd, out, err)
+	},
+}
+var adiCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create new ADI",
+	Run: func(cmd *cobra.Command, args []string) {
+		if len(args) < 3 {
+			PrintADICreate()
+			return
+		}
+		out, err := NewADI(args[0], args[1:])
+		printOutput(cmd, out, err)
+	},
 }
 
 func PrintADICreate() {
 	fmt.Println("  accumulate adi create [origin-lite-account] [adi url to create] [public-key or key name] [key-book-name (optional)] [key-page-name (optional)]  Create new ADI from lite account")
 	fmt.Println("  accumulate adi create [origin-adi-url] [wallet signing key name] [key index (optional)] [key height (optional)] [adi url to create] [public key or wallet key name] [key book url (optional)] [key page url (optional)] Create new ADI for another ADI")
-}
-
-func PrintADIImport() {
-	fmt.Println("  accumulate adi import [adi-url] [private-key]	Import Existing ADI")
-}
-
-func PrintAdiDirectory() {
-	fmt.Println("  accumulate adi directory [url] [start] [count]		Get directory of URL's associated with an ADI with starting index and number of directories to receive")
 }
 
 func GetAdiDirectory(origin string, start string, count string) (string, error) {
@@ -113,13 +109,6 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	}
 
 	return PrintMultiResponse(&res)
-}
-
-func PrintADI() {
-	PrintADIGet()
-	PrintAdiDirectory()
-	PrintADICreate()
-	PrintADIImport()
 }
 
 func GetADI(url string) (string, error) {
