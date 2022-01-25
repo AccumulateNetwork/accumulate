@@ -11,13 +11,16 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	acctypes "github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/libs/log"
 	rpc "github.com/tendermint/tendermint/rpc/client"
 	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	"github.com/tendermint/tendermint/types"
@@ -36,6 +39,7 @@ type FakeTendermint struct {
 	network    *config.Network
 	nextHeight func() int64
 	address    crypto.Address
+	logger     log.Logger
 	onError    func(err error)
 
 	stop    chan struct{}
@@ -61,13 +65,14 @@ type txStatus struct {
 	Done          bool
 }
 
-func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, address crypto.Address, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
+func NewFakeTendermint(app <-chan abci.Application, db *database.Database, network *config.Network, address crypto.Address, logger log.Logger, nextHeight func() int64, onError func(err error), interval time.Duration) *FakeTendermint {
 	c := new(FakeTendermint)
 	c.appWg = new(sync.WaitGroup)
 	c.db = db
 	c.network = network
 	c.nextHeight = nextHeight
 	c.address = address
+	c.logger = logger
 	c.onError = onError
 	c.stop = make(chan struct{})
 	c.txCh = make(chan *txStatus)
@@ -104,7 +109,7 @@ func (c *FakeTendermint) App() abci.Application {
 // WaitForAll until all pending transactions are done
 func (c *FakeTendermint) WaitForAll() {
 	if debugTX {
-		fmt.Printf("Waiting for transactions\n")
+		c.logger.Info("Waiting for transactions")
 	}
 	c.txMu.RLock()
 	defer c.txMu.RUnlock()
@@ -112,13 +117,13 @@ func (c *FakeTendermint) WaitForAll() {
 		c.txCond.Wait()
 	}
 	if debugTX {
-		fmt.Printf("Done waiting\n")
+		c.logger.Info("Done waiting")
 	}
 }
 
 func (c *FakeTendermint) WaitFor(txid [32]byte, waitSynth bool) error {
 	if debugTX {
-		fmt.Printf("Waiting for transaction %X\n", txid)
+		c.logger.Info("Waiting for transaction", "tx", logging.AsHex(txid))
 	}
 	c.txMu.RLock()
 	st := c.txStatus[txid]
@@ -128,7 +133,7 @@ func (c *FakeTendermint) WaitFor(txid [32]byte, waitSynth bool) error {
 	}
 	c.txMu.RUnlock()
 	if debugTX {
-		fmt.Printf("Done waiting for %X\n", txid)
+		c.logger.Info("Done waiting for transaction", "tx", logging.AsHex(txid))
 	}
 
 	if !waitSynth {
@@ -193,17 +198,14 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	if err != nil {
 		c.onError(err)
 		if debugTX {
-			fmt.Printf("Rejecting invalid transaction: %v\n", err)
+			c.logger.Error("Rejecting invalid transaction", "error", err)
 		}
 		return nil
 	}
 
 	txids := make([][32]byte, len(envelopes))
+	c.logTxns("Submitting", envelopes...)
 	for i, env := range envelopes {
-		if debugTX {
-			txt := env.Transaction.Type()
-			fmt.Printf("Submitting type=%v tx=%X env=%X\n", txt, env.GetTxHash(), env.EnvHash())
-		}
 		copy(txids[i][:], env.Transaction.Hash())
 	}
 
@@ -357,7 +359,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 		height := c.nextHeight()
 		if debugTX {
-			fmt.Printf("Beginning block %d with %d transactions queued\n", height, len(queue))
+			c.logger.Info("Beginning block", "height", height, "queue", len(queue))
 		}
 
 		begin := abci.RequestBeginBlock{}
@@ -365,18 +367,20 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		begin.Header.ProposerAddress = c.address
 		c.app.BeginBlock(begin)
 
+		if debugTX {
+			c.logger.Info("Processing queue", "height", height, "queue", len(queue))
+		}
+
 		// Process the queue
 		for _, sub := range queue {
+			c.logTxns("Processing", sub.Envelopes...)
+
 			// TODO Index
 			sub.Height = begin.Header.Height
 
 			cr := c.app.CheckTx(abci.RequestCheckTx{Tx: sub.Tx})
 			sub.CheckResult = &cr
-			if debugTX {
-				for _, env := range sub.Envelopes {
-					fmt.Printf("Checked type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
-				}
-			}
+			c.logTxns("Checked", sub.Envelopes...)
 			if cr.Code != 0 {
 				c.onError(fmt.Errorf("CheckTx failed: %v\n", cr.Log))
 				continue
@@ -384,11 +388,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 			dr := c.app.DeliverTx(abci.RequestDeliverTx{Tx: sub.Tx})
 			sub.DeliverResult = &dr
-			if debugTX {
-				for _, env := range sub.Envelopes {
-					fmt.Printf("Delivered type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
-				}
-			}
+			c.logTxns("Delivered", sub.Envelopes...)
 			if dr.Code != 0 {
 				c.onError(fmt.Errorf("DeliverTx failed: %v\n", dr.Log))
 			}
@@ -399,11 +399,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 
 		for _, sub := range queue {
 			sub.Done = true
-			if debugTX {
-				for _, env := range sub.Envelopes {
-					fmt.Printf("Committed type=%v tx=%X env=%X\n", env.Transaction.Type(), env.GetTxHash(), env.EnvHash())
-				}
-			}
+			c.logTxns("Committed", sub.Envelopes...)
 		}
 
 		// Ensure Wait waits for synthetic transactions
@@ -423,7 +419,7 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		queue = queue[:0]
 
 		if debugTX {
-			fmt.Printf("Completed block %d with %d transactions pending\n", height, c.txActive+len(c.txPend))
+			c.logger.Info("Completed block", "height", height, "tx-pending", c.txActive+len(c.txPend))
 		}
 	}
 }
@@ -485,4 +481,17 @@ func (c *FakeTendermint) BroadcastTxSync(ctx context.Context, tx types.Tx) (*cty
 		MempoolError: cr.MempoolError,
 		Hash:         hash[:],
 	}, nil
+}
+
+func (c *FakeTendermint) logTxns(msg string, env ...*transactions.Envelope) {
+	if !debugTX {
+		return
+	}
+
+	for _, env := range env {
+		txt := env.Transaction.Type()
+		if !txt.IsInternal() && txt != acctypes.TxTypeSyntheticAnchor {
+			c.logger.Debug(msg, "type", txt, "tx", logging.AsHex(env.GetTxHash()), "env", logging.AsHex(env.EnvHash()))
+		}
+	}
 }

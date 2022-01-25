@@ -12,10 +12,10 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -52,13 +52,10 @@ type ExecutorOptions struct {
 	DB      *database.Database
 	Logger  log.Logger
 	Key     ed25519.PrivateKey
-	Local   api.ABCIBroadcastClient
+	Router  routing.Router
 	Network config.Network
 
 	isGenesis bool
-
-	// TODO Remove once tests support running the DN
-	IsTest bool
 }
 
 func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, error) {
