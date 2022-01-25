@@ -373,61 +373,25 @@ func TestCreateAdiDataAccount(t *testing.T) {
 		time.Sleep(3 * time.Second)
 
 		// Test getting the data by URL
-		r2 := n.GetChainDataByUrl("FooBar/oof")
-		if r2 == nil {
-			t.Fatalf("error getting chain data by URL")
-		}
-
-		if r2.Data == nil {
-			t.Fatalf("no data returned")
-		}
-
-		rde := protocol.ResponseDataEntry{}
-
-		err := rde.UnmarshalJSON(*r2.Data)
-		if err != nil {
-			t.Fatal(err)
-		}
+		rde := new(protocol.ResponseDataEntry)
+		n.QueryAccountAs("FooBar/oof#data", rde)
 
 		if !rde.Entry.Equal(&wd.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
 		//now test query by entry hash.
-		r3 := n.GetChainDataByEntryHash("FooBar/oof", wd.Entry.Hash())
-
-		if r3.Data == nil {
-			t.Fatalf("no data returned")
-		}
-
-		rde2 := protocol.ResponseDataEntry{}
-
-		err = rde2.UnmarshalJSON(*r3.Data)
-		if err != nil {
-			t.Fatal(err)
-		}
+		rde2 := new(protocol.ResponseDataEntry)
+		n.QueryAccountAs(fmt.Sprintf("FooBar/oof#data/%X", wd.Entry.Hash()), rde2)
 
 		if !rde.Entry.Equal(&rde2.Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
 		//now test query by entry set
-		r4 := n.GetChainDataSet("FooBar/oof", 0, 1, true)
-
-		if r4.Data == nil {
-			t.Fatalf("no data returned")
-		}
-
-		if len(r4.Data) != 1 {
-			t.Fatalf("insufficent data return from set query")
-		}
-		rde3 := protocol.ResponseDataEntry{}
-		err = rde3.UnmarshalJSON(*r4.Data[0].Data)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if !rde.Entry.Equal(&rde3.Entry) {
+		rde3 := new(protocol.ResponseDataEntrySet)
+		n.QueryAccountAs("FooBar/oof#data/0:1", rde3)
+		if !rde.Entry.Equal(&rde3.DataEntries[0].Entry) {
 			t.Fatalf("data query does not match what was entered")
 		}
 
