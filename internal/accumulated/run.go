@@ -18,6 +18,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
+	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
@@ -137,12 +138,16 @@ func (d *Daemon) Start() (err error) {
 	// after the node has been created.
 	clientProxy := node.NewLocalClient()
 
-	execOpts := chain.ExecutorOptions{
+	router := routing.RPC{
+		Network: &d.Config.Accumulate.Network,
 		Local:   clientProxy,
+	}
+	execOpts := chain.ExecutorOptions{
 		DB:      d.db,
 		Logger:  d.Logger,
 		Key:     d.Key().Bytes(),
 		Network: d.Config.Accumulate.Network,
+		Router:  &router,
 	}
 	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {

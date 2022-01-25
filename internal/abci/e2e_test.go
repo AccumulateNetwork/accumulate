@@ -28,8 +28,8 @@ func TestEndToEndSuite(t *testing.T) {
 
 	suite.Run(t, e2e.NewSuite(func(s *e2e.Suite) e2e.DUT {
 		// Recreate the app for each test
-		subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
-		nodes := RunTestNet(t, subnets, daemons, nil, true)
+		subnets, daemons := acctesting.CreateTestNet(s.T(), 1, 1, 0)
+		nodes := RunTestNet(s.T(), subnets, daemons, nil, true)
 		n := nodes[subnets[1]][0]
 
 		return &e2eDUT{s, n}
