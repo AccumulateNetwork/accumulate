@@ -142,7 +142,7 @@ func TestValidate(t *testing.T) {
 			Url   string
 			Count int
 		}{liteUrl.String(), 10}, r)
-		require.Len(t, r.Items, 6)
+		require.Equal(t, 7, len(r.Items), "Expected 7 transactions for %s", liteUrl)
 	})
 
 	dataAccountUrl := adiName + "/dataAccount"
