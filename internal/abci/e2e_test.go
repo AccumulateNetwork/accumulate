@@ -80,11 +80,12 @@ func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 
 			exch := new(protocol.SendTokens)
 			exch.AddRecipient(n.ParseUrl(recipient.Addr), big.NewInt(int64(1000)))
-			tx, err := transactions.New(origin.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
+			tx, err := transactions.New(origin.Addr, origin.Nonce, func(hash []byte) (*transactions.ED25519Sig, error) {
 				return origin.Sign(hash), nil
 			}, exch)
 			require.NoError(n.t, err)
 			send(tx)
+			origin.Nonce++
 		}
 	})
 
@@ -637,7 +638,7 @@ func TestAddKeyPage(t *testing.T) {
 			PublicKey: testKey2.PubKey().Bytes(),
 		})
 
-		tx, err := transactions.New("foo/book1", 2, edSigner(testKey1, 1), cms)
+		tx, err := transactions.New("foo/book1", 1, edSigner(testKey1, 1), cms)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -670,7 +671,7 @@ func TestAddKey(t *testing.T) {
 		body.Operation = protocol.KeyPageOperationAdd
 		body.NewKey = newKey.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/page1", 2, edSigner(testKey, 1), body)
+		tx, err := transactions.New("foo/page1", 1, edSigner(testKey, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -701,7 +702,7 @@ func TestUpdateKey(t *testing.T) {
 		body.Key = testKey.PubKey().Bytes()
 		body.NewKey = newKey.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/page1", 2, edSigner(testKey, 1), body)
+		tx, err := transactions.New("foo/page1", 1, edSigner(testKey, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -730,7 +731,7 @@ func TestRemoveKey(t *testing.T) {
 		body.Operation = protocol.KeyPageOperationRemove
 		body.Key = testKey1.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/page1", 2, edSigner(testKey2, 1), body)
+		tx, err := transactions.New("foo/page1", 1, edSigner(testKey2, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -766,8 +767,6 @@ func TestSignatorHeight(t *testing.T) {
 		return uint64(chain.Height())
 	}
 
-	liteHeight := getHeight(liteUrl)
-
 	n.Batch(func(send func(*transactions.Envelope)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = "foo"
@@ -779,8 +778,6 @@ func TestSignatorHeight(t *testing.T) {
 		require.NoError(t, err)
 		send(tx)
 	})
-
-	require.Equal(t, liteHeight, getHeight(liteUrl), "Lite account height changed")
 
 	batch = n.db.Begin()
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page0"), 1e9))

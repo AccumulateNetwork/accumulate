@@ -359,7 +359,7 @@ func (m *Executor) validateAgainstBook(st *StateManager, env *transactions.Envel
 		return false, err
 	}
 	if height != env.Transaction.KeyPageHeight {
-		return false, fmt.Errorf("invalid height")
+		return false, fmt.Errorf("invalid height: want %d, got %d", height, env.Transaction.KeyPageHeight)
 	}
 
 	for i, sig := range env.Signatures {

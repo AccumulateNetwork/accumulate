@@ -37,8 +37,6 @@ import (
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
-const logConsole = true
-
 type FakeNode struct {
 	t       testing.TB
 	db      *database.Database
@@ -95,7 +93,7 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	n.network = &d.Config.Accumulate.Network
 
 	var logWriter io.Writer
-	if logConsole {
+	if acctesting.LogConsole {
 		logWriter, err = logging.NewConsoleWriter(d.Config.LogFormat)
 	} else {
 		logWriter, err = logging.TestLogWriter(t)(d.Config.LogFormat)

@@ -93,7 +93,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	ed := new(transactions.ED25519Sig)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = sponsor[32:]
-	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.Transaction.Hash())
+	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.GetTxHash())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
@@ -131,7 +131,7 @@ func BuildTestSynthDepositGenTx() (types.String, ed25519.PrivateKey, *transactio
 	ed := new(transactions.ED25519Sig)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.Transaction.Hash())
+	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
