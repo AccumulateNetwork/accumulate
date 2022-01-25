@@ -24,7 +24,7 @@ func testCase2_8(t *testing.T, tc *testCmd) {
 	require.NoError(t, err)
 
 	//if this doesn't fail, then adi is created
-	_, err = tc.execute(t, "adi directory acc://RedWagon")
+	_, err = tc.execute(t, "adi directory acc://RedWagon 0 10")
 	require.NoError(t, err)
 }
 
