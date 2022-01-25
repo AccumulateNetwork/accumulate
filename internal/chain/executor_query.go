@@ -133,6 +133,73 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 
 			return []byte("tx"), res, nil
 		}
+	case "pending":
+		pendingChain, err := batch.Account(u).ReadChain(protocol.PendingChain)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
+		}
+		switch len(fragment) {
+		case 1:
+			height := pendingChain.Height()
+			entries, err := pendingChain.Entries(0, height)
+			if err != nil {
+				return nil, nil, err
+			}
+			res := new(query.ResponseChainRange)
+			res.Start = 0
+			res.End = height
+			res.Total = height + 1
+			res.Entries = entries
+			return []byte("pending-range"), res, nil
+		case 2:
+			queryParam := fragment[1]
+			if strings.Contains(queryParam, ":") {
+				indexes := strings.Split(queryParam, ":")
+				start, err := strconv.Atoi(indexes[0])
+				if err != nil {
+					return nil, nil, err
+				}
+				end, err := strconv.Atoi(indexes[1])
+				if err != nil {
+					return nil, nil, err
+				}
+				entries, err := pendingChain.Entries(int64(start), int64(end))
+				if err != nil {
+					return nil, nil, err
+				}
+				res := new(query.ResponseChainRange)
+				res.Start = int64(start)
+				res.End = int64(end)
+				res.Total = int64(start) - int64(end)
+				res.Entries = entries
+				return []byte("pending-range"), res, nil
+			} else {
+				index, err := strconv.Atoi(queryParam)
+				if err != nil {
+					height, err := pendingChain.HeightOf([]byte(queryParam))
+					if err != nil {
+						return nil, nil, err
+					}
+					entry, err := pendingChain.Entry(height)
+					if err != nil {
+						return nil, nil, err
+					}
+					res := new(query.ResponseChainEntry)
+					res.Entry = entry
+					res.Height = height
+					return []byte("pending-entry"), res, nil
+				} else {
+					entry, err := pendingChain.Entry(int64(index))
+					if err != nil {
+						return nil, nil, err
+					}
+					res := new(query.ResponseChainEntry)
+					res.Entry = entry
+					res.Height = int64(index)
+					return []byte("pending-entry"), res, nil
+				}
+			}
+		}
 	case "data":
 		data, err := batch.Account(u).Data()
 		if err != nil {
