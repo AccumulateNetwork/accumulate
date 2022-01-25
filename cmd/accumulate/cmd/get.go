@@ -87,7 +87,7 @@ func GetByChainId(chainId []byte) (*api2.ChainQueryResponse, error) {
 		return nil, err
 	}
 
-	if err := Client.Request(context.Background(), "query-chain", json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query-chain", json.RawMessage(data), &res); err != nil {
 		log.Fatal(err)
 	}
 
