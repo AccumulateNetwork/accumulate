@@ -37,13 +37,18 @@ func TestStateDBConsistency(t *testing.T) {
 
 	n.testLiteTx(10)
 
+	for _, nodes := range nodes {
+		for _, node := range nodes {
+			node.client.Shutdown()
+		}
+	}
+
 	ledger := n.network.NodeUrl(protocol.Ledger)
 	ledger1 := protocol.NewInternalLedger()
 	batch := n.db.Begin()
 	require.NoError(t, batch.Account(ledger).GetStateAs(ledger1))
 	rootHash := batch.RootHash()
 	batch.Discard()
-	n.client.Shutdown()
 
 	// Reopen the database
 	db := database.New(stores[daemons[subnets[1]][0]], nil)
