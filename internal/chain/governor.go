@@ -213,9 +213,6 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	batch := g.DB.Begin()
 	defer batch.Discard()
 
-	// Reset dispatcher
-	g.dispatcher.Reset(context.Background())
-
 	// Mirror the subnet's ADI
 	if msg.mirrorAdi {
 		g.sendMirror(batch)
@@ -228,11 +225,13 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	g.signTransactions(batch, msg.ledger)
 	g.sendTransactions(batch, msg.ledger)
 
-	// Dispatch transactions
-	err := g.dispatcher.Send(context.Background())
-	if err != nil {
-		g.logger.Error("Failed to dispatch transactions", "error", err)
-	}
+	// Dispatch transactions asynchronously
+	errs := g.dispatcher.Send(context.Background())
+	go func() {
+		for err := range errs {
+			g.logger.Error("Failed to dispatch transactions", "error", err)
+		}
+	}()
 }
 
 func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.InternalLedger) {
