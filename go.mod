@@ -4,7 +4,6 @@ go 1.17
 
 require (
 	github.com/AccumulateNetwork/jsonrpc2/v15 v15.0.0-20210802145948-43d2d974a106
-	github.com/Factom-Asset-Tokens/factom v0.0.0-20200222022020-d06cbcfe6ece
 	github.com/boltdb/bolt v1.3.1
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/dgraph-io/badger v1.6.2
@@ -44,11 +43,8 @@ require (
 replace github.com/tendermint/tendermint v0.35.0-rc1 => github.com/AccumulateNetwork/tendermint v0.35.0-rc1.0.20220122004453-8b50702426bf
 
 require (
-	github.com/AdamSLevy/go-merkle v0.0.0-20190611101253-ca33344a884d // indirect
-	github.com/AdamSLevy/jsonrpc2/v14 v14.0.0 // indirect
 	github.com/AndreasBriese/bbloom v0.0.0-20190825152654-46b345b51c96 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
-	github.com/Factom-Asset-Tokens/base58 v0.0.0-20191118025050-4fa02e92ec20 // indirect
 	github.com/FactomProject/basen v0.0.0-20150613233007-fe3947df716e // indirect
 	github.com/FactomProject/btcutilecc v0.0.0-20130527213604-d3a63a5752ec // indirect
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
