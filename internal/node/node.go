@@ -9,21 +9,16 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	web "github.com/AccumulateNetwork/accumulate/internal/web/static"
-	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
 	nm "github.com/tendermint/tendermint/node"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
-	ctypes "github.com/tendermint/tendermint/rpc/core/types"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
-	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
 )
 
 // AppFactory creates and returns an ABCI application.
@@ -85,10 +80,6 @@ func (n *Node) Start() error {
 	}
 
 	n.waitForGRPC()
-
-	if n.Config.Accumulate.API.EnableSubscribeTX {
-		return n.waitForRPC()
-	}
 	return nil
 }
 
@@ -100,40 +91,6 @@ func (n *Node) waitForGRPC() coregrpc.BroadcastAPIClient {
 			return client
 		}
 	}
-}
-
-func (n *Node) waitForRPC() error {
-	net := &n.Config.Accumulate.Network
-	var names []string
-	if net.Addresses[protocol.Directory] != nil {
-		names = append(names, protocol.Directory)
-	}
-	names = append(names, n.Config.Accumulate.Network.BvnNames...)
-	for _, name := range names {
-		addr := net.AddressWithPortOffset(name, networks.TmRpcPortOffset)
-		if addr == "local" {
-			continue
-		}
-
-		client, err := rpcclient.New(addr)
-		if err != nil {
-			return err
-		}
-
-		result := new(ctypes.ResultStatus)
-		for {
-			_, err := client.Call(context.Background(), "status", map[string]interface{}{}, result)
-			if err == nil {
-				break
-			}
-			if !isConnectionError(err) {
-				return err
-			}
-
-			time.Sleep(time.Millisecond)
-		}
-	}
-	return nil
 }
 
 func isConnectionError(err error) bool {
