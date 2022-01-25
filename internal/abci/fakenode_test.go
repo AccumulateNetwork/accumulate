@@ -17,6 +17,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -31,28 +32,57 @@ import (
 	"github.com/stretchr/testify/require"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
-const logConsole = false
+const logConsole = true
+
+type FakeNode struct {
+	t       testing.TB
+	db      *database.Database
+	network *config.Network
+	app     abcitypes.Application
+	client  *acctesting.FakeTendermint
+	key     crypto.PrivKey
+	height  int64
+	api     api2.Querier
+	logger  log.Logger
+
+	assert  *assert.Assertions
+	require *require.Assertions
+}
 
 func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool) map[string][]*FakeNode {
 	t.Helper()
 
 	allNodes := map[string][]*FakeNode{}
+	allChans := map[string][]chan<- abcitypes.Application{}
+	clients := map[string]api2.ABCIBroadcastClient{}
 	for _, netName := range subnets {
 		daemons := daemons[netName]
 		nodes := make([]*FakeNode, len(daemons))
-		allNodes[netName] = nodes
+		chans := make([]chan<- abcitypes.Application, len(daemons))
+		allNodes[netName], allChans[netName] = nodes, chans
 		for i, daemon := range daemons {
-			nodes[i] = StartFake(t, daemon, openDb, doGenesis)
+			nodes[i], chans[i] = InitFake(t, daemon, openDb)
+		}
+		clients[netName] = nodes[0].client
+	}
+
+	for _, netName := range subnets {
+		nodes, chans := allNodes[netName], allChans[netName]
+		for i := range nodes {
+			nodes[i].client.CreateEmptyBlocks = true
+			nodes[i].Start(chans[i], clients, doGenesis)
 		}
 	}
+
 	return allNodes
 }
 
-func StartFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error), doGenesis bool) *FakeNode {
+func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Daemon) (*database.Database, error)) (*FakeNode, chan<- abcitypes.Application) {
 	pv, err := privval.LoadFilePV(
 		d.Config.PrivValidator.KeyFile(),
 		d.Config.PrivValidator.StateFile(),
@@ -71,11 +101,12 @@ func StartFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.D
 		logWriter, err = logging.TestLogWriter(t)(d.Config.LogFormat)
 	}
 	require.NoError(t, err)
-	logLevel, logWriter, err := logging.ParseLogLevel(d.Config.LogLevel, logWriter)
+	logLevel, logWriter, err := logging.ParseLogLevel(d.Config.LogLevel+";fake-tendermint=debug", logWriter)
 	require.NoError(t, err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(logWriter), logLevel, false)
 	require.NoError(t, err)
 	d.Logger = logger
+	n.logger = logger
 
 	if openDb == nil {
 		openDb = func(d *accumulated.Daemon) (*database.Database, error) {
@@ -96,43 +127,51 @@ func StartFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.D
 		require.ErrorIs(t, err, storage.ErrNotFound)
 	}
 
+	fakeTmLogger := logger.With("module", "fake-tendermint", "subnet", n.network.ID)
+
 	appChan := make(chan abcitypes.Application)
-	defer close(appChan)
-	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey().Address(), n.NextHeight, func(err error) {
+	t.Cleanup(func() { close(appChan) })
+	n.client = acctesting.NewFakeTendermint(appChan, n.db, n.network, n.key.PubKey().Address(), fakeTmLogger, n.NextHeight, func(err error) {
 		t.Helper()
 		assert.NoError(t, err)
 	}, 100*time.Millisecond)
 
+	return n, appChan
+}
+
+func (n *FakeNode) Start(appChan chan<- abcitypes.Application, clients map[string]api2.ABCIBroadcastClient, doGenesis bool) *FakeNode {
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		Local:   n.client,
 		DB:      n.db,
-		IsTest:  true,
-		Logger:  logger,
+		Logger:  n.logger,
 		Key:     n.key.Bytes(),
 		Network: *n.network,
+		Router: &routing.Direct{
+			Network: n.network,
+			Clients: clients,
+		},
 	})
-	require.NoError(t, err)
+	n.Require().NoError(err)
 
 	n.app = abci.NewAccumulator(abci.AccumulatorOptions{
 		Chain:   mgr,
 		DB:      n.db,
-		Logger:  logger,
+		Logger:  n.logger,
 		Network: *n.network,
-		Address: pv.Key.Address,
+		Address: n.key.PubKey().Address(),
 	})
 	appChan <- n.app
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
-		t.Helper()
-		require.NoError(t, err)
+		n.T().Helper()
+		n.Require().NoError(err)
 	})
 
 	n.api = api2.NewQueryDirect(n.client, api2.QuerierOptions{
 		TxMaxWaitTime: 10 * time.Second,
 	})
 
-	require.NoError(t, mgr.Start())
-	t.Cleanup(func() { _ = mgr.Stop() })
-	t.Cleanup(func() { n.client.Shutdown() })
+	n.Require().NoError(mgr.Start())
+	n.T().Cleanup(func() { _ = mgr.Stop() })
+	n.T().Cleanup(func() { n.client.Shutdown() })
 
 	if !doGenesis {
 		return n
@@ -145,37 +184,23 @@ func StartFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.D
 	_, err = genesis.Init(kv, genesis.InitOpts{
 		Network:     *n.network,
 		GenesisTime: time.Now(),
-		Logger:      logger,
+		Logger:      n.logger,
 		Validators: []tmtypes.GenesisValidator{
 			{PubKey: n.key.PubKey()},
 		},
 	})
-	require.NoError(t, err)
+	n.Require().NoError(err)
 
 	state, err := kv.MarshalJSON()
-	require.NoError(t, err)
+	n.Require().NoError(err)
 
 	n.app.InitChain(abcitypes.RequestInitChain{
 		Time:          time.Now(),
-		ChainId:       d.Config.Accumulate.Network.ID,
+		ChainId:       n.network.ID,
 		AppStateBytes: state,
 	})
 
 	return n
-}
-
-type FakeNode struct {
-	t       testing.TB
-	db      *database.Database
-	network *config.Network
-	app     abcitypes.Application
-	client  *acctesting.FakeTendermint
-	key     crypto.PrivKey
-	height  int64
-	api     api2.Querier
-
-	assert  *assert.Assertions
-	require *require.Assertions
 }
 
 func (n *FakeNode) T() testing.TB {
