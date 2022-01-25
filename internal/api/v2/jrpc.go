@@ -11,7 +11,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/config"
-	v1 "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
@@ -27,9 +26,6 @@ type JrpcOptions struct {
 	QueueDuration time.Duration
 	QueueDepth    int
 	Logger        log.Logger
-
-	// Deprecated: will be removed when API v1 is removed
-	QueryV1 *v1.Query
 }
 
 type JrpcMethods struct {
@@ -41,9 +37,6 @@ type JrpcMethods struct {
 	exch       chan executeRequest
 	queue      executeQueue
 	logger     log.Logger
-
-	// Deprecated: will be removed
-	v1 *v1.API
 }
 
 func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
@@ -62,11 +55,6 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 	}
 
 	m.validate, err = protocol.NewValidator()
-	if err != nil {
-		return nil, err
-	}
-
-	m.v1, err = v1.New(opts.Config, opts.QueryV1)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +110,6 @@ func (m *JrpcMethods) EnableDebug(local ABCIQueryClient) {
 
 func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.Handle("/v1", m.v1.Handler())
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
 	return mux
 }

@@ -2,10 +2,8 @@ package abci_test
 
 import (
 	"context"
-	"encoding"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"strconv"
 	"testing"
@@ -14,13 +12,11 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
 	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
-	accapi "github.com/AccumulateNetwork/accumulate/internal/api"
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -28,8 +24,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/rs/zerolog"
@@ -108,10 +102,6 @@ func StartFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.D
 		t.Helper()
 		assert.NoError(t, err)
 	}, 100*time.Millisecond)
-	relay := relay.New(n.client)
-	require.NoError(t, relay.Start())
-	t.Cleanup(func() { require.NoError(t, relay.Stop()) })
-	n.query = accapi.NewQuery(relay)
 
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
 		Local:   n.client,
@@ -134,6 +124,10 @@ func StartFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.D
 	n.app.(*abci.Accumulator).OnFatal(func(err error) {
 		t.Helper()
 		require.NoError(t, err)
+	})
+
+	n.api = api2.NewQueryDirect(n.client, api2.QuerierOptions{
+		TxMaxWaitTime: 10 * time.Second,
 	})
 
 	require.NoError(t, mgr.Start())
@@ -176,9 +170,9 @@ type FakeNode struct {
 	network *config.Network
 	app     abcitypes.Application
 	client  *acctesting.FakeTendermint
-	query   *accapi.Query
 	key     crypto.PrivKey
 	height  int64
+	api     api2.Querier
 
 	assert  *assert.Assertions
 	require *require.Assertions
@@ -207,53 +201,32 @@ func (n *FakeNode) NextHeight() int64 {
 	return n.height
 }
 
-func (n *FakeNode) Query(q *query.Query) *api.APIDataResponse {
-	payload, err := q.MarshalBinary()
-	require.NoError(n.t, err)
-
-	resp := n.app.Query(abcitypes.RequestQuery{Data: payload})
-	require.Zero(n.t, resp.Code, "Query failed: %s", resp.Info)
-
-	var msg json.RawMessage = []byte(fmt.Sprintf("{\"entry\":\"%x\"}", resp.Value))
-	chain := new(state.ChainHeader)
-	require.NoError(n.t, chain.UnmarshalBinary(resp.Value))
-	return &api.APIDataResponse{Type: types.String(chain.Type.Name()), Data: &msg}
+func (n *FakeNode) QueryAccount(url string) *api2.ChainQueryResponse {
+	r, err := n.api.QueryUrl(url, api2.QueryOptions{})
+	n.Require().NoError(err)
+	n.Require().IsType((*api2.ChainQueryResponse)(nil), r)
+	return r.(*api2.ChainQueryResponse)
 }
 
-func (n *FakeNode) GetChainStateByUrl(url string) *api.APIDataResponse {
-	r, err := n.query.GetChainStateByUrl(url)
-	require.NoError(n.t, err)
-	return r
+func (n *FakeNode) QueryTransaction(url string) *api2.TransactionQueryResponse {
+	r, err := n.api.QueryUrl(url, api2.QueryOptions{})
+	n.require.NoError(err)
+	n.Require().IsType((*api2.TransactionQueryResponse)(nil), r)
+	return r.(*api2.TransactionQueryResponse)
 }
 
-func (n *FakeNode) GetChainDataByUrl(url string) *api.APIDataResponse {
-	r, err := n.query.QueryDataByUrl(url)
-	require.NoError(n.t, err)
-	return r
+func (n *FakeNode) QueryMulti(url string) *api2.MultiResponse {
+	r, err := n.api.QueryUrl(url, api2.QueryOptions{})
+	n.require.NoError(err)
+	n.Require().IsType((*api2.MultiResponse)(nil), r)
+	return r.(*api2.MultiResponse)
 }
 
-func (n *FakeNode) GetChainDataByEntryHash(url string, entryHash []byte) *api.APIDataResponse {
-	r, err := n.query.GetDataByEntryHash(url, entryHash)
-	require.NoError(n.t, err)
-	return r
-}
-
-func (n *FakeNode) GetChainDataSet(url string, start uint64, limit uint64, expand bool) *api.APIDataResponsePagination {
-	r, err := n.query.GetDataSetByUrl(url, start, limit, expand)
-	require.NoError(n.t, err)
-	return r
-}
-
-func (n *FakeNode) GetChainStateByTxId(txid []byte) *api.APIDataResponse {
-	r, err := n.query.GetChainStateByTxId(txid)
-	require.NoError(n.t, err)
-	return r
-}
-
-func (n *FakeNode) GetChainStateByChainId(txid []byte) *api.APIDataResponse {
-	r, err := n.query.GetChainStateByChainId(txid)
-	require.NoError(n.t, err)
-	return r
+func (n *FakeNode) QueryAccountAs(url string, result interface{}) {
+	r := n.QueryAccount(url)
+	data, err := json.Marshal(r.Data)
+	n.Require().NoError(err)
+	n.Require().NoError(json.Unmarshal(data, result))
 }
 
 func (n *FakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte {
@@ -328,68 +301,51 @@ func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
 	return resp
 }
 
-func (n *FakeNode) GetChainAs(url string, obj encoding.BinaryUnmarshaler) {
-	r, err := n.query.QueryByUrl(url)
-	require.NoError(n.t, err)
-
-	if r.Response.Code != 0 {
-		n.t.Fatalf("query for %q failed with code %d: %s", url, r.Response.Code, r.Response.Info)
-	}
-
-	so := state.Object{}
-	err = so.UnmarshalBinary(r.Response.Value)
-	if err != nil {
-		n.t.Fatalf("error unmarshaling state object %v", err)
-	}
-
-	require.NoError(n.t, obj.UnmarshalBinary(so.Entry))
-}
-
 func (n *FakeNode) GetDataAccount(url string) *protocol.DataAccount {
 	acct := protocol.NewDataAccount()
-	n.GetChainAs(url, acct)
+	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetTokenAccount(url string) *protocol.TokenAccount {
 	acct := protocol.NewTokenAccount()
-	n.GetChainAs(url, acct)
+	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteTokenAccount(url string) *protocol.LiteTokenAccount {
 	acct := new(protocol.LiteTokenAccount)
-	n.GetChainAs(url, acct)
+	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetLiteDataAccount(url string) *protocol.LiteDataAccount {
 	acct := new(protocol.LiteDataAccount)
-	n.GetChainAs(url, acct)
+	n.QueryAccountAs(url, acct)
 	return acct
 }
 
 func (n *FakeNode) GetADI(url string) *protocol.ADI {
 	adi := new(protocol.ADI)
-	n.GetChainAs(url, adi)
+	n.QueryAccountAs(url, adi)
 	return adi
 }
 
 func (n *FakeNode) GetKeyBook(url string) *protocol.KeyBook {
 	book := new(protocol.KeyBook)
-	n.GetChainAs(url, book)
+	n.QueryAccountAs(url, book)
 	return book
 }
 
 func (n *FakeNode) GetKeyPage(url string) *protocol.KeyPage {
 	mss := new(protocol.KeyPage)
-	n.GetChainAs(url, mss)
+	n.QueryAccountAs(url, mss)
 	return mss
 }
 
 func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
 	mss := new(protocol.TokenIssuer)
-	n.GetChainAs(url, mss)
+	n.QueryAccountAs(url, mss)
 	return mss
 }
 
@@ -398,23 +354,12 @@ type e2eDUT struct {
 	*FakeNode
 }
 
-func (d *e2eDUT) getObj(url string) *state.Object {
-	r, err := d.query.QueryByUrl(url)
-	d.Require().NoError(err)
-	d.Require().Zero(r.Response.Code, "Query failed: %v", r.Response.Info)
-
-	obj := new(state.Object)
-	d.Require().Equal([]byte("chain"), r.Response.Key)
-	d.Require().NoError(obj.UnmarshalBinary(r.Response.Value))
-	return obj
-}
-
 func (d *e2eDUT) GetRecordAs(url string, target state.Chain) {
-	d.Require().NoError(d.getObj(url).As(target))
+	d.QueryAccountAs(url, target)
 }
 
 func (d *e2eDUT) GetRecordHeight(url string) uint64 {
-	return d.getObj(url).Height
+	return d.QueryAccount(url).MainChain.Height
 }
 
 func (d *e2eDUT) SubmitTxn(tx *transactions.Envelope) {
@@ -427,6 +372,6 @@ func (d *e2eDUT) WaitForTxns(ids ...[]byte) {
 	for _, id := range ids {
 		var id32 [32]byte
 		copy(id32[:], id)
-		d.client.WaitFor(id32, true)
+		d.Require().NoError(d.client.WaitFor(id32, true))
 	}
 }
