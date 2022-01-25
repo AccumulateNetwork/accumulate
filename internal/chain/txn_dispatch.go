@@ -5,7 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math/rand"
+	"net/http"
+	"sync"
+
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -27,8 +32,6 @@ func (b *txBatch) Append(tx []byte) {
 // their recipients.
 type dispatcher struct {
 	ExecutorOptions
-	localIndex  int
-	isDirectory bool
 	batches     map[connections.Route]txBatch
 	dnBatch     txBatch
 	errg        *errgroup.Group
@@ -38,8 +41,6 @@ type dispatcher struct {
 func newDispatcher(opts ExecutorOptions) *dispatcher {
 	d := new(dispatcher)
 	d.ExecutorOptions = opts
-	d.isDirectory = opts.Network.Type == config.Directory
-	d.localIndex = -1
 	d.batches = make(map[connections.Route]txBatch)
 	return d
 }
@@ -165,17 +166,33 @@ func (*dispatcher) checkError(err error) error {
 }
 
 // Send sends all of the batches.
-func (d *dispatcher) Send(ctx context.Context) error {
+func (d *dispatcher) Send(ctx context.Context) <-chan error {
+	errs := make(chan error)
+	wg := new(sync.WaitGroup)
 	for route, batch := range d.batches {
-		if route.IsDirectoryNode() && d.IsTest { // Routing to a DN is not supported in the test env, skip it
+		if len(batch) == 0 {
 			continue
 		}
-		log.Println("*** Sending batch to subnet ", route.GetSubnetName(), "batch size", len(batch), " of ", len(d.batches))
-		d.send(ctx, route, batch)
+
+		wg.Add(1)
+		batch := batch // Don't capture loop variables
+		go func() {
+			defer wg.Done()
+			err := d.send(ctx, route, batch)
+			err = d.checkError(err)
+			if err != nil {
+				errs <- err
+			}
+		}()
 	}
 
-	// Wait for everyone to finish
-	return d.errg.Wait()
+	go func() {
+		wg.Wait()
+		close(errs)
+	}()
+
+	d.Reset(ctx)
+	return errs
 }
 
 func (d *dispatcher) getRouteAndBatch(u *url.URL) (connections.Route, *txBatch, error) {

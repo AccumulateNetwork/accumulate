@@ -14,13 +14,12 @@ import (
 	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	apiv1 "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/chain"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/internal/relay"
+	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
@@ -33,17 +32,15 @@ type Daemon struct {
 	Config *config.Config
 	Logger tmlog.Logger
 
-	done  chan struct{}
-	db    *database.Database
-	node  *node.Node
-	relay *relay.Relay
-	query *apiv1.Query
-	api   *http.Server
-	pv    *privval.FilePV
-	jrpc  *api.JrpcMethods
+	done chan struct{}
+	db   *database.Database
+	node *node.Node
+	api  *http.Server
+	pv   *privval.FilePV
+	jrpc *api.JrpcMethods
 
 	// knobs for tests
-	//IsTest   bool
+	// IsTest   bool
 	UseMemDB bool
 
 	// Connection & router accessible for tests
@@ -86,7 +83,6 @@ func (d *Daemon) Key() crypto.PrivKey {
 	return d.pv.Key.PrivKey
 }
 
-func (d *Daemon) Query_TESTONLY() *apiv1.Query    { return d.query }
 func (d *Daemon) DB_TESTONLY() *database.Database { return d.db }
 func (d *Daemon) Node_TESTONLY() *node.Node       { return d.node }
 func (d *Daemon) Jrpc_TESTONLY() *api.JrpcMethods { return d.jrpc }
@@ -148,16 +144,14 @@ func (d *Daemon) Start() (err error) {
 	// Create a proxy local client which we will populate with the local client
 	// after the node has been created.
 	clientProxy := node.NewLocalClient()
-	d.query = apiv1.NewQuery(d.relay)
 
 	execOpts := chain.ExecutorOptions{
-		Local:            clientProxy,
 		ConnectionMgr:    d.ConnMgr,
 		ConnectionRouter: d.ConnRouter,
-		DB:               d.db,
-		Logger:           d.Logger,
-		Key:              d.Key().Bytes(),
-		Network:          d.Config.Accumulate.Network,
+		DB:      d.db,
+		Logger:  d.Logger,
+		Key:     d.Key().Bytes(),
+		Network: d.Config.Accumulate.Network,
 	}
 	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {
@@ -214,30 +208,15 @@ func (d *Daemon) Start() (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to initialize connection manager: %v", err)
 	}
-
 	clientProxy.Set(lclClient)
-	if ok {
-		d.relay = relay.New(d.ConnRouter, d.ConnMgr)
-		if err != nil {
-			return fmt.Errorf("failed to create RPC relay: %v", err)
-		}
-	}
-
-	if d.Config.Accumulate.API.EnableSubscribeTX {
-		err = d.relay.Start()
-		if err != nil {
-			return fmt.Errorf("failed to start RPC relay: %v", err)
-		}
-	}
 
 	// Configure JSON-RPC
 	var jrpcOpts api.JrpcOptions
 	jrpcOpts.Config = &d.Config.Accumulate.API
 	jrpcOpts.QueueDuration = time.Second / 4
 	jrpcOpts.QueueDepth = 100
-	jrpcOpts.QueryV1 = d.query
-	jrpcOpts.ConnectionRouter = d.ConnRouter
 	jrpcOpts.Logger = d.Logger
+	jrpcOpts.ConnectionRouter = d.ConnRouter
 
 	// Create the querier for JSON-RPC
 	jrpcOpts.Query = api.NewQueryDispatch(d.ConnRouter, api.QuerierOptions{
@@ -283,13 +262,6 @@ func (d *Daemon) Start() (err error) {
 
 		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(5*time.Second))
 		defer cancel()
-
-		if d.node.Config.Accumulate.API.EnableSubscribeTX {
-			err := d.relay.Stop()
-			if err != nil {
-				d.Logger.Error("Error stopping relay", "module", "relay", "error", err)
-			}
-		}
 
 		err := d.api.Shutdown(ctx)
 		if err != nil {
