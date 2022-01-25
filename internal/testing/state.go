@@ -28,6 +28,14 @@ func GenerateKey(seed ...interface{}) ed25519.PrivateKey {
 	return ed25519.NewKeyFromSeed(h[:])
 }
 
+func MustParseUrl(s string) *url.URL {
+	u, err := url.Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return u
+}
+
 func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.Envelope, error) {
 	recipientAdi := AcmeLiteAddressTmPriv(recipient)
 
@@ -58,6 +66,79 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 
 	tx.Signatures = append(tx.Signatures, ed)
 	return tx, nil
+}
+
+func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount uint64) (*transactions.Envelope, error) {
+	//use the public key of the bvc to make a sponsor address (this doesn't really matter right now, but need something so Identity of the BVC is good)
+	from := AcmeLiteAddressStdPriv(sponsor)
+
+	u, err := url.Parse(destAddr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid URL: %v", err)
+	}
+
+	send := protocol.SendTokens{}
+	send.AddRecipient(u, big.NewInt(int64(amount)))
+
+	txData, err := send.MarshalBinary()
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal token tx: %v", err)
+	}
+
+	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
+	gtx.Transaction.Body = txData
+	gtx.Transaction.Origin = from
+
+	ed := new(transactions.ED25519Sig)
+	gtx.Transaction.Nonce = 1
+	ed.PublicKey = sponsor[32:]
+	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.Transaction.Hash())
+	if err != nil {
+		return nil, fmt.Errorf("failed to sign TX: %v", err)
+	}
+
+	gtx.Signatures = append(gtx.Signatures, ed)
+
+	return gtx, nil
+}
+
+func BuildTestSynthDepositGenTx() (types.String, ed25519.PrivateKey, *transactions.Envelope, error) {
+	_, privateKey, _ := ed25519.GenerateKey(nil)
+	//set destination url address
+	destAddress := AcmeLiteAddressStdPriv(privateKey)
+
+	//create a fake synthetic deposit for faucet.
+	deposit := new(protocol.SyntheticDepositTokens)
+	deposit.Cause = sha256.Sum256([]byte("fake txid"))
+	deposit.Token = protocol.ACME
+	deposit.Amount = *new(big.Int).SetUint64(5e4 * protocol.AcmePrecision)
+	// deposit := synthetic.NewTokenTransactionDeposit(txid[:], adiSponsor, destAddress)
+	// amtToDeposit := int64(50000)                             //deposit 50k tokens
+	// deposit.DepositAmount.SetInt64(amtToDeposit * protocol.AcmePrecision) // assume 8 decimal places
+	// deposit.TokenUrl = tokenUrl
+
+	depData, err := deposit.MarshalBinary()
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("failed to marshal deposit: %v", err)
+	}
+
+	gtx := new(transactions.Envelope)
+	gtx.Transaction = new(transactions.Transaction)
+	gtx.Transaction.Body = depData
+	gtx.Transaction.Origin = destAddress
+
+	ed := new(transactions.ED25519Sig)
+	gtx.Transaction.Nonce = 1
+	ed.PublicKey = privateKey[32:]
+	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.Transaction.Hash())
+	if err != nil {
+		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
+	}
+
+	gtx.Signatures = append(gtx.Signatures, ed)
+
+	return types.String(destAddress.String()), privateKey, gtx, nil
 }
 
 func CreateLiteTokenAccount(db DB, key tmed25519.PrivKey, tokens float64) error {
