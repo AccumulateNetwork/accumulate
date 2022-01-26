@@ -62,6 +62,7 @@
       "env": {
         "ACC_API": "local"
       },
+      "cwd": "${workspaceFolder}",
       "args": [
         // "tx",
         // "get",
@@ -80,11 +81,11 @@
         // "get",
         // "c85422d30077a4f297d129b3fd34e9368dc4aa0bda213e966ba09f32c33ce336"
 
-        "tx",
-        "sign",
-        "keytest/tokens",
-        "keytest-1-1",
-        "e05d44e9688d21556b67c0afc8c3c2493c930ac67a608701e22b7c98a421df8e"
+        // "tx",
+        // "sign",
+        // "keytest/tokens",
+        // "keytest-1-1",
+        // "e05d44e9688d21556b67c0afc8c3c2493c930ac67a608701e22b7c98a421df8e"
       ]
     }
   ]

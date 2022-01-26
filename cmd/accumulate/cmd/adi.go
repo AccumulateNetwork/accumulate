@@ -155,12 +155,9 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 		return "", fmt.Errorf("invalid number of arguments")
 	}
 
-	pubKey, err := getPublicKey(args[1])
+	pubKey, err := resolvePublicKey(args[1])
 	if err != nil {
-		pubKey, err = pubKeyFromString(args[1])
-		if err != nil {
-			return "", fmt.Errorf("key %s, does not exist in wallet, nor is it a valid public key", args[1])
-		}
+		return "", err
 	}
 
 	if len(args) > 2 {
