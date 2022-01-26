@@ -319,3 +319,21 @@ VersionResponse:
       type: string
     - name: VersionIsKnown
       type: bool
+
+DescriptionResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Subnet
+      type: SubnetDescription
+      marshal-as: reference
+
+SubnetDescription:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: config.NetworkType
+      marshal-as: value

@@ -12,8 +12,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/config"
 	cfg "github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/client"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/networks"
@@ -32,16 +34,16 @@ import (
 
 var cmdInit = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize node",
-	Run:   initNode,
+	Short: "Initialize a named network",
+	Run:   initNamedNetwork,
 	Args:  cobra.NoArgs,
 }
 
-var cmdInitFollower = &cobra.Command{
-	Use:   "follower",
-	Short: "Initialize follower node",
-	Run:   initFollower,
-	Args:  cobra.NoArgs,
+var cmdInitNode = &cobra.Command{
+	Use:   "node <network-name|url>",
+	Short: "Initialize a node",
+	Run:   initNode,
+	Args:  cobra.ExactArgs(1),
 }
 
 var cmdInitDevnet = &cobra.Command{
@@ -58,9 +60,10 @@ var flagInit struct {
 	Reset         bool
 }
 
-var flagInitFollower struct {
+var flagInitNode struct {
 	GenesisDoc string
 	ListenIP   string
+	Follower   bool
 }
 
 var flagInitDevnet struct {
@@ -78,7 +81,7 @@ var flagInitDevnet struct {
 
 func init() {
 	cmdMain.AddCommand(cmdInit)
-	cmdInit.AddCommand(cmdInitFollower, cmdInitDevnet)
+	cmdInit.AddCommand(cmdInitNode, cmdInitDevnet)
 
 	cmdInit.PersistentFlags().StringVarP(&flagInit.Net, "network", "n", "", "Node to build configs for")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
@@ -86,10 +89,10 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
 	cmdInit.MarkFlagRequired("network")
 
-	cmdInitFollower.Flags().StringVar(&flagInitFollower.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
-	cmdInitFollower.Flags().StringVarP(&flagInitFollower.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
-	cmdInitFollower.MarkFlagRequired("network")
-	cmdInitFollower.MarkFlagRequired("listen")
+	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
+	cmdInitNode.Flags().StringVar(&flagInitNode.GenesisDoc, "genesis-doc", "", "Genesis doc for the target network")
+	cmdInitNode.Flags().StringVarP(&flagInitNode.ListenIP, "listen", "l", "", "Address and port to listen on, e.g. tcp://1.2.3.4:5678")
+	cmdInitNode.MarkFlagRequired("listen")
 
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.Name, "name", "DevNet", "Network name")
 	cmdInitDevnet.Flags().IntVarP(&flagInitDevnet.NumBvns, "bvns", "b", 2, "Number of block validator networks to configure")
@@ -103,7 +106,7 @@ func init() {
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
 }
 
-func initNode(*cobra.Command, []string) {
+func initNamedNetwork(*cobra.Command, []string) {
 	subnet, err := networks.Resolve(flagInit.Net)
 	checkf(err, "--network")
 
@@ -177,54 +180,66 @@ func nodeReset() {
 	}
 }
 
-func initFollower(cmd *cobra.Command, _ []string) {
-	u, err := url.Parse(flagInitFollower.ListenIP)
-	checkf(err, "invalid --listen %q", flagInitFollower.ListenIP)
+func initNode(cmd *cobra.Command, args []string) {
+	netAddr, netPort, err := networks.ResolveAddr(args[0], true)
+	checkf(err, "invalid network name or URL")
 
-	port := 26656
+	u, err := url.Parse(flagInitNode.ListenIP)
+	checkf(err, "invalid --listen %q", flagInitNode.ListenIP)
+
+	nodePort := 26656
 	if u.Port() != "" {
 		p, err := strconv.ParseInt(u.Port(), 10, 16)
 		if err != nil {
 			fatalf("invalid port number %q", u.Port())
 		}
-		port = int(p)
+		nodePort = int(p)
 		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
 	}
 
-	subnet, err := networks.Resolve(flagInit.Net)
-	checkf(err, "--network")
+	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccRouterJsonPortOffset))
+	checkf(err, "failed to create API client for %s", args[0])
+
+	tmClient, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", netAddr, netPort+networks.TmRpcPortOffset))
+	checkf(err, "failed to create Tendermint client for %s", args[0])
+
+	version := getVersion(accClient)
+	switch {
+	case !accumulate.IsVersionKnown() && !version.VersionIsKnown:
+		// Hope for the best
+
+	case accumulate.Commit != version.Commit:
+		fatalf("wrong version: network is %s, we are %s", version.Commit, accumulate.Commit)
+	}
+
+	description, err := accClient.Describe(context.Background())
+	checkf(err, "failed to get description from %s", args[0])
 
 	var genDoc *types.GenesisDoc
 	if cmd.Flag("genesis-doc").Changed {
-		genDoc, err = types.GenesisDocFromFile(flagInitFollower.GenesisDoc)
-		checkf(err, "failed to load genesis doc %q", flagInitFollower.GenesisDoc)
-	}
-
-	peers := make([]string, len(subnet.Nodes))
-	for i, n := range subnet.Nodes {
-		client, err := rpchttp.New(fmt.Sprintf("tcp://%s:%d", n.IP, subnet.Port+networks.TmRpcPortOffset))
-		checkf(err, "failed to connect to %s", n.IP)
-
-		if genDoc == nil {
-			msg := "WARNING!!! You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!\n"
-			if term.IsTerminal(int(os.Stderr.Fd())) {
-				fmt.Fprint(os.Stderr, color.RedString(msg, n.IP))
-			} else {
-				fmt.Fprintf(os.Stderr, msg, n.IP)
-			}
-			rgen, err := client.Genesis(context.Background())
-			checkf(err, "failed to get genesis of %s", n.IP)
-			genDoc = rgen.Genesis
+		genDoc, err = types.GenesisDocFromFile(flagInitNode.GenesisDoc)
+		checkf(err, "failed to load genesis doc %q", flagInitNode.GenesisDoc)
+	} else {
+		msg := "WARNING!!! You are fetching the Genesis document from %s! Only do this if you trust %[1]s and your connection to it!\n"
+		if term.IsTerminal(int(os.Stderr.Fd())) {
+			fmt.Fprint(os.Stderr, color.RedString(msg, args[0]))
+		} else {
+			fmt.Fprintf(os.Stderr, msg, args[0])
 		}
-
-		status, err := client.Status(context.Background())
-		checkf(err, "failed to get status of %s", n)
-
-		peers[i] = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, n.IP, subnet.Port)
+		rgen, err := tmClient.Genesis(context.Background())
+		checkf(err, "failed to get genesis from %s", args[0])
+		genDoc = rgen.Genesis
 	}
 
-	config := config.Default(subnet.Type, cfg.Follower, subnet.Name)
-	config.P2P.PersistentPeers = strings.Join(peers, ",")
+	status, err := tmClient.Status(context.Background())
+	checkf(err, "failed to get status of %s", args[0])
+
+	nodeType := cfg.Validator
+	if flagInitNode.Follower {
+		nodeType = cfg.Follower
+	}
+	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.Name)
+	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 
 	if flagInit.Reset {
 		nodeReset()
@@ -232,7 +247,7 @@ func initFollower(cmd *cobra.Command, _ []string) {
 
 	check(node.Init(node.InitOptions{
 		WorkDir:    flagMain.WorkDir,
-		Port:       port,
+		Port:       nodePort,
 		GenesisDoc: genDoc,
 		Config:     []*cfg.Config{config},
 		RemoteIP:   []string{""},

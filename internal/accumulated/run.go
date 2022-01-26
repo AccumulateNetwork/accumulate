@@ -206,6 +206,7 @@ func (d *Daemon) Start() (err error) {
 	jrpcOpts.QueueDepth = 100
 	jrpcOpts.Local = lclient
 	jrpcOpts.Logger = d.Logger
+	jrpcOpts.Network = &d.Config.Accumulate.Network
 
 	// Build the list of remote addresses and query clients
 	jrpcOpts.Remote = d.Config.Accumulate.Network.BvnAddressesWithPortOffset(0)
