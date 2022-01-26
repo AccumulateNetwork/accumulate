@@ -1,22 +1,22 @@
 Version:
   rpc: version
-  output: QueryResponse with VersionResponse
+  output: ChainQueryResponse
 
 Metrics:
   rpc: metrics
   input: MetricsQuery
-  output: QueryResponse with MetricsResponse
+  output: ChainQueryResponse
 
 Faucet:
   rpc: faucet
-  input: AcmeFaucet
+  input: protocol.AcmeFaucet
   output: TxResponse
 
 Query:
   kind: query
   rpc: query
   input: GeneralQuery
-  output: QueryResponse with record or tx payload
+  output: ChainQueryResponse|TransactionQueryResponse|MultiResponse
   call: QueryUrl
   call-params: [Url, QueryOptions]
 
@@ -24,49 +24,49 @@ QueryDirectory:
   kind: query
   rpc: query-directory
   input: DirectoryQuery
-  output: QueryResponse with DirectoryQueryResult
+  output: MultiResponse
   call-params: [Url, QueryPagination, QueryOptions]
 
 QueryChain:
   kind: query
   rpc: query-chain
   input: ChainIdQuery
-  output: QueryResponse with record
+  output: ChainQueryResponse
   call-params: [ChainId]
 
 QueryTx:
   kind: query
   rpc: query-tx
   input: TxnQuery
-  output: QueryResponse with tx payload
+  output: TransactionQueryResponse
   call-params: [Txid, Wait, QueryOptions]
 
 QueryTxHistory:
   kind: query
   rpc: query-tx-history
   input: TxHistoryQuery
-  output: QueryMultiResponse with transactions
+  output: MultiResponse
   call-params: [Url, QueryPagination]
 
 QueryData:
   kind: query
   rpc: query-data
   input: DataEntryQuery
-  output: QueryResponse with protocol.ResponseDataEntry
+  output: ChainQueryResponse
   call-params: [Url, EntryHash]
 
 QueryDataSet:
   kind: query
   rpc: query-data-set
   input: DataEntrySetQuery
-  output: QueryResponse with protocol.ResponseDataEntrySet
+  output: MultiResponse
   call-params: [Url, QueryPagination, QueryOptions]
 
 QueryKeyPageIndex:
   kind: query
   rpc: query-key-index
   input: KeyPageIndexQuery
-  output: QueryResponse with query.ResponseKeyPageIndex
+  output: ChainQueryResponse
   call-params: [Url, Key]
 
 Execute:
