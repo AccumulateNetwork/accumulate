@@ -11,11 +11,13 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 )
 
 type StateManager struct {
 	stateCache
-	submissions []*submission
+	submissions   []*submission
+	newValidators []ed25519.PubKey
 
 	Origin        state.Chain
 	OriginUrl     *url.URL
@@ -111,4 +113,8 @@ func (m *StateManager) Submit(url *url.URL, body protocol.TransactionPayload) {
 		panic("Called stateCache.Submit from a synthetic transaction!")
 	}
 	m.submissions = append(m.submissions, &submission{url, body})
+}
+
+func (m *StateManager) AddValidator(pubKey ed25519.PubKey) {
+	m.newValidators = append(m.newValidators, pubKey)
 }
