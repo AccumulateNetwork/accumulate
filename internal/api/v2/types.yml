@@ -308,3 +308,14 @@ DataEntryQueryResponse:
     - name: Entry
       type: DataEntry
       marshal-as: reference
+
+VersionResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
+    - name: VersionIsKnown
+      type: bool

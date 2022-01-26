@@ -118,7 +118,7 @@ func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, err
 		return nil, err
 	}
 
-	err = Client.Request(context.Background(), "query-tx", jsondata, &res)
+	err = Client.RequestAPIv2(context.Background(), "query-tx", jsondata, &res)
 	if err != nil {
 		return nil, err
 	}
@@ -219,7 +219,7 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 		return "", err
 	}
 
-	if err := Client.Request(context.Background(), "query-tx-history", json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query-tx-history", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
