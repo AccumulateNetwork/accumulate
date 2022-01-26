@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -46,6 +47,10 @@ type DataEntrySetQuery struct {
 	UrlQuery
 	QueryPagination
 	QueryOptions
+}
+
+type DescriptionResponse struct {
+	Subnet SubnetDescription `json:"subnet,omitempty" form:"subnet" query:"subnet" validate:"required"`
 }
 
 type DirectoryQuery struct {
@@ -107,6 +112,11 @@ type QueryPagination struct {
 type Signer struct {
 	PublicKey []byte `json:"publicKey,omitempty" form:"publicKey" query:"publicKey" validate:"required"`
 	Nonce     uint64 `json:"nonce,omitempty" form:"nonce" query:"nonce" validate:"required"`
+}
+
+type SubnetDescription struct {
+	Name string             `json:"name,omitempty" form:"name" query:"name" validate:"required"`
+	Type config.NetworkType `json:"type,omitempty" form:"type" query:"type" validate:"required"`
 }
 
 type TokenDeposit struct {
