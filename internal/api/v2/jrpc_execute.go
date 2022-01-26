@@ -76,7 +76,7 @@ func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interf
 
 	ed := new(transactions.ED25519Sig)
 	tx.Signatures = append(tx.Signatures, ed)
-	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, tx.Transaction.Hash())
+	err = ed.Sign(protocol.FaucetWallet.Nonce, protocol.FaucetWallet.PrivateKey, tx.GetTxHash())
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -157,21 +157,22 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload []byte) interface{} {
 
 	// Build the TX
-	tx := new(transactions.Envelope)
-	tx.Transaction = new(transactions.Transaction)
-	tx.Transaction.Body = payload
-	tx.Transaction.Origin = req.Origin
-	tx.Transaction.Nonce = req.Signer.Nonce
-	tx.Transaction.KeyPageHeight = req.KeyPage.Height
-	tx.Transaction.KeyPageIndex = req.KeyPage.Index
+	env := new(transactions.Envelope)
+	env.TxHash = req.TxHash
+	env.Transaction = new(transactions.Transaction)
+	env.Transaction.Body = payload
+	env.Transaction.Origin = req.Origin
+	env.Transaction.Nonce = req.Signer.Nonce
+	env.Transaction.KeyPageHeight = req.KeyPage.Height
+	env.Transaction.KeyPageIndex = req.KeyPage.Index
 
 	ed := new(transactions.ED25519Sig)
 	ed.Nonce = req.Signer.Nonce
 	ed.PublicKey = req.Signer.PublicKey
 	ed.Signature = req.Signature
-	tx.Signatures = append(tx.Signatures, ed)
+	env.Signatures = append(env.Signatures, ed)
 
-	txb, err := tx.MarshalBinary()
+	txb, err := env.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -209,10 +210,12 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 		data = r.Data
 	}
 
+	simpleHash := sha256.Sum256(txb)
 	res := new(TxResponse)
 	res.Code = code
-	res.Txid = tx.Transaction.Hash()
-	res.Hash = sha256.Sum256(txb)
+	res.TransactionHash = env.GetTxHash()
+	res.EnvelopeHash = env.EnvHash()
+	res.SimpleHash = simpleHash[:]
 
 	var results []protocol.TransactionResult
 	for len(data) > 0 {

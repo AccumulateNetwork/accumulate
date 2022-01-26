@@ -43,14 +43,17 @@ func (x *BlockStateIndexer) DidProduceSynthTxn(entry *BlockStateSynthTxnEntry) e
 	return x.value.PutAs(state)
 }
 
+// DirectoryAnchorIndexer indexes directory anchors.
 type DirectoryAnchorIndexer struct {
 	account *database.Account
 }
 
+// DirectoryAnchor returns a directory anchor indexer.
 func DirectoryAnchor(batch *database.Batch, ledger *url.URL) *DirectoryAnchorIndexer {
 	return &DirectoryAnchorIndexer{batch.Account(ledger)}
 }
 
+// Add indexes a directory anchor.
 func (x *DirectoryAnchorIndexer) Add(anchor *protocol.SyntheticAnchor) error {
 	var v *database.Value
 	if anchor.Major {
@@ -62,6 +65,7 @@ func (x *DirectoryAnchorIndexer) Add(anchor *protocol.SyntheticAnchor) error {
 	return v.PutAs(anchor)
 }
 
+// AnchorForLocalBlock retrieves the directory anchor that anchors the given local block.
 func (x *DirectoryAnchorIndexer) AnchorForLocalBlock(block uint64, major bool) (*protocol.SyntheticAnchor, error) {
 	var v *database.Value
 	if major {

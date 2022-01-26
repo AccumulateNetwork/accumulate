@@ -192,6 +192,18 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 		qr.Data = res
 		return qr, nil
 
+	case "pending":
+		res := new(query.ResponsePending)
+		err := res.UnmarshalBinary(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid response: %v", err)
+		}
+
+		qr := new(ChainQueryResponse)
+		qr.Type = "pending"
+		qr.Data = res
+		return qr, nil
+
 	default:
 		return nil, fmt.Errorf("unknown response type %q", k)
 	}

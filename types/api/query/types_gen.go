@@ -46,6 +46,10 @@ type ResponseKeyPageIndex struct {
 	Index   uint64 `json:"index" form:"index" query:"index" validate:"required"`
 }
 
+type ResponsePending struct {
+	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+}
+
 type ResponseTxHistory struct {
 	Start        int64            `json:"start" form:"start" query:"start" validate:"required"`
 	End          int64            `json:"end" form:"end" query:"end" validate:"required"`
@@ -188,6 +192,20 @@ func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 	return true
 }
 
+func (v *ResponsePending) Equal(u *ResponsePending) bool {
+	if !(len(v.Transactions) == len(u.Transactions)) {
+		return false
+	}
+
+	for i := range v.Transactions {
+		if v.Transactions[i] != u.Transactions[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *ResponseTxHistory) Equal(u *ResponseTxHistory) bool {
 	if !(v.Start == u.Start) {
 		return false
@@ -324,6 +342,14 @@ func (v *ResponseKeyPageIndex) BinarySize() int {
 	return n
 }
 
+func (v *ResponsePending) BinarySize() int {
+	var n int
+
+	n += encoding.ChainSetBinarySize(v.Transactions)
+
+	return n
+}
+
 func (v *ResponseTxHistory) BinarySize() int {
 	var n int
 
@@ -445,6 +471,14 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.StringMarshalBinary(v.KeyPage))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Index))
+
+	return buffer.Bytes(), nil
+}
+
+func (v *ResponsePending) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.ChainSetMarshalBinary(v.Transactions))
 
 	return buffer.Bytes(), nil
 }
@@ -696,6 +730,17 @@ func (v *ResponseKeyPageIndex) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *ResponsePending) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Transactions: %w", err)
+	} else {
+		v.Transactions = x
+	}
+	data = data[encoding.ChainSetBinarySize(v.Transactions):]
+
+	return nil
+}
+
 func (v *ResponseTxHistory) UnmarshalBinary(data []byte) error {
 	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Start: %w", err)
@@ -829,6 +874,14 @@ func (v *ResponseChainRange) MarshalJSON() ([]byte, error) {
 	for i, x := range v.Entries {
 		u.Entries[i] = encoding.BytesToJSON(x)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *ResponsePending) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Transactions []string `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
 	return json.Marshal(&u)
 }
 
@@ -966,6 +1019,22 @@ func (v *ResponseChainRange) UnmarshalJSON(data []byte) error {
 		} else {
 			v.Entries[i] = x
 		}
+	}
+	return nil
+}
+
+func (v *ResponsePending) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Transactions []string `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainSetFromJSON(u.Transactions); err != nil {
+		return fmt.Errorf("error decoding Transactions: %w", err)
+	} else {
+		v.Transactions = x
 	}
 	return nil
 }

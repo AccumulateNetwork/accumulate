@@ -33,7 +33,7 @@ func packTxResponse(txid [32]byte, synth []byte, ms *MerkleState, main *state.Tr
 	res := new(TransactionQueryResponse)
 	res.Type = payload.GetType().String()
 	res.Data = payload
-	res.Txid = txid[:]
+	res.TransactionHash = txid[:]
 	res.MainChain = ms
 	res.KeyPage = new(KeyPage)
 	res.KeyPage.Height = tx.SigInfo.KeyPageHeight
