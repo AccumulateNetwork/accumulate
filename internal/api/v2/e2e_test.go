@@ -62,7 +62,7 @@ func TestValidate(t *testing.T) {
 			xr := new(api.TxResponse)
 			callApi(t, japi, "faucet", &AcmeFaucet{Url: liteUrl.String()}, xr)
 			require.Zero(t, xr.Code, xr.Message)
-			txWait(t, japi, xr.Txid)
+			txWait(t, japi, xr.TransactionHash)
 		}
 
 		account := NewLiteTokenAccount()
@@ -142,7 +142,7 @@ func TestValidate(t *testing.T) {
 			Url   string
 			Count int
 		}{liteUrl.String(), 10}, r)
-		require.Len(t, r.Items, 6)
+		require.Equal(t, 7, len(r.Items), "Expected 7 transactions for %s", liteUrl)
 	})
 
 	dataAccountUrl := adiName + "/dataAccount"

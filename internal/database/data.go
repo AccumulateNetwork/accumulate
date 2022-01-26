@@ -28,7 +28,7 @@ func (d *Data) Put(hash []byte, entry *protocol.DataEntry) error {
 	d.batch.store.Put(d.record.Data(hash), data)
 
 	// Add entry to the chain
-	err = d.chain.AddEntry(hash)
+	err = d.chain.AddEntry(hash, false)
 	if err != nil {
 		return err
 	}

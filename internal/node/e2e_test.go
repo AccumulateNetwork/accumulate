@@ -165,7 +165,7 @@ func TestFaucetMultiNetwork(t *testing.T) {
 	txResp := new(apiv2.TxResponse)
 	rpcCall(t, jrpc.Faucet, &protocol.AcmeFaucet{Url: lite.String()}, txResp)
 	txqResp := new(apiv2.TransactionQueryResponse)
-	rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txResp.Txid, Wait: 10 * time.Second}, txqResp)
+	rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txResp.TransactionHash, Wait: 10 * time.Second}, txqResp)
 	for _, txid := range txqResp.SyntheticTxids {
 		rpcCall(t, jrpc.QueryTx, &apiv2.TxnQuery{Txid: txid[:], Wait: 10 * time.Second}, nil)
 	}
