@@ -411,7 +411,7 @@ func (app *Accumulator) EndBlock(req abci.RequestEndBlock) (resp abci.ResponseEn
 		}
 	}
 
-	return abci.ResponseEndBlock{} //ValidatorUpdates: app.ValUpdates}
+	return resp
 }
 
 // Commit implements github.com/tendermint/tendermint/abci/types.Application.
