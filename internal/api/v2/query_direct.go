@@ -463,10 +463,8 @@ func responseDataSetFromProto(protoDataSet *protocol.ResponseDataEntrySet, pagin
 		de := DataEntryQueryResponse{}
 		de.EntryHash = entry.EntryHash
 		de.Entry.Data = entry.Entry.Data
-		for _, eh := range entry.Entry.ExtIds {
-			de.Entry.ExtIds = append(de.Entry.ExtIds, eh)
-		}
-		respDataSet.Items = append(respDataSet.Items, de)
+		de.Entry.ExtIds = entry.Entry.ExtIds
+		respDataSet.Items = append(respDataSet.Items, &de)
 	}
 	return respDataSet, nil
 }
