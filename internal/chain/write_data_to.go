@@ -37,5 +37,7 @@ func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 
 	res := new(protocol.WriteDataResult)
 	copy(res.EntryHash[:], body.Entry.Hash())
+	res.LiteDataAccount = recipient.String()
+	res.LiteDataAccountId = recipient.AccountID()
 	return res, nil
 }
