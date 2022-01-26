@@ -27,7 +27,7 @@ func addChainEntry(nodeUrl *url.URL, batch *database.Batch, account *url.URL, na
 	}
 
 	index := chain.Height()
-	err = chain.AddEntry(entry)
+	err = chain.AddEntry(entry, true)
 	if err != nil {
 		return err
 	}
