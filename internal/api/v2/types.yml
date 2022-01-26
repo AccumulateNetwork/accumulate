@@ -333,15 +333,5 @@ DescriptionResponse:
   incomparable: true
   fields:
     - name: Subnet
-      type: SubnetDescription
+      type: config.Network
       marshal-as: reference
-
-SubnetDescription:
-  non-binary: true
-  incomparable: true
-  fields:
-    - name: Name
-      type: string
-    - name: Type
-      type: config.NetworkType
-      marshal-as: value

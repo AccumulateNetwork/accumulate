@@ -128,7 +128,6 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 
 func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
 	res := new(DescriptionResponse)
-	res.Subnet.Name = m.opts.Network.ID
-	res.Subnet.Type = m.opts.Network.Type
+	res.Subnet = *m.opts.Network
 	return res
 }
