@@ -59,7 +59,7 @@ func CreateFakeSyntheticDepositTx(recipient tmed25519.PrivKey) (*transactions.En
 	ed := new(transactions.ED25519Sig)
 	tx.Transaction.Nonce = 1
 	ed.PublicKey = recipient.PubKey().Bytes()
-	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.Transaction.Hash())
+	err = ed.Sign(tx.Transaction.Nonce, recipient, tx.GetTxHash())
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ func BuildTestTokenTxGenTx(sponsor ed25519.PrivateKey, destAddr string, amount u
 	ed := new(transactions.ED25519Sig)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = sponsor[32:]
-	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.Transaction.Hash())
+	err = ed.Sign(gtx.Transaction.Nonce, sponsor, gtx.GetTxHash())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
@@ -131,7 +131,7 @@ func BuildTestSynthDepositGenTx() (types.String, ed25519.PrivateKey, *transactio
 	ed := new(transactions.ED25519Sig)
 	gtx.Transaction.Nonce = 1
 	ed.PublicKey = privateKey[32:]
-	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.Transaction.Hash())
+	err = ed.Sign(gtx.Transaction.Nonce, privateKey, gtx.GetTxHash())
 	if err != nil {
 		return "", nil, nil, fmt.Errorf("failed to sign TX: %v", err)
 	}
@@ -187,7 +187,7 @@ func WriteStates(db DB, chains ...state.Chain) error {
 			return err
 		}
 
-		err = chain.AddEntry(txid[:])
+		err = chain.AddEntry(txid[:], true)
 		if err != nil {
 			return err
 		}

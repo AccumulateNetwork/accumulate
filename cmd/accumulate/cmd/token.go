@@ -97,7 +97,7 @@ func CreateToken(origin, signer, url, symbol, precision, properties string) (str
 	params.Precision = uint64(prcsn)
 	params.Properties = properties
 
-	res, err := dispatchTxRequest("create-token", &params, originUrl, si, privKey)
+	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}

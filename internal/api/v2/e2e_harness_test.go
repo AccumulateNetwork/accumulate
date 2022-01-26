@@ -146,7 +146,7 @@ func executeTx(t *testing.T, japi *api.JrpcMethods, method string, wait bool, pa
 	require.Zero(t, resp.Code, resp.Message)
 
 	if wait {
-		txWait(t, japi, resp.Txid)
+		txWait(t, japi, resp.TransactionHash)
 	}
 	return resp
 }

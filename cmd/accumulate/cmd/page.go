@@ -143,7 +143,7 @@ func CreateKeyPage(page string, args []string) (string, error) {
 		ckp.Keys[i] = &ksp
 	}
 
-	res, err := dispatchTxRequest("create-key-page", &ckp, pageUrl, si, privKey)
+	res, err := dispatchTxRequest("create-key-page", &ckp, nil, pageUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}
@@ -215,7 +215,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 	ukp.Key = oldKey[:]
 	ukp.NewKey = newKey[:]
 
-	res, err := dispatchTxRequest("update-key-page", &ukp, u, si, privKey)
+	res, err := dispatchTxRequest("update-key-page", &ukp, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}

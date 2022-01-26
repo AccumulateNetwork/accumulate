@@ -219,7 +219,7 @@ func CreateLiteDataAccount(origin string, args []string) (string, error) {
 		return "", fmt.Errorf("lite data hash cannot be computed, %v", err)
 	}
 
-	res, err = dispatchTxRequest("write-data-to", &wdt, u, si, privKey)
+	res, err = dispatchTxRequest("write-data-to", &wdt, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
@@ -264,7 +264,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda.Url = accountUrl.String()
 	cda.KeyBookUrl = keybook
 
-	res, err = dispatchTxRequest("create-data-account", &cda, u, si, privKey)
+	res, err = dispatchTxRequest("create-data-account", &cda, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
@@ -289,7 +289,7 @@ func WriteData(accountUrl string, args []string) (string, error) {
 	wd := protocol.WriteData{}
 	wd.Entry = *prepareData(args, false)
 
-	res, err := dispatchTxRequest("write-data", &wd, u, si, privKey)
+	res, err := dispatchTxRequest("write-data", &wd, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
@@ -358,7 +358,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 
 	wd.Entry = *prepareData(args[1:], false)
 
-	res, err := dispatchTxRequest("write-data-to", &wd, u, si, privKey)
+	res, err := dispatchTxRequest("write-data-to", &wd, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}

@@ -248,6 +248,9 @@ type SendTransaction struct {
 	Recipient *url.URL           `json:"recipient,omitempty" form:"recipient" query:"recipient" validate:"required"`
 }
 
+type SignPending struct {
+}
+
 type SyntheticAnchor struct {
 	Source      string   `json:"source,omitempty" form:"source" query:"source" validate:"required,acc-url"`
 	Major       bool     `json:"major,omitempty" form:"major" query:"major" validate:"required"`
@@ -325,6 +328,7 @@ type TransactionSignature struct {
 type TransactionStatus struct {
 	Remote    bool              `json:"remote,omitempty" form:"remote" query:"remote" validate:"required"`
 	Delivered bool              `json:"delivered,omitempty" form:"delivered" query:"delivered" validate:"required"`
+	Pending   bool              `json:"pending,omitempty" form:"pending" query:"pending" validate:"required"`
 	Code      uint64            `json:"code,omitempty" form:"code" query:"code" validate:"required"`
 	Message   string            `json:"message,omitempty" form:"message" query:"message" validate:"required"`
 	Result    TransactionResult `json:"result,omitempty" form:"result" query:"result"`
@@ -448,6 +452,8 @@ func (*IssueTokens) GetType() types.TransactionType { return types.TxTypeIssueTo
 func (*SegWitDataEntry) GetType() types.TransactionType { return types.TxTypeSegWitDataEntry }
 
 func (*SendTokens) GetType() types.TransactionType { return types.TxTypeSendTokens }
+
+func (*SignPending) GetType() types.TransactionType { return types.TxTypeSignPending }
 
 func (*SyntheticAnchor) GetType() types.TransactionType { return types.TxTypeSyntheticAnchor }
 
@@ -1138,6 +1144,11 @@ func (v *SendTokens) Equal(u *SendTokens) bool {
 	return true
 }
 
+func (v *SignPending) Equal(u *SignPending) bool {
+
+	return true
+}
+
 func (v *SyntheticAnchor) Equal(u *SyntheticAnchor) bool {
 	if !(v.Source == u.Source) {
 		return false
@@ -1378,6 +1389,10 @@ func (v *TransactionStatus) Equal(u *TransactionStatus) bool {
 	}
 
 	if !(v.Delivered == u.Delivered) {
+		return false
+	}
+
+	if !(v.Pending == u.Pending) {
 		return false
 	}
 
@@ -2030,6 +2045,14 @@ func (v *SendTransaction) BinarySize() int {
 	return n
 }
 
+func (v *SignPending) BinarySize() int {
+	var n int
+
+	n += encoding.UvarintBinarySize(types.TxTypeSignPending.ID())
+
+	return n
+}
+
 func (v *SyntheticAnchor) BinarySize() int {
 	var n int
 
@@ -2214,6 +2237,8 @@ func (v *TransactionStatus) BinarySize() int {
 	n += encoding.BoolBinarySize(v.Remote)
 
 	n += encoding.BoolBinarySize(v.Delivered)
+
+	n += encoding.BoolBinarySize(v.Pending)
 
 	n += encoding.UvarintBinarySize(v.Code)
 
@@ -2954,6 +2979,14 @@ func (v *SendTransaction) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (v *SignPending) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeSignPending.ID()))
+
+	return buffer.Bytes(), nil
+}
+
 func (v *SyntheticAnchor) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -3164,6 +3197,8 @@ func (v *TransactionStatus) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.BoolMarshalBinary(v.Remote))
 
 	buffer.Write(encoding.BoolMarshalBinary(v.Delivered))
+
+	buffer.Write(encoding.BoolMarshalBinary(v.Pending))
 
 	buffer.Write(encoding.UvarintMarshalBinary(v.Code))
 
@@ -4406,6 +4441,18 @@ func (v *SendTransaction) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *SignPending) UnmarshalBinary(data []byte) error {
+	typ := types.TxTypeSignPending
+	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding TX type: %w", err)
+	} else if v != uint64(typ) {
+		return fmt.Errorf("invalid TX type: want %v, got %v", typ, types.TransactionType(v))
+	}
+	data = data[encoding.UvarintBinarySize(uint64(typ)):]
+
+	return nil
+}
+
 func (v *SyntheticAnchor) UnmarshalBinary(data []byte) error {
 	typ := types.TxTypeSyntheticAnchor
 	if v, err := encoding.UvarintUnmarshalBinary(data); err != nil {
@@ -4807,6 +4854,13 @@ func (v *TransactionStatus) UnmarshalBinary(data []byte) error {
 		v.Delivered = x
 	}
 	data = data[encoding.BoolBinarySize(v.Delivered):]
+
+	if x, err := encoding.BoolUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Pending: %w", err)
+	} else {
+		v.Pending = x
+	}
+	data = data[encoding.BoolBinarySize(v.Pending):]
 
 	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Code: %w", err)
@@ -5349,12 +5403,14 @@ func (v *TransactionStatus) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Remote    bool            `json:"remote,omitempty"`
 		Delivered bool            `json:"delivered,omitempty"`
+		Pending   bool            `json:"pending,omitempty"`
 		Code      uint64          `json:"code,omitempty"`
 		Message   string          `json:"message,omitempty"`
 		Result    json.RawMessage `json:"result,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
+	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
 	if x, err := json.Marshal(v.Result); err != nil {
@@ -6173,12 +6229,14 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Remote    bool            `json:"remote,omitempty"`
 		Delivered bool            `json:"delivered,omitempty"`
+		Pending   bool            `json:"pending,omitempty"`
 		Code      uint64          `json:"code,omitempty"`
 		Message   string          `json:"message,omitempty"`
 		Result    json.RawMessage `json:"result,omitempty"`
 	}{}
 	u.Remote = v.Remote
 	u.Delivered = v.Delivered
+	u.Pending = v.Pending
 	u.Code = v.Code
 	u.Message = v.Message
 	if x, err := json.Marshal(v.Result); err != nil {
@@ -6192,6 +6250,7 @@ func (v *TransactionStatus) UnmarshalJSON(data []byte) error {
 	}
 	v.Remote = u.Remote
 	v.Delivered = u.Delivered
+	v.Pending = u.Pending
 	v.Code = u.Code
 	v.Message = u.Message
 	if x, err := UnmarshalTransactionResultJSON(u.Result); err != nil {
