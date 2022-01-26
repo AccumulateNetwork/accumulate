@@ -2,6 +2,10 @@ Version:
   rpc: version
   output: ChainQueryResponse
 
+Describe:
+  rpc: describe
+  output: DescriptionResponse
+
 Metrics:
   rpc: metrics
   input: MetricsQuery

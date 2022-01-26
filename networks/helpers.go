@@ -6,23 +6,7 @@ import (
 	"strconv"
 )
 
-func GetRpcAddr(netOrIp string) (string, error) {
-	net := all[netOrIp]
-	ip, err := url.Parse(netOrIp)
-	if net != nil {
-		ip = &url.URL{Scheme: "tcp", Host: fmt.Sprintf("%s:%d", net.Nodes[0].IP, net.Port+TmRpcPortOffset)}
-	} else if err != nil {
-		return "", fmt.Errorf("%q is not a URL or a named network", netOrIp)
-	} else if ip.Port() == "" {
-		return "", fmt.Errorf("missing port number: %q", netOrIp)
-	} else if _, err := strconv.ParseInt(ip.Port(), 10, 17); err != nil {
-		return "", fmt.Errorf("invalid port number: %q", netOrIp)
-	}
-
-	return ip.String(), nil
-}
-
-func Resolve(name string) (*Subnet, error) {
+func resolve(name string) (*Subnet, error) {
 	sub := all[name]
 	if sub != nil {
 		return sub, nil
@@ -30,5 +14,48 @@ func Resolve(name string) (*Subnet, error) {
 	if nameCount[name] > 1 {
 		return nil, fmt.Errorf("%q is ambiguous and must be qualified with the network name", name)
 	}
+	return nil, nil
+}
+
+func Resolve(name string) (*Subnet, error) {
+	sub, err := resolve(name)
+	if err != nil {
+		return nil, err
+	}
+	if sub != nil {
+		return sub, nil
+	}
 	return nil, fmt.Errorf("%q is not the name of a subnet", name)
+}
+
+func ResolveAddr(netOrIp string, allowIp bool) (string, int, error) {
+	sub, err := resolve(netOrIp)
+	if err != nil {
+		return "", 0, err
+	}
+	if sub != nil {
+		return sub.Nodes[0].IP, sub.Port, nil
+	}
+	if !allowIp {
+		return "", 0, fmt.Errorf("%q is not the name of a subnet", netOrIp)
+	}
+
+	ip, err := url.Parse(netOrIp)
+	if err != nil {
+		return "", 0, fmt.Errorf("%q is not a URL or a named network", netOrIp)
+	}
+
+	if ip.Path != "" && ip.Path != "/" {
+		return "", 0, fmt.Errorf("address cannot have a path")
+	}
+
+	if ip.Port() == "" {
+		return "", 0, fmt.Errorf("%q does not specify a port number", netOrIp)
+	}
+	port, err := strconv.ParseUint(ip.Port(), 10, 16)
+	if err != nil {
+		return "", 0, fmt.Errorf("%q is not a valid port number", ip.Port())
+	}
+
+	return ip.Hostname(), int(port), nil
 }
