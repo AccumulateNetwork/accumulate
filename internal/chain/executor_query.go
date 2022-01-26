@@ -134,71 +134,45 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			return []byte("tx"), res, nil
 		}
 	case "pending":
-		pendingChain, err := batch.Account(u).ReadChain(protocol.PendingChain)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
-		}
 		switch len(fragment) {
 		case 1:
-			height := pendingChain.Height()
-			entries, err := pendingChain.Entries(0, height)
+			txIds, err := indexing.PendingTransactions(batch, u).Get()
 			if err != nil {
 				return nil, nil, err
 			}
-			res := new(query.ResponseChainRange)
-			res.Start = 0
-			res.End = height
-			res.Total = height + 1
-			res.Entries = entries
-			return []byte("pending-range"), res, nil
-		case 2:
-			queryParam := fragment[1]
-			if strings.Contains(queryParam, ":") {
-				indexes := strings.Split(queryParam, ":")
-				start, err := strconv.Atoi(indexes[0])
-				if err != nil {
-					return nil, nil, err
-				}
-				end, err := strconv.Atoi(indexes[1])
-				if err != nil {
-					return nil, nil, err
-				}
-				entries, err := pendingChain.Entries(int64(start), int64(end))
-				if err != nil {
-					return nil, nil, err
-				}
-				res := new(query.ResponseChainRange)
-				res.Start = int64(start)
-				res.End = int64(end)
-				res.Total = int64(start) - int64(end)
-				res.Entries = entries
-				return []byte("pending-range"), res, nil
-			} else {
-				index, err := strconv.Atoi(queryParam)
-				if err != nil {
-					height, err := pendingChain.HeightOf([]byte(queryParam))
-					if err != nil {
-						return nil, nil, err
-					}
-					entry, err := pendingChain.Entry(height)
-					if err != nil {
-						return nil, nil, err
-					}
-					res := new(query.ResponseChainEntry)
-					res.Entry = entry
-					res.Height = height
-					return []byte("pending-entry"), res, nil
-				} else {
-					entry, err := pendingChain.Entry(int64(index))
-					if err != nil {
-						return nil, nil, err
-					}
-					res := new(query.ResponseChainEntry)
-					res.Entry = entry
-					res.Height = int64(index)
-					return []byte("pending-entry"), res, nil
-				}
+			resp := new(query.MultiResponse)
+			for _, txid := range txIds {
+				resp.Items = append(resp.Items, hex.EncodeToString(txid[:]))
 			}
+			return []byte("pending-transactions"), resp, nil
+		case 2:
+			chain, err := batch.Account(u).ReadChain(protocol.PendingChain)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
+			}
+
+			height, txid, err := getTransaction(chain, fragment[1])
+			if err != nil {
+				return nil, nil, err
+			}
+
+			state, err := chain.State(height)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
+			}
+
+			res, err := m.queryByTxId(batch, txid, prove)
+			if err != nil {
+				return nil, nil, err
+			}
+
+			res.Height = height
+			res.ChainState = make([][]byte, len(state.Pending))
+			for i, h := range state.Pending {
+				res.ChainState[i] = h.Copy()
+			}
+
+			return []byte("pending-transaction"), res, nil
 		}
 	case "data":
 		data, err := batch.Account(u).Data()
@@ -275,17 +249,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				}
 			}
 		}
-	case "pending":
-		pending, err := indexing.PendingTransactions(batch, u).Get()
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to retrieve pending transaction list for %q: %v", u, err)
-		}
-
-		res := new(query.ResponsePending)
-		res.Transactions = pending
-		return []byte("pending"), res, nil
 	}
-
 	return nil, nil, fmt.Errorf("invalid fragment")
 }
 
