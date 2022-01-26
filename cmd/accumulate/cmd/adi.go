@@ -100,7 +100,7 @@ func GetAdiDirectory(origin string, start string, count string) (string, error) 
 	}
 
 	var res api2.MultiResponse
-	if err := Client.Request(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query-directory", json.RawMessage(data), &res); err != nil {
 		ret, err := PrintJsonRpcError(err)
 		if err != nil {
 			return "", err

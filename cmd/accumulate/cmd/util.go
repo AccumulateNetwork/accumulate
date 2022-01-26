@@ -30,7 +30,7 @@ func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
 	}
 	res := new(api2.ChainQueryResponse)
 	res.Data = rec
-	if err := Client.Request(context.Background(), "query", &params, res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query", &params, res); err != nil {
 		return nil, err
 	}
 	return res.MainChain, nil
@@ -42,7 +42,7 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	}
 	res := new(api2.ChainQueryResponse)
 	res.Data = rec
-	if err := Client.Request(context.Background(), "query-chain", &params, res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query-chain", &params, res); err != nil {
 		return nil, err
 	}
 	return res.MainChain, nil
@@ -229,7 +229,7 @@ func GetUrl(url string) (*QueryResponse, error) {
 }
 
 func queryAs(method string, input, output interface{}) error {
-	err := Client.Request(context.Background(), method, input, output)
+	err := Client.RequestAPIv2(context.Background(), method, input, output)
 	if err == nil {
 		return nil
 	}
@@ -270,7 +270,7 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *
 	}
 
 	var res api2.TxResponse
-	if err := Client.Request(context.Background(), action, json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), action, json.RawMessage(data), &res); err != nil {
 		_, err := PrintJsonRpcError(err)
 		return nil, err
 	}
