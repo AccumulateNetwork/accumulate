@@ -26,6 +26,7 @@ type JrpcOptions struct {
 	QueueDuration time.Duration
 	QueueDepth    int
 	Logger        log.Logger
+	Network       *config.Network
 }
 
 type JrpcMethods struct {
@@ -117,10 +118,17 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {
 	res := new(ChainQueryResponse)
 	res.Type = "version"
-	res.Data = map[string]interface{}{
-		"version":        accumulate.Version,
-		"commit":         accumulate.Commit,
-		"versionIsKnown": accumulate.IsVersionKnown(),
+	res.Data = VersionResponse{
+		Version:        accumulate.Version,
+		Commit:         accumulate.Commit,
+		VersionIsKnown: accumulate.IsVersionKnown(),
 	}
+	return res
+}
+
+func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
+	res := new(DescriptionResponse)
+	res.Subnet.Name = m.opts.Network.ID
+	res.Subnet.Type = m.opts.Network.Type
 	return res
 }
