@@ -46,7 +46,7 @@ func Faucet(url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if err := Client.Request(context.Background(), "faucet", json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "faucet", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 

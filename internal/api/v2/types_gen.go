@@ -166,6 +166,12 @@ type UrlQuery struct {
 	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 }
 
+type VersionResponse struct {
+	Version        string `json:"version,omitempty" form:"version" query:"version" validate:"required"`
+	Commit         string `json:"commit,omitempty" form:"commit" query:"commit" validate:"required"`
+	VersionIsKnown bool   `json:"versionIsKnown,omitempty" form:"versionIsKnown" query:"versionIsKnown" validate:"required"`
+}
+
 func (v *DataEntry) Equal(u *DataEntry) bool {
 	if !(len(v.ExtIds) == len(u.ExtIds)) {
 		return false
