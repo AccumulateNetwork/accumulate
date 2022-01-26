@@ -20,7 +20,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/davecgh/go-spew/spew"
 	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/fatih/color"
 	"github.com/rs/zerolog"
@@ -364,8 +363,6 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 			}
 		}
 	}
-
-	spew.Dump(dnRemote, bvnRemote)
 
 	for i := 0; i < count; i++ {
 		addresses[protocol.Directory] = append(addresses[protocol.Directory], fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort))
