@@ -33,11 +33,11 @@ type submission struct {
 // NewStateManager creates a new state manager and loads the transaction's
 // origin. If the origin is not found, NewStateManager returns a valid state
 // manager along with a not-found error.
-func NewStateManager(batch *database.Batch, nodeUrl *url.URL, tx *transactions.Envelope) (*StateManager, error) {
+func NewStateManager(batch *database.Batch, nodeUrl *url.URL, env *transactions.Envelope) (*StateManager, error) {
 	m := new(StateManager)
-	txid := types.Bytes(tx.GetTxHash()).AsBytes32()
-	m.stateCache = *newStateCache(nodeUrl, tx.Transaction.Type(), txid, batch)
-	m.OriginUrl = tx.Transaction.Origin
+	txid := types.Bytes(env.GetTxHash()).AsBytes32()
+	m.stateCache = *newStateCache(nodeUrl, env.Transaction.Type(), txid, batch)
+	m.OriginUrl = env.Transaction.Origin
 
 	copy(m.OriginChainId[:], m.OriginUrl.AccountID())
 

@@ -41,6 +41,8 @@ func NewTransaction(typ types.TransactionType) (TransactionPayload, error) {
 		return new(AddCredits), nil
 	case types.TxTypeUpdateKeyPage:
 		return new(UpdateKeyPage), nil
+	case types.TxTypeSignPending:
+		return new(SignPending), nil
 
 	case types.TxTypeSyntheticCreateChain:
 		return new(SyntheticCreateChain), nil

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -163,12 +164,10 @@ func listenHttpUrl(s string) (net2.Listener, bool, error) {
 func waitForTxns(t *testing.T, tc *testCmd, jsonRes string) {
 	t.Helper()
 
-	var res struct {
-		Txid string
-	}
+	var res ActionResponse
 	require.NoError(t, json.Unmarshal([]byte(jsonRes), &res))
 
-	commandLine := fmt.Sprintf("tx get --wait 10s --wait-synth 10s %s", res.Txid)
+	commandLine := fmt.Sprintf("tx get --wait 10s --wait-synth 10s %s", hex.EncodeToString(res.TransactionHash))
 	_, err := tc.execute(t, commandLine)
 	require.NoError(t, err)
 }

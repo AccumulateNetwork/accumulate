@@ -321,7 +321,8 @@ func (m *stateCache) SignTransaction(txid []byte, signature *transactions.ED2551
 }
 
 func (op *signTransaction) Execute(st *stateCache) ([]state.Chain, error) {
-	return nil, st.batch.Transaction(op.txid).AddSignatures(op.signature)
+	_, err := st.batch.Transaction(op.txid).AddSignatures(op.signature)
+	return nil, err
 }
 
 type addSyntheticTxns struct {

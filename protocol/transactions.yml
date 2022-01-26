@@ -185,6 +185,10 @@ UpdateKeyPage:
       type: uvarint
       optional: true
 
+SignPending:
+  kind: tx
+  fields: []
+
 ##### Synthetic #####
 
 SyntheticCreateChain:
