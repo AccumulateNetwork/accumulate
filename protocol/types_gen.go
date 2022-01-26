@@ -347,7 +347,9 @@ type WriteData struct {
 }
 
 type WriteDataResult struct {
-	EntryHash [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	EntryHash         [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	LiteDataAccount   string   `json:"liteDataAccount,omitempty" form:"liteDataAccount" query:"liteDataAccount" validate:"required"`
+	LiteDataAccountId []byte   `json:"liteDataAccountId,omitempty" form:"liteDataAccountId" query:"liteDataAccountId" validate:"required"`
 }
 
 type WriteDataTo struct {
@@ -1448,6 +1450,14 @@ func (v *WriteDataResult) Equal(u *WriteDataResult) bool {
 		return false
 	}
 
+	if !(v.LiteDataAccount == u.LiteDataAccount) {
+		return false
+	}
+
+	if !(bytes.Equal(v.LiteDataAccountId, u.LiteDataAccountId)) {
+		return false
+	}
+
 	return true
 }
 
@@ -2283,6 +2293,10 @@ func (v *WriteDataResult) BinarySize() int {
 	n += encoding.UvarintBinarySize(types.TxTypeWriteData.ID())
 
 	n += encoding.ChainBinarySize(&v.EntryHash)
+
+	n += encoding.StringBinarySize(v.LiteDataAccount)
+
+	n += encoding.BytesBinarySize(v.LiteDataAccountId)
 
 	return n
 }
@@ -3255,6 +3269,10 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 	buffer.Write(encoding.UvarintMarshalBinary(types.TxTypeWriteData.ID()))
 
 	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
+
+	buffer.Write(encoding.StringMarshalBinary(v.LiteDataAccount))
+
+	buffer.Write(encoding.BytesMarshalBinary(v.LiteDataAccountId))
 
 	return buffer.Bytes(), nil
 }
@@ -4964,6 +4982,20 @@ func (v *WriteDataResult) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.ChainBinarySize(&v.EntryHash):]
 
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding LiteDataAccount: %w", err)
+	} else {
+		v.LiteDataAccount = x
+	}
+	data = data[encoding.StringBinarySize(v.LiteDataAccount):]
+
+	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding LiteDataAccountId: %w", err)
+	} else {
+		v.LiteDataAccountId = x
+	}
+	data = data[encoding.BytesBinarySize(v.LiteDataAccountId):]
+
 	return nil
 }
 
@@ -5440,11 +5472,15 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *WriteDataResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type      types.TransactionType `json:"type"`
-		EntryHash string                `json:"entryHash,omitempty"`
+		Type              types.TransactionType `json:"type"`
+		EntryHash         string                `json:"entryHash,omitempty"`
+		LiteDataAccount   string                `json:"liteDataAccount,omitempty"`
+		LiteDataAccountId *string               `json:"liteDataAccountId,omitempty"`
 	}{}
 	u.Type = v.GetType()
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.LiteDataAccount = v.LiteDataAccount
+	u.LiteDataAccountId = encoding.BytesToJSON(v.LiteDataAccountId)
 	return json.Marshal(&u)
 }
 
@@ -6296,11 +6332,15 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *WriteDataResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type      types.TransactionType `json:"type"`
-		EntryHash string                `json:"entryHash,omitempty"`
+		Type              types.TransactionType `json:"type"`
+		EntryHash         string                `json:"entryHash,omitempty"`
+		LiteDataAccount   string                `json:"liteDataAccount,omitempty"`
+		LiteDataAccountId *string               `json:"liteDataAccountId,omitempty"`
 	}{}
 	u.Type = v.GetType()
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
+	u.LiteDataAccount = v.LiteDataAccount
+	u.LiteDataAccountId = encoding.BytesToJSON(v.LiteDataAccountId)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -6308,6 +6348,12 @@ func (v *WriteDataResult) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("error decoding EntryHash: %w", err)
 	} else {
 		v.EntryHash = x
+	}
+	v.LiteDataAccount = u.LiteDataAccount
+	if x, err := encoding.BytesFromJSON(u.LiteDataAccountId); err != nil {
+		return fmt.Errorf("error decoding LiteDataAccountId: %w", err)
+	} else {
+		v.LiteDataAccountId = x
 	}
 	return nil
 }
