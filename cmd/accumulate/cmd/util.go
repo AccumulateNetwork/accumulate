@@ -62,7 +62,7 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 	hdr.KeyPageHeight = 1
 	hdr.KeyPageIndex = 0
 
-	if IsLiteAccount(origin.String()) == true {
+	if IsLiteAccount(origin.String()) {
 		privKey, err = LookupByLabel(origin.String())
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", origin.String(), err)
@@ -71,18 +71,9 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 	}
 
 	if len(args) > 1 {
-		b, err := pubKeyFromString(args[0])
+		privKey, err = resolvePrivateKey(args[0])
 		if err != nil {
-			privKey, err = LookupByLabel(args[0])
-			if err != nil {
-				return nil, nil, nil, fmt.Errorf("invalid public key or wallet label specified on command line")
-			}
-
-		} else {
-			privKey, err = LookupByPubKey(b)
-			if err != nil {
-				return nil, nil, nil, fmt.Errorf("invalid public key, cannot resolve signing key")
-			}
+			return nil, nil, nil, err
 		}
 		ct++
 	} else {
@@ -185,11 +176,8 @@ func IsLiteAccount(url string) bool {
 	if err != nil {
 		log.Fatal(err)
 	}
-	u2, err := url2.Parse(u.Authority)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return protocol.IsValidAdiUrl(u2) != nil
+	key, _, _ := protocol.ParseLiteTokenAddress(u)
+	return key != nil
 }
 
 // Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.

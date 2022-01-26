@@ -152,18 +152,6 @@ func CreateKeyPage(page string, args []string) (string, error) {
 
 }
 
-func resolveKey(key string) ([]byte, error) {
-	ret, err := getPublicKey(key)
-	if err != nil {
-		ret, err = pubKeyFromString(key)
-		if err != nil {
-			PrintKeyUpdate()
-			return nil, fmt.Errorf("key %s, does not exist in wallet, nor is it a valid public key", key)
-		}
-	}
-	return ret, err
-}
-
 func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (string, error) {
 	u, err := url2.Parse(origin)
 	if err != nil {
@@ -186,11 +174,11 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if len(args) < 2 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		oldKey, err = resolveKey(args[0])
+		oldKey, err = resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
-		newKey, err = resolveKey(args[1])
+		newKey, err = resolvePublicKey(args[1])
 		if err != nil {
 			return "", err
 		}
@@ -198,7 +186,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		newKey, err = resolveKey(args[0])
+		newKey, err = resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}
@@ -206,7 +194,7 @@ func KeyPageUpdate(origin string, op protocol.KeyPageOperation, args []string) (
 		if len(args) < 1 {
 			return "", fmt.Errorf("invalid number of arguments")
 		}
-		oldKey, err = resolveKey(args[0])
+		oldKey, err = resolvePublicKey(args[0])
 		if err != nil {
 			return "", err
 		}

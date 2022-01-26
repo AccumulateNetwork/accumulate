@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"strconv"
 	"strings"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/spf13/cobra"
+	tmjson "github.com/tendermint/tendermint/libs/json"
+	"github.com/tendermint/tendermint/privval"
 	"github.com/tyler-smith/go-bip32"
 	"github.com/tyler-smith/go-bip39"
 )
@@ -126,6 +129,53 @@ func PrintKey() {
 	PrintKeyExport()
 }
 
+func resolvePrivateKey(s string) ([]byte, error) {
+	pub, priv, err := parseKey(s)
+	if err != nil {
+		return nil, err
+	}
+
+	if priv != nil {
+		return priv, nil
+	}
+
+	return LookupByPubKey(pub)
+}
+
+func resolvePublicKey(s string) ([]byte, error) {
+	pub, _, err := parseKey(s)
+	if err != nil {
+		return nil, err
+	}
+
+	return pub, nil
+}
+
+func parseKey(s string) (pubKey, privKey []byte, err error) {
+	pubKey, err = pubKeyFromString(s)
+	if err == nil {
+		return pubKey, nil, nil
+	}
+
+	privKey, err = LookupByLabel(s)
+	if err == nil {
+		// Assume ED25519
+		return privKey[32:], privKey, nil
+	}
+
+	b, err := ioutil.ReadFile(s)
+	if err != nil {
+		return nil, nil, fmt.Errorf("invalid key specifier: %q is not a label, key, or file", s)
+	}
+
+	var pvkey privval.FilePVKey
+	if tmjson.Unmarshal(b, &pvkey) == nil {
+		return pvkey.PubKey.Bytes(), pvkey.PrivKey.Bytes(), nil
+	}
+
+	return nil, nil, fmt.Errorf("invalid key specifier: %q is in an unsupported format", s)
+}
+
 func pubKeyFromString(s string) ([]byte, error) {
 	var pubKey types.Bytes32
 	if len(s) != 64 {
@@ -139,23 +189,6 @@ func pubKeyFromString(s string) ([]byte, error) {
 
 	if i != 32 {
 		return nil, fmt.Errorf("invalid public key")
-	}
-
-	return pubKey[:], nil
-}
-
-func getPublicKey(s string) ([]byte, error) {
-	var pubKey types.Bytes32
-	privKey, err := LookupByLabel(s)
-
-	if err != nil {
-		b, err := pubKeyFromString(s)
-		if err != nil {
-			return nil, fmt.Errorf("unable to resolve public key %s,%v", s, err)
-		}
-		pubKey.FromBytes(b)
-	} else {
-		pubKey.FromBytes(privKey[32:])
 	}
 
 	return pubKey[:], nil
