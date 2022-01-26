@@ -9,6 +9,15 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 )
 
+func (c *Client) Describe(ctx context.Context) (*api.DescriptionResponse, error) {
+	var resp *api.DescriptionResponse
+	err := c.RequestAPIv2(ctx, "describe", struct{}{}, resp)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 func (c *Client) Execute(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp *api.TxResponse
 	err := c.RequestAPIv2(ctx, "execute", req, resp)
