@@ -30,7 +30,7 @@ func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
 	}
 	res := new(api2.ChainQueryResponse)
 	res.Data = rec
-	if err := Client.Request(context.Background(), "query", &params, res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query", &params, res); err != nil {
 		return nil, err
 	}
 	return res.MainChain, nil
@@ -42,7 +42,7 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	}
 	res := new(api2.ChainQueryResponse)
 	res.Data = rec
-	if err := Client.Request(context.Background(), "query-chain", &params, res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query-chain", &params, res); err != nil {
 		return nil, err
 	}
 	return res.MainChain, nil
@@ -134,29 +134,31 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(binaryPayload []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
-	gtx := new(transactions.Envelope)
-	gtx.Transaction = new(transactions.Transaction)
-	gtx.Transaction.Body = binaryPayload
+func signGenTx(binaryPayload, txHash []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
+	env := new(transactions.Envelope)
+	env.TxHash = txHash
+	env.Transaction = new(transactions.Transaction)
+	env.Transaction.Body = binaryPayload
 
 	hdr.Nonce = nonce
-	gtx.Transaction.Header = *hdr
+	env.Transaction.Header = *hdr
 
 	ed := new(transactions.ED25519Sig)
-	err := ed.Sign(nonce, privKey, gtx.Transaction.Hash())
+	err := ed.Sign(nonce, privKey, env.GetTxHash())
 	if err != nil {
 		return nil, err
 	}
 	return ed, nil
 }
 
-func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(binaryPayload, origin, si, privKey, nonce)
+func prepareGenTxV2(jsonPayload, binaryPayload, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
+	ed, err := signGenTx(binaryPayload, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
 
 	params := &api2.TxRequest{}
+	params.TxHash = txHash
 
 	if TxPretend {
 		params.CheckOnly = true
@@ -229,7 +231,7 @@ func GetUrl(url string) (*QueryResponse, error) {
 }
 
 func queryAs(method string, input, output interface{}) error {
-	err := Client.Request(context.Background(), method, input, output)
+	err := Client.RequestAPIv2(context.Background(), method, input, output)
 	if err == nil {
 		return nil
 	}
@@ -242,7 +244,11 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, txHash []byte, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+	if payload == nil && txHash != nil {
+		payload = new(protocol.SignPending)
+	}
+
 	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -259,7 +265,7 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *
 	}
 
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, origin, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, txHash, origin, si, privKey, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +276,7 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *
 	}
 
 	var res api2.TxResponse
-	if err := Client.Request(context.Background(), action, json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), action, json.RawMessage(data), &res); err != nil {
 		_, err := PrintJsonRpcError(err)
 		return nil, err
 	}
@@ -279,14 +285,15 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *
 }
 
 type ActionResponse struct {
-	Txid      types.Bytes32 `json:"txid"`
-	Hash      types.Bytes32 `json:"hash"`
-	Log       types.String  `json:"log"`
-	Code      types.String  `json:"code"`
-	Codespace types.String  `json:"codespace"`
-	Error     types.String  `json:"error"`
-	Mempool   types.String  `json:"mempool"`
-	Result    interface{}   `json:"result"`
+	TransactionHash types.Bytes  `json:"transactionHash"`
+	EnvelopeHash    types.Bytes  `json:"envelopeHash"`
+	SimpleHash      types.Bytes  `json:"simpleHash"`
+	Log             types.String `json:"log"`
+	Code            types.String `json:"code"`
+	Codespace       types.String `json:"codespace"`
+	Error           types.String `json:"error"`
+	Mempool         types.String `json:"mempool"`
+	Result          interface{}  `json:"result"`
 }
 
 type ActionDataResponse struct {
@@ -363,10 +370,11 @@ func (a *ActionDataResponse) Print() (string, error) {
 
 func ActionResponseFrom(r *api2.TxResponse) *ActionResponse {
 	return &ActionResponse{
-		Txid:  types.Bytes(r.Txid).AsBytes32(),
-		Hash:  r.Hash,
-		Error: types.String(r.Message),
-		Code:  types.String(fmt.Sprint(r.Code)),
+		TransactionHash: r.TransactionHash,
+		EnvelopeHash:    r.EnvelopeHash,
+		SimpleHash:      r.SimpleHash,
+		Error:           types.String(r.Message),
+		Code:            types.String(fmt.Sprint(r.Code)),
 	}
 }
 
@@ -384,8 +392,9 @@ func (a *ActionResponse) Print() (string, error) {
 		}
 		out = string(b)
 	} else {
-		out += fmt.Sprintf("\n\tTransaction Id\t\t:\t%x\n", a.Txid)
-		out += fmt.Sprintf("\tTendermint Reference\t:\t%x\n", a.Hash)
+		out += fmt.Sprintf("\n\tTransaction Hash\t:\t%x\n", a.TransactionHash)
+		out += fmt.Sprintf("\tEnvelope Hash\t\t:\t%x\n", a.EnvelopeHash)
+		out += fmt.Sprintf("\tSimple Hash\t\t:\t%x\n", a.SimpleHash)
 		if !ok {
 			out += fmt.Sprintf("\tError code\t\t:\t%s\n", a.Code)
 		} else {
@@ -484,7 +493,7 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 
 func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
 	out := fmt.Sprintf("---\n")
-	out += fmt.Sprintf("  - Transaction           : %x\n", res.Txid)
+	out += fmt.Sprintf("  - Transaction           : %x\n", res.TransactionHash)
 	out += fmt.Sprintf("  - Signer Url            : %s\n", res.Origin)
 	out += fmt.Sprintf("  - Signatures            :\n")
 	for _, sig := range res.Signatures {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -52,21 +51,26 @@ func checkf(err error, format string, otherArgs ...interface{}) {
 }
 
 func readTypes(files []string) typegen.DataTypes {
-	buf := new(bytes.Buffer)
+	allTypes := map[string]*typegen.DataType{}
 	for _, file := range files {
-		data, err := ioutil.ReadFile(file)
-		check(err)
-		buf.Write(data)
-		buf.WriteRune('\n')
+		f, err := os.Open(file)
+		checkf(err, "opening %q", file)
+		defer f.Close()
+
+		var types map[string]*typegen.DataType
+		dec := yaml.NewDecoder(f)
+		dec.KnownFields(true)
+		checkf(dec.Decode(&types), "decoding %q", file)
+
+		for name, typ := range types {
+			if allTypes[name] != nil {
+				fatalf("duplicate entries for %q", name)
+			}
+			allTypes[name] = typ
+		}
 	}
 
-	var types map[string]*typegen.DataType
-
-	dec := yaml.NewDecoder(buf)
-	dec.KnownFields(true)
-	check(dec.Decode(&types))
-
-	return typegen.DataTypesFrom(types)
+	return typegen.DataTypesFrom(allTypes)
 }
 
 func getPackagePath() string {

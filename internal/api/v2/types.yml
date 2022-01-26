@@ -34,8 +34,9 @@ TransactionQueryResponse:
       type: KeyPage
       pointer: true
       marshal-as: reference
-    - name: Txid
+    - name: TransactionHash
       type: bytes
+      alternative: Txid
     - name: Signatures
       type: slice
       slice:
@@ -254,6 +255,9 @@ TxRequest:
   - name: KeyPage
     type: KeyPage
     marshal-as: reference
+  - name: TxHash
+    type: bytes
+    optional: true
   - name: Payload
     type: any
 
@@ -261,10 +265,14 @@ TxResponse:
   non-binary: true
   incomparable: true
   fields:
-  - name: Txid
+  - name: TransactionHash
     type: bytes
-  - name: Hash
-    type: chain
+    alternative: Txid
+  - name: EnvelopeHash
+    type: bytes
+  - name: SimpleHash
+    type: bytes
+    alternative: Hash
   - name: Code
     type: uvarint
   - name: Message
@@ -308,3 +316,32 @@ DataEntryQueryResponse:
     - name: Entry
       type: DataEntry
       marshal-as: reference
+
+VersionResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
+    - name: VersionIsKnown
+      type: bool
+
+DescriptionResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Subnet
+      type: SubnetDescription
+      marshal-as: reference
+
+SubnetDescription:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Name
+      type: string
+    - name: Type
+      type: config.NetworkType
+      marshal-as: value

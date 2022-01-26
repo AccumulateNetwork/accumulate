@@ -1,6 +1,7 @@
 package database
 
 import (
+	"crypto/sha256"
 	"errors"
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
@@ -72,10 +73,8 @@ func (t *Transaction) Put(state *state.Transaction, status *protocol.Transaction
 		return err
 	}
 
-	if len(sigs) > 0 {
-		return t.AddSignatures(sigs...)
-	}
-	return nil
+	_, err = t.AddSignatures(sigs...)
+	return err
 }
 
 // GetState loads the transaction state.
@@ -139,7 +138,6 @@ func (t *Transaction) PutStatus(status *protocol.TransactionStatus) error {
 // GetSignatures loads the transaction's signatures.
 func (t *Transaction) GetSignatures() ([]*transactions.ED25519Sig, error) {
 	data, err := t.batch.store.Get(t.key.Signatures())
-	// if errors.Is
 	if err != nil {
 		return nil, err
 	}
@@ -154,21 +152,40 @@ func (t *Transaction) GetSignatures() ([]*transactions.ED25519Sig, error) {
 }
 
 // AddSignatures adds signatures the transaction's list of signatures.
-func (t *Transaction) AddSignatures(signatures ...*transactions.ED25519Sig) error {
-	current, err := t.GetSignatures()
+func (t *Transaction) AddSignatures(newSignatures ...*transactions.ED25519Sig) (count int, err error) {
+	signatures, err := t.GetSignatures()
 	if err != nil && !errors.Is(err, storage.ErrNotFound) {
-		return err
+		return 0, err
+	}
+
+	if len(newSignatures) == 0 {
+		return len(signatures), nil
+	}
+
+	// Only keep one signature per public key
+	seen := map[[32]byte]bool{}
+	for _, sig := range signatures {
+		hash := sha256.Sum256(sig.PublicKey)
+		seen[hash] = true
+	}
+	for _, sig := range newSignatures {
+		hash := sha256.Sum256(sig.PublicKey)
+		if seen[hash] {
+			continue
+		}
+		seen[hash] = true
+		signatures = append(signatures, sig)
 	}
 
 	v := new(txSignatures)
-	v.Signatures = append(current, signatures...)
+	v.Signatures = signatures
 	data, err := v.MarshalBinary()
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	t.batch.store.Put(t.key.Signatures(), data)
-	return nil
+	return len(signatures), nil
 }
 
 // GetSyntheticTxns returns IDs of synthetic transactions produced by the

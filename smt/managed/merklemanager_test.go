@@ -30,7 +30,7 @@ func TestMerkleManager_GetChainState(t *testing.T) {
 
 	var States []*MerkleState
 	for i := 0; i < numTests; i++ {
-		m.AddHash(randHash.Next())
+		m.AddHash(randHash.Next(), false)
 		mState, err := m.MS.Marshal()
 		require.NoError(t, err, "must be able to marshal a MerkleState")
 		ms := new(MerkleState)
@@ -53,7 +53,7 @@ func TestMerkleManager_GetAnyState(t *testing.T) {
 	require.NoError(t, e2, "should be able to open a database")
 	var States []*MerkleState
 	for i := 0; i < testnum; i++ {
-		m.AddHash(randHash.Next())
+		m.AddHash(randHash.Next(), false)
 		States = append(States, m.MS.Copy())
 	}
 	for i := int64(0); i < testnum; i++ {
@@ -94,7 +94,7 @@ func TestIndexing2(t *testing.T) {
 	for i := 0; i < testlen; i++ {
 		data := []byte(fmt.Sprintf("data %d", i))
 		dataHash := sha256.Sum256(data)
-		MM1.AddHash(dataHash[:])
+		MM1.AddHash(dataHash[:], false)
 		dataI, e := MM1.Manager.Get(storage.MakeKey(Chain, "ElementIndex", dataHash))
 		if e != nil {
 			t.Fatalf("error")
@@ -136,7 +136,7 @@ func TestMerkleManager(t *testing.T) {
 	// Fill the Merkle Tree with a few hashes
 	hash := sha256.Sum256([]byte("start"))
 	for i := 0; i < testLen; i++ {
-		MM1.AddHash(hash[:])
+		MM1.AddHash(hash[:], false)
 		hash = sha256.Sum256(hash[:])
 	}
 
@@ -245,7 +245,7 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 	var r common.RandHash
 
 	for col := int64(0); col < 20; col++ {
-		m.AddHash(r.NextList())
+		m.AddHash(r.NextList(), false)
 		m.MS.PadPending()
 		if col&1 == 1 {
 			s, _ := m.GetAnyState(col - 1)
@@ -264,4 +264,31 @@ func TestMerkleManager_GetIntermediate(t *testing.T) {
 		}
 	}
 
+}
+
+func TestMerkleManager_AddHash_Unique(t *testing.T) {
+	var r common.RandHash
+	hash := r.NextList()
+
+	t.Run("true", func(t *testing.T) {
+		store := memory.NewDB()
+		storeTx := store.Begin()
+		m, _ := NewMerkleManager(storeTx, 4)
+		m.MS.InitSha256()
+
+		m.AddHash(hash, true)
+		m.AddHash(hash, true)
+		require.Equal(t, int64(1), m.MS.Count)
+	})
+
+	t.Run("false", func(t *testing.T) {
+		store := memory.NewDB()
+		storeTx := store.Begin()
+		m, _ := NewMerkleManager(storeTx, 4)
+		m.MS.InitSha256()
+
+		m.AddHash(hash, false)
+		m.AddHash(hash, false)
+		require.Equal(t, int64(2), m.MS.Count)
+	})
 }

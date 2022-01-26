@@ -275,6 +275,15 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				}
 			}
 		}
+	case "pending":
+		pending, err := indexing.PendingTransactions(batch, u).Get()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to retrieve pending transaction list for %q: %v", u, err)
+		}
+
+		res := new(query.ResponsePending)
+		res.Transactions = pending
+		return []byte("pending"), res, nil
 	}
 
 	return nil, nil, fmt.Errorf("invalid fragment")

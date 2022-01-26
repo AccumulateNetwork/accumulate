@@ -31,7 +31,7 @@ func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 
 	writeThis := new(protocol.SyntheticWriteData)
 	writeThis.Entry = body.Entry
-	copy(writeThis.Cause[:], tx.Transaction.Hash())
+	copy(writeThis.Cause[:], tx.GetTxHash())
 
 	st.Submit(recipient, writeThis)
 

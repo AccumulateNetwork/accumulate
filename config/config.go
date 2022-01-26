@@ -30,6 +30,7 @@ const (
 	Validator NodeType = "validator"
 	Follower  NodeType = "follower"
 )
+
 const DefaultLogLevels = "error;accumulate=info" // main=info;state=info;statesync=info;accumulate=debug;executor=info;disk-monitor=info;init=info
 
 func Default(net NetworkType, node NodeType, netId string) *Config {
@@ -76,7 +77,6 @@ type Network struct {
 type API struct {
 	TxMaxWaitTime      time.Duration `toml:"tx-max-wait-time" mapstructure:"tx-max-wait-time"`
 	PrometheusServer   string        `toml:"prometheus-server" mapstructure:"prometheus-server"`
-	EnableSubscribeTX  bool          `toml:"enable-subscribe-tx" mapstructure:"enable-subscribe-tx"`
 	ListenAddress      string        `toml:"listen-address" mapstructure:"listen-address"`
 	DebugJSONRPC       bool          `toml:"debug-jsonrpc" mapstructure:"debug-jsonrpc"`
 	EnableDebugMethods bool          `toml:"enable-debug-methods" mapstructure:"enable-debug-methods"`

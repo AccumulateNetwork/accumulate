@@ -98,3 +98,8 @@ TxReceipt:
     - name: Receipt
       type: protocol.Receipt
       marshal-as: reference
+
+ResponsePending:
+  fields:
+    - name: Transactions
+      type: chainSet

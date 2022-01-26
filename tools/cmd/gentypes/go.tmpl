@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -254,8 +255,7 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	{{- range .Fields}}
 	{{- if .IsMarshalled}}
 	{{- if .AlternativeName}}
-	var zero{{.Name}} {{resolveType . false}}
-	if u.{{.Name}} != zero{{.Name}} {
+	if u.{{.Name}} != {{jsonZeroValue .}} {
 		{{valueFromJson . (print "v." .Name) (print "u." .Name) .Name}}
 	} else {
 		{{valueFromJson . (print "v." .Name) (print "u." .AlternativeName) .Name}}
