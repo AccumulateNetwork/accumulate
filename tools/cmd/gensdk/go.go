@@ -11,7 +11,7 @@ import (
 var goSrc string
 
 var Go = mustParseTemplate("go.tmpl", goSrc, template.FuncMap{
-	"ioParam": GoIOParam,
+	"ioParam":   GoIOParam,
 	"outputVar": GoOutputVar,
 	"outputRet": GoOutputReturn,
 })
