@@ -36,7 +36,7 @@ func (IssueTokens) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	issuer.Supply.Sub(&issuer.Supply, &body.Amount)
 
 	deposit := new(protocol.SyntheticDepositTokens)
-	copy(deposit.Cause[:], tx.Transaction.Hash())
+	copy(deposit.Cause[:], tx.GetTxHash())
 	deposit.Token = issuer.Header().GetChainUrl()
 	deposit.Amount = body.Amount
 	st.Submit(accountUrl, deposit)
