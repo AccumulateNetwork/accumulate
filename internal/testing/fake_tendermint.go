@@ -206,7 +206,7 @@ func (c *FakeTendermint) didSubmit(tx []byte, txh [32]byte) *txStatus {
 	txids := make([][32]byte, len(envelopes))
 	c.logTxns("Submitting", envelopes...)
 	for i, env := range envelopes {
-		copy(txids[i][:], env.Transaction.Hash())
+		copy(txids[i][:], env.GetTxHash())
 	}
 
 	c.txMu.Lock()

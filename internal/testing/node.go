@@ -21,7 +21,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const logConsole = false
+const LogConsole = false
 
 const DefaultLogLevels = "error;accumulate=info"
 
@@ -86,7 +86,7 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]st
 
 	var initLogger log.Logger
 	var logWriter func(format string) (io.Writer, error)
-	if logConsole {
+	if LogConsole {
 		logWriter = logging.NewConsoleWriter
 		w, err := logging.NewConsoleWriter("plain")
 		require.NoError(t, err)

@@ -41,3 +41,8 @@ BlockStateSynthTxnEntry:
     type: bytes
   - name: ChainEntry
     type: uvarint
+
+PendingTransactionsIndex:
+  fields:
+  - name: Transactions
+    type: chainSet

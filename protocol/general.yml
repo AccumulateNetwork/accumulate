@@ -58,6 +58,8 @@ TransactionStatus:
       type: bool
     - name: Delivered
       type: bool
+    - name: Pending
+      type: bool
     - name: Code
       type: uvarint
     - name: Message
