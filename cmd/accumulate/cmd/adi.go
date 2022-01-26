@@ -186,7 +186,7 @@ func NewADIFromADISigner(origin *url2.URL, args []string) (string, error) {
 	idc.KeyBookName = book
 	idc.KeyPageName = page
 
-	res, err := dispatchTxRequest("create-adi", &idc, origin, si, privKey)
+	res, err := dispatchTxRequest("create-adi", &idc, nil, origin, si, privKey)
 	if err != nil {
 		return "", err
 	}

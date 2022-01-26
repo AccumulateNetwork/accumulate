@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/internal/database"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -79,11 +80,12 @@ func (n *FakeNode) testLiteTx(count int) (string, map[string]int64) {
 
 			exch := new(protocol.SendTokens)
 			exch.AddRecipient(n.ParseUrl(recipient.Addr), big.NewInt(int64(1000)))
-			tx, err := transactions.New(origin.Addr, 1, func(hash []byte) (*transactions.ED25519Sig, error) {
+			tx, err := transactions.New(origin.Addr, origin.Nonce, func(hash []byte) (*transactions.ED25519Sig, error) {
 				return origin.Sign(hash), nil
 			}, exch)
 			require.NoError(n.t, err)
 			send(tx)
+			origin.Nonce++
 		}
 	})
 
@@ -636,7 +638,7 @@ func TestAddKeyPage(t *testing.T) {
 			PublicKey: testKey2.PubKey().Bytes(),
 		})
 
-		tx, err := transactions.New("foo/book1", 2, edSigner(testKey1, 1), cms)
+		tx, err := transactions.New("foo/book1", 1, edSigner(testKey1, 1), cms)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -669,7 +671,7 @@ func TestAddKey(t *testing.T) {
 		body.Operation = protocol.KeyPageOperationAdd
 		body.NewKey = newKey.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/page1", 2, edSigner(testKey, 1), body)
+		tx, err := transactions.New("foo/page1", 1, edSigner(testKey, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -700,7 +702,7 @@ func TestUpdateKey(t *testing.T) {
 		body.Key = testKey.PubKey().Bytes()
 		body.NewKey = newKey.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/page1", 2, edSigner(testKey, 1), body)
+		tx, err := transactions.New("foo/page1", 1, edSigner(testKey, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -729,7 +731,7 @@ func TestRemoveKey(t *testing.T) {
 		body.Operation = protocol.KeyPageOperationRemove
 		body.Key = testKey1.PubKey().Bytes()
 
-		tx, err := transactions.New("foo/page1", 2, edSigner(testKey2, 1), body)
+		tx, err := transactions.New("foo/page1", 1, edSigner(testKey2, 1), body)
 		require.NoError(t, err)
 		send(tx)
 	})
@@ -765,8 +767,6 @@ func TestSignatorHeight(t *testing.T) {
 		return uint64(chain.Height())
 	}
 
-	liteHeight := getHeight(liteUrl)
-
 	n.Batch(func(send func(*transactions.Envelope)) {
 		adi := new(protocol.CreateIdentity)
 		adi.Url = "foo"
@@ -778,8 +778,6 @@ func TestSignatorHeight(t *testing.T) {
 		require.NoError(t, err)
 		send(tx)
 	})
-
-	require.Equal(t, liteHeight, getHeight(liteUrl), "Lite account height changed")
 
 	batch = n.db.Begin()
 	require.NoError(t, acctesting.AddCredits(batch, n.ParseUrl("foo/page0"), 1e9))
@@ -881,4 +879,41 @@ func TestInvalidDeposit(t *testing.T) {
 
 	tx := n.GetTx(id[:])
 	require.NotZero(t, tx.Status.Code)
+}
+
+func DumpAccount(t *testing.T, batch *database.Batch, accountUrl *url.URL) {
+	account := batch.Account(accountUrl)
+	state, err := account.GetState()
+	require.NoError(t, err)
+	fmt.Println("Dump", accountUrl, state.Header().Type)
+	meta, err := account.GetObject()
+	require.NoError(t, err)
+	seen := map[[32]byte]bool{}
+	for _, cmeta := range meta.Chains {
+		chain, err := account.ReadChain(cmeta.Name)
+		require.NoError(t, err)
+		fmt.Printf("  Chain: %s (%v)\n", cmeta.Name, cmeta.Type)
+		height := chain.Height()
+		entries, err := chain.Entries(0, height)
+		require.NoError(t, err)
+		for idx, id := range entries {
+			fmt.Printf("    Entry %d: %X\n", idx, id)
+			if cmeta.Type != protocol.ChainTypeTransaction {
+				continue
+			}
+			var id32 [32]byte
+			require.Equal(t, 32, copy(id32[:], id))
+			if seen[id32] {
+				continue
+			}
+			txState, txStatus, txSigs, err := batch.Transaction(id32[:]).Get()
+			require.NoError(t, err)
+			if seen[*txState.TransactionHash()] {
+				fmt.Printf("      TX: hash=%X\n", *txState.TransactionHash())
+				continue
+			}
+			fmt.Printf("      TX: type=%v origin=%v status=%#v sigs=%d\n", txState.TxType(), txState.ChainUrl, txStatus, len(txSigs))
+			seen[id32] = true
+		}
+	}
 }

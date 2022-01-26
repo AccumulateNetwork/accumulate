@@ -316,7 +316,7 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Send it
 		typ := env.Transaction.Type()
 		if typ != types.TxTypeSyntheticAnchor {
-			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.Transaction.Hash()), "type", typ)
+			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
 		g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
 		body.Transactions = append(body.Transactions, id)
@@ -454,7 +454,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	ed := new(transactions.ED25519Sig)
 	env.Signatures = append(env.Signatures, ed)
 	ed.PublicKey = g.Key[32:]
-	err = ed.Sign(env.Transaction.Nonce, g.Key, env.Transaction.Hash())
+	err = ed.Sign(env.Transaction.Nonce, g.Key, env.GetTxHash())
 	if err != nil {
 		g.logger.Error("Failed to sign internal transaction", "error", err)
 		return
@@ -468,6 +468,6 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	}
 
 	// Send it
-	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.Transaction.Hash()), "type", body.GetType())
+	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()), "type", body.GetType())
 	g.dispatcher.BroadcastTxAsyncLocal(context.TODO(), data)
 }

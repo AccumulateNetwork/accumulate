@@ -120,7 +120,7 @@ func CreateKeyBook(book string, args []string) (string, error) {
 		keyBook.Pages = append(keyBook.Pages, u2.String())
 	}
 
-	res, err := dispatchTxRequest("create-key-book", &keyBook, bookUrl, si, privKey)
+	res, err := dispatchTxRequest("create-key-book", &keyBook, nil, bookUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}
