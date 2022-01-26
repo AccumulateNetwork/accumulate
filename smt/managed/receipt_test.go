@@ -36,7 +36,7 @@ func TestReceipt(t *testing.T) {
 	// populate the database
 	for i := 0; i < testMerkleTreeSize; i++ {
 		v := GetHash(i)
-		manager.AddHash(v)
+		manager.AddHash(v, false)
 		fmt.Printf("e%-6d %x %v\n", i, v, v[:3])
 	}
 	e0 := GetHash(0)
@@ -88,7 +88,7 @@ func TestReceiptAll(t *testing.T) {
 	var rh common.RandHash                     // A source of random hashes
 	var mdRoots [][]byte                       // Collect all the MDRoots for each hash added
 	for i := 0; i < testMerkleTreeSize; i++ {  // Then for all the hashes for our test
-		manager.AddHash(rh.NextList())                    // Add a hash
+		manager.AddHash(rh.NextList(), false)             // Add a hash
 		mdRoots = append(mdRoots, manager.MS.GetMDRoot()) // Collect a MDRoot
 	}
 
@@ -134,7 +134,7 @@ func PopulateDatabase(manager *MerkleManager, treeSize int64) {
 	startCount := manager.MS.Count
 	for i := startCount; i < treeSize; i++ {
 		v := GetHash(int(i))
-		manager.AddHash(v)
+		manager.AddHash(v, false)
 	}
 }
 
@@ -210,9 +210,9 @@ func TestBadgerReceipts(t *testing.T) {
 	manager, err := NewMerkleManager(badger.Begin(), 2)
 	require.NoError(t, err)
 
-	PopulateDatabase(manager, 1400)
+	PopulateDatabase(manager, 700)
 
-	GenerateReceipts(manager, 1500000, t)
+	GenerateReceipts(manager, 150000, t)
 
 }
 
@@ -233,10 +233,10 @@ func TestReceipt_Combine(t *testing.T) {
 	require.NoError(t, err, "should be able to set a key")
 
 	for i := int64(0); i < testCnt; i++ {
-		m1.AddHash(rh.NextList())
+		m1.AddHash(rh.NextList(), false)
 		root1 := m1.MS.GetMDRoot()
 		m1Roots = append(m1Roots, root1)
-		m2.AddHash(root1)
+		m2.AddHash(root1, false)
 		root2 := m2.MS.GetMDRoot()
 		m2Roots = append(m2Roots, root2)
 	}

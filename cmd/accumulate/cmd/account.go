@@ -224,7 +224,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.TokenUrl = tok.String()
 	tac.KeyBookUrl = keybook
 
-	res, err := dispatchTxRequest("create-token-account", &tac, u, si, privKey)
+	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, si, privKey)
 	if err != nil {
 		return "", err
 	}
