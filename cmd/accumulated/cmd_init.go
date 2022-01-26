@@ -194,7 +194,6 @@ func initNode(cmd *cobra.Command, args []string) {
 			fatalf("invalid port number %q", u.Port())
 		}
 		nodePort = int(p)
-		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
 	}
 
 	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccRouterJsonPortOffset))
@@ -238,8 +237,9 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.Name)
+	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.ID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
+	config.Accumulate.Network = description.Subnet
 
 	if flagInit.Reset {
 		nodeReset()
@@ -250,8 +250,8 @@ func initNode(cmd *cobra.Command, args []string) {
 		Port:       nodePort,
 		GenesisDoc: genDoc,
 		Config:     []*cfg.Config{config},
-		RemoteIP:   []string{""},
-		ListenIP:   []string{u.String()},
+		RemoteIP:   []string{u.Hostname()},
+		ListenIP:   []string{u.Hostname()},
 		Logger:     newLogger(),
 	}))
 }

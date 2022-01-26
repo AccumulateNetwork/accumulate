@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"strings"
 	"text/template"
 )
@@ -10,17 +11,38 @@ import (
 var goSrc string
 
 var Go = mustParseTemplate("go.tmpl", goSrc, template.FuncMap{
-	"resolveType": GoResolveType,
+	"ioParam": GoIOParam,
+	"outputVar": GoOutputVar,
+	"outputRet": GoOutputReturn,
 })
 
-func GoResolveType(typ string) string {
-	if strings.Contains(typ, "|") {
+func GoIOParam(typ string) string {
+	switch {
+	case strings.Contains(typ, "|"):
 		return "interface{}"
-	}
-
-	if strings.Contains(typ, ".") {
+	case strings.Contains(typ, "."):
 		return "*" + typ
+	default:
+		return "*api." + typ
 	}
+}
 
-	return "*api." + typ
+func GoOutputVar(typ string) string {
+	switch {
+	case strings.Contains(typ, "|"):
+		return "interface{}"
+	case strings.Contains(typ, "."):
+		return fmt.Sprintf("%s", typ)
+	default:
+		return fmt.Sprintf("api.%s", typ)
+	}
+}
+
+func GoOutputReturn(typ string) string {
+	switch {
+	case strings.Contains(typ, "|"):
+		return "resp"
+	default:
+		return "&resp"
+	}
 }
