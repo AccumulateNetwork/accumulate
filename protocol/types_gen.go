@@ -347,9 +347,9 @@ type WriteData struct {
 }
 
 type WriteDataResult struct {
-	EntryHash         [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
-	LiteDataAccount   string   `json:"liteDataAccount,omitempty" form:"liteDataAccount" query:"liteDataAccount" validate:"required"`
-	LiteDataAccountId []byte   `json:"liteDataAccountId,omitempty" form:"liteDataAccountId" query:"liteDataAccountId" validate:"required"`
+	EntryHash  [32]byte `json:"entryHash,omitempty" form:"entryHash" query:"entryHash" validate:"required"`
+	AccountUrl *url.URL `json:"accountUrl,omitempty" form:"accountUrl" query:"accountUrl" validate:"required"`
+	AccountID  []byte   `json:"accountID,omitempty" form:"accountID" query:"accountID" validate:"required"`
 }
 
 type WriteDataTo struct {
@@ -1450,11 +1450,11 @@ func (v *WriteDataResult) Equal(u *WriteDataResult) bool {
 		return false
 	}
 
-	if !(v.LiteDataAccount == u.LiteDataAccount) {
+	if !(v.AccountUrl.Equal(u.AccountUrl)) {
 		return false
 	}
 
-	if !(bytes.Equal(v.LiteDataAccountId, u.LiteDataAccountId)) {
+	if !(bytes.Equal(v.AccountID, u.AccountID)) {
 		return false
 	}
 
@@ -2294,9 +2294,9 @@ func (v *WriteDataResult) BinarySize() int {
 
 	n += encoding.ChainBinarySize(&v.EntryHash)
 
-	n += encoding.StringBinarySize(v.LiteDataAccount)
+	n += v.AccountUrl.BinarySize()
 
-	n += encoding.BytesBinarySize(v.LiteDataAccountId)
+	n += encoding.BytesBinarySize(v.AccountID)
 
 	return n
 }
@@ -3270,9 +3270,13 @@ func (v *WriteDataResult) MarshalBinary() ([]byte, error) {
 
 	buffer.Write(encoding.ChainMarshalBinary(&v.EntryHash))
 
-	buffer.Write(encoding.StringMarshalBinary(v.LiteDataAccount))
+	if b, err := v.AccountUrl.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding AccountUrl: %w", err)
+	} else {
+		buffer.Write(b)
+	}
 
-	buffer.Write(encoding.BytesMarshalBinary(v.LiteDataAccountId))
+	buffer.Write(encoding.BytesMarshalBinary(v.AccountID))
 
 	return buffer.Bytes(), nil
 }
@@ -4982,19 +4986,18 @@ func (v *WriteDataResult) UnmarshalBinary(data []byte) error {
 	}
 	data = data[encoding.ChainBinarySize(&v.EntryHash):]
 
-	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding LiteDataAccount: %w", err)
-	} else {
-		v.LiteDataAccount = x
+	v.AccountUrl = new(url.URL)
+	if err := v.AccountUrl.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding AccountUrl: %w", err)
 	}
-	data = data[encoding.StringBinarySize(v.LiteDataAccount):]
+	data = data[v.AccountUrl.BinarySize():]
 
 	if x, err := encoding.BytesUnmarshalBinary(data); err != nil {
-		return fmt.Errorf("error decoding LiteDataAccountId: %w", err)
+		return fmt.Errorf("error decoding AccountID: %w", err)
 	} else {
-		v.LiteDataAccountId = x
+		v.AccountID = x
 	}
-	data = data[encoding.BytesBinarySize(v.LiteDataAccountId):]
+	data = data[encoding.BytesBinarySize(v.AccountID):]
 
 	return nil
 }
@@ -5472,15 +5475,15 @@ func (v *UpdateKeyPage) MarshalJSON() ([]byte, error) {
 
 func (v *WriteDataResult) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Type              types.TransactionType `json:"type"`
-		EntryHash         string                `json:"entryHash,omitempty"`
-		LiteDataAccount   string                `json:"liteDataAccount,omitempty"`
-		LiteDataAccountId *string               `json:"liteDataAccountId,omitempty"`
+		Type       types.TransactionType `json:"type"`
+		EntryHash  string                `json:"entryHash,omitempty"`
+		AccountUrl *url.URL              `json:"accountUrl,omitempty"`
+		AccountID  *string               `json:"accountID,omitempty"`
 	}{}
 	u.Type = v.GetType()
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	u.LiteDataAccount = v.LiteDataAccount
-	u.LiteDataAccountId = encoding.BytesToJSON(v.LiteDataAccountId)
+	u.AccountUrl = v.AccountUrl
+	u.AccountID = encoding.BytesToJSON(v.AccountID)
 	return json.Marshal(&u)
 }
 
@@ -6332,15 +6335,15 @@ func (v *UpdateKeyPage) UnmarshalJSON(data []byte) error {
 
 func (v *WriteDataResult) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Type              types.TransactionType `json:"type"`
-		EntryHash         string                `json:"entryHash,omitempty"`
-		LiteDataAccount   string                `json:"liteDataAccount,omitempty"`
-		LiteDataAccountId *string               `json:"liteDataAccountId,omitempty"`
+		Type       types.TransactionType `json:"type"`
+		EntryHash  string                `json:"entryHash,omitempty"`
+		AccountUrl *url.URL              `json:"accountUrl,omitempty"`
+		AccountID  *string               `json:"accountID,omitempty"`
 	}{}
 	u.Type = v.GetType()
 	u.EntryHash = encoding.ChainToJSON(v.EntryHash)
-	u.LiteDataAccount = v.LiteDataAccount
-	u.LiteDataAccountId = encoding.BytesToJSON(v.LiteDataAccountId)
+	u.AccountUrl = v.AccountUrl
+	u.AccountID = encoding.BytesToJSON(v.AccountID)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -6349,11 +6352,11 @@ func (v *WriteDataResult) UnmarshalJSON(data []byte) error {
 	} else {
 		v.EntryHash = x
 	}
-	v.LiteDataAccount = u.LiteDataAccount
-	if x, err := encoding.BytesFromJSON(u.LiteDataAccountId); err != nil {
-		return fmt.Errorf("error decoding LiteDataAccountId: %w", err)
+	v.AccountUrl = u.AccountUrl
+	if x, err := encoding.BytesFromJSON(u.AccountID); err != nil {
+		return fmt.Errorf("error decoding AccountID: %w", err)
 	} else {
-		v.LiteDataAccountId = x
+		v.AccountID = x
 	}
 	return nil
 }
