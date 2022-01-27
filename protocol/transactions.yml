@@ -288,9 +288,11 @@ WriteDataResult:
   fields:
     - name: EntryHash
       type: chain
-    - name: LiteDataAccount
-      type: string
-    - name: LiteDataAccountId
+    - name: AccountUrl
+      type: url.URL
+      marshal-as: reference
+      pointer: true
+    - name: AccountID
       type: bytes
 
 ##### Data Types #####
