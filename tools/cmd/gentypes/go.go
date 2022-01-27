@@ -35,8 +35,21 @@ var Go = mustParseTemplate("go.tmpl", goSrc, template.FuncMap{
 		if typ.IsTxResult {
 			return true
 		}
+
+		// Add a custom un/marshaller if the type embeds another type - fields
+		// of embedded types are un-embedded during JSON un/marshalling
+		if len(typ.Embeddings) > 0 {
+			return true
+		}
+
 		for _, f := range typ.Fields {
+			// Add a custom un/marshaller if the field needs special handling
 			if GoJsonType(f) != "" {
+				return true
+			}
+
+			// Add a custom un/marshaller if the field has an alternate name
+			if f.AlternativeName != "" {
 				return true
 			}
 		}
