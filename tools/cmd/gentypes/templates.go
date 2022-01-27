@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"fmt"
 	"strings"
 	"text/template"
 
@@ -25,7 +26,7 @@ type Type struct {
 	MakeConstructor bool
 	ChainType       string
 	TransactionType string
-	Embeddings      []string
+	Embeddings      []*Type
 	Fields          []*Field
 }
 
@@ -44,15 +45,17 @@ type Field struct {
 	Slice           *Field
 }
 
-func convert(types typegen.DataTypes, pkgName, pkgPath string) *Types {
+func convert(types typegen.DataTypes, pkgName, pkgPath string) (*Types, error) {
 	ttypes := new(Types)
 	ttypes.Package = pkgName
 	PackagePath = pkgPath
 	ttypes.Types = make([]*Type, len(types))
+	lup := map[string]*Type{}
 
 	for i, typ := range types {
 		ttyp := new(Type)
 		ttypes.Types[i] = ttyp
+		lup[typ.Name] = ttyp
 		ttyp.Name = typ.Name
 		ttyp.IsChain = typ.Kind == "chain"
 		ttyp.IsTransaction = typ.Kind == "tx"
@@ -61,7 +64,6 @@ func convert(types typegen.DataTypes, pkgName, pkgPath string) *Types {
 		ttyp.IsComparable = !typ.Incomparable
 		ttyp.ChainType = typ.ChainType
 		ttyp.TransactionType = typ.TxType
-		ttyp.Embeddings = typ.Embeddings
 		ttyp.Fields = make([]*Field, len(typ.Fields))
 		ttyp.MakeConstructor = !typ.OmitNewFunc
 		for i, field := range typ.Fields {
@@ -69,7 +71,19 @@ func convert(types typegen.DataTypes, pkgName, pkgPath string) *Types {
 		}
 	}
 
-	return ttypes
+	for i, typ := range types {
+		ttyp := ttypes.Types[i]
+		ttyp.Embeddings = make([]*Type, len(typ.Embeddings))
+		for i, name := range typ.Embeddings {
+			etyp, ok := lup[name]
+			if !ok {
+				return nil, fmt.Errorf("unknown embedded type %s", name)
+			}
+			ttyp.Embeddings[i] = etyp
+		}
+	}
+
+	return ttypes, nil
 }
 
 func convertField(field *typegen.Field) *Field {
@@ -99,7 +113,16 @@ func lcName(s string) string {
 }
 
 func mustParseTemplate(name, src string, funcs template.FuncMap) *template.Template {
-	tmpl := template.New(name)
+	tmpl := template.New(name).Funcs(template.FuncMap{
+		"map": func(v ...interface{}) map[string]interface{} {
+			m := make(map[string]interface{}, len(v)/2)
+			for len(v) > 1 {
+				m[fmt.Sprint(v[0])] = v[1]
+				v = v[2:]
+			}
+			return m
+		},
+	})
 	if funcs != nil {
 		tmpl = tmpl.Funcs(funcs)
 	}
