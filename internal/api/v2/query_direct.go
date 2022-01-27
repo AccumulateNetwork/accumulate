@@ -200,7 +200,7 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 		}
 
 		qr := new(ChainQueryResponse)
-		qr.Type = "pending"
+		qr.Type = "pending-transaction"
 		qr.Data = res
 		return qr, nil
 

@@ -144,7 +144,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			for _, txid := range txIds {
 				resp.Items = append(resp.Items, hex.EncodeToString(txid[:]))
 			}
-			return []byte("pending-transactions"), resp, nil
+			return []byte("pending-transaction"), resp, nil
 		case 2:
 			chain, err := batch.Account(u).ReadChain(protocol.PendingChain)
 			if err != nil {
