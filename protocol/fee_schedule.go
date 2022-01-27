@@ -72,6 +72,14 @@ const (
 )
 
 func ComputeFee(tx *transactions.Envelope) (Fee, error) {
+	// Do not charge fees for the DN or BVNs
+	if IsDnUrl(tx.Transaction.Origin) {
+		return 0, nil
+	}
+	if _, ok := ParseBvnUrl(tx.Transaction.Origin); ok {
+		return 0, nil
+	}
+
 	txType := tx.Transaction.Type()
 	if txType == types.TxTypeUnknown {
 		return 0, fmt.Errorf("cannot compute fee with no data defined for transaction")

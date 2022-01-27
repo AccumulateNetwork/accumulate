@@ -20,6 +20,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/davecgh/go-spew/spew"
 	dc "github.com/docker/cli/cli/compose/types"
 	"github.com/fatih/color"
 	"github.com/rs/zerolog"
@@ -77,6 +78,7 @@ var flagInitDevnet struct {
 	DockerTag     string
 	UseVolumes    bool
 	Compose       bool
+	DnsSuffix     string
 }
 
 func init() {
@@ -104,6 +106,7 @@ func init() {
 	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DockerTag, "tag", "latest", "Tag to use on the docker images")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.UseVolumes, "use-volumes", false, "Use Docker volumes instead of a local directory")
 	cmdInitDevnet.Flags().BoolVar(&flagInitDevnet.Compose, "compose", false, "Only write the Docker Compose file, do not write the configuration files")
+	cmdInitDevnet.Flags().StringVar(&flagInitDevnet.DnsSuffix, "dns-suffix", "", "DNS suffix to add to hostnames used when initializing dockerized nodes")
 }
 
 func initNamedNetwork(*cobra.Command, []string) {
@@ -194,7 +197,6 @@ func initNode(cmd *cobra.Command, args []string) {
 			fatalf("invalid port number %q", u.Port())
 		}
 		nodePort = int(p)
-		u.Host = u.Host[:len(u.Host)-len(u.Port())-1]
 	}
 
 	accClient, err := client.New(fmt.Sprintf("http://%s:%d", netAddr, netPort+networks.AccRouterJsonPortOffset))
@@ -238,8 +240,9 @@ func initNode(cmd *cobra.Command, args []string) {
 	if flagInitNode.Follower {
 		nodeType = cfg.Follower
 	}
-	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.Name)
+	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.ID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
+	config.Accumulate.Network = description.Subnet
 
 	if flagInit.Reset {
 		nodeReset()
@@ -250,8 +253,8 @@ func initNode(cmd *cobra.Command, args []string) {
 		Port:       nodePort,
 		GenesisDoc: genDoc,
 		Config:     []*cfg.Config{config},
-		RemoteIP:   []string{""},
-		ListenIP:   []string{u.String()},
+		RemoteIP:   []string{u.Hostname()},
+		ListenIP:   []string{u.Hostname()},
 		Logger:     newLogger(),
 	}))
 }
@@ -331,7 +334,6 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 			nodeType = cfg.Follower
 		}
 		dnConfig[i], dnRemote[i], dnListen[i] = initDevNetNode(cfg.Directory, nodeType, 0, i, compose)
-		addresses[protocol.Directory] = append(addresses[protocol.Directory], fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort))
 	}
 
 	bvnConfig := make([][]*cfg.Config, flagInitDevnet.NumBvns)
@@ -349,6 +351,27 @@ func initDevNet(cmd *cobra.Command, _ []string) {
 				nodeType = cfg.Follower
 			}
 			bvnConfig[bvn][i], bvnRemote[bvn][i], bvnListen[bvn][i] = initDevNetNode(cfg.BlockValidator, nodeType, bvn, i, compose)
+		}
+	}
+
+	if flagInitDevnet.Docker && flagInitDevnet.DnsSuffix != "" {
+		for i := range dnRemote {
+			dnRemote[i] += flagInitDevnet.DnsSuffix
+		}
+		for _, remotes := range bvnRemote {
+			for i := range remotes {
+				remotes[i] += flagInitDevnet.DnsSuffix
+			}
+		}
+	}
+
+	spew.Dump(dnRemote, bvnRemote)
+
+	for i := 0; i < count; i++ {
+		addresses[protocol.Directory] = append(addresses[protocol.Directory], fmt.Sprintf("http://%s:%d", dnRemote[i], flagInitDevnet.BasePort))
+	}
+	for bvn := range bvnConfig {
+		for i := 0; i < count; i++ {
 			addresses[bvns[bvn]] = append(addresses[bvns[bvn]], fmt.Sprintf("http://%s:%d", bvnRemote[bvn][i], flagInitDevnet.BasePort))
 		}
 	}

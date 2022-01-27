@@ -288,6 +288,10 @@ WriteDataResult:
   fields:
     - name: EntryHash
       type: chain
+    - name: LiteDataAccount
+      type: string
+    - name: LiteDataAccountId
+      type: bytes
 
 ##### Data Types #####
 
