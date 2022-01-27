@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"log"
 
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -181,8 +182,11 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	args, si, privKey, err := prepareSigner(u, args)
-	if len(args) < 3 {
+	if err != nil {
 		return "", err
+	}
+	if len(args) < 2 {
+		return "", fmt.Errorf("not enough arguments")
 	}
 
 	accountUrl, err := url2.Parse(args[0])
@@ -208,14 +212,13 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	}
 
 	//make sure this is a valid token account
-	tokenJson, err := Get(tok.String())
-	if err != nil {
-		return "", err
-	}
+	req := new(api.GeneralQuery)
+	req.Url = tok.String()
+	resp := new(api.ChainQueryResponse)
 	token := protocol.TokenIssuer{}
-	err = json.Unmarshal([]byte(tokenJson), &token)
-	if err != nil {
-		_ = cmd.Usage()
+	resp.Data = &token
+	err = Client.RequestAPIv2(context.Background(), "query", req, resp)
+	if err != nil || resp.Type != types.AccountTypeTokenIssuer.String() {
 		return "", fmt.Errorf("invalid token type %v", err)
 	}
 
