@@ -95,7 +95,8 @@ func getPackagePath() string {
 
 func run(_ *cobra.Command, args []string) {
 	types := readTypes(args)
-	ttypes := convert(types, flags.Package, getPackagePath())
+	ttypes, err := convert(types, flags.Package, getPackagePath())
+	check(err)
 
 	w := new(bytes.Buffer)
 	check(Go.Execute(w, ttypes))

@@ -385,6 +385,18 @@ func (v *Object) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *Transaction) MarshalJSON() ([]byte, error) {
+	u := struct {
+		ChainHeader
+		SigInfo     *transactions.Header `json:"sigInfo,omitempty"`
+		Transaction *string              `json:"transaction,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.SigInfo = v.TxState.SigInfo
+	u.Transaction = encoding.BytesToJSON(v.TxState.Transaction)
+	return json.Marshal(&u)
+}
+
 func (v *TxState) MarshalJSON() ([]byte, error) {
 	u := struct {
 		SigInfo     *transactions.Header `json:"sigInfo,omitempty"`
@@ -423,6 +435,28 @@ func (v *Object) UnmarshalJSON(data []byte) error {
 		} else {
 			v.Roots[i] = x
 		}
+	}
+	return nil
+}
+
+func (v *Transaction) UnmarshalJSON(data []byte) error {
+	u := struct {
+		ChainHeader
+		SigInfo     *transactions.Header `json:"sigInfo,omitempty"`
+		Transaction *string              `json:"transaction,omitempty"`
+	}{}
+	u.ChainHeader = v.ChainHeader
+	u.SigInfo = v.TxState.SigInfo
+	u.Transaction = encoding.BytesToJSON(v.TxState.Transaction)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.ChainHeader = u.ChainHeader
+	v.TxState.SigInfo = u.SigInfo
+	if x, err := encoding.BytesFromJSON(u.Transaction); err != nil {
+		return fmt.Errorf("error decoding Transaction: %w", err)
+	} else {
+		v.TxState.Transaction = x
 	}
 	return nil
 }
