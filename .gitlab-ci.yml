@@ -169,6 +169,33 @@ deploy 4/4:
   variables:   { HOST: 172.31.13.8,   NETWORK: Yellowstone,  NODE: 1, DN_NODE: 3, BIN: accumulated-linux-arm64 }
   environment: { url: 'http://172.31.13.8:8080',   name: Yellowstone/1 }
 
+deploy terraform:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/terraform-images/stable:latest
+  needs: []
+  variables:
+    TF_ROOT: ${CI_PROJECT_DIR}/terraform/Devnet
+    TF_ADDRESS: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/devnet
+  cache:
+    key: terraform-devnet
+    paths:
+    - ${TF_ROOT}/.terraform
+  environment:
+    name: ecs-devnet
+  script:
+  - cd ${TF_ROOT}
+  - gitlab-terraform init
+  - gitlab-terraform validate
+  - gitlab-terraform plan
+  - gitlab-terraform plan-json
+  - gitlab-terraform apply
+  artifacts:
+    name: plan
+    paths:
+      - ${TF_ROOT}/plan.cache
+    reports:
+      terraform: ${TF_ROOT}/plan.json
+
 .validate:
   stage: validate
   extends: .go

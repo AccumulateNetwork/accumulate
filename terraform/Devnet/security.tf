@@ -41,7 +41,6 @@ resource "aws_security_group_rule" "tool_allow_devnet" {
     from_port                = 0
     to_port                  = 26660
     protocol                 = "tcp"
-    ipv6_cidr_blocks         = ["::/0"]
     security_group_id        = "${aws_security_group.dev_tools.id}"
     source_security_group_id = "${aws_security_group.devnet.id}"
 }

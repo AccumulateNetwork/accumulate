@@ -1,5 +1,5 @@
 resource "aws_alb" "dev_alb" {
-  name               = "accumulate-devnet-alb" # Name of load balancer
+  name               = "accumulate-${var.name}-alb" # Name of load balancer
   load_balancer_type = "application"
   subnets            = ["${aws_subnet.dev_pubsub_a.id}",
                          "${aws_subnet.dev_pubsub_b.id}"]
@@ -8,18 +8,18 @@ resource "aws_alb" "dev_alb" {
 
 
 resource "aws_alb_target_group" "dev_target" {
-  name        = "accumulate-dev-target"
+  name        = "accumulate-${var.name}"
   port        = "26660"
   protocol    = "HTTP"
   target_type = "ip"
-  vpc_id      = "${aws_vpc.dev_vpc.id}"  
+  vpc_id      = "${aws_vpc.dev_vpc.id}"
   depends_on  = [aws_alb.dev_alb]
   deregistration_delay = 50
-  
+
   lifecycle {
         create_before_destroy = true
     }
-  
+
   health_check {
     healthy_threshold   = 2
     unhealthy_threshold = 10
@@ -28,7 +28,7 @@ resource "aws_alb_target_group" "dev_target" {
     path                = "/"
     protocol            = "HTTP"
     port                = "traffic-port"
-    
+
   }
 }
 
