@@ -30,14 +30,10 @@ func (WriteDataTo) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	}
 
 	writeThis := new(protocol.SyntheticWriteData)
+	writeThis.Cause = *(*[32]byte)(tx.GetTxHash())
 	writeThis.Entry = body.Entry
-	copy(writeThis.Cause[:], tx.GetTxHash())
 
 	st.Submit(recipient, writeThis)
 
-	res := new(protocol.WriteDataResult)
-	copy(res.EntryHash[:], body.Entry.Hash())
-	res.LiteDataAccount = recipient.String()
-	res.LiteDataAccountId = recipient.AccountID()
-	return res, nil
+	return nil, nil
 }
