@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"strconv"
 
 	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
@@ -61,7 +62,7 @@ var accountCreateCmd = &cobra.Command{
 }
 
 var accountCreateTokenCmd = &cobra.Command{
-	Use:   "token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBook (optional)]",
+	Use:   "token [actor adi] [signing key name] [key index (optional)] [key height (optional)] [new token account url] [tokenUrl] [keyBook (optional)] [scratch (optional)]",
 	Short: "Create an ADI token account",
 	Args:  cobra.MinimumNArgs(4),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -226,6 +227,13 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.Url = accountUrl.String()
 	tac.TokenUrl = tok.String()
 	tac.KeyBookUrl = keybook
+	if len(args) > 3 {
+		scratch, err := strconv.ParseBool(args[3])
+		if err != nil {
+			return "", err
+		}
+		tac.Scratch = scratch
+	}
 
 	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, si, privKey)
 	if err != nil {
