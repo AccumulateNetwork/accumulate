@@ -5025,14 +5025,16 @@ func (v *WriteDataTo) UnmarshalBinary(data []byte) error {
 
 func (v *AnchorMetadata) MarshalJSON() ([]byte, error) {
 	u := struct {
-		ChainMetadata
-		Account     *url.URL `json:"account,omitempty"`
-		Index       uint64   `json:"index,omitempty"`
-		SourceIndex uint64   `json:"sourceIndex,omitempty"`
-		SourceBlock uint64   `json:"sourceBlock,omitempty"`
-		Entry       *string  `json:"entry,omitempty"`
+		Name        string    `json:"name,omitempty"`
+		Type        ChainType `json:"type,omitempty"`
+		Account     *url.URL  `json:"account,omitempty"`
+		Index       uint64    `json:"index,omitempty"`
+		SourceIndex uint64    `json:"sourceIndex,omitempty"`
+		SourceBlock uint64    `json:"sourceBlock,omitempty"`
+		Entry       *string   `json:"entry,omitempty"`
 	}{}
-	u.ChainMetadata = v.ChainMetadata
+	u.Name = v.ChainMetadata.Name
+	u.Type = v.ChainMetadata.Type
 	u.Account = v.Account
 	u.Index = v.Index
 	u.SourceIndex = v.SourceIndex
@@ -5486,14 +5488,16 @@ func (v *WriteDataResult) MarshalJSON() ([]byte, error) {
 
 func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 	u := struct {
-		ChainMetadata
-		Account     *url.URL `json:"account,omitempty"`
-		Index       uint64   `json:"index,omitempty"`
-		SourceIndex uint64   `json:"sourceIndex,omitempty"`
-		SourceBlock uint64   `json:"sourceBlock,omitempty"`
-		Entry       *string  `json:"entry,omitempty"`
+		Name        string    `json:"name,omitempty"`
+		Type        ChainType `json:"type,omitempty"`
+		Account     *url.URL  `json:"account,omitempty"`
+		Index       uint64    `json:"index,omitempty"`
+		SourceIndex uint64    `json:"sourceIndex,omitempty"`
+		SourceBlock uint64    `json:"sourceBlock,omitempty"`
+		Entry       *string   `json:"entry,omitempty"`
 	}{}
-	u.ChainMetadata = v.ChainMetadata
+	u.Name = v.ChainMetadata.Name
+	u.Type = v.ChainMetadata.Type
 	u.Account = v.Account
 	u.Index = v.Index
 	u.SourceIndex = v.SourceIndex
@@ -5502,7 +5506,8 @@ func (v *AnchorMetadata) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.ChainMetadata = u.ChainMetadata
+	v.ChainMetadata.Name = u.Name
+	v.ChainMetadata.Type = u.Type
 	v.Account = u.Account
 	v.Index = u.Index
 	v.SourceIndex = u.SourceIndex
