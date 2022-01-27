@@ -8,7 +8,7 @@ resource "aws_alb" "application_load_balancer" {
 
 resource "aws_alb_target_group" "target_group" {
   name                        = "accumulate-target-group"
-  port                        = "3000"
+  port                        = "26660"
   protocol                    = "HTTP"
   target_type                 = "ip"
   vpc_id                      = "vpc-0e8d6207813fabfc4" # Reference the VPC  
@@ -34,7 +34,7 @@ resource "aws_alb_target_group" "target_group" {
 
 resource "aws_alb_listener" "listener" {
   load_balancer_arn    = "${aws_alb.application_load_balancer.id}" # Reference our load balancer
-  port                 = "3000"
+  port                 = "26660"
   protocol             = "HTTP"
   default_action {
     type               = "forward"
@@ -42,77 +42,3 @@ resource "aws_alb_listener" "listener" {
   }
       depends_on       = [aws_alb.application_load_balancer]
 }
-
-# resource "aws_alb_target_group" "target_group_1" {
-#   name                        = "accumulate-target-group-1"
-#   port                        = "9000"
-#   protocol                    = "HTTP"
-#   target_type                 = "ip"
-#   vpc_id                      = "vpc-0e8d6207813fabfc4" # Reference the VPC  
-#   depends_on                  = [aws_alb.application_load_balancer]
-#   deregistration_delay        = 50
-  
-#   lifecycle {
-#         create_before_destroy = true
-#     }
-  
-#   health_check {
-#     healthy_threshold         = 2
-#     unhealthy_threshold       = 10
-#     interval                  = 300
-#     matcher                   = "200"
-#     path                      = "/"
-#     protocol                  = "HTTP"
-#     port                      = "traffic-port"
-    
-#   }
-
-# }
-
-# resource "aws_alb_listener" "listener_1" {
-#   load_balancer_arn    = "${aws_alb.application_load_balancer.id}" # Reference our load balancer
-#   port                 = "9000"
-#   protocol             = "HTTP"
-#   default_action {
-#     type               = "forward"
-#     target_group_arn   = "${aws_alb_target_group.target_group_1.arn}" # Reference our target group
-#   }
-#       depends_on       = [aws_alb.application_load_balancer]
-# }
-
-# resource "aws_alb_target_group" "target_group_2" {
-#   name                        = "accumulate-target-group-2"
-#   port                        = "90"
-#   protocol                    = "HTTP"
-#   target_type                 = "ip"
-#   vpc_id                      = "vpc-0e8d6207813fabfc4" # Reference the VPC  
-#   depends_on                  = [aws_alb.application_load_balancer]
-#   deregistration_delay        = 50
-  
-#   lifecycle {
-#         create_before_destroy = true
-#     }
-  
-#   health_check {
-#     healthy_threshold         = 2
-#     unhealthy_threshold       = 10
-#     interval                  = 300
-#     matcher                   = "200"
-#     path                      = "/"
-#     protocol                  = "HTTP"
-#     port                      = "traffic-port"
-    
-#   }
-
-# }
-
-# resource "aws_alb_listener" "listener_2" {
-#   load_balancer_arn    = "${aws_alb.application_load_balancer.id}" # Reference our load balancer
-#   port                 = "90"
-#   protocol             = "HTTP"
-#   default_action {
-#     type               = "forward"
-#     target_group_arn   = "${aws_alb_target_group.target_group_2.arn}" # Reference our target group
-#   }
-#       depends_on       = [aws_alb.application_load_balancer]
-# }
