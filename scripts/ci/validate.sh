@@ -272,6 +272,8 @@ ACCOUNT_ID=$(accumulate -j account create data lite keytest keytest-0-0 "Factom 
 accumulate data get $ACCOUNT_ID 0 1 &> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to keytest keytest-0-0 $ACCOUNT_ID "data test"
 accumulate data get $ACCOUNT_ID 0 2 &> /dev/null || die "lite data error"
+accumulate -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.entryHash &> /dev/null || die "Entry hash is missing from transaction results"
+accumulate -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
 success
 
 section "Create ADI Data Account"
