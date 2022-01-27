@@ -44,12 +44,34 @@ Subcommands are defined in files sibling to <code>/cmd/accumulate/cmd/root.go</c
 
 ## Node
 
-A node is any program running the Accumulate daemon. Nodes come in the following flavors, each with different functions:
+A node is any instance of the Accumulate daemon.
 
-| Node Type | Function |
-|---|---|
-| Directory | TODO: Does some stuff? |
-| Validator | TODO: Does some completely different stuff? |
+<table>
+    <thead>
+        <tr>
+            <th colspan='2' style='text-align:center'>Node Type</th>
+            <th>Function</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td colspan='2' style='text-align:center'>Directory</td>
+            <td>TODO: Does some stuff?</td>
+        </tr><tr>
+            <td rowspan='3' style='text-align:center'>Validator</td>
+            <td style='text-align:center'>Qualified</td>
+            <td>A staked, vetted node that validates and executes transactions and is eligible to vote in Tendermint consensus.</td>
+        </tr><tr>
+            <!-- col -->
+            <td style='text-align:center'>Full<br>(Non-Qualified)</td>
+            <td>A node that validates and executes transactions.</td>
+        </tr><tr>
+            <!-- col -->
+            <td style='text-align:center'>Partial</td>
+            <td>A fragment of a Node, which validates and executes only some transactions. Other transactions are handled by a partial node's (also partial) peers. A partial node and all of its peers together make up a single full node (either qualified or non-qualified).</td>
+        </tr>
+    </tbody>
+</table>
 
 Initialization of a node follows the following procedure:
 
@@ -77,7 +99,7 @@ Initialization of a node follows the following procedure:
             </td>
         </tr><tr>
             <td>2</td>
-            <td colspan='200'><i>TODO: Intermediate steps unclear</i></td>
+            <td colspan='200'><i>TODO: Intermediate steps unclear</i> cmd_run.go</td>
         </tr><tr>
             <td>A</td>
             <td><code>Start</code></td>

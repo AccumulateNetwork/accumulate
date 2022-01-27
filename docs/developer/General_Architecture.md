@@ -1,25 +1,28 @@
 # General Architecture
 
-_This document works its way, loosely, from top to bottom of the flowchart depicted in __./General_Architecture.drawio__.
+_This document works its way, loosely, from top to bottom of the flowchart depicted in <code>__./General_Architecture.drawio__</code>._
 
 <span style='color:#88CC88'>
 
 > To assist in illustrating this documentation, green text herein will follow the life of a single transaction which has the following properties:
 > - The transaction was initiated by User A, who is the owner of Account A.
-> - The transaction is a sending of tokens to Account B (a donation, payment for a purchase, etc), which is owned by User B.
+> - The other person involved is User B, who owns Account B.
+> - User A is sending tokens to User B.
 >
-> This will follow the transaction in general theory. For a detailed description of how a transaction traces through the Accumulate system, see Transaction_Trace.md.
+> This will follow the transaction in general theory. For a detailed description of how a transaction traces through the Accumulate system, see <code>./Transaction_Trace.md</code>.
 
 </span>
 
 ## Client Application
-One or more users will interact with a client application, which is a DApp or other arbitrary piece of software implementing the Accumulate API. It can be thought of as an Accumulate client instance.  
+One or more users will interact with a client application, which is a DApp or other arbitrary piece of software implementing the Accumulate API. It can be thought of as an Accumulate client instance.
+
+Each client application is told where to send requests. Typically the destination will be some central load balancer at a URL such as "mainNet.defidevs.io" from which the request is forwarded to an automatically selected node. It could also be the address of a specific node.
 
 <span style='color:#88CC88'>
 
-> The user uses their client daemon to execute a transaction. The daemon uses JRPC to send the transaction request to a BVN for processing.  
+> The user uses their CLI client application to execute a transaction. The application uses the Accumulate API to send the transaction request to a node for processing.  
 > _Alternatively:_  
-> The user uses an app on their smartphone to execute a transaction. The app sends that request to some server running an ABCI implementation, which then uses JRPC or some other RPC to send the transaction request to a BVN for processing.
+> The user uses an app on their smartphone to execute a transaction. The app sends that request to some server running some application, which then uses the Accumulate API to send the transaction request to a node for processing.
 
 </span>
 
@@ -29,7 +32,7 @@ A client instance will **route** a transaction to a **BVN** for validation and e
 - <span style='color:#FFAAAA'>**TODO:** Routing instruction management is not currently implemented. Routing instructions are currently hard-coded into the ABCI implementation.  
 <code><span style='color:#FFAAAA'>_/internal/api/v2/query_dispatch.go # (q *queryDispatch) direct_</span></code></span>  
 
-- <span style='color:#FFFFAA'>**TODO: VERIFY:** A request sent to the wrong BVN will be refused.  
+- <span style='color:#FFFFAA'>**TODO: VERIFY:** A request sent to the wrong BVN will be refused.  THIS IS FALSE
 
 Routing instructions are currently coded here: <code>_/internal/api/v2/query_dispatch.go_</code>
 
@@ -38,7 +41,9 @@ Routing instructions are currently coded here: <code>_/internal/api/v2/query_dis
 </span>
 
 ## BVN (_Block Validator Network_)
-A **BVN** can be thought of as an Accumulate host instance. It manages the receipt, validation, and execution of transactions and other queries. ABCI implementations communicate exclusively with BVN's.  
+A BVN is a collection of node instances.
+
+A BVN can be thought of as an Accumulate host instance. It manages the receipt, validation, and execution of transactions and other queries. Accumulate API implementations communicate exclusively with BVN's.  
 A BVN consists of multiple nodes which may or may not be distributed across many hosts. Each node performs a discrete function of the BVN. However, as far as anything outside the BVN is concerned (ABCI implementations, other BVN's, etc) the BVN is a single entity.
 
 ## Governor

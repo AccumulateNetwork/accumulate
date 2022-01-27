@@ -13,6 +13,7 @@ import (
 	"github.com/ybbus/jsonrpc/v2"
 )
 
+// Re-entry from JRPC black box after CallBatch; redirects to execute()
 func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) interface{} {
 	var payload string
 	req := new(TxRequest)
@@ -137,6 +138,9 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 
 	case <-m.queue.leader:
 		// We are the leader, start a new dispatcher
+		//
+		//Send this trx back into the JRPC black box for transmission to another
+		//node. Lands at Execute() in this file.
 		go m.executeBatch(ex)
 	}
 
