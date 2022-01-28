@@ -3,7 +3,7 @@ resource "aws_alb" "dev_alb" {
   load_balancer_type = "application"
   subnets            = ["${aws_subnet.dev_pubsub_a.id}",
                          "${aws_subnet.dev_pubsub_b.id}"]
-  security_groups    = ["${aws_security_group.alb_security_group.id}"]
+  security_groups    = ["${aws_security_group.alb.id}"]
  }
 
 
@@ -54,4 +54,27 @@ resource "aws_alb_listener" "dev_listener_https" {
     target_group_arn = "${aws_alb_target_group.dev_target.arn}" # Reference our target group
   }
   depends_on       = [aws_alb.dev_alb]
+}
+
+resource "aws_security_group" "alb" {
+  vpc_id      = "${aws_vpc.dev_vpc.id}"
+  name        = "accumulate-devnet-alb"
+
+  # Allow HTTP
+  ingress {
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  # Allow HTTPS
+  ingress {
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
 }
