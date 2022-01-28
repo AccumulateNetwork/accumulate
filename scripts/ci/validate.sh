@@ -289,6 +289,16 @@ echo $JSON | jq -re .result.entryHash &> /dev/null || die "Deliver response does
 accumulate -j tx get $TXID | jq -re .status.result.entryHash &> /dev/null || die "Transaction query response does not include the entry hash"
 success
 
+section "Issue a new token"
+JSON=$(accumulate -j token create keytest keytest-0-0 keytest/foocoin bar 8)
+TXID=$(echo $JSON | jq -re .transactionHash)
+echo $JSON | jq -C --indent 0
+wait-for-tx $TXID
+RESULT=$(accumulate -j token get keytest/foocoin)
+[ "$(echo $RESULT | jq -re .data.symbol)" == "bar" ] && success || die "Token issuance failed with invalid symbol"
+[ "$(echo $RESULT | jq -re .data.precision)" -eq 8 ] && success || die "Token issuance failed with invalid precision"
+success
+
 section "Query latest data entry by URL"
 RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data)
 [ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Latest entry is not 'bar'"
