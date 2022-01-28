@@ -21,10 +21,10 @@ func (m *JrpcMethods) Metrics(_ context.Context, params json.RawMessage) interfa
 	}
 
 	c, err := promapi.NewClient(promapi.Config{
-		Address: m.opts.Config.PrometheusServer,
+		Address: m.PrometheusServer,
 	})
 	if err != nil {
-		m.logError("Metrics query failed", "error", err, "server", m.opts.Config.PrometheusServer)
+		m.logError("Metrics query failed", "error", err, "server", m.PrometheusServer)
 		return internalError(err)
 	}
 	papi := prometheus.NewAPI(c)

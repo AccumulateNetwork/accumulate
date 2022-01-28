@@ -242,6 +242,9 @@ TxRequest:
   - name: CheckOnly
     type: bool
     optional: true
+  - name: IsEnvelope
+    type: bool
+    optional: true
   - name: Origin
     type: url.URL
     marshal-as: reference

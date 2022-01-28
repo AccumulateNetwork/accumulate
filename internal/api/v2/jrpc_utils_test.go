@@ -12,7 +12,7 @@ func (m *JrpcMethods) DoExecute(ctx context.Context, req *TxRequest, payload []b
 }
 
 func (m *JrpcMethods) Querier() Querier {
-	return m.opts.Query
+	return m.querier
 }
 
 func (m *JrpcMethods) GetMethod(name string) jsonrpc2.MethodFunc {
