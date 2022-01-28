@@ -116,7 +116,7 @@ wait-for-tx $TX8
 wait-for-tx $TX9
 accumulate account get ${LITE} &> /dev/null && success || die "Cannot find ${LITE}"
 
-section "Add credits to lite account"
+section "Add credits to lite token account"
 wait-for cli-tx credits ${LITE} ${LITE} 1100
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 1100 ] && success || die "${LITE} should have at least 1100 credits but only has ${BALANCE}"
@@ -256,7 +256,7 @@ wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueToke
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 123 ] && success || die "${LITE_TOK} should have 123 keytest tokens but has ${BALANCE}"
 
-section "Add credits to lite account (TOK)"
+section "Add credits to lite token account (TOK)"
 wait-for cli-tx credits ${LITE} ${LITE_TOK} 100
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE_TOK} should have at least 100 credits but only has ${BALANCE}"

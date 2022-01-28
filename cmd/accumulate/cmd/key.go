@@ -242,7 +242,7 @@ func GenerateKey(label string) (string, error) {
 	if label == "" {
 		ltu, err := protocol.LiteTokenAddress(pubKey, protocol.AcmeUrl().String())
 		if err != nil {
-			return "", fmt.Errorf("unable to create lite account")
+			return "", fmt.Errorf("unable to create lite token account")
 		}
 		label = ltu.String()
 	}
@@ -335,7 +335,7 @@ func ImportKey(pkhex string, label string) (out string, err error) {
 	if label == "" {
 		lt, err := protocol.LiteTokenAddress(pk[32:], protocol.AcmeUrl().String())
 		if err != nil {
-			return "", fmt.Errorf("no label specified and cannot import as lite account")
+			return "", fmt.Errorf("no label specified and cannot import as lite token account")
 		}
 		label = lt.String()
 	}

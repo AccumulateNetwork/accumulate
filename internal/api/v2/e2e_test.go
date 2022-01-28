@@ -70,7 +70,7 @@ func TestValidate(t *testing.T) {
 		assert.Equal(t, int64(count*10*AcmePrecision), account.Balance.Int64())
 	})
 
-	t.Run("Lite Account Credits", func(t *testing.T) {
+	t.Run("Lite Token Account Credits", func(t *testing.T) {
 		executeTx(t, japi, "add-credits", true, execParams{
 			Origin: liteUrl.String(),
 			Key:    liteKey,

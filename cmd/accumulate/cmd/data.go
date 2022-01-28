@@ -342,7 +342,7 @@ func WriteDataTo(accountUrl string, args []string) (string, error) {
 	wd := protocol.WriteDataTo{}
 	r, err := url.Parse(args[0])
 	if err != nil {
-		return "", fmt.Errorf("unable to parse lite account url")
+		return "", fmt.Errorf("unable to parse lite token account url")
 	}
 
 	accountId, err := protocol.ParseLiteDataAddress(r)

@@ -34,7 +34,7 @@ func (AcmeFaucet) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	err = st.LoadUrlAs(u, account)
 	switch {
 	case err == nil:
-		// If the recipient exists, it must be an ACME lite account
+		// If the recipient exists, it must be an ACME lite token account
 		u, err := account.ParseTokenUrl()
 		if err != nil {
 			return nil, fmt.Errorf("invalid record: bad token URL: %v", err)

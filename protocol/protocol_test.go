@@ -39,8 +39,8 @@ func TestIsValidAdiUrl(t *testing.T) {
 		"Identity has dot":        {URL{Authority: "foo.bar"}, "identity contains dot(s)"},
 		"Identity has underscore": {URL{Authority: "foo_bar"}, "illegal character '_'"},
 		"Identity has space":      {URL{Authority: "foo bar"}, "illegal character ' '"},
-		"Looks like lite acct lc": {URL{Authority: strings.ToLower(randHex(24))}, "identity could be a lite account key"},
-		"Looks like lite acct uc": {URL{Authority: strings.ToUpper(randHex(24))}, "identity could be a lite account key"},
+		"Looks like lite acct lc": {URL{Authority: strings.ToLower(randHex(24))}, "identity could be a lite token account key"},
+		"Looks like lite acct uc": {URL{Authority: strings.ToUpper(randHex(24))}, "identity could be a lite token account key"},
 	}
 
 	for name, str := range good {

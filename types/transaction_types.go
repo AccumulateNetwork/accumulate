@@ -56,7 +56,7 @@ const (
 	TxTypeWriteDataTo TransactionType = 0x06
 
 	// TxTypeAcmeFaucet produces a synthetic deposit tokens transaction that
-	// deposits ACME tokens into a lite account.
+	// deposits ACME tokens into a lite token account.
 	TxTypeAcmeFaucet TransactionType = 0x07
 
 	// TxTypeCreateToken creates a token issuer, which produces a synthetic

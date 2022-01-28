@@ -99,7 +99,7 @@ var accountCreateDataLiteCmd = &cobra.Command{
 
 var accountQrCmd = &cobra.Command{
 	Use:   "qr [url]",
-	Short: "Display QR code for lite account URL",
+	Short: "Display QR code for lite token account URL",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := QrAccount(args[0])
@@ -272,9 +272,9 @@ func RestoreAccounts() (out string, err error) {
 		}
 		key, _, err := protocol.ParseLiteTokenAddress(u)
 		if err != nil {
-			out += fmt.Sprintf("%q is not a valid lite account: %v\n", v.Key, err)
+			out += fmt.Sprintf("%q is not a valid lite token account: %v\n", v.Key, err)
 		} else if key == nil {
-			out += fmt.Sprintf("%q is not a lite account\n", v.Key)
+			out += fmt.Sprintf("%q is not a lite token account\n", v.Key)
 		}
 
 		privKey := ed25519.PrivateKey(v.Value)
