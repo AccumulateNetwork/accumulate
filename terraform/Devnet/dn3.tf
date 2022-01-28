@@ -3,12 +3,18 @@ data "aws_ecs_task_definition" "dn-3" {
 }
 
 resource "aws_ecs_task_definition" "dn-3" {
-  family = "dn-3"
+  lifecycle {
+    ignore_changes = [
+      "volume"
+    ]
+  }
+
+  family = "accumulate-devnet-dn-3"
   container_definitions = <<DEFINITION
 [
 
    {
-      "name": "dn-3",
+      "name": "accumulate-devnet-dn-3",
       "image": "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:develop",
       "essential": true,
       "portMappings": [{"containerPort": 26660}],

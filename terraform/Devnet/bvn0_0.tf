@@ -3,12 +3,18 @@ data "aws_ecs_task_definition" "bvn0-0" {
 }
 
 resource "aws_ecs_task_definition" "bvn0-0" {
-  family = "bvn0-0"
+  lifecycle {
+    ignore_changes = [
+      "volume"
+    ]
+  }
+
+  family = "accumulate-devnet-bvn0-0"
   container_definitions = <<DEFINITION
 [
 
    {
-      "name": "bvn0-0",
+      "name": "accumulate-devnet-bvn0-0",
       "image": "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:develop",
       "essential": true,
       "portMappings": [{"containerPort": 26660}],

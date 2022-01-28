@@ -2,8 +2,8 @@ resource "aws_security_group" "alb_security_group" {
     vpc_id      = "${aws_vpc.dev_vpc.id}"
     name        = "accumulate-devnet-alb"
   ingress {
-    from_port   = 26660
-    to_port     = 26660
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"] # Allowing traffic in from all sources
   }
@@ -41,7 +41,6 @@ resource "aws_security_group_rule" "tool_allow_devnet" {
     from_port                = 0
     to_port                  = 26660
     protocol                 = "tcp"
-    ipv6_cidr_blocks         = ["::/0"]
     security_group_id        = "${aws_security_group.dev_tools.id}"
     source_security_group_id = "${aws_security_group.devnet.id}"
 }

@@ -2,18 +2,24 @@ resource "aws_ecs_cluster" "dev_cluster" {
     name = "accumulate-dev-cluster"
 }
 
-data "aws_ecs_task_definition" "dev_tools" {
-  task_definition = "${aws_ecs_task_definition.dev_tools.family}"
+data "aws_ecs_task_definition" "init" {
+  task_definition = "${aws_ecs_task_definition.init.family}"
 }
 
 
-resource "aws_ecs_task_definition" "dev_tools" {
+resource "aws_ecs_task_definition" "init" {
+  lifecycle {
+    ignore_changes = [
+      "volume"
+    ]
+  }
+
   depends_on               = [aws_ecs_cluster.dev_cluster]
-  family                   = "dev_tools" # Name of first task
+  family                   = "accumulate-devnet-init" # Name of first task
   container_definitions    = <<DEFINITION
   [
     {
-      "name": "dev_tools",
+      "name": "accumulate-devnet-init",
       "image": "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:develop",
       "essential": true,
       "portMappings": [{"containerPort": 80}],
@@ -33,7 +39,7 @@ resource "aws_ecs_task_definition" "dev_tools" {
               "containerPath": "/mnt/efs/node",
               "sourceVolume": "efs_temp"
           }
-      ]                 
+      ]
     }
   ]
 DEFINITION

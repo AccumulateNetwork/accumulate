@@ -3,13 +3,19 @@ data "aws_ecs_task_definition" "dev_bvn1_0" {
 }
 
 resource "aws_ecs_task_definition" "bvn1-0" {
-  family = "bvn1-0"
+  lifecycle {
+    ignore_changes = [
+      "volume"
+    ]
+  }
+
+  family = "accumulate-devnet-bvn1-0"
  # container_definitions = jsonencode(yamldecode(file("docker-compose.yml")))
   container_definitions = <<DEFINITION
 [
 
    {
-      "name": "bvn1-0",
+      "name": "accumulate-devnet-bvn1-0",
       "image": "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:develop",
       "essential": true,
       "portMappings": [{"containerPort": 26660}],
