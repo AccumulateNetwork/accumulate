@@ -41,3 +41,17 @@ resource "aws_alb_listener" "dev_listener" {
   }
   depends_on       = [aws_alb.dev_alb]
 }
+
+resource "aws_alb_listener" "dev_listener_https" {
+  load_balancer_arn = "${aws_alb.dev_alb.id}" # Reference our load balancer
+  certificate_arn   = "arn:aws:acm:us-east-1:018508593216:certificate/d1a0d5d7-b237-455b-9757-27e85a945e9d"
+  port              = "443"
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-2016-08"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = "${aws_alb_target_group.dev_target.arn}" # Reference our target group
+  }
+  depends_on       = [aws_alb.dev_alb]
+}
