@@ -56,7 +56,7 @@ func (m *JrpcMethods) {{.Name}}(_ context.Context, params json.RawMessage) inter
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.{{.Call}}({{range $i, $v := .CallParams}}{{if gt $i 0}}, {{end}}req.{{$v}}{{end}}))
+	return jrpcFormatResponse(m.querier.{{.Call}}({{range $i, $v := .CallParams}}{{if gt $i 0}}, {{end}}req.{{$v}}{{end}}))
 }
 {{else if eq .Kind "execute"}}
 func (m *JrpcMethods) {{.Name}}(ctx context.Context, params json.RawMessage) interface{} {

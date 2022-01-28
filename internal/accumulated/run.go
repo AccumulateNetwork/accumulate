@@ -19,13 +19,12 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
 	"github.com/AccumulateNetwork/accumulate/internal/routing"
-	"github.com/AccumulateNetwork/accumulate/networks"
+	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/client/local"
 )
 
@@ -199,57 +198,25 @@ func (d *Daemon) Start() (err error) {
 	}
 	clientProxy.Set(lclient)
 
-	// Configure JSON-RPC
-	var jrpcOpts api.JrpcOptions
-	jrpcOpts.Config = &d.Config.Accumulate.API
-	jrpcOpts.QueueDuration = time.Second / 4
-	jrpcOpts.QueueDepth = 100
-	jrpcOpts.Local = lclient
-	jrpcOpts.Logger = d.Logger
-	jrpcOpts.Network = &d.Config.Accumulate.Network
-
-	// Build the list of remote addresses and query clients
-	jrpcOpts.Remote = d.Config.Accumulate.Network.BvnAddressesWithPortOffset(0)
-	clients := make([]api.ABCIQueryClient, len(jrpcOpts.Remote))
-	for i, addr := range jrpcOpts.Remote {
-		switch {
-		case d.Config.Accumulate.Network.BvnNames[i] == d.Config.Accumulate.Network.ID:
-			jrpcOpts.Remote[i] = "local"
-			clients[i] = lclient
-
-		default:
-			jrpcOpts.Remote[i], err = config.OffsetPort(addr, networks.AccRouterJsonPortOffset)
-			if err != nil {
-				return fmt.Errorf("invalid BVN address: %v", err)
-			}
-			jrpcOpts.Remote[i] += "/v2"
-
-			addr, err = config.OffsetPort(addr, networks.TmRpcPortOffset)
-			if err != nil {
-				return fmt.Errorf("invalid BVN address: %v", err)
-			}
-
-			clients[i], err = rpchttp.New(addr)
-			if err != nil {
-				return fmt.Errorf("failed to create RPC client: %v", err)
-			}
-		}
+	if d.Config.Accumulate.API.DebugJSONRPC {
+		jsonrpc2.DebugMethodFunc = true
 	}
 
-	// Create the querier for JSON-RPC
-	jrpcOpts.Query = api.NewQueryDispatch(clients, api.QuerierOptions{
-		TxMaxWaitTime: d.Config.Accumulate.API.TxMaxWaitTime,
-	})
-
 	// Create the JSON-RPC handler
-	d.jrpc, err = api.NewJrpc(jrpcOpts)
+	d.jrpc, err = api.NewJrpc(api.Options{
+		Logger:           d.Logger,
+		Network:          &d.Config.Accumulate.Network,
+		Router:           &router,
+		PrometheusServer: d.Config.Accumulate.API.PrometheusServer,
+		TxMaxWaitTime:    d.Config.Accumulate.API.TxMaxWaitTime,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to start API: %v", err)
 	}
 
 	// Enable debug methods
 	if d.Config.Accumulate.API.EnableDebugMethods {
-		d.jrpc.EnableDebug(lclient)
+		d.jrpc.EnableDebug()
 	}
 
 	// Run JSON-RPC server

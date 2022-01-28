@@ -9,17 +9,24 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/jsonrpc2/v15"
-	"github.com/ybbus/jsonrpc/v2"
 )
 
 func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) interface{} {
 	var payload string
 	req := new(TxRequest)
 	req.Payload = &payload
-	err := m.parse(params, req)
+	err := json.Unmarshal(params, req)
 	if err != nil {
-		return err
+		return validatorError(err)
+	}
+
+	if req.IsEnvelope {
+		err = m.validate.StructPartial(req, "Origin", "Payload")
+	} else {
+		err = m.validate.Struct(req)
+	}
+	if err != nil {
+		return validatorError(err)
 	}
 
 	data, err := hex.DecodeString(payload)
@@ -28,10 +35,6 @@ func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) inter
 	}
 
 	return m.execute(ctx, req, data)
-}
-
-func (m *JrpcMethods) ExecuteCreateIdentity(ctx context.Context, params json.RawMessage) interface{} {
-	return m.executeWith(ctx, params, new(protocol.CreateIdentity))
 }
 
 func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionPayload, validateFields ...string) interface{} {
@@ -98,133 +101,80 @@ type executeQueue struct {
 
 // executeRequest captures the state of an execute requests.
 type executeRequest struct {
-	remote int
-	params json.RawMessage
-	result interface{}
-	done   chan struct{}
+	subnet    string
+	checkOnly bool
+	payload   []byte
+	result    interface{}
+	done      chan struct{}
 }
 
 // execute either executes the request locally, or dispatches it to another BVC
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
 	// Route the request
-	i := int(req.Origin.Routing() % uint64(len(m.opts.Remote)))
-	if i == m.localIndex {
-		// We have a local node and the routing number is local, so process the
-		// request and broadcast it locally
-		return m.executeLocal(ctx, req, payload)
-	}
-
-	// Prepare the request for dispatch to a remote BVC
-	var err error
-	req.Payload = hex.EncodeToString(payload)
-	ex := new(executeRequest)
-	ex.remote = i
-	ex.params, err = req.MarshalJSON()
+	subnet, err := m.Router.Route(req.Origin)
 	if err != nil {
-		return accumulateError(err)
-	}
-	ex.done = make(chan struct{})
-
-	// Either send the request to the active dispatcher, or start a new
-	// dispatcher
-	select {
-	case <-ctx.Done():
-		// Request was canceled
-		return ErrCanceled
-
-	case m.queue.enqueue <- ex:
-		// Request was accepted by the leader
-
-	case <-m.queue.leader:
-		// We are the leader, start a new dispatcher
-		go m.executeBatch(ex)
+		return validatorError(err)
 	}
 
-	// Wait for dispatch to complete
-	select {
-	case <-ctx.Done():
-		// Canceled
-		return ErrCanceled
+	var envs []*transactions.Envelope
+	if req.IsEnvelope {
+		// Unmarshal all the envelopes
+		envs, err = transactions.UnmarshalAll(payload)
+		if err != nil {
+			return accumulateError(err)
+		}
+	} else {
+		// Build the envelope
+		env := new(transactions.Envelope)
+		env.TxHash = req.TxHash
+		env.Transaction = new(transactions.Transaction)
+		env.Transaction.Body = payload
+		env.Transaction.Origin = req.Origin
+		env.Transaction.Nonce = req.Signer.Nonce
+		env.Transaction.KeyPageHeight = req.KeyPage.Height
+		env.Transaction.KeyPageIndex = req.KeyPage.Index
+		envs = append(envs, env)
 
-	case <-ex.done:
-		// Completed
-		return ex.result
+		ed := new(transactions.ED25519Sig)
+		ed.Nonce = req.Signer.Nonce
+		ed.PublicKey = req.Signer.PublicKey
+		ed.Signature = req.Signature
+		env.Signatures = append(env.Signatures, ed)
 	}
-}
 
-// executeLocal constructs a TX, broadcasts it to the local node, and waits for
-// results.
-func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload []byte) interface{} {
+	// Marshal the envelope(s)
+	var txData []byte
+	for _, env := range envs {
+		b, err := env.MarshalBinary()
+		if err != nil {
+			return accumulateError(err)
+		}
+		txData = append(txData, b...)
+	}
 
-	// Build the TX
-	env := new(transactions.Envelope)
-	env.TxHash = req.TxHash
-	env.Transaction = new(transactions.Transaction)
-	env.Transaction.Body = payload
-	env.Transaction.Origin = req.Origin
-	env.Transaction.Nonce = req.Signer.Nonce
-	env.Transaction.KeyPageHeight = req.KeyPage.Height
-	env.Transaction.KeyPageIndex = req.KeyPage.Index
-
-	ed := new(transactions.ED25519Sig)
-	ed.Nonce = req.Signer.Nonce
-	ed.PublicKey = req.Signer.PublicKey
-	ed.Signature = req.Signature
-	env.Signatures = append(env.Signatures, ed)
-
-	txb, err := env.MarshalBinary()
+	// Submit the envelope(s)
+	resp, err := m.Router.Submit(ctx, subnet, txData, req.CheckOnly, false)
 	if err != nil {
 		return accumulateError(err)
 	}
 
-	// The two cases below look virtually identical. Unfortunately, CheckTx and
-	// BroadcastTxSync return different types, and the latter does not have any
-	// methods, so they have to be handled separately.
-
-	var code uint64
-	var mempool, log string
-	var data []byte
-	switch {
-	case req.CheckOnly:
-		// Check the TX
-		r, err := m.opts.Local.CheckTx(ctx, txb)
-		if err != nil {
-			return accumulateError(err)
-		}
-
-		code = uint64(r.Code)
-		mempool = r.MempoolError
-		log = r.Log
-		data = r.Data
-
-	default:
-		// Broadcast the TX
-		r, err := m.opts.Local.BroadcastTxSync(ctx, txb)
-		if err != nil {
-			return accumulateError(err)
-		}
-
-		code = uint64(r.Code)
-		mempool = r.MempoolError
-		log = r.Log
-		data = r.Data
-	}
-
-	simpleHash := sha256.Sum256(txb)
+	// Build the response
+	simpleHash := sha256.Sum256(txData)
 	res := new(TxResponse)
-	res.Code = code
-	res.TransactionHash = env.GetTxHash()
-	res.EnvelopeHash = env.EnvHash()
+	res.Code = uint64(resp.Code)
+	res.TransactionHash = envs[0].GetTxHash()
+	res.EnvelopeHash = envs[0].EnvHash()
 	res.SimpleHash = simpleHash[:]
 
+	// Parse the results
 	var results []protocol.TransactionResult
-	for len(data) > 0 {
-		result, err := protocol.UnmarshalTransactionResult(data)
+	for len(resp.Data) > 0 {
+		result, err := protocol.UnmarshalTransactionResult(resp.Data)
 		if err != nil {
 			m.logError("Failed to decode transaction results", "error", err)
 			break
 		}
-		data = data[result.BinarySize():]
+		resp.Data = resp.Data[result.BinarySize():]
 		if _, ok := result.(*protocol.EmptyResult); ok {
 			result = nil
 		}
@@ -239,91 +189,19 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 
 	// Check for errors
 	switch {
-	case len(mempool) > 0:
-		res.Message = mempool
+	case len(resp.MempoolError) > 0:
+		res.Message = resp.MempoolError
 		return res
-	case len(log) > 0:
-		res.Message = log
+	case len(resp.Log) > 0:
+		res.Message = resp.Log
 		return res
-	case code != 0:
+	case len(resp.Info) > 0:
+		res.Message = resp.Info
+		return res
+	case resp.Code != 0:
 		res.Message = "An unknown error occured"
 		return res
 	default:
 		return res
-	}
-}
-
-// executeBatch accepts execute requests for dispatch, then dispatches requests
-// in batches to the appropriate remote BVCs.
-func (m *JrpcMethods) executeBatch(queue ...*executeRequest) {
-	// Free the leader semaphore once we're done
-	defer func() { m.queue.leader <- struct{}{} }()
-
-	timer := time.NewTimer(m.opts.QueueDuration)
-	defer timer.Stop()
-
-	// Accept requests until we reach the target depth or the timer fires
-loop:
-	for {
-		select {
-		case <-timer.C:
-			break loop
-		case ex := <-m.queue.enqueue:
-			queue = append(queue, ex)
-			if len(queue) >= m.opts.QueueDepth {
-				break loop
-			}
-		}
-	}
-
-	// Construct batches
-	lup := map[*jsonrpc.RPCRequest]*executeRequest{}
-	batches := make([]jsonrpc.RPCRequests, len(m.remote))
-	for _, ex := range queue {
-		rq := &jsonrpc.RPCRequest{
-			Method: "execute",
-			Params: ex.params,
-		}
-		lup[rq] = ex
-		batches[ex.remote] = append(batches[ex.remote], rq)
-	}
-
-	for i, rq := range batches {
-		var res jsonrpc.RPCResponses
-		var err error
-		switch len(rq) {
-		case 0:
-			// Nothing to do
-		case 1:
-			// Send single (Tendermint JSON-RPC behaves badly)
-			m.logDebug("Sending call", "remote", m.opts.Remote[i])
-			r, e := m.remote[i].Call(rq[0].Method, rq[0].Params)
-			res, err = jsonrpc.RPCResponses{r}, e
-		default:
-			// Send batch
-			m.logDebug("Sending call batch", "remote", m.opts.Remote[i])
-			res, err = m.remote[i].CallBatch(rq)
-		}
-
-		// Forward results
-		for j := range rq {
-			ex := lup[rq[j]]
-			switch {
-			case err != nil:
-				m.logError("Execute batch failed", "error", err, "remote", m.opts.Remote[i])
-				ex.result = internalError(err)
-			case res[j].Error != nil:
-				err := res[j].Error
-				code := jsonrpc2.ErrorCode(err.Code)
-				if code.IsReserved() {
-					ex.result = jsonrpc2.NewError(ErrCodeDispatch, err.Message, err)
-				} else {
-					ex.result = jsonrpc2.NewError(code, err.Message, err.Data)
-				}
-			default:
-				ex.result = res[j].Result
-			}
-			close(ex.done)
-		}
 	}
 }
