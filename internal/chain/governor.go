@@ -318,7 +318,11 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		if typ != types.TxTypeSyntheticAnchor {
 			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
-		g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
+		err = g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
+		if err != nil {
+			g.logger.Error("Failed to dispatch transaction", "txid", logging.AsHex(id), "error", err)
+			continue
+		}
 		body.Transactions = append(body.Transactions, id)
 	}
 

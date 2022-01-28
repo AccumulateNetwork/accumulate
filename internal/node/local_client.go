@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/local"
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	tm "github.com/tendermint/tendermint/types"
@@ -35,13 +36,13 @@ func (c *LocalClient) Set(client *local.Local) {
 	}
 }
 
-// ABCIQuery implements client.ABCIClient.ABCIQuery. Returns ErrNotInitialized
+// ABCIQueryWithOptions implements client.ABCIClient.ABCIQueryWithOptions. Returns ErrNotInitialized
 // if Set has not been called.
-func (c *LocalClient) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*core.ResultABCIQuery, error) {
+func (c *LocalClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*core.ResultABCIQuery, error) {
 	if c.client == nil {
 		return nil, ErrNotInitialized
 	}
-	return c.client.ABCIQuery(ctx, path, data)
+	return c.client.ABCIQueryWithOptions(ctx, path, data, opts)
 }
 
 // CheckTx implements client.MempoolClient.CheckTx. Returns ErrNotInitialized if
