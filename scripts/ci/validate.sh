@@ -94,26 +94,17 @@ echo
 section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
-TX0=$(cli-tx faucet ${LITE})
-TX1=$(cli-tx faucet ${LITE})
-TX2=$(cli-tx faucet ${LITE})
-TX3=$(cli-tx faucet ${LITE})
-TX4=$(cli-tx faucet ${LITE})
-TX5=$(cli-tx faucet ${LITE})
-TX6=$(cli-tx faucet ${LITE})
-TX7=$(cli-tx faucet ${LITE})
-TX8=$(cli-tx faucet ${LITE})
-TX9=$(cli-tx faucet ${LITE})
-wait-for-tx $TX0
-wait-for-tx $TX1
-wait-for-tx $TX2
-wait-for-tx $TX3
-wait-for-tx $TX4
-wait-for-tx $TX5
-wait-for-tx $TX6
-wait-for-tx $TX7
-wait-for-tx $TX8
-wait-for-tx $TX9
+TXS=()
+for i in {1..20}
+do
+	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
+done
+for tx in "${TXS[@]}"
+do
+	echo $tx
+	wait-for-tx $tx
+done
+
 accumulate account get ${LITE} &> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
