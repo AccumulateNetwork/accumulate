@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -58,6 +59,7 @@ var flagInit struct {
 	NoEmptyBlocks bool
 	NoWebsite     bool
 	Reset         bool
+	LogLevels     string
 }
 
 var flagInitNode struct {
@@ -88,6 +90,7 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
+	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -242,6 +245,11 @@ func initNode(cmd *cobra.Command, args []string) {
 	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.ID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Subnet
+	if flagInit.LogLevels != "" {
+		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
+		checkf(err, "--log-level")
+		config.LogLevel = flagInit.LogLevels
+	}
 
 	if flagInit.Reset {
 		nodeReset()

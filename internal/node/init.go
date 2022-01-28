@@ -141,38 +141,18 @@ func Init(opts InitOptions) (err error) {
 		}
 	}
 
-	// Gather validator peer addresses.
-	validatorPeers := map[int]string{}
-	for i, config := range config {
-		// if config.Mode != tmcfg.ModeValidator {
-		// 	continue
-		// }
-
-		nodeKey, err := types.LoadNodeKey(config.NodeKeyFile())
-		if err != nil {
-			return fmt.Errorf("failed to load node key: %v", err)
-		}
-		validatorPeers[i] = nodeKey.ID.AddressString(fmt.Sprintf("%s:%d", opts.RemoteIP[i], opts.Port))
+	node0Key, err := types.LoadNodeKey(config[0].NodeKeyFile())
+	if err != nil {
+		return fmt.Errorf("failed to load node key: %v", err)
 	}
 
 	// Overwrite default config.
 	nConfig := len(config)
 	for i, config := range config {
-		if nConfig > 1 {
-			config.P2P.AddrBookStrict = false
-			config.P2P.AllowDuplicateIP = true
-			config.P2P.PersistentPeers = ""
-			if config.P2P.PersistentPeers == "" {
-				for j, peer := range validatorPeers {
-					if j != i {
-						config.P2P.PersistentPeers += "," + peer
-					}
-				}
-				config.P2P.PersistentPeers = config.P2P.PersistentPeers[1:]
-			}
-		} else {
-			config.P2P.AddrBookStrict = true
-			config.P2P.AllowDuplicateIP = false
+		config.P2P.AddrBookStrict = true
+		config.P2P.AllowDuplicateIP = false
+		if i > 0 {
+			config.P2P.PersistentPeers = node0Key.ID.AddressString(fmt.Sprintf("%s:%d", opts.RemoteIP[0], opts.Port))
 		}
 		config.Moniker = fmt.Sprintf("%s.%d", config.Accumulate.Network.ID, i)
 
