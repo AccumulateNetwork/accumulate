@@ -76,6 +76,17 @@ func (c *Client) ExecuteCreateDataAccount(ctx context.Context, req *api.TxReques
 	return &resp, nil
 }
 
+func (c *Client) ExecuteCreateIdentity(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
+	var resp api.TxResponse
+
+	err := c.RequestAPIv2(ctx, "create-identity", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 func (c *Client) ExecuteCreateKeyBook(ctx context.Context, req *api.TxRequest) (*api.TxResponse, error) {
 	var resp api.TxResponse
 
