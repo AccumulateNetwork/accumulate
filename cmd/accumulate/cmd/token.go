@@ -13,7 +13,6 @@ var tokenCmd = &cobra.Command{
 	Use:   "token",
 	Short: "Issue and get tokens",
 	Run: func(cmd *cobra.Command, args []string) {
-
 		if len(args) > 0 {
 			switch arg := args[0]; arg {
 			case "get":
@@ -24,9 +23,9 @@ var tokenCmd = &cobra.Command{
 					PrintTokenGet()
 				}
 			case "create":
-				if len(args) > 4 {
+				if len(args) > 5 {
 					var propertiesUrl string
-					if len(args) > 5 {
+					if len(args) > 6 {
 						propertiesUrl = args[6]
 					}
 					CreateToken(args[1], args[2], args[3], args[4], args[5], propertiesUrl)
