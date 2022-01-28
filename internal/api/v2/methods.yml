@@ -1,3 +1,7 @@
+Status:
+  rpc: status
+  output: StatusResponse
+
 Version:
   rpc: version
   output: ChainQueryResponse
