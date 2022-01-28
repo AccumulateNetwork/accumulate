@@ -98,6 +98,17 @@ type MultiResponse struct {
 	OtherItems []interface{} `json:"otherItems,omitempty" form:"otherItems" query:"otherItems" validate:"required"`
 }
 
+type PendingTransactionPaginationQuery struct {
+	UrlQuery
+	QueryPagination
+	QueryOptions
+}
+
+type PendingTransactionQuery struct {
+	QueryOptions
+	Txid []byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+}
+
 type QueryOptions struct {
 	Expand bool   `json:"expand,omitempty" form:"expand" query:"expand"`
 	Height uint64 `json:"height,omitempty" form:"height" query:"height"`
@@ -538,6 +549,42 @@ func (v *MultiResponse) MarshalJSON() ([]byte, error) {
 	for i, x := range v.OtherItems {
 		u.OtherItems[i] = encoding.AnyToJSON(x)
 	}
+	return json.Marshal(&u)
+}
+
+func (v *PendingTransactionPaginationQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	return json.Marshal(&u)
+}
+
+func (v *PendingTransactionQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Expand       bool    `json:"expand,omitempty"`
+		ExpandChains bool    `json:"expandChains,omitempty"`
+		Height       uint64  `json:"height,omitempty"`
+		Prove        bool    `json:"prove,omitempty"`
+		Txid         *string `json:"txid,omitempty"`
+	}{}
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	u.Txid = encoding.BytesToJSON(v.Txid)
 	return json.Marshal(&u)
 }
 
@@ -1010,6 +1057,70 @@ func (v *MultiResponse) UnmarshalJSON(data []byte) error {
 	v.OtherItems = make([]interface{}, len(u.OtherItems))
 	for i, x := range u.OtherItems {
 		v.OtherItems[i] = encoding.AnyFromJSON(x)
+	}
+	return nil
+}
+
+func (v *PendingTransactionPaginationQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
+func (v *PendingTransactionQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Expand       bool    `json:"expand,omitempty"`
+		ExpandChains bool    `json:"expandChains,omitempty"`
+		Height       uint64  `json:"height,omitempty"`
+		Prove        bool    `json:"prove,omitempty"`
+		Txid         *string `json:"txid,omitempty"`
+	}{}
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	u.Txid = encoding.BytesToJSON(v.Txid)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
+	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
+		return fmt.Errorf("error decoding Txid: %w", err)
+	} else {
+		v.Txid = x
 	}
 	return nil
 }

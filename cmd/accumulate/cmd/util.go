@@ -566,7 +566,22 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			}
 			out += fmt.Sprintf("\t%v (%s)\n", header.ChainUrl, chainDesc)
 		}
+	case "pendingTxs":
+		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		for i := range res.Items {
+			// Convert the item to a transaction query response
+			txr := new(api2.TransactionQueryResponse)
+			err := Remarshal(res.Items[i], txr)
+			if err != nil {
+				return "", err
+			}
 
+			s, err := PrintTransactionQueryResponseV2(txr)
+			if err != nil {
+				return "", err
+			}
+			out += s
+		}
 	case "txHistory":
 		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
 		for i := range res.Items {

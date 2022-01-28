@@ -66,6 +66,20 @@ QueryDataSet:
   output: MultiResponse
   call-params: [Url, QueryPagination, QueryOptions]
 
+QueryPending:
+  kind: query
+  rpc: query-pending-tx
+  input: PendingTransactionQuery
+  output: TransactionQueryResponse
+  call-params: [Url, Txid, QueryOptions]
+
+QueryPendingPagination:
+  kind: query
+  rpc: query-pending-txs
+  input: PendingTransactionPaginationQuery
+  output: MultiResponse
+  call-params: [Url, QueryPagination, QueryOptions]
+
 QueryKeyPageIndex:
   kind: query
   rpc: query-key-index

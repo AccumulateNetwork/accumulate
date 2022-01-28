@@ -10,7 +10,7 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 26)
+		m.methods = make(jsonrpc2.MethodMap, 28)
 	}
 
 	m.methods["describe"] = m.Describe
@@ -36,6 +36,8 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-data-set"] = m.QueryDataSet
 	m.methods["query-directory"] = m.QueryDirectory
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
+	m.methods["query-pending-tx"] = m.QueryPending
+	m.methods["query-pending-txs"] = m.QueryPendingPagination
 	m.methods["query-tx"] = m.QueryTx
 	m.methods["query-tx-history"] = m.QueryTxHistory
 	m.methods["version"] = m.Version
@@ -181,6 +183,26 @@ func (m *JrpcMethods) QueryKeyPageIndex(_ context.Context, params json.RawMessag
 	}
 
 	return jrpcFormatResponse(m.opts.Query.QueryKeyPageIndex(req.Url, req.Key))
+}
+
+func (m *JrpcMethods) QueryPending(_ context.Context, params json.RawMessage) interface{} {
+	req := new(PendingTransactionQuery)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatResponse(m.opts.Query.QueryPending(req.Url, req.Txid, req.QueryOptions))
+}
+
+func (m *JrpcMethods) QueryPendingPagination(_ context.Context, params json.RawMessage) interface{} {
+	req := new(PendingTransactionPaginationQuery)
+	err := m.parse(params, req)
+	if err != nil {
+		return err
+	}
+
+	return jrpcFormatResponse(m.opts.Query.QueryPendingPagination(req.Url, req.QueryPagination, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interface{} {
