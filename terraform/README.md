@@ -1,9 +1,9 @@
-Terraform Command Steps;
+1. Terraform Command Steps;
     *   terraform init - to initialize the backend.
     *   terraform plan - to create an execution plan. You will be prompted to provide your gitlab token.
     *   terraform apply - to apply resources to aws. You will be prompted to provide your gitlab token.
 
-Steps in AWS console;
+2. Steps in AWS console;
     *   Go to Elastic Container Services.
     *   Click on task definitions on the left menu bar.
     *   Select dev_tools (for Devnet) or tool_service (for Testnet)
