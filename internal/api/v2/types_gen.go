@@ -105,8 +105,9 @@ type PendingTransactionPaginationQuery struct {
 }
 
 type PendingTransactionQuery struct {
+	UrlQuery
 	QueryOptions
-	Txid []byte `json:"txid,omitempty" form:"txid" query:"txid" validate:"required"`
+	Txid []byte `json:"txid,omitempty" form:"txid" query:"txid"`
 }
 
 type QueryOptions struct {
@@ -574,12 +575,14 @@ func (v *PendingTransactionPaginationQuery) MarshalJSON() ([]byte, error) {
 
 func (v *PendingTransactionQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
+		Url          string  `json:"url,omitempty"`
 		Expand       bool    `json:"expand,omitempty"`
 		ExpandChains bool    `json:"expandChains,omitempty"`
 		Height       uint64  `json:"height,omitempty"`
 		Prove        bool    `json:"prove,omitempty"`
 		Txid         *string `json:"txid,omitempty"`
 	}{}
+	u.Url = v.UrlQuery.Url
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
@@ -1096,12 +1099,14 @@ func (v *PendingTransactionPaginationQuery) UnmarshalJSON(data []byte) error {
 
 func (v *PendingTransactionQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
+		Url          string  `json:"url,omitempty"`
 		Expand       bool    `json:"expand,omitempty"`
 		ExpandChains bool    `json:"expandChains,omitempty"`
 		Height       uint64  `json:"height,omitempty"`
 		Prove        bool    `json:"prove,omitempty"`
 		Txid         *string `json:"txid,omitempty"`
 	}{}
+	u.Url = v.UrlQuery.Url
 	u.Expand = v.QueryOptions.Expand
 	u.ExpandChains = v.QueryOptions.Expand
 	u.Height = v.QueryOptions.Height
@@ -1110,6 +1115,7 @@ func (v *PendingTransactionQuery) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
+	v.UrlQuery.Url = u.Url
 	if u.Expand != false {
 		v.QueryOptions.Expand = u.Expand
 	} else {

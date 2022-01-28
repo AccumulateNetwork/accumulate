@@ -321,10 +321,12 @@ PendingTransactionQuery:
   non-binary: true
   incomparable: true
   embeddings:
+    - UrlQuery
     - QueryOptions
   fields:
     - name: Txid
       type: bytes
+      optional: true
 
 PendingTransactionPaginationQuery:
   non-binary: true

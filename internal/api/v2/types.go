@@ -23,6 +23,8 @@ type Querier interface {
 	QueryData(url string, entryHash [32]byte) (*ChainQueryResponse, error)
 	QueryDataSet(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
 	QueryKeyPageIndex(url string, key []byte) (*ChainQueryResponse, error)
+	QueryPending(s string, txid []byte, opts QueryOptions) (*ChainQueryResponse, error)
+	QueryPendingPagination(s string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error)
 }
 
 // ABCIQueryClient is a subset of from TM/rpc/client.ABCIClient for sending

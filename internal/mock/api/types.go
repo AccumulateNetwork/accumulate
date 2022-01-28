@@ -115,6 +115,36 @@ func (mr *MockQuerierMockRecorder) QueryKeyPageIndex(url, key interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryKeyPageIndex", reflect.TypeOf((*MockQuerier)(nil).QueryKeyPageIndex), url, key)
 }
 
+// QueryPending mocks base method.
+func (m *MockQuerier) QueryPending(s string, txid []byte, opts api.QueryOptions) (*api.ChainQueryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryPending", s, txid, opts)
+	ret0, _ := ret[0].(*api.ChainQueryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryPending indicates an expected call of QueryPending.
+func (mr *MockQuerierMockRecorder) QueryPending(s, txid, opts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryPending", reflect.TypeOf((*MockQuerier)(nil).QueryPending), s, txid, opts)
+}
+
+// QueryPendingPagination mocks base method.
+func (m *MockQuerier) QueryPendingPagination(s string, pagination api.QueryPagination, opts api.QueryOptions) (*api.MultiResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryPendingPagination", s, pagination, opts)
+	ret0, _ := ret[0].(*api.MultiResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryPendingPagination indicates an expected call of QueryPendingPagination.
+func (mr *MockQuerierMockRecorder) QueryPendingPagination(s, pagination, opts interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryPendingPagination", reflect.TypeOf((*MockQuerier)(nil).QueryPendingPagination), s, pagination, opts)
+}
+
 // QueryTx mocks base method.
 func (m *MockQuerier) QueryTx(id []byte, wait time.Duration, opts api.QueryOptions) (*api.TransactionQueryResponse, error) {
 	m.ctrl.T.Helper()

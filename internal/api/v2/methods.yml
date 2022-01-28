@@ -70,7 +70,7 @@ QueryPending:
   kind: query
   rpc: query-pending-tx
   input: PendingTransactionQuery
-  output: TransactionQueryResponse
+  output: ChainQueryResponse
   call-params: [Url, Txid, QueryOptions]
 
 QueryPendingPagination:

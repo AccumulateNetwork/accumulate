@@ -263,8 +263,8 @@ func (c *Client) QueryKeyPageIndex(ctx context.Context, req *api.KeyPageIndexQue
 	return &resp, nil
 }
 
-func (c *Client) QueryPending(ctx context.Context, req *api.PendingTransactionQuery) (*api.TransactionQueryResponse, error) {
-	var resp api.TransactionQueryResponse
+func (c *Client) QueryPending(ctx context.Context, req *api.PendingTransactionQuery) (*api.ChainQueryResponse, error) {
+	var resp api.ChainQueryResponse
 
 	err := c.RequestAPIv2(ctx, "query-pending-tx", req, &resp)
 	if err != nil {

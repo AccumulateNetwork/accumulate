@@ -161,3 +161,21 @@ func (q *queryDispatch) QueryDataSet(url string, pagination QueryPagination, que
 
 	return q.direct(r).QueryDataSet(url, pagination, queryOptions)
 }
+
+func (q *queryDispatch) QueryPending(url string, txid []byte, opts QueryOptions) (*ChainQueryResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryPending(url, txid, opts)
+}
+
+func (q *queryDispatch) QueryPendingPagination(url string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
+	r, err := q.routing(url)
+	if err != nil {
+		return nil, err
+	}
+
+	return q.direct(r).QueryPendingPagination(url, pagination, opts)
+}
