@@ -25,7 +25,11 @@ var tokenCmd = &cobra.Command{
 				}
 			case "create":
 				if len(args) > 4 {
-					CreateToken(args[1], args[2], args[3], args[4], args[5], args[6])
+					var propertiesUrl string
+					if len(args) > 5 {
+						propertiesUrl = args[6]
+					}
+					CreateToken(args[1], args[2], args[3], args[4], args[5], propertiesUrl)
 				} else {
 					fmt.Println("Usage:")
 					PrintTokenCreate()
@@ -47,7 +51,7 @@ func PrintTokenGet() {
 }
 
 func PrintTokenCreate() {
-	fmt.Println("  accumulate token create [origin adi url] [signer key name] [url] [symbol] [precision] [properties] 	Create new token")
+	fmt.Println("  accumulate token create [origin adi url] [signer key name] [url] [symbol] [precision (0 - 18)] [properties URL (optional)] 	Create new token")
 }
 
 func PrintToken() {
