@@ -165,7 +165,7 @@ func parseKey(s string) (pubKey, privKey []byte, err error) {
 
 	b, err := ioutil.ReadFile(s)
 	if err != nil {
-		return nil, nil, fmt.Errorf("invalid key specifier: %q is not a label, key, or file", s)
+		return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is not a label, key, or file", s)
 	}
 
 	var pvkey privval.FilePVKey
@@ -173,7 +173,7 @@ func parseKey(s string) (pubKey, privKey []byte, err error) {
 		return pvkey.PubKey.Bytes(), pvkey.PrivKey.Bytes(), nil
 	}
 
-	return nil, nil, fmt.Errorf("invalid key specifier: %q is in an unsupported format", s)
+	return nil, nil, fmt.Errorf("cannot resolve signing key, invalid key specifier: %q is in an unsupported format", s)
 }
 
 func pubKeyFromString(s string) ([]byte, error) {
