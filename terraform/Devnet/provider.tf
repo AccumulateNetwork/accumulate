@@ -19,12 +19,11 @@ provider "docker" {
 }
 
 provider "gitlab" {
-    token = var.gitlab_token
+    token = backend.config.password
     base_url = "https://gitlab.com/accumulatenetwork/accumulate"
 }
 
 provider "aws" {
-  # shared_credentials_file = "~/.aws/credentials"
-  profile                 = "myAWS"
-  region                  = "us-east-1"
+  profile = var.aws_profile
+  region  = var.aws_region
 }
