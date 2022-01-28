@@ -12,7 +12,6 @@ import (
 
 // addSynthTxns prepares synthetic transactions for signing next block.
 func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error {
-
 	// Need to pass this to a threaded batcher / dispatcher to do both signing
 	// and sending of synth tx. No need to spend valuable time here doing that.
 	ids := make([][32]byte, len(submissions))
@@ -29,17 +28,17 @@ func (m *Executor) addSynthTxns(st *stateCache, submissions []*submission) error
 		txState, txPending := state.NewTransaction(txPending)
 
 		status := &protocol.TransactionStatus{Remote: true}
-		err = m.blockBatch.Transaction(tx.Transaction.Hash()).Put(txState, status, nil)
+		err = m.blockBatch.Transaction(tx.GetTxHash()).Put(txState, status, nil)
 		if err != nil {
 			return err
 		}
 
-		err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, tx.Transaction.Hash(), 0)
+		err = st.AddChainEntry(m.Network.NodeUrl(protocol.Ledger), protocol.SyntheticChain, protocol.ChainTypeTransaction, tx.GetTxHash(), 0, 0)
 		if err != nil {
 			return err
 		}
 
-		copy(ids[i][:], tx.Transaction.Hash())
+		copy(ids[i][:], tx.GetTxHash())
 	}
 
 	ledgerState := protocol.NewInternalLedger()
@@ -69,7 +68,7 @@ func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body p
 	env.Transaction.KeyPageIndex = 0
 	env.Transaction.Body = data
 
-	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.Transaction.Hash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
+	// m.logDebug("Built synth txn", "txid", logging.AsHex(tx.GetTxHash()), "dest", dest.String(), "nonce", tx.SigInfo.Nonce, "type", body.GetType())
 
 	ledgerState := new(protocol.InternalLedger)
 	err = st.LoadUrlAs(opts.Network.NodeUrl(protocol.Ledger), ledgerState)
@@ -90,7 +89,7 @@ func (opts *ExecutorOptions) buildSynthTxn(st *stateCache, dest *url.URL, body p
 	ledgerState.Synthetic.Nonce++
 
 	// Append the ID
-	txid := types.Bytes(env.Transaction.Hash()).AsBytes32()
+	txid := types.Bytes(env.GetTxHash()).AsBytes32()
 	ledgerState.Synthetic.Unsigned = append(ledgerState.Synthetic.Unsigned, txid)
 
 	st.Update(ledgerState)

@@ -30,13 +30,27 @@ var Go = mustParseTemplate("go.tmpl", goSrc, template.FuncMap{
 	"binaryUnmarshalValue": GoBinaryUnmarshalValue,
 	"valueToJson":          GoValueToJson,
 	"valueFromJson":        GoValueFromJson,
+	"jsonZeroValue":        GoJsonZeroValue,
 
 	"needsCustomJSON": func(typ *Type) bool {
 		if typ.IsTxResult {
 			return true
 		}
+
+		// Add a custom un/marshaller if the type embeds another type - fields
+		// of embedded types are un-embedded during JSON un/marshalling
+		if len(typ.Embeddings) > 0 {
+			return true
+		}
+
 		for _, f := range typ.Fields {
+			// Add a custom un/marshaller if the field needs special handling
 			if GoJsonType(f) != "" {
+				return true
+			}
+
+			// Add a custom un/marshaller if the field has an alternate name
+			if f.AlternativeName != "" {
 				return true
 			}
 		}
@@ -124,6 +138,29 @@ func GoJsonType(field *Field) string {
 	}
 
 	return ""
+}
+
+func GoJsonZeroValue(field *Field) (string, error) {
+	switch field.Type {
+	case "bytes", "bigint", "chainSet", "duration", "any", "slice", "rawJson":
+		return "nil", nil
+	case "bool":
+		return "false", nil
+	case "string", "chain":
+		return `""`, nil
+	case "uvarint", "varint":
+		return "0", nil
+	}
+
+	switch {
+	case field.AsReference, field.AsValue:
+		if field.IsPointer {
+			return "nil", nil
+		}
+		return fmt.Sprintf("(%s{})", GoResolveType(field, false)), nil
+	}
+
+	return "", fmt.Errorf("field %q: cannot determine zero value for %s", field.Name, GoResolveType(field, false))
 }
 
 func GoAreEqual(field *Field, varName, otherName string) (string, error) {

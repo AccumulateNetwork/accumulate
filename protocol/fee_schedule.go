@@ -66,22 +66,33 @@ const (
 
 	//FeeWriteScratchData $0.0001 / 256 bytes
 	FeeWriteScratchData Fee = 1
+
+	// FeeSignPending $0.001
+	FeeSignPending Fee = 10
 )
 
-func ComputeFee(tx *transactions.Envelope) (int, error) {
+func ComputeFee(tx *transactions.Envelope) (Fee, error) {
+	// Do not charge fees for the DN or BVNs
+	if IsDnUrl(tx.Transaction.Origin) {
+		return 0, nil
+	}
+	if _, ok := ParseBvnUrl(tx.Transaction.Origin); ok {
+		return 0, nil
+	}
+
 	txType := tx.Transaction.Type()
 	if txType == types.TxTypeUnknown {
 		return 0, fmt.Errorf("cannot compute fee with no data defined for transaction")
 	}
 	switch types.TransactionType(txType) {
 	case types.TxTypeCreateIdentity:
-		return FeeCreateIdentity.AsInt(), nil
+		return FeeCreateIdentity, nil
 	case types.TxTypeCreateTokenAccount:
-		return FeeCreateTokenAccount.AsInt(), nil
+		return FeeCreateTokenAccount, nil
 	case types.TxTypeSendTokens:
-		return FeeSendTokens.AsInt(), nil
+		return FeeSendTokens, nil
 	case types.TxTypeCreateDataAccount:
-		return FeeCreateDataAccount.AsInt(), nil
+		return FeeCreateDataAccount, nil
 	case types.TxTypeWriteData:
 		size := len(tx.Transaction.Body)
 		if size > WriteDataMax {
@@ -90,25 +101,27 @@ func ComputeFee(tx *transactions.Envelope) (int, error) {
 		if size <= 0 {
 			return 0, fmt.Errorf("insufficient data provided for %v needed to compute cost", txType)
 		}
-		return FeeWriteData.AsInt() * (size/256 + 1), nil
+		return FeeWriteData * Fee(size/256+1), nil
 	case types.TxTypeWriteDataTo:
-		return FeeWriteDataTo.AsInt(), nil
+		return FeeWriteDataTo, nil
 	case types.TxTypeAcmeFaucet:
-		return FeeAcmeFaucet.AsInt(), nil
+		return FeeAcmeFaucet, nil
 	case types.TxTypeCreateToken:
-		return FeeCreateToken.AsInt(), nil
+		return FeeCreateToken, nil
 	case types.TxTypeIssueTokens:
-		return FeeIssueTokens.AsInt(), nil
+		return FeeIssueTokens, nil
 	case types.TxTypeBurnTokens:
-		return FeeBurnTokens.AsInt(), nil
+		return FeeBurnTokens, nil
 	case types.TxTypeCreateKeyPage:
-		return FeeCreateKeyPage.AsInt(), nil
+		return FeeCreateKeyPage, nil
 	case types.TxTypeCreateKeyBook:
-		return FeeCreateKeyBook.AsInt(), nil
+		return FeeCreateKeyBook, nil
 	case types.TxTypeAddCredits:
-		return FeeAddCredits.AsInt(), nil
+		return FeeAddCredits, nil
 	case types.TxTypeUpdateKeyPage:
-		return FeeUpdateKeyPage.AsInt(), nil
+		return FeeUpdateKeyPage, nil
+	case types.TxTypeSignPending:
+		return FeeSignPending, nil
 	default:
 		//by default assume if type isn't specified, there is no charge for tx
 		return 0, nil

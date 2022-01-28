@@ -10,9 +10,10 @@ import (
 
 func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	if m.methods == nil {
-		m.methods = make(jsonrpc2.MethodMap, 25)
+		m.methods = make(jsonrpc2.MethodMap, 26)
 	}
 
+	m.methods["describe"] = m.Describe
 	m.methods["execute"] = m.Execute
 	m.methods["add-credits"] = m.ExecuteAddCredits
 	m.methods["burn-tokens"] = m.ExecuteBurnTokens
@@ -123,13 +124,13 @@ func (m *JrpcMethods) ExecuteWriteDataTo(ctx context.Context, params json.RawMes
 }
 
 func (m *JrpcMethods) Query(_ context.Context, params json.RawMessage) interface{} {
-	req := new(UrlQuery)
+	req := new(GeneralQuery)
 	err := m.parse(params, req)
 	if err != nil {
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryUrl(req.Url))
+	return jrpcFormatResponse(m.opts.Query.QueryUrl(req.Url, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryChain(_ context.Context, params json.RawMessage) interface{} {
@@ -189,7 +190,7 @@ func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interfa
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryTx(req.Txid, req.Wait))
+	return jrpcFormatResponse(m.opts.Query.QueryTx(req.Txid, req.Wait, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryTxHistory(_ context.Context, params json.RawMessage) interface{} {

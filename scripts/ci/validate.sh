@@ -48,10 +48,16 @@ function wait-for-tx {
     done
 }
 
-# cli-tx <args...> - Execute a CLI command and extract the TXID from the result
+# cli-tx <args...> - Execute a CLI command and extract the transaction hash from the result
 function cli-tx {
     JSON=`accumulate -j "$@"` || return 1
-    echo "$JSON" | jq -re .txid
+    echo "$JSON" | jq -re .transactionHash
+}
+
+# cli-tx-env <args...> - Execute a CLI command and extract the envelope hash from the result
+function cli-tx-env {
+    JSON=`accumulate -j "$@"` || return 1
+    echo "$JSON" | jq -re .envelopeHash
 }
 
 # api-v2 <payload> - Send a JSON-RPC message to the API
@@ -62,7 +68,7 @@ function api-v2 {
 # api-tx <payload> - Send a JSON-RPC message to the API and extract the TXID from the result
 function api-tx {
     JSON=`api-v2 "$@"` || return 1
-    echo "$JSON" | jq -r .result.txid
+    echo "$JSON" | jq -r .result.transactionHash
 }
 
 # die <message> - Print an error message and exit
@@ -119,6 +125,7 @@ section "Generate keys"
 ensure-key keytest-0-0
 ensure-key keytest-1-0
 ensure-key keytest-1-1
+ensure-key keytest-1-2
 ensure-key keytest-2-0
 ensure-key keytest-2-1
 echo
@@ -160,6 +167,7 @@ BALANCE=$(accumulate -j page get keytest/page1 | jq -r .data.creditBalance)
 
 section "Add a key to page 1 using a key from page 1"
 wait-for cli-tx page key add keytest/page1 keytest-1-0 1 keytest-1-1
+wait-for cli-tx page key add keytest/page1 keytest-1-0 1 keytest-1-2
 success
 
 section "Add a key to page 2 using a key from page 1"
@@ -179,6 +187,30 @@ section "Send tokens from the lite token account to the ADI token account"
 wait-for cli-tx tx create ${LITE} keytest/tokens 5
 BALANCE=$(accumulate -j account get keytest/tokens | jq -r .data.balance)
 [ "$BALANCE" -eq 500000000 ] && success || die "${LITE} should have 5 tokens but has $(expr ${BALANCE} / 100000000)"
+
+section "Send tokens from the ADI token account to the lite token account using the multisig page"
+TXID=$(cli-tx tx create keytest/tokens keytest-1-0 ${LITE} 1)
+wait-for-tx $TXID
+accumulate -j tx get $TXID | jq -re .status.pending &> /dev/null || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.delivered &> /dev/null && die "Transaction was delivered"
+success
+
+section "Signing the transaction with the same key does not deliver it"
+wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
+accumulate -j tx get $TXID | jq -re .status.pending &> /dev/null || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.delivered &> /dev/null && die "Transaction was delivered"
+wait-for-tx $TXID
+success
+
+section "Sign the pending transaction using the other key"
+wait-for cli-tx-env tx sign keytest/tokens keytest-1-1 $TXID
+accumulate -j tx get $TXID | jq -re .status.pending &> /dev/null && die "Transaction is pending"
+accumulate -j tx get $TXID | jq -re .status.delivered &> /dev/null || die "Transaction was not delivered"
+wait-for-tx $TXID
+success
+
+section "Signing the transaction after it has been delivered fails"
+cli-tx-env tx sign keytest/tokens keytest-1-2 $TXID && die "Signed the transaction after it was delivered" || success
 
 section "Bug AC-551"
 api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value &> /dev/null
@@ -209,6 +241,10 @@ GOT=$(api-v2 '{"jsonrpc": "2.0", "id": 0, "method": "query-tx", "params": {"txid
 [ "${TXID}" = "${GOT}" ] || die "Failed to find TX ${TXID}"
 success
 
+section "Query transaction receipt"
+TXID=$(accumulate -j tx history keytest 0 1 | jq -re '.items[0].txid')
+(accumulate -j tx get --prove $TXID | jq -e .receipts[0] -C --indent 0) && success || die "Failed to get receipt for ${TXID}"
+
 section "Create a token issuer"
 wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "createToken", "url": "keytest/token-issuer", "symbol": "TOK", "precision": 10}'
 accumulate get keytest/token-issuer &> /dev/null || die "Cannot find keytest/token-issuer"
@@ -236,6 +272,8 @@ ACCOUNT_ID=$(accumulate -j account create data lite keytest keytest-0-0 "Factom 
 accumulate data get $ACCOUNT_ID 0 1 &> /dev/null || die "lite data entry not found"
 wait-for cli-tx data write-to keytest keytest-0-0 $ACCOUNT_ID "data test"
 accumulate data get $ACCOUNT_ID 0 2 &> /dev/null || die "lite data error"
+accumulate -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.entryHash &> /dev/null || die "Entry hash is missing from transaction results"
+accumulate -j get "${ACCOUNT_ID}#txn/0" | jq -re .status.result.accountID &> /dev/null || die "Account ID is missing from transaction results"
 success
 
 section "Create ADI Data Account"
@@ -244,9 +282,26 @@ accumulate account get keytest/data &> /dev/null && success || die "Cannot find 
 
 section "Write data to ADI Data Account"
 JSON=$(accumulate -j data write keytest/data keytest-0-0 foo bar)
-TXID=$(echo $JSON | jq -re .txid)
+TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
 echo $JSON | jq -re .result.entryHash &> /dev/null || die "Deliver response does not include the entry hash"
 accumulate -j tx get $TXID | jq -re .status.result.entryHash &> /dev/null || die "Transaction query response does not include the entry hash"
 success
+
+section "Query latest data entry by URL"
+RESULT=$(accumulate -j get keytest/data#data | jq -re .data.entry.data)
+[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Latest entry is not 'bar'"
+
+section "Query data entry at height 0 by URL"
+RESULT=$(accumulate -j get keytest/data#data/0 | jq -re .data.entry.data)
+[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry at height 0 is not 'bar'"
+
+section "Query data entry with hash by URL"
+ENTRY=$(accumulate -j get keytest/data#data/0 | jq -re .data.entryHash)
+RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data)
+[ "$RESULT" == $(echo -n bar | xxd -p) ] && success || die "Entry with hash ${ENTRY} is not 'bar'"
+
+section "Query data entry range by URL"
+RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
+[ "$RESULT" -ge 1 ] && success || die "No entries found"

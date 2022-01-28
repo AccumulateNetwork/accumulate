@@ -34,8 +34,9 @@ TransactionQueryResponse:
       type: KeyPage
       pointer: true
       marshal-as: reference
-    - name: Txid
+    - name: TransactionHash
       type: bytes
+      alternative: Txid
     - name: Signatures
       type: slice
       slice:
@@ -46,6 +47,12 @@ TransactionQueryResponse:
       pointer: true
     - name: SyntheticTxids
       type: chainSet
+    - name: Receipts
+      type: slice
+      slice:
+        type: query.TxReceipt
+        marshal-as: reference
+        pointer: true
 
 MerkleState:
   non-binary: true
@@ -128,6 +135,13 @@ TokenDeposit:
   - name: Txid
     type: bytes
 
+GeneralQuery:
+  non-binary: true
+  incomparable: true
+  embeddings:
+  - UrlQuery
+  - QueryOptions
+
 UrlQuery:
   non-binary: true
   incomparable: true
@@ -144,7 +158,6 @@ KeyPageIndexQuery:
   fields:
   - name: Key
     type: bytes
-
 
 TxHistoryQuery:
   non-binary: true
@@ -176,13 +189,22 @@ QueryOptions:
   non-binary: true
   incomparable: true
   fields:
-    - name: ExpandChains
+    - name: Expand
+      type: bool
+      optional: true
+      alternative: ExpandChains
+    - name: Height
+      type: uvarint
+      optional: true
+    - name: Prove
       type: bool
       optional: true
 
 TxnQuery:
   non-binary: true
   incomparable: true
+  embeddings:
+  - QueryOptions
   fields:
   - name: Txid
     type: bytes
@@ -233,6 +255,9 @@ TxRequest:
   - name: KeyPage
     type: KeyPage
     marshal-as: reference
+  - name: TxHash
+    type: bytes
+    optional: true
   - name: Payload
     type: any
 
@@ -240,10 +265,14 @@ TxResponse:
   non-binary: true
   incomparable: true
   fields:
-  - name: Txid
+  - name: TransactionHash
     type: bytes
-  - name: Hash
-    type: chain
+    alternative: Txid
+  - name: EnvelopeHash
+    type: bytes
+  - name: SimpleHash
+    type: bytes
+    alternative: Hash
   - name: Code
     type: uvarint
   - name: Message
@@ -286,4 +315,23 @@ DataEntryQueryResponse:
       type: chain
     - name: Entry
       type: DataEntry
+      marshal-as: reference
+
+VersionResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Version
+      type: string
+    - name: Commit
+      type: string
+    - name: VersionIsKnown
+      type: bool
+
+DescriptionResponse:
+  non-binary: true
+  incomparable: true
+  fields:
+    - name: Subnet
+      type: config.Network
       marshal-as: reference

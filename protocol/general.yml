@@ -31,6 +31,10 @@ AnchorMetadata:
       type: uvarint
     - name: SourceIndex
       type: uvarint
+    - name: SourceBlock
+      type: uvarint
+    - name: Entry
+      type: bytes
 
 DataEntry:
   fields:
@@ -53,6 +57,8 @@ TransactionStatus:
     - name: Remote
       type: bool
     - name: Delivered
+      type: bool
+    - name: Pending
       type: bool
     - name: Code
       type: uvarint

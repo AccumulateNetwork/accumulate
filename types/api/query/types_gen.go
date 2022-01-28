@@ -8,6 +8,8 @@ import (
 	"fmt"
 
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"github.com/AccumulateNetwork/accumulate/protocol"
 )
 
 type RequestKeyPageIndex struct {
@@ -16,12 +18,13 @@ type RequestKeyPageIndex struct {
 }
 
 type ResponseByTxId struct {
-	TxId           [32]byte `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
-	TxState        []byte   `json:"txState,omitempty" form:"txState" query:"txState" validate:"required"`
-	TxPendingState []byte   `json:"txPendingState,omitempty" form:"txPendingState" query:"txPendingState" validate:"required"`
-	TxSynthTxIds   []byte   `json:"txSynthTxIds,omitempty" form:"txSynthTxIds" query:"txSynthTxIds" validate:"required"`
-	Height         int64    `json:"height" form:"height" query:"height" validate:"required"`
-	ChainState     [][]byte `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
+	TxId           [32]byte     `json:"txId,omitempty" form:"txId" query:"txId" validate:"required"`
+	TxState        []byte       `json:"txState,omitempty" form:"txState" query:"txState" validate:"required"`
+	TxPendingState []byte       `json:"txPendingState,omitempty" form:"txPendingState" query:"txPendingState" validate:"required"`
+	TxSynthTxIds   []byte       `json:"txSynthTxIds,omitempty" form:"txSynthTxIds" query:"txSynthTxIds" validate:"required"`
+	Height         int64        `json:"height" form:"height" query:"height" validate:"required"`
+	ChainState     [][]byte     `json:"chainState,omitempty" form:"chainState" query:"chainState" validate:"required"`
+	Receipts       []*TxReceipt `json:"receipts,omitempty" form:"receipts" query:"receipts" validate:"required"`
 }
 
 type ResponseChainEntry struct {
@@ -43,11 +46,22 @@ type ResponseKeyPageIndex struct {
 	Index   uint64 `json:"index" form:"index" query:"index" validate:"required"`
 }
 
+type ResponsePending struct {
+	Transactions [][32]byte `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+}
+
 type ResponseTxHistory struct {
 	Start        int64            `json:"start" form:"start" query:"start" validate:"required"`
 	End          int64            `json:"end" form:"end" query:"end" validate:"required"`
 	Total        int64            `json:"total" form:"total" query:"total" validate:"required"`
 	Transactions []ResponseByTxId `json:"transactions,omitempty" form:"transactions" query:"transactions" validate:"required"`
+}
+
+type TxReceipt struct {
+	Account        *url.URL         `json:"account,omitempty" form:"account" query:"account" validate:"required"`
+	Chain          string           `json:"chain,omitempty" form:"chain" query:"chain" validate:"required"`
+	DirectoryBlock uint64           `json:"directoryBlock,omitempty" form:"directoryBlock" query:"directoryBlock" validate:"required"`
+	Receipt        protocol.Receipt `json:"receipt,omitempty" form:"receipt" query:"receipt" validate:"required"`
 }
 
 func (v *RequestKeyPageIndex) Equal(u *RequestKeyPageIndex) bool {
@@ -90,6 +104,18 @@ func (v *ResponseByTxId) Equal(u *ResponseByTxId) bool {
 	for i := range v.ChainState {
 		v, u := v.ChainState[i], u.ChainState[i]
 		if !(bytes.Equal(v, u)) {
+			return false
+		}
+
+	}
+
+	if !(len(v.Receipts) == len(u.Receipts)) {
+		return false
+	}
+
+	for i := range v.Receipts {
+		v, u := v.Receipts[i], u.Receipts[i]
+		if !(v.Equal(u)) {
 			return false
 		}
 
@@ -166,6 +192,20 @@ func (v *ResponseKeyPageIndex) Equal(u *ResponseKeyPageIndex) bool {
 	return true
 }
 
+func (v *ResponsePending) Equal(u *ResponsePending) bool {
+	if !(len(v.Transactions) == len(u.Transactions)) {
+		return false
+	}
+
+	for i := range v.Transactions {
+		if v.Transactions[i] != u.Transactions[i] {
+			return false
+		}
+	}
+
+	return true
+}
+
 func (v *ResponseTxHistory) Equal(u *ResponseTxHistory) bool {
 	if !(v.Start == u.Start) {
 		return false
@@ -189,6 +229,26 @@ func (v *ResponseTxHistory) Equal(u *ResponseTxHistory) bool {
 			return false
 		}
 
+	}
+
+	return true
+}
+
+func (v *TxReceipt) Equal(u *TxReceipt) bool {
+	if !(v.Account.Equal(u.Account)) {
+		return false
+	}
+
+	if !(v.Chain == u.Chain) {
+		return false
+	}
+
+	if !(v.DirectoryBlock == u.DirectoryBlock) {
+		return false
+	}
+
+	if !(v.Receipt.Equal(&u.Receipt)) {
+		return false
 	}
 
 	return true
@@ -221,6 +281,13 @@ func (v *ResponseByTxId) BinarySize() int {
 
 	for _, v := range v.ChainState {
 		n += encoding.BytesBinarySize(v)
+
+	}
+
+	n += encoding.UvarintBinarySize(uint64(len(v.Receipts)))
+
+	for _, v := range v.Receipts {
+		n += v.BinarySize()
 
 	}
 
@@ -275,6 +342,14 @@ func (v *ResponseKeyPageIndex) BinarySize() int {
 	return n
 }
 
+func (v *ResponsePending) BinarySize() int {
+	var n int
+
+	n += encoding.ChainSetBinarySize(v.Transactions)
+
+	return n
+}
+
 func (v *ResponseTxHistory) BinarySize() int {
 	var n int
 
@@ -290,6 +365,20 @@ func (v *ResponseTxHistory) BinarySize() int {
 		n += v.BinarySize()
 
 	}
+
+	return n
+}
+
+func (v *TxReceipt) BinarySize() int {
+	var n int
+
+	n += v.Account.BinarySize()
+
+	n += encoding.StringBinarySize(v.Chain)
+
+	n += encoding.UvarintBinarySize(v.DirectoryBlock)
+
+	n += v.Receipt.BinarySize()
 
 	return n
 }
@@ -321,6 +410,17 @@ func (v *ResponseByTxId) MarshalBinary() ([]byte, error) {
 	for i, v := range v.ChainState {
 		_ = i
 		buffer.Write(encoding.BytesMarshalBinary(v))
+
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Receipts))))
+	for i, v := range v.Receipts {
+		_ = i
+		if b, err := v.MarshalBinary(); err != nil {
+			return nil, fmt.Errorf("error encoding Receipts[%d]: %w", i, err)
+		} else {
+			buffer.Write(b)
+		}
 
 	}
 
@@ -375,6 +475,14 @@ func (v *ResponseKeyPageIndex) MarshalBinary() ([]byte, error) {
 	return buffer.Bytes(), nil
 }
 
+func (v *ResponsePending) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.ChainSetMarshalBinary(v.Transactions))
+
+	return buffer.Bytes(), nil
+}
+
 func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 	var buffer bytes.Buffer
 
@@ -393,6 +501,28 @@ func (v *ResponseTxHistory) MarshalBinary() ([]byte, error) {
 			buffer.Write(b)
 		}
 
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func (v *TxReceipt) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	if b, err := v.Account.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Account: %w", err)
+	} else {
+		buffer.Write(b)
+	}
+
+	buffer.Write(encoding.StringMarshalBinary(v.Chain))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.DirectoryBlock))
+
+	if b, err := v.Receipt.MarshalBinary(); err != nil {
+		return nil, fmt.Errorf("error encoding Receipt: %w", err)
+	} else {
+		buffer.Write(b)
 	}
 
 	return buffer.Bytes(), nil
@@ -469,6 +599,26 @@ func (v *ResponseByTxId) UnmarshalBinary(data []byte) error {
 		}
 		data = data[encoding.BytesBinarySize(v.ChainState[i]):]
 
+	}
+
+	var lenReceipts uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Receipts: %w", err)
+	} else {
+		lenReceipts = x
+	}
+	data = data[encoding.UvarintBinarySize(lenReceipts):]
+
+	v.Receipts = make([]*TxReceipt, lenReceipts)
+	for i := range v.Receipts {
+		var x *TxReceipt
+		x = new(TxReceipt)
+		if err := x.UnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Receipts[%d]: %w", i, err)
+		}
+		data = data[x.BinarySize():]
+
+		v.Receipts[i] = x
 	}
 
 	return nil
@@ -580,6 +730,17 @@ func (v *ResponseKeyPageIndex) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *ResponsePending) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.ChainSetUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Transactions: %w", err)
+	} else {
+		v.Transactions = x
+	}
+	data = data[encoding.ChainSetBinarySize(v.Transactions):]
+
+	return nil
+}
+
 func (v *ResponseTxHistory) UnmarshalBinary(data []byte) error {
 	if x, err := encoding.VarintUnmarshalBinary(data); err != nil {
 		return fmt.Errorf("error decoding Start: %w", err)
@@ -622,6 +783,35 @@ func (v *ResponseTxHistory) UnmarshalBinary(data []byte) error {
 	return nil
 }
 
+func (v *TxReceipt) UnmarshalBinary(data []byte) error {
+	v.Account = new(url.URL)
+	if err := v.Account.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Account: %w", err)
+	}
+	data = data[v.Account.BinarySize():]
+
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Chain: %w", err)
+	} else {
+		v.Chain = x
+	}
+	data = data[encoding.StringBinarySize(v.Chain):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding DirectoryBlock: %w", err)
+	} else {
+		v.DirectoryBlock = x
+	}
+	data = data[encoding.UvarintBinarySize(v.DirectoryBlock):]
+
+	if err := v.Receipt.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Receipt: %w", err)
+	}
+	data = data[v.Receipt.BinarySize():]
+
+	return nil
+}
+
 func (v *RequestKeyPageIndex) MarshalJSON() ([]byte, error) {
 	u := struct {
 		Url string  `json:"url,omitempty"`
@@ -634,12 +824,13 @@ func (v *RequestKeyPageIndex) MarshalJSON() ([]byte, error) {
 
 func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	u := struct {
-		TxId           string    `json:"txId,omitempty"`
-		TxState        *string   `json:"txState,omitempty"`
-		TxPendingState *string   `json:"txPendingState,omitempty"`
-		TxSynthTxIds   *string   `json:"txSynthTxIds,omitempty"`
-		Height         int64     `json:"height"`
-		ChainState     []*string `json:"chainState,omitempty"`
+		TxId           string       `json:"txId,omitempty"`
+		TxState        *string      `json:"txState,omitempty"`
+		TxPendingState *string      `json:"txPendingState,omitempty"`
+		TxSynthTxIds   *string      `json:"txSynthTxIds,omitempty"`
+		Height         int64        `json:"height"`
+		ChainState     []*string    `json:"chainState,omitempty"`
+		Receipts       []*TxReceipt `json:"receipts,omitempty"`
 	}{}
 	u.TxId = encoding.ChainToJSON(v.TxId)
 	u.TxState = encoding.BytesToJSON(v.TxState)
@@ -650,6 +841,7 @@ func (v *ResponseByTxId) MarshalJSON() ([]byte, error) {
 	for i, x := range v.ChainState {
 		u.ChainState[i] = encoding.BytesToJSON(x)
 	}
+	u.Receipts = v.Receipts
 	return json.Marshal(&u)
 }
 
@@ -685,6 +877,14 @@ func (v *ResponseChainRange) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *ResponsePending) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Transactions []string `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	return json.Marshal(&u)
+}
+
 func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 	u := struct {
 		Url string  `json:"url,omitempty"`
@@ -706,12 +906,13 @@ func (v *RequestKeyPageIndex) UnmarshalJSON(data []byte) error {
 
 func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	u := struct {
-		TxId           string    `json:"txId,omitempty"`
-		TxState        *string   `json:"txState,omitempty"`
-		TxPendingState *string   `json:"txPendingState,omitempty"`
-		TxSynthTxIds   *string   `json:"txSynthTxIds,omitempty"`
-		Height         int64     `json:"height"`
-		ChainState     []*string `json:"chainState,omitempty"`
+		TxId           string       `json:"txId,omitempty"`
+		TxState        *string      `json:"txState,omitempty"`
+		TxPendingState *string      `json:"txPendingState,omitempty"`
+		TxSynthTxIds   *string      `json:"txSynthTxIds,omitempty"`
+		Height         int64        `json:"height"`
+		ChainState     []*string    `json:"chainState,omitempty"`
+		Receipts       []*TxReceipt `json:"receipts,omitempty"`
 	}{}
 	u.TxId = encoding.ChainToJSON(v.TxId)
 	u.TxState = encoding.BytesToJSON(v.TxState)
@@ -722,6 +923,7 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 	for i, x := range v.ChainState {
 		u.ChainState[i] = encoding.BytesToJSON(x)
 	}
+	u.Receipts = v.Receipts
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
@@ -754,6 +956,7 @@ func (v *ResponseByTxId) UnmarshalJSON(data []byte) error {
 			v.ChainState[i] = x
 		}
 	}
+	v.Receipts = u.Receipts
 	return nil
 }
 
@@ -816,6 +1019,22 @@ func (v *ResponseChainRange) UnmarshalJSON(data []byte) error {
 		} else {
 			v.Entries[i] = x
 		}
+	}
+	return nil
+}
+
+func (v *ResponsePending) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Transactions []string `json:"transactions,omitempty"`
+	}{}
+	u.Transactions = encoding.ChainSetToJSON(v.Transactions)
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if x, err := encoding.ChainSetFromJSON(u.Transactions); err != nil {
+		return fmt.Errorf("error decoding Transactions: %w", err)
+	} else {
+		v.Transactions = x
 	}
 	return nil
 }

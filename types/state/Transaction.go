@@ -14,7 +14,7 @@ func NewPendingTransaction(env *transactions.Envelope) *PendingTransaction {
 	ret.TransactionState = &TxState{}
 	ret.TransactionState.SigInfo = &env.Transaction.Header
 	ret.TransactionState.Transaction = env.Transaction.Body
-	copy(ret.TransactionState.transactionHash[:], env.Transaction.Hash())
+	copy(ret.TransactionState.transactionHash[:], env.GetTxHash())
 	return ret
 }
 
@@ -60,7 +60,9 @@ func (is *Transaction) TransactionHash() *types.Bytes32 {
 	tx := new(transactions.Transaction)
 	tx.Header = *is.SigInfo
 	tx.Body = is.Transaction
+	env := new(transactions.Envelope)
+	env.Transaction = tx
 	var txHash types.Bytes32
-	copy(txHash[:], tx.Hash())
+	copy(txHash[:], env.GetTxHash())
 	return &txHash
 }

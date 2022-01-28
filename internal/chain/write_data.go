@@ -41,9 +41,9 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol
 	// produced the data entry
 
 	sw := protocol.SegWitDataEntry{}
-	copy(sw.Cause[:], tx.Transaction.Hash())
-	copy(sw.EntryHash[:], body.Entry.Hash())
-	sw.EntryUrl = st.Origin.Header().GetChainUrl()
+	sw.Cause = *(*[32]byte)(tx.GetTxHash())
+	sw.EntryHash = *(*[32]byte)(body.Entry.Hash())
+	sw.EntryUrl = tx.Transaction.Origin.String()
 
 	segWitPayload, err := sw.MarshalBinary()
 	if err != nil {
@@ -56,7 +56,9 @@ func (WriteData) Validate(st *StateManager, tx *transactions.Envelope) (protocol
 	//store the entry
 	st.UpdateData(st.Origin, sw.EntryHash[:], &body.Entry)
 
-	return &protocol.WriteDataResult{
-		EntryHash: sw.EntryHash,
-	}, nil
+	result := new(protocol.WriteDataResult)
+	result.EntryHash = *(*[32]byte)(body.Entry.Hash())
+	result.AccountID = tx.Transaction.Origin.AccountID()
+	result.AccountUrl = tx.Transaction.Origin
+	return result, nil
 }

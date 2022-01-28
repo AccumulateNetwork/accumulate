@@ -7,12 +7,11 @@ import (
 	"errors"
 	"math/rand"
 	"net/http"
-	"strings"
+	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/config"
+	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
@@ -29,13 +28,9 @@ func (b *txBatch) Append(tx []byte) {
 // their recipients.
 type dispatcher struct {
 	ExecutorOptions
-	localIndex  int
 	isDirectory bool
-	localBatch  txBatch
-	bvn         []string
-	bvnBatches  []txBatch
-	dn          string
-	dnBatch     txBatch
+	getClient   func(subnet string) (api.ABCIBroadcastClient, error)
+	batches     map[string]txBatch
 	errg        *errgroup.Group
 }
 
@@ -44,88 +39,20 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 	d := new(dispatcher)
 	d.ExecutorOptions = opts
 	d.isDirectory = opts.Network.Type == config.Directory
-	d.localIndex = -1
-	d.bvn = make([]string, len(opts.Network.BvnNames))
-	d.bvnBatches = make([]txBatch, len(opts.Network.BvnNames))
-
-	// If we're not a directory, make an RPC client for the DN
-	if !d.isDirectory && !d.IsTest {
-		// Get the address of a directory node
-		d.dn = opts.Network.AddressWithPortOffset(protocol.Directory, networks.TmRpcPortOffset)
-	}
-
-	// Make a client for all of the BVNs
-	for i, id := range opts.Network.BvnNames {
-		// Use the local client for ourself
-		if id == opts.Network.ID {
-			d.localIndex = i
-			continue
-		}
-
-		// Get the BVN address
-		d.bvn[i] = opts.Network.AddressWithPortOffset(id, networks.TmRpcPortOffset)
-	}
-
+	d.batches = map[string]txBatch{}
 	return d
-}
-
-// Reset creates new RPC client batches.
-func (d *dispatcher) Reset(ctx context.Context) {
-	d.errg = new(errgroup.Group)
-
-	d.localBatch = d.localBatch[:0]
-	d.dnBatch = d.dnBatch[:0]
-	for i, bv := range d.bvnBatches {
-		d.bvnBatches[i] = bv[:0]
-	}
-}
-
-// route gets the client for the URL
-func (d *dispatcher) route(u *url.URL) *txBatch {
-	// Is it a DN URL?
-	if protocol.IsDnUrl(u) {
-		if d.isDirectory {
-			return &d.localBatch
-		}
-		if d.dn == "" && !d.IsTest {
-			panic("Directory was not configured")
-		}
-		return &d.dnBatch
-	}
-
-	// Is it a BVN URL?
-	if bvn, ok := protocol.ParseBvnUrl(u); ok {
-		for i, id := range d.Network.BvnNames {
-			if strings.EqualFold(bvn, id) {
-				if i == d.localIndex {
-					// Use the local client for local requests
-					return nil
-				}
-
-				return &d.bvnBatches[i]
-			}
-		}
-
-		// Is it OK to just route unknown BVNs normally?
-	}
-
-	// Modulo routing
-	i := u.Routing() % uint64(len(d.bvn))
-	if i == uint64(d.localIndex) {
-		// Use the local client for local requests
-		return &d.localBatch
-	}
-	return &d.bvnBatches[i]
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte) {
-	d.route(u).Append(tx)
+	subnet := d.Router.Route(u)
+	d.batches[subnet] = append(d.batches[subnet], tx...)
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
-	d.localBatch.Append(tx)
+	subnet := d.Network.ID
+	d.batches[subnet] = append(d.batches[subnet], tx...)
 }
 
 func (d *dispatcher) send(ctx context.Context, server string, batch txBatch) {
@@ -180,7 +107,8 @@ func (d *dispatcher) send(ctx context.Context, server string, batch txBatch) {
 	})
 }
 
-var errTxInCache = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
+var errTxInCache2 = jsonrpc2.NewError(jsonrpc2.ErrorCode(errTxInCache1.Code), errTxInCache1.Message, errTxInCache1.Data)
 
 // checkError returns nil if the error can be ignored.
 func (*dispatcher) checkError(err error) error {
@@ -197,8 +125,13 @@ func (*dispatcher) checkError(err error) error {
 	}
 
 	// Or RPC error "tx already exists in cache"?
-	var rpcErr *jrpc.RPCError
-	if errors.As(err, &rpcErr) && *rpcErr == *errTxInCache {
+	var rpcErr1 *jrpc.RPCError
+	if errors.As(err, &rpcErr1) && *rpcErr1 == *errTxInCache1 {
+		return nil
+	}
+
+	var rpcErr2 jsonrpc2.Error
+	if errors.As(err, &rpcErr2) && rpcErr2 == errTxInCache2 {
 		return nil
 	}
 
@@ -207,25 +140,35 @@ func (*dispatcher) checkError(err error) error {
 }
 
 // Send sends all of the batches.
-func (d *dispatcher) Send(ctx context.Context) error {
-	// Send local
-	if d.localIndex >= 0 && len(d.localBatch) > 0 {
-		d.errg.Go(func() error {
-			_, err := d.Local.BroadcastTxAsync(ctx, tm.Tx(d.localBatch))
-			return d.checkError(err)
-		})
+func (d *dispatcher) Send(ctx context.Context) <-chan error {
+	errs := make(chan error)
+	wg := new(sync.WaitGroup)
+	for subnet, batch := range d.batches {
+		if len(batch) == 0 {
+			continue
+		}
+
+		wg.Add(1)
+		subnet, batch := subnet, batch // Don't capture loop variables
+		go func() {
+			defer wg.Done()
+			err := d.Router.Send(ctx, subnet, batch)
+			err = d.checkError(err)
+			if err != nil {
+				errs <- err
+			}
+		}()
 	}
 
-	// Send to the DN
-	if d.dn != "" || !d.IsTest {
-		d.send(ctx, d.dn, d.dnBatch)
+	go func() {
+		wg.Wait()
+		close(errs)
+	}()
+
+	// Optimized by the compiler
+	for subnet := range d.batches {
+		delete(d.batches, subnet)
 	}
 
-	// Send to the BVNs
-	for i := range d.bvn {
-		d.send(ctx, d.bvn[i], d.bvnBatches[i])
-	}
-
-	// Wait for everyone to finish
-	return d.errg.Wait()
+	return errs
 }

@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"time"
 
+	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/encoding"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/types"
@@ -25,7 +26,7 @@ type {{.Name}} struct {
 	{{if .IsChain}}{{if isPkg "types/state"}}ChainHeader{{else}}state.ChainHeader{{end}}
 	{{- end}}
 	{{- range .Embeddings}}
-	{{.}}
+	{{.Name}}
 	{{- end}}
 	{{- range .Fields}}
 	{{.Name}} {{resolveType . false}}{{if .IsMarshalled}} `json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}" form:"{{lcName .Name}}" query:"{{lcName .Name}}"{{validateTag .}}`{{end}}
@@ -81,7 +82,7 @@ func (v *{{.Name}}) BinarySize() int {
 	{{end}}
 
 	{{- range .Embeddings}}
-	n += v.{{.}}.BinarySize()
+	n += v.{{.Name}}.BinarySize()
 	{{end}}
 
 	{{- range .Fields}}
@@ -114,7 +115,7 @@ func (v *{{.Name}}) MarshalBinary() ([]byte, error) {
 	{{- end}}
 
 	{{- range .Embeddings}}
-	if b, err := v.{{.}}.MarshalBinary(); err != nil {
+	if b, err := v.{{.Name}}.MarshalBinary(); err != nil {
 		return nil, err
 	} else {
 		buffer.Write(b)
@@ -154,10 +155,10 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 	{{end}}
 
 	{{- range .Embeddings}}
-	if err := v.{{.}}.UnmarshalBinary(data); err != nil {
+	if err := v.{{.Name}}.UnmarshalBinary(data); err != nil {
 		return err
 	}
-	data = data[v.{{.}}.BinarySize():]
+	data = data[v.{{.Name}}.BinarySize():]
 	{{end}}
 
 	{{- range .Fields}}
@@ -170,22 +171,53 @@ func (v *{{.Name}}) UnmarshalBinary(data []byte) error {
 }
 {{end}}{{end}}
 
+{{define "jsonField"}}
+{{- if .IsMarshalled}}
+{{.Name}} {{jsonType .}}{{if .IsMarshalled}} `json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}"`{{end}}
+{{- if .AlternativeName}}
+{{.AlternativeName}} {{jsonType .}}{{if .IsMarshalled}} `json:"{{lcName .AlternativeName}}{{if .OmitEmpty}},omitempty{{end}}"`{{end}}
+{{- end}}
+{{- end}}
+{{- end}}
+
 {{define "jsonType"}}struct {
-	{{- if .IsChain}}{{if isPkg "types/state"}}ChainHeader{{else}}state.ChainHeader{{end}}
+	{{- if .IsChain}}
+	{{if isPkg "types/state"}}ChainHeader{{else}}state.ChainHeader{{end}}{{end}}
+	{{- if .IsTxResult}}
+	Type {{if isPkg "types"}}TransactionType{{else}}types.TransactionType{{end}} `json:"type"`{{end}}
+	{{- range .Embeddings}}
+	{{- range .Fields}}
+	{{- template "jsonField" .}}
 	{{- end}}
-	{{- if .IsTxResult}}Type {{if isPkg "types"}}TransactionType{{else}}types.TransactionType{{end}} `json:"type"`
-	{{- end}}
-	{{- range .Embeddings}}{{.}}
 	{{- end}}
 	{{- range .Fields}}
-	{{- if .IsMarshalled}}
-	{{.Name}} {{jsonType .}}{{if .IsMarshalled}} `json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}"`{{end}}
-	{{- if .AlternativeName}}
-	{{.AlternativeName}} {{jsonType .}}{{if .IsMarshalled}} `json:"{{lcName .AlternativeName}}{{if .OmitEmpty}},omitempty{{end}}"`{{end}}
+	{{- template "jsonField" .}}
 	{{- end}}
-	{{- end}}
-	{{- end}}
-}{{end}}
+}
+{{- end}}
+
+{{define "valueToJson"}}
+{{- if .Field.IsMarshalled}}
+{{valueToJson .Field (print .Dst "." .Field.Name) (print .Src "." .Field.Name) .ForUnmarshal .Field.Name}}
+{{- if .Field.AlternativeName}}
+{{valueToJson .Field (print .Dst "." .Field.AlternativeName) (print .Src "." .Field.Name) .ForUnmarshal .Field.Name}}
+{{- end}}
+{{- end}}
+{{- end}}
+
+{{define "valueFromJson"}}
+{{- if .Field.IsMarshalled}}
+{{- if .Field.AlternativeName}}
+if u.{{.Field.Name}} != {{jsonZeroValue .Field}} {
+	{{valueFromJson .Field (print .Dst "." .Field.Name) (print .Src "." .Field.Name) .Field.Name}}
+} else {
+	{{valueFromJson .Field (print .Dst "." .Field.Name) (print .Src "." .Field.AlternativeName) .Field.Name}}
+}
+{{- else}}
+{{valueFromJson .Field (print .Dst "." .Field.Name) (print .Src "." .Field.Name) .Field.Name}}
+{{- end}}
+{{- end}}
+{{- end}}
 
 {{range .Types}}{{if needsCustomJSON .}}
 func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
@@ -200,16 +232,14 @@ func (v *{{.Name}}) MarshalJSON() ([]byte, error) {
 	{{- end}}
 
 	{{- range .Embeddings}}
-	u.{{.}} = v.{{.}}
+	{{- $name := .Name}}
+	{{- range .Fields}}
+	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u" "ForUnmarshal" false}}
+	{{- end}}
 	{{- end}}
 
 	{{- range .Fields}}
-	{{- if .IsMarshalled}}
-	{{valueToJson . (print "u." .Name) (print "v." .Name) false .Name}}
-	{{- if .AlternativeName}}
-	{{valueToJson . (print "u." .AlternativeName) (print "v." .Name) false .Name}}
-	{{- end}}
-	{{- end}}
+	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u" "ForUnmarshal" false}}
 	{{- end}}
 	return json.Marshal(&u)
 }
@@ -228,16 +258,14 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	{{- end}}
 
 	{{- range .Embeddings}}
-	u.{{.}} = v.{{.}}
+	{{- $name := .Name}}
+	{{- range .Fields}}
+	{{- template "valueToJson" map "Field" . "Src" (print "v." $name) "Dst" "u" "ForUnmarshal" true}}
+	{{- end}}
 	{{- end}}
 
 	{{- range .Fields}}
-	{{- if .IsMarshalled}}
-	{{valueToJson . (print "u." .Name) (print "v." .Name) true .Name}}
-	{{- if .AlternativeName}}
-	{{valueToJson . (print "u." .AlternativeName) (print "v." .Name) true .Name}}
-	{{- end}}
-	{{- end}}
+	{{- template "valueToJson" map "Field" . "Src" "v" "Dst" "u" "ForUnmarshal" true}}
 	{{- end}}
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
@@ -248,22 +276,14 @@ func (v *{{.Name}}) UnmarshalJSON(data []byte) error {
 	{{- end}}
 
 	{{- range .Embeddings}}
-	v.{{.}} = u.{{.}}
+	{{- $name := .Name}}
+	{{- range .Fields}}
+	{{- template "valueFromJson" map "Field" . "Src" "u" "Dst" (print "v." $name)}}
+	{{- end}}
 	{{- end}}
 
 	{{- range .Fields}}
-	{{- if .IsMarshalled}}
-	{{- if .AlternativeName}}
-	var zero{{.Name}} {{resolveType . false}}
-	if u.{{.Name}} != zero{{.Name}} {
-		{{valueFromJson . (print "v." .Name) (print "u." .Name) .Name}}
-	} else {
-		{{valueFromJson . (print "v." .Name) (print "u." .AlternativeName) .Name}}
-	}
-	{{- else}}
-	{{valueFromJson . (print "v." .Name) (print "u." .Name) .Name}}
-	{{- end}}
-	{{- end}}
+	{{- template "valueFromJson" map "Field" . "Src" "u" "Dst" "v"}}
 	{{- end}}
 	return nil
 }

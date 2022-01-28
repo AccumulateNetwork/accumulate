@@ -11,7 +11,6 @@ import (
 
 	"github.com/AccumulateNetwork/accumulate"
 	"github.com/AccumulateNetwork/accumulate/config"
-	v1 "github.com/AccumulateNetwork/accumulate/internal/api"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
@@ -27,9 +26,7 @@ type JrpcOptions struct {
 	QueueDuration time.Duration
 	QueueDepth    int
 	Logger        log.Logger
-
-	// Deprecated: will be removed when API v1 is removed
-	QueryV1 *v1.Query
+	Network       *config.Network
 }
 
 type JrpcMethods struct {
@@ -41,9 +38,6 @@ type JrpcMethods struct {
 	exch       chan executeRequest
 	queue      executeQueue
 	logger     log.Logger
-
-	// Deprecated: will be removed
-	v1 *v1.API
 }
 
 func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
@@ -62,11 +56,6 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 	}
 
 	m.validate, err = protocol.NewValidator()
-	if err != nil {
-		return nil, err
-	}
-
-	m.v1, err = v1.New(opts.Config, opts.QueryV1)
 	if err != nil {
 		return nil, err
 	}
@@ -110,19 +99,18 @@ func (m *JrpcMethods) EnableDebug(local ABCIQueryClient) {
 	q := &queryDirect{client: local}
 
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
-		req := new(UrlQuery)
+		req := new(GeneralQuery)
 		err := m.parse(params, req)
 		if err != nil {
 			return err
 		}
 
-		return jrpcFormatResponse(q.QueryUrl(req.Url))
+		return jrpcFormatResponse(q.QueryUrl(req.Url, req.QueryOptions))
 	}
 }
 
 func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.Handle("/v1", m.v1.Handler())
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
 	return mux
 }
@@ -130,10 +118,16 @@ func (m *JrpcMethods) NewMux() *http.ServeMux {
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {
 	res := new(ChainQueryResponse)
 	res.Type = "version"
-	res.Data = map[string]interface{}{
-		"version":        accumulate.Version,
-		"commit":         accumulate.Commit,
-		"versionIsKnown": accumulate.IsVersionKnown(),
+	res.Data = VersionResponse{
+		Version:        accumulate.Version,
+		Commit:         accumulate.Commit,
+		VersionIsKnown: accumulate.IsVersionKnown(),
 	}
+	return res
+}
+
+func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
+	res := new(DescriptionResponse)
+	res.Subnet = *m.opts.Network
 	return res
 }

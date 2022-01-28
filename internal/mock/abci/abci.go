@@ -99,9 +99,11 @@ func (mr *MockChainMockRecorder) DeliverTx(arg0 interface{}) *gomock.Call {
 }
 
 // EndBlock mocks base method.
-func (m *MockChain) EndBlock(arg0 abci.EndBlockRequest) {
+func (m *MockChain) EndBlock(arg0 abci.EndBlockRequest) abci.EndBlockResponse {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "EndBlock", arg0)
+	ret := m.ctrl.Call(m, "EndBlock", arg0)
+	ret0, _ := ret[0].(abci.EndBlockResponse)
+	return ret0
 }
 
 // EndBlock indicates an expected call of EndBlock.
@@ -125,9 +127,9 @@ func (mr *MockChainMockRecorder) InitChain(state, time, blockIndex interface{}) 
 }
 
 // Query mocks base method.
-func (m *MockChain) Query(arg0 *query.Query) ([]byte, []byte, *protocol.Error) {
+func (m *MockChain) Query(q *query.Query, height int64, prove bool) ([]byte, []byte, *protocol.Error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Query", arg0)
+	ret := m.ctrl.Call(m, "Query", q, height, prove)
 	ret0, _ := ret[0].([]byte)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(*protocol.Error)
@@ -135,7 +137,7 @@ func (m *MockChain) Query(arg0 *query.Query) ([]byte, []byte, *protocol.Error) {
 }
 
 // Query indicates an expected call of Query.
-func (mr *MockChainMockRecorder) Query(arg0 interface{}) *gomock.Call {
+func (mr *MockChainMockRecorder) Query(q, height, prove interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockChain)(nil).Query), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Query", reflect.TypeOf((*MockChain)(nil).Query), q, height, prove)
 }

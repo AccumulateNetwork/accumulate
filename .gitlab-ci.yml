@@ -201,7 +201,7 @@ validate docker:
 validate:
   extends: .validate
   script:
-  - apt-get -y update && apt-get -y install jq
+  - apt-get -y update && apt-get -y install jq xxd
   - ./scripts/ci/validate.sh
 
 .validate matrix 1/6:

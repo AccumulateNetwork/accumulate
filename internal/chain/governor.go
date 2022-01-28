@@ -47,6 +47,8 @@ type receiptAndIndex struct {
 	Receipt     protocol.Receipt
 	Index       int64
 	SourceIndex int64
+	Block       uint64
+	SourceBlock uint64
 }
 
 func newGovernor(opts ExecutorOptions) *governor {
@@ -159,7 +161,7 @@ func (g *governor) buildProofs(msg *govDidCommit, batch *database.Batch, rootCha
 			s.Entries[i] = protocol.ReceiptEntry{Right: n.Right, Hash: n.Hash}
 		}
 
-		msg.receipts[bvn] = &receiptAndIndex{s, int64(u.Index), int64(u.SourceIndex)}
+		msg.receipts[bvn] = &receiptAndIndex{s, int64(u.Index), int64(u.SourceIndex), uint64(msg.height), u.SourceBlock}
 	}
 
 	return nil
@@ -211,9 +213,6 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	batch := g.DB.Begin()
 	defer batch.Discard()
 
-	// Reset dispatcher
-	g.dispatcher.Reset(context.Background())
-
 	// Mirror the subnet's ADI
 	if msg.mirrorAdi {
 		g.sendMirror(batch)
@@ -226,11 +225,13 @@ func (g *governor) runDidCommit(msg *govDidCommit) {
 	g.signTransactions(batch, msg.ledger)
 	g.sendTransactions(batch, msg.ledger)
 
-	// Dispatch transactions
-	err := g.dispatcher.Send(context.Background())
-	if err != nil {
-		g.logger.Error("Failed to dispatch transactions", "error", err)
-	}
+	// Dispatch transactions asynchronously
+	errs := g.dispatcher.Send(context.Background())
+	go func() {
+		for err := range errs {
+			g.logger.Error("Failed to dispatch transactions", "error", err)
+		}
+	}()
 }
 
 func (g *governor) signTransactions(batch *database.Batch, ledger *protocol.InternalLedger) {
@@ -315,7 +316,7 @@ func (g *governor) sendTransactions(batch *database.Batch, ledger *protocol.Inte
 		// Send it
 		typ := env.Transaction.Type()
 		if typ != types.TxTypeSyntheticAnchor {
-			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.Transaction.Hash()), "type", typ)
+			g.logger.Info("Sending synth txn", "origin", env.Transaction.Origin, "txid", logging.AsHex(env.GetTxHash()), "type", typ)
 		}
 		g.dispatcher.BroadcastTxAsync(context.Background(), env.Transaction.Origin, raw)
 		body.Transactions = append(body.Transactions, id)
@@ -334,6 +335,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
 	body := new(protocol.SyntheticAnchor)
 	body.Source = g.Network.NodeUrl().String()
 	body.RootIndex = uint64(msg.rootHeight - 1)
+	body.Block = uint64(msg.ledger.Index)
 	copy(body.RootAnchor[:], msg.rootAnchor)
 
 	kv := []interface{}{"root", logging.AsHex(body.RootAnchor)}
@@ -360,6 +362,7 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
 			if r := msg.receipts[bvn]; r != nil {
 				body.Receipt = r.Receipt
 				body.SourceIndex = uint64(r.SourceIndex)
+				body.SourceBlock = r.SourceBlock
 			}
 
 			txns.Transactions[i] = protocol.SendTransaction{
@@ -451,7 +454,7 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	ed := new(transactions.ED25519Sig)
 	env.Signatures = append(env.Signatures, ed)
 	ed.PublicKey = g.Key[32:]
-	err = ed.Sign(env.Transaction.Nonce, g.Key, env.Transaction.Hash())
+	err = ed.Sign(env.Transaction.Nonce, g.Key, env.GetTxHash())
 	if err != nil {
 		g.logger.Error("Failed to sign internal transaction", "error", err)
 		return
@@ -465,6 +468,6 @@ func (g *governor) sendInternal(batch *database.Batch, body protocol.Transaction
 	}
 
 	// Send it
-	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.Transaction.Hash()), "type", body.GetType())
+	g.logger.Debug("Sending internal txn", "txid", logging.AsHex(env.GetTxHash()), "type", body.GetType())
 	g.dispatcher.BroadcastTxAsyncLocal(context.TODO(), data)
 }

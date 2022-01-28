@@ -7,14 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
+	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
+	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -22,6 +22,7 @@ import (
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
+	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/libs/log"
 )
 
@@ -34,15 +35,13 @@ type Executor struct {
 	governor  *governor
 	logger    log.Logger
 
-	wg      *sync.WaitGroup
-	mu      *sync.Mutex
-	chainWG map[uint64]*sync.WaitGroup
-
 	blockLeader bool
 	blockIndex  int64
 	blockTime   time.Time
 	blockBatch  *database.Batch
 	blockMeta   blockMetadata
+
+	newValidators []tmed25519.PubKey
 }
 
 var _ abci.Chain = (*Executor)(nil)
@@ -51,21 +50,16 @@ type ExecutorOptions struct {
 	DB      *database.Database
 	Logger  log.Logger
 	Key     ed25519.PrivateKey
-	Local   api.ABCIBroadcastClient
+	Router  routing.Router
 	Network config.Network
 
 	isGenesis bool
-
-	// TODO Remove once tests support running the DN
-	IsTest bool
 }
 
 func newExecutor(opts ExecutorOptions, executors ...TxExecutor) (*Executor, error) {
 	m := new(Executor)
 	m.ExecutorOptions = opts
 	m.executors = map[types.TxType]TxExecutor{}
-	m.wg = new(sync.WaitGroup)
-	m.mu = new(sync.Mutex)
 
 	if opts.Logger != nil {
 		m.logger = opts.Logger.With("module", "executor")
@@ -158,7 +152,12 @@ func (m *Executor) Genesis(time time.Time, callback func(st *StateManager) error
 	txAccepted, txPending := state.NewTransaction(txPending)
 
 	status := &protocol.TransactionStatus{Delivered: true}
-	err = m.blockBatch.Transaction(env.Transaction.Hash()).Put(txAccepted, status, nil)
+	err = m.blockBatch.Transaction(env.GetTxHash()).Put(txAccepted, status, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = indexing.BlockState(m.blockBatch, m.Network.NodeUrl(protocol.Ledger)).Clear()
 	if err != nil {
 		return nil, err
 	}
@@ -241,19 +240,25 @@ func (m *Executor) InitChain(data []byte, time time.Time, blockIndex int64) erro
 func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockResponse, error) {
 	m.logDebug("Begin block", "height", req.Height, "leader", req.IsLeader, "time", req.Time)
 
-	m.chainWG = make(map[uint64]*sync.WaitGroup, chainWGSize)
 	m.blockLeader = req.IsLeader
 	m.blockIndex = req.Height
 	m.blockTime = req.Time
 	m.blockBatch = m.DB.Begin()
 	m.blockMeta = blockMetadata{}
+	m.newValidators = m.newValidators[:0]
 
 	m.governor.DidBeginBlock(req.IsLeader, req.Height, req.Time)
+
+	// Reset the block state
+	err := indexing.BlockState(m.blockBatch, m.Network.NodeUrl(protocol.Ledger)).Clear()
+	if err != nil {
+		return abci.BeginBlockResponse{}, nil
+	}
 
 	// Load the ledger state
 	ledger := m.blockBatch.Account(m.Network.NodeUrl(protocol.Ledger))
 	ledgerState := protocol.NewInternalLedger()
-	err := ledger.GetStateAs(ledgerState)
+	err = ledger.GetStateAs(ledgerState)
 	switch {
 	case err == nil:
 		// Make sure the block index is increasing
@@ -283,12 +288,14 @@ func (m *Executor) BeginBlock(req abci.BeginBlockRequest) (abci.BeginBlockRespon
 }
 
 // EndBlock implements ./abci.Chain
-func (m *Executor) EndBlock(req abci.EndBlockRequest) {}
+func (m *Executor) EndBlock(req abci.EndBlockRequest) abci.EndBlockResponse {
+	return abci.EndBlockResponse{
+		NewValidators: m.newValidators,
+	}
+}
 
 // Commit implements ./abci.Chain
 func (m *Executor) Commit() ([]byte, error) {
-	m.wg.Wait()
-
 	// Discard changes if commit fails
 	defer m.blockBatch.Discard()
 
@@ -361,6 +368,13 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		return err
 	}
 
+	// Pending transaction-chain index entries
+	type txChainIndexEntry struct {
+		indexing.TransactionChainEntry
+		Txid []byte
+	}
+	txChainEntries := make([]*txChainIndexEntry, 0, len(ledgerState.Updates))
+
 	// Add an anchor to the root chain for every updated chain
 	accountSeen := map[string]bool{}
 	updates := ledgerState.Updates
@@ -382,9 +396,23 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		}
 
 		// Add its anchor to the root chain
-		err = rootChain.AddEntry(recordChain.Anchor())
+		rootIndex := rootChain.Height()
+		err = rootChain.AddEntry(recordChain.Anchor(), false)
 		if err != nil {
 			return err
+		}
+
+		// Add a pending transaction-chain index update
+		if u.Type == protocol.ChainTypeTransaction {
+			e := new(txChainIndexEntry)
+			e.Txid = u.Entry
+			e.Account = u.Account
+			e.Chain = u.Name
+			e.Block = uint64(m.blockIndex)
+			e.ChainEntry = u.Index
+			e.ChainAnchor = uint64(recordChain.Height()) - 1
+			e.RootEntry = uint64(rootIndex)
+			txChainEntries = append(txChainEntries, e)
 		}
 
 		// Once for each account
@@ -436,6 +464,7 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 	}
 
 	// Add the synthetic transaction chain to the root chain
+	var synthRootIndex, synthAnchorIndex uint64
 	if len(ledgerState.Synthetic.Produced) > 0 {
 		synthChain, err := ledger.ReadChain(protocol.SyntheticChain)
 		if err != nil {
@@ -451,7 +480,9 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 			Index:   uint64(synthChain.Height() - 1),
 		})
 
-		err = rootChain.AddEntry(synthChain.Anchor())
+		synthAnchorIndex = uint64(synthChain.Height() - 1)
+		synthRootIndex = uint64(rootChain.Height())
+		err = rootChain.AddEntry(synthChain.Anchor(), false)
 		if err != nil {
 			return err
 		}
@@ -466,5 +497,41 @@ func (m *Executor) doCommit(ledgerState *protocol.InternalLedger) error {
 		Account: m.Network.NodeUrl(),
 		Index:   uint64(m.blockIndex - 1),
 	})
-	return rootChain.AddEntry(m.blockBatch.RootHash())
+
+	err = rootChain.AddEntry(m.blockBatch.RootHash(), false)
+	if err != nil {
+		return err
+	}
+
+	// Update the transaction-chain index
+	for _, e := range txChainEntries {
+		e.RootAnchor = uint64(rootChain.Height()) - 1
+		err = indexing.TransactionChain(m.blockBatch, e.Txid).Add(&e.TransactionChainEntry)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Add transaction-chain index entries for synthetic transactions
+	blockState, err := indexing.BlockState(m.blockBatch, ledgerUrl).Get()
+	if err != nil {
+		return err
+	}
+
+	for _, e := range blockState.ProducedSynthTxns {
+		err = indexing.TransactionChain(m.blockBatch, e.Transaction).Add(&indexing.TransactionChainEntry{
+			Account:     ledgerUrl,
+			Chain:       protocol.SyntheticChain,
+			Block:       uint64(m.blockIndex),
+			ChainEntry:  e.ChainEntry,
+			ChainAnchor: synthAnchorIndex,
+			RootEntry:   synthRootIndex,
+			RootAnchor:  uint64(rootChain.Height()) - 1,
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

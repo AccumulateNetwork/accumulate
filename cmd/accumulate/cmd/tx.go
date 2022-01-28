@@ -55,6 +55,13 @@ var txCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintTXExecute()
 				}
+			case "sign":
+				if len(args) > 2 {
+					out, err = SignTX(args[1], args[2:])
+				} else {
+					fmt.Println("Usage:")
+					PrintTxSign()
+				}
 			default:
 				fmt.Println("Usage:")
 				PrintTX()
@@ -89,6 +96,10 @@ func PrintTXExecute() {
 	fmt.Println("  accumulate tx execute [from] [payload]	Execute an arbitrary transaction")
 }
 
+func PrintTxSign() {
+	fmt.Println("  accumulate tx sign [origin] [signing key name] [key index (optional)] [key height (optional)] [txid]	Sign a pending transaction")
+}
+
 func PrintTXHistoryGet() {
 	fmt.Println("  accumulate tx history [url] [starting transaction number] [ending transaction number]	Get transaction history")
 }
@@ -97,6 +108,7 @@ func PrintTX() {
 	PrintTXGet()
 	PrintTXCreate()
 	PrintTXExecute()
+	PrintTxSign()
 	PrintTXHistoryGet()
 }
 
@@ -106,6 +118,7 @@ func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, err
 
 	params := new(api2.TxnQuery)
 	params.Txid = hash
+	params.Prove = TxProve
 
 	if wait > 0 {
 		params.Wait = wait
@@ -117,7 +130,7 @@ func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, err
 		return nil, err
 	}
 
-	err = Client.Request(context.Background(), "query-tx", jsondata, &res)
+	err = Client.RequestAPIv2(context.Background(), "query-tx", jsondata, &res)
 	if err != nil {
 		return nil, err
 	}
@@ -218,7 +231,7 @@ func GetTXHistory(accountUrl string, s string, e string) (string, error) {
 		return "", err
 	}
 
-	if err := Client.Request(context.Background(), "query-tx-history", json.RawMessage(data), &res); err != nil {
+	if err := Client.RequestAPIv2(context.Background(), "query-tx-history", json.RawMessage(data), &res); err != nil {
 		return PrintJsonRpcError(err)
 	}
 
@@ -253,7 +266,7 @@ func CreateTX(sender string, args []string) (string, error) {
 	send := new(protocol.SendTokens)
 	send.AddRecipient(u2, big.NewInt(int64(amt*protocol.AcmePrecision)))
 
-	res, err := dispatchTxRequest("send-tokens", send, u, si, pk)
+	res, err := dispatchTxRequest("send-tokens", send, nil, u, si, pk)
 	if err != nil {
 		return "", err
 	}
@@ -290,7 +303,35 @@ func ExecuteTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("invalid payload 3: %v", err)
 	}
 
-	res, err := dispatchTxRequest("execute", txn, u, si, pk)
+	res, err := dispatchTxRequest("execute", txn, nil, u, si, pk)
+	if err != nil {
+		return "", err
+	}
+	return ActionResponseFrom(res).Print()
+}
+
+func SignTX(sender string, args []string) (string, error) {
+	//sender string, receiver string, amount string
+	u, err := url.Parse(sender)
+	if err != nil {
+		return "", err
+	}
+
+	args, si, pk, err := prepareSigner(u, args)
+	if err != nil {
+		return "", fmt.Errorf("unable to prepare signer, %v", err)
+	}
+	if len(args) != 1 {
+		PrintTxSign()
+		return "", nil
+	}
+
+	txHash, err := hex.DecodeString(args[0])
+	if err != nil {
+		return "", fmt.Errorf("unable to parse transaction hash: %v", err)
+	}
+
+	res, err := dispatchTxRequest("execute", nil, txHash, u, si, pk)
 	if err != nil {
 		return "", err
 	}
