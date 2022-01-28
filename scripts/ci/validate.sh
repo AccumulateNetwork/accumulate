@@ -149,9 +149,9 @@ echo $STATUS | jq -re .message &> /dev/null || die "Synthetic transaction does n
 success
 
 section "Add credits to the ADI's key page 0"
-wait-for cli-tx credits ${LITE} keytest/page0 5500
+wait-for cli-tx credits ${LITE} keytest/page0 60000
 BALANCE=$(accumulate -j page get keytest/page0 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 5500 ] && success || die "keytest/page0 should have 5500 credits but has ${BALANCE}"
+[ "$BALANCE" -ge 60000 ] && success || die "keytest/page0 should have 60000 credits but has ${BALANCE}"
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-0-0 keytest/page1 keytest-1-0
