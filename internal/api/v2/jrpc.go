@@ -3,7 +3,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io/ioutil"
 	stdlog "log"
+	"mime"
 	"net/http"
 	"os"
 
@@ -76,8 +78,43 @@ func (m *JrpcMethods) EnableDebug() {
 
 func (m *JrpcMethods) NewMux() *http.ServeMux {
 	mux := http.NewServeMux()
+	mux.Handle("/status", m.jrpc2http(m.Status))
+	mux.Handle("/version", m.jrpc2http(m.Version))
 	mux.Handle("/v2", jsonrpc2.HTTPRequestHandler(m.methods, stdlog.New(os.Stdout, "", 0)))
 	return mux
+}
+
+func (m *JrpcMethods) jrpc2http(jrpc jsonrpc2.MethodFunc) http.HandlerFunc {
+	return func(res http.ResponseWriter, req *http.Request) {
+		body, err := ioutil.ReadAll(req.Body)
+		if err != nil {
+			res.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		var params json.RawMessage
+		mediatype, _, _ := mime.ParseMediaType(req.Header.Get("Content-Type"))
+		if mediatype == "application/json" || mediatype == "text/json" {
+			params = body
+		}
+
+		r := jrpc(req.Context(), params)
+		res.Header().Add("Content-Type", "application/json")
+		data, err := json.Marshal(r)
+		if err != nil {
+			m.logError("Failed to marshal status", "error", err)
+			res.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		_, _ = res.Write(data)
+	}
+}
+
+func (m *JrpcMethods) Status(_ context.Context, params json.RawMessage) interface{} {
+	return &StatusResponse{
+		Ok: true,
+	}
 }
 
 func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interface{} {

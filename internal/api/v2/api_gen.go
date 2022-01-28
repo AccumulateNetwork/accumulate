@@ -39,6 +39,7 @@ func (m *JrpcMethods) populateMethodTable() jsonrpc2.MethodMap {
 	m.methods["query-key-index"] = m.QueryKeyPageIndex
 	m.methods["query-tx"] = m.QueryTx
 	m.methods["query-tx-history"] = m.QueryTxHistory
+	m.methods["status"] = m.Status
 	m.methods["version"] = m.Version
 
 	return m.methods

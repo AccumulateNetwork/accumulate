@@ -296,6 +296,18 @@ func (c *Client) QueryTxHistory(ctx context.Context, req *api.TxHistoryQuery) (*
 	return &resp, nil
 }
 
+func (c *Client) Status(ctx context.Context) (*api.StatusResponse, error) {
+	var req struct{}
+	var resp api.StatusResponse
+
+	err := c.RequestAPIv2(ctx, "status", req, &resp)
+	if err != nil {
+		return nil, err
+	}
+
+	return &resp, nil
+}
+
 func (c *Client) Version(ctx context.Context) (*api.ChainQueryResponse, error) {
 	var req struct{}
 	var resp api.ChainQueryResponse
