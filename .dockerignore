@@ -1,2 +1,4 @@
 .nodes
 *.exe
+Dockerfile*
+terraform
