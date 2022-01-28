@@ -95,7 +95,7 @@ section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
 TXS=()
-for i in {1..20}
+for i in {1..100}
 do
 	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
 done
