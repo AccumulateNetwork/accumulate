@@ -263,12 +263,8 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda := protocol.CreateDataAccount{}
 	cda.Url = accountUrl.String()
 	cda.KeyBookUrl = keybook
-	if len(args) > 2 {
-		scratch, err := strconv.ParseBool(args[2])
-		if err != nil {
-			return "", err
-		}
-		cda.Scratch = scratch
+	if len(args) > 2 && args[2] == "scratch" {
+		cda.Scratch = true
 	}
 
 	res, err = dispatchTxRequest("create-data-account", &cda, nil, u, si, privKey)
