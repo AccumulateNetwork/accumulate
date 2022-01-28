@@ -4,7 +4,12 @@ _This document describes how the various parts of this project actually execute.
 
 There are essentially two different launch procedures: client and node.
 
+<br>
+
 ---
+---
+
+<br>
 
 ## Client
 
@@ -40,31 +45,45 @@ Subcommands are defined in files sibling to <code>/cmd/accumulate/cmd/root.go</c
 
 **Keep in mind** that this is only the default, "stock" client provided by DeFiDevs. A client could be a CLI, a DApp backend, a mobile app, or the whims of some wizened lady using IPOAC from her coven in Nebraska.
 
+<br>
+
 ---
+---
+
+<br>
 
 ## Node
 
-A node is any instance of the Accumulate daemon.
+A node is any instance of the Accumulate daemon. There are three primary properties of a node which define its function:
 
 <table>
     <thead>
         <tr>
-            <th colspan='2' style='text-align:center'>Node Type</th>
-            <th>Function</th>
+            <th colspan='2' style='text-align:center'>Property</th>
+            <th>Effect</th>
         </tr>
     </thead>
     <tbody>
         <tr>
-            <td colspan='2' style='text-align:center'>Directory</td>
-            <td>TODO: Does some stuff?</td>
-        </tr><tr>
-            <td rowspan='3' style='text-align:center'>Validator</td>
+            <td rowspan='2' style='text-align:center'>Qualification</td>
             <td style='text-align:center'>Qualified</td>
-            <td>A staked, vetted node that validates and executes transactions and is eligible to vote in Tendermint consensus.</td>
+            <td>The node operator has been vetted and has staked in the Accumulate network and maintains a near-100% uptime.<br>This node is eligible to vote in Tendermint consensus and may become the governor.</td>
         </tr><tr>
             <!-- col -->
-            <td style='text-align:center'>Full<br>(Non-Qualified)</td>
-            <td>A node that validates and executes transactions.</td>
+            <td style='text-align:center'>Non-Qualified</td>
+            <td>The node may participate fully in the Accumulate network except that it can never vote and will never become the governor.</td>
+        </tr><tr>
+            <td rowspan='2' style='text-align:center'>Network</td>
+            <td style='text-align:center'>BVN</td>
+            <td>The node handles routine transaction operations as a member of an arbitrary BVN.</td>
+        </tr><tr>
+            <!-- col -->
+            <td style='text-align:center'>Directory</td>
+            <td>The node participates in maintenance of the top levels of the blockchain and does not handle routine transactions.</td>
+        </tr><tr>
+            <td rowspan='2' style='text-align:center'>Size</td>
+            <td style='text-align:center'>Full</td>
+            <td>A full node which can validate and execute any kind of transaction as long as the transaction is routed to the right node.</td>
         </tr><tr>
             <!-- col -->
             <td style='text-align:center'>Partial</td>
@@ -72,6 +91,8 @@ A node is any instance of the Accumulate daemon.
         </tr>
     </tbody>
 </table>
+
+A node's qualification level is determined by the rest of the network. TODO: How, specifically? Its network type and its size are determined by configuration at startup.
 
 Initialization of a node follows the following procedure:
 
@@ -93,13 +114,16 @@ Initialization of a node follows the following procedure:
                 <ul>
                     <li>This is the entry point of execution from the parent OS.</li>
                     <li>
-                        Uses COBRA to set up the root CLI command and adds subcommands for all node functions.
+                        Uses COBRA to set up the root CLI command and adds subcommands for all node functions. One of these subcommands is <code>run</code> which launches the node instance.
                     </li>
+                    <li>After COBRA setup, executes the <code>run</code> subcommand.
                 </ul>
             </td>
         </tr><tr>
             <td>2</td>
-            <td colspan='200'><i>TODO: Intermediate steps unclear</i> cmd_run.go</td>
+            <td><code>runNode</code></td>
+            <td><code>/cmd/accumulated/cmd_run.go</code></td>
+            <td>Creates and launches the Accumulate daemon as a service on the host OS.</td>
         </tr><tr>
             <td>A</td>
             <td><code>Start</code></td>
@@ -118,12 +142,15 @@ Initialization of a node follows the following procedure:
             <td><code>[ Tendermint black box ]</code></td>
             <td>Initializes a Tendermint node.</td>
         </tr><tr>
-            <td>B.2</td>
-            <td><code>NewMux</code></td>
-            <td><code>/internal/api/v2/jrpc.go</code></td>
-            <td>
+            <td>8.2.1</td>
+            <td><code>NewJrpc</code></td>
+            <td rowspan='2'><code>/internal/api/v2/jrpc.go</code></td>a
+            <td rowspan='2'>
                 Launches the JRPC listener, which effectively <i>is</i> the node or "server".
             </td>
+        </tr><tr>
+            <td>B.2.2</td>
+            <td><code>NewMux</code></td>
         </tr>
     </tbody>
 </table>
