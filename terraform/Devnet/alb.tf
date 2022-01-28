@@ -9,7 +9,7 @@ resource "aws_alb" "dev_alb" {
 
 resource "aws_alb_target_group" "dev_target" {
   name        = "accumulate-dev-target"
-  port        = "3000"
+  port        = "26660"
   protocol    = "HTTP"
   target_type = "ip"
   vpc_id      = "${aws_vpc.dev_vpc.id}"  
@@ -34,7 +34,7 @@ resource "aws_alb_target_group" "dev_target" {
 
 resource "aws_alb_listener" "dev_listener" {
   load_balancer_arn = "${aws_alb.dev_alb.id}" # Reference our load balancer
-  port              = "3000"
+  port              = "26660"
   protocol          = "HTTP"
   default_action {
     type             = "forward"
