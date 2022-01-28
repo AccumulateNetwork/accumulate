@@ -3,49 +3,34 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	stdlog "log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/AccumulateNetwork/accumulate"
-	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/ybbus/jsonrpc/v2"
 )
 
-type JrpcOptions struct {
-	Config        *config.API
-	Query         Querier
-	Local         ABCIBroadcastClient
-	Remote        []string
-	QueueDuration time.Duration
-	QueueDepth    int
-	Logger        log.Logger
-	Network       *config.Network
-}
-
 type JrpcMethods struct {
-	methods    jsonrpc2.MethodMap
-	opts       JrpcOptions
-	validate   *validator.Validate
-	remote     []jsonrpc.RPCClient
-	localIndex int
-	exch       chan executeRequest
-	queue      executeQueue
-	logger     log.Logger
+	Options
+	querier  *queryDispatch
+	methods  jsonrpc2.MethodMap
+	validate *validator.Validate
+	exch     chan executeRequest
+	queue    executeQueue
+	logger   log.Logger
 }
 
-func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
+func NewJrpc(opts Options) (*JrpcMethods, error) {
 	var err error
 	m := new(JrpcMethods)
-	m.opts = opts
-	m.remote = make([]jsonrpc.RPCClient, len(opts.Remote))
-	m.localIndex = -1
+	m.Options = opts
+	m.querier = new(queryDispatch)
+	m.querier.Options = opts
+
 	m.exch = make(chan executeRequest)
 	m.queue.leader = make(chan struct{}, 1)
 	m.queue.leader <- struct{}{}
@@ -58,25 +43,6 @@ func NewJrpc(opts JrpcOptions) (*JrpcMethods, error) {
 	m.validate, err = protocol.NewValidator()
 	if err != nil {
 		return nil, err
-	}
-
-	for i, addr := range opts.Remote {
-		switch {
-		case addr != "local":
-			m.remote[i] = jsonrpc.NewClient(addr)
-		case m.localIndex < 0:
-			m.localIndex = i
-		default:
-			return nil, errors.New("multiple remote addresses are 'local'")
-		}
-	}
-
-	if m.localIndex >= 0 && m.opts.Local == nil {
-		return nil, errors.New("local node specified but no client provided")
-	}
-
-	if opts.Config != nil && opts.Config.DebugJSONRPC {
-		jsonrpc2.DebugMethodFunc = true
 	}
 
 	m.populateMethodTable()
@@ -95,9 +61,8 @@ func (m *JrpcMethods) logError(msg string, keyVals ...interface{}) {
 	}
 }
 
-func (m *JrpcMethods) EnableDebug(local ABCIQueryClient) {
-	q := &queryDirect{client: local}
-
+func (m *JrpcMethods) EnableDebug() {
+	q := m.querier.direct(m.Network.ID)
 	m.methods["debug-query-direct"] = func(_ context.Context, params json.RawMessage) interface{} {
 		req := new(GeneralQuery)
 		err := m.parse(params, req)
@@ -128,6 +93,6 @@ func (m *JrpcMethods) Version(_ context.Context, params json.RawMessage) interfa
 
 func (m *JrpcMethods) Describe(_ context.Context, params json.RawMessage) interface{} {
 	res := new(DescriptionResponse)
-	res.Subnet = *m.opts.Network
+	res.Subnet = *m.Network
 	return res
 }
