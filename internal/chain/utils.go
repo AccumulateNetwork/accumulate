@@ -100,27 +100,29 @@ func loadDirectoryEntry(batch *database.Batch, chainId []byte, index uint64) (st
 	return string(b), nil
 }
 
-func mirrorRecord(batch *database.Batch, u *url.URL) (protocol.AnchoredRecord, error) {
+func (g *governor) mirrorRecord(batch *database.Batch, mirror *protocol.SyntheticMirror, path ...string) error {
 	var arec protocol.AnchoredRecord
 
+	u := g.Network.NodeUrl(path...)
 	rec := batch.Account(u)
 	state, err := rec.GetState()
 	if err != nil {
-		return arec, fmt.Errorf("failed to load %q: %v", u, err)
+		return fmt.Errorf("failed to load %q: %v", u, err)
 	}
 
 	chain, err := rec.ReadChain(protocol.MainChain)
 	if err != nil {
-		return arec, fmt.Errorf("failed to load main chain of %q: %v", u, err)
+		return fmt.Errorf("failed to load main chain of %q: %v", u, err)
 	}
 
 	arec.Record, err = state.MarshalBinary()
 	if err != nil {
-		return arec, fmt.Errorf("failed to marshal %q: %v", u, err)
+		return fmt.Errorf("failed to marshal %q: %v", u, err)
 	}
 
 	copy(arec.Anchor[:], chain.Anchor())
-	return arec, nil
+	mirror.Objects = append(mirror.Objects, arec)
+	return nil
 }
 
 func buildProof(batch *database.Batch, u *protocol.AnchorMetadata, rootChain *database.Chain, rootIndex, rootHeight int64) (*managed.Receipt, error) {

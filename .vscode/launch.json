@@ -47,7 +47,7 @@
       "args": [
         "run",
         "-w",
-        "${workspaceFolder}/.nodes/dn",
+        "${workspaceFolder}/.nodes/bvn0",
         "-n",
         "0",
         "--truncate"

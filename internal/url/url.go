@@ -207,6 +207,28 @@ func (u *URL) Equal(v *URL) bool {
 	return strings.EqualFold(u.String(), v.String())
 }
 
+// Contains returns true if u and v have the same identity and the path of u
+// contains the path of v.
+func (u *URL) Contains(v *URL) bool {
+	if !u.Identity().Equal(v.Identity()) {
+		return false
+	}
+
+	upath, vpath := strings.Split(ensurePath(u.Path), "/")[1:], strings.Split(ensurePath(v.Path), "/")[1:]
+
+	if len(upath) < len(vpath) {
+		return false
+	}
+
+	for len(upath) > 0 {
+		if !strings.EqualFold(upath[0], vpath[0]) {
+			return false
+		}
+		upath, vpath = upath[1:], vpath[1:]
+	}
+	return true
+}
+
 // JoinPath returns a copy of U with additional path elements.
 func (u *URL) JoinPath(s ...string) *URL {
 	v := *u

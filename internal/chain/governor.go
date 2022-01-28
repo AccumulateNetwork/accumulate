@@ -11,7 +11,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
@@ -385,39 +384,19 @@ func (g *governor) sendAnchor(batch *database.Batch, msg *govDidCommit) {
 func (g *governor) sendMirror(batch *database.Batch) {
 	mirror := new(protocol.SyntheticMirror)
 
-	nodeUrl := g.Network.NodeUrl()
-	rec, err := mirrorRecord(batch, nodeUrl)
-	if err != nil {
-		g.logger.Error("Failed to mirror ADI", "error", err, "url", nodeUrl)
-		return
-	}
-	mirror.Objects = append(mirror.Objects, rec)
-
-	md, err := loadDirectoryMetadata(batch, nodeUrl.AccountID())
-	if err != nil {
-		g.logger.Error("Failed to load directory", "error", err, "url", nodeUrl)
+	if err := g.mirrorRecord(batch, mirror); err != nil {
+		g.logger.Error("Failed to mirror account", "error", err)
 		return
 	}
 
-	for i := uint64(0); i < md.Count; i++ {
-		s, err := loadDirectoryEntry(batch, nodeUrl.AccountID(), i)
-		if err != nil {
-			g.logger.Error("Failed to load directory entry", "error", err, "url", nodeUrl, "index", i)
-			return
-		}
+	if err := g.mirrorRecord(batch, mirror, protocol.ValidatorBook); err != nil {
+		g.logger.Error("Failed to mirror account", "error", err)
+		return
+	}
 
-		u, err := url.Parse(s)
-		if err != nil {
-			g.logger.Error("Invalid directory entry", "error", err, "url", nodeUrl, "index", i)
-			return
-		}
-
-		rec, err := mirrorRecord(batch, u)
-		if err != nil {
-			g.logger.Error("Failed to mirror directory entry", "error", err, "url", nodeUrl, "index", i)
-			return
-		}
-		mirror.Objects = append(mirror.Objects, rec)
+	if err := g.mirrorRecord(batch, mirror, protocol.ValidatorBook+"0"); err != nil {
+		g.logger.Error("Failed to mirror account", "error", err)
+		return
 	}
 
 	txns := new(protocol.InternalSendTransactions)

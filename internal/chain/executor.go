@@ -308,12 +308,17 @@ func (m *Executor) Commit() ([]byte, error) {
 	}
 
 	// Deduplicate the update list
+	var mirrorAdi bool
 	updatedMap := make(map[string]bool, len(ledgerState.Updates))
 	updatedSlice := make([]protocol.AnchorMetadata, 0, len(ledgerState.Updates))
 	for _, u := range ledgerState.Updates {
 		s := strings.ToLower(fmt.Sprintf("%s#chain/%s", u.Account, u.Name))
 		if updatedMap[s] {
 			continue
+		}
+
+		if m.Network.NodeUrl(protocol.ValidatorBook + "0").Equal(u.Account) {
+			mirrorAdi = true
 		}
 
 		updatedSlice = append(updatedSlice, u)
@@ -347,7 +352,7 @@ func (m *Executor) Commit() ([]byte, error) {
 	}
 
 	if !m.isGenesis {
-		err := m.governor.DidCommit(m.blockBatch, m.blockLeader, false, m.blockIndex, m.blockTime)
+		err := m.governor.DidCommit(m.blockBatch, m.blockLeader, mirrorAdi, m.blockIndex, m.blockTime)
 		if err != nil {
 			return nil, err
 		}
