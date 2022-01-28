@@ -11,7 +11,7 @@ resource "aws_ecs_task_definition" "bvn2-2" {
       "name": "bvn2-2",
       "image": "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:develop",
       "essential": true,
-      "portMappings": [{"containerPort": 3000}],
+      "portMappings": [{"containerPort": 26660}],
       "memory": 512,
       "cpu": 256,
       "logConfiguration": {
@@ -30,7 +30,7 @@ resource "aws_ecs_task_definition" "bvn2-2" {
                "readOnly": false
            }
        ]
-       
+
     }
 ]
 DEFINITION
@@ -58,7 +58,7 @@ DEFINITION
 }
 
   resource "aws_ecs_service" "bvn2-2" {
-  name            = "bvn2-2"              
+  name            = "bvn2-2"
   cluster         = "${aws_ecs_cluster.dev_cluster.id}"
   task_definition = "${aws_ecs_task_definition.bvn2-2.arn}"
   launch_type     = "FARGATE"
@@ -69,7 +69,7 @@ DEFINITION
   load_balancer {
     target_group_arn = "${aws_alb_target_group.dev_target.arn}" # Reference our target group
     container_name   = "${aws_ecs_task_definition.bvn2-2.family}"
-    container_port   = 3000
+    container_port   = 26660
   }
 
   service_registries {
