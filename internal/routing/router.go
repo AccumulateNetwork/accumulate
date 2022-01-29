@@ -50,7 +50,7 @@ type ResponseSubmit struct {
 // select a BVN.
 func routeModulo(network *config.Network, account *url.URL) (string, error) {
 	// Is it a DN URL?
-	if protocol.IsDnUrl(account) {
+	if protocol.BelongsToDn(account) {
 		return protocol.Directory, nil
 	}
 
