@@ -90,5 +90,11 @@ func (AddCredits) Validate(st *StateManager, tx *transactions.Envelope) (protoco
 	sdc.Amount = body.Amount
 	st.Submit(recvUrl, sdc)
 
+	//Create synthetic burn token
+	burnAcme := new(protocol.SyntheticBurnTokens)
+	copy(sdc.Cause[:], tx.GetTxHash())
+	burnAcme.Amount = amount.Int
+	st.Submit(tokenUrl, burnAcme)
+
 	return nil, nil
 }
