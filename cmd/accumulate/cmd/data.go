@@ -180,6 +180,10 @@ func GetDataEntrySet(accountUrl string, args []string) (string, error) {
 }
 
 func CreateLiteDataAccount(origin string, args []string) (string, error) {
+	if flagAccount.Scratch {
+		return "", fmt.Errorf("lite scratch data accounts are not supported")
+	}
+
 	u, err := url.Parse(origin)
 	if err != nil {
 		return "", err
@@ -263,6 +267,7 @@ func CreateDataAccount(origin string, args []string) (string, error) {
 	cda := protocol.CreateDataAccount{}
 	cda.Url = accountUrl.String()
 	cda.KeyBookUrl = keybook
+	cda.Scratch = flagAccount.Scratch
 
 	res, err = dispatchTxRequest("create-data-account", &cda, nil, u, si, privKey)
 	if err != nil {
