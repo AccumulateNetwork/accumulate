@@ -44,7 +44,7 @@ function wait-for-tx {
     fi
 
     for TXID in $(echo $RESP | jq -re '(.syntheticTxids // [])[]'); do
-        wait-for-tx $NO_CHECK "$TXID"
+        wait-for-tx $NO_CHECK "$TXID" || return 1
     done
 }
 
@@ -108,9 +108,14 @@ done
 accumulate account get ${LITE} 1> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
-wait-for cli-tx credits ${LITE} ${LITE} 1100
+TXID=$(cli-tx credits ${LITE} ${LITE} 1100)
+wait-for-tx $TXID
 BALANCE=$(accumulate -j account get ${LITE} | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 1100 ] && success || die "${LITE} should have at least 1100 credits but only has ${BALANCE}"
+[ "$BALANCE" -ge 1100 ] || die "${LITE} should have at least 1100 credits but only has ${BALANCE}"
+TXID=$(accumulate -j tx get ${TXID} | jq -re .syntheticTxids[1]) # this depends on the burn coming last
+TYPE=$(accumulate -j tx get ${TXID} | jq -re .type)
+[ "$TYPE" == "syntheticBurnTokens" ] || die "Expected a syntheticBurnTokens, got ${TYPE}"
+success
 
 section "Generate keys"
 ensure-key keytest-0-0
