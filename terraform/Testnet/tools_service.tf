@@ -31,14 +31,14 @@ resource "aws_ecs_task_definition" "tool_service" {
             "awslogs-stream-prefix": "ecs"
                 }
             },
-      "command": ["init", "devnet", "--work-dir", "/mnt/efs/node", "--docker", "--bvns=3", "--followers=0", "--validators=4", "--dns-suffix", ".accumulate-testnet"],     
+      "command": ["init", "devnet", "--work-dir", "/mnt/efs/node", "--docker", "--bvns=3", "--followers=0", "--validators=4", "--dns-suffix", ".accumulate-testnet"],
       "mountPoints": [
           {
               "containerPath": "/mnt/efs/node",
               "sourceVolume": "efs_temp",
               "readOnly": false
           }
-      ]                 
+      ]
     }
   ]
 DEFINITION
@@ -50,7 +50,6 @@ DEFINITION
     name     = "efs_temp"
     efs_volume_configuration {
       file_system_id = "${aws_efs_file_system.testnet.id}"
-      root_directory = "/mnt/efs/node"
       transit_encryption      = "ENABLED"
       transit_encryption_port = 2999
       authorization_config {
@@ -66,7 +65,7 @@ DEFINITION
 
 
 # resource "aws_ecs_service" "tool_service" {
-#   name             = "tool-service"              
+#   name             = "tool-service"
 #   cluster          = "${aws_ecs_cluster.test_cluster.id}"
 #   task_definition  = "${aws_ecs_task_definition.tool_service.arn}"
 #   launch_type      = "FARGATE"
@@ -80,7 +79,7 @@ DEFINITION
 #     security_groups  = ["${aws_security_group.tool_service.id}"]
 #       }
 
-#   #  depends_on = [aws_alb_listener.listener]   
+#   #  depends_on = [aws_alb_listener.listener]
 # }
 
 # resource "aws_cloudwatch_event_rule" "scheduled_task" {
@@ -109,7 +108,7 @@ DEFINITION
     #   subnets = ["subnet-02c15750cd0264806","subnet-03c42789aa7599f12"]
     # }
 #   }
-# } 
+# }
 
 
 

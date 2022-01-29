@@ -30,7 +30,7 @@ resource "aws_ecs_task_definition" "bvn1-2" {
                "readOnly": false
            }
        ]
-       
+
     }
 ]
 DEFINITION
@@ -42,7 +42,6 @@ DEFINITION
     name     = "efs_temp"
     efs_volume_configuration {
       file_system_id = "${aws_efs_file_system.testnet.id}"
-      root_directory = "/mnt/efs/node"
       transit_encryption      = "ENABLED"
       transit_encryption_port = 2999
       authorization_config {
@@ -58,7 +57,7 @@ DEFINITION
 }
 
   resource "aws_ecs_service" "bvn1-2" {
-  name            = "bvn1-2"              
+  name            = "bvn1-2"
   cluster         = "${aws_ecs_cluster.test_cluster.id}"
   task_definition = "${aws_ecs_task_definition.bvn1-2.arn}"
   launch_type     = "FARGATE"

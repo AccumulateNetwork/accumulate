@@ -8,6 +8,10 @@ resource "aws_efs_file_system" "devnet" {
   }
 }
 
+output "efs" {
+  value = aws_efs_file_system.devnet.dns_name
+}
+
 resource "aws_efs_access_point" "devnet" {
   file_system_id = aws_efs_file_system.devnet.id
   tags = {
@@ -19,7 +23,7 @@ resource "aws_efs_access_point" "devnet" {
   }
 
   root_directory {
-    path = "/mnt/efs/node"
+    path = "/"
     creation_info {
       owner_gid = 1000
       owner_uid = 1000
@@ -28,20 +32,14 @@ resource "aws_efs_access_point" "devnet" {
   }
 }
 
-resource "aws_efs_mount_target" "dev" {
+resource "aws_efs_mount_target" "devnet" {
+  count           = length(data.aws_availability_zones.available.names)
   file_system_id  = aws_efs_file_system.devnet.id
-  subnet_id       = aws_subnet.dev_private_a.id 
-  security_groups = ["${aws_security_group.efs_dev.id}",
-      "${aws_security_group.dev_tools.id}",
-      "${aws_security_group.devnet.id}"
-    ]
-}
-
-resource "aws_efs_mount_target" "dev_2" {
-  file_system_id  = aws_efs_file_system.devnet.id
-  subnet_id       = aws_subnet.dev_private_b.id
-  security_groups = ["${aws_security_group.efs_dev.id}",
-      "${aws_security_group.dev_tools.id}",
-      "${aws_security_group.devnet.id}"
+  subnet_id       = aws_subnet.subnet[count.index].id
+  security_groups = [
+    aws_security_group.efs_dev.id,
+    aws_security_group.dev_tools.id,
+    aws_security_group.devnet.id,
+    aws_security_group.ec2.id,
   ]
 }

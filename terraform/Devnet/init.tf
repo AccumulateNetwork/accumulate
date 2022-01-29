@@ -8,11 +8,6 @@ data "aws_ecs_task_definition" "init" {
 
 
 resource "aws_ecs_task_definition" "init" {
-  lifecycle {
-    ignore_changes = [
-      "volume"
-    ]
-  }
 
   depends_on               = [aws_ecs_cluster.dev_cluster]
   family                   = "accumulate-devnet-init" # Name of first task
@@ -22,7 +17,6 @@ resource "aws_ecs_task_definition" "init" {
       "name": "accumulate-devnet-init",
       "image": "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:develop",
       "essential": true,
-      "portMappings": [{"containerPort": 80}],
       "memory": 512,
       "cpu": 256,
       "logConfiguration": {
@@ -33,7 +27,8 @@ resource "aws_ecs_task_definition" "init" {
             "awslogs-stream-prefix": "ecs"
                 }
             },
-      "command": ["init", "devnet", "--work-dir", "/mnt/efs/node", "--docker", "--bvns=3", "--followers=0", "--validators=4", "--dns-suffix", ".accumulate-devnet"],
+      "entryPoint": ["sh"],
+      "command": ["mount", "&&", "accumulated", "init", "devnet", "--work-dir", "/mnt/efs/node", "--docker", "--bvns=3", "--followers=0", "--validators=4", "--dns-suffix=.accumulate-devnet", "--reset", "--log-levels=error;accumulate=debug;executor=debug;governor=debug"],
       "mountPoints": [
           {
               "containerPath": "/mnt/efs/node",
@@ -51,7 +46,6 @@ DEFINITION
     name     = "efs_temp"
     efs_volume_configuration {
       file_system_id          = "${aws_efs_file_system.devnet.id}"
-      root_directory          = "/mnt/efs/node"
       transit_encryption      = "ENABLED"
       transit_encryption_port = 2999
       authorization_config {

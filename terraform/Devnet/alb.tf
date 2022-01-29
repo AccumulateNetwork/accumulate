@@ -1,18 +1,25 @@
+data "aws_acm_certificate" "issued" {
+  domain   = "devnet.accumulatenetwork.io"
+  statuses = ["ISSUED"]
+}
+
 resource "aws_alb" "dev_alb" {
   name               = "accumulate-devnet-alb" # Name of load balancer
   load_balancer_type = "application"
-  subnets            = ["${aws_subnet.dev_pubsub_a.id}",
-                         "${aws_subnet.dev_pubsub_b.id}"]
+  subnets            = aws_subnet.subnet.*.id
   security_groups    = ["${aws_security_group.alb_security_group.id}"]
  }
-
+ 
+output "alb_hostname" {
+  value = aws_alb.dev_alb.dns_name
+}
 
 resource "aws_alb_target_group" "dev_target" {
   name        = "accumulate-dev-target"
   port        = "26660"
   protocol    = "HTTP"
   target_type = "ip"
-  vpc_id      = "${aws_vpc.dev_vpc.id}"
+  vpc_id      = aws_vpc.vpc.id
   depends_on  = [aws_alb.dev_alb]
   deregistration_delay = 50
 
@@ -44,7 +51,7 @@ resource "aws_alb_listener" "dev_listener" {
 
 resource "aws_alb_listener" "dev_listener_https" {
   load_balancer_arn = "${aws_alb.dev_alb.id}" # Reference our load balancer
-  certificate_arn   = "arn:aws:acm:us-east-1:018508593216:certificate/d1a0d5d7-b237-455b-9757-27e85a945e9d"
+  certificate_arn   = data.aws_acm_certificate.issued.arn
   port              = "443"
   protocol          = "HTTPS"
   ssl_policy        = "ELBSecurityPolicy-2016-08"

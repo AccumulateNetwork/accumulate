@@ -1,44 +1,30 @@
 resource "aws_security_group" "alb_security_group" {
-  vpc_id      = "${aws_vpc.dev_vpc.id}"
+  vpc_id      = aws_vpc.vpc.id
   name        = "accumulate-devnet-alb"
 
+  # Allow HTTP
   ingress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+    description      = ""
+    from_port        = 80
+    to_port          = 80
+    protocol         = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
+    cidr_blocks      = ["0.0.0.0/0"]
   }
 
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  # Allow HTTPS
+  ingress {
+    description      = ""
+    from_port        = 443
+    to_port          = 443
+    protocol         = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
+    cidr_blocks      = ["0.0.0.0/0"]
   }
-}
-
-resource "aws_security_group_rule" "alb_allow_http" {
-  type              = "ingress"
-  from_port         = 80
-  to_port           = 80
-  protocol          = "tcp"
-  ipv6_cidr_blocks  = ["::/0"]
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = "${aws_security_group.alb_security_group.id}"
-}
-
-resource "aws_security_group_rule" "alb_allow_https" {
-  type              = "ingress"
-  from_port         = 443
-  to_port           = 443
-  protocol          = "tcp"
-  ipv6_cidr_blocks  = ["::/0"]
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = "${aws_security_group.alb_security_group.id}"
 }
 
 resource "aws_security_group" "dev_tools" {
-  vpc_id        = "${aws_vpc.dev_vpc.id}"
+  vpc_id        = aws_vpc.vpc.id
   name          = "accumulate-devnet-tools"
 
   egress {
@@ -95,20 +81,47 @@ resource "aws_security_group_rule" "allow_docker" {
 }
 
 resource "aws_security_group" "devnet" {
-  vpc_id            = "${aws_vpc.dev_vpc.id}"
+  vpc_id            = aws_vpc.vpc.id
   name              = "accumulate-devnet-nodes"
+
+  lifecycle {
+    ignore_changes = [ingress]
+  }
+
   ingress {
-    from_port       = 0
-    to_port         = 26660
-    protocol        = "tcp"
+    description      = ""
+    from_port        = 0
+    to_port          = 26660
+    protocol         = "tcp"
     ipv6_cidr_blocks = ["::/0"]
     # allowing traffic in from the load balancer security group and efs mount target security group
     security_groups = ["${aws_security_group.alb_security_group.id}",
                          "${aws_security_group.dev_tools.id}"]
   }
 
+  # Accumulate node website
+  ingress {
+    description      = ""
+    from_port        = 8080
+    to_port          = 8080
+    protocol         = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
+  # Accumulate node services
+  ingress {
+    description      = ""
+    from_port        = 26656
+    to_port          = 26666
+    protocol         = "tcp"
+    ipv6_cidr_blocks = ["::/0"]
+    cidr_blocks      = ["0.0.0.0/0"]
+  }
+
 
   egress {
+    description      = ""
     from_port       = 0
     to_port         = 0
     protocol        = "-1"
@@ -116,6 +129,7 @@ resource "aws_security_group" "devnet" {
   }
 
   egress {
+    description      = ""
       from_port        = 0
       to_port          = 0
       protocol         = "-1"
@@ -132,42 +146,30 @@ resource "aws_security_group_rule" "allow_efs_dev" {
     source_security_group_id = "${aws_security_group.efs_dev.id}"
 }
 
-resource "aws_security_group_rule" "ingress_docker_devnet" {
-  type              = "ingress"
-  from_port         = 26656
-  to_port           = 26666
-  protocol          = "tcp"
-  ipv6_cidr_blocks  = ["::/0"]
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = "${aws_security_group.devnet.id}"
-}
-
-resource "aws_security_group_rule" "allow_docker_2" {
-  type              = "ingress"
-  from_port         = 8080
-  to_port           = 8080
-  protocol          = "tcp"
-  ipv6_cidr_blocks  = ["::/0"]
-  cidr_blocks       = ["0.0.0.0/0"]
-  security_group_id = "${aws_security_group.devnet.id}"
-}
-
 resource "aws_security_group" "efs_dev" {
-  vpc_id            = "${aws_vpc.dev_vpc.id}"
+  vpc_id            = aws_vpc.vpc.id
   name              = "accumulate-devnet-efs"
 
   ingress {
     from_port   = 2049
     to_port     = 2049
     protocol    = "tcp"
-    security_groups = ["${aws_security_group.dev_tools.id}", "${aws_security_group.devnet.id}"]
+    security_groups = [
+      aws_security_group.dev_tools.id,
+      aws_security_group.devnet.id,
+      aws_security_group.ec2.id,
+    ]
   }
 
   egress {
     from_port       = 0
     to_port         = 0
     protocol        = "-1"
-    security_groups = ["${aws_security_group.devnet.id}", "${aws_security_group.dev_tools.id}"]
+    security_groups = [
+      aws_security_group.dev_tools.id,
+      aws_security_group.devnet.id,
+      aws_security_group.ec2.id,
+    ]
   }
 }
 

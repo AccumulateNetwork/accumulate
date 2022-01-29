@@ -48,7 +48,6 @@ DEFINITION
     name     = "efs_temp"
     efs_volume_configuration {
       file_system_id = "${aws_efs_file_system.devnet.id}"
-      root_directory = "/mnt/efs/node"
       transit_encryption      = "ENABLED"
       transit_encryption_port = 2999
       authorization_config {
@@ -85,7 +84,7 @@ DEFINITION
 
 
   network_configuration {
-    subnets          = ["${aws_subnet.dev_pubsub_a.id}","${aws_subnet.dev_pubsub_b.id}"]
+    subnets          = aws_subnet.subnet.*.id
     assign_public_ip = true # Provide our containers with public IPs
     security_groups  = ["${aws_security_group.dev_tools.id}"]
       }
