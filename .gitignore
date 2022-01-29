@@ -76,3 +76,4 @@ _testmain.go
 vendor/
 .sim
 recovery
+*go_build_c_gentypes
