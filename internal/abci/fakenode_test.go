@@ -73,7 +73,6 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	for _, netName := range subnets {
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
-			nodes[i].client.CreateEmptyBlocks = true
 			nodes[i].Start(chans[i], clients, doGenesis)
 		}
 	}
@@ -274,7 +273,6 @@ func (n *FakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte 
 	// Submit all the transactions as a batch
 	n.client.SubmitTx(context.Background(), blob)
 
-	// n.client.WaitForAll()
 	for _, id := range ids {
 		err := n.client.WaitFor(id, true)
 		n.Require().NoError(err)
