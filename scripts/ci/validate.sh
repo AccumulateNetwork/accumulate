@@ -94,26 +94,17 @@ echo
 section "Generate a Lite Token Account"
 accumulate account list | grep -q ACME || accumulate account generate
 LITE=$(accumulate account list | grep ACME | head -1)
-TX0=$(cli-tx faucet ${LITE})
-TX1=$(cli-tx faucet ${LITE})
-TX2=$(cli-tx faucet ${LITE})
-TX3=$(cli-tx faucet ${LITE})
-TX4=$(cli-tx faucet ${LITE})
-TX5=$(cli-tx faucet ${LITE})
-TX6=$(cli-tx faucet ${LITE})
-TX7=$(cli-tx faucet ${LITE})
-TX8=$(cli-tx faucet ${LITE})
-TX9=$(cli-tx faucet ${LITE})
-wait-for-tx $TX0
-wait-for-tx $TX1
-wait-for-tx $TX2
-wait-for-tx $TX3
-wait-for-tx $TX4
-wait-for-tx $TX5
-wait-for-tx $TX6
-wait-for-tx $TX7
-wait-for-tx $TX8
-wait-for-tx $TX9
+TXS=()
+for i in {1..100}
+do
+	TXS=(${TXS[@]} $(cli-tx faucet ${LITE}))
+done
+for tx in "${TXS[@]}"
+do
+	echo $tx
+	wait-for-tx $tx
+done
+
 accumulate account get ${LITE} &> /dev/null && success || die "Cannot find ${LITE}"
 
 section "Add credits to lite account"
@@ -149,9 +140,9 @@ echo $STATUS | jq -re .message &> /dev/null || die "Synthetic transaction does n
 success
 
 section "Add credits to the ADI's key page 0"
-wait-for cli-tx credits ${LITE} keytest/page0 5500
+wait-for cli-tx credits ${LITE} keytest/page0 60000
 BALANCE=$(accumulate -j page get keytest/page0 | jq -r .data.creditBalance)
-[ "$BALANCE" -ge 5500 ] && success || die "keytest/page0 should have 5500 credits but has ${BALANCE}"
+[ "$BALANCE" -ge 60000 ] && success || die "keytest/page0 should have 60000 credits but has ${BALANCE}"
 
 section "Create additional Key Pages"
 wait-for cli-tx page create keytest/book keytest-0-0 keytest/page1 keytest-1-0
@@ -287,6 +278,16 @@ echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
 echo $JSON | jq -re .result.entryHash &> /dev/null || die "Deliver response does not include the entry hash"
 accumulate -j tx get $TXID | jq -re .status.result.entryHash &> /dev/null || die "Transaction query response does not include the entry hash"
+success
+
+section "Issue a new token"
+JSON=$(accumulate -j token create keytest keytest-0-0 keytest/foocoin bar 8)
+TXID=$(echo $JSON | jq -re .transactionHash)
+echo $JSON | jq -C --indent 0
+wait-for-tx $TXID
+RESULT=$(accumulate -j token get keytest/foocoin)
+[ "$(echo $RESULT | jq -re .data.symbol)" == "bar" ] && success || die "Token issuance failed with invalid symbol"
+[ "$(echo $RESULT | jq -re .data.precision)" -eq 8 ] && success || die "Token issuance failed with invalid precision"
 success
 
 section "Query latest data entry by URL"
