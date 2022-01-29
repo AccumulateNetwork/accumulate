@@ -23,6 +23,10 @@ func NewNodeExecutor(opts ExecutorOptions) (*Executor, error) {
 			InternalSendTransactions{},
 			InternalTransactionsSigned{},
 			InternalTransactionsSent{},
+
+			// for ACME
+			IssueTokens{},
+			SyntheticBurnTokens{},
 		)
 
 	case config.BlockValidator:
