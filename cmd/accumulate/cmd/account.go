@@ -31,7 +31,16 @@ func init() {
 
 	accountCreateDataCmd.AddCommand(
 		accountCreateDataLiteCmd)
+
+	accountCreateTokenCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch token account")
+	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Scratch, "scratch", false, "Create a scratch data account")
+	accountCreateDataCmd.Flags().BoolVar(&flagAccount.Lite, "lite", false, "Create a lite data account")
 }
+
+var flagAccount = struct {
+	Lite    bool
+	Scratch bool
+}{}
 
 var accountCmd = &cobra.Command{
 	Use:   "account",
@@ -74,12 +83,22 @@ var accountCreateDataCmd = &cobra.Command{
 	Use:   "data",
 	Short: "Create a data account",
 	Run: func(cmd *cobra.Command, args []string) {
-		if len(args) < 3 {
-			PrintDataAccountCreate()
-			PrintDataLiteAccountCreate()
-			return
+		var out string
+		var err error
+		if flagAccount.Lite {
+			if len(args) < 2 {
+				PrintDataLiteAccountCreate()
+				return
+			}
+			out, err = CreateLiteDataAccount(args[0], args[1:])
+		} else {
+			if len(args) < 3 {
+				PrintDataAccountCreate()
+				PrintDataLiteAccountCreate()
+				return
+			}
+			out, err = CreateDataAccount(args[0], args[1:])
 		}
-		out, err := CreateDataAccount(args[0], args[1:])
 		printOutput(cmd, out, err)
 	},
 }
@@ -88,6 +107,7 @@ var accountCreateDataLiteCmd = &cobra.Command{
 	Use:   "lite",
 	Short: "Create a lite data account",
 	Run: func(cmd *cobra.Command, args []string) {
+		fmt.Printf("Deprecation Warning!\nTo create a lite data account, use `accumulate account create data --lite ...`\n\n")
 		if len(args) < 2 {
 			PrintDataLiteAccountCreate()
 			return
@@ -226,6 +246,7 @@ func CreateAccount(cmd *cobra.Command, origin string, args []string) (string, er
 	tac.Url = accountUrl.String()
 	tac.TokenUrl = tok.String()
 	tac.KeyBookUrl = keybook
+	tac.Scratch = flagAccount.Scratch
 
 	res, err := dispatchTxRequest("create-token-account", &tac, nil, u, si, privKey)
 	if err != nil {
