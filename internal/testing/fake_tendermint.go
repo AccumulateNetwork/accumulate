@@ -26,13 +26,11 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-const debugTX = false
+const debugTX = true
 
 // FakeTendermint is a test harness that facilitates testing the ABCI
 // application without creating an actual Tendermint node.
 type FakeTendermint struct {
-	CreateEmptyBlocks bool
-
 	appWg      *sync.WaitGroup
 	app        abci.Application
 	db         *database.Database
@@ -104,21 +102,6 @@ func (c *FakeTendermint) Shutdown() {
 func (c *FakeTendermint) App() abci.Application {
 	c.appWg.Wait()
 	return c.app
-}
-
-// WaitForAll until all pending transactions are done
-func (c *FakeTendermint) WaitForAll() {
-	if debugTX {
-		c.logger.Info("Waiting for transactions")
-	}
-	c.txMu.RLock()
-	defer c.txMu.RUnlock()
-	for c.txActive > 0 || len(c.txPend) > 0 {
-		c.txCond.Wait()
-	}
-	if debugTX {
-		c.logger.Info("Done waiting")
-	}
 }
 
 func (c *FakeTendermint) WaitFor(txid [32]byte, waitSynth bool) error {
@@ -304,7 +287,6 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 	defer c.stopped.Done()
 
 	var queue []*txStatus
-	var hadTxnLastTime bool
 	tick := time.NewTicker(interval)
 
 	defer func() {
@@ -335,9 +317,6 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 			continue
 
 		case <-tick.C:
-			if len(queue) == 0 && !c.CreateEmptyBlocks && !hadTxnLastTime {
-				continue
-			}
 			if c.app == nil {
 				continue
 			}
@@ -411,9 +390,6 @@ func (c *FakeTendermint) execute(interval time.Duration) {
 		c.txMu.RLock()
 		c.txCond.Broadcast()
 		c.txMu.RUnlock()
-
-		// Remember if this block had transactions
-		hadTxnLastTime = len(queue) > 0
 
 		// Clear the queue (reuse the memory)
 		queue = queue[:0]
