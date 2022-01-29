@@ -21,53 +21,60 @@ struct {{.Name}} {
     {{end}}
 	{{- end}}
 
-	{{- range .Embeddings}}
-	{{.}}
-	{{- end}}
+    {{- range .Embeddings}}
+    {{.}}
+    {{- end}}
 
-	{{- range .Fields}}
-	{{resolveType . false}} {{.Name}}; {{if .IsMarshalled}} //`json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}" form:"{{lcName .Name}}" query:"{{lcName .Name}}"{{validateTag .}}`{{end}}
-	{{- end}}
+    {{- range .Fields}}
+    {{resolveType . false}} {{.Name}}; {{if .IsMarshalled}} //`json:"{{lcName .Name}}{{if .OmitEmpty}},omitempty{{end}}" form:"{{lcName .Name}}" query:"{{lcName .Name}}"{{validateTag .}}`{{end}}
+    {{- end}}
 
     ///pseudo helper functions
     TxType (*GetType)();
-    ReturnBytes (*MarshalBinary)(v *{{.Name}});
-    Error (*UnmarshalBinary)(v *{{.Name}});
-    ReturnBytes (*MarshalJSON)(v *{{.Name}});
-    Error (*UnmarshalJSON)(v *{{.Name}});
-    bool (*Equal)(v *{{.Name}},u *{{.Name}});
-    int (*BinarySize)(v *{{.Name}});
+    int (*BinarySize)(const struct {{.Name}} *);
+    bool (*Equal)(const struct {{.Name}}*, const struct {{.Name}}*);
+    int (*Copy)(struct {{.Name}}*, const struct {{.Name}}*);
+    Error (*MarshalBinary)(const struct {{.Name}}*, Bytes *outData);
+    Error (*UnmarshalBinary)(struct {{.Name}}*,const Bytes* data);
+    Error (*MarshalJSON)(const struct {{.Name}} *v, Bytes *outData);
+    Error (*UnmarshalJSON)(struct {{.Name}}*,const Bytes* data);
 };
 {{end}}
 
 {{range .Types}}
 {{- if and .MakeConstructor}}
-ACME_API {{.Name}}_init({{.Name}} *v) {
+ACME_API {{.Name}} {{.Name}}_init({{.Name}} *v) {
+    {{.Name}} init;
 {{- if and .IsChain}}
-	v->Type = types.AccountType{{.ChainType}};
+	init.Type = types.AccountType{{.ChainType}};
 {{- end}}
-    v->GetType = GetType{{.Name}};
-    v->MarshalBinary = MarshalBinary{{.Name}};
-    v->UnmarshalBinary = UnmarshalBinary{{.Name}};
-    v->MarshalJSON = MarshalJSON{{.Name}};
-    v->UnmarshalJSON = UnmarshalJSON{{.Name}};
-    v->Equal = Equal{{.Name}};
-    return v;
+    memset((void*)&init, 0, sizeof(init));
+    init.GetType = {{.Name}}_type;
+    init.MarshalBinary = {{.Name}}_binarySize;
+    init.UnmarshalBinary = {{.Name}}_equal;
+    init.MarshalJSON = {{.Name}}_copy;
+    init.UnmarshalJSON = {{.Name}}_marshalBinary;
+    init.Equal = {{.Name}}_unmarshalBinary;
+
+    if ( b ) {
+        *b = init;
+    }
+    return init;
 }
 {{- end}}{{end}}
 /// Transaction Type
 {{range .Types}}
-{{if .IsTransaction}}ACME_API TxType GetType{{.Name}}();
+{{if .IsTransaction}}ACME_API TxType {{.Name}}_type();
 {{end}}{{end}}
 
 /// Comparisons
 {{range .Types}}
-{{if .IsComparable}}ACME_API bool Equal{{.Name}}({{.Name}} *v, {{.Name}} *u);
+{{if .IsComparable}}ACME_API bool {{.Name}}_equal({{.Name}} *v, {{.Name}} *u);
 {{end}}{{end}}
 
 /// Marshaled Binary Size Calculations
 {{range .Types}}
-{{if .IsBinary}}ACME_API int BinarySize{{.Name}}({{.Name}} *v);
+{{if .IsBinary}}ACME_API int {{.Name}}_binarySize({{.Name}} *v);
 {{end}}{{end}}
 
 /// Binary Marshalers

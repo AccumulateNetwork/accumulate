@@ -73,6 +73,8 @@ func CResolveType(field *Field, forNew bool) string {
 	switch field.Type {
 	case "bytes":
 		return "Bytes"
+	case "string":
+		return "String"
 	case "rawJson":
 		return "json.RawMessage"
 	case "bigint":
