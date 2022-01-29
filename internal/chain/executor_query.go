@@ -144,35 +144,52 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			for _, txid := range txIds {
 				resp.Items = append(resp.Items, hex.EncodeToString(txid[:]))
 			}
-			return []byte("pending-transaction"), resp, nil
+			return []byte("pending"), resp, nil
 		case 2:
-			chain, err := batch.Account(u).ReadChain(protocol.PendingChain)
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
-			}
+			if strings.Contains(fragment[1], ":") {
+				indexes := strings.Split(fragment[1], ":")
+				start, err := strconv.Atoi(indexes[0])
+				if err != nil {
+					return nil, nil, err
+				}
+				end, err := strconv.Atoi(indexes[1])
+				if err != nil {
+					return nil, nil, err
+				}
+				txns, perr := m.queryTxHistoryByChainId(batch, u.AccountID(), int64(start), int64(end), protocol.PendingChain)
+				if perr != nil {
+					return nil, nil, perr
+				}
+				return []byte("pending"), txns, nil
+			} else {
+				chain, err := batch.Account(u).ReadChain(protocol.PendingChain)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to load main chain of %q: %v", u, err)
+				}
 
-			height, txid, err := getTransaction(chain, fragment[1])
-			if err != nil {
-				return nil, nil, err
-			}
+				height, txid, err := getTransaction(chain, fragment[1])
+				if err != nil {
+					return nil, nil, err
+				}
 
-			state, err := chain.State(height)
-			if err != nil {
-				return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
-			}
+				state, err := chain.State(height)
+				if err != nil {
+					return nil, nil, fmt.Errorf("failed to load chain state: %v", err)
+				}
 
-			res, err := m.queryByTxId(batch, txid, prove)
-			if err != nil {
-				return nil, nil, err
-			}
+				res, err := m.queryByTxId(batch, txid, prove)
+				if err != nil {
+					return nil, nil, err
+				}
 
-			res.Height = height
-			res.ChainState = make([][]byte, len(state.Pending))
-			for i, h := range state.Pending {
-				res.ChainState[i] = h.Copy()
-			}
+				res.Height = height
+				res.ChainState = make([][]byte, len(state.Pending))
+				for i, h := range state.Pending {
+					res.ChainState[i] = h.Copy()
+				}
 
-			return []byte("pending-transaction"), res, nil
+				return []byte("tx"), res, nil
+			}
 		}
 	case "data":
 		data, err := batch.Account(u).Data()

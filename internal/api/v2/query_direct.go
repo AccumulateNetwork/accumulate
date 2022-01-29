@@ -199,14 +199,14 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 		return qr, nil
 
 	case "pending":
-		res := new(query.ResponsePending)
+		res := new(query.MultiResponse)
 		err := res.UnmarshalBinary(v)
 		if err != nil {
 			return nil, fmt.Errorf("invalid response: %v", err)
 		}
 
 		qr := new(ChainQueryResponse)
-		qr.Type = "pending-transaction"
+		qr.Type = "pending"
 		qr.Data = res
 		return qr, nil
 

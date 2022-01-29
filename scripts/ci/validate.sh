@@ -307,5 +307,4 @@ RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
 
 section "Query pending by URL"
-RESULT=$(accumulate -j get keytest/pending#pending | jq -re .data.entry.data)
-[ "$RESULT" == $(echo -n bar | xxd -p) ] && success 
+accumulate -j get keytest/pending#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
