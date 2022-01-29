@@ -279,10 +279,16 @@ func (v *Envelope) MarshalJSON() ([]byte, error) {
 
 func (v *Transaction) MarshalJSON() ([]byte, error) {
 	u := struct {
-		Header
-		Body *string `json:"body,omitempty"`
+		Origin        *url.URL `json:"origin,omitempty"`
+		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
+		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
+		Nonce         uint64   `json:"nonce,omitempty"`
+		Body          *string  `json:"body,omitempty"`
 	}{}
-	u.Header = v.Header
+	u.Origin = v.Header.Origin
+	u.KeyPageHeight = v.Header.KeyPageHeight
+	u.KeyPageIndex = v.Header.KeyPageIndex
+	u.Nonce = v.Header.Nonce
 	u.Body = encoding.BytesToJSON(v.Body)
 	return json.Marshal(&u)
 }
@@ -311,15 +317,24 @@ func (v *Envelope) UnmarshalJSON(data []byte) error {
 
 func (v *Transaction) UnmarshalJSON(data []byte) error {
 	u := struct {
-		Header
-		Body *string `json:"body,omitempty"`
+		Origin        *url.URL `json:"origin,omitempty"`
+		KeyPageHeight uint64   `json:"keyPageHeight,omitempty"`
+		KeyPageIndex  uint64   `json:"keyPageIndex,omitempty"`
+		Nonce         uint64   `json:"nonce,omitempty"`
+		Body          *string  `json:"body,omitempty"`
 	}{}
-	u.Header = v.Header
+	u.Origin = v.Header.Origin
+	u.KeyPageHeight = v.Header.KeyPageHeight
+	u.KeyPageIndex = v.Header.KeyPageIndex
+	u.Nonce = v.Header.Nonce
 	u.Body = encoding.BytesToJSON(v.Body)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.Header = u.Header
+	v.Header.Origin = u.Origin
+	v.Header.KeyPageHeight = u.KeyPageHeight
+	v.Header.KeyPageIndex = u.KeyPageIndex
+	v.Header.Nonce = u.Nonce
 	if x, err := encoding.BytesFromJSON(u.Body); err != nil {
 		return fmt.Errorf("error decoding Body: %w", err)
 	} else {

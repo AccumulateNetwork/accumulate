@@ -1,21 +1,15 @@
 package chain
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"math/rand"
-	"net/http"
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
-	"golang.org/x/sync/errgroup"
 )
 
 type txBatch []byte
@@ -29,9 +23,7 @@ func (b *txBatch) Append(tx []byte) {
 type dispatcher struct {
 	ExecutorOptions
 	isDirectory bool
-	getClient   func(subnet string) (api.ABCIBroadcastClient, error)
 	batches     map[string]txBatch
-	errg        *errgroup.Group
 }
 
 // newDispatcher creates a new dispatcher.
@@ -44,67 +36,20 @@ func newDispatcher(opts ExecutorOptions) *dispatcher {
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
-func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte) {
-	subnet := d.Router.Route(u)
+func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte) error {
+	subnet, err := d.Router.Route(u)
+	if err != nil {
+		return err
+	}
+
 	d.batches[subnet] = append(d.batches[subnet], tx...)
+	return nil
 }
 
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
 	subnet := d.Network.ID
 	d.batches[subnet] = append(d.batches[subnet], tx...)
-}
-
-func (d *dispatcher) send(ctx context.Context, server string, batch txBatch) {
-	if len(batch) == 0 {
-		return
-	}
-
-	// Tendermint's JSON RPC batch client is utter trash, so we're rolling our
-	// own
-
-	request := jsonrpc2.Request{
-		Method: "broadcast_tx_async",
-		Params: map[string]interface{}{"tx": batch},
-		ID:     rand.Int()%5000 + 1,
-	}
-
-	d.errg.Go(func() error {
-		data, err := json.Marshal(request)
-		if err != nil {
-			return err
-		}
-
-		httpReq, err := http.NewRequest(http.MethodPost, server, bytes.NewBuffer(data))
-		if err != nil {
-			return err
-		}
-		httpReq = httpReq.WithContext(ctx)
-		httpReq.Header.Add("Content-Type", "application/json")
-
-		httpRes, err := http.DefaultClient.Do(httpReq)
-		if err != nil {
-			return err
-		}
-		defer httpRes.Body.Close()
-
-		response := new(jsonrpc2.Response)
-		err = json.NewDecoder(httpRes.Body).Decode(&response)
-		if err != nil {
-			return err
-		}
-
-		if !response.HasError() {
-			return nil
-		}
-
-		err = d.checkError(response.Error)
-		if err != nil {
-			return err
-		}
-
-		return nil
-	})
 }
 
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error
@@ -139,10 +84,12 @@ func (*dispatcher) checkError(err error) error {
 	return err
 }
 
-// Send sends all of the batches.
+// Send sends all of the batches asynchronously.
 func (d *dispatcher) Send(ctx context.Context) <-chan error {
 	errs := make(chan error)
 	wg := new(sync.WaitGroup)
+
+	// Send transactions to each destination in parallel
 	for subnet, batch := range d.batches {
 		if len(batch) == 0 {
 			continue
@@ -152,7 +99,7 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		subnet, batch := subnet, batch // Don't capture loop variables
 		go func() {
 			defer wg.Done()
-			err := d.Router.Send(ctx, subnet, batch)
+			_, err := d.Router.Submit(ctx, subnet, batch, false, true)
 			err = d.checkError(err)
 			if err != nil {
 				errs <- err
@@ -160,15 +107,17 @@ func (d *dispatcher) Send(ctx context.Context) <-chan error {
 		}()
 	}
 
+	// Once all transactions are sent, close the error channel
 	go func() {
 		wg.Wait()
 		close(errs)
 	}()
 
-	// Optimized by the compiler
+	// Reset the batches, optimized by the compiler
 	for subnet := range d.batches {
 		delete(d.batches, subnet)
 	}
 
+	// Let the caller wait for errors
 	return errs
 }

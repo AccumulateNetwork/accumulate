@@ -144,13 +144,14 @@ type TxHistoryQuery struct {
 }
 
 type TxRequest struct {
-	CheckOnly bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
-	Origin    *url.URL    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	Signer    Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Signature []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	KeyPage   KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	TxHash    []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
-	Payload   interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	CheckOnly  bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
+	IsEnvelope bool        `json:"isEnvelope,omitempty" form:"isEnvelope" query:"isEnvelope"`
+	Origin     *url.URL    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	Signer     Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signature  []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	KeyPage    KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	TxHash     []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
+	Payload    interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
 }
 
 type TxResponse struct {
@@ -418,12 +419,68 @@ func (v *DataEntryQueryResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *DataEntrySetQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	return json.Marshal(&u)
+}
+
+func (v *DirectoryQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	return json.Marshal(&u)
+}
+
+func (v *GeneralQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	return json.Marshal(&u)
+}
+
 func (v *KeyPageIndexQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		UrlQuery
+		Url string  `json:"url,omitempty"`
 		Key *string `json:"key,omitempty"`
 	}{}
-	u.UrlQuery = v.UrlQuery
+	u.Url = v.UrlQuery.Url
 	u.Key = encoding.BytesToJSON(v.Key)
 	return json.Marshal(&u)
 }
@@ -485,6 +542,20 @@ func (v *MultiResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *QueryOptions) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Expand = v.Expand
+	u.ExpandChains = v.Expand
+	u.Height = v.Height
+	u.Prove = v.Prove
+	return json.Marshal(&u)
+}
+
 func (v *Signer) MarshalJSON() ([]byte, error) {
 	u := struct {
 		PublicKey *string `json:"publicKey,omitempty"`
@@ -539,18 +610,32 @@ func (v *TransactionQueryResponse) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&u)
 }
 
+func (v *TxHistoryQuery) MarshalJSON() ([]byte, error) {
+	u := struct {
+		Url   string `json:"url,omitempty"`
+		Start uint64 `json:"start,omitempty"`
+		Count uint64 `json:"count,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	return json.Marshal(&u)
+}
+
 func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		CheckOnly bool        `json:"checkOnly,omitempty"`
-		Origin    *url.URL    `json:"origin,omitempty"`
-		Sponsor   *url.URL    `json:"sponsor,omitempty"`
-		Signer    Signer      `json:"signer,omitempty"`
-		Signature *string     `json:"signature,omitempty"`
-		KeyPage   KeyPage     `json:"keyPage,omitempty"`
-		TxHash    *string     `json:"txHash,omitempty"`
-		Payload   interface{} `json:"payload,omitempty"`
+		CheckOnly  bool        `json:"checkOnly,omitempty"`
+		IsEnvelope bool        `json:"isEnvelope,omitempty"`
+		Origin     *url.URL    `json:"origin,omitempty"`
+		Sponsor    *url.URL    `json:"sponsor,omitempty"`
+		Signer     Signer      `json:"signer,omitempty"`
+		Signature  *string     `json:"signature,omitempty"`
+		KeyPage    KeyPage     `json:"keyPage,omitempty"`
+		TxHash     *string     `json:"txHash,omitempty"`
+		Payload    interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
+	u.IsEnvelope = v.IsEnvelope
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.Signer = v.Signer
@@ -587,11 +672,17 @@ func (v *TxResponse) MarshalJSON() ([]byte, error) {
 
 func (v *TxnQuery) MarshalJSON() ([]byte, error) {
 	u := struct {
-		QueryOptions
-		Txid *string     `json:"txid,omitempty"`
-		Wait interface{} `json:"wait,omitempty"`
+		Expand       bool        `json:"expand,omitempty"`
+		ExpandChains bool        `json:"expandChains,omitempty"`
+		Height       uint64      `json:"height,omitempty"`
+		Prove        bool        `json:"prove,omitempty"`
+		Txid         *string     `json:"txid,omitempty"`
+		Wait         interface{} `json:"wait,omitempty"`
 	}{}
-	u.QueryOptions = v.QueryOptions
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	return json.Marshal(&u)
@@ -712,17 +803,110 @@ func (v *DataEntryQueryResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *DataEntrySetQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
+func (v *DirectoryQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Start        uint64 `json:"start,omitempty"`
+		Count        uint64 `json:"count,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
+func (v *GeneralQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url          string `json:"url,omitempty"`
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
+	return nil
+}
+
 func (v *KeyPageIndexQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		UrlQuery
+		Url string  `json:"url,omitempty"`
 		Key *string `json:"key,omitempty"`
 	}{}
-	u.UrlQuery = v.UrlQuery
+	u.Url = v.UrlQuery.Url
 	u.Key = encoding.BytesToJSON(v.Key)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.UrlQuery = u.UrlQuery
+	v.UrlQuery.Url = u.Url
 	if x, err := encoding.BytesFromJSON(u.Key); err != nil {
 		return fmt.Errorf("error decoding Key: %w", err)
 	} else {
@@ -830,6 +1014,30 @@ func (v *MultiResponse) UnmarshalJSON(data []byte) error {
 	for i, x := range u.OtherItems {
 		v.OtherItems[i] = encoding.AnyFromJSON(x)
 	}
+	return nil
+}
+
+func (v *QueryOptions) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Expand       bool   `json:"expand,omitempty"`
+		ExpandChains bool   `json:"expandChains,omitempty"`
+		Height       uint64 `json:"height,omitempty"`
+		Prove        bool   `json:"prove,omitempty"`
+	}{}
+	u.Expand = v.Expand
+	u.ExpandChains = v.Expand
+	u.Height = v.Height
+	u.Prove = v.Prove
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	if u.Expand != false {
+		v.Expand = u.Expand
+	} else {
+		v.Expand = u.ExpandChains
+	}
+	v.Height = u.Height
+	v.Prove = u.Prove
 	return nil
 }
 
@@ -948,18 +1156,38 @@ func (v *TransactionQueryResponse) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+func (v *TxHistoryQuery) UnmarshalJSON(data []byte) error {
+	u := struct {
+		Url   string `json:"url,omitempty"`
+		Start uint64 `json:"start,omitempty"`
+		Count uint64 `json:"count,omitempty"`
+	}{}
+	u.Url = v.UrlQuery.Url
+	u.Start = v.QueryPagination.Start
+	u.Count = v.QueryPagination.Count
+	if err := json.Unmarshal(data, &u); err != nil {
+		return err
+	}
+	v.UrlQuery.Url = u.Url
+	v.QueryPagination.Start = u.Start
+	v.QueryPagination.Count = u.Count
+	return nil
+}
+
 func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		CheckOnly bool        `json:"checkOnly,omitempty"`
-		Origin    *url.URL    `json:"origin,omitempty"`
-		Sponsor   *url.URL    `json:"sponsor,omitempty"`
-		Signer    Signer      `json:"signer,omitempty"`
-		Signature *string     `json:"signature,omitempty"`
-		KeyPage   KeyPage     `json:"keyPage,omitempty"`
-		TxHash    *string     `json:"txHash,omitempty"`
-		Payload   interface{} `json:"payload,omitempty"`
+		CheckOnly  bool        `json:"checkOnly,omitempty"`
+		IsEnvelope bool        `json:"isEnvelope,omitempty"`
+		Origin     *url.URL    `json:"origin,omitempty"`
+		Sponsor    *url.URL    `json:"sponsor,omitempty"`
+		Signer     Signer      `json:"signer,omitempty"`
+		Signature  *string     `json:"signature,omitempty"`
+		KeyPage    KeyPage     `json:"keyPage,omitempty"`
+		TxHash     *string     `json:"txHash,omitempty"`
+		Payload    interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
+	u.IsEnvelope = v.IsEnvelope
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.Signer = v.Signer
@@ -971,6 +1199,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.CheckOnly = u.CheckOnly
+	v.IsEnvelope = u.IsEnvelope
 	if u.Origin != nil {
 		v.Origin = u.Origin
 	} else {
@@ -1058,17 +1287,29 @@ func (v *TxResponse) UnmarshalJSON(data []byte) error {
 
 func (v *TxnQuery) UnmarshalJSON(data []byte) error {
 	u := struct {
-		QueryOptions
-		Txid *string     `json:"txid,omitempty"`
-		Wait interface{} `json:"wait,omitempty"`
+		Expand       bool        `json:"expand,omitempty"`
+		ExpandChains bool        `json:"expandChains,omitempty"`
+		Height       uint64      `json:"height,omitempty"`
+		Prove        bool        `json:"prove,omitempty"`
+		Txid         *string     `json:"txid,omitempty"`
+		Wait         interface{} `json:"wait,omitempty"`
 	}{}
-	u.QueryOptions = v.QueryOptions
+	u.Expand = v.QueryOptions.Expand
+	u.ExpandChains = v.QueryOptions.Expand
+	u.Height = v.QueryOptions.Height
+	u.Prove = v.QueryOptions.Prove
 	u.Txid = encoding.BytesToJSON(v.Txid)
 	u.Wait = encoding.DurationToJSON(v.Wait)
 	if err := json.Unmarshal(data, &u); err != nil {
 		return err
 	}
-	v.QueryOptions = u.QueryOptions
+	if u.Expand != false {
+		v.QueryOptions.Expand = u.Expand
+	} else {
+		v.QueryOptions.Expand = u.ExpandChains
+	}
+	v.QueryOptions.Height = u.Height
+	v.QueryOptions.Prove = u.Prove
 	if x, err := encoding.BytesFromJSON(u.Txid); err != nil {
 		return fmt.Errorf("error decoding Txid: %w", err)
 	} else {

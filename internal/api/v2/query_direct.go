@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -17,8 +18,13 @@ import (
 )
 
 type queryDirect struct {
-	QuerierOptions
-	client ABCIQueryClient
+	Options
+	Subnet string
+}
+
+type queryRequest interface {
+	encoding.BinaryMarshaler
+	Type() types.QueryType
 }
 
 func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []byte, error) {
@@ -35,7 +41,7 @@ func (q *queryDirect) query(content queryRequest, opts QueryOptions) (string, []
 		return "", nil, fmt.Errorf("failed to marshal request: %v", err)
 	}
 
-	res, err := q.client.ABCIQueryWithOptions(context.Background(), "/abci_query", b, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
+	res, err := q.Router.Query(context.Background(), q.Subnet, b, client.ABCIQueryOptions{Height: int64(opts.Height), Prove: opts.Prove})
 	if err != nil {
 		return "", nil, fmt.Errorf("failed to send request: %v", err)
 	}
