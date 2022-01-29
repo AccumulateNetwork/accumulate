@@ -140,10 +140,8 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 			if err != nil {
 				return nil, nil, err
 			}
-			resp := new(query.MultiResponse)
-			for _, txid := range txIds {
-				resp.Items = append(resp.Items, hex.EncodeToString(txid[:]))
-			}
+			resp := new(query.ResponsePending)
+			resp.Transactions = txIds
 			return []byte("pending"), resp, nil
 		case 2:
 			if strings.Contains(fragment[1], ":") {
@@ -160,7 +158,7 @@ func (m *Executor) queryByUrl(batch *database.Batch, u *url.URL, prove bool) ([]
 				if perr != nil {
 					return nil, nil, perr
 				}
-				return []byte("pending"), txns, nil
+				return []byte("tx-history"), txns, nil
 			} else {
 				chain, err := batch.Account(u).ReadChain(protocol.PendingChain)
 				if err != nil {

@@ -195,6 +195,20 @@ accumulate -j tx get $TXID | jq -re .status.pending &> /dev/null || die "Transac
 accumulate -j tx get $TXID | jq -re .status.delivered &> /dev/null && die "Transaction was delivered"
 success
 
+section "Query pending by URL"
+accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
+
+section "Query pending chain at height 0 by URL"
+TXID=$(accumulate -j get keytest/tokens#pending/0 | jq -re .transactionHash) && success || die "Failed to query pending chain by height"
+
+section "Query pending chain with hash by URL"
+RESULT=$(accumulate -j get keytest/tokens#pending/${TXID} | jq -re .transactionHash) || die "Failed to query pending chain by hash"
+[ "$RESULT" == "$TXID" ] && success || die "Querying by height and by hash gives different results"
+
+section "Query pending chain range by URL"
+RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
+[ "$RESULT" -ge 1 ] && success || die "No entries found"
+
 section "Signing the transaction with the same key does not deliver it"
 wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
 accumulate -j tx get $TXID | jq -re .status.pending &> /dev/null || die "Transaction is not pending"
@@ -305,6 +319,3 @@ RESULT=$(accumulate -j get keytest/data#data/${ENTRY} | jq -re .data.entry.data)
 section "Query data entry range by URL"
 RESULT=$(accumulate -j get keytest/data#data/0:10 | jq -re .data.total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
-
-section "Query pending by URL"
-accumulate -j get keytest/pending#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
