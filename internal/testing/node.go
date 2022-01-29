@@ -23,7 +23,7 @@ import (
 
 const LogConsole = false
 
-const DefaultLogLevels = "error;accumulate=info"
+const DefaultLogLevels = config.DefaultLogLevels //+ ";accumulate=debug"
 
 func DefaultConfig(net config.NetworkType, node config.NodeType, netId string) *config.Config {
 	cfg := config.Default(net, node, netId)       //
