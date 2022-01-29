@@ -3,12 +3,12 @@ locals {
     image: "public.ecr.aws/accumulate-network/accumulate/accumulated:develop",
     essential: true
     portMappings: [
-      { containerPort: 8080  }, // Website
-      { containerPort: 26656 }, // Tendermint P2P
-      { containerPort: 26657 }, // Tendermint JSON-RPC
-      { containerPort: 26658 }, // Tendermint gRPC
-      { containerPort: 26660 }, // Accumulate JSON-RPC
-      { containerPort: 26662 }, // Prometheus
+      { protocol: "tcp", containerPort: 8080,  hostPort: 8080  }, // Website
+      { protocol: "tcp", containerPort: 26656, hostPort: 26656 }, // Tendermint P2P
+      { protocol: "tcp", containerPort: 26657, hostPort: 26657 }, // Tendermint JSON-RPC
+      { protocol: "tcp", containerPort: 26658, hostPort: 26658 }, // Tendermint gRPC
+      { protocol: "tcp", containerPort: 26660, hostPort: 26660 }, // Accumulate JSON-RPC
+      { protocol: "tcp", containerPort: 26662, hostPort: 26662 }, // Prometheus
     ]
     memory: 512
     cpu: 256
@@ -22,7 +22,7 @@ locals {
     }
     mountPoints: [
       {
-        containerPath: "/mnt/efs/node"
+        containerPath: "/nodes"
         sourceVolume: "accumulate-devnet-storage"
         readOnly: false
       }
@@ -31,10 +31,13 @@ locals {
 
   init_once = merge({
     name: "init-once"
+    entryPoint: ["sh"]
     command: [
+      "mount", "&&",
+      "accumulated",
       "init", "devnet",
       "--docker",
-      "--work-dir=/mnt/efs/node",
+      "--work-dir=/nodes",
       "--bvns=3",
       "--followers=0",
       "--validators=4",
@@ -45,10 +48,13 @@ locals {
 
   init_reset = merge({
     name: "init-reset"
+    entryPoint: ["sh"]
     command: [
+      "mount", "&&",
+      "accumulated",
       "init", "devnet", "--reset",
       "--docker",
-      "--work-dir=/mnt/efs/node",
+      "--work-dir=/nodes",
       "--bvns=3",
       "--followers=0",
       "--validators=4",
@@ -61,7 +67,7 @@ locals {
     for subnet in concat(["dn"], [for n in range(0, 3) : "bvn${n}" ]) : [
       for n in range(0, 4) : merge({
         name: "${subnet}-${n}"
-        command: ["run", "-w", "/mnt/efs/node/${subnet}/Node${n}"]
+        command: ["run", "-w", "/nodes/${subnet}/Node${n}"]
       }, local.base_container)
     ]
   ])
@@ -74,7 +80,7 @@ resource "aws_ecs_cluster" "dev_cluster" {
 }
 
 resource "aws_security_group" "nodes" {
-  vpc_id = aws_vpc.dev_vpc.id
+  vpc_id = aws_vpc.vpc.id
   name   = "accumulate-devnet-nodes"
 
   # Allow node website
@@ -93,6 +99,18 @@ resource "aws_security_group" "nodes" {
     protocol         = "tcp"
     cidr_blocks      = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
+  }
+
+  # Allow all outbound traffic
+  #
+  # This is mainly for EFS, but referencing EFS causes a cycle
+  egress {
+    from_port        = 0
+    to_port          = 0
+    protocol         = "-1"
+    cidr_blocks      = ["0.0.0.0/0"]
+    ipv6_cidr_blocks = ["::/0"]
+    # security_groups  = [aws_security_group.efs.id]
   }
 }
 
@@ -136,7 +154,6 @@ resource "aws_ecs_task_definition" "accumulate" {
     name = "accumulate-devnet-storage"
     efs_volume_configuration {
       file_system_id          = aws_efs_file_system.devnet.id
-      root_directory          = "/mnt/efs/node"
       transit_encryption      = "ENABLED"
       transit_encryption_port = 2999
       authorization_config {
@@ -160,7 +177,7 @@ resource "aws_ecs_service" "accumulate" {
 
   network_configuration {
     assign_public_ip = true # Provide our containers with public IPs
-    subnets          = [aws_subnet.dev_pubsub_a.id,aws_subnet.dev_pubsub_b.id]
+    subnets          = [aws_subnet.subnet[0].id]
     security_groups  = [aws_security_group.nodes.id]
   }
 
