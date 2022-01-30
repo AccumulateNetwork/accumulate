@@ -293,17 +293,22 @@ func BvnUrl(subnet string) *url.URL {
 	return &url.URL{Authority: "bvn-" + subnet}
 }
 
-// IsDnUrl checks if the URL belongs to the DN.
+// IsDnUrl checks if the URL is the DN ADI URL.
 func IsDnUrl(u *url.URL) bool {
 	u = u.Identity()
-	return DnUrl().Equal(u) || AcmeUrl().Equal(u)
+	return DnUrl().Equal(u)
 }
 
 // ParseBvnUrl extracts the BVN subnet name from a BVN URL, if the URL is a
-// valid BVN URL.
+// valid BVN ADI URL.
 func ParseBvnUrl(u *url.URL) (string, bool) {
 	if !strings.HasPrefix(u.Authority, "bvn-") {
 		return "", false
 	}
 	return u.Authority[4:], true
+}
+
+// BelongsToDn checks if the give account belongs to the DN.
+func BelongsToDn(u *url.URL) bool {
+	return IsDnUrl(u) || u.Identity().Equal(AcmeUrl())
 }

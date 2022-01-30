@@ -103,3 +103,22 @@ ResponsePending:
   fields:
     - name: Transactions
       type: chainSet
+
+MultiResponse:
+  incomparable: true
+  fields:
+    - name: Type
+      type: string
+    - name: Items
+      type: slice
+      slice:
+        type: string
+    - name: Start
+      type: uvarint
+      keep-empty: true
+    - name: Count
+      type: uvarint
+      keep-empty: true
+    - name: Total
+      type: uvarint
+      keep-empty: true
