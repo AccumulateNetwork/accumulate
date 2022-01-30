@@ -11,9 +11,10 @@ import (
 )
 
 var flags struct {
-	Package string
-	Out     string
-	IsState bool
+	Package  string
+	Language string
+	Out      string
+	IsState  bool
 }
 
 func main() {
@@ -24,6 +25,7 @@ func main() {
 	}
 
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
+	cmd.Flags().StringVar(&flags.Language, "language", "go", "go or c")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 
 	_ = cmd.Execute()
@@ -64,8 +66,17 @@ func readTypes(file string) map[string]typegen.Type {
 func run(_ *cobra.Command, args []string) {
 	types := readTypes(args[0])
 	ttypes := convert(types, flags.Package)
-
-	w := new(bytes.Buffer)
-	check(Go.Execute(w, ttypes))
-	check(typegen.GoFmt(flags.Out, w))
+	switch flags.Language {
+	case "go":
+		w := new(bytes.Buffer)
+		check(Go.Execute(w, ttypes))
+		check(typegen.GoFmt(flags.Out, w))
+	case "c":
+		w := new(bytes.Buffer)
+		check(C.Execute(w, ttypes))
+		f, err := os.Create(flags.Out)
+		check(err)
+		f.WriteString(w.String())
+		f.Close()
+	}
 }
