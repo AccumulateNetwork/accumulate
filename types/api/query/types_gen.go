@@ -12,6 +12,14 @@ import (
 	"github.com/AccumulateNetwork/accumulate/protocol"
 )
 
+type MultiResponse struct {
+	Type  string   `json:"type,omitempty" form:"type" query:"type" validate:"required"`
+	Items []string `json:"items,omitempty" form:"items" query:"items" validate:"required"`
+	Start uint64   `json:"start" form:"start" query:"start" validate:"required"`
+	Count uint64   `json:"count" form:"count" query:"count" validate:"required"`
+	Total uint64   `json:"total" form:"total" query:"total" validate:"required"`
+}
+
 type RequestKeyPageIndex struct {
 	Url string `json:"url,omitempty" form:"url" query:"url" validate:"required,acc-url"`
 	Key []byte `json:"key,omitempty" form:"key" query:"key" validate:"required"`
@@ -254,6 +262,27 @@ func (v *TxReceipt) Equal(u *TxReceipt) bool {
 	return true
 }
 
+func (v *MultiResponse) BinarySize() int {
+	var n int
+
+	n += encoding.StringBinarySize(v.Type)
+
+	n += encoding.UvarintBinarySize(uint64(len(v.Items)))
+
+	for _, v := range v.Items {
+		n += encoding.StringBinarySize(v)
+
+	}
+
+	n += encoding.UvarintBinarySize(v.Start)
+
+	n += encoding.UvarintBinarySize(v.Count)
+
+	n += encoding.UvarintBinarySize(v.Total)
+
+	return n
+}
+
 func (v *RequestKeyPageIndex) BinarySize() int {
 	var n int
 
@@ -381,6 +410,27 @@ func (v *TxReceipt) BinarySize() int {
 	n += v.Receipt.BinarySize()
 
 	return n
+}
+
+func (v *MultiResponse) MarshalBinary() ([]byte, error) {
+	var buffer bytes.Buffer
+
+	buffer.Write(encoding.StringMarshalBinary(v.Type))
+
+	buffer.Write(encoding.UvarintMarshalBinary(uint64(len(v.Items))))
+	for i, v := range v.Items {
+		_ = i
+		buffer.Write(encoding.StringMarshalBinary(v))
+
+	}
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Start))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Count))
+
+	buffer.Write(encoding.UvarintMarshalBinary(v.Total))
+
+	return buffer.Bytes(), nil
 }
 
 func (v *RequestKeyPageIndex) MarshalBinary() ([]byte, error) {
@@ -526,6 +576,57 @@ func (v *TxReceipt) MarshalBinary() ([]byte, error) {
 	}
 
 	return buffer.Bytes(), nil
+}
+
+func (v *MultiResponse) UnmarshalBinary(data []byte) error {
+	if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Type: %w", err)
+	} else {
+		v.Type = x
+	}
+	data = data[encoding.StringBinarySize(v.Type):]
+
+	var lenItems uint64
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Items: %w", err)
+	} else {
+		lenItems = x
+	}
+	data = data[encoding.UvarintBinarySize(lenItems):]
+
+	v.Items = make([]string, lenItems)
+	for i := range v.Items {
+		if x, err := encoding.StringUnmarshalBinary(data); err != nil {
+			return fmt.Errorf("error decoding Items[%d]: %w", i, err)
+		} else {
+			v.Items[i] = x
+		}
+		data = data[encoding.StringBinarySize(v.Items[i]):]
+
+	}
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Start: %w", err)
+	} else {
+		v.Start = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Start):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Count: %w", err)
+	} else {
+		v.Count = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Count):]
+
+	if x, err := encoding.UvarintUnmarshalBinary(data); err != nil {
+		return fmt.Errorf("error decoding Total: %w", err)
+	} else {
+		v.Total = x
+	}
+	data = data[encoding.UvarintBinarySize(v.Total):]
+
+	return nil
 }
 
 func (v *RequestKeyPageIndex) UnmarshalBinary(data []byte) error {
