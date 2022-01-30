@@ -193,6 +193,13 @@ accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transac
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
 success
 
+section "Signing the transaction with the same key does not deliver it"
+wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
+accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
+accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
+wait-for-tx $TXID
+success
+
 section "Query pending by URL"
 accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
 
@@ -206,13 +213,6 @@ RESULT=$(accumulate -j get keytest/tokens#pending/${TXID} | jq -re .transactionH
 section "Query pending chain range by URL"
 RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
-
-section "Signing the transaction with the same key does not deliver it"
-wait-for cli-tx-env tx sign keytest/tokens keytest-1-0 $TXID
-accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null || die "Transaction is not pending"
-accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Transaction was delivered"
-wait-for-tx $TXID
-success
 
 section "Sign the pending transaction using the other key"
 wait-for cli-tx-env tx sign keytest/tokens keytest-1-1 $TXID
