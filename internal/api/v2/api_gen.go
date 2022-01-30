@@ -197,7 +197,7 @@ func (m *JrpcMethods) QueryPending(_ context.Context, params json.RawMessage) in
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryPending(req.Url, req.Txid, req.QueryOptions))
+	return jrpcFormatResponse(m.querier.QueryPending(req.Url, req.Txid, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryPendingPagination(_ context.Context, params json.RawMessage) interface{} {
@@ -207,7 +207,7 @@ func (m *JrpcMethods) QueryPendingPagination(_ context.Context, params json.RawM
 		return err
 	}
 
-	return jrpcFormatResponse(m.opts.Query.QueryPendingPagination(req.Url, req.QueryPagination, req.QueryOptions))
+	return jrpcFormatResponse(m.querier.QueryPendingPagination(req.Url, req.QueryPagination, req.QueryOptions))
 }
 
 func (m *JrpcMethods) QueryTx(_ context.Context, params json.RawMessage) interface{} {
