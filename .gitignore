@@ -20,6 +20,8 @@ go_build_accumulated_init
 *.test
 
 /.nodes
+.terraform
+.terraform.lock.hcl
 
 debug
 !debug/

@@ -156,13 +156,14 @@ type TxHistoryQuery struct {
 }
 
 type TxRequest struct {
-	CheckOnly bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
-	Origin    *url.URL    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
-	Signer    Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
-	Signature []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
-	KeyPage   KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
-	TxHash    []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
-	Payload   interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
+	CheckOnly  bool        `json:"checkOnly,omitempty" form:"checkOnly" query:"checkOnly"`
+	IsEnvelope bool        `json:"isEnvelope,omitempty" form:"isEnvelope" query:"isEnvelope"`
+	Origin     *url.URL    `json:"origin,omitempty" form:"origin" query:"origin" validate:"required"`
+	Signer     Signer      `json:"signer,omitempty" form:"signer" query:"signer" validate:"required"`
+	Signature  []byte      `json:"signature,omitempty" form:"signature" query:"signature" validate:"required"`
+	KeyPage    KeyPage     `json:"keyPage,omitempty" form:"keyPage" query:"keyPage" validate:"required"`
+	TxHash     []byte      `json:"txHash,omitempty" form:"txHash" query:"txHash"`
+	Payload    interface{} `json:"payload,omitempty" form:"payload" query:"payload" validate:"required"`
 }
 
 type TxResponse struct {
@@ -673,16 +674,18 @@ func (v *TxHistoryQuery) MarshalJSON() ([]byte, error) {
 
 func (v *TxRequest) MarshalJSON() ([]byte, error) {
 	u := struct {
-		CheckOnly bool        `json:"checkOnly,omitempty"`
-		Origin    *url.URL    `json:"origin,omitempty"`
-		Sponsor   *url.URL    `json:"sponsor,omitempty"`
-		Signer    Signer      `json:"signer,omitempty"`
-		Signature *string     `json:"signature,omitempty"`
-		KeyPage   KeyPage     `json:"keyPage,omitempty"`
-		TxHash    *string     `json:"txHash,omitempty"`
-		Payload   interface{} `json:"payload,omitempty"`
+		CheckOnly  bool        `json:"checkOnly,omitempty"`
+		IsEnvelope bool        `json:"isEnvelope,omitempty"`
+		Origin     *url.URL    `json:"origin,omitempty"`
+		Sponsor    *url.URL    `json:"sponsor,omitempty"`
+		Signer     Signer      `json:"signer,omitempty"`
+		Signature  *string     `json:"signature,omitempty"`
+		KeyPage    KeyPage     `json:"keyPage,omitempty"`
+		TxHash     *string     `json:"txHash,omitempty"`
+		Payload    interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
+	u.IsEnvelope = v.IsEnvelope
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.Signer = v.Signer
@@ -1290,16 +1293,18 @@ func (v *TxHistoryQuery) UnmarshalJSON(data []byte) error {
 
 func (v *TxRequest) UnmarshalJSON(data []byte) error {
 	u := struct {
-		CheckOnly bool        `json:"checkOnly,omitempty"`
-		Origin    *url.URL    `json:"origin,omitempty"`
-		Sponsor   *url.URL    `json:"sponsor,omitempty"`
-		Signer    Signer      `json:"signer,omitempty"`
-		Signature *string     `json:"signature,omitempty"`
-		KeyPage   KeyPage     `json:"keyPage,omitempty"`
-		TxHash    *string     `json:"txHash,omitempty"`
-		Payload   interface{} `json:"payload,omitempty"`
+		CheckOnly  bool        `json:"checkOnly,omitempty"`
+		IsEnvelope bool        `json:"isEnvelope,omitempty"`
+		Origin     *url.URL    `json:"origin,omitempty"`
+		Sponsor    *url.URL    `json:"sponsor,omitempty"`
+		Signer     Signer      `json:"signer,omitempty"`
+		Signature  *string     `json:"signature,omitempty"`
+		KeyPage    KeyPage     `json:"keyPage,omitempty"`
+		TxHash     *string     `json:"txHash,omitempty"`
+		Payload    interface{} `json:"payload,omitempty"`
 	}{}
 	u.CheckOnly = v.CheckOnly
+	u.IsEnvelope = v.IsEnvelope
 	u.Origin = v.Origin
 	u.Sponsor = v.Origin
 	u.Signer = v.Signer
@@ -1311,6 +1316,7 @@ func (v *TxRequest) UnmarshalJSON(data []byte) error {
 		return err
 	}
 	v.CheckOnly = u.CheckOnly
+	v.IsEnvelope = u.IsEnvelope
 	if u.Origin != nil {
 		v.Origin = u.Origin
 	} else {

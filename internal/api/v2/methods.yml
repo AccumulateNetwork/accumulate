@@ -97,6 +97,11 @@ ExecuteCreateAdi:
   rpc: create-adi
   input: CreateIdentity
 
+ExecuteCreateIdentity:
+  kind: execute
+  rpc: create-identity
+  input: CreateIdentity
+
 ExecuteCreateDataAccount:
   kind: execute
   rpc: create-data-account

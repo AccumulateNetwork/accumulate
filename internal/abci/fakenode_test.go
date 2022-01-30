@@ -47,6 +47,7 @@ type FakeNode struct {
 	height  int64
 	api     api2.Querier
 	logger  log.Logger
+	router  routing.Router
 
 	assert  *assert.Assertions
 	require *require.Assertions
@@ -57,7 +58,7 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 
 	allNodes := map[string][]*FakeNode{}
 	allChans := map[string][]chan<- abcitypes.Application{}
-	clients := map[string]api2.ABCIBroadcastClient{}
+	clients := map[string]routing.Client{}
 	for _, netName := range subnets {
 		daemons := daemons[netName]
 		nodes := make([]*FakeNode, len(daemons))
@@ -72,7 +73,6 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	for _, netName := range subnets {
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
-			nodes[i].client.CreateEmptyBlocks = true
 			nodes[i].Start(chans[i], clients, doGenesis)
 		}
 	}
@@ -137,16 +137,17 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	return n, appChan
 }
 
-func (n *FakeNode) Start(appChan chan<- abcitypes.Application, clients map[string]api2.ABCIBroadcastClient, doGenesis bool) *FakeNode {
+func (n *FakeNode) Start(appChan chan<- abcitypes.Application, clients map[string]routing.Client, doGenesis bool) *FakeNode {
+	n.router = &routing.Direct{
+		Network: n.network,
+		Clients: clients,
+	}
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
 		DB:      n.db,
 		Logger:  n.logger,
 		Key:     n.key.Bytes(),
 		Network: *n.network,
-		Router: &routing.Direct{
-			Network: n.network,
-			Clients: clients,
-		},
+		Router:  n.router,
 	})
 	n.Require().NoError(err)
 
@@ -163,7 +164,10 @@ func (n *FakeNode) Start(appChan chan<- abcitypes.Application, clients map[strin
 		n.Require().NoError(err)
 	})
 
-	n.api = api2.NewQueryDirect(n.client, api2.QuerierOptions{
+	n.api = api2.NewQueryDirect(n.network.ID, api2.Options{
+		Logger:        n.logger,
+		Network:       n.network,
+		Router:        n.router,
 		TxMaxWaitTime: 10 * time.Second,
 	})
 
@@ -269,7 +273,6 @@ func (n *FakeNode) Batch(inBlock func(func(*transactions.Envelope))) [][32]byte 
 	// Submit all the transactions as a batch
 	n.client.SubmitTx(context.Background(), blob)
 
-	// n.client.WaitForAll()
 	for _, id := range ids {
 		err := n.client.WaitFor(id, true)
 		n.Require().NoError(err)
@@ -308,7 +311,11 @@ func (n *FakeNode) GetDirectory(adi string) []string {
 }
 
 func (n *FakeNode) GetTx(txid []byte) *api2.TransactionQueryResponse {
-	q := api2.NewQueryDirect(n.client, api2.QuerierOptions{})
+	q := api2.NewQueryDirect(n.network.ID, api2.Options{
+		Logger:  n.logger,
+		Network: n.network,
+		Router:  n.router,
+	})
 	resp, err := q.QueryTx(txid, 0, api2.QueryOptions{})
 	require.NoError(n.t, err)
 	data, err := json.Marshal(resp.Data)

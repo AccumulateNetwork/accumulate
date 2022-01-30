@@ -70,17 +70,13 @@ func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Hea
 		return args, &hdr, privKey, nil
 	}
 
-	if len(args) > 1 {
-		privKey, err = resolvePrivateKey(args[0])
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		ct++
-	} else {
-		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
+	privKey, err = resolvePrivateKey(args[0])
+	if err != nil {
+		return nil, nil, nil, err
 	}
+	ct++
 
-	if len(args) > 2 {
+	if len(args) > 1 {
 		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
 			ct++
 			hdr.KeyPageIndex = uint64(v)
@@ -684,6 +680,25 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			}
 			out += fmt.Sprintf("\t%d\t%d\t%x\t%s", i, k.Nonce, k.PublicKey, keyName)
 		}
+		return out, nil
+
+	case types.AccountTypeTokenIssuer.String():
+		ti := protocol.TokenIssuer{}
+		err := Remarshal(res.Data, &ti)
+		if err != nil {
+			return "", err
+		}
+		hasSupplyLimit := "no"
+		if ti.HasSupplyLimit {
+			hasSupplyLimit = "yes"
+		}
+		out := fmt.Sprintf("\n\tToken URL\t:\t%s", ti.ChainUrl)
+		out += fmt.Sprintf("\n\tSymbol\t\t:\t%s", ti.Symbol)
+		out += fmt.Sprintf("\n\tPrecision\t:\t%d", ti.Precision)
+		out += fmt.Sprintf("\n\tSupply\t\t:\t%s", ti.Supply.String())
+		out += fmt.Sprintf("\n\tSupply Limit\t:\t%s", hasSupplyLimit)
+		out += fmt.Sprintf("\n\tProperties URL\t:\t%s", ti.Properties)
+		out += "\n"
 		return out, nil
 	default:
 		data, err := json.Marshal(res.Data)

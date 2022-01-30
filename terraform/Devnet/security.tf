@@ -2,8 +2,8 @@ resource "aws_security_group" "alb_security_group" {
     vpc_id      = "${aws_vpc.dev_vpc.id}"
     name        = "accumulate-devnet-alb"
   ingress {
-    from_port   = 0
-    to_port     = 3000
+    from_port   = 26660
+    to_port     = 26660
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"] # Allowing traffic in from all sources
   }
@@ -20,7 +20,7 @@ resource "aws_security_group" "alb_security_group" {
 resource "aws_security_group" "dev_tools" {
   vpc_id        = "${aws_vpc.dev_vpc.id}"
   name          = "accumulate-devnet-tools"
- 
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -39,7 +39,7 @@ resource "aws_security_group" "dev_tools" {
 resource "aws_security_group_rule" "tool_allow_devnet" {
     type                     = "ingress"
     from_port                = 0
-    to_port                  = 3000
+    to_port                  = 26660
     protocol                 = "tcp"
     ipv6_cidr_blocks         = ["::/0"]
     security_group_id        = "${aws_security_group.dev_tools.id}"
@@ -80,7 +80,7 @@ resource "aws_security_group" "devnet" {
   name              = "accumulate-devnet-nodes"
   ingress {
     from_port       = 0
-    to_port         = 3000
+    to_port         = 26660
     protocol        = "tcp"
     ipv6_cidr_blocks = ["::/0"]
     # allowing traffic in from the load balancer security group and efs mount target security group
@@ -135,7 +135,7 @@ resource "aws_security_group_rule" "allow_docker_2" {
 
 resource "aws_security_group" "efs_dev" {
   vpc_id            = "${aws_vpc.dev_vpc.id}"
-  name              = "accumulate-devnet-efs" 
+  name              = "accumulate-devnet-efs"
 
   ingress {
     from_port   = 2049
