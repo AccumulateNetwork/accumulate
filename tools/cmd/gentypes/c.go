@@ -10,6 +10,7 @@ import (
 var cFuncMap = template.FuncMap{
 	"isPkg":       func(s string) bool { return s == PackagePath },
 	"lcName":      lcName,
+	"init":        CInit,
 	"resolveType": CResolveType,
 
 	"jsonType": func(field *Field) string {
@@ -61,7 +62,7 @@ var CH = mustParseTemplate("c_header.tmpl", chSrc, cFuncMap)
 var C = mustParseTemplate("c.tmpl", cSrc, cFuncMap)
 
 func CMethodName(typ, name string) string {
-	return "encoding." + strings.Title(typ) + name
+	return strings.Title(typ) + "_" + name
 }
 
 func CFieldError(op, name string, args ...string) string {
@@ -76,17 +77,17 @@ func CResolveType(field *Field, forNew bool) string {
 	case "string":
 		return "String"
 	case "rawJson":
-		return "json.RawMessage"
+		return "String"
 	case "bigint":
-		return "uint256_t"
+		return "BigInt"
 	case "uvarint":
-		return "uint64_t"
+		return "VarInt"
 	case "varint":
-		return "int64_t"
+		return "VarInt"
 	case "chain":
 		return "Bytes32"
 	case "chainSet":
-		return "Bytes32[]"
+		return "Bytes32*"
 	case "duration":
 		return "timespec"
 	case "time":
@@ -94,12 +95,12 @@ func CResolveType(field *Field, forNew bool) string {
 	case "any":
 		return "interface{}"
 	case "slice":
-		return CResolveType(field.Slice, false) + "[]"
+		return CResolveType(field.Slice, false) + "*"
 	}
 
 	typ := field.Type
 	if field.IsPointer && !forNew {
-		typ = "*" + typ
+		typ = typ + "*"
 	}
 	return typ
 }
@@ -109,7 +110,7 @@ func CJsonType(field *Field) string {
 	case "bytes":
 		return "String*"
 	case "bigint":
-		return "String*"
+		return "BigInt*"
 	case "chain":
 		return "String"
 	case "chainSet":
@@ -125,24 +126,70 @@ func CJsonType(field *Field) string {
 
 	return ""
 }
+func CInit(field *Field, varName string) (string, error) {
+	typ := field.Type //CResolveType(field,false)
+
+	var expr string
+	switch typ {
+	case "bool":
+		expr = "%s"
+		varName = "false"
+	case "rawJson":
+		typ = "bytes"
+		fallthrough
+	case "bytes", "string", "chainSet", "duration", "time":
+		typ = CResolveType(field, false)
+		expr = CMethodName(typ, "init") + "(%s, buffer->ptr, buffer->size)"
+		varName = "0"
+	case "bigint", "chain", "varint", "uvarint":
+		typ = CResolveType(field, false)
+		expr = CMethodName(typ, "init") + "(%s)"
+		varName = "0"
+	case "slice":
+		expr = "your guess is as good as mine(uint64(len(%s)))"
+	default:
+		switch {
+		case field.AsReference, field.AsValue:
+			expr = fmt.Sprintf("init.%s_init(%%s)", typ)
+		default:
+			return "", fmt.Errorf("field %q: cannot determine how to marshal %s", field.Name, CResolveType(field, false))
+		}
+	}
+
+	w := new(strings.Builder)
+	expr = fmt.Sprintf(expr, varName)
+	fmt.Fprintf(w, "\t%s;\n\n", expr)
+
+	if typ != "slice" {
+		fmt.Fprintf(w, "\n")
+		return w.String(), nil
+	}
+
+	fmt.Fprintf(w, "\tfor _, v := range %s {\n", varName)
+	str, err := CBinarySize(field.Slice, "v")
+	if err != nil {
+		return "", err
+	}
+	w.WriteString(str)
+	fmt.Fprintf(w, "\t}\n\n")
+	return w.String(), nil
+}
 
 func CAreEqual(field *Field, varName, otherName string) (string, error) {
 	var expr string
 	switch field.Type {
-	case "uvarint", "varint":
-		expr = "memcmp(%s, %s) == 0"
-	case "string":
-		expr = "strcmp(%s.string.Data, %s.string.Data)==0"
-	case "bool", "chain", "duration", "time":
+	case "uvarint", "varint", "string", "bigint", "bytes", "rawJson", "chain":
+		expr = "%s.Equal(%s)"
+	case "bool", "duration", "time":
 		expr = "%s == %s"
-	case "bytes", "rawJson":
-		expr = "memcmp(%s, %s)==0"
-	case "bigint":
-		if field.IsPointer {
-			expr = "%s.Cmp(%s) == 0"
-		} else {
-			expr = "%s.Cmp(&%s) == 0"
-		}
+	//case "bytes", "rawJson":
+	//	expr = "memcmp(%s, %s)==0"
+	//case "bigint":
+	//	if field.IsPointer {
+	//		expr = "%s.Cmp(%s) == 0"
+	//	} else {
+	//		expr = "%s.Cmp(&%s) == 0"
+	//	}
 	case "slice", "chainSet":
 		expr = "%s.data.len == %s.data.len"
 	default:
@@ -165,26 +212,28 @@ func CAreEqual(field *Field, varName, otherName string) (string, error) {
 	}
 
 	w := new(strings.Builder)
-	expr = fmt.Sprintf(expr, varName, otherName)
-	fmt.Fprintf(w, "\tif !(%s) { return false }\n\n", expr)
 
 	switch field.Type {
 	case "slice":
-		fmt.Fprintf(w, "\tfor i := range %s {\n", varName)
-		fmt.Fprintf(w, "\t\tv, u := %s[i], %s[i]\n", varName, otherName)
-		str, err := CAreEqual(field.Slice, "v", "u")
-		if err != nil {
-			return "", err
-		}
-		w.WriteString(str)
-		fmt.Fprintf(w, "\t}\n\n")
+		//fmt.Fprintf(w, "\tfor i := range %s {\n", varName)
+		//fmt.Fprintf(w, "\t\tv, u := %s[i], %s[i]\n", varName, otherName)
+		//str, err := CAreEqual(field.Slice, "v", "u")
+		//if err != nil {
+		//	return "", err
+		//}
+		//w.WriteString(str)
+		//fmt.Fprintf(w, "\t}\n\n")
+		fmt.Fprintf(w, "// slices currently unsupported\n\n")
 
 	case "chainSet":
-		fmt.Fprintf(w, "\tfor i := range %s {\n", varName)
-		fmt.Fprintf(w, "\t\tif %s[i] != %s[i] { return false }\n", varName, otherName)
-		fmt.Fprintf(w, "\t}\n\n")
+		//fmt.Fprintf(w, "\tfor i := range %s {\n", varName)
+		//fmt.Fprintf(w, "\t\tif %s[i] != %s[i] { return false }\n", varName, otherName)
+		//fmt.Fprintf(w, "\t}\n\n")
+		fmt.Fprintf(w, "// chainSets currently unsupported\n\n")
 
 	default:
+		expr = fmt.Sprintf(expr, varName, otherName)
+		fmt.Fprintf(w, "\tif (!%s) { return false; }\n\n", expr)
 		fmt.Fprintf(w, "\n")
 	}
 	return w.String(), nil
@@ -203,7 +252,7 @@ func CBinarySize(field *Field, varName string) (string, error) {
 	case "bigint", "chain":
 		expr = CMethodName(typ, "BinarySize") + "(&%s)"
 	case "slice":
-		expr = "encoding.UvarintBinarySize(uint64(len(%s)))"
+		expr = "varint_size((uint64)(%s->buffer.size))"
 	default:
 		switch {
 		case field.AsReference, field.AsValue:
@@ -215,20 +264,20 @@ func CBinarySize(field *Field, varName string) (string, error) {
 
 	w := new(strings.Builder)
 	expr = fmt.Sprintf(expr, varName)
-	fmt.Fprintf(w, "\tn += %s\n\n", expr)
+	fmt.Fprintf(w, "\tn += %s;\n\n", expr)
 
 	if typ != "slice" {
 		fmt.Fprintf(w, "\n")
 		return w.String(), nil
 	}
 
-	fmt.Fprintf(w, "\tfor _, v := range %s {\n", varName)
-	str, err := CBinarySize(field.Slice, "v")
-	if err != nil {
-		return "", err
-	}
-	w.WriteString(str)
-	fmt.Fprintf(w, "\t}\n\n")
+	//fmt.Fprintf(w, "\tfor _, v := range %s {\n", varName)
+	//str, err := CBinarySize(field.Slice, "v")
+	//if err != nil {
+	//	return "", err
+	//}
+	//w.WriteString(str)
+	//fmt.Fprintf(w, "\t}\n\n")
 	return w.String(), nil
 }
 

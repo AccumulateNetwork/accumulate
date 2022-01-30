@@ -1,0 +1,34 @@
+# Transactions - names should be verbs
+# Transactions - names should be verbs
+
+##### User #####
+
+CreateIdentity:
+  kind: tx
+  fields:
+    - name: string
+      type: string
+      is-url: true
+    - name: bytes
+      type: bytes
+    - name: optionalstring
+      type: string
+      optional: true
+    - name: booltype
+      type: bool
+    - name: chain
+      type: chain
+    - name: jsontype
+      type: rawJson
+    - name: slice_pointer
+      type: slice
+      slice:
+        type: String
+        marshal-as: reference
+    - name: varint
+      type: uvarint
+    - name: bigint
+      type: bigint
+SignPending:
+  kind: tx
+  fields: []
