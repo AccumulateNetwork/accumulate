@@ -200,7 +200,22 @@ accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null && die "Trans
 wait-for-tx $TXID
 success
 
+section "Query pending by URL"
+accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
+
+section "Query pending chain at height 0 by URL"
+TXID=$(accumulate -j get keytest/tokens#pending/0 | jq -re .transactionHash) && success || die "Failed to query pending chain by height"
+
+section "Query pending chain with hash by URL"
+RESULT=$(accumulate -j get keytest/tokens#pending/${TXID} | jq -re .transactionHash) || die "Failed to query pending chain by hash"
+[ "$RESULT" == "$TXID" ] && success || die "Querying by height and by hash gives different results"
+
+section "Query pending chain range by URL"
+RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
+[ "$RESULT" -ge 1 ] && success || die "No entries found"
+
 section "Sign the pending transaction using the other key"
+TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
 wait-for cli-tx-env tx sign keytest/tokens keytest-1-1 $TXID
 accumulate -j tx get $TXID | jq -re .status.pending 1> /dev/null && die "Transaction is pending"
 accumulate -j tx get $TXID | jq -re .status.delivered 1> /dev/null || die "Transaction was not delivered"
@@ -295,8 +310,8 @@ TXID=$(echo $JSON | jq -re .transactionHash)
 echo $JSON | jq -C --indent 0
 wait-for-tx $TXID
 RESULT=$(accumulate -j token get keytest/foocoin)
-[ "$(echo $RESULT | jq -re .data.symbol)" == "bar" ] && success || die "Token issuance failed with invalid symbol"
-[ "$(echo $RESULT | jq -re .data.precision)" -eq 8 ] && success || die "Token issuance failed with invalid precision"
+[ "$(echo $RESULT | jq -re .data.symbol)" == "bar" ] || die "Token issuance failed with invalid symbol"
+[ "$(echo $RESULT | jq -re .data.precision)" -eq 8 ] || die "Token issuance failed with invalid precision"
 success
 
 section "Query latest data entry by URL"
