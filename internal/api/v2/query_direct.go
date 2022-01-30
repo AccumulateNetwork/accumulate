@@ -205,9 +205,12 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 			return nil, fmt.Errorf("invalid response: %v", err)
 		}
 
-		qr := new(ChainQueryResponse)
+		qr := new(MultiResponse)
 		qr.Type = "pending"
-		qr.Data = res
+		qr.Items = make([]interface{}, len(res.Transactions))
+		for i, txid := range res.Transactions {
+			qr.Items[i] = hex.EncodeToString(txid[:])
+		}
 		return qr, nil
 
 	default:
