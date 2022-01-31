@@ -137,7 +137,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	var perr error
 	switch len(args) {
 	case 0:
-		//query with no parameters, expect back query.ResponsePending
+		//query with no parameters
 		u.Fragment = "pending"
 		r, err := Get(u.String())
 		if err != nil {
