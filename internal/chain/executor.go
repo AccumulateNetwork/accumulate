@@ -16,7 +16,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/indexing"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/smt/pmt"
 	"github.com/AccumulateNetwork/accumulate/smt/storage"
@@ -55,7 +54,6 @@ type ExecutorOptions struct {
 	Key              ed25519.PrivateKey
 	ConnectionMgr    connections.ConnectionManager
 	ConnectionRouter connections.ConnectionRouter
-	Local            connections.ABCIBroadcastClient
 	Network          config.Network
 
 	isGenesis bool

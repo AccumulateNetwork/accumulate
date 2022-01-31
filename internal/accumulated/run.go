@@ -19,7 +19,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto"
@@ -148,10 +147,10 @@ func (d *Daemon) Start() (err error) {
 	execOpts := chain.ExecutorOptions{
 		ConnectionMgr:    d.ConnMgr,
 		ConnectionRouter: d.ConnRouter,
-		DB:      d.db,
-		Logger:  d.Logger,
-		Key:     d.Key().Bytes(),
-		Network: d.Config.Accumulate.Network,
+		DB:               d.db,
+		Logger:           d.Logger,
+		Key:              d.Key().Bytes(),
+		Network:          d.Config.Accumulate.Network,
 	}
 	exec, err := chain.NewNodeExecutor(execOpts)
 	if err != nil {

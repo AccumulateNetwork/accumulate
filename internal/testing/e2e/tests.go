@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"fmt"
 	"math/big"
 	"testing"
 

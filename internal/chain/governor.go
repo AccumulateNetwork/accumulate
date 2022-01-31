@@ -56,7 +56,7 @@ func newGovernor(opts ExecutorOptions) *governor {
 	g.ExecutorOptions = opts
 	g.messages = make(chan interface{})
 	g.done = make(chan struct{})
-	g.dispatcher = newDispatcher(opts)
+	g.dispatcher, _ = newDispatcher(opts)
 	g.logger.L = opts.Logger
 	g.logger.L = g.logger.With("module", "governor")
 	return g

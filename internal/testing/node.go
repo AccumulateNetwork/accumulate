@@ -2,6 +2,7 @@ package testing
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"io"
 	"path/filepath"
 	"testing"
@@ -123,6 +124,11 @@ func CreateTestNet(t *testing.T, numBvns, numValidators, numFollowers int) ([]st
 			daemons[i], err = accumulated.Load(dir, logWriter)
 			require.NoError(t, err)
 			daemons[i].Logger = daemons[i].Logger.With("test", t.Name(), "subnet", netName, "node", i)
+
+			// Create connection manager & router
+			daemons[i].ConnMgr = NewFakeConnectionManager(daemons[i].Config, daemons[i].Logger)
+			daemons[i].ConnRouter = connections.NewConnectionRouter(daemons[i].ConnMgr)
+
 		}
 	}
 

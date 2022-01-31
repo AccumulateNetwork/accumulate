@@ -33,7 +33,7 @@ type connectionRouter struct {
 
 // Node group is just a list of nodeContext items and an int field for round-robin routing
 type nodeGroup struct {
-	nodes   []*nodeContext
+	nodes   []NodeContext
 	next    uint32
 	nodeUrl *url.URL
 }
@@ -129,7 +129,7 @@ func (cr *connectionRouter) GetBvnAdiUrls() ([]*url.URL, error) {
 	return urls, nil
 }
 
-func (cr *connectionRouter) selectNodeContext(adiUrl *url.URL, allowFollower bool) (*nodeContext, error) {
+func (cr *connectionRouter) selectNodeContext(adiUrl *url.URL, allowFollower bool) (NodeContext, error) {
 	switch {
 	case protocol.IsBvnUrl(adiUrl):
 		return cr.lookupBvnNode(adiUrl)
@@ -149,7 +149,7 @@ func (cr *connectionRouter) isDnExists(hostname string) bool {
 	return dnNameMap[strings.ToLower(hostname)]
 }
 
-func (cr *connectionRouter) lookupBvnNode(adiUrl *url.URL) (*nodeContext, error) {
+func (cr *connectionRouter) lookupBvnNode(adiUrl *url.URL) (NodeContext, error) {
 	bvnName := strings.ToLower(adiUrl.Hostname())
 	bvnGroup, ok := cr.bvnGroupMap[bvnName]
 	if !ok {
@@ -164,30 +164,30 @@ func (cr *connectionRouter) lookupBvnNode(adiUrl *url.URL) (*nodeContext, error)
 	return nil, NoHealthyNodes
 }
 
-func (cr *connectionRouter) selectDirNode() (*nodeContext, error) {
+func (cr *connectionRouter) selectDirNode() (NodeContext, error) {
 	if cr.isDnExists(protocol.DnUrl().Hostname()) && len(cr.dnGroup.nodes) > 0 {
 		nodeCtx := cr.dnGroup.nodes[0] // TODO follower support?
 		if !nodeCtx.IsHealthy() {
-			return nil, dnNotHealthy(nodeCtx.address, nodeCtx.lastError)
+			return nil, dnNotHealthy(nodeCtx.GetAddress(), nodeCtx.GetLastError())
 		}
 		return nodeCtx, nil
 	}
 	return nil, dnNotFound()
 }
 
-func (cr *connectionRouter) selectBvnNode(adiUrl *url.URL, allowFollower bool) (*nodeContext, error) {
+func (cr *connectionRouter) selectBvnNode(adiUrl *url.URL, allowFollower bool) (NodeContext, error) {
 	bvnGroup := cr.selectBvnGroup(adiUrl)
 
 	return cr.selectNodeFromGroup(bvnGroup, allowFollower)
 }
 
-func (cr *connectionRouter) selectNodeFromGroup(bvnGroup nodeGroup, allowFollower bool) (*nodeContext, error) {
+func (cr *connectionRouter) selectNodeFromGroup(bvnGroup nodeGroup, allowFollower bool) (NodeContext, error) {
 	nodeCnt := len(bvnGroup.nodes)
 	// If we only have one node we don't have to route
 	if nodeCnt == 1 {
 		nodeCtx := bvnGroup.nodes[0]
 		if !nodeCtx.IsHealthy() {
-			return nil, errorNodeNotHealthy(nodeCtx.subnetName, nodeCtx.address, nodeCtx.lastError)
+			return nil, errorNodeNotHealthy(nodeCtx.GetSubnetName(), nodeCtx.GetAddress(), nodeCtx.GetLastError())
 		}
 		return nodeCtx, nil
 	}
@@ -197,8 +197,8 @@ func (cr *connectionRouter) selectNodeFromGroup(bvnGroup nodeGroup, allowFollowe
 		// Apply round-robin on the nodes within the group
 		next := atomic.AddUint32(&bvnGroup.next, 1)
 		nodeCtx := bvnGroup.nodes[int(next-1)%nodeCnt]
-		if nodeCtx.IsHealthy() && (allowFollower || nodeCtx.nodeType == config.Validator) { // TODO Can BVN subnets also contain followers? (In networks.go on the DN has that)
-			log.Println("   ==> selected address " + nodeCtx.address) // TODO remove after debug
+		if nodeCtx.IsHealthy() && (allowFollower || nodeCtx.GetNodeType() == config.Validator) { // TODO Can BVN subnets also contain followers? (In networks.go on the DN has that)
+			log.Println("   ==> selected address " + nodeCtx.GetAddress()) // TODO remove after debug
 			return nodeCtx, nil
 		}
 	}
@@ -222,7 +222,7 @@ func (cr *connectionRouter) selectBvnGroup(adiUrl *url.URL) nodeGroup {
 	return bvnGroup
 }
 
-func createBvnGroupMap(nodes map[string][]*nodeContext) map[string]nodeGroup {
+func createBvnGroupMap(nodes map[string][]NodeContext) map[string]nodeGroup {
 	bvnMap := make(map[string]nodeGroup)
 	for bvnName, nodeCtxList := range nodes {
 		nodeUrl, _ := protocol.BuildNodeUrl(bvnName)

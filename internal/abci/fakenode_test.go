@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"io"
 	"strconv"
 	"testing"
@@ -17,7 +19,6 @@ import (
 	"github.com/AccumulateNetwork/accumulate/internal/database"
 	"github.com/AccumulateNetwork/accumulate/internal/genesis"
 	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
@@ -72,10 +73,17 @@ func RunTestNet(t *testing.T, subnets []string, daemons map[string][]*accumulate
 	}
 
 	for _, netName := range subnets {
+		daemons := daemons[netName]
 		nodes, chans := allNodes[netName], allChans[netName]
 		for i := range nodes {
+			connInitializer := daemons[i].ConnMgr.(connections.FakeConnectionInitializer)
+			err := connInitializer.AssignFakeClients(allNodes)
+			if err != nil {
+				panic(fmt.Errorf("failed to initialize connection manager: %v", err))
+			}
+
 			nodes[i].client.CreateEmptyBlocks = true
-			nodes[i].Start(chans[i], clients, doGenesis)
+			nodes[i].Start(chans[i], daemons[i].ConnMgr, daemons[i].ConnRouter, doGenesis)
 		}
 	}
 
@@ -139,16 +147,16 @@ func InitFake(t *testing.T, d *accumulated.Daemon, openDb func(d *accumulated.Da
 	return n, appChan
 }
 
-func (n *FakeNode) Start(appChan chan<- abcitypes.Application, clients map[string]api2.ABCIBroadcastClient, doGenesis bool) *FakeNode {
+func (n *FakeNode) Start(appChan chan<- abcitypes.Application, connMgr connections.ConnectionManager, router connections.ConnectionRouter,
+	doGenesis bool) *FakeNode {
+
 	mgr, err := chain.NewNodeExecutor(chain.ExecutorOptions{
-		DB:      n.db,
-		Logger:  n.logger,
-		Key:     n.key.Bytes(),
-		Network: *n.network,
-		Router: &routing.Direct{
-			Network: n.network,
-			Clients: clients,
-		},
+		DB:               n.db,
+		Logger:           n.logger,
+		Key:              n.key.Bytes(),
+		ConnectionMgr:    connMgr,
+		ConnectionRouter: router,
+		Network:          *n.network,
 	})
 	n.Require().NoError(err)
 
@@ -372,6 +380,10 @@ func (n *FakeNode) GetTokenIssuer(url string) *protocol.TokenIssuer {
 	mss := new(protocol.TokenIssuer)
 	n.QueryAccountAs(url, mss)
 	return mss
+}
+
+func (n *FakeNode) GetClient() *acctesting.FakeTendermint {
+	return n.client
 }
 
 type e2eDUT struct {

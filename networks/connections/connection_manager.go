@@ -21,12 +21,12 @@ import (
 const UnhealthyNodeCheckInterval = time.Minute * 10 // TODO Configurable in toml?
 
 type ConnectionManager interface {
-	GetLocalNodeContext() *nodeContext
+	GetLocalNodeContext() NodeContext
 	GetLocalClient() *local.Local
-	GetBVNContextMap() map[string][]*nodeContext
-	GetDNContextList() []*nodeContext
-	GetFNContextList() []*nodeContext
-	GetAllNodeContexts() []*nodeContext
+	GetBVNContextMap() map[string][]NodeContext
+	GetDNContextList() []NodeContext
+	GetFNContextList() []NodeContext
+	GetAllNodeContexts() []NodeContext
 	ResetErrors()
 }
 
@@ -34,19 +34,23 @@ type ConnectionInitializer interface {
 	CreateClients(*local.Local) error
 }
 
+type FakeConnectionInitializer interface {
+	AssignFakeClients(interface{}) error
+}
+
 type connectionManager struct {
 	accConfig    *config.Accumulate
-	bvnCtxMap    map[string][]*nodeContext
-	dnCtxList    []*nodeContext
-	fnCtxList    []*nodeContext
-	all          []*nodeContext
-	localNodeCtx *nodeContext
+	bvnCtxMap    map[string][]NodeContext
+	dnCtxList    []NodeContext
+	fnCtxList    []NodeContext
+	all          []NodeContext
+	localNodeCtx NodeContext
 	localClient  *local.Local
 	logger       log.Logger
 	selfAddress  string
 }
 
-func (cm *connectionManager) doHealthCheckOnNode(nc *nodeContext) {
+func (cm *connectionManager) doHealthCheckOnNode(nc NodeContext) {
 	// Try to get the version using the jsonRpcClient
 	/*	FIXME this call does not work.  Maybe only on v1?
 		_, err := nc.jsonRpcClient.Call("version")
@@ -72,10 +76,10 @@ func (cm *connectionManager) doHealthCheckOnNode(nc *nodeContext) {
 		res, err := nc.jsonRpcClient.Call("metrics", &protocol.MetricsRequest{Metric: "tps", Duration: time.Hour})
 		cm.logger.Info("TPS response: %v", res.Result)
 	*/
-	nc.metrics.status = Up
+	nc.GetMetrics().status = Up
 }
 
-type nodeMetrics struct {
+type NodeMetrics struct {
 	status NodeStatus
 	// TODO add metrics that can be useful for the router to determine whether it should put or should avoid putting put more load on a BVN
 }
@@ -89,23 +93,23 @@ func NewConnectionManager(config *config.Config, logger log.Logger) ConnectionMa
 	return cm
 }
 
-func (cm *connectionManager) GetBVNContextMap() map[string][]*nodeContext {
+func (cm *connectionManager) GetBVNContextMap() map[string][]NodeContext {
 	return cm.bvnCtxMap
 }
 
-func (cm *connectionManager) GetDNContextList() []*nodeContext {
+func (cm *connectionManager) GetDNContextList() []NodeContext {
 	return cm.dnCtxList
 }
 
-func (cm *connectionManager) GetFNContextList() []*nodeContext {
+func (cm *connectionManager) GetFNContextList() []NodeContext {
 	return cm.fnCtxList
 }
 
-func (cm *connectionManager) GetAllNodeContexts() []*nodeContext {
+func (cm *connectionManager) GetAllNodeContexts() []NodeContext {
 	return cm.all
 }
 
-func (cm *connectionManager) GetLocalNodeContext() *nodeContext {
+func (cm *connectionManager) GetLocalNodeContext() NodeContext {
 	return cm.localNodeCtx
 }
 
@@ -115,14 +119,13 @@ func (cm *connectionManager) GetLocalClient() *local.Local {
 
 func (cm *connectionManager) ResetErrors() {
 	for _, nodeCtx := range cm.all {
-		nodeCtx.metrics.status = Unknown
-		nodeCtx.lastError = nil
-		nodeCtx.lastErrorExpiryTime = time.Now()
+		nodeCtx.GetMetrics().status = Unknown
+		nodeCtx.ClearErrors()
 	}
 }
 
 func (cm *connectionManager) buildNodeInventory() {
-	cm.bvnCtxMap = make(map[string][]*nodeContext)
+	cm.bvnCtxMap = make(map[string][]NodeContext)
 
 	for subnetName, addresses := range cm.accConfig.Network.Addresses {
 		for _, address := range addresses {
@@ -143,7 +146,7 @@ func (cm *connectionManager) buildNodeInventory() {
 					}
 					nodeList, ok := cm.bvnCtxMap[bvnName]
 					if !ok {
-						nodeList := make([]*nodeContext, 1)
+						nodeList := make([]NodeContext, 1)
 						nodeList[0] = nodeCtx
 						cm.bvnCtxMap[bvnName] = nodeList
 					} else {
@@ -169,7 +172,7 @@ func (cm *connectionManager) buildNodeContext(address string, subnetName string)
 	nodeCtx := &nodeContext{subnetName: subnetName,
 		address: address,
 		connMgr: cm,
-		metrics: nodeMetrics{status: Unknown}}
+		metrics: NodeMetrics{status: Unknown}}
 	nodeCtx.networkGroup = cm.determineNetworkGroup(subnetName, address)
 	nodeCtx.netType, nodeCtx.nodeType = determineTypes(subnetName, cm.accConfig.Network)
 
@@ -255,14 +258,14 @@ func (cm *connectionManager) CreateClients(lclClient *local.Local) error {
 	return nil
 }
 
-func (cm *connectionManager) createAbciClients(nodeCtx *nodeContext) error {
-	switch nodeCtx.networkGroup {
+func (cm *connectionManager) createAbciClients(nodeCtx NodeContext) error {
+	switch nodeCtx.GetNetworkGroup() {
 	case Local:
-		nodeCtx.queryClient = cm.localClient
-		nodeCtx.broadcastClient = cm.localClient
-		nodeCtx.service = cm.localClient
+		nodeCtx.SetQueryClient(cm.localClient)
+		nodeCtx.SetBroadcastClient(cm.localClient)
+		nodeCtx.SetService(cm.localClient)
 	default:
-		offsetAddr, err := config.OffsetPort(nodeCtx.address, networks.TmRpcPortOffset)
+		offsetAddr, err := config.OffsetPort(nodeCtx.GetAddress(), networks.TmRpcPortOffset)
 		if err != nil {
 			return fmt.Errorf("invalid BVN address: %v", err)
 		}
@@ -271,30 +274,30 @@ func (cm *connectionManager) createAbciClients(nodeCtx *nodeContext) error {
 			return fmt.Errorf("failed to create RPC client: %v", err)
 		}
 
-		nodeCtx.nodeUrl = offsetAddr
-		nodeCtx.queryClient = client
-		nodeCtx.broadcastClient = client
-		nodeCtx.batchBroadcastClient = client
-		nodeCtx.rawClient = RawClient{client}
-		nodeCtx.service = nodeCtx.rawClient
+		nodeCtx.SetNodeUrl(offsetAddr)
+		nodeCtx.SetQueryClient(client)
+		nodeCtx.SetBroadcastClient(client)
+		nodeCtx.SetBatchBroadcastClient(client)
+		nodeCtx.SetRawClient(RawClient{client})
+		nodeCtx.SetService(nodeCtx.GetRawClient())
 	}
 	return nil
 }
 
-func (cm *connectionManager) createJsonRpcClient(nodeCtx *nodeContext) error {
+func (cm *connectionManager) createJsonRpcClient(nodeCtx NodeContext) error {
 	// RPC HTTP client
 	var address string
-	if strings.EqualFold(nodeCtx.address, "local") || strings.EqualFold(nodeCtx.address, "self") {
+	if strings.EqualFold(nodeCtx.GetAddress(), "local") || strings.EqualFold(nodeCtx.GetAddress(), "self") {
 		address = cm.accConfig.API.ListenAddress
 	} else {
 		var err error
-		address, err = config.OffsetPort(nodeCtx.address, networks.AccRouterJsonPortOffset)
+		address, err = config.OffsetPort(nodeCtx.GetAddress(), networks.AccRouterJsonPortOffset)
 		if err != nil {
 			return fmt.Errorf("invalid BVN address: %v", err)
 		}
 	}
 
-	nodeCtx.jsonRpcClient = jsonrpc.NewClient(address + "/v2")
+	nodeCtx.SetJsonRpcClient(jsonrpc.NewClient(address + "/v2"))
 	return nil
 }
 
@@ -320,4 +323,8 @@ func resolveIPs(address string) ([]net.IP, error) {
 		return nil, fmt.Errorf("error doing DNS lookup for %s: %w", address, err)
 	}
 	return ipList, nil
+}
+
+func (m *NodeMetrics) SetStatus(status NodeStatus) {
+	m.status = status
 }

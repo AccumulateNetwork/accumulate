@@ -5,7 +5,6 @@ import (
 	"crypto/ed25519"
 	"encoding/json"
 	"math/big"
-	"fmt"
 	"testing"
 	"time"
 

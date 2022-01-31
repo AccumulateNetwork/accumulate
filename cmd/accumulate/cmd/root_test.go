@@ -76,12 +76,6 @@ func NewTestBVNN(t *testing.T) string {
 	t.Helper()
 	acctesting.SkipPlatformCI(t, "darwin", "requires setting up localhost aliases")
 
-	// Configure BVN
-	opts := acctesting.NodeInitOptsForLocalNetwork(t.Name(), acctesting.GetIP())
-	opts.WorkDir = defaultWorkDir
-	opts.Logger = logging.NewTestLogger(t, "plain", config.DefaultLogLevels, false)
-	require.NoError(t, node.Init(opts))
-
 	// Start
 	subnets, daemons := acctesting.CreateTestNet(t, 1, 1, 0)
 	acctesting.RunTestNet(t, subnets, daemons)

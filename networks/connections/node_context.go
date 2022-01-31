@@ -30,16 +30,43 @@ type RawClient struct {
 	*http.HTTP
 }
 
+type NodeContext interface {
+	GetSubnetName() string
+	GetNodeUrl() string
+	GetQueryClient() ABCIQueryClient
+	GetNetworkGroup() NetworkGroup
+	GetNodeType() config.NodeType
+	GetMetrics() *NodeMetrics
+	GetLastError() error
+	SetQueryClient(client ABCIQueryClient)
+	SetBroadcastClient(client ABCIBroadcastClient)
+	GetBroadcastClient() ABCIBroadcastClient
+	SetBatchBroadcastClient(client BatchABCIBroadcastClient)
+	GetBatchBroadcastClient() BatchABCIBroadcastClient
+	SetService(client service.Service)
+	GetAddress() string
+	SetRawClient(client RawClient)
+	GetRawClient() RawClient
+	SetNodeUrl(addr string)
+	SetJsonRpcClient(client jsonrpc.RPCClient)
+	GetJsonRpcClient() jsonrpc.RPCClient
+	IsDirectoryNode() bool
+	IsHealthy() bool
+	ReportError(err error)
+	ReportErrorStatus(status NodeStatus, err error)
+	ClearErrors()
+}
+
 type nodeContext struct {
 	subnetName           string
 	address              string
+	nodeUrl              string
 	connMgr              *connectionManager
 	netType              config.NetworkType
 	nodeType             config.NodeType
 	networkGroup         NetworkGroup
 	resolvedIPs          []net.IP
-	metrics              nodeMetrics
-	nodeUrl              string
+	metrics              NodeMetrics
 	queryClient          ABCIQueryClient
 	broadcastClient      ABCIBroadcastClient
 	batchBroadcastClient BatchABCIBroadcastClient
@@ -48,6 +75,46 @@ type nodeContext struct {
 	service              service.Service
 	lastError            error
 	lastErrorExpiryTime  time.Time
+}
+
+func (nc *nodeContext) SetQueryClient(client ABCIQueryClient) {
+	nc.queryClient = client
+}
+
+func (nc *nodeContext) SetBroadcastClient(client ABCIBroadcastClient) {
+	nc.broadcastClient = client
+}
+
+func (nc *nodeContext) SetBatchBroadcastClient(client BatchABCIBroadcastClient) {
+	nc.batchBroadcastClient = client
+}
+
+func (nc *nodeContext) SetService(client service.Service) {
+	nc.service = client
+}
+
+func (nc *nodeContext) GetAddress() string {
+	return nc.address
+}
+
+func (nc *nodeContext) GetNodeType() config.NodeType {
+	return nc.nodeType
+}
+
+func (nc *nodeContext) SetRawClient(client RawClient) {
+	nc.rawClient = client
+}
+
+func (nc *nodeContext) SetNodeUrl(addr string) {
+	nc.nodeUrl = addr
+}
+
+func (nc *nodeContext) SetJsonRpcClient(client jsonrpc.RPCClient) {
+	nc.jsonRpcClient = client
+}
+
+func (nc *nodeContext) GetLastError() error {
+	return nc.lastError
 }
 
 func (nc *nodeContext) GetNodeUrl() string {
@@ -103,6 +170,15 @@ func (nc *nodeContext) IsHealthy() bool {
 		}
 	}
 	return false
+}
+
+func (nc *nodeContext) ClearErrors() {
+	nc.lastError = nil
+	nc.lastErrorExpiryTime = time.Now()
+}
+
+func (nc *nodeContext) GetMetrics() *NodeMetrics {
+	return &nc.metrics
 }
 
 func (nc *nodeContext) ReportError(err error) {

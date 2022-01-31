@@ -5,12 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math/rand"
 	"net/http"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -19,7 +16,6 @@ import (
 	"golang.org/x/exp/rand"
 	"golang.org/x/sync/errgroup"
 	"log"
-	"net/http"
 )
 
 type txBatch []byte
@@ -32,17 +28,24 @@ func (b *txBatch) Append(tx []byte) {
 // their recipients.
 type dispatcher struct {
 	ExecutorOptions
-	batches     map[connections.Route]txBatch
-	dnBatch     txBatch
-	errg        *errgroup.Group
+	batches map[connections.Route]txBatch
+	dnBatch txBatch
+	errg    *errgroup.Group
+	local   connections.Route
 }
 
 // newDispatcher creates a new dispatcher.
-func newDispatcher(opts ExecutorOptions) *dispatcher {
+func newDispatcher(opts ExecutorOptions) (*dispatcher, error) {
 	d := new(dispatcher)
 	d.ExecutorOptions = opts
 	d.batches = make(map[connections.Route]txBatch)
-	return d
+	d.errg = new(errgroup.Group)
+	local, err := opts.ConnectionRouter.GetLocalRoute()
+	if err != nil {
+		return nil, err
+	}
+	d.local = local
+	return d, nil
 }
 
 // Reset creates new RPC client batches.
@@ -76,14 +79,15 @@ func (d *dispatcher) BroadcastTxAsync(ctx context.Context, u *url.URL, tx []byte
 // BroadcastTxAsync dispatches the txn to the appropriate client.
 func (d *dispatcher) BroadcastTxAsyncLocal(ctx context.Context, tx []byte) {
 	d.errg.Go(func() error {
-		_, err := d.Local.BroadcastTxAsync(ctx, tx)
+		_, err := d.local.GetBroadcastClient().BroadcastTxAsync(ctx, tx)
 		return d.checkError(err)
 	})
 }
 
-func (d *dispatcher) send(ctx context.Context, route connections.Route, batch txBatch) {
+func (d *dispatcher) send(ctx context.Context, route connections.Route, batch txBatch) error {
+
 	if len(batch) == 0 {
-		return
+		return nil
 	}
 
 	// Tendermint's JSON RPC batch client is utter trash, so we're rolling our
@@ -128,9 +132,10 @@ func (d *dispatcher) send(ctx context.Context, route connections.Route, batch tx
 		if err != nil {
 			return err
 		}
-
 		return nil
 	})
+	// TODO if we need to return an error now is the go routine still needed?
+	return d.errg.Wait()
 }
 
 var errTxInCache1 = jrpc.RPCInternalError(jrpc.JSONRPCIntID(0), tm.ErrTxInCache).Error

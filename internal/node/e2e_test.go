@@ -2,6 +2,8 @@ package node_test
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
 	"testing"
 	"time"
@@ -39,7 +41,7 @@ func TestEndToEnd(t *testing.T) {
 type e2eDUT struct {
 	*e2e.Suite
 	db         *database.Database
-	api    *apiv2.JrpcMethods
+	api        *apiv2.JrpcMethods
 	client     *local.Local
 	connRouter connections.ConnectionRouter
 }

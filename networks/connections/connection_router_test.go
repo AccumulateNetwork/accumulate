@@ -1,19 +1,11 @@
 package connections_test
 
 import (
-	"fmt"
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/node"
+	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/networks"
 	"github.com/AccumulateNetwork/accumulate/networks/connections"
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	tmlog "github.com/tendermint/tendermint/libs/log"
-	"net"
 	"testing"
 )
 
@@ -21,7 +13,11 @@ const selfId = "BVN0"
 const otherId = "BVN1"
 
 func TestConnectionRouter(t *testing.T) {
-	_, connRouter := mockLocalNode(t)
+	subnets, daemons := acctesting.CreateTestNet(t, 2, 2, 0)
+	acctesting.RunTestNet(t, subnets, daemons)
+
+	daemon0 := daemons[subnets[0]][0]
+	connRouter := daemon0.ConnRouter
 
 	localRoute, err := connRouter.GetLocalRoute()
 	broadcastClient := localRoute
@@ -67,32 +63,4 @@ func toURL(t *testing.T, urlString string) *url.URL {
 	url, err := url.Parse(urlString)
 	require.NoError(t, err)
 	return url
-}
-
-func mockLocalNode(t *testing.T) (*node.Node, connections.ConnectionRouter) {
-	bvc0 := initNodes(t, selfId, net.ParseIP("127.0.26.1"), 3000, 3, []string{"127.0.26.1", "127.0.26.2", "127.0.26.3"})
-	bvc0[0].Node_TESTONLY().ABCI.(*abci.Accumulator).OnFatal(func(err error) { require.NoError(t, err) })
-	return bvc0[0].Node_TESTONLY(), bvc0[0].ConnRouter
-}
-
-func getAddresses(nodes []networks.Node, port int, nodeType config.NodeType) []string {
-	ret := make([]string, 0)
-	for _, node := range nodes {
-		if node.Type == nodeType {
-			ret = append(ret, buildUrl(node.IP, port))
-		}
-	}
-	return ret
-}
-
-func buildUrl(address string, port int) string {
-	return fmt.Sprintf("http://%s:%d", address, port)
-}
-
-func makeLogger(t *testing.T) tmlog.Logger {
-	w, _ := logging.TestLogWriter(t)("plain")
-	zl := zerolog.New(w)
-	tm, err := logging.NewTendermintLogger(zl, "error", false)
-	require.NoError(t, err)
-	return tm
 }
