@@ -202,39 +202,18 @@ success
 
 section "Query pending by URL"
 accumulate -j get keytest/tokens#pending | jq -re .items[0] &> /dev/null && success || die "Failed to retrieve pending transactions"
-echo "====================================================================="
-echo "====================================================================="
-echo "====================================================================="
-echo "====================================================================="
+
 section "Query pending chain at height 0 by URL"
 TXID=$(accumulate -j get keytest/tokens#pending/0 | jq -re .transactionHash) && success || die "Failed to query pending chain by height"
-
-echo "===============================1 Param Height======================================"
-accumulate --debug tx pending keytest/tokens 0
-echo "====================================================================="
 
 section "Query pending chain with hash by URL"
 RESULT=$(accumulate -j get keytest/tokens#pending/${TXID} | jq -re .transactionHash) || die "Failed to query pending chain by hash"
 [ "$RESULT" == "$TXID" ] && success || die "Querying by height and by hash gives different results"
-echo "===============================1 Param TXID======================================"
-accumulate  tx pending keytest/tokens ${TXID}
-echo "====================================================================="
-
-accumulate  tx pending keytest/tokens
-echo "===============================No Params======================================"
 
 section "Query pending chain range by URL"
 RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
 [ "$RESULT" -ge 1 ] && success || die "No entries found"
-echo "===============================2 Param history======================================"
-accumulate  tx pending keytest/tokens 0 10
-echo "====================================================================="
 
-
-echo "====================================================================="
-echo "====================================================================="
-echo "====================================================================="
-echo "====================================================================="
 section "Sign the pending transaction using the other key"
 TXID=$(accumulate -j get keytest/tokens#pending | jq -re .items[0])
 wait-for cli-tx-env tx sign keytest/tokens keytest-1-1 $TXID
