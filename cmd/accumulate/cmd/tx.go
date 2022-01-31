@@ -133,22 +133,21 @@ func GetPendingTx(origin string, args []string) (string, error) {
 	//<record>#pending/<index> - fetch an envelope by index/height
 	//<record>#pending/<start>:<end> - fetch a range of envelope by index/height
 	//build the fragments:
+	params := api2.UrlQuery{}
+
 	var out string
 	var perr error
 	switch len(args) {
 	case 0:
 		//query with no parameters
 		u.Fragment = "pending"
-		r, err := Get(u.String())
+		params.Url = u.String()
+		res := api2.MultiResponse{}
+		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
 		}
-		mr := api2.MultiResponse{}
-		err = json.Unmarshal([]byte(r), &mr)
-		if err != nil {
-			return "", err
-		}
-		out, perr = PrintMultiResponse(&mr)
+		out, perr = PrintMultiResponse(&res)
 	case 1:
 		if len(args[0]) == 64 {
 			//this looks like a transaction hash, now check it
@@ -156,7 +155,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("cannot decode transaction id")
 			}
-			u.Fragment = "pending/" + string(txid)
+			u.Fragment = fmt.Sprintf("pending/%x", txid)
 		} else {
 			height, err := strconv.ParseUint(args[0], 10, 64)
 			if err != nil {
@@ -164,16 +163,13 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			}
 			u.Fragment = fmt.Sprintf("pending/%d", height)
 		}
-		r, err := Get(u.String())
+		params.Url = u.String()
+		res := api2.TransactionQueryResponse{}
+		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
 		}
-		tqr := api2.TransactionQueryResponse{}
-		err = json.Unmarshal([]byte(r), &tqr)
-		if err != nil {
-			return "", err
-		}
-		out, perr = PrintTransactionQueryResponseV2(&tqr)
+		out, perr = PrintTransactionQueryResponseV2(&res)
 	case 2:
 		//pagination
 		start, err := strconv.Atoi(args[0])
@@ -185,16 +181,13 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			return "", fmt.Errorf("error converting count %v", err)
 		}
 		u.Fragment = fmt.Sprintf("pending/%d:%d", start, count)
-		r, err := Get(u.String())
+		params.Url = u.String()
+		res := api2.MultiResponse{}
+		err = queryAs("query", &params, &res)
 		if err != nil {
 			return "", err
 		}
-		mr := api2.MultiResponse{}
-		err = json.Unmarshal([]byte(r), &mr)
-		if err != nil {
-			return "", err
-		}
-		out, perr = PrintMultiResponse(&mr)
+		out, perr = PrintMultiResponse(&res)
 	default:
 		return "", fmt.Errorf("invalid number of arguments")
 	}
