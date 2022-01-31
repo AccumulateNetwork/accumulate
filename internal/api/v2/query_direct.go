@@ -120,6 +120,7 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 		}
 
 		res := new(MultiResponse)
+		res.Type = "txHistory"
 		res.Items = make([]interface{}, len(txh.Transactions))
 		res.Start = uint64(txh.Start)
 		res.Count = uint64(txh.End - txh.Start)
