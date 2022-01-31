@@ -274,28 +274,6 @@ func (c *Client) QueryKeyPageIndex(ctx context.Context, req *api.KeyPageIndexQue
 	return &resp, nil
 }
 
-func (c *Client) QueryPending(ctx context.Context, req *api.PendingTransactionQuery) (*api.ChainQueryResponse, error) {
-	var resp api.ChainQueryResponse
-
-	err := c.RequestAPIv2(ctx, "query-pending-tx", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
-func (c *Client) QueryPendingPagination(ctx context.Context, req *api.PendingTransactionPaginationQuery) (*api.MultiResponse, error) {
-	var resp api.MultiResponse
-
-	err := c.RequestAPIv2(ctx, "query-pending-txs", req, &resp)
-	if err != nil {
-		return nil, err
-	}
-
-	return &resp, nil
-}
-
 func (c *Client) QueryTx(ctx context.Context, req *api.TxnQuery) (*api.TransactionQueryResponse, error) {
 	var resp api.TransactionQueryResponse
 

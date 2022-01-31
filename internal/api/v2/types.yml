@@ -320,25 +320,6 @@ DataEntryQueryResponse:
       type: DataEntry
       marshal-as: reference
 
-PendingTransactionQuery:
-  non-binary: true
-  incomparable: true
-  embeddings:
-    - UrlQuery
-    - QueryOptions
-  fields:
-    - name: Txid
-      type: bytes
-      optional: true
-
-PendingTransactionPaginationQuery:
-  non-binary: true
-  incomparable: true
-  embeddings:
-    - UrlQuery
-    - QueryPagination
-    - QueryOptions
-
 VersionResponse:
   non-binary: true
   incomparable: true

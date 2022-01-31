@@ -218,33 +218,6 @@ func (q *queryDirect) QueryUrl(s string, opts QueryOptions) (interface{}, error)
 	}
 }
 
-func (q *queryDirect) QueryPending(s string, txid []byte, opts QueryOptions) (*ChainQueryResponse, error) {
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrInvalidUrl, err)
-	}
-	req := new(query.RequestByUrl)
-	req.Url = types.String(u.String())
-
-	_, v, err := q.query(req, opts)
-
-	res := new(query.ResponsePending)
-	err = res.UnmarshalBinary(v)
-	if err != nil {
-		return nil, fmt.Errorf("invalid response: %v", err)
-	}
-
-	qr := new(ChainQueryResponse)
-	qr.Type = "pending"
-	qr.Data = res
-	return nil, nil
-}
-
-func (q *queryDirect) QueryPendingPagination(s string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
-
-	return nil, nil
-}
-
 func (q *queryDirect) QueryDirectory(s string, pagination QueryPagination, opts QueryOptions) (*MultiResponse, error) {
 	u, err := url.Parse(s)
 	if err != nil {

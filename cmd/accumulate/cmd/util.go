@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"log"
 	"math"
 	"math/big"
@@ -562,21 +563,15 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			}
 			out += fmt.Sprintf("\t%v (%s)\n", header.ChainUrl, chainDesc)
 		}
-	case "pendingTxs":
-		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
-		for i := range res.Items {
-			// Convert the item to a transaction query response
-			txr := new(api2.TransactionQueryResponse)
-			err := Remarshal(res.Items[i], txr)
-			if err != nil {
-				return "", err
-			}
-
-			s, err := PrintTransactionQueryResponseV2(txr)
-			if err != nil {
-				return "", err
-			}
-			out += s
+	case "pending":
+		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		txr := new(query.ResponsePending)
+		err := Remarshal(res.Items, txr)
+		if err != nil {
+			return "", err
+		}
+		for i, v := range txr.Transactions {
+			out += fmt.Sprintf("\t%d\t%s", i, v)
 		}
 	case "txHistory":
 		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
