@@ -492,6 +492,13 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 	svc.ContainerName = "devnet-" + name
 	svc.Image = "registry.gitlab.com/accumulatenetwork/accumulate/accumulated:" + flagInitDevnet.DockerTag
 	svc.DependsOn = []string{"tools"}
+	if node > 0 {
+		if netType == cfg.Directory {
+			svc.DependsOn = append(svc.DependsOn, "dn-0")
+		} else {
+			svc.DependsOn = append(svc.DependsOn, fmt.Sprintf("bvn%d-0", bvn))
+		}
+	}
 
 	if flagInitDevnet.UseVolumes {
 		svc.Volumes = []dc.ServiceVolumeConfig{
@@ -502,6 +509,15 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 		svc.Volumes = []dc.ServiceVolumeConfig{
 			{Type: "bind", Source: dir, Target: "/node"},
 		}
+	}
+
+	if netType == cfg.Directory && node == 0 {
+		svc.Ports = append(svc.Ports, dc.ServicePortConfig{
+			Target:    26660,
+			Published: 80,
+			Protocol:  "tcp",
+			Mode:      "host",
+		})
 	}
 
 	compose.Services = append(compose.Services, svc)
