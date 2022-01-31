@@ -209,8 +209,6 @@ echo "====================================================================="
 section "Query pending chain at height 0 by URL"
 TXID=$(accumulate -j get keytest/tokens#pending/0 | jq -re .transactionHash) && success || die "Failed to query pending chain by height"
 
-echo "===============================No Params======================================"
-accumulate  tx pending keytest/tokens
 echo "===============================1 Param Height======================================"
 accumulate  tx pending keytest/tokens 0
 echo "====================================================================="
@@ -221,6 +219,9 @@ RESULT=$(accumulate -j get keytest/tokens#pending/${TXID} | jq -re .transactionH
 echo "===============================1 Param TXID======================================"
 accumulate  tx pending keytest/tokens ${TXID}
 echo "====================================================================="
+
+accumulate  tx pending keytest/tokens
+echo "===============================No Params======================================"
 
 section "Query pending chain range by URL"
 RESULT=$(accumulate -j get keytest/tokens#pending/0:10 | jq -re .total)
