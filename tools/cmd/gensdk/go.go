@@ -7,7 +7,7 @@ import (
 	"text/template"
 )
 
-//go:embed go.tmpl
+//go:embed go.go.tmpl
 var goSrc string
 
 var Go = mustParseTemplate("go.tmpl", goSrc, template.FuncMap{
