@@ -17,7 +17,6 @@ import (
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/AccumulateNetwork/accumulate/types/state"
@@ -565,15 +564,8 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 		}
 	case "pending":
 		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
-		if len(res.Items) > 0 {
-			txr := new(query.ResponsePending)
-			err := Remarshal(res.Items, txr)
-			if err != nil {
-				return "", err
-			}
-			for i, v := range txr.Transactions {
-				out += fmt.Sprintf("\t%d\t%s", i, v)
-			}
+		for i, item := range res.Items {
+			out += fmt.Sprintf("\t%d\t%s", i, item)
 		}
 	case "txHistory":
 		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
