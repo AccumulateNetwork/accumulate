@@ -162,7 +162,7 @@ func GetPendingTx(origin string, args []string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("expecting height, but could not convert argument, %v", err)
 			}
-			u.Fragment = "pending/" + string(height)
+			u.Fragment = fmt.Sprintf("pending/%d", height)
 		}
 		r, err := Get(u.String())
 		if err != nil {
