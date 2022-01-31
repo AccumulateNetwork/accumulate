@@ -34,6 +34,12 @@ var txCmd = &cobra.Command{
 					fmt.Println("Usage:")
 					PrintTXGet()
 				}
+			case "pending":
+				if len(args) == 1 {
+					out, err = GetPendingTx(args[1], []string{})
+				} else {
+					out, err = GetPendingTx(args[1], args[2:])
+				}
 			case "history":
 				if len(args) > 3 {
 					out, err = GetTXHistory(args[1], args[2], args[3])
@@ -88,6 +94,12 @@ func PrintTXGet() {
 	fmt.Println("  accumulate tx get [txid]			Get token transaction by txid")
 }
 
+func PrintTXPendingGet() {
+	fmt.Println("  accumulate tx pending [txid]			Get token transaction by txid")
+	fmt.Println("  accumulate tx pending [height]			Get token transaction by block height")
+	fmt.Println("  accumulate tx pending [starting transaction number]	[ending transaction number]		Get token transaction by block height")
+}
+
 func PrintTXCreate() {
 	fmt.Println("  accumulate tx create [from] [to] [amount]	Create new token tx")
 }
@@ -110,8 +122,78 @@ func PrintTX() {
 	PrintTXExecute()
 	PrintTxSign()
 	PrintTXHistoryGet()
+	PrintTXPendingGet()
 }
+func GetPendingTx(origin string, args []string) (string, error) {
+	u, err := url.Parse(origin)
+	if err != nil {
+		return "", err
+	}
+	//<record>#pending/<hash> - fetch an envelope by hash
+	//<record>#pending/<index> - fetch an envelope by index/height
+	//<record>#pending/<start>:<end> - fetch a range of envelope by index/height
+	//build the fragments:
+	params := api2.UrlQuery{}
 
+	var out string
+	var perr error
+	switch len(args) {
+	case 0:
+		//query with no parameters
+		u.Fragment = "pending"
+		params.Url = u.String()
+		res := api2.MultiResponse{}
+		err = queryAs("query", &params, &res)
+		if err != nil {
+			return "", err
+		}
+		out, perr = PrintMultiResponse(&res)
+	case 1:
+		if len(args[0]) == 64 {
+			//this looks like a transaction hash, now check it
+			txid, err := hex.DecodeString(args[0])
+			if err != nil {
+				return "", fmt.Errorf("cannot decode transaction id")
+			}
+			u.Fragment = fmt.Sprintf("pending/%x", txid)
+		} else {
+			height, err := strconv.ParseUint(args[0], 10, 64)
+			if err != nil {
+				return "", fmt.Errorf("expecting height, but could not convert argument, %v", err)
+			}
+			u.Fragment = fmt.Sprintf("pending/%d", height)
+		}
+		params.Url = u.String()
+		res := api2.TransactionQueryResponse{}
+		err = queryAs("query", &params, &res)
+		if err != nil {
+			return "", err
+		}
+		out, perr = PrintTransactionQueryResponseV2(&res)
+	case 2:
+		//pagination
+		start, err := strconv.Atoi(args[0])
+		if err != nil {
+			return "", fmt.Errorf("error converting start index %v", err)
+		}
+		count, err := strconv.Atoi(args[1])
+		if err != nil {
+			return "", fmt.Errorf("error converting count %v", err)
+		}
+		u.Fragment = fmt.Sprintf("pending/%d:%d", start, count)
+		params.Url = u.String()
+		res := api2.MultiResponse{}
+		err = queryAs("query", &params, &res)
+		if err != nil {
+			return "", err
+		}
+		out, perr = PrintMultiResponse(&res)
+	default:
+		return "", fmt.Errorf("invalid number of arguments")
+	}
+
+	return out, perr
+}
 func getTX(hash []byte, wait time.Duration) (*api2.TransactionQueryResponse, error) {
 	var res api2.TransactionQueryResponse
 	var err error
