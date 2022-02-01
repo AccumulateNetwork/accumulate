@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"os"
@@ -58,6 +59,7 @@ var flagInit struct {
 	NoEmptyBlocks bool
 	NoWebsite     bool
 	Reset         bool
+	LogLevels     string
 }
 
 var flagInitNode struct {
@@ -88,6 +90,7 @@ func init() {
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoEmptyBlocks, "no-empty-blocks", false, "Do not create empty blocks")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.NoWebsite, "no-website", false, "Disable website")
 	cmdInit.PersistentFlags().BoolVar(&flagInit.Reset, "reset", false, "Delete any existing directories within the working directory")
+	cmdInit.PersistentFlags().StringVar(&flagInit.LogLevels, "log-levels", "", "Override the default log levels")
 	cmdInit.MarkFlagRequired("network")
 
 	cmdInitNode.Flags().BoolVarP(&flagInitNode.Follower, "follow", "f", false, "Do not participate in voting")
@@ -139,6 +142,11 @@ func initNamedNetwork(*cobra.Command, []string) {
 		listenIP[i] = "0.0.0.0"
 		remoteIP[i] = node.IP
 		config[i] = cfg.Default(subnet.Type, node.Type, subnet.Name)
+		if flagInit.LogLevels != "" {
+			_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
+			checkf(err, "--log-level")
+			config[i].LogLevel = flagInit.LogLevels
+		}
 
 		if flagInit.NoEmptyBlocks {
 			config[i].Consensus.CreateEmptyBlocks = false
@@ -242,6 +250,11 @@ func initNode(cmd *cobra.Command, args []string) {
 	config := config.Default(description.Subnet.Type, nodeType, description.Subnet.ID)
 	config.P2P.PersistentPeers = fmt.Sprintf("%s@%s:%d", status.NodeInfo.NodeID, netAddr, netPort+networks.TmP2pPortOffset)
 	config.Accumulate.Network = description.Subnet
+	if flagInit.LogLevels != "" {
+		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
+		checkf(err, "--log-level")
+		config.LogLevel = flagInit.LogLevels
+	}
 
 	if flagInit.Reset {
 		nodeReset()
@@ -467,6 +480,11 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 	} else {
 		config = cfg.Default(netType, nodeType, fmt.Sprintf("BVN%d", bvn))
 	}
+	if flagInit.LogLevels != "" {
+		_, _, err := logging.ParseLogLevel(flagInit.LogLevels, io.Discard)
+		checkf(err, "--log-level")
+		config.LogLevel = flagInit.LogLevels
+	}
 
 	if flagInit.NoEmptyBlocks {
 		config.Consensus.CreateEmptyBlocks = false
@@ -509,9 +527,14 @@ func initDevNetNode(netType cfg.NetworkType, nodeType cfg.NodeType, bvn, node in
 }
 
 func newLogger() log.Logger {
+	levels := config.DefaultLogLevels
+	if flagInit.LogLevels != "" {
+		levels = flagInit.LogLevels
+	}
+
 	writer, err := logging.NewConsoleWriter("plain")
 	check(err)
-	level, writer, err := logging.ParseLogLevel(config.DefaultLogLevels, writer)
+	level, writer, err := logging.ParseLogLevel(levels, writer)
 	check(err)
 	logger, err := logging.NewTendermintLogger(zerolog.New(writer), level, false)
 	check(err)
