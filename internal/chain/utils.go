@@ -148,9 +148,9 @@ func buildProof(batch *database.Batch, u *protocol.AnchorMetadata, rootChain *da
 	return r, nil
 }
 
-func synthCountExceptAnchors(batch *database.Batch, ledger *protocol.InternalLedger) int {
+func countExceptAnchors(batch *database.Batch, txids [][32]byte) int {
 	var count int
-	for _, hash := range ledger.Synthetic.Produced {
+	for _, hash := range txids {
 		txn, err := batch.Transaction(hash[:]).GetState()
 		if err != nil {
 			count++
