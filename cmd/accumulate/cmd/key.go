@@ -126,18 +126,20 @@ func PrintKey() {
 	PrintKeyExport()
 }
 
+// Resolve a string of 64 hexadecimal characters to
+// a 32-byte (256-bit) public key.
 func pubKeyFromString(s string) ([]byte, error) {
-	var pubKey types.Bytes32
 	if len(s) != 64 {
 		return nil, fmt.Errorf("invalid public key or wallet key name")
 	}
-	i, err := hex.Decode(pubKey[:], []byte(s))
+	var pubKey types.Bytes32
+	bytes_written, err := hex.Decode(pubKey[:], []byte(s))
 
 	if err != nil {
 		return nil, err
 	}
 
-	if i != 32 {
+	if bytes_written != 32 {
 		return nil, fmt.Errorf("invalid public key")
 	}
 

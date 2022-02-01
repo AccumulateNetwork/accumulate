@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Retrieve, from the general ledger, the data at the specified URL.
 func getRecord(url string, rec interface{}) (*api2.MerkleState, error) {
 	params := api2.UrlQuery{
 		Url: url,
@@ -48,68 +49,125 @@ func getRecordById(chainId []byte, rec interface{}) (*api2.MerkleState, error) {
 	return res.MainChain, nil
 }
 
+// Create a transaction header containing a signing key (and the origin).
+//
+// The first parameter is the lite account or key page which initiated the
+// transaction. All user-supplied arguments from the CLI are arrayed into
+// the second parameter.
+//
+// Returns the provided list of user-supplied CLI arguments minus those
+// used to resolve a signing key, a transaction header, and a private key
+// for signing a transaction.
 func prepareSigner(origin *url2.URL, args []string) ([]string, *transactions.Header, []byte, error) {
-	var privKey []byte
+	var privateKey []byte
 	var err error
 
-	ct := 0
+	// This function "consumes" the user-supplied (CLI) arguments needed to
+	// specify target account information by stripping them from the argument
+	// list and returning the remainder, for the convenience of the calling
+	// function.
+	usedArgsCount := 0
+
 	if len(args) == 0 {
 		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	hdr := transactions.Header{}
-	hdr.Origin = origin
-	hdr.KeyPageHeight = 1
-	hdr.KeyPageIndex = 0
+	// Create a new transaction header.
+	header := transactions.Header{}
+	header.Origin = origin
+	header.KeyPageHeight = 1 // Default
+	header.KeyPageIndex = 0  // Default
 
-	if IsLiteAccount(origin.String()) == true {
-		privKey, err = LookupByLabel(origin.String())
+	// If the transaction origin is a lite account, we can just pull private
+	// key data directly from that account. VERIFY: A lite account is little
+	// more than a key anyway, right?
+	//
+	// SUGGEST: The first thing IsLiteAccount does is resolve the given string
+	// to an Accumulate URL. origin is necessarily an accumulate URL, so
+	// couldn't we create something like IsLiteAccountFromURL to save work, and
+	// wrap it with the existing IsLiteAccount function?
+	if IsLiteAccount(origin.String()) {
+		privateKey, err = LookupByLabel(origin.String())
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("unable to find private key for lite account %s %v", origin.String(), err)
 		}
-		return args, &hdr, privKey, nil
+		return args, &header, privateKey, nil
 	}
 
-	if len(args) > 1 {
-		b, err := pubKeyFromString(args[0])
+	// The user did not provide a lite account as the origin, so they should
+	// have provided a URL pointing to a key page.
+
+	// The user MUST have provided at least 2 arguments from the CLI in
+	// addition to the origin: one specifiying the target of their
+	// transaction and one specifying the payload of the transaction,
+	// typically an amount.
+	//
+	// TODO: QUERY: SUGGEST: Shouldn't we require at least 3 args at this point?
+	// First arg for a wallet label or public key for the SENDER,
+	// Second arg for the TARGET,
+	// Third arg for the AMOUNT.
+	if len(args) >= 2 {
+
+		// Try to resolve the first argument to a public key.
+		publicKey, err := pubKeyFromString(args[0])
 		if err != nil {
-			privKey, err = LookupByLabel(args[0])
+			// The first argument is not a public key, so try to resolve it to
+			// a wallet label instead.
+			privateKey, err = LookupByLabel(args[0])
 			if err != nil {
 				return nil, nil, nil, fmt.Errorf("invalid public key or wallet label specified on command line")
 			}
 
 		} else {
-			privKey, err = LookupByPubKey(b)
+			// The first argument is, in fact, a valid public key.
+			privateKey, err = LookupByPubKey(publicKey)
 			if err != nil {
+				// SUGGEST: This error message may not be descriptive enough.
 				return nil, nil, nil, fmt.Errorf("invalid public key, cannot resolve signing key")
 			}
 		}
-		ct++
+
+		usedArgsCount++
+
 	} else {
 		return nil, nil, nil, fmt.Errorf("insufficent arguments on comand line")
 	}
 
-	if len(args) > 2 {
-		if v, err := strconv.ParseInt(args[1], 10, 64); err == nil {
-			ct++
-			hdr.KeyPageIndex = uint64(v)
+	// If the user supplied at least 3 arguments (other than the origin) then
+	// the second one should be a key page index.
+	//
+	// TODO: QUERY: SUGGEST: Shouldn't we require at least 4 args at this point?
+	// First arg for a wallet label or public key for the SENDER,
+	// Second arg for SENDER'S KEY PAGE INDEX,
+	// Third arg for the TARGET,
+	// Fourth arg for the AMOUNT.
+	if len(args) >= 3 {
+		if intValue, err := strconv.ParseInt(args[1], 10, 64); err == nil {
+			usedArgsCount++
+			header.KeyPageIndex = uint64(intValue)
 		}
 	}
 
-	keyInfo, err := getKey(origin.String(), privKey[32:])
+	// TODO: QUERY: Not entirely clear on this.
+	// Query the Accumulate network for information about the resolved
+	// private key.
+	keyInfo, err := getKey(origin.String(), privateKey[32:])
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get key for %q : %v", origin, err)
 	}
 
-	ms, err := getRecord(keyInfo.KeyPage, nil)
+	// TODO: QUERY: Not entirely clear on this.
+	// Get, from the general ledger, the key page specified by the
+	// key info we just retrieved.
+	merkleState, err := getRecord(keyInfo.KeyPage, nil)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get %q : %v", keyInfo.KeyPage, err)
 	}
 
-	hdr.KeyPageIndex = keyInfo.Index
-	hdr.KeyPageHeight = ms.Height
+	header.KeyPageIndex = keyInfo.Index
+	header.KeyPageHeight = merkleState.Height
 
-	return args[ct:], &hdr, privKey, nil
+	return args[usedArgsCount:], &header, privateKey, nil
 }
 
 func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
@@ -178,16 +236,21 @@ func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *tra
 	return params, err
 }
 
+// SUGGEST: Ungraceful exits exist in this function.
+// QUERY: All we're checking here is that the provided URL is
+// a valid ADI host followed by some valid Accumulate URL.
+// Is a lite account really the only thing that can reside
+// at such a location?
 func IsLiteAccount(url string) bool {
-	u, err := url2.Parse(url)
+	accumulateURL, err := url2.Parse(url)
 	if err != nil {
 		log.Fatal(err)
 	}
-	u2, err := url2.Parse(u.Authority)
+	authorityURL, err := url2.Parse(accumulateURL.Authority)
 	if err != nil {
 		log.Fatal(err)
 	}
-	return protocol.IsValidAdiUrl(u2) != nil
+	return protocol.IsValidAdiUrl(authorityURL) != nil
 }
 
 // Remarshal uses mapstructure to convert a generic JSON-decoded map into a struct.

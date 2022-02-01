@@ -134,6 +134,8 @@ func Get(url string) (string, error) {
 	return string(res), nil
 }
 
+// Query the Accumulate network via JSONRPC2 for a information about the
+// key located at the specified URL.
 func getKey(url string, key []byte) (*query.ResponseKeyPageIndex, error) {
 	params := new(api2.KeyPageIndexQuery)
 	params.Url = url

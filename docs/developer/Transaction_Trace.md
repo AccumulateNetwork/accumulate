@@ -107,7 +107,7 @@ This table will follow a theoretical "add-credits" transaction.
             <td><code>execute</code></td>
             <!-- col -->
             <td rowspan='7'>A host running a BVN node daemon instance, guaranteed to be within the correct BVN.</td>
-            <td rowspan='0'>The correct destination BVN for the given transaction.</td>
+            <td rowspan='0'>The correct destination BVN for the given transaction:<br>This is the BVN which manages accounts and data for the user that initiated the transaction. Any other parties invovled in the transaction are irrelevant for determining which BVN should process the transaction.</td>
         </tr><tr>
             <!-- col -->
             <td style='text-align:center'>8</td>
@@ -223,7 +223,7 @@ This table will follow a theoretical "add-credits" transaction.
     </tbody>
 </table>
 
-## Notes
+## Step Detail
 
 1. In the CLI client implementation provided by DeFiDevs, this method is triggered by a user-entered command.
 
@@ -278,12 +278,22 @@ Transactions are executed in order, one at a time, each one being executed on al
         <li><!-- B -->The transaction is handed down to the node's general executor for processing.</li>
         <li>
             <!-- C -->Another validity check is made for this transaction.  
-            The transaction was valid in steps 11 and 12 when executed by itself against the main ledger, but in step 13 other transactions already executed from this block may have changed the state of the forked ledger such that this transaction is no longer valid. If that is the case, then execution stops and the entire block is scrapped.
+            The transaction was valid in steps 11 and 12 when executed by itself against the main ledger, but in step 13 other transactions already executed from this block may have changed the state of the forked ledger such that this transaction is no longer valid. If that is the case, then execution stops and the entire block is scrapped. TODO: verify
         </li>
-        <li>The transaction is committed to the forked ledger.</li>
+        <li>The transaction is committed to the forked ledger.<br>&nbsp;</li>
     </ol>
 
 14. Tendermint notifies <i>all</i> nodes in the BVN that the block was successful and that the forked ledger should now be permanently committed to the main ledger. Nodes which failed step 12 (and then sat out step 13) either apply this update or fall out of sync, ultimately resulting in their removal from Tendermint voting. TODO: verify
 
+## Synthetic Transactions
+
+A transaction, as recorded in the blockchain, only describes a change made to a single account. Any operation that modifies more than one account therefore results in two separate transactions being committed to the ledger.
+
+Take the example of a payment made from Account A to Account B:
+
+- A transaction deducting value from Account A is recorded.
+- A separate transaction adding value to Account B is also recorded.
+
+To save work, one of these transactions will be a normal transaction and the other will be a "synthetic" transaction. When User A executes payment, steps 7-E through 14 above will be carried out within the BVN that manages User A's account and a normal transaction reflecting a deduction of value will be recorded for Account A. After this a synthetic transaction reflecting an addition of value will be sent to the appropriate BVN for Account B. Note that a synthetic transaction is created even if accounts A and B are both managed by the same BVN. TODO: How are all of the peer nodes in BVN-A prevented from creating duplicate synthetics since they all execute steps 12-14?
 
 TODO: Append synthetic transaction trace, which begins at step 13.

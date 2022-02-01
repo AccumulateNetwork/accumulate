@@ -29,16 +29,29 @@ var creditsCmd = &cobra.Command{
 func PrintCredits() {
 	fmt.Println("  accumulate credits [origin lite account] [lite account or key page url] [amount] 		Send credits using a lite account or adi key page to another lite account or adi key page")
 	fmt.Println("  accumulate credits [origin url] [origin key name] [key index (optional)] [key height (optional)] [key page or lite account url] [amount] 		Send credits to another lite account or adi key page")
+	// SUGGEST: This usage does not indicate that an origin key itself can be provided in place of an origin key name.
 }
 
+// AddCredits begins execution of a transaction sending credits from one
+// specified account to another. This method is called when a user enters
+// the appropriate command from their CLI as defined in PrintCredits().
+//
+// The first parameter is the first user-supplied argument from the CLI
+// and all subsequent arguments are arrayed in the second parameter.
 func AddCredits(origin string, args []string) (string, error) {
-	u, err := url2.Parse(origin)
+
+	// Resolve the first user-supplied argument to a lite account or
+	// ADI key page, which is indicated by a URL.
+	origin_url, err := url2.Parse(origin)
 	if err != nil {
+		// The first argument could not be resolved to a usable URL.
 		PrintCredits()
 		return "", err
 	}
 
-	args, si, privKey, err := prepareSigner(u, args)
+	// Resolve the remaining user-supplied arguments to a valid target
+	// lite account or ADI key page.
+	args, si, privKey, err := prepareSigner(origin_url, args)
 	if err != nil {
 		return "", err
 	}
@@ -61,7 +74,7 @@ func AddCredits(origin string, args []string) (string, error) {
 	credits.Recipient = u2.String()
 	credits.Amount = uint64(amt * protocol.CreditPrecision)
 
-	res, err := dispatchTxRequest("add-credits", &credits, u, si, privKey)
+	res, err := dispatchTxRequest("add-credits", &credits, origin_url, si, privKey)
 	if err != nil {
 		return "", err
 	}
