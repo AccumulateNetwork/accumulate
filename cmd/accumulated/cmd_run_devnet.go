@@ -11,9 +11,7 @@ import (
 	"sync"
 
 	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/fatih/color"
-	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/log"
 )
@@ -88,6 +86,8 @@ func runDevNet(*cobra.Command, []string) {
 	stop := make(chan struct{})
 	done := new(sync.WaitGroup)
 
+	logWriter := newLogWriter(nil)
+
 	for _, node := range nodes {
 		if skip[fmt.Sprintf("%s.%d", node.Subnet, node.Number)] {
 			continue
@@ -96,7 +96,9 @@ func runDevNet(*cobra.Command, []string) {
 		// Load the node
 		dir := filepath.Join(dir, node.Subnet, fmt.Sprintf("Node%d", node.Number))
 		daemon, err := accumulated.Load(dir, func(format string) (io.Writer, error) {
-			return newNodeWriter(format, node.Subnet, node.Number)
+			return logWriter(format, func(w io.Writer, format string, color bool) io.Writer {
+				return newNodeWriter(w, format, node.Subnet, node.Number, color)
+			})
 		})
 		check(err)
 
@@ -162,46 +164,75 @@ func getNodesFromSubnetDir(dir string) []int {
 
 var nodeIdLen int
 
-func newNodeWriter(format, subnet string, node int) (io.Writer, error) {
-	w, err := logging.NewConsoleWriter(format)
-	if err != nil {
-		return nil, err
-	}
+var subnetColor = map[string]*color.Color{}
 
-	switch strings.ToLower(format) {
+func newNodeWriter(w io.Writer, format, subnet string, node int, color bool) io.Writer {
+	switch format {
 	case log.LogFormatPlain, log.LogFormatText:
-		break
+		id := fmt.Sprintf("%s.%d", subnet, node)
+		s := fmt.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen-len(id)+1)
+		if !color {
+			return &plainNodeWriter{s, w}
+		}
+
+		c, ok := subnetColor[subnet]
+		if !ok {
+			c = fallbackColor
+			if len(colors) > 0 {
+				c = colors[0]
+				colors = colors[1:]
+			}
+			subnetColor[subnet] = c
+		}
+
+		s = c.Sprint(s)
+		return &plainNodeWriter{s, w}
+
+	case log.LogFormatJSON:
+		s := fmt.Sprintf(`"subnet":"%s","node":%d`, subnet, node)
+		return &jsonNodeWriter{s, w}
+
 	default:
-		return w, nil
+		return w
 	}
-
-	c := fallbackColor
-	if len(colors) > 0 {
-		c = colors[0]
-		colors = colors[1:]
-	}
-
-	id := fmt.Sprintf("%s.%d", subnet, node)
-	prefix := c.Sprintf("[%s]", id) + strings.Repeat(" ", nodeIdLen-len(id)+1)
-
-	cw := w.(*zerolog.ConsoleWriter)
-	cw.Out = &nodeWriter{prefix, cw.Out}
-	return cw, nil
 }
 
-type nodeWriter struct {
-	prefix string
-	w      io.Writer
+type plainNodeWriter struct {
+	s string
+	w io.Writer
 }
 
-func (w *nodeWriter) Write(b []byte) (int, error) {
-	c := make([]byte, len(w.prefix)+len(b))
-	n := copy(c, []byte(w.prefix))
+func (w *plainNodeWriter) Write(b []byte) (int, error) {
+	c := make([]byte, len(w.s)+len(b))
+	n := copy(c, []byte(w.s))
 	copy(c[n:], b)
 
 	n, err := w.w.Write(c)
-	if n >= len(w.prefix) {
-		n -= len(w.prefix)
+	if n >= len(w.s) {
+		n -= len(w.s)
+	}
+	return n, err
+}
+
+type jsonNodeWriter struct {
+	s string
+	w io.Writer
+}
+
+func (w *jsonNodeWriter) Write(b []byte) (int, error) {
+	if b[0] != '{' {
+		return w.w.Write(b)
+	}
+
+	c := make([]byte, 0, len(w.s)+len(b)+1)
+	c = append(c, '{')
+	c = append(c, []byte(w.s)...)
+	c = append(c, ',')
+	c = append(c, b[1:]...)
+
+	n, err := w.w.Write(c)
+	if n >= len(w.s)+1 {
+		n -= len(w.s) + 1
 	}
 	return n, err
 }
