@@ -562,7 +562,11 @@ func PrintMultiResponse(res *api2.MultiResponse) (string, error) {
 			}
 			out += fmt.Sprintf("\t%v (%s)\n", header.ChainUrl, chainDesc)
 		}
-
+	case "pending":
+		out += fmt.Sprintf("\n\tPending Tranactions -> Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
+		for i, item := range res.Items {
+			out += fmt.Sprintf("\t%d\t%s", i, item)
+		}
 	case "txHistory":
 		out += fmt.Sprintf("\n\tTrasaction History Start: %d\t Count: %d\t Total: %d\n", res.Start, res.Count, res.Total)
 		for i := range res.Items {
