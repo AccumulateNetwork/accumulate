@@ -192,51 +192,68 @@ func jsonUnmarshalAccount(data []byte) (state.Chain, error) {
 	return account, nil
 }
 
-func signGenTx(binaryPayload []byte, origin *url2.URL, hdr *transactions.Header, privKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
-	gtx := new(transactions.Envelope)
-	gtx.Transaction = new(transactions.Transaction)
-	gtx.Transaction.Body = binaryPayload
+// Sign a transaction with the provided private key.
+// Returns the mechanism used to sign the transaction, not the signature
+// itself, though the mechanism will have already signed and has the
+// singature.
+//
+// Returns an error if the signing mechanism fails to sign for some reason.
+func signGenTx(binaryPayload []byte, origin *url2.URL, trxHeader *transactions.Header, privateKey []byte, nonce uint64) (*transactions.ED25519Sig, error) {
 
-	hdr.Nonce = nonce
-	gtx.Transaction.Header = *hdr
+	// Prepare an envelope and populate it with transaction data which is
+	// used later when we call
+	// transactions.Envelope.Transaction.Hash().
+	trxEnvelope := new(transactions.Envelope)
+	trxEnvelope.Transaction = new(transactions.Transaction)
+	trxEnvelope.Transaction.Body = binaryPayload
+	trxHeader.Nonce = nonce
+	trxEnvelope.Transaction.Header = *trxHeader
 
-	ed := new(transactions.ED25519Sig)
-	err := ed.Sign(nonce, privKey, gtx.Transaction.Hash())
+	signingMechanism := new(transactions.ED25519Sig)
+	err := signingMechanism.Sign(nonce, privateKey, trxEnvelope.Transaction.Hash())
 	if err != nil {
 		return nil, err
 	}
-	return ed, nil
+	return signingMechanism, nil
 }
 
-func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, si *transactions.Header, privKey []byte, nonce uint64) (*api2.TxRequest, error) {
-	ed, err := signGenTx(binaryPayload, origin, si, privKey, nonce)
+// Generate a transaction request with a signature.
+// Returns an error if signing fails.
+// SUGGEST: This function's predecessor no longer exists. The V2 suffix
+// on this function is superfluous and could lead to confusion.
+func prepareGenTxV2(jsonPayload, binaryPayload []byte, origin *url2.URL, trxHeader *transactions.Header, privateKey []byte, nonce uint64) (*api2.TxRequest, error) {
+
+	// Sign the transaction and retrieve the mechanism used to do so.
+	signingMechanism, err := signGenTx(binaryPayload, origin, trxHeader, privateKey, nonce)
 	if err != nil {
 		return nil, err
 	}
 
+	// Create and populate a new transaction request.
 	params := &api2.TxRequest{}
 
+	// TxPretend is set with each CLI command via a user-provided flag.
 	if TxPretend {
 		params.CheckOnly = true
 	}
 
-	// TODO The payload field can be set equal to the struct, without marshalling first
+	// TODO: The payload field can be set equal to the struct, without marshalling first
 	params.Payload = json.RawMessage(jsonPayload)
 	params.Signer.Nonce = nonce
 	params.Origin = origin
-	params.KeyPage.Height = si.KeyPageHeight
-	params.KeyPage.Index = si.KeyPageIndex
+	params.KeyPage.Height = trxHeader.KeyPageHeight
+	params.KeyPage.Index = trxHeader.KeyPageIndex
 
-	params.Signature = ed.GetSignature()
+	params.Signature = signingMechanism.GetSignature()
 	//The public key needs to be used to verify the signature, however,
 	//to pass verification, the validator will hash the key and check the
 	//sig spec group to make sure this key belongs to the identity.
-	params.Signer.PublicKey = ed.GetPublicKey()
+	params.Signer.PublicKey = signingMechanism.GetPublicKey()
 
 	return params, err
 }
 
-// SUGGEST: Ungraceful exits exist in this function.
+// SUGGEST: Ungraceful exits can occur in this function.
 // QUERY: All we're checking here is that the provided URL is
 // a valid ADI host followed by some valid Accumulate URL.
 // Is a lite account really the only thing that can reside
@@ -305,14 +322,46 @@ func queryAs(method string, input, output interface{}) error {
 	return fmt.Errorf("%v", ret)
 }
 
-func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, si *transactions.Header, privKey []byte) (*api2.TxResponse, error) {
+// Prepare a transaction for dispatch and then pass it to the local client
+// for sending to the Accumulate network.
+//
+// The first parameter must be a valid action as defined in
+// /internal/api/v2/api_gen.go#populateMethodTable().
+// SUGGEST: Can this be done with an Enum instead of string literals?
+//
+// trxHeader should be a header prepared by prepareSigner().
+//
+// Returns an error if the data is malformed or signing fails.
+func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *url2.URL, trxHeader *transactions.Header, privateKey []byte) (*api2.TxResponse, error) {
+
+	/*
+		In order to send the transaction we'll construct a big, multi-layered
+		data snowball:
+
+		STEP 1: Marshal the payload (the recipient and the amount) into binary.
+		STEP 2: The same payload is also JSON-ized (except for "execute" trxs).
+		STEP 3: All the data from steps 1 and 2 are then rolled up into a single
+				transaction request.
+		STEP 4: That whole transaction request is then JSON-ized.
+	*/
+
+	//
+	// STEP 1
+	//
+
 	dataBinary, err := payload.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
 
+	//
+	// STEP 2
+	//
+
 	var data []byte
 	if action == "execute" {
+		// Special case for ./tx.go for executing arbitrary transactions.
+		// QUERY: Why do we have this?
 		data, err = json.Marshal(hex.EncodeToString(dataBinary))
 	} else {
 		data, err = json.Marshal(payload)
@@ -321,16 +370,32 @@ func dispatchTxRequest(action string, payload encoding.BinaryMarshaler, origin *
 		return nil, err
 	}
 
+	//
+	// STEP 3
+	//
+
+	// QUERY: SUGGEST: Why are we passing the nonce around? The first thing
+	// prepareGenTxV2 does is pass it to signGenTx which then attaches it to
+	// the trxHeader, which has been passed by reference. Why not attach it
+	// here and shorten several param lists?
 	nonce := nonceFromTimeNow()
-	params, err := prepareGenTxV2(data, dataBinary, origin, si, privKey, nonce)
+	params, err := prepareGenTxV2(data, dataBinary, origin, trxHeader, privateKey, nonce)
 	if err != nil {
 		return nil, err
 	}
+
+	//
+	// STEP 4
+	//
 
 	data, err = json.Marshal(params)
 	if err != nil {
 		return nil, err
 	}
+
+	//
+	// SEND
+	//
 
 	var res api2.TxResponse
 	if err := Client.Request(context.Background(), action, json.RawMessage(data), &res); err != nil {
@@ -478,6 +543,8 @@ type JsonRpcError struct {
 
 func (e *JsonRpcError) Error() string { return e.Msg }
 
+// QUERY: SUGGEST: This function's return is always an empty string.
+// Why return a string at all?
 func PrintJsonRpcError(err error) (string, error) {
 	var e jsonrpc2.Error
 	switch err := err.(type) {

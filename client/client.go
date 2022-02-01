@@ -24,12 +24,23 @@ func NewAPIClient() *APIClient {
 	return c
 }
 
-// Request makes request to API server (version 2)
+// Send a transaction request to the API server.
+// This is the transaction's final departure into the JSON-RPC-2
+// black box, from which it proceeds to a remote host inside the
+// Accumulate network.
+//
+// Execution resumes, on the server side, at
+// /internal/api/v2/jrpc_execute.go#execute with a protocol
+// selected from
+// /internal/api/v2/api_gen.go
+// according to the provided action.
+//
+// The JSON-RPC-2 response is returned verbatim.
 func (c *APIClient) Request(ctx context.Context,
-	method string, params, result interface{}) error {
+	action string, params, result interface{}) error {
 
 	if c.DebugRequest {
 		fmt.Println("accumulated:", c.Server)
 	}
-	return c.Client.Request(ctx, c.Server, method, params, result)
+	return c.Client.Request(ctx, c.Server, action, params, result)
 }

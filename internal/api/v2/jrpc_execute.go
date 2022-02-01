@@ -13,7 +13,16 @@ import (
 	"github.com/ybbus/jsonrpc/v2"
 )
 
-// Re-entry from JRPC black box after CallBatch; redirects to execute()
+// This is effectively, and technically, the entry point of execution on the
+// server side within the accumulate network for transactions redirected from
+// another node (with action "execute", defined in ./api_gen.go).
+//
+// The JSON message is passed verbatim to this function. The protocol resolved
+// from the action sent with the original request was packaged into this RPC
+// so we can just unpackage it here, redirect to execute(), and carry on as if
+// this node were the original recipient.
+//
+// TODO: Update the above reference to execute() if that method's name changes.
 func (m *JrpcMethods) Execute(ctx context.Context, params json.RawMessage) interface{} {
 	var payload string
 	req := new(TxRequest)
@@ -35,26 +44,38 @@ func (m *JrpcMethods) ExecuteCreateIdentity(ctx context.Context, params json.Raw
 	return m.executeWith(ctx, params, new(protocol.CreateIdentity))
 }
 
+// This is effectively the entry point of execution on the server side within
+// the accumulate network for transactions sent from a client. The technical
+// entry point is any one of the methods in ./api_gen.go, selected according
+// to an action string sent with the RPC.
+//
+// The JSON message is passed verbatim to this function. The action is
+// resolved to a protocol type which is passed, brand-new and without any
+// data, as the third parameter for this function.
 func (m *JrpcMethods) executeWith(ctx context.Context, params json.RawMessage, payload protocol.TransactionPayload, validateFields ...string) interface{} {
+
+	// Create a transaction request and unpack the raw JSON into its fields.
 	var raw json.RawMessage
-	req := new(TxRequest)
-	req.Payload = &raw
-	err := m.parse(params, req)
+	trxRequest := new(TxRequest)
+	trxRequest.Payload = &raw
+	err := m.parse(params, trxRequest)
 	if err != nil {
 		return err
 	}
 
+	// The transaction request also contains a JSON-ized payload which needs
+	// to be unpacked. Until now payload does not have any data, only a type.
 	err = m.parse(raw, payload, validateFields...)
 	if err != nil {
 		return err
 	}
 
-	b, err := payload.MarshalBinary()
+	binaryData, err := payload.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
 
-	return m.execute(ctx, req, b)
+	return m.execute(ctx, trxRequest, binaryData)
 }
 
 func (m *JrpcMethods) Faucet(ctx context.Context, params json.RawMessage) interface{} {
@@ -105,26 +126,46 @@ type executeRequest struct {
 	done   chan struct{}
 }
 
-// execute either executes the request locally, or dispatches it to another BVC
+// This method determines where a transaction request should be executed:
+//
+// If this node is within the correct BVN for processing this transaction, then
+// the request is handed down to this node's general executor.
+//
+// If this node is NOT within the correct BVN for processing this transaction
+// then the request is kicked back out to JSON-RPC-2 and sent to a node
+// within the appropriate BVN with the "execute" action. Processing resumes
+// on the remote node at Execute().
+//
+// SUGGEST: Having two methods with basically-identical names is confusing.
+// This one should be renamed to avoid conflict with Execute. Perhaps something
+// like route() ?
 func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byte) interface{} {
-	// Route the request
-	i := int(req.Origin.Routing() % uint64(len(m.opts.Remote)))
-	if i == m.localIndex {
-		// We have a local node and the routing number is local, so process the
-		// request and broadcast it locally
+
+	// This node may not be within the correct BVN for processing this
+	// transaction. First we have to determine where it is actually
+	// supposed to go.
+	destinationIndex := int(req.Origin.Routing() % uint64(len(m.opts.Remote)))
+	if destinationIndex == m.localIndex {
+		// This node is within the correct BVN, so execute this
+		// transaction here.
 		return m.executeLocal(ctx, req, payload)
 	}
 
-	// Prepare the request for dispatch to a remote BVC
+	// At this point we know that this request needs to be sent to a
+	// different BVN, so we'll package it up and send it there.
+
+	// Prepare the request for dispatch to a remote BVN
 	var err error
 	req.Payload = hex.EncodeToString(payload)
 	ex := new(executeRequest)
-	ex.remote = i
+	ex.remote = destinationIndex
 	ex.params, err = req.MarshalJSON()
 	if err != nil {
 		return accumulateError(err)
 	}
 	ex.done = make(chan struct{})
+
+	// TODO: All this batching stuff is apparently going bye-bye.
 
 	// Either send the request to the active dispatcher, or start a new
 	// dispatcher
@@ -156,26 +197,30 @@ func (m *JrpcMethods) execute(ctx context.Context, req *TxRequest, payload []byt
 	}
 }
 
-// executeLocal constructs a TX, broadcasts it to the local node, and waits for
-// results.
+// SUGGEST: This method's name is very similar to Execute() and execute(), and
+// this method doesn't actually execute the transaction: the executors do. To
+// avoid confusion this method should be renamed. Perhaps "broadcastLocally" ?
 func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload []byte) interface{} {
 
-	// Build the TX
-	tx := new(transactions.Envelope)
-	tx.Transaction = new(transactions.Transaction)
-	tx.Transaction.Body = payload
-	tx.Transaction.Origin = req.Origin
-	tx.Transaction.Nonce = req.Signer.Nonce
-	tx.Transaction.KeyPageHeight = req.KeyPage.Height
-	tx.Transaction.KeyPageIndex = req.KeyPage.Index
+	// Reconstruct the transaction from the request.
+	trxEnvelope := new(transactions.Envelope)
+	trxEnvelope.Transaction = new(transactions.Transaction)
+	trxEnvelope.Transaction.Body = payload
+	trxEnvelope.Transaction.Origin = req.Origin
+	trxEnvelope.Transaction.Nonce = req.Signer.Nonce
+	trxEnvelope.Transaction.KeyPageHeight = req.KeyPage.Height
+	trxEnvelope.Transaction.KeyPageIndex = req.KeyPage.Index
 
-	ed := new(transactions.ED25519Sig)
-	ed.Nonce = req.Signer.Nonce
-	ed.PublicKey = req.Signer.PublicKey
-	ed.Signature = req.Signature
-	tx.Signatures = append(tx.Signatures, ed)
+	// We create a new signing mechanism here not because we want it to sign
+	// anything, but so we can use it as a vehicle for this transaction's
+	// signature data.
+	signingMechanism := new(transactions.ED25519Sig)
+	signingMechanism.Nonce = req.Signer.Nonce
+	signingMechanism.PublicKey = req.Signer.PublicKey
+	signingMechanism.Signature = req.Signature
+	trxEnvelope.Signatures = append(trxEnvelope.Signatures, signingMechanism)
 
-	txb, err := tx.MarshalBinary()
+	evelopeBinary, err := trxEnvelope.MarshalBinary()
 	if err != nil {
 		return accumulateError(err)
 	}
@@ -184,39 +229,49 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 	// BroadcastTxSync return different types, and the latter does not have any
 	// methods, so they have to be handled separately.
 
+	// QUERY: Why did we use a switch here and not a simple if/else? What other
+	// case might there be?
+
 	var code uint64
 	var mempool, log string
 	var data []byte
 	switch {
 	case req.CheckOnly:
-		// Check the TX
-		r, err := m.opts.Local.CheckTx(ctx, txb)
+		// Check the transaction to see if it would succeed, but don't actually
+		// execute it. CheckOnly is an option sent from the client with the
+		// original transaction request.
+		tMintResult, err := m.opts.Local.CheckTx(ctx, evelopeBinary)
 		if err != nil {
 			return accumulateError(err)
 		}
 
-		code = uint64(r.Code)
-		mempool = r.MempoolError
-		log = r.Log
-		data = r.Data
+		code = uint64(tMintResult.Code)
+		mempool = tMintResult.MempoolError
+		log = tMintResult.Log
+		data = tMintResult.Data
 
 	default:
-		// Broadcast the TX
-		r, err := m.opts.Local.BroadcastTxSync(ctx, txb)
+		// Hand off the transaction to the local Tendermint client, which will
+		// then broadcast the transaction to all nodes within the local BVN
+		// (including this node) for validation, consensus, and execution.
+		// Execution resumes, on each node in the local BVN, at
+		// /internal/abci/accumulator.go. For details on how this takes place
+		// see step 11 in /docs/developer/Transaction_Trace.md.
+		tMintResult, err := m.opts.Local.BroadcastTxSync(ctx, evelopeBinary)
 		if err != nil {
 			return accumulateError(err)
 		}
 
-		code = uint64(r.Code)
-		mempool = r.MempoolError
-		log = r.Log
-		data = r.Data
+		code = uint64(tMintResult.Code)
+		mempool = tMintResult.MempoolError
+		log = tMintResult.Log
+		data = tMintResult.Data
 	}
 
-	res := new(TxResponse)
-	res.Code = code
-	res.Txid = tx.Transaction.Hash()
-	res.Hash = sha256.Sum256(txb)
+	response := new(TxResponse)
+	response.Code = code
+	response.Txid = trxEnvelope.Transaction.Hash()
+	response.Hash = sha256.Sum256(evelopeBinary)
 
 	var results []protocol.TransactionResult
 	for len(data) > 0 {
@@ -233,24 +288,24 @@ func (m *JrpcMethods) executeLocal(ctx context.Context, req *TxRequest, payload 
 	}
 
 	if len(results) == 1 {
-		res.Result = results[0]
+		response.Result = results[0]
 	} else if len(results) > 0 {
-		res.Result = results
+		response.Result = results
 	}
 
 	// Check for errors
 	switch {
 	case len(mempool) > 0:
-		res.Message = mempool
-		return res
+		response.Message = mempool
+		return response
 	case len(log) > 0:
-		res.Message = log
-		return res
+		response.Message = log
+		return response
 	case code != 0:
-		res.Message = "An unknown error occured"
-		return res
+		response.Message = "An unknown error occured"
+		return response
 	default:
-		return res
+		return response
 	}
 }
 

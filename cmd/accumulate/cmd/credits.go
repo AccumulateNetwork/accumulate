@@ -42,7 +42,7 @@ func AddCredits(origin string, args []string) (string, error) {
 
 	// Resolve the first user-supplied argument to a lite account or
 	// ADI key page, which is indicated by a URL.
-	origin_url, err := url2.Parse(origin)
+	originURL, err := url2.Parse(origin)
 	if err != nil {
 		// The first argument could not be resolved to a usable URL.
 		PrintCredits()
@@ -51,32 +51,42 @@ func AddCredits(origin string, args []string) (string, error) {
 
 	// Resolve the remaining user-supplied arguments to a valid target
 	// lite account or ADI key page.
-	args, si, privKey, err := prepareSigner(origin_url, args)
+	// Note that the args used to do this are removed from the arg list.
+	args, trxHeader, privKey, err := prepareSigner(originURL, args)
 	if err != nil {
 		return "", err
 	}
 
+	// Check how many args were NOT used by prepareSigner() to resolve a
+	// signing key. There must be at least two: a target and an amount.
 	if len(args) < 2 {
 		return "", err
 	}
 
-	u2, err := url2.Parse(args[0])
+	// The target must be specified by a URL in a single arg.
+	targetURL, err := url2.Parse(args[0])
 	if err != nil {
 		return "", err
 	}
 
-	amt, err := strconv.ParseInt(args[1], 10, 64)
+	// Read the amount of credits for this transaction.
+	amount, err := strconv.ParseInt(args[1], 10, 64)
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}
 
-	credits := protocol.AddCredits{}
-	credits.Recipient = u2.String()
-	credits.Amount = uint64(amt * protocol.CreditPrecision)
+	payload := protocol.AddCredits{}
+	payload.Recipient = targetURL.String()
+	payload.Amount = uint64(amount * protocol.CreditPrecision)
 
-	res, err := dispatchTxRequest("add-credits", &credits, origin_url, si, privKey)
+	// Send the transaction request.
+	res, err := dispatchTxRequest("add-credits", &payload, originURL, trxHeader, privKey)
 	if err != nil {
 		return "", err
 	}
+
+	// Return the response from transaction execution.
+	// SUGGEST: Print() doesn't actually print anything to system output,
+	// it returns a String. Consider renaming.
 	return ActionResponseFrom(res).Print()
 }
