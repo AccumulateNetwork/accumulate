@@ -11,6 +11,7 @@ import (
 	"math"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
@@ -459,20 +460,22 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
-	t := protocol.TokenIssuer{}
-	err = json.Unmarshal([]byte(tokenData), &t)
+	tokenValues := strings.Split(tokenData, ":")
+	values := strings.Split(tokenValues[4], "\n")
+	symbols := strings.Split(tokenValues[3], "\n")
+	precision, err := strconv.ParseFloat(strings.Trim(values[0], "\t"), 32)
 	if err != nil {
 		return "", err
 	}
 
 	bf := big.Float{}
 	bd := big.Float{}
-	bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
+	bd.SetFloat64(math.Pow(10.0, precision))
 	bf.SetInt(amount)
 	bal := big.Float{}
 	bal.Quo(&bf, &bd)
 
-	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
+	return fmt.Sprintf("%s %s", bal.String(), symbols[0]), nil
 }
 
 func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
