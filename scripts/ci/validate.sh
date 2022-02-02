@@ -225,9 +225,9 @@ success
 section "Signing the transaction after it has been delivered fails"
 cli-tx-env tx sign keytest/tokens keytest-1-2 $TXID && die "Signed the transaction after it was delivered" || success
 
-section "Bug AC-551"
-api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value 1> /dev/null
-success
+# section "Bug AC-551"
+# api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value 1> /dev/null
+# success
 
 section "API v2 faucet (AC-570)"
 BEFORE=$(accumulate -j account get ${LITE} | jq -r .data.balance)
