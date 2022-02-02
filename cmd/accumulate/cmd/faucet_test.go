@@ -23,7 +23,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 	for i := range liteAccounts {
 		bal, err := testGetBalance(t, tc, liteAccounts[i])
 		if err == nil {
-			beenFauceted[i] = bal == "10000000000"
+			beenFauceted[i] = bal == "90000000000"
 			continue
 		}
 
@@ -58,7 +58,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		require.NoError(t, json.Unmarshal(*res.Data, &acc), "received error on liteAccount[%d] %s ", i, liteAccounts[i])
 
 		if !beenFauceted[i] {
-			require.Equal(t, "19000000000", acc.Balance.String(),
+			require.Equal(t, "10000000000", acc.Balance.String(),
 				"balance does not match not expected for account %s", liteAccounts[i])
 		}
 	}
