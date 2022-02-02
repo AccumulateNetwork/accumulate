@@ -17,6 +17,7 @@ var tokenCmd = &cobra.Command{
 var tokenCmdGet = &cobra.Command{
 	Use:   "get [url]",
 	Short: "get token by URL",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		out, err := GetToken(args[0])
 		printOutput(cmd, out, err)
@@ -26,6 +27,7 @@ var tokenCmdGet = &cobra.Command{
 var tokenCmdCreate = &cobra.Command{
 	Use:   "create [origin adi or lite url] [adi signer key name (if applicable)] [token url] [symbol] [precision (0 - 18)] [properties URL (optional)]",
 	Short: "Create new token",
+	Args:  cobra.MinimumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
@@ -79,7 +81,6 @@ func GetToken(url string) (string, error) {
 	}
 
 	return PrintChainQueryResponseV2(res)
-
 }
 
 func CreateToken(origin string, args []string) (string, error) {
@@ -155,7 +156,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	//query the token prescision and reformat amount argument into a bigInt.
+	//query the token precision and reformat amount argument into a bigInt.
 	amt, err := amountToBigInt(originUrl.String(), args[1])
 	if err != nil {
 		return "", err
