@@ -23,7 +23,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 	for i := range liteAccounts {
 		bal, err := testGetBalance(t, tc, liteAccounts[i])
 		if err == nil {
-			beenFauceted[i] = bal == "1000000000"
+			beenFauceted[i] = bal == "10000000000"
 			continue
 		}
 

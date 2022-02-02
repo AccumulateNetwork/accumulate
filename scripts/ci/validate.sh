@@ -229,7 +229,7 @@ section "Bug AC-551"
 api-v2 '{"jsonrpc": "2.0", "id": 4, "method": "metrics", "params": {"metric": "tps", "duration": "1h"}}' | jq -e .result.data.value 1> /dev/null
 success
 
-section "API v2 faucet (AC-570)"
+section "API v2 faucet (AC-faucet570)"
 BEFORE=$(accumulate -j account get ${LITE} | jq -r .data.balance)
 wait-for api-tx '{"jsonrpc": "2.0", "id": 4, "method": "faucet", "params": {"url": "'${LITE}'"}}'
 AFTER=$(accumulate -j account get ${LITE} | jq -r .data.balance)
