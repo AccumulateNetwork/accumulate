@@ -58,7 +58,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		require.NoError(t, json.Unmarshal(*res.Data, &acc), "received error on liteAccount[%d] %s ", i, liteAccounts[i])
 
 		if !beenFauceted[i] {
-			require.Equal(t, "1000000000", acc.Balance.String(),
+			require.Equal(t, "10000000000", acc.Balance.String(),
 				"balance does not match not expected for account %s", liteAccounts[i])
 		}
 	}
