@@ -453,6 +453,29 @@ var (
 	}
 )
 
+func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
+	//query the token
+	tokenData, err := Get(tokenUrl)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving token url, %v", err)
+	}
+	t := protocol.TokenIssuer{}
+	err = json.Unmarshal([]byte(tokenData), &t)
+	if err != nil {
+		return nil, err
+	}
+
+	amt, b := big.NewFloat(0).SetPrec(128).SetString(amount)
+	if b {
+		return nil, fmt.Errorf("invalid amount %s", amount)
+	}
+	oneToken := big.NewFloat(1).SetPrec(128)
+	oneToken.SetMantExp(oneToken, int(t.Precision))
+	amt.Mul(amt, oneToken)
+	iAmt, _ := amt.Int(big.NewInt(0))
+	return iAmt, nil
+}
+
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	//query the token
 	tokenData, err := Get(tokenUrl)
