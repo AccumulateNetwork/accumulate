@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 // ChainTypeUnknown is used when the chain type is not known.

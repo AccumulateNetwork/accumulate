@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/dustin/go-humanize"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 func GetHash(i int) Hash {

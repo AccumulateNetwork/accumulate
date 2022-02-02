@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	api2 "github.com/AccumulateNetwork/accumulate/types/api"
-	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	api2 "gitlab.com/accumulatenetwork/accumulate/types/api"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/response"
 )
 
 func init() {
