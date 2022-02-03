@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 func TestMerkleState_Equal(t *testing.T) {

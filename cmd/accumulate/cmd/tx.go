@@ -6,16 +6,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"strconv"
 	"time"
 
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/spf13/cobra"
+	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -97,7 +96,7 @@ func PrintTXGet() {
 func PrintTXPendingGet() {
 	fmt.Println("  accumulate tx pending [txid]			Get token transaction by txid")
 	fmt.Println("  accumulate tx pending [height]			Get token transaction by block height")
-	fmt.Println("  accumulate tx pending [starting transaction number]	[ending transaction number]		Get token transaction by block height")
+	fmt.Println("  accumulate tx pending [starting transaction number]	[ending transaction number]		Get token transaction by beginning and ending height")
 }
 
 func PrintTXCreate() {
@@ -333,20 +332,25 @@ func CreateTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
 
+	tokenUrl, err := GetTokenUrlFromAccount(u)
+	if err != nil {
+		return "", fmt.Errorf("invalid token url was obtained from %s, %v", u.String(), err)
+	}
+
 	u2, err := url.Parse(args[0])
 	if err != nil {
 		return "", fmt.Errorf("invalid receiver url %s, %v", args[0], err)
 	}
 
 	amount := args[1]
-	amt, err := strconv.ParseFloat(amount, 64)
+	send := new(protocol.SendTokens)
+
+	amt, err := amountToBigInt(tokenUrl.String(), amount)
 	if err != nil {
-		return "", fmt.Errorf("invalid amount %q: %v", amount, err)
+		return "", err
 	}
 
-	// TODO Fetch the precision instead of hard-coding it
-	send := new(protocol.SendTokens)
-	send.AddRecipient(u2, big.NewInt(int64(amt*protocol.AcmePrecision)))
+	send.AddRecipient(u2, amt)
 
 	res, err := dispatchTxRequest("send-tokens", send, nil, u, si, pk)
 	if err != nil {

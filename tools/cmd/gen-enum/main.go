@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 	"gopkg.in/yaml.v3"
 )
 
@@ -19,13 +19,13 @@ var flags struct {
 
 func main() {
 	cmd := cobra.Command{
-		Use:  "gentypes [file]",
+		Use:  "gen-enum [file]",
 		Args: cobra.ExactArgs(1),
 		Run:  run,
 	}
 
+	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
-	cmd.Flags().StringVar(&flags.Language, "language", "go", "go or c")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 
 	_ = cmd.Execute()
@@ -66,17 +66,22 @@ func readTypes(file string) map[string]typegen.Type {
 func run(_ *cobra.Command, args []string) {
 	types := readTypes(args[0])
 	ttypes := convert(types, flags.Package)
-	switch flags.Language {
-	case "go":
-		w := new(bytes.Buffer)
-		check(Go.Execute(w, ttypes))
-		check(typegen.GoFmt(flags.Out, w))
-	case "c":
-		w := new(bytes.Buffer)
-		check(C.Execute(w, ttypes))
-		f, err := os.Create(flags.Out)
-		check(err)
-		f.WriteString(w.String())
-		f.Close()
-	}
+
+	w := new(bytes.Buffer)
+	check(Templates.Execute(w, flags.Language, ttypes))
+	check(typegen.WriteFile(flags.Language, flags.Out, w))
+	/////from me
+	//switch flags.Language {
+	//case "go":
+	//	w := new(bytes.Buffer)
+	//	check(Go.Execute(w, ttypes))
+	//	check(typegen.GoFmt(flags.Out, w))
+	//case "c":
+	//	w := new(bytes.Buffer)
+	//	check(C.Execute(w, ttypes))
+	//	f, err := os.Create(flags.Out)
+	//	check(err)
+	//	f.WriteString(w.String())
+	//	f.Close()
+	//}
 }

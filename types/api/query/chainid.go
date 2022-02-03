@@ -3,8 +3,8 @@ package query
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 type RequestByChainId struct {

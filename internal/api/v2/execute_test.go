@@ -4,13 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	. "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/routing"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	core "github.com/tendermint/tendermint/rpc/core/types"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 func TestExecuteCheckOnly(t *testing.T) {

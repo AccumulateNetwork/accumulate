@@ -7,15 +7,15 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/indexing"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/indexing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // CheckTx implements ./abci.Chain

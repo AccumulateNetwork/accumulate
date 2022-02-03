@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/go-playground/validator/v10"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // ChainType is the type of a chain belonging to an account.
@@ -38,11 +38,12 @@ func (t TransactionType) IsInternal() bool {
 	return TransactionMaxSynthetic.ID() < t.ID() && t.ID() <= TransactionMaxInternal.ID()
 }
 
-//go:generate go run ../tools/cmd/gentypes accounts.yml general.yml internal.yml query.yml transactions.yml
-//go:generate go run ../tools/cmd/gentypes2 --out enums_gen.go enums.yml
+//go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml
+//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml
 
-///go:generate go run ../tools/cmd/gentypes accounts.yml general.yml internal.yml query.yml transactions.yml --out ../export/c --language c
-///go:generate go run ../tools/cmd/gentypes2 --out enums_gen.go enums.yml --out ../export/c --language c
+///intentionally disabled for now
+///go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml --out ../export/sdk/c --language c
+///go:generate go run ../tools/cmd/gen-enum enums.yml --out ../export/sdk/c --language c
 
 func NewValidator() (*validator.Validate, error) {
 	v := validator.New()

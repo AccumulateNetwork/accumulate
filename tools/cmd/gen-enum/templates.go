@@ -8,7 +8,7 @@ import (
 	"text/template"
 	"unicode"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
 type Types struct {
@@ -26,6 +26,11 @@ type TypeValue struct {
 	typegen.TypeValue
 }
 
+var Templates = typegen.NewTemplateLibrary(template.FuncMap{
+	"lower":   lower,
+	"natural": natural,
+})
+
 func convert(types map[string]typegen.Type, pkgName string) *Types {
 	ttypes := make([]*Type, 0, len(types))
 
@@ -41,6 +46,11 @@ func convert(types map[string]typegen.Type, pkgName string) *Types {
 			tval.TypeValue = *val
 		}
 		sort.Slice(ttyp.Values, func(i, j int) bool {
+			v1, ok1 := ttyp.Values[i].Value.(int)
+			v2, ok2 := ttyp.Values[j].Value.(int)
+			if ok1 && ok2 {
+				return v1 < v2
+			}
 			return strings.Compare(fmt.Sprint(ttyp.Values[i].Value), fmt.Sprint(ttyp.Values[j].Value)) < 0
 		})
 	}
@@ -83,17 +93,4 @@ func natural(name string) string {
 
 	w.WriteString(name)
 	return w.String()
-}
-
-func mustParseTemplate(name, src string, funcs template.FuncMap) *template.Template {
-	tmpl := template.New(name).Funcs(template.FuncMap{
-		"lower":   lower,
-		"natural": natural,
-	})
-	if funcs != nil {
-		tmpl = tmpl.Funcs(funcs)
-	}
-	tmpl, err := tmpl.Parse(src)
-	checkf(err, "bad template")
-	return tmpl
 }

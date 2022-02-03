@@ -10,28 +10,33 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 	"gopkg.in/yaml.v3"
 )
 
 var flags struct {
 	Package  string
-	Language string
 	Out      string
-	IsState  bool
+	Language string
+	Include  []string
+	Exclude  []string
+	Rename   []string
 }
 
 func main() {
 	cmd := cobra.Command{
-		Use:  "gentypes [file]",
+		Use:  "gen-types [file]",
 		Args: cobra.MinimumNArgs(1),
 		Run:  run,
 	}
 
+	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
-	cmd.Flags().StringVar(&flags.Language, "language", "go", "go or c")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
+	cmd.Flags().StringSliceVarP(&flags.Include, "include", "i", nil, "Include only specific types")
+	cmd.Flags().StringSliceVarP(&flags.Exclude, "exclude", "x", nil, "Exclude specific types")
+	cmd.Flags().StringSliceVar(&flags.Rename, "rename", nil, "Rename types, e.g. 'Object:AccObject'")
 
 	_ = cmd.Execute()
 }
@@ -71,6 +76,41 @@ func readTypes(files []string) typegen.DataTypes {
 			}
 			allTypes[name] = typ
 		}
+	}
+
+	if flags.Include != nil {
+		included := map[string]*typegen.DataType{}
+		for _, name := range flags.Include {
+			typ, ok := allTypes[name]
+			if !ok {
+				fatalf("%q is not a type", name)
+			}
+			included[name] = typ
+		}
+		allTypes = included
+	}
+
+	for _, name := range flags.Exclude {
+		_, ok := allTypes[name]
+		if !ok {
+			fatalf("%q is not a type", name)
+		}
+		delete(allTypes, name)
+	}
+
+	for _, spec := range flags.Rename {
+		bits := strings.Split(spec, ":")
+		if len(bits) != 2 {
+			fatalf("invalid rename: want 'X:Y', got '%s'", spec)
+		}
+
+		from, to := bits[0], bits[1]
+		typ, ok := allTypes[from]
+		if !ok {
+			fatalf("%q is not a type", from)
+		}
+		delete(allTypes, from)
+		allTypes[to] = typ
 	}
 
 	return typegen.DataTypesFrom(allTypes)
@@ -117,41 +157,44 @@ func run(_ *cobra.Command, args []string) {
 	ttypes, err := convert(types, flags.Package, getPackagePath())
 	check(err)
 
-	switch flags.Language {
-	case "go":
-		w := new(bytes.Buffer)
-		check(Go.Execute(w, ttypes))
-		check(typegen.GoFmt(flags.Out, w))
-	case "c":
-		cw := new(bytes.Buffer)
-		check(CH.Execute(cw, ttypes))
-		cc := new(bytes.Buffer)
-		check(C.Execute(cc, ttypes))
-
-		ext := filepath.Ext(flags.Out)
-		basepath := flags.Out
-		if ext == ".h" || ext == ".c" {
-			basepath = strings.TrimSuffix(basepath, ext)
-		}
-		header := basepath + ".h"
-		source := basepath + ".c"
-
-		sh := cleanupWhitespace(cw.String())
-		sc := cleanupWhitespace(cc.String())
-
-		f, err := os.Create(header)
-		check(err)
-		f.WriteString(sh)
-		f.Close()
-
-		f, err = os.Create(source)
-		check(err)
-		fmt.Fprintf(f, "#include \"%s\"\n", header)
-		f.WriteString(sc)
-		f.Close()
-
-	default:
-		fmt.Printf("Unsupported language %s", flags.Language)
-	}
+	w := new(bytes.Buffer)
+	check(Templates.Execute(w, flags.Language, ttypes))
+	check(typegen.WriteFile(flags.Language, flags.Out, w))
+	//switch flags.Language {
+	//case "go":
+	//	w := new(bytes.Buffer)
+	//	check(Go.Execute(w, ttypes))
+	//	check(typegen.GoFmt(flags.Out, w))
+	//case "c":
+	//	cw := new(bytes.Buffer)
+	//	check(CH.Execute(cw, ttypes))
+	//	cc := new(bytes.Buffer)
+	//	check(C.Execute(cc, ttypes))
+	//
+	//	ext := filepath.Ext(flags.Out)
+	//	basepath := flags.Out
+	//	if ext == ".h" || ext == ".c" {
+	//		basepath = strings.TrimSuffix(basepath, ext)
+	//	}
+	//	header := basepath + ".h"
+	//	source := basepath + ".c"
+	//
+	//	sh := cleanupWhitespace(cw.String())
+	//	sc := cleanupWhitespace(cc.String())
+	//
+	//	f, err := os.Create(header)
+	//	check(err)
+	//	f.WriteString(sh)
+	//	f.Close()
+	//
+	//	f, err = os.Create(source)
+	//	check(err)
+	//	fmt.Fprintf(f, "#include \"%s\"\n", header)
+	//	f.WriteString(sc)
+	//	f.Close()
+	//
+	//default:
+	//	fmt.Printf("Unsupported language %s", flags.Language)
+	//}
 
 }
