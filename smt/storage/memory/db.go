@@ -6,10 +6,10 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/batch"
-	"github.com/AccumulateNetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/batch"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 // DB

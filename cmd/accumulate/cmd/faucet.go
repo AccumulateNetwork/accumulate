@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/spf13/cobra"
+	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // faucetCmd represents the faucet command

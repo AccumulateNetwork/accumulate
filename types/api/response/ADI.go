@@ -1,7 +1,7 @@
 package response
 
 import (
-	"github.com/AccumulateNetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type ADI struct {

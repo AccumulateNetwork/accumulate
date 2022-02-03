@@ -1,6 +1,6 @@
 package protocol
 
-import "github.com/AccumulateNetwork/accumulate/smt/managed"
+import "gitlab.com/accumulatenetwork/accumulate/smt/managed"
 
 func (r *Receipt) Convert() *managed.Receipt {
 	m := new(managed.Receipt)

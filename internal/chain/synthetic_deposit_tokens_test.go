@@ -3,13 +3,13 @@ package chain_test
 import (
 	"testing"
 
-	. "github.com/AccumulateNetwork/accumulate/internal/chain"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	testing2 "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/stretchr/testify/require"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	testing2 "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func TestSynthTokenDeposit_Lite(t *testing.T) {

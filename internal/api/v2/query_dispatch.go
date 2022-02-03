@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 type queryDispatch struct {
