@@ -2,11 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"github.com/AccumulateNetwork/accumulate/types"
 	"strconv"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/accumulate/protocol"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"github.com/spf13/cobra"
 )
 
