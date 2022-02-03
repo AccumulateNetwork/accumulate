@@ -52,7 +52,7 @@ func AddCredits(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	amt, err := strconv.ParseInt(args[1], 10, 64)
+	amt, err := strconv.ParseFloat(args[1], 64)
 	if err != nil {
 		return "", fmt.Errorf("amount must be an integer %v", err)
 	}

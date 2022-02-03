@@ -172,7 +172,7 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	params.Recipient = recipient.String()
 	params.Amount.Set(amt)
 
-	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, si, privKey)
+	res, err := dispatchTxRequest("issue-tokens", &params, nil, originUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}

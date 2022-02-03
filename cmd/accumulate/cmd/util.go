@@ -624,6 +624,7 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		cred := big.NewFloat(0).SetInt(&ata.CreditBalance)
+		cred.Mul(cred, big.NewFloat(0.01))
 
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
@@ -685,6 +686,8 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		}
 
 		cred := big.NewFloat(0).SetInt(&ss.CreditBalance)
+		cred.Mul(cred, big.NewFloat(0.01))
+
 		out := fmt.Sprintf("\n\tCredit Balance\t:\t%s\n", cred.Text('f', 2))
 		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
