@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	accurl "github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/pelletier/go-toml"
 	"github.com/spf13/viper"
 	tm "github.com/tendermint/tendermint/config"
+	accurl "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type NetworkType string

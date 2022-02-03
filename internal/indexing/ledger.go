@@ -1,9 +1,9 @@
 package indexing
 
 import (
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // BlockStateIndexer tracks transient state for a block.

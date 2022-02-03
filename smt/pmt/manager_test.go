@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 var _ = PrintNode // Avoids highlighting that PrintNode isn't used.  It is useful for debugging.

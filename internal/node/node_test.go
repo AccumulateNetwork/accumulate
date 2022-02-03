@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
 func TestNodeLifecycle(t *testing.T) {

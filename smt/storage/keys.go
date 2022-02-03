@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 const (

@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
 type Program struct {

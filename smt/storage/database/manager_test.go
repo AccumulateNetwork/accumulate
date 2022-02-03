@@ -10,9 +10,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 	"golang.org/x/exp/rand"
 )
 

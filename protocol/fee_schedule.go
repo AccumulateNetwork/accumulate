@@ -3,8 +3,8 @@ package protocol
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // Fee is the unit cost of a transaction.

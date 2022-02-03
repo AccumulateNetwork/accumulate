@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	. "github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/stretchr/testify/require"
+	. "gitlab.com/accumulatenetwork/accumulate/internal/url"
 	"golang.org/x/exp/rand"
 )
 

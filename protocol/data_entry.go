@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
 )
 
 // ComputeEntryHash

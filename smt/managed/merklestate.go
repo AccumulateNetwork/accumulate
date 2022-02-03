@@ -5,8 +5,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
-	"github.com/AccumulateNetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
 )
 
 // MerkleState
