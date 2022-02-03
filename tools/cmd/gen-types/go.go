@@ -7,12 +7,11 @@ import (
 	"text/template"
 )
 
-//go:embed go.tmpl
+//go:embed go.go.tmpl
 var goSrc string
 
-var Go = mustParseTemplate("go.tmpl", goSrc, template.FuncMap{
+var _ = Templates.Register(goSrc, "go", template.FuncMap{
 	"isPkg":       func(s string) bool { return s == PackagePath },
-	"lcName":      lcName,
 	"resolveType": GoResolveType,
 
 	"jsonType": func(field *Field) string {
@@ -69,7 +68,7 @@ var Go = mustParseTemplate("go.tmpl", goSrc, template.FuncMap{
 		}
 		return fmt.Sprintf(` validate:"%s"`, strings.Join(flags, ","))
 	},
-})
+}, "Go")
 
 func GoMethodName(typ, name string) string {
 	return "encoding." + strings.Title(typ) + name

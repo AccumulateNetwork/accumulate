@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type UpdateKeyPage struct{}

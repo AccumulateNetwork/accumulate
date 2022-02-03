@@ -3,12 +3,13 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	api2 "github.com/AccumulateNetwork/accumulate/types/api"
-	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	api2 "gitlab.com/accumulatenetwork/accumulate/types/api"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/response"
 )
 
 func init() {
@@ -23,7 +24,9 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 	for i := range liteAccounts {
 		bal, err := testGetBalance(t, tc, liteAccounts[i])
 		if err == nil {
-			beenFauceted[i] = bal == "1000000000"
+			balance, err := strconv.Atoi(bal)
+			require.NoError(t, err)
+			beenFauceted[i] = balance > 0
 			continue
 		}
 
@@ -58,7 +61,7 @@ func testCase5_1(t *testing.T, tc *testCmd) {
 		require.NoError(t, json.Unmarshal(*res.Data, &acc), "received error on liteAccount[%d] %s ", i, liteAccounts[i])
 
 		if !beenFauceted[i] {
-			require.Equal(t, "1000000000", acc.Balance.String(),
+			require.Equal(t, "10000000000", acc.Balance.String(),
 				"balance does not match not expected for account %s", liteAccounts[i])
 		}
 	}

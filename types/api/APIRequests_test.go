@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	. "github.com/AccumulateNetwork/accumulate/types/api"
 	"github.com/mitchellh/mapstructure"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	. "gitlab.com/accumulatenetwork/accumulate/types/api"
 )
 
 func createAdiTx(adiUrl string, pubkey []byte) (string, error) {

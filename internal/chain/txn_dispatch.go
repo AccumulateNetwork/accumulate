@@ -5,11 +5,11 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	jrpc "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 	tm "github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 type txBatch []byte

@@ -3,8 +3,8 @@ package abci_test
 import (
 	"crypto/ed25519"
 
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 func generateKey() tmed25519.PrivKey {

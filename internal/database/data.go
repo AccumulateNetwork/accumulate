@@ -3,7 +3,7 @@ package database
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Data manages a data chain.

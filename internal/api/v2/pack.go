@@ -3,8 +3,8 @@ package api
 import (
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func packStateResponse(obj *state.Object, chain state.Chain) (*ChainQueryResponse, error) {

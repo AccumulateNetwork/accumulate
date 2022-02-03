@@ -3,7 +3,7 @@ package database
 import (
 	"encoding"
 
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Value reads and writes a value.

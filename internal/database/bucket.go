@@ -1,8 +1,8 @@
 package database
 
 import (
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // objectBucket is a database bucket for some object.

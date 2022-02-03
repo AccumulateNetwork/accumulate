@@ -9,12 +9,12 @@ import (
 	"math"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/tendermint/tendermint/rpc/client"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 type queryDirect struct {

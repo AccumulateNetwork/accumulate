@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
 var PackagePath string
@@ -112,21 +112,16 @@ func lcName(s string) string {
 	return strings.ToLower(s[:1]) + s[1:]
 }
 
-func mustParseTemplate(name, src string, funcs template.FuncMap) *template.Template {
-	tmpl := template.New(name).Funcs(template.FuncMap{
-		"map": func(v ...interface{}) map[string]interface{} {
-			m := make(map[string]interface{}, len(v)/2)
-			for len(v) > 1 {
-				m[fmt.Sprint(v[0])] = v[1]
-				v = v[2:]
-			}
-			return m
-		},
-	})
-	if funcs != nil {
-		tmpl = tmpl.Funcs(funcs)
+func makeMap(v ...interface{}) map[string]interface{} {
+	m := make(map[string]interface{}, len(v)/2)
+	for len(v) > 1 {
+		m[fmt.Sprint(v[0])] = v[1]
+		v = v[2:]
 	}
-	tmpl, err := tmpl.Parse(src)
-	checkf(err, "bad template")
-	return tmpl
+	return m
 }
+
+var Templates = typegen.NewTemplateLibrary(template.FuncMap{
+	"lcName": lcName,
+	"map":    makeMap,
+})
