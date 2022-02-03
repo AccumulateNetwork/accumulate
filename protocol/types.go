@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/go-playground/validator/v10"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // ChainType is the type of a chain belonging to an account.

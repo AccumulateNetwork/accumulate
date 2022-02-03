@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 	"gopkg.in/yaml.v3"
 )
 

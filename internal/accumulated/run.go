@@ -10,15 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate"
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/abci"
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/internal/chain"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/internal/node"
-	"github.com/AccumulateNetwork/accumulate/internal/routing"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/getsentry/sentry-go"
 	"github.com/rs/zerolog"
@@ -26,6 +17,15 @@ import (
 	tmlog "github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/rpc/client/local"
+	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/abci"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/internal/chain"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/internal/node"
+	"gitlab.com/accumulatenetwork/accumulate/internal/routing"
 )
 
 type Daemon struct {
