@@ -47,14 +47,17 @@ var tokenCmdIssue = &cobra.Command{
 	Short: "send tokens from a token url to a recipient",
 	Args:  cobra.MinimumNArgs(4),
 	Run: func(cmd *cobra.Command, args []string) {
-		var out string
-		var err error
-		if len(args) > 1 {
-			out, err = IssueTokenToRecipient(args[0], args[1:])
-		} else {
-			fmt.Println("Usage:")
-			PrintTokenCreate()
-		}
+		out, err := IssueTokenToRecipient(args[0], args[1:])
+		printOutput(cmd, out, err)
+	},
+}
+
+var tokenCmdBurn = &cobra.Command{
+	Use:   "burn [adi or lite token account] [adi signer key name (if applicable)] [amount]",
+	Short: "burn tokens",
+	Args:  cobra.MinimumNArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		out, err := BurnTokens(args[0], args[1:])
 		printOutput(cmd, out, err)
 	},
 }
@@ -63,7 +66,8 @@ func init() {
 	tokenCmd.AddCommand(
 		tokenCmdGet,
 		tokenCmdCreate,
-		tokenCmdIssue)
+		tokenCmdIssue,
+		tokenCmdBurn)
 }
 
 func PrintTokenGet() {
@@ -173,6 +177,43 @@ func IssueTokenToRecipient(origin string, args []string) (string, error) {
 	params.Amount.Set(amt)
 
 	res, err := dispatchTxRequest("issue-tokens", &params, nil, originUrl, si, privKey)
+	if err != nil {
+		return "", err
+	}
+
+	return ActionResponseFrom(res).Print()
+}
+
+func BurnTokens(origin string, args []string) (string, error) {
+	originUrl, err := url2.Parse(origin)
+	if err != nil {
+		return "", err
+	}
+
+	args, si, privKey, err := prepareSigner(originUrl, args)
+	if err != nil {
+		return "", err
+	}
+
+	if len(args) < 1 {
+		return "", fmt.Errorf("amount to burn is not specified")
+	}
+
+	tokenUrl, err := GetTokenUrlFromAccount(originUrl)
+	if err != nil {
+		return "", fmt.Errorf("invalid token url was obtained from %s, %v", originUrl.String(), err)
+	}
+
+	//query the token precision and reformat amount argument into a bigInt.
+	amt, err := amountToBigInt(tokenUrl.String(), args[0])
+	if err != nil {
+		return "", err
+	}
+
+	params := protocol.BurnTokens{}
+	params.Amount.Set(amt)
+
+	res, err := dispatchTxRequest("burn-tokens", &params, nil, originUrl, si, privKey)
 	if err != nil {
 		return "", err
 	}

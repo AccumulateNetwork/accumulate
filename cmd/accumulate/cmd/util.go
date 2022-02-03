@@ -475,6 +475,38 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 	return iAmt, nil
 }
 
+func GetTokenUrlFromAccount(u *url2.URL) (*url2.URL, error) {
+	var err error
+	var tokenUrl *url2.URL
+	if IsLiteAccount(u.String()) {
+		_, tokenUrl, err = protocol.ParseLiteTokenAddress(u)
+		if err != nil {
+			return nil, fmt.Errorf("cannot extract token url from lite token account, %v", err)
+		}
+	} else {
+		res, err := GetUrl(u.String())
+		if err != nil {
+			return nil, err
+		}
+		if res.Type != types.AccountTypeTokenAccount.String() {
+			return nil, fmt.Errorf("expecting token account but received %s", res.Type)
+		}
+		ta := protocol.TokenAccount{}
+		err = Remarshal(res.Data, &ta)
+		if err != nil {
+			return nil, fmt.Errorf("error remarshaling token account, %v", err)
+		}
+		tokenUrl, err = url2.Parse(ta.TokenUrl)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if tokenUrl == nil {
+		return nil, fmt.Errorf("invalid token url was obtained from %s", u.String())
+	}
+	return tokenUrl, nil
+}
+
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	//query the token
 	tokenData, err := Get(tokenUrl)

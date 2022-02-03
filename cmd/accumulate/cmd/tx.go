@@ -332,32 +332,9 @@ func CreateTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
 
-	var tokenUrl *url.URL
-	if IsLiteAccount(u.String()) {
-		_, tokenUrl, err = protocol.ParseLiteTokenAddress(u)
-		if err != nil {
-			return "", fmt.Errorf("cannot extract token url from lite token account, %v", err)
-		}
-	} else {
-		res, err := GetUrl(u.String())
-		if err != nil {
-			return "", err
-		}
-		if res.Type != types.AccountTypeTokenAccount.String() {
-			return "", fmt.Errorf("expecting token account but received %s", res.Type)
-		}
-		ta := protocol.TokenAccount{}
-		err = Remarshal(res.Data, &ta)
-		if err != nil {
-			return "", fmt.Errorf("error remarshaling token account, %v", err)
-		}
-		tokenUrl, err = url.Parse(ta.TokenUrl)
-		if err != nil {
-			return "", err
-		}
-	}
-	if tokenUrl == nil {
-		return "", fmt.Errorf("invalid token url was obtained from %s", u.String())
+	tokenUrl, err := GetTokenUrlFromAccount(u)
+	if err != nil {
+		return "", fmt.Errorf("invalid token url was obtained from %s, %v", u.String(), err)
 	}
 
 	u2, err := url.Parse(args[0])

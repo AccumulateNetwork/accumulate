@@ -275,9 +275,9 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE_TOK} should have at least 100 credits but only has ${BALANCE}"
 
 section "Burn tokens"
-wait-for cli-tx tx execute ${LITE_TOK} '{"type": "burnTokens", "amount": "100"}'
+wait-for cli-tx token burn ${LITE_TOK} 100
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
-[ "$BALANCE" -eq 23 ] && success || die "${LITE_TOK} should have 23 keytest tokens but has ${BALANCE}"
+[ "$BALANCE" -eq 230123456689 ] && success || die "${LITE_TOK} should have 230123456689 keytest tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data --lite keytest keytest-0-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
