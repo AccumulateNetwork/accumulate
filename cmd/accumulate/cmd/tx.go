@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"strconv"
 	"time"
 
@@ -97,7 +96,7 @@ func PrintTXGet() {
 func PrintTXPendingGet() {
 	fmt.Println("  accumulate tx pending [txid]			Get token transaction by txid")
 	fmt.Println("  accumulate tx pending [height]			Get token transaction by block height")
-	fmt.Println("  accumulate tx pending [starting transaction number]	[ending transaction number]		Get token transaction by block height")
+	fmt.Println("  accumulate tx pending [starting transaction number]	[ending transaction number]		Get token transaction by beginning and ending height")
 }
 
 func PrintTXCreate() {
@@ -333,20 +332,25 @@ func CreateTX(sender string, args []string) (string, error) {
 		return "", fmt.Errorf("unable to prepare signer, %v", err)
 	}
 
+	tokenUrl, err := GetTokenUrlFromAccount(u)
+	if err != nil {
+		return "", fmt.Errorf("invalid token url was obtained from %s, %v", u.String(), err)
+	}
+
 	u2, err := url.Parse(args[0])
 	if err != nil {
 		return "", fmt.Errorf("invalid receiver url %s, %v", args[0], err)
 	}
 
 	amount := args[1]
-	amt, err := strconv.ParseFloat(amount, 64)
+	send := new(protocol.SendTokens)
+
+	amt, err := amountToBigInt(tokenUrl.String(), amount)
 	if err != nil {
-		return "", fmt.Errorf("invalid amount %q: %v", amount, err)
+		return "", err
 	}
 
-	// TODO Fetch the precision instead of hard-coding it
-	send := new(protocol.SendTokens)
-	send.AddRecipient(u2, big.NewInt(int64(amt*protocol.AcmePrecision)))
+	send.AddRecipient(u2, amt)
 
 	res, err := dispatchTxRequest("send-tokens", send, nil, u, si, pk)
 	if err != nil {
