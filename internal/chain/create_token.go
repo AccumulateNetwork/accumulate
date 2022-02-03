@@ -49,6 +49,9 @@ func (CreateToken) Validate(st *StateManager, tx *transactions.Envelope) (protoc
 	if body.Properties != "" {
 		token.Properties = body.Properties
 	}
+	if body.Manager != "" {
+		token.ManagerKeyBook = types.String(body.Manager)
+	}
 
 	st.Create(token)
 	return nil, nil

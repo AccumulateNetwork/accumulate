@@ -55,6 +55,9 @@ func (CreateTokenAccount) Validate(st *StateManager, tx *transactions.Envelope) 
 
 		account.KeyBook = types.String(keyBookUrl.String())
 	}
+	if body.Manager != "" {
+		account.ManagerKeyBook = types.String(body.Manager)
+	}
 
 	st.Create(account)
 	return nil, nil

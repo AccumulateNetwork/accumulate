@@ -81,6 +81,9 @@ func (CreateKeyBook) Validate(st *StateManager, tx *transactions.Envelope) (prot
 			return nil, fmt.Errorf("failed to marshal state: %v", err)
 		}
 	}
+	if body.Manager != "" {
+		book.ManagerKeyBook = types.String(body.Manager)
+	}
 
 	err = scc.Create(book)
 	if err != nil {
