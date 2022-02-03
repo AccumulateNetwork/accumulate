@@ -9,23 +9,28 @@ import (
 )
 
 // TransactionType is the type of a transaction.
+// Deprecated: use protocol.TransactionType
 type TransactionType uint64
 
 // TxType is an alias for TransactionType
-// Deprecated: use TransactionType
+// Deprecated: use protocol.TransactionType
 type TxType = TransactionType
 
 const (
 	// TxTypeUnknown represents an unknown transaction type.
+	// Deprecated: use protocol.TransactionTypeUnknown
 	TxTypeUnknown TransactionType = 0x00
 
 	// txMaxUser is the highest number reserved for user transactions.
+	// Deprecated: use protocol.TransactionMaxUser
 	txMaxUser TransactionType = 0x2F
 
 	// txMaxSynthetic is the highest number reserved for synthetic transactions.
+	// Deprecated: use protocol.TransactionaxSynthetic
 	txMaxSynthetic TransactionType = 0x5F
 
 	// txMaxInternal is the highest number reserved for internal transactions.
+	// Deprecated: use protocol.TransactionMaxInternal
 	txMaxInternal TransactionType = 0xFF
 )
 
@@ -33,105 +38,132 @@ const (
 const (
 	// TxTypeCreateIdentity creates an ADI, which produces a synthetic chain
 	// create transaction.
+	// Deprecated: use protocol.TransactionTypeCreateIdentity
 	TxTypeCreateIdentity TransactionType = 0x01
 
 	// TxTypeCreateTokenAccount creates an ADI token account, which produces a
 	// synthetic chain create transaction.
+	// Deprecated: use protocol.TransactionTypeCreateTokenAccount
 	TxTypeCreateTokenAccount TransactionType = 0x02
 
 	// TxTypeSendTokens transfers tokens between token accounts, which produces
 	// a synthetic deposit tokens transaction.
+	// Deprecated: use protocol.TransactionTypeSendTokens
 	TxTypeSendTokens TransactionType = 0x03
 
 	// TxTypeCreateDataAccount creates an ADI Data Account, which produces a
 	// synthetic chain create transaction.
+	// Deprecated: use protocol.TransactionTypeCreateDataAccount
 	TxTypeCreateDataAccount TransactionType = 0x04
 
 	// TxTypeWriteData writes data to an ADI Data Account, which *does not*
 	// produce a synthetic transaction.
+	// Deprecated: use protocol.TransactionTypeWriteData
 	TxTypeWriteData TransactionType = 0x05
 
 	// TxTypeWriteDataTo writes data to a Lite Data Account, which produces a
 	// synthetic write data transaction.
+	// Deprecated: use protocol.TransactionTypeWriteDataTo
 	TxTypeWriteDataTo TransactionType = 0x06
 
 	// TxTypeAcmeFaucet produces a synthetic deposit tokens transaction that
-	// deposits ACME tokens into a lite account.
+	// deposits ACME tokens into a lite token account.
+	// Deprecated: use protocol.TransactionTypeAcmeFaucet
 	TxTypeAcmeFaucet TransactionType = 0x07
 
 	// TxTypeCreateToken creates a token issuer, which produces a synthetic
 	// chain create transaction.
+	// Deprecated: use protocol.TransactionTypeCreateToken
 	TxTypeCreateToken TransactionType = 0x08
 
 	// TxTypeIssueTokens issues tokens to a token account, which produces a
 	// synthetic token deposit transaction.
+	// Deprecated: use protocol.TransactionTypeIssueTokens
 	TxTypeIssueTokens TransactionType = 0x09
 
 	// TxTypeBurnTokens burns tokens from a token account, which produces a
 	// synthetic burn tokens transaction.
+	// Deprecated: use protocol.TransactionTypeBurnTokens
 	TxTypeBurnTokens TransactionType = 0x0A
 
 	// TxTypeCreateKeyPage creates a key page, which produces a synthetic chain
 	// create transaction.
+	// Deprecated: use protocol.TransactionTypeCreateKeyPage
 	TxTypeCreateKeyPage TransactionType = 0x0C
 
 	// TxTypeCreateKeyBook creates a key book, which produces a synthetic chain
 	// create transaction.
+	// Deprecated: use protocol.TransactionTypeCreateKeyBook
 	TxTypeCreateKeyBook TransactionType = 0x0D
 
 	// TxTypeAddCredits converts ACME tokens to credits, which produces a
 	// synthetic deposit credits transaction.
+	// Deprecated: use protocol.TransactionTypeAddCredits
 	TxTypeAddCredits TransactionType = 0x0E
 
 	// TxTypeUpdateKeyPage adds, removes, or updates keys in a key page, which
 	// *does not* produce a synthetic transaction.
+	// Deprecated: use protocol.TransactionTypeUpdateKeyPage
 	TxTypeUpdateKeyPage TransactionType = 0x0F
 
 	// TxTypeSignPending is used to sign a pending transaction.
+	// Deprecated: use protocol.TransactionTypeSignPending
 	TxTypeSignPending TransactionType = 0x30
 )
 
 // Synthetic transactions
 const (
 	// TxTypeSyntheticCreateChain creates or updates chains.
+	// Deprecated: use protocol.TransactionTypeSyntheticCreateChain
 	TxTypeSyntheticCreateChain TransactionType = 0x31
 
 	// TxTypeSyntheticWriteData writes data to a data account.
+	// Deprecated: use protocol.TransactionTypeSyntheticWriteData
 	TxTypeSyntheticWriteData TransactionType = 0x32
 
 	// TxTypeSyntheticDepositTokens deposits tokens into token accounts.
+	// Deprecated: use protocol.TransactionTypeSyntheticDepositTokens
 	TxTypeSyntheticDepositTokens TransactionType = 0x33
 
 	// TxTypeSyntheticAnchor anchors one network to another.
+	// Deprecated: use protocol.TransactionTypeSyntheticAnchor
 	TxTypeSyntheticAnchor TransactionType = 0x34
 
 	// TxTypeSyntheticDepositCredits deposits credits into a credit holder.
+	// Deprecated: use protocol.TransactionTypeSyntheticDepositCredits
 	TxTypeSyntheticDepositCredits TransactionType = 0x35
 
 	// TxTypeSyntheticBurnTokens returns tokens to a token issuer's pool of
 	// issuable tokens.
+	// Deprecated: use protocol.TransactionTypeSyntheticBurnTokens
 	TxTypeSyntheticBurnTokens TransactionType = 0x36
 
 	// TxTypeSyntheticMirror mirrors records from one network to another.
+	// Deprecated: use protocol.TransactionTypeSyntheticMirror
 	TxTypeSyntheticMirror TransactionType = 0x38
 
 	// TxTypeSegWitDataEntry is a surrogate transaction segregated witness for
 	// a WriteData transaction
+	// Deprecated: use protocol.TransactionTypeSegWitDataEntry
 	TxTypeSegWitDataEntry TransactionType = 0x39
 )
 
 const (
 	// TxTypeInternalGenesis initializes system chains.
+	// Deprecated: use protocol.TransactionTypeInternalGenesis
 	TxTypeInternalGenesis TransactionType = 0x60
 
+	// Deprecated: use protocol.TransactionTypeInternalSendTransactions
 	TxTypeInternalSendTransactions TransactionType = 0x61
 
 	// TxTypeInternalTransactionsSigned notifies the executor of synthetic
 	// transactions that have been signed.
+	// Deprecated: use protocol.TransactionTypeInternalTransactionsSigned
 	TxTypeInternalTransactionsSigned TransactionType = 0x62
 
 	// TxTypeInternalTransactionsSent notifies the executor of synthetic
 	// transactions that have been sent.
+	// Deprecated: use protocol.TransactionTypeInternalTransactionsSent
 	TxTypeInternalTransactionsSent TransactionType = 0x63
 )
 
