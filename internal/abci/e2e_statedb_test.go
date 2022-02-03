@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
 func TestStateDBConsistency(t *testing.T) {

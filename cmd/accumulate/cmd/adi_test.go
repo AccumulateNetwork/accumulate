@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func init() {

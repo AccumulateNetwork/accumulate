@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/require"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
 )
 
 type testCase func(t *testing.T, tc *testCmd)

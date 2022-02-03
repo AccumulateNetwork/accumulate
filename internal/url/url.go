@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
 )
 
 // ErrMissingHost means that a URL did not include a hostname.

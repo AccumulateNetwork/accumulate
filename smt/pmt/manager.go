@@ -1,7 +1,7 @@
 package pmt
 
 import (
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 var kBpt = storage.MakeKey("BPT")

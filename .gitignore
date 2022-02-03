@@ -1,78 +1,29 @@
-# Executable (mac, linux)
+# Binaries (mac, linux)
 accumulated
-cli
 accumulate
-go_build_accumulated_init
-# unignore directories
 !*/
 
-# User-specific configuration
-/.vscode/settings.json
-
-# Binaries for programs and plugins
+# Binaries
 *.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-
-# Test binary, built with `go test -c`
 *.test
 
-/.nodes
-.terraform
-.terraform.lock.hcl
-
-debug
-!debug/
-scripts/test_cli
-
-# Output of the go coverage tool, specifically when used with LiteIDE
-*.out
-
-*.idea
-
-# Special build files
-engine/overrideversion.go
-
-# Compiled Object files, Static and Dynamic libs (Shared Objects)
-*.o
-*.a
-*.db
-# Temp files
+# Temp and log files
 *~
 *.kate-swp
 *.orig
 *.bak
 *.txt
 *.log
-.idea/
-peers.json
-*.csv
-*.gz
 *.swp
-out
-# Folders
-_obj
-_test
-build
-bin
-pkg
-.vagrant
-# Architecture specific extensions/prefixes
-*.[568vq]
-[568vq].out
-*.cgo1.go
-*.cgo2.c
-_cgo_defun.c
-_cgo_gotypes.go
-_cgo_export.*
-_testmain.go
-*.block
-*.entry
+*.out
+
+# macOS
 .DS_Store
-----*
-# Vendoring
-vendor/
-.sim
-recovery
+
+# Tooling
+.idea
+.nodes
+.vagrant
+.terraform
+.terraform.lock.hcl
+/.vscode/settings.json
