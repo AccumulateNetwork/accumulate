@@ -67,7 +67,7 @@ func TestValidate(t *testing.T) {
 
 		account := NewLiteTokenAccount()
 		queryRecordAs(t, japi, "query", &api.UrlQuery{Url: liteUrl.String()}, account)
-		assert.Equal(t, int64(count*10*AcmePrecision), account.Balance.Int64())
+		assert.Equal(t, int64(count*100*AcmePrecision), account.Balance.Int64())
 	})
 
 	t.Run("Lite Account Credits", func(t *testing.T) {
