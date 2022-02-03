@@ -3,8 +3,8 @@ package indexing
 import (
 	"errors"
 
-	"github.com/AccumulateNetwork/accumulate/internal/database"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/database"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // TransactionChainIndexer indexes account chains against a transaction.

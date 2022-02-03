@@ -4,9 +4,9 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/stretchr/testify/require"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 func TestRestart(t *testing.T) {

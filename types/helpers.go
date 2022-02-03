@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // MarshalBinaryLedgerAdiChainPath adiChainPath == adi/chain/path

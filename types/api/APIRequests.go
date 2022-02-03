@@ -3,7 +3,7 @@ package api
 import (
 	"encoding/json"
 
-	"github.com/AccumulateNetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 const DefaultPaginationSize = 20

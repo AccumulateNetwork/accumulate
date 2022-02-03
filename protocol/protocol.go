@@ -11,7 +11,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // Well known strings

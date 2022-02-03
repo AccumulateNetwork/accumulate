@@ -4,8 +4,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/smt/managed"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/managed"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // Chain manages a Merkle tree (chain).

@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 type Hex []byte
