@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"log"
 
-	api2 "github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/spf13/cobra"
+	api2 "gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 // getCmd represents the get command

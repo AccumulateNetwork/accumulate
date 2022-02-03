@@ -3,12 +3,12 @@ package database
 import (
 	"encoding"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/smt/pmt"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/smt/pmt"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 const markPower = 8

@@ -4,8 +4,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 //Query will route a query message to a chain state
