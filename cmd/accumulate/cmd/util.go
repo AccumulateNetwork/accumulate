@@ -11,7 +11,6 @@ import (
 	"math"
 	"math/big"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
@@ -456,26 +455,28 @@ var (
 
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	//query the token
-	tokenData, err := Get(tokenUrl)
+	tokenData, err := GetUrl(tokenUrl)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
-	tokenValues := strings.Split(tokenData, ":")
-	values := strings.Split(tokenValues[4], "\n")
-	symbols := strings.Split(tokenValues[3], "\n")
-	precision, err := strconv.ParseFloat(strings.Trim(values[0], "\t"), 32)
+	t := protocol.TokenIssuer{}
+	dataBytes, err := json.Marshal(tokenData.Data)
+	if err != nil {
+		return "", err
+	}
+	err = json.Unmarshal(dataBytes, &t)
 	if err != nil {
 		return "", err
 	}
 
 	bf := big.Float{}
 	bd := big.Float{}
-	bd.SetFloat64(math.Pow(10.0, precision))
+	bd.SetFloat64(math.Pow(10.0, float64(t.Precision)))
 	bf.SetInt(amount)
 	bal := big.Float{}
 	bal.Quo(&bf, &bd)
 
-	return fmt.Sprintf("%s %s", bal.String(), symbols[0]), nil
+	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
 }
 
 func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
