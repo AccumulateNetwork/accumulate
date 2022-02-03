@@ -259,15 +259,15 @@ TXID=$(accumulate -j tx history keytest 0 1 | jq -re '.items[0].txid')
 (accumulate -j tx get --prove $TXID | jq -e .receipts[0] -C --indent 0) && success || die "Failed to get receipt for ${TXID}"
 
 section "Create a token issuer"
-wait-for cli-tx tx execute keytest keytest-0-0 '{"type": "createToken", "url": "keytest/token-issuer", "symbol": "TOK", "precision": 10}'
+wait-for cli-tx token create keytest keytest-0-0 keytest/token-issuer TOK 10
 accumulate get keytest/token-issuer 1> /dev/null || die "Cannot find keytest/token-issuer"
 success
 
 section "Issue tokens"
 LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
-wait-for cli-tx tx execute keytest/token-issuer keytest-0-0 '{"type": "issueTokens", "recipient": "'${LITE_TOK}'", "amount": "123"}'
+wait-for cli-tx token issue keytest/token-issuer keytest-0-0 ${LITE_TOK} 123.0123456789
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
-[ "$BALANCE" -eq 123 ] && success || die "${LITE_TOK} should have 123 keytest tokens but has ${BALANCE}"
+[ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 keytest tokens but has ${BALANCE}"
 
 section "Add credits to lite account (TOK)"
 wait-for cli-tx credits ${LITE} ${LITE_TOK} 100
@@ -275,9 +275,9 @@ BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.creditBalance)
 [ "$BALANCE" -ge 100 ] && success || die "${LITE_TOK} should have at least 100 credits but only has ${BALANCE}"
 
 section "Burn tokens"
-wait-for cli-tx tx execute ${LITE_TOK} '{"type": "burnTokens", "amount": "100"}'
+wait-for cli-tx token burn ${LITE_TOK} 100
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
-[ "$BALANCE" -eq 23 ] && success || die "${LITE_TOK} should have 23 keytest tokens but has ${BALANCE}"
+[ "$BALANCE" -eq 230123456789 ] && success || die "${LITE_TOK} should have 230123456789 keytest tokens but has ${BALANCE}"
 
 section "Create lite data account and write the data"
 ACCOUNT_ID=$(accumulate -j account create data --lite keytest keytest-0-0 "Factom PRO" "Tutorial" | jq -r .accountUrl)
