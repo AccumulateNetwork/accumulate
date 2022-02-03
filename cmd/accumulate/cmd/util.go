@@ -477,12 +477,12 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	//query the token
-	qr, err := GetUrl(tokenUrl)
+	tokenData, err := Get(tokenUrl)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
 	t := protocol.TokenIssuer{}
-	err = Remarshal(qr.Data, &t)
+	err = json.Unmarshal([]byte(tokenData), &t)
 	if err != nil {
 		return "", err
 	}
@@ -493,7 +493,7 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	bf.SetInt(amount)
 	bal := big.Float{}
 	bal.Quo(&bf, &bd)
-	return fmt.Sprintf("%s %s", bal.Text('f', int(t.Precision)), t.Symbol), nil
+	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
 }
 
 func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
