@@ -10,12 +10,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/internal/accumulated"
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
 	"github.com/fatih/color"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate/internal/accumulated"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
 )
 
 var cmdRunDevnet = &cobra.Command{

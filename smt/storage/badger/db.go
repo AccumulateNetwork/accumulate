@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/batch"
 	"github.com/dgraph-io/badger"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/batch"
 )
 
 // TruncateBadger controls whether Badger is configured to truncate corrupted

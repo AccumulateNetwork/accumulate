@@ -7,10 +7,6 @@ import (
 	"os"
 	"path"
 
-	cfg "github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/genesis"
-	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
 	tmcfg "github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/libs/log"
 	tmlog "github.com/tendermint/tendermint/libs/log"
@@ -18,6 +14,10 @@ import (
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
+	cfg "gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/genesis"
+	"gitlab.com/accumulatenetwork/accumulate/networks"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 const nodeDirPerm = 0755

@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulate"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/AccumulateNetwork/jsonrpc2/v15"
 	"github.com/go-playground/validator/v10"
 	"github.com/tendermint/tendermint/libs/log"
+	"gitlab.com/accumulatenetwork/accumulate"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 type JrpcMethods struct {

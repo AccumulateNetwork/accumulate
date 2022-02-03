@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/networks"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/client/http"
 	core "github.com/tendermint/tendermint/rpc/core/types"
 	tm "github.com/tendermint/tendermint/types"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/networks"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var ErrUnknownSubnet = errors.New("unknown subnet")

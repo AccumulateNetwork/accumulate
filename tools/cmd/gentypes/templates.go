@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
 var PackagePath string

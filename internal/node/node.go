@@ -10,8 +10,6 @@ import (
 	"net/url"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	web "github.com/AccumulateNetwork/accumulate/internal/web/static"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
@@ -19,6 +17,8 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/proxy"
 	coregrpc "github.com/tendermint/tendermint/rpc/grpc"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	web "gitlab.com/accumulatenetwork/accumulate/internal/web/static"
 )
 
 // AppFactory creates and returns an ABCI application.

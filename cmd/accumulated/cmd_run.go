@@ -3,9 +3,9 @@ package main
 import (
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
 	"github.com/kardianos/service"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
 )
 
 var cmdRun = &cobra.Command{

@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 type txSignatures struct {
