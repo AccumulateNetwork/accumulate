@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 	"gopkg.in/yaml.v3"
 )
 
@@ -40,7 +40,7 @@ func readFile(file string) typegen.API {
 
 func main() {
 	cmd := cobra.Command{
-		Use:  "gentypes [file]",
+		Use:  "gen-types [file]",
 		Args: cobra.ExactArgs(1),
 		Run:  run,
 	}

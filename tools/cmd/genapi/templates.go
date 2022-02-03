@@ -6,7 +6,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
 var (
@@ -45,7 +45,7 @@ func convert(api typegen.API) *TApi {
 	return tapi
 }
 
-//go:embed go.tmpl
+//go:embed go.go.tmpl
 var goSrc string
 
 func mustParseTemplate(name, src string) *template.Template {
