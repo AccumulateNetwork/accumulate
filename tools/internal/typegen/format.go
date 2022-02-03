@@ -9,6 +9,22 @@ import (
 	"os/exec"
 )
 
+func WriteFile(language, file string, buf *bytes.Buffer) error {
+	switch language {
+	case "go", "Go":
+		return GoFmt(file, buf)
+	default:
+		f, err := os.Create(file)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		_, err = buf.WriteTo(f)
+		return err
+	}
+}
+
 func GoFmt(filePath string, buf *bytes.Buffer) error {
 	f, err := os.Create(filePath)
 	if err != nil {
