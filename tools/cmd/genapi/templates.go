@@ -45,7 +45,7 @@ func convert(api typegen.API) *TApi {
 	return tapi
 }
 
-//go:embed go.tmpl
+//go:embed go.go.tmpl
 var goSrc string
 
 func mustParseTemplate(name, src string) *template.Template {

@@ -15,20 +15,27 @@ import (
 )
 
 var flags struct {
-	Package string
-	Out     string
-	IsState bool
+	Package  string
+	Out      string
+	Language string
+	Include  []string
+	Exclude  []string
+	Rename   []string
 }
 
 func main() {
 	cmd := cobra.Command{
-		Use:  "gentypes [file]",
+		Use:  "gen-types [file]",
 		Args: cobra.MinimumNArgs(1),
 		Run:  run,
 	}
 
+	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
+	cmd.Flags().StringSliceVarP(&flags.Include, "include", "i", nil, "Include only specific types")
+	cmd.Flags().StringSliceVarP(&flags.Exclude, "exclude", "x", nil, "Exclude specific types")
+	cmd.Flags().StringSliceVar(&flags.Rename, "rename", nil, "Rename types, e.g. 'Object:AccObject'")
 
 	_ = cmd.Execute()
 }
@@ -70,6 +77,41 @@ func readTypes(files []string) typegen.DataTypes {
 		}
 	}
 
+	if flags.Include != nil {
+		included := map[string]*typegen.DataType{}
+		for _, name := range flags.Include {
+			typ, ok := allTypes[name]
+			if !ok {
+				fatalf("%q is not a type", name)
+			}
+			included[name] = typ
+		}
+		allTypes = included
+	}
+
+	for _, name := range flags.Exclude {
+		_, ok := allTypes[name]
+		if !ok {
+			fatalf("%q is not a type", name)
+		}
+		delete(allTypes, name)
+	}
+
+	for _, spec := range flags.Rename {
+		bits := strings.Split(spec, ":")
+		if len(bits) != 2 {
+			fatalf("invalid rename: want 'X:Y', got '%s'", spec)
+		}
+
+		from, to := bits[0], bits[1]
+		typ, ok := allTypes[from]
+		if !ok {
+			fatalf("%q is not a type", from)
+		}
+		delete(allTypes, from)
+		allTypes[to] = typ
+	}
+
 	return typegen.DataTypesFrom(allTypes)
 }
 
@@ -99,6 +141,6 @@ func run(_ *cobra.Command, args []string) {
 	check(err)
 
 	w := new(bytes.Buffer)
-	check(Go.Execute(w, ttypes))
-	check(typegen.GoFmt(flags.Out, w))
+	check(Templates.Execute(w, flags.Language, ttypes))
+	check(typegen.WriteFile(flags.Language, flags.Out, w))
 }
