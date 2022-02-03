@@ -265,7 +265,7 @@ success
 
 section "Issue tokens"
 LITE_TOK=$(echo $LITE | cut -d/ -f-3)/keytest/token-issuer
-wait-for cli-tx token issue keytest/token-issuer keytest-0-0 ${LITE_TOK} "123.0123456789"
+wait-for cli-tx token issue keytest/token-issuer keytest-0-0 ${LITE_TOK} 123.0123456789
 BALANCE=$(accumulate -j account get ${LITE_TOK} | jq -r .data.balance)
 [ "$BALANCE" -eq 1230123456789 ] && success || die "${LITE_TOK} should have 1230123456789 keytest tokens but has ${BALANCE}"
 

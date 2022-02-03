@@ -45,7 +45,7 @@ var tokenCmdCreate = &cobra.Command{
 var tokenCmdIssue = &cobra.Command{
 	Use:   "issue [adi token url] [signer key name] [recipient url] [amount]",
 	Short: "send tokens from a token url to a recipient",
-	Args:  cobra.MinimumNArgs(2),
+	Args:  cobra.MinimumNArgs(4),
 	Run: func(cmd *cobra.Command, args []string) {
 		var out string
 		var err error
