@@ -6,13 +6,13 @@ import (
 	"math/big"
 	"testing"
 
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	. "github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/require"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	. "gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 func TestTransactionState(t *testing.T) {

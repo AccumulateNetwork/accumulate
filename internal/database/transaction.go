@@ -4,10 +4,10 @@ import (
 	"crypto/sha256"
 	"errors"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 )
 
 // Transaction manages a transaction.

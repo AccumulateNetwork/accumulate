@@ -14,10 +14,10 @@ package abci
 import (
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	apiQuery "github.com/AccumulateNetwork/accumulate/types/api/query"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	apiQuery "gitlab.com/accumulatenetwork/accumulate/types/api/query"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 //go:generate go run github.com/golang/mock/mockgen -source abci.go -destination ../mock/abci/abci.go

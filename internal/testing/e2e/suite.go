@@ -5,11 +5,11 @@ import (
 	"encoding"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
-	"github.com/AccumulateNetwork/accumulate/types/state"
 	"github.com/stretchr/testify/suite"
 	tmed25519 "github.com/tendermint/tendermint/crypto/ed25519"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 	"golang.org/x/exp/rand"
 )
 

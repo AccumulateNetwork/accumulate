@@ -8,7 +8,7 @@ import (
 	"text/template"
 	"unicode"
 
-	"github.com/AccumulateNetwork/accumulate/tools/internal/typegen"
+	"gitlab.com/accumulatenetwork/accumulate/tools/internal/typegen"
 )
 
 type Types struct {

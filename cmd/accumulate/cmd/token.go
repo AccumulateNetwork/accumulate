@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strconv"
 
-	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	"github.com/spf13/cobra"
+	url2 "gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 var tokenCmd = &cobra.Command{

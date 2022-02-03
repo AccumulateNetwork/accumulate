@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/badger"
-	"github.com/AccumulateNetwork/accumulate/smt/storage/memory"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/badger"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage/memory"
 )
 
 const debugKeys = false

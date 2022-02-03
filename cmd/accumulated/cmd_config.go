@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/AccumulateNetwork/accumulate/config"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/config"
 )
 
 var cmdConfig = &cobra.Command{

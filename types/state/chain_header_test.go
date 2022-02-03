@@ -3,7 +3,7 @@ package state
 import (
 	"testing"
 
-	"github.com/AccumulateNetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 func TestStateHeader(t *testing.T) {

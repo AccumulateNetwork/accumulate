@@ -9,15 +9,15 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/config"
-	"github.com/AccumulateNetwork/accumulate/internal/encoding"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/config"
+	"gitlab.com/accumulatenetwork/accumulate/internal/encoding"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 	{{- if not (isPkg "types/state")}}
-	"github.com/AccumulateNetwork/accumulate/types/state"
+	"gitlab.com/accumulatenetwork/accumulate/types/state"
 	{{- end}}
 	{{- if not (isPkg "types/api/transactions")}}
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 	{{- end}}
 )
 

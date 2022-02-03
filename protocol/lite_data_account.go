@@ -3,7 +3,7 @@ package protocol
 import (
 	"crypto/sha256"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // ComputeLiteDataAccountId will compute the chain id from the first entry in the chain which defines

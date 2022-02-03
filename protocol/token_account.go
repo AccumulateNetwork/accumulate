@@ -4,7 +4,7 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 type TokenHolder interface {

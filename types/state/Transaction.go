@@ -1,9 +1,9 @@
 package state
 
 import (
-	"github.com/AccumulateNetwork/accumulate/smt/common"
-	"github.com/AccumulateNetwork/accumulate/types"
-	"github.com/AccumulateNetwork/accumulate/types/api/transactions"
+	"gitlab.com/accumulatenetwork/accumulate/smt/common"
+	"gitlab.com/accumulatenetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/transactions"
 )
 
 // NewPendingTransaction will create a new pending transaction from a general transaction
