@@ -455,12 +455,16 @@ var (
 
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	//query the token
-	tokenData, err := Get(tokenUrl)
+	tokenData, err := GetUrl(tokenUrl)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
 	t := protocol.TokenIssuer{}
-	err = json.Unmarshal([]byte(tokenData), &t)
+	dataBytes, err := json.Marshal(tokenData.Data)
+	if err != nil {
+		return "", err
+	}
+	err = json.Unmarshal(dataBytes, &t)
 	if err != nil {
 		return "", err
 	}
