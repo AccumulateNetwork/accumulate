@@ -3,8 +3,8 @@ package batch
 import (
 	"sync"
 
-	"github.com/AccumulateNetwork/accumulate/internal/logging"
-	"github.com/AccumulateNetwork/accumulate/smt/storage"
+	"gitlab.com/accumulatenetwork/accumulate/internal/logging"
+	"gitlab.com/accumulatenetwork/accumulate/smt/storage"
 )
 
 // debug is a bit field for enabling debug log messages
