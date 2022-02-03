@@ -26,6 +26,11 @@ type TypeValue struct {
 	typegen.TypeValue
 }
 
+var Templates = typegen.NewTemplateLibrary(template.FuncMap{
+	"lower":   lower,
+	"natural": natural,
+})
+
 func convert(types map[string]typegen.Type, pkgName string) *Types {
 	ttypes := make([]*Type, 0, len(types))
 
@@ -83,17 +88,4 @@ func natural(name string) string {
 
 	w.WriteString(name)
 	return w.String()
-}
-
-func mustParseTemplate(name, src string, funcs template.FuncMap) *template.Template {
-	tmpl := template.New(name).Funcs(template.FuncMap{
-		"lower":   lower,
-		"natural": natural,
-	})
-	if funcs != nil {
-		tmpl = tmpl.Funcs(funcs)
-	}
-	tmpl, err := tmpl.Parse(src)
-	checkf(err, "bad template")
-	return tmpl
 }

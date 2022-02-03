@@ -11,18 +11,19 @@ import (
 )
 
 var flags struct {
-	Package string
-	Out     string
-	IsState bool
+	Package  string
+	Out      string
+	Language string
 }
 
 func main() {
 	cmd := cobra.Command{
-		Use:  "gentypes [file]",
+		Use:  "gen-enum [file]",
 		Args: cobra.ExactArgs(1),
 		Run:  run,
 	}
 
+	cmd.Flags().StringVarP(&flags.Language, "language", "l", "Go", "Output language or template file")
 	cmd.Flags().StringVar(&flags.Package, "package", "protocol", "Package name")
 	cmd.Flags().StringVarP(&flags.Out, "out", "o", "types_gen.go", "Output file")
 
@@ -66,6 +67,6 @@ func run(_ *cobra.Command, args []string) {
 	ttypes := convert(types, flags.Package)
 
 	w := new(bytes.Buffer)
-	check(Go.Execute(w, ttypes))
-	check(typegen.GoFmt(flags.Out, w))
+	check(Templates.Execute(w, flags.Language, ttypes))
+	check(typegen.WriteFile(flags.Language, flags.Out, w))
 }

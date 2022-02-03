@@ -1,3 +1,3 @@
 package state
 
-//go:generate go run ../../tools/cmd/gentypes --package state types.yml
+//go:generate go run ../../tools/cmd/gen-types --package state types.yml
