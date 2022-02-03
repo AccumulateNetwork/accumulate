@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulate"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate"
 )
 
 var cmdVersion = &cobra.Command{

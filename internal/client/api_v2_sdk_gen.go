@@ -5,8 +5,8 @@ package client
 import (
 	"context"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	"github.com/AccumulateNetwork/accumulate/protocol"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 func (c *Client) Describe(ctx context.Context) (*api.DescriptionResponse, error) {

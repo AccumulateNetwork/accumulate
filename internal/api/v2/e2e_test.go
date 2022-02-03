@@ -8,16 +8,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/internal/api/v2"
-	acctesting "github.com/AccumulateNetwork/accumulate/internal/testing"
-	"github.com/AccumulateNetwork/accumulate/internal/testing/e2e"
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/protocol"
-	. "github.com/AccumulateNetwork/accumulate/protocol"
-	query2 "github.com/AccumulateNetwork/accumulate/types/api/query"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"gitlab.com/accumulatenetwork/accumulate/internal/api/v2"
+	acctesting "gitlab.com/accumulatenetwork/accumulate/internal/testing"
+	"gitlab.com/accumulatenetwork/accumulate/internal/testing/e2e"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
+	. "gitlab.com/accumulatenetwork/accumulate/protocol"
+	query2 "gitlab.com/accumulatenetwork/accumulate/types/api/query"
 )
 
 func TestEndToEnd(t *testing.T) {

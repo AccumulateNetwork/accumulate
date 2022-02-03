@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
-	"github.com/AccumulateNetwork/accumulate/types"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/types"
 )
 
 // GetTxHash returns the hash of the transaction.

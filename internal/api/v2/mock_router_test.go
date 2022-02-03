@@ -8,13 +8,13 @@ import (
 	context "context"
 	reflect "reflect"
 
-	routing "github.com/AccumulateNetwork/accumulate/internal/routing"
-	url "github.com/AccumulateNetwork/accumulate/internal/url"
 	gomock "github.com/golang/mock/gomock"
 	bytes "github.com/tendermint/tendermint/libs/bytes"
 	client "github.com/tendermint/tendermint/rpc/client"
 	coretypes "github.com/tendermint/tendermint/rpc/core/types"
 	types "github.com/tendermint/tendermint/types"
+	routing "gitlab.com/accumulatenetwork/accumulate/internal/routing"
+	url "gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 // MockRouter is a mock of Router interface.

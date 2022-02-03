@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/cmd/accumulate/db"
-	"github.com/AccumulateNetwork/accumulate/internal/client"
 	"github.com/spf13/cobra"
+	"gitlab.com/accumulatenetwork/accumulate/cmd/accumulate/db"
+	"gitlab.com/accumulatenetwork/accumulate/internal/client"
 )
 
 var (
