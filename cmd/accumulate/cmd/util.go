@@ -455,22 +455,21 @@ var (
 
 func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 	//query the token
-	tokenData, err := Get(tokenUrl)
+	qr, err := GetUrl(tokenUrl)
 	if err != nil {
 		return nil, fmt.Errorf("error retrieving token url, %v", err)
 	}
 	t := protocol.TokenIssuer{}
-	err = json.Unmarshal([]byte(tokenData), &t)
+	err = Remarshal(qr.Data, &t)
 	if err != nil {
 		return nil, err
 	}
 
-	amt, b := big.NewFloat(0).SetPrec(128).SetString(amount)
-	if b {
+	amt, _ := big.NewFloat(0).SetPrec(128).SetString(amount)
+	if amt == nil {
 		return nil, fmt.Errorf("invalid amount %s", amount)
 	}
-	oneToken := big.NewFloat(1).SetPrec(128)
-	oneToken.SetMantExp(oneToken, int(t.Precision))
+	oneToken := big.NewFloat(math.Pow(10.0, float64(t.Precision)))
 	amt.Mul(amt, oneToken)
 	iAmt, _ := amt.Int(big.NewInt(0))
 	return iAmt, nil
@@ -478,12 +477,12 @@ func amountToBigInt(tokenUrl string, amount string) (*big.Int, error) {
 
 func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	//query the token
-	tokenData, err := Get(tokenUrl)
+	qr, err := GetUrl(tokenUrl)
 	if err != nil {
 		return "", fmt.Errorf("error retrieving token url, %v", err)
 	}
 	t := protocol.TokenIssuer{}
-	err = json.Unmarshal([]byte(tokenData), &t)
+	err = Remarshal(qr.Data, &t)
 	if err != nil {
 		return "", err
 	}
@@ -494,8 +493,7 @@ func formatAmount(tokenUrl string, amount *big.Int) (string, error) {
 	bf.SetInt(amount)
 	bal := big.Float{}
 	bal.Quo(&bf, &bd)
-
-	return fmt.Sprintf("%s %s", bal.String(), t.Symbol), nil
+	return fmt.Sprintf("%s %s", bal.Text('f', int(t.Precision)), t.Symbol), nil
 }
 
 func printGeneralTransactionParameters(res *api2.TransactionQueryResponse) string {
@@ -625,11 +623,13 @@ func outputForHumans(res *QueryResponse) (string, error) {
 			amt = "unknown"
 		}
 
+		cred := big.NewFloat(0).SetInt(&ata.CreditBalance)
+
 		var out string
 		out += fmt.Sprintf("\n\tAccount Url\t:\t%v\n", ata.ChainUrl)
 		out += fmt.Sprintf("\tToken Url\t:\t%v\n", ata.TokenUrl)
 		out += fmt.Sprintf("\tBalance\t\t:\t%s\n", amt)
-		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", ata.CreditBalance.String())
+		out += fmt.Sprintf("\tCredits\t\t:\t%s\n", cred.Text('f', 2))
 		out += fmt.Sprintf("\tNonce\t\t:\t%d\n", ata.Nonce)
 
 		return out, nil
@@ -683,7 +683,10 @@ func outputForHumans(res *QueryResponse) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		out := fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
+
+		cred := big.NewFloat(0).SetInt(&ss.CreditBalance)
+		out := fmt.Sprintf("\n\tCredit Balance\t:\t%s\n", cred.Text('f', 2))
+		out += fmt.Sprintf("\n\tIndex\tNonce\tPublic Key\t\t\t\t\t\t\t\tKey Name\n")
 		for i, k := range ss.Keys {
 			keyName := ""
 			name, err := FindLabelFromPubKey(k.PublicKey)
