@@ -17,8 +17,8 @@ type ObjectType uint64
 // KeyPageOperation is the operation type of an UpdateKeyPage transaction.
 type KeyPageOperation uint8
 
-//go:generate go run ../tools/cmd/gentypes accounts.yml general.yml internal.yml query.yml transactions.yml
-//go:generate go run ../tools/cmd/gentypes2 --out enums_gen.go enums.yml
+//go:generate go run ../tools/cmd/gen-types accounts.yml general.yml internal.yml query.yml transactions.yml
+//go:generate go run ../tools/cmd/gen-enum --out enums_gen.go enums.yml
 
 func NewValidator() (*validator.Validate, error) {
 	v := validator.New()
