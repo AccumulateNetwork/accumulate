@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/AccumulateNetwork/accumulate/internal/url"
+	"gitlab.com/accumulatenetwork/accumulate/internal/url"
 )
 
 func main() {

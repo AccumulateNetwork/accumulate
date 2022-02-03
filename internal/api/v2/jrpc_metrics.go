@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AccumulateNetwork/accumulate/protocol"
 	promapi "github.com/prometheus/client_golang/api"
 	prometheus "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
+	"gitlab.com/accumulatenetwork/accumulate/protocol"
 )
 
 // Metrics returns Metrics for explorer (tps, etc.)

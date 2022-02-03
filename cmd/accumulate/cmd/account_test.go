@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	api2 "github.com/AccumulateNetwork/accumulate/types/api"
-	"github.com/AccumulateNetwork/accumulate/types/api/response"
 	"github.com/stretchr/testify/require"
+	api2 "gitlab.com/accumulatenetwork/accumulate/types/api"
+	"gitlab.com/accumulatenetwork/accumulate/types/api/response"
 )
 
 func init() {
