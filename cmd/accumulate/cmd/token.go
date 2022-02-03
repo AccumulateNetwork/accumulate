@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/AccumulateNetwork/accumulate/types"
 	"strconv"
 
 	url2 "github.com/AccumulateNetwork/accumulate/internal/url"
@@ -94,14 +95,29 @@ func CreateToken(origin string, args []string) (string, error) {
 		return "", err
 	}
 
-	if len(args) < 4 {
+	if len(args) < 3 {
 		return "", fmt.Errorf("insufficient number of arguments")
 	}
 
 	url := args[0]
 	symbol := args[1]
 	precision := args[2]
-	properties := args[3]
+	var properties string
+	if len(args) > 3 {
+		u, err := url2.Parse(args[3])
+		if err != nil {
+			return "", fmt.Errorf("invalid properties url, %v", err)
+		}
+		properties = u.String()
+		res, err := GetUrl(properties)
+		if err != nil {
+			return "", fmt.Errorf("cannot query properties url, %v", err)
+		}
+		//TODO: make a better test for properties to make sure contents are valid, for now we just see if it is at least a data account
+		if res.Type != types.AccountTypeDataAccount.String() {
+			return "", fmt.Errorf("properties url is not a valid properties data account")
+		}
+	}
 
 	prcsn, err := strconv.Atoi(precision)
 	if err != nil {
@@ -117,16 +133,6 @@ func CreateToken(origin string, args []string) (string, error) {
 	params.Url = u.String()
 	params.Symbol = symbol
 	params.Precision = uint64(prcsn)
-
-	if len(properties) > 0 {
-		//todo: add GetPropertiesUrl-> as a good measure if propertiesUrl is specified, then we should make sure the url is already populated and valid
-		u, err := url2.Parse(properties)
-		if err != nil {
-			return "", fmt.Errorf("invalid properties url, %v", err)
-		}
-		params.Properties = u.String()
-	}
-
 	params.Properties = properties
 
 	res, err := dispatchTxRequest("create-token", &params, nil, originUrl, si, privKey)
